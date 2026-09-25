@@ -54,6 +54,8 @@ function card(id: number, columnId: number, over: Partial<ProjectCardRow> = {}) 
 function input(over: Partial<PublicBoardInput> = {}): PublicBoardInput {
     return {
         now: 10_000,
+        theme: 'auto',
+        accent: '',
         project: { title: ' Site ', icon: '', description: '', version: '', status: 'active' },
         columns: [column(1, false), column(2, true)],
         cards: [],
@@ -62,6 +64,7 @@ function input(over: Partial<PublicBoardInput> = {}): PublicBoardInput {
         priorityOf: priorityFromDb,
         showDates: true,
         showAssignees: true,
+        showSubtasks: false,
         ...over
     };
 }
@@ -132,6 +135,28 @@ describe('la vue du tableau public', () => {
             })
         );
         assert.equal(png.icon, 'data:image/png;base64,iVBORw0K');
+    });
+
+    it('ne déplie les sous-tâches qu’avec l’option, et n’y nomme personne sans l’autre', () => {
+        const checklist = [
+            { id: 'a', label: 'Maquette', done: true, assigneeUserId: 7 },
+            { id: 'b', label: ' ', done: false, assigneeUserId: null }
+        ].map((item) => ({ ...item, required: false, createdAt: null, doneAt: null, doneBy: null }));
+        const members = new Map([[7, { name: 'Alice', color: 'blue' as const }]]);
+        const cards = [{ ...card(1, 1), checklist }, card(2, 1)];
+        const closed = buildBoardView(input({ cards, members }));
+        assert.equal(closed.columns[0].cards[0].subtasks, null);
+
+        const open = buildBoardView(input({ cards, members, showSubtasks: true }));
+        assert.deepEqual(open.columns[0].cards[0].subtasks, [
+            { label: 'Maquette', done: true, assignee: { initials: 'A', name: 'Alice', color: 'blue' } },
+            { label: 'Sans titre', done: false, assignee: null }
+        ]);
+        // Une carte sans sous-tâche ne se déplie pas.
+        assert.equal(open.columns[0].cards[1].subtasks, null);
+
+        const anonymous = buildBoardView(input({ cards, members, showSubtasks: true, showAssignees: false }));
+        assert.equal(anonymous.columns[0].cards[0].subtasks?.[0].assignee, null);
     });
 
     it('tire des initiales lisibles', () => {

@@ -1,4 +1,5 @@
 import type { ProjectStatus, UserColor } from '@deveye/types';
+import type { PageThemeChoice } from '@deveye/types/sdk';
 
 import type {
     ProjectCardRow,
@@ -36,7 +37,16 @@ export interface PublicAssignee {
     color: UserColor;
 }
 
+export interface PublicSubtaskView {
+    label: string;
+    done: boolean;
+    /** Avec l'option des personnes assignées seulement. */
+    assignee: PublicAssignee | null;
+}
+
 export interface PublicCardView {
+    /** Ce qui retrouve une carte dépliée quand le tableau se relit. */
+    id: number;
     title: string;
     priority: ProjectPriority;
     excerpt: string;
@@ -47,6 +57,8 @@ export interface PublicCardView {
     milestone: { name: string; color: ProjectMilestoneColor | null } | null;
     /** Avec l'option des personnes assignées seulement. */
     assignees: PublicAssignee[];
+    /** Ce qu'un clic déplie, avec l'option des sous-tâches ; `null` sans elle, ou sans sous-tâche. */
+    subtasks: PublicSubtaskView[] | null;
 }
 
 export interface PublicColumnView {
@@ -57,6 +69,9 @@ export interface PublicColumnView {
 
 export interface PublicBoardView {
     generatedAt: number;
+    theme: PageThemeChoice;
+    /** Tel que le propriétaire l'a choisi ; le rendu ne garde que ce qui se résout. */
+    accent: string;
     title: string;
     /** Une URL de données d'image, ou vide. */
     icon: string;
@@ -70,6 +85,8 @@ export interface PublicBoardView {
 
 export interface PublicBoardInput {
     now: number;
+    theme: PageThemeChoice;
+    accent: string;
     project: { title: string; icon: string; description: string; version: string; status: ProjectStatus };
     columns: readonly { row: ProjectColumnRow; name: string }[];
     cards: readonly {
@@ -83,6 +100,7 @@ export interface PublicBoardInput {
     priorityOf(value: number): ProjectPriority;
     showDates: boolean;
     showAssignees: boolean;
+    showSubtasks: boolean;
 }
 
 /** Une vignette n'est reprise que si c'est bien une image : la page la pose telle quelle dans `src`. */
@@ -112,6 +130,12 @@ export function buildBoardView(input: PublicBoardInput): PublicBoardView {
     let cardTotal = 0;
     let cardDone = 0;
 
+    // Un ancien membre n'a plus de nom ici : il n'apparaît pas.
+    const assigneeOf = (id: number | null): PublicAssignee | null => {
+        const member = id === null || !input.showAssignees ? undefined : input.members.get(id);
+        return member ? { initials: initialsOf(member.name), name: member.name, color: member.color } : null;
+    };
+
     for (const card of input.cards) {
         if (card.row.column_id === null || card.row.archived_at !== null) continue;
         const columnDone = doneColumns.has(card.row.column_id);
@@ -124,14 +148,14 @@ export function buildBoardView(input: PublicBoardInput): PublicBoardView {
             : [];
         const assignees: PublicAssignee[] = [];
         for (const id of new Set(assigneeIds)) {
-            // Un ancien membre n'a plus de nom ici : il n'apparaît pas.
-            const member = id === null ? undefined : input.members.get(id);
-            if (member) assignees.push({ initials: initialsOf(member.name), name: member.name, color: member.color });
+            const person = assigneeOf(id);
+            if (person) assignees.push(person);
         }
 
         const due = card.row.due_date;
         const list = byColumn.get(card.row.column_id) ?? [];
         list.push({
+            id: card.row.id,
             title: card.title.trim() || 'Sans titre',
             priority: input.priorityOf(card.row.priority),
             excerpt: excerptOf(card.description),
@@ -144,13 +168,23 @@ export function buildBoardView(input: PublicBoardInput): PublicBoardView {
                 input.showDates && milestone
                     ? { name: milestone.name.trim() || 'Sans nom', color: milestone.color }
                     : null,
-            assignees
+            assignees,
+            subtasks:
+                input.showSubtasks && card.checklist.length > 0
+                    ? card.checklist.map((item) => ({
+                          label: item.label.trim() || 'Sans titre',
+                          done: item.done,
+                          assignee: assigneeOf(item.assigneeUserId)
+                      }))
+                    : null
         });
         byColumn.set(card.row.column_id, list);
     }
 
     return {
         generatedAt: input.now,
+        theme: input.theme,
+        accent: input.accent,
         title: input.project.title.trim() || 'Sans titre',
         icon: ICON_PATTERN.test(input.project.icon) ? input.project.icon : '',
         description: input.project.description.trim(),

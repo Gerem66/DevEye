@@ -82,6 +82,9 @@ function publication(over: Partial<StoredPublication> & { project_id: number }):
         domain_at: null,
         show_dates: 0,
         show_assignees: 0,
+        show_subtasks: 0,
+        theme: 'auto',
+        accent: '',
         created: 1,
         ...over
     };
@@ -266,6 +269,39 @@ describe('le tableau public', () => {
         assert.ok(open.body.includes('>AM<'));
         assert.ok(open.body.includes('Zoé'));
         assert.ok(!open.body.includes('"><script>'));
+    });
+
+    it('suit le visiteur par défaut, et pose le thème et l’accent choisis', async () => {
+        const auto = await board(mount([project({ id: 1 })], [publication({ project_id: 1 })]));
+        assert.ok(auto.body.includes('<html lang="fr">'));
+        assert.ok(auto.body.includes('content="light dark"'));
+
+        const chosen = await board(
+            mount([project({ id: 1 })], [publication({ project_id: 1, theme: 'dark', accent: 'purple' })])
+        );
+        assert.ok(chosen.body.includes('<html lang="fr" data-theme="dark">'));
+        assert.ok(chosen.body.includes('--accent: #b088ff;'));
+
+        // Un accent abîmé en base retombe sur celui de la page, sans rien écrire de lui.
+        const broken = await board(
+            mount([project({ id: 1 })], [publication({ project_id: 1, theme: 'sepia', accent: '#000;}body{' })])
+        );
+        assert.ok(broken.body.includes('<html lang="fr">'));
+        assert.ok(!broken.body.includes('body{'));
+    });
+
+    it('ne déplie les cartes qu’avec l’option, et seulement celles qui ont des sous-tâches', async () => {
+        const closed = await board(mount([project({ id: 1 })], [publication({ project_id: 1 })]));
+        assert.ok(!closed.body.includes('<details'));
+        assert.ok(!closed.body.includes('Maquette'));
+
+        const open = await board(mount([project({ id: 1 })], [publication({ project_id: 1, show_subtasks: 1 })]));
+        assert.ok(open.body.includes('<details data-card="1"><summary>'));
+        assert.ok(open.body.includes('Maquette'));
+        assert.ok(open.body.includes('(terminée)'));
+        // Rien dans le résumé qui n'y soit admis : pas de bloc, pas de titre.
+        const summary = /<summary>([\s\S]*?)<\/summary>/.exec(open.body)?.[1] ?? '';
+        assert.ok(!/<(div|p|h3|ul|li)[\s>]/.test(summary));
     });
 
     it('ne laisse jamais sortir la discussion', async () => {

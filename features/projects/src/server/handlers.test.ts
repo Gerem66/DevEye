@@ -2487,7 +2487,16 @@ describe('la vue d’ensemble d’un projet', () => {
 });
 
 describe('la page publique d’un projet', () => {
-    const DRAFT = { enabled: true, domainId: null, slug: null, showDates: false, showAssignees: false };
+    const DRAFT = {
+        enabled: true,
+        domainId: null,
+        slug: null,
+        showDates: false,
+        showAssignees: false,
+        showSubtasks: false,
+        theme: 'auto' as const,
+        accent: ''
+    };
     const publish = handlerFor(projectPublish);
     const get = handlerFor(projectPublicationGet);
     const eventsOf = (repo: FakeRepo) => repo.rows.events.filter((e) => e.kind === 'projects.publication');
@@ -2531,6 +2540,9 @@ describe('la page publique d’un projet', () => {
             domain_at: null,
             show_dates: 0,
             show_assignees: 0,
+            show_subtasks: 0,
+            theme: 'auto',
+            accent: '',
             created: 1
         });
         const one = contextWith(repo, { quotaLimits: { pages: 2 }, ownerWorkspaceIds: [1, 9] });

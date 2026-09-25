@@ -330,10 +330,17 @@ script relit chaque minute ; rien du client React ne sort de l'app.
 
 - **Ce qui sort** : l'en-tête du projet (vignette, titre, description, statut,
   version, avancement), les colonnes et les cartes (titre, priorité, début de
-  la description, avancement des sous-tâches). Deux options par projet,
-  fermées par défaut : les échéances et les jalons, et les personnes assignées
-  (leur nom, lu par `deps.membersFor`). La discussion, l'historique et les
-  tâches archivées ne sortent jamais.
+  la description, avancement des sous-tâches). Trois options par projet,
+  fermées par défaut : les échéances et les jalons, les personnes assignées
+  (leur nom, lu par `deps.membersFor`), et les sous-tâches qu'un clic déplie
+  (un `<details>`, qui se déplie sans le script et reste ouvert quand il relit
+  le tableau). La discussion, l'historique et les tâches archivées ne sortent
+  jamais.
+- **L'apparence** : le sélecteur commun des pages publiques (`PageLookFields`
+  du SDK, celui de Rendez-vous), automatique par défaut (le thème du
+  visiteur), clair ou sombre, et un accent. Les couleurs de la page vivent dans
+  `PUBLIC_BOARD_PALETTE` : la page en fait ses jetons, la vignette des réglages
+  les reprend.
 - **Les adresses** : un lien tiré au hasard sous l'adresse de DevEye
   (`/projet/<16 hex>`), toujours valable, et un domaine vérifié de l'espace au
   choix. Sur un domaine, le plus ancien projet en ligne en tient la racine
@@ -487,6 +494,7 @@ repo/rekey.ts       la liste des cellules chiffrées suspendues à un projet (co
 migrations/001_event_kinds.sql   les genres d'événements stockés passent de `project.*` à `projects.*`
 migrations/003_dashboard.sql     ft_projects_dashboard_tiles, première table propre au module
 migrations/007_public_pages.sql  ft_projects_public
+migrations/008_public_look.sql   son thème, son accent, le dépli des sous-tâches
 handlers.test.ts    les handlers sur le harnais du SDK (dépôt en mémoire)
 testing/            le dépôt de la page publique en mémoire, pour les tests
 usageProvider.test.ts   le contrat publié, sur le harnais sessionless
@@ -513,7 +521,8 @@ rights.ts          les cinq droits propres, lus sur CE projet, et les phrases de
 ProjectDetail.tsx  en-tête + onglets ; possède le niveau live `l2`
 ProjectDialog.tsx  créer un projet (le niveau de confidentialité s'y choisit)
 ProjectGeneralPanel.tsx  onglet Général de la fiche : le profil du projet, et son archivage
-ProjectPublicPanel.tsx   onglet Page publique de la fiche : l'ouvrir, son adresse, ses options, changer le lien
+ProjectPublicPanel.tsx   onglet Page publique de la fiche : l'ouvrir, son adresse, ses options, son apparence, changer le lien
+PublicBoardPreview.tsx   la vignette du tableau public, aux couleurs que la page posera
 MyTasks.tsx        mes cartes, tous projets confondus
 tabs.ts            les onglets, leur ordre, et la règle qui les fait paraître
 useProjectTabs.ts  les compteurs (`projects.linkCounts`) qui alimentent la barre

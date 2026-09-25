@@ -1,4 +1,5 @@
 import type { ProjectPublicRow } from '../../contracts/domain';
+import type { PageThemeChoice } from '@deveye/types/sdk';
 import type { SdkQueryable, SdkStockItem } from '@deveye/types/sdk/server';
 
 /**
@@ -19,6 +20,9 @@ export interface ProjectPublicationConfig {
     domainAt: number | null;
     showDates: boolean;
     showAssignees: boolean;
+    showSubtasks: boolean;
+    theme: PageThemeChoice;
+    accent: string;
 }
 
 /**
@@ -98,16 +102,21 @@ export function projectPublicationRepo(q: SdkQueryable): ProjectPublicationRepo 
                 config.slug,
                 config.domainAt,
                 config.showDates ? 1 : 0,
-                config.showAssignees ? 1 : 0
+                config.showAssignees ? 1 : 0,
+                config.showSubtasks ? 1 : 0,
+                config.theme,
+                config.accent
             ];
             await q.execute(
                 `INSERT INTO ft_projects_public
-                     (project_id, public_ref, enabled, published_at, domain_id, slug, domain_at, show_dates, show_assignees)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     (project_id, public_ref, enabled, published_at, domain_id, slug, domain_at, show_dates,
+                      show_assignees, show_subtasks, theme, accent)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                  ON DUPLICATE KEY UPDATE public_ref = VALUES(public_ref), enabled = VALUES(enabled),
                      published_at = VALUES(published_at), domain_id = VALUES(domain_id), slug = VALUES(slug),
                      domain_at = VALUES(domain_at), show_dates = VALUES(show_dates),
-                     show_assignees = VALUES(show_assignees)`,
+                     show_assignees = VALUES(show_assignees), show_subtasks = VALUES(show_subtasks),
+                     theme = VALUES(theme), accent = VALUES(accent)`,
                 [projectId, publicRef, ...values]
             );
         },

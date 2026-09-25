@@ -11,6 +11,7 @@ import { defaultUserColor, USER_COLORS } from '@deveye/types';
 import { PROJECT_SLUG_PATTERN, PUBLIC_PATH, type ProjectPublicRow } from '../../contracts/domain';
 import { decryptCard, decryptColumn, decryptMilestone, priorityFromDb, tryDecryptProject } from '../_shared';
 import { WELL_KNOWN_PATH } from '../domains';
+import { themeOf } from '../publication';
 import { env } from '../env';
 import { publicStockId, type ProjectsRepo } from '../repo';
 import { renderBoardPage, renderMissingPage, type RenderOptions } from './render';
@@ -127,7 +128,10 @@ export function createPublicPages(deps: FeatureServiceDeps<ProjectsRepo>): Publi
             members,
             priorityOf: priorityFromDb,
             showDates,
-            showAssignees
+            showAssignees,
+            showSubtasks: row.show_subtasks === 1,
+            theme: themeOf(row),
+            accent: row.accent
         });
         return renderBoardPage(view, options);
     }

@@ -53,6 +53,9 @@ export function memoryPublicationRepo(projects: () => readonly ProjectRow[]): Me
                 domain_at: config.domainAt,
                 show_dates: config.showDates ? 1 : 0,
                 show_assignees: config.showAssignees ? 1 : 0,
+                show_subtasks: config.showSubtasks ? 1 : 0,
+                theme: config.theme,
+                accent: config.accent,
                 created: rows.find((row) => row.project_id === projectId)?.created ?? 1
             };
             const clash = rows.find(

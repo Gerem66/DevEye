@@ -63,6 +63,11 @@ enregistrements copiables. Les commandes sont transversales (`domain.*`, la
 fonctionnalité en argument), le sujet en direct est `domain`. Un formulaire de
 module qui désigne un domaine lit `useDomains(feature)` et ouvre l'onglet par
 `<FeatureSettingsButton initialSection='domains' />`.
+L'allure d'une page qu'un module sert au public (réservation, tableau de
+projet) se choisit partout avec le même contrôle, `PageLookFields`
+(`Components/PageLook`) : thème, accent, et la vignette de la page que le
+module passe en dessous. La palette et le calcul de l'accent sont dans
+`@deveye/types/sdk` (`pageLook.ts`), pour que la page les pose à l'identique.
 Les tables de câblage natif (`GENERAL_WIRED`, `SYNC_WIRED`, `ENCRYPTION_WIRED`)
 et leurs dispatcheurs ont disparu avec le rapatriement de Mail, leur dernier
 occupant : une native n'a plus que les sections génériques (Notifications,

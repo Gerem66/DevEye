@@ -110,6 +110,8 @@ export { humanizeError, useResource } from '@/api/useResource';
 export { useAccountPlan, usePlanPauses } from '@/stores/accountPlan';
 /** Un élément que l'offre tient en pause : sa pastille, et le bandeau de sa liste. */
 export { PlanPausedBadge, PlanPausedNotice } from '@/Components/PlanPause';
+/** L'allure d'une page publique qu'un module sert : thème et accent. */
+export { PageLookFields } from '@/Components/PageLook';
 export { openAccountView } from '@/stores/accountView';
 /** L'erreur d'une commande refusée : son code, son message, ses détails de validation. */
 export { WsError } from '@/api/ws';

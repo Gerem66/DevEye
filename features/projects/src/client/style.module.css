@@ -3439,3 +3439,69 @@ button.tlAddCard {
     font-size: 0.85rem;
     overflow-wrap: anywhere;
 }
+
+/* La vignette du tableau public, aux couleurs que la page posera
+   (`PUBLIC_BOARD_PALETTE`, passées en variables par le composant). */
+.pvRow {
+    display: flex;
+    gap: var(--space-sm);
+}
+
+.pv {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-height: 104px;
+    padding: 10px;
+    border: 1px solid var(--glass-border);
+    border-top: 3px solid var(--pv-accent);
+    border-radius: var(--radius-md);
+    background: var(--pv-bg);
+}
+
+.pvTitle {
+    width: 45%;
+    height: 8px;
+    border-radius: 3px;
+    background: var(--pv-ink);
+    opacity: 0.85;
+}
+
+.pvProgress {
+    width: 38%;
+    height: 4px;
+    border-radius: var(--radius-pill);
+    background: var(--pv-chip);
+    overflow: hidden;
+}
+
+.pvProgress span {
+    display: block;
+    width: 60%;
+    height: 100%;
+    background: var(--pv-accent);
+}
+
+.pvColumns {
+    display: flex;
+    gap: 5px;
+    margin-top: 4px;
+}
+
+.pvColumn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 4px;
+    border-radius: 5px;
+    background: var(--pv-column);
+}
+
+.pvCard {
+    height: 12px;
+    border: 1px solid var(--pv-line);
+    border-radius: 3px;
+    background: var(--pv-card);
+}

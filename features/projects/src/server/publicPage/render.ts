@@ -1,7 +1,9 @@
+import type { PageThemeChoice } from '@deveye/types/sdk';
+
 import type { ProjectPriority } from '../../contracts/domain';
 import { escapeHtml } from './html';
-import { BOARD_STYLE } from './style';
-import type { PublicAssignee, PublicBoardView, PublicCardView, PublicColumnView } from './view';
+import { accentStyle, BOARD_STYLE } from './style';
+import type { PublicAssignee, PublicBoardView, PublicCardView, PublicColumnView, PublicSubtaskView } from './view';
 
 /**
  * La page publique d'un projet, en HTML : un document complet, sans ressource
@@ -36,6 +38,8 @@ const PRIORITY_LABELS: Record<Exclude<ProjectPriority, 'none'>, string> = {
 
 const ICONS = {
     check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+    box: '<rect x="4" y="4" width="16" height="16" rx="3"/>',
+    chevron: '<path d="M6.5 9.5l5.5 5.5 5.5-5.5"/>',
     list: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8.5 12l2.5 2.5 4.5-5"/>',
     calendar: '<rect x="4" y="5.5" width="16" height="14" rx="2.5"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/>'
 };
@@ -54,23 +58,54 @@ function plural(n: number, one: string, many: string): string {
     return `${n} ${n > 1 ? many : one}`;
 }
 
-function renderPeople(people: readonly PublicAssignee[]): string {
+/**
+ * Les balises d'une carte. Celle qui se déplie tient tout son contenu dans un
+ * `<summary>`, qui n'admet que du texte en ligne : les mêmes classes, portées
+ * par des `span`.
+ */
+interface CardTags {
+    block: string;
+    para: string;
+    title: string;
+    list: string;
+    item: string;
+    listLabel: string;
+}
+
+const PLAIN: CardTags = {
+    block: 'div',
+    para: 'p',
+    title: 'h3',
+    list: 'ul',
+    item: 'li',
+    listLabel: ' aria-label="Personnes assignées"'
+};
+const INLINE: CardTags = { block: 'span', para: 'span', title: 'span', list: 'span', item: 'span', listLabel: '' };
+
+function avatarOf(person: PublicAssignee, tag: string): string {
+    return `<${tag} class="avatar hue-${person.color}" title="${escapeHtml(person.name)}"><span aria-hidden="true">${escapeHtml(person.initials)}</span><span class="sr">${escapeHtml(person.name)}</span></${tag}>`;
+}
+
+function renderPeople(people: readonly PublicAssignee[], tags: CardTags): string {
     if (people.length === 0) return '';
-    const items = people
-        .map(
-            (person) =>
-                `<li class="avatar hue-${person.color}" title="${escapeHtml(person.name)}"><span aria-hidden="true">${escapeHtml(person.initials)}</span><span class="sr">${escapeHtml(person.name)}</span></li>`
-        )
-        .join('');
-    return `<ul class="people" aria-label="Personnes assignées">${items}</ul>`;
+    const items = people.map((person) => avatarOf(person, tags.item)).join('');
+    return `<${tags.list} class="people"${tags.listLabel}>${items}</${tags.list}>`;
+}
+
+function renderSubtask(subtask: PublicSubtaskView): string {
+    const done = subtask.done ? '<span class="sr"> (terminée)</span>' : '';
+    const who = subtask.assignee ? avatarOf(subtask.assignee, 'span') : '';
+    return `<li class="subtask${subtask.done ? ' subtask--done' : ''}">${icon(subtask.done ? 'list' : 'box')}<span class="subtask-label">${escapeHtml(subtask.label)}${done}</span>${who}</li>`;
 }
 
 function renderCard(card: PublicCardView): string {
+    const tags = card.subtasks === null ? PLAIN : INLINE;
     const priority =
         card.priority === 'none'
             ? ''
             : `<span class="priority priority--${card.priority}" title="${PRIORITY_LABELS[card.priority]}"><span class="sr">${PRIORITY_LABELS[card.priority]}</span></span>`;
-    const excerpt = card.excerpt.length > 0 ? `<p class="excerpt">${escapeHtml(card.excerpt)}</p>` : '';
+    const excerpt =
+        card.excerpt.length > 0 ? `<${tags.para} class="excerpt">${escapeHtml(card.excerpt)}</${tags.para}>` : '';
 
     const meta: string[] = [];
     if (card.checklist) {
@@ -91,13 +126,14 @@ function renderCard(card: PublicCardView): string {
             `<span class="meta-item milestone" title="Jalon : ${escapeHtml(card.milestone.name)}"><i class="dot${hue}" aria-hidden="true"></i><span><span class="sr">Jalon : </span>${escapeHtml(card.milestone.name)}</span></span>`
         );
     }
-    const people = renderPeople(card.assignees);
-
-    return `<li class="card">
-                            <div class="card-top">${priority}<h3>${escapeHtml(card.title)}</h3></div>
-                            ${excerpt}
-                            ${meta.length > 0 || people ? `<div class="card-meta">${meta.join('')}${people}</div>` : ''}
-                        </li>`;
+    const people = renderPeople(card.assignees, tags);
+    const chevron = card.subtasks === null ? '' : `<span class="chevron">${icon('chevron')}</span>`;
+    const body = `<${tags.block} class="card-top">${priority}<${tags.title} class="card-title">${escapeHtml(card.title)}</${tags.title}>${chevron}</${tags.block}>${excerpt}${
+        meta.length > 0 || people ? `<${tags.block} class="card-meta">${meta.join('')}${people}</${tags.block}>` : ''
+    }`;
+    if (card.subtasks === null) return `<li class="card">${body}</li>`;
+    const subtasks = card.subtasks.map(renderSubtask).join('');
+    return `<li class="card"><details data-card="${card.id}"><summary>${body}</summary><ul class="subtasks" aria-label="Sous-tâches">${subtasks}</ul></details></li>`;
 }
 
 function renderColumn(column: PublicColumnView, index: number): string {
@@ -128,17 +164,21 @@ function documentOf(input: {
     body: string;
     options: RenderOptions;
     robots: boolean;
+    theme: PageThemeChoice;
+    accent: string;
 }): string {
+    const theme = input.theme === 'auto' ? '' : ` data-theme="${input.theme}"`;
+    const scheme = input.theme === 'auto' ? 'light dark' : input.theme;
     return `<!doctype html>
-<html lang="fr">
+<html lang="fr"${theme}>
     <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta name="color-scheme" content="light dark" />
+        <meta name="color-scheme" content="${scheme}" />
         ${input.robots ? '' : '<meta name="robots" content="noindex" />'}
         <title>${escapeHtml(input.title)}</title>
         <meta name="description" content="${escapeHtml(input.description)}" />
-        <style>${BOARD_STYLE}</style>
+        <style>${BOARD_STYLE}${accentStyle(input.accent)}</style>
     </head>
     <body>
         <div class="page">
@@ -160,6 +200,10 @@ export function renderBoardPage(view: PublicBoardView, options: RenderOptions): 
             ? `<li>${view.cardDone} ${view.cardDone > 1 ? 'tâches terminées' : 'tâche terminée'} sur ${view.cardTotal}</li>`
             : ''
     ].join('');
+    const progress =
+        view.cardTotal > 0
+            ? `<div class="progress" aria-hidden="true"><span style="width: ${Math.round((view.cardDone / view.cardTotal) * 100)}%"></span></div>`
+            : '';
     const lede = view.description.length > 0 ? `<p class="lede">${escapeHtml(view.description)}</p>` : '';
     const columns =
         view.columns.length > 0
@@ -174,12 +218,15 @@ export function renderBoardPage(view: PublicBoardView, options: RenderOptions): 
             view.description.length > 0 ? view.description.slice(0, 160) : `Le tableau du projet ${view.title}.`,
         options,
         robots: true,
+        theme: view.theme,
+        accent: view.accent,
         body: `<main id="board">
             <header class="top">
                 ${iconTag}
                 <div>
                     <h1>${escapeHtml(view.title)}</h1>
                     <ul class="facts">${facts}</ul>
+                    ${progress}
                 </div>
             </header>
             ${lede}
@@ -196,6 +243,8 @@ export function renderMissingPage(options: RenderOptions): string {
         description: 'Ce tableau n’existe pas, ou n’est plus publié.',
         options: { ...options, scriptPath: '' },
         robots: false,
+        theme: 'auto',
+        accent: '',
         body: `<main class="missing">
                 <h1>Page introuvable</h1>
                 <p>Ce tableau n’existe pas, ou n’est plus publié.</p>

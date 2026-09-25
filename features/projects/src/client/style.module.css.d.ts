@@ -205,6 +205,13 @@ declare const styles: {
     readonly progress: string;
     readonly progressFill: string;
     readonly publicUrl: string;
+    readonly pv: string;
+    readonly pvCard: string;
+    readonly pvColumn: string;
+    readonly pvColumns: string;
+    readonly pvProgress: string;
+    readonly pvRow: string;
+    readonly pvTitle: string;
     readonly readonlyAssignee: string;
     readonly readonlyMeta: string;
     readonly readonlyText: string;

@@ -9,6 +9,7 @@ import {
     type ProjectPublicRow,
     type ProjectRow
 } from '../contracts/domain';
+import type { PageThemeChoice } from '@deveye/types/sdk';
 import { defineSdkFeature, FeatureError, type SdkDomain } from '@deveye/types/sdk/server';
 
 import { assertAtHome, isForeign, loadProject, MANAGE, recordEvent, tryDecryptProject, type Ctx } from './_shared';
@@ -66,6 +67,11 @@ async function titleOf(ctx: Ctx, project: ProjectRow): Promise<string> {
     return (await tryDecryptProject(ctx.cipher(), project.content))?.title ?? '';
 }
 
+/** Le thème stocké ; une valeur abîmée suit le visiteur. */
+export function themeOf(row: ProjectPublicRow): PageThemeChoice {
+    return row.theme === 'light' || row.theme === 'dark' ? row.theme : 'auto';
+}
+
 /** En ligne, ouvert, et pas tenu en pause par l'offre : ce que la route publique sert. */
 function served(ctx: Ctx, row: ProjectPublicRow): boolean {
     return (
@@ -99,6 +105,9 @@ async function toPublication(ctx: Ctx, row: ProjectPublicRow): Promise<ProjectPu
         slug: row.slug,
         showDates: row.show_dates === 1,
         showAssignees: row.show_assignees === 1,
+        showSubtasks: row.show_subtasks === 1,
+        theme: themeOf(row),
+        accent: row.accent,
         url,
         atRoot,
         rootTitle,
@@ -215,7 +224,10 @@ export const projectPublicationFeatures = [
                           ? await queueEnd(ctx, draft.domainId, project.id, at)
                           : (existing?.domain_at ?? at),
                 showDates: draft.showDates,
-                showAssignees: draft.showAssignees
+                showAssignees: draft.showAssignees,
+                showSubtasks: draft.showSubtasks,
+                theme: draft.theme,
+                accent: draft.accent
             });
             forgetPublicPage(project.id);
 
@@ -233,7 +245,9 @@ export const projectPublicationFeatures = [
                     enabled: draft.enabled,
                     domainId: draft.domainId,
                     showDates: draft.showDates,
-                    showAssignees: draft.showAssignees
+                    showAssignees: draft.showAssignees,
+                    showSubtasks: draft.showSubtasks,
+                    theme: draft.theme
                 }
             });
             const row = await ctx.repo.publication.find(project.id, project.workspace_id);
@@ -258,7 +272,10 @@ export const projectPublicationFeatures = [
                 slug: existing.slug,
                 domainAt: existing.domain_at,
                 showDates: existing.show_dates === 1,
-                showAssignees: existing.show_assignees === 1
+                showAssignees: existing.show_assignees === 1,
+                showSubtasks: existing.show_subtasks === 1,
+                theme: themeOf(existing),
+                accent: existing.accent
             });
             forgetPublicPage(project.id);
             await recordEvent(ctx, project, { kind: 'projects.publication', label: 'Lien public changé' });

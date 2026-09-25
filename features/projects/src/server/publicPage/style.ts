@@ -1,71 +1,69 @@
+import { accentSoft, PAGE_ACCENTS, resolvePageAccent, type PageTheme } from '@deveye/types/sdk';
+
+import { PUBLIC_BOARD_PALETTE } from '../../contracts/domain';
+
 /**
  * La feuille de la page publique, en ligne dans le document : aucune ressource
  * distante, et la police du système. La page vit hors de l'app, sans son thème :
- * ses couleurs sont ses propres jetons, posés une fois par thème ci-dessous, et
- * tout le reste passe par `var()`. Le thème suit celui du visiteur.
+ * ses couleurs sont celles de `PUBLIC_BOARD_PALETTE`, posées une fois par thème
+ * ci-dessous, et tout le reste passe par `var()`.
  *
- * Les teintes des jalons et des membres sont celles de l'app, les mêmes dans les
- * deux thèmes : les initiales s'y écrivent en encre sombre, lisible sur chacune.
+ * Sans `data-theme` sur la racine, la page suit le visiteur ; avec, le choix du
+ * propriétaire l'emporte. Les teintes des jalons et des membres sont celles de
+ * l'app, les mêmes dans les deux thèmes : les initiales s'y écrivent en encre
+ * sombre, lisible sur chacune.
  */
 
-const LIGHT = `
-    color-scheme: light;
-    --bg: #f5f6f8;
-    --column: #eceef2;
-    --card: #ffffff;
-    --ink: #15171c;
-    --muted: #5e6573;
-    --line: #e3e6eb;
-    --accent: #3a6ad6;
-    --low: #1c9a52;
-    --high: #d23f3f;
-    --late: #c23434;
-    --late-soft: #fbe9e9;
-    --chip: #eef0f3;
-    --dot-ring: rgba(21, 23, 28, 0.18);
-    --shadow: 0 1px 2px rgba(21, 23, 28, 0.06);`;
+function tokens(theme: PageTheme): string {
+    const palette = PUBLIC_BOARD_PALETTE[theme];
+    return [
+        `color-scheme: ${theme};`,
+        ...Object.entries(palette).map(([name, value]) => `--${name}: ${value};`),
+        `--accent-soft: ${accentSoft(palette.accent, theme)};`
+    ].join('\n    ');
+}
 
-const DARK = `
-    color-scheme: dark;
-    --bg: #0e1015;
-    --column: #14171d;
-    --card: #1b1f27;
-    --ink: #e8eaef;
-    --muted: #9aa2b1;
-    --line: #2a303b;
-    --accent: #6f9bff;
-    --low: #30bd6a;
-    --high: #ee5858;
-    --late: #ff7b7b;
-    --late-soft: #331a1c;
-    --chip: #242a33;
-    --dot-ring: rgba(232, 234, 239, 0.16);
-    --shadow: none;`;
-
-const HUES = `
-    --avatar-ink: #15171c;
-    --hue-red: #ff6b81;
-    --hue-orange: #ff9f43;
-    --hue-yellow: #ffd54a;
-    --hue-green: #5ed17c;
-    --hue-blue: #4da8ff;
-    --hue-indigo: #7c8cff;
-    --hue-purple: #b088ff;
-    --hue-pink: #ff7ac6;`;
-
-const HUE_NAMES = ['red', 'orange', 'yellow', 'green', 'blue', 'indigo', 'purple', 'pink'];
-
-export const BOARD_STYLE = `
-:root {${LIGHT}${HUES}
+/** Les trois sélecteurs de la palette, dans l'ordre où la feuille les pose. */
+function byTheme(block: (theme: PageTheme) => string): string {
+    return `
+:root {
+    ${block('light')}
+}
+:root[data-theme='dark'] {
+    ${block('dark')}
 }
 @media (prefers-color-scheme: dark) {
-    :root {${DARK}
+    :root:not([data-theme='light']) {
+        ${block('dark')}
     }
+}`;
+}
+
+/**
+ * L'accent choisi, à poser après la feuille sous les mêmes sélecteurs que la
+ * palette : à spécificité égale, le dernier l'emporte. Vide pour l'accent
+ * d'origine, et rien de ce que le propriétaire écrit n'en sort tel quel.
+ */
+export function accentStyle(accent: string): string {
+    const hex = resolvePageAccent(accent);
+    if (hex === null) return '';
+    return byTheme((theme) => `--accent: ${hex}; --accent-soft: ${accentSoft(hex, theme)};`);
+}
+
+/** Les teintes des jalons et des membres, celles des comptes de l'app. */
+const HUES = Object.entries(PAGE_ACCENTS)
+    .map(([name, hex]) => `--hue-${name}: ${hex};`)
+    .join('\n    ');
+
+export const BOARD_STYLE = `${byTheme(tokens)}
+:root {
+    ${HUES}
 }
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
 body {
     margin: 0;
+    border-top: 4px solid var(--accent);
     background: var(--bg);
     color: var(--ink);
     font: 15px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -80,7 +78,9 @@ body {
 .top img { flex: none; width: 52px; height: 52px; border-radius: 12px; object-fit: cover; }
 .top h1 { margin: 0; font-size: 28px; line-height: 1.2; font-weight: 700; letter-spacing: -0.01em; overflow-wrap: anywhere; }
 .facts { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin: 6px 0 0; padding: 0; list-style: none; color: var(--muted); font-size: 13px; }
-.status { padding: 1px 9px; border-radius: 999px; background: var(--chip); color: var(--ink); font-weight: 600; }
+.status { padding: 1px 9px; border-radius: 999px; background: var(--accent-soft); color: var(--ink); font-weight: 600; }
+.progress { max-width: 320px; height: 6px; margin: 10px 0 0; border-radius: 999px; background: var(--chip); overflow: hidden; }
+.progress span { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
 .lede { max-width: 72ch; margin: 0 0 24px; color: var(--muted); white-space: pre-line; overflow-wrap: anywhere; }
 
 .board {
@@ -103,10 +103,23 @@ body {
     background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow);
 }
 .card-top { display: flex; align-items: flex-start; gap: 8px; }
-.card h3 { margin: 0; font-size: 14px; line-height: 1.4; font-weight: 600; overflow-wrap: anywhere; }
+.card-title { display: block; margin: 0; font-size: 14px; line-height: 1.4; font-weight: 600; overflow-wrap: anywhere; }
+.card summary { display: block; list-style: none; cursor: pointer; border-radius: 6px; outline: none; }
+.card summary::-webkit-details-marker { display: none; }
+.card summary:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+.chevron { flex: none; margin: 2px 0 0 auto; color: var(--muted); }
+.chevron svg { display: block; width: 16px; height: 16px; transition: transform 0.15s; }
+details[open] .chevron svg { transform: rotate(180deg); }
+.subtasks { display: grid; gap: 6px; margin: 10px 0 0; padding: 10px 0 0; border-top: 1px solid var(--line); list-style: none; font-size: 13px; }
+.subtask { display: flex; align-items: flex-start; gap: 8px; }
+.subtask svg { flex: none; width: 15px; height: 15px; margin-top: 2px; color: var(--muted); }
+.subtask--done svg { color: var(--low); }
+.subtask--done .subtask-label { color: var(--muted); text-decoration: line-through; }
+.subtask-label { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.subtask .avatar { flex: none; margin-left: 0; }
 .priority { flex: none; width: 7px; height: 7px; margin-top: 7px; border-radius: 50%; }
 .priority--low { background: var(--low); }
-.priority--normal { background: var(--accent); }
+.priority--normal { background: var(--normal); }
 .priority--high { background: var(--high); }
 .excerpt {
     margin: 4px 0 0; color: var(--muted); font-size: 13px; line-height: 1.45; overflow-wrap: anywhere;
@@ -121,12 +134,15 @@ body {
 .milestone span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--muted); box-shadow: inset 0 0 0 1px var(--dot-ring); }
 .people { display: flex; margin: 0 0 0 auto; padding: 0 0 0 6px; list-style: none; }
+.people .avatar:first-child { margin-left: 0; }
 .avatar {
     display: grid; place-items: center; width: 22px; height: 22px; margin-left: -6px;
     border-radius: 50%; border: 2px solid var(--card);
     color: var(--avatar-ink); font-size: 9px; font-weight: 700; letter-spacing: 0.02em;
 }
-${HUE_NAMES.map((hue) => `.hue-${hue} { background: var(--hue-${hue}); }`).join('\n')}
+${Object.keys(PAGE_ACCENTS)
+    .map((hue) => `.hue-${hue} { background: var(--hue-${hue}); }`)
+    .join('\n')}
 
 .updated { margin: 18px 0 0; color: var(--muted); font-size: 12px; }
 .foot { margin-top: 28px; text-align: center; font-size: 12px; color: var(--muted); }
@@ -136,6 +152,9 @@ ${HUE_NAMES.map((hue) => `.hue-${hue} { background: var(--hue-${hue}); }`).join(
 .missing h1 { margin: 0 0 8px; font-size: 24px; }
 .missing p { margin: 0; color: var(--muted); }
 
+@media (prefers-reduced-motion: reduce) {
+    .chevron svg { transition: none; }
+}
 @media (max-width: 640px) {
     .page { padding-top: 24px; }
     .top h1 { font-size: 23px; }

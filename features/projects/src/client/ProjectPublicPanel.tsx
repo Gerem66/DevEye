@@ -7,6 +7,7 @@ import {
     humanizeError,
     invalidate,
     openAccountView,
+    PageLookFields,
     PlanPausedBadge,
     PlanPausedNotice,
     ReadOnlyNotice,
@@ -21,16 +22,20 @@ import {
     useWorkspacePermissions,
     type ConfirmRequest
 } from 'deveye-sdk-client';
+import { resolvePageAccent } from '@deveye/types/sdk';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import {
     PROJECT_SLUG_MAX_LENGTH,
     PROJECT_SLUG_PATTERN,
+    PUBLIC_OWN_ACCENT,
     PUBLIC_PATH,
+    PUBLIC_THEMES,
     type ProjectPublication,
     type ProjectPublicationDraft
 } from '../contracts/domain';
 
 import { api } from './api';
+import PublicBoardPreview from './PublicBoardPreview';
 import styles from './style.module.css';
 
 function draftOf(publication: ProjectPublication | null): ProjectPublicationDraft {
@@ -39,7 +44,10 @@ function draftOf(publication: ProjectPublication | null): ProjectPublicationDraf
         domainId: publication?.domainId ?? null,
         slug: null,
         showDates: publication?.showDates ?? false,
-        showAssignees: publication?.showAssignees ?? false
+        showAssignees: publication?.showAssignees ?? false,
+        showSubtasks: publication?.showSubtasks ?? false,
+        theme: publication?.theme ?? 'auto',
+        accent: publication?.accent ?? ''
     };
 }
 
@@ -117,9 +125,10 @@ export default function ProjectPublicPanel({ scope, canWrite }: SettingsPanelPro
     const slugTouched = showsPath && slugText.trim() !== (publication?.slug ?? '');
     const slugInvalid = slugTouched && !PROJECT_SLUG_PATTERN.test(slugText.trim());
     const pending = chosen !== null && chosen.verifiedAt === null;
+    const accentInvalid = draft.accent !== '' && resolvePageAccent(draft.accent) === null;
 
     const save = async () => {
-        if (!canManage || busy || slugInvalid) return;
+        if (!canManage || busy || slugInvalid || accentInvalid) return;
         setBusy(true);
         setError(null);
         try {
@@ -287,9 +296,34 @@ export default function ProjectPublicPanel({ scope, canWrite }: SettingsPanelPro
                 hint='Le nom des membres de l’espace assignés à chaque tâche, lisible par quiconque a le lien.'
                 onChange={(showAssignees) => setDraft((d) => ({ ...d, showAssignees }))}
             />
+            <Switch
+                checked={draft.showSubtasks}
+                disabled={!editable}
+                label='Déplier les sous-tâches'
+                hint='Un clic sur une tâche montre ses sous-tâches, faites ou non.'
+                onChange={(showSubtasks) => setDraft((d) => ({ ...d, showSubtasks }))}
+            />
+
+            <div className={shell.field}>
+                <span className={shell.sectionLabel}>Apparence</span>
+                <PageLookFields
+                    theme={draft.theme}
+                    accent={draft.accent}
+                    themes={PUBLIC_THEMES}
+                    ownAccent={PUBLIC_OWN_ACCENT}
+                    disabled={!editable}
+                    onChange={(look) => setDraft((d) => ({ ...d, theme: look.theme, accent: look.accent }))}
+                    preview={<PublicBoardPreview theme={draft.theme} accent={draft.accent} />}
+                />
+                {accentInvalid && (
+                    <span className={shell.errorText}>
+                        Une couleur en hexadécimal s’écrit en six chiffres : #3a6ad6.
+                    </span>
+                )}
+            </div>
 
             {canManage ? (
-                <SaveButton onSave={save} disabled={busy || slugInvalid} />
+                <SaveButton onSave={save} disabled={busy || slugInvalid || accentInvalid} />
             ) : (
                 <ReadOnlyNotice>
                     Votre rôle ne permet pas de régler la page publique : cela relève de la permission « Gérer les

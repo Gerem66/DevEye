@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
  * Le script de la page publique, servi à part (`script-src 'self'`) plutôt qu'en
  * ligne. Deux gestes : les dates remises dans le fuseau du visiteur, et le
  * tableau relu toutes les minutes tant qu'il est à l'écran. Sans lui, la page
- * reste lisible, à l'heure de Paris.
+ * reste lisible, à l'heure de Paris, et les cartes se déplient quand même.
  *
  * Une chaîne dans un fichier TypeScript, et non un `.js` : rien à copier au
  * build, et l'ETag se calcule sur ce qui sera réellement servi.
@@ -41,9 +41,16 @@ export const BOARD_SCRIPT = `(function () {
                 var current = document.getElementById('board');
                 if (!next || !current) return;
                 localize(next);
-                // Le défilement horizontal du tableau survit à la relecture.
+                // Le défilement horizontal et les cartes dépliées survivent à la relecture.
                 var scroller = current.querySelector('.board');
                 var left = scroller ? scroller.scrollLeft : 0;
+                var open = {};
+                var opened = current.querySelectorAll('details[open][data-card]');
+                for (var i = 0; i < opened.length; i++) open[opened[i].getAttribute('data-card')] = true;
+                var cards = next.querySelectorAll('details[data-card]');
+                for (var j = 0; j < cards.length; j++) {
+                    if (open[cards[j].getAttribute('data-card')]) cards[j].setAttribute('open', '');
+                }
                 current.replaceWith(next);
                 var after = next.querySelector('.board');
                 if (after) after.scrollLeft = left;
