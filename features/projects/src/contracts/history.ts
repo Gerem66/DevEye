@@ -23,6 +23,7 @@ export const projectEventKindSchema = z.enum([
     'projects.securityTier',
     'projects.archived',
     'projects.restored',
+    'projects.publication',
     'card.archived',
     'card.restored',
     'column.purged',

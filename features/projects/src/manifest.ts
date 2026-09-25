@@ -34,11 +34,37 @@ export const manifest = {
      * Seul un écran monté relit : ravive donc qui regarde ce projet, personne
      * d'autre.
      */
-    resources: ['projects.count', 'projects.list', 'projects.board', 'projects.myTasks', 'projects.messages'],
-    invalidatedByTopic: ['projects.count', 'projects.list', 'projects.board', 'projects.myTasks'],
+    resources: [
+        'projects.count',
+        'projects.list',
+        'projects.board',
+        'projects.myTasks',
+        'projects.messages',
+        'projects.publication'
+    ],
+    invalidatedByTopic: [
+        'projects.count',
+        'projects.list',
+        'projects.board',
+        'projects.myTasks',
+        'projects.publication'
+    ],
     topics: [{ id: 'projectsChat', keys: ['projects.messages', 'projects.list', 'projects.board'] }],
-    /** Les assignés d'une carte et les auteurs d'un message sont des membres. */
-    nativeCapabilities: ['members.read'],
+    /** Un domaine vérifié, en pause ou retiré change l'adresse qu'une page publique donne à partager. */
+    alsoInvalidatedBy: [{ topic: 'domain', keys: ['projects.publication'] }],
+    /**
+     * `members.read` : les assignés d'une carte et les auteurs d'un message sont
+     * des membres. `routes.public` : le tableau d'un projet, lisible sans compte.
+     */
+    nativeCapabilities: ['members.read', 'routes.public'],
+    quotas: [{ key: 'pages', label: 'projets publics', stock: true }],
+    domains: {
+        hint: 'Votre propre adresse pour montrer un projet, comme roadmap.monentreprise.fr : le premier projet publié dessus y répond directement, à la racine, les suivants sous leur propre chemin. Sans elle, un projet public reste sur l’adresse de DevEye, qui fonctionne toujours.',
+        service: 'Faites pointer le domaine vers DevEye avec l’enregistrement ci-dessous.',
+        placeholder: 'roadmap.monentreprise.fr',
+        removal: 'Les projets qu’il montre repartent sur l’adresse de DevEye, et ce domaine cesse de les afficher.',
+        web: true
+    },
     /**
      * `write` seul laisse participer au tableau : retoucher une tâche et la
      * faire passer d'une colonne à l'autre. Les cinq droits ci-dessous
@@ -93,11 +119,19 @@ export const manifest = {
         }
     ],
     /**
-     * Le projet lui-même (profil, archivage) dans l'onglet Général de sa fiche, et
-     * son histoire dans le dernier : on l'ouvre rarement, pour une question
-     * précise, et elle prenait un onglet de la barre toute la journée pour ça.
-     * Partage et Permissions viennent du descripteur.
+     * Le projet lui-même (profil, archivage) dans l'onglet Général de sa fiche, sa
+     * page publique ensuite, et son histoire dans le dernier : on l'ouvre rarement,
+     * pour une question précise, et elle prenait un onglet de la barre toute la
+     * journée pour ça. Partage et Permissions viennent du descripteur. À l'échelle
+     * de la feature, les domaines qui servent les pages publiques.
      */
-    settings: { item: ['general', { id: 'history', label: 'Historique', icon: 'archive' }] },
+    settings: {
+        feature: ['domains'],
+        item: [
+            'general',
+            { id: 'public', label: 'Page publique', icon: 'eye-open' },
+            { id: 'history', label: 'Historique', icon: 'archive' }
+        ]
+    },
     commands: projectCommands
 } satisfies FeatureManifest;

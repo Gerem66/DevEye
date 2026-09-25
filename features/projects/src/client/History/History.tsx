@@ -14,6 +14,7 @@ const KIND_META: Record<ProjectEventKind, { icon: string; text: string }> = {
     'projects.securityTier': { icon: 'lock', text: 'Confidentialité' },
     'projects.archived': { icon: 'archive', text: 'Projet archivé' },
     'projects.restored': { icon: 'refresh', text: 'Projet restauré' },
+    'projects.publication': { icon: 'eye-open', text: 'Page publique' },
     'card.archived': { icon: 'archive', text: 'Bloc archivé' },
     'card.restored': { icon: 'refresh', text: 'Bloc restauré' },
     'column.purged': { icon: 'archive', text: 'Colonne vidée' },

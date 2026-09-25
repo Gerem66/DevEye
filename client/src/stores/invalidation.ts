@@ -70,6 +70,7 @@ export type ResourceKey =
     | 'projects.board'
     | 'projects.myTasks'
     | 'projects.messages'
+    | 'projects.publication'
     | 'git.count'
     | 'git.list'
     | 'git.repo'

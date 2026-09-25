@@ -661,7 +661,9 @@ l'origine des membres et celle de l'écouteur public). Une erreur se signale par
 Par service (`FeatureServiceDeps`, `_sdk/service.ts`) : `repo`,
 `listWorkspaceIds` (tous les espaces), `storeFor`/`cipherFor`/`deveyeFor`/
 `devicesFor` (sessionless, étage ouvert seul ; `devicesFor` est la vraie façade,
-gardée par `devices.read`, avec l'état en ligne du hub), `devices` (la flotte
+gardée par `devices.read`, avec l'état en ligne du hub), `membersFor` (les
+membres d'un espace, propriétaire compris, gardé par `members.read` : le nom
+qu'une page publique montre), `devices` (la flotte
 par identifiant, même garde), `telemetry`, `live.changed(workspaceId, topics?)`
 (le sujet du module, ou ceux que le service nomme : les siens, un secondaire du
 manifest, celui d'une autre feature ; diffusé par le hub, projections

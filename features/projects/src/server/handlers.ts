@@ -11,6 +11,7 @@ import { projectHistoryFeatures } from './history';
 import { projectDashboardFeatures } from './dashboard';
 import { projectLinkFeatures } from './links';
 import { projectPortfolioFeatures } from './projects';
+import { projectPublicationFeatures } from './publication';
 import type { ProjectsRepo } from './repo';
 import { projectRepoLinkFeatures } from './repoLink';
 import { projectTimelineFeatures } from './timeline';
@@ -35,5 +36,6 @@ export const projectsHandlers: readonly SdkFeatureDefinition<ProjectsRepo, strin
     ...projectLinkFeatures,
     ...projectDashboardFeatures,
     ...projectDatabaseLinkFeatures,
-    ...projectAudienceLinkFeatures
+    ...projectAudienceLinkFeatures,
+    ...projectPublicationFeatures
 ];

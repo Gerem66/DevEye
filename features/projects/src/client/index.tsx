@@ -2,6 +2,7 @@ import type { FeatureClient } from '@deveye/types/sdk/client';
 
 import ProjectGeneralPanel from './ProjectGeneralPanel';
 import ProjectHistoryPanel from './ProjectHistoryPanel';
+import ProjectPublicPanel from './ProjectPublicPanel';
 import Projects from './Projects';
 import ProjectsWidget from './ProjectsWidget';
 
@@ -12,8 +13,8 @@ import ProjectsWidget from './ProjectsWidget';
 export const clientEntry: FeatureClient = {
     Widget: ProjectsWidget,
     Full: Projects,
-    /** Le projet lui-même (Général), puis son histoire et ses archives (Historique). */
-    settingsPanels: { general: ProjectGeneralPanel, history: ProjectHistoryPanel },
+    /** Le projet lui-même (Général), sa page publique, puis son histoire et ses archives (Historique). */
+    settingsPanels: { general: ProjectGeneralPanel, public: ProjectPublicPanel, history: ProjectHistoryPanel },
     // Démonté à la fermeture : portefeuille, fils et présence vivent en
     // direct, une instance en cache continuerait de travailler sans être vue.
     cacheDurationMinutes: 0,

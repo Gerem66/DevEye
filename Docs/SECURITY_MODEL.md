@@ -358,6 +358,13 @@ Ce qui en découle :
   liaisons. Les services des modules Git et Déploiement n'ont donc jamais un
   projet gardé à lire, et les lectures d'usage que Projets leur offre filtrent
   de toute façon sur l'étage ouvert.
+- **Seul un projet ouvert se publie.** La page publique d'un projet
+  (`features/projects/src/server/publicPage/`) déchiffre son tableau sans
+  session, à l'étage ouvert, pour qui a le lien. Un projet gardé ne se publie
+  pas, et le passer en gardé retire sa publication, lien compris : un lien
+  donné comme public ne doit jamais rouvrir un projet devenu confidentiel. La
+  route revérifie l'étage à chaque calcul. Ce qu'elle garde en mémoire (le
+  HTML, trente secondes) est ce que le visiteur lit de toute façon.
 
 ### Ce qui reste en clair, et pourquoi
 

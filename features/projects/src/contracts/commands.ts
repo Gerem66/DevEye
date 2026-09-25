@@ -27,6 +27,7 @@ import {
     dashboardMeasureSchema,
     dashboardTileSchema
 } from './dashboard';
+import { projectPublicationBlockSchema, projectPublicationDraftSchema, projectPublicationSchema } from './publication';
 
 /**
  * Commandes des projets. L'espace visé n'apparaît dans aucune entrée : il voyage sur
@@ -699,6 +700,35 @@ export const projectDashboardKpiTest = {
     output: z.object({ value: z.number().nullable(), error: z.string().nullable() })
 };
 
+/**
+ * La page publique du projet, pour son onglet de réglages. `blocked` dit pourquoi
+ * rien ne se publie d'ici (un projet gardé, un projet partagé depuis un autre
+ * espace), `limit` ce que l'offre du propriétaire en permet (`null` : sans limite).
+ */
+export const projectPublicationGet = {
+    command: 'projects.publication' as const,
+    input: z.object({ projectId }),
+    output: z.object({
+        publication: projectPublicationSchema.nullable(),
+        blocked: projectPublicationBlockSchema.nullable(),
+        limit: z.number().int().nonnegative().nullable()
+    })
+};
+
+/** Ouvre, règle ou referme la page publique ; la première fois tire son lien. */
+export const projectPublish = {
+    command: 'projects.publish' as const,
+    input: z.object({ projectId, publication: projectPublicationDraftSchema }),
+    output: z.object({ publication: projectPublicationSchema })
+};
+
+/** Tire un nouveau lien sous l'adresse de DevEye : l'ancien cesse aussitôt de répondre. */
+export const projectPublicationRelink = {
+    command: 'projects.publicationRelink' as const,
+    input: z.object({ projectId }),
+    output: z.object({ publication: projectPublicationSchema })
+};
+
 export const projectCommands = [
     projectList,
     projectCount,
@@ -757,5 +787,8 @@ export const projectCommands = [
     projectDashboardKpiSave,
     projectDashboardKpiRemove,
     projectDashboardKpiRun,
-    projectDashboardKpiTest
+    projectDashboardKpiTest,
+    projectPublicationGet,
+    projectPublish,
+    projectPublicationRelink
 ] as const;

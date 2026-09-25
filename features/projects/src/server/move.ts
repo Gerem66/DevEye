@@ -9,6 +9,7 @@ import {
 
 import type { ProjectsRepo } from './repo';
 import { projectsTree } from './copy';
+import { forgetPublicPage } from './publication';
 
 /**
  * Le changement d'espace d'un projet : tout son arbre, colonnes, cartes,
@@ -70,6 +71,11 @@ async function linkCounts(q: SdkQueryable, projectId: number, workspaceId: numbe
                 : `Les bases de ses ${k} indicateurs sur mesure, à redésigner là-bas`
         );
     }
+    const published = await q.query<{ n: number }>(
+        'SELECT COUNT(*) AS n FROM ft_projects_public WHERE project_id = ? AND enabled = 1',
+        [projectId]
+    );
+    if (Number(published[0]?.n ?? 0) > 0) out.push('Sa page publique : le lien donné cessera de répondre');
     return out;
 }
 
@@ -95,6 +101,11 @@ export const projectsMove: FeatureItemsMove<ProjectsRepo> = {
                 fromWorkspaceId
             ]);
         }
+
+        // La page publique tient à l'offre et aux domaines de l'espace quitté : elle
+        // reste ici, comme une liaison, et son lien cesse de répondre.
+        await q.execute('DELETE FROM ft_projects_public WHERE project_id = ?', [projectId]);
+        forgetPublicPage(projectId);
 
         // Un indicateur perd sa base pour la même raison, mais garde sa requête :
         // c'est du travail, et la tuile dira qu'il lui faut une base d'ici.

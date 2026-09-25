@@ -3384,3 +3384,58 @@ button.tlAddCard {
     border-color: var(--accent);
     color: var(--accent);
 }
+
+/* Page publique : l'adresse à partager et son bouton de copie, sur une ligne. */
+.publicUrl {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    min-width: 0;
+}
+
+.publicUrl a {
+    flex: 1;
+    min-width: 0;
+    color: var(--accent);
+    overflow-wrap: anywhere;
+    text-decoration: none;
+}
+
+.publicUrl a:hover,
+.publicUrl a:focus-visible {
+    text-decoration: underline;
+}
+
+/* L'offre n'en permet aucune : le dire, et mener aux offres. */
+.planNotice {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--space-sm) var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    background: var(--warning-bg);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.planNotice p {
+    flex: 1;
+    min-width: 240px;
+    margin: 0;
+}
+
+/* Le chemin sous un domaine : le début de l'adresse, fixe, puis le champ. */
+.slugField {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    min-width: 0;
+}
+
+.slugPrefix {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    overflow-wrap: anywhere;
+}

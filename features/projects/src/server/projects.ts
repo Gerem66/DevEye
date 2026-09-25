@@ -35,6 +35,7 @@ import {
     type Ctx,
     type StoredProject
 } from './_shared';
+import { forgetPublicPage } from './publication';
 
 /**
  * Le portefeuille : les projets de l'espace actif, plus ceux qu'un autre espace y
@@ -382,6 +383,16 @@ export const projectSetSecurityTierFeature = defineSdkFeature({
                 await recordEvent(ctx, existing, {
                     kind: 'projects.deployUnlink',
                     label: `${targets} cible${targets > 1 ? 's' : ''} de déploiement déliée${targets > 1 ? 's' : ''} (projet passé en confidentiel)`
+                });
+            }
+
+            // La page publique tombe, lien compris : un lien donné comme public ne
+            // doit jamais rouvrir un projet devenu confidentiel.
+            if (await ctx.repo.publication.remove(input.projectId)) {
+                forgetPublicPage(input.projectId);
+                await recordEvent(ctx, existing, {
+                    kind: 'projects.publication',
+                    label: 'Page publique fermée (projet passé en confidentiel)'
                 });
             }
         }

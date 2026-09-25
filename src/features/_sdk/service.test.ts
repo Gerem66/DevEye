@@ -70,7 +70,17 @@ function fakeHost() {
                 search: async (query: string, limit: number) => {
                     searchCalls.push({ query, limit });
                     return [{ id: 7, email: 'alice@exemple.fr', username: 'alice', role: 'admin', created: 12 }];
-                }
+                },
+                findByIds: async (ids: number[]) =>
+                    [
+                        { id: 7, username: 'alice', color: 'blue' },
+                        { id: 9, username: 'bob', color: '' }
+                    ].filter((u) => ids.includes(u.id))
+            },
+            // L'espace 4 appartient à alice, qui n'y a pas de ligne de membre.
+            workspaces: { findById: async (id: number) => (id === 4 ? { id: 4, owner_user_id: 7 } : null) },
+            workspaceMembers: {
+                listByWorkspaceIds: async (ids: number[]) => (ids.includes(4) ? [{ workspace_id: 4, user_id: 9 }] : [])
             },
             featureKv: {
                 get: async () => ({
@@ -254,6 +264,23 @@ describe('createServiceDeps : devicesFor', () => {
         const { host } = fakeHost();
         const devices = createServiceDeps(host, manifest(ID, ['devices.read']), null, NO_PROVIDERS).devicesFor(1);
         assert.deepEqual(Object.keys(devices).sort(), ['isOnline', 'list']);
+    });
+});
+
+describe('createServiceDeps : membersFor', () => {
+    it("sans 'members.read' : forbidden, sans toucher à la base", async () => {
+        const { host } = fakeHost();
+        await assert.rejects(createServiceDeps(host, manifest(ID), null, NO_PROVIDERS).membersFor(4).list(), forbidden);
+    });
+
+    it('avec la capacité : le propriétaire compris, même sans ligne de membre', async () => {
+        const { host } = fakeHost();
+        const deps = createServiceDeps(host, manifest(ID, ['members.read']), null, NO_PROVIDERS);
+        assert.deepEqual(await deps.membersFor(4).list(), [
+            { userId: 7, name: 'alice', isOwner: true, color: 'blue' },
+            { userId: 9, name: 'bob', isOwner: false, color: null }
+        ]);
+        assert.deepEqual(await deps.membersFor(5).list(), []);
     });
 });
 

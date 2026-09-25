@@ -66,29 +66,31 @@ export function createServiceDeps(
 
     // La façade sessionless d'un espace, gardée par les capacités du manifest
     // comme dans une requête.
-    const facades = new Map<number, DevEyeFacade>();
-    const facadeFor = (workspaceId: number): DevEyeFacade => {
-        const hit = facades.get(workspaceId);
-        if (hit) return hit;
-        const facade = createFacade({
+    const buildFacade = (workspaceId: number, ownerUserId: number): DevEyeFacade =>
+        createFacade({
             db: host.db,
             cipher: cipherFor(workspaceId),
             workspaceId,
             userId: 0,
             isAdmin: false,
-            ownerUserId: 0,
+            ownerUserId,
             workspaceKind: 'shared',
             manifest,
             logger: host.logger,
             providers
         });
+    const facades = new Map<number, DevEyeFacade>();
+    const facadeFor = (workspaceId: number): DevEyeFacade => {
+        const hit = facades.get(workspaceId);
+        if (hit) return hit;
+        const facade = buildFacade(workspaceId, 0);
         facades.set(workspaceId, facade);
         return facade;
     };
 
     // La même erreur qu'en requête (`facade.ts`), nommant la capacité manquante.
     const capabilities = new Set(manifest.nativeCapabilities ?? []);
-    const gate = (cap: 'agents' | 'devices.read' | 'telemetry.read' | 'accounts.read') => (): void => {
+    const gate = (cap: 'agents' | 'devices.read' | 'telemetry.read' | 'accounts.read' | 'members.read') => (): void => {
         if (!capabilities.has(cap)) {
             throw new FeatureError('forbidden', `Module « ${manifest.id} » : declare '${cap}' in nativeCapabilities`);
         }
@@ -96,6 +98,7 @@ export function createServiceDeps(
     const gateAgents = gate('agents');
     const gateDevices = gate('devices.read');
     const gateAccounts = gate('accounts.read');
+    const gateMembers = gate('members.read');
     const keys = serverKeysOf(host.crypt, manifest.id);
 
     return {
@@ -151,6 +154,15 @@ export function createServiceDeps(
             const { list, isOnline } = facadeFor(workspaceId).devices;
             return { list, isOnline };
         },
+        // La façade mémoïsée ignore le propriétaire, qui n'a pas toujours de ligne de membre.
+        membersFor: (workspaceId) => ({
+            async list() {
+                gateMembers();
+                const workspace = await host.db.workspaces.findById(workspaceId);
+                if (!workspace) return [];
+                return buildFacade(workspaceId, workspace.owner_user_id).members.list();
+            }
+        }),
         // La flotte entière, par identifiant, sans espace : pour un moteur qui
         // reçoit les trames de tous les appareils.
         devices: {

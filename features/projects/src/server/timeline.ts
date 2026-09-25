@@ -8,24 +8,21 @@ import {
     projectMilestoneUpdate,
     projectPlan
 } from '../contracts/commands';
-import { projectMilestoneColorSchema, projectMilestoneSchema } from '../contracts/domain';
-import type {
-    ProjectCardDepRow,
-    ProjectMilestone,
-    ProjectMilestoneColor,
-    ProjectMilestoneRow,
-    ProjectRow
-} from '../contracts/domain';
-import { defineSdkFeature, FeatureError, type SdkCipher } from '@deveye/types/sdk/server';
+import { projectMilestoneSchema } from '../contracts/domain';
+import type { ProjectCardDepRow, ProjectMilestone, ProjectMilestoneRow, ProjectRow } from '../contracts/domain';
+import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 
 import {
     assertProjectUnlocked,
+    decryptMilestone,
+    encryptMilestone,
     loadProject,
     PLAN,
     projectCipher,
     recordEvent,
     type Ctx,
-    type ItemLevel
+    type ItemLevel,
+    type StoredMilestone
 } from './_shared';
 
 /**
@@ -34,33 +31,6 @@ import {
  * de repérer un retard et de refuser un cycle sans rien déchiffrer. Seul le libellé
  * d'un jalon passe par le chiffre, sous le codec du projet.
  */
-
-interface StoredMilestone {
-    name: string;
-    description: string;
-    color: ProjectMilestoneColor | null;
-}
-
-async function encryptMilestone(cipher: SdkCipher, payload: StoredMilestone): Promise<string> {
-    return cipher.encrypt(JSON.stringify(payload));
-}
-
-/** Ne lève jamais : un jalon illisible reste sur la frise, sans son nom. */
-async function decryptMilestone(cipher: SdkCipher, content: string): Promise<StoredMilestone> {
-    const empty: StoredMilestone = { name: '', description: '', color: null };
-    const plain = await cipher.tryDecrypt(content);
-    if (plain === null) return empty;
-    try {
-        const parsed = JSON.parse(plain) as Partial<StoredMilestone>;
-        return {
-            name: typeof parsed.name === 'string' ? parsed.name : '',
-            description: typeof parsed.description === 'string' ? parsed.description : '',
-            color: projectMilestoneColorSchema.nullable().catch(null).parse(parsed.color)
-        };
-    } catch {
-        return empty;
-    }
-}
 
 function toMilestone(row: ProjectMilestoneRow, payload: StoredMilestone): ProjectMilestone {
     return projectMilestoneSchema.parse({

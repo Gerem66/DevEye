@@ -321,6 +321,39 @@ qu'il porte, ou celle qu'il a écrite et que personne n'a prise) sans tenir
 dès qu'elle passe à quelqu'un d'autre. Le client applique exactement le même
 prédicat (`client/rights.ts`), pour que rien ne soit proposé qui serait refusé.
 
+### La page publique
+
+L'onglet **Page publique** de la fiche ouvre le tableau d'un projet à qui en a
+le lien, sans compte, en lecture seule. Le serveur rend une page HTML complète
+(`server/publicPage/`, sur le modèle des pages de statut d'Uptime) qu'un petit
+script relit chaque minute ; rien du client React ne sort de l'app.
+
+- **Ce qui sort** : l'en-tête du projet (vignette, titre, description, statut,
+  version, avancement), les colonnes et les cartes (titre, priorité, début de
+  la description, avancement des sous-tâches). Deux options par projet,
+  fermées par défaut : les échéances et les jalons, et les personnes assignées
+  (leur nom, lu par `deps.membersFor`). La discussion, l'historique et les
+  tâches archivées ne sortent jamais.
+- **Les adresses** : un lien tiré au hasard sous l'adresse de DevEye
+  (`/projet/<16 hex>`), toujours valable, et un domaine vérifié de l'espace au
+  choix. Sur un domaine, le plus ancien projet en ligne en tient la racine
+  (`domainRoot`), les suivants répondent sous `/projet/<chemin>`, tiré du titre
+  et figé ensuite. Quand le projet de la racine s'en va, le suivant y monte.
+- **Les gardes** : seul un projet ouvert se publie (le serveur n'a pas la clé
+  d'un projet gardé hors session), et le passer en gardé retire sa publication,
+  lien compris. Publier est un geste du domicile, sous `manageProjects`. Un
+  projet déplacé perd sa publication, comme ses liaisons ; une copie arrive sans.
+  Un tableau ne paraît que sous l'adresse de DevEye ou sous un domaine de son
+  espace.
+- **L'offre** : `projects.pages` est un stock (1 en Gratuite, 10 en Pro) qui
+  compte les projets en ligne. Au-delà, l'hôte met en pause les plus
+  récemment publiés, qui répondent alors « introuvable » sans que leur réglage
+  ne bouge. Le domaine, lui, relève de `domains.hosts`.
+- **Le coût** : un tableau se calcule au plus une fois toutes les trente
+  secondes, un calcul à la fois, et la route est bornée à 300 visites par
+  minute et par adresse. Une écriture sur le tableau paraît donc au public en
+  une minute et demie au plus.
+
 ---
 
 ## 3. Le direct
@@ -416,9 +449,10 @@ assignés et les mentions sont des membres), et les commandes.
 ### Serveur : `features/projects/src/server/`
 
 ```
-index.ts            serverEntry : createRepo, features, migrationsDir, createService (publie PROJECTS_USAGE_PROVIDER),
-                    items (homeOf, labelOf, shareable : ce que le partage sait des projets)
-handlers.ts         l'agrégat des dix fichiers de commandes, ce que serverEntry.features expose
+index.ts            serverEntry : createRepo, features, migrationsDir, domains, quotas, createService (publie
+                    PROJECTS_USAGE_PROVIDER, sert les tableaux publics), items (homeOf, labelOf, shareable : ce que
+                    le partage sait des projets)
+handlers.ts         l'agrégat des fichiers de commandes, ce que serverEntry.features expose
 _shared.ts          Ctx, WRITE, cipherFor (création et conversion, chez lui), projectCipher (par projet, chez lui ou
                     projeté), isForeign, assertAtHome, codecs (projet, colonne, carte, événement), toProject /
                     toSummary / toMaskedSummary, loadProject (findVisible puis items.assert), assertGuardedAllowed,
@@ -435,6 +469,10 @@ deployLink.ts       le pointeur vers les cibles (DEPLOY_ITEMS_PROVIDER)
 databaseLink.ts     le pointeur vers les bases (DATABASE_ITEMS_PROVIDER)
 audienceLink.ts     le pointeur vers les sites (AUDIENCE_ITEMS_PROVIDER)
 dashboard.ts        la vue d'ensemble : agencement, indicateurs (DATABASE_MEASURE_PROVIDER), garde « base reliée »
+publication.ts      la page publique côté réglages : lire, publier, changer le lien ; le chemin sous un domaine
+publicPage/         les routes publiques du tableau, la racine d'un domaine, la vue, le rendu HTML, le style, le script
+domains.ts          les crochets des domaines : l'enregistrement CNAME, la sonde du jeton, l'usage, le retrait
+env.ts              PROJECTS_SITE_URL, le lien au pied des tableaux publics
 usageProvider.ts    PROJECTS_USAGE_PROVIDER : usageOf, countByItem, detach, linkTargets, link, unlink, recordEvent, applyVersion
 repo/index.ts       ProjectsRepo, createRepo(SdkQueryable) : les huit dépôts natifs, un fichier par agrégat
 repo/projects.ts    la table projects (listVisible, findVisible : les siens plus les projetés) et ses compteurs en clair (statsFor)
@@ -444,20 +482,25 @@ repo/plan.ts        project_milestones, project_card_deps
 repo/history.ts     project_events
 repo/links.ts       les cinq tables de liaison, leurs lectures, leurs comptes et leurs usages
 repo/dashboard.ts   ft_projects_dashboard_tiles : l'agencement et les indicateurs
+repo/publication.ts ft_projects_public : la page publique d'un projet, la file d'un domaine, le stock de l'offre
 repo/rekey.ts       la liste des cellules chiffrées suspendues à un projet (conversion d'étage)
 migrations/001_event_kinds.sql   les genres d'événements stockés passent de `project.*` à `projects.*`
-migrations/003_dashboard.sql     ft_projects_dashboard_tiles, la seule table propre au module
+migrations/003_dashboard.sql     ft_projects_dashboard_tiles, première table propre au module
+migrations/007_public_pages.sql  ft_projects_public
 handlers.test.ts    les handlers sur le harnais du SDK (dépôt en mémoire)
+testing/            le dépôt de la page publique en mémoire, pour les tests
 usageProvider.test.ts   le contrat publié, sur le harnais sessionless
+publicPage/*.test.ts    les routes publiques et la vue du tableau, sur le harnais sessionless
 ```
 
 Côté app, seules les migrations du socle : `060_projects_core.sql` (9 tables),
 `061_projects_integrations.sql`, `064_git_repos.sql` (sort le git du projet),
 `067` à `069`, `077` et `080` (les tables de liaison). Les treize tables sont
 dans l'allowlist de `deveye-feature.json` : historiques, jamais déplacées,
-dispensées du préfixe `ft_projects_`. La table de la vue d'ensemble, elle, est
-propre au module et le porte ; `uninstall.sql` ne détruit qu'elle, le SQL de
-démontage ne pouvant pas toucher aux tables historiques.
+dispensées du préfixe `ft_projects_`. Les tables de la vue d'ensemble et de la
+page publique, elles, sont propres au module et le portent ; `uninstall.sql` ne
+détruit qu'elles, le SQL de démontage ne pouvant pas toucher aux tables
+historiques.
 
 ### Client : `features/projects/src/client/`
 
@@ -470,6 +513,7 @@ rights.ts          les cinq droits propres, lus sur CE projet, et les phrases de
 ProjectDetail.tsx  en-tête + onglets ; possède le niveau live `l2`
 ProjectDialog.tsx  créer un projet (le niveau de confidentialité s'y choisit)
 ProjectGeneralPanel.tsx  onglet Général de la fiche : le profil du projet, et son archivage
+ProjectPublicPanel.tsx   onglet Page publique de la fiche : l'ouvrir, son adresse, ses options, changer le lien
 MyTasks.tsx        mes cartes, tous projets confondus
 tabs.ts            les onglets, leur ordre, et la règle qui les fait paraître
 useProjectTabs.ts  les compteurs (`projects.linkCounts`) qui alimentent la barre
@@ -712,7 +756,14 @@ Le serveur du module se teste sans base ni réseau, sur le harnais du SDK
 - `usageProvider.test.ts` : le contrat publié (usage et comptes par élément,
   titre de secours, feature inconnue vide, frise d'un projet gardé ignorée,
   version reportée sur les seuls suiveurs ouverts, le sujet ravivé seulement
-  quand quelque chose a changé).
+  quand quelque chose a changé) ;
+- la page publique : les commandes dans `handlers.test.ts` (lien stable,
+  quota compté à la mise en ligne seulement, gardé et fenêtre refusés, racine
+  puis chemin sur un domaine, chemin unique, publication qui tombe avec le
+  passage en gardé), les routes dans `publicPage/routes.test.ts` (introuvable
+  pareil pour un lien inconnu, fermé, gardé ou en pause, domaine d'un autre
+  espace refusé, options fermées par défaut, racine qui passe au suivant,
+  cache) et la vue dans `publicPage/view.test.ts`.
 
 Les parties pures du client restent vérifiables directement avec `tsx` :
 l'échelle de la frise (`Timeline/scale.ts`), la largeur naturelle du kanban
@@ -749,6 +800,11 @@ transaction, et ne sont jamais rejouées.
 8. **Frise après migration** : un projet créé avant le rapatriement montre bien
    « projet créé » et non « statut modifié » en bas de son historique (la
    migration `001` a renommé les genres stockés).
+9. **Page publique** : ouvrir le lien en navigation privée, déplacer une carte
+   et la voir paraître en moins d'une minute et demie, ouvrir puis fermer les
+   deux options. Sur un domaine vérifié, un premier projet à la racine, un
+   second sous `/projet/<chemin>`, et la racine qui passe au second quand le
+   premier ferme.
 
 ---
 

@@ -200,9 +200,11 @@ declare const styles: {
     readonly myTasks: string;
     readonly openArrow: string;
     readonly overdue: string;
+    readonly planNotice: string;
     readonly priority: string;
     readonly progress: string;
     readonly progressFill: string;
+    readonly publicUrl: string;
     readonly readonlyAssignee: string;
     readonly readonlyMeta: string;
     readonly readonlyText: string;
@@ -214,6 +216,8 @@ declare const styles: {
     readonly rows: string;
     readonly sectionTitle: string;
     readonly shared: string;
+    readonly slugField: string;
+    readonly slugPrefix: string;
     readonly stack: string;
     readonly stackBubble: string;
     readonly stackMore: string;

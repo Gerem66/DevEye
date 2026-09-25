@@ -42,6 +42,9 @@ import {
     projectMilestoneSetReached,
     projectMyTasks,
     projectPlan,
+    projectPublicationGet,
+    projectPublicationRelink,
+    projectPublish,
     projectReorder,
     projectRepoLink,
     projectRepoList,
@@ -76,11 +79,13 @@ import {
     UPTIME_ITEMS_PROVIDER
 } from '@deveye/types/sdk';
 import { FeatureError, type SdkCipher, type SdkFeatureContext } from '@deveye/types/sdk/server';
-import { createTestContext, type TestContext, type TestContextOverrides } from '@deveye/types/sdk/testing';
+import { createTestContext, testDomain, type TestContext, type TestContextOverrides } from '@deveye/types/sdk/testing';
 
 import { projectsHandlers } from './handlers';
+import { slugify, uniqueSlug } from './publication';
 import { serverEntry } from './index';
 import type { ProjectsRepo } from './repo';
+import { memoryPublicationRepo, type MemoryPublicationRepo } from './testing/publicationRepo';
 
 /**
  * Les handlers du module, sur le harnais du SDK. Ce qui mérite d'être tenu, c'est ce
@@ -124,6 +129,7 @@ interface ReadRow {
 }
 
 interface FakeRepo extends ProjectsRepo {
+    publication: MemoryPublicationRepo;
     rows: {
         projects: ProjectRow[];
         columns: ProjectColumnRow[];
@@ -822,7 +828,8 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
                 const row = list.find((r) => r.id === cell.id && r.project_id === projectId);
                 if (row) row.content = cell.value;
             }
-        }
+        },
+        publication: memoryPublicationRepo(() => rows.projects)
     };
 }
 
@@ -934,7 +941,8 @@ describe('le registre des commandes', () => {
             'projects.uptimeList',
             'projects.databaseList',
             'projects.audienceList',
-            'projects.dashboard'
+            'projects.dashboard',
+            'projects.publication'
         ]);
         // Elles ne persistent rien, mais sollicitent un service extérieur au nom
         // du projet : réservées à qui peut l'écrire, sans rien battre.
@@ -2475,5 +2483,141 @@ describe('la vue d’ensemble d’un projet', () => {
         );
         const after = await handlerFor(projectDashboard)(ctx, { projectId: 1 });
         assert.equal(after.tiles.find((t) => t.key === key)?.kpi?.sql, 'SELECT COUNT(*) FROM orders');
+    });
+});
+
+describe('la page publique d’un projet', () => {
+    const DRAFT = { enabled: true, domainId: null, slug: null, showDates: false, showAssignees: false };
+    const publish = handlerFor(projectPublish);
+    const get = handlerFor(projectPublicationGet);
+    const eventsOf = (repo: FakeRepo) => repo.rows.events.filter((e) => e.kind === 'projects.publication');
+
+    it('s’ouvre sous l’adresse de DevEye avec un lien tiré au hasard, fermée par défaut dans les options', async () => {
+        const repo = fakeRepo();
+        repo.rows.projects.push(project({ id: 1 }));
+        const ctx = contextWith(repo);
+        assert.deepEqual(await get(ctx, { projectId: 1 }), { publication: null, blocked: null, limit: null });
+
+        const { publication } = await publish(ctx, { projectId: 1, publication: DRAFT });
+        assert.match(publication.url, /^https:\/\/public\.deveye\.test\/projet\/[0-9a-f]{16}$/);
+        assert.equal(publication.showDates, false);
+        assert.equal(publication.showAssignees, false);
+        assert.equal(eventsOf(repo).length, 1);
+
+        // Fermer puis rouvrir rend le même lien ; seul « Changer le lien » le change.
+        const closed = await publish(ctx, { projectId: 1, publication: { ...DRAFT, enabled: false } });
+        const reopened = await publish(ctx, { projectId: 1, publication: DRAFT });
+        assert.equal(closed.publication.url, publication.url);
+        assert.equal(reopened.publication.url, publication.url);
+        const relinked = await handlerFor(projectPublicationRelink)(ctx, { projectId: 1 });
+        assert.notEqual(relinked.publication.url, publication.url);
+        assert.equal(eventsOf(repo).length, 4);
+    });
+
+    it('compte les projets en ligne de tous les espaces du propriétaire, et seulement à la mise en ligne', async () => {
+        const repo = fakeRepo();
+        repo.rows.projects.push(project({ id: 1 }), project({ id: 2 }), project({ id: 3, workspace_id: 9 }));
+        const none = contextWith(repo, { quotaLimits: { pages: 0 } });
+        await assert.rejects(publish(none, { projectId: 1, publication: DRAFT }), failsWith('quota_exceeded'));
+        assert.equal(repo.publication.rows.length, 0);
+
+        repo.publication.rows.push({
+            project_id: 3,
+            public_ref: 'cccccccccccccccc',
+            enabled: 1,
+            published_at: 1,
+            domain_id: null,
+            slug: null,
+            domain_at: null,
+            show_dates: 0,
+            show_assignees: 0,
+            created: 1
+        });
+        const one = contextWith(repo, { quotaLimits: { pages: 2 }, ownerWorkspaceIds: [1, 9] });
+        await publish(one, { projectId: 1, publication: DRAFT });
+        await assert.rejects(publish(one, { projectId: 2, publication: DRAFT }), failsWith('quota_exceeded'));
+        // Une page déjà en ligne se règle sans repasser par l'offre.
+        const tuned = await publish(one, { projectId: 1, publication: { ...DRAFT, showDates: true } });
+        assert.equal(tuned.publication.showDates, true);
+        assert.equal((await get(one, { projectId: 1 })).limit, 2);
+        // Le stock compte les pages, pas les projets : un projet déplacé, qui les
+        // laisse derrière lui, n'entre pas dans l'offre de la cible à ce titre.
+        const stock = await serverEntry.quotas?.pages.list(repo, [1, 9]);
+        assert.deepEqual(
+            stock?.map((item) => item.id),
+            ['public:3', 'public:1']
+        );
+    });
+
+    it('refuse un projet gardé, et ne se règle pas depuis un espace qui le voit partagé', async () => {
+        const repo = fakeRepo({ 1: [7] });
+        repo.rows.projects.push(project({ id: 1 }), project({ id: 2, security_tier: 'guarded' }));
+        const ctx = contextWith(repo, { kind: 'personal' });
+        assert.equal((await get(ctx, { projectId: 2 })).blocked, 'guarded');
+        await assert.rejects(publish(ctx, { projectId: 2, publication: DRAFT }), failsWith('validation'));
+
+        const window = contextWith(repo, { workspaceId: 7, shares: { 1: 1 } });
+        assert.deepEqual(await get(window, { projectId: 1 }), { publication: null, blocked: 'foreign', limit: null });
+        await assert.rejects(publish(window, { projectId: 1, publication: DRAFT }), failsWith('validation'));
+    });
+
+    it('prend un domaine vérifié : le premier en tient la racine, le suivant un chemin tiré de son titre', async () => {
+        const repo = fakeRepo();
+        repo.rows.projects.push(
+            project({ id: 1, content: body('Site web') }),
+            project({ id: 2, content: body('Site web') }),
+            project({ id: 3, content: body('Appli') })
+        );
+        const domains = [
+            testDomain({ id: 5, host: 'roadmap.exemple.fr' }),
+            testDomain({ id: 6, host: 'attente.exemple.fr', verified: false })
+        ];
+        const ctx = contextWith(repo, { domains });
+        await assert.rejects(
+            publish(ctx, { projectId: 1, publication: { ...DRAFT, domainId: 6 } }),
+            failsWith('validation')
+        );
+
+        const first = await publish(ctx, { projectId: 1, publication: { ...DRAFT, domainId: 5 } });
+        assert.equal(first.publication.url, 'https://roadmap.exemple.fr/');
+        assert.equal(first.publication.atRoot, true);
+        assert.equal(first.publication.slug, 'site-web');
+
+        const second = await publish(ctx, { projectId: 2, publication: { ...DRAFT, domainId: 5 } });
+        assert.equal(second.publication.url, 'https://roadmap.exemple.fr/projet/site-web-2');
+        assert.equal(second.publication.atRoot, false);
+        assert.equal(second.publication.rootTitle, 'Site web');
+
+        await assert.rejects(
+            publish(ctx, { projectId: 3, publication: { ...DRAFT, domainId: 5, slug: 'site-web' } }),
+            failsWith('conflict')
+        );
+        const chosen = await publish(ctx, { projectId: 3, publication: { ...DRAFT, domainId: 5, slug: 'mobile' } });
+        assert.equal(chosen.publication.url, 'https://roadmap.exemple.fr/projet/mobile');
+
+        // Le premier ferme : le plus ancien des suivants monte à la racine.
+        await publish(ctx, { projectId: 1, publication: { ...DRAFT, enabled: false, domainId: 5 } });
+        const promoted = await get(ctx, { projectId: 2 });
+        assert.equal(promoted.publication?.url, 'https://roadmap.exemple.fr/');
+        // Rouvert, il rejoint la file par la fin plutôt que de reprendre la racine.
+        const back = await publish(ctx, { projectId: 1, publication: { ...DRAFT, domainId: 5 } });
+        assert.equal(back.publication.url, 'https://roadmap.exemple.fr/projet/site-web');
+    });
+
+    it('tire un chemin sans accent ni ponctuation, et le rend unique sur le domaine', () => {
+        assert.equal(slugify('Refonte : Café & Crème !'), 'refonte-cafe-creme');
+        assert.equal(slugify('???'), 'projet');
+        assert.equal(uniqueSlug('site', new Set(['site', 'site-2'])), 'site-3');
+        assert.ok(uniqueSlug('x'.repeat(48), new Set(['x'.repeat(48)])).length <= 48);
+    });
+
+    it('tombe, lien compris, quand le projet passe en confidentiel', async () => {
+        const repo = fakeRepo();
+        repo.rows.projects.push(project({ id: 1, content: `server:${body('Projet 1')}` }));
+        const ctx = tagging(contextWith(repo, { kind: 'personal' }));
+        await publish(ctx, { projectId: 1, publication: DRAFT });
+        await handlerFor(projectSetSecurityTier)(ctx, { projectId: 1, securityTier: 'guarded' });
+        assert.deepEqual(repo.publication.rows, []);
+        assert.ok(eventsOf(repo).some((e) => e.content.includes('passé en confidentiel')));
     });
 });

@@ -6,6 +6,7 @@ import type {
     ProjectColumn,
     ProjectColumnRow,
     ProjectLinkLabel,
+    ProjectMilestoneColor,
     ProjectPriority,
     ProjectRow,
     ProjectSecurityTier,
@@ -18,6 +19,7 @@ import {
     PROJECT_PRIORITIES,
     projectCardSchema,
     projectColumnSchema,
+    projectMilestoneColorSchema,
     projectSchema,
     projectTimelineZoomSchema
 } from '../contracts/domain';
@@ -424,6 +426,36 @@ export function toCard(row: ProjectCardRow, payload: StoredCard, unread: number)
         created: row.created,
         updated: row.updated
     });
+}
+
+// -------------------------------------------------------------------- jalons
+
+/** Payload chiffré d'un jalon (`project_milestones.content`). */
+export interface StoredMilestone {
+    name: string;
+    description: string;
+    color: ProjectMilestoneColor | null;
+}
+
+export async function encryptMilestone(cipher: SdkCipher, payload: StoredMilestone): Promise<string> {
+    return cipher.encrypt(JSON.stringify(payload));
+}
+
+/** Ne lève jamais : un jalon illisible reste sur la frise, sans son nom. */
+export async function decryptMilestone(cipher: SdkCipher, content: string): Promise<StoredMilestone> {
+    const empty: StoredMilestone = { name: '', description: '', color: null };
+    const plain = await cipher.tryDecrypt(content);
+    if (plain === null) return empty;
+    try {
+        const parsed = JSON.parse(plain) as Partial<StoredMilestone>;
+        return {
+            name: typeof parsed.name === 'string' ? parsed.name : '',
+            description: typeof parsed.description === 'string' ? parsed.description : '',
+            color: projectMilestoneColorSchema.nullable().catch(null).parse(parsed.color)
+        };
+    } catch {
+        return empty;
+    }
 }
 
 // --------------------------------------------------------------- historique

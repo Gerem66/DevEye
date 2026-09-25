@@ -172,7 +172,8 @@ function fakeRepo(): FakeRepo {
             }
         },
         links,
-        rekey: {} as ProjectsRepo['rekey']
+        rekey: {} as ProjectsRepo['rekey'],
+        publication: {} as ProjectsRepo['publication']
     };
 }
 

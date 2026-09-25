@@ -6,3 +6,4 @@ export * from './plan';
 export * from './history';
 export * from './link';
 export * from './dashboard';
+export * from './publication';
