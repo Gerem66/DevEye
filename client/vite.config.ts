@@ -159,11 +159,15 @@ function inlineIcons(): Plugin {
  * de source n'y sont pas : le serveur ne les sert pas.
  */
 function buildManifest(): Plugin {
+    let root = '';
     return {
         name: 'deveye-build-manifest',
         apply: 'build',
+        configResolved(config) {
+            // Le smoke construit ailleurs (`--outDir`) : jamais `build/` en dur.
+            root = path.resolve(config.root, config.build.outDir);
+        },
         closeBundle() {
-            const root = path.resolve(__dirname, 'build');
             const manifestPath = path.join('.well-known', 'deveye-build.json');
             const files: Record<string, string> = {};
             const walk = (dir: string): void => {
