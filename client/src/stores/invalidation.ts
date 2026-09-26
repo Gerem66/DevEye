@@ -82,6 +82,8 @@ export type ResourceKey =
     | 'finance.transactionList'
     | 'finance.recurringList'
     | 'finance.overview'
+    | 'finance.statementList'
+    | 'finance.ruleList'
     | 'database.count'
     | 'database.list'
     | 'database.detail'

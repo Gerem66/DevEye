@@ -21,7 +21,9 @@ export const manifest = {
         'finance.accountList',
         'finance.transactionList',
         'finance.recurringList',
-        'finance.overview'
+        'finance.overview',
+        'finance.statementList',
+        'finance.ruleList'
     ],
     /**
      * Un règlement saisi dans Facturation arrive dans le livre à la lecture
@@ -32,16 +34,26 @@ export const manifest = {
     alsoInvalidatedBy: [
         {
             topic: 'invoicing',
-            keys: ['finance.summary', 'finance.accountList', 'finance.transactionList', 'finance.overview']
+            keys: [
+                'finance.summary',
+                'finance.accountList',
+                'finance.transactionList',
+                'finance.overview',
+                'finance.statementList'
+            ]
         }
     ],
     /**
-     * À l'échelle de la feature, Général (devise, TVA) et Catégories, où les
-     * fiches ne font que choisir. L'élément est le compte : son Général porte
+     * À l'échelle de la feature, le statut, les catégories et les règles qui
+     * rangent les lignes de relevé. L'élément est le compte : son Général porte
      * son identité, son archivage et son retrait.
      */
     settings: {
-        feature: ['general', { id: 'categories', label: 'Catégories', icon: 'folder' }],
+        feature: [
+            'general',
+            { id: 'categories', label: 'Catégories', icon: 'folder' },
+            { id: 'rules', label: 'Règles', icon: 'list' }
+        ],
         item: ['general']
     },
     /** Les rappels de déclaration URSSAF partent par les canaux de l'espace. */

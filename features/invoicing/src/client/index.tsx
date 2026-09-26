@@ -1,3 +1,4 @@
+import { INVOICING_CLIENT_PROVIDER } from '@deveye/types/sdk';
 import type { FeatureClient } from '@deveye/types/sdk/client';
 
 import Invoicing from './Invoicing';
@@ -6,6 +7,7 @@ import GeneralPanel from './GeneralPanel';
 import NumberingPanel from './NumberingPanel';
 import TaxesPanel from './TaxesPanel';
 import WordingPanel from './WordingPanel';
+import { clientProvider } from './provider';
 
 /**
  * Pas d'`Art` : l'id est natif, donc sa vignette vit avec celles de ses voisines
@@ -24,5 +26,7 @@ export const clientEntry: FeatureClient = {
     },
     // Les filtres du journal n'ont pas à survivre, et un brouillon gardé en
     // cache vieillirait sous les doigts d'un autre membre.
-    cacheDurationMinutes: 0
+    cacheDurationMinutes: 0,
+    /** Finances y enregistre le règlement d'une ligne de relevé reconnue. */
+    providers: { [INVOICING_CLIENT_PROVIDER]: clientProvider }
 };

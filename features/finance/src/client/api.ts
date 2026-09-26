@@ -17,7 +17,9 @@ export function refreshFinance(): void {
         'finance.accountList',
         'finance.transactionList',
         'finance.overview',
-        'finance.recurringList'
+        'finance.recurringList',
+        'finance.statementList',
+        'finance.ruleList'
     );
 }
 

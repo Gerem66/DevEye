@@ -12,6 +12,7 @@ import {
     type LedgerIo,
     type StoredEntry
 } from './_shared';
+import { reconcileAccount } from './reconcile';
 
 /**
  * Une recette déjà saisie à la main est reconnue comme la copie d'un règlement
@@ -137,6 +138,8 @@ export async function syncInvoicing(ctx: LedgerIo): Promise<void> {
                 if (!isDuplicate(error)) throw error;
             }
         }
+        // Un règlement arrivé après le relevé confirme la ligne qui l'attendait.
+        await reconcileAccount(ctx, accountId);
     }
 
     await ctx.repo.setInvoicingVersion(ctx.workspaceId, version);

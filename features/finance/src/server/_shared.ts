@@ -216,7 +216,9 @@ export function rangeBounds(
  * ouvrant un écran. La devise et la TVA sont celles de Facturation ; une panne
  * de sa part laisse le livre lisible, en euros et sans TVA.
  */
-export async function readConfig(ctx: Ctx): Promise<FinanceConfig> {
+export async function readConfig(
+    ctx: Pick<Ctx, 'repo' | 'workspaceId' | 'providers' | 'logger'>
+): Promise<FinanceConfig> {
     const ledger = invoicingLedger(ctx);
     const [row, profile] = await Promise.all([
         ctx.repo.getConfig(ctx.workspaceId),

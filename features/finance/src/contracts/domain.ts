@@ -382,6 +382,8 @@ export const financeOverviewSchema = z.object({
     forecast: z.array(financeForecastPointSchema),
     /** `null` tant que le statut n'est pas dit. */
     status: financeStatusSchema.nullable(),
+    /** Les lignes de relevé qui attendent d'être rapprochées, tous comptes. */
+    pendingLines: z.number().int().nonnegative(),
     /** Récapitulatif TVA sur la fenêtre, ou `null` quand la TVA n'est pas suivie. */
     vat: z
         .object({

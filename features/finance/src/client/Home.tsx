@@ -26,6 +26,8 @@ interface HomeProps {
     onOpenAccount: (accountId: number) => void;
     onOpenTransactions: () => void;
     onOpenRecurring: () => void;
+    onOpenReview: () => void;
+    onImport: () => void;
     onNewAccount: () => void;
     onNewTransaction: () => void;
     onEditTransaction: (transaction: FinanceTransaction) => void;
@@ -69,9 +71,14 @@ export function Home(props: HomeProps) {
             <div className={styles.actions}>
                 <FeatureSettingsButton scope={{ kind: 'feature', feature: 'finance' }} />
                 {base.canWrite && hasAccounts && (
-                    <Button icon='add' onClick={props.onNewTransaction}>
-                        Opération
-                    </Button>
+                    <>
+                        <Button variant='secondary' icon='file' onClick={props.onImport}>
+                            Importer
+                        </Button>
+                        <Button icon='add' onClick={props.onNewTransaction}>
+                            Opération
+                        </Button>
+                    </>
                 )}
             </div>
         </header>
@@ -161,6 +168,20 @@ export function Home(props: HomeProps) {
                 </div>
             )}
             <ErrorNote note={linkError} />
+
+            {data.pendingLines > 0 && (
+                <div className={styles.notice} role='status'>
+                    <span className='icon icon-file' aria-hidden='true' />
+                    <p className={styles.noticeText}>
+                        <strong>
+                            {data.pendingLines} ligne{data.pendingLines > 1 ? 's' : ''} de relevé à rapprocher.
+                        </strong>{' '}
+                        Rien ne les confirme encore au livre : dites ce qu’elles sont, une fois, et vos règles rangeront
+                        les suivantes.
+                    </p>
+                    <Button onClick={props.onOpenReview}>Rapprocher</Button>
+                </div>
+            )}
 
             {status === null && base.canWrite && (
                 <div className={styles.notice} role='status'>
@@ -359,9 +380,14 @@ export function Home(props: HomeProps) {
             <Section
                 title='Dernières opérations'
                 actions={
-                    <Button variant='ghost' onClick={props.onOpenTransactions}>
-                        Voir tout
-                    </Button>
+                    <>
+                        <Button variant='ghost' onClick={props.onOpenReview}>
+                            Relevés
+                        </Button>
+                        <Button variant='ghost' onClick={props.onOpenTransactions}>
+                            Voir tout
+                        </Button>
+                    </>
                 }
             >
                 <ErrorNote note={cleared.error} />

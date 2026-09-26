@@ -26,6 +26,10 @@ declare const styles: {
     readonly days: string;
     readonly detailHead: string;
     readonly dropBar: string;
+    readonly dropzone: string;
+    readonly dropzoneHint: string;
+    readonly dropzoneIcon: string;
+    readonly dropzoneTitle: string;
     readonly empty: string;
     readonly emptyBody: string;
     readonly emptyIcon: string;
@@ -74,6 +78,7 @@ declare const styles: {
     readonly rowAmount: string;
     readonly rowBadge: string;
     readonly rowBody: string;
+    readonly rowCheck: string;
     readonly rowClear: string;
     readonly rowDate: string;
     readonly rowIcon: string;

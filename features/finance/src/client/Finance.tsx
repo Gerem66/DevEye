@@ -6,7 +6,9 @@ import type { FinanceTransaction } from '../contracts/domain';
 import AccountDialog from './AccountDialog';
 import AccountSheet from './AccountSheet';
 import Home from './Home';
+import ImportDialog from './ImportDialog';
 import RecurringPage from './RecurringPage';
+import ReviewPage from './ReviewPage';
 import TransactionDialog from './TransactionDialog';
 import TransactionsPage from './TransactionsPage';
 import { api, refreshFinance } from './api';
@@ -17,11 +19,16 @@ import type { FinanceBase } from './shared';
 /**
  * Les finances de l'espace. Pas d'onglets : l'accueil porte les chiffres, les
  * comptes, ce qui arrive et ce qui vient de passer, et « Voir tout » ouvre les
- * listes complètes. Aucun mot de passe demandé : tout vit à l'étage ouvert,
+ * listes complètes, comme « Rapprocher » ouvre les relevés. Aucun mot de passe demandé : tout vit à l'étage ouvert,
  * pour que tout membre lise les comptes sans la session de leur propriétaire.
  */
 
-type View = { kind: 'home' } | { kind: 'transactions' } | { kind: 'recurring' } | { kind: 'account'; id: number };
+type View =
+    | { kind: 'home' }
+    | { kind: 'transactions' }
+    | { kind: 'recurring' }
+    | { kind: 'review' }
+    | { kind: 'account'; id: number };
 
 /**
  * Ce que la présence déclare pour l'écran courant. Le segment d'un compte est
@@ -37,6 +44,7 @@ function segmentOf(view: View): string | null {
 function viewOf(segment: string): View {
     if (segment === 'transactions') return { kind: 'transactions' };
     if (segment === 'recurring') return { kind: 'recurring' };
+    if (segment === 'review') return { kind: 'review' };
     if (/^\d+$/.test(segment)) return { kind: 'account', id: Number(segment) };
     return { kind: 'home' };
 }
@@ -51,6 +59,8 @@ export default function Finance() {
     const [view, setView] = useState<View>({ kind: 'home' });
     const [dialog, setDialog] = useState<TransactionDraft | null>(null);
     const [creatingAccount, setCreatingAccount] = useState(false);
+    /** Le compte d'où l'on importe un relevé, `null` pour le choisir ; `undefined` fermé. */
+    const [importing, setImporting] = useState<number | null | undefined>(undefined);
 
     const liveTarget = useLiveSegment('l1', segmentOf(view));
     useEffect(() => {
@@ -116,6 +126,8 @@ export default function Finance() {
                             onOpenAccount={(id) => setView({ kind: 'account', id })}
                             onOpenTransactions={() => setView({ kind: 'transactions' })}
                             onOpenRecurring={() => setView({ kind: 'recurring' })}
+                            onOpenReview={() => setView({ kind: 'review' })}
+                            onImport={() => setImporting(null)}
                             onNewAccount={() => setCreatingAccount(true)}
                             onNewTransaction={() => setDialog({ transaction: null })}
                             onEditTransaction={edit}
@@ -133,6 +145,10 @@ export default function Finance() {
 
                     {view.kind === 'recurring' && <RecurringPage base={base} onBack={home} />}
 
+                    {view.kind === 'review' && (
+                        <ReviewPage base={base} onBack={home} onImport={() => setImporting(null)} />
+                    )}
+
                     {view.kind === 'account' && (
                         <AccountSheet
                             base={base}
@@ -140,6 +156,7 @@ export default function Finance() {
                             onBack={home}
                             onGone={home}
                             onNewTransaction={(accountId) => setDialog({ transaction: null, accountId })}
+                            onImport={(accountId) => setImporting(accountId)}
                             onEdit={edit}
                         />
                     )}
@@ -156,6 +173,17 @@ export default function Finance() {
                 onSaved={() => {
                     setDialog(null);
                     refreshFinance();
+                }}
+            />
+
+            <ImportDialog
+                base={base}
+                open={importing !== undefined}
+                accountId={importing ?? null}
+                onClose={() => setImporting(undefined)}
+                onReview={() => {
+                    setImporting(undefined);
+                    setView({ kind: 'review' });
                 }}
             />
 

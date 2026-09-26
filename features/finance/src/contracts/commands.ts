@@ -23,6 +23,15 @@ import {
     financeTransactionKindSchema,
     financeTransactionSchema
 } from './domain';
+import {
+    csvMappingSchema,
+    financeRuleSchema,
+    STATEMENT_LINES_MAX,
+    statementClosingSchema,
+    statementImportResultSchema,
+    statementLineInputSchema,
+    statementLineSchema
+} from './statement';
 /**
  * Commandes des finances. Préfixe `finance.` et verbes en camelCase : le filet
  * `MUTATION_VERB` de `_topics.ts` ne voit aucune de ces commandes, donc les
@@ -253,6 +262,100 @@ export const financeRecurringSkip = {
     input: z.object({ recurringId }),
     output: z.object({ recurring: financeRecurringSchema })
 };
+/**
+ * Un relevé lu dans le navigateur. Le serveur ne garde que les lignes qu'il
+ * n'a pas déjà (par leur identité chez la banque), les rapproche, et retient la
+ * correspondance des colonnes d'un CSV pour le prochain.
+ */
+export const financeStatementImport = {
+    command: 'finance.statementImport' as const,
+    input: z.object({
+        accountId,
+        format: z.enum(['csv', 'ofx']),
+        lines: z.array(statementLineInputSchema).min(1).max(STATEMENT_LINES_MAX),
+        closing: statementClosingSchema.nullable(),
+        mapping: csvMappingSchema.nullable()
+    }),
+    output: z.object({ result: statementImportResultSchema })
+};
+/** La correspondance des colonnes retenue au dernier import CSV de ce compte. */
+export const financeImportMapping = {
+    command: 'finance.importMapping' as const,
+    input: z.object({ accountId }),
+    output: z.object({ mapping: csvMappingSchema.nullable() })
+};
+/**
+ * Les lignes de relevé, celles à rapprocher d'abord, avec ce qu'elles
+ * pourraient être. `banks` : pour chaque compte, le dernier solde que la banque
+ * a annoncé, face au solde pointé du livre à la même date.
+ */
+export const financeStatementList = {
+    command: 'finance.statementList' as const,
+    input: z.object({
+        status: z.enum(['pending', 'all']),
+        accountId: accountId.optional(),
+        limit: z.number().int().positive().max(500).optional()
+    }),
+    output: z.object({
+        lines: z.array(statementLineSchema),
+        pendingCount: z.number().int().nonnegative(),
+        banks: z.array(
+            z.object({ accountId, date: financeDateSchema, bank: financeBalanceSchema, book: financeBalanceSchema })
+        )
+    })
+};
+const statementActionSchema = z.discriminatedUnion('kind', [
+    /** Elle confirme cette opération du livre. */
+    z.object({ kind: z.literal('link'), transactionId }),
+    /**
+     * Elle entre au livre. `label` à `null` : le libellé de la banque. `rule` :
+     * retenir que ce texte range dans cette catégorie, pour les suivantes.
+     */
+    z.object({
+        kind: z.literal('create'),
+        categoryId: categoryId.nullable(),
+        label: z.string().max(FINANCE_LABEL_MAX_LENGTH).nullable(),
+        counterparty: z.string().max(FINANCE_COUNTERPARTY_MAX_LENGTH),
+        vatRateBp: z.number().int().min(0).max(10_000).nullable(),
+        rule: z.object({ contains: z.string().trim().min(2).max(80) }).nullable()
+    }),
+    /** Un virement vers un autre compte du livre, ou depuis lui. */
+    z.object({ kind: z.literal('transfer'), accountId }),
+    /** L'occurrence d'une échéance manuelle, à ce montant. */
+    z.object({ kind: z.literal('post'), recurringId }),
+    z.object({ kind: z.literal('ignore') }),
+    z.object({ kind: z.literal('restore') })
+]);
+/**
+ * Plusieurs lignes à la fois pour créer, ignorer ou rétablir ; une seule pour le
+ * reste. Un rapprochement se défait par l'opération : la modifier, ou la
+ * supprimer, ce qui écarte la ligne qui la confirmait.
+ */
+export const financeStatementResolve = {
+    command: 'finance.statementResolve' as const,
+    input: z.object({
+        lineIds: z.array(z.number().int().positive()).min(1).max(500),
+        action: statementActionSchema
+    }),
+    output: z.object({ resolved: z.number().int().nonnegative(), pending: z.number().int().nonnegative() })
+};
+const ruleDraftSchema = financeRuleSchema.omit({ id: true, hits: true });
+export const financeRuleList = {
+    command: 'finance.ruleList' as const,
+    input: z.object({}),
+    output: z.object({ rules: z.array(financeRuleSchema) })
+};
+/** `id` à `null` : une règle neuve. Elle range aussitôt les lignes en attente qu'elle reconnaît. */
+export const financeRuleSave = {
+    command: 'finance.ruleSave' as const,
+    input: z.object({ id: z.number().int().positive().nullable(), rule: ruleDraftSchema }),
+    output: z.object({ rule: financeRuleSchema })
+};
+export const financeRuleRemove = {
+    command: 'finance.ruleRemove' as const,
+    input: z.object({ id: z.number().int().positive() }),
+    output: z.object({ id: z.number().int().positive() })
+};
 export const financeOverview = {
     command: 'finance.overview' as const,
     input: z.object({ range: financeRangeSchema }),
@@ -283,5 +386,12 @@ export const financeCommands = [
     financeRecurringRemove,
     financeRecurringPost,
     financeRecurringSkip,
+    financeStatementImport,
+    financeImportMapping,
+    financeStatementList,
+    financeStatementResolve,
+    financeRuleList,
+    financeRuleSave,
+    financeRuleRemove,
     financeOverview
 ] as const;

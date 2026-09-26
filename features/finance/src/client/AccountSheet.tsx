@@ -14,6 +14,7 @@ interface AccountSheetProps {
     /** Le compte n'est plus là (retiré depuis ses réglages) : la fiche s'en va. */
     onGone: () => void;
     onNewTransaction: (accountId: number) => void;
+    onImport: (accountId: number) => void;
     onEdit: (transaction: FinanceTransaction) => void;
 }
 
@@ -21,7 +22,15 @@ interface AccountSheetProps {
  * La fiche d'un compte : ses soldes, puis ses opérations. Son identité se
  * règle dans l'onglet Général de ses réglages, au bout de la rangée d'en-tête.
  */
-export function AccountSheet({ base, accountId, onBack, onGone, onNewTransaction, onEdit }: AccountSheetProps) {
+export function AccountSheet({
+    base,
+    accountId,
+    onBack,
+    onGone,
+    onNewTransaction,
+    onImport,
+    onEdit
+}: AccountSheetProps) {
     const account = accountOf(base.accounts, accountId);
     const currency = base.config.currency;
 
@@ -60,9 +69,14 @@ export function AccountSheet({ base, accountId, onBack, onGone, onNewTransaction
                 </div>
                 <div className={styles.actions}>
                     {base.canWrite && !account.archived && (
-                        <Button icon='add' onClick={() => onNewTransaction(account.id)}>
-                            Opération
-                        </Button>
+                        <>
+                            <Button variant='secondary' icon='file' onClick={() => onImport(account.id)}>
+                                Importer
+                            </Button>
+                            <Button icon='add' onClick={() => onNewTransaction(account.id)}>
+                                Opération
+                            </Button>
+                        </>
                     )}
                     <FeatureSettingsButton
                         scope={{

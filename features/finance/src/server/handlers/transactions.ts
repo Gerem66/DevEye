@@ -19,6 +19,7 @@ import {
     type Ctx,
     type StoredEntry
 } from '../_shared';
+import { fitsLine, reconcileAccount } from '../reconcile';
 import { catchUp } from '../sources';
 
 /** Ce que dit un refus sur une copie de règlement. */
@@ -96,6 +97,9 @@ export const financeTransactionAddFeature = defineSdkFeature({
             cleared: draft.cleared,
             content: await encryptJson(financeCipher(ctx), payload)
         });
+        // Une saisie peut confirmer une ligne de relevé déjà importée.
+        await reconcileAccount(ctx, draft.accountId);
+        if (draft.transferAccountId !== null) await reconcileAccount(ctx, draft.transferAccountId);
         const row = await ctx.repo.findTransaction(id, ctx.workspaceId);
         if (!row) throw new FeatureError('internal', 'Opération introuvable après création');
         ctx.audit({
@@ -169,6 +173,10 @@ export const financeTransactionUpdateFeature = defineSdkFeature({
         if (!updated) throw new FeatureError('not_found', 'Opération introuvable');
         const row = await ctx.repo.findTransaction(input.transactionId, ctx.workspaceId);
         if (!row) throw new FeatureError('not_found', 'Opération introuvable');
+        // Une ligne de relevé que l'opération corrigée ne confirme plus revient à rapprocher.
+        for (const line of await ctx.repo.linkedLines(ctx.workspaceId, row.id)) {
+            if (!fitsLine(row, line)) await ctx.repo.linkLine(line.id, ctx.workspaceId, null);
+        }
         ctx.audit({
             action: 'finance.transactionUpdate',
             description: 'Opération modifiée',
@@ -191,6 +199,7 @@ export const financeTransactionRemoveFeature = defineSdkFeature({
                 'Ce règlement vient de Facturation : c’est là-bas qu’il se retire, et sa copie part avec lui.'
             );
         }
+        await ctx.repo.releaseLines(input.transactionId, ctx.workspaceId);
         await ctx.repo.deleteTransaction(input.transactionId, ctx.workspaceId);
         ctx.audit({
             action: 'finance.transactionRemove',

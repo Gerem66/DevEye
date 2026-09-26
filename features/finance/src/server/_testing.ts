@@ -9,6 +9,7 @@ import type {
     FinanceRecurringRow,
     FinanceTransactionRow
 } from '../contracts/domain';
+import type { FinanceRuleRow, FinanceStatementLineRow } from '../contracts/statement';
 
 import type { SdkFeatureContext } from '@deveye/types/sdk/server';
 
@@ -38,6 +39,17 @@ export interface FakeRepo extends FinanceRepo {
     recurring: FinanceRecurringRow[];
     /** Les rappels retenus, `espace/période/étape`. */
     reminders: string[];
+    imports: {
+        id: number;
+        workspace_id: number;
+        account_id: number;
+        line_count: number;
+        new_count: number;
+        closing_balance: number | null;
+        closing_date: string | null;
+    }[];
+    lines: FinanceStatementLineRow[];
+    rules: FinanceRuleRow[];
 }
 
 /** Une ligne de réglages vierge : ce que la base rend avant tout réglage. */
@@ -100,6 +112,9 @@ export function fakeRepo(): FakeRepo {
         transactions: [],
         recurring: [],
         reminders: [],
+        imports: [],
+        lines: [],
+        rules: [],
 
         async getConfig(ws) {
             return this.config?.workspace_id === ws ? this.config : null;
@@ -191,6 +206,7 @@ export function fakeRepo(): FakeRepo {
             const i = this.accounts.findIndex((a) => a.id === id && a.workspace_id === ws);
             if (i === -1) return false;
             this.accounts.splice(i, 1);
+            this.lines = this.lines.filter((line) => line.account_id !== id);
             return true;
         },
         async reorderAccounts(ws, ids) {
@@ -363,6 +379,7 @@ export function fakeRepo(): FakeRepo {
             const i = this.transactions.findIndex((t) => t.id === id && t.workspace_id === ws);
             if (i === -1) return false;
             this.transactions.splice(i, 1);
+            for (const line of this.lines) if (line.transaction_id === id) line.transaction_id = null;
             return true;
         },
         async setCleared(ws, ids, cleared) {
@@ -498,6 +515,181 @@ export function fakeRepo(): FakeRepo {
             row.next_date = nextDate;
             if (lastPostedDate !== null) row.last_posted_date = lastPostedDate;
             if (active !== null) row.active = active ? 1 : 0;
+        },
+
+        async createImport(ws, input) {
+            const id = ++seq;
+            this.imports.push({
+                id,
+                workspace_id: ws,
+                account_id: input.accountId,
+                line_count: input.lineCount,
+                new_count: input.newCount,
+                closing_balance: input.closingBalance,
+                closing_date: input.closingDate
+            });
+            return id;
+        },
+        async setImportCounts(id, ws, lineCount, newCount) {
+            const row = this.imports.find((i) => i.id === id && i.workspace_id === ws);
+            if (row) Object.assign(row, { line_count: lineCount, new_count: newCount });
+        },
+        async latestClosings(ws) {
+            const rows = this.imports
+                .filter((i) => i.workspace_id === ws && i.closing_balance !== null && i.closing_date !== null)
+                .sort((a, b) =>
+                    a.closing_date === b.closing_date ? b.id - a.id : a.closing_date! < b.closing_date! ? 1 : -1
+                );
+            const seen = new Set<number>();
+            return rows
+                .filter((row) => !seen.has(row.account_id) && seen.add(row.account_id))
+                .map((row) => ({
+                    account_id: row.account_id,
+                    closing_balance: row.closing_balance!,
+                    closing_date: row.closing_date!
+                }));
+        },
+        async insertLine(ws, input) {
+            if (this.lines.some((l) => l.account_id === input.accountId && l.external_id === input.externalId))
+                return null;
+            const row: FinanceStatementLineRow = {
+                id: ++seq,
+                workspace_id: ws,
+                account_id: input.accountId,
+                import_id: input.importId,
+                external_id: input.externalId,
+                date: input.date,
+                direction: input.direction,
+                amount: input.amount,
+                transaction_id: null,
+                ignored: 0,
+                content: input.content
+            };
+            this.lines.push(row);
+            return row.id;
+        },
+        async findLines(ws, ids) {
+            return this.lines.filter((l) => l.workspace_id === ws && ids.includes(l.id));
+        },
+        async listLines(ws, filter, limit) {
+            const open = (l: FinanceStatementLineRow) => l.transaction_id === null && l.ignored === 0;
+            return this.lines
+                .filter(
+                    (l) =>
+                        l.workspace_id === ws &&
+                        (!filter.pendingOnly || open(l)) &&
+                        (filter.accountId === undefined || l.account_id === filter.accountId)
+                )
+                .sort((a, b) =>
+                    open(a) !== open(b)
+                        ? open(a)
+                            ? -1
+                            : 1
+                        : a.date === b.date
+                          ? b.id - a.id
+                          : a.date < b.date
+                            ? 1
+                            : -1
+                )
+                .slice(0, limit);
+        },
+        async countPendingLines(ws, accountId) {
+            return this.lines.filter(
+                (l) =>
+                    l.workspace_id === ws &&
+                    l.transaction_id === null &&
+                    l.ignored === 0 &&
+                    (accountId === undefined || l.account_id === accountId)
+            ).length;
+        },
+        async linkLine(id, ws, transactionId) {
+            const row = this.lines.find((l) => l.id === id && l.workspace_id === ws);
+            if (!row) return;
+            if (
+                transactionId !== null &&
+                this.lines.some(
+                    (l) => l.id !== id && l.transaction_id === transactionId && l.account_id === row.account_id
+                )
+            ) {
+                throw Object.assign(new Error('Duplicate entry'), { code: 'ER_DUP_ENTRY' });
+            }
+            row.transaction_id = transactionId;
+        },
+        async setLineIgnored(ids, ws, ignored) {
+            for (const l of this.lines) {
+                if (l.workspace_id === ws && l.transaction_id === null && ids.includes(l.id))
+                    l.ignored = ignored ? 1 : 0;
+            }
+        },
+        async unconfirmedTransactions(ws, accountId, from, to) {
+            return this.transactions
+                .filter(
+                    (t) =>
+                        t.workspace_id === ws &&
+                        (t.account_id === accountId || t.transfer_account_id === accountId) &&
+                        t.date >= from &&
+                        t.date <= to &&
+                        !this.lines.some((l) => l.transaction_id === t.id && l.account_id === accountId)
+                )
+                .sort((a, b) => (a.date === b.date ? a.id - b.id : a.date < b.date ? -1 : 1));
+        },
+        async linkedLines(ws, transactionId) {
+            return this.lines.filter((l) => l.workspace_id === ws && l.transaction_id === transactionId);
+        },
+        async releaseLines(transactionId, ws) {
+            for (const l of this.lines) {
+                if (l.workspace_id === ws && l.transaction_id === transactionId) {
+                    l.transaction_id = null;
+                    l.ignored = 1;
+                }
+            }
+        },
+        async countAccountLines(id, ws) {
+            return this.lines.filter((l) => l.workspace_id === ws && l.account_id === id).length;
+        },
+        async listRules(ws) {
+            return this.rules
+                .filter((r) => r.workspace_id === ws)
+                .sort((a, b) => (a.sort_order === b.sort_order ? a.id - b.id : a.sort_order - b.sort_order));
+        },
+        async findRule(id, ws) {
+            return this.rules.find((r) => r.id === id && r.workspace_id === ws) ?? null;
+        },
+        async createRule(ws, input) {
+            const mine = this.rules.filter((r) => r.workspace_id === ws);
+            const row: FinanceRuleRow = {
+                id: ++seq,
+                workspace_id: ws,
+                direction: input.direction,
+                category_id: input.categoryId,
+                vat_rate_bp: input.vatRateBp,
+                sort_order: mine.length === 0 ? 0 : Math.max(...mine.map((r) => r.sort_order)) + 1,
+                hits: 0,
+                content: input.content
+            };
+            this.rules.push(row);
+            return row.id;
+        },
+        async updateRule(id, ws, input) {
+            const row = await this.findRule(id, ws);
+            if (!row) return false;
+            Object.assign(row, {
+                direction: input.direction,
+                category_id: input.categoryId,
+                vat_rate_bp: input.vatRateBp,
+                content: input.content
+            });
+            return true;
+        },
+        async deleteRule(id, ws) {
+            const i = this.rules.findIndex((r) => r.id === id && r.workspace_id === ws);
+            if (i === -1) return false;
+            this.rules.splice(i, 1);
+            return true;
+        },
+        async bumpRuleHits(id, ws, by) {
+            const row = await this.findRule(id, ws);
+            if (row) row.hits += by;
         }
     };
     return repo;

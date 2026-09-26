@@ -14,6 +14,8 @@ import type {
 } from '../contracts/domain';
 import type { SdkQueryable } from '@deveye/types/sdk/server';
 
+import type { FinanceRuleRow, FinanceStatementLineRow, StatementDirection } from '../contracts/statement';
+
 /**
  * Aucun `SELECT *` sur une table à colonne `DATE` : le pilote rendrait un
  * objet `Date` recalé sur le fuseau du processus, d'où les projections
@@ -78,6 +80,35 @@ export interface FinanceStatusInput {
     incomeTaxPrepaid: boolean;
     declarationPeriod: string | null;
     trackingSince: string | null;
+}
+
+/** Une ligne de relevé à écrire, déjà chiffrée, son identité chez la banque calculée. */
+export interface FinanceStatementLineInput {
+    accountId: number;
+    importId: number;
+    externalId: string;
+    date: string;
+    direction: StatementDirection;
+    amount: number;
+    content: string;
+}
+
+export interface FinanceImportInput {
+    accountId: number;
+    format: string;
+    firstDate: string | null;
+    lastDate: string | null;
+    lineCount: number;
+    newCount: number;
+    closingBalance: number | null;
+    closingDate: string | null;
+}
+
+export interface FinanceRuleInput {
+    direction: StatementDirection | null;
+    categoryId: number;
+    vatRateBp: number | null;
+    content: string;
 }
 
 /** Un espace en micro-entreprise, tel que le service des rappels le parcourt. */
@@ -269,6 +300,53 @@ export interface FinanceRepo {
         lastPostedDate: string | null,
         active: boolean | null
     ): Promise<void>;
+
+    createImport(workspaceId: number, input: FinanceImportInput): Promise<number>;
+    setImportCounts(id: number, workspaceId: number, lineCount: number, newCount: number): Promise<void>;
+    /** Le dernier solde annoncé par la banque, par compte. */
+    latestClosings(
+        workspaceId: number
+    ): Promise<{ account_id: number; closing_balance: number; closing_date: string }[]>;
+    /** `null` quand la banque avait déjà donné cette ligne : l'index unique `(account_id, external_id)` la refuse. */
+    insertLine(workspaceId: number, input: FinanceStatementLineInput): Promise<number | null>;
+    findLines(workspaceId: number, ids: readonly number[]): Promise<FinanceStatementLineRow[]>;
+    /** Les lignes, celles à rapprocher d'abord puis les plus récentes. */
+    listLines(
+        workspaceId: number,
+        filter: { pendingOnly: boolean; accountId?: number },
+        limit: number
+    ): Promise<FinanceStatementLineRow[]>;
+    countPendingLines(workspaceId: number, accountId?: number): Promise<number>;
+    /** `transactionId` à `null` défait le rapprochement. */
+    linkLine(id: number, workspaceId: number, transactionId: number | null): Promise<void>;
+    setLineIgnored(ids: readonly number[], workspaceId: number, ignored: boolean): Promise<void>;
+    /** Les opérations qui touchent ce compte sur `[from, to]` et qu'aucune de ses lignes ne confirme encore. */
+    unconfirmedTransactions(
+        workspaceId: number,
+        accountId: number,
+        from: string,
+        to: string
+    ): Promise<FinanceTransactionRow[]>;
+    /** Les lignes qui confirment cette opération : une, deux pour un virement entre deux comptes importés. */
+    linkedLines(workspaceId: number, transactionId: number): Promise<FinanceStatementLineRow[]>;
+    /** Avant de supprimer une opération : les lignes qui la confirmaient sont écartées, pas remises à rapprocher. */
+    releaseLines(transactionId: number, workspaceId: number): Promise<void>;
+    countAccountLines(id: number, workspaceId: number): Promise<number>;
+
+    listRules(workspaceId: number): Promise<FinanceRuleRow[]>;
+    findRule(id: number, workspaceId: number): Promise<FinanceRuleRow | null>;
+    createRule(workspaceId: number, input: FinanceRuleInput): Promise<number>;
+    updateRule(id: number, workspaceId: number, input: FinanceRuleInput): Promise<boolean>;
+    deleteRule(id: number, workspaceId: number): Promise<boolean>;
+    bumpRuleHits(id: number, workspaceId: number, by: number): Promise<void>;
+}
+
+/** Colonnes d'une ligne de relevé, la date projetée. */
+const LINE_COLUMNS = `l.id, l.workspace_id, l.account_id, l.import_id, l.external_id,
+    DATE_FORMAT(l.date, '%Y-%m-%d') AS date, l.direction, l.amount, l.transaction_id, l.ignored, l.content`;
+
+function isDuplicateEntry(error: unknown): boolean {
+    return (error as { code?: string } | null)?.code === 'ER_DUP_ENTRY';
 }
 
 /** Les fragments sont écrits ici, jamais bâtis depuis une donnée reçue : seules les valeurs voyagent. */
@@ -886,6 +964,208 @@ export function createRepo(q: SdkQueryable): FinanceRepo {
             ]);
             return res.affectedRows > 0;
         },
+        async createImport(workspaceId, input) {
+            const res = await q.execute(
+                `INSERT INTO ft_finance_imports
+                     (workspace_id, account_id, format, first_date, last_date, line_count, new_count,
+                      closing_balance, closing_date)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    workspaceId,
+                    input.accountId,
+                    input.format,
+                    input.firstDate,
+                    input.lastDate,
+                    input.lineCount,
+                    input.newCount,
+                    input.closingBalance,
+                    input.closingDate
+                ]
+            );
+            return res.insertId;
+        },
+        async setImportCounts(id, workspaceId, lineCount, newCount) {
+            await q.execute(
+                'UPDATE ft_finance_imports SET line_count = ?, new_count = ? WHERE id = ? AND workspace_id = ?',
+                [lineCount, newCount, id, workspaceId]
+            );
+        },
+        async latestClosings(workspaceId) {
+            const rows = await q.query<{ account_id: number; closing_balance: number; closing_date: string }>(
+                `SELECT account_id, closing_balance, DATE_FORMAT(closing_date, '%Y-%m-%d') AS closing_date
+                   FROM ft_finance_imports
+                  WHERE workspace_id = ? AND closing_balance IS NOT NULL AND closing_date IS NOT NULL
+                  ORDER BY closing_date DESC, id DESC`,
+                [workspaceId]
+            );
+            const seen = new Set<number>();
+            return rows.filter((row) => {
+                if (seen.has(row.account_id)) return false;
+                seen.add(row.account_id);
+                return true;
+            });
+        },
+        async insertLine(workspaceId, input) {
+            try {
+                const res = await q.execute(
+                    `INSERT INTO ft_finance_statement_lines
+                         (workspace_id, account_id, import_id, external_id, date, direction, amount, content)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [
+                        workspaceId,
+                        input.accountId,
+                        input.importId,
+                        input.externalId,
+                        input.date,
+                        input.direction,
+                        input.amount,
+                        input.content
+                    ]
+                );
+                return res.insertId;
+            } catch (error) {
+                if (isDuplicateEntry(error)) return null;
+                throw error;
+            }
+        },
+        async findLines(workspaceId, ids) {
+            if (ids.length === 0) return [];
+            const marks = ids.map(() => '?').join(', ');
+            return q.query<FinanceStatementLineRow>(
+                `SELECT ${LINE_COLUMNS} FROM ft_finance_statement_lines l
+                  WHERE l.workspace_id = ? AND l.id IN (${marks})`,
+                [workspaceId, ...ids]
+            );
+        },
+        async listLines(workspaceId, filter, limit) {
+            const parts = ['l.workspace_id = ?'];
+            const params: unknown[] = [workspaceId];
+            if (filter.pendingOnly) parts.push('l.transaction_id IS NULL AND l.ignored = 0');
+            if (filter.accountId !== undefined) {
+                parts.push('l.account_id = ?');
+                params.push(filter.accountId);
+            }
+            return q.query<FinanceStatementLineRow>(
+                `SELECT ${LINE_COLUMNS} FROM ft_finance_statement_lines l
+                  WHERE ${parts.join(' AND ')}
+                  ORDER BY (l.transaction_id IS NULL AND l.ignored = 0) DESC, l.date DESC, l.id DESC
+                  LIMIT ?`,
+                [...params, limit]
+            );
+        },
+        async countPendingLines(workspaceId, accountId) {
+            const rows = await q.query<{ n: number }>(
+                `SELECT COUNT(*) AS n FROM ft_finance_statement_lines
+                  WHERE workspace_id = ? AND transaction_id IS NULL AND ignored = 0
+                    ${accountId === undefined ? '' : 'AND account_id = ?'}`,
+                accountId === undefined ? [workspaceId] : [workspaceId, accountId]
+            );
+            return Number(rows[0]?.n ?? 0);
+        },
+        async linkLine(id, workspaceId, transactionId) {
+            await q.execute(
+                'UPDATE ft_finance_statement_lines SET transaction_id = ? WHERE id = ? AND workspace_id = ?',
+                [transactionId, id, workspaceId]
+            );
+        },
+        async setLineIgnored(ids, workspaceId, ignored) {
+            if (ids.length === 0) return;
+            const marks = ids.map(() => '?').join(', ');
+            await q.execute(
+                `UPDATE ft_finance_statement_lines SET ignored = ?
+                  WHERE workspace_id = ? AND transaction_id IS NULL AND id IN (${marks})`,
+                [ignored ? 1 : 0, workspaceId, ...ids]
+            );
+        },
+        async unconfirmedTransactions(workspaceId, accountId, from, to) {
+            return q.query<FinanceTransactionRow>(
+                `SELECT ${TX_COLUMNS} FROM finance_transactions t
+                  WHERE t.workspace_id = ? AND (t.account_id = ? OR t.transfer_account_id = ?)
+                    AND t.date >= ? AND t.date <= ?
+                    AND NOT EXISTS (SELECT 1 FROM ft_finance_statement_lines l
+                                     WHERE l.transaction_id = t.id AND l.account_id = ?)
+                  ORDER BY t.date ASC, t.id ASC`,
+                [workspaceId, accountId, accountId, from, to, accountId]
+            );
+        },
+        async linkedLines(workspaceId, transactionId) {
+            return q.query<FinanceStatementLineRow>(
+                `SELECT ${LINE_COLUMNS} FROM ft_finance_statement_lines l
+                  WHERE l.workspace_id = ? AND l.transaction_id = ?`,
+                [workspaceId, transactionId]
+            );
+        },
+        async releaseLines(transactionId, workspaceId) {
+            await q.execute(
+                'UPDATE ft_finance_statement_lines SET transaction_id = NULL, ignored = 1 WHERE transaction_id = ? AND workspace_id = ?',
+                [transactionId, workspaceId]
+            );
+        },
+        async countAccountLines(id, workspaceId) {
+            const rows = await q.query<{ n: number }>(
+                'SELECT COUNT(*) AS n FROM ft_finance_statement_lines WHERE workspace_id = ? AND account_id = ?',
+                [workspaceId, id]
+            );
+            return Number(rows[0]?.n ?? 0);
+        },
+
+        async listRules(workspaceId) {
+            return q.query<FinanceRuleRow>(
+                `SELECT id, workspace_id, direction, category_id, vat_rate_bp, sort_order, hits, content
+                   FROM ft_finance_rules WHERE workspace_id = ? ORDER BY sort_order ASC, id ASC`,
+                [workspaceId]
+            );
+        },
+        async findRule(id, workspaceId) {
+            const rows = await q.query<FinanceRuleRow>(
+                `SELECT id, workspace_id, direction, category_id, vat_rate_bp, sort_order, hits, content
+                   FROM ft_finance_rules WHERE id = ? AND workspace_id = ?`,
+                [id, workspaceId]
+            );
+            return rows[0] ?? null;
+        },
+        async createRule(workspaceId, input) {
+            const rank = await q.query<{ next: number }>(
+                'SELECT COALESCE(MAX(sort_order) + 1, 0) AS next FROM ft_finance_rules WHERE workspace_id = ?',
+                [workspaceId]
+            );
+            const res = await q.execute(
+                `INSERT INTO ft_finance_rules (workspace_id, direction, category_id, vat_rate_bp, sort_order, content)
+                 VALUES (?, ?, ?, ?, ?, ?)`,
+                [
+                    workspaceId,
+                    input.direction,
+                    input.categoryId,
+                    input.vatRateBp,
+                    Number(rank[0]?.next ?? 0),
+                    input.content
+                ]
+            );
+            return res.insertId;
+        },
+        async updateRule(id, workspaceId, input) {
+            const res = await q.execute(
+                `UPDATE ft_finance_rules SET direction = ?, category_id = ?, vat_rate_bp = ?, content = ?
+                  WHERE id = ? AND workspace_id = ?`,
+                [input.direction, input.categoryId, input.vatRateBp, input.content, id, workspaceId]
+            );
+            return res.affectedRows > 0;
+        },
+        async deleteRule(id, workspaceId) {
+            const res = await q.execute('DELETE FROM ft_finance_rules WHERE id = ? AND workspace_id = ?', [
+                id,
+                workspaceId
+            ]);
+            return res.affectedRows > 0;
+        },
+        async bumpRuleHits(id, workspaceId, by) {
+            await q.execute('UPDATE ft_finance_rules SET hits = hits + ? WHERE id = ? AND workspace_id = ?', [
+                by,
+                id,
+                workspaceId
+            ]);
+        },
+
         async advanceRecurring(id, workspaceId, nextDate, lastPostedDate, active) {
             // `COALESCE` porte ici tout le contrat: un argument à `null` veut
             // dire « ne touche pas », et non « mets NULL ».

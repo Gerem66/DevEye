@@ -144,6 +144,52 @@ export const financeRecurringRemoveFeature = defineSdkFeature({
 });
 
 /**
+ * Écrit l'occurrence attendue d'une échéance, à ce montant, et avance la date.
+ * Un montant corrigé garde le taux du modèle : sa TVA suit, au lieu de rester
+ * celle d'un autre montant. Rend l'identifiant de l'opération écrite.
+ */
+export async function postOccurrence(
+    ctx: Ctx,
+    row: FinanceRecurringRow,
+    amount: number,
+    cleared: boolean
+): Promise<number> {
+    if (row.active !== 1) throw new FeatureError('conflict', 'Cette échéance est suspendue.');
+    const date = row.next_date;
+    const existing = await ctx.repo.findOccurrence(ctx.workspaceId, row.id, date);
+    if (existing) throw new FeatureError('conflict', 'Cette occurrence a déjà été enregistrée.');
+
+    const vatAmount =
+        row.vat_amount === null || Number(row.amount) === 0
+            ? null
+            : Math.round((Number(row.vat_amount) * amount) / Number(row.amount));
+    const id = await ctx.repo.createTransaction(ctx.workspaceId, {
+        accountId: row.account_id,
+        transferAccountId: row.transfer_account_id,
+        categoryId: row.category_id,
+        recurringId: row.id,
+        source: null,
+        sourceRef: null,
+        kind: row.kind,
+        amount,
+        vatAmount,
+        date,
+        cleared,
+        content: row.content
+    });
+
+    const next = nextOccurrence(date, row.frequency, row.interval_count, row.anchor_day);
+    const finished = row.end_date !== null && next > row.end_date;
+    await ctx.repo.advanceRecurring(row.id, ctx.workspaceId, next, date, finished ? false : null);
+    ctx.audit({
+        action: 'finance.recurringPost',
+        description: 'Échéance enregistrée',
+        metadata: { recurringId: row.id, transactionId: id, amount }
+    });
+    return id;
+}
+
+/**
  * Le clic d'une échéance manuelle. `amount` corrige au passage une facture qui
  * varie sans toucher au modèle.
  */
@@ -153,48 +199,12 @@ export const financeRecurringPostFeature = defineSdkFeature({
     access: WRITE,
     handler: async (ctx: Ctx, input) => {
         const row = await load(ctx, input.recurringId);
-        if (row.active !== 1) throw new FeatureError('conflict', 'Cette échéance est suspendue.');
-
         const payload = await decryptJson<StoredEntry>(financeCipher(ctx), row.content);
         if (!payload) throw new FeatureError('internal', 'Échéance illisible');
 
-        const date = row.next_date;
-        const existing = await ctx.repo.findOccurrence(ctx.workspaceId, row.id, date);
-        if (existing) throw new FeatureError('conflict', 'Cette occurrence a déjà été enregistrée.');
-
-        const amount = input.amount ?? Number(row.amount);
-        // Un montant corrigé garde le taux du modèle : sa TVA suit, au lieu de
-        // rester celle d'un autre montant.
-        const vatAmount =
-            row.vat_amount === null || Number(row.amount) === 0
-                ? null
-                : Math.round((Number(row.vat_amount) * amount) / Number(row.amount));
-        const id = await ctx.repo.createTransaction(ctx.workspaceId, {
-            accountId: row.account_id,
-            transferAccountId: row.transfer_account_id,
-            categoryId: row.category_id,
-            recurringId: row.id,
-            source: null,
-            sourceRef: null,
-            kind: row.kind,
-            amount,
-            vatAmount,
-            date,
-            cleared: false,
-            content: row.content
-        });
-
-        const next = nextOccurrence(date, row.frequency, row.interval_count, row.anchor_day);
-        const finished = row.end_date !== null && next > row.end_date;
-        await ctx.repo.advanceRecurring(row.id, ctx.workspaceId, next, date, finished ? false : null);
-
+        const id = await postOccurrence(ctx, row, input.amount ?? Number(row.amount), false);
         const created = await ctx.repo.findTransaction(id, ctx.workspaceId);
         if (!created) throw new FeatureError('internal', 'Opération introuvable après création');
-        ctx.audit({
-            action: 'finance.recurringPost',
-            description: 'Échéance enregistrée',
-            metadata: { recurringId: row.id, transactionId: id, amount }
-        });
         return {
             transaction: toTransaction(created, payload),
             recurring: toRecurring(await load(ctx, row.id), payload)

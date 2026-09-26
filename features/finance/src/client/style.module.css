@@ -951,6 +951,60 @@
     filter: opacity(0.6);
 }
 
+/* La case d'une rangée qu'on range avec d'autres, avant son corps cliquable. */
+.rowCheck {
+    flex: none;
+    padding-left: var(--space-md);
+}
+
+/* Le dépôt d'un relevé : un vrai bouton, que le glisser-déposer ne fait qu'abréger. */
+.dropzone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-xs);
+    width: 100%;
+    padding: var(--space-xl) var(--space-md);
+    border: 2px dashed var(--glass-border-strong);
+    border-radius: var(--radius-lg);
+    background: var(--surface-subtle);
+    color: var(--text-secondary);
+    font: inherit;
+    text-align: center;
+    cursor: pointer;
+    transition:
+        border-color var(--transition-fast),
+        background var(--transition-fast);
+}
+
+.dropzone:hover:not(:disabled),
+.dropzone:focus-visible,
+.dropzone[data-over='true'] {
+    border-color: var(--accent);
+    background: var(--accent-bg);
+    color: var(--text-primary);
+}
+
+.dropzone:disabled {
+    cursor: progress;
+}
+
+.dropzoneIcon {
+    width: 28px;
+    color: var(--accent);
+}
+
+.dropzoneTitle {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.dropzoneHint {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+}
+
 /* Une phrase qui situe ce qu'on regarde, et le geste qui y mène. */
 .notice {
     display: flex;

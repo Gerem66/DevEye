@@ -226,7 +226,10 @@ export const financeOverviewFeature = defineSdkFeature({
             computeStatus(ctx, config.status, config.vatEnabled, now, netBalance, receivables),
             microPaymentsDue(ctx, config.status, now, forecastHorizon(now))
         ]);
-        const forecast = await buildForecast(ctx, now, netBalance, receivables, payments);
+        const [forecast, pendingLines] = await Promise.all([
+            buildForecast(ctx, now, netBalance, receivables, payments),
+            ctx.repo.countPendingLines(ctx.workspaceId)
+        ]);
 
         return {
             overview: {
@@ -253,6 +256,7 @@ export const financeOverviewFeature = defineSdkFeature({
                 receivables: summarize(receivables),
                 forecast,
                 status,
+                pendingLines,
                 // `null` plutôt que des zéros quand la TVA n'est pas suivie :
                 // il n'y en a pas « zéro ».
                 vat: config.vatEnabled

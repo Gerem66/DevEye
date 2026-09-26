@@ -157,6 +157,61 @@ suivante.
 
 ---
 
+## Les relevés de la banque
+
+Personne ne retape son relevé. Il s'**importe** (Relevés, ou la fiche d'un
+compte), en CSV ou en OFX, et chaque ligne se **rapproche** : elle confirme une
+opération déjà au livre, ou en devient une.
+
+**Le fichier est lu dans le navigateur** (`src/client/statement/`). Aucun CSV ne
+ressemble à un autre : séparateur, encodage (UTF-8 ou Windows-1252), lignes
+avant l'en-tête, montant signé ou débit et crédit séparés, jour avant le mois.
+La lecture devine les colonnes, les montre avec un aperçu, et la correspondance
+validée est retenue pour le compte (`ctx.store`, `import:<compte>`) : le même
+export se relit ensuite sans rien demander. Le serveur ne reçoit que des lignes
+normalisées, 2 000 au plus par envoi.
+
+**Une ligne n'entre qu'une fois.** Son identité chez la banque (`external_id`,
+unique par compte) est le `FITID` d'un OFX ; pour un CSV, une empreinte HMAC du
+compte, du jour, du sens, du montant, du libellé normalisé et du rang parmi les
+lignes identiques du même fichier (deux cafés le même jour restent deux). La
+clé vient de `ctx.keys` : l'empreinte ne rend pas le libellé. Réimporter un
+relevé qui chevauche le précédent n'ajoute que ce qui manque.
+
+**Le rapprochement** (`src/server/reconcile.ts`) ne choisit jamais à la place de
+la personne :
+
+1. Une opération du livre au même compte, même sens, même montant, datée de
+   cinq jours avant à trois jours après, et **seule candidate** : la ligne s'y
+   rattache et l'opération est pointée. C'est ainsi qu'une copie de règlement,
+   une échéance écrite ou une saisie se confirment.
+2. Sinon, une **règle** (« le libellé contient ovh » → Hébergement) crée
+   l'opération, pointée, avec sa TVA quand le régime la récupère.
+3. Sinon la ligne attend dans Relevés, avec ce qu'elle pourrait être : les
+   opérations candidates quand il y en a plusieurs, une échéance manuelle due au
+   même montant, une facture qui attend exactement ce montant (sur le compte qui
+   reçoit les règlements seulement).
+
+Le moteur tourne à l'import, à chaque saisie, et quand des règlements de
+Facturation arrivent : l'ordre (relevé d'abord, règlement ensuite, ou l'inverse)
+ne change rien au résultat. « Encaisser » une facture depuis une ligne passe par
+`INVOICING_CLIENT_PROVIDER` : c'est la commande de Facturation qui s'exécute,
+sous la session de la personne, avec ses droits, son audit et son avis « facture
+soldée » ; la copie arrive ensuite et confirme la ligne.
+
+**Défaire un rapprochement** passe par l'opération. La corriger au point
+qu'elle ne ressemble plus à sa ligne remet la ligne à rapprocher. La supprimer
+**écarte** la ligne plutôt que de la remettre en attente, sinon la même règle la
+recréerait aussitôt ; « Rétablir » la rend. Une copie qui disparaît avec son
+règlement, elle, remet sa ligne en attente : l'argent est bien arrivé.
+
+**Le solde de la banque**, quand le fichier le porte, est gardé par import et
+comparé au solde pointé du livre à la même date. Au premier import dans un
+compte vide, le solde de départ qu'il implique est **proposé**, jamais écrit
+d'office.
+
+---
+
 ## Ce qu'il faut mettre de côté
 
 Le **statut** de l'activité (panneau Général) dit ce qui est dû sur l'argent
@@ -235,9 +290,9 @@ annoncé. Ils sortent seulement des sélecteurs de saisie.
 Toutes lèvent `conflict` ou `validation`, avec une phrase en français que le
 client affiche telle quelle (`humanizeError`).
 
-- **Supprimer un compte** est refusé tant qu'il porte une opération ou une
-  échéance. **L'archiver** est refusé tant qu'il reçoit les règlements de
-  Facturation. Les deux clés étrangères sont en `CASCADE` : sans ces décomptes, de
+- **Supprimer un compte** est refusé tant qu'il porte une opération, une
+  échéance ou une ligne de relevé. **L'archiver** est refusé tant qu'il reçoit les règlements de
+  Facturation. Les clés étrangères sont en `CASCADE` : sans ces décomptes, de
   l'argent disparaîtrait d'un livre de comptes sans un mot. Le geste réversible
   existe déjà, c'est l'archivage.
 - **Changer le sens d'une catégorie** est refusé : toutes les opérations déjà
@@ -273,7 +328,8 @@ saisissable en ajustant le montant.
 
 Pas d'onglets, sur le modèle de Facturation : l'accueil porte les chiffres de la
 période, les comptes, ce qui arrive et les dernières opérations, et « Voir tout »
-ouvre les listes complètes (Opérations, Échéances). Un clic sur un compte ouvre
+ouvre les listes complètes (Opérations, Échéances, Relevés). Des lignes en
+attente s'annoncent en tête de l'accueil. Un clic sur un compte ouvre
 sa fiche : ses soldes, puis son journal.
 
 Le **compte est l'élément** de la feature (`hasItems: true`, `itemNoun:
@@ -284,7 +340,7 @@ opération, elle, n'est pas un élément : elle se corrige dans son dialogue.
 
 ## Les réglages
 
-Trois panneaux dans la coquille commune (`Docs/SETTINGS.md`), déclarés par le
+Quatre panneaux dans la coquille commune (`Docs/SETTINGS.md`), déclarés par le
 manifest (`settings.feature` et `settings.item`) et fournis par l'entrée client
 (`settingsPanels`) :
 
@@ -300,6 +356,9 @@ manifest (`settings.feature` et `settings.item`) et fournis par l'entrée client
   rangée canonique) ; le dialogue d'opération ne fait que choisir dedans, et
   mène à cet onglet quand il n'y a rien à choisir. Patron des sources
   (`Docs/SOURCES.md`).
+- **Règles** (`FinanceRulesPanel`) : celles qui rangent les lignes de relevé.
+  Elles naissent surtout en rapprochant une ligne (« Ranger ainsi, à
+  l'avenir ») ; ici elles se relisent, se corrigent et se retirent.
 
 ## Points d'entrée
 
@@ -307,12 +366,14 @@ manifest (`settings.feature` et `settings.item`) et fournis par l'entrée client
 | ------------------------------------------------------- | --------------------------------------------------------------------- |
 | Manifest                                                | `src/manifest.ts`                                                     |
 | Schémas et types                                        | `src/contracts/domain.ts`                                             |
-| Contrats des 25 commandes                               | `src/contracts/commands.ts`                                           |
+| Contrats des 32 commandes, relevés                      | `src/contracts/commands.ts`, `src/contracts/statement.ts`             |
 | Schéma SQL d'origine, dans le socle                     | `DevEye/src/db/migrations/084_finance.sql`                            |
 | Évolutions du schéma                                    | `src/server/migrations/`                                              |
 | Requêtes                                                | `src/server/repo.ts`                                                  |
 | Socle serveur (chiffre, calendrier, gardes, rattrapage) | `src/server/_shared.ts`                                               |
 | Recopie des règlements de Facturation                   | `src/server/sources.ts`                                               |
+| Rapprochement des relevés et règles                     | `src/server/reconcile.ts`                                             |
+| Lecture des CSV et OFX, dans le navigateur              | `src/client/statement/`                                               |
 | Statut, provisions, seuils ; taux et calendrier légaux  | `src/server/status.ts`, `src/contracts/legal.ts`                      |
 | Rappels de déclaration                                  | `src/server/service.ts`                                               |
 | Handlers (un fichier par nature)                        | `src/server/handlers/`                                                |

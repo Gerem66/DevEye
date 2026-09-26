@@ -101,11 +101,12 @@ export const financeAccountRemoveFeature = defineSdkFeature({
         const row = await ctx.repo.findAccount(input.accountId, ctx.workspaceId, today());
         if (!row) throw new FeatureError('not_found', 'Compte introuvable');
 
-        // Les deux clés étrangères sont en CASCADE : supprimer emporterait
-        // opérations et échéances sans un mot. Le geste réversible est l'archivage.
-        const [used, scheduled] = await Promise.all([
+        // Les clés étrangères sont en CASCADE : supprimer emporterait opérations,
+        // échéances et relevés sans un mot. Le geste réversible est l'archivage.
+        const [used, scheduled, imported] = await Promise.all([
             ctx.repo.countAccountUsage(input.accountId, ctx.workspaceId),
-            ctx.repo.countAccountRecurring(input.accountId, ctx.workspaceId)
+            ctx.repo.countAccountRecurring(input.accountId, ctx.workspaceId),
+            ctx.repo.countAccountLines(input.accountId, ctx.workspaceId)
         ]);
         if (used > 0) {
             throw new FeatureError(
@@ -119,6 +120,13 @@ export const financeAccountRemoveFeature = defineSdkFeature({
                 'conflict',
                 `Ce compte porte ${scheduled} échéance${scheduled > 1 ? 's' : ''}. ` +
                     'Supprimez-les ou déplacez-les avant, ou archivez le compte.'
+            );
+        }
+        if (imported > 0) {
+            throw new FeatureError(
+                'conflict',
+                `Ce compte porte ${imported} ligne${imported > 1 ? 's' : ''} de relevé importée${imported > 1 ? 's' : ''}. ` +
+                    'Archivez-le plutôt que de le supprimer.'
             );
         }
 
