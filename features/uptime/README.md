@@ -333,8 +333,9 @@ l'onglet « Pages de statut » des réglages de la feature (`StatusPagesPanel`,
   propre politique de contenu et ses propres couleurs (`statusPage/style.ts`),
   intégrable en iframe. Un petit script servi à part (`/statut/page.js`) relit
   la page toutes les minutes et remet les heures dans le fuseau du visiteur ;
-  sans lui, la page reste lisible en UTC. « DevEye » au pied de la page mène à
-  `UPTIME_SITE_URL` (`https://deveye.fr` par défaut, vide : pas de lien).
+  sans lui, la page reste lisible en UTC. « DevEye » au pied de la page mène au
+  site vitrine de l'hôte (`origins.site`, soit `SITE_URL`), avec sa politique de
+  confidentialité ; sans site, le nom reste, sans lien.
 
 ## Commandes
 

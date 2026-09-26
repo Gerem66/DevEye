@@ -483,7 +483,6 @@ dashboard.ts        la vue d'ensemble : agencement, indicateurs (DATABASE_MEASUR
 publication.ts      la page publique côté réglages : lire, publier, changer le lien ; le chemin sous un domaine
 publicPage/         les routes publiques du tableau, la racine d'un domaine, la vue, le rendu HTML, le style, le script
 domains.ts          les crochets des domaines : l'enregistrement CNAME, la sonde du jeton, l'usage, le retrait
-env.ts              PROJECTS_SITE_URL, le lien au pied des tableaux publics
 usageProvider.ts    PROJECTS_USAGE_PROVIDER : usageOf, countByItem, detach, linkTargets, link, unlink, recordEvent, applyVersion
 repo/index.ts       ProjectsRepo, createRepo(SdkQueryable) : les huit dépôts natifs, un fichier par agrégat
 repo/projects.ts    la table projects (listVisible, findVisible : les siens plus les projetés) et ses compteurs en clair (statsFor)

@@ -776,11 +776,6 @@ Pairs admis d'un module : `@deveye/types`, `react`, `zod`, `framer-motion`
 
 ## Dettes connues
 
-- **Le site vitrine en trois exemplaires** : `ctx.origins.site` (`SITE_URL`)
-  dit aux modules où vivent les pages légales, mais Uptime, Projets et
-  Rendez-vous lisent encore chacun leur `*_SITE_URL` pour le lien de leurs
-  pages publiques. Une seule variable suffirait ; le jour où on les retire,
-  `origins.site` passe aussi aux routes publiques (`SdkPublicApp`).
 - **Partage inter-espaces et restrictions par élément** : au SDK depuis
   Uptime (`ctx.sharing.scope()`, `ctx.items.*`, `FeatureServer.items`, les
   harnais de test qui les simulent par `shares` et `itemRestrictions`). Ce qui

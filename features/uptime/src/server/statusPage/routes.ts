@@ -10,7 +10,6 @@ import {
 import { UPTIME_PAGE_DAYS, type UptimePageRow } from '../../contracts/domain';
 import { decryptError, decryptPage, decryptService, STATUS_PATH } from '../_shared';
 import { WELL_KNOWN_PATH } from '../domains';
-import { env } from '../env';
 import type { UptimeRepo } from '../repo';
 import { pageStockId } from '../repoPages';
 import { renderMissingPage, renderStatusPage, type RenderOptions } from './render';
@@ -70,7 +69,7 @@ export interface StatusPages {
 
 export function createStatusPages(deps: FeatureServiceDeps<UptimeRepo>): StatusPages {
     const originHosts = new Set([new URL(deps.origins.public).hostname, new URL(deps.origins.app).hostname]);
-    const options: RenderOptions = { siteUrl: env.UPTIME_SITE_URL, scriptPath: SCRIPT_PATH };
+    const options: RenderOptions = { siteUrl: deps.origins.site ?? '', scriptPath: SCRIPT_PATH };
     /** Par clé de recherche : `ref:<lien>` ou `domain:<id>`. */
     const cache = new Map<string, Cached>();
     const pending = new Map<string, Promise<Cached | null>>();

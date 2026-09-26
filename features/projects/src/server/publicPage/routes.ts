@@ -15,7 +15,6 @@ import { PROJECT_SLUG_PATTERN, PUBLIC_PATH, type ProjectPublicRow } from '../../
 import { decryptCard, decryptColumn, decryptMilestone, priorityFromDb, tryDecryptProject } from '../_shared';
 import { WELL_KNOWN_PATH } from '../domains';
 import { themeOf } from '../publication';
-import { env } from '../env';
 import { publicStockId, type ProjectsRepo } from '../repo';
 import { renderBoardPage, renderMissingPage, type RenderOptions } from './render';
 import { BOARD_SCRIPT, BOARD_SCRIPT_ETAG } from './script';
@@ -102,7 +101,7 @@ export interface PublicPages {
 
 export function createPublicPages(deps: FeatureServiceDeps<ProjectsRepo>): PublicPages {
     const originHosts = new Set([new URL(deps.origins.public).hostname, new URL(deps.origins.app).hostname]);
-    const options: RenderOptions = { siteUrl: env.PROJECTS_SITE_URL, scriptPath: SCRIPT_PATH };
+    const options: RenderOptions = { siteUrl: deps.origins.site ?? '', scriptPath: SCRIPT_PATH };
     /** Par clé de recherche : `ref:<lien>`, `slug:<domaine>:<chemin>` ou `root:<domaine>`. */
     const cache = new Map<string, Cached>();
     const pending = new Map<string, Promise<Cached | null>>();

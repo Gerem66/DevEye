@@ -7,7 +7,6 @@ import type { FeatureServer } from '@deveye/types/sdk/server';
 import { projectsHandlers } from './handlers';
 import { projectsCopy } from './copy';
 import { createDomainHooks } from './domains';
-import { PROJECTS_ENV } from './env';
 import { projectsMove } from './move';
 import { setPublicPages } from './publication';
 import { createPublicPages } from './publicPage/routes';
@@ -36,7 +35,6 @@ import { createProjectsUsageProvider } from './usageProvider';
  * tables historiques.
  */
 export const serverEntry: FeatureServer<ProjectsRepo> = {
-    env: PROJECTS_ENV,
     createRepo,
     features: projectsHandlers,
     migrationsDir: path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations'),
