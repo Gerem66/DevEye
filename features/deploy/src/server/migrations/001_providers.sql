@@ -22,6 +22,19 @@ SET @s = IF(@c = 0,
     'SELECT 1');
 PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
+-- `deploy_targets` épingle general_ci, `devices` hérite du défaut de la base
+-- (0900_ai_ci sur un MySQL 8 neuf) : la clé étrangère exige la même collation.
+SELECT CHARACTER_SET_NAME, COLLATION_NAME INTO @dev_charset, @dev_collation
+  FROM INFORMATION_SCHEMA.COLUMNS
+ WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'devices' AND COLUMN_NAME = 'id';
+SET @col_collation = (SELECT COLLATION_NAME FROM INFORMATION_SCHEMA.COLUMNS
+                       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'deploy_targets' AND COLUMN_NAME = 'device_id');
+SET @s = IF(@col_collation <> @dev_collation,
+    CONCAT('ALTER TABLE deploy_targets MODIFY COLUMN device_id CHAR(36) CHARACTER SET ', @dev_charset,
+           ' COLLATE ', @dev_collation, ' NULL'),
+    'SELECT 1');
+PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
 SET @c = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'deploy_targets'
              AND CONSTRAINT_NAME = 'fk_deploy_target_device');
