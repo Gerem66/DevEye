@@ -181,13 +181,13 @@ export default function ConnectionDialog({ open, connection, enableBanking, onCl
                             {
                                 value: 'qonto',
                                 label: 'Qonto',
-                                icon: 'key',
+                                icon: 'icon-key',
                                 description: 'Par la clé d’API de votre organisation, en lecture seule.'
                             },
                             {
                                 value: 'enablebanking',
                                 label: 'Autre banque',
-                                icon: 'finance',
+                                icon: 'icon-finance',
                                 description:
                                     'La plupart des banques françaises et européennes, par le consentement que vous donnez chez elle.',
                                 unavailable: enableBanking
