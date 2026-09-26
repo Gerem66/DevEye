@@ -38,15 +38,15 @@ export const FINANCE_COLORS = financeColorSchema.options;
 /** Code ISO 4217. Une seule devise par espace : le multidevise serait un taux de change daté par opération. */
 export const financeCurrencySchema = z.string().regex(/^[A-Z]{3}$/);
 
-/** `vatEnabled` est le seul commutateur entre usage particulier et PME : il fait apparaître la TVA. */
+/** `vatEnabled` fait apparaître la TVA sur les saisies et son récapitulatif au tableau de bord. */
 export const financeConfigSchema = z.object({
     currency: financeCurrencySchema,
     vatEnabled: z.boolean()
 });
 export type FinanceConfig = z.infer<typeof financeConfigSchema>;
 
-/** Sert à l'icône, et à compter l'épargne à part du disponible sur le tableau de bord. */
-export const financeAccountKindSchema = z.enum(['checking', 'savings', 'cash', 'card', 'business', 'other']);
+/** Sert à l'icône, et à compter l'épargne (là où l'on range ses provisions) à part du disponible. */
+export const financeAccountKindSchema = z.enum(['checking', 'savings', 'cash', 'other']);
 export type FinanceAccountKind = z.infer<typeof financeAccountKindSchema>;
 
 /**
@@ -66,7 +66,7 @@ export const financeAccountSchema = z.object({
     cleared: financeBalanceSchema,
     /** Nombre d'opérations rattachées, toutes dates confondues. */
     transactionCount: z.number().int().nonnegative(),
-    /** Un compte archivé sort des totaux et des sélecteurs, sans rien perdre. */
+    /** Un compte archivé sort des sélecteurs de saisie mais reste dans les totaux : l'argent ne disparaît pas. */
     archived: z.boolean(),
     note: z.string().max(FINANCE_NOTE_MAX_LENGTH),
     sortOrder: z.number().int().nonnegative(),
@@ -120,27 +120,6 @@ export const financeTransactionSchema = z.object({
 });
 export type FinanceTransaction = z.infer<typeof financeTransactionSchema>;
 
-/** Périodicité d'un budget. */
-export const financeBudgetPeriodSchema = z.enum(['monthly', 'quarterly', 'yearly']);
-export type FinanceBudgetPeriod = z.infer<typeof financeBudgetPeriodSchema>;
-
-/** `spent` et `remaining` sont calculés à la lecture, jamais stockés : un budget est une règle, pas un compteur. */
-export const financeBudgetSchema = z.object({
-    id: z.number().int().positive(),
-    categoryId: z.number().int().positive(),
-    amount: financeAmountSchema,
-    period: financeBudgetPeriodSchema,
-    /** Consommé sur la période en cours. */
-    spent: financeAmountSchema,
-    /** Ce qu'il reste. Négatif quand l'enveloppe est dépassée. */
-    remaining: financeBalanceSchema,
-    /** Premier jour de la période en cours, pour situer le calcul. */
-    periodStart: financeDateSchema,
-    /** Premier jour de la période suivante (borne exclue). */
-    periodEnd: financeDateSchema
-});
-export type FinanceBudget = z.infer<typeof financeBudgetSchema>;
-
 /** Cadence d'une échéance. Combinée à `interval`: « tous les 2 mois ». */
 export const financeFrequencySchema = z.enum(['weekly', 'monthly', 'quarterly', 'yearly']);
 export type FinanceFrequency = z.infer<typeof financeFrequencySchema>;
@@ -187,7 +166,7 @@ export const financeMonthPointSchema = z.object({
     month: financeMonthSchema,
     income: financeAmountSchema,
     expense: financeAmountSchema,
-    /** Solde cumulé de tous les comptes actifs à la fin de ce mois. */
+    /** Solde cumulé de tous les comptes, archivés compris, à la fin de ce mois. */
     balance: financeBalanceSchema
 });
 export type FinanceMonthPoint = z.infer<typeof financeMonthPointSchema>;
@@ -223,7 +202,7 @@ export const financeOverviewSchema = z.object({
     /** Bornes de la fenêtre analysée (`to` exclu). */
     from: financeDateSchema,
     to: financeDateSchema,
-    /** Somme des soldes du jour, comptes archivés exclus. */
+    /** Somme des soldes du jour, comptes archivés compris. */
     netBalance: financeBalanceSchema,
     /** La part de `netBalance` posée sur des comptes d'épargne. */
     savings: financeBalanceSchema,
@@ -238,9 +217,10 @@ export const financeOverviewSchema = z.object({
     previousExpense: financeAmountSchema,
     months: z.array(financeMonthPointSchema),
     categories: z.array(financeCategoryShareSchema),
-    budgets: z.array(financeBudgetSchema),
     upcoming: z.array(financeUpcomingSchema),
-    /** Récapitulatif TVA sur la fenêtre, ou `null` hors mode entreprise. */
+    /** Les dernières opérations datées au plus tard aujourd'hui, la plus récente en tête. */
+    recent: z.array(financeTransactionSchema),
+    /** Récapitulatif TVA sur la fenêtre, ou `null` quand la TVA n'est pas suivie. */
     vat: z
         .object({
             collected: financeAmountSchema,
@@ -321,15 +301,6 @@ export interface FinanceTransactionRow {
     content: string;
     created: number;
     updated: number;
-}
-
-export interface FinanceBudgetRow {
-    id: number;
-    workspace_id: number;
-    category_id: number;
-    amount: number;
-    period: FinanceBudgetPeriod;
-    created: number;
 }
 
 export interface FinanceRecurringRow {

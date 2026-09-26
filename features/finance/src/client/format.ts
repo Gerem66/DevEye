@@ -1,6 +1,5 @@
 import type {
     FinanceAccountKind,
-    FinanceBudgetPeriod,
     FinanceColor,
     FinanceFrequency,
     FinanceRange,
@@ -92,10 +91,6 @@ export function formatDate(iso: string): string {
     return localDate(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-export function formatDateShort(iso: string): string {
-    return localDate(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
-}
-
 /** L'en-tête d'un groupe de jour dans le journal: « aujourd'hui », sinon la date. */
 export function formatDayHeading(iso: string): string {
     const now = todayIso();
@@ -144,13 +139,21 @@ export function formatRelativeDay(iso: string): string {
     return `il y a ${-days} jours`;
 }
 
-export const ACCOUNT_KINDS: { id: FinanceAccountKind; label: string; icon: string }[] = [
-    { id: 'checking', label: 'Compte courant', icon: 'finance' },
-    { id: 'savings', label: 'Épargne', icon: 'star' },
-    { id: 'cash', label: 'Espèces', icon: 'key' },
-    { id: 'card', label: 'Carte de crédit', icon: 'square-check' },
-    { id: 'business', label: 'Compte professionnel', icon: 'server' },
-    { id: 'other', label: 'Autre', icon: 'other' }
+export const ACCOUNT_KINDS: { id: FinanceAccountKind; label: string; icon: string; hint: string }[] = [
+    {
+        id: 'checking',
+        label: 'Courant',
+        icon: 'finance',
+        hint: 'Le compte où arrivent les règlements et d’où partent les dépenses.'
+    },
+    {
+        id: 'savings',
+        label: 'Épargne',
+        icon: 'star',
+        hint: 'Là où l’on range ses provisions : compté à part du disponible.'
+    },
+    { id: 'cash', label: 'Caisse', icon: 'key', hint: 'Les espèces encaissées ou avancées.' },
+    { id: 'other', label: 'Autre', icon: 'other', hint: 'Tout ce qui ne rentre pas ailleurs.' }
 ];
 
 export function accountKindLabel(kind: FinanceAccountKind): string {
@@ -166,10 +169,6 @@ export const TRANSACTION_KINDS: { id: FinanceTransactionKind; label: string }[] 
     { id: 'income', label: 'Recette' },
     { id: 'transfer', label: 'Virement' }
 ];
-
-export function transactionKindLabel(kind: FinanceTransactionKind): string {
-    return TRANSACTION_KINDS.find((k) => k.id === kind)?.label ?? '';
-}
 
 export const FREQUENCIES: { id: FinanceFrequency; label: string; every: string }[] = [
     { id: 'weekly', label: 'Hebdomadaire', every: 'semaines' },
@@ -194,41 +193,46 @@ export function frequencyLabel(frequency: FinanceFrequency, interval: number): s
     return `tous les ${interval} ${found.every}`;
 }
 
-export const BUDGET_PERIODS: { id: FinanceBudgetPeriod; label: string; short: string }[] = [
-    { id: 'monthly', label: 'Par mois', short: 'mois' },
-    { id: 'quarterly', label: 'Par trimestre', short: 'trimestre' },
-    { id: 'yearly', label: 'Par an', short: 'an' }
-];
-
-export function budgetPeriodShort(period: FinanceBudgetPeriod): string {
-    return BUDGET_PERIODS.find((p) => p.id === period)?.short ?? '';
-}
-
 export const RANGES: { id: FinanceRange; label: string }[] = [
     { id: 'month', label: 'Ce mois' },
     { id: 'quarter', label: 'Ce trimestre' },
     { id: 'year', label: 'Cette année' }
 ];
 
-/** Choisies dans `icons.css`, sans en ajouter : une catégorie doit être reconnaissable, la couleur fait l'essentiel. */
-export const CATEGORY_ICONS = [
-    'other',
-    'home',
-    'finance',
-    'key',
-    'star',
-    'cloud',
-    'activity',
-    'server',
-    'mail',
-    'users',
-    'clock',
-    'file',
-    'rocket',
-    'shield',
-    'projects',
-    'notes',
-    'refresh'
+/** Le nom d'une couleur, pour qui ne la voit pas. */
+export const COLOR_LABELS: Record<FinanceColor, string> = {
+    red: 'Rouge',
+    orange: 'Orange',
+    yellow: 'Jaune',
+    green: 'Vert',
+    blue: 'Bleu',
+    indigo: 'Indigo',
+    purple: 'Violet',
+    pink: 'Rose'
+};
+
+/**
+ * Choisies dans `icons.css`, sans en ajouter : une catégorie doit être
+ * reconnaissable, la couleur fait l'essentiel. Le libellé dit le dessin.
+ */
+export const CATEGORY_ICONS: { id: string; label: string }[] = [
+    { id: 'other', label: 'Point' },
+    { id: 'home', label: 'Maison' },
+    { id: 'finance', label: 'Billet' },
+    { id: 'key', label: 'Clé' },
+    { id: 'star', label: 'Étoile' },
+    { id: 'cloud', label: 'Nuage' },
+    { id: 'activity', label: 'Courbe' },
+    { id: 'server', label: 'Serveur' },
+    { id: 'mail', label: 'Enveloppe' },
+    { id: 'users', label: 'Personnes' },
+    { id: 'clock', label: 'Horloge' },
+    { id: 'file', label: 'Document' },
+    { id: 'rocket', label: 'Fusée' },
+    { id: 'shield', label: 'Bouclier' },
+    { id: 'projects', label: 'Tableau' },
+    { id: 'notes', label: 'Carnet' },
+    { id: 'refresh', label: 'Flèches' }
 ];
 
 /** Proposé en un bouton à qui n'a aucune catégorie, jamais créé d'office. */
@@ -238,18 +242,20 @@ export const DEFAULT_CATEGORIES: {
     color: FinanceColor;
     icon: string;
 }[] = [
-    { name: 'Logement', flow: 'expense', color: 'blue', icon: 'home' },
-    { name: 'Courses', flow: 'expense', color: 'green', icon: 'other' },
-    { name: 'Transport', flow: 'expense', color: 'indigo', icon: 'rocket' },
-    { name: 'Abonnements', flow: 'expense', color: 'purple', icon: 'clock' },
-    { name: 'Santé', flow: 'expense', color: 'red', icon: 'shield' },
-    { name: 'Loisirs', flow: 'expense', color: 'pink', icon: 'star' },
-    { name: 'Restaurants', flow: 'expense', color: 'orange', icon: 'users' },
-    { name: 'Impôts et taxes', flow: 'expense', color: 'yellow', icon: 'file' },
-    { name: 'Frais bancaires', flow: 'expense', color: 'red', icon: 'finance' },
-    { name: 'Fournitures', flow: 'expense', color: 'blue', icon: 'projects' },
-    { name: 'Salaire', flow: 'income', color: 'green', icon: 'finance' },
+    { name: 'Prestations', flow: 'income', color: 'green', icon: 'server' },
     { name: 'Ventes', flow: 'income', color: 'indigo', icon: 'activity' },
-    { name: 'Prestations', flow: 'income', color: 'blue', icon: 'server' },
-    { name: 'Remboursements', flow: 'income', color: 'purple', icon: 'refresh' }
+    { name: 'Remboursements', flow: 'income', color: 'purple', icon: 'refresh' },
+    { name: 'Hébergement et infra', flow: 'expense', color: 'blue', icon: 'cloud' },
+    { name: 'Logiciels et abonnements', flow: 'expense', color: 'purple', icon: 'clock' },
+    { name: 'Matériel', flow: 'expense', color: 'indigo', icon: 'server' },
+    { name: 'Téléphone et internet', flow: 'expense', color: 'blue', icon: 'activity' },
+    { name: 'Déplacements', flow: 'expense', color: 'orange', icon: 'rocket' },
+    { name: 'Repas d’affaires', flow: 'expense', color: 'pink', icon: 'users' },
+    { name: 'Formation', flow: 'expense', color: 'green', icon: 'notes' },
+    { name: 'Honoraires', flow: 'expense', color: 'yellow', icon: 'file' },
+    { name: 'Assurances', flow: 'expense', color: 'indigo', icon: 'shield' },
+    { name: 'Frais bancaires', flow: 'expense', color: 'red', icon: 'finance' },
+    { name: 'Cotisations sociales', flow: 'expense', color: 'orange', icon: 'shield' },
+    { name: 'TVA reversée', flow: 'expense', color: 'purple', icon: 'file' },
+    { name: 'Impôts', flow: 'expense', color: 'red', icon: 'file' }
 ];

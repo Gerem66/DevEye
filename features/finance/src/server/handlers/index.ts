@@ -8,12 +8,10 @@ import {
     financeAccountReorderFeature,
     financeAccountUpdateFeature
 } from './accounts';
-import { financeBudgetListFeature, financeBudgetRemoveFeature, financeBudgetSetFeature } from './budgets';
 import {
     financeCategoryAddFeature,
     financeCategoryListFeature,
     financeCategoryRemoveFeature,
-    financeCategoryReorderFeature,
     financeCategoryUpdateFeature
 } from './categories';
 import { financeConfigFeature, financeConfigUpdateFeature, financeSummaryFeature } from './config';
@@ -54,15 +52,11 @@ export const financeHandlers: ReadonlyArray<SdkFeatureDefinition<FinanceRepo>> =
     financeCategoryAddFeature,
     financeCategoryUpdateFeature,
     financeCategoryRemoveFeature,
-    financeCategoryReorderFeature,
     financeTransactionListFeature,
     financeTransactionAddFeature,
     financeTransactionUpdateFeature,
     financeTransactionRemoveFeature,
     financeTransactionSetClearedFeature,
-    financeBudgetListFeature,
-    financeBudgetSetFeature,
-    financeBudgetRemoveFeature,
     financeRecurringListFeature,
     financeRecurringAddFeature,
     financeRecurringUpdateFeature,

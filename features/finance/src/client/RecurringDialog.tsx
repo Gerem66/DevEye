@@ -2,12 +2,16 @@ import { useEffect, useMemo, useState } from 'react';
 import {
     Button,
     Checkbox,
+    ConfirmDialog,
     Dialog,
     DialogCancelButton,
-    humanizeError,
+    ErrorNote,
+    NumberInput,
     SegmentedControl,
     SelectInput,
-    TextInput
+    TextInput,
+    type ConfirmRequest,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { FinanceFrequency, FinanceRecurring, FinanceTransactionKind } from '../contracts/domain';
 import {
@@ -29,6 +33,7 @@ import {
     todayIso,
     vatFromGross
 } from './format';
+import { activeAccounts, errorNote } from './shared';
 import styles from './style.module.css';
 import type { FinanceBase } from './shared';
 
@@ -49,7 +54,7 @@ interface Draft {
     categoryId: number | null;
     counterparty: string;
     note: string;
-    vatRate: number;
+    vatRate: string;
     frequency: FinanceFrequency;
     interval: number;
     nextDate: string;
@@ -57,6 +62,11 @@ interface Draft {
     automatic: boolean;
     active: boolean;
 }
+
+const VAT_OPTIONS = VAT_RATES.map((rate) => ({
+    value: String(rate),
+    label: rate === 0 ? 'Aucune' : `${String(rate).replace('.', ',')} %`
+}));
 
 /**
  * La prochaine date fixe le jour d'ancrage de la série : une échéance au 31
@@ -66,14 +76,14 @@ export function RecurringDialog({ base, open, recurring, onClose, onSaved }: Rec
     const initial = useMemo<Draft>(
         () => ({
             kind: recurring?.kind ?? 'expense',
-            amount: amountToInput(recurring?.amount ?? 0),
+            amount: recurring ? amountToInput(recurring.amount) : '',
             label: recurring?.label ?? '',
-            accountId: recurring?.accountId ?? base.accounts.find((a) => !a.archived)?.id ?? 0,
+            accountId: recurring?.accountId ?? activeAccounts(base.accounts)[0]?.id ?? 0,
             transferAccountId: recurring?.transferAccountId ?? null,
             categoryId: recurring?.categoryId ?? null,
             counterparty: recurring?.counterparty ?? '',
             note: recurring?.note ?? '',
-            vatRate: recurring ? (rateOfVat(recurring.amount, recurring.vatAmount ?? 0) ?? 0) : 0,
+            vatRate: String(recurring ? (rateOfVat(recurring.amount, recurring.vatAmount ?? 0) ?? 0) : 0),
             frequency: recurring?.frequency ?? 'monthly',
             interval: recurring?.interval ?? 1,
             nextDate: recurring?.nextDate ?? todayIso(),
@@ -86,12 +96,15 @@ export function RecurringDialog({ base, open, recurring, onClose, onSaved }: Rec
 
     const [draft, setDraft] = useState<Draft>(initial);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
+    const [showAmountError, setShowAmountError] = useState(false);
+    const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
 
     useEffect(() => {
         if (!open) return;
         setDraft(initial);
         setError(null);
+        setShowAmountError(false);
     }, [open, initial]);
 
     const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
@@ -103,20 +116,27 @@ export function RecurringDialog({ base, open, recurring, onClose, onSaved }: Rec
             kind,
             categoryId: kind === 'transfer' ? null : previous.categoryId,
             transferAccountId: kind === 'transfer' ? previous.transferAccountId : null,
-            vatRate: kind === 'transfer' ? 0 : previous.vatRate
+            vatRate: kind === 'transfer' ? '0' : previous.vatRate
         }));
 
-    const amountCents = parseAmount(draft.amount) ?? 0;
-    const vatCents = draft.kind === 'transfer' || draft.vatRate <= 0 ? null : vatFromGross(amountCents, draft.vatRate);
+    const amountCents = parseAmount(draft.amount);
+    const rate = Number(draft.vatRate);
+    const vatCents = draft.kind === 'transfer' || rate <= 0 ? null : vatFromGross(amountCents ?? 0, rate);
     const categories = base.categories.filter((category) => category.flow === draft.kind);
     const dirty = JSON.stringify(draft) !== JSON.stringify(initial);
+    // Une manuelle peut partir de zéro : son montant se corrige à chaque fois.
+    const amountMissing = amountCents === null || amountCents < 0 || (draft.automatic && amountCents === 0);
 
     const submit = async () => {
         if (busy || draft.accountId === 0) return;
+        if (amountCents === null || amountMissing) {
+            setShowAmountError(true);
+            return;
+        }
         const payload = {
             accountId: draft.accountId,
             kind: draft.kind,
-            amount: Math.max(0, amountCents),
+            amount: amountCents,
             label: draft.label.trim(),
             categoryId: draft.kind === 'transfer' ? null : draft.categoryId,
             transferAccountId: draft.kind === 'transfer' ? draft.transferAccountId : null,
@@ -138,25 +158,36 @@ export function RecurringDialog({ base, open, recurring, onClose, onSaved }: Rec
             refreshFinance();
             onSaved();
         } catch (e) {
-            setError(humanizeError(e, 'Enregistrement impossible.'));
+            setError(errorNote(e, 'Enregistrement impossible.'));
         } finally {
             setBusy(false);
         }
     };
 
-    const remove = async () => {
-        if (!recurring || busy) return;
-        setBusy(true);
-        setError(null);
-        try {
-            await api.send('finance.recurringRemove', { recurringId: recurring.id });
-            refreshFinance();
-            onSaved();
-        } catch (e) {
-            setError(humanizeError(e, 'Suppression impossible.'));
-        } finally {
-            setBusy(false);
-        }
+    const askRemove = () => {
+        if (!recurring) return;
+        setConfirm({
+            title: 'Supprimer cette échéance ?',
+            description:
+                'Rien ne sera plus écrit ni proposé. Les opérations qu’elle a déjà écrites restent : elles ont eu lieu.',
+            confirmLabel: 'Supprimer',
+            tone: 'danger',
+            onConfirm: () => {
+                void (async () => {
+                    setBusy(true);
+                    try {
+                        await api.send('finance.recurringRemove', { recurringId: recurring.id });
+                        refreshFinance();
+                        onSaved();
+                    } catch (e) {
+                        setError(errorNote(e, 'Suppression impossible.'));
+                    } finally {
+                        setBusy(false);
+                        setConfirm(null);
+                    }
+                })();
+            }
+        });
     };
 
     return (
@@ -168,22 +199,28 @@ export function RecurringDialog({ base, open, recurring, onClose, onSaved }: Rec
             onSubmit={() => void submit()}
             dirty={dirty}
             onSave={() => void submit()}
+            footer={
+                <>
+                    {recurring && (
+                        <Button variant='danger' className={styles.footerStart} onClick={askRemove} disabled={busy}>
+                            Supprimer
+                        </Button>
+                    )}
+                    <DialogCancelButton>Annuler</DialogCancelButton>
+                    <Button onClick={() => void submit()} disabled={busy || draft.accountId === 0}>
+                        {busy ? 'Enregistrement…' : recurring ? 'Enregistrer' : 'Ajouter'}
+                    </Button>
+                </>
+            }
         >
             <div className={styles.form}>
-                <div className={styles.segmented} role='tablist' aria-label='Nature'>
-                    {TRANSACTION_KINDS.map((entry) => (
-                        <button
-                            key={entry.id}
-                            type='button'
-                            role='tab'
-                            aria-selected={entry.id === draft.kind}
-                            className={entry.id === draft.kind ? styles.segmentActive : styles.segment}
-                            onClick={() => setKind(entry.id)}
-                        >
-                            {entry.label}
-                        </button>
-                    ))}
-                </div>
+                <SegmentedControl
+                    aria-label='Nature'
+                    fullWidth
+                    value={draft.kind}
+                    options={TRANSACTION_KINDS.map((entry) => ({ value: entry.id, label: entry.label }))}
+                    onChange={setKind}
+                />
 
                 <div className={styles.formRow}>
                     <label className={styles.fieldWide}>
@@ -194,11 +231,15 @@ export function RecurringDialog({ base, open, recurring, onClose, onSaved }: Rec
                             placeholder='0,00'
                             className={styles.amountInput}
                             value={draft.amount}
-                            onChange={(e) => set('amount', e.target.value)}
+                            error={showAmountError && amountMissing ? 'Montant requis' : undefined}
+                            onChange={(e) => {
+                                set('amount', e.target.value);
+                                setShowAmountError(false);
+                            }}
                         />
                     </label>
                     <label className={styles.field}>
-                        <span className={styles.fieldLabel}>Prochaine occurrence</span>
+                        <span className={styles.fieldLabel}>Prochaine fois</span>
                         <TextInput
                             type='date'
                             value={draft.nextDate}
@@ -210,36 +251,37 @@ export function RecurringDialog({ base, open, recurring, onClose, onSaved }: Rec
                 <label className={styles.field}>
                     <span className={styles.fieldLabel}>Intitulé</span>
                     <TextInput
-                        placeholder='ex. Loyer'
+                        placeholder='ex. Serveur dédié'
                         maxLength={FINANCE_LABEL_MAX_LENGTH}
                         value={draft.label}
                         onChange={(e) => set('label', e.target.value)}
                     />
                 </label>
 
+                <div className={styles.field}>
+                    <span className={styles.fieldLabel}>Cadence</span>
+                    <SegmentedControl
+                        aria-label='Cadence'
+                        value={draft.frequency}
+                        onChange={(value: FinanceFrequency) => set('frequency', value)}
+                        options={FREQUENCIES.map((entry) => ({ value: entry.id, label: entry.label }))}
+                    />
+                </div>
+
                 <div className={styles.formRow}>
-                    <div className={styles.field}>
-                        <span className={styles.fieldLabel}>Cadence</span>
-                        <SegmentedControl
-                            aria-label='Cadence'
-                            value={draft.frequency}
-                            onChange={(v: FinanceFrequency) => set('frequency', v)}
-                            options={FREQUENCIES.map((entry) => ({ value: entry.id, label: entry.label }))}
-                        />
-                    </div>
-                    <label className={styles.field}>
+                    <label className={styles.field} htmlFor='finance-recurring-interval'>
                         <span className={styles.fieldLabel}>Tous les</span>
-                        <TextInput
-                            type='number'
+                        <NumberInput
+                            id='finance-recurring-interval'
+                            value={draft.interval}
                             min={1}
                             max={60}
-                            value={draft.interval}
-                            onChange={(e) => set('interval', Math.min(60, Math.max(1, Number(e.target.value) || 1)))}
+                            onChange={(value) => set('interval', value ?? 1)}
                         />
                         <span className={styles.fieldHint}>{frequencyLabel(draft.frequency, draft.interval)}</span>
                     </label>
                     <label className={styles.field}>
-                        <span className={styles.fieldLabel}>Fin (optionnel)</span>
+                        <span className={styles.fieldLabel}>Jusqu’au (facultatif)</span>
                         <TextInput type='date' value={draft.endDate} onChange={(e) => set('endDate', e.target.value)} />
                     </label>
                 </div>
@@ -301,7 +343,7 @@ export function RecurringDialog({ base, open, recurring, onClose, onSaved }: Rec
                 {draft.kind !== 'transfer' && (
                     <label className={styles.field}>
                         <span className={styles.fieldLabel}>
-                            {draft.kind === 'income' ? 'Client' : 'Bénéficiaire'} (optionnel)
+                            {draft.kind === 'income' ? 'Client' : 'Fournisseur'} (facultatif)
                         </span>
                         <TextInput
                             maxLength={FINANCE_COUNTERPARTY_MAX_LENGTH}
@@ -314,29 +356,22 @@ export function RecurringDialog({ base, open, recurring, onClose, onSaved }: Rec
                 {base.config.vatEnabled && draft.kind !== 'transfer' && (
                     <div className={styles.field}>
                         <span className={styles.fieldLabel}>TVA</span>
-                        <div className={styles.chips}>
-                            {VAT_RATES.map((rate) => (
-                                <button
-                                    key={rate}
-                                    type='button'
-                                    aria-pressed={draft.vatRate === rate}
-                                    className={draft.vatRate === rate ? styles.chipActive : styles.chip}
-                                    onClick={() => set('vatRate', rate)}
-                                >
-                                    {rate === 0 ? 'Aucune' : `${String(rate).replace('.', ',')} %`}
-                                </button>
-                            ))}
-                        </div>
+                        <SegmentedControl
+                            aria-label='Taux de TVA'
+                            value={draft.vatRate}
+                            options={VAT_OPTIONS}
+                            onChange={(value) => set('vatRate', value)}
+                        />
                         {vatCents !== null && vatCents > 0 && (
                             <span className={styles.fieldHint}>
-                                Soit {formatMoney(vatCents, base.config.currency)} de TVA par occurrence.
+                                Soit {formatMoney(vatCents, base.config.currency)} de TVA à chaque fois.
                             </span>
                         )}
                     </div>
                 )}
 
                 <label className={styles.field}>
-                    <span className={styles.fieldLabel}>Note (optionnel)</span>
+                    <span className={styles.fieldLabel}>Note (facultatif)</span>
                     <textarea
                         className={styles.textarea}
                         rows={2}
@@ -347,34 +382,24 @@ export function RecurringDialog({ base, open, recurring, onClose, onSaved }: Rec
                 </label>
 
                 <Checkbox checked={draft.automatic} onChange={(value) => set('automatic', value)}>
-                    Enregistrer automatiquement le jour venu
+                    L’enregistrer toute seule le jour venu
                 </Checkbox>
                 <span className={styles.fieldHint}>
                     {draft.automatic
-                        ? 'L’opération sera écrite seule, au montant indiqué. À réserver à ce qui ne varie pas: loyer, salaire, abonnement.'
-                        : 'L’occurrence vous sera proposée, et vous pourrez corriger son montant avant de l’enregistrer.'}
+                        ? 'Écrite seule, au montant indiqué. À réserver à ce qui ne varie pas : loyer, abonnement, serveur.'
+                        : 'Proposée le jour venu : vous corrigez son montant, puis vous l’enregistrez.'}
                 </span>
 
-                <Checkbox checked={draft.active} onChange={(value) => set('active', value)}>
-                    Active
-                </Checkbox>
+                {recurring && (
+                    <Checkbox checked={!draft.active} onChange={(value) => set('active', !value)}>
+                        Suspendue : plus rien n’est écrit ni proposé
+                    </Checkbox>
+                )}
 
-                {error && <p className={styles.error}>{error}</p>}
+                <ErrorNote note={error} />
             </div>
 
-            <div className={styles.popupActions}>
-                <div className={styles.popupActionsLeft}>
-                    <DialogCancelButton>Fermer</DialogCancelButton>
-                    {recurring && (
-                        <Button variant='danger' onClick={() => void remove()} disabled={busy}>
-                            Supprimer
-                        </Button>
-                    )}
-                </div>
-                <Button onClick={() => void submit()} disabled={busy || draft.accountId === 0}>
-                    {busy ? 'Enregistrement…' : recurring ? 'Enregistrer' : 'Ajouter'}
-                </Button>
-            </div>
+            <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} busy={busy} />
         </Dialog>
     );
 }

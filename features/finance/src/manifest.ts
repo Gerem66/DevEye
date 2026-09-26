@@ -20,11 +20,17 @@ export const manifest = {
         'finance.summary',
         'finance.accountList',
         'finance.transactionList',
-        'finance.budgetList',
         'finance.recurringList',
         'finance.overview'
     ],
-    /** Général (devise, mode entreprise) et Catégories ; les fiches ne font que choisir dedans. */
-    settings: { feature: ['general', { id: 'categories', label: 'Catégories', icon: 'folder' }] },
+    /**
+     * À l'échelle de la feature, Général (devise, TVA) et Catégories, où les
+     * fiches ne font que choisir. L'élément est le compte : son Général porte
+     * son identité, son archivage et son retrait.
+     */
+    settings: {
+        feature: ['general', { id: 'categories', label: 'Catégories', icon: 'folder' }],
+        item: ['general']
+    },
     commands: financeCommands
 } satisfies FeatureManifest;

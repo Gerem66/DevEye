@@ -1,7 +1,6 @@
 import type {
     FinanceAccount,
     FinanceAccountBalanceRow,
-    FinanceBudgetPeriod,
     FinanceCategory,
     FinanceCategoryRow,
     FinanceConfig,
@@ -150,21 +149,6 @@ export function nextOccurrence(
             return addMonths(from, 3 * interval, anchorDay);
         case 'yearly':
             return addMonths(from, 12 * interval, anchorDay);
-    }
-}
-
-/** `end` est exclu (premier jour de la période suivante) : `date < end` reste juste quel que soit le mois. */
-export function periodBounds(period: FinanceBudgetPeriod, reference: string): { start: string; end: string } {
-    const { year, month } = partsOf(reference);
-    switch (period) {
-        case 'monthly':
-            return { start: isoOf(year, month, 1), end: addMonths(isoOf(year, month, 1), 1, 1) };
-        case 'quarterly': {
-            const first = Math.floor((month - 1) / 3) * 3 + 1;
-            return { start: isoOf(year, first, 1), end: addMonths(isoOf(year, first, 1), 3, 1) };
-        }
-        case 'yearly':
-            return { start: isoOf(year, 1, 1), end: isoOf(year + 1, 1, 1) };
     }
 }
 

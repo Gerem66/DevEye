@@ -80,7 +80,6 @@ export type ResourceKey =
     | 'finance.summary'
     | 'finance.accountList'
     | 'finance.transactionList'
-    | 'finance.budgetList'
     | 'finance.recurringList'
     | 'finance.overview'
     | 'database.count'

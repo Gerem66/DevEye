@@ -9,5 +9,5 @@
     "finance_budgets"
   ],
   "minTypesVersion": "0.15.2",
-  "$comment": "Tables historiques (migration 084 du socle, jamais déplacée) : l'allowlist les dispense du préfixe ft_finance_. Toute NOUVELLE table du module prendra le préfixe, via src/server/migrations/."
+  "$comment": "Tables nées dans le socle (084_finance.sql) : l'allowlist les dispense du préfixe ft_finance_ et laisse src/server/migrations/ les faire évoluer. Toute table nouvelle prend le préfixe."
 }

@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "license": "AGPL-3.0-only",
-  "description": "Finances, au format module : le grand livre de l'espace (comptes, opérations, budgets, échéances), troisième native rapatriée sur le SDK des features.",
+  "description": "Finances : la trésorerie d'une activité (comptes, opérations, échéances, TVA).",
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",

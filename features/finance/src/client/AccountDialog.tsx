@@ -1,64 +1,59 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Button, Checkbox, Dialog, DialogCancelButton, humanizeError, SelectInput, TextInput } from 'deveye-sdk-client';
-import type { FinanceAccount, FinanceAccountKind, FinanceColor } from '../contracts/domain';
-import { FINANCE_COLORS, FINANCE_NAME_MAX_LENGTH, FINANCE_NOTE_MAX_LENGTH } from '../contracts/domain';
+import { useEffect, useState } from 'react';
+import {
+    Button,
+    Dialog,
+    DialogCancelButton,
+    ErrorNote,
+    SegmentedControl,
+    TextInput,
+    type ErrorNoteInput
+} from 'deveye-sdk-client';
+import type { FinanceAccountKind, FinanceColor } from '../contracts/domain';
+import { FINANCE_NAME_MAX_LENGTH } from '../contracts/domain';
 
+import ColorPicker from './ColorPicker';
 import { api } from './api';
-import { ACCOUNT_KINDS, amountToInput, parseAmount } from './format';
-import { colorVar } from './shared';
+import { ACCOUNT_KINDS, parseAmount } from './format';
+import { errorNote } from './shared';
 import styles from './style.module.css';
-import type { FinanceBase } from './shared';
 
 interface AccountDialogProps {
-    base: FinanceBase;
     open: boolean;
-    account: FinanceAccount | null;
     onClose: () => void;
-    onSaved: () => void;
+    onCreated: (id: number) => void;
 }
 
 interface Draft {
     name: string;
     kind: FinanceAccountKind;
     color: FinanceColor;
-    initialBalance: string;
-    note: string;
-    archived: boolean;
+    balance: string;
 }
 
-/**
- * Le solde de départ est « combien il y a au moment où je commence ce livre »,
- * pas le solde d'ouverture du compte : se tromper décale tous les soldes suivants.
- */
-export function AccountDialog({ base, open, account, onClose, onSaved }: AccountDialogProps) {
-    const initial = useMemo<Draft>(
-        () => ({
-            name: account?.name ?? '',
-            kind: account?.kind ?? 'checking',
-            color: account?.color ?? 'blue',
-            initialBalance: amountToInput(account?.initialBalance ?? 0),
-            note: account?.note ?? '',
-            archived: account?.archived ?? false
-        }),
-        [account]
-    );
+const EMPTY: Draft = { name: '', kind: 'checking', color: 'blue', balance: '' };
 
-    const [draft, setDraft] = useState<Draft>(initial);
+/**
+ * La création d'un compte, et rien d'autre : le modifier, l'archiver ou le
+ * retirer se fait dans l'onglet Général de ses réglages, depuis sa fiche.
+ */
+export function AccountDialog({ open, onClose, onCreated }: AccountDialogProps) {
+    const [draft, setDraft] = useState<Draft>(EMPTY);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [showNameError, setShowNameError] = useState(false);
 
     useEffect(() => {
         if (!open) return;
-        setDraft(initial);
+        setDraft(EMPTY);
         setError(null);
         setShowNameError(false);
-    }, [open, initial]);
+    }, [open]);
 
     const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
         setDraft((previous) => ({ ...previous, [key]: value }));
 
-    const dirty = JSON.stringify(draft) !== JSON.stringify(initial);
+    const balance = draft.balance.trim() === '' ? 0 : parseAmount(draft.balance);
+    const kind = ACCOUNT_KINDS.find((entry) => entry.id === draft.kind);
 
     const submit = async () => {
         if (busy) return;
@@ -67,37 +62,23 @@ export function AccountDialog({ base, open, account, onClose, onSaved }: Account
             setShowNameError(true);
             return;
         }
-        const payload = {
-            name,
-            kind: draft.kind,
-            color: draft.color,
-            initialBalance: parseAmount(draft.initialBalance) ?? 0,
-            note: draft.note,
-            archived: draft.archived
-        };
+        if (balance === null) return;
         setBusy(true);
         setError(null);
         try {
-            if (account) await api.send('finance.accountUpdate', { accountId: account.id, account: payload });
-            else await api.send('finance.accountAdd', { account: payload });
-            onSaved();
+            const res = await api.send('finance.accountAdd', {
+                account: {
+                    name,
+                    kind: draft.kind,
+                    color: draft.color,
+                    initialBalance: balance,
+                    note: '',
+                    archived: false
+                }
+            });
+            onCreated(res.account.id);
         } catch (e) {
-            setError(humanizeError(e, 'Enregistrement impossible.'));
-        } finally {
-            setBusy(false);
-        }
-    };
-
-    const remove = async () => {
-        if (!account || busy) return;
-        setBusy(true);
-        setError(null);
-        try {
-            await api.send('finance.accountRemove', { accountId: account.id });
-            onSaved();
-        } catch (e) {
-            // La phrase du serveur dit combien d'opérations bloquent : plus utile que le repli.
-            setError(humanizeError(e, 'Suppression impossible.'));
+            setError(errorNote(e, 'Création impossible.'));
         } finally {
             setBusy(false);
         }
@@ -107,18 +88,27 @@ export function AccountDialog({ base, open, account, onClose, onSaved }: Account
         <Dialog
             open={open}
             onClose={onClose}
-            title={account ? 'Modifier le compte' : 'Nouveau compte'}
+            title='Nouveau compte'
+            description='Le compte de votre activité : celui où arrivent les règlements et d’où partent les dépenses.'
             width={520}
             onSubmit={() => void submit()}
-            dirty={dirty}
+            dirty={JSON.stringify(draft) !== JSON.stringify(EMPTY)}
             onSave={() => void submit()}
+            footer={
+                <>
+                    <DialogCancelButton>Annuler</DialogCancelButton>
+                    <Button onClick={() => void submit()} disabled={busy || balance === null}>
+                        {busy ? 'Création…' : 'Créer'}
+                    </Button>
+                </>
+            }
         >
             <div className={styles.form}>
                 <label className={styles.field}>
                     <span className={styles.fieldLabel}>Nom</span>
                     <TextInput
                         data-autofocus='true'
-                        placeholder='ex. Compte courant'
+                        placeholder='ex. Compte pro'
                         maxLength={FINANCE_NAME_MAX_LENGTH}
                         value={draft.name}
                         error={showNameError && draft.name.trim() === '' ? 'Nom requis' : undefined}
@@ -129,89 +119,44 @@ export function AccountDialog({ base, open, account, onClose, onSaved }: Account
                     />
                 </label>
 
-                <div className={styles.formRow}>
-                    <label className={styles.field}>
-                        <span className={styles.fieldLabel}>Nature</span>
-                        <SelectInput
-                            value={draft.kind}
-                            onChange={(e) => set('kind', e.target.value as FinanceAccountKind)}
-                        >
-                            {ACCOUNT_KINDS.map((entry) => (
-                                <option key={entry.id} value={entry.id}>
-                                    {entry.label}
-                                </option>
-                            ))}
-                        </SelectInput>
-                        {draft.kind === 'savings' && (
-                            <span className={styles.fieldHint}>
-                                Compté à part du disponible sur le tableau de bord.
-                            </span>
-                        )}
-                    </label>
-
-                    <label className={styles.field}>
-                        <span className={styles.fieldLabel}>{account ? 'Solde de départ' : 'Solde d’aujourd’hui'}</span>
-                        <TextInput
-                            inputMode='decimal'
-                            placeholder='0,00'
-                            value={draft.initialBalance}
-                            onChange={(e) => set('initialBalance', e.target.value)}
-                        />
-                        <span className={styles.fieldHint}>
-                            Ce qu’il y a dessus avant la première opération saisie ici. Un découvert se note avec un
-                            signe moins.
-                        </span>
-                    </label>
-                </div>
-
                 <div className={styles.field}>
-                    <span className={styles.fieldLabel}>Couleur</span>
-                    <div className={styles.swatches}>
-                        {FINANCE_COLORS.map((color) => (
-                            <button
-                                key={color}
-                                type='button'
-                                aria-label={color}
-                                aria-pressed={draft.color === color}
-                                className={draft.color === color ? styles.swatchActive : styles.swatch}
-                                style={{ background: colorVar(color) }}
-                                onClick={() => set('color', color)}
-                            />
-                        ))}
-                    </div>
+                    <span className={styles.fieldLabel}>Type</span>
+                    <SegmentedControl
+                        aria-label='Type de compte'
+                        fullWidth
+                        value={draft.kind}
+                        options={ACCOUNT_KINDS.map((entry) => ({ value: entry.id, label: entry.label }))}
+                        onChange={(value) => set('kind', value)}
+                    />
+                    {kind && <span className={styles.fieldHint}>{kind.hint}</span>}
                 </div>
 
                 <label className={styles.field}>
-                    <span className={styles.fieldLabel}>Note (optionnel)</span>
+                    <span className={styles.fieldLabel}>Solde d’aujourd’hui</span>
                     <TextInput
-                        placeholder='ex. IBAN, agence, usage'
-                        maxLength={FINANCE_NOTE_MAX_LENGTH}
-                        value={draft.note}
-                        onChange={(e) => set('note', e.target.value)}
+                        inputMode='decimal'
+                        placeholder='0,00'
+                        className={styles.amountInput}
+                        value={draft.balance}
+                        error={balance === null ? 'Montant illisible' : undefined}
+                        onChange={(e) => set('balance', e.target.value)}
                     />
+                    <span className={styles.fieldHint}>
+                        Ce qu’indique votre banque aujourd’hui : tous les soldes suivants s’en déduisent. Un découvert
+                        se note avec un signe moins.
+                    </span>
                 </label>
 
-                {account && (
-                    <Checkbox checked={draft.archived} onChange={(value) => set('archived', value)}>
-                        Archivé: retiré des listes de saisie, mais toujours compté dans les totaux
-                    </Checkbox>
-                )}
-
-                {error && <p className={styles.error}>{error}</p>}
-            </div>
-
-            <div className={styles.popupActions}>
-                <div className={styles.popupActionsLeft}>
-                    <DialogCancelButton>Fermer</DialogCancelButton>
-                    {account && base.canWrite && (
-                        <Button variant='danger' onClick={() => void remove()} disabled={busy}>
-                            Supprimer
-                        </Button>
-                    )}
+                <div className={styles.field}>
+                    <span className={styles.fieldLabel}>Couleur</span>
+                    <ColorPicker
+                        aria-label='Couleur du compte'
+                        value={draft.color}
+                        onChange={(value) => set('color', value)}
+                    />
                 </div>
-                <Button onClick={() => void submit()} disabled={busy}>
-                    {busy ? 'Enregistrement…' : account ? 'Enregistrer' : 'Ajouter'}
-                </Button>
+
+                <ErrorNote note={error} />
             </div>
         </Dialog>
     );

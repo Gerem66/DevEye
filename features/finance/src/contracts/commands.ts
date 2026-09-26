@@ -8,8 +8,6 @@ import {
     financeAccountSchema,
     financeAmountSchema,
     financeBalanceSchema,
-    financeBudgetPeriodSchema,
-    financeBudgetSchema,
     financeCategorySchema,
     financeColorSchema,
     financeConfigSchema,
@@ -31,7 +29,6 @@ import {
 const accountId = z.number().int().positive();
 const categoryId = z.number().int().positive();
 const transactionId = z.number().int().positive();
-const budgetId = z.number().int().positive();
 const recurringId = z.number().int().positive();
 /** Jamais derrière un droit d'écriture : toute lecture en a besoin, ne serait-ce que pour formater un montant. */
 export const financeConfig = {
@@ -106,19 +103,11 @@ export const financeCategoryUpdate = {
     input: z.object({ categoryId, category: categoryDraftSchema }),
     output: z.object({ category: financeCategorySchema })
 };
-/**
- * Les opérations retombent dans « Sans catégorie » (`ON DELETE SET NULL`) ;
- * les budgets posés dessus disparaissent avec elle.
- */
+/** Les opérations retombent dans « Sans catégorie » (`ON DELETE SET NULL`). */
 export const financeCategoryRemove = {
     command: 'finance.categoryRemove' as const,
     input: z.object({ categoryId }),
     output: z.object({ categoryId })
-};
-export const financeCategoryReorder = {
-    command: 'finance.categoryReorder' as const,
-    input: z.object({ categoryIds: z.array(categoryId).min(1) }),
-    output: z.object({ categoryIds: z.array(categoryId) })
 };
 const transactionDraftSchema = z.object({
     accountId,
@@ -191,22 +180,6 @@ export const financeTransactionSetCleared = {
     }),
     output: z.object({ transactionIds: z.array(transactionId), cleared: z.boolean() })
 };
-export const financeBudgetList = {
-    command: 'finance.budgetList' as const,
-    input: z.object({}),
-    output: z.object({ budgets: z.array(financeBudgetSchema) })
-};
-/** Une seule enveloppe par catégorie, d'où un `set` plutôt qu'un couple ajout / modification. */
-export const financeBudgetSet = {
-    command: 'finance.budgetSet' as const,
-    input: z.object({ categoryId, amount: financeAmountSchema, period: financeBudgetPeriodSchema }),
-    output: z.object({ budget: financeBudgetSchema })
-};
-export const financeBudgetRemove = {
-    command: 'finance.budgetRemove' as const,
-    input: z.object({ budgetId }),
-    output: z.object({ budgetId })
-};
 const recurringDraftSchema = z.object({
     accountId,
     kind: financeTransactionKindSchema,
@@ -278,15 +251,11 @@ export const financeCommands = [
     financeCategoryAdd,
     financeCategoryUpdate,
     financeCategoryRemove,
-    financeCategoryReorder,
     financeTransactionList,
     financeTransactionAdd,
     financeTransactionUpdate,
     financeTransactionRemove,
     financeTransactionSetCleared,
-    financeBudgetList,
-    financeBudgetSet,
-    financeBudgetRemove,
     financeRecurringList,
     financeRecurringAdd,
     financeRecurringUpdate,

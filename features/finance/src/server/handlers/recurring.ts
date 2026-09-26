@@ -163,6 +163,12 @@ export const financeRecurringPostFeature = defineSdkFeature({
         if (existing) throw new FeatureError('conflict', 'Cette occurrence a déjà été enregistrée.');
 
         const amount = input.amount ?? Number(row.amount);
+        // Un montant corrigé garde le taux du modèle : sa TVA suit, au lieu de
+        // rester celle d'un autre montant.
+        const vatAmount =
+            row.vat_amount === null || Number(row.amount) === 0
+                ? null
+                : Math.round((Number(row.vat_amount) * amount) / Number(row.amount));
         const id = await ctx.repo.createTransaction(ctx.workspaceId, {
             accountId: row.account_id,
             transferAccountId: row.transfer_account_id,
@@ -170,7 +176,7 @@ export const financeRecurringPostFeature = defineSdkFeature({
             recurringId: row.id,
             kind: row.kind,
             amount,
-            vatAmount: row.vat_amount === null ? null : Number(row.vat_amount),
+            vatAmount,
             date,
             cleared: false,
             content: row.content

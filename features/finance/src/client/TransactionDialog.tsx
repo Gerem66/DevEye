@@ -2,12 +2,16 @@ import { useEffect, useMemo, useState } from 'react';
 import {
     Button,
     Checkbox,
+    ConfirmDialog,
     Dialog,
     DialogCancelButton,
+    ErrorNote,
     FeatureSettingsButton,
-    humanizeError,
+    SegmentedControl,
     SelectInput,
-    TextInput
+    TextInput,
+    type ConfirmRequest,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { FinanceTransaction, FinanceTransactionKind } from '../contracts/domain';
 import {
@@ -26,7 +30,7 @@ import {
     rateOfVat,
     vatFromGross
 } from './format';
-import { activeAccounts } from './shared';
+import { activeAccounts, errorNote } from './shared';
 import styles from './style.module.css';
 import type { FinanceBase } from './shared';
 
@@ -52,9 +56,15 @@ interface Draft {
     categoryId: number | null;
     counterparty: string;
     note: string;
-    vatRate: number;
+    vatRate: string;
     cleared: boolean;
 }
+
+/** Les taux en texte : un segment porte une valeur-chaîne. */
+const VAT_OPTIONS = VAT_RATES.map((rate) => ({
+    value: String(rate),
+    label: rate === 0 ? 'Aucune' : `${String(rate).replace('.', ',')} %`
+}));
 
 /**
  * La saisie d'une opération. Le montant est toujours positif : le sens vient
@@ -86,7 +96,7 @@ export function TransactionDialog({
                       categoryId: transaction.categoryId,
                       counterparty: transaction.counterparty,
                       note: transaction.note,
-                      vatRate: rateOfVat(transaction.amount, transaction.vatAmount ?? 0) ?? 0,
+                      vatRate: String(rateOfVat(transaction.amount, transaction.vatAmount ?? 0) ?? 0),
                       cleared: transaction.cleared
                   }
                 : {
@@ -99,7 +109,7 @@ export function TransactionDialog({
                       categoryId: null,
                       counterparty: '',
                       note: '',
-                      vatRate: 0,
+                      vatRate: '0',
                       cleared: false
                   },
         [transaction, defaultDate, fallbackAccount]
@@ -107,11 +117,12 @@ export function TransactionDialog({
 
     const [draft, setDraft] = useState<Draft>(initial);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [showAmountError, setShowAmountError] = useState(false);
+    const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
 
-    // Repartir de zéro à chaque ouverture: un dialogue rouvert doit montrer ce
-    // qu'on vient de cliquer, pas ce qu'on avait tapé la fois d'avant.
+    // Repartir de zéro à chaque ouverture : un dialogue rouvert montre ce qu'on
+    // vient de cliquer, pas ce qu'on avait tapé la fois d'avant.
     useEffect(() => {
         if (!open) return;
         setDraft(initial);
@@ -129,12 +140,12 @@ export function TransactionDialog({
             kind,
             categoryId: kind === 'transfer' ? null : previous.categoryId,
             transferAccountId: kind === 'transfer' ? previous.transferAccountId : null,
-            vatRate: kind === 'transfer' ? 0 : previous.vatRate
+            vatRate: kind === 'transfer' ? '0' : previous.vatRate
         }));
 
     const amountCents = parseAmount(draft.amount);
-    const vatCents =
-        draft.kind === 'transfer' || draft.vatRate <= 0 ? null : vatFromGross(amountCents ?? 0, draft.vatRate);
+    const rate = Number(draft.vatRate);
+    const vatCents = draft.kind === 'transfer' || rate <= 0 ? null : vatFromGross(amountCents ?? 0, rate);
     const categories = base.categories.filter((category) => category.flow === draft.kind);
     const dirty = JSON.stringify(draft) !== JSON.stringify(initial);
 
@@ -165,24 +176,34 @@ export function TransactionDialog({
             else await api.send('finance.transactionAdd', { transaction: payload });
             onSaved();
         } catch (e) {
-            setError(humanizeError(e, 'Enregistrement impossible.'));
+            setError(errorNote(e, 'Enregistrement impossible.'));
         } finally {
             setBusy(false);
         }
     };
 
-    const remove = async () => {
-        if (!transaction || busy) return;
-        setBusy(true);
-        setError(null);
-        try {
-            await api.send('finance.transactionRemove', { transactionId: transaction.id });
-            onSaved();
-        } catch (e) {
-            setError(humanizeError(e, 'Suppression impossible.'));
-        } finally {
-            setBusy(false);
-        }
+    const askRemove = () => {
+        if (!transaction) return;
+        setConfirm({
+            title: 'Supprimer cette opération ?',
+            description: 'Les soldes des comptes qu’elle touche seront recalculés sans elle.',
+            confirmLabel: 'Supprimer',
+            tone: 'danger',
+            onConfirm: () => {
+                void (async () => {
+                    setBusy(true);
+                    try {
+                        await api.send('finance.transactionRemove', { transactionId: transaction.id });
+                        onSaved();
+                    } catch (e) {
+                        setError(errorNote(e, 'Suppression impossible.'));
+                    } finally {
+                        setBusy(false);
+                        setConfirm(null);
+                    }
+                })();
+            }
+        });
     };
 
     return (
@@ -194,22 +215,28 @@ export function TransactionDialog({
             onSubmit={() => void submit()}
             dirty={dirty}
             onSave={() => void submit()}
+            footer={
+                <>
+                    {transaction && (
+                        <Button variant='danger' className={styles.footerStart} onClick={askRemove} disabled={busy}>
+                            Supprimer
+                        </Button>
+                    )}
+                    <DialogCancelButton>Annuler</DialogCancelButton>
+                    <Button onClick={() => void submit()} disabled={busy}>
+                        {busy ? 'Enregistrement…' : transaction ? 'Enregistrer' : 'Ajouter'}
+                    </Button>
+                </>
+            }
         >
             <div className={styles.form}>
-                <div className={styles.segmented} role='tablist' aria-label='Nature de l’opération'>
-                    {TRANSACTION_KINDS.map((entry) => (
-                        <button
-                            key={entry.id}
-                            type='button'
-                            role='tab'
-                            aria-selected={entry.id === draft.kind}
-                            className={entry.id === draft.kind ? styles.segmentActive : styles.segment}
-                            onClick={() => setKind(entry.id)}
-                        >
-                            {entry.label}
-                        </button>
-                    ))}
-                </div>
+                <SegmentedControl
+                    aria-label='Nature de l’opération'
+                    fullWidth
+                    value={draft.kind}
+                    options={TRANSACTION_KINDS.map((entry) => ({ value: entry.id, label: entry.label }))}
+                    onChange={setKind}
+                />
 
                 <div className={styles.formRow}>
                     <label className={styles.fieldWide}>
@@ -240,7 +267,9 @@ export function TransactionDialog({
                 <label className={styles.field}>
                     <span className={styles.fieldLabel}>Intitulé</span>
                     <TextInput
-                        placeholder={draft.kind === 'income' ? 'ex. Salaire de septembre' : 'ex. Courses du samedi'}
+                        placeholder={
+                            draft.kind === 'income' ? 'ex. Acompte du site vitrine' : 'ex. Hébergement d’octobre'
+                        }
                         maxLength={FINANCE_LABEL_MAX_LENGTH}
                         value={draft.label}
                         onChange={(e) => set('label', e.target.value)}
@@ -298,19 +327,16 @@ export function TransactionDialog({
                                 ))}
                             </SelectInput>
                             {categories.length === 0 && (
-                                <>
-                                    {/* Sans catégorie à choisir, le bouton mène au panneau Catégories. */}
-                                    <span className={styles.fieldHint}>
-                                        Aucune catégorie de {draft.kind === 'income' ? 'recettes' : 'dépenses'}: elles
-                                        se créent dans les réglages.
-                                    </span>
+                                <span className={styles.fieldHint}>
+                                    Aucune catégorie de {draft.kind === 'income' ? 'recettes' : 'dépenses'} :{' '}
                                     <FeatureSettingsButton
                                         scope={{ kind: 'feature', feature: 'finance' }}
                                         initialSection='categories'
-                                        variant='ghost'
-                                        label='Catégories'
+                                        variant='link'
+                                        label='en créer'
                                     />
-                                </>
+                                    .
+                                </span>
                             )}
                         </label>
                     )}
@@ -319,10 +345,10 @@ export function TransactionDialog({
                 {draft.kind !== 'transfer' && (
                     <label className={styles.field}>
                         <span className={styles.fieldLabel}>
-                            {draft.kind === 'income' ? 'Client' : 'Bénéficiaire'} (optionnel)
+                            {draft.kind === 'income' ? 'Client' : 'Fournisseur'} (facultatif)
                         </span>
                         <TextInput
-                            placeholder={draft.kind === 'income' ? 'ex. Dupont SARL' : 'ex. EDF'}
+                            placeholder={draft.kind === 'income' ? 'ex. Dupont SARL' : 'ex. OVHcloud'}
                             maxLength={FINANCE_COUNTERPARTY_MAX_LENGTH}
                             value={draft.counterparty}
                             onChange={(e) => set('counterparty', e.target.value)}
@@ -333,19 +359,12 @@ export function TransactionDialog({
                 {base.config.vatEnabled && draft.kind !== 'transfer' && (
                     <div className={styles.field}>
                         <span className={styles.fieldLabel}>TVA</span>
-                        <div className={styles.chips}>
-                            {VAT_RATES.map((rate) => (
-                                <button
-                                    key={rate}
-                                    type='button'
-                                    aria-pressed={draft.vatRate === rate}
-                                    className={draft.vatRate === rate ? styles.chipActive : styles.chip}
-                                    onClick={() => set('vatRate', rate)}
-                                >
-                                    {rate === 0 ? 'Aucune' : `${String(rate).replace('.', ',')} %`}
-                                </button>
-                            ))}
-                        </div>
+                        <SegmentedControl
+                            aria-label='Taux de TVA'
+                            value={draft.vatRate}
+                            options={VAT_OPTIONS}
+                            onChange={(value) => set('vatRate', value)}
+                        />
                         <span className={styles.fieldHint}>
                             {vatCents === null || vatCents === 0
                                 ? 'Le montant saisi est le montant total, TVA comprise.'
@@ -358,7 +377,7 @@ export function TransactionDialog({
                 )}
 
                 <label className={styles.field}>
-                    <span className={styles.fieldLabel}>Note (optionnel)</span>
+                    <span className={styles.fieldLabel}>Note (facultatif)</span>
                     <textarea
                         className={styles.textarea}
                         rows={2}
@@ -369,25 +388,13 @@ export function TransactionDialog({
                 </label>
 
                 <Checkbox checked={draft.cleared} onChange={(value) => set('cleared', value)}>
-                    Pointée: déjà vue sur le relevé de la banque
+                    Pointée : déjà vue sur le relevé de la banque
                 </Checkbox>
 
-                {error && <p className={styles.error}>{error}</p>}
+                <ErrorNote note={error} />
             </div>
 
-            <div className={styles.popupActions}>
-                <div className={styles.popupActionsLeft}>
-                    <DialogCancelButton>Fermer</DialogCancelButton>
-                    {transaction && (
-                        <Button variant='danger' onClick={() => void remove()} disabled={busy}>
-                            Supprimer
-                        </Button>
-                    )}
-                </div>
-                <Button onClick={() => void submit()} disabled={busy}>
-                    {busy ? 'Enregistrement…' : transaction ? 'Enregistrer' : 'Ajouter'}
-                </Button>
-            </div>
+            <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} busy={busy} />
         </Dialog>
     );
 }

@@ -14,7 +14,7 @@ export function FinanceWidget() {
         <div className={styles.widget}>
             <div className={styles.widgetStat}>
                 <span className={`${styles.widgetValue} ${(summary?.balance ?? 0) < 0 ? styles.widgetNegative : ''}`}>
-                    {loading || !summary ? '—' : formatMoney(summary.balance, currency, { compact: true })}
+                    {loading || !summary ? '…' : formatMoney(summary.balance, currency, { compact: true })}
                 </span>
             </div>
             <span className={styles.widgetFoot}>

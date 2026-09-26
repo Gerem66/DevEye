@@ -5,17 +5,18 @@ import { defineSdkFeature } from '@deveye/types/sdk/server';
 import {
     addDays,
     addMonths,
+    decryptAll,
     decryptJson,
     financeCipher,
     postDueRecurring,
     rangeBounds,
     readConfig,
     startOfMonth,
+    toTransaction,
     today,
     type Ctx,
     type StoredEntry
 } from '../_shared';
-import { withConsumption } from './budgets';
 
 /** Le tableau de bord en une réponse : ces chiffres doivent être cohérents entre eux. */
 
@@ -25,6 +26,8 @@ const SERIES_MONTHS = 12;
 /** Jusqu'où l'on annonce les échéances à venir. */
 const UPCOMING_DAYS = 45;
 const UPCOMING_MAX = 8;
+
+const RECENT_MAX = 5;
 
 /**
  * La courbe du solde : le solde à la veille de la fenêtre, puis les flux de
@@ -89,7 +92,7 @@ export const financeOverviewFeature = defineSdkFeature({
         const { from, to, previousFrom, previousTo } = rangeBounds(input.range, now);
         const config = await readConfig(ctx);
 
-        const [netBalance, savings, projected, current, previous, categories, months, budgetRows, upcoming, vatTotals] =
+        const [netBalance, savings, projected, current, previous, categories, months, upcoming, recentRows, vatTotals] =
             await Promise.all([
                 ctx.repo.totalBalance(ctx.workspaceId, now),
                 // L'épargne à part : 7 000 bloqués sur un livret ne sont pas du disponible.
@@ -99,12 +102,10 @@ export const financeOverviewFeature = defineSdkFeature({
                 ctx.repo.sumTransactions(ctx.workspaceId, { from: previousFrom, to: previousTo }),
                 ctx.repo.categoryShares(ctx.workspaceId, from, to),
                 buildSeries(ctx, to),
-                ctx.repo.listBudgets(ctx.workspaceId),
                 buildUpcoming(ctx, now),
+                ctx.repo.listTransactions(ctx.workspaceId, { to: now }, RECENT_MAX, 0),
                 ctx.repo.vatTotals(ctx.workspaceId, from, to)
             ]);
-
-        const budgets = await Promise.all(budgetRows.map((row) => withConsumption(ctx, row)));
 
         return {
             overview: {
@@ -126,10 +127,10 @@ export const financeOverviewFeature = defineSdkFeature({
                     amount: row.amount,
                     count: row.count
                 })),
-                budgets,
                 upcoming,
-                // Hors mode entreprise, `null` plutôt que des zéros : on ne suit
-                // pas la TVA, il n'y en a pas « zéro ».
+                recent: await decryptAll(financeCipher(ctx), recentRows, toTransaction),
+                // `null` plutôt que des zéros quand la TVA n'est pas suivie :
+                // il n'y en a pas « zéro ».
                 vat: config.vatEnabled
                     ? {
                           collected: vatTotals.collected,

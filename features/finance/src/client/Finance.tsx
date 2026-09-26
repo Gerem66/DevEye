@@ -1,60 +1,61 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import {
-    Button,
-    FeatureSettingsButton,
-    useActiveWorkspace,
-    useLiveSegment,
-    useResource,
-    useWorkspacePermissions
-} from 'deveye-sdk-client';
+import { ErrorNote, useActiveWorkspace, useLiveSegment, useResource, useWorkspacePermissions } from 'deveye-sdk-client';
 import type { FinanceTransaction } from '../contracts/domain';
 
-import Accounts from './Accounts';
-import Budgets from './Budgets';
-import Dashboard from './Dashboard';
-import Recurring from './Recurring';
+import AccountDialog from './AccountDialog';
+import AccountSheet from './AccountSheet';
+import Home from './Home';
+import RecurringPage from './RecurringPage';
 import TransactionDialog from './TransactionDialog';
-import Transactions from './Transactions';
+import TransactionsPage from './TransactionsPage';
 import { api, refreshFinance } from './api';
 import { todayIso } from './format';
 import styles from './style.module.css';
 import type { FinanceBase } from './shared';
 
 /**
- * Les finances de l'espace : le grand livre. Aucun mot de passe demandé : tout
- * vit à l'étage ouvert, pour que tout membre d'un espace partagé lise les
- * comptes sans dépendre de la session du propriétaire. Cinq onglets ; les
- * catégories et les réglages sont des panneaux de la coquille de réglages.
+ * Les finances de l'espace. Pas d'onglets : l'accueil porte les chiffres, les
+ * comptes, ce qui arrive et ce qui vient de passer, et « Voir tout » ouvre les
+ * listes complètes. Aucun mot de passe demandé : tout vit à l'étage ouvert,
+ * pour que tout membre lise les comptes sans la session de leur propriétaire.
  */
 
-type TabId = 'dashboard' | 'transactions' | 'accounts' | 'budgets' | 'recurring';
+type View = { kind: 'home' } | { kind: 'transactions' } | { kind: 'recurring' } | { kind: 'account'; id: number };
 
-const TABS: { id: TabId; label: string; icon: string }[] = [
-    { id: 'dashboard', label: 'Tableau de bord', icon: 'activity' },
-    { id: 'transactions', label: 'Opérations', icon: 'list' },
-    { id: 'accounts', label: 'Comptes', icon: 'finance' },
-    { id: 'budgets', label: 'Budgets', icon: 'square-check' },
-    { id: 'recurring', label: 'Échéances', icon: 'clock' }
-];
+/**
+ * Ce que la présence déclare pour l'écran courant. Le segment d'un compte est
+ * son identifiant nu : c'est ce que la téléportation de l'hôte écrit pour un
+ * élément de la feature.
+ */
+function segmentOf(view: View): string | null {
+    if (view.kind === 'home') return null;
+    if (view.kind === 'account') return String(view.id);
+    return view.kind;
+}
 
-/** Ce que le dialogue d'opération reçoit: une ligne à modifier, ou une saisie neuve. */
-export type TransactionDraft = { transaction: FinanceTransaction | null; accountId?: number };
+function viewOf(segment: string): View {
+    if (segment === 'transactions') return { kind: 'transactions' };
+    if (segment === 'recurring') return { kind: 'recurring' };
+    if (/^\d+$/.test(segment)) return { kind: 'account', id: Number(segment) };
+    return { kind: 'home' };
+}
+
+/** Ce que le dialogue d'opération reçoit : une ligne à modifier, ou une saisie neuve. */
+type TransactionDraft = { transaction: FinanceTransaction | null; accountId?: number };
 
 export default function Finance() {
-    const permissions = useWorkspacePermissions();
-    const canWrite = permissions.canFeature('finance', 'write');
+    const canWrite = useWorkspacePermissions().canFeature('finance', 'write');
     const workspaceId = useActiveWorkspace()?.id ?? null;
 
-    const [tab, setTab] = useState<TabId>('dashboard');
+    const [view, setView] = useState<View>({ kind: 'home' });
     const [dialog, setDialog] = useState<TransactionDraft | null>(null);
+    const [creatingAccount, setCreatingAccount] = useState(false);
 
-    // L'onglet ouvert est le niveau profond ; la racine `view:finance` vient de l'accueil.
-    const liveTarget = useLiveSegment('l1', tab);
+    const liveTarget = useLiveSegment('l1', segmentOf(view));
     useEffect(() => {
         if (!liveTarget || liveTarget.value === null) return;
-        const wanted = TABS.find((entry) => entry.id === liveTarget.value);
-        if (wanted) setTab(wanted.id);
+        setView(viewOf(liveTarget.value));
     }, [liveTarget]);
 
     /**
@@ -88,68 +89,60 @@ export default function Finance() {
     if (!data) {
         return (
             <div className={styles.feature}>
-                <p className={styles.error}>{error ?? 'Chargement impossible.'}</p>
+                <ErrorNote note={{ message: error ?? 'Chargement impossible.', code: null }} />
             </div>
         );
     }
 
     const base: FinanceBase = { ...data, canWrite, reloadBase };
-    const hasAccounts = data.accounts.length > 0;
+    const home = () => setView({ kind: 'home' });
+    const edit = (transaction: FinanceTransaction) => setDialog({ transaction });
 
     return (
         <div className={styles.feature}>
-            <header className={styles.toolbar}>
-                <nav className={styles.tabs} role='tablist'>
-                    {TABS.map((entry) => (
-                        <button
-                            key={entry.id}
-                            type='button'
-                            role='tab'
-                            aria-selected={entry.id === tab}
-                            className={entry.id === tab ? styles.tabActive : styles.tab}
-                            onClick={() => setTab(entry.id)}
-                        >
-                            <span className={`icon icon-${entry.icon}`} />
-                            <span className={styles.tabLabel}>{entry.label}</span>
-                        </button>
-                    ))}
-                </nav>
-
-                <div className={styles.toolbarActions}>
-                    {canWrite && hasAccounts && (
-                        <Button icon='plus' onClick={() => setDialog({ transaction: null })}>
-                            Opération
-                        </Button>
-                    )}
-                    <FeatureSettingsButton scope={{ kind: 'feature', feature: 'finance' }} />
-                </div>
-            </header>
-
-            {error && <p className={styles.error}>{error}</p>}
-
-            {/* Un fondu court : un glissement supposerait un ordre entre les onglets. */}
+            {/* Un fondu court : un glissement supposerait un ordre entre les écrans. */}
             <AnimatePresence mode='wait' initial={false}>
                 <motion.div
-                    key={tab}
-                    className={styles.panel}
+                    key={segmentOf(view) ?? 'home'}
+                    className={styles.view}
                     initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -4 }}
                     transition={{ duration: 0.16, ease: 'easeOut' }}
                 >
-                    {tab === 'dashboard' && (
-                        <Dashboard
+                    {view.kind === 'home' && (
+                        <Home
                             base={base}
-                            onOpenTab={(next) => setTab(next as TabId)}
+                            onOpenAccount={(id) => setView({ kind: 'account', id })}
+                            onOpenTransactions={() => setView({ kind: 'transactions' })}
+                            onOpenRecurring={() => setView({ kind: 'recurring' })}
+                            onNewAccount={() => setCreatingAccount(true)}
                             onNewTransaction={() => setDialog({ transaction: null })}
+                            onEditTransaction={edit}
                         />
                     )}
-                    {tab === 'transactions' && (
-                        <Transactions base={base} onEdit={(transaction) => setDialog({ transaction })} />
+
+                    {view.kind === 'transactions' && (
+                        <TransactionsPage
+                            base={base}
+                            onBack={home}
+                            onNew={() => setDialog({ transaction: null })}
+                            onEdit={edit}
+                        />
                     )}
-                    {tab === 'accounts' && <Accounts base={base} />}
-                    {tab === 'budgets' && <Budgets base={base} />}
-                    {tab === 'recurring' && <Recurring base={base} />}
+
+                    {view.kind === 'recurring' && <RecurringPage base={base} onBack={home} />}
+
+                    {view.kind === 'account' && (
+                        <AccountSheet
+                            base={base}
+                            accountId={view.id}
+                            onBack={home}
+                            onGone={home}
+                            onNewTransaction={(accountId) => setDialog({ transaction: null, accountId })}
+                            onEdit={edit}
+                        />
+                    )}
                 </motion.div>
             </AnimatePresence>
 
@@ -162,6 +155,16 @@ export default function Finance() {
                 onClose={() => setDialog(null)}
                 onSaved={() => {
                     setDialog(null);
+                    refreshFinance();
+                }}
+            />
+
+            <AccountDialog
+                open={creatingAccount}
+                onClose={() => setCreatingAccount(false)}
+                onCreated={() => {
+                    setCreatingAccount(false);
+                    reloadBase();
                     refreshFinance();
                 }}
             />

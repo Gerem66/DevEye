@@ -1,17 +1,22 @@
 import { useCallback, useState } from 'react';
 import {
     Button,
+    ConfirmDialog,
+    Dialog,
+    DialogCancelButton,
     humanizeError,
     ReadOnlyNotice,
     SegmentedControl,
     settingsStyles as shell,
     TextInput,
-    useResource
+    useResource,
+    type ConfirmRequest
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
-import { FINANCE_COLORS, FINANCE_NAME_MAX_LENGTH } from '../contracts/domain';
+import { FINANCE_NAME_MAX_LENGTH } from '../contracts/domain';
 import type { FinanceCategory, FinanceColor, FinanceFlow } from '../contracts/domain';
 
+import ColorPicker from './ColorPicker';
 import { api, refreshFinance } from './api';
 import { CATEGORY_ICONS, DEFAULT_CATEGORIES } from './format';
 import { colorVar } from './shared';
@@ -26,78 +31,101 @@ interface Draft {
     icon: string;
 }
 
-const EMPTY: Draft = { id: null, name: '', flow: 'expense', color: 'blue', icon: 'other' };
-
 const FLOWS: { value: FinanceFlow; label: string }[] = [
     { value: 'expense', label: 'Dépense' },
     { value: 'income', label: 'Recette' }
 ];
 
 /**
- * Les catégories, panneau Catégories de la coquille de réglages. Sa liste est
- * lue sur la clé `finance.accountList`, celle du socle de l'écran : une
- * catégorie changée ici ravive les deux d'un coup par `refreshFinance`. Le
- * sens d'une catégorie ne se change pas : toutes les opérations classées
- * dessous deviendraient fausses.
+ * Les catégories, onglet de la coquille de réglages : le seul endroit où elles
+ * se créent, se corrigent et se retirent. La liste suit la clé du socle de
+ * l'écran (`finance.accountList`) : une catégorie changée ici ravive les deux
+ * d'un coup par `refreshFinance`. Le sens ne se change pas : toutes les
+ * opérations classées dessous deviendraient fausses.
  */
 export default function FinanceCategoriesPanel({ canWrite }: SettingsPanelProps) {
-    const [draft, setDraft] = useState<Draft>(EMPTY);
+    const [editing, setEditing] = useState<Draft | null>(null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [formError, setFormError] = useState<string | null>(null);
+    const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
 
     const load = useCallback(async () => (await api.send('finance.categoryList', {})).categories, []);
     const { data, error: loadError, loading } = useResource('finance.accountList', load, 'Chargement impossible.');
     const categories = data ?? [];
 
-    const run = async (action: () => Promise<unknown>, fallback: string) => {
+    const openForm = (flow: FinanceFlow, category: FinanceCategory | null) => {
+        setFormError(null);
+        setEditing(
+            category
+                ? {
+                      id: category.id,
+                      name: category.name,
+                      flow: category.flow,
+                      color: category.color,
+                      icon: category.icon
+                  }
+                : { id: null, name: '', flow, color: 'blue', icon: 'other' }
+        );
+    };
+
+    const submit = async () => {
+        if (editing === null || busy) return;
+        const name = editing.name.trim();
+        if (name === '') return;
+        const payload = { name, flow: editing.flow, color: editing.color, icon: editing.icon };
         setBusy(true);
-        setError(null);
+        setFormError(null);
         try {
-            await action();
+            if (editing.id === null) await api.send('finance.categoryAdd', { category: payload });
+            else await api.send('finance.categoryUpdate', { categoryId: editing.id, category: payload });
             refreshFinance();
-            return true;
+            setEditing(null);
         } catch (e) {
-            setError(humanizeError(e, fallback));
-            return false;
+            setFormError(humanizeError(e, 'Enregistrement impossible.'));
         } finally {
             setBusy(false);
         }
     };
 
-    const submit = async () => {
-        const name = draft.name.trim();
-        if (name === '' || busy) return;
-        const payload = { name, flow: draft.flow, color: draft.color, icon: draft.icon };
-        const ok = await run(
-            () =>
-                draft.id === null
-                    ? api.send('finance.categoryAdd', { category: payload })
-                    : api.send('finance.categoryUpdate', { categoryId: draft.id, category: payload }),
-            'Enregistrement impossible.'
-        );
-        // Vidé après un ajout réussi, pour enchaîner.
-        if (ok) setDraft({ ...EMPTY, flow: draft.flow });
-    };
-
     /** Séquentiel : chaque création prend son rang en bout de liste, en parallèle elles viseraient le même. */
-    const seed = () =>
-        run(async () => {
+    const seed = async () => {
+        setBusy(true);
+        setError(null);
+        try {
             for (const entry of DEFAULT_CATEGORIES) {
                 await api.send('finance.categoryAdd', { category: entry });
             }
-        }, 'Création impossible.');
+            refreshFinance();
+        } catch (e) {
+            setError(humanizeError(e, 'Création impossible.'));
+        } finally {
+            setBusy(false);
+        }
+    };
 
-    const edit = (category: FinanceCategory) =>
-        setDraft({
-            id: category.id,
-            name: category.name,
-            flow: category.flow,
-            color: category.color,
-            icon: category.icon
+    const askRemove = (category: FinanceCategory) =>
+        setConfirm({
+            title: `Retirer « ${category.name} » ?`,
+            description: 'Les opérations classées ici retombent dans « Sans catégorie ». Rien d’autre ne change.',
+            confirmLabel: 'Retirer',
+            tone: 'danger',
+            onConfirm: () => {
+                void (async () => {
+                    setBusy(true);
+                    setError(null);
+                    try {
+                        await api.send('finance.categoryRemove', { categoryId: category.id });
+                        refreshFinance();
+                    } catch (e) {
+                        setError(humanizeError(e, 'Retrait impossible.'));
+                    } finally {
+                        setBusy(false);
+                        setConfirm(null);
+                    }
+                })();
+            }
         });
-
-    const remove = (category: FinanceCategory) =>
-        run(() => api.send('finance.categoryRemove', { categoryId: category.id }), 'Suppression impossible.');
 
     const group = (flow: FinanceFlow, title: string) => {
         const rows = categories.filter((category) => category.flow === flow);
@@ -126,17 +154,17 @@ export default function FinanceCategoriesPanel({ canWrite }: SettingsPanelProps)
                                             title='Modifier'
                                             aria-label={`Modifier ${category.name}`}
                                             disabled={busy}
-                                            onClick={() => edit(category)}
+                                            onClick={() => openForm(flow, category)}
                                         >
                                             <span className='icon icon-edit' />
                                         </button>
                                         <button
                                             type='button'
                                             className={`${shell.rowAction} ${shell.rowActionDanger}`}
-                                            title='Supprimer: les opérations classées ici retombent dans « Sans catégorie »'
-                                            aria-label={`Supprimer ${category.name}`}
+                                            title='Retirer'
+                                            aria-label={`Retirer ${category.name}`}
                                             disabled={busy}
-                                            onClick={() => void remove(category)}
+                                            onClick={() => askRemove(category)}
                                         >
                                             <span className='icon icon-trash' />
                                         </button>
@@ -144,6 +172,13 @@ export default function FinanceCategoriesPanel({ canWrite }: SettingsPanelProps)
                                 )}
                             </div>
                         ))}
+                    </div>
+                )}
+                {canWrite && (
+                    <div className={shell.sectionActions}>
+                        <Button variant='secondary' icon='plus' disabled={busy} onClick={() => openForm(flow, null)}>
+                            {flow === 'income' ? 'Catégorie de recettes' : 'Catégorie de dépenses'}
+                        </Button>
                     </div>
                 )}
             </div>
@@ -157,106 +192,108 @@ export default function FinanceCategoriesPanel({ canWrite }: SettingsPanelProps)
             {categories.length === 0 && canWrite && (
                 <div className={shell.emptyRow}>
                     <span>
-                        Aucune catégorie. Un jeu courant (logement, courses, salaire…) vous évite de tout créer à la
-                        main, et reste modifiable ensuite.
+                        Aucune catégorie. Le jeu courant d’une activité (prestations, hébergement, logiciels,
+                        cotisations…) vous évite de tout créer à la main, et reste modifiable ensuite.
                     </span>
                     <Button variant='secondary' disabled={busy} onClick={() => void seed()}>
-                        {busy ? 'Création…' : 'Ajouter les catégories courantes'}
+                        {busy ? 'Création…' : 'Ajouter le jeu courant'}
                     </Button>
                 </div>
             )}
 
-            {group('expense', 'Dépenses')}
             {group('income', 'Recettes')}
+            {group('expense', 'Dépenses')}
 
-            {canWrite ? (
-                <div className={shell.section}>
-                    <span className={shell.sectionLabel}>
-                        {draft.id === null ? 'Nouvelle catégorie' : 'Modifier la catégorie'}
-                    </span>
-
-                    <div className={styles.formRow}>
-                        <div className={`${shell.field} ${styles.fieldWide}`}>
-                            <span className={shell.sectionLabel}>Nom</span>
-                            <TextInput
-                                placeholder='ex. Logement'
-                                maxLength={FINANCE_NAME_MAX_LENGTH}
-                                value={draft.name}
-                                onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
-                            />
-                        </div>
-
-                        <div className={shell.field}>
-                            <span className={shell.sectionLabel}>Sens</span>
-                            {draft.id === null ? (
-                                <SegmentedControl
-                                    aria-label='Sens'
-                                    options={FLOWS}
-                                    value={draft.flow}
-                                    onChange={(flow) => setDraft((d) => ({ ...d, flow }))}
-                                />
-                            ) : (
-                                <span className={styles.fieldStatic}>
-                                    {draft.flow === 'expense' ? 'Dépense' : 'Recette'}
-                                    <span className={shell.fieldHint}>ne se change pas après coup</span>
-                                </span>
-                            )}
-                        </div>
-                    </div>
-
-                    <div className={shell.field}>
-                        <span className={shell.sectionLabel}>Couleur</span>
-                        <div className={styles.swatches}>
-                            {FINANCE_COLORS.map((color) => (
-                                <button
-                                    key={color}
-                                    type='button'
-                                    aria-label={color}
-                                    aria-pressed={draft.color === color}
-                                    className={draft.color === color ? styles.swatchActive : styles.swatch}
-                                    style={{ background: colorVar(color) }}
-                                    onClick={() => setDraft((d) => ({ ...d, color }))}
-                                />
-                            ))}
-                        </div>
-                    </div>
-
-                    <div className={shell.field}>
-                        <span className={shell.sectionLabel}>Icône</span>
-                        <div className={styles.iconGrid}>
-                            {CATEGORY_ICONS.map((icon) => (
-                                <button
-                                    key={icon}
-                                    type='button'
-                                    aria-label={icon}
-                                    aria-pressed={draft.icon === icon}
-                                    className={draft.icon === icon ? styles.iconPickActive : styles.iconPick}
-                                    onClick={() => setDraft((d) => ({ ...d, icon }))}
-                                >
-                                    <span className={`icon icon-${icon}`} />
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    <div className={shell.sectionActions}>
-                        <Button onClick={() => void submit()} disabled={busy || draft.name.trim() === ''}>
-                            {draft.id === null ? 'Ajouter' : 'Enregistrer'}
-                        </Button>
-                        {draft.id !== null && (
-                            <Button variant='ghost' onClick={() => setDraft(EMPTY)}>
-                                Annuler la modification
-                            </Button>
-                        )}
-                    </div>
-                </div>
-            ) : (
+            {!canWrite && (
                 <ReadOnlyNotice>
                     Votre rôle ne permet pas de modifier les catégories : elles relèvent de l’écriture sur Finances.
                 </ReadOnlyNotice>
             )}
 
             {(error ?? loadError) && <p className={shell.notice}>{error ?? loadError}</p>}
+
+            <Dialog
+                open={editing !== null}
+                onClose={() => setEditing(null)}
+                title={editing?.id === null ? 'Nouvelle catégorie' : 'Modifier la catégorie'}
+                width={480}
+                onSubmit={() => void submit()}
+                footer={
+                    <>
+                        <DialogCancelButton>Annuler</DialogCancelButton>
+                        <Button onClick={() => void submit()} disabled={busy || !editing?.name.trim()}>
+                            {busy ? 'Enregistrement…' : editing?.id === null ? 'Ajouter' : 'Enregistrer'}
+                        </Button>
+                    </>
+                }
+            >
+                {editing && (
+                    <div className={shell.section}>
+                        <label className={shell.field}>
+                            <span className={shell.fieldLabel}>Nom</span>
+                            <TextInput
+                                data-autofocus
+                                placeholder='ex. Hébergement'
+                                maxLength={FINANCE_NAME_MAX_LENGTH}
+                                value={editing.name}
+                                onChange={(e) => setEditing((d) => (d ? { ...d, name: e.target.value } : d))}
+                            />
+                        </label>
+
+                        <div className={shell.field}>
+                            <span className={shell.fieldLabel}>Sens</span>
+                            {editing.id === null ? (
+                                <SegmentedControl
+                                    aria-label='Sens'
+                                    options={FLOWS}
+                                    value={editing.flow}
+                                    onChange={(flow) => setEditing((d) => (d ? { ...d, flow } : d))}
+                                />
+                            ) : (
+                                <span className={styles.fieldStatic}>
+                                    {editing.flow === 'expense' ? 'Dépense' : 'Recette'}
+                                    <span className={shell.fieldHint}>
+                                        Ne se change pas : les opérations classées ici deviendraient fausses.
+                                    </span>
+                                </span>
+                            )}
+                        </div>
+
+                        <div className={shell.field}>
+                            <span className={shell.fieldLabel}>Couleur</span>
+                            <ColorPicker
+                                aria-label='Couleur de la catégorie'
+                                value={editing.color}
+                                onChange={(color) => setEditing((d) => (d ? { ...d, color } : d))}
+                            />
+                        </div>
+
+                        <div className={shell.field}>
+                            <span className={shell.fieldLabel}>Icône</span>
+                            <div className={styles.iconGrid} role='radiogroup' aria-label='Icône de la catégorie'>
+                                {CATEGORY_ICONS.map((icon) => (
+                                    <button
+                                        key={icon.id}
+                                        type='button'
+                                        role='radio'
+                                        aria-label={icon.label}
+                                        title={icon.label}
+                                        aria-checked={editing.icon === icon.id}
+                                        className={editing.icon === icon.id ? styles.iconPickActive : styles.iconPick}
+                                        onClick={() => setEditing((d) => (d ? { ...d, icon: icon.id } : d))}
+                                    >
+                                        <span className={`icon icon-${icon.id}`} aria-hidden='true' />
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {formError && <p className={shell.notice}>{formError}</p>}
+                    </div>
+                )}
+            </Dialog>
+
+            <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} busy={busy} />
         </div>
     );
 }

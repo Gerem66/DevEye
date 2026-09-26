@@ -2,8 +2,6 @@ import type {
     FinanceAccountBalanceRow,
     FinanceAccountKind,
     FinanceAccountRow,
-    FinanceBudgetPeriod,
-    FinanceBudgetRow,
     FinanceCategoryRow,
     FinanceColor,
     FinanceConfigRow,
@@ -150,7 +148,6 @@ export interface FinanceRepo {
     createCategory(workspaceId: number, input: FinanceCategoryInput): Promise<number>;
     updateCategory(id: number, workspaceId: number, input: FinanceCategoryInput): Promise<boolean>;
     deleteCategory(id: number, workspaceId: number): Promise<boolean>;
-    reorderCategories(workspaceId: number, categoryIds: number[]): Promise<void>;
 
     listTransactions(
         workspaceId: number,
@@ -186,18 +183,6 @@ export interface FinanceRepo {
     monthlyFlow(workspaceId: number, from: string, to: string): Promise<FinanceMonthRow[]>;
     /** TVA collectée et déductible sur `[from, to]`. */
     vatTotals(workspaceId: number, from: string, to: string): Promise<{ collected: number; deductible: number }>;
-    /** Consommé d'une catégorie sur `[from, to)`, sorties seules. */
-    spentByCategory(workspaceId: number, categoryId: number, from: string, toExclusive: string): Promise<number>;
-
-    listBudgets(workspaceId: number): Promise<FinanceBudgetRow[]>;
-    findBudget(id: number, workspaceId: number): Promise<FinanceBudgetRow | null>;
-    upsertBudget(
-        workspaceId: number,
-        categoryId: number,
-        amount: number,
-        period: FinanceBudgetPeriod
-    ): Promise<FinanceBudgetRow>;
-    deleteBudget(id: number, workspaceId: number): Promise<boolean>;
 
     listRecurring(workspaceId: number): Promise<FinanceRecurringRow[]>;
     /** Les échéances actives dont l'occurrence est due au plus tard à `onOrBefore`. */
@@ -418,15 +403,6 @@ export function createRepo(q: SdkQueryable): FinanceRepo {
             ]);
             return res.affectedRows > 0;
         },
-        async reorderCategories(workspaceId, categoryIds) {
-            for (let i = 0; i < categoryIds.length; i++) {
-                await q.execute('UPDATE finance_categories SET sort_order = ? WHERE id = ? AND workspace_id = ?', [
-                    i,
-                    categoryIds[i],
-                    workspaceId
-                ]);
-            }
-        },
 
         async listTransactions(workspaceId, filter, limit, offset) {
             const { sql, params } = whereOf(workspaceId, filter);
@@ -622,47 +598,6 @@ export function createRepo(q: SdkQueryable): FinanceRepo {
                 collected: Number(rows[0]?.collected ?? 0),
                 deductible: Number(rows[0]?.deductible ?? 0)
             };
-        },
-        async spentByCategory(workspaceId, categoryId, from, toExclusive) {
-            const rows = await q.query<{ total: number }>(
-                `SELECT COALESCE(SUM(t.amount), 0) AS total FROM finance_transactions t
-                  WHERE t.workspace_id = ? AND t.category_id = ? AND t.kind = 'expense'
-                    AND t.date >= ? AND t.date < ?`,
-                [workspaceId, categoryId, from, toExclusive]
-            );
-            return Number(rows[0]?.total ?? 0);
-        },
-
-        async listBudgets(workspaceId) {
-            return q.query<FinanceBudgetRow>('SELECT * FROM finance_budgets WHERE workspace_id = ? ORDER BY id ASC', [
-                workspaceId
-            ]);
-        },
-        async findBudget(id, workspaceId) {
-            const rows = await q.query<FinanceBudgetRow>(
-                'SELECT * FROM finance_budgets WHERE id = ? AND workspace_id = ?',
-                [id, workspaceId]
-            );
-            return rows[0] ?? null;
-        },
-        async upsertBudget(workspaceId, categoryId, amount, period) {
-            await q.execute(
-                `INSERT INTO finance_budgets (workspace_id, category_id, amount, period) VALUES (?, ?, ?, ?)
-                 ON DUPLICATE KEY UPDATE amount = VALUES(amount), period = VALUES(period)`,
-                [workspaceId, categoryId, amount, period]
-            );
-            const rows = await q.query<FinanceBudgetRow>(
-                'SELECT * FROM finance_budgets WHERE workspace_id = ? AND category_id = ?',
-                [workspaceId, categoryId]
-            );
-            return rows[0];
-        },
-        async deleteBudget(id, workspaceId) {
-            const res = await q.execute('DELETE FROM finance_budgets WHERE id = ? AND workspace_id = ?', [
-                id,
-                workspaceId
-            ]);
-            return res.affectedRows > 0;
         },
 
         async listRecurring(workspaceId) {

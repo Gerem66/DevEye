@@ -38,7 +38,7 @@ Ce dossier porte le transverse ; la doc d'une feature vit dans son module,
 | [Sauvegardes](../features/backup/README.md)        | les sauvegardes : sources, destinations, chiffrement des archives |
 | [Bases de données](../features/database/README.md) | l'inventaire des bases et leurs alertes                           |
 | [Déploiements](../features/deploy/README.md)       | les mises en production via Dokploy ou GitHub Actions             |
-| [Finances](../features/finance/README.md)          | le livre de comptes de l'espace                                   |
+| [Finances](../features/finance/README.md)          | la trésorerie de l'activité                                       |
 | [Git](../features/git/README.md)                   | les dépôts de l'espace et leur cache                              |
 | [Mail](../features/mail/README.md)                 | les boîtes mail de l'espace, leurs deux paliers, les alertes      |
 | [Appareils](../features/devices/README.md)         | la supervision des machines enrôlées                              |

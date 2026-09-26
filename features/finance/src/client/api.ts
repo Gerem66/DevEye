@@ -9,7 +9,7 @@ export const api = featureApi(manifest);
 
 /**
  * Toutes les clés que remue une écriture : une dépense change le journal, un
- * solde, un budget, le tableau de bord et la carte de l'accueil.
+ * solde, l'accueil de la feature et sa carte sur l'accueil de l'app.
  */
 export function refreshFinance(): void {
     invalidate(
@@ -17,7 +17,6 @@ export function refreshFinance(): void {
         'finance.accountList',
         'finance.transactionList',
         'finance.overview',
-        'finance.budgetList',
         'finance.recurringList'
     );
 }

@@ -2,7 +2,6 @@ import {
     financeCategoryAdd,
     financeCategoryList,
     financeCategoryRemove,
-    financeCategoryReorder,
     financeCategoryUpdate
 } from '../../contracts/commands';
 import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
@@ -77,8 +76,7 @@ export const financeCategoryRemoveFeature = defineSdkFeature({
     handler: async (ctx: Ctx, input) => {
         const existing = await ctx.repo.findCategory(input.categoryId, ctx.workspaceId);
         if (!existing) throw new FeatureError('not_found', 'Catégorie introuvable');
-        // Les opérations retombent dans « Sans catégorie » (`ON DELETE SET NULL`),
-        // le budget part avec elle (`ON DELETE CASCADE`).
+        // Les opérations retombent dans « Sans catégorie » (`ON DELETE SET NULL`).
         await ctx.repo.deleteCategory(input.categoryId, ctx.workspaceId);
         ctx.audit({
             action: 'finance.categoryRemove',
@@ -86,17 +84,5 @@ export const financeCategoryRemoveFeature = defineSdkFeature({
             metadata: { categoryId: input.categoryId }
         });
         return { categoryId: input.categoryId };
-    }
-});
-
-export const financeCategoryReorderFeature = defineSdkFeature({
-    ...financeCategoryReorder,
-    mutates: true,
-    access: WRITE,
-    handler: async (ctx: Ctx, input) => {
-        const owned = new Set((await ctx.repo.listCategories(ctx.workspaceId)).map((row) => row.id));
-        const categoryIds = input.categoryIds.filter((id) => owned.has(id));
-        await ctx.repo.reorderCategories(ctx.workspaceId, categoryIds);
-        return { categoryIds };
     }
 });

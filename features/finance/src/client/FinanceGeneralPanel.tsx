@@ -2,8 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import {
     ReadOnlyNotice,
     SaveButton,
+    SegmentedControl,
     humanizeError,
-    SelectInput,
     settingsStyles as shell,
     Switch
 } from 'deveye-sdk-client';
@@ -17,17 +17,17 @@ import { api, refreshFinance } from './api';
  * code ISO, élargir ne demande qu'une ligne ici.
  */
 const CURRENCIES = [
-    { code: 'EUR', label: 'Euro (€)' },
-    { code: 'USD', label: 'Dollar américain ($)' },
-    { code: 'GBP', label: 'Livre sterling (£)' },
-    { code: 'CHF', label: 'Franc suisse (CHF)' },
-    { code: 'CAD', label: 'Dollar canadien (CA$)' }
+    { value: 'EUR', label: 'Euro', title: 'Euro (€)' },
+    { value: 'USD', label: 'Dollar US', title: 'Dollar américain ($)' },
+    { value: 'GBP', label: 'Livre', title: 'Livre sterling (£)' },
+    { value: 'CHF', label: 'Franc suisse', title: 'Franc suisse (CHF)' },
+    { value: 'CAD', label: 'Dollar CA', title: 'Dollar canadien (CA$)' }
 ];
 
 /**
- * Panneau Général : devise et mode entreprise (la TVA sur les saisies et son
- * récapitulatif). Après l'enregistrement, `refreshFinance` : tout l'écran
- * dépend de la devise, jusqu'au symbole de chaque montant.
+ * Panneau Général de la feature : la devise et le suivi de la TVA. Après
+ * l'enregistrement, `refreshFinance` : tout l'écran dépend de la devise,
+ * jusqu'au symbole de chaque montant.
  */
 export default function FinanceGeneralPanel({ canWrite }: SettingsPanelProps) {
     const [draft, setDraft] = useState<FinanceConfig | null>(null);
@@ -72,19 +72,15 @@ export default function FinanceGeneralPanel({ canWrite }: SettingsPanelProps) {
         <div className={shell.section}>
             <div className={shell.field}>
                 <span className={shell.sectionLabel}>Devise</span>
-                <SelectInput
+                <SegmentedControl
+                    aria-label='Devise'
                     value={draft.currency}
+                    options={CURRENCIES}
                     disabled={!canWrite}
-                    onChange={(e) => setDraft((d) => (d ? { ...d, currency: e.target.value } : d))}
-                >
-                    {CURRENCIES.map((entry) => (
-                        <option key={entry.code} value={entry.code}>
-                            {entry.label}
-                        </option>
-                    ))}
-                </SelectInput>
+                    onChange={(currency) => setDraft((d) => (d ? { ...d, currency } : d))}
+                />
                 <span className={shell.fieldHint}>
-                    Une seule devise par espace. Les montants déjà saisis ne sont pas convertis: changer de devise ne
+                    Une seule devise par espace. Les montants déjà saisis ne sont pas convertis : changer de devise ne
                     fait que changer le symbole affiché.
                 </span>
             </div>
@@ -93,8 +89,8 @@ export default function FinanceGeneralPanel({ canWrite }: SettingsPanelProps) {
                 checked={draft.vatEnabled}
                 disabled={!canWrite}
                 onChange={(value) => setDraft((d) => (d ? { ...d, vatEnabled: value } : d))}
-                label='Mode entreprise (TVA)'
-                hint='Ajoute la TVA aux saisies et son récapitulatif collectée / déductible au tableau de bord.'
+                label='Suivre la TVA'
+                hint='Ajoute la TVA aux saisies, et son récapitulatif (collectée, déductible, à reverser) à l’accueil.'
             />
 
             {canWrite ? (

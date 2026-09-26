@@ -8,17 +8,15 @@ interface CategoryBarsProps {
     shares: FinanceCategoryShare[];
     categories: FinanceCategory[];
     currency: string;
-    /** Combien de lignes au plus; le reste est replié dans « Autres ». */
+    /** Combien de lignes au plus ; le reste est replié dans « Autres ». */
     limit?: number;
-    onSelect?: (categoryId: number | null) => void;
 }
 
 /**
  * Des barres et non un camembert : on compare des longueurs mieux que des
- * angles, et les intitulés tiennent à côté. Au-delà de `limit`, la queue est
- * repliée dans « Autres ».
+ * angles, et les intitulés tiennent à côté.
  */
-export function CategoryBars({ shares, categories, currency, limit = 8, onSelect }: CategoryBarsProps) {
+export function CategoryBars({ shares, categories, currency, limit = 8 }: CategoryBarsProps) {
     if (shares.length === 0) {
         return <p className={styles.placeholder}>Rien sur la période.</p>;
     }
@@ -29,35 +27,19 @@ export function CategoryBars({ shares, categories, currency, limit = 8, onSelect
     const tailAmount = tail.reduce((sum, share) => sum + share.amount, 0);
     const max = Math.max(1, ...head.map((share) => share.amount), tailAmount);
 
-    const row = (key: string, label: string, icon: string, color: string, amount: number, onClick?: () => void) => {
-        const Tag = onClick ? 'button' : 'div';
-        return (
-            <Tag
-                key={key}
-                type={onClick ? 'button' : undefined}
-                className={onClick ? styles.shareRowAction : styles.shareRow}
-                onClick={onClick}
-            >
-                <span className={styles.shareHead}>
-                    <span className={`icon icon-${icon} ${styles.shareIcon}`} style={{ color }} />
-                    <span className={styles.shareName}>{label}</span>
-                    <span className={styles.shareAmount}>{formatMoney(amount, currency)}</span>
-                </span>
-                <span className={styles.shareTrack}>
-                    {/* La largeur est une transition CSS et non une animation
-                        framer-motion: elle doit rejouer à chaque changement de
-                        fenêtre, sans remonter le composant. */}
-                    <span
-                        className={styles.shareFill}
-                        style={{ width: `${(amount / max) * 100}%`, background: color }}
-                    />
-                </span>
-                <span className={styles.shareShare}>
-                    {total === 0 ? '' : `${Math.round((amount / total) * 100)} %`}
-                </span>
-            </Tag>
-        );
-    };
+    const row = (key: string, label: string, icon: string, color: string, amount: number) => (
+        <div key={key} className={styles.shareRow}>
+            <span className={styles.shareHead}>
+                <span className={`icon icon-${icon} ${styles.shareIcon}`} style={{ color }} aria-hidden='true' />
+                <span className={styles.shareName}>{label}</span>
+                <span className={styles.shareAmount}>{formatMoney(amount, currency)}</span>
+            </span>
+            <span className={styles.shareTrack}>
+                <span className={styles.shareFill} style={{ width: `${(amount / max) * 100}%`, background: color }} />
+            </span>
+            <span className={styles.shareShare}>{total === 0 ? '' : `${Math.round((amount / total) * 100)} %`}</span>
+        </div>
+    );
 
     return (
         <div className={styles.shares}>
@@ -68,8 +50,7 @@ export function CategoryBars({ shares, categories, currency, limit = 8, onSelect
                     category?.name ?? 'Sans catégorie',
                     category?.icon ?? 'other',
                     category ? colorVar(category.color) : 'var(--text-muted)',
-                    share.amount,
-                    onSelect ? () => onSelect(share.categoryId) : undefined
+                    share.amount
                 );
             })}
             {tail.length > 0 &&

@@ -6,7 +6,6 @@ import {
     financeAccountAdd,
     financeAccountList,
     financeAccountRemove,
-    financeBudgetSet,
     financeCategoryAdd,
     financeConfig,
     financeConfigUpdate,
@@ -18,7 +17,6 @@ import {
 import type {
     FinanceAccountBalanceRow,
     FinanceAccountRow,
-    FinanceBudgetRow,
     FinanceCategoryRow,
     FinanceConfigRow,
     FinanceRecurringRow,
@@ -48,7 +46,6 @@ interface FakeRepo extends FinanceRepo {
     accounts: FinanceAccountRow[];
     categories: FinanceCategoryRow[];
     transactions: FinanceTransactionRow[];
-    budgets: FinanceBudgetRow[];
     recurring: FinanceRecurringRow[];
 }
 
@@ -92,7 +89,6 @@ function fakeRepo(): FakeRepo {
         accounts: [],
         categories: [],
         transactions: [],
-        budgets: [],
         recurring: [],
 
         async getConfig(ws) {
@@ -197,12 +193,6 @@ function fakeRepo(): FakeRepo {
             this.categories.splice(i, 1);
             return true;
         },
-        async reorderCategories(ws, ids) {
-            ids.forEach((id, i) => {
-                const row = this.categories.find((c) => c.id === id && c.workspace_id === ws);
-                if (row) row.sort_order = i;
-            });
-        },
 
         async listTransactions(ws, filter, limit, offset) {
             return this.transactions
@@ -298,40 +288,6 @@ function fakeRepo(): FakeRepo {
         },
         async vatTotals() {
             return { collected: 0, deductible: 0 };
-        },
-        async spentByCategory(ws, categoryId, from, toExclusive) {
-            return this.transactions
-                .filter(
-                    (t) =>
-                        t.workspace_id === ws &&
-                        t.category_id === categoryId &&
-                        t.kind === 'expense' &&
-                        t.date >= from &&
-                        t.date < toExclusive
-                )
-                .reduce((s, t) => s + t.amount, 0);
-        },
-
-        async listBudgets(ws) {
-            return this.budgets.filter((b) => b.workspace_id === ws);
-        },
-        async findBudget(id, ws) {
-            return this.budgets.find((b) => b.id === id && b.workspace_id === ws) ?? null;
-        },
-        async upsertBudget(ws, categoryId, amount, period) {
-            let row = this.budgets.find((b) => b.workspace_id === ws && b.category_id === categoryId);
-            if (row) Object.assign(row, { amount, period });
-            else {
-                row = { id: ++seq, workspace_id: ws, category_id: categoryId, amount, period, created: now() };
-                this.budgets.push(row);
-            }
-            return row;
-        },
-        async deleteBudget(id, ws) {
-            const i = this.budgets.findIndex((b) => b.id === id && b.workspace_id === ws);
-            if (i === -1) return false;
-            this.budgets.splice(i, 1);
-            return true;
         },
 
         async listRecurring(ws) {
@@ -507,7 +463,7 @@ describe("la cohérence d'une saisie", () => {
         );
     });
 
-    it('refuse une catégorie du mauvais sens, et un budget sur une recette', async () => {
+    it('refuse une catégorie du mauvais sens', async () => {
         const ctx = createTestContext({ repo: fakeRepo() });
         const account = await seedAccount(ctx);
         const salary = await handlerFor(financeCategoryAdd)(ctx, {
@@ -530,10 +486,6 @@ describe("la cohérence d'une saisie", () => {
                 }
             }),
             /recettes/
-        );
-        await assert.rejects(
-            handlerFor(financeBudgetSet)(ctx, { categoryId: salary.category.id, amount: 100_000, period: 'monthly' }),
-            /catégorie de dépenses/
         );
     });
 
@@ -638,5 +590,34 @@ describe('le rattrapage des échéances', () => {
         assert.equal(posted.transaction.date, added.recurring.nextDate);
         assert.equal(posted.recurring.lastPostedDate, added.recurring.nextDate);
         assert.equal(repo.transactions.length, 1);
+    });
+
+    it('garde le taux de TVA du modèle quand le montant est corrigé', async () => {
+        const ctx = createTestContext({ repo: fakeRepo() });
+        const account = await seedAccount(ctx);
+        // 120 € TTC dont 20 € de TVA : 20 %.
+        const added = await handlerFor(financeRecurringAdd)(ctx, {
+            recurring: {
+                accountId: account.id,
+                kind: 'expense',
+                amount: 12_000,
+                label: 'Serveur',
+                categoryId: null,
+                transferAccountId: null,
+                counterparty: '',
+                note: '',
+                vatAmount: 2_000,
+                frequency: 'monthly',
+                interval: 1,
+                nextDate: today(),
+                endDate: null,
+                automatic: false,
+                active: true
+            }
+        });
+
+        const posted = await handlerFor(financeRecurringPost)(ctx, { recurringId: added.recurring.id, amount: 6_000 });
+        assert.equal(posted.transaction.amount, 6_000);
+        assert.equal(posted.transaction.vatAmount, 1_000);
     });
 });

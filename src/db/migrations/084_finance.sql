@@ -33,18 +33,17 @@ CREATE TABLE IF NOT EXISTS finance_config (
 CREATE TABLE IF NOT EXISTS finance_accounts (
     id              INT AUTO_INCREMENT PRIMARY KEY,
     workspace_id    INT          NOT NULL,
-    -- 'checking' | 'savings' | 'cash' | 'card' | 'business' | 'other'.
-    -- Sert l'icône de la carte, et le fait qu'une épargne soit comptée à part
-    -- du disponible sur le tableau de bord.
+    -- 'checking' | 'savings' | 'cash' | 'other'. Sert l'icône de la carte, et
+    -- le fait qu'une épargne soit comptée à part du disponible.
     kind            VARCHAR(16)  NOT NULL DEFAULT 'checking',
-    -- Nom de la palette de thème (`--finance-<nom>`), jamais un hexadécimal:
+    -- Nom de la palette de thème (`--palette-<nom>`), jamais un hexadécimal:
     -- la valeur stockée reste liée au thème au lieu de jurer avec lui.
     color           VARCHAR(16)  NOT NULL DEFAULT 'blue',
     -- Solde avant toute opération enregistrée dans DevEye. Signé: on peut
     -- reprendre un compte à découvert.
     initial_balance BIGINT       NOT NULL DEFAULT 0,
-    -- Mis de côté: sort des totaux et des sélecteurs, sans rien perdre. C'est
-    -- le geste réversible que `accountRemove` n'est pas.
+    -- Mis de côté: sort des sélecteurs mais reste dans les totaux. C'est le
+    -- geste réversible que `accountRemove` n'est pas.
     archived        TINYINT      NOT NULL DEFAULT 0,
     sort_order      INT          NOT NULL DEFAULT 0,
     -- { name, note } chiffré, étage ouvert.

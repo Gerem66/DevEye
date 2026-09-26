@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { addDays, addMonths, anchorDayOf, daysInMonth, nextOccurrence, periodBounds, rangeBounds } from './_shared';
+import { addDays, addMonths, anchorDayOf, daysInMonth, nextOccurrence, rangeBounds } from './_shared';
 
 /**
  * Le seul endroit purement calculatoire, et celui dont une erreur ne se verrait
@@ -83,21 +83,6 @@ describe('anchorDayOf', () => {
     it('ancre les autres sur leur jour', () => {
         assert.equal(anchorDayOf('monthly', '2026-08-31'), 31);
         assert.equal(anchorDayOf('yearly', '2026-02-05'), 5);
-    });
-});
-
-describe('periodBounds', () => {
-    it('mois : du 1er au 1er du suivant, borne de fin exclue', () => {
-        assert.deepEqual(periodBounds('monthly', '2026-08-18'), { start: '2026-08-01', end: '2026-09-01' });
-    });
-
-    it('trimestre : cale sur le début du trimestre civil', () => {
-        assert.deepEqual(periodBounds('quarterly', '2026-08-18'), { start: '2026-07-01', end: '2026-10-01' });
-        assert.deepEqual(periodBounds('quarterly', '2026-01-01'), { start: '2026-01-01', end: '2026-04-01' });
-    });
-
-    it('année : du 1er janvier au 1er janvier suivant', () => {
-        assert.deepEqual(periodBounds('yearly', '2026-08-18'), { start: '2026-01-01', end: '2027-01-01' });
     });
 });
 

@@ -1,9 +1,15 @@
-import type { FinanceAccount, FinanceCategory, FinanceColor, FinanceConfig } from '../contracts/domain';
+import { humanizeError, type ErrorNoteInput } from 'deveye-sdk-client';
+import type {
+    FinanceAccount,
+    FinanceCategory,
+    FinanceColor,
+    FinanceConfig,
+    FinanceTransactionKind
+} from '../contracts/domain';
 
 /**
- * Le socle chargé une fois par `Finance.tsx` et passé aux onglets : deux
- * onglets qui reliraient chacun pourraient afficher différemment à la même
- * seconde.
+ * Le socle chargé une fois par `Finance.tsx` et passé aux écrans : deux écrans
+ * qui reliraient chacun pourraient afficher différemment à la même seconde.
  */
 export interface FinanceBase {
     config: FinanceConfig;
@@ -39,4 +45,20 @@ export function colorVar(color: FinanceColor): string {
 /** Le nom d'un compte, ou un repli lisible quand il a disparu. */
 export function accountName(accounts: FinanceAccount[], id: number | null): string {
     return accountOf(accounts, id)?.name || 'Compte inconnu';
+}
+
+/** Le sens d'un mouvement, tel que le lisent les montants colorés : un virement n'en a pas. */
+export function flowOf(kind: FinanceTransactionKind): 'in' | 'out' | undefined {
+    return kind === 'income' ? 'in' : kind === 'expense' ? 'out' : undefined;
+}
+
+/** Le signe qui précède un montant : plus pour une recette, moins pour une dépense, rien pour un virement. */
+export function signOf(kind: FinanceTransactionKind): string {
+    return kind === 'income' ? '+' : kind === 'expense' ? '\u2212' : '';
+}
+
+/** Un refus tel que le bandeau d'erreur du SDK le montre : la phrase, et son code pour le signalement. */
+export function errorNote(e: unknown, fallback: string): ErrorNoteInput {
+    const code = (e as { code?: unknown } | null)?.code;
+    return { message: humanizeError(e, fallback), code: typeof code === 'string' ? code : null };
 }
