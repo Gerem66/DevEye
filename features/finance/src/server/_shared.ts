@@ -12,6 +12,7 @@ import type {
     FinanceTransactionKind,
     FinanceTransactionRow
 } from '../contracts/domain';
+import { INVOICING_LEDGER_PROVIDER, type InvoicingLedgerProvider } from '@deveye/types/sdk';
 import { FeatureError, type SdkCipher, type SdkFeatureContext } from '@deveye/types/sdk/server';
 
 import type { FinanceRepo } from './repo';
@@ -26,8 +27,11 @@ export type Ctx = SdkFeatureContext<FinanceRepo>;
  */
 export const WRITE = { level: 'write' } as const;
 
-/** Devise par défaut d'un espace qui n'a jamais rien réglé. */
+/** La devise quand Facturation n'est pas là pour la dire. */
 export const DEFAULT_CURRENCY = 'EUR';
+
+/** La provenance d'une copie de règlement de Facturation (`finance_transactions.source`). */
+export const INVOICING_SOURCE = 'invoicing';
 
 /**
  * Plafond d'occurrences écrites par échéance en un rattrapage : une
@@ -56,6 +60,13 @@ export interface StoredEntry {
     label: string;
     counterparty: string;
     note: string;
+    /** La facture d'une copie de règlement : de quoi la nommer et l'ouvrir. */
+    origin?: { docNumber: string; segment: string };
+}
+
+/** Le livre de Facturation, ou `null` quand le module n'est pas là. */
+export function invoicingLedger(ctx: Pick<Ctx, 'providers'>): InvoicingLedgerProvider | null {
+    return ctx.providers.get<InvoicingLedgerProvider>(INVOICING_LEDGER_PROVIDER) ?? null;
 }
 
 export async function encryptJson(cipher: SdkCipher, payload: unknown): Promise<string> {
@@ -194,11 +205,31 @@ export function rangeBounds(
     };
 }
 
-/** N'écrit jamais : un membre en lecture seule ne doit pas modifier la base en ouvrant un écran. */
+/**
+ * N'écrit jamais : un membre en lecture seule ne doit pas modifier la base en
+ * ouvrant un écran. La devise et la TVA sont celles de Facturation ; une panne
+ * de sa part laisse le livre lisible, en euros et sans TVA.
+ */
 export async function readConfig(ctx: Ctx): Promise<FinanceConfig> {
-    const row = await ctx.repo.getConfig(ctx.workspaceId);
-    if (!row) return { currency: DEFAULT_CURRENCY, vatEnabled: false };
-    return { currency: row.currency, vatEnabled: row.vat_enabled === 1 };
+    const ledger = invoicingLedger(ctx);
+    const [row, profile] = await Promise.all([
+        ctx.repo.getConfig(ctx.workspaceId),
+        ledger === null
+            ? null
+            : ledger.profile(ctx.workspaceId).catch((error: unknown) => {
+                  ctx.logger.warn({ err: error }, 'finance: réglages de Facturation illisibles');
+                  return null;
+              })
+    ]);
+    return {
+        currency: profile?.currency ?? DEFAULT_CURRENCY,
+        vatEnabled: profile?.vatRegime === 'standard',
+        invoicing: {
+            available: ledger !== null,
+            accountId: row?.invoicing_account_id ?? null,
+            categoryId: row?.invoicing_category_id ?? null
+        }
+    };
 }
 
 export function toAccount(row: FinanceAccountBalanceRow, payload: StoredAccount | null): FinanceAccount {
@@ -208,6 +239,7 @@ export function toAccount(row: FinanceAccountBalanceRow, payload: StoredAccount 
         kind: row.kind,
         color: row.color,
         initialBalance: Number(row.initial_balance),
+        openedOn: row.opened_on,
         balance: Number(row.balance),
         projected: Number(row.projected),
         cleared: Number(row.cleared),
@@ -245,6 +277,7 @@ export function toTransaction(row: FinanceTransactionRow, payload: StoredEntry |
         vatAmount: row.vat_amount === null ? null : Number(row.vat_amount),
         cleared: row.cleared === 1,
         recurringId: row.recurring_id,
+        origin: row.source === INVOICING_SOURCE && payload?.origin ? payload.origin : null,
         created: Number(row.created),
         updated: Number(row.updated)
     };
@@ -348,7 +381,7 @@ export function anchorDayOf(frequency: FinanceFrequency, date: string): number |
 }
 
 /** L'erreur MySQL d'une clé unique déjà prise. */
-function isDuplicate(error: unknown): boolean {
+export function isDuplicate(error: unknown): boolean {
     return typeof error === 'object' && error !== null && (error as { code?: string }).code === 'ER_DUP_ENTRY';
 }
 
@@ -388,6 +421,8 @@ export async function postDueRecurring(ctx: Ctx): Promise<void> {
                     transferAccountId: row.transfer_account_id,
                     categoryId: row.category_id,
                     recurringId: row.id,
+                    source: null,
+                    sourceRef: null,
                     kind: row.kind,
                     amount: Number(row.amount),
                     vatAmount: row.vat_amount === null ? null : Number(row.vat_amount),

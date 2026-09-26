@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useActiveWorkspace, useLiveSegment, useResource } from 'deveye-sdk-client';
 
+import { docIdOfSegment, docSegment } from '../contracts/domain';
 import ClientDialog from './ClientDialog';
 import ClientSheet from './ClientSheet';
 import ClientsPage from './ClientsPage';
@@ -46,15 +47,15 @@ function segmentOf(view: View): string | null {
     if (view.kind === 'home') return null;
     if (view.kind === 'documents') return 'documents';
     if (view.kind === 'clients') return 'clients';
-    if (view.kind === 'document') return `doc-${view.id}`;
+    if (view.kind === 'document') return docSegment(view.id);
     return String(view.id);
 }
 
 function viewOf(segment: string): View {
     if (segment === 'documents') return { kind: 'documents' };
     if (segment === 'clients') return { kind: 'clients' };
-    const doc = /^doc-(\d+)$/.exec(segment);
-    if (doc !== null) return { kind: 'document', id: Number(doc[1]), from: 'home' };
+    const docId = docIdOfSegment(segment);
+    if (docId !== null) return { kind: 'document', id: docId, from: 'home' };
     if (/^\d+$/.test(segment)) return { kind: 'client', id: Number(segment), from: 'home' };
     return { kind: 'home' };
 }

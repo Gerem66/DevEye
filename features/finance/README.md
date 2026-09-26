@@ -66,9 +66,9 @@ l'intégralité du journal dans le navigateur pour afficher un solde.
 
 ## Les échéances n'ont pas de tâche de fond
 
-`postDueRecurring` (`features/finance/src/server/_shared.ts`) est appelé **en
-tête de chaque lecture** qui montre un montant. Il écrit les occurrences dues des échéances
-automatiques, puis avance leur date.
+`postDueRecurring` (`src/server/_shared.ts`) est appelé **en tête de chaque
+lecture** qui montre un montant, par `catchUp` (`src/server/sources.ts`). Il écrit
+les occurrences dues des échéances automatiques, puis avance leur date.
 
 Pourquoi pas un ordonnanceur : il aurait fallu un état en mémoire, un cycle de
 vie, et une réponse à « que se passe-t-il si le serveur était éteint mardi ». Ici
@@ -95,8 +95,65 @@ aux autres connexions (le contexte d'une commande n'expose pas `live.changed`,
 par construction ; seul un service de fond du module l'aurait).
 
 **En ajoutant une lecture qui montre un solde ou un journal, il faut appeler
-`postDueRecurring`.** Cinq lectures le font ; `finance.config` et
-`finance.categoryList` s'en passent, aucune des deux ne portant de montant.
+`catchUp`.** Cinq lectures le font ; `finance.config` et `finance.categoryList`
+s'en passent, aucune des deux ne portant de montant.
+
+---
+
+## Les recettes viennent de Facturation
+
+Qui facture n'a pas à retaper ce qu'il vient d'encaisser. Chaque règlement saisi
+dans Facturation arrive dans le livre, sur le compte qui les reçoit (un seul par
+espace, `finance_config.invoicing_account_id`), rangé dans la catégorie choisie
+(« Prestations » par défaut, créée au besoin). Facturation offre ce qu'il faut
+par un fournisseur du SDK, `INVOICING_LEDGER_PROVIDER` : les règlements, les
+factures qui attendent encore, la devise et le régime de TVA.
+
+**Le livre lit Facturation, pas l'inverse.** `syncInvoicing` tourne à la lecture,
+comme les échéances. Une écriture poussée par Facturation aurait demandé trois
+mécanismes (l'écriture, un rattrapage pour le module absent ou le compte pas
+encore choisi, une réparation quand l'une des deux écritures échoue sans
+l'autre : il n'y a pas de transaction entre modules) ; la comparaison à la
+lecture n'en demande qu'un, et elle converge toujours.
+
+**Ce qu'elle coûte quand rien ne bouge** : la ligne de réglages, le compte, et la
+version de Facturation (le nombre de règlements et le plus grand identifiant,
+sur un index). La comparaison complète ne tourne que quand cette version, la
+devise, le compte qui reçoit ou son jour de départ ont changé. Un règlement ne
+fait qu'apparaître ou disparaître, et tout ce dont il dépend est figé à
+l'émission de sa facture : la copie ne peut pas diverger en silence.
+
+- Une copie porte `source = 'invoicing'` et l'identifiant du règlement ; l'index
+  unique `(workspace_id, source, source_ref)` fait de deux lectures simultanées
+  une seule copie.
+- **Rien d'antérieur au jour de départ** du compte (`opened_on`) ne se recopie :
+  le solde de départ le compte déjà. Déplacer ce jour retire les copies qui le
+  précèdent.
+- Un règlement dans **une autre devise** que celle de Facturation reste là-bas.
+- Au **premier passage**, une recette déjà notée à la main (même compte, même
+  montant, à trois jours près, et seule candidate) devient la copie au lieu
+  d'être comptée deux fois. Deux candidates : aucune n'est choisie, le doublon
+  reste visible.
+- Une copie se **range** ici (compte, catégorie, pointage, note) mais ses **faits**
+  (montant, date, TVA, intitulé) se corrigent dans Facturation, et elle ne se
+  supprime pas ici : elle part avec son règlement.
+- Sa **part de TVA** est celle que Facturation déclare (`paymentVatCents`), au
+  centime près : les deux tableaux de bord disent la même chose.
+
+**Ce que voit un membre** : qui lit Finances voit l'argent entré, donc le nom des
+clients qui paient, même sans droit sur Facturation. Le nom figé sur la facture
+devient le tiers de la copie. Le livre ne peut pas vérifier les restrictions
+d'un autre module ; fermer Finances à un rôle reste le geste qui cache
+l'argent.
+
+L'accueil montre aussi **ce qui reste à encaisser** (les factures émises qui
+attendent, les plus anciennes échéances d'abord) et une **prévision** sur le
+mois en cours et les deux suivants : le solde du jour, plus les factures à leur
+échéance (les retards comptés tout de suite), plus ou moins les échéances et ce
+qui est déjà saisi à une date future. Le sujet `invoicing` ravive ces écrans en
+direct (`alsoInvalidatedBy`) ; un membre qui lit Finances sans lire
+Facturation ne reçoit pas ce battement et voit le règlement à sa lecture
+suivante.
 
 ---
 
@@ -134,7 +191,8 @@ Toutes lèvent `conflict` ou `validation`, avec une phrase en français que le
 client affiche telle quelle (`humanizeError`).
 
 - **Supprimer un compte** est refusé tant qu'il porte une opération ou une
-  échéance. Les deux clés étrangères sont en `CASCADE` : sans ces décomptes, de
+  échéance. **L'archiver** est refusé tant qu'il reçoit les règlements de
+  Facturation. Les deux clés étrangères sont en `CASCADE` : sans ces décomptes, de
   l'argent disparaîtrait d'un livre de comptes sans un mot. Le geste réversible
   existe déjà, c'est l'archivage.
 - **Changer le sens d'une catégorie** est refusé : toutes les opérations déjà
@@ -149,7 +207,12 @@ client affiche telle quelle (`humanizeError`).
 
 ## La TVA
 
-Un seul commutateur (`vatEnabled`), et il n'ajoute aucun écran : il fait
+La devise et le régime de TVA sont ceux de Facturation, qui en a besoin pour
+émettre : le panneau Général de Finances les montre et renvoie à leur réglage.
+Deux réglages au même nom dans deux features finiraient par se contredire. Sans
+Facturation, le livre compte en euros, sans TVA.
+
+Un seul drapeau (`vatEnabled`), et il n'ajoute aucun écran : il fait
 apparaître la TVA sur les saisies et son récapitulatif (collectée, déductible, à
 reverser) parmi les chiffres de l'accueil. Rien d'autre ne change, parce que rien
 d'autre n'a besoin de changer.
@@ -181,11 +244,11 @@ manifest (`settings.feature` et `settings.item`) et fournis par l'entrée client
 (`settingsPanels`) :
 
 - **Général**, à l'échelle de la feature (`FinanceGeneralPanel`) : la devise et
-  le suivi de la TVA (`finance.config` / `finance.configUpdate`). Après
-  enregistrement, toutes les clés de la feature sont ravivées : le socle porte le
-  symbole de chaque montant.
-- **Général**, à l'échelle d'un compte (`AccountPanel`) : son identité, sa note,
-  son archivage et son retrait. `GeneralPanel` aiguille entre les deux.
+  la TVA, lues de Facturation, avec le lien vers leur réglage là-bas.
+- **Général**, à l'échelle d'un compte (`AccountPanel`) : son identité, son solde
+  de départ et le jour où il a été relevé, l'arrivée des règlements de
+  Facturation (`finance.invoicingLink`), sa note, son archivage et son retrait.
+  `GeneralPanel` aiguille entre les deux.
 - **Catégories** (`FinanceCategoriesPanel`) : la grille de lecture. C'est le
   seul endroit où une catégorie se crée, se corrige, se retire (popup empilée,
   rangée canonique) ; le dialogue d'opération ne fait que choisir dedans, et
@@ -203,8 +266,9 @@ manifest (`settings.feature` et `settings.item`) et fournis par l'entrée client
 | Évolutions du schéma                                    | `src/server/migrations/`                                              |
 | Requêtes                                                | `src/server/repo.ts`                                                  |
 | Socle serveur (chiffre, calendrier, gardes, rattrapage) | `src/server/_shared.ts`                                               |
+| Recopie des règlements de Facturation                   | `src/server/sources.ts`                                               |
 | Handlers (un fichier par nature)                        | `src/server/handlers/`                                                |
-| Tests (calendrier, handlers)                            | `src/server/calendar.test.ts`, `src/server/handlers.test.ts`          |
+| Tests (calendrier, handlers, recopie), faux dépôt       | `src/server/*.test.ts`, `src/server/_testing.ts`                      |
 | Entrée client, panneaux de réglages                     | `src/client/index.tsx`, `src/client/*Panel.tsx`                       |
 | Coquille, accueil, pages et fiche                       | `src/client/Finance.tsx`, `Home.tsx`, `*Page.tsx`, `AccountSheet.tsx` |
 | Mise en forme et vocabulaire                            | `src/client/format.ts`                                                |

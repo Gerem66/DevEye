@@ -50,6 +50,7 @@ declare const styles: {
     readonly header: string;
     readonly heading: string;
     readonly home: string;
+    readonly icon: string;
     readonly iconGrid: string;
     readonly iconPick: string;
     readonly iconPickActive: string;
@@ -58,6 +59,8 @@ declare const styles: {
     readonly legendNote: string;
     readonly legendSwatch: string;
     readonly legendWhen: string;
+    readonly notice: string;
+    readonly noticeText: string;
     readonly page: string;
     readonly pageHead: string;
     readonly pageTitle: string;

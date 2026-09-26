@@ -120,6 +120,18 @@ domaine de **son** espace. Sans cette règle, n'importe quel émetteur ferait
 paraître sa facture, et son IBAN, sous le domaine d'un autre, en changeant
 seulement le nom d'hôte du lien : c'est le scénario d'une fraude au virement.
 
+## Ce que Finances en lit
+
+Le module offre `INVOICING_LEDGER_PROVIDER` (`src/server/ledger.ts`) : les
+règlements, les factures qui attendent encore, la devise et le régime de TVA.
+Finances recopie les règlements dans son livre et montre ce qui reste à
+encaisser ; rien n'y écrit, et Facturation ne sait rien de Finances. La
+version qu'il expose (le nombre de règlements et le plus grand identifiant, que
+MySQL ne réattribue jamais) permet à Finances de ne rien relire tant que rien
+n'a bougé. La part de TVA d'un règlement vient de `paymentVatCents`
+(`src/contracts/money.ts`), la même que celle du tableau de bord : les deux
+features disent la même chose au centime.
+
 ## Limites connues, et assumées
 
 - **Pas de pièce jointe PDF.** Le document part en HTML dans le corps du mail,

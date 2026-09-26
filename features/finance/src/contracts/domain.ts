@@ -38,10 +38,22 @@ export const FINANCE_COLORS = financeColorSchema.options;
 /** Code ISO 4217. Une seule devise par espace : le multidevise serait un taux de change daté par opération. */
 export const financeCurrencySchema = z.string().regex(/^[A-Z]{3}$/);
 
-/** `vatEnabled` fait apparaître la TVA sur les saisies et son récapitulatif au tableau de bord. */
+/**
+ * La devise et la TVA viennent de Facturation, qui en a besoin pour émettre :
+ * une seule vérité. `vatEnabled` fait apparaître la TVA sur les saisies et son
+ * récapitulatif à l'accueil. `invoicing` dit où arrivent les règlements.
+ */
 export const financeConfigSchema = z.object({
     currency: financeCurrencySchema,
-    vatEnabled: z.boolean()
+    vatEnabled: z.boolean(),
+    invoicing: z.object({
+        /** Facturation est installée : ses règlements peuvent arriver ici. */
+        available: z.boolean(),
+        /** Le compte qui reçoit les règlements, `null` tant qu'aucun ne les reçoit. */
+        accountId: z.number().int().positive().nullable(),
+        /** La catégorie de recettes où ils se rangent. */
+        categoryId: z.number().int().positive().nullable()
+    })
 });
 export type FinanceConfig = z.infer<typeof financeConfigSchema>;
 
@@ -61,6 +73,11 @@ export const financeAccountSchema = z.object({
     color: financeColorSchema,
     /** Solde de départ, avant toute opération enregistrée dans DevEye. */
     initialBalance: financeBalanceSchema,
+    /**
+     * Le jour où ce solde de départ a été relevé. Rien d'antérieur ne se recopie
+     * de Facturation sur ce compte : le solde de départ le compte déjà.
+     */
+    openedOn: financeDateSchema,
     balance: financeBalanceSchema,
     projected: financeBalanceSchema,
     cleared: financeBalanceSchema,
@@ -115,6 +132,17 @@ export const financeTransactionSchema = z.object({
     cleared: z.boolean(),
     /** L'échéance qui l'a engendrée, quand elle vient d'une échéance. */
     recurringId: z.number().int().positive().nullable(),
+    /**
+     * Le règlement de Facturation dont elle est la copie, ou `null`. Ses faits
+     * (montant, date, TVA, intitulé) se corrigent là-bas, jamais ici.
+     */
+    origin: z
+        .object({
+            docNumber: z.string(),
+            /** Ce que `openFeature('invoicing', segment)` ouvre : la facture. */
+            segment: z.string()
+        })
+        .nullable(),
     created: z.number().int().nonnegative(),
     updated: z.number().int().nonnegative()
 });
@@ -196,6 +224,26 @@ export const financeUpcomingSchema = z.object({
 });
 export type FinanceUpcoming = z.infer<typeof financeUpcomingSchema>;
 
+/** Une facture émise qui attend encore de l'argent, telle que Facturation la décrit. */
+export const financeReceivableSchema = z.object({
+    docNumber: z.string(),
+    clientName: z.string(),
+    dueOn: financeDateSchema.nullable(),
+    remaining: financeAmountSchema,
+    overdue: z.boolean(),
+    segment: z.string()
+});
+export type FinanceReceivable = z.infer<typeof financeReceivableSchema>;
+
+/** Un mois de la prévision : ce qui doit entrer, ce qui doit sortir, et le solde attendu à sa fin. */
+export const financeForecastPointSchema = z.object({
+    month: financeMonthSchema,
+    incoming: financeAmountSchema,
+    outgoing: financeAmountSchema,
+    balance: financeBalanceSchema
+});
+export type FinanceForecastPoint = z.infer<typeof financeForecastPointSchema>;
+
 /** Tout le tableau de bord en une réponse : ces chiffres doivent être cohérents entre eux. */
 export const financeOverviewSchema = z.object({
     currency: financeCurrencySchema,
@@ -220,6 +268,23 @@ export const financeOverviewSchema = z.object({
     upcoming: z.array(financeUpcomingSchema),
     /** Les dernières opérations datées au plus tard aujourd'hui, la plus récente en tête. */
     recent: z.array(financeTransactionSchema),
+    /** Ce que les factures émises attendent encore, dans la devise du livre. `null` sans Facturation. */
+    receivables: z
+        .object({
+            total: financeAmountSchema,
+            overdue: financeAmountSchema,
+            count: z.number().int().nonnegative(),
+            overdueCount: z.number().int().nonnegative(),
+            /** Les premières, la plus ancienne échéance d'abord. */
+            items: z.array(financeReceivableSchema)
+        })
+        .nullable(),
+    /**
+     * Le mois en cours puis les deux suivants, à partir du solde du jour : les
+     * factures à leur échéance (les retards comptés tout de suite), les
+     * échéances récurrentes, et ce qui est déjà saisi à une date future.
+     */
+    forecast: z.array(financeForecastPointSchema),
     /** Récapitulatif TVA sur la fenêtre, ou `null` quand la TVA n'est pas suivie. */
     vat: z
         .object({
@@ -247,8 +312,10 @@ export type FinanceSummary = z.infer<typeof financeSummarySchema>;
 
 export interface FinanceConfigRow {
     workspace_id: number;
-    currency: string;
-    vat_enabled: number;
+    invoicing_account_id: number | null;
+    invoicing_category_id: number | null;
+    /** Ce qui décrivait la dernière recopie des règlements : tant qu'il ne bouge pas, rien à refaire. */
+    invoicing_version: string | null;
 }
 
 export interface FinanceAccountRow {
@@ -257,6 +324,8 @@ export interface FinanceAccountRow {
     kind: FinanceAccountKind;
     color: FinanceColor;
     initial_balance: number;
+    /** `AAAA-MM-JJ`, projeté par `DATE_FORMAT`. */
+    opened_on: string;
     archived: number;
     sort_order: number;
     /** `{ name, note }` chiffré, étage ouvert. */
@@ -291,6 +360,10 @@ export interface FinanceTransactionRow {
     transfer_account_id: number | null;
     category_id: number | null;
     recurring_id: number | null;
+    /** `'invoicing'` pour la copie d'un règlement, `null` pour une saisie. */
+    source: string | null;
+    /** L'identifiant du règlement recopié, unique par espace avec `source`. */
+    source_ref: string | null;
     kind: FinanceTransactionKind;
     amount: number;
     vat_amount: number | null;

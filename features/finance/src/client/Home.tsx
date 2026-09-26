@@ -1,14 +1,23 @@
 import { useCallback, useState, type ReactNode } from 'react';
-import { Button, ErrorNote, FeatureSettingsButton, SegmentedControl, useResource } from 'deveye-sdk-client';
+import {
+    Button,
+    ErrorNote,
+    FeatureSettingsButton,
+    openFeature,
+    SegmentedControl,
+    useResource,
+    useWorkspacePermissions,
+    type ErrorNoteInput
+} from 'deveye-sdk-client';
 import type { FinanceOverview, FinanceRange, FinanceTransaction } from '../contracts/domain';
 
 import AccountGrid from './AccountGrid';
 import CategoryBars from './Charts/CategoryBars';
 import FlowChart from './Charts/FlowChart';
 import TransactionRow, { useClearedToggle } from './TransactionRow';
-import { api } from './api';
-import { RANGES, formatDate, formatMoney, formatRelativeDay, formatSigned } from './format';
-import { accountName, flowOf, signOf } from './shared';
+import { api, refreshFinance } from './api';
+import { RANGES, formatDate, formatMoney, formatMonth, formatRelativeDay, formatSigned } from './format';
+import { accountName, activeAccounts, errorNote, flowOf, signOf } from './shared';
 import styles from './style.module.css';
 import type { FinanceBase } from './shared';
 
@@ -31,6 +40,9 @@ export function Home(props: HomeProps) {
     const { base } = props;
     const [range, setRange] = useState<FinanceRange>('month');
     const cleared = useClearedToggle();
+    const canOpenInvoicing = useWorkspacePermissions().canFeature('invoicing', 'read');
+    const [linking, setLinking] = useState(false);
+    const [linkError, setLinkError] = useState<ErrorNoteInput | null>(null);
 
     const load = useCallback(async () => (await api.send('finance.overview', { range })).overview, [range]);
     const { data, error, loading } = useResource<FinanceOverview>('finance.overview', load, 'Chargement impossible.', [
@@ -95,6 +107,30 @@ export function Home(props: HomeProps) {
         );
     }
 
+    const invoicing = base.config.invoicing;
+    // Le compte proposé pour recevoir les règlements : le premier courant, sinon le premier tout court.
+    const candidate =
+        activeAccounts(base.accounts).find((account) => account.kind === 'checking') ??
+        activeAccounts(base.accounts)[0] ??
+        null;
+    const offerLink = base.canWrite && invoicing.available && invoicing.accountId === null && candidate !== null;
+    const receivables = data.receivables;
+
+    const link = async () => {
+        if (candidate === null) return;
+        setLinking(true);
+        setLinkError(null);
+        try {
+            await api.send('finance.invoicingLink', { accountId: candidate.id, categoryId: null });
+            base.reloadBase();
+            refreshFinance();
+        } catch (e) {
+            setLinkError(errorNote(e, 'Le lien avec Facturation n’a pas pu être posé.'));
+        } finally {
+            setLinking(false);
+        }
+    };
+
     const expenses = data.categories.filter((share) => share.flow === 'expense');
     const incomes = data.categories.filter((share) => share.flow === 'income');
 
@@ -109,6 +145,21 @@ export function Home(props: HomeProps) {
     return (
         <div className={styles.home}>
             {header}
+
+            {offerLink && (
+                <div className={styles.notice} role='status'>
+                    <span className='icon icon-invoicing' aria-hidden='true' />
+                    <p className={styles.noticeText}>
+                        <strong>Vos règlements peuvent arriver tout seuls.</strong> Chaque règlement saisi dans
+                        Facturation s’inscrirait sur « {candidate.name} », sans rien retaper. Un autre compte se choisit
+                        dans ses réglages.
+                    </p>
+                    <Button onClick={() => void link()} disabled={linking}>
+                        {linking ? 'Liaison…' : 'Les recevoir ici'}
+                    </Button>
+                </div>
+            )}
+            <ErrorNote note={linkError} />
 
             <div className={styles.periodRow}>
                 <SegmentedControl
@@ -159,7 +210,78 @@ export function Home(props: HomeProps) {
                         </p>
                     </div>
                 )}
+                {receivables !== null && receivables.total > 0 && (
+                    <div className={`${styles.figure} ${receivables.overdue > 0 ? styles.figureBad : ''}`}>
+                        <dt>À encaisser</dt>
+                        <dd>{formatMoney(receivables.total, currency)}</dd>
+                        <p className={styles.figureNote}>
+                            {receivables.overdue > 0
+                                ? `Dont ${formatMoney(receivables.overdue, currency)} en retard`
+                                : 'Rien en retard'}
+                        </p>
+                    </div>
+                )}
             </dl>
+
+            {receivables !== null && receivables.count > 0 && (
+                <Section
+                    title='À encaisser'
+                    hint={
+                        receivables.count > receivables.items.length
+                            ? `Les ${receivables.items.length} plus anciennes échéances sur ${receivables.count} factures.`
+                            : 'La plus ancienne échéance d’abord.'
+                    }
+                    actions={
+                        canOpenInvoicing ? (
+                            <Button variant='ghost' onClick={() => openFeature('invoicing')}>
+                                Facturation
+                            </Button>
+                        ) : undefined
+                    }
+                >
+                    <ul className={styles.rows}>
+                        {receivables.items.map((item) => (
+                            <li key={item.segment}>
+                                <div className={styles.row}>
+                                    <button
+                                        type='button'
+                                        className={styles.rowBody}
+                                        disabled={!canOpenInvoicing}
+                                        title={canOpenInvoicing ? 'Ouvrir la facture' : undefined}
+                                        onClick={() => openFeature('invoicing', item.segment)}
+                                    >
+                                        <span className={`icon icon-invoicing ${styles.rowIcon}`} aria-hidden='true' />
+                                        <span className={styles.rowText}>
+                                            <span className={styles.rowLabel}>
+                                                <span className={styles.rowLabelText}>
+                                                    {item.clientName || 'Client sans nom'}
+                                                </span>
+                                            </span>
+                                            <span className={styles.rowMeta}>Facture {item.docNumber}</span>
+                                        </span>
+                                        <span
+                                            className={styles.rowWhen}
+                                            data-overdue={item.overdue ? 'true' : undefined}
+                                        >
+                                            {item.dueOn === null
+                                                ? 'à réception'
+                                                : item.overdue
+                                                  ? `échue ${formatRelativeDay(item.dueOn)}`
+                                                  : `due ${formatRelativeDay(item.dueOn)}`}
+                                            {item.dueOn !== null && (
+                                                <span className={styles.rowDate}>{formatDate(item.dueOn)}</span>
+                                            )}
+                                        </span>
+                                        <span className={styles.rowAmount}>
+                                            {formatMoney(item.remaining, currency)}
+                                        </span>
+                                    </button>
+                                </div>
+                            </li>
+                        ))}
+                    </ul>
+                </Section>
+            )}
 
             <Section
                 title='Comptes'
@@ -243,7 +365,32 @@ export function Home(props: HomeProps) {
                 )}
             </Section>
 
-            <Section title='Sur un an'>
+            <Section
+                title='Prévision'
+                hint='À partir du solde d’aujourd’hui, avec les factures à leur échéance (les retards tout de suite), les échéances et ce qui est déjà daté.'
+            >
+                <ul className={styles.rows}>
+                    {data.forecast.map((point) => (
+                        <li key={point.month} className={styles.rowStatic}>
+                            <span className={styles.rowText}>
+                                <span className={styles.rowLabel}>
+                                    <span className={styles.rowLabelText}>Fin {formatMonth(point.month)}</span>
+                                </span>
+                                <span className={styles.rowMeta}>
+                                    {point.incoming === 0 && point.outgoing === 0
+                                        ? 'Rien d’attendu'
+                                        : `+${formatMoney(point.incoming, currency)} attendus, ${signOf('expense')}${formatMoney(point.outgoing, currency)} à sortir`}
+                                </span>
+                            </span>
+                            <span className={styles.rowAmount} data-negative={point.balance < 0 ? 'true' : undefined}>
+                                {formatMoney(point.balance, currency)}
+                            </span>
+                        </li>
+                    ))}
+                </ul>
+            </Section>
+
+            <Section title='Douze derniers mois'>
                 <FlowChart months={data.months} currency={currency} />
             </Section>
 

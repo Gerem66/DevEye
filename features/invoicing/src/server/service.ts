@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 
+import { INVOICING_LEDGER_PROVIDER } from '@deveye/types/sdk';
 import {
     normaliseDomainHost,
     type FeatureService,
@@ -19,6 +20,7 @@ import {
 } from '../contracts/domain';
 import { remainingCents } from '../contracts/money';
 import { WELL_KNOWN_PATH } from './domains';
+import { createLedgerProvider } from './ledger';
 import { answerForm, renderMissingPage, renderPublicPage } from './publicPage';
 import { paperInputOf } from './paperInput';
 import { openJson, settingsOf, type RepoIo } from './_shared';
@@ -160,6 +162,8 @@ export function createService(deps: FeatureServiceDeps<InvoicingRepo>): FeatureS
         stop() {
             return ticker.stop();
         },
+
+        providers: { [INVOICING_LEDGER_PROVIDER]: createLedgerProvider(ioFor) },
 
         publicRoutes(app: SdkPublicApp) {
             app.get(PAGE_PATH, { rateLimit: { max: 120, timeWindow: '1 minute' } }, async (req, reply) => {

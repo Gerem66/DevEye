@@ -447,3 +447,18 @@ export const invoicingDashboardSchema = z.object({
 });
 
 export type InvoicingDashboard = z.infer<typeof invoicingDashboardSchema>;
+
+/**
+ * Le segment de présence d'un document. Un préfixe, pour ne pas se confondre
+ * avec un client, élément de la feature, dont le segment est l'identifiant nu.
+ * Défini ici parce qu'un autre module y renvoie (`openFeature`).
+ */
+export function docSegment(id: number): string {
+    return `doc-${id}`;
+}
+
+/** L'inverse : l'identifiant d'un document, ou `null` si le segment n'en désigne pas un. */
+export function docIdOfSegment(segment: string): number | null {
+    const match = /^doc-(\d+)$/.exec(segment);
+    return match === null ? null : Number(match[1]);
+}

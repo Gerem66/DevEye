@@ -85,3 +85,16 @@ export function remainingCents(input: {
     const settled = input.paidCents + input.creditedCents + input.deductedCents;
     return Math.max(0, input.grossCents - settled);
 }
+
+/**
+ * La part de TVA que porte un encaissement : sa fraction de la taxe de la
+ * facture, arrondie au centime le plus proche, le demi vers le haut. Pour une
+ * prestation de services, la TVA est due à l'encaissement : c'est ce montant
+ * que déclare l'espace, et celui que Finances reprend. En `BigInt` : le produit
+ * de deux montants plafonnés dépasse la précision d'un `number`.
+ */
+export function paymentVatCents(amountCents: number, totalVatCents: number, totalGrossCents: number): number {
+    if (totalGrossCents <= 0 || totalVatCents <= 0 || amountCents <= 0) return 0;
+    const gross = BigInt(totalGrossCents);
+    return Number((BigInt(amountCents) * BigInt(totalVatCents) * 2n + gross) / (2n * gross));
+}

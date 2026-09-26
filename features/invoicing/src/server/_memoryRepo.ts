@@ -1,5 +1,5 @@
 import { addDays, todayIn } from '../contracts/calendar';
-import { remainingCents } from '../contracts/money';
+import { paymentVatCents, remainingCents } from '../contracts/money';
 import type {
     InvoicingClientRow,
     InvoicingClientUsage,
@@ -549,11 +549,46 @@ export function memoryRepo(store: MemoryStore = emptyStore()): InvoicingRepo & {
                 if (payment.paid_on < from || payment.paid_on > to) continue;
                 cents += payment.amount;
                 const doc = store.docs.find((d) => d.id === payment.doc_id);
-                if (doc && (doc.total_gross ?? 0) > 0) {
-                    vatCents += Math.round((payment.amount * (doc.total_vat ?? 0)) / (doc.total_gross ?? 1));
-                }
+                if (doc) vatCents += paymentVatCents(payment.amount, doc.total_vat ?? 0, doc.total_gross ?? 0);
             }
             return { cents, vatCents };
+        },
+
+        ledgerVersion: async (workspaceId) => {
+            const mine = store.payments.filter((p) => p.workspace_id === workspaceId);
+            return `${mine.length}:${Math.max(0, ...mine.map((p) => p.id ?? 0))}`;
+        },
+
+        ledgerPayments: async (workspaceId, from) =>
+            store.payments
+                .filter((p) => p.workspace_id === workspaceId && (from === null || p.paid_on >= from))
+                .flatMap((p) => {
+                    const doc = store.docs.find((d) => d.id === p.doc_id && d.workspace_id === workspaceId);
+                    if (!doc) return [];
+                    return [
+                        {
+                            id: p.id ?? 0,
+                            doc_id: p.doc_id,
+                            paid_on: p.paid_on,
+                            amount: p.amount,
+                            method: p.method ?? 'transfer',
+                            number_label: doc.number_label,
+                            currency: doc.currency,
+                            total_vat: doc.total_vat,
+                            total_gross: doc.total_gross
+                        }
+                    ];
+                })
+                .sort((a, b) => (a.paid_on === b.paid_on ? a.id - b.id : a.paid_on < b.paid_on ? -1 : 1)),
+
+        clientSnapshotsOf: async (workspaceId, docIds) => {
+            const snapshots = new Map<number, string>();
+            for (const doc of store.docs) {
+                if (doc.workspace_id === workspaceId && docIds.includes(doc.id) && doc.client_snapshot !== null) {
+                    snapshots.set(doc.id, doc.client_snapshot);
+                }
+            }
+            return snapshots;
         },
 
         billedBetween: async (workspaceId, from, to) => {

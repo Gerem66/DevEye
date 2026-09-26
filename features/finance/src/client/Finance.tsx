@@ -161,6 +161,7 @@ export default function Finance() {
 
             <AccountDialog
                 open={creatingAccount}
+                offerInvoicing={data.config.invoicing.available && data.config.invoicing.accountId === null}
                 onClose={() => setCreatingAccount(false)}
                 onCreated={() => {
                     setCreatingAccount(false);

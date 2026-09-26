@@ -11,13 +11,13 @@ import {
     decryptAll,
     encryptJson,
     financeCipher,
-    postDueRecurring,
     toAccount,
     today,
     WRITE,
     type Ctx,
     type StoredAccount
 } from '../_shared';
+import { catchUp } from '../sources';
 
 /**
  * Les comptes. Le solde de départ est le seul compteur : tout le reste se
@@ -27,7 +27,7 @@ import {
 export const financeAccountListFeature = defineSdkFeature({
     ...financeAccountList,
     handler: async (ctx: Ctx, input) => {
-        await postDueRecurring(ctx);
+        await catchUp(ctx);
         const rows = await ctx.repo.listAccounts(ctx.workspaceId, input.archived === true, today());
         return { accounts: await decryptAll(financeCipher(ctx), rows, toAccount) };
     }
@@ -44,6 +44,7 @@ export const financeAccountAddFeature = defineSdkFeature({
             kind: input.account.kind,
             color: input.account.color,
             initialBalance: input.account.initialBalance,
+            openedOn: input.account.openedOn ?? today(),
             archived: input.account.archived,
             content: await encryptJson(cipher, payload)
         });
@@ -59,12 +60,24 @@ export const financeAccountUpdateFeature = defineSdkFeature({
     mutates: true,
     access: WRITE,
     handler: async (ctx: Ctx, input) => {
+        const existing = await ctx.repo.findAccountPlain(input.accountId, ctx.workspaceId);
+        if (!existing) throw new FeatureError('not_found', 'Compte introuvable');
+        if (input.account.archived && existing.archived === 0) {
+            const config = await ctx.repo.getConfig(ctx.workspaceId);
+            if (config?.invoicing_account_id === input.accountId) {
+                throw new FeatureError(
+                    'conflict',
+                    'Ce compte reçoit les règlements de Facturation : faites-les arriver ailleurs avant de l’archiver.'
+                );
+            }
+        }
         const cipher = financeCipher(ctx);
         const payload: StoredAccount = { name: input.account.name.trim(), note: input.account.note };
         const updated = await ctx.repo.updateAccount(input.accountId, ctx.workspaceId, {
             kind: input.account.kind,
             color: input.account.color,
             initialBalance: input.account.initialBalance,
+            openedOn: input.account.openedOn ?? existing.opened_on,
             archived: input.account.archived,
             content: await encryptJson(cipher, payload)
         });

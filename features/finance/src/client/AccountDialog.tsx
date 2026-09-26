@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
     Button,
+    Checkbox,
     Dialog,
     DialogCancelButton,
     ErrorNote,
@@ -19,6 +20,8 @@ import styles from './style.module.css';
 
 interface AccountDialogProps {
     open: boolean;
+    /** Facturation est là et aucun compte ne reçoit encore ses règlements : le nouveau peut les recevoir. */
+    offerInvoicing: boolean;
     onClose: () => void;
     onCreated: (id: number) => void;
 }
@@ -36,8 +39,9 @@ const EMPTY: Draft = { name: '', kind: 'checking', color: 'blue', balance: '' };
  * La création d'un compte, et rien d'autre : le modifier, l'archiver ou le
  * retirer se fait dans l'onglet Général de ses réglages, depuis sa fiche.
  */
-export function AccountDialog({ open, onClose, onCreated }: AccountDialogProps) {
+export function AccountDialog({ open, offerInvoicing, onClose, onCreated }: AccountDialogProps) {
     const [draft, setDraft] = useState<Draft>(EMPTY);
+    const [receives, setReceives] = useState(true);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [showNameError, setShowNameError] = useState(false);
@@ -45,6 +49,7 @@ export function AccountDialog({ open, onClose, onCreated }: AccountDialogProps) 
     useEffect(() => {
         if (!open) return;
         setDraft(EMPTY);
+        setReceives(true);
         setError(null);
         setShowNameError(false);
     }, [open]);
@@ -76,6 +81,9 @@ export function AccountDialog({ open, onClose, onCreated }: AccountDialogProps) 
                     archived: false
                 }
             });
+            if (offerInvoicing && receives) {
+                await api.send('finance.invoicingLink', { accountId: res.account.id, categoryId: null });
+            }
             onCreated(res.account.id);
         } catch (e) {
             setError(errorNote(e, 'Création impossible.'));
@@ -155,6 +163,18 @@ export function AccountDialog({ open, onClose, onCreated }: AccountDialogProps) 
                         onChange={(value) => set('color', value)}
                     />
                 </div>
+
+                {offerInvoicing && (
+                    <div className={styles.field}>
+                        <Checkbox checked={receives} onChange={setReceives}>
+                            Recevoir ici les règlements de Facturation
+                        </Checkbox>
+                        <span className={styles.fieldHint}>
+                            Chaque règlement saisi dans Facturation à partir d’aujourd’hui arrive sur ce compte tout
+                            seul, rangé dans « Prestations ».
+                        </span>
+                    </div>
+                )}
 
                 <ErrorNote note={error} />
             </div>

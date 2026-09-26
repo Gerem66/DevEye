@@ -36,9 +36,14 @@ export const financeConfig = {
     input: z.object({}),
     output: z.object({ config: financeConfigSchema })
 };
-export const financeConfigUpdate = {
-    command: 'finance.configUpdate' as const,
-    input: z.object({ config: financeConfigSchema }),
+/**
+ * Le compte qui reçoit les règlements de Facturation, et la catégorie où ils se
+ * rangent. `accountId` à `null` coupe l'arrivée ; `categoryId` à `null` range
+ * dans « Prestations », créée au besoin.
+ */
+export const financeInvoicingLink = {
+    command: 'finance.invoicingLink' as const,
+    input: z.object({ accountId: accountId.nullable(), categoryId: categoryId.nullable() }),
     output: z.object({ config: financeConfigSchema })
 };
 /** Ce que lit la carte de l'accueil, et rien de plus. */
@@ -52,6 +57,8 @@ const accountDraftSchema = z.object({
     kind: financeAccountKindSchema,
     color: financeColorSchema,
     initialBalance: financeBalanceSchema,
+    /** Aujourd'hui quand il est omis à la création : le solde saisi est celui du jour. */
+    openedOn: financeDateSchema.optional(),
     note: z.string().max(FINANCE_NOTE_MAX_LENGTH),
     archived: z.boolean()
 });
@@ -240,7 +247,7 @@ export const financeOverview = {
 };
 export const financeCommands = [
     financeConfig,
-    financeConfigUpdate,
+    financeInvoicingLink,
     financeSummary,
     financeAccountList,
     financeAccountAdd,

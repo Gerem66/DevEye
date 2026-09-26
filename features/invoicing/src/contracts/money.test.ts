@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { INVOICING_QUANTITY_MILLI_MAX, INVOICING_UNIT_PRICE_MAX } from './domain';
-import { documentTotals, lineNet, remainingCents, type MoneyLine } from './money';
+import { documentTotals, lineNet, paymentVatCents, remainingCents, type MoneyLine } from './money';
 
 /**
  * Le cœur calculatoire, et celui dont une erreur ne se verrait pas : le chiffre
@@ -140,5 +140,30 @@ describe('remainingCents', () => {
 
     it('ne descend jamais sous zéro', () => {
         assert.equal(remainingCents({ ...base, paidCents: 150_000 }), 0);
+    });
+});
+
+describe('paymentVatCents', () => {
+    it('rend toute la taxe pour un règlement du total', () => {
+        assert.equal(paymentVatCents(120_000, 20_000, 120_000), 20_000);
+    });
+
+    it('prend la fraction d’un acompte, le demi vers le haut', () => {
+        // 1/3 de 20,00 € = 6,666… : 6,67 €.
+        assert.equal(paymentVatCents(40_000, 20_000, 120_000), 6_667);
+        // Sur 100 € TTC dont 10 € de taxe : 25 centimes en portent 2,5, arrondis à 3 ;
+        // 24 centimes en portent 2,4, arrondis à 2.
+        assert.equal(paymentVatCents(25, 1_000, 10_000), 3);
+        assert.equal(paymentVatCents(24, 1_000, 10_000), 2);
+    });
+
+    it('vaut zéro sans taxe ou sans total', () => {
+        assert.equal(paymentVatCents(10_000, 0, 10_000), 0);
+        assert.equal(paymentVatCents(10_000, 2_000, 0), 0);
+    });
+
+    it('ne perd rien sur des montants plafonnés', () => {
+        const max = INVOICING_UNIT_PRICE_MAX;
+        assert.equal(paymentVatCents(max, max, max), max);
     });
 });

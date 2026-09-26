@@ -11,14 +11,18 @@ import type { FinanceTransactionFilter } from '../repo';
 import {
     assertEntryConsistent,
     decryptAll,
+    decryptJson,
     encryptJson,
     financeCipher,
-    postDueRecurring,
     toTransaction,
     WRITE,
     type Ctx,
     type StoredEntry
 } from '../_shared';
+import { catchUp } from '../sources';
+
+/** Ce que dit un refus sur une copie de règlement. */
+const SOURCED_REFUSAL = 'Ce règlement vient de Facturation : son montant, sa date et son intitulé se corrigent là-bas.';
 
 /**
  * Le journal. Un virement est une ligne unique portant ses deux comptes : une
@@ -49,7 +53,7 @@ function filterOf(input: {
 export const financeTransactionListFeature = defineSdkFeature({
     ...financeTransactionList,
     handler: async (ctx: Ctx, input) => {
-        await postDueRecurring(ctx);
+        await catchUp(ctx);
         const filter = filterOf(input);
         const [rows, total, totals] = await Promise.all([
             ctx.repo.listTransactions(ctx.workspaceId, filter, input.limit ?? DEFAULT_LIMIT, input.offset ?? 0),
@@ -83,6 +87,8 @@ export const financeTransactionAddFeature = defineSdkFeature({
             categoryId: draft.categoryId,
             // Seul le rattrapage rattache une opération à une échéance.
             recurringId: null,
+            source: null,
+            sourceRef: null,
             kind: draft.kind,
             amount: draft.amount,
             vatAmount: draft.vatAmount,
@@ -123,22 +129,42 @@ export const financeTransactionUpdateFeature = defineSdkFeature({
             }
         }
 
+        const cipher = financeCipher(ctx);
+        let origin: StoredEntry['origin'];
+        if (existing.source !== null) {
+            // Une copie de règlement : ses faits appartiennent à Facturation.
+            // Le compte, la catégorie, le pointage et la note restent au livre.
+            const stored = await decryptJson<StoredEntry>(cipher, existing.content);
+            const factsKept =
+                draft.kind === existing.kind &&
+                draft.amount === Number(existing.amount) &&
+                draft.date === existing.date &&
+                draft.vatAmount === (existing.vat_amount === null ? null : Number(existing.vat_amount)) &&
+                draft.label.trim() === (stored?.label ?? '') &&
+                draft.counterparty.trim() === (stored?.counterparty ?? '');
+            if (!factsKept) throw new FeatureError('conflict', SOURCED_REFUSAL);
+            origin = stored?.origin;
+        }
+
         const payload: StoredEntry = {
             label: draft.label.trim(),
             counterparty: draft.counterparty.trim(),
-            note: draft.note
+            note: draft.note,
+            ...(origin ? { origin } : {})
         };
         const updated = await ctx.repo.updateTransaction(input.transactionId, ctx.workspaceId, {
             accountId: draft.accountId,
             transferAccountId: draft.transferAccountId,
             categoryId: draft.categoryId,
             recurringId: existing.recurring_id,
+            source: existing.source,
+            sourceRef: existing.source_ref,
             kind: draft.kind,
             amount: draft.amount,
             vatAmount: draft.vatAmount,
             date: draft.date,
             cleared: draft.cleared,
-            content: await encryptJson(financeCipher(ctx), payload)
+            content: await encryptJson(cipher, payload)
         });
         if (!updated) throw new FeatureError('not_found', 'Opération introuvable');
         const row = await ctx.repo.findTransaction(input.transactionId, ctx.workspaceId);
@@ -159,6 +185,12 @@ export const financeTransactionRemoveFeature = defineSdkFeature({
     handler: async (ctx: Ctx, input) => {
         const existing = await ctx.repo.findTransaction(input.transactionId, ctx.workspaceId);
         if (!existing) throw new FeatureError('not_found', 'Opération introuvable');
+        if (existing.source !== null) {
+            throw new FeatureError(
+                'conflict',
+                'Ce règlement vient de Facturation : c’est là-bas qu’il se retire, et sa copie part avec lui.'
+            );
+        }
         await ctx.repo.deleteTransaction(input.transactionId, ctx.workspaceId);
         ctx.audit({
             action: 'finance.transactionRemove',

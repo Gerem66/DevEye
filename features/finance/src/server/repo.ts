@@ -22,8 +22,12 @@ import type { SdkQueryable } from '@deveye/types/sdk/server';
 
 /** Colonnes d'une opération, la date projetée en `AAAA-MM-JJ`. */
 const TX_COLUMNS = `t.id, t.workspace_id, t.account_id, t.transfer_account_id, t.category_id,
-    t.recurring_id, t.kind, t.amount, t.vat_amount, DATE_FORMAT(t.date, '%Y-%m-%d') AS date,
-    t.cleared, t.content, t.created, t.updated`;
+    t.recurring_id, t.source, t.source_ref, t.kind, t.amount, t.vat_amount,
+    DATE_FORMAT(t.date, '%Y-%m-%d') AS date, t.cleared, t.content, t.created, t.updated`;
+
+/** Colonnes d'un compte, le jour de départ projeté en `AAAA-MM-JJ`. */
+const ACCOUNT_COLUMNS = `a.id, a.workspace_id, a.kind, a.color, a.initial_balance,
+    DATE_FORMAT(a.opened_on, '%Y-%m-%d') AS opened_on, a.archived, a.sort_order, a.content, a.created`;
 
 /** Colonnes d'une échéance, les trois dates projetées. */
 const REC_COLUMNS = `r.id, r.workspace_id, r.account_id, r.transfer_account_id, r.category_id,
@@ -52,6 +56,7 @@ export interface FinanceAccountInput {
     kind: FinanceAccountKind;
     color: FinanceColor;
     initialBalance: number;
+    openedOn: string;
     archived: boolean;
     content: string;
 }
@@ -68,12 +73,25 @@ export interface FinanceTransactionInput {
     transferAccountId: number | null;
     categoryId: number | null;
     recurringId: number | null;
+    /** La provenance d'une copie (`'invoicing'`) et l'identifiant de l'original, ou `null` pour une saisie. */
+    source: string | null;
+    sourceRef: string | null;
     kind: FinanceTransactionKind;
     amount: number;
     vatAmount: number | null;
     date: string;
     cleared: boolean;
     content: string;
+}
+
+/** Une copie telle que la recopie la compare à son original. */
+export interface FinanceSourcedRow {
+    id: number;
+    account_id: number;
+    source_ref: string;
+    amount: number;
+    vat_amount: number | null;
+    date: string;
 }
 
 export interface FinanceRecurringInput {
@@ -123,7 +141,9 @@ export interface FinanceMonthRow {
 
 export interface FinanceRepo {
     getConfig(workspaceId: number): Promise<FinanceConfigRow | null>;
-    upsertConfig(workspaceId: number, currency: string, vatEnabled: boolean): Promise<FinanceConfigRow>;
+    /** Pose le lien avec Facturation et oublie la dernière recopie : la suivante compare tout. */
+    setInvoicingLink(workspaceId: number, accountId: number | null, categoryId: number | null): Promise<void>;
+    setInvoicingVersion(workspaceId: number, version: string): Promise<void>;
 
     /**
      * `includeArchived` ne joue que sur la liste, jamais sur les totaux.
@@ -168,6 +188,24 @@ export interface FinanceRepo {
     updateTransaction(id: number, workspaceId: number, input: FinanceTransactionInput): Promise<boolean>;
     deleteTransaction(id: number, workspaceId: number): Promise<boolean>;
     setCleared(workspaceId: number, ids: number[], cleared: boolean): Promise<void>;
+    /** Les copies d'une provenance, pour les comparer à leurs originaux. */
+    listSourced(workspaceId: number, source: string): Promise<FinanceSourcedRow[]>;
+    /** Aligne les faits d'une copie sur son original : rien d'autre ne bouge. */
+    updateSourcedFacts(
+        id: number,
+        workspaceId: number,
+        facts: { amount: number; vatAmount: number | null; date: string }
+    ): Promise<void>;
+    /** Les recettes saisies à la main sur ce compte, à ce montant, sur `[from, to]` : ni copie ni échéance. */
+    listAdoptable(
+        workspaceId: number,
+        accountId: number,
+        amount: number,
+        from: string,
+        to: string
+    ): Promise<FinanceTransactionRow[]>;
+    /** Fait d'une saisie la copie d'un original, son contenu réécrit pour dire d'où elle vient. */
+    adopt(id: number, workspaceId: number, source: string, sourceRef: string, content: string): Promise<void>;
 
     /**
      * Somme des soldes à `today`, archivés compris (archiver ne fait pas
@@ -246,8 +284,7 @@ export function createRepo(q: SdkQueryable): FinanceRepo {
     /** Les trois soldes en une passe ; le solde initial est ajouté aux trois. */
     const accountsQuery = (extra: string) => `
         WITH mv AS (${MOVEMENTS})
-        SELECT a.id, a.workspace_id, a.kind, a.color, a.initial_balance, a.archived,
-               a.sort_order, a.content, a.created,
+        SELECT ${ACCOUNT_COLUMNS},
                a.initial_balance + COALESCE(SUM(CASE WHEN mv.date <= ? THEN mv.delta END), 0) AS balance,
                a.initial_balance + COALESCE(SUM(mv.delta), 0) AS projected,
                a.initial_balance
@@ -261,21 +298,28 @@ export function createRepo(q: SdkQueryable): FinanceRepo {
 
     return {
         async getConfig(workspaceId) {
-            const rows = await q.query<FinanceConfigRow>('SELECT * FROM finance_config WHERE workspace_id = ?', [
-                workspaceId
-            ]);
+            const rows = await q.query<FinanceConfigRow>(
+                `SELECT workspace_id, invoicing_account_id, invoicing_category_id, invoicing_version
+                   FROM finance_config WHERE workspace_id = ?`,
+                [workspaceId]
+            );
             return rows[0] ?? null;
         },
-        async upsertConfig(workspaceId, currency, vatEnabled) {
+        async setInvoicingLink(workspaceId, accountId, categoryId) {
             await q.execute(
-                `INSERT INTO finance_config (workspace_id, currency, vat_enabled) VALUES (?, ?, ?)
-                 ON DUPLICATE KEY UPDATE currency = VALUES(currency), vat_enabled = VALUES(vat_enabled)`,
-                [workspaceId, currency, vatEnabled ? 1 : 0]
+                `INSERT INTO finance_config (workspace_id, invoicing_account_id, invoicing_category_id, invoicing_version)
+                 VALUES (?, ?, ?, NULL)
+                 ON DUPLICATE KEY UPDATE invoicing_account_id = VALUES(invoicing_account_id),
+                                         invoicing_category_id = VALUES(invoicing_category_id),
+                                         invoicing_version = NULL`,
+                [workspaceId, accountId, categoryId]
             );
-            const rows = await q.query<FinanceConfigRow>('SELECT * FROM finance_config WHERE workspace_id = ?', [
+        },
+        async setInvoicingVersion(workspaceId, version) {
+            await q.execute('UPDATE finance_config SET invoicing_version = ? WHERE workspace_id = ?', [
+                version,
                 workspaceId
             ]);
-            return rows[0];
         },
 
         async listAccounts(workspaceId, includeArchived, today) {
@@ -300,7 +344,7 @@ export function createRepo(q: SdkQueryable): FinanceRepo {
         },
         async findAccountPlain(id, workspaceId) {
             const rows = await q.query<FinanceAccountRow>(
-                'SELECT * FROM finance_accounts WHERE id = ? AND workspace_id = ?',
+                `SELECT ${ACCOUNT_COLUMNS} FROM finance_accounts a WHERE a.id = ? AND a.workspace_id = ?`,
                 [id, workspaceId]
             );
             return rows[0] ?? null;
@@ -309,13 +353,14 @@ export function createRepo(q: SdkQueryable): FinanceRepo {
             const sortOrder = await nextRank(q, 'finance_accounts', workspaceId);
             const res = await q.execute(
                 `INSERT INTO finance_accounts
-                     (workspace_id, kind, color, initial_balance, archived, sort_order, content)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                     (workspace_id, kind, color, initial_balance, opened_on, archived, sort_order, content)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
                     workspaceId,
                     input.kind,
                     input.color,
                     input.initialBalance,
+                    input.openedOn,
                     input.archived ? 1 : 0,
                     sortOrder,
                     input.content
@@ -326,9 +371,18 @@ export function createRepo(q: SdkQueryable): FinanceRepo {
         async updateAccount(id, workspaceId, input) {
             const res = await q.execute(
                 `UPDATE finance_accounts
-                    SET kind = ?, color = ?, initial_balance = ?, archived = ?, content = ?
+                    SET kind = ?, color = ?, initial_balance = ?, opened_on = ?, archived = ?, content = ?
                   WHERE id = ? AND workspace_id = ?`,
-                [input.kind, input.color, input.initialBalance, input.archived ? 1 : 0, input.content, id, workspaceId]
+                [
+                    input.kind,
+                    input.color,
+                    input.initialBalance,
+                    input.openedOn,
+                    input.archived ? 1 : 0,
+                    input.content,
+                    id,
+                    workspaceId
+                ]
             );
             return res.affectedRows > 0;
         },
@@ -455,14 +509,16 @@ export function createRepo(q: SdkQueryable): FinanceRepo {
             const res = await q.execute(
                 `INSERT INTO finance_transactions
                      (workspace_id, account_id, transfer_account_id, category_id, recurring_id,
-                      kind, amount, vat_amount, date, cleared, content)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                      source, source_ref, kind, amount, vat_amount, date, cleared, content)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
                     workspaceId,
                     input.accountId,
                     input.transferAccountId,
                     input.categoryId,
                     input.recurringId,
+                    input.source,
+                    input.sourceRef,
                     input.kind,
                     input.amount,
                     input.vatAmount,
@@ -511,6 +567,38 @@ export function createRepo(q: SdkQueryable): FinanceRepo {
                 `UPDATE finance_transactions SET cleared = ?, updated = UNIX_TIMESTAMP()
                   WHERE workspace_id = ? AND id IN (${marks})`,
                 [cleared ? 1 : 0, workspaceId, ...ids]
+            );
+        },
+
+        async listSourced(workspaceId, source) {
+            return q.query<FinanceSourcedRow>(
+                `SELECT t.id, t.account_id, t.source_ref, t.amount, t.vat_amount,
+                        DATE_FORMAT(t.date, '%Y-%m-%d') AS date
+                   FROM finance_transactions t
+                  WHERE t.workspace_id = ? AND t.source = ?`,
+                [workspaceId, source]
+            );
+        },
+        async updateSourcedFacts(id, workspaceId, facts) {
+            await q.execute(
+                `UPDATE finance_transactions SET amount = ?, vat_amount = ?, date = ?, updated = UNIX_TIMESTAMP()
+                  WHERE id = ? AND workspace_id = ?`,
+                [facts.amount, facts.vatAmount, facts.date, id, workspaceId]
+            );
+        },
+        async listAdoptable(workspaceId, accountId, amount, from, to) {
+            return q.query<FinanceTransactionRow>(
+                `SELECT ${TX_COLUMNS} FROM finance_transactions t
+                  WHERE t.workspace_id = ? AND t.account_id = ? AND t.kind = 'income' AND t.amount = ?
+                    AND t.date >= ? AND t.date <= ? AND t.source IS NULL AND t.recurring_id IS NULL`,
+                [workspaceId, accountId, amount, from, to]
+            );
+        },
+        async adopt(id, workspaceId, source, sourceRef, content) {
+            await q.execute(
+                `UPDATE finance_transactions SET source = ?, source_ref = ?, content = ?, updated = UNIX_TIMESTAMP()
+                  WHERE id = ? AND workspace_id = ? AND source IS NULL`,
+                [source, sourceRef, content, id, workspaceId]
             );
         },
 

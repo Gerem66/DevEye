@@ -1,5 +1,7 @@
 import type { SdkQueryable } from '@deveye/types/sdk/server';
 
+import { paymentVatCents } from '../contracts/money';
+
 /**
  * Toutes les requêtes du module, et elles seules. Trois règles :
  *
@@ -232,6 +234,16 @@ export interface InvoicingRepo {
 
     /** Ce qui est entré en caisse sur la période, et la part de taxe qu'il porte. */
     cashedBetween(workspaceId: number, from: string, to: string): Promise<{ cents: number; vatCents: number }>;
+    /**
+     * Change dès qu'un règlement de l'espace apparaît ou disparaît : leur nombre
+     * et le plus grand identifiant, que MySQL ne réattribue jamais. Servi par
+     * l'index de l'espace seul.
+     */
+    ledgerVersion(workspaceId: number): Promise<string>;
+    /** Les règlements reçus depuis `from` (tous si `null`), du plus ancien au plus récent, avec leur facture. */
+    ledgerPayments(workspaceId: number, from: string | null): Promise<InvoicingLedgerRow[]>;
+    /** Le client figé sur chacun de ces documents, scellé. */
+    clientSnapshotsOf(workspaceId: number, docIds: readonly number[]): Promise<Map<number, string>>;
     /** Ce qui a été facturé sur la période, avoirs déduits. */
     billedBetween(
         workspaceId: number,
@@ -264,6 +276,19 @@ export interface InvoicingPaymentRow {
     amount: number;
     method: string;
     content: string;
+}
+
+/** Un règlement, et ce que sa facture dit de lui : son numéro, sa devise, sa part de taxe. */
+export interface InvoicingLedgerRow {
+    id: number;
+    doc_id: number;
+    paid_on: string;
+    amount: number;
+    method: string;
+    number_label: string | null;
+    currency: string;
+    total_vat: number | null;
+    total_gross: number | null;
 }
 
 export interface NewPayment {
@@ -1051,20 +1076,63 @@ export function createRepo(q: SdkQueryable): InvoicingRepo {
         },
 
         async cashedBetween(workspaceId, from, to) {
-            // La part de taxe d'un encaissement est sa fraction de la facture :
-            // pour une prestation de services, la TVA est due à l'encaissement,
-            // pas à la facturation.
-            const rows = await q.query<{ cents: string | number; vat: string | number }>(
-                `SELECT COALESCE(SUM(p.amount), 0) AS cents,
-                        COALESCE(SUM(CASE WHEN d.total_gross > 0
-                                          THEN ROUND(p.amount * d.total_vat / d.total_gross)
-                                          ELSE 0 END), 0) AS vat
+            // La part de taxe se calcule règlement par règlement dans `money.ts`,
+            // seul endroit qui arrondit : Finances reprend la même, au centime.
+            const rows = await q.query<{
+                amount: string | number;
+                total_vat: number | null;
+                total_gross: number | null;
+            }>(
+                `SELECT p.amount, d.total_vat, d.total_gross
                    FROM ft_invoicing_payments p
                    JOIN ft_invoicing_docs d ON d.id = p.doc_id
                   WHERE p.workspace_id = ? AND p.paid_on BETWEEN ? AND ?`,
                 [workspaceId, from, to]
             );
-            return { cents: Number(rows[0]?.cents ?? 0), vatCents: Number(rows[0]?.vat ?? 0) };
+            let cents = 0;
+            let vatCents = 0;
+            for (const row of rows) {
+                const amount = Number(row.amount);
+                cents += amount;
+                vatCents += paymentVatCents(amount, Number(row.total_vat ?? 0), Number(row.total_gross ?? 0));
+            }
+            return { cents, vatCents };
+        },
+
+        async ledgerVersion(workspaceId) {
+            const rows = await q.query<{ n: number; top: number }>(
+                `SELECT COUNT(*) AS n, COALESCE(MAX(id), 0) AS top
+                   FROM ft_invoicing_payments WHERE workspace_id = ?`,
+                [workspaceId]
+            );
+            return `${Number(rows[0]?.n ?? 0)}:${Number(rows[0]?.top ?? 0)}`;
+        },
+
+        async ledgerPayments(workspaceId, from) {
+            const since = from === null ? '' : 'AND p.paid_on >= ?';
+            return q.query<InvoicingLedgerRow>(
+                `SELECT p.id, p.doc_id, DATE_FORMAT(p.paid_on, '%Y-%m-%d') AS paid_on, p.amount, p.method,
+                        d.number_label, d.currency, d.total_vat, d.total_gross
+                   FROM ft_invoicing_payments p
+                   JOIN ft_invoicing_docs d ON d.id = p.doc_id AND d.workspace_id = p.workspace_id
+                  WHERE p.workspace_id = ? ${since}
+                  ORDER BY p.paid_on ASC, p.id ASC`,
+                from === null ? [workspaceId] : [workspaceId, from]
+            );
+        },
+
+        async clientSnapshotsOf(workspaceId, docIds) {
+            const snapshots = new Map<number, string>();
+            if (docIds.length === 0) return snapshots;
+            // Des marqueurs engendrés depuis la longueur du tableau, jamais depuis son contenu.
+            const marks = docIds.map(() => '?').join(', ');
+            const rows = await q.query<{ id: number; client_snapshot: string | null }>(
+                `SELECT id, client_snapshot FROM ft_invoicing_docs
+                  WHERE workspace_id = ? AND id IN (${marks})`,
+                [workspaceId, ...docIds]
+            );
+            for (const row of rows) if (row.client_snapshot !== null) snapshots.set(row.id, row.client_snapshot);
+            return snapshots;
         },
 
         async billedBetween(workspaceId, from, to) {

@@ -24,6 +24,18 @@ export const manifest = {
         'finance.overview'
     ],
     /**
+     * Un règlement saisi dans Facturation arrive dans le livre à la lecture
+     * suivante : son sujet ravive donc ce qui montre de l'argent. Un membre qui
+     * lit Finances sans lire Facturation ne reçoit pas ce battement, il verra
+     * le règlement à sa prochaine lecture.
+     */
+    alsoInvalidatedBy: [
+        {
+            topic: 'invoicing',
+            keys: ['finance.summary', 'finance.accountList', 'finance.transactionList', 'finance.overview']
+        }
+    ],
+    /**
      * À l'échelle de la feature, Général (devise, TVA) et Catégories, où les
      * fiches ne font que choisir. L'élément est le compte : son Général porte
      * son identité, son archivage et son retrait.

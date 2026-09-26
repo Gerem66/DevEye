@@ -17,18 +17,18 @@ import {
     encryptJson,
     financeCipher,
     nextOccurrence,
-    postDueRecurring,
     toRecurring,
     toTransaction,
     WRITE,
     type Ctx,
     type StoredEntry
 } from '../_shared';
+import { catchUp } from '../sources';
 
 /**
- * Les échéances. Aucune tâche de fond : `postDueRecurring` (voir `_shared.ts`)
- * écrit ce qui manque en tête de chaque lecture. Ici, seulement les gestes
- * explicites.
+ * Les échéances. Aucune tâche de fond : `postDueRecurring` (voir `_shared.ts`),
+ * par `catchUp`, écrit ce qui manque en tête de chaque lecture. Ici, seulement
+ * les gestes explicites.
  */
 
 /** Charge une échéance de l'espace, ou lève `not_found`. */
@@ -41,7 +41,7 @@ async function load(ctx: Ctx, id: number): Promise<FinanceRecurringRow> {
 export const financeRecurringListFeature = defineSdkFeature({
     ...financeRecurringList,
     handler: async (ctx: Ctx) => {
-        await postDueRecurring(ctx);
+        await catchUp(ctx);
         const rows = await ctx.repo.listRecurring(ctx.workspaceId);
         return { recurrings: await decryptAll(financeCipher(ctx), rows, toRecurring) };
     }
@@ -174,6 +174,8 @@ export const financeRecurringPostFeature = defineSdkFeature({
             transferAccountId: row.transfer_account_id,
             categoryId: row.category_id,
             recurringId: row.id,
+            source: null,
+            sourceRef: null,
             kind: row.kind,
             amount,
             vatAmount,

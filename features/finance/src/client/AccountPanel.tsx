@@ -6,29 +6,46 @@ import {
     ReadOnlyNotice,
     SaveButton,
     SegmentedControl,
+    SelectInput,
     settingsStyles as shell,
     Switch,
     TextInput,
     type ConfirmRequest
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
-import type { FinanceAccount } from '../contracts/domain';
+import type { FinanceAccount, FinanceCategory, FinanceConfig } from '../contracts/domain';
 import { FINANCE_NAME_MAX_LENGTH, FINANCE_NOTE_MAX_LENGTH } from '../contracts/domain';
 
 import ColorPicker from './ColorPicker';
 import { api, refreshFinance } from './api';
-import { ACCOUNT_KINDS, amountToInput, parseAmount } from './format';
+import { ACCOUNT_KINDS, amountToInput, formatDate, parseAmount } from './format';
 import styles from './style.module.css';
 
+interface Loaded {
+    account: FinanceAccount;
+    accounts: FinanceAccount[];
+    categories: FinanceCategory[];
+    config: FinanceConfig;
+}
+
+/** Ce que le panneau règle du lien avec Facturation : ce compte reçoit-il, et dans quelle catégorie. */
+interface Link {
+    receives: boolean;
+    categoryId: number | null;
+}
+
 /**
- * L'onglet Général d'un compte : ce que le dialogue de création demandait, la
- * note, l'archivage et le retrait. Le solde de départ est « ce qu'il y avait
- * quand ce livre a commencé » : le changer décale tous les soldes suivants.
+ * L'onglet Général d'un compte : ce que le dialogue de création demandait, le
+ * jour du solde de départ, l'arrivée des règlements de Facturation, la note,
+ * l'archivage et le retrait. Le solde de départ est « ce qu'il y avait ce
+ * jour-là » : le changer décale tous les soldes suivants.
  */
 export default function AccountPanel({ scope, canWrite, gone }: SettingsPanelProps) {
     const accountId = scope.kind === 'item' ? Number(scope.itemId) : null;
+    const [loaded, setLoaded] = useState<Loaded | null>(null);
     const [account, setAccount] = useState<FinanceAccount | null>(null);
     const [balance, setBalance] = useState('');
+    const [link, setLink] = useState<Link>({ receives: false, categoryId: null });
     const [error, setError] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
@@ -38,11 +55,28 @@ export default function AccountPanel({ scope, canWrite, gone }: SettingsPanelPro
         try {
             // La liste est courte et déjà la seule lecture des comptes : pas de
             // commande à part pour une ligne.
-            const res = await api.send('finance.accountList', { archived: true });
-            const found = res.accounts.find((entry) => entry.id === accountId) ?? null;
-            if (found === null) setError('Ce compte n’existe plus.');
+            const [accounts, categories, config] = await Promise.all([
+                api.send('finance.accountList', { archived: true }),
+                api.send('finance.categoryList', {}),
+                api.send('finance.config', {})
+            ]);
+            const found = accounts.accounts.find((entry) => entry.id === accountId) ?? null;
+            if (found === null) {
+                setError('Ce compte n’existe plus.');
+                return;
+            }
+            setLoaded({
+                account: found,
+                accounts: accounts.accounts,
+                categories: categories.categories,
+                config: config.config
+            });
             setAccount(found);
-            if (found) setBalance(amountToInput(found.initialBalance));
+            setBalance(amountToInput(found.initialBalance));
+            setLink({
+                receives: config.config.invoicing.accountId === found.id,
+                categoryId: config.config.invoicing.categoryId
+            });
         } catch (e) {
             setError(humanizeError(e, 'Ce compte n’a pas pu être lu.'));
         }
@@ -52,13 +86,18 @@ export default function AccountPanel({ scope, canWrite, gone }: SettingsPanelPro
         void load();
     }, [load]);
 
-    if (account === null) {
+    if (account === null || loaded === null) {
         return <p className={error ? shell.notice : shell.empty}>{error ?? 'Chargement…'}</p>;
     }
 
     const set = (change: Partial<FinanceAccount>) => setAccount((a) => (a ? { ...a, ...change } : a));
     const initialBalance = parseAmount(balance);
     const kind = ACCOUNT_KINDS.find((entry) => entry.id === account.kind);
+    const invoicing = loaded.config.invoicing;
+    const receiving = invoicing.accountId === null ? null : loaded.accounts.find((a) => a.id === invoicing.accountId);
+    const incomeCategories = loaded.categories.filter((category) => category.flow === 'income');
+    const wasReceiving = invoicing.accountId === account.id;
+    const linkChanged = link.receives !== wasReceiving || (link.receives && link.categoryId !== invoicing.categoryId);
 
     const submit = async () => {
         if (busy || accountId === null) return;
@@ -80,11 +119,19 @@ export default function AccountPanel({ scope, canWrite, gone }: SettingsPanelPro
                     kind: account.kind,
                     color: account.color,
                     initialBalance,
+                    openedOn: account.openedOn,
                     note: account.note,
                     archived: account.archived
                 }
             });
+            if (linkChanged) {
+                await api.send('finance.invoicingLink', {
+                    accountId: link.receives ? accountId : null,
+                    categoryId: link.receives ? link.categoryId : null
+                });
+            }
             refreshFinance();
+            await load();
         } catch (e) {
             setError(humanizeError(e, 'Enregistrement impossible.'));
             throw e;
@@ -146,20 +193,71 @@ export default function AccountPanel({ scope, canWrite, gone }: SettingsPanelPro
                 {kind && <span className={shell.fieldHint}>{kind.hint}</span>}
             </div>
 
-            <label className={shell.field}>
-                <span className={shell.fieldLabel}>Solde de départ</span>
-                <TextInput
-                    inputMode='decimal'
-                    value={balance}
-                    disabled={!canWrite}
-                    error={initialBalance === null ? 'Montant illisible' : undefined}
-                    onChange={(e) => setBalance(e.target.value)}
-                />
-                <span className={shell.fieldHint}>
-                    Ce qu’il y avait sur le compte avant la première opération saisie ici. Le changer décale tous les
-                    soldes qui suivent.
-                </span>
-            </label>
+            <div className={styles.formRow}>
+                <label className={shell.field}>
+                    <span className={shell.fieldLabel}>Solde de départ</span>
+                    <TextInput
+                        inputMode='decimal'
+                        value={balance}
+                        disabled={!canWrite}
+                        error={initialBalance === null ? 'Montant illisible' : undefined}
+                        onChange={(e) => setBalance(e.target.value)}
+                    />
+                </label>
+                <label className={shell.field}>
+                    <span className={shell.fieldLabel}>Relevé le</span>
+                    <TextInput
+                        type='date'
+                        value={account.openedOn}
+                        disabled={!canWrite}
+                        onChange={(e) => e.target.value !== '' && set({ openedOn: e.target.value })}
+                    />
+                </label>
+            </div>
+            <span className={shell.fieldHint}>
+                Ce que la banque indiquait le {formatDate(account.openedOn)}, avant la première opération saisie ici. Le
+                changer décale tous les soldes qui suivent.
+            </span>
+
+            {invoicing.available && (
+                <div className={shell.field}>
+                    <Switch
+                        checked={link.receives}
+                        disabled={!canWrite || account.archived}
+                        onChange={(receives) => setLink((current) => ({ ...current, receives }))}
+                        label='Recevoir les règlements de Facturation'
+                        hint={
+                            link.receives
+                                ? `Chaque règlement saisi dans Facturation arrive ici tout seul, à partir du ${formatDate(account.openedOn)} : il n’y a rien à retaper.`
+                                : receiving
+                                  ? `Ils arrivent aujourd’hui sur « ${receiving.name} ». Un seul compte les reçoit : les recevoir ici les détourne pour la suite.`
+                                  : 'Chaque règlement saisi dans Facturation arriverait ici tout seul, sans rien retaper.'
+                        }
+                    />
+                    {link.receives && (
+                        <label className={shell.field}>
+                            <span className={shell.fieldLabel}>Rangés dans</span>
+                            <SelectInput
+                                value={link.categoryId ?? ''}
+                                disabled={!canWrite}
+                                onChange={(e) =>
+                                    setLink((current) => ({
+                                        ...current,
+                                        categoryId: e.target.value === '' ? null : Number(e.target.value)
+                                    }))
+                                }
+                            >
+                                <option value=''>Prestations (créée au besoin)</option>
+                                {incomeCategories.map((category) => (
+                                    <option key={category.id} value={category.id}>
+                                        {category.name}
+                                    </option>
+                                ))}
+                            </SelectInput>
+                        </label>
+                    )}
+                </div>
+            )}
 
             <div className={shell.field}>
                 <span className={shell.fieldLabel}>Couleur</span>
@@ -186,10 +284,14 @@ export default function AccountPanel({ scope, canWrite, gone }: SettingsPanelPro
 
             <Switch
                 checked={account.archived}
-                disabled={!canWrite}
+                disabled={!canWrite || wasReceiving}
                 onChange={(archived) => set({ archived })}
                 label='Archiver ce compte'
-                hint='Il sort des listes de saisie sans rien perdre, et son solde reste compté dans le total.'
+                hint={
+                    wasReceiving
+                        ? 'Il reçoit les règlements de Facturation : faites-les arriver ailleurs avant de l’archiver.'
+                        : 'Il sort des listes de saisie sans rien perdre, et son solde reste compté dans le total.'
+                }
             />
 
             {canWrite ? (

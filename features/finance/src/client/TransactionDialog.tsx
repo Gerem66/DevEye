@@ -7,9 +7,11 @@ import {
     DialogCancelButton,
     ErrorNote,
     FeatureSettingsButton,
+    openFeature,
     SegmentedControl,
     SelectInput,
     TextInput,
+    useWorkspacePermissions,
     type ConfirmRequest,
     type ErrorNoteInput
 } from 'deveye-sdk-client';
@@ -81,6 +83,9 @@ export function TransactionDialog({
     onSaved
 }: TransactionDialogProps) {
     const accounts = activeAccounts(base.accounts);
+    const canOpenInvoice = useWorkspacePermissions().canFeature('invoicing', 'read');
+    /** La copie d'un règlement de Facturation : ses faits s'y corrigent, le livre n'en garde que le rangement. */
+    const origin = transaction?.origin ?? null;
     const fallbackAccount = defaultAccountId ?? accounts[0]?.id ?? base.accounts[0]?.id ?? 0;
 
     const initial = useMemo<Draft>(
@@ -166,7 +171,19 @@ export function TransactionDialog({
             counterparty: draft.counterparty.trim(),
             note: draft.note,
             vatAmount: vatCents !== null && vatCents > 0 ? vatCents : null,
-            cleared: draft.cleared
+            cleared: draft.cleared,
+            // Les faits d'une copie repartent tels quels : sa part de TVA suit la
+            // facture et ne tombe pas toujours sur un taux rond.
+            ...(transaction && origin
+                ? {
+                      kind: transaction.kind,
+                      amount: transaction.amount,
+                      date: transaction.date,
+                      label: transaction.label,
+                      counterparty: transaction.counterparty,
+                      vatAmount: transaction.vatAmount
+                  }
+                : {})
         };
         setBusy(true);
         setError(null);
@@ -210,14 +227,14 @@ export function TransactionDialog({
         <Dialog
             open={open}
             onClose={onClose}
-            title={transaction ? 'Modifier l’opération' : 'Nouvelle opération'}
+            title={origin ? 'Règlement de facture' : transaction ? 'Modifier l’opération' : 'Nouvelle opération'}
             width={560}
             onSubmit={() => void submit()}
             dirty={dirty}
             onSave={() => void submit()}
             footer={
                 <>
-                    {transaction && (
+                    {transaction && !origin && (
                         <Button variant='danger' className={styles.footerStart} onClick={askRemove} disabled={busy}>
                             Supprimer
                         </Button>
@@ -230,9 +247,31 @@ export function TransactionDialog({
             }
         >
             <div className={styles.form}>
+                {origin && (
+                    <div className={styles.notice} role='note'>
+                        <span className='icon icon-invoicing' aria-hidden='true' />
+                        <p className={styles.noticeText}>
+                            Recopié de la facture {origin.docNumber} : son montant, sa date et son intitulé se corrigent
+                            dans Facturation. Ici, vous rangez et vous pointez.
+                        </p>
+                        {canOpenInvoice && (
+                            <Button
+                                variant='secondary'
+                                onClick={() => {
+                                    onClose();
+                                    openFeature('invoicing', origin.segment);
+                                }}
+                            >
+                                Ouvrir la facture
+                            </Button>
+                        )}
+                    </div>
+                )}
+
                 <SegmentedControl
                     aria-label='Nature de l’opération'
                     fullWidth
+                    disabled={origin !== null}
                     value={draft.kind}
                     options={TRANSACTION_KINDS.map((entry) => ({ value: entry.id, label: entry.label }))}
                     onChange={setKind}
@@ -246,6 +285,7 @@ export function TransactionDialog({
                             inputMode='decimal'
                             placeholder='0,00'
                             className={styles.amountInput}
+                            disabled={origin !== null}
                             value={draft.amount}
                             error={
                                 showAmountError && (amountCents === null || amountCents <= 0)
@@ -260,7 +300,12 @@ export function TransactionDialog({
                     </label>
                     <label className={styles.field}>
                         <span className={styles.fieldLabel}>Date</span>
-                        <TextInput type='date' value={draft.date} onChange={(e) => set('date', e.target.value)} />
+                        <TextInput
+                            type='date'
+                            value={draft.date}
+                            disabled={origin !== null}
+                            onChange={(e) => set('date', e.target.value)}
+                        />
                     </label>
                 </div>
 
@@ -271,6 +316,7 @@ export function TransactionDialog({
                             draft.kind === 'income' ? 'ex. Acompte du site vitrine' : 'ex. Hébergement d’octobre'
                         }
                         maxLength={FINANCE_LABEL_MAX_LENGTH}
+                        disabled={origin !== null}
                         value={draft.label}
                         onChange={(e) => set('label', e.target.value)}
                     />
@@ -350,13 +396,25 @@ export function TransactionDialog({
                         <TextInput
                             placeholder={draft.kind === 'income' ? 'ex. Dupont SARL' : 'ex. OVHcloud'}
                             maxLength={FINANCE_COUNTERPARTY_MAX_LENGTH}
+                            disabled={origin !== null}
                             value={draft.counterparty}
                             onChange={(e) => set('counterparty', e.target.value)}
                         />
                     </label>
                 )}
 
-                {base.config.vatEnabled && draft.kind !== 'transfer' && (
+                {base.config.vatEnabled && draft.kind !== 'transfer' && origin !== null && (
+                    <div className={styles.field}>
+                        <span className={styles.fieldLabel}>TVA</span>
+                        <span className={styles.fieldStatic}>
+                            {transaction?.vatAmount
+                                ? `${formatMoney(transaction.vatAmount, base.config.currency)}, la part de la facture que porte ce règlement`
+                                : 'Aucune'}
+                        </span>
+                    </div>
+                )}
+
+                {base.config.vatEnabled && draft.kind !== 'transfer' && origin === null && (
                     <div className={styles.field}>
                         <span className={styles.fieldLabel}>TVA</span>
                         <SegmentedControl

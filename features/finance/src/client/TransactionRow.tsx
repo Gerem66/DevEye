@@ -60,6 +60,13 @@ export function TransactionRow({ base, row, busy, onToggleCleared, onOpen }: Tra
                                 aria-label='Écrite par une échéance'
                             />
                         )}
+                        {row.origin !== null && (
+                            <span
+                                className={`icon icon-invoicing ${styles.rowBadge}`}
+                                title='Recopiée de Facturation'
+                                aria-label='Recopiée de Facturation'
+                            />
+                        )}
                     </span>
                     <span className={styles.rowMeta}>{meta}</span>
                 </span>
