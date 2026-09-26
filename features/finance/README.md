@@ -285,8 +285,6 @@ même : c'est le contrat qui lève la restriction de l'application.
    `https://app.deveye.fr/api/finance/bank/callback` déclarée.
 3. Si le tarif se compte par compte relié plutôt que par connexion, revoir la
    clé de quota : une connexion peut ouvrir plusieurs comptes.
-4. Le dire sur le site vitrine (carte Finances de `DevEye-Site/src/i18n/fr.ts`),
-   qui ne promet aujourd'hui que Qonto et l'import.
 
 ---
 
