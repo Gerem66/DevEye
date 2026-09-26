@@ -27,6 +27,11 @@
     font-variant-numeric: tabular-nums;
 }
 
+.widgetLabel {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
 /* Un solde négatif est la seule chose que cette carte doive crier. */
 .widgetNegative {
     color: var(--danger);
@@ -850,6 +855,15 @@
     border-radius: var(--radius-pill);
     background: var(--accent);
     transition: width var(--transition-normal);
+}
+
+/* Une jauge de seuil : on approche, puis on dépasse. Deux messages, pas un dégradé. */
+.shareFill[data-level='near'] {
+    background: var(--warning);
+}
+
+.shareFill[data-level='over'] {
+    background: var(--danger);
 }
 
 .shareShare {

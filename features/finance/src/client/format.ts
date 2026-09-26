@@ -1,5 +1,6 @@
 import type {
     FinanceAccountKind,
+    FinanceCategoryRole,
     FinanceColor,
     FinanceFrequency,
     FinanceRange,
@@ -241,21 +242,30 @@ export const DEFAULT_CATEGORIES: {
     flow: 'expense' | 'income';
     color: FinanceColor;
     icon: string;
+    role: FinanceCategoryRole | null;
 }[] = [
-    { name: 'Prestations', flow: 'income', color: 'green', icon: 'server' },
-    { name: 'Ventes', flow: 'income', color: 'indigo', icon: 'activity' },
-    { name: 'Remboursements', flow: 'income', color: 'purple', icon: 'refresh' },
-    { name: 'Hébergement et infra', flow: 'expense', color: 'blue', icon: 'cloud' },
-    { name: 'Logiciels et abonnements', flow: 'expense', color: 'purple', icon: 'clock' },
-    { name: 'Matériel', flow: 'expense', color: 'indigo', icon: 'server' },
-    { name: 'Téléphone et internet', flow: 'expense', color: 'blue', icon: 'activity' },
-    { name: 'Déplacements', flow: 'expense', color: 'orange', icon: 'rocket' },
-    { name: 'Repas d’affaires', flow: 'expense', color: 'pink', icon: 'users' },
-    { name: 'Formation', flow: 'expense', color: 'green', icon: 'notes' },
-    { name: 'Honoraires', flow: 'expense', color: 'yellow', icon: 'file' },
-    { name: 'Assurances', flow: 'expense', color: 'indigo', icon: 'shield' },
-    { name: 'Frais bancaires', flow: 'expense', color: 'red', icon: 'finance' },
-    { name: 'Cotisations sociales', flow: 'expense', color: 'orange', icon: 'shield' },
-    { name: 'TVA reversée', flow: 'expense', color: 'purple', icon: 'file' },
-    { name: 'Impôts', flow: 'expense', color: 'red', icon: 'file' }
+    { name: 'Prestations', flow: 'income', color: 'green', icon: 'server', role: null },
+    { name: 'Ventes', flow: 'income', color: 'indigo', icon: 'activity', role: null },
+    { name: 'Remboursements', flow: 'income', color: 'purple', icon: 'refresh', role: 'other' },
+    { name: 'Hébergement et infra', flow: 'expense', color: 'blue', icon: 'cloud', role: null },
+    { name: 'Logiciels et abonnements', flow: 'expense', color: 'purple', icon: 'clock', role: null },
+    { name: 'Matériel', flow: 'expense', color: 'indigo', icon: 'server', role: null },
+    { name: 'Téléphone et internet', flow: 'expense', color: 'blue', icon: 'activity', role: null },
+    { name: 'Déplacements', flow: 'expense', color: 'orange', icon: 'rocket', role: null },
+    { name: 'Repas d’affaires', flow: 'expense', color: 'pink', icon: 'users', role: null },
+    { name: 'Formation', flow: 'expense', color: 'green', icon: 'notes', role: null },
+    { name: 'Honoraires', flow: 'expense', color: 'yellow', icon: 'file', role: null },
+    { name: 'Assurances', flow: 'expense', color: 'indigo', icon: 'shield', role: null },
+    { name: 'Frais bancaires', flow: 'expense', color: 'red', icon: 'finance', role: null },
+    { name: 'Cotisations sociales', flow: 'expense', color: 'orange', icon: 'shield', role: 'social' },
+    { name: 'TVA reversée', flow: 'expense', color: 'purple', icon: 'file', role: 'vat' },
+    { name: 'Impôts', flow: 'expense', color: 'red', icon: 'file', role: 'tax' }
 ];
+
+/** Ce que dit le rôle d'une catégorie, en un mot, pour la rangée qui la montre. */
+export const CATEGORY_ROLE_LABELS: Record<FinanceCategoryRole, string> = {
+    other: 'hors chiffre d’affaires',
+    social: 'verse des cotisations',
+    tax: 'verse des impôts',
+    vat: 'reverse la TVA'
+};

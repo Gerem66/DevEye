@@ -39,7 +39,15 @@ describe('finance.config', () => {
         assert.deepEqual(initial.config, {
             currency: 'EUR',
             vatEnabled: false,
-            invoicing: { available: false, accountId: null, categoryId: null }
+            invoicing: { available: false, accountId: null, categoryId: null },
+            status: {
+                legalStatus: null,
+                microActivity: null,
+                provisionRateBp: null,
+                incomeTaxPrepaid: false,
+                declarationPeriod: null,
+                trackingSince: null
+            }
         });
         // Une lecture n'insère jamais la ligne : un membre en lecture seule
         // ne doit pas modifier la base en ouvrant un écran.
@@ -129,7 +137,7 @@ describe("la cohérence d'une saisie", () => {
         const ctx = createTestContext({ repo: fakeRepo() });
         const account = await seedAccount(ctx);
         const salary = await handlerFor(financeCategoryAdd)(ctx, {
-            category: { name: 'Salaire', flow: 'income', color: 'green', icon: 'finance' }
+            category: { name: 'Salaire', flow: 'income', color: 'green', icon: 'finance', role: null }
         });
         await assert.rejects(
             handlerFor(financeTransactionAdd)(ctx, {

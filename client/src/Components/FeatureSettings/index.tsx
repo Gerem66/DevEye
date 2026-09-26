@@ -130,7 +130,10 @@ export function useSettingsSections(scope: SettingsScope): SectionDef[] {
                     sections.push({ id: tab.id, label: tab.label, icon: tab.icon ?? 'settings' });
                 }
             }
-            if (descriptor.notifies && (scope.kind === 'feature' || descriptor.hasItems)) {
+            if (
+                descriptor.notifies &&
+                (scope.kind === 'feature' || (descriptor.hasItems && descriptor.notifications?.perItem !== false))
+            ) {
                 sections.push({ id: 'notifications', label: 'Notifications', icon: 'mail' });
             }
             pushProjectsSection(sections);
@@ -141,7 +144,10 @@ export function useSettingsSections(scope: SettingsScope): SectionDef[] {
         // Une native n'a que ce que la coquille rend elle-même. Notifications :
         // réservé aux émetteurs, et à l'échelle d'un élément seulement quand la
         // fonctionnalité en a de réglables.
-        if (descriptor.notifies && (scope.kind === 'feature' || descriptor.hasItems)) {
+        if (
+            descriptor.notifies &&
+            (scope.kind === 'feature' || (descriptor.hasItems && descriptor.notifications?.perItem !== false))
+        ) {
             sections.push({ id: 'notifications', label: 'Notifications', icon: 'mail' });
         }
 

@@ -16,7 +16,9 @@ import {
     financeFrequencySchema,
     financeOverviewSchema,
     financeRangeSchema,
+    financeCategoryRoleSchema,
     financeRecurringSchema,
+    financeStatusSettingsSchema,
     financeSummarySchema,
     financeTransactionKindSchema,
     financeTransactionSchema
@@ -44,6 +46,15 @@ export const financeConfig = {
 export const financeInvoicingLink = {
     command: 'finance.invoicingLink' as const,
     input: z.object({ accountId: accountId.nullable(), categoryId: categoryId.nullable() }),
+    output: z.object({ config: financeConfigSchema })
+};
+/**
+ * Le statut de l'activité. Choisir « micro » demande une activité et une
+ * cadence ; le jour de suivi part du début du mois quand personne ne l'a dit.
+ */
+export const financeStatusSet = {
+    command: 'finance.statusSet' as const,
+    input: z.object({ status: financeStatusSettingsSchema }),
     output: z.object({ config: financeConfigSchema })
 };
 /** Ce que lit la carte de l'accueil, et rien de plus. */
@@ -93,7 +104,9 @@ const categoryDraftSchema = z.object({
     name: z.string().min(1).max(FINANCE_NAME_MAX_LENGTH),
     flow: financeFlowSchema,
     color: financeColorSchema,
-    icon: z.string().max(40)
+    icon: z.string().max(40),
+    /** Absent : `null`, du chiffre d'affaires ou une charge. */
+    role: financeCategoryRoleSchema.nullable().default(null)
 });
 export const financeCategoryList = {
     command: 'finance.categoryList' as const,
@@ -248,6 +261,7 @@ export const financeOverview = {
 export const financeCommands = [
     financeConfig,
     financeInvoicingLink,
+    financeStatusSet,
     financeSummary,
     financeAccountList,
     financeAccountAdd,

@@ -9,7 +9,7 @@ import {
     useWorkspacePermissions,
     type ErrorNoteInput
 } from 'deveye-sdk-client';
-import type { FinanceOverview, FinanceRange, FinanceTransaction } from '../contracts/domain';
+import type { FinanceOverview, FinanceRange, FinanceStatus, FinanceTransaction } from '../contracts/domain';
 
 import AccountGrid from './AccountGrid';
 import CategoryBars from './Charts/CategoryBars';
@@ -115,6 +115,7 @@ export function Home(props: HomeProps) {
         null;
     const offerLink = base.canWrite && invoicing.available && invoicing.accountId === null && candidate !== null;
     const receivables = data.receivables;
+    const status = data.status;
 
     const link = async () => {
         if (candidate === null) return;
@@ -160,6 +161,22 @@ export function Home(props: HomeProps) {
                 </div>
             )}
             <ErrorNote note={linkError} />
+
+            {status === null && base.canWrite && (
+                <div className={styles.notice} role='status'>
+                    <span className='icon icon-finance' aria-hidden='true' />
+                    <p className={styles.noticeText}>
+                        <strong>Combien garder pour l’URSSAF et la TVA ?</strong> Dites votre statut : DevEye calcule ce
+                        qu’il faut mettre de côté, ce que vous déclarez, et vous prévient avant chaque échéance.
+                    </p>
+                    <FeatureSettingsButton
+                        scope={{ kind: 'feature', feature: 'finance' }}
+                        initialSection='general'
+                        variant='primary'
+                        label='Dire mon statut'
+                    />
+                </div>
+            )}
 
             <div className={styles.periodRow}>
                 <SegmentedControl
@@ -222,6 +239,8 @@ export function Home(props: HomeProps) {
                     </div>
                 )}
             </dl>
+
+            {status !== null && <SetAside status={status} currency={currency} />}
 
             {receivables !== null && receivables.count > 0 && (
                 <Section
@@ -417,6 +436,111 @@ export function Home(props: HomeProps) {
                 <p className={styles.placeholder}>
                     Votre rôle permet de lire les finances de cet espace, pas de les modifier.
                 </p>
+            )}
+        </div>
+    );
+}
+
+/** Ce qu'il faut garder, la déclaration à faire, le disponible réel, et l'année face aux seuils. */
+function SetAside({ status, currency }: { status: FinanceStatus; currency: string }) {
+    const { declaration, setAside, thresholds } = status;
+    const parts = [
+        setAside.contributions > 0 &&
+            `${formatMoney(setAside.contributions, currency)} ${status.legalStatus === 'micro' ? 'de cotisations' : 'd’impôts et de cotisations'}`,
+        setAside.incomeTax > 0 && `${formatMoney(setAside.incomeTax, currency)} d’impôt libératoire`,
+        setAside.vat > 0 && `${formatMoney(setAside.vat, currency)} de TVA`
+    ].filter(Boolean);
+    const of = (label: string) => (label.includes('trimestre') ? `du ${label}` : `de ${label}`);
+
+    return (
+        <Section
+            title='À mettre de côté'
+            hint='Des estimations tirées du livre : la déclaration fait foi.'
+            actions={
+                <FeatureSettingsButton
+                    scope={{ kind: 'feature', feature: 'finance' }}
+                    initialSection='general'
+                    variant='ghost'
+                    label='Statut'
+                />
+            }
+        >
+            <dl className={styles.figures}>
+                {declaration && (
+                    <div className={styles.figure}>
+                        <dt>
+                            {declaration.closed
+                                ? `Déclaration ${of(declaration.label)}`
+                                : `${declaration.label.charAt(0).toUpperCase()}${declaration.label.slice(1)}, en cours`}
+                        </dt>
+                        <dd>{formatMoney(declaration.revenue, currency)}</dd>
+                        <p className={styles.figureNote}>
+                            {declaration.closed
+                                ? `À déclarer au plus tard le ${formatDate(declaration.deadline)}, ${formatMoney(declaration.contributions + declaration.incomeTax, currency)} à payer`
+                                : `Encaissé à ce jour, à déclarer au plus tard le ${formatDate(declaration.deadline)}`}
+                        </p>
+                    </div>
+                )}
+                <div className={styles.figure}>
+                    <dt>À mettre de côté</dt>
+                    <dd>{formatMoney(setAside.total, currency)}</dd>
+                    <p className={styles.figureNote}>{parts.length === 0 ? 'Rien de dû' : parts.join(', ')}</p>
+                </div>
+                <div className={`${styles.figure} ${status.available < 0 ? styles.figureBad : ''}`}>
+                    <dt>Disponible réel</dt>
+                    <dd>{formatMoney(status.available, currency)}</dd>
+                    <p className={styles.figureNote}>Le solde, moins ce qu’il faut mettre de côté</p>
+                </div>
+            </dl>
+
+            {thresholds && (
+                <div className={styles.shares}>
+                    <Threshold
+                        name={`Plafond de la micro-entreprise en ${thresholds.year}`}
+                        revenue={thresholds.revenue}
+                        projected={thresholds.projected}
+                        limit={thresholds.ceiling}
+                        currency={currency}
+                    />
+                    {thresholds.vatBase !== null && thresholds.vatMajor !== null && (
+                        <Threshold
+                            name={`Franchise de TVA, au-delà de ${formatMoney(thresholds.vatMajor, currency)} elle s’arrête aussitôt`}
+                            revenue={thresholds.revenue}
+                            projected={thresholds.projected}
+                            limit={thresholds.vatBase}
+                            currency={currency}
+                        />
+                    )}
+                </div>
+            )}
+        </Section>
+    );
+}
+
+/** Une jauge de seuil : le chiffre d'affaires de l'année, et ce que les factures en attente y ajouteront. */
+function Threshold(props: { name: string; revenue: number; projected: number; limit: number; currency: string }) {
+    const ratio = props.limit === 0 ? 0 : props.revenue / props.limit;
+    const level =
+        props.revenue > props.limit ? 'over' : ratio > 0.85 || props.projected > props.limit ? 'near' : undefined;
+    return (
+        <div className={styles.shareRow}>
+            <span className={styles.shareHead}>
+                <span className={styles.shareName}>{props.name}</span>
+                <span className={styles.shareAmount}>
+                    {formatMoney(props.revenue, props.currency)} sur {formatMoney(props.limit, props.currency)}
+                </span>
+            </span>
+            <span className={styles.shareTrack}>
+                <span
+                    className={styles.shareFill}
+                    data-level={level}
+                    style={{ width: `${Math.min(100, ratio * 100)}%` }}
+                />
+            </span>
+            {props.projected > props.revenue && (
+                <span className={styles.shareShare}>
+                    {formatMoney(props.projected, props.currency)} avec les factures en attente
+                </span>
             )}
         </div>
     );

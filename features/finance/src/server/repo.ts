@@ -2,6 +2,7 @@ import type {
     FinanceAccountBalanceRow,
     FinanceAccountKind,
     FinanceAccountRow,
+    FinanceCategoryRole,
     FinanceCategoryRow,
     FinanceColor,
     FinanceConfigRow,
@@ -65,7 +66,27 @@ export interface FinanceCategoryInput {
     flow: FinanceFlow;
     color: FinanceColor;
     icon: string;
+    role: FinanceCategoryRole | null;
     content: string;
+}
+
+/** Le statut tel que la ligne de réglages le porte. */
+export interface FinanceStatusInput {
+    legalStatus: string | null;
+    microActivity: string | null;
+    provisionRateBp: number | null;
+    incomeTaxPrepaid: boolean;
+    declarationPeriod: string | null;
+    trackingSince: string | null;
+}
+
+/** Un espace en micro-entreprise, tel que le service des rappels le parcourt. */
+export interface FinanceDeclaringRow {
+    workspace_id: number;
+    micro_activity: string;
+    declaration_period: string;
+    provision_rate_bp: number | null;
+    income_tax_prepaid: number;
 }
 
 export interface FinanceTransactionInput {
@@ -144,6 +165,11 @@ export interface FinanceRepo {
     /** Pose le lien avec Facturation et oublie la dernière recopie : la suivante compare tout. */
     setInvoicingLink(workspaceId: number, accountId: number | null, categoryId: number | null): Promise<void>;
     setInvoicingVersion(workspaceId: number, version: string): Promise<void>;
+    setStatus(workspaceId: number, status: FinanceStatusInput): Promise<void>;
+    /** Tous espaces confondus : ceux qu'une déclaration URSSAF attend. */
+    listDeclaring(): Promise<FinanceDeclaringRow[]>;
+    /** Retient un rappel ; `false` s'il était déjà parti. */
+    markReminder(workspaceId: number, periodKey: string, stage: string): Promise<boolean>;
 
     /**
      * `includeArchived` ne joue que sur la liste, jamais sur les totaux.
@@ -221,6 +247,12 @@ export interface FinanceRepo {
     monthlyFlow(workspaceId: number, from: string, to: string): Promise<FinanceMonthRow[]>;
     /** TVA collectée et déductible sur `[from, to]`. */
     vatTotals(workspaceId: number, from: string, to: string): Promise<{ collected: number; deductible: number }>;
+    /** Le chiffre d'affaires hors TVA sur `[from, to]` : les recettes, sauf celles rangées hors chiffre d'affaires. */
+    revenueBetween(workspaceId: number, from: string, to: string): Promise<number>;
+    /** Les charges hors TVA sur `[from, to]` : les dépenses qui ne versent ni cotisations, ni impôts, ni TVA. */
+    chargesBetween(workspaceId: number, from: string, to: string): Promise<number>;
+    /** Ce qui a été versé sur `[from, to]` dans les catégories de ces rôles. */
+    paidByRoles(workspaceId: number, roles: FinanceCategoryRole[], from: string, to: string): Promise<number>;
 
     listRecurring(workspaceId: number): Promise<FinanceRecurringRow[]>;
     /** Les échéances actives dont l'occurrence est due au plus tard à `onOrBefore`. */
@@ -299,11 +331,57 @@ export function createRepo(q: SdkQueryable): FinanceRepo {
     return {
         async getConfig(workspaceId) {
             const rows = await q.query<FinanceConfigRow>(
-                `SELECT workspace_id, invoicing_account_id, invoicing_category_id, invoicing_version
+                `SELECT workspace_id, invoicing_account_id, invoicing_category_id, invoicing_version,
+                        legal_status, micro_activity, provision_rate_bp, income_tax_prepaid, declaration_period,
+                        DATE_FORMAT(tracking_since, '%Y-%m-%d') AS tracking_since
                    FROM finance_config WHERE workspace_id = ?`,
                 [workspaceId]
             );
             return rows[0] ?? null;
+        },
+        async setStatus(workspaceId, status) {
+            await q.execute(
+                `INSERT INTO finance_config
+                     (workspace_id, legal_status, micro_activity, provision_rate_bp, income_tax_prepaid,
+                      declaration_period, tracking_since)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE legal_status = VALUES(legal_status),
+                                         micro_activity = VALUES(micro_activity),
+                                         provision_rate_bp = VALUES(provision_rate_bp),
+                                         income_tax_prepaid = VALUES(income_tax_prepaid),
+                                         declaration_period = VALUES(declaration_period),
+                                         tracking_since = VALUES(tracking_since)`,
+                [
+                    workspaceId,
+                    status.legalStatus,
+                    status.microActivity,
+                    status.provisionRateBp,
+                    status.incomeTaxPrepaid ? 1 : 0,
+                    status.declarationPeriod,
+                    status.trackingSince
+                ]
+            );
+        },
+        async listDeclaring() {
+            return q.query<FinanceDeclaringRow>(
+                `SELECT workspace_id, micro_activity, declaration_period, provision_rate_bp, income_tax_prepaid
+                   FROM finance_config
+                  WHERE legal_status = 'micro' AND micro_activity IS NOT NULL AND declaration_period IS NOT NULL`,
+                []
+            );
+        },
+        async markReminder(workspaceId, periodKey, stage) {
+            try {
+                await q.execute('INSERT INTO ft_finance_reminders (workspace_id, period_key, stage) VALUES (?, ?, ?)', [
+                    workspaceId,
+                    periodKey,
+                    stage
+                ]);
+                return true;
+            } catch (error) {
+                if ((error as { code?: string } | null)?.code === 'ER_DUP_ENTRY') return false;
+                throw error;
+            }
         },
         async setInvoicingLink(workspaceId, accountId, categoryId) {
             await q.execute(
@@ -436,17 +514,17 @@ export function createRepo(q: SdkQueryable): FinanceRepo {
         async createCategory(workspaceId, input) {
             const sortOrder = await nextRank(q, 'finance_categories', workspaceId);
             const res = await q.execute(
-                `INSERT INTO finance_categories (workspace_id, flow, color, icon, sort_order, content)
-                 VALUES (?, ?, ?, ?, ?, ?)`,
-                [workspaceId, input.flow, input.color, input.icon, sortOrder, input.content]
+                `INSERT INTO finance_categories (workspace_id, flow, color, icon, role, sort_order, content)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                [workspaceId, input.flow, input.color, input.icon, input.role, sortOrder, input.content]
             );
             return res.insertId;
         },
         async updateCategory(id, workspaceId, input) {
             const res = await q.execute(
-                `UPDATE finance_categories SET flow = ?, color = ?, icon = ?, content = ?
+                `UPDATE finance_categories SET flow = ?, color = ?, icon = ?, role = ?, content = ?
                   WHERE id = ? AND workspace_id = ?`,
-                [input.flow, input.color, input.icon, input.content, id, workspaceId]
+                [input.flow, input.color, input.icon, input.role, input.content, id, workspaceId]
             );
             return res.affectedRows > 0;
         },
@@ -686,6 +764,41 @@ export function createRepo(q: SdkQueryable): FinanceRepo {
                 collected: Number(rows[0]?.collected ?? 0),
                 deductible: Number(rows[0]?.deductible ?? 0)
             };
+        },
+        async revenueBetween(workspaceId, from, to) {
+            const rows = await q.query<{ total: number }>(
+                `SELECT COALESCE(SUM(t.amount - COALESCE(t.vat_amount, 0)), 0) AS total
+                   FROM finance_transactions t
+                   LEFT JOIN finance_categories c ON c.id = t.category_id
+                  WHERE t.workspace_id = ? AND t.kind = 'income' AND t.date >= ? AND t.date <= ?
+                    AND (c.role IS NULL OR c.role <> 'other')`,
+                [workspaceId, from, to]
+            );
+            return Number(rows[0]?.total ?? 0);
+        },
+        async chargesBetween(workspaceId, from, to) {
+            const rows = await q.query<{ total: number }>(
+                `SELECT COALESCE(SUM(t.amount - COALESCE(t.vat_amount, 0)), 0) AS total
+                   FROM finance_transactions t
+                   LEFT JOIN finance_categories c ON c.id = t.category_id
+                  WHERE t.workspace_id = ? AND t.kind = 'expense' AND t.date >= ? AND t.date <= ?
+                    AND c.role IS NULL`,
+                [workspaceId, from, to]
+            );
+            return Number(rows[0]?.total ?? 0);
+        },
+        async paidByRoles(workspaceId, roles, from, to) {
+            if (roles.length === 0) return 0;
+            const marks = roles.map(() => '?').join(', ');
+            const rows = await q.query<{ total: number }>(
+                `SELECT COALESCE(SUM(t.amount), 0) AS total
+                   FROM finance_transactions t
+                   JOIN finance_categories c ON c.id = t.category_id
+                  WHERE t.workspace_id = ? AND t.kind = 'expense' AND t.date >= ? AND t.date <= ?
+                    AND c.role IN (${marks})`,
+                [workspaceId, from, to, ...roles]
+            );
+            return Number(rows[0]?.total ?? 0);
         },
 
         async listRecurring(workspaceId) {

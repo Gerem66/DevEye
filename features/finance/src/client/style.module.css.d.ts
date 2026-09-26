@@ -114,6 +114,7 @@ declare const styles: {
     readonly widget: string;
     readonly widgetFoot: string;
     readonly widgetIn: string;
+    readonly widgetLabel: string;
     readonly widgetNegative: string;
     readonly widgetOut: string;
     readonly widgetStat: string;

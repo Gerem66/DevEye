@@ -44,5 +44,7 @@ export const manifest = {
         feature: ['general', { id: 'categories', label: 'Catégories', icon: 'folder' }],
         item: ['general']
     },
+    /** Les rappels de déclaration URSSAF partent par les canaux de l'espace. */
+    nativeCapabilities: ['notify'],
     commands: financeCommands
 } satisfies FeatureManifest;

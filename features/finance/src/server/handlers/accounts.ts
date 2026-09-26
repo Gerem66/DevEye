@@ -123,6 +123,8 @@ export const financeAccountRemoveFeature = defineSdkFeature({
         }
 
         await ctx.repo.deleteAccount(input.accountId, ctx.workspaceId);
+        // Ses restrictions de rôle et sa route de notification : rien d'autre ne les rattache au compte.
+        await ctx.items.forget(String(input.accountId));
         ctx.audit({
             action: 'finance.accountRemove',
             level: 'warning',

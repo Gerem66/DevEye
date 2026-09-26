@@ -262,7 +262,7 @@ describe('les gardes d’une copie de règlement', () => {
     it('laisse changer la catégorie, la note et le pointage', async () => {
         const { ctx, copy, draft } = await copied();
         const { category } = await handlerFor(financeCategoryAdd)(ctx, {
-            category: { name: 'Ventes', flow: 'income', color: 'indigo', icon: 'activity' }
+            category: { name: 'Ventes', flow: 'income', color: 'indigo', icon: 'activity', role: null }
         });
         const out = await handlerFor(financeTransactionUpdate)(ctx, {
             transactionId: copy.id,
@@ -305,7 +305,7 @@ describe('le lien avec Facturation', () => {
 
         repo.accounts[0].archived = 0;
         const { category } = await handlerFor(financeCategoryAdd)(ctx, {
-            category: { name: 'Hébergement', flow: 'expense', color: 'blue', icon: 'cloud' }
+            category: { name: 'Hébergement', flow: 'expense', color: 'blue', icon: 'cloud', role: null }
         });
         await assert.rejects(
             handlerFor(financeInvoicingLink)(ctx, { accountId: account.id, categoryId: category.id }),
@@ -321,7 +321,7 @@ describe('le lien avec Facturation', () => {
             account: { name: 'Pro', kind: 'checking', color: 'blue', initialBalance: 0, note: '', archived: false }
         });
         const { category } = await handlerFor(financeCategoryAdd)(ctx, {
-            category: { name: 'prestations', flow: 'income', color: 'green', icon: 'server' }
+            category: { name: 'prestations', flow: 'income', color: 'green', icon: 'server', role: null }
         });
         const { config } = await handlerFor(financeInvoicingLink)(ctx, { accountId: account.id, categoryId: null });
         assert.equal(config.invoicing.categoryId, category.id);

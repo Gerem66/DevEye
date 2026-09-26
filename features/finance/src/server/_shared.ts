@@ -21,6 +21,12 @@ import type { FinanceRepo } from './repo';
 export type Ctx = SdkFeatureContext<FinanceRepo>;
 
 /**
+ * Ce dont le livre a besoin pour se tenir à jour, qu'une commande ou le service
+ * de fond l'appelle : le service n'a pas de session, et n'offre que cela.
+ */
+export type LedgerIo = Pick<Ctx, 'repo' | 'workspaceId' | 'providers' | 'logger' | 'cipher'>;
+
+/**
  * Un seul chiffre, l'étage ouvert : tout membre d'un espace partagé doit lire
  * le livre sans le mot de passe du propriétaire. La lecture est implicite ;
  * seules les écritures déclarent leur niveau.
@@ -40,8 +46,8 @@ export const INVOICING_SOURCE = 'invoicing';
 const CATCH_UP_MAX = 120;
 
 /** L'étage ouvert du chiffrement. */
-export function financeCipher(ctx: Ctx): SdkCipher {
-    return ctx.cipher();
+export function financeCipher(io: Pick<Ctx, 'cipher'>): SdkCipher {
+    return io.cipher();
 }
 
 /** Ce que porte `finance_accounts.content`. */
@@ -228,6 +234,14 @@ export async function readConfig(ctx: Ctx): Promise<FinanceConfig> {
             available: ledger !== null,
             accountId: row?.invoicing_account_id ?? null,
             categoryId: row?.invoicing_category_id ?? null
+        },
+        status: {
+            legalStatus: row?.legal_status ?? null,
+            microActivity: row?.micro_activity ?? null,
+            provisionRateBp: row?.provision_rate_bp ?? null,
+            incomeTaxPrepaid: row?.income_tax_prepaid === 1,
+            declarationPeriod: row?.declaration_period ?? null,
+            trackingSince: row?.tracking_since ?? null
         }
     };
 }
@@ -258,6 +272,7 @@ export function toCategory(row: FinanceCategoryRow, payload: StoredCategory | nu
         flow: row.flow,
         color: row.color,
         icon: row.icon,
+        role: row.role,
         sortOrder: row.sort_order
     };
 }
@@ -396,7 +411,7 @@ export function isDuplicate(error: unknown): boolean {
  * Rien n'est diffusé (une lecture ne déclare pas `mutates`) : l'écran d'un
  * autre membre ne verra le loyer qu'à sa prochaine lecture.
  */
-export async function postDueRecurring(ctx: Ctx): Promise<void> {
+export async function postDueRecurring(ctx: LedgerIo): Promise<void> {
     const now = today();
     const due = await ctx.repo.listDueRecurring(ctx.workspaceId, now, true);
     if (due.length === 0) return;

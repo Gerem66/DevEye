@@ -20,6 +20,7 @@ import {
     type StoredEntry
 } from '../_shared';
 import { catchUp } from '../sources';
+import { computeStatus, microPaymentsDue } from '../status';
 
 /** Le tableau de bord en une réponse : ces chiffres doivent être cohérents entre eux. */
 
@@ -128,22 +129,29 @@ function summarize(receivables: InvoicingLedgerReceivable[] | null): FinanceOver
     };
 }
 
+/** La fin de la prévision : le dernier jour du dernier mois qu'elle couvre. */
+function forecastHorizon(now: string): string {
+    return addDays(addMonths(startOfMonth(now), FORECAST_MONTHS, 1), -1);
+}
+
 /**
  * Le solde attendu à la fin du mois en cours et des deux suivants, à partir de
  * celui du jour. Entre ce qui est déjà saisi à une date future, les
- * occurrences des échéances actives, et les factures à leur échéance. Ce qui
- * est déjà en retard (une facture échue, une échéance manuelle pas encore
- * enregistrée) tombe dans le mois en cours : on l'attend maintenant.
+ * occurrences des échéances actives, les factures à leur échéance, et sortent
+ * les versements URSSAF à la leur. Ce qui est déjà en retard (une facture
+ * échue, une échéance manuelle pas encore enregistrée) tombe dans le mois en
+ * cours : on l'attend maintenant.
  */
 async function buildForecast(
     ctx: Ctx,
     now: string,
     balance: number,
-    receivables: InvoicingLedgerReceivable[] | null
+    receivables: InvoicingLedgerReceivable[] | null,
+    payments: readonly { date: string; amount: number }[]
 ): Promise<FinanceForecastPoint[]> {
     const first = startOfMonth(now);
     const months = Array.from({ length: FORECAST_MONTHS }, (_, i) => addMonths(first, i, 1).slice(0, 7));
-    const horizon = addDays(addMonths(first, FORECAST_MONTHS, 1), -1);
+    const horizon = forecastHorizon(now);
     const flows = new Map(months.map((month) => [month, { incoming: 0, outgoing: 0 }]));
     const bucket = (date: string) => flows.get(date <= now ? months[0] : date.slice(0, 7));
 
@@ -178,6 +186,11 @@ async function buildForecast(
         if (flow) flow.incoming += receivable.remainingCents;
     }
 
+    for (const payment of payments) {
+        const flow = bucket(payment.date);
+        if (flow) flow.outgoing += payment.amount;
+    }
+
     let running = balance;
     return months.map((month) => {
         const flow = flows.get(month) ?? { incoming: 0, outgoing: 0 };
@@ -209,7 +222,11 @@ export const financeOverviewFeature = defineSdkFeature({
                 ctx.repo.vatTotals(ctx.workspaceId, from, to)
             ]);
         const receivables = await readReceivables(ctx, config.currency);
-        const forecast = await buildForecast(ctx, now, netBalance, receivables);
+        const [status, payments] = await Promise.all([
+            computeStatus(ctx, config.status, config.vatEnabled, now, netBalance, receivables),
+            microPaymentsDue(ctx, config.status, now, forecastHorizon(now))
+        ]);
+        const forecast = await buildForecast(ctx, now, netBalance, receivables, payments);
 
         return {
             overview: {
@@ -235,6 +252,7 @@ export const financeOverviewFeature = defineSdkFeature({
                 recent: await decryptAll(financeCipher(ctx), recentRows, toTransaction),
                 receivables: summarize(receivables),
                 forecast,
+                status,
                 // `null` plutôt que des zéros quand la TVA n'est pas suivie :
                 // il n'y en a pas « zéro ».
                 vat: config.vatEnabled

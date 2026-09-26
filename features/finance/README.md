@@ -157,6 +157,51 @@ suivante.
 
 ---
 
+## Ce qu'il faut mettre de côté
+
+Le **statut** de l'activité (panneau Général) dit ce qui est dû sur l'argent
+entré. Tout est estimé à partir du livre, et l'écran le dit : la déclaration
+fait foi.
+
+- **Micro-entreprise** : son activité (libéral, libéral CIPAV, services, vente),
+  la cadence de ses déclarations, un taux choisi à la place du taux légal (l'ACRE)
+  et le versement libératoire. Les taux, la formation professionnelle et les
+  seuils vivent dans une table datée, `src/contracts/legal.ts`, avec leurs
+  sources : une période passée se calcule au taux de son époque. **À relire à
+  chaque loi de finances.**
+- **Entreprise ou société** : la part du bénéfice à garder pour l'impôt et les
+  cotisations, que son expert-comptable lui donne.
+
+Deux façons de compter, selon ce que la loi rend prévisible :
+
+- Les **cotisations d'une micro-entreprise** se comptent par période, sans rien
+  demander : celles de la période en cours, plus celles de la période close tant
+  que son échéance (la fin du mois qui suit) n'est pas passée. Après, on les
+  suppose payées. La déclaration à faire est la période close encore due, sinon
+  celle en cours ; son chiffre d'affaires est hors TVA, sans les recettes rangées
+  hors chiffre d'affaires.
+- La **TVA** et la **part du bénéfice** n'ont pas de calendrier aussi simple :
+  elles s'additionnent depuis le jour de suivi (le début du mois où l'on a dit
+  son statut, modifiable), moins ce qui a été versé depuis dans les catégories
+  qui les paient.
+
+C'est le **rôle d'une catégorie** qui dit ce qu'elle compte (`finance_categories.role`) :
+une recette hors chiffre d'affaires (un remboursement), ou une dépense qui verse
+des cotisations, des impôts ou de la TVA. Le jeu par défaut les pose.
+
+L'accueil montre la déclaration à faire, ce qu'il faut mettre de côté, le
+**disponible réel** (le solde, moins ce qui est dû), et le chiffre d'affaires de
+l'année face au plafond de la micro-entreprise et à la franchise de TVA. La
+prévision fait sortir les versements URSSAF au mois de leur échéance, et la carte
+de l'accueil de l'app montre le disponible réel.
+
+**Les rappels** sont le seul travail de fond du module (`src/server/service.ts`) :
+une semaine avant l'échéance d'une déclaration, puis la veille, par les canaux
+de l'espace, avec le chiffre d'affaires à déclarer. Une lecture ne sait pas
+quand minuit passe, d'où une boucle ; `ft_finance_reminders` retient ce qui est
+parti. Aucun rappel ne vise un compte : leur onglet Notifications n'existe pas
+(`notifications.perItem: false`).
+
 ## Les soldes
 
 Trois par compte, et les confondre est la source d'erreur la plus courante d'un
@@ -243,8 +288,9 @@ Trois panneaux dans la coquille commune (`Docs/SETTINGS.md`), déclarés par le
 manifest (`settings.feature` et `settings.item`) et fournis par l'entrée client
 (`settingsPanels`) :
 
-- **Général**, à l'échelle de la feature (`FinanceGeneralPanel`) : la devise et
-  la TVA, lues de Facturation, avec le lien vers leur réglage là-bas.
+- **Général**, à l'échelle de la feature (`FinanceGeneralPanel`) : le statut de
+  l'activité (`finance.statusSet`), puis la devise et la TVA, lues de
+  Facturation, avec le lien vers leur réglage là-bas.
 - **Général**, à l'échelle d'un compte (`AccountPanel`) : son identité, son solde
   de départ et le jour où il a été relevé, l'arrivée des règlements de
   Facturation (`finance.invoicingLink`), sa note, son archivage et son retrait.
@@ -261,12 +307,14 @@ manifest (`settings.feature` et `settings.item`) et fournis par l'entrée client
 | ------------------------------------------------------- | --------------------------------------------------------------------- |
 | Manifest                                                | `src/manifest.ts`                                                     |
 | Schémas et types                                        | `src/contracts/domain.ts`                                             |
-| Contrats des 24 commandes                               | `src/contracts/commands.ts`                                           |
+| Contrats des 25 commandes                               | `src/contracts/commands.ts`                                           |
 | Schéma SQL d'origine, dans le socle                     | `DevEye/src/db/migrations/084_finance.sql`                            |
 | Évolutions du schéma                                    | `src/server/migrations/`                                              |
 | Requêtes                                                | `src/server/repo.ts`                                                  |
 | Socle serveur (chiffre, calendrier, gardes, rattrapage) | `src/server/_shared.ts`                                               |
 | Recopie des règlements de Facturation                   | `src/server/sources.ts`                                               |
+| Statut, provisions, seuils ; taux et calendrier légaux  | `src/server/status.ts`, `src/contracts/legal.ts`                      |
+| Rappels de déclaration                                  | `src/server/service.ts`                                               |
 | Handlers (un fichier par nature)                        | `src/server/handlers/`                                                |
 | Tests (calendrier, handlers, recopie), faux dépôt       | `src/server/*.test.ts`, `src/server/_testing.ts`                      |
 | Entrée client, panneaux de réglages                     | `src/client/index.tsx`, `src/client/*Panel.tsx`                       |

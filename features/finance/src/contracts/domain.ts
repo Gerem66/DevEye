@@ -38,6 +38,42 @@ export const FINANCE_COLORS = financeColorSchema.options;
 /** Code ISO 4217. Une seule devise par espace : le multidevise serait un taux de change daté par opération. */
 export const financeCurrencySchema = z.string().regex(/^[A-Z]{3}$/);
 
+/** Micro-entreprise, ou entreprise (société, entreprise individuelle au réel) qui garde une part de son bénéfice. */
+export const financeLegalStatusSchema = z.enum(['micro', 'company']);
+export type FinanceLegalStatus = z.infer<typeof financeLegalStatusSchema>;
+
+export const financeMicroActivitySchema = z.enum(['bnc', 'bnc_cipav', 'bic_services', 'bic_sales']);
+
+export const financeDeclarationPeriodSchema = z.enum(['monthly', 'quarterly']);
+
+/** Un taux en points de base : 1 % = 100. */
+export const financeRateBpSchema = z.number().int().min(0).max(10_000);
+
+/**
+ * Le statut de l'activité, qui dit ce qu'il faut mettre de côté. `null` tant
+ * que personne ne l'a dit : l'accueil ne calcule alors rien.
+ */
+export const financeStatusSettingsSchema = z.object({
+    legalStatus: financeLegalStatusSchema.nullable(),
+    /** Micro : l'activité déclarée, qui fixe les taux et les seuils. */
+    microActivity: financeMicroActivitySchema.nullable(),
+    /**
+     * Micro : un taux de cotisations choisi à la place du taux légal (l'ACRE),
+     * `null` pour le taux légal. Entreprise : la part du bénéfice à garder.
+     */
+    provisionRateBp: financeRateBpSchema.nullable(),
+    /** Micro : l'impôt sur le revenu payé avec les cotisations. */
+    incomeTaxPrepaid: z.boolean(),
+    /** Micro : la cadence des déclarations à l'URSSAF. */
+    declarationPeriod: financeDeclarationPeriodSchema.nullable(),
+    /**
+     * Depuis quand la TVA due et la part du bénéfice s'additionnent, moins ce
+     * qui a été versé depuis dans les catégories qui le paient.
+     */
+    trackingSince: financeDateSchema.nullable()
+});
+export type FinanceStatusSettings = z.infer<typeof financeStatusSettingsSchema>;
+
 /**
  * La devise et la TVA viennent de Facturation, qui en a besoin pour émettre :
  * une seule vérité. `vatEnabled` fait apparaître la TVA sur les saisies et son
@@ -53,7 +89,8 @@ export const financeConfigSchema = z.object({
         accountId: z.number().int().positive().nullable(),
         /** La catégorie de recettes où ils se rangent. */
         categoryId: z.number().int().positive().nullable()
-    })
+    }),
+    status: financeStatusSettingsSchema
 });
 export type FinanceConfig = z.infer<typeof financeConfigSchema>;
 
@@ -95,6 +132,15 @@ export type FinanceAccount = z.infer<typeof financeAccountSchema>;
 export const financeFlowSchema = z.enum(['expense', 'income']);
 export type FinanceFlow = z.infer<typeof financeFlowSchema>;
 
+/**
+ * Ce qu'une catégorie compte, au-delà de son sens. Recette : `null` pour du
+ * chiffre d'affaires, `other` pour ce qui n'en est pas (un remboursement).
+ * Dépense : `null` pour une charge, ou ce qu'elle verse (cotisations, impôts,
+ * TVA), qui se déduit de ce qu'il reste à mettre de côté.
+ */
+export const financeCategoryRoleSchema = z.enum(['other', 'social', 'tax', 'vat']);
+export type FinanceCategoryRole = z.infer<typeof financeCategoryRoleSchema>;
+
 export const financeCategorySchema = z.object({
     id: z.number().int().positive(),
     name: z.string().max(FINANCE_NAME_MAX_LENGTH),
@@ -102,6 +148,7 @@ export const financeCategorySchema = z.object({
     color: financeColorSchema,
     /** Classe d'icône (`icons.css`), sans le préfixe `icon-`. */
     icon: z.string().max(40),
+    role: financeCategoryRoleSchema.nullable(),
     sortOrder: z.number().int().nonnegative()
 });
 export type FinanceCategory = z.infer<typeof financeCategorySchema>;
@@ -244,6 +291,54 @@ export const financeForecastPointSchema = z.object({
 });
 export type FinanceForecastPoint = z.infer<typeof financeForecastPointSchema>;
 
+/**
+ * Ce que le statut fait dire à l'accueil. Des estimations, dites comme telles :
+ * la déclaration fait foi.
+ */
+export const financeStatusSchema = z.object({
+    legalStatus: financeLegalStatusSchema,
+    /**
+     * Micro : la déclaration à faire. La période close dont l'échéance n'est pas
+     * passée, sinon celle en cours (`closed` à `false`, son chiffre encore partiel).
+     */
+    declaration: z
+        .object({
+            label: z.string(),
+            from: financeDateSchema,
+            to: financeDateSchema,
+            deadline: financeDateSchema,
+            closed: z.boolean(),
+            /** Le chiffre d'affaires encaissé, hors TVA : ce qui se déclare. */
+            revenue: financeAmountSchema,
+            contributions: financeAmountSchema,
+            incomeTax: financeAmountSchema
+        })
+        .nullable(),
+    /** Ce qui est dû et pas encore versé : cotisations (ou part du bénéfice), impôt libératoire, TVA. */
+    setAside: z.object({
+        total: financeAmountSchema,
+        contributions: financeAmountSchema,
+        incomeTax: financeAmountSchema,
+        vat: financeAmountSchema
+    }),
+    /** Le solde du jour, moins ce qu'il faut mettre de côté. */
+    available: financeBalanceSchema,
+    /** Micro : le chiffre d'affaires de l'année civile face aux seuils. */
+    thresholds: z
+        .object({
+            year: z.number().int(),
+            revenue: financeAmountSchema,
+            /** Le même, plus ce que les factures en attente apporteront. */
+            projected: financeAmountSchema,
+            ceiling: financeAmountSchema,
+            /** Les seuils de la franchise de TVA, `null` quand la TVA est déjà suivie. */
+            vatBase: financeAmountSchema.nullable(),
+            vatMajor: financeAmountSchema.nullable()
+        })
+        .nullable()
+});
+export type FinanceStatus = z.infer<typeof financeStatusSchema>;
+
 /** Tout le tableau de bord en une réponse : ces chiffres doivent être cohérents entre eux. */
 export const financeOverviewSchema = z.object({
     currency: financeCurrencySchema,
@@ -285,6 +380,8 @@ export const financeOverviewSchema = z.object({
      * échéances récurrentes, et ce qui est déjà saisi à une date future.
      */
     forecast: z.array(financeForecastPointSchema),
+    /** `null` tant que le statut n'est pas dit. */
+    status: financeStatusSchema.nullable(),
     /** Récapitulatif TVA sur la fenêtre, ou `null` quand la TVA n'est pas suivie. */
     vat: z
         .object({
@@ -304,7 +401,9 @@ export const financeSummarySchema = z.object({
     /** Entrées et sorties du mois civil en cours. */
     income: financeAmountSchema,
     expense: financeAmountSchema,
-    accountCount: z.number().int().nonnegative()
+    accountCount: z.number().int().nonnegative(),
+    /** Ce qu'il faut mettre de côté, `null` tant que le statut n'est pas dit. */
+    setAside: financeAmountSchema.nullable()
 });
 export type FinanceSummary = z.infer<typeof financeSummarySchema>;
 
@@ -316,6 +415,13 @@ export interface FinanceConfigRow {
     invoicing_category_id: number | null;
     /** Ce qui décrivait la dernière recopie des règlements : tant qu'il ne bouge pas, rien à refaire. */
     invoicing_version: string | null;
+    legal_status: FinanceLegalStatus | null;
+    micro_activity: z.infer<typeof financeMicroActivitySchema> | null;
+    provision_rate_bp: number | null;
+    income_tax_prepaid: number;
+    declaration_period: z.infer<typeof financeDeclarationPeriodSchema> | null;
+    /** `AAAA-MM-JJ`, projeté par `DATE_FORMAT`. */
+    tracking_since: string | null;
 }
 
 export interface FinanceAccountRow {
@@ -347,6 +453,7 @@ export interface FinanceCategoryRow {
     flow: FinanceFlow;
     color: FinanceColor;
     icon: string;
+    role: FinanceCategoryRole | null;
     sort_order: number;
     /** `{ name }` chiffré, étage ouvert. */
     content: string;

@@ -36,6 +36,24 @@ export interface FakeRepo extends FinanceRepo {
     categories: FinanceCategoryRow[];
     transactions: FinanceTransactionRow[];
     recurring: FinanceRecurringRow[];
+    /** Les rappels retenus, `espace/période/étape`. */
+    reminders: string[];
+}
+
+/** Une ligne de réglages vierge : ce que la base rend avant tout réglage. */
+function blankConfig(ws: number): FinanceConfigRow {
+    return {
+        workspace_id: ws,
+        invoicing_account_id: null,
+        invoicing_category_id: null,
+        invoicing_version: null,
+        legal_status: null,
+        micro_activity: null,
+        provision_rate_bp: null,
+        income_tax_prepaid: 0,
+        declaration_period: null,
+        tracking_since: null
+    };
 }
 
 function matches(t: FinanceTransactionRow, f: FinanceTransactionFilter): boolean {
@@ -62,6 +80,8 @@ export function fakeRepo(): FakeRepo {
         if (t.kind === 'transfer' && t.transfer_account_id === accountId) return t.amount;
         return 0;
     };
+    const roleOf = (categoryId: number | null) =>
+        categoryId === null ? null : (repo.categories.find((c) => c.id === categoryId)?.role ?? null);
     const withBalances = (a: FinanceAccountRow, ws: number, day: string): FinanceAccountBalanceRow => {
         const mine = repo.transactions.filter((t) => t.workspace_id === ws && delta(t, a.id) !== 0);
         const sum = (rows: FinanceTransactionRow[]) => rows.reduce((s, t) => s + delta(t, a.id), 0);
@@ -79,17 +99,48 @@ export function fakeRepo(): FakeRepo {
         categories: [],
         transactions: [],
         recurring: [],
+        reminders: [],
 
         async getConfig(ws) {
             return this.config?.workspace_id === ws ? this.config : null;
         },
         async setInvoicingLink(ws, accountId, categoryId) {
             this.config = {
-                workspace_id: ws,
+                ...(this.config?.workspace_id === ws ? this.config : blankConfig(ws)),
                 invoicing_account_id: accountId,
                 invoicing_category_id: categoryId,
                 invoicing_version: null
             };
+        },
+        async setStatus(ws, status) {
+            this.config = {
+                ...(this.config?.workspace_id === ws ? this.config : blankConfig(ws)),
+                legal_status: status.legalStatus as FinanceConfigRow['legal_status'],
+                micro_activity: status.microActivity as FinanceConfigRow['micro_activity'],
+                provision_rate_bp: status.provisionRateBp,
+                income_tax_prepaid: status.incomeTaxPrepaid ? 1 : 0,
+                declaration_period: status.declarationPeriod as FinanceConfigRow['declaration_period'],
+                tracking_since: status.trackingSince
+            };
+        },
+        async listDeclaring() {
+            const c = this.config;
+            if (!c || c.legal_status !== 'micro' || !c.micro_activity || !c.declaration_period) return [];
+            return [
+                {
+                    workspace_id: c.workspace_id,
+                    micro_activity: c.micro_activity,
+                    declaration_period: c.declaration_period,
+                    provision_rate_bp: c.provision_rate_bp,
+                    income_tax_prepaid: c.income_tax_prepaid
+                }
+            ];
+        },
+        async markReminder(ws, periodKey, stage) {
+            const key = `${ws}/${periodKey}/${stage}`;
+            if (this.reminders.includes(key)) return false;
+            this.reminders.push(key);
+            return true;
         },
         async setInvoicingVersion(ws, version) {
             if (this.config?.workspace_id === ws) this.config.invoicing_version = version;
@@ -172,6 +223,7 @@ export function fakeRepo(): FakeRepo {
                 flow: input.flow,
                 color: input.color,
                 icon: input.icon,
+                role: input.role,
                 sort_order: this.categories.length,
                 content: input.content,
                 created: now()
@@ -182,7 +234,13 @@ export function fakeRepo(): FakeRepo {
         async updateCategory(id, ws, input) {
             const row = await this.findCategory(id, ws);
             if (!row) return false;
-            Object.assign(row, { flow: input.flow, color: input.color, icon: input.icon, content: input.content });
+            Object.assign(row, {
+                flow: input.flow,
+                color: input.color,
+                icon: input.icon,
+                role: input.role,
+                content: input.content
+            });
             return true;
         },
         async deleteCategory(id, ws) {
@@ -324,11 +382,47 @@ export function fakeRepo(): FakeRepo {
         async categoryShares() {
             return [];
         },
-        async monthlyFlow() {
-            return [];
+        async monthlyFlow(ws, from, to) {
+            const months = new Map<string, { month: string; income: number; expense: number }>();
+            for (const t of this.transactions) {
+                if (t.workspace_id !== ws || t.date < from || t.date > to || t.kind === 'transfer') continue;
+                const month = t.date.slice(0, 7);
+                const entry = months.get(month) ?? { month, income: 0, expense: 0 };
+                if (t.kind === 'income') entry.income += t.amount;
+                else entry.expense += t.amount;
+                months.set(month, entry);
+            }
+            return [...months.values()].sort((a, b) => (a.month < b.month ? -1 : 1));
         },
-        async vatTotals() {
-            return { collected: 0, deductible: 0 };
+        async vatTotals(ws, from, to) {
+            const rows = this.transactions.filter(
+                (t) => t.workspace_id === ws && t.date >= from && t.date <= to && t.vat_amount !== null
+            );
+            return {
+                collected: rows.filter((t) => t.kind === 'income').reduce((s, t) => s + (t.vat_amount ?? 0), 0),
+                deductible: rows.filter((t) => t.kind === 'expense').reduce((s, t) => s + (t.vat_amount ?? 0), 0)
+            };
+        },
+        async revenueBetween(ws, from, to) {
+            return this.transactions
+                .filter((t) => t.workspace_id === ws && t.kind === 'income' && t.date >= from && t.date <= to)
+                .filter((t) => roleOf(t.category_id) !== 'other')
+                .reduce((s, t) => s + t.amount - (t.vat_amount ?? 0), 0);
+        },
+        async chargesBetween(ws, from, to) {
+            return this.transactions
+                .filter((t) => t.workspace_id === ws && t.kind === 'expense' && t.date >= from && t.date <= to)
+                .filter((t) => roleOf(t.category_id) === null)
+                .reduce((s, t) => s + t.amount - (t.vat_amount ?? 0), 0);
+        },
+        async paidByRoles(ws, roles, from, to) {
+            return this.transactions
+                .filter((t) => t.workspace_id === ws && t.kind === 'expense' && t.date >= from && t.date <= to)
+                .filter((t) => {
+                    const role = roleOf(t.category_id);
+                    return role !== null && roles.includes(role);
+                })
+                .reduce((s, t) => s + t.amount, 0);
         },
 
         async listRecurring(ws) {

@@ -1,4 +1,4 @@
-import { financeConfig, financeInvoicingLink, financeSummary } from '../../contracts/commands';
+import { financeConfig, financeInvoicingLink, financeStatusSet, financeSummary } from '../../contracts/commands';
 import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 
 import {
@@ -14,6 +14,7 @@ import {
     type StoredCategory
 } from '../_shared';
 import { catchUp } from '../sources';
+import { computeStatus } from '../status';
 
 /** Réglages de l'espace, arrivée des règlements de Facturation, et carte de l'accueil. */
 
@@ -63,6 +64,42 @@ export const financeInvoicingLinkFeature = defineSdkFeature({
     }
 });
 
+/**
+ * Le statut de l'activité. Une micro-entreprise dit son activité et sa cadence,
+ * sans quoi rien ne se calcule ; ce qui ne la concerne pas est oublié plutôt
+ * que gardé en réserve. Le jour de suivi part du mois en cours quand personne
+ * ne l'a dit : ce qui précède a été réglé hors de DevEye.
+ */
+export const financeStatusSetFeature = defineSdkFeature({
+    ...financeStatusSet,
+    mutates: true,
+    access: WRITE,
+    handler: async (ctx: Ctx, input) => {
+        const status = input.status;
+        if (status.legalStatus === 'micro' && (status.microActivity === null || status.declarationPeriod === null)) {
+            throw new FeatureError(
+                'validation',
+                'Une micro-entreprise dit son activité et la cadence de ses déclarations.'
+            );
+        }
+        const micro = status.legalStatus === 'micro';
+        await ctx.repo.setStatus(ctx.workspaceId, {
+            legalStatus: status.legalStatus,
+            microActivity: micro ? status.microActivity : null,
+            provisionRateBp: status.legalStatus === null ? null : status.provisionRateBp,
+            incomeTaxPrepaid: micro && status.incomeTaxPrepaid,
+            declarationPeriod: micro ? status.declarationPeriod : null,
+            trackingSince: status.legalStatus === null ? null : (status.trackingSince ?? startOfMonth(today()))
+        });
+        ctx.audit({
+            action: 'finance.statusSet',
+            description: 'Statut de l’activité modifié',
+            metadata: { legalStatus: status.legalStatus, microActivity: micro ? status.microActivity : null }
+        });
+        return { config: await readConfig(ctx) };
+    }
+});
+
 /** « Prestations » si l'espace l'a déjà, créée sinon. Les noms sont chiffrés : la recherche se fait ici. */
 async function defaultIncomeCategory(ctx: Ctx): Promise<number> {
     const cipher = financeCipher(ctx);
@@ -79,6 +116,7 @@ async function defaultIncomeCategory(ctx: Ctx): Promise<number> {
         flow: 'income',
         color: 'green',
         icon: 'server',
+        role: null,
         content: await encryptJson(cipher, payload)
     });
 }
@@ -95,13 +133,15 @@ export const financeSummaryFeature = defineSdkFeature({
             ctx.repo.listAccounts(ctx.workspaceId, false, now),
             ctx.repo.sumTransactions(ctx.workspaceId, { from: startOfMonth(now), to: now })
         ]);
+        const status = await computeStatus(ctx, config.status, config.vatEnabled, now, balance, null);
         return {
             summary: {
                 currency: config.currency,
                 balance,
                 income: flow.income,
                 expense: flow.expense,
-                accountCount: accounts.length
+                accountCount: accounts.length,
+                setAside: status?.setAside.total ?? null
             }
         };
     }

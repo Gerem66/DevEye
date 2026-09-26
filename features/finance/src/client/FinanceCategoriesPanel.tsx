@@ -8,17 +8,18 @@ import {
     ReadOnlyNotice,
     SegmentedControl,
     settingsStyles as shell,
+    Switch,
     TextInput,
     useResource,
     type ConfirmRequest
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import { FINANCE_NAME_MAX_LENGTH } from '../contracts/domain';
-import type { FinanceCategory, FinanceColor, FinanceFlow } from '../contracts/domain';
+import type { FinanceCategory, FinanceCategoryRole, FinanceColor, FinanceFlow } from '../contracts/domain';
 
 import ColorPicker from './ColorPicker';
 import { api, refreshFinance } from './api';
-import { CATEGORY_ICONS, DEFAULT_CATEGORIES } from './format';
+import { CATEGORY_ICONS, CATEGORY_ROLE_LABELS, DEFAULT_CATEGORIES } from './format';
 import { colorVar } from './shared';
 import styles from './style.module.css';
 
@@ -29,7 +30,16 @@ interface Draft {
     flow: FinanceFlow;
     color: FinanceColor;
     icon: string;
+    role: FinanceCategoryRole | null;
 }
+
+/** Ce qu'une dépense peut payer : une charge, ou ce qui se déduit de ce qu'il faut mettre de côté. */
+const EXPENSE_ROLES: { value: 'charge' | 'social' | 'tax' | 'vat'; label: string; title: string }[] = [
+    { value: 'charge', label: 'Une charge', title: 'Une dépense de l’activité' },
+    { value: 'social', label: 'Cotisations', title: 'Ce que vous versez à l’URSSAF' },
+    { value: 'tax', label: 'Impôts', title: 'L’impôt sur le revenu ou sur les sociétés' },
+    { value: 'vat', label: 'TVA', title: 'La TVA que vous reversez' }
+];
 
 const FLOWS: { value: FinanceFlow; label: string }[] = [
     { value: 'expense', label: 'Dépense' },
@@ -63,9 +73,10 @@ export default function FinanceCategoriesPanel({ canWrite }: SettingsPanelProps)
                       name: category.name,
                       flow: category.flow,
                       color: category.color,
-                      icon: category.icon
+                      icon: category.icon,
+                      role: category.role
                   }
-                : { id: null, name: '', flow, color: 'blue', icon: 'other' }
+                : { id: null, name: '', flow, color: 'blue', icon: 'other', role: null }
         );
     };
 
@@ -73,7 +84,7 @@ export default function FinanceCategoriesPanel({ canWrite }: SettingsPanelProps)
         if (editing === null || busy) return;
         const name = editing.name.trim();
         if (name === '') return;
-        const payload = { name, flow: editing.flow, color: editing.color, icon: editing.icon };
+        const payload = { name, flow: editing.flow, color: editing.color, icon: editing.icon, role: editing.role };
         setBusy(true);
         setFormError(null);
         try {
@@ -145,6 +156,9 @@ export default function FinanceCategoriesPanel({ canWrite }: SettingsPanelProps)
                                 />
                                 <span className={shell.channelText}>
                                     <span className={shell.channelLabel}>{category.name}</span>
+                                    {category.role !== null && (
+                                        <span className={shell.channelMeta}>{CATEGORY_ROLE_LABELS[category.role]}</span>
+                                    )}
                                 </span>
                                 {canWrite && (
                                     <span className={shell.channelActions}>
@@ -258,6 +272,40 @@ export default function FinanceCategoriesPanel({ canWrite }: SettingsPanelProps)
                                 </span>
                             )}
                         </div>
+
+                        {editing.flow === 'income' ? (
+                            <Switch
+                                checked={editing.role === null}
+                                onChange={(counts) =>
+                                    setEditing((d) => (d ? { ...d, role: counts ? null : 'other' } : d))
+                                }
+                                label='Compte dans le chiffre d’affaires'
+                                hint='Ce que vos clients vous paient. Un remboursement de frais, par exemple, n’en est pas : il ne se déclare pas.'
+                            />
+                        ) : (
+                            <div className={shell.field}>
+                                <span className={shell.fieldLabel}>Ce qu’elle paie</span>
+                                <SegmentedControl
+                                    aria-label='Ce que paie cette catégorie'
+                                    options={EXPENSE_ROLES}
+                                    value={editing.role ?? 'charge'}
+                                    onChange={(value) =>
+                                        setEditing((d) =>
+                                            d
+                                                ? {
+                                                      ...d,
+                                                      role: value === 'charge' ? null : (value as FinanceCategoryRole)
+                                                  }
+                                                : d
+                                        )
+                                    }
+                                />
+                                <span className={shell.fieldHint}>
+                                    Des cotisations, des impôts ou de la TVA versés se retirent de ce qu’il reste à
+                                    mettre de côté.
+                                </span>
+                            </div>
+                        )}
 
                         <div className={shell.field}>
                             <span className={shell.fieldLabel}>Couleur</span>

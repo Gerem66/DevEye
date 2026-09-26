@@ -9,7 +9,7 @@ import {
     invoicingLedger,
     isDuplicate,
     postDueRecurring,
-    type Ctx,
+    type LedgerIo,
     type StoredEntry
 } from './_shared';
 
@@ -25,7 +25,7 @@ const ADOPT_WINDOW_DAYS = 3;
  * dues écrites, puis les règlements de Facturation recopiés. Une panne de
  * Facturation n'empêche jamais le livre de s'ouvrir.
  */
-export async function catchUp(ctx: Ctx): Promise<void> {
+export async function catchUp(ctx: LedgerIo): Promise<void> {
     await postDueRecurring(ctx);
     try {
         await syncInvoicing(ctx);
@@ -49,7 +49,7 @@ export async function catchUp(ctx: Ctx): Promise<void> {
  * simultanées insèrent la même copie : l'index unique `(source, source_ref)`
  * refuse la seconde, traitée comme un succès.
  */
-export async function syncInvoicing(ctx: Ctx): Promise<void> {
+export async function syncInvoicing(ctx: LedgerIo): Promise<void> {
     const ledger = invoicingLedger(ctx);
     if (ledger === null) return;
     const config = await ctx.repo.getConfig(ctx.workspaceId);
@@ -144,7 +144,7 @@ export async function syncInvoicing(ctx: Ctx): Promise<void> {
 
 /** Une saisie à la main, seule candidate, devient la copie du règlement. Rend `true` si c'est fait. */
 async function adopted(
-    ctx: Ctx,
+    ctx: LedgerIo,
     accountId: number,
     payment: InvoicingLedgerPayment,
     origin: { docNumber: string; segment: string }

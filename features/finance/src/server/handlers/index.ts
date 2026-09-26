@@ -14,7 +14,12 @@ import {
     financeCategoryRemoveFeature,
     financeCategoryUpdateFeature
 } from './categories';
-import { financeConfigFeature, financeInvoicingLinkFeature, financeSummaryFeature } from './config';
+import {
+    financeConfigFeature,
+    financeInvoicingLinkFeature,
+    financeStatusSetFeature,
+    financeSummaryFeature
+} from './config';
 import { financeOverviewFeature } from './overview';
 import {
     financeRecurringAddFeature,
@@ -42,6 +47,7 @@ import {
 export const financeHandlers: ReadonlyArray<SdkFeatureDefinition<FinanceRepo>> = [
     financeConfigFeature,
     financeInvoicingLinkFeature,
+    financeStatusSetFeature,
     financeSummaryFeature,
     financeAccountListFeature,
     financeAccountAddFeature,
