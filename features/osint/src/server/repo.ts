@@ -20,6 +20,9 @@ export interface OsintRepo {
     getKey(workspaceId: number, provider: OsintProvider): Promise<OsintProviderKeyRow | null>;
     setKey(workspaceId: number, provider: OsintProvider, keyEnc: string): Promise<void>;
     deleteKey(workspaceId: number, provider: OsintProvider): Promise<void>;
+    /** Les recherches comptées ce mois (`AAAAMM`) sur ces espaces. */
+    lookupsIn(workspaceIds: readonly number[], month: number): Promise<number>;
+    countLookup(workspaceId: number, month: number): Promise<void>;
 }
 
 export function createRepo(q: SdkQueryable): OsintRepo {
@@ -74,6 +77,21 @@ export function createRepo(q: SdkQueryable): OsintRepo {
                 workspaceId,
                 provider
             ]);
+        },
+        async lookupsIn(workspaceIds, month) {
+            if (workspaceIds.length === 0) return 0;
+            const rows = await q.query<{ total: number | null }>(
+                'SELECT COALESCE(SUM(lookups), 0) AS total FROM ft_osint_usage WHERE workspace_id IN (?) AND month = ?',
+                [[...workspaceIds], month]
+            );
+            return Number(rows[0]?.total ?? 0);
+        },
+        async countLookup(workspaceId, month) {
+            await q.execute(
+                'INSERT INTO ft_osint_usage (workspace_id, month, lookups) VALUES (?, ?, 1) ' +
+                    'ON DUPLICATE KEY UPDATE lookups = lookups + 1',
+                [workspaceId, month]
+            );
         }
     };
 }

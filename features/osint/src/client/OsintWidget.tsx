@@ -1,19 +1,28 @@
 import { useEffect, useState } from 'react';
-import { OSINT_PROBE_META, osintProbeIdSchema, osintProbeUsable, type OsintProvider } from '../contracts/domain';
+import {
+    OSINT_PROBE_META,
+    osintProbeIdSchema,
+    osintProbeUsable,
+    type OsintProvider,
+    type OsintUsage
+} from '../contracts/domain';
 import { onSocketOpen, useActiveWorkspace, useResourceVersion } from 'deveye-sdk-client';
 
 import { api } from './api';
+import { usageSentence } from './QuotaNotice';
 import styles from './Osint.module.css';
 
 /**
- * Carte de la grille : les sondes prêtes, et celles qui attendent une clé,
- * nommées. Ne dépend jamais du mot de passe en cache : `osint.keyList` ne rend
- * qu'un booléen par fournisseur, donc le compte est le même, verrouillé ou non.
+ * Carte de la grille : les sondes prêtes, celles qui attendent une clé, nommées,
+ * et les recherches du mois quand l'offre les borne. Ne dépend jamais du mot de
+ * passe en cache : ni `osint.keyList` ni `osint.usage` ne rendent de requête.
  */
 export function OsintWidget(): React.ReactElement {
     const workspace = useActiveWorkspace();
     const keysVersion = useResourceVersion('osint.keyList');
+    const usageVersion = useResourceVersion('osint.usage');
     const [held, setHeld] = useState<ReadonlySet<OsintProvider> | null>(null);
+    const [usage, setUsage] = useState<OsintUsage | null>(null);
 
     useEffect(() => {
         if (!workspace) return;
@@ -37,6 +46,24 @@ export function OsintWidget(): React.ReactElement {
         };
     }, [workspace, keysVersion]);
 
+    useEffect(() => {
+        if (!workspace) return;
+        let cancelled = false;
+        const off = onSocketOpen(() => {
+            api.send('osint.usage', {})
+                .then((res) => {
+                    if (!cancelled) setUsage(res.usage);
+                })
+                .catch(() => {
+                    // Même règle que les clés : le dernier compte connu reste.
+                });
+        });
+        return () => {
+            cancelled = true;
+            off();
+        };
+    }, [workspace, usageVersion]);
+
     const probes = osintProbeIdSchema.options;
     const blocked = held ? probes.filter((p) => !osintProbeUsable(p, held)) : [];
 
@@ -55,6 +82,7 @@ export function OsintWidget(): React.ReactElement {
                                 ? 'Aucune n’attend de clé'
                                 : `En attente d’une clé : ${blocked.map((p) => OSINT_PROBE_META[p].label).join(', ')}`}
                         </div>
+                        {usage && <div>{usageSentence(usage)}</div>}
                     </>
                 )}
             </div>

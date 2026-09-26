@@ -5,10 +5,12 @@ import {
     osintKeyList,
     osintLookup,
     osintProbe,
-    osintSetKey
+    osintSetKey,
+    osintUsage
 } from '../contracts/commands';
 import {
     detectTarget,
+    OSINT_LOOKUP_QUOTA,
     OSINT_PROBE_META,
     OSINT_PROVIDER_META,
     osintProviderSchema,
@@ -20,13 +22,15 @@ import { defineSdkFeature, FeatureError, type SdkFeatureContext } from '@deveye/
 
 import { PROBES, probeAccepts, probesFor, readCache, runProbe, writeCache } from './probes';
 import type { OsintRepo } from './repo';
+import { lookupUsage, monthKey, ticketFor, ticketValid } from './usage';
 
 type Ctx = SdkFeatureContext<OsintRepo>;
 
 /**
- * `osint.lookup` ne sonde rien : il reconnaît la cible, journalise et rend la
- * liste des sondes ; le client tire un `osint.probe` par sonde. L'historique
- * s'écrit au niveau `read`, à dessein : chercher est l'usage de la feature.
+ * `osint.lookup` ne sonde rien : il reconnaît la cible, compte la recherche,
+ * journalise et rend la liste des sondes avec leur ticket ; le client tire un
+ * `osint.probe` par sonde. L'historique s'écrit au niveau `read`, à dessein :
+ * chercher est l'usage de la feature.
  */
 
 async function toHistoryEntry(ctx: Ctx, row: OsintLookupRow): Promise<OsintHistoryEntry> {
@@ -73,13 +77,21 @@ export const osintHandlers = [
         handler: async (ctx: Ctx, input) => {
             const target = trustedTarget(input.query);
             const probes = probesFor(target.kind);
+            const month = monthKey();
 
-            const row = await ctx.repo.createLookup({
-                userId: ctx.userId,
-                workspaceId: ctx.workspaceId,
-                kind: target.kind,
-                queryEnc: await ctx.cipher('private').encrypt(target.query)
-            });
+            // Compté avant tout le reste, sur tous les espaces du propriétaire :
+            // un refus ne laisse ni entrée d'historique ni ticket.
+            await ctx.quota.assert(OSINT_LOOKUP_QUOTA, async (owned) => (await ctx.repo.lookupsIn(owned, month)) + 1);
+            await ctx.repo.countLookup(ctx.workspaceId, month);
+
+            const row = input.fromHistory
+                ? null
+                : await ctx.repo.createLookup({
+                      userId: ctx.userId,
+                      workspaceId: ctx.workspaceId,
+                      kind: target.kind,
+                      queryEnc: await ctx.cipher('private').encrypt(target.query)
+                  });
 
             // La requête elle-même n'entre pas dans le journal d'audit : c'est la
             // donnée que la table prend soin de chiffrer, l'écrire en clair ici la
@@ -87,10 +99,15 @@ export const osintHandlers = [
             ctx.audit({
                 action: 'osint.lookup',
                 description: `Recherche OSINT (${target.kind})`,
-                metadata: { kind: target.kind, probes: probes.length }
+                metadata: { kind: target.kind, probes: probes.length, fromHistory: input.fromHistory }
             });
 
-            return { target, probes, entry: await toHistoryEntry(ctx, row) };
+            return {
+                target,
+                probes,
+                ticket: ticketFor(ctx.keys, ctx.workspaceId, target, month),
+                entry: row ? await toHistoryEntry(ctx, row) : null
+            };
         }
     }),
     defineSdkFeature({
@@ -108,6 +125,12 @@ export const osintHandlers = [
             if (!probeAccepts(input.probe, target.kind)) {
                 throw new FeatureError('validation', `La sonde « ${input.probe} » ne s'applique pas à cette cible.`);
             }
+            if (!ticketValid(ctx.keys, ctx.workspaceId, target, input.ticket, monthKey())) {
+                throw new FeatureError(
+                    'validation',
+                    'Relancez la recherche : elle date d’un mois passé, ou d’un autre espace.'
+                );
+            }
 
             // La clé est lue avant le cache : ce qu'une sonde rend en dépend,
             // et un résultat d'avant sa pose n'a plus rien à voir avec elle.
@@ -120,6 +143,10 @@ export const osintHandlers = [
 
             return { result };
         }
+    }),
+    defineSdkFeature({
+        ...osintUsage,
+        handler: async (ctx: Ctx) => ({ usage: await lookupUsage(ctx.quota, ctx.repo, monthKey()) })
     }),
     defineSdkFeature({
         ...osintHistory,

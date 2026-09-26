@@ -42,6 +42,7 @@ export type ResourceKey =
     | 'weather.list'
     | 'weather.keyList'
     | 'osint.history'
+    | 'osint.usage'
     | 'osint.keyList'
     | 'cve.news'
     | 'cve.favorites'

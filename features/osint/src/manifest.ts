@@ -10,12 +10,13 @@ export const manifest = {
     ...descriptor,
     category: 'security',
     /**
-     * L'historique suit le sujet de la feature ; les clés ont le leur, pour
+     * L'historique et l'usage suivent le sujet de la feature ; les clés ont le leur, pour
      * qu'une recherche ne fasse pas relire les réglages de tout l'espace. Les
      * résultats de sonde se relisent à la demande depuis le cache du serveur.
      */
-    resources: ['osint.history', 'osint.keyList'],
-    invalidatedByTopic: ['osint.history'],
+    resources: ['osint.history', 'osint.usage', 'osint.keyList'],
+    invalidatedByTopic: ['osint.history', 'osint.usage'],
+    quotas: [{ key: 'lookupsPerMonth', label: 'recherches par mois' }],
     topics: [{ id: 'osintKeys', keys: ['osint.keyList'] }],
     settings: { feature: [{ id: 'probes', label: 'Sondes', icon: 'search' }] },
     commands: osintCommands

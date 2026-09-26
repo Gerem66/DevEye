@@ -9,7 +9,8 @@ import {
     osintKeyList,
     osintLookup,
     osintProbe,
-    osintSetKey
+    osintSetKey,
+    osintUsage
 } from '../contracts/commands';
 import type { OsintLookupRow, OsintProviderKeyRow } from '../contracts/domain';
 import type { SdkFeatureContext } from '@deveye/types/sdk/server';
@@ -37,6 +38,8 @@ function handlerFor<C extends { command: string; input: ZodType; output: ZodType
 interface FakeRepo extends OsintRepo {
     lookups: OsintLookupRow[];
     keys: OsintProviderKeyRow[];
+    /** `<espace>|<mois>` → recherches comptées. */
+    usage: Map<string, number>;
 }
 
 /** Un dépôt en mémoire, même contrat que le vrai. Les tableaux sont mutés en
@@ -46,6 +49,7 @@ function fakeRepo(): FakeRepo {
     return {
         lookups: [],
         keys: [],
+        usage: new Map(),
         async listLookups(workspaceId, limit) {
             return this.lookups.filter((l) => l.workspace_id === workspaceId).slice(0, limit);
         },
@@ -87,6 +91,13 @@ function fakeRepo(): FakeRepo {
         async deleteKey(workspaceId, provider) {
             const i = this.keys.findIndex((k) => k.workspace_id === workspaceId && k.provider === provider);
             if (i !== -1) this.keys.splice(i, 1);
+        },
+        async lookupsIn(workspaceIds, month) {
+            return workspaceIds.reduce((sum, id) => sum + (this.usage.get(`${id}|${month}`) ?? 0), 0);
+        },
+        async countLookup(workspaceId, month) {
+            const key = `${workspaceId}|${month}`;
+            this.usage.set(key, (this.usage.get(key) ?? 0) + 1);
         }
     };
 }
@@ -95,7 +106,7 @@ describe('osint.lookup', () => {
     it('journalise la recherche chiffrée et rend les sondes de la nature reconnue', async () => {
         const repo = fakeRepo();
         const ctx = createTestContext({ repo });
-        const out = await handlerFor(osintLookup)(ctx, { query: 'github.com' });
+        const out = await handlerFor(osintLookup)(ctx, { query: 'github.com', fromHistory: false });
 
         assert.equal(out.target.kind, 'domain');
         assert.ok(out.probes.length > 0);
@@ -118,7 +129,8 @@ describe('osint.probe — les gardes', () => {
                 probe: 'dns',
                 // Un client qui annonce « nom de personne » pour une requête qui
                 // est en réalité un domaine : la nature re-déduite le trahit.
-                target: { kind: 'person', value: 'github.com', query: 'github.com' }
+                target: { kind: 'person', value: 'github.com', query: 'github.com' },
+                ticket: 'x'
             }),
             /incohérente/i
         );
@@ -129,10 +141,55 @@ describe('osint.probe — les gardes', () => {
         await assert.rejects(
             handlerFor(osintProbe)(ctx, {
                 probe: 'phone',
-                target: { kind: 'domain', value: 'github.com', query: 'github.com' }
+                target: { kind: 'domain', value: 'github.com', query: 'github.com' },
+                ticket: 'x'
             }),
             /ne s'applique pas/i
         );
+    });
+
+    it('ne sonde qu’une cible recherchée dans cet espace', async () => {
+        const repo = fakeRepo();
+        const here = createTestContext({ repo, workspaceId: 7 });
+        const { target, ticket } = await handlerFor(osintLookup)(here, { query: 'github.com', fromHistory: false });
+
+        // `dorks` ne sort pas sur le réseau : le ticket est la seule garde en jeu.
+        const ran = await handlerFor(osintProbe)(here, { probe: 'dorks', target, ticket });
+        assert.equal(ran.result.probe, 'dorks');
+
+        // Sonder sans passer par la recherche contournerait la limite.
+        await assert.rejects(handlerFor(osintProbe)(here, { probe: 'dorks', target, ticket: 'forgé' }), /Relancez/);
+        // Un ticket ne voyage pas d'un espace à l'autre, où il n'a rien compté.
+        const elsewhere = createTestContext({ repo, workspaceId: 8 });
+        await assert.rejects(handlerFor(osintProbe)(elsewhere, { probe: 'dorks', target, ticket }), /Relancez/);
+    });
+});
+
+describe('la limite mensuelle', () => {
+    it('compte chaque recherche, rejeu compris, et refuse au-delà de l’offre', async () => {
+        const repo = fakeRepo();
+        const ctx = createTestContext({ repo, quotaLimits: { lookupsPerMonth: 2 } });
+
+        await handlerFor(osintLookup)(ctx, { query: 'github.com', fromHistory: false });
+        const replay = await handlerFor(osintLookup)(ctx, { query: 'github.com', fromHistory: true });
+        // Un rejeu est compté mais ne double pas l'historique.
+        assert.equal(replay.entry, null);
+        assert.equal(repo.lookups.length, 1);
+        assert.deepEqual((await handlerFor(osintUsage)(ctx, {})).usage, { used: 2, limit: 2 });
+
+        await assert.rejects(handlerFor(osintLookup)(ctx, { query: '8.8.8.8', fromHistory: false }), (e: unknown) => {
+            assert.equal((e as { code?: string }).code, 'quota_exceeded');
+            return true;
+        });
+        // Refusée, la recherche ne laisse rien : ni compte, ni entrée.
+        assert.deepEqual((await handlerFor(osintUsage)(ctx, {})).usage, { used: 2, limit: 2 });
+        assert.equal(repo.lookups.length, 1);
+    });
+
+    it('ne dit rien quand l’offre ne borne pas', async () => {
+        const ctx = createTestContext({ repo: fakeRepo() });
+        await handlerFor(osintLookup)(ctx, { query: 'github.com', fromHistory: false });
+        assert.equal((await handlerFor(osintUsage)(ctx, {})).usage, null);
     });
 });
 
@@ -160,8 +217,8 @@ describe("l'historique", () => {
     it("liste, supprime une entrée, puis efface tout — borné à l'espace", async () => {
         const repo = fakeRepo();
         const ctx = createTestContext({ repo, workspaceId: 7 });
-        await handlerFor(osintLookup)(ctx, { query: 'github.com' });
-        await handlerFor(osintLookup)(ctx, { query: '8.8.8.8' });
+        await handlerFor(osintLookup)(ctx, { query: 'github.com', fromHistory: false });
+        await handlerFor(osintLookup)(ctx, { query: '8.8.8.8', fromHistory: false });
 
         const listed = await handlerFor(osintHistory)(ctx, { limit: 30 });
         assert.equal(listed.entries.length, 2);

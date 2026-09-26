@@ -12,7 +12,8 @@ import {
     type OsintPricing,
     type OsintProbeId,
     type OsintProvider,
-    type OsintTargetKind
+    type OsintTargetKind,
+    type OsintUsage
 } from '../contracts/domain';
 
 import {
@@ -26,6 +27,7 @@ import {
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 
 import { api } from './api';
+import { usageSentence } from './QuotaNotice';
 
 /**
  * L'onglet Sondes : tout ce qu'OSINT interroge, avec son tarif et sa clé
@@ -87,6 +89,16 @@ export default function OsintProbesPanel({ canWrite }: SettingsPanelProps) {
     const [held, setHeld] = useState<ReadonlySet<OsintProvider> | null>(null);
     const [error, setError] = useState<string | null>(null);
     const keysVersion = useResourceVersion('osint.keyList');
+    const usageVersion = useResourceVersion('osint.usage');
+    const [usage, setUsage] = useState<OsintUsage | null>(null);
+
+    useEffect(() => {
+        api.send('osint.usage', {})
+            .then((res) => setUsage(res.usage))
+            .catch(() => {
+                // Le compte est une information : l'onglet sert sans lui.
+            });
+    }, [usageVersion]);
 
     const load = useCallback(async () => {
         try {
@@ -135,6 +147,12 @@ export default function OsintProbesPanel({ canWrite }: SettingsPanelProps) {
                 offre un usage gratuit plafonné, et des offres payantes au-delà. Une clé facultative ne fait qu’enrichir
                 sa sonde.
             </p>
+            {usage && (
+                <p className={shell.sectionHint}>
+                    Votre offre : {usageSentence(usage)} Chaque recherche compte, même rejouée depuis l’historique ;
+                    relancer une carte ne compte pas.
+                </p>
+            )}
             <ProviderKeys
                 rows={rows}
                 canWrite={canWrite}

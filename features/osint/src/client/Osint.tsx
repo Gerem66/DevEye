@@ -7,7 +7,8 @@ import {
     OSINT_SLOW_PROBES,
     type OsintHistoryEntry,
     type OsintProbeId,
-    type OsintTarget
+    type OsintTarget,
+    type OsintUsage
 } from '../contracts/domain';
 
 import {
@@ -19,12 +20,14 @@ import {
     useResourceVersion,
     useSecrecy,
     withSecrecy,
+    WsError,
     type ConfirmRequest
 } from 'deveye-sdk-client';
 
 import { api } from './api';
 import { ProbeCard, type ProbeCardState } from './ProbeCard';
 import { HistoryPanel } from './HistoryPanel';
+import QuotaNotice from './QuotaNotice';
 import styles from './Osint.module.css';
 
 /**
@@ -45,7 +48,23 @@ function orderProbes(probes: readonly OsintProbeId[]): OsintProbeId[] {
 interface RunState {
     target: OsintTarget;
     probes: OsintProbeId[];
+    /** Rendu par `osint.lookup`, exigé par chaque sonde de cette cible. */
+    ticket: string;
     cards: Record<string, ProbeCardState>;
+}
+
+/** Le mois UTC sur lequel le serveur compte, et au bout duquel un ticket expire. */
+function utcMonth(): number {
+    const d = new Date();
+    return d.getUTCFullYear() * 100 + d.getUTCMonth() + 1;
+}
+
+const targetKey = (t: OsintTarget): string => `${t.kind}|${t.value}`;
+
+/** Un refus de l'offre a déjà son invite et son encadré : un bandeau le dirait une troisième fois. */
+function searchFailure(e: unknown): string | null {
+    if (e instanceof WsError && e.code === 'quota_exceeded') return null;
+    return humanizeError(e, "La recherche n'a pas abouti.");
 }
 
 export default function Osint(): React.ReactElement {
@@ -55,6 +74,13 @@ export default function Osint(): React.ReactElement {
     const [error, setError] = useState<string | null>(null);
     const [historyOpen, setHistoryOpen] = useState(false);
     const [history, setHistory] = useState<OsintHistoryEntry[]>([]);
+    const [usage, setUsage] = useState<OsintUsage | null>(null);
+    const usageVersion = useResourceVersion('osint.usage');
+    /**
+     * Les tickets des cibles déjà comptées dans cette session : rejouer l'une
+     * d'elles depuis l'historique ne la compte pas une seconde fois.
+     */
+    const ticketsRef = useRef(new Map<string, { ticket: string; month: number }>());
     /** L'action destructive en attente de confirmation, ou `null`. */
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -101,6 +127,14 @@ export default function Osint(): React.ReactElement {
         void loadHistory();
     }, [loadHistory, historyVersion]);
 
+    useEffect(() => {
+        api.send('osint.usage', {})
+            .then((res) => setUsage(res.usage))
+            .catch(() => {
+                // Le compte est une information : son échec laisse le dernier connu.
+            });
+    }, [usageVersion]);
+
     // Le mot de passe vient d'être saisi quelque part dans l'application : les
     // entrées jusqu'ici chiffrées deviennent lisibles, on les relit.
     useEffect(() => {
@@ -109,10 +143,10 @@ export default function Osint(): React.ReactElement {
         void loadHistory();
     }, [unlocked, loadHistory]);
 
-    const probeOne = useCallback((runId: number, target: OsintTarget, probe: OsintProbeId) => {
+    const probeOne = useCallback((runId: number, target: OsintTarget, ticket: string, probe: OsintProbeId) => {
         setRun((prev) => (prev ? { ...prev, cards: { ...prev.cards, [probe]: { kind: 'pending' } } } : prev));
 
-        api.send('osint.probe', { probe, target }, { timeoutMs: 30_000 })
+        api.send('osint.probe', { probe, target, ticket }, { timeoutMs: 30_000 })
             .then((res) => {
                 if (runIdRef.current !== runId) return;
                 setRun((prev) =>
@@ -137,13 +171,15 @@ export default function Osint(): React.ReactElement {
 
     /** Monte la grille pour une cible et lance toutes ses sondes en parallèle. */
     const runProbes = useCallback(
-        (runId: number, target: OsintTarget, probes: OsintProbeId[]) => {
+        (runId: number, target: OsintTarget, probes: OsintProbeId[], ticket: string) => {
+            ticketsRef.current.set(targetKey(target), { ticket, month: utcMonth() });
             setRun({
                 target,
                 probes,
+                ticket,
                 cards: Object.fromEntries(probes.map((p) => [p, { kind: 'pending' } as ProbeCardState]))
             });
-            for (const probe of probes) probeOne(runId, target, probe);
+            for (const probe of probes) probeOne(runId, target, ticket, probe);
         },
         [probeOne]
     );
@@ -165,14 +201,16 @@ export default function Osint(): React.ReactElement {
                 const res = await withSecrecy(() => api.send('osint.lookup', { query: trimmed }));
                 if (runIdRef.current !== runId) return;
 
-                runProbes(runId, res.target, orderProbes(res.probes));
-                // L'historique vient de gagner une entrée : la carte d'accueil et
-                // le panneau doivent la voir sans attendre l'aller-retour.
+                runProbes(runId, res.target, orderProbes(res.probes), res.ticket);
+                // L'historique vient de gagner une entrée et le mois une recherche :
+                // la carte d'accueil et le panneau doivent le voir sans attendre.
                 invalidate('osint.history');
+                invalidate('osint.usage');
             } catch (e) {
                 if (runIdRef.current !== runId) return;
-                setError(humanizeError(e, "La recherche n'a pas abouti."));
+                setError(searchFailure(e));
                 setRun(null);
+                invalidate('osint.usage');
             } finally {
                 if (runIdRef.current === runId) setBusy(false);
             }
@@ -181,18 +219,35 @@ export default function Osint(): React.ReactElement {
     );
 
     /**
-     * Rejoue une entrée sans créer de doublon : aucun `osint.lookup` (c'est lui
-     * qui enregistre). Cible et sondes sont redérivées localement par les mêmes
-     * fonctions que le serveur.
+     * Rejoue une entrée sans doubler l'historique. Une cible déjà comptée dans
+     * cette session garde son ticket ; sinon `osint.lookup` la compte, comme une
+     * recherche, sans nouvelle entrée.
      */
     const replay = useCallback(
-        (entry: OsintHistoryEntry) => {
+        async (entry: OsintHistoryEntry) => {
             if (!entry.query) return;
             const target = detectTarget(entry.query);
             setQuery(entry.query);
             setError(null);
             setHistoryOpen(false);
-            runProbes(++runIdRef.current, target, orderProbes(OSINT_PROBES_BY_KIND[target.kind]));
+            const runId = ++runIdRef.current;
+
+            const held = ticketsRef.current.get(targetKey(target));
+            if (held && held.month === utcMonth()) {
+                runProbes(runId, target, orderProbes(OSINT_PROBES_BY_KIND[target.kind]), held.ticket);
+                return;
+            }
+            try {
+                const res = await api.send('osint.lookup', { query: entry.query, fromHistory: true });
+                if (runIdRef.current !== runId) return;
+                runProbes(runId, res.target, orderProbes(res.probes), res.ticket);
+                invalidate('osint.usage');
+            } catch (e) {
+                if (runIdRef.current !== runId) return;
+                setError(searchFailure(e));
+                setRun(null);
+                invalidate('osint.usage');
+            }
         },
         [runProbes]
     );
@@ -208,7 +263,7 @@ export default function Osint(): React.ReactElement {
     const retry = useCallback(
         (probe: OsintProbeId) => {
             if (!run) return;
-            probeOne(runIdRef.current, run.target, probe);
+            probeOne(runIdRef.current, run.target, run.ticket, probe);
         },
         [run, probeOne]
     );
@@ -310,7 +365,7 @@ export default function Osint(): React.ReactElement {
                 onClose={() => setHistoryOpen(false)}
                 entries={history}
                 kindLabels={OSINT_KIND_LABELS}
-                onReplay={replay}
+                onReplay={(entry) => void replay(entry)}
                 onRemove={askRemoveEntry}
                 onClear={askClearHistory}
                 locked={historyLocked}
@@ -318,6 +373,8 @@ export default function Osint(): React.ReactElement {
             />
 
             <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
+
+            <QuotaNotice usage={usage} />
 
             {error && <p className={styles.banner}>{error}</p>}
 

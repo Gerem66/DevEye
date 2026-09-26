@@ -32,6 +32,9 @@ declare const styles: {
     readonly panelHead: string;
     readonly panelScrim: string;
     readonly pulse: string;
+    readonly quotaNotice: string;
+    readonly quotaTitle: string;
+    readonly quotaUsage: string;
     readonly raw: string;
     readonly rawToggle: string;
     readonly results: string;

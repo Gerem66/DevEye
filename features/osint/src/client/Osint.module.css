@@ -116,6 +116,42 @@
     font-size: 0.875rem;
 }
 
+/* Le compte du mois tant qu'il n'inquiète pas : une ligne, pas un bandeau. */
+.quotaUsage {
+    margin: 0;
+    padding: 0 var(--space-md);
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+.quotaNotice {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--space-sm) var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    background: var(--warning-bg);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
+.quotaNotice > div {
+    flex: 1;
+    min-width: 240px;
+}
+
+.quotaNotice p {
+    margin: 0;
+}
+
+.quotaTitle {
+    font-weight: 600;
+    color: var(--warning);
+}
+
 /* ---------------------------------- Corps --------------------------------- */
 
 /* Le conteneur de la grille occupe toute la largeur : l'historique n'est plus

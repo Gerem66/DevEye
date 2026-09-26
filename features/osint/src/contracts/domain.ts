@@ -232,6 +232,21 @@ export type OsintHistoryEntry = z.infer<typeof osintHistoryEntrySchema>;
 
 export const OSINT_HISTORY_PAGE_MAX = 100;
 
+/* --------------------------------- L'offre -------------------------------- */
+
+/**
+ * La clé du quota que le manifest déclare (`osint.lookupsPerMonth` pour l'offre) :
+ * les recherches lancées dans le mois, en UTC, sur tous les espaces du
+ * propriétaire. Relancer une sonde d'une recherche ne compte pas.
+ */
+export const OSINT_LOOKUP_QUOTA = 'lookupsPerMonth';
+
+export const osintUsageSchema = z.object({
+    used: z.number().int().nonnegative(),
+    limit: z.number().int().nonnegative()
+});
+export type OsintUsage = z.infer<typeof osintUsageSchema>;
+
 /**
  * Ligne SQL. `query_enc` est chiffré à l'étage gardé : la question posée est la
  * donnée la plus sensible de la feature. `kind` reste en clair pour grouper la
