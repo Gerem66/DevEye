@@ -1,3 +1,4 @@
+import { env } from './env';
 import type {
     WeatherCondition,
     WeatherDay,
@@ -8,15 +9,16 @@ import type {
 } from '../contracts/domain';
 
 /**
- * Les fournisseurs météo derrière une même interface. Open-Meteo est libre et
- * sans clé ; les autres reçoivent la clé de l'espace à chaque appel. Tout échec
- * sort en {@link WeatherError}, dont la raison décide du message et du sort du
- * relevé côté client.
+ * Les fournisseurs météo derrière une même interface. Open-Meteo prend la clé de
+ * l'instance quand elle en a une ; les autres reçoivent la clé de l'espace à
+ * chaque appel. Tout échec sort en {@link WeatherError}, dont la raison décide
+ * du message et du sort du relevé côté client.
  */
 
 export class WeatherError extends Error {
     constructor(
-        public readonly reason: 'fetch_failed' | 'not_found' | 'unauthorized' | 'rate_limited',
+        /** `misconfigured` : la clé de l'instance est refusée, rien que l'espace puisse corriger. */
+        public readonly reason: 'fetch_failed' | 'not_found' | 'unauthorized' | 'rate_limited' | 'misconfigured',
         message: string,
         /** Le délai avant de réessayer, quand il est connu. */
         public readonly retryAfterMs?: number
@@ -56,8 +58,27 @@ export interface WeatherProviderAdapter {
     fetchReport(input: FetchReportInput): Promise<WeatherReport>;
 }
 
-const GEOCODE_URL = 'https://geocoding-api.open-meteo.com/v1/search';
-const FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
+/**
+ * Une adresse d'Open-Meteo. Avec la clé de l'instance, l'hôte `customer-` et
+ * `apikey` : c'est ce que couvre l'abonnement commercial ; sans elle, le palier
+ * gratuit, réservé au non commercial.
+ */
+function openMeteoUrl(host: 'api' | 'geocoding-api', path: string, params: URLSearchParams): string {
+    const key = env.OPEN_METEO_API_KEY;
+    if (key) params.set('apikey', key);
+    return `https://${key ? 'customer-' : ''}${host}.open-meteo.com${path}?${params.toString()}`;
+}
+
+async function openMeteoJson<T>(url: string): Promise<T> {
+    try {
+        return await getJson<T>(url);
+    } catch (e) {
+        if (e instanceof WeatherError && e.reason === 'unauthorized') {
+            throw new WeatherError('misconfigured', 'Open-Meteo refuse OPEN_METEO_API_KEY');
+        }
+        throw e;
+    }
+}
 
 interface OpenMeteoGeocode {
     results?: Array<{
@@ -137,8 +158,8 @@ async function getJson<T>(url: string): Promise<T> {
 
 const openMeteoAdapter: WeatherProviderAdapter = {
     async geocode(query) {
-        const url = `${GEOCODE_URL}?name=${encodeURIComponent(query)}&count=1&language=en&format=json`;
-        const data = await getJson<OpenMeteoGeocode>(url);
+        const params = new URLSearchParams({ name: query, count: '1', language: 'en', format: 'json' });
+        const data = await openMeteoJson<OpenMeteoGeocode>(openMeteoUrl('geocoding-api', '/v1/search', params));
         const hit = data.results?.[0];
         if (!hit) throw new WeatherError('not_found', `No location matched "${query}"`);
         const label = [hit.name, hit.admin1, hit.country].filter(Boolean).join(', ');
@@ -154,7 +175,7 @@ const openMeteoAdapter: WeatherProviderAdapter = {
             forecast_days: String(Math.min(Math.max(days, 1), 16)),
             timezone: 'auto'
         });
-        const data = await getJson<OpenMeteoForecast>(`${FORECAST_URL}?${params.toString()}`);
+        const data = await openMeteoJson<OpenMeteoForecast>(openMeteoUrl('api', '/v1/forecast', params));
 
         const current: WeatherCondition | null = data.current
             ? {

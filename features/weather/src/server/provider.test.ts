@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 
+import { env } from './env';
 import { fetchWeatherReport, forgetProviderCaches, geocodeLocation, WeatherError } from './provider';
 import type { FetchReportInput } from './provider';
 
@@ -134,6 +135,35 @@ describe('Le provider météo', () => {
         // Le seau est de l'espace : le voisin appelle toujours.
         await geocodeLocation({ workspaceId: workspaceId + 1, provider: 'open-meteo', query: 'ville-du-voisin' });
         assert.equal(stub.calls, sent + 1);
+    });
+
+    it('passe par l’hôte commercial avec la clé de l’instance', async () => {
+        const urls: string[] = [];
+        stubFetch((url) => {
+            urls.push(url);
+            return forecastReply();
+        });
+        env.OPEN_METEO_API_KEY = 'cle-instance';
+        try {
+            await fetchWeatherReport(input({ workspaceId: 90, latitude: 7.0007 }));
+        } finally {
+            env.OPEN_METEO_API_KEY = '';
+        }
+        assert.ok(urls[0].startsWith('https://customer-api.open-meteo.com/v1/forecast?'), urls[0]);
+        assert.equal(new URL(urls[0]).searchParams.get('apikey'), 'cle-instance');
+    });
+
+    it('dit une clé d’instance refusée comme un défaut de configuration, pas de l’espace', async () => {
+        stubFetch(() => new Response('{"error":true}', { status: 401 }));
+        env.OPEN_METEO_API_KEY = 'cle-perimee';
+        try {
+            await assert.rejects(
+                fetchWeatherReport(input({ workspaceId: 91, latitude: 8.0008 })),
+                isWeatherError('misconfigured')
+            );
+        } finally {
+            env.OPEN_METEO_API_KEY = '';
+        }
     });
 
     // En dernier : le recul est du fournisseur, donc commun à tout ce qui suit.

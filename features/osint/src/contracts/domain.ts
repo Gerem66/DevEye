@@ -111,7 +111,11 @@ export const OSINT_PROBE_META: Record<OsintProbeId, OsintProbeMeta> = {
     ptr: { label: 'Reverse DNS', source: 'Résolveurs publics de Cloudflare et de Google' },
     rdapIp: { label: 'Bloc réseau', source: 'rdap.org, qui renvoie vers le registre régional (RIPE, ARIN…)' },
     geoip: { label: 'Géolocalisation', source: 'ipwho.is' },
-    blocklist: { label: 'Réputation', source: 'Listes noires Spamhaus, SpamCop, Barracuda et SORBS' },
+    blocklist: {
+        label: 'Réputation',
+        source: 'Listes noires SpamCop et Barracuda, et Spamhaus avec une clé DQS',
+        key: { provider: 'spamhaus', mode: 'optional' }
+    },
     ports: {
         label: 'Ports ouverts',
         source: 'Shodan InternetDB, ou l’API Shodan avec une clé',
@@ -267,7 +271,15 @@ export interface OsintLookupRow {
  * Fournisseurs qu'une clé débloque. Aucun n'est requis : une sonde dont la clé
  * manque rend `skipped` avec le lien pour en obtenir une, jamais une erreur.
  */
-export const osintProviderSchema = z.enum(['pappers', 'numverify', 'hibp', 'shodan', 'virustotal', 'github']);
+export const osintProviderSchema = z.enum([
+    'pappers',
+    'numverify',
+    'hibp',
+    'shodan',
+    'virustotal',
+    'github',
+    'spamhaus'
+]);
 export type OsintProvider = z.infer<typeof osintProviderSchema>;
 
 /**
@@ -322,6 +334,13 @@ export const OSINT_PROVIDER_META: Record<
         enables:
             'Un jeton personnel, gratuit et sans aucun droit, lève la limite de la carte GitHub : sans lui, quelques recherches par heure pour tout le serveur.',
         pricing: 'free'
+    },
+    spamhaus: {
+        label: 'Spamhaus DQS',
+        signupUrl: 'https://www.spamhaus.com/free-trial/sign-up-for-a-free-data-query-service-account/',
+        enables:
+            'Ajoute la liste Spamhaus ZEN à la réputation d’une IP. Le compte gratuit est réservé à un usage non commercial, au-delà il est payant.',
+        pricing: 'freemium'
     }
 };
 

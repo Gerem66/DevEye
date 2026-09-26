@@ -66,7 +66,8 @@ const FAILURE_TEXT: Record<WeatherError['reason'], string> = {
     not_found: 'Aucun lieu ne correspond à cette recherche.',
     unauthorized: 'Le fournisseur refuse la clé d’API de cet espace.',
     fetch_failed: 'Le fournisseur météo ne répond pas.',
-    rate_limited: 'Le fournisseur météo a atteint sa limite d’appels, réessayez dans quelques minutes.'
+    rate_limited: 'Le fournisseur météo a atteint sa limite d’appels, réessayez dans quelques minutes.',
+    misconfigured: 'La météo de ce serveur est mal configurée : prévenez son administrateur.'
 };
 
 function errorCode(reason: WeatherError['reason']): 'not_found' | 'rate_limited' | 'internal' {
@@ -79,8 +80,10 @@ function errorCode(reason: WeatherError['reason']): 'not_found' | 'rate_limited'
  * La raison voyage en `details` : le client y lit qu'une clé est refusée, seul
  * échec qui périme un relevé déjà affiché.
  */
-function mapWeatherError(e: unknown): FeatureError {
+function mapWeatherError(e: unknown, ctx: Ctx): FeatureError {
     if (!(e instanceof WeatherError)) return new FeatureError('internal', FAILURE_TEXT.fetch_failed);
+    // Seul l'exploitant peut y remédier : c'est dans son journal que ça doit se lire.
+    if (e.reason === 'misconfigured') ctx.logger.warn({ err: e.message }, 'Météo : clé d’instance refusée');
     return new FeatureError(errorCode(e.reason), FAILURE_TEXT[e.reason], {
         reason: e.reason,
         ...(e.retryAfterMs === undefined ? {} : { retryAfterMs: e.retryAfterMs })
@@ -110,7 +113,7 @@ export const weatherHandlers = [
                     apiKey: await workspaceKey(ctx, input.provider)
                 });
             } catch (e) {
-                throw mapWeatherError(e);
+                throw mapWeatherError(e, ctx);
             }
             const row = await ctx.repo.createLocation({
                 userId: ctx.userId,
@@ -207,7 +210,7 @@ export const weatherHandlers = [
                 });
                 return { report };
             } catch (e) {
-                throw mapWeatherError(e);
+                throw mapWeatherError(e, ctx);
             }
         }
     }),

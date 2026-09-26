@@ -4,7 +4,7 @@ import { z } from 'zod';
 export const weatherFormatSchema = z.enum(['current', 'daily']);
 export type WeatherFormat = z.infer<typeof weatherFormatSchema>;
 
-/** Le fournisseur des relevés. Open-Meteo est sans clé, les autres passent par celle de l'espace. */
+/** Le fournisseur des relevés. Open-Meteo n'a pas de clé d'espace (l'instance porte la sienne), les autres passent par celle de l'espace. */
 export const weatherProviderSchema = z.enum(['open-meteo', 'openweathermap']);
 export type WeatherProvider = z.infer<typeof weatherProviderSchema>;
 
