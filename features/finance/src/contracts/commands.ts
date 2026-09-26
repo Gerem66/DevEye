@@ -1,5 +1,12 @@
 import { z } from 'zod';
 import {
+    BANK_LABEL_MAX_LENGTH,
+    bankConnectionSchema,
+    bankInstitutionSchema,
+    bankLinkSchema,
+    bankPsuTypeSchema
+} from './banking';
+import {
     FINANCE_COUNTERPARTY_MAX_LENGTH,
     FINANCE_LABEL_MAX_LENGTH,
     FINANCE_NAME_MAX_LENGTH,
@@ -356,6 +363,92 @@ export const financeRuleRemove = {
     input: z.object({ id: z.number().int().positive() }),
     output: z.object({ id: z.number().int().positive() })
 };
+const connectionId = z.number().int().positive();
+const bankLabel = z.string().trim().min(1).max(BANK_LABEL_MAX_LENGTH);
+/** L'identifiant et la clé secrète d'une organisation Qonto. */
+const qontoLogin = z.string().trim().min(1).max(200);
+const qontoSecretKey = z.string().trim().min(1).max(500);
+
+/**
+ * Les connexions de l'espace et les comptes du livre qu'elles alimentent.
+ * `enableBanking` : l'instance sait relier d'autres banques que Qonto. `quota` :
+ * ce que l'offre du propriétaire permet, `null` quand rien ne le borne.
+ */
+export const financeConnectionList = {
+    command: 'finance.connectionList' as const,
+    input: z.object({}),
+    output: z.object({
+        connections: z.array(bankConnectionSchema),
+        links: z.array(bankLinkSchema),
+        enableBanking: z.boolean(),
+        quota: z.object({ limit: z.number().int().nonnegative(), used: z.number().int().nonnegative() }).nullable()
+    })
+};
+/** Refusé quand Qonto n'accepte pas ces accès : rien ne s'enregistre qui ne marche pas. */
+export const financeConnectionAddQonto = {
+    command: 'finance.connectionAddQonto' as const,
+    input: z.object({ label: bankLabel, login: qontoLogin, secretKey: qontoSecretKey }),
+    output: z.object({ connection: bankConnectionSchema })
+};
+/** `login` et `secretKey` à `null` : inchangés, le client ne les a jamais reçus. */
+export const financeConnectionUpdate = {
+    command: 'finance.connectionUpdate' as const,
+    input: z.object({
+        connectionId,
+        label: bankLabel,
+        login: qontoLogin.nullable(),
+        secretKey: qontoSecretKey.nullable()
+    }),
+    output: z.object({ connection: bankConnectionSchema })
+};
+/** Délie ses comptes ; ce qu'elle a apporté au livre reste. */
+export const financeConnectionRemove = {
+    command: 'finance.connectionRemove' as const,
+    input: z.object({ connectionId }),
+    output: z.object({ connectionId })
+};
+/** La relève tout de suite, sans attendre la suivante. */
+export const financeConnectionSync = {
+    command: 'finance.connectionSync' as const,
+    input: z.object({ connectionId }),
+    output: z.object({ connection: bankConnectionSchema, added: z.number().int().nonnegative() })
+};
+/** Les banques qu'Enable Banking ouvre dans ce pays. */
+export const financeBankList = {
+    command: 'finance.bankList' as const,
+    input: z.object({ country: z.string().length(2) }),
+    output: z.object({ banks: z.array(bankInstitutionSchema) })
+};
+/**
+ * L'adresse où consentir chez sa banque, à ouvrir dans une fenêtre : la banque
+ * renvoie sur la route de retour de Finances, qui crée la connexion.
+ * `connectionId` : en reconnecter une, sans rien délier.
+ */
+export const financeConnectionStart = {
+    command: 'finance.connectionStart' as const,
+    input: z.object({
+        connectionId: connectionId.nullable(),
+        label: bankLabel,
+        bank: z.object({ name: z.string().min(1).max(200), country: z.string().length(2) }),
+        psuType: bankPsuTypeSchema
+    }),
+    output: z.object({ authUrl: z.string() })
+};
+/**
+ * Relie un compte du livre à un compte de la banque, ou le délie. La première
+ * relève part aussitôt, à partir du lendemain de la dernière ligne déjà
+ * importée (le solde de départ sinon) : rien n'arrive en double.
+ */
+export const financeAccountBankLink = {
+    command: 'finance.accountBankLink' as const,
+    input: z.object({
+        accountId,
+        connectionId: connectionId.nullable(),
+        externalAccountId: z.string().min(1).max(100).nullable()
+    }),
+    output: z.object({ links: z.array(bankLinkSchema), added: z.number().int().nonnegative() })
+};
+
 export const financeOverview = {
     command: 'finance.overview' as const,
     input: z.object({ range: financeRangeSchema }),
@@ -393,5 +486,13 @@ export const financeCommands = [
     financeRuleList,
     financeRuleSave,
     financeRuleRemove,
+    financeConnectionList,
+    financeConnectionAddQonto,
+    financeConnectionUpdate,
+    financeConnectionRemove,
+    financeConnectionSync,
+    financeBankList,
+    financeConnectionStart,
+    financeAccountBankLink,
     financeOverview
 ] as const;

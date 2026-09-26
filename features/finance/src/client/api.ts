@@ -19,7 +19,8 @@ export function refreshFinance(): void {
         'finance.overview',
         'finance.recurringList',
         'finance.statementList',
-        'finance.ruleList'
+        'finance.ruleList',
+        'finance.connectionList'
     );
 }
 

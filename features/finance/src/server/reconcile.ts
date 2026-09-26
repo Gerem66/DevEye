@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto';
 
 import type { InvoicingLedgerReceivable } from '@deveye/types/sdk';
 
+import type { BankProvider } from '../contracts/banking';
 import type { FinanceTransactionRow } from '../contracts/domain';
 import {
     normalizeLabel,
@@ -76,7 +77,8 @@ function withinWindow(transactionDate: string, lineDate: string): boolean {
 }
 
 /**
- * L'identité d'une ligne chez la banque. Un OFX la donne (`FITID`). Un CSV non :
+ * L'identité d'une ligne chez la banque. Un OFX la donne (`FITID`), une
+ * connexion aussi (préfixée par son fournisseur). Un CSV non :
  * une empreinte signée du compte, du jour, du sens, du montant, du libellé et du
  * rang parmi les lignes identiques du même fichier (deux cafés le même jour
  * restent deux). Signée par une clé du serveur : l'empreinte ne rend pas le
@@ -85,12 +87,13 @@ function withinWindow(transactionDate: string, lineDate: string): boolean {
 export function lineIdentities(
     io: Pick<Ctx, 'keys'>,
     accountId: number,
-    lines: readonly StatementLineInput[]
+    lines: readonly StatementLineInput[],
+    source: 'ofx' | BankProvider = 'ofx'
 ): string[] {
     const key = io.keys.derive('finance.statement', 'line-identity', 32);
     const seen = new Map<string, number>();
     return lines.map((line) => {
-        if (line.fitid !== null) return `ofx:${line.fitid}`;
+        if (line.fitid !== null) return `${source}:${line.fitid}`;
         const base = `${accountId}|${line.date}|${line.direction}|${line.amount}|${normalizeLabel(`${line.label} ${line.memo}`)}`;
         const rank = seen.get(base) ?? 0;
         seen.set(base, rank + 1);

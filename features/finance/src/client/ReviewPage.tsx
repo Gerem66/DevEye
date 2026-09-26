@@ -160,11 +160,20 @@ export function ReviewPage({ base, onBack, onImport }: ReviewPageProps) {
                     <span className={`icon icon-check-circle ${styles.emptyIcon}`} aria-hidden='true' />
                     <p className={styles.emptyTitle}>Rien à rapprocher</p>
                     <p className={styles.emptyBody}>
-                        Importez le relevé de votre banque, en CSV ou en OFX : ses lignes retrouvent les opérations déjà
-                        au livre, vos règles rangent les habituelles, et il ne reste ici que ce qui demande un choix.
+                        Importez le relevé de votre banque, en CSV ou en OFX, ou reliez-la pour que ses lignes arrivent
+                        seules : elles retrouvent les opérations déjà au livre, vos règles rangent les habituelles, et
+                        il ne reste ici que ce qui demande un choix.
                     </p>
                     <div className={styles.actions}>
                         {base.canWrite && <Button onClick={onImport}>Importer un relevé</Button>}
+                        {base.canWrite && (
+                            <FeatureSettingsButton
+                                scope={{ kind: 'feature', feature: 'finance' }}
+                                initialSection='sources'
+                                variant='secondary'
+                                label='Relier une banque'
+                            />
+                        )}
                         <Button variant='ghost' onClick={() => setStatus('all')}>
                             Voir les lignes rangées
                         </Button>

@@ -1,6 +1,10 @@
 import type { FeatureService, FeatureServiceDeps } from '@deveye/types/sdk/server';
 
+import { BANK_SYNC_HOURS, type FinanceConnectionRow } from '../contracts/banking';
 import { financeDeclarationPeriodSchema, financeMicroActivitySchema } from '../contracts/domain';
+import { readConnection, syncConnection, type BankIo } from './banking';
+import { enableBankingProblem } from './banks/enableBanking';
+import { financeRoutes } from './routes';
 import { declarationTarget, periodFigures, type MicroSettings } from './status';
 import { DEFAULT_CURRENCY, invoicingLedger, partsOf, today, type LedgerIo } from './_shared';
 import type { FinanceDeclaringRow, FinanceRepo } from './repo';
@@ -8,13 +12,22 @@ import { catchUp } from './sources';
 
 /**
  * Le service de Finances : les rappels de déclaration URSSAF d'une
- * micro-entreprise, une semaine avant l'échéance puis la veille. Une lecture
- * ne sait pas quand minuit passe, d'où une boucle ; tout le reste du livre se
- * tient à la lecture. La table des rappels retient ce qui est parti : un rappel
- * ne part jamais deux fois, même à plusieurs instances.
+ * micro-entreprise, une semaine avant l'échéance puis la veille, et la relève
+ * des connexions bancaires. Une lecture ne sait pas quand minuit passe, d'où
+ * des boucles ; tout le reste du livre se tient à la lecture. Ce qui est parti
+ * est retenu en base : un avis ne part jamais deux fois, même à plusieurs instances.
  */
 
 const REMIND_EVERY_MS = 6 * 60 * 60 * 1000;
+
+/** La relève regarde toutes les quinze minutes ce qui a plus de `BANK_SYNC_HOURS` heures. */
+const BANK_TICK_MS = 15 * 60 * 1000;
+
+/** Connexions relevées de front par tour : borne la rafale d'appels sortants. */
+const BANK_BATCH = 6;
+
+/** L'avis d'un consentement qui finit part une semaine avant. */
+const EXPIRY_NOTICE_DAYS = 7;
 
 /** Combien de jours séparent deux dates civiles. */
 function daysUntil(from: string, to: string): number {
@@ -99,14 +112,87 @@ export function createService(deps: FeatureServiceDeps<FinanceRepo>, clock: () =
         }
     }
 
+    const bankIo = (workspaceId: number): BankIo => ({
+        repo: deps.repo,
+        workspaceId,
+        providers: deps.providers,
+        logger: deps.logger,
+        cipher: () => deps.cipherFor(workspaceId),
+        keys: deps.keys
+    });
+
+    async function namesOf(row: FinanceConnectionRow) {
+        const stored = await readConnection({ cipher: () => deps.cipherFor(row.workspace_id) }, row);
+        return { label: stored?.label || 'Connexion bancaire', bank: stored?.bankName || 'la banque' };
+    }
+
+    /** L'avis une semaine avant la fin d'un consentement, puis celui de sa fin. */
+    async function warnExpiring(now: number): Promise<void> {
+        for (const row of await deps.repo.listExpiringConnections(now + EXPIRY_NOTICE_DAYS * 86_400)) {
+            const workspaceId = row.workspace_id;
+            const until = Number(row.valid_until);
+            if (until <= now) {
+                if (!(await deps.repo.markExpired(row.id, workspaceId))) continue;
+                const { label, bank } = await namesOf(row);
+                deps.live.changed(workspaceId);
+                await deps.deveyeFor(workspaceId).notify.send({
+                    subject: `Connexion bancaire expirée : ${label}`,
+                    body:
+                        `Le consentement donné à ${bank} a pris fin : ses relevés n’arrivent plus. ` +
+                        'Reconnectez-la dans Finances, Réglages, Sources.'
+                });
+            } else if (await deps.repo.claimExpiryWarning(row.id, workspaceId)) {
+                const { label, bank } = await namesOf(row);
+                const day = new Date(until * 1000).toISOString().slice(0, 10);
+                await deps.deveyeFor(workspaceId).notify.send({
+                    subject: `Connexion bancaire à renouveler : ${label}`,
+                    body:
+                        `Le consentement donné à ${bank} prend fin le ${longDate(day)}. ` +
+                        'Reconnectez-la dans Finances, Réglages, Sources, pour que ses relevés continuent d’arriver.'
+                });
+            }
+        }
+    }
+
+    async function relieve(): Promise<void> {
+        const now = Math.floor(Date.now() / 1000);
+        try {
+            await warnExpiring(now);
+        } catch (error) {
+            deps.logger.warn({ err: error }, 'finance: avis d’expiration bancaire interrompu');
+        }
+        const due = await deps.repo.listDueConnections(
+            now - BANK_SYNC_HOURS * 3600,
+            deps.pauses.paused('bankConnections').map(Number),
+            BANK_BATCH
+        );
+        await Promise.all(
+            due.map(async (row) => {
+                try {
+                    const outcome = await syncConnection(bankIo(row.workspace_id), row);
+                    if (outcome.added > 0 || outcome.status !== row.status) deps.live.changed(row.workspace_id);
+                } catch (error) {
+                    deps.logger.warn({ err: error, connectionId: row.id }, 'finance: relève bancaire interrompue');
+                }
+            })
+        );
+    }
+
     const ticker = deps.createTicker({ intervalMs: REMIND_EVERY_MS, tick: remind });
+    const bankTicker = deps.createTicker({ intervalMs: BANK_TICK_MS, tick: relieve });
 
     return {
         start() {
+            const problem = enableBankingProblem();
+            if (problem !== null) {
+                deps.logger.warn({}, `finance: ${problem} ; seules Qonto et l’import relient une banque`);
+            }
             ticker.start();
+            bankTicker.start();
         },
-        stop() {
-            return ticker.stop();
-        }
+        async stop() {
+            await Promise.all([ticker.stop(), bankTicker.stop()]);
+        },
+        publicRoutes: (app) => financeRoutes(app, deps)
     };
 }

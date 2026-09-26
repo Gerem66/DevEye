@@ -1,7 +1,8 @@
-import { Button, FeatureSettingsButton, StatusBadge } from 'deveye-sdk-client';
+import { Button, FeatureSettingsButton, StatusBadge, useResource } from 'deveye-sdk-client';
 import type { FinanceTransaction } from '../contracts/domain';
 
 import Journal from './Journal';
+import { api } from './api';
 import { accountKindLabel, formatMoney } from './format';
 import { accountOf } from './shared';
 import styles from './style.module.css';
@@ -33,6 +34,13 @@ export function AccountSheet({
 }: AccountSheetProps) {
     const account = accountOf(base.accounts, accountId);
     const currency = base.config.currency;
+    const { data: banking } = useResource(
+        'finance.connectionList',
+        () => api.send('finance.connectionList', {}),
+        'Chargement impossible.'
+    );
+    const link = banking?.links.find((entry) => entry.accountId === accountId) ?? null;
+    const connection = link === null ? null : (banking?.connections.find((c) => c.id === link.connectionId) ?? null);
 
     if (account === null) {
         return (
@@ -62,7 +70,13 @@ export function AccountSheet({
                                     Archivé
                                 </StatusBadge>
                             )}
+                            {connection !== null && connection.status !== 'ok' && (
+                                <StatusBadge tone='warning' dot={false}>
+                                    {connection.status === 'expired' ? 'Banque à reconnecter' : 'Relève en échec'}
+                                </StatusBadge>
+                            )}
                             {accountKindLabel(account.kind)}
+                            {connection && ` · relevé par ${connection.label}`}
                             {account.note && ` · ${account.note}`}
                         </p>
                     </div>

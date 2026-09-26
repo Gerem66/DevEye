@@ -1005,6 +1005,27 @@
     color: var(--text-muted);
 }
 
+/* L'offre atteinte : ce qu'elle permet, et pour le propriétaire le chemin vers les offres. */
+.planNotice {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--space-sm) var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    background: var(--warning-bg);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
+.planNotice p {
+    flex: 1;
+    min-width: 240px;
+    margin: 0;
+}
+
 /* Une phrase qui situe ce qu'on regarde, et le geste qui y mène. */
 .notice {
     display: flex;

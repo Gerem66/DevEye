@@ -9,6 +9,7 @@ import type {
     FinanceRecurringRow,
     FinanceTransactionRow
 } from '../contracts/domain';
+import type { FinanceBankLinkRow, FinanceConnectionRow } from '../contracts/banking';
 import type { FinanceRuleRow, FinanceStatementLineRow } from '../contracts/statement';
 
 import type { SdkFeatureContext } from '@deveye/types/sdk/server';
@@ -50,6 +51,8 @@ export interface FakeRepo extends FinanceRepo {
     }[];
     lines: FinanceStatementLineRow[];
     rules: FinanceRuleRow[];
+    connections: FinanceConnectionRow[];
+    links: FinanceBankLinkRow[];
 }
 
 /** Une ligne de réglages vierge : ce que la base rend avant tout réglage. */
@@ -115,6 +118,8 @@ export function fakeRepo(): FakeRepo {
         imports: [],
         lines: [],
         rules: [],
+        connections: [],
+        links: [],
 
         async getConfig(ws) {
             return this.config?.workspace_id === ws ? this.config : null;
@@ -207,6 +212,7 @@ export function fakeRepo(): FakeRepo {
             if (i === -1) return false;
             this.accounts.splice(i, 1);
             this.lines = this.lines.filter((line) => line.account_id !== id);
+            this.links = this.links.filter((link) => link.account_id !== id);
             return true;
         },
         async reorderAccounts(ws, ids) {
@@ -690,6 +696,120 @@ export function fakeRepo(): FakeRepo {
         async bumpRuleHits(id, ws, by) {
             const row = await this.findRule(id, ws);
             if (row) row.hits += by;
+        },
+
+        async listConnections(ws) {
+            return this.connections.filter((c) => c.workspace_id === ws);
+        },
+        async findConnection(id, ws) {
+            return this.connections.find((c) => c.id === id && c.workspace_id === ws) ?? null;
+        },
+        async createConnection(ws, input) {
+            const row: FinanceConnectionRow = {
+                id: ++seq,
+                workspace_id: ws,
+                provider: input.provider,
+                status: 'ok',
+                error: null,
+                valid_until: input.validUntil,
+                warned_until: null,
+                last_sync_at: null,
+                content: input.content,
+                created: now()
+            };
+            this.connections.push(row);
+            return row.id;
+        },
+        async setConnectionContent(id, ws, content) {
+            const row = await this.findConnection(id, ws);
+            if (!row) return false;
+            row.content = content;
+            return true;
+        },
+        async replaceConnection(id, ws, input) {
+            const row = await this.findConnection(id, ws);
+            if (!row) return false;
+            Object.assign(row, { content: input.content, valid_until: input.validUntil, status: 'ok', error: null });
+            return true;
+        },
+        async recordSync(id, ws, at, status, error) {
+            const row = await this.findConnection(id, ws);
+            if (row) Object.assign(row, { last_sync_at: at, status, error });
+        },
+        async deleteConnection(id, ws) {
+            const i = this.connections.findIndex((c) => c.id === id && c.workspace_id === ws);
+            if (i === -1) return false;
+            this.connections.splice(i, 1);
+            this.links = this.links.filter((link) => link.connection_id !== id);
+            return true;
+        },
+        async countConnectionsInWorkspaces(ids) {
+            return this.connections.filter((c) => ids.includes(c.workspace_id)).length;
+        },
+        async listStockConnections(ids) {
+            return this.connections
+                .filter((c) => ids.includes(c.workspace_id))
+                .map((c) => ({ id: String(c.id), workspaceId: c.workspace_id }));
+        },
+        async listDueConnections(before, pausedIds, limit) {
+            return this.connections
+                .filter(
+                    (c) =>
+                        c.status !== 'expired' &&
+                        (c.last_sync_at === null || c.last_sync_at < before) &&
+                        !pausedIds.includes(c.id)
+                )
+                .slice(0, limit);
+        },
+        async listExpiringConnections(before) {
+            return this.connections.filter(
+                (c) => c.valid_until !== null && c.valid_until < before && c.status !== 'expired'
+            );
+        },
+        async claimExpiryWarning(id, ws) {
+            const row = await this.findConnection(id, ws);
+            if (!row || row.valid_until === null || row.warned_until === row.valid_until) return false;
+            row.warned_until = row.valid_until;
+            return true;
+        },
+        async markExpired(id, ws) {
+            const row = await this.findConnection(id, ws);
+            if (!row || row.status === 'expired') return false;
+            row.status = 'expired';
+            return true;
+        },
+        async listBankLinks(ws) {
+            return this.links.filter((link) => link.workspace_id === ws);
+        },
+        async listConnectionLinks(connectionId, ws) {
+            return this.links.filter((link) => link.connection_id === connectionId && link.workspace_id === ws);
+        },
+        async setBankLink(accountId, ws, link) {
+            this.links = this.links.filter((entry) => !(entry.account_id === accountId && entry.workspace_id === ws));
+            if (link === null) return;
+            if (
+                this.links.some(
+                    (entry) =>
+                        entry.connection_id === link.connectionId &&
+                        entry.external_account_id === link.externalAccountId
+                )
+            ) {
+                throw Object.assign(new Error('Duplicate entry'), { code: 'ER_DUP_ENTRY' });
+            }
+            this.links.push({
+                account_id: accountId,
+                workspace_id: ws,
+                connection_id: link.connectionId,
+                external_account_id: link.externalAccountId,
+                since: link.since
+            });
+        },
+        async latestLineDate(accountId, ws) {
+            const dates = this.lines
+                .filter((l) => l.account_id === accountId && l.workspace_id === ws)
+                .map((l) => l.date)
+                .sort();
+            return dates[dates.length - 1] ?? null;
         }
     };
     return repo;

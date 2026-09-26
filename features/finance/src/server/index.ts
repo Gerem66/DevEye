@@ -3,18 +3,21 @@ import { fileURLToPath } from 'node:url';
 
 import type { FeatureServer } from '@deveye/types/sdk/server';
 
+import { FINANCE_ENV } from './env';
 import { financeHandlers } from './handlers';
 import { createRepo, type FinanceRepo } from './repo';
 import { createService } from './service';
 
 /**
  * Les tables datent du socle (`084_finance.sql`) ; `migrations/` porte leurs
- * évolutions. Le service ne fait que les rappels de déclaration : le livre, lui,
- * se tient à la lecture (voir `catchUp`).
+ * évolutions. Le service fait les rappels de déclaration et relève les
+ * connexions bancaires : le livre, lui, se tient à la lecture (voir `catchUp`).
  */
 export const serverEntry: FeatureServer<FinanceRepo> = {
+    env: FINANCE_ENV,
     createRepo,
     features: financeHandlers,
     migrationsDir: path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations'),
-    createService
+    createService,
+    quotas: { bankConnections: { list: (repo, owned) => repo.listStockConnections(owned) } }
 };

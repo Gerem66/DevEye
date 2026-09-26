@@ -30,6 +30,16 @@ import {
     financeRecurringUpdateFeature
 } from './recurring';
 import {
+    financeAccountBankLinkFeature,
+    financeBankListFeature,
+    financeConnectionAddQontoFeature,
+    financeConnectionListFeature,
+    financeConnectionRemoveFeature,
+    financeConnectionStartFeature,
+    financeConnectionSyncFeature,
+    financeConnectionUpdateFeature
+} from './connections';
+import {
     financeImportMappingFeature,
     financeRuleListFeature,
     financeRuleRemoveFeature,
@@ -85,5 +95,13 @@ export const financeHandlers: ReadonlyArray<SdkFeatureDefinition<FinanceRepo>> =
     financeRuleListFeature,
     financeRuleSaveFeature,
     financeRuleRemoveFeature,
+    financeConnectionListFeature,
+    financeConnectionAddQontoFeature,
+    financeConnectionUpdateFeature,
+    financeConnectionRemoveFeature,
+    financeConnectionSyncFeature,
+    financeBankListFeature,
+    financeConnectionStartFeature,
+    financeAccountBankLinkFeature,
     financeOverviewFeature
 ];

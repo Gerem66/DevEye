@@ -84,6 +84,7 @@ export type ResourceKey =
     | 'finance.overview'
     | 'finance.statementList'
     | 'finance.ruleList'
+    | 'finance.connectionList'
     | 'database.count'
     | 'database.list'
     | 'database.detail'

@@ -12,7 +12,14 @@ import type {
     FinanceTransactionKind,
     FinanceTransactionRow
 } from '../contracts/domain';
-import type { SdkQueryable } from '@deveye/types/sdk/server';
+import type { SdkQueryable, SdkStockItem } from '@deveye/types/sdk/server';
+
+import type {
+    BankConnectionStatus,
+    BankProvider,
+    FinanceBankLinkRow,
+    FinanceConnectionRow
+} from '../contracts/banking';
 
 import type { FinanceRuleRow, FinanceStatementLineRow, StatementDirection } from '../contracts/statement';
 
@@ -85,7 +92,8 @@ export interface FinanceStatusInput {
 /** Une ligne de relevé à écrire, déjà chiffrée, son identité chez la banque calculée. */
 export interface FinanceStatementLineInput {
     accountId: number;
-    importId: number;
+    /** `null` pour une ligne venue d'une connexion : elle n'appartient à aucun fichier. */
+    importId: number | null;
     externalId: string;
     date: string;
     direction: StatementDirection;
@@ -339,7 +347,62 @@ export interface FinanceRepo {
     updateRule(id: number, workspaceId: number, input: FinanceRuleInput): Promise<boolean>;
     deleteRule(id: number, workspaceId: number): Promise<boolean>;
     bumpRuleHits(id: number, workspaceId: number, by: number): Promise<void>;
+
+    listConnections(workspaceId: number): Promise<FinanceConnectionRow[]>;
+    findConnection(id: number, workspaceId: number): Promise<FinanceConnectionRow | null>;
+    createConnection(
+        workspaceId: number,
+        input: { provider: BankProvider; validUntil: number | null; content: string }
+    ): Promise<number>;
+    /** Le nom seul : l'état de la dernière relève reste vrai. */
+    setConnectionContent(id: number, workspaceId: number, content: string): Promise<boolean>;
+    /** Accès neufs (édition, reconnexion) : l'état d'erreur ne leur survit pas. */
+    replaceConnection(
+        id: number,
+        workspaceId: number,
+        input: { validUntil: number | null; content: string }
+    ): Promise<boolean>;
+    recordSync(
+        id: number,
+        workspaceId: number,
+        at: number,
+        status: BankConnectionStatus,
+        error: string | null
+    ): Promise<void>;
+    deleteConnection(id: number, workspaceId: number): Promise<boolean>;
+    countConnectionsInWorkspaces(workspaceIds: readonly number[]): Promise<number>;
+    /** Ce que compte `countConnectionsInWorkspaces`, du plus ancien au plus récent : le stock du quota `bankConnections`. */
+    listStockConnections(workspaceIds: readonly number[]): Promise<SdkStockItem[]>;
+    /**
+     * Les connexions à relever, tous espaces : relevées avant `before` ou jamais,
+     * hors celles expirées et hors `pausedIds`, écartées dans le SQL pour ne pas
+     * affamer les autres derrière le `LIMIT`.
+     */
+    listDueConnections(before: number, pausedIds: readonly number[], limit: number): Promise<FinanceConnectionRow[]>;
+    /** Les consentements qui finissent avant `before`, tous espaces, hors ceux déjà dits expirés. */
+    listExpiringConnections(before: number): Promise<FinanceConnectionRow[]>;
+    /** Réserve l'avis d'expiration de ce consentement : `false` s'il est déjà parti, d'ici ou d'une autre instance. */
+    claimExpiryWarning(id: number, workspaceId: number): Promise<boolean>;
+    /** `false` quand elle l'était déjà. */
+    markExpired(id: number, workspaceId: number): Promise<boolean>;
+
+    listBankLinks(workspaceId: number): Promise<FinanceBankLinkRow[]>;
+    listConnectionLinks(connectionId: number, workspaceId: number): Promise<FinanceBankLinkRow[]>;
+    /** `null` délie. Un compte de la banque déjà relié ailleurs lève `ER_DUP_ENTRY`. */
+    setBankLink(
+        accountId: number,
+        workspaceId: number,
+        link: { connectionId: number; externalAccountId: string; since: string } | null
+    ): Promise<void>;
+    /** Le jour de la plus récente ligne de relevé du compte, importée ou relevée. */
+    latestLineDate(accountId: number, workspaceId: number): Promise<string | null>;
 }
+
+const CONNECTION_COLUMNS = `id, workspace_id, provider, status, error, valid_until, warned_until, last_sync_at,
+    content, created`;
+
+const LINK_COLUMNS = `account_id, workspace_id, connection_id, external_account_id,
+    DATE_FORMAT(since, '%Y-%m-%d') AS since`;
 
 /** Colonnes d'une ligne de relevé, la date projetée. */
 const LINE_COLUMNS = `l.id, l.workspace_id, l.account_id, l.import_id, l.external_id,
@@ -1164,6 +1227,146 @@ export function createRepo(q: SdkQueryable): FinanceRepo {
                 id,
                 workspaceId
             ]);
+        },
+
+        async listConnections(workspaceId) {
+            return q.query<FinanceConnectionRow>(
+                `SELECT ${CONNECTION_COLUMNS} FROM ft_finance_connections
+                  WHERE workspace_id = ? ORDER BY created ASC, id ASC`,
+                [workspaceId]
+            );
+        },
+        async findConnection(id, workspaceId) {
+            const rows = await q.query<FinanceConnectionRow>(
+                `SELECT ${CONNECTION_COLUMNS} FROM ft_finance_connections WHERE id = ? AND workspace_id = ?`,
+                [id, workspaceId]
+            );
+            return rows[0] ?? null;
+        },
+        async createConnection(workspaceId, input) {
+            const res = await q.execute(
+                `INSERT INTO ft_finance_connections (workspace_id, provider, valid_until, content)
+                 VALUES (?, ?, ?, ?)`,
+                [workspaceId, input.provider, input.validUntil, input.content]
+            );
+            return res.insertId;
+        },
+        async setConnectionContent(id, workspaceId, content) {
+            const res = await q.execute(
+                'UPDATE ft_finance_connections SET content = ? WHERE id = ? AND workspace_id = ?',
+                [content, id, workspaceId]
+            );
+            return res.affectedRows > 0;
+        },
+        async replaceConnection(id, workspaceId, input) {
+            const res = await q.execute(
+                `UPDATE ft_finance_connections
+                    SET content = ?, valid_until = ?, status = 'ok', error = NULL
+                  WHERE id = ? AND workspace_id = ?`,
+                [input.content, input.validUntil, id, workspaceId]
+            );
+            return res.affectedRows > 0;
+        },
+        async recordSync(id, workspaceId, at, status, error) {
+            await q.execute(
+                `UPDATE ft_finance_connections SET last_sync_at = ?, status = ?, error = ?
+                  WHERE id = ? AND workspace_id = ?`,
+                [at, status, error, id, workspaceId]
+            );
+        },
+        async deleteConnection(id, workspaceId) {
+            const res = await q.execute('DELETE FROM ft_finance_connections WHERE id = ? AND workspace_id = ?', [
+                id,
+                workspaceId
+            ]);
+            return res.affectedRows > 0;
+        },
+        async countConnectionsInWorkspaces(workspaceIds) {
+            if (workspaceIds.length === 0) return 0;
+            const rows = await q.query<{ n: number }>(
+                'SELECT COUNT(*) AS n FROM ft_finance_connections WHERE workspace_id IN (?)',
+                [[...workspaceIds]]
+            );
+            return Number(rows[0]?.n ?? 0);
+        },
+        async listStockConnections(workspaceIds) {
+            if (workspaceIds.length === 0) return [];
+            const rows = await q.query<{ id: number; workspace_id: number }>(
+                `SELECT id, workspace_id FROM ft_finance_connections
+                  WHERE workspace_id IN (?) ORDER BY created ASC, id ASC`,
+                [[...workspaceIds]]
+            );
+            return rows.map((row) => ({ id: String(row.id), workspaceId: Number(row.workspace_id) }));
+        },
+        async listDueConnections(before, pausedIds, limit) {
+            const paused = pausedIds.length > 0;
+            return q.query<FinanceConnectionRow>(
+                `SELECT ${CONNECTION_COLUMNS} FROM ft_finance_connections
+                  WHERE status <> 'expired' AND (last_sync_at IS NULL OR last_sync_at < ?)
+                    ${paused ? 'AND id NOT IN (?)' : ''}
+                  ORDER BY last_sync_at IS NULL DESC, last_sync_at ASC, id ASC
+                  LIMIT ?`,
+                paused ? [before, [...pausedIds], limit] : [before, limit]
+            );
+        },
+        async listExpiringConnections(before) {
+            return q.query<FinanceConnectionRow>(
+                `SELECT ${CONNECTION_COLUMNS} FROM ft_finance_connections
+                  WHERE valid_until IS NOT NULL AND valid_until < ? AND status <> 'expired'`,
+                [before]
+            );
+        },
+        async claimExpiryWarning(id, workspaceId) {
+            const res = await q.execute(
+                `UPDATE ft_finance_connections SET warned_until = valid_until
+                  WHERE id = ? AND workspace_id = ? AND valid_until IS NOT NULL
+                    AND (warned_until IS NULL OR warned_until <> valid_until)`,
+                [id, workspaceId]
+            );
+            return res.affectedRows > 0;
+        },
+        async markExpired(id, workspaceId) {
+            const res = await q.execute(
+                `UPDATE ft_finance_connections SET status = 'expired'
+                  WHERE id = ? AND workspace_id = ? AND status <> 'expired'`,
+                [id, workspaceId]
+            );
+            return res.affectedRows > 0;
+        },
+
+        async listBankLinks(workspaceId) {
+            return q.query<FinanceBankLinkRow>(
+                `SELECT ${LINK_COLUMNS} FROM ft_finance_bank_links WHERE workspace_id = ?`,
+                [workspaceId]
+            );
+        },
+        async listConnectionLinks(connectionId, workspaceId) {
+            return q.query<FinanceBankLinkRow>(
+                `SELECT ${LINK_COLUMNS} FROM ft_finance_bank_links WHERE connection_id = ? AND workspace_id = ?`,
+                [connectionId, workspaceId]
+            );
+        },
+        async setBankLink(accountId, workspaceId, link) {
+            // Pas d'`ON DUPLICATE KEY UPDATE` : sur la clé du compte distant, il
+            // réécrirait le lien d'un AUTRE compte du livre au lieu de refuser.
+            await q.execute('DELETE FROM ft_finance_bank_links WHERE account_id = ? AND workspace_id = ?', [
+                accountId,
+                workspaceId
+            ]);
+            if (link === null) return;
+            await q.execute(
+                `INSERT INTO ft_finance_bank_links (account_id, workspace_id, connection_id, external_account_id, since)
+                 VALUES (?, ?, ?, ?, ?)`,
+                [accountId, workspaceId, link.connectionId, link.externalAccountId, link.since]
+            );
+        },
+        async latestLineDate(accountId, workspaceId) {
+            const rows = await q.query<{ last: string | null }>(
+                `SELECT DATE_FORMAT(MAX(date), '%Y-%m-%d') AS last FROM ft_finance_statement_lines
+                  WHERE account_id = ? AND workspace_id = ?`,
+                [accountId, workspaceId]
+            );
+            return rows[0]?.last ?? null;
         },
 
         async advanceRecurring(id, workspaceId, nextDate, lastPostedDate, active) {

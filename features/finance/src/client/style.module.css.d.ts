@@ -73,6 +73,7 @@ declare const styles: {
     readonly periodHint: string;
     readonly periodRow: string;
     readonly placeholder: string;
+    readonly planNotice: string;
     readonly row: string;
     readonly rowActions: string;
     readonly rowAmount: string;
