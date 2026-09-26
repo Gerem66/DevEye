@@ -1,17 +1,26 @@
 import { OSINT_PROBES_BY_KIND, type OsintProbeId, type OsintTargetKind } from '../../contracts/domain';
 
+import { breachesProbe } from './breaches';
 import { crtshProbe } from './crtsh';
+import { deathsProbe } from './deaths';
 import { dnsProbe } from './dns';
 import { dorksProbe } from './dorks';
 import { emailProbe } from './email';
+import { githubProbe } from './github';
+import { gravatarProbe } from './gravatar';
 import { httpProbe } from './http';
 import { blocklistProbe, geoipProbe, ptrProbe } from './ip';
-import { pappersProbe } from './pappers';
+import { keybaseProbe } from './keybase';
+import { pgpProbe } from './pgp';
 import { phoneProbe } from './phone';
+import { portsProbe } from './ports';
 import { rdapIpProbe, rdapProbe } from './rdap';
+import { registryProbe } from './registry';
 import { tlsProbe } from './tls';
 import { usernameProbe } from './username';
+import { virustotalProbe } from './virustotal';
 import { whoisProbe } from './whois';
+import { wikidataProbe } from './wikidata';
 import type { OsintProbeAdapter } from './shared';
 
 export * from './shared';
@@ -32,10 +41,19 @@ export const PROBES: Record<OsintProbeId, OsintProbeAdapter> = {
     rdapIp: rdapIpProbe,
     geoip: geoipProbe,
     blocklist: blocklistProbe,
+    ports: portsProbe,
+    virustotal: virustotalProbe,
     phone: phoneProbe,
     email: emailProbe,
+    pgp: pgpProbe,
+    breaches: breachesProbe,
     username: usernameProbe,
-    pappers: pappersProbe,
+    registry: registryProbe,
+    deaths: deathsProbe,
+    wikidata: wikidataProbe,
+    github: githubProbe,
+    gravatar: gravatarProbe,
+    keybase: keybaseProbe,
     dorks: dorksProbe
 };
 

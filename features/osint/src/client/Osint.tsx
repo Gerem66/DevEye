@@ -2,12 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import {
     detectTarget,
+    OSINT_KIND_LABELS,
     OSINT_PROBES_BY_KIND,
     OSINT_SLOW_PROBES,
     type OsintHistoryEntry,
     type OsintProbeId,
-    type OsintTarget,
-    type OsintTargetKind
+    type OsintTarget
 } from '../contracts/domain';
 
 import {
@@ -32,16 +32,6 @@ import styles from './Osint.module.css';
  * sonder ; une carte squelette apparaît par sonde, et un `osint.probe` part par
  * carte, en parallèle. Chacune se remplit dès que sa réponse arrive.
  */
-
-const KIND_LABELS: Record<OsintTargetKind, string> = {
-    domain: 'Domaine',
-    url: 'URL',
-    ip: 'Adresse IP',
-    email: 'Adresse e-mail',
-    phone: 'Téléphone',
-    person: 'Personne',
-    username: 'Pseudo'
-};
 
 /** Les lentes en fin de grille : les réponses immédiates occupent le haut. */
 function orderProbes(probes: readonly OsintProbeId[]): OsintProbeId[] {
@@ -298,7 +288,7 @@ export default function Osint(): React.ReactElement {
                     autoComplete='off'
                     aria-label='Cible à rechercher'
                 />
-                {preview && <span className={styles.kindChip}>{KIND_LABELS[preview.kind]}</span>}
+                {preview && <span className={styles.kindChip}>{OSINT_KIND_LABELS[preview.kind]}</span>}
                 <button type='submit' className={styles.searchGo} disabled={busy || !query.trim()}>
                     {busy ? 'Analyse…' : 'Analyser'}
                 </button>
@@ -319,7 +309,7 @@ export default function Osint(): React.ReactElement {
                 open={historyOpen}
                 onClose={() => setHistoryOpen(false)}
                 entries={history}
-                kindLabels={KIND_LABELS}
+                kindLabels={OSINT_KIND_LABELS}
                 onReplay={replay}
                 onRemove={askRemoveEntry}
                 onClear={askClearHistory}
@@ -352,7 +342,7 @@ export default function Osint(): React.ReactElement {
                 {run && (
                     <>
                         <div className={styles.targetLine}>
-                            <span className={styles.kindChip}>{KIND_LABELS[run.target.kind]}</span>
+                            <span className={styles.kindChip}>{OSINT_KIND_LABELS[run.target.kind]}</span>
                             <span className={styles.targetValue}>{run.target.value}</span>
                         </div>
                         <div className={styles.grid}>

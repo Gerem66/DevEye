@@ -1,7 +1,7 @@
 import { Resolver } from 'dns/promises';
 
 import {
-    OSINT_PROBE_LABELS,
+    OSINT_PROBE_META,
     OSINT_RAW_MAX_LENGTH,
     type OsintField,
     type OsintLink,
@@ -44,13 +44,10 @@ export interface OsintProbeContext {
     key: string | null;
 }
 
+/** La clé qu'une sonde attend, et de quel fournisseur, est dans `OSINT_PROBE_META`. */
 export interface OsintProbeAdapter {
     id: OsintProbeId;
     appliesTo: readonly OsintTargetKind[];
-    /** Fournisseur dont la clé débloque (ou enrichit) cette sonde. */
-    provider?: OsintProvider;
-    /** Sans clé, la sonde ne peut rien faire (par opposition à un simple enrichissement). */
-    requiresKey?: true;
     /** Combien de temps un résultat reste servi depuis le cache. */
     ttlMs?: number;
     run(ctx: OsintProbeContext): Promise<OsintProbeDraft>;
@@ -180,13 +177,28 @@ export function dropCache(target: OsintTarget): void {
 /* -------------------------------- Exécution ------------------------------- */
 
 /**
+ * Un même compte revient souvent par plusieurs chemins (quatre preuves Keybase
+ * au même pseudo, `Pseudo` et `pseudo` sur Wikidata) : un rebond ne
+ * s'affiche qu'une fois, casse mise à part.
+ */
+function uniqueLinks(links: OsintLink[]): OsintLink[] {
+    const seen = new Set<string>();
+    return links.filter((l) => {
+        const key = l.href.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+}
+
+/**
  * Exécute une sonde et normalise tout ce qui en sort, y compris un jet : une
  * sonde qui échoue rend une carte en erreur, jamais une exception qui
  * emporterait les autres cartes.
  */
 export async function runProbe(adapter: OsintProbeAdapter, ctx: OsintProbeContext): Promise<OsintProbeResult> {
     const started = Date.now();
-    const label = OSINT_PROBE_LABELS[adapter.id];
+    const label = OSINT_PROBE_META[adapter.id].label;
 
     let draft: OsintProbeDraft;
     try {
@@ -216,7 +228,7 @@ export async function runProbe(adapter: OsintProbeAdapter, ctx: OsintProbeContex
         summary: draft.summary ?? null,
         fields,
         tags: draft.tags ?? [],
-        links: draft.links ?? [],
+        links: uniqueLinks(draft.links ?? []),
         score: draft.score ?? null,
         raw: draft.raw != null ? clampRaw(draft.raw) : null,
         tookMs: Date.now() - started
@@ -238,6 +250,25 @@ export async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (it
     });
     await Promise.all(workers);
     return out;
+}
+
+/** Les mots d'un nom, sans accents ni casse : `Hélène DE LA TOUR-MARTIN` → `helene de la tour martin`. */
+export function nameTokens(name: string): string[] {
+    return name
+        .normalize('NFD')
+        .replace(/\p{M}/gu, '')
+        .toLowerCase()
+        .split(/[^\p{L}\p{N}]+/u)
+        .filter(Boolean);
+}
+
+/**
+ * Tous les mots cherchés figurent-ils dans ce nom ? Dans n'importe quel ordre :
+ * les registres écrivent « NOM Prénoms », la saisie souvent l'inverse.
+ */
+export function coversName(wanted: readonly string[], candidate: string): boolean {
+    const have = new Set(nameTokens(candidate));
+    return wanted.length > 0 && wanted.every((w) => have.has(w));
 }
 
 /** Date ISO → « 12 mars 2019 (il y a 6 ans) ». */

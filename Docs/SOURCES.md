@@ -44,7 +44,6 @@ boîte créée.
 | Sauvegardes     | destinations d'archives                                                 | `backup_destinations`                                   | `JobDialog` à la création, puis l'onglet Général du travail, champ « Où l'écrire »                  |
 | chaque émetteur | ses canaux d'alerte                                                     | `notification_channels` (colonne `feature`)             | section Notifications (cases)                                                                       |
 | Météo           | clés d'API des fournisseurs                                             | `weather_provider_keys`                                 | le sélecteur en bas de la fiche d'une ville, offert dès que l'espace a plus d'une source utilisable |
-| OSINT           | clés d'API des fournisseurs                                             | `osint_provider_keys`                                   | aucun : les sondes les résolvent seules                                                             |
 | Veille CVE      | clé d'API du NVD                                                        | `feature_kv` (clé `nvdApiKey`)                          | aucun : les lectures la résolvent seules                                                            |
 | Finances        | connexions bancaires (Qonto par clé, autres banques par Enable Banking) | `ft_finance_connections` (le module `features/finance`) | l'onglet Banque d'un compte du livre, champ « Connexion bancaire »                                  |
 

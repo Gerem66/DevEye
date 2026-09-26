@@ -9,6 +9,7 @@ import {
 } from '../contracts/commands';
 import {
     detectTarget,
+    OSINT_PROBE_META,
     OSINT_PROVIDER_META,
     osintProviderSchema,
     type OsintHistoryEntry,
@@ -65,16 +66,6 @@ async function providerKey(ctx: Ctx, provider: OsintProvider | undefined): Promi
     return row ? ctx.cipher().tryDecrypt(row.key_enc) : null;
 }
 
-/**
- * Le total est fixe (le registre) ; seule une sonde qui exige une clé absente
- * compte comme indisponible. Une clé qui ne fait qu'enrichir ne change rien.
- */
-function countProbeAvailability(held: ReadonlySet<OsintProvider>): { available: number; total: number } {
-    const probes = Object.values(PROBES);
-    const missingKey = probes.filter((probe) => probe.requiresKey && !(probe.provider && held.has(probe.provider)));
-    return { available: probes.length - missingKey.length, total: probes.length };
-}
-
 export const osintHandlers = [
     defineSdkFeature({
         ...osintLookup,
@@ -120,7 +111,7 @@ export const osintHandlers = [
 
             // La clé est lue avant le cache : ce qu'une sonde rend en dépend,
             // et un résultat d'avant sa pose n'a plus rien à voir avec elle.
-            const key = await providerKey(ctx, adapter.provider);
+            const key = await providerKey(ctx, OSINT_PROBE_META[input.probe].key?.provider);
             const cached = readCache(input.probe, target, Boolean(key));
             if (cached) return { result: cached };
 
@@ -168,21 +159,18 @@ export const osintHandlers = [
             const held = new Set(rows.map((r) => r.provider));
             // Tous les fournisseurs sont rendus, posés ou non : l'écran doit
             // proposer ceux qui manquent. La clé elle-même ne sort jamais.
-            const { available: probesAvailable, total: probesTotal } = countProbeAvailability(held);
             return {
                 providers: osintProviderSchema.options.map((provider) => ({
                     provider,
                     hasKey: held.has(provider)
-                })),
-                probesAvailable,
-                probesTotal
+                }))
             };
         }
     }),
     defineSdkFeature({
         ...osintSetKey,
         access: { level: 'write' },
-        mutates: true,
+        mutates: ['osintKeys'],
         handler: async (ctx: Ctx, input) => {
             const key = input.key.trim();
             if (key.length === 0) {

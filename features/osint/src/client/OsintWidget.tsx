@@ -1,23 +1,19 @@
 import { useEffect, useState } from 'react';
-import { onSocketOpen, useActiveWorkspace } from 'deveye-sdk-client';
+import { OSINT_PROBE_META, osintProbeIdSchema, osintProbeUsable, type OsintProvider } from '../contracts/domain';
+import { onSocketOpen, useActiveWorkspace, useResourceVersion } from 'deveye-sdk-client';
 
 import { api } from './api';
 import styles from './Osint.module.css';
 
 /**
- * Carte de la grille : sondes opérationnelles, et clés fournisseurs restant à
- * poser. Ne dépend jamais du mot de passe en cache : `osint.keyList` ne rend
- * qu'un booléen par fournisseur, donc les deux comptes sont les mêmes,
- * verrouillé ou non.
+ * Carte de la grille : les sondes prêtes, et celles qui attendent une clé,
+ * nommées. Ne dépend jamais du mot de passe en cache : `osint.keyList` ne rend
+ * qu'un booléen par fournisseur, donc le compte est le même, verrouillé ou non.
  */
 export function OsintWidget(): React.ReactElement {
     const workspace = useActiveWorkspace();
-    const [counts, setCounts] = useState<{
-        probesAvailable: number;
-        probesTotal: number;
-        keysHeld: number;
-        keysTotal: number;
-    } | null>(null);
+    const keysVersion = useResourceVersion('osint.keyList');
+    const [held, setHeld] = useState<ReadonlySet<OsintProvider> | null>(null);
 
     useEffect(() => {
         if (!workspace) return;
@@ -28,13 +24,7 @@ export function OsintWidget(): React.ReactElement {
         const off = onSocketOpen(() => {
             api.send('osint.keyList', {})
                 .then((res) => {
-                    if (cancelled) return;
-                    setCounts({
-                        probesAvailable: res.probesAvailable,
-                        probesTotal: res.probesTotal,
-                        keysHeld: res.providers.filter((p) => p.hasKey).length,
-                        keysTotal: res.providers.length
-                    });
+                    if (!cancelled) setHeld(new Set(res.providers.filter((p) => p.hasKey).map((p) => p.provider)));
                 })
                 .catch(() => {
                     // Un échec passager garde le dernier compte connu plutôt
@@ -45,22 +35,25 @@ export function OsintWidget(): React.ReactElement {
             cancelled = true;
             off();
         };
-    }, [workspace]);
+    }, [workspace, keysVersion]);
+
+    const probes = osintProbeIdSchema.options;
+    const blocked = held ? probes.filter((p) => !osintProbeUsable(p, held)) : [];
 
     return (
         <div className={styles.widget}>
             <div className={styles.widgetMuted}>
-                {counts === null ? (
+                {held === null ? (
                     'Chargement…'
                 ) : (
                     <>
                         <div>
-                            {counts.probesAvailable} sonde{counts.probesAvailable > 1 ? 's' : ''} sur{' '}
-                            {counts.probesTotal} disponible{counts.probesAvailable > 1 ? 's' : ''}
+                            {probes.length - blocked.length} sondes prêtes sur {probes.length}
                         </div>
                         <div>
-                            {counts.keysHeld} clé{counts.keysHeld > 1 ? 's' : ''} sur {counts.keysTotal} configurée
-                            {counts.keysHeld > 1 ? 's' : ''}
+                            {blocked.length === 0
+                                ? 'Aucune n’attend de clé'
+                                : `En attente d’une clé : ${blocked.map((p) => OSINT_PROBE_META[p].label).join(', ')}`}
                         </div>
                     </>
                 )}

@@ -148,7 +148,6 @@ describe('osint.setKey / osint.keyList', () => {
         const pappers = listed.providers.find((p) => p.provider === 'pappers');
         assert.equal(pappers?.hasKey, true);
         assert.ok(!JSON.stringify(listed).includes('secret-key'));
-        assert.ok(listed.probesAvailable <= listed.probesTotal);
 
         // Clé vide = effacement, même commande.
         const cleared = await handlerFor(osintSetKey)(ctx, { provider: 'pappers', key: '  ' });

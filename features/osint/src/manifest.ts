@@ -10,10 +10,13 @@ export const manifest = {
     ...descriptor,
     category: 'security',
     /**
-     * Une seule clé de cache : l'historique. Les résultats de sonde se relisent à
-     * la demande depuis le cache TTL du serveur.
+     * L'historique suit le sujet de la feature ; les clés ont le leur, pour
+     * qu'une recherche ne fasse pas relire les réglages de tout l'espace. Les
+     * résultats de sonde se relisent à la demande depuis le cache du serveur.
      */
-    resources: ['osint.history'],
-    settings: { feature: ['sources'] },
+    resources: ['osint.history', 'osint.keyList'],
+    invalidatedByTopic: ['osint.history'],
+    topics: [{ id: 'osintKeys', keys: ['osint.keyList'] }],
+    settings: { feature: [{ id: 'probes', label: 'Sondes', icon: 'search' }] },
     commands: osintCommands
 } satisfies FeatureManifest;

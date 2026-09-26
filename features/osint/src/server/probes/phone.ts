@@ -128,7 +128,6 @@ function numverifyError(nv: NumverifyResponse): string | null {
 export const phoneProbe: OsintProbeAdapter = {
     id: 'phone',
     appliesTo: ['phone'],
-    provider: 'numverify',
     ttlMs: 24 * 60 * 60 * 1000,
     async run({ target, key }) {
         const raw = target.value;

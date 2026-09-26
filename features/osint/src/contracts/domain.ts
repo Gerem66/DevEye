@@ -23,6 +23,16 @@ export const osintTargetKindSchema = z.enum([
 ]);
 export type OsintTargetKind = z.infer<typeof osintTargetKindSchema>;
 
+export const OSINT_KIND_LABELS: Record<OsintTargetKind, string> = {
+    domain: 'Domaine',
+    url: 'URL',
+    ip: 'Adresse IP',
+    email: 'Adresse e-mail',
+    phone: 'Téléphone',
+    person: 'Personne',
+    username: 'Pseudo'
+};
+
 export const OSINT_QUERY_MAX_LENGTH = 253;
 
 export const osintTargetSchema = z.object({
@@ -54,39 +64,95 @@ export const osintProbeIdSchema = z.enum([
     'rdapIp',
     'geoip',
     'blocklist',
+    'ports',
+    // Domaine ou IP
+    'virustotal',
     // Téléphone
     'phone',
     // Adresse e-mail
     'email',
+    'pgp',
+    'breaches',
     // Identité
     'username',
-    'pappers',
+    'registry',
+    'deaths',
+    'wikidata',
+    'github',
+    'gravatar',
+    'keybase',
     // Toutes cibles
     'dorks'
 ]);
 export type OsintProbeId = z.infer<typeof osintProbeIdSchema>;
 
-/** Libellé humain d'une sonde. Sert au squelette de carte, avant tout résultat. */
-export const OSINT_PROBE_LABELS: Record<OsintProbeId, string> = {
-    dns: 'DNS',
-    rdap: 'RDAP',
-    whois: 'WHOIS',
-    tls: 'Certificat TLS',
-    http: 'En-têtes HTTP',
-    crtsh: 'Sous-domaines',
-    ptr: 'Reverse DNS',
-    rdapIp: 'Bloc réseau',
-    geoip: 'Géolocalisation',
-    blocklist: 'Réputation',
-    phone: 'Numéro',
-    email: 'Adresse e-mail',
-    username: 'Profils',
-    pappers: 'Registre du commerce',
-    dorks: 'Pivots'
+export type OsintKeyMode = 'optional' | 'required';
+
+export interface OsintProbeMeta {
+    /** Libellé humain. Sert aussi au squelette de carte, avant tout résultat. */
+    label: string;
+    /** Ce que la sonde interroge, nommé pour qui choisit ses clés. */
+    source: string;
+    /**
+     * Le fournisseur dont une clé enrichit la sonde (`optional`) ou la rend
+     * possible (`required`). Sans clé exigée posée, la sonde est indisponible.
+     */
+    key?: { provider: OsintProvider; mode: OsintKeyMode };
+}
+
+/** Le catalogue des sondes : le serveur y lit la clé à fournir, les réglages tout le reste. */
+export const OSINT_PROBE_META: Record<OsintProbeId, OsintProbeMeta> = {
+    dns: { label: 'DNS', source: 'Résolveurs publics de Cloudflare (1.1.1.1) et de Google (8.8.8.8)' },
+    rdap: { label: 'RDAP', source: 'rdap.org, qui renvoie vers le registre du domaine' },
+    whois: { label: 'WHOIS', source: 'Serveur WHOIS du registre, trouvé par whois.iana.org' },
+    tls: { label: 'Certificat TLS', source: 'Connexion TLS directe au serveur' },
+    http: { label: 'En-têtes HTTP', source: 'Requête directe au site' },
+    crtsh: { label: 'Sous-domaines', source: 'crt.sh, les journaux publics de certificats' },
+    ptr: { label: 'Reverse DNS', source: 'Résolveurs publics de Cloudflare et de Google' },
+    rdapIp: { label: 'Bloc réseau', source: 'rdap.org, qui renvoie vers le registre régional (RIPE, ARIN…)' },
+    geoip: { label: 'Géolocalisation', source: 'ipwho.is' },
+    blocklist: { label: 'Réputation', source: 'Listes noires Spamhaus, SpamCop, Barracuda et SORBS' },
+    ports: {
+        label: 'Ports ouverts',
+        source: 'Shodan InternetDB, ou l’API Shodan avec une clé',
+        key: { provider: 'shodan', mode: 'optional' }
+    },
+    virustotal: {
+        label: 'VirusTotal',
+        source: 'VirusTotal, verdicts des moteurs antivirus',
+        key: { provider: 'virustotal', mode: 'required' }
+    },
+    phone: {
+        label: 'Numéro',
+        source: 'Plages d’attribution embarquées (libphonenumber), et Numverify avec une clé',
+        key: { provider: 'numverify', mode: 'optional' }
+    },
+    email: { label: 'Adresse e-mail', source: 'DNS du domaine, liste de domaines jetables, Gravatar' },
+    pgp: { label: 'Clés PGP', source: 'keyserver.ubuntu.com et keys.openpgp.org' },
+    breaches: {
+        label: 'Fuites de données',
+        source: 'Have I Been Pwned',
+        key: { provider: 'hibp', mode: 'required' }
+    },
+    username: { label: 'Profils', source: 'GitHub, Reddit, Instagram, TikTok, Twitch et une vingtaine d’autres sites' },
+    registry: {
+        label: 'Registre du commerce',
+        source: 'Annuaire des entreprises (data.gouv.fr), ou Pappers avec une clé',
+        key: { provider: 'pappers', mode: 'optional' }
+    },
+    deaths: { label: 'Décès (INSEE)', source: 'Fichier des personnes décédées de l’INSEE, par matchID' },
+    wikidata: { label: 'Wikidata', source: 'Wikidata, la base de Wikipédia' },
+    github: { label: 'GitHub', source: 'API GitHub', key: { provider: 'github', mode: 'optional' } },
+    gravatar: { label: 'Gravatar', source: 'API Gravatar' },
+    keybase: { label: 'Keybase', source: 'API Keybase' },
+    dorks: {
+        label: 'Pivots',
+        source: 'Recherches Google, Bing, DuckDuckGo et annuaires, ouvertes dans votre navigateur'
+    }
 };
 
 /** Sondes lentes par nature : le client les place en fin de grille. */
-export const OSINT_SLOW_PROBES: readonly OsintProbeId[] = ['crtsh', 'username', 'whois'];
+export const OSINT_SLOW_PROBES: readonly OsintProbeId[] = ['crtsh', 'username', 'whois', 'github', 'wikidata'];
 
 /* ------------------------------ Le résultat ------------------------------ */
 
@@ -186,34 +252,61 @@ export interface OsintLookupRow {
  * Fournisseurs qu'une clé débloque. Aucun n'est requis : une sonde dont la clé
  * manque rend `skipped` avec le lien pour en obtenir une, jamais une erreur.
  */
-export const osintProviderSchema = z.enum(['pappers', 'numverify', 'hibp', 'shodan', 'virustotal']);
+export const osintProviderSchema = z.enum(['pappers', 'numverify', 'hibp', 'shodan', 'virustotal', 'github']);
 export type OsintProvider = z.infer<typeof osintProviderSchema>;
 
-export const OSINT_PROVIDER_META: Record<OsintProvider, { label: string; signupUrl: string; enables: string }> = {
+/**
+ * Le tarif d'un service : `freemium` a une offre gratuite (souvent plafonnée)
+ * et des offres payantes au-dessus.
+ */
+export type OsintPricing = 'free' | 'freemium' | 'paid';
+
+export const OSINT_PRICING_LABELS: Record<OsintPricing, string> = {
+    free: 'gratuit',
+    freemium: 'gratuit et payant',
+    paid: 'payant'
+};
+
+export const OSINT_PROVIDER_META: Record<
+    OsintProvider,
+    { label: string; signupUrl: string; enables: string; pricing: OsintPricing }
+> = {
     pappers: {
         label: 'Pappers',
         signupUrl: 'https://www.pappers.fr/api',
-        enables: 'Registre du commerce français : nom/prénom → mandats de dirigeant.'
+        enables: 'Recherche des mandats de dirigeant par Pappers, à la place de l’annuaire public des entreprises.',
+        pricing: 'freemium'
     },
     numverify: {
         label: 'Numverify',
         signupUrl: 'https://numverify.com/',
-        enables: "Opérateur réel d'un numéro, au-delà de la plage d'attribution."
+        enables: "Opérateur réel d'un numéro, au-delà de la plage d'attribution.",
+        pricing: 'freemium'
     },
     hibp: {
         label: 'Have I Been Pwned',
         signupUrl: 'https://haveibeenpwned.com/API/Key',
-        enables: 'Fuites de données connues pour une adresse e-mail.'
+        enables: 'Fuites de données connues pour une adresse e-mail.',
+        pricing: 'paid'
     },
     shodan: {
         label: 'Shodan',
         signupUrl: 'https://account.shodan.io/register',
-        enables: "Ports ouverts et bannières de service d'une IP."
+        enables: "Logiciel et version de chaque service ouvert d'une IP, au-delà de la liste de ports gratuite.",
+        pricing: 'freemium'
     },
     virustotal: {
         label: 'VirusTotal',
         signupUrl: 'https://www.virustotal.com/gui/join-us',
-        enables: 'Réputation multi-moteurs des domaines et des IP.'
+        enables: 'Réputation multi-moteurs des domaines et des IP.',
+        pricing: 'freemium'
+    },
+    github: {
+        label: 'GitHub',
+        signupUrl: 'https://github.com/settings/personal-access-tokens/new',
+        enables:
+            'Un jeton personnel, gratuit et sans aucun droit, lève la limite de la carte GitHub : sans lui, quelques recherches par heure pour tout le serveur.',
+        pricing: 'free'
     }
 };
 
@@ -322,13 +415,30 @@ export function detectTarget(raw: string): OsintTarget {
     return mk('person', query);
 }
 
+/**
+ * Le tarif d'une sonde. Sans clé, elle ne coûte rien ; avec, c'est celui du
+ * fournisseur, sauf qu'une clé facultative n'ôte rien à l'usage gratuit.
+ */
+export function osintProbePricing(probe: OsintProbeId): OsintPricing {
+    const key = OSINT_PROBE_META[probe].key;
+    if (!key) return 'free';
+    const pricing = OSINT_PROVIDER_META[key.provider].pricing;
+    return key.mode === 'optional' && pricing === 'paid' ? 'freemium' : pricing;
+}
+
+/** La sonde peut-elle rendre quelque chose avec les clés que l'espace a posées ? */
+export function osintProbeUsable(probe: OsintProbeId, held: ReadonlySet<OsintProvider>): boolean {
+    const key = OSINT_PROBE_META[probe].key;
+    return key?.mode !== 'required' || held.has(key.provider);
+}
+
 /** Quelles sondes s'appliquent à cette nature de cible. Miroir du registre serveur. */
 export const OSINT_PROBES_BY_KIND: Record<OsintTargetKind, readonly OsintProbeId[]> = {
-    domain: ['dns', 'rdap', 'whois', 'tls', 'http', 'crtsh', 'dorks'],
-    url: ['dns', 'rdap', 'whois', 'tls', 'http', 'crtsh', 'dorks'],
-    ip: ['ptr', 'rdapIp', 'geoip', 'blocklist', 'dorks'],
-    email: ['email', 'dorks'],
+    domain: ['dns', 'rdap', 'whois', 'tls', 'http', 'crtsh', 'virustotal', 'dorks'],
+    url: ['dns', 'rdap', 'whois', 'tls', 'http', 'crtsh', 'virustotal', 'dorks'],
+    ip: ['ptr', 'rdapIp', 'geoip', 'blocklist', 'ports', 'virustotal', 'dorks'],
+    email: ['email', 'gravatar', 'github', 'pgp', 'breaches', 'dorks'],
     phone: ['phone', 'dorks'],
-    person: ['pappers', 'dorks'],
-    username: ['username', 'dorks']
+    person: ['registry', 'deaths', 'wikidata', 'github', 'dorks'],
+    username: ['username', 'github', 'keybase', 'gravatar', 'dorks']
 };

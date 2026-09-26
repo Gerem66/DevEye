@@ -1,7 +1,7 @@
 import { safeHref } from 'deveye-sdk-client';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { OSINT_PROBE_LABELS, type OsintProbeId, type OsintProbeResult, type OsintTone } from '../contracts/domain';
+import { OSINT_PROBE_META, type OsintProbeId, type OsintProbeResult, type OsintTone } from '../contracts/domain';
 
 import { internalPivot } from './api';
 import styles from './Osint.module.css';
@@ -30,7 +30,7 @@ const TONE_CLASS: Record<OsintTone, string> = {
 
 export function ProbeCard({ probe, state, onRetry, onPivot }: Props): React.ReactElement {
     const [rawOpen, setRawOpen] = useState(false);
-    const label = OSINT_PROBE_LABELS[probe];
+    const label = OSINT_PROBE_META[probe].label;
 
     return (
         <motion.section

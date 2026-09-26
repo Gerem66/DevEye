@@ -274,8 +274,9 @@
 
 .channelLabel {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: var(--space-sm);
+    gap: 2px var(--space-sm);
     color: var(--text-primary);
     font-size: 0.9rem;
     font-weight: 600;
@@ -334,6 +335,34 @@
 .channelUsageIdle {
     background: var(--surface-subtle);
     color: var(--text-muted);
+}
+
+/* Une liste de clés découpée en groupes : l'intertitre colle à sa liste. */
+.keyGroup {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+/* Une information sur la rangée (un tarif), pas un état : même gabarit que
+   `.channelOff`, sans la casse basse imposée au libellé. */
+.keyBadge {
+    padding: 1px 6px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-subtle);
+    color: var(--text-secondary);
+    font-size: 0.68rem;
+    font-weight: 600;
+}
+
+.keyBadgeAccent {
+    background: var(--accent-bg);
+    color: var(--accent);
+}
+
+.keyBadgeWarning {
+    background: var(--warning-bg);
+    color: var(--warning);
 }
 
 /* Un groupe par espace : son nom, puis ses projets. Le liseré n'apparaît qu'à

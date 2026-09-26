@@ -1,13 +1,13 @@
 import type { FeatureClient } from '@deveye/types/sdk/client';
 
 import Osint from './Osint';
-import OsintKeysPanel from './OsintKeysPanel';
+import OsintProbesPanel from './OsintProbesPanel';
 import OsintWidget from './OsintWidget';
 
 export const clientEntry: FeatureClient = {
     Widget: OsintWidget,
     Full: Osint,
-    settingsPanels: { sources: OsintKeysPanel },
+    settingsPanels: { probes: OsintProbesPanel },
     // Démonté dès la fermeture : les cartes tiennent des résultats lus chez des
     // tiers, et le cache TTL du serveur les resert si on rouvre.
     cacheDurationMinutes: 0,
