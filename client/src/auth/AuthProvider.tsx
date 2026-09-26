@@ -12,6 +12,7 @@ import { setCurrentUser, useActingUser } from '../stores/currentUser';
 import { forgetRemoteSessions, patchRemoteUser, syncRemoteInstances } from '../stores/remoteInstances';
 import { getActiveInstanceId } from '../stores/workspace';
 import { setFeedbackEnabled } from '../stores/feedbackEnabled';
+import { setSiteUrl } from '../stores/siteUrl';
 import { setMaintenanceEnvNotice, setPublicMaintenance } from '../stores/maintenance';
 import { devicesProvider } from '../devicesProvider';
 
@@ -79,6 +80,7 @@ function applyBundle(bundle: SessionBundle): AuthState {
         syncHomeLayoutFromServer(bundle.homeLayout);
     }
     setFeedbackEnabled(bundle.feedbackEnabled);
+    setSiteUrl(bundle.siteUrl);
     setMaintenanceEnvNotice(bundle.maintenanceEnvNotice);
     return { status: 'authenticated', user: bundle.user };
 }

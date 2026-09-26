@@ -10,6 +10,7 @@ import { domainFeatures } from './domain';
 import { sharingFeatures } from './sharing';
 import { secrecyFeatures } from './secrecy';
 import { twoFactorFeatures } from './twofa';
+import { userDeleteAccountFeature } from './user/deleteAccount';
 import { userSetAvatarFeature } from './user/setAvatar';
 import { userPlanFeature } from './user/plan';
 import { userSetColorFeature } from './user/setColor';
@@ -65,6 +66,7 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     userSetColorFeature,
     userSetSettingFeature,
     userSetUsernameFeature,
+    userDeleteAccountFeature,
     ...agentFeatures,
     ...twoFactorFeatures,
     ...secrecyFeatures,

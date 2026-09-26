@@ -9,6 +9,7 @@ export interface PendingSignupRow {
     token_hash: string;
     watch_hash: string;
     plan: string | null;
+    terms_accepted_at: number | null;
     opened_at: number | null;
     completed_at: number | null;
     expires_at: number;
@@ -21,6 +22,7 @@ export interface PendingSignupInput {
     tokenHash: string;
     watchHash: string;
     plan: string | null;
+    termsAcceptedAt: number | null;
     expiresAt: number;
 }
 
@@ -44,12 +46,12 @@ export interface PendingSignupsRepo {
 
 export function pendingSignupsRepo(pool: Q): PendingSignupsRepo {
     return {
-        async replace({ email, username, tokenHash, watchHash, plan, expiresAt }) {
+        async replace({ email, username, tokenHash, watchHash, plan, termsAcceptedAt, expiresAt }) {
             await pool.query('DELETE FROM pending_signups WHERE email = ?', [email]);
             await pool.query(
-                `INSERT INTO pending_signups (email, username, token_hash, watch_hash, plan, expires_at)
-                 VALUES (?, ?, ?, ?, ?, ?)`,
-                [email, username, tokenHash, watchHash, plan, expiresAt]
+                `INSERT INTO pending_signups (email, username, token_hash, watch_hash, plan, terms_accepted_at, expires_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                [email, username, tokenHash, watchHash, plan, termsAcceptedAt, expiresAt]
             );
         },
         async findLiveByTokenHash(tokenHash, now) {

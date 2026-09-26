@@ -10,6 +10,8 @@ import {
     visibleFeatureCatalog,
     type FeatureCatalogEntry
 } from '../catalog';
+import { LEGAL_LABELS, legalLinks } from '@/legal';
+import { useSiteUrl } from '@/stores/siteUrl';
 import Term from '@/Components/Term';
 
 import { FeatureArt } from '../art';
@@ -95,6 +97,8 @@ function FeatureRow({ entry }: { entry: FeatureCatalogEntry }) {
  */
 export default function AboutContent() {
     const catalog = visibleFeatureCatalog();
+    const siteUrl = useSiteUrl();
+    const legal = siteUrl === null ? null : legalLinks(siteUrl);
     const encrypted = catalog.filter((f) => f.holdSecrecy);
     const alerting = catalog.filter((f) => (f.links ?? []).some((l) => l.to === 'mail'));
 
@@ -167,6 +171,21 @@ export default function AboutContent() {
                     </li>
                 </ul>
             </div>
+
+            {legal && (
+                <div>
+                    <p className={styles.sectionTitle}>Informations légales</p>
+                    <ul className={styles.legalLinks}>
+                        {(Object.keys(LEGAL_LABELS) as (keyof typeof LEGAL_LABELS)[]).map((key) => (
+                            <li key={key}>
+                                <a href={legal[key]} target='_blank' rel='noopener noreferrer'>
+                                    {LEGAL_LABELS[key]}
+                                </a>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
 
             <div>
                 <p className={styles.sectionTitle}>Services externes utilisés</p>

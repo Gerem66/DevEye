@@ -219,10 +219,12 @@ function renderHistory(view: StatusPageView): string {
         </section>`;
 }
 
+/** Le site porte aussi la politique de confidentialité : un visiteur anonyme doit pouvoir la lire d'ici. */
 function footer(siteUrl: string): string {
-    const name =
-        siteUrl.length > 0 ? `<a href="${escapeHtml(siteUrl)}" target="_blank" rel="noopener">DevEye</a>` : 'DevEye';
-    return `<footer class="foot">Page de statut propulsée par ${name}</footer>`;
+    if (siteUrl.length === 0) return '<footer class="foot">Page de statut propulsée par DevEye</footer>';
+    const site = escapeHtml(siteUrl);
+    const privacy = `<a href="${site}/confidentialite" target="_blank" rel="noopener">Confidentialité</a>`;
+    return `<footer class="foot">Page de statut propulsée par <a href="${site}" target="_blank" rel="noopener">DevEye</a> · ${privacy}</footer>`;
 }
 
 function documentOf(input: {

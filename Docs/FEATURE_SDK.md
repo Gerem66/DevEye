@@ -654,8 +654,9 @@ restrictions du dispatcheur liées à LA feature du module, et le ménage d'un
 `shareScope` de `_sharing.ts` ; refusé sous `shareTier: 'never'`), `audit`,
 `domains` (`list()`, `get(id)`, `verified()` : les domaines de LA feature du
 module dans l'espace actif ; refusé sans `domains` au manifest), `logger`,
-`requestId`, `origins { app, public }` (où vit DevEye, sans barre finale :
-l'origine des membres et celle de l'écouteur public). Une erreur se signale par
+`requestId`, `origins { app, public, site }` (où vit DevEye, sans barre finale :
+l'origine des membres, celle de l'écouteur public, et le site vitrine où vivent
+les pages légales, `null` sans site). Une erreur se signale par
 `FeatureError(code, message)`.
 
 Par service (`FeatureServiceDeps`, `_sdk/service.ts`) : `repo`,
@@ -775,6 +776,11 @@ Pairs admis d'un module : `@deveye/types`, `react`, `zod`, `framer-motion`
 
 ## Dettes connues
 
+- **Le site vitrine en trois exemplaires** : `ctx.origins.site` (`SITE_URL`)
+  dit aux modules où vivent les pages légales, mais Uptime, Projets et
+  Rendez-vous lisent encore chacun leur `*_SITE_URL` pour le lien de leurs
+  pages publiques. Une seule variable suffirait ; le jour où on les retire,
+  `origins.site` passe aussi aux routes publiques (`SdkPublicApp`).
 - **Partage inter-espaces et restrictions par élément** : au SDK depuis
   Uptime (`ctx.sharing.scope()`, `ctx.items.*`, `FeatureServer.items`, les
   harnais de test qui les simulent par `shares` et `itemRestrictions`). Ce qui

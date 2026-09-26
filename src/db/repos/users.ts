@@ -14,7 +14,14 @@ export interface UsersRepo {
      * premiers comptes.
      */
     search(query: string, limit: number): Promise<UserRow[]>;
-    create(input: { email: string; username: string; passwordHash: string; role?: 'user' | 'admin' }): Promise<UserRow>;
+    create(input: {
+        email: string;
+        username: string;
+        passwordHash: string;
+        role?: 'user' | 'admin';
+        /** Secondes : quand les conditions du site ont été acceptées ; `null` sans site. */
+        termsAcceptedAt?: number | null;
+    }): Promise<UserRow>;
     updateLastLogin(id: number, lastLogin: number): Promise<void>;
     /** Rattache le compte à son espace personnel, juste après l'avoir créé. */
     setPersonalWorkspace(id: number, workspaceId: number): Promise<void>;
@@ -93,14 +100,14 @@ export function usersRepo(pool: Q): UsersRepo {
             );
             return r.rows;
         },
-        async create({ email, username, passwordHash, role = 'user' }) {
+        async create({ email, username, passwordHash, role = 'user', termsAcceptedAt = null }) {
             // `personal_workspace_id` est NOT NULL mais l'espace ne peut pas
             // exister avant le compte (FK propriétaire) : 0 le temps de créer
             // l'espace, puis `setPersonalWorkspace` referme le cycle.
             const res = await pool.query(
-                `INSERT INTO users (email, username, password_hash, role, settings, personal_workspace_id)
-                 VALUES (?, ?, ?, ?, CAST('[]' AS JSON), 0)`,
-                [email, username, passwordHash, role]
+                `INSERT INTO users (email, username, password_hash, role, settings, personal_workspace_id, terms_accepted_at)
+                 VALUES (?, ?, ?, ?, CAST('[]' AS JSON), 0, ?)`,
+                [email, username, passwordHash, role, termsAcceptedAt]
             );
             // La colonne a un défaut vide : un compte neuf prend sa teinte ici.
             await pool.query('UPDATE users SET color = ? WHERE id = ?', [

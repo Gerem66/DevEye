@@ -449,7 +449,7 @@ describe('audience.get', () => {
         const repo = seed(fakeRepo(), site({ id: 1, workspace_id: 1 }));
         const ctx = createTestContext({
             repo,
-            origins: { app: 'https://deveye.exemple.fr', public: 'https://t.exemple.fr' },
+            origins: { app: 'https://deveye.exemple.fr', public: 'https://t.exemple.fr', site: null },
             providers: { [PROJECTS_USAGE_PROVIDER]: projectsProvider() }
         });
 

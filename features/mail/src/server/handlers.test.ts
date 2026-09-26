@@ -412,7 +412,7 @@ describe('mail.oauthStart', () => {
     it('rend l’URL de consentement, `state` = ticket du fournisseur et du palier, retour sur l’origine de l’app', async () => {
         const ctx = createTestContext({
             repo: fakeRepo(),
-            origins: { app: 'https://app.test', public: 'https://p.test' }
+            origins: { app: 'https://app.test', public: 'https://p.test', site: null }
         });
         const { authUrl } = await handlerFor(mailOAuthStart)(ctx, {
             provider: 'google',

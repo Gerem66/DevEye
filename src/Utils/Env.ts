@@ -13,6 +13,11 @@ export const env = {
     // et n'exposer qu'elles. Vide, on retombe sur `PUBLIC_ORIGIN`.
     AUDIENCE_ORIGIN: getEnvVar('AUDIENCE_ORIGIN', 'string', false),
 
+    // Le site vitrine, où vivent les pages légales (`/cgu`, `/cgv`,
+    // `/confidentialite`, `/mentions-legales`) : l'inscription les fait
+    // accepter et l'app y renvoie. Vide (auto-hébergé) : ni case, ni liens.
+    SITE_URL: getEnvVar('SITE_URL', 'string', false),
+
     // Port du second écouteur, celui qu'on expose sur Internet (`publicApp.ts`) :
     // il n'enregistre que les routes publiques des modules. Vide, pas de second
     // serveur, et ces routes restent joignables sur le port principal.

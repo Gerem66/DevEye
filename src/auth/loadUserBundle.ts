@@ -3,6 +3,7 @@ import type { HomeLayout, MinimalUser, SessionBundle, ThemeStateDTO, UserRole, W
 import { homeLayoutSchema, themeStateSchema } from '@deveye/types';
 import { toRemoteInstance } from '@/db/repos/remoteInstances';
 import { permissionsFor } from '@/features/_access';
+import { ORIGINS } from '@/features/_sdk/context';
 import { maintenance, MaintenanceError } from '@/Services/maintenance';
 import { memberPausedIn, workspacePauses } from '@/Services/planPauses';
 import { env } from '@/Utils/Env';
@@ -114,6 +115,7 @@ export async function loadUserBundle(
             ? await permissionsFor(db, userId, activeRow)
             : { isOwner: false, capabilities: [], features: [], itemOverrides: [] },
         feedbackEnabled: env.FEEDBACK_ENABLED,
+        siteUrl: ORIGINS.site,
         maintenanceEnvNotice: isAdmin && (await maintenance.envNotice())
     };
 }

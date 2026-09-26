@@ -292,7 +292,7 @@ function mount(
     const deps = tagging(
         createTestServiceDeps({
             repo,
-            origins: { app: 'https://app.test', public: 'https://p.test' },
+            origins: { app: 'https://app.test', public: 'https://p.test', site: null },
             pausedItems: { accounts: paused }
         })
     );

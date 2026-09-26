@@ -436,6 +436,25 @@ export async function notifyModulePlanPause(featureId: string, change: SdkPlanPa
     }
 }
 
+/**
+ * Un compte va être supprimé : chaque service qui l'écoute termine ce qu'il
+ * tient pour lui ailleurs (un abonnement). Avant la suppression, et sans
+ * avaler l'erreur : un module qui échoue, ou qu'une maintenance tient à
+ * l'arrêt, laisserait un abonnement tourner sur un compte disparu.
+ */
+export async function notifyModulesAccountDeleted(userId: number): Promise<void> {
+    for (const s of SERVICES) {
+        if (!s.service.onAccountDeleted) continue;
+        if (s.halted) {
+            throw new FeatureError(
+                'conflict',
+                `Le module « ${s.manifest.label} » est en maintenance : réessayez plus tard.`
+            );
+        }
+        await s.service.onAccountDeleted(userId);
+    }
+}
+
 /** Les fonctionnalités installées qui gèrent des domaines. */
 export function moduleDomainFeatures(): string[] {
     return MODULES.filter((mod) => mod.manifest.domains && mod.server.domains).map((mod) => mod.manifest.id);

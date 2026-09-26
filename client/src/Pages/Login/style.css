@@ -311,6 +311,21 @@
     font-weight: 600;
 }
 
+/* La case des conditions, alignée à gauche comme les champs, ses liens lisibles sur le verre. */
+.login .signup-terms {
+    margin: 0 0 12px;
+    font-size: 0.85rem;
+    line-height: 1.4;
+    text-align: left;
+    color: var(--text-secondary);
+}
+
+.login .signup-terms a {
+    color: var(--text-primary);
+    text-decoration: underline;
+    text-underline-offset: 0.15em;
+}
+
 /* Aide et erreur partagent la même place : la carte ne change pas de hauteur
    quand l'une remplace l'autre, donc rien ne saute sous le curseur. */
 .login .signup-hint,

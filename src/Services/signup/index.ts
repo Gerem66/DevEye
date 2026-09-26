@@ -45,7 +45,13 @@ export type SignupCompleteResult =
 
 export interface SignupService extends FeatureService {
     isOpen(): Promise<boolean>;
-    request(input: { username: string; email: string; plan: string | null }): Promise<SignupStartResult>;
+    /** `termsAcceptedAt` : secondes, quand les conditions du site ont été acceptées ; `null` sans site. */
+    request(input: {
+        username: string;
+        email: string;
+        plan: string | null;
+        termsAcceptedAt: number | null;
+    }): Promise<SignupStartResult>;
     status(watchToken: string): Promise<SignupStatus['state']>;
     /** Le lien du mail vient d'être ouvert. `null` s'il ne mène plus à rien. */
     open(token: string): Promise<{ username: string; email: string } | null>;
@@ -76,7 +82,7 @@ export function createSignupService(deps: SignupDeps): SignupService {
         isOpen,
         sweep,
 
-        async request({ username, email, plan }) {
+        async request({ username, email, plan, termsAcceptedAt }) {
             if (!(await isOpen())) return { ok: false, reason: 'closed' };
             const address = email.trim().toLowerCase();
             const watchToken = newToken();
@@ -109,6 +115,7 @@ export function createSignupService(deps: SignupDeps): SignupService {
                 tokenHash: sha256hex(token),
                 watchHash: sha256hex(watchToken),
                 plan,
+                termsAcceptedAt,
                 expiresAt: now() + SIGNUP_TTL_SECONDS
             });
 
@@ -159,7 +166,13 @@ export function createSignupService(deps: SignupDeps): SignupService {
                 if (!(await tx.pendingSignups.markCompleted(row.id, now()))) return { ok: false, reason: 'not_found' };
 
                 const role = existing === 0 ? 'admin' : 'user';
-                const user = await tx.users.create({ email: row.email, username: row.username, passwordHash, role });
+                const user = await tx.users.create({
+                    email: row.email,
+                    username: row.username,
+                    passwordHash,
+                    role,
+                    termsAcceptedAt: row.terms_accepted_at
+                });
                 // L'espace personnel ne peut pas exister avant le compte (sa FK
                 // propriétaire le référence) : compte, espace, puis rattachement.
                 const personal = await tx.workspaces.createPersonal(user.id, row.username);

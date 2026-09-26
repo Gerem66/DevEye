@@ -4,6 +4,8 @@ import { invalidateAccess } from '../_access';
 import { schedulePlanReconcile } from '@/Services/planPauses';
 import { forgetSessionsOf } from '@/Services/SecureStore';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
+import { notifyModulesAccountDeleted } from '../_sdk/register';
+import { deleteUserEverywhere } from '../_users';
 import { adminMaintenanceFeatures } from './maintenance';
 import { notifyAdmins } from './notify';
 
@@ -118,33 +120,9 @@ export const adminDeleteUserFeature: FeatureDefinition<
         const target = await ctx.db.users.findById(input.userId);
         if (!target) throw new FeatureError('not_found', 'Compte introuvable');
 
-        // Relevés AVANT la suppression : la cascade emporte les rattachements,
-        // et il n'y aurait plus personne à prévenir après coup.
-        const shared = (await ctx.db.workspaces.findAccessibleByUser(input.userId)).filter((w) => w.kind === 'shared');
-        const members = await ctx.db.workspaceMembers.listByWorkspaceIds(shared.map((w) => w.id));
-
-        // Les FK ON DELETE CASCADE emportent l'espace personnel, les espaces
-        // partagés dont il est propriétaire, et tout leur contenu.
-        await ctx.db.users.delete(input.userId);
-        invalidateAccess();
-        forgetSessionsOf(input.userId);
-        if (ctx.live) {
-            ctx.live.evictEverywhere(input.userId);
-            ctx.live.closeSessionsOf(input.userId);
-            // Les espaces qu'il possédait ont disparu avec lui : leurs salles se vident.
-            for (const w of shared) {
-                if (w.owner_user_id === input.userId) ctx.live.evictRoom(w.id);
-            }
-            // Chaque membre de ses espaces relit sa session : le supprimé sort
-            // des listes de membres, et un espace qu'il possédait sort des menus.
-            // Par compte : assis ailleurs, un membre ne recevrait rien de la salle.
-            for (const m of members) {
-                if (m.user_id !== input.userId) {
-                    ctx.live.userChanged(m.user_id, m.workspace_id, ['workspace'], ctx.userId);
-                }
-            }
-            await notifyAdmins(ctx.db, ctx.live, ctx.workspaceId, ctx.userId);
-        }
+        // Les modules d'abord : un abonnement ne survit pas au compte.
+        await notifyModulesAccountDeleted(input.userId);
+        await deleteUserEverywhere(ctx, input.userId, { userId: ctx.userId, workspaceId: ctx.workspaceId });
 
         ctx.audit({
             action: 'user.delete',

@@ -14,6 +14,7 @@ import type { FastifyInstance } from 'fastify';
 
 import type { Database } from '@/db';
 import { notifyAdmins } from '@/features/admin/notify';
+import { ORIGINS } from '@/features/_sdk/context';
 import type { LiveHub } from '@/live/hub';
 import { assertAttemptAllowed, LockedOutError, recordFailedAttempt } from '@/Services/attempts';
 import type { AuditLog } from '@/Services/AuditLog';
@@ -34,7 +35,12 @@ const DEAD_LINK = 'Ce lien est invalide ou a expiré';
 
 export async function signupRoutes(app: FastifyInstance, { db, audit, live, signup }: SignupRouteDeps): Promise<void> {
     app.get('/api/auth/signup', { logLevel: 'silent' }, async () =>
-        ok(signupAvailabilitySchema.parse({ open: !maintenance.siteDown() && (await signup.isOpen()) }))
+        ok(
+            signupAvailabilitySchema.parse({
+                open: !maintenance.siteDown() && (await signup.isOpen()),
+                siteUrl: ORIGINS.site
+            })
+        )
     );
 
     // Pas de compte neuf pendant la maintenance du site : il n'y entrerait pas.
@@ -51,7 +57,12 @@ export async function signupRoutes(app: FastifyInstance, { db, audit, live, sign
                 return reply.code(400).send(err('validation', 'Demande invalide', parsed.error.flatten()));
             }
             assertSiteOpen();
-            const { username, email, plan } = parsed.data;
+            const { username, email, plan, termsAccepted } = parsed.data;
+            // Avec un site, ses conditions se lisent et s'acceptent avant tout : le
+            // client cache le bouton tant que la case n'est pas cochée, ceci garde.
+            if (ORIGINS.site !== null && !termsAccepted) {
+                return reply.code(400).send(err('validation', 'Les conditions d’utilisation doivent être acceptées'));
+            }
 
             // La limite par IP ne protège pas une boîte visée depuis plusieurs
             // adresses : chaque demande compte aussi contre l'adresse demandée.
@@ -67,7 +78,12 @@ export async function signupRoutes(app: FastifyInstance, { db, audit, live, sign
             }
             recordFailedAttempt('signup', target);
 
-            const result = await signup.request({ username, email, plan: plan ?? null });
+            const result = await signup.request({
+                username,
+                email,
+                plan: plan ?? null,
+                termsAcceptedAt: ORIGINS.site !== null ? Math.floor(Date.now() / 1000) : null
+            });
             if (result.ok) return reply.send(ok(signupStartResponseSchema.parse({ watchToken: result.watchToken })));
             if (result.reason === 'closed') {
                 return reply.code(403).send(err('forbidden', 'Les inscriptions sont fermées sur ce serveur'));

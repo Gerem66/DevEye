@@ -1,4 +1,4 @@
-import type { SdkFeatureContext, SdkProviders, SdkSocketTransport } from '@deveye/types/sdk/server';
+import type { SdkFeatureContext, SdkOrigins, SdkProviders, SdkSocketTransport } from '@deveye/types/sdk/server';
 import { env } from '@/Utils/Env';
 import { signModuleTicket } from '@/auth/jwt';
 import { sdkLive, serverKeysOf } from './host';
@@ -30,12 +30,14 @@ import { createFeatureStore } from './store';
  * Où vit DevEye, sans barre finale : l'origine des membres et celle des routes
  * publiques (`AUDIENCE_ORIGIN`, sinon la même), qui diffère quand elles sont
  * exposées à part. Le serveur seul la connaît : le navigateur d'un membre ne
- * voit que la première.
+ * voit que la première. `site` est la vitrine (`SITE_URL`), où vivent les
+ * pages légales ; `null` sans site.
  */
-export const ORIGINS = {
+export const ORIGINS: SdkOrigins = {
     app: env.PUBLIC_ORIGIN.replace(/\/+$/, ''),
-    public: (env.AUDIENCE_ORIGIN || env.PUBLIC_ORIGIN).replace(/\/+$/, '')
-} as const;
+    public: (env.AUDIENCE_ORIGIN || env.PUBLIC_ORIGIN).replace(/\/+$/, ''),
+    site: env.SITE_URL ? env.SITE_URL.replace(/\/+$/, '') : null
+};
 
 export function createSdkContext(
     ctx: FeatureContext,

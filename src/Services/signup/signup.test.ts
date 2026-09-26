@@ -47,6 +47,7 @@ function harness(options: { mode?: 'open' | 'closed'; smtp?: boolean; users?: Fa
                 tokenHash: string;
                 watchHash: string;
                 plan: string | null;
+                termsAcceptedAt: number | null;
                 expiresAt: number;
             }) => {
                 const at = pending.findIndex((p) => p.email === input.email);
@@ -58,6 +59,7 @@ function harness(options: { mode?: 'open' | 'closed'; smtp?: boolean; users?: Fa
                     token_hash: input.tokenHash,
                     watch_hash: input.watchHash,
                     plan: input.plan,
+                    terms_accepted_at: input.termsAcceptedAt,
                     opened_at: null,
                     completed_at: null,
                     expires_at: input.expiresAt,
@@ -120,7 +122,7 @@ function harness(options: { mode?: 'open' | 'closed'; smtp?: boolean; users?: Fa
     return { service, users, pending, sent, warnings, tokenOf, advance: (seconds: number) => (clock += seconds) };
 }
 
-const ALICE = { username: 'alice', email: 'alice@exemple.fr', plan: null };
+const ALICE = { username: 'alice', email: 'alice@exemple.fr', plan: null, termsAcceptedAt: null };
 
 describe("l'inscription", () => {
     it('crée le compte à la dernière étape seulement, et porte le plan jusqu’au bout', async () => {
@@ -198,7 +200,7 @@ describe("l'inscription", () => {
         const h = harness({ mode: 'closed' });
         assert.equal(await h.service.isOpen(), true);
         await h.service.request(ALICE);
-        await h.service.request({ username: 'bob', email: 'bob@exemple.fr', plan: null });
+        await h.service.request({ username: 'bob', email: 'bob@exemple.fr', plan: null, termsAcceptedAt: null });
 
         const first = await h.service.complete(h.tokenOf(h.sent[0]), 'hash');
         assert.ok(first.ok);
@@ -206,10 +208,13 @@ describe("l'inscription", () => {
 
         assert.equal(await h.service.isOpen(), false);
         assert.deepEqual(await h.service.complete(h.tokenOf(h.sent[1]), 'hash'), { ok: false, reason: 'closed' });
-        assert.deepEqual(await h.service.request({ username: 'eve', email: 'eve@exemple.fr', plan: null }), {
-            ok: false,
-            reason: 'closed'
-        });
+        assert.deepEqual(
+            await h.service.request({ username: 'eve', email: 'eve@exemple.fr', plan: null, termsAcceptedAt: null }),
+            {
+                ok: false,
+                reason: 'closed'
+            }
+        );
     });
 
     it('ouverte, donne le rôle ordinaire dès qu’un compte existe', async () => {

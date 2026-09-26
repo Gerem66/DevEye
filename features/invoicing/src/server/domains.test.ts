@@ -34,7 +34,7 @@ function settingsRow(domainId: number | null): InvoicingSettingsRow {
 describe('les crochets de domaine', () => {
     it('le CNAME vise l’hôte public de DevEye', async () => {
         const ctx = createTestDomainsContext<InvoicingRepo>({
-            origins: { app: 'https://app.test', public: 'https://pub.test' }
+            origins: { app: 'https://app.test', public: 'https://pub.test', site: null }
         });
         assert.deepEqual(await createDomainHooks().records(ctx, DOMAIN), [
             { type: 'CNAME', name: 'factures.dupont.fr', value: 'pub.test' }
