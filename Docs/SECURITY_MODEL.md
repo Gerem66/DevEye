@@ -323,6 +323,12 @@ Même garantie que la BMK CloudSync : protégé au repos, lisible par un serveur
 vivant compromis. Le choix est ici structurel : un moniteur qui exigerait le mot
 de passe ne pourrait tout simplement pas sonder.
 
+Le client bâti publie aussi `/.well-known/deveye-build.json`, l'empreinte
+SHA-256 de chacun de ses fichiers. Ce n'est pas une preuve (le serveur qui le
+sert pourrait le réécrire) mais la liste de ce qu'un contrôle d'intégrité tenu
+par une **autre** instance doit relire ; la référence, elle, est apprise et
+gardée là-bas. Voir le README d'Uptime.
+
 ## Projets : l'étage choisi par l'utilisateur
 
 Contrairement à Uptime (toujours ouvert) et au coffre (toujours gardé), les

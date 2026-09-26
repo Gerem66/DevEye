@@ -48,6 +48,7 @@ declare const styles: {
     readonly dot: string;
     readonly dotDown: string;
     readonly dotUp: string;
+    readonly driftLines: string;
     readonly dropBar: string;
     readonly empty: string;
     readonly error: string;
@@ -60,6 +61,7 @@ declare const styles: {
     readonly grip: string;
     readonly headline: string;
     readonly incident: string;
+    readonly incidentBody: string;
     readonly incidentError: string;
     readonly incidentWhen: string;
     readonly journal: string;
@@ -84,6 +86,7 @@ declare const styles: {
     readonly ratioLabel: string;
     readonly ratioValue: string;
     readonly ratiosCompact: string;
+    readonly reference: string;
     readonly section: string;
     readonly sectionTitle: string;
     readonly statusAlert: string;
@@ -93,6 +96,7 @@ declare const styles: {
     readonly summaryItem: string;
     readonly summaryLabel: string;
     readonly summaryValue: string;
+    readonly textarea: string;
     readonly toolbar: string;
     readonly toolbarActions: string;
     readonly 'uptime-spin': string;

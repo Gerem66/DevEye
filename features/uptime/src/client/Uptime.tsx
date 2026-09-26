@@ -126,6 +126,11 @@ export default function Uptime(_props: FeatureViewProps) {
                             await api.send('uptime.checkNow', { id: selected.id });
                         })
                     }
+                    onAcceptBaseline={() =>
+                        void runAction(async () => {
+                            await api.send('uptime.acceptBaseline', { id: selected.id });
+                        })
+                    }
                 />
             ) : (
                 <>

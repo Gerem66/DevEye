@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import fastifyCookie from '@fastify/cookie';
@@ -8,7 +8,14 @@ import fastifyRateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
 import Fastify, { type FastifyBaseLogger, type FastifyError, type FastifyInstance, type FastifyRequest } from 'fastify';
-import { err, ok, publicMaintenanceSchema, serverStatusSchema, type ErrorCode } from '@deveye/types';
+import {
+    BUILD_MANIFEST_PATH,
+    type ErrorCode,
+    err,
+    ok,
+    publicMaintenanceSchema,
+    serverStatusSchema
+} from '@deveye/types';
 
 import { agentRoutes } from '@/agent/routes';
 import { registerAgentWS } from '@/agent/ws';
@@ -387,6 +394,17 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
             index: false,
             allowedPath: (pathName) => !pathName.endsWith('.map')
         });
+
+        // Le manifeste de build, ce qu'un contrôle d'intégrité d'une autre
+        // instance relit. Une route à part : `@fastify/static` tait les dossiers
+        // cachés, et `.well-known` en est un ; le repli SPA lui répondrait la page.
+        const manifestFile = resolve(clientDir, '.well-known', 'deveye-build.json');
+        if (existsSync(manifestFile)) {
+            const manifest = readFileSync(manifestFile, 'utf8');
+            app.get(BUILD_MANIFEST_PATH, { logLevel: 'silent' }, async (_req, reply) =>
+                reply.type('application/json').send(manifest)
+            );
+        }
 
         // SPA fallback: any non-API/WS GET that didn't match a static asset
         // returns index.html so client-side routing can take over. Les cartes de

@@ -924,3 +924,51 @@
         overflow: visible;
     }
 }
+
+/* La zone « un chemin par ligne » d'un contrôle d'intégrité. */
+.textarea {
+    width: 100%;
+    padding: var(--space-sm);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-md);
+    background: var(--input-bg);
+    color: var(--text-primary);
+    font: inherit;
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    resize: vertical;
+}
+
+.textarea:focus {
+    outline: none;
+    border-color: var(--input-focus);
+}
+
+/* La référence d'un contrôle d'intégrité : ce à quoi la sonde compare. */
+.reference {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-sm) var(--space-md);
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+/* Le détail d'un incident d'intégrité, fichier par fichier, sous sa ligne. */
+.incidentBody {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.driftLines {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}

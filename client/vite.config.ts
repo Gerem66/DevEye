@@ -1,7 +1,8 @@
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import { defineConfig, type Plugin } from 'vite';
-import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 
 const serverPort = process.env.LISTEN_PORT ?? '3000';
 const serverOrigin = `http://localhost:${serverPort}`;
@@ -150,6 +151,44 @@ function inlineIcons(): Plugin {
     };
 }
 
+/**
+ * `.well-known/deveye-build.json` : chaque fichier du build et son SHA-256.
+ * Ce n'est pas une référence de confiance (un serveur compromis le réécrirait
+ * avec le reste) mais la LISTE de ce qu'un contrôle d'intégrité tenu par une
+ * autre instance doit relire, morceaux chargés à la demande compris. Les cartes
+ * de source n'y sont pas : le serveur ne les sert pas.
+ */
+function buildManifest(): Plugin {
+    return {
+        name: 'deveye-build-manifest',
+        apply: 'build',
+        closeBundle() {
+            const root = path.resolve(__dirname, 'build');
+            const manifestPath = path.join('.well-known', 'deveye-build.json');
+            const files: Record<string, string> = {};
+            const walk = (dir: string): void => {
+                for (const entry of readdirSync(dir, { withFileTypes: true })) {
+                    const full = path.join(dir, entry.name);
+                    if (entry.isDirectory()) {
+                        walk(full);
+                        continue;
+                    }
+                    const rel = path.relative(root, full).split(path.sep).join('/');
+                    if (rel.endsWith('.map') || rel === manifestPath) continue;
+                    files[rel] = createHash('sha256').update(readFileSync(full)).digest('hex');
+                }
+            };
+            walk(root);
+            const sorted = Object.fromEntries(Object.entries(files).sort(([a], [b]) => a.localeCompare(b)));
+            mkdirSync(path.join(root, '.well-known'), { recursive: true });
+            writeFileSync(
+                path.join(root, manifestPath),
+                JSON.stringify({ format: 1, version: appVersion, files: sorted }, null, 2) + '\n'
+            );
+        }
+    };
+}
+
 // https://vitejs.dev/config/
 export default defineConfig(({ command }) => {
     const featureRoots = featureChunkRoots();
@@ -159,7 +198,7 @@ export default defineConfig(({ command }) => {
         define: {
             __APP_VERSION__: JSON.stringify(appVersion)
         },
-        plugins: [react(), inlineIcons()],
+        plugins: [react(), inlineIcons(), buildManifest()],
         optimizeDeps: {
             // `@deveye/types` ships TypeScript source and is the one dependency that
             // changes in step with the app. Vite's dep pre-bundling keys its cache on

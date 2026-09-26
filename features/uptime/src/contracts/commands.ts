@@ -1,5 +1,8 @@
 import { z } from 'zod';
 import {
+    UPTIME_INTEGRITY_INTERVAL_MIN,
+    UPTIME_INTEGRITY_PATH_MAX_LENGTH,
+    UPTIME_INTEGRITY_PATHS_MAX,
     UPTIME_INTERVAL_MAX,
     UPTIME_INTERVAL_MIN,
     UPTIME_KEYWORD_MAX_LENGTH,
@@ -14,6 +17,7 @@ import {
     uptimeCheckSchema,
     uptimeCheckStatsSchema,
     uptimeIncidentSchema,
+    uptimeKindSchema,
     uptimeMethodSchema,
     uptimePageSchema,
     uptimePageServiceSchema,
@@ -27,19 +31,33 @@ import {
 
 const serviceId = z.number().int().positive();
 
-/** Everything the user may set on a service. */
-const uptimeDraftSchema = z.object({
-    name: z.string().min(1).max(UPTIME_NAME_MAX_LENGTH),
-    url: z.url({ protocol: /^https?$/ }).max(UPTIME_URL_MAX_LENGTH),
-    method: uptimeMethodSchema,
-    expectedStatus: z.number().int().min(100).max(599).nullable(),
-    keyword: z.string().max(UPTIME_KEYWORD_MAX_LENGTH).nullable(),
-    intervalSeconds: z.number().int().min(UPTIME_INTERVAL_MIN).max(UPTIME_INTERVAL_MAX),
-    timeoutSeconds: z.number().int().min(UPTIME_TIMEOUT_MIN).max(UPTIME_TIMEOUT_MAX),
-    failureThreshold: z.number().int().min(1).max(UPTIME_THRESHOLD_MAX),
-    retentionDays: uptimeRetentionSchema,
-    enabled: z.boolean()
-});
+/** A site-relative path an integrity check adds to what it verifies: `/t.js`. */
+const integrityPathSchema = z
+    .string()
+    .max(UPTIME_INTEGRITY_PATH_MAX_LENGTH)
+    .regex(/^\/[^\s]*$/)
+    .refine((p) => !/(^|\/)\.\.(\/|$)/.test(p), 'Chemin invalide');
+
+/** Everything the user may set on a service. `kind` is fixed at creation. */
+const uptimeDraftSchema = z
+    .object({
+        kind: uptimeKindSchema,
+        name: z.string().min(1).max(UPTIME_NAME_MAX_LENGTH),
+        url: z.url({ protocol: /^https?$/ }).max(UPTIME_URL_MAX_LENGTH),
+        paths: z.array(integrityPathSchema).max(UPTIME_INTEGRITY_PATHS_MAX),
+        method: uptimeMethodSchema,
+        expectedStatus: z.number().int().min(100).max(599).nullable(),
+        keyword: z.string().max(UPTIME_KEYWORD_MAX_LENGTH).nullable(),
+        intervalSeconds: z.number().int().min(UPTIME_INTERVAL_MIN).max(UPTIME_INTERVAL_MAX),
+        timeoutSeconds: z.number().int().min(UPTIME_TIMEOUT_MIN).max(UPTIME_TIMEOUT_MAX),
+        failureThreshold: z.number().int().min(1).max(UPTIME_THRESHOLD_MAX),
+        retentionDays: uptimeRetentionSchema,
+        enabled: z.boolean()
+    })
+    .refine((d) => d.kind !== 'integrity' || d.intervalSeconds >= UPTIME_INTEGRITY_INTERVAL_MIN, {
+        message: `Un contrôle d’intégrité relit tout un site : au plus toutes les ${UPTIME_INTEGRITY_INTERVAL_MIN / 60} minutes.`,
+        path: ['intervalSeconds']
+    });
 
 /**
  * List the workspace's services in the user's own order, each carrying its live
@@ -232,6 +250,17 @@ export const uptimePageRemove = {
     output: z.object({ id: pageId })
 };
 
+/**
+ * Integrity: take what the site serves NOW as the reference (after a deployment
+ * one made, say). Closes the incident the drift had opened. The files are
+ * refetched first: what is accepted is what a visitor gets at that moment.
+ */
+export const uptimeAcceptBaseline = {
+    command: 'uptime.acceptBaseline' as const,
+    input: z.object({ id: serviceId }),
+    output: z.object({ service: uptimeServiceSchema })
+};
+
 export const uptimeCommands = [
     uptimeList,
     uptimeCount,
@@ -241,6 +270,7 @@ export const uptimeCommands = [
     uptimeRemove,
     uptimeReorder,
     uptimeCheckNow,
+    uptimeAcceptBaseline,
     uptimeHistory,
     uptimeChecks,
     uptimeCheckStats,

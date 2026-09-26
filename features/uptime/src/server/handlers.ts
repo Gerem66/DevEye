@@ -1,4 +1,5 @@
 import {
+    uptimeAcceptBaseline,
     uptimeAdd,
     uptimeCheckNow,
     uptimeCheckStats,
@@ -21,6 +22,7 @@ import { isAllowedOutboundUrl, OUTBOUND_REFUSED_MESSAGE } from '@/Services/netFe
 
 import {
     decryptError,
+    decryptService,
     encryptService,
     monitor,
     toIncident,
@@ -188,8 +190,10 @@ export const uptimeHandlers = [
                 content: await encryptService(ctx.cipher(), {
                     name: draft.name,
                     url: draft.url,
-                    keyword: draft.keyword
+                    keyword: draft.keyword,
+                    paths: draft.kind === 'integrity' ? draft.paths : []
                 }),
+                kind: draft.kind,
                 method: draft.method,
                 expectedStatus: draft.expectedStatus,
                 intervalSeconds: draft.intervalSeconds,
@@ -218,16 +222,25 @@ export const uptimeHandlers = [
             const existing = await loadService(ctx, input.id, 'write');
             const draft = input.service;
             if (!isAllowedOutboundUrl(draft.url)) throw new FeatureError('validation', OUTBOUND_REFUSED_MESSAGE);
+            // Le type se fixe à la création : une référence apprise ne veut rien
+            // dire pour une sonde HTTP, et l'inverse repartirait de zéro sans le dire.
+            if (draft.kind !== existing.kind) {
+                throw new FeatureError('validation', 'Le type d’un contrôle ne se change pas : créez-en un autre.');
+            }
             // Réécrit sous la clé de son espace d'origine : le chiffrer avec celle
             // d'ici le rendrait illisible chez lui, c'est-à-dire perdu pour tout le
             // monde y compris l'ordonnanceur qui le sonde.
             const shares = await ctx.sharing.scope();
+            const cipher = await shares.cipherFor(String(input.id));
+            const before = await decryptService(cipher, existing.content);
             const row = await ctx.repo.services.update(input.id, existing.workspace_id, {
-                content: await encryptService(await shares.cipherFor(String(input.id)), {
+                content: await encryptService(cipher, {
                     name: draft.name,
                     url: draft.url,
-                    keyword: draft.keyword
+                    keyword: draft.keyword,
+                    paths: draft.kind === 'integrity' ? draft.paths : []
                 }),
+                kind: existing.kind,
                 method: draft.method,
                 expectedStatus: draft.expectedStatus,
                 intervalSeconds: draft.intervalSeconds,
@@ -237,12 +250,18 @@ export const uptimeHandlers = [
                 enabled: draft.enabled
             });
             if (!row) throw new FeatureError('not_found', 'Uptime service not found');
+            // Une autre adresse ou d'autres fichiers : la référence apprise ne
+            // décrit plus ce qu'on surveille, la prochaine sonde en apprend une.
+            const relearn =
+                existing.kind === 'integrity' &&
+                (before.url !== draft.url || before.paths.join('\n') !== draft.paths.join('\n'));
+            if (relearn) await ctx.repo.services.setBaseline(row.id, null);
             ctx.audit({
                 action: 'uptime.update',
                 description: `Service surveillé modifié : « ${draft.name} »`,
                 metadata: { serviceId: row.id }
             });
-            return { service: await toOneService(ctx, row) };
+            return { service: await toOneService(ctx, relearn ? await loadService(ctx, row.id) : row) };
         }
     }),
     defineSdkFeature({
@@ -314,6 +333,29 @@ export const uptimeHandlers = [
             // Same code path as the scheduler, so a manual check counts in the
             // history, the rollup and the incident log exactly like an automatic one.
             await monitor().runOne(row);
+            return { service: await toOneService(ctx, await loadService(ctx, input.id)) };
+        }
+    }),
+    defineSdkFeature({
+        ...uptimeAcceptBaseline,
+        access: { level: 'write' },
+        mutates: true,
+        handler: async (ctx: Ctx, input) => {
+            const row = await loadService(ctx, input.id, 'write');
+            if (row.kind !== 'integrity') throw new FeatureError('validation', 'Ce contrôle n’a pas de référence.');
+            await ctx.quota.assertActive('monitors', String(row.id));
+            // Oublier la référence, puis sonder : la sonde apprend ce que le site
+            // sert à cet instant, et l'incident se referme par le chemin ordinaire,
+            // « rétabli » compris, une seule fois. Un site injoignable à ce moment
+            // n'apprend rien : la prochaine lecture réussie le fera.
+            await ctx.repo.services.setBaseline(row.id, null);
+            ctx.audit({
+                action: 'uptime.baselineAccepted',
+                level: 'warning',
+                description: 'Version actuelle acceptée comme référence d’intégrité',
+                metadata: { serviceId: row.id }
+            });
+            await monitor().runOne({ ...row, baseline_enc: null });
             return { service: await toOneService(ctx, await loadService(ctx, input.id)) };
         }
     }),

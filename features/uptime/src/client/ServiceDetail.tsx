@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, FeatureSettingsButton, safeHref, StatusBadge } from 'deveye-sdk-client';
+import {
+    Button,
+    ConfirmDialog,
+    FeatureSettingsButton,
+    safeHref,
+    StatusBadge,
+    type ConfirmRequest
+} from 'deveye-sdk-client';
 import type {
     UptimeCheck,
     UptimeIncident,
@@ -27,6 +34,8 @@ interface ServiceDetailProps {
     service: UptimeService;
     onBack: () => void;
     onCheckNow: () => void;
+    /** Intégrité : prendre ce que le site sert maintenant comme référence. */
+    onAcceptBaseline: () => void;
 }
 
 /**
@@ -36,8 +45,9 @@ interface ServiceDetailProps {
  * The three panels load independently (a slow journal never holds the chart
  * back), and only the chart re-queries when the range changes.
  */
-export function ServiceDetail({ service, onBack, onCheckNow }: ServiceDetailProps) {
+export function ServiceDetail({ service, onBack, onCheckNow, onAcceptBaseline }: ServiceDetailProps) {
     const [range, setRange] = useState<UptimeRange>('24h');
+    const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
     const [points, setPoints] = useState<UptimePoint[]>([]);
     const [resolution, setResolution] = useState<UptimeResolution>('raw');
     const [incidents, setIncidents] = useState<UptimeIncident[]>([]);
@@ -147,6 +157,30 @@ export function ServiceDetail({ service, onBack, onCheckNow }: ServiceDetailProp
                     <Button variant='secondary' icon='refresh' onClick={onCheckNow}>
                         Tester
                     </Button>
+                    {/* Un écart constaté, ou pas encore de référence : ce que le site
+                        sert maintenant devient la référence. Confirmé, parce que c'est
+                        valider ce qu'un attaquant aurait pu y mettre. */}
+                    {service.kind === 'integrity' && (service.status === 'down' || service.baseline === null) && (
+                        <Button
+                            variant='secondary'
+                            icon='shield'
+                            onClick={() =>
+                                setConfirm({
+                                    title: 'Accepter la version actuelle ?',
+                                    confirmLabel: 'Accepter',
+                                    tone: 'primary',
+                                    description:
+                                        'Les fichiers que le site sert à cet instant deviennent la référence, et l’écart en cours est clos. À ne faire que pour un déploiement que vous reconnaissez.',
+                                    onConfirm: () => {
+                                        setConfirm(null);
+                                        onAcceptBaseline();
+                                    }
+                                })
+                            }
+                        >
+                            Accepter la version actuelle
+                        </Button>
+                    )}
                     {/* Les réglages de ce service, son identité et sa suppression
                         comprises (onglet Général). Supprimé ou déplacé depuis la
                         coquille, le service n'est plus ici : la fiche revient à
@@ -164,6 +198,30 @@ export function ServiceDetail({ service, onBack, onCheckNow }: ServiceDetailProp
             </div>
 
             {staleError && <p className={styles.error}>{staleError}</p>}
+
+            {service.kind === 'integrity' && (
+                <p className={styles.reference}>
+                    {service.baseline === null ? (
+                        <span>Aucune référence encore : la première relève réussie apprend ce que le site sert.</span>
+                    ) : (
+                        <>
+                            <span>
+                                Référence : {service.baseline.fileCount} fichier
+                                {service.baseline.fileCount > 1 ? 's' : ''}
+                                {service.baseline.source === 'manifest'
+                                    ? ' (annoncés par le site)'
+                                    : ' (trouvés dans la page)'}
+                            </span>
+                            <span>capturée le {formatMoment(service.baseline.capturedAt)}</span>
+                            <span>
+                                {service.baseline.csp
+                                    ? 'politique de contenu surveillée'
+                                    : 'aucune politique de contenu'}
+                            </span>
+                        </>
+                    )}
+                </p>
+            )}
 
             <div className={styles.ranges}>
                 {RANGES.map((r) => (
@@ -225,7 +283,22 @@ export function ServiceDetail({ service, onBack, onCheckNow }: ServiceDetailProp
                                             : formatDuration(incident.endedAt - incident.startedAt)}
                                     </StatusBadge>
                                     <span className={styles.incidentWhen}>{formatMoment(incident.startedAt)}</span>
-                                    <span className={styles.incidentError}>{incident.error ?? '—'}</span>
+                                    {/* Un incident d'intégrité nomme ses fichiers, un par ligne, sous le résumé. */}
+                                    <span className={styles.incidentBody}>
+                                        <span className={styles.incidentError}>
+                                            {incident.error?.split('\n')[0] ?? '—'}
+                                        </span>
+                                        {(incident.error?.includes('\n') ?? false) && (
+                                            <ul className={styles.driftLines}>
+                                                {incident
+                                                    .error!.split('\n')
+                                                    .slice(1)
+                                                    .map((line, i) => (
+                                                        <li key={i}>{line}</li>
+                                                    ))}
+                                            </ul>
+                                        )}
+                                    </span>
                                 </li>
                             ))}
                         </ul>
@@ -259,6 +332,8 @@ export function ServiceDetail({ service, onBack, onCheckNow }: ServiceDetailProp
                     Voir toutes les mesures
                 </Button>
             </section>
+
+            <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
 
             <p className={styles.detailFoot}>
                 Dernière mesure {formatAgo(service.lastCheckedAt)} · conservation détaillée{' '}

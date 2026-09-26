@@ -1,5 +1,5 @@
 // Helpers Discord partagés par tous les émetteurs de l'app : importés, pas recopiés.
-import { COLOR_DANGER, COLOR_SUCCESS, block, duration, moment, trim } from '@/Services/notices/shared';
+import { COLOR_DANGER, COLOR_SUCCESS, COLOR_WARNING, block, duration, moment, trim } from '@/Services/notices/shared';
 
 /**
  * L'avis de disponibilité tel que Discord doit le montrer : un état devient un
@@ -30,6 +30,15 @@ export type UptimeNotice =
           /** L'erreur qui avait ouvert l'incident. */
           cause: string | null;
           responseMs: number | null;
+      }
+    | {
+          event: 'integrity';
+          service: string;
+          url: string;
+          /** L'instant où l'écart a été constaté. */
+          at: number;
+          /** Le détail, fichier par fichier, déjà borné. */
+          lines: string[];
       };
 
 /**
@@ -79,6 +88,13 @@ function headline(notice: UptimeNotice): { title: string; description: string; c
             color: COLOR_DANGER
         };
     }
+    if (notice.event === 'integrity') {
+        return {
+            title: '🟠 Intégrité : fichiers modifiés',
+            description: `Ce que sert **${trim(notice.service)}** n’est plus ce qui avait été accepté.`,
+            color: COLOR_WARNING
+        };
+    }
     return {
         title: '🟢 Service rétabli',
         description: `**${trim(notice.service)}** répond de nouveau.`,
@@ -100,6 +116,18 @@ function fieldsOf(notice: UptimeNotice): Record<string, unknown>[] {
             // dit depuis combien de temps ça dure.
             { name: '📅 Depuis', value: moment(notice.at, 'R'), inline: true },
             { name: '⚠️ Erreur', value: block(notice.error ?? 'inconnue'), inline: false }
+        ];
+    }
+    if (notice.event === 'integrity') {
+        return [
+            { name: '🌐 Adresse', value: address(notice.url), inline: true },
+            { name: '📅 Constaté', value: moment(notice.at, 'R'), inline: true },
+            { name: '📄 Écart', value: block(notice.lines.join('\n')), inline: false },
+            {
+                name: '✅ Déploiement voulu ?',
+                value: 'Acceptez la version actuelle depuis la fiche du service.',
+                inline: false
+            }
         ];
     }
 

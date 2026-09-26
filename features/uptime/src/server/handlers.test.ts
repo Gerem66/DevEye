@@ -49,7 +49,9 @@ function row(over: Partial<UptimeServiceRow> & { id: number; workspace_id: numbe
     return {
         user_id: 1,
         content: JSON.stringify({ name: `Service ${over.id}`, url: `https://exemple.fr/${over.id}`, keyword: null }),
+        kind: 'http',
         method: 'GET',
+        baseline_enc: null,
         expected_status: null,
         interval_seconds: 60,
         timeout_seconds: 10,
@@ -143,7 +145,11 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
                 });
             },
             listDue: async () => [],
-            recordProbe: async () => undefined
+            recordProbe: async () => undefined,
+            setBaseline: async (id, baselineEnc) => {
+                const r = rows.find((x) => x.id === id);
+                if (r) r.baseline_enc = baselineEnc;
+            }
         },
         history: {
             addCheck: async () => undefined,
@@ -185,6 +191,8 @@ function seed(repo: FakeRepo, ...seeded: UptimeServiceRow[]): FakeRepo {
 
 /** Le brouillon complet qu'attend `uptime.update` (le contrat prend le service entier). */
 const DRAFT = {
+    kind: 'http' as const,
+    paths: [] as string[],
     name: 'API renommée',
     url: 'https://exemple.fr/health',
     method: 'GET' as const,

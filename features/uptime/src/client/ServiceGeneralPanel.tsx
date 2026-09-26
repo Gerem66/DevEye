@@ -15,14 +15,17 @@ import {
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import {
+    UPTIME_INTEGRITY_INTERVAL_MIN,
     UPTIME_THRESHOLD_MAX,
     UPTIME_TIMEOUT_MAX,
     UPTIME_TIMEOUT_MIN,
+    type UptimeKind,
     type UptimeMethod,
     type UptimeService
 } from '../contracts/domain';
 
 import { api } from './api';
+import { KIND_OPTIONS, parsePaths } from './kinds';
 import { clamp, type ServiceTuning } from './format';
 import styles from './style.module.css';
 
@@ -53,8 +56,11 @@ const RETENTIONS: { value: number | null; label: string }[] = [
 
 /** Tout ce qu'`uptime.update` prend : l'identité du service et ses réglages fins. */
 interface ServiceDraft extends ServiceTuning {
+    kind: UptimeKind;
     name: string;
     url: string;
+    /** Intégrité : un chemin par ligne, tel que saisi. */
+    paths: string;
     method: UptimeMethod;
     expectedStatus: number | null;
     keyword: string | null;
@@ -63,8 +69,10 @@ interface ServiceDraft extends ServiceTuning {
 
 function draftOf(service: UptimeService): ServiceDraft {
     return {
+        kind: service.kind,
         name: service.name,
         url: service.url,
+        paths: service.paths.join('\n'),
         method: service.method,
         expectedStatus: service.expectedStatus,
         keyword: service.keyword,
@@ -129,7 +137,13 @@ export default function ServiceGeneralPanel({ scope, canWrite, gone }: SettingsP
         try {
             const res = await api.send('uptime.update', {
                 id: service.id,
-                service: { ...draft, name, url, keyword: draft.keyword?.trim() || null }
+                service: {
+                    ...draft,
+                    name,
+                    url,
+                    paths: draft.kind === 'integrity' ? parsePaths(draft.paths) : [],
+                    keyword: draft.keyword?.trim() || null
+                }
             });
             setService(res.service);
             setDraft(draftOf(res.service));
@@ -168,6 +182,9 @@ export default function ServiceGeneralPanel({ scope, canWrite, gone }: SettingsP
         setDraft((d) => (d ? { ...d, [key]: value } : d));
 
     const editable = canWrite && !busy;
+    const integrity = draft.kind === 'integrity';
+    // Un contrôle d'intégrité relit tout un site : les cadences rapides n'y sont pas.
+    const intervals = integrity ? INTERVALS.filter((i) => i.value >= UPTIME_INTEGRITY_INTERVAL_MIN) : INTERVALS;
     const base = draftOf(service);
     const unchanged = (Object.keys(draft) as (keyof ServiceDraft)[]).every((k) => draft[k] === base[k]);
 
@@ -185,6 +202,18 @@ export default function ServiceGeneralPanel({ scope, canWrite, gone }: SettingsP
             </div>
 
             <div className={shell.field}>
+                <span className={shell.sectionLabel}>Type de contrôle</span>
+                {/* Fixé à la création : une référence apprise ne vaut que pour l'intégrité. */}
+                <SegmentedControl
+                    aria-label='Type de contrôle'
+                    value={draft.kind}
+                    onChange={() => {}}
+                    disabled
+                    options={KIND_OPTIONS}
+                />
+            </div>
+
+            <div className={shell.field}>
                 <span className={shell.sectionLabel}>URL surveillée</span>
                 <TextInput
                     placeholder='https://exemple.com/health'
@@ -195,45 +224,69 @@ export default function ServiceGeneralPanel({ scope, canWrite, gone }: SettingsP
                 />
             </div>
 
-            <div className={styles.formRow}>
-                <div className={styles.field}>
-                    <span className={shell.sectionLabel}>Méthode</span>
-                    <SegmentedControl
-                        aria-label='Méthode HTTP'
-                        value={draft.method}
+            {integrity && (
+                <div className={shell.field}>
+                    <span className={shell.sectionLabel}>Fichiers supplémentaires (un chemin par ligne)</span>
+                    <textarea
+                        className={styles.textarea}
+                        rows={3}
+                        placeholder={'/t.js'}
+                        value={draft.paths}
                         disabled={!editable}
-                        onChange={(v: UptimeMethod) => set('method', v)}
-                        options={[
-                            { value: 'GET', label: 'GET' },
-                            { value: 'HEAD', label: 'HEAD' },
-                            { value: 'POST', label: 'POST' }
-                        ]}
+                        onChange={(e) => set('paths', e.target.value)}
                     />
+                    <span className={shell.fieldHint}>
+                        Les scripts et styles de la page sont trouvés seuls ; une instance DevEye annonce tous ses
+                        fichiers. Changer l’adresse ou cette liste fait ré-apprendre la référence à la prochaine relève.
+                    </span>
                 </div>
-                <div className={styles.field}>
-                    <span className={shell.sectionLabel}>Statut attendu</span>
-                    <TextInput
-                        type='number'
-                        min={100}
-                        max={599}
-                        placeholder='2xx / 3xx'
-                        value={draft.expectedStatus ?? ''}
-                        disabled={!editable}
-                        onChange={(e) => set('expectedStatus', e.target.value ? clamp(e.target.value, 100, 599) : null)}
-                    />
-                    <span className={shell.fieldHint}>Vide, toute réponse 2xx ou 3xx convient.</span>
-                </div>
-            </div>
+            )}
 
-            <div className={shell.field}>
-                <span className={shell.sectionLabel}>Mot-clé attendu dans la réponse (optionnel)</span>
-                <TextInput
-                    placeholder='ex. "ok"'
-                    value={draft.keyword ?? ''}
-                    disabled={!editable}
-                    onChange={(e) => set('keyword', e.target.value || null)}
-                />
-            </div>
+            {!integrity && (
+                <>
+                    <div className={styles.formRow}>
+                        <div className={styles.field}>
+                            <span className={shell.sectionLabel}>Méthode</span>
+                            <SegmentedControl
+                                aria-label='Méthode HTTP'
+                                value={draft.method}
+                                disabled={!editable}
+                                onChange={(v: UptimeMethod) => set('method', v)}
+                                options={[
+                                    { value: 'GET', label: 'GET' },
+                                    { value: 'HEAD', label: 'HEAD' },
+                                    { value: 'POST', label: 'POST' }
+                                ]}
+                            />
+                        </div>
+                        <div className={styles.field}>
+                            <span className={shell.sectionLabel}>Statut attendu</span>
+                            <TextInput
+                                type='number'
+                                min={100}
+                                max={599}
+                                placeholder='2xx / 3xx'
+                                value={draft.expectedStatus ?? ''}
+                                disabled={!editable}
+                                onChange={(e) =>
+                                    set('expectedStatus', e.target.value ? clamp(e.target.value, 100, 599) : null)
+                                }
+                            />
+                            <span className={shell.fieldHint}>Vide, toute réponse 2xx ou 3xx convient.</span>
+                        </div>
+                    </div>
+
+                    <div className={shell.field}>
+                        <span className={shell.sectionLabel}>Mot-clé attendu dans la réponse (optionnel)</span>
+                        <TextInput
+                            placeholder='ex. "ok"'
+                            value={draft.keyword ?? ''}
+                            disabled={!editable}
+                            onChange={(e) => set('keyword', e.target.value || null)}
+                        />
+                    </div>
+                </>
+            )}
 
             <Checkbox checked={draft.enabled} disabled={!editable} onChange={(v) => set('enabled', v)}>
                 <>
@@ -251,7 +304,7 @@ export default function ServiceGeneralPanel({ scope, canWrite, gone }: SettingsP
                     disabled={!editable}
                     onChange={(e) => set('intervalSeconds', Number(e.target.value))}
                 >
-                    {INTERVALS.map((i) => (
+                    {intervals.map((i) => (
                         <option key={i.value} value={i.value}>
                             {i.label}
                         </option>

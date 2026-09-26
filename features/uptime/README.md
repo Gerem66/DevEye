@@ -59,6 +59,61 @@ Une sonde est réussie si :
 Un échec isolé ne fait pas une panne : le service ne bascule `down` qu'après
 `failure_threshold` échecs consécutifs.
 
+## Le contrôle d'intégrité
+
+Un second type de service (`kind = 'integrity'`) ne demande pas « le site
+répond-il ? » mais « **sert-il encore les mêmes fichiers ?** ». Le JavaScript
+qu'une page charge est ce qui tient les sessions de ses visiteurs : un serveur
+compromis qui le modifie touche tout le monde, et personne ne le voit. Un
+vérificateur qui vit sur ce serveur ne vaut rien, l'attaquant le remplace avec
+le reste. Celui-ci vit **ailleurs** : sur une autre instance DevEye.
+
+À chaque relève (`src/server/integrity.ts`), la sonde :
+
+1. lit le document (statut, et son en-tête `Content-Security-Policy`) ;
+2. établit la liste des fichiers : le **manifeste de build** du site s'il en
+   publie un (`/.well-known/deveye-build.json`, ce que fait toute instance
+   DevEye : chaque fichier de son client, morceaux chargés à la demande compris,
+   que rien d'autre ne nomme), sinon les scripts, feuilles de style et
+   préchargements de même origine trouvés dans la page ; plus les chemins
+   ajoutés à la main (`/t.js`) ;
+3. relit chaque fichier, empreinte SHA-256 calculée en flux (8 Mo au plus par
+   fichier, 400 fichiers au plus, quatre à la fois) ;
+4. compare à la **référence** (`baseline_enc`, chiffrée à l'étage ouvert).
+
+Le manifeste n'est pas la référence : un serveur compromis le réécrirait. La
+référence est **apprise** ici, à la première relève réussie, manifeste compris ;
+tout écart ensuite (fichier modifié, ajouté, retiré, politique changée) fait
+basculer le service (`failure_threshold` s'applique), ouvre un incident qui nomme
+les fichiers, et part en alerte `integrity`. Après un déploiement voulu,
+« Accepter la version actuelle » (`uptime.acceptBaseline`) oublie la référence
+et relit : ce que le site sert à cet instant devient la référence, et l'incident
+se referme par le chemin ordinaire, « rétabli » compris. Changer l'adresse ou la
+liste des chemins fait de même.
+
+Ce qu'il voit et ne voit pas :
+
+- **Détecter, pas empêcher** : une attaque plus courte que la cadence (5 min au
+  plus vite) passe entre deux relèves.
+- Une page servie **différemment selon le visiteur** (adresse, session) n'est pas
+  couverte : la sonde est anonyme, depuis l'adresse de l'instance qui la porte.
+- Une ressource d'une **autre origine** (CDN) n'est pas relue : ce serait
+  mesurer un autre serveur.
+- Le repli SPA d'un serveur répond `index.html` à un chemin disparu : l'écart se
+  voit à l'empreinte, jamais au statut.
+- Une relève sur une instance DevEye fait autant de requêtes qu'elle a de
+  fichiers (près de deux cents), et son limiteur de débit en accepte 200 par
+  minute et par adresse : un fichier refusé (`429`) fait échouer la relève, qui
+  compte alors comme un échec ordinaire, jamais comme un fichier modifié. D'où
+  la cadence de cinq minutes au plus vite, et un « Tester » juste après une
+  relève qui peut tomber sur ce refus.
+
+**Surveillance mutuelle** : chaque instance porte un contrôle d'intégrité vers
+l'autre, sans rien de spécial. Un sens ne marche pas : depuis une instance
+publique vers une instance derrière un VPN, `safeFetch` refuse l'adresse privée.
+L'inverse (l'instance privée surveille la plateforme) est le sens utile, et
+celui qui protège les sessions distantes ([Docs/FEDERATION.md](../../Docs/FEDERATION.md)).
+
 ## Les trois niveaux d'historique
 
 | Table              | Contenu              | Purge                                     |
@@ -285,6 +340,7 @@ l'onglet « Pages de statut » des réglages de la feature (`StatusPagesPanel`,
 
 `uptime.list` · `uptime.count` · `uptime.add` · `uptime.update` ·
 `uptime.setEnabled` · `uptime.remove` · `uptime.reorder` · `uptime.checkNow` ·
+`uptime.acceptBaseline` ·
 `uptime.history` · `uptime.checks` · `uptime.checkStats` · `uptime.incidents` ·
 `uptime.pageList` · `uptime.pageAdd` · `uptime.pageUpdate` · `uptime.pageRemove`
 

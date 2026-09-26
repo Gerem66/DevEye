@@ -2,6 +2,7 @@ import type {
     UptimeCheckRow,
     UptimeCheckStats,
     UptimeIncidentRow,
+    UptimeKind,
     UptimeMethod,
     UptimePoint,
     UptimeServiceRow,
@@ -20,8 +21,9 @@ export interface UptimeCheckFilter {
 
 /** The user-settable part of a service (everything but its live probe state). */
 export interface UptimeServiceConfig {
-    /** Encrypted `{ name, url, keyword }`. */
+    /** Encrypted `{ name, url, keyword, paths }`. */
     content: string;
+    kind: UptimeKind;
     method: UptimeMethod;
     expectedStatus: number | null;
     intervalSeconds: number;
@@ -86,6 +88,8 @@ export interface UptimeServicesRepo {
     listDue(now: number, limit: number, planPaused: readonly number[]): Promise<UptimeServiceRow[]>;
     /** Write back the outcome of a probe. */
     recordProbe(id: number, result: UptimeProbeResult): Promise<void>;
+    /** Integrity: the encrypted reference, or `null` to forget it (the next probe learns anew). */
+    setBaseline(id: number, baselineEnc: string | null): Promise<void>;
     /**
      * Counts of the **active** services of one workspace. `up + down` can be
      * below `total`: a service awaiting its first probe is neither, and must
@@ -160,12 +164,13 @@ export interface UptimeRepo {
     status: UptimeStatusRepo;
 }
 
-const SERVICE_COLUMNS = `content = ?, method = ?, expected_status = ?, interval_seconds = ?,
+const SERVICE_COLUMNS = `content = ?, kind = ?, method = ?, expected_status = ?, interval_seconds = ?,
      timeout_seconds = ?, failure_threshold = ?, retention_days = ?, enabled = ?`;
 
 function configParams(c: UptimeServiceConfig): unknown[] {
     return [
         c.content,
+        c.kind,
         c.method,
         c.expectedStatus,
         c.intervalSeconds,
@@ -307,9 +312,9 @@ function servicesRepo(q: SdkQueryable): UptimeServicesRepo {
             );
             const res = await q.execute(
                 `INSERT INTO uptime_services
-                     (user_id, workspace_id, content, method, expected_status, interval_seconds,
+                     (user_id, workspace_id, content, kind, method, expected_status, interval_seconds,
                       timeout_seconds, failure_threshold, retention_days, enabled, sort_order)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [userId, workspaceId, ...configParams(config), Number(posRows[0]?.next ?? 0)]
             );
             const rows = await q.query<UptimeServiceRow>('SELECT * FROM uptime_services WHERE id = ?', [res.insertId]);
@@ -363,6 +368,9 @@ function servicesRepo(q: SdkQueryable): UptimeServicesRepo {
                  LIMIT ?`,
                 skip ? [now, [...planPaused], limit] : [now, limit]
             );
+        },
+        async setBaseline(id, baselineEnc) {
+            await q.execute('UPDATE uptime_services SET baseline_enc = ? WHERE id = ?', [baselineEnc, id]);
         },
         async recordProbe(id, result) {
             await q.execute(

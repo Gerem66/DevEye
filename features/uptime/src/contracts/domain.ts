@@ -24,6 +24,21 @@ export const UPTIME_TIMEOUT_MAX = 120;
 /** Consecutive failures required before a service is declared down. */
 export const UPTIME_THRESHOLD_MAX = 10;
 
+/**
+ * What a service checks. `http`: the target answers (status, keyword).
+ * `integrity`: the files a site serves have not changed since a reference the
+ * user accepted (SHA-256 of every file, and the document's Content-Security-
+ * Policy). A detector that must live on ANOTHER server than the one it watches.
+ */
+export const uptimeKindSchema = z.enum(['http', 'integrity']);
+export type UptimeKind = z.infer<typeof uptimeKindSchema>;
+
+/** An integrity check refetches a whole site: never more often than this, in seconds. */
+export const UPTIME_INTEGRITY_INTERVAL_MIN = 300;
+/** Extra files an integrity check verifies (site-relative paths). */
+export const UPTIME_INTEGRITY_PATHS_MAX = 50;
+export const UPTIME_INTEGRITY_PATH_MAX_LENGTH = 512;
+
 /** HTTP verb used for the probe. `POST` sends no body : it only pokes the route. */
 export const uptimeMethodSchema = z.enum(['GET', 'HEAD', 'POST']);
 export type UptimeMethod = z.infer<typeof uptimeMethodSchema>;
@@ -52,10 +67,28 @@ export const uptimeResolutionSchema = z.enum(['raw', 'hour', 'day']);
 export type UptimeResolution = z.infer<typeof uptimeResolutionSchema>;
 
 /** One monitored service: its configuration, its live state and its ratios. */
+/**
+ * What an integrity service compares against, as the screen sees it: never the
+ * fingerprints themselves. `null` until the first successful capture.
+ */
+export const uptimeBaselineSchema = z.object({
+    capturedAt: z.number().int().nonnegative(),
+    fileCount: z.number().int().nonnegative(),
+    /** The document carried a Content-Security-Policy, watched since. */
+    csp: z.boolean(),
+    /** `manifest`: the site names its files (`/.well-known/deveye-build.json`); `page`: found in the page. */
+    source: z.enum(['manifest', 'page'])
+});
+export type UptimeBaseline = z.infer<typeof uptimeBaselineSchema>;
+
 export const uptimeServiceSchema = z.object({
     id: z.number().int().positive(),
+    kind: uptimeKindSchema,
     name: z.string(),
     url: z.string(),
+    /** Integrity only: extra site-relative files to verify (`/t.js`). */
+    paths: z.array(z.string()),
+    baseline: uptimeBaselineSchema.nullable(),
     method: uptimeMethodSchema,
     /** Exact status code required, or `null` to accept any 2xx/3xx. */
     expectedStatus: z.number().int().min(100).max(599).nullable(),
@@ -208,8 +241,9 @@ export interface UptimeServiceRow {
     id: number;
     user_id: number;
     workspace_id: number;
-    /** Encrypted `{ name, url, keyword }` (open tier). */
+    /** Encrypted `{ name, url, keyword, paths }` (open tier). */
     content: string;
+    kind: UptimeKind;
     method: UptimeMethod;
     expected_status: number | null;
     interval_seconds: number;
@@ -225,6 +259,8 @@ export interface UptimeServiceRow {
     last_http_status: number | null;
     /** Encrypted error string (open tier), or null after a success. */
     last_error: string | null;
+    /** Integrity only: encrypted reference (open tier), null until learned. */
+    baseline_enc: string | null;
     created: number;
 }
 

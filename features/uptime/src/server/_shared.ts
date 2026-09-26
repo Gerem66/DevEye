@@ -1,4 +1,10 @@
-import type { UptimeIncident, UptimeIncidentRow, UptimeService, UptimeServiceRow } from '../contracts/domain';
+import type {
+    UptimeBaseline,
+    UptimeIncident,
+    UptimeIncidentRow,
+    UptimeService,
+    UptimeServiceRow
+} from '../contracts/domain';
 import { FeatureError, type SdkCipher, type SdkDomain, type SdkFeatureContext } from '@deveye/types/sdk/server';
 
 import type { UptimeRepo } from './repo';
@@ -28,6 +34,8 @@ export interface ServicePayload {
     name: string;
     url: string;
     keyword: string | null;
+    /** Integrity only: extra site-relative files to verify. */
+    paths: string[];
 }
 
 export async function encryptService(cipher: SdkCipher, payload: ServicePayload): Promise<string> {
@@ -41,17 +49,69 @@ export async function encryptService(cipher: SdkCipher, payload: ServicePayload)
  */
 export async function decryptService(cipher: SdkCipher, content: string): Promise<ServicePayload> {
     const plain = await cipher.tryDecrypt(content);
-    if (plain === null) return { name: '', url: '', keyword: null };
+    if (plain === null) return { name: '', url: '', keyword: null, paths: [] };
     try {
         const parsed = JSON.parse(plain) as Partial<ServicePayload>;
         return {
             name: typeof parsed.name === 'string' ? parsed.name : '',
             url: typeof parsed.url === 'string' ? parsed.url : '',
-            keyword: typeof parsed.keyword === 'string' ? parsed.keyword : null
+            keyword: typeof parsed.keyword === 'string' ? parsed.keyword : null,
+            paths: Array.isArray(parsed.paths) ? parsed.paths.filter((p): p is string => typeof p === 'string') : []
         };
     } catch {
-        return { name: '', url: '', keyword: null };
+        return { name: '', url: '', keyword: null, paths: [] };
     }
+}
+
+/**
+ * What an integrity service compares against (`uptime_services.baseline_enc`,
+ * open tier): the fingerprint of every file, and the document's policy.
+ */
+export interface IntegrityBaseline {
+    capturedAt: number;
+    /** The document's Content-Security-Policy header, `null` when it carries none. */
+    csp: string | null;
+    /** Site-relative path (leading slash) to SHA-256, hex. */
+    files: Record<string, string>;
+    source: 'manifest' | 'page';
+}
+
+export async function encryptBaseline(cipher: SdkCipher, baseline: IntegrityBaseline): Promise<string> {
+    return cipher.encrypt(JSON.stringify(baseline));
+}
+
+/** An unreadable reference reads as "none yet": the next probe learns anew rather than alerting forever. */
+export async function decryptBaseline(cipher: SdkCipher, blob: string | null): Promise<IntegrityBaseline | null> {
+    if (blob === null) return null;
+    const plain = await cipher.tryDecrypt(blob);
+    if (plain === null) return null;
+    try {
+        const parsed = JSON.parse(plain) as Partial<IntegrityBaseline>;
+        if (typeof parsed.capturedAt !== 'number' || typeof parsed.files !== 'object' || parsed.files === null) {
+            return null;
+        }
+        return {
+            capturedAt: parsed.capturedAt,
+            csp: typeof parsed.csp === 'string' ? parsed.csp : null,
+            files: Object.fromEntries(
+                Object.entries(parsed.files).filter((e): e is [string, string] => typeof e[1] === 'string')
+            ),
+            source: parsed.source === 'manifest' ? 'manifest' : 'page'
+        };
+    } catch {
+        return null;
+    }
+}
+
+/** The reference as the screen shows it: counts, never fingerprints. */
+export function summarizeBaseline(baseline: IntegrityBaseline | null): UptimeBaseline | null {
+    if (!baseline) return null;
+    return {
+        capturedAt: baseline.capturedAt,
+        fileCount: Object.keys(baseline.files).length,
+        csp: baseline.csp !== null,
+        source: baseline.source
+    };
 }
 
 /** Encrypt an error message, or pass `null` straight through. */
@@ -87,8 +147,11 @@ export async function toService(
     const payload = await decryptService(cipher, row.content);
     return {
         id: row.id,
+        kind: row.kind,
         name: payload.name,
         url: payload.url,
+        paths: payload.paths,
+        baseline: row.kind === 'integrity' ? summarizeBaseline(await decryptBaseline(cipher, row.baseline_enc)) : null,
         method: row.method,
         expectedStatus: row.expected_status,
         keyword: payload.keyword,
@@ -178,6 +241,8 @@ export function forgetStatusPage(pageId: number): void {
 export function publicReason(httpStatus: number | null, error: string | null): string {
     if (error?.startsWith('Délai dépassé')) return 'Délai de réponse dépassé';
     if (error?.startsWith('Mot-clé')) return 'Contenu inattendu';
+    // Avant le statut : une dérive d'intégrité arrive avec un document en 200.
+    if (error?.startsWith('Intégrité')) return 'Intégrité des fichiers compromise';
     if (httpStatus !== null) return `Réponse HTTP ${httpStatus}`;
     return 'Connexion impossible';
 }

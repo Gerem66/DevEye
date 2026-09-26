@@ -1,6 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Button, Checkbox, Dialog, DialogCancelButton, SegmentedControl, TextInput } from 'deveye-sdk-client';
-import type { UptimeMethod, UptimeService } from '../contracts/domain';
+import {
+    UPTIME_INTEGRITY_INTERVAL_MIN,
+    type UptimeKind,
+    type UptimeMethod,
+    type UptimeService
+} from '../contracts/domain';
+
+import { KIND_OPTIONS, parsePaths } from './kinds';
 
 import { api } from './api';
 import styles from './style.module.css';
@@ -12,8 +19,11 @@ import { clamp, type ServiceTuning } from './format';
  * ensuite dans l'onglet Général de sa fiche.
  */
 interface ServiceIdentity {
+    kind: UptimeKind;
     name: string;
     url: string;
+    /** Intégrité : un chemin par ligne, tel que saisi. */
+    paths: string;
     method: UptimeMethod;
     expectedStatus: number | null;
     keyword: string | null;
@@ -27,8 +37,10 @@ interface ServiceDialogProps {
 }
 
 const DEFAULTS: ServiceIdentity = {
+    kind: 'http',
     name: '',
     url: '',
+    paths: '',
     method: 'GET',
     expectedStatus: null,
     keyword: null,
@@ -83,7 +95,17 @@ export function ServiceDialog({ open, onClose, onSaved }: ServiceDialogProps) {
             setErrorUrl(validUrl ? '' : 'URL invalide (http:// ou https://)');
             return;
         }
-        const payload = { ...draft, ...TUNING_DEFAULTS, name, url, keyword: draft.keyword?.trim() || null };
+        const integrity = draft.kind === 'integrity';
+        const payload = {
+            ...draft,
+            ...TUNING_DEFAULTS,
+            // Un contrôle d'intégrité relit tout un site : sa cadence part plus lente.
+            intervalSeconds: integrity ? UPTIME_INTEGRITY_INTERVAL_MIN : TUNING_DEFAULTS.intervalSeconds,
+            name,
+            url,
+            paths: integrity ? parsePaths(draft.paths) : [],
+            keyword: draft.keyword?.trim() || null
+        };
         setBusy(true);
         setError(null);
         try {
@@ -107,6 +129,21 @@ export function ServiceDialog({ open, onClose, onSaved }: ServiceDialogProps) {
             onSave={() => void submit()}
         >
             <div className={styles.form}>
+                <div className={styles.field}>
+                    <span className={styles.fieldLabel}>Type de contrôle</span>
+                    <SegmentedControl
+                        aria-label='Type de contrôle'
+                        value={draft.kind}
+                        onChange={(v: UptimeKind) => set('kind', v)}
+                        options={KIND_OPTIONS}
+                        fullWidth
+                    />
+                    <span className={styles.fieldHint}>
+                        {draft.kind === 'integrity'
+                            ? 'Relit les fichiers que sert le site (scripts, styles, politique de contenu) et alerte dès qu’un seul change. À poser sur une autre instance que celle qu’on surveille.'
+                            : 'Vérifie que l’adresse répond, avec le statut et le mot-clé attendus.'}
+                    </span>
+                </div>
                 <TextInput
                     placeholder='Nom (ex. API de production)'
                     value={draft.name}
@@ -114,49 +151,72 @@ export function ServiceDialog({ open, onClose, onSaved }: ServiceDialogProps) {
                     onChange={(e) => set('name', e.target.value)}
                 />
                 <TextInput
-                    placeholder='https://exemple.com/health'
+                    placeholder={draft.kind === 'integrity' ? 'https://app.exemple.fr/' : 'https://exemple.com/health'}
                     value={draft.url}
                     error={errorUrl}
                     onChange={(e) => set('url', e.target.value)}
                 />
 
-                <div className={styles.formRow}>
-                    <div className={styles.field}>
-                        <span className={styles.fieldLabel}>Méthode</span>
-                        <SegmentedControl
-                            aria-label='Méthode HTTP'
-                            value={draft.method}
-                            onChange={(v: UptimeMethod) => set('method', v)}
-                            options={[
-                                { value: 'GET', label: 'GET' },
-                                { value: 'HEAD', label: 'HEAD' },
-                                { value: 'POST', label: 'POST' }
-                            ]}
-                        />
-                    </div>
+                {draft.kind === 'integrity' && (
                     <label className={styles.field}>
-                        <span className={styles.fieldLabel}>Statut attendu</span>
-                        <TextInput
-                            type='number'
-                            min={100}
-                            max={599}
-                            placeholder='2xx / 3xx'
-                            value={draft.expectedStatus ?? ''}
-                            onChange={(e) =>
-                                set('expectedStatus', e.target.value ? clamp(e.target.value, 100, 599) : null)
-                            }
+                        <span className={styles.fieldLabel}>
+                            Fichiers supplémentaires (optionnel, un chemin par ligne)
+                        </span>
+                        <textarea
+                            className={styles.textarea}
+                            rows={2}
+                            placeholder={'/t.js'}
+                            value={draft.paths}
+                            onChange={(e) => set('paths', e.target.value)}
                         />
+                        <span className={styles.fieldHint}>
+                            Les scripts et styles de la page sont trouvés seuls ; une instance DevEye annonce tous ses
+                            fichiers. Ajoutez ici ce que rien ne nomme.
+                        </span>
                     </label>
-                </div>
+                )}
 
-                <label className={styles.field}>
-                    <span className={styles.fieldLabel}>Mot-clé attendu dans la réponse (optionnel)</span>
-                    <TextInput
-                        placeholder='ex. "ok"'
-                        value={draft.keyword ?? ''}
-                        onChange={(e) => set('keyword', e.target.value || null)}
-                    />
-                </label>
+                {draft.kind === 'http' && (
+                    <>
+                        <div className={styles.formRow}>
+                            <div className={styles.field}>
+                                <span className={styles.fieldLabel}>Méthode</span>
+                                <SegmentedControl
+                                    aria-label='Méthode HTTP'
+                                    value={draft.method}
+                                    onChange={(v: UptimeMethod) => set('method', v)}
+                                    options={[
+                                        { value: 'GET', label: 'GET' },
+                                        { value: 'HEAD', label: 'HEAD' },
+                                        { value: 'POST', label: 'POST' }
+                                    ]}
+                                />
+                            </div>
+                            <label className={styles.field}>
+                                <span className={styles.fieldLabel}>Statut attendu</span>
+                                <TextInput
+                                    type='number'
+                                    min={100}
+                                    max={599}
+                                    placeholder='2xx / 3xx'
+                                    value={draft.expectedStatus ?? ''}
+                                    onChange={(e) =>
+                                        set('expectedStatus', e.target.value ? clamp(e.target.value, 100, 599) : null)
+                                    }
+                                />
+                            </label>
+                        </div>
+
+                        <label className={styles.field}>
+                            <span className={styles.fieldLabel}>Mot-clé attendu dans la réponse (optionnel)</span>
+                            <TextInput
+                                placeholder='ex. "ok"'
+                                value={draft.keyword ?? ''}
+                                onChange={(e) => set('keyword', e.target.value || null)}
+                            />
+                        </label>
+                    </>
+                )}
 
                 {/* Cadence, délai, seuil, rétention et canaux d'alerte : dans les
                     réglages du service, pas ici. */}

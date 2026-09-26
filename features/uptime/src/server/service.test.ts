@@ -35,7 +35,9 @@ function fakeRepo(over: Partial<UptimeServiceRow> = {}): FakeRepo {
             user_id: 9,
             workspace_id: 1,
             content: JSON.stringify({ name: 'API OxyFoo', url: 'https://api.oxyfoo.com/health', keyword: null }),
+            kind: 'http',
             method: 'GET',
+            baseline_enc: null,
             expected_status: null,
             interval_seconds: 0,
             timeout_seconds: 10,
@@ -91,6 +93,10 @@ function fakeRepo(over: Partial<UptimeServiceRow> = {}): FakeRepo {
                     )
                     .slice(0, limit)
                     .map((r) => ({ ...r })),
+            setBaseline: async (id, baselineEnc) => {
+                const r = rows.find((x) => x.id === id);
+                if (r) r.baseline_enc = baselineEnc;
+            },
             recordProbe: async (id, result) => {
                 const target = rows.find((r) => r.id === id);
                 if (!target) return;
@@ -252,6 +258,73 @@ describe('une panne', () => {
         assert.notEqual(repo.incidents[0].ended_at, null);
         // Rien de plus n'est parti : la tentative de la panne, et c'est tout.
         assert.equal(deps.recorded.notifications.length, 1);
+    });
+});
+
+describe('un contrôle d’intégrité', () => {
+    const CAPTURE = {
+        csp: "script-src 'self'",
+        files: { '/': 'h-index', '/assets/app.js': 'h-app' },
+        source: 'page' as const,
+        documentStatus: 200
+    };
+    const LEARNED: ProbeOutcome = { up: true, httpStatus: 200, responseMs: 300, error: null, capture: CAPTURE };
+    const DRIFT: ProbeOutcome = {
+        up: false,
+        httpStatus: 200,
+        responseMs: 300,
+        error: 'Intégrité : 1 fichier modifié',
+        driftLines: ['Modifié : /assets/app.js']
+    };
+
+    it('apprend sa référence à la première lecture, puis la tend à la sonde', async () => {
+        const repo = fakeRepo({ kind: 'integrity', failure_threshold: 1 });
+        const deps = createTestServiceDeps({ repo });
+        const seen: (string | null)[] = [];
+        const monitor = new UptimeMonitor(deps, async (_target, _row, baseline) => {
+            seen.push(baseline ? Object.keys(baseline.files).join(',') : null);
+            return LEARNED;
+        });
+        await deps.recorded.tickers[0].tick();
+        assert.equal(repo.rows[0].status, 'up');
+        assert.ok(repo.rows[0].baseline_enc);
+        const stored = JSON.parse(repo.rows[0].baseline_enc!) as { files: Record<string, string>; csp: string };
+        assert.deepEqual(stored.files, CAPTURE.files);
+        assert.equal(stored.csp, CAPTURE.csp);
+        // Le tour suivant reçoit la référence apprise.
+        await monitor.runOne(repo.rows[0]);
+        assert.deepEqual(seen, [null, '/,/assets/app.js']);
+        assert.equal(deps.recorded.notifications.length, 0);
+    });
+
+    it('un écart ouvre un incident détaillé et une alerte d’intégrité, l’acceptation le referme', async () => {
+        const repo = fakeRepo({
+            kind: 'integrity',
+            failure_threshold: 1,
+            baseline_enc: JSON.stringify({ capturedAt: 1, csp: CAPTURE.csp, files: CAPTURE.files, source: 'page' })
+        });
+        const { deps, probe } = monitorWith(repo);
+
+        await probe(DRIFT);
+        assert.equal(repo.rows[0].status, 'down');
+        assert.equal(repo.incidents.length, 1);
+        // Le résumé sur la ligne du service, le détail fichier par fichier sur l'incident.
+        assert.equal(repo.rows[0].last_error, 'Intégrité : 1 fichier modifié');
+        assert.equal(repo.incidents[0].error, 'Intégrité : 1 fichier modifié\nModifié : /assets/app.js');
+        assert.equal(deps.recorded.notifications.length, 1);
+        assert.ok(deps.recorded.notifications[0].subject.includes('fichiers modifiés'));
+        assert.ok(deps.recorded.notifications[0].body.includes('Modifié : /assets/app.js'));
+        assert.equal(deps.recorded.audits[0].action, 'uptime.integrity');
+
+        // Accepter : la référence est oubliée, la lecture suivante apprend et
+        // referme l'incident par le chemin ordinaire, « rétabli » compris.
+        repo.rows[0].baseline_enc = null;
+        await probe(LEARNED);
+        assert.equal(repo.rows[0].status, 'up');
+        assert.notEqual(repo.incidents[0].ended_at, null);
+        assert.ok(repo.rows[0].baseline_enc);
+        assert.equal(deps.recorded.notifications.length, 2);
+        assert.ok(deps.recorded.notifications[1].subject.includes('de retour'));
     });
 });
 

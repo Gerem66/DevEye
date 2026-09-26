@@ -7,8 +7,17 @@ import { formatDuration, formatMoment } from '@/Services/notifications';
 // adresse qu'un membre a saisie, et rend son statut et la présence d'un mot-clé.
 import { safeFetch, UnsafeTargetError } from '@/Services/netFetch';
 
-import { decryptError, decryptService, encryptError, type ServicePayload } from './_shared';
+import {
+    decryptBaseline,
+    decryptError,
+    decryptService,
+    encryptBaseline,
+    encryptError,
+    type IntegrityBaseline,
+    type ServicePayload
+} from './_shared';
 import { env } from './env';
+import { captureSite, describeDrift, detailDrift, diffCapture, hasDrift, type IntegrityCapture } from './integrity';
 import { buildNotice, type UptimeNotice } from './notice';
 import type { UptimeRepo } from './repo';
 
@@ -30,23 +39,83 @@ import type { UptimeRepo } from './repo';
 /** Élagage des pings bruts, une fois par heure. */
 const PRUNE_INTERVAL_MS = 60 * 60 * 1000;
 
-/** Outcome of a single HTTP probe. */
+/** Outcome of a single probe. */
 export interface ProbeOutcome {
     up: boolean;
     httpStatus: number | null;
     responseMs: number | null;
     /** Plaintext failure reason, or null on success. */
     error: string | null;
+    /** Integrity: what the site serves now; becomes the reference when there is none yet. */
+    capture?: IntegrityCapture;
+    /** Integrity: the drift, file by file, for the incident and the alert. */
+    driftLines?: string[];
 }
 
-/** La sonde elle-même, injectable : les tests en simulent une, sans réseau. */
-export type ProbeFn = (target: ServicePayload, row: UptimeServiceRow) => Promise<ProbeOutcome>;
+/**
+ * La sonde elle-même, injectable : les tests en simulent une, sans réseau.
+ * `baseline` ne concerne que l'intégrité : la référence retenue, `null` tant
+ * qu'aucune n'a été apprise.
+ */
+export type ProbeFn = (
+    target: ServicePayload,
+    row: UptimeServiceRow,
+    baseline: IntegrityBaseline | null
+) => Promise<ProbeOutcome>;
 
 /** How long a probe body is read before giving up on the keyword match. */
 const KEYWORD_BODY_MAX_BYTES = 512 * 1024;
 
-/** Run one HTTP probe. Never throws: a failure *is* the result. */
-export async function probeService(target: ServicePayload, row: UptimeServiceRow): Promise<ProbeOutcome> {
+/** Run one probe, of the service's kind. Never throws: a failure *is* the result. */
+export async function probeService(
+    target: ServicePayload,
+    row: UptimeServiceRow,
+    baseline: IntegrityBaseline | null
+): Promise<ProbeOutcome> {
+    return row.kind === 'integrity' ? probeIntegrity(target, row, baseline) : probeHttp(target, row);
+}
+
+/**
+ * Integrity: refetch every file the site serves and compare. Without a
+ * reference, the capture IS the result: `record` stores it as the reference
+ * and the service is up. The document unreachable is a failure like any other.
+ */
+async function probeIntegrity(
+    target: ServicePayload,
+    row: UptimeServiceRow,
+    baseline: IntegrityBaseline | null
+): Promise<ProbeOutcome> {
+    const started = Date.now();
+    try {
+        const capture = await captureSite(target.url, target.paths, row.timeout_seconds * 1000);
+        const responseMs = Date.now() - started;
+        if (!baseline) return { up: true, httpStatus: capture.documentStatus, responseMs, error: null, capture };
+        const diff = diffCapture(baseline, capture);
+        if (!hasDrift(diff)) return { up: true, httpStatus: capture.documentStatus, responseMs, error: null };
+        return {
+            up: false,
+            httpStatus: capture.documentStatus,
+            responseMs,
+            error: describeDrift(diff),
+            driftLines: detailDrift(diff)
+        };
+    } catch (e) {
+        return { up: false, httpStatus: null, responseMs: Date.now() - started, error: failureMessage(e, row) };
+    }
+}
+
+/** Ce qu'une lecture qui a échoué dit d'elle-même, sans le « fetch failed » générique de Node. */
+function failureMessage(e: unknown, row: UptimeServiceRow): string {
+    if (e instanceof UnsafeTargetError) return e.message;
+    // AbortSignal.timeout rejects with a TimeoutError; everything else is a
+    // connection-level failure (DNS, refused, TLS...), whose `cause` carries
+    // the useful detail Node hides behind a generic "fetch failed".
+    if (e instanceof Error && e.name === 'TimeoutError') return `Délai dépassé (${row.timeout_seconds} s)`;
+    const cause = e instanceof Error && e.cause instanceof Error ? e.cause.message : null;
+    return cause ?? (e instanceof Error ? e.message : String(e));
+}
+
+async function probeHttp(target: ServicePayload, row: UptimeServiceRow): Promise<ProbeOutcome> {
     const started = Date.now();
     try {
         const response = await safeFetch(target.url, {
@@ -78,23 +147,13 @@ export async function probeService(target: ServicePayload, row: UptimeServiceRow
         }
         return { up: true, httpStatus, responseMs, error: null };
     } catch (e) {
-        const responseMs = Date.now() - started;
-        if (e instanceof UnsafeTargetError) return { up: false, httpStatus: null, responseMs: null, error: e.message };
-        const name = e instanceof Error ? e.name : '';
-        // AbortSignal.timeout rejects with a TimeoutError; everything else is a
-        // connection-level failure (DNS, refused, TLS...), whose `cause` carries
-        // the useful detail Node hides behind a generic "fetch failed".
-        if (name === 'TimeoutError') {
-            return {
-                up: false,
-                httpStatus: null,
-                responseMs,
-                error: `Délai dépassé (${row.timeout_seconds} s)`
-            };
-        }
-        const cause = e instanceof Error && e.cause instanceof Error ? e.cause.message : null;
-        const message = e instanceof Error ? e.message : String(e);
-        return { up: false, httpStatus: null, responseMs: null, error: cause ?? message };
+        const timedOut = e instanceof Error && e.name === 'TimeoutError';
+        return {
+            up: false,
+            httpStatus: null,
+            responseMs: timedOut ? Date.now() - started : null,
+            error: failureMessage(e, row)
+        };
     }
 }
 
@@ -103,7 +162,7 @@ export async function probeService(target: ServicePayload, row: UptimeServiceRow
  * sans analyser du texte : ce que ni le corps ni l'embed ne disent.
  */
 function webhookPayload(alert: {
-    event: 'down' | 'recovered';
+    event: 'down' | 'recovered' | 'integrity';
     service: string;
     url: string;
     at: number;
@@ -219,8 +278,9 @@ export class UptimeMonitor {
         try {
             const cipher = this.deps.cipherFor(row.workspace_id);
             const target = await decryptService(cipher, row.content);
+            const baseline = row.kind === 'integrity' ? await decryptBaseline(cipher, row.baseline_enc) : null;
             const outcome = target.url
-                ? await this.probe(target, row)
+                ? await this.probe(target, row, baseline)
                 : { up: false, httpStatus: null, responseMs: null, error: 'Cible illisible (blob corrompu)' };
             await this.record(row, target, outcome, cipher);
         } catch (e) {
@@ -241,6 +301,16 @@ export class UptimeMonitor {
         const { repo } = this.deps;
         const at = Math.floor(Date.now() / 1000);
         const encryptedError = await encryptError(cipher, outcome.error);
+
+        // Première lecture réussie d'un contrôle d'intégrité : ce que le site
+        // sert devient la référence. Rien n'est comparé à ce tour-là.
+        if (outcome.capture) {
+            const { csp, files, source } = outcome.capture;
+            await repo.services.setBaseline(
+                row.id,
+                await encryptBaseline(cipher, { capturedAt: at, csp, files, source })
+            );
+        }
 
         await repo.history.addCheck({
             serviceId: row.id,
@@ -273,7 +343,13 @@ export class UptimeMonitor {
             this.deps.live.changed(row.workspace_id);
         }
 
-        await this.reconcileIncident(row, target, { ...outcome, at, status, encryptedError }, cipher);
+        // L'incident porte le détail fichier par fichier ; la ligne du service
+        // n'en garde que le résumé.
+        const incidentError =
+            outcome.driftLines && outcome.error
+                ? await encryptError(cipher, [outcome.error, ...outcome.driftLines].join('\n'))
+                : encryptedError;
+        await this.reconcileIncident(row, target, { ...outcome, at, status, encryptedError: incidentError }, cipher);
     }
 
     /**
@@ -297,37 +373,56 @@ export class UptimeMonitor {
                 httpStatus: probe.httpStatus,
                 error: probe.encryptedError
             });
+            const drift = probe.driftLines ?? null;
             this.deps.audit({
                 level: 'error',
-                action: 'uptime.down',
+                action: drift ? 'uptime.integrity' : 'uptime.down',
                 userId: row.user_id,
-                description: `Service « ${target.name} » injoignable`,
-                metadata: { serviceId: row.id, httpStatus: probe.httpStatus }
+                description: drift
+                    ? `Fichiers de « ${target.name} » modifiés : ${probe.error}`
+                    : `Service « ${target.name} » injoignable`,
+                metadata: { serviceId: row.id, httpStatus: probe.httpStatus, ...(drift ? { drift } : {}) }
             });
             // Toujours tenté : c'est la route qui décide. Un service « silencieux »
             // a une route sans canal, la façade ne fait rien et l'incident reste
             // non-notifié, donc pas de « c'est revenu » orphelin.
-            const sent = await this.notify(row, target, {
-                subject: `⚠️ ${target.name} est hors ligne`,
-                body: [
-                    `Le service « ${target.name} » ne répond plus.`,
-                    '',
-                    `URL : ${target.url}`,
-                    `Depuis : ${formatMoment(probe.at)}`,
-                    `Erreur : ${probe.error ?? 'inconnue'}`,
-                    probe.httpStatus === null ? null : `Statut HTTP : ${probe.httpStatus}`
-                ]
-                    .filter((line) => line !== null)
-                    .join('\n'),
-                notice: {
-                    event: 'down',
-                    service: target.name,
-                    url: target.url,
-                    at: probe.at,
-                    error: probe.error,
-                    httpStatus: probe.httpStatus
-                }
-            });
+            const sent = drift
+                ? await this.notify(row, target, {
+                      subject: `🛡️ ${target.name} : fichiers modifiés`,
+                      body: [
+                          `Les fichiers que sert « ${target.name} » ne sont plus ceux de la référence.`,
+                          '',
+                          `URL : ${target.url}`,
+                          `Constaté : ${formatMoment(probe.at)}`,
+                          `Écart : ${probe.error ?? 'inconnu'}`,
+                          '',
+                          ...drift,
+                          '',
+                          'Si c’est un déploiement voulu, acceptez la version actuelle depuis la fiche du service.'
+                      ].join('\n'),
+                      notice: { event: 'integrity', service: target.name, url: target.url, at: probe.at, lines: drift }
+                  })
+                : await this.notify(row, target, {
+                      subject: `⚠️ ${target.name} est hors ligne`,
+                      body: [
+                          `Le service « ${target.name} » ne répond plus.`,
+                          '',
+                          `URL : ${target.url}`,
+                          `Depuis : ${formatMoment(probe.at)}`,
+                          `Erreur : ${probe.error ?? 'inconnue'}`,
+                          probe.httpStatus === null ? null : `Statut HTTP : ${probe.httpStatus}`
+                      ]
+                          .filter((line) => line !== null)
+                          .join('\n'),
+                      notice: {
+                          event: 'down',
+                          service: target.name,
+                          url: target.url,
+                          at: probe.at,
+                          error: probe.error,
+                          httpStatus: probe.httpStatus
+                      }
+                  });
             if (sent) await repo.history.markIncidentNotified(incident.id);
             return;
         }
