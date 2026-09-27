@@ -6,6 +6,8 @@ import { agentDistDir, startAgentReconcile } from '@/agent/sync';
 
 import Encryption from '@/Services/Encryption';
 import { createAuditLog } from '@/Services/AuditLog';
+import { describeError, systemAlerts } from '@/Services/systemAlerts';
+import { appVersion } from '@/version';
 import { createDatabase } from '@/db';
 import { runMigrations } from '@/db/migrate';
 import { assertSealFormat } from '@/Services/sealFormat';
@@ -24,6 +26,25 @@ import '@/features/registry';
  * cette ligne de journal plutôt qu'un signal muet.
  */
 const SHUTDOWN_TIMEOUT_MS = 3000;
+
+/** Le temps laissé à l'alerte d'un plantage ou d'un arrêt forcé avant la sortie. */
+const EXIT_ALERT_MS = 2000;
+
+/**
+ * Une exception ou un rejet que rien n'attrape : Node sortirait en écrivant une
+ * pile brute sur stderr, hors du journal JSON. On la journalise et on prévient,
+ * puis on sort comme Node l'aurait fait ; Docker relance le conteneur.
+ */
+let crashing = false;
+function crash(kind: string, e: unknown): void {
+    if (crashing) process.exit(1);
+    crashing = true;
+    logger.fatal({ err: e }, kind);
+    systemAlerts.report({ key: 'crash', level: 'critical', title: 'Plantage du serveur', detail: describeError(e) });
+    void systemAlerts.flush(EXIT_ALERT_MS).finally(() => process.exit(1));
+}
+process.on('uncaughtException', (e) => crash('Uncaught exception', e));
+process.on('unhandledRejection', (e) => crash('Unhandled rejection', e));
 
 async function main() {
     warnUnsetModuleEnv();
@@ -50,6 +71,7 @@ async function main() {
 
     const db = createDatabase(pool);
     const crypt = new Encryption(env.CRYPT_KEY_A, env.CRYPT_KEY_B);
+    systemAlerts.init({ db, crypt, logger, live: env.ENVIRONMENT === 'prod' });
 
     const { app, stopServices } = await buildApp({
         db,
@@ -74,7 +96,13 @@ async function main() {
         let step = 'module services';
         const deadline = setTimeout(() => {
             logger.error({ signal, step }, 'Graceful shutdown timed out; exiting');
-            process.exit(1);
+            systemAlerts.report({
+                key: 'shutdown',
+                level: 'error',
+                title: 'Arrêt forcé du serveur',
+                detail: `L’arrêt propre n’a pas abouti en ${SHUTDOWN_TIMEOUT_MS / 1000} s (étape : ${step}).`
+            });
+            void systemAlerts.flush(EXIT_ALERT_MS).finally(() => process.exit(1));
         }, SHUTDOWN_TIMEOUT_MS);
         // Le chien de garde ne doit pas retenir à lui seul la boucle
         // d'événements : sans lui, l'arrêt est déjà fini.
@@ -130,9 +158,12 @@ async function main() {
         description: 'Serveur DevEye démarré',
         metadata: { port: env.LISTEN_PORT }
     });
+    // Un démarrage que personne n'a demandé est la trace d'un plantage.
+    systemAlerts.report({ key: 'boot', level: 'info', title: 'Serveur démarré', detail: `Version ${appVersion()}` });
+    void systemAlerts.warnIfUnrouted();
 }
 
 main().catch((e) => {
-    logger.fatal({ err: e instanceof Error ? e.message : String(e) }, 'Fatal startup error');
+    logger.fatal({ err: e }, 'Fatal startup error');
     process.exit(1);
 });

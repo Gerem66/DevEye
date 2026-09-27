@@ -3,6 +3,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import {
     LOGS_PAGE_DEFAULT,
     LOG_LEVEL_NAMES,
+    SYSTEM_NOTIFICATION_TARGET,
     logLevelName,
     logLevelValue,
     type LogEntry,
@@ -13,6 +14,7 @@ import {
 
 import { ws, WsError } from '@/api/ws';
 import Button from '@/Components/Button';
+import { FeatureSettingsButton } from '@/Components/FeatureSettings';
 import TextInput from '@/Components/TextInput';
 import SelectInput from '@/Components/SelectInput';
 
@@ -236,6 +238,8 @@ function FeatureLogs() {
                             Réinitialiser
                         </Button>
                     )}
+                    {/* Les alertes de l'instance : où partent ses erreurs, plantages et redémarrages. */}
+                    <FeatureSettingsButton scope={{ kind: 'feature', feature: SYSTEM_NOTIFICATION_TARGET }} />
                 </div>
             </header>
 

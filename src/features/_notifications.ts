@@ -1,8 +1,9 @@
-import type {
-    NotificationChannel,
-    NotificationChannelInput,
-    NotificationFeature,
-    NotificationRoute
+import {
+    SYSTEM_NOTIFICATION_TARGET,
+    type NotificationChannel,
+    type NotificationChannelInput,
+    type NotificationFeature,
+    type NotificationRoute
 } from '@deveye/types';
 
 import { describeChannel, resolveRoute, type ResolvedChannel } from '@/Services/notifications';
@@ -19,13 +20,44 @@ import { isAllowedOutboundUrl, OUTBOUND_REFUSED_MESSAGE } from '@/Services/netFe
  * `Docs/SECURITY_MODEL.md`).
  */
 
+/**
+ * La cible système n'est pas une fonctionnalité d'espace : aucun rôle ne la
+ * porte. Un admin global la règle dans un espace qu'il possède, et c'est là
+ * que `Services/systemAlerts.ts` va chercher sa route.
+ */
+function managesSystem(ctx: FeatureContext): boolean {
+    return ctx.isAdmin && ctx.isOwner;
+}
+
+function assertManagesSystem(ctx: FeatureContext): void {
+    if (!managesSystem(ctx)) {
+        throw new FeatureError('forbidden', 'Réservé aux administrateurs, dans un espace qui leur appartient.');
+    }
+}
+
+/**
+ * Le droit de régler où une cible écrit : lire la fonctionnalité suffit pour
+ * lire sa route (les canaux ne livrent pas leur adresse pour autant), l'écrire
+ * pour la régler.
+ */
+export function assertRouteAccess(ctx: FeatureContext, feature: NotificationFeature, level: 'read' | 'write'): void {
+    if (feature === SYSTEM_NOTIFICATION_TARGET) return assertManagesSystem(ctx);
+    ctx.assertFeature(feature, level);
+}
+
+/** Le droit de déclarer, corriger ou supprimer les canaux d'une cible (champ `channels` du grant). */
+export function assertChannelAccess(ctx: FeatureContext, feature: NotificationFeature): void {
+    if (feature === SYSTEM_NOTIFICATION_TARGET) return assertManagesSystem(ctx);
+    ctx.assertChannels(feature);
+}
+
 /** Les canaux d'une fonctionnalité, avec leur nombre d'usages, prêts pour l'écran. */
 export async function listChannels(ctx: FeatureContext, feature: NotificationFeature): Promise<NotificationChannel[]> {
     const rows = await ctx.db.notificationChannels.list(ctx.workspaceId, feature);
     const usage = await ctx.db.notificationChannels.usageCounts(ctx.workspaceId);
     // La liste s'ouvre avec la fonctionnalité (on ne route pas vers ce qu'on ne
     // voit pas) ; les adresses restent derrière le grant `channels`.
-    const reveal = ctx.canChannels(feature);
+    const reveal = feature === SYSTEM_NOTIFICATION_TARGET ? managesSystem(ctx) : ctx.canChannels(feature);
     return Promise.all(rows.map((row) => describeChannel(ctx.secure.open, row, usage.get(row.id) ?? 0, reveal)));
 }
 

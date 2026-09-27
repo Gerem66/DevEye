@@ -6,6 +6,7 @@ import { err, type ErrorCode } from '@deveye/types';
 
 import { keepRawBody, modulePublicRoutes, parseFormFields } from '@/features/_sdk/register';
 import { logger } from '@/logger';
+import { describeError, systemAlerts } from '@/Services/systemAlerts';
 import { env, TRUST_PROXY } from '@/Utils/Env';
 
 /**
@@ -130,7 +131,16 @@ export async function buildPublicApp(): Promise<FastifyInstance> {
     app.setErrorHandler((error: FastifyError, req, reply) => {
         const explicit = typeof error.statusCode === 'number' && error.statusCode >= 400 && error.statusCode < 500;
         const status = explicit ? (error.statusCode as number) : 500;
-        if (status >= 500) req.log.error({ err: error }, 'unhandled public request error');
+        if (status >= 500) {
+            req.log.error({ err: error }, 'unhandled public request error');
+            const route = `${req.method} ${req.routeOptions.url ?? req.url.split('?')[0]}`;
+            systemAlerts.report({
+                key: `public:${route}`,
+                level: 'error',
+                title: 'Erreur serveur sur la surface publique',
+                detail: `${route}\n${describeError(error)}`
+            });
+        }
         const code: ErrorCode = status === 400 ? 'validation' : 'internal';
         return reply.code(status).send(err(code, status >= 500 ? 'Erreur interne' : 'Requête invalide'));
     });

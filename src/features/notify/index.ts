@@ -1,5 +1,7 @@
 import type { NotificationFeature } from '@deveye/types';
 import {
+    SYSTEM_NOTIFICATION_INFO,
+    SYSTEM_NOTIFICATION_TARGET,
     featureDescriptor,
     notifyChannelAdd,
     notifyChannelDelete,
@@ -18,6 +20,8 @@ import { formatMoment, resolveChannelIds, sendTest } from '@/Services/notificati
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import { moduleItems } from '../_sdk/register';
 import {
+    assertChannelAccess,
+    assertRouteAccess,
     createChannel,
     foreignChannels,
     getRoute,
@@ -30,10 +34,11 @@ import {
 /**
  * Les canaux d'alerte, et les routes qui pointent dessus. Deux étages
  * d'autorisation : les canaux appartiennent à leur fonctionnalité (champ
- * `channels` du grant, `ctx.assertChannels`) ; les routes relèvent du droit
- * d'écriture de la fonctionnalité visée. Aucun ne peut être déclaré dans
+ * `channels` du grant) ; les routes relèvent du droit d'écriture de la
+ * fonctionnalité visée. La cible système, qui n'est pas une fonctionnalité,
+ * revient à un admin propriétaire de l'espace. Aucun ne peut être déclaré dans
  * `access` : la fonctionnalité visée est une donnée d'entrée, chaque handler
- * la vérifie en première ligne.
+ * la vérifie en première ligne (`assertChannelAccess`, `assertRouteAccess`).
  */
 
 /** La fonctionnalité propriétaire d'un canal, ou `not_found`. */
@@ -41,15 +46,6 @@ async function channelFeatureOf(ctx: FeatureContext, id: number): Promise<Notifi
     const row = await ctx.db.notificationChannels.findById(id, ctx.workspaceId);
     if (!row) throw new FeatureError('not_found', 'Canal introuvable');
     return row.feature;
-}
-
-/**
- * Le droit de régler où une fonctionnalité écrit : lire la fonctionnalité
- * suffit pour lire sa route (les canaux ne livrent pas leur adresse pour
- * autant), l'écrire pour la régler.
- */
-function assertRouteAccess(ctx: FeatureContext, feature: NotificationFeature, level: 'read' | 'write'): void {
-    ctx.assertFeature(feature, level === 'write' ? 'write' : 'read');
 }
 
 /**
@@ -111,7 +107,7 @@ const channelAdd = defineFeature({
     handler: async (ctx, input) => {
         // La gestion des canaux de la fonctionnalité visée, qui emporte sa
         // lecture : on ne déclare pas de canal sur ce qu'on ne voit pas.
-        ctx.assertChannels(input.feature);
+        assertChannelAccess(ctx, input.feature);
         const { feature, ...draft } = input;
         const channel = await createChannel(ctx, feature, draft);
         ctx.audit({
@@ -126,7 +122,7 @@ const channelUpdate = defineFeature({
     ...notifyChannelUpdate,
     mutates: true,
     handler: async (ctx, input) => {
-        ctx.assertChannels(await channelFeatureOf(ctx, input.id));
+        assertChannelAccess(ctx, await channelFeatureOf(ctx, input.id));
         const { id, enabled, ...rest } = input;
         const channel = await updateChannel(ctx, id, rest, enabled);
         ctx.audit({ action: 'notify.channelUpdate', description: `Canal d’alerte « ${channel.label} » modifié` });
@@ -137,7 +133,7 @@ const channelUpdate = defineFeature({
 const channelUsage = defineFeature({
     ...notifyChannelUsage,
     handler: async (ctx, input) => {
-        ctx.assertChannels(await channelFeatureOf(ctx, input.id));
+        assertChannelAccess(ctx, await channelFeatureOf(ctx, input.id));
         const rows = await ctx.db.notificationChannels.usageDetail(input.id, ctx.workspaceId);
         const routes = await Promise.all(
             rows.map(async (r) => ({
@@ -154,7 +150,7 @@ const channelDelete = defineFeature({
     ...notifyChannelDelete,
     mutates: true,
     handler: async (ctx, input) => {
-        ctx.assertChannels(await channelFeatureOf(ctx, input.id));
+        assertChannelAccess(ctx, await channelFeatureOf(ctx, input.id));
         // Les liaisons partent en cascade ; une route laissée vide est sans
         // conséquence (vide ou absente, la cible est silencieuse).
         if (!(await ctx.db.notificationChannels.remove(input.id, ctx.workspaceId))) {
@@ -174,7 +170,7 @@ const channelReorder = defineFeature({
         // être gérée par l'appelant.
         const touched = new Set<NotificationFeature>();
         for (const id of input.ids) touched.add(await channelFeatureOf(ctx, id));
-        for (const f of touched) ctx.assertChannels(f);
+        for (const f of touched) assertChannelAccess(ctx, f);
         await ctx.db.notificationChannels.reorder(ctx.workspaceId, input.ids);
         return { ok: true as const };
     }
@@ -185,7 +181,7 @@ const channelTest = defineFeature({
     handler: async (ctx, input) => {
         const row = await ctx.db.notificationChannels.findById(input.id, ctx.workspaceId);
         if (!row) throw new FeatureError('not_found', 'Canal introuvable');
-        ctx.assertChannels(row.feature);
+        assertChannelAccess(ctx, row.feature);
         const channels = await resolveChannelIds(ctx.db, ctx.secure.open, ctx.workspaceId, [row.id]);
         return sendTest(channels, testAlert(channels[0]?.label ?? 'canal'), ctx.logger);
     }
@@ -211,6 +207,9 @@ const routeSet = defineFeature({
     mutates: true,
     handler: async (ctx, input) => {
         assertRouteAccess(ctx, input.feature, 'write');
+        if (input.feature === SYSTEM_NOTIFICATION_TARGET && input.itemId !== undefined) {
+            throw new FeatureError('validation', 'La cible système n’a pas d’éléments.');
+        }
         // Router un élément projeté vers des canaux d'ici est refusé :
         // l'ordonnanceur qui sonde l'élément tourne dans son espace d'origine et
         // ne les résoudrait pas.
@@ -225,7 +224,11 @@ const routeSet = defineFeature({
         }
         // La sélection vit sur l'élément : une route de fonctionnalité ne
         // subsiste que pour les émetteurs sans éléments.
-        if (input.itemId === undefined && featureDescriptor(input.feature).hasItems) {
+        if (
+            input.feature !== SYSTEM_NOTIFICATION_TARGET &&
+            input.itemId === undefined &&
+            featureDescriptor(input.feature).hasItems
+        ) {
             throw new FeatureError(
                 'validation',
                 'Les canaux se choisissent sur chaque élément de cette fonctionnalité, dans ses réglages.'
@@ -247,7 +250,8 @@ const routeTest = defineFeature({
         // lecture. Il relève donc du même droit que le réglage lui-même.
         assertRouteAccess(ctx, input.feature, 'write');
         const channels = await resolveChannelsFor(ctx, input.feature, input.itemId);
-        return sendTest(channels, testAlert(input.feature), ctx.logger);
+        const label = input.feature === SYSTEM_NOTIFICATION_TARGET ? SYSTEM_NOTIFICATION_INFO.label : input.feature;
+        return sendTest(channels, testAlert(label), ctx.logger);
     }
 });
 

@@ -1,0 +1,43 @@
+.page,
+.view {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-md);
+    padding: var(--space-xl) var(--space-lg);
+    text-align: center;
+    color: var(--text-primary);
+}
+
+.page {
+    min-height: 100vh;
+    background: var(--surface-popup-solid);
+}
+
+.view {
+    min-height: 16rem;
+}
+
+.icon {
+    font-size: 2rem;
+    color: var(--danger);
+}
+
+.title {
+    margin: 0;
+    font-size: 1.25rem;
+}
+
+.text {
+    margin: 0;
+    max-width: 32rem;
+    color: var(--text-secondary);
+}
+
+.actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--space-sm);
+}

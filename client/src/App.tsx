@@ -7,6 +7,7 @@ import MaintenancePage from './Pages/Maintenance';
 import SignupPage from './Pages/Signup';
 import { readSignupRoute, type SignupRoute } from './Pages/Signup/route';
 import { SecrecyGate } from './Components/SecrecyGate';
+import ErrorBoundary from './Components/ErrorBoundary';
 import { ReportButton } from './Components/ReportButton';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
 import { useLocalUser } from './stores/currentUser';
@@ -82,7 +83,13 @@ function AppRoot() {
 
     return (
         <>
-            {status === 'authenticated' && <HomePage />}
+            {/* Le bouton de signalement, frère et non enfant, survit à la chute
+                de l'accueil : l'écran de secours peut donc proposer le signalement. */}
+            {status === 'authenticated' && (
+                <ErrorBoundary variant='page' canReport>
+                    <HomePage />
+                </ErrorBoundary>
+            )}
             {status === 'authenticated' && <SecrecyGate />}
             {/* Monté ici et non dans l'accueil : le bouton doit survivre à
                 n'importe quelle vue, et se poser au-dessus d'elles toutes. */}

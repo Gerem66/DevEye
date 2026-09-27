@@ -5,6 +5,7 @@ import Button from '@/Components/Button';
 import { Dialog } from '@/Components/Dialog';
 import { useLiveOutline } from '@/live/useLiveOutline';
 import { pushLiveSettings } from '@/stores/live';
+import { useCurrentUser } from '@/stores/currentUser';
 import { consumeItemSettings } from '@/stores/settingsRequest';
 import { getActiveWorkspaceId, useActiveWorkspace, useWorkspacePermissions } from '@/stores/workspace';
 
@@ -17,7 +18,16 @@ import { flashKey, onFlash } from './flash';
 import { SettingsFooterContext } from './footer';
 import SideNav, { type SideNavItem } from './SideNav';
 import { isModuleShareWired, moduleClient, moduleManifest } from '@/sdk/registry';
-import { liveSettingsValue, scopeDescription, scopeTitle, type SettingsScope, type SettingsSectionId } from './scope';
+import {
+    isSystemScope,
+    liveSettingsValue,
+    scopeDescription,
+    scopeTitle,
+    targetInfo,
+    type SettingsScope,
+    type SettingsSectionId,
+    type ShellScope
+} from './scope';
 import styles from './FeatureSettings.module.css';
 
 /**
@@ -45,19 +55,35 @@ function isShareWired(feature: FeatureId): boolean {
  * Les sections visibles pour cette cible, dans l'ordre. Exporté pour que les
  * appelants décident s'il y a un bouton à rendre.
  */
-export function useSettingsSections(scope: SettingsScope): SectionDef[] {
+export function useSettingsSections(shellScope: ShellScope): SectionDef[] {
+    const isAdmin = useCurrentUser()?.role === 'admin';
+    const featureSections = useFeatureSections(isSystemScope(shellScope) ? null : shellScope);
+    const permissions = useWorkspacePermissions();
+    if (!isSystemScope(shellScope)) return featureSections;
+    // La cible système n'est au registre d'aucun rôle : un admin la règle dans
+    // un espace qu'il possède, comme le serveur l'exige.
+    return isAdmin && permissions.isOwner ? SYSTEM_SECTIONS : [];
+}
+
+const SYSTEM_SECTIONS: SectionDef[] = [{ id: 'notifications', label: 'Notifications', icon: 'mail' }];
+
+/** Les sections d'une fonctionnalité ou d'un élément ; aucune sans portée. */
+function useFeatureSections(scope: SettingsScope | null): SectionDef[] {
     const permissions = useWorkspacePermissions();
     const active = useActiveWorkspace();
-    const canRead = permissions.canFeature(scope.feature, 'read');
+    const feature = scope?.feature;
+    const canRead = feature !== undefined && permissions.canFeature(feature, 'read');
     // Sur l'élément quand il y en a un : ses droits peuvent différer de ceux de
     // la fonctionnalité, dans les deux sens. C'est aussi ce que `ModulePanel`
     // passe ensuite en `canWrite`, donc un onglet gardé n'est jamais monté sans.
-    const canWrite = permissions.canFeature(scope.feature, 'write', scope.kind === 'item' ? scope.itemId : undefined);
-    const canRestrict = permissions.canManageItemGrants(scope.feature);
+    const canWrite =
+        feature !== undefined &&
+        permissions.canFeature(feature, 'write', scope?.kind === 'item' ? scope.itemId : undefined);
+    const canRestrict = feature !== undefined && permissions.canManageItemGrants(feature);
     const isShared = active?.kind === 'shared';
 
     return useMemo(() => {
-        if (!canRead) return [];
+        if (!scope || !canRead) return [];
         const descriptor = featureDescriptor(scope.feature);
         const sections: SectionDef[] = [];
 
@@ -154,7 +180,7 @@ export function useSettingsSections(scope: SettingsScope): SectionDef[] {
         pushProjectsSection(sections);
         pushSharingSections(sections);
         return sections;
-    }, [scope.feature, scope.kind, canRead, canWrite, canRestrict, isShared, permissions]);
+    }, [scope?.feature, scope?.kind, canRead, canWrite, canRestrict, isShared, permissions]);
 }
 
 /** Les sections que la coquille rend elle-même, native ou module. */
@@ -169,7 +195,7 @@ const GENERIC_SECTIONS: ReadonlySet<SettingsSectionId> = new Set([
 export interface FeatureSettingsDialogProps {
     open: boolean;
     onClose: () => void;
-    scope: SettingsScope;
+    scope: ShellScope;
     /** La section à montrer à l'ouverture : le « + » d'un sélecteur de source
      *  ouvre directement l'onglet Sources. */
     initialSection?: SettingsSectionId;
@@ -199,7 +225,9 @@ export function FeatureSettingsDialog({ open, onClose, scope, initialSection, on
      * d'une fonctionnalité ne propose pas ce saut, elle est déjà tout en haut.
      */
     const [general, setGeneral] = useState<{ section?: SettingsSectionId } | null>(null);
-    const generalSections = useSettingsSections({ kind: 'feature', feature: scope.feature });
+    const generalSections = useSettingsSections(
+        scope.kind === 'item' ? { kind: 'feature', feature: scope.feature } : scope
+    );
     const canOpenGeneral = scope.kind === 'item' && generalSections.length > 0;
     const current = active && sections.some((s) => s.id === active) ? active : sections[0]?.id;
     /**
@@ -257,10 +285,10 @@ export function FeatureSettingsDialog({ open, onClose, scope, initialSection, on
                                         title='Ouvrir les réglages généraux'
                                         onClick={() => setGeneral({})}
                                     >
-                                        {featureDescriptor(scope.feature).label}
+                                        {targetInfo(scope.feature).label}
                                     </button>
                                 ) : (
-                                    <span>{featureDescriptor(scope.feature).label}</span>
+                                    <span>{targetInfo(scope.feature).label}</span>
                                 )}
                             </>
                         )}
@@ -298,9 +326,13 @@ export function FeatureSettingsDialog({ open, onClose, scope, initialSection, on
                                 <ItemPermissionsSection scope={scope} />
                             )}
                             {current === 'projects' && scope.kind === 'item' && <ProjectsSection scope={scope} />}
-                            {current === 'sharing' && <SharingSection scope={scope} onGone={gone} />}
-                            {current === 'domains' && scope.kind === 'feature' && <DomainsSection scope={scope} />}
-                            {current && !GENERIC_SECTIONS.has(current) && (
+                            {current === 'sharing' && !isSystemScope(scope) && (
+                                <SharingSection scope={scope} onGone={gone} />
+                            )}
+                            {current === 'domains' && scope.kind === 'feature' && !isSystemScope(scope) && (
+                                <DomainsSection scope={scope} />
+                            )}
+                            {current && !GENERIC_SECTIONS.has(current) && !isSystemScope(scope) && (
                                 <ModulePanel scope={scope} section={current} close={onClose} gone={gone} />
                             )}
                         </div>
@@ -322,7 +354,7 @@ export function FeatureSettingsDialog({ open, onClose, scope, initialSection, on
 }
 
 export interface FeatureSettingsButtonProps {
-    scope: SettingsScope;
+    scope: ShellScope;
     /**
      * `link` : un mot souligné plutôt qu'un bouton, pour le geste glissé dans une
      * phrase ou dans une cellule trop étroite pour un bouton. Même porte, même
@@ -380,14 +412,15 @@ export function FeatureSettingsButton({
      * suffit. Périmée ou visant un autre élément, elle rend `null`.
      */
     const itemId = scope.kind === 'item' ? scope.itemId : null;
+    const itemFeature = scope.kind === 'item' ? scope.feature : null;
     useEffect(() => {
-        if (itemId === null) return;
-        const wanted = consumeItemSettings(getActiveWorkspaceId(), scope.feature, itemId);
+        if (itemId === null || itemFeature === null) return;
+        const wanted = consumeItemSettings(getActiveWorkspaceId(), itemFeature, itemId);
         if (wanted) {
             setSection(wanted as SettingsSectionId);
             setOpen(true);
         }
-    }, [scope.feature, itemId]);
+    }, [itemFeature, itemId]);
 
     // Qui règle est un cran plus loin que qui regarde l'écran : son halo se pose
     // donc sur le bouton, et non sur ce que la coquille recouvre.
@@ -397,11 +430,13 @@ export function FeatureSettingsButton({
        ce qui vient de changer. Le bouton canonique seul, celui qui ouvre sur la
        première section : les raccourcis vers un onglet précis partagent la
        même portée, et s'éclaireraient tous ensemble. */
-    const myFlashKey = flashKey(
-        scope.kind === 'item'
-            ? { kind: 'item', feature: scope.feature, itemId: scope.itemId }
-            : { kind: 'feature', feature: scope.feature }
-    );
+    const myFlashKey = isSystemScope(scope)
+        ? null
+        : flashKey(
+              scope.kind === 'item'
+                  ? { kind: 'item', feature: scope.feature, itemId: scope.itemId }
+                  : { kind: 'feature', feature: scope.feature }
+          );
     const [flashing, setFlashing] = useState(false);
     const canonical = initialSection === undefined;
     useEffect(() => {
@@ -460,7 +495,7 @@ export function FeatureSettingsButton({
     );
 }
 
-export type { SettingsScope, SettingsSectionId } from './scope';
+export type { SettingsScope, SettingsSectionId, ShellScope } from './scope';
 
 /**
  * Le panneau d'un module pour la section courante (`settingsPanels`). Rien à

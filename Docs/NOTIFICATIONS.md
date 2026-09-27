@@ -333,3 +333,21 @@ service silencieux est devenu une route explicite sans canal), puis a supprimé
 la colonne. La règle vaut pour tout émetteur : **la route est le seul endroit
 qui décide**, et `deliver` sans canal rend `false`, ce qui suffit à retenir le
 « c'est revenu » d'une panne jamais annoncée.
+
+## 11. La cible système
+
+`system` n'est pas une fonctionnalité : elle porte les alertes de l'instance
+elle-même (erreurs serveur, plantages, redémarrages ; voir [LOGS.md](./LOGS.md)).
+Elle entre dans `notificationFeatureSchema` à côté de l'enum natif, jamais dans
+`FEATURE_REGISTRY` : aucun rôle ne la porte, et le contrôle de parité ne la voit
+pas.
+
+- **Qui la règle** : un admin global, dans un espace qu'il possède
+  (`assertChannelAccess` et `assertRouteAccess` dans `features/_notifications.ts`).
+  Ses canaux et sa route vivent dans cet espace, avec `item_id = 0`.
+- **Qui la reçoit** : `systemRouteWorkspaces()` rend les espaces qui ont une
+  route système et dont le propriétaire est un admin actif. Un admin rétrogradé
+  cesse d'être prévenu sans qu'on nettoie sa route.
+- **Côté client** : la coquille accepte `ShellScope` (une fonctionnalité, un
+  élément ou la cible système) à ses entrées seulement ; les sections propres
+  aux fonctionnalités gardent `SettingsScope`. La page Logs porte le bouton.

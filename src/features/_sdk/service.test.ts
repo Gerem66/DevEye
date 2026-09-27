@@ -230,7 +230,12 @@ describe('createServiceDeps : createTicker', () => {
         service.start();
         t.mock.timers.tick(1000);
         await flush();
-        assert.deepEqual(errors, [{ obj: { feature: ID, err: 'boom' }, msg: 'Module tick failed' }]);
+        assert.equal(errors.length, 1);
+        const [logged] = errors as { obj: { feature: string; err: unknown }; msg: string }[];
+        assert.equal(logged.msg, 'Module tick failed');
+        assert.equal(logged.obj.feature, ID);
+        // L'erreur entière, pas son message : pino en sérialise la pile.
+        assert.ok(logged.obj.err instanceof Error && logged.obj.err.message === 'boom');
         t.mock.timers.tick(1000);
         assert.equal(runs, 2);
         service.stop();

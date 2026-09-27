@@ -20,6 +20,7 @@ import type { Mailer } from '@/Services/mailer';
 import { mailHtml, mailText } from '@/Services/mailLayout';
 import { verifyModuleTicket } from '@/auth/jwt';
 import { maintenance } from '@/Services/maintenance';
+import { describeError, systemAlerts } from '@/Services/systemAlerts';
 import type { Logger } from 'pino';
 import type { AuditLog } from '@/Services/AuditLog';
 import type { LiveHub } from '@/live/hub';
@@ -269,7 +270,13 @@ export function createServiceDeps(
                 try {
                     await tick();
                 } catch (e) {
-                    host.logger.error({ feature: manifest.id, err: (e as Error).message }, 'Module tick failed');
+                    host.logger.error({ feature: manifest.id, err: e }, 'Module tick failed');
+                    systemAlerts.report({
+                        key: `tick:${manifest.id}`,
+                        level: 'error',
+                        title: `Échec d’une tâche de fond (${manifest.id})`,
+                        detail: describeError(e)
+                    });
                 }
             };
             return {

@@ -11,10 +11,18 @@
 
 name: deveye
 
+# Sans plafond, le pilote par défaut garde tout et le disque finit par se remplir.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: '20m'
+    max-file: '5'
+
 services:
   db:
     image: mysql:8
     restart: unless-stopped
+    logging: *logging
     environment:
       MYSQL_RANDOM_ROOT_PASSWORD: 'yes'
       MYSQL_DATABASE: ${DB_DATABASE:-DevEye}
@@ -33,6 +41,7 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
+    logging: *logging
     depends_on:
       db:
         condition: service_healthy

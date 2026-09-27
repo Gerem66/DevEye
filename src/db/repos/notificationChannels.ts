@@ -1,8 +1,9 @@
-import type {
-    NotificationChannelKind,
-    NotificationChannelRow,
-    NotificationFeature,
-    NotificationRouteRow
+import {
+    SYSTEM_NOTIFICATION_TARGET,
+    type NotificationChannelKind,
+    type NotificationChannelRow,
+    type NotificationFeature,
+    type NotificationRouteRow
 } from '@deveye/types';
 
 import type { Queryable } from '../pool';
@@ -64,6 +65,13 @@ export interface NotificationChannelsRepo {
     ): Promise<NotificationRouteRow>;
     /** Efface la route d'une cible : plus de sélection, elle ne prévient personne. */
     clearRoute(workspaceId: number, feature: NotificationFeature, itemId: number): Promise<void>;
+
+    /**
+     * Les espaces qui ont une route système et dont le propriétaire est un
+     * admin actif : un admin rétrogradé ou suspendu cesse d'être prévenu sans
+     * qu'on nettoie sa route.
+     */
+    systemRouteWorkspaces(): Promise<number[]>;
 }
 
 export function notificationChannelsRepo(pool: Q): NotificationChannelsRepo {
@@ -220,6 +228,18 @@ export function notificationChannelsRepo(pool: Q): NotificationChannelsRepo {
                 );
             }
             return route;
+        },
+
+        async systemRouteWorkspaces() {
+            const r = await pool.query<{ workspace_id: number }>(
+                `SELECT DISTINCT r.workspace_id
+                   FROM notification_routes r
+                   JOIN workspaces w ON w.id = r.workspace_id
+                   JOIN users u ON u.id = w.owner_user_id
+                  WHERE r.feature = ? AND r.item_id = 0 AND u.role = 'admin' AND u.status = 'active'`,
+                [SYSTEM_NOTIFICATION_TARGET]
+            );
+            return r.rows.map((row) => row.workspace_id);
         },
 
         async clearRoute(workspaceId, feature, itemId) {

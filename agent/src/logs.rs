@@ -110,9 +110,13 @@ fn win_level(name: &str) -> Option<&'static str> {
     }
 }
 
-/// Coarse severity guess from a line's text, for sources without structured levels
-/// (Docker, plain files, the macOS unified log). `None` when nothing stands out.
+/// Severity of a line from a source without native levels (Docker, plain files,
+/// the macOS unified log): its own `level` field when it is a JSON record, else a
+/// coarse guess from its words. `None` when nothing stands out.
 fn guess_level(msg: &str) -> Option<&'static str> {
+    if let Some(level) = json_level(msg) {
+        return Some(level);
+    }
     let m = msg.to_ascii_uppercase();
     if m.contains("CRITICAL") || m.contains("FATAL") || m.contains("EMERG") || m.contains("PANIC") {
         Some("critical")
@@ -126,6 +130,43 @@ fn guess_level(msg: &str) -> Option<&'static str> {
         Some("debug")
     } else {
         None
+    }
+}
+
+/// The `level` field of a structured (JSON) log line: pino's numbers (10 trace to
+/// 60 fatal) or a name. The words would mislead here: a pino warning whose message
+/// says "error" is still a warning, and a fatal line may not say "fatal" at all.
+fn json_level(msg: &str) -> Option<&'static str> {
+    let line = msg.trim_start();
+    if !line.starts_with('{') {
+        return None;
+    }
+    let record: serde_json::Value = serde_json::from_str(line).ok()?;
+    match record.get("level")? {
+        serde_json::Value::Number(n) => {
+            let n = n.as_f64()?;
+            Some(if n >= 60.0 {
+                "critical"
+            } else if n >= 50.0 {
+                "error"
+            } else if n >= 40.0 {
+                "warning"
+            } else if n >= 30.0 {
+                "info"
+            } else {
+                "debug"
+            })
+        }
+        serde_json::Value::String(name) => match name.to_ascii_lowercase().as_str() {
+            "fatal" | "critical" | "crit" | "emerg" | "alert" | "panic" => Some("critical"),
+            "error" | "err" => Some("error"),
+            "warn" | "warning" => Some("warning"),
+            "notice" => Some("notice"),
+            "info" | "information" => Some("info"),
+            "debug" | "trace" | "verbose" => Some("debug"),
+            _ => None,
+        },
+        _ => None,
     }
 }
 
@@ -917,6 +958,35 @@ mod tests {
             message: message.into(),
             unit: None,
         }
+    }
+
+    #[test]
+    fn a_json_line_is_ranked_by_its_own_level() {
+        // A pino warning that mentions an error stays a warning.
+        let warn = r#"{"level":40,"time":1,"msg":"Request rejected","reason":"Error: quota"}"#;
+        assert_eq!(guess_level(warn), Some("warning"));
+        assert_eq!(
+            guess_level(r#"{"level":60,"msg":"Uncaught exception"}"#),
+            Some("critical")
+        );
+        assert_eq!(
+            guess_level(r#"{"level":30,"msg":"request completed"}"#),
+            Some("info")
+        );
+        assert_eq!(
+            guess_level(r#"{"level":"warn","message":"slow"}"#),
+            Some("warning")
+        );
+    }
+
+    #[test]
+    fn a_line_that_is_not_json_is_still_guessed_from_its_words() {
+        assert_eq!(
+            guess_level("Error: connect ECONNREFUSED 127.0.0.1:3306"),
+            Some("error")
+        );
+        assert_eq!(guess_level("{not json but an ERROR}"), Some("error"));
+        assert_eq!(guess_level(r#"{"msg":"no level here"}"#), None);
     }
 
     #[test]

@@ -136,6 +136,22 @@ export function installErrorTrace(): void {
     });
 }
 
+/**
+ * Une erreur de rendu arrêtée par une frontière d'erreur : React ne la remonte
+ * pas à `window`, elle manquerait sinon aux signalements. L'origine est le
+ * composant le plus proche dans la pile des composants.
+ */
+export function noteRenderError(error: unknown, componentStack: string | null): void {
+    const isError = error instanceof Error;
+    const origin = componentStack?.trim().split('\n')[0]?.trim() ?? null;
+    noteError({
+        source: 'error',
+        message: clamp(isError ? error.message : String(error), 500) ?? 'Erreur de rendu sans message',
+        origin: clamp(origin, 300),
+        stack: clamp([isError ? error.stack : null, componentStack].filter(Boolean).join('\n'), 2000)
+    });
+}
+
 /** Les trois anneaux, datés par rapport à maintenant, plus l'âge de la session. */
 export function readTrace(): {
     requests: FeedbackRequestTrace[];

@@ -5,6 +5,7 @@ import '@/sdk/modules';
 import { createRoot } from 'react-dom/client';
 
 import App from './App.js';
+import ErrorBoundary from './Components/ErrorBoundary';
 import { installErrorTrace } from './diagnostics/trace';
 import { suppressNativeDrags } from './nativeDrag';
 
@@ -19,4 +20,8 @@ installErrorTrace();
 
 const container = document.getElementById('root');
 const root = createRoot(container ?? document.body);
-root.render(<App />);
+root.render(
+    <ErrorBoundary variant='page'>
+        <App />
+    </ErrorBoundary>
+);

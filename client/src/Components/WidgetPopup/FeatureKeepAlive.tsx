@@ -1,6 +1,8 @@
 import { type ReactNode, useRef, useState, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 
+import ErrorBoundary from '@/Components/ErrorBoundary';
+
 export interface FeatureKeepAliveProps {
     /**
      * Where the feature should be displayed. When set (the open popup body) the
@@ -45,7 +47,14 @@ export default function FeatureKeepAlive({ target, children }: FeatureKeepAliveP
     return (
         <>
             <div ref={hiddenHolderRef} style={{ display: 'none' }} />
-            {createPortal(children, container)}
+            {/* Une fonctionnalité qui plante ne blanchit qu'elle-même : la
+                frontière suit l'arbre React, pas le DOM où le portail l'emmène. */}
+            {createPortal(
+                <ErrorBoundary variant='view' canReport>
+                    {children}
+                </ErrorBoundary>,
+                container
+            )}
         </>
     );
 }

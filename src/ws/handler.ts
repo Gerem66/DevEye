@@ -36,6 +36,7 @@ import { featureHandlerMap } from '@/features/registry';
 import { topicsOf } from '@/features/_topics';
 import { enterSessionCommand, exitSessionCommand, forgetSessionDek } from '@/Services/SecureStore';
 import { maintenance } from '@/Services/maintenance';
+import { describeError, systemAlerts } from '@/Services/systemAlerts';
 import { env, isDev } from '@/Utils/Env';
 import { logger } from '@/logger';
 
@@ -434,6 +435,12 @@ export async function registerWS(
                 const outputParse = def.output.safeParse(result);
                 if (!outputParse.success) {
                     reqLogger.error({ command, err: outputParse.error.flatten() }, 'Handler returned invalid output');
+                    systemAlerts.report({
+                        key: `ws:${command}`,
+                        level: 'error',
+                        title: 'Réponse invalide d’une commande',
+                        detail: `${command}\n${JSON.stringify(outputParse.error.flatten()).slice(0, 800)}`
+                    });
                     send(socket, {
                         requestId: replyId,
                         command,
@@ -471,7 +478,7 @@ export async function registerWS(
                 // peuvent résoudre deux instances distinctes de @deveye/types.
                 if (!(e instanceof FeatureError) && e instanceof Error && e.name === 'FeatureError' && 'code' in e) {
                     const dup = e as Error & { code: string; details?: unknown };
-                    reqLogger.warn({ command, code: dup.code, msg: dup.message }, 'Feature error');
+                    reqLogger.info({ command, code: dup.code, reason: dup.message }, 'Command rejected');
                     send(socket, {
                         requestId: replyId,
                         command,
@@ -479,8 +486,10 @@ export async function registerWS(
                     });
                     return;
                 }
+                // Un refus ordinaire (introuvable, quota, droit) : ni `err` ni le
+                // mot « error », qui le feraient passer pour une panne à la lecture.
                 if (e instanceof FeatureError) {
-                    reqLogger.warn({ command, code: e.code, msg: e.message }, 'Feature error');
+                    reqLogger.info({ command, code: e.code, reason: e.message }, 'Command rejected');
                     send(socket, {
                         requestId: replyId,
                         command,
@@ -491,6 +500,12 @@ export async function registerWS(
                 // L'objet entier, pas son message : pino sérialise la pile et la
                 // chaîne des `cause` sous la clé `err`.
                 reqLogger.error({ command, err: e }, 'Feature handler threw');
+                systemAlerts.report({
+                    key: `ws:${command}`,
+                    level: 'error',
+                    title: 'Erreur serveur sur une commande',
+                    detail: `${command}\n${describeError(e)}`
+                });
                 send(socket, {
                     requestId: replyId,
                     command,

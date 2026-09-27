@@ -1,4 +1,11 @@
-import { featureDescriptor, itemNounForms, type FeatureId } from '@deveye/types';
+import {
+    SYSTEM_NOTIFICATION_INFO,
+    SYSTEM_NOTIFICATION_TARGET,
+    featureDescriptor,
+    itemNounForms,
+    type FeatureId,
+    type SystemNotificationTarget
+} from '@deveye/types';
 
 /**
  * Ce que règle une coquille de réglages : une fonctionnalité, ou un de ses
@@ -22,6 +29,20 @@ export type SettingsScope =
           shareable?: boolean;
       };
 
+/**
+ * La cible système : les alertes de l'instance, réservées aux admins. Hors du
+ * registre, elle n'a que l'onglet Notifications ; seules les entrées de la
+ * coquille l'acceptent, jamais les sections propres aux fonctionnalités.
+ */
+export type SystemScope = { kind: 'feature'; feature: SystemNotificationTarget };
+
+/** Ce qu'ouvre la coquille : une fonctionnalité, un élément, ou la cible système. */
+export type ShellScope = SettingsScope | SystemScope;
+
+export function isSystemScope(scope: ShellScope): scope is SystemScope {
+    return scope.feature === SYSTEM_NOTIFICATION_TARGET;
+}
+
 /** Les sections que la coquille sait rendre, dans leur ordre d'affichage. */
 export type SettingsSectionId =
     | 'general'
@@ -38,17 +59,48 @@ export type SettingsSectionId =
     // module. L'intersection garde l'autocomplétion des neuf natifs.
     | (string & {});
 
+/**
+ * Ce que la coquille lit d'une cible : le descripteur d'une fonctionnalité, ou
+ * l'équivalent de la cible système, qui n'est pas au registre.
+ */
+export function targetInfo(feature: FeatureId | SystemNotificationTarget): {
+    label: string;
+    hasItems: boolean;
+    notifies: boolean;
+    notificationsHint: string | null;
+    itemNoun: string | null;
+} {
+    if (feature === SYSTEM_NOTIFICATION_TARGET) {
+        return {
+            label: SYSTEM_NOTIFICATION_INFO.label,
+            hasItems: false,
+            notifies: true,
+            notificationsHint: SYSTEM_NOTIFICATION_INFO.hint,
+            itemNoun: null
+        };
+    }
+    const descriptor = featureDescriptor(feature);
+    return {
+        label: descriptor.label,
+        hasItems: descriptor.hasItems,
+        notifies: descriptor.notifies,
+        notificationsHint: descriptor.notifications?.hint ?? null,
+        itemNoun: descriptor.itemNoun ?? null
+    };
+}
+
 /** Le titre du dialogue : le nom de l'élément, ou celui de la fonctionnalité. */
-export function scopeTitle(scope: SettingsScope): string {
-    return scope.kind === 'item' ? scope.itemLabel : featureDescriptor(scope.feature).label;
+export function scopeTitle(scope: ShellScope): string {
+    return scope.kind === 'item' ? scope.itemLabel : targetInfo(scope.feature).label;
 }
 
 /**
  * La phrase sous le titre dit sur quoi les réglages portent : sans elle, la
  * coquille d'un élément et celle de sa fonctionnalité se ressemblent trop.
  */
-export function scopeDescription(scope: SettingsScope): string {
-    const feature = featureDescriptor(scope.feature);
+export function scopeDescription(scope: ShellScope): string {
+    if (isSystemScope(scope)) return 'Où partent les alertes de cette instance DevEye.';
+    const feature = targetInfo(scope.feature);
     if (scope.kind === 'feature') {
         // Le libellé tel quel : « Uptime », « OSINT » sont des noms propres, en
         // minuscules ils se lisent comme une faute.
@@ -70,7 +122,7 @@ export function scopeDescription(scope: SettingsScope): string {
  * le chemin, et deux personnes sur deux éléments différents divergent avant
  * d'arriver ici.
  */
-export function liveSettingsValue(scope: SettingsScope): string {
+export function liveSettingsValue(scope: ShellScope): string {
     return `${scope.kind}:${scope.feature}`;
 }
 
@@ -79,7 +131,7 @@ export function liveSettingsValue(scope: SettingsScope): string {
  * numérique. `null` pour une portée de feature, comme pour une feature dont les
  * éléments ont un identifiant texte : elle n'a pas de route.
  */
-export function routeItemId(scope: SettingsScope): number | null {
+export function routeItemId(scope: ShellScope): number | null {
     if (scope.kind !== 'item') return null;
     const id = Number(scope.itemId);
     return Number.isInteger(id) ? id : null;

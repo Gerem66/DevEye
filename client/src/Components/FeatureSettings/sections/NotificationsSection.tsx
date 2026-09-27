@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     NOTIFICATION_LABEL_MAX,
     NOTIFICATION_TARGET_MAX,
-    featureDescriptor,
     type NotificationChannel,
     type NotificationChannelInput,
     type NotificationChannelKind,
@@ -20,11 +19,12 @@ import SelectInput from '@/Components/SelectInput';
 import Term from '@/Components/Term';
 import TextInput from '@/Components/TextInput';
 import { moduleClientProvider } from '@/sdk/registry';
+import { useCurrentUser } from '@/stores/currentUser';
 import { invalidate, useResourceVersion } from '@/stores/invalidation';
 import { useWorkspacePermissions } from '@/stores/workspace';
 import { accessibleWorkspaceName, goToItemSettings } from '../goToHome';
 
-import { routeItemId, type SettingsScope } from '../scope';
+import { isSystemScope, routeItemId, targetInfo, type ShellScope } from '../scope';
 import styles from '../FeatureSettings.module.css';
 
 /**
@@ -65,7 +65,7 @@ function emptyDraft(mailAvailable: boolean): NotificationChannelInput {
 type MailSender = Awaited<ReturnType<MailClientProvider['listSenders']>>[number];
 
 interface Props {
-    scope: SettingsScope;
+    scope: ShellScope;
     /** Ouvre les réglages de la fonctionnalité sur cet onglet ; fourni à
      *  l'échelle d'un élément seulement. */
     onManageChannels?: () => void;
@@ -73,9 +73,12 @@ interface Props {
 
 export default function NotificationsSection({ scope, onManageChannels }: Props) {
     const feature = scope.feature as NotificationFeature;
-    const descriptor = featureDescriptor(scope.feature);
+    const descriptor = targetInfo(scope.feature);
     const permissions = useWorkspacePermissions();
-    const canManage = permissions.canChannels(scope.feature);
+    const isAdmin = useCurrentUser()?.role === 'admin';
+    // La cible système : un admin, dans un espace qu'il possède, règle tout.
+    const managesSystem = isAdmin && permissions.isOwner;
+    const canManage = isSystemScope(scope) ? managesSystem : permissions.canChannels(scope.feature);
     /** Le module Mail par son contrat client ; `undefined` sans le module, et
      *  pas de canal e-mail alors. */
     const mail = moduleClientProvider<MailClientProvider>(MAIL_CLIENT_PROVIDER);
@@ -112,7 +115,8 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
     // Régler où une fonctionnalité prévient est un réglage de cette
     // fonctionnalité : son droit d'écriture suffit. Jamais sur un élément
     // projeté, dont les canaux vivent ailleurs.
-    const canRoute = permissions.canFeature(feature, 'write') && managedHere;
+    const canRoute =
+        (isSystemScope(scope) ? managesSystem : permissions.canFeature(scope.feature, 'write')) && managedHere;
 
     const itemId = routeItemId(scope) ?? undefined;
 
@@ -222,7 +226,7 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
                             <ul className={styles.usageList}>
                                 {usage.routes.map((r) => (
                                     <li key={`${r.feature}-${r.itemId ?? 0}`}>
-                                        {featureDescriptor(r.feature).label}
+                                        {targetInfo(r.feature).label}
                                         {r.itemId !== null && ` · ${r.itemLabel ?? `élément #${r.itemId}`}`}
                                     </li>
                                 ))}
@@ -295,7 +299,7 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
 
     return (
         <div className={styles.section}>
-            {descriptor.notifications && <p className={styles.sectionHint}>{descriptor.notifications.hint}</p>}
+            {descriptor.notificationsHint && <p className={styles.sectionHint}>{descriptor.notificationsHint}</p>}
 
             {/* À cette échelle on déclare les sources ; le choix se fait sur
                 chaque élément, et le dire évite de chercher des cases ici. */}
@@ -446,7 +450,7 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
                                     type='button'
                                     className={styles.jumpBtn}
                                     onClick={() =>
-                                        goToItemSettings(homeWorkspaceId, feature, scope.itemId, 'notifications')
+                                        goToItemSettings(homeWorkspaceId, scope.feature, scope.itemId, 'notifications')
                                     }
                                 >
                                     Régler dans « {accessibleWorkspaceName(homeWorkspaceId)} »

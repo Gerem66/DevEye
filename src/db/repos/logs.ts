@@ -49,6 +49,8 @@ export interface LogsRepo {
     record(input: RecordLogInput): Promise<void>;
     query(filter: LogQueryFilter, paging: { limit: number; offset: number }): Promise<LogPage>;
     facets(): Promise<LogFacets>;
+    /** Supprime au plus `batch` lignes antérieures à `cutoff` (secondes), et dit combien. */
+    purgeBefore(cutoff: number, batch: number): Promise<number>;
 }
 
 /** Row shape of the list query (logs joined to users for the display name). */
@@ -185,6 +187,11 @@ export function logsRepo(pool: Q): LogsRepo {
             );
 
             return { logs: rows.rows.map(toEntry), total };
+        },
+
+        async purgeBefore(cutoff, batch) {
+            const r = await pool.query('DELETE FROM logs WHERE date < ? LIMIT ?', [cutoff, batch]);
+            return r.rowCount;
         },
 
         async facets() {

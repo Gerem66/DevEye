@@ -49,9 +49,11 @@ import { startAttemptSweeper } from '@/Services/attempts';
 import { startDekSweeper } from '@/Services/SecureStore';
 import { registerProxyRoute } from '@/Services/domains/proxy';
 import { createDomainVerifier } from '@/Services/domains/verifier';
+import { createLogRetention } from '@/Services/logRetention';
 import { createMailer } from '@/Services/mailer';
 import { createSignupService } from '@/Services/signup';
 import { maintenance, MaintenanceError } from '@/Services/maintenance';
+import { describeError, systemAlerts } from '@/Services/systemAlerts';
 import { status } from '@/status';
 
 import type { Database } from '@/db';
@@ -253,8 +255,20 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         }
         const explicit = typeof error.statusCode === 'number' && error.statusCode >= 400 && error.statusCode < 500;
         const status = explicit ? (error.statusCode as number) : 500;
-        if (status >= 500) req.log.error({ err: error }, 'unhandled request error');
-        else req.log.warn({ err: error, status }, 'request error');
+        if (status >= 500) {
+            req.log.error({ err: error }, 'unhandled request error');
+            const route = `${req.method} ${req.routeOptions.url ?? req.url.split('?')[0]}`;
+            systemAlerts.report({
+                key: `http:${route}`,
+                level: 'error',
+                title: 'Erreur serveur sur une requête HTTP',
+                detail: `${route}\n${describeError(error)}`
+            });
+        } else {
+            // Un refus ordinaire (saisie invalide, droit manquant) : ni `err` ni
+            // le mot « error », qui le feraient passer pour une panne à la lecture.
+            req.log.info({ status, code: error.code, reason: error.message }, 'Request rejected');
+        }
         const code: ErrorCode = error.validation || status === 400 ? 'validation' : 'internal';
         const message = status >= 500 ? 'Erreur interne du serveur' : error.message || 'Requête invalide';
         return reply.code(status).send(err(code, message));
@@ -341,7 +355,11 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         origin: env.PUBLIC_ORIGIN.replace(/\/+$/, '')
     });
     createModuleServices({ db: deps.db, crypt: deps.crypt, audit, logger, live, mailer });
-    const hostServices = [createDomainVerifier({ db: deps.db, crypt: deps.crypt, logger, live }), signup];
+    const hostServices = [
+        createDomainVerifier({ db: deps.db, crypt: deps.crypt, logger, live }),
+        signup,
+        createLogRetention({ db: deps.db, logger })
+    ];
     // Lue avant tout démarrage : un service en arrêt complet ne démarre pas, et
     // `MAINTENANCE=1` ferme le site avant la première connexion.
     await maintenance.init({ db: deps.db, live, logger, services: moduleServiceControl });
