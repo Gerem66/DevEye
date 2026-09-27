@@ -100,7 +100,7 @@ export function EmptyHome({ canLayout, onCompose }: EmptyHomeProps) {
                     </div>
 
                     <Button className={styles.starterPlace} disabled={picked.size === 0} onClick={place}>
-                        {picked.size > 1 ? `Poser les ${picked.size} sections` : 'Poser la section'}
+                        {picked.size > 1 ? `Valider les ${picked.size} sections` : 'Valider'}
                     </Button>
                 </>
             )}
