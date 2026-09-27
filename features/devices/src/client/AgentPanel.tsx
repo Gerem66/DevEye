@@ -1,4 +1,4 @@
-import { Button, Switch, useCurrentUser } from 'deveye-sdk-client';
+import { Switch, useCurrentUser } from 'deveye-sdk-client';
 import type { AgentPolicy, AgentServiceScope, DeviceReport } from '@deveye/types';
 
 import type { FleetDevice } from '../contracts/commands';
@@ -271,14 +271,15 @@ export function AgentPanel({ device, report, actions, canWrite, updater, onShowP
             </section>
 
             <section className={styles.hwGroup}>
-                <h4 className={styles.hwGroupTitle}>Privilèges</h4>
+                <div className={styles.agentGroupHead}>
+                    <h4 className={styles.hwGroupTitle}>Privilèges</h4>
+                    <button type='button' className={styles.agentInfoLink} onClick={onShowPrivilegeInfo}>
+                        <span className='icon icon-info' />
+                        Ce que ça change
+                    </button>
+                </div>
                 <div className={styles.powerList}>
                     <ActionRow action={privilege} />
-                </div>
-                <div>
-                    <Button variant='ghost' icon='info' onClick={onShowPrivilegeInfo}>
-                        Ce que les privilèges changent
-                    </Button>
                 </div>
             </section>
 

@@ -1135,8 +1135,20 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             ) : pending ? (
                 <div className={styles.offlineBanner}>
                     <span className='icon icon-clock' />
-                    En attente d’approbation : cette machine a été reliée à nouveau, son agent n’est pas admis tant que
-                    personne ne l’a approuvée (popup « Agent »).
+                    <span className={styles.bannerText}>
+                        En attente d’approbation : cette machine a été reliée à nouveau, son agent n’est pas admis tant
+                        que personne ne l’a approuvée.
+                    </span>
+                    {/* Le même geste que dans la popup « Agent », confirmation comprise. */}
+                    {canWrite && !selected.foreign && (
+                        <Button
+                            variant='secondary'
+                            icon='check-circle'
+                            onClick={() => actions.askApprove({ id: selected.id, name: selected.name })}
+                        >
+                            Approuver
+                        </Button>
+                    )}
                 </div>
             ) : (
                 !online && (
@@ -1535,7 +1547,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 open={packagesOpen}
                 onClose={() => setPackagesOpen(false)}
                 title={`Mises à jour — « ${selected.name} »`}
-                description='Gestionnaires détectés sur l’appareil et application des mises à jour en direct.'
+                description='Les systèmes de mises à jour détectés sur l’appareil, et ce qu’ils ont à appliquer.'
             >
                 {packagesOpen && (
                     <PackagesPanel deviceId={selected.id} privileged={report?.agent?.privileged ?? null} />

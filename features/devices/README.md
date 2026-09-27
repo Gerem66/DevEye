@@ -309,9 +309,9 @@ Statuts (`devices.status`) : `pending`, `active`, `pending_deletion`,
   Ni config, ni hooks de modules, ni ordres, ni binaire d'auto-mise à jour ;
   `authorizeReachableDevice` le dit en clair. Un appareil en attente ne compte
   pas dans l'offre.
-- **Approbation** (`devices.confirm`, popup « Agent ») : un appareil `pending`
-  seulement, dans la limite de l'offre. Il passe `active`, son agent est admis
-  à la tentative suivante.
+- **Approbation** (`devices.confirm`, bouton du bandeau d'attente ou popup
+  « Agent ») : un appareil `pending` seulement, dans la limite de l'offre. Il
+  passe `active`, son agent est admis à la tentative suivante.
 - **Révocation** (`devices.revoke`, popup « Agent ») : unilatérale et
   immédiate. L'appareil est archivé (jeton effacé), la session coupée
   (`agents.disconnectAgent`). Seul un nouvel appairage le fait revenir, en
@@ -350,6 +350,15 @@ Statuts (`devices.status`) : `pending`, `active`, `pending_deletion`,
 - **« Matériel »** : l'inventaire seul. Les interfaces virtuelles et la boucle
   locale sont repliées derrière un bouton quand des interfaces physiques
   existent.
+- **« Mises à jour système »** (`PackagesPanel.tsx`) : le total, puis un
+  tableau des outils que l'agent a trouvés. Ceux que DevEye pilote d'abord,
+  système puis applications, avec leur compte et leur bouton ; en dessous,
+  grisés, ceux qu'il reconnaît sans les piloter (rpm-ostree, fwupd, nix…).
+  « Tout mettre à jour » les enchaîne un à un dans l'ordre du tableau, tant que
+  la fenêtre reste ouverte. Le compte Flatpak est le plan de `flatpak update`
+  lui-même, installation par installation : `remote-ls --updates` compare des
+  identifiants de commit qu'un dépôt OCI (celui de Fedora) ne fait jamais
+  correspondre, et affichait des mises à jour éternelles.
 - **« Agent »** (`AgentPanel.tsx`) : l'état (version, compte, privilèges,
   démarrage, transport, politique locale), le démarrage automatique, l'élévation
   en service système ou la rétrogradation, la mise à jour, le redémarrage,
