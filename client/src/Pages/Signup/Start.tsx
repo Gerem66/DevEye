@@ -179,7 +179,7 @@ export function SignupStart({ plan, onLogin }: { plan: string | null; onLogin: (
                 <Checkbox checked={terms} onChange={setTerms} className='signup-terms'>
                     {/* Un seul enfant : le libellé de la case empile ses enfants, et les liens resteraient chacun sur leur ligne. */}
                     <span>
-                        J’ai lu et j’accepte les{' '}
+                        J’ai au moins 18 ans, j’ai lu et j’accepte les{' '}
                         <a href={legalLinks(siteUrl).terms} target='_blank' rel='noopener noreferrer'>
                             conditions d’utilisation
                         </a>{' '}
