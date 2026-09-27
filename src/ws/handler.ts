@@ -34,6 +34,7 @@ import type { LiveHub } from '@/live/hub';
 import { FeatureError } from '@/features/_define';
 import { featureHandlerMap } from '@/features/registry';
 import { topicsOf } from '@/features/_topics';
+import { selfTracking } from '@/Services/debug/selfTracking';
 import { enterSessionCommand, exitSessionCommand, forgetSessionDek } from '@/Services/SecureStore';
 import { maintenance } from '@/Services/maintenance';
 import { describeError, systemAlerts } from '@/Services/systemAlerts';
@@ -116,6 +117,7 @@ export async function registerWS(
 
         const reqLogger = logger.child({ userId: session.userId, sid: session.sessionId });
         reqLogger.info('WS connected');
+        const tracker = selfTracking.forConnection(req, session.userId);
 
         // Autorité unique sur ce que l'appelant peut faire et sur les clés de
         // chaque espace, mémoïsée pour la durée de la connexion et reconstruite
@@ -456,6 +458,7 @@ export async function registerWS(
                 // l'enveloppe, ce qui rend `scope: 'account'` correct. L'émetteur
                 // est exclu : il tient déjà sa propre réponse.
                 let topics = topicsOf(command);
+                if (topics) tracker.wrote(command);
                 let extraWorkspace: number | null = null;
                 // Les commandes de partage portent leur fonctionnalité en entrée :
                 // le sujet se lit dans la requête, et l'espace visé est prévenu
@@ -474,6 +477,7 @@ export async function registerWS(
                     }
                 }
             } catch (e) {
+                tracker.failed(command, e);
                 // Le duck-typing double l'instanceof exprès : un module et l'app
                 // peuvent résoudre deux instances distinctes de @deveye/types.
                 if (!(e instanceof FeatureError) && e instanceof Error && e.name === 'FeatureError' && 'code' in e) {

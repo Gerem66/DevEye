@@ -1,0 +1,223 @@
+.layout {
+    display: grid;
+    grid-template-columns: 180px minmax(0, 1fr);
+    gap: var(--space-lg);
+    height: min(680px, 75vh);
+    min-height: 0;
+}
+
+.panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xl);
+    min-width: 0;
+    overflow-y: auto;
+    padding-right: var(--space-sm);
+}
+
+.opaque .panel {
+    background: var(--surface-popup-solid);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+}
+
+.toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-md);
+}
+
+.specimen {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.specimenHead {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.specimenTitle {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.specimenNote {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.variants {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-md);
+    padding: var(--space-md);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+}
+
+.variant {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    min-width: 0;
+}
+
+.variantWide {
+    flex: 1 1 100%;
+}
+
+.variantLabel {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+.variantBody {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+}
+
+.groupTitle {
+    margin: 0;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.tokens {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+    gap: var(--space-sm);
+}
+
+.token {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-xs) var(--space-sm);
+    background: none;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.token:hover {
+    background: var(--surface-subtle);
+}
+
+.swatch {
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+}
+
+.swatchLength {
+    height: 12px;
+    flex-shrink: 0;
+    background: var(--accent);
+    border-radius: 2px;
+}
+
+.swatchShadow {
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    background: var(--surface-popup-solid);
+    border-radius: var(--radius-sm);
+}
+
+.tokenText {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.tokenName {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+}
+
+.tokenValue {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    overflow-wrap: anywhere;
+}
+
+.icons {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr));
+    gap: var(--space-xs);
+}
+
+.iconCell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-sm);
+    background: none;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font: inherit;
+    cursor: pointer;
+}
+
+.iconCell:hover {
+    border-color: var(--glass-border);
+    color: var(--text-primary);
+}
+
+.iconGlyph {
+    width: 22px;
+    height: 22px;
+}
+
+.iconName {
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    overflow-wrap: anywhere;
+    text-align: center;
+}
+
+.copied {
+    font-size: 0.8rem;
+    color: var(--success);
+}
+
+.colorDot {
+    width: 24px;
+    height: 24px;
+    border-radius: var(--radius-pill);
+}
+
+.widgetFrame {
+    width: 260px;
+    height: 180px;
+}
+
+.demoText {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}

@@ -10,6 +10,7 @@ import {
     useLiveItemTarget,
     useLiveOutlines,
     useResourceVersion,
+    useSubView,
     useWorkspacePermissions
 } from 'deveye-sdk-client';
 import type { FeatureViewProps } from '@deveye/types/sdk/client';
@@ -71,6 +72,7 @@ export function FeatureDatabase(_props: FeatureViewProps) {
         setOpenedId(id);
     });
     const outlineFor = useLiveOutlines('l1');
+    useSubView(opened ? 'database' : null);
 
     const reload = useCallback(async () => {
         try {
@@ -231,7 +233,7 @@ export function FeatureDatabase(_props: FeatureViewProps) {
                 <p className={styles.hint}>
                     Aucune base pour l’instant.
                     {canWrite &&
-                        ' Ajoutez-en une pour la tester, en explorer les tables, et — si vous le voulez — la surveiller.'}
+                        ' Ajoutez-en une pour la tester, en explorer les tables, et, si vous le voulez, la surveiller.'}
                 </p>
             )}
 

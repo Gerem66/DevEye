@@ -25,6 +25,9 @@
     --surface-popup-solid: rgb(14, 21, 32);
     --surface-navbar: rgba(9, 14, 22, 0.78);
     --surface-subtle: rgba(255, 255, 255, 0.04);
+    /* Le papier d'un document ou d'un mail montré en aperçu : blanc quel que
+     soit le thème, comme à l'impression ou dans une messagerie. */
+    --paper: #fff;
 
     --text-primary: rgba(255, 255, 255, 0.95);
     --text-secondary: rgba(255, 255, 255, 0.66);

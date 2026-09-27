@@ -1,4 +1,5 @@
 import { getQueryable, withTransaction, type DbPool, type Queryable } from './pool';
+import { debugRepo, type DebugRepo } from './repos/debug';
 import { devicesRepo, linkCodesRepo, type DevicesRepo, type LinkCodesRepo } from './repos/devices';
 import { feedbackRepo, type FeedbackRepo } from './repos/feedback';
 import { logsRepo, type LogsRepo } from './repos/logs';
@@ -6,6 +7,7 @@ import { maintenanceRepo, type MaintenanceRepo } from './repos/maintenance';
 import { metricsRepo, type MetricsRepo } from './repos/metrics';
 import { featureDomainsRepo, type FeatureDomainsRepo } from './repos/featureDomains';
 import { featureKvRepo, type FeatureKvRepo } from './repos/featureKv';
+import { instanceSettingsRepo, type InstanceSettingsRepo } from './repos/instanceSettings';
 import { itemSharingRepo, type ItemSharingRepo } from './repos/itemSharing';
 import { notificationChannelsRepo, type NotificationChannelsRepo } from './repos/notificationChannels';
 import { pendingSignupsRepo, type PendingSignupsRepo } from './repos/pendingSignups';
@@ -65,6 +67,10 @@ export interface Database {
     itemSharing: ItemSharingRepo;
     /** Canaux d'alerte, par espace et par feature (voir `Services/notifications.ts`). */
     notificationChannels: NotificationChannelsRepo;
+    /** Les réglages de l'instance, par origine publique. */
+    instanceSettings: InstanceSettingsRepo;
+    /** Les essais de la page Tests et débogage (voir `Services/debug/`). */
+    debug: DebugRepo;
 }
 
 /**
@@ -107,6 +113,8 @@ function buildDatabase(pool: DbPool, q: Queryable, inTransaction: boolean): Data
         featureDomains: featureDomainsRepo(q),
         featureKv: featureKvRepo(q),
         itemSharing: itemSharingRepo(q),
-        notificationChannels: notificationChannelsRepo(q)
+        notificationChannels: notificationChannelsRepo(q),
+        instanceSettings: instanceSettingsRepo(q),
+        debug: debugRepo(q)
     };
 }

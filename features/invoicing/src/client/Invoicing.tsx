@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { useActiveWorkspace, useLiveSegment, useResource } from 'deveye-sdk-client';
+import { useActiveWorkspace, useLiveSegment, useResource, useSubView } from 'deveye-sdk-client';
 
 import { docIdOfSegment, docSegment } from '../contracts/domain';
 import ClientDialog from './ClientDialog';
@@ -67,6 +67,7 @@ export default function Invoicing() {
     const [creatingClient, setCreatingClient] = useState(false);
 
     const liveTarget = useLiveSegment('l1', segmentOf(view));
+    useSubView(view.kind === 'home' ? null : view.kind);
     useEffect(() => {
         if (!liveTarget || liveTarget.value === null) return;
         setView(viewOf(liveTarget.value));

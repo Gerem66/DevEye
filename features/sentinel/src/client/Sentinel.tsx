@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { onResourceChange, onSocketOpen, useActiveWorkspace, useLiveSegment } from 'deveye-sdk-client';
+import { onResourceChange, onSocketOpen, useActiveWorkspace, useLiveSegment, useSubView } from 'deveye-sdk-client';
 import type { FeatureViewProps } from '@deveye/types/sdk/client';
 
 import type { AllowScope, DevicePosture, DeviceSentinelState, Finding, FindingSeverity } from '../contracts/domain';
@@ -42,6 +42,7 @@ export default function Sentinel(_props: FeatureViewProps) {
 
     // La machine ouverte est le niveau profond ; la racine `view:sentinel` vient de l'accueil.
     const liveTarget = useLiveSegment('l1', deviceId);
+    useSubView(device ? 'device' : null);
     useEffect(() => {
         if (!liveTarget) return;
         if (liveTarget.value === null) {
@@ -180,7 +181,7 @@ export default function Sentinel(_props: FeatureViewProps) {
                                     : `Score de posture de la flotte : ${fleetScore} sur 100`
                             }
                         >
-                            {fleetScore === null ? '—' : fleetScore}
+                            {fleetScore === null ? '–' : fleetScore}
                         </span>
                     </span>
                     <span className={styles.overviewLabel}>Vue d’ensemble</span>

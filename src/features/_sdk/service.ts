@@ -17,7 +17,7 @@ import { serverKeysOf } from './host';
 import { ORIGINS, publishFrame } from './context';
 import { createOpenCipher, createSecureStore } from '@/Services/SecureStore';
 import type { Mailer } from '@/Services/mailer';
-import { mailHtml, mailText } from '@/Services/mailLayout';
+import { renderAccountMail } from '@/Services/mailLayout';
 import { verifyModuleTicket } from '@/auth/jwt';
 import { maintenance } from '@/Services/maintenance';
 import { describeError, systemAlerts } from '@/Services/systemAlerts';
@@ -235,13 +235,7 @@ export function createServiceDeps(
                 }
                 const row = await host.db.users.findById(userId);
                 if (!row) throw new FeatureError('not_found', `Compte ${userId} introuvable`);
-                await host.mailer.send({
-                    to: row.email,
-                    // Un saut de ligne dans un en-tête en ouvrirait un autre.
-                    subject: message.subject.replace(/\s+/g, ' ').trim(),
-                    text: mailText(message),
-                    html: mailHtml(message)
-                });
+                await host.mailer.send({ to: row.email, ...renderAccountMail(message) });
                 return row.email;
             }
         },

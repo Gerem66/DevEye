@@ -12,6 +12,7 @@ import {
     useLiveSegment,
     useResource,
     useResourceVersion,
+    useSubView,
     useWorkspacePermissions,
     type ConfirmRequest
 } from 'deveye-sdk-client';
@@ -140,6 +141,7 @@ export default function DocumentSheet({
     const paperCache = useRef<{ revision: number; html: string } | null>(null);
 
     useLiveSegment('l2', tab);
+    useSubView(`document/${tab}`);
 
     const loadClients = useCallback(
         async () => (await api.send('invoicing.clientList', { archived: false })).clients,

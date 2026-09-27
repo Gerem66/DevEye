@@ -30,6 +30,7 @@ export function toSdkAccount(row: UserRow): SdkAccount {
         email: row.email,
         username: row.username,
         isAdmin: row.role === 'admin',
+        e2e: row.e2e_run !== null,
         created: Number(row.created) * 1000
     };
 }

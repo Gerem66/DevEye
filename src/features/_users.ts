@@ -1,8 +1,13 @@
 import type { Database } from '@/db';
 import type { LiveTransport } from '@/live/hub';
+import { logger } from '@/logger';
+import { accountDeletedMail } from '@/Services/accountMails';
 import { forgetSessionsOf } from '@/Services/SecureStore';
+import { serverMail } from '@/Services/serverMail';
 import { invalidateAccess } from './_access';
 import { notifyAdmins } from './admin/notify';
+import { ORIGINS } from './_sdk/context';
+import { notifyModulesAccountDeleted } from './_sdk/register';
 
 export interface DeleteUserDeps {
     db: Database;
@@ -11,23 +16,41 @@ export interface DeleteUserDeps {
 
 /**
  * Supprime un compte avec tout ce qu'il possède, que ce soit par un
- * administrateur ou par son titulaire. Les FK ON DELETE CASCADE emportent
- * l'espace personnel, les espaces partagés dont il est propriétaire et tout
- * leur contenu ; le reste ici prévient ceux qui les partageaient.
+ * administrateur, par son titulaire ou par le ménage des essais. Les modules
+ * d'abord (un abonnement ne survit pas au compte), puis les FK ON DELETE
+ * CASCADE emportent l'espace personnel, les espaces partagés dont il est
+ * propriétaire et tout leur contenu ; le reste ici prévient ceux qui les
+ * partageaient, et le titulaire par mail.
  */
 export async function deleteUserEverywhere(
     { db, live }: DeleteUserDeps,
     userId: number,
     by: { userId: number; workspaceId: number }
 ): Promise<void> {
+    const target = await db.users.findById(userId);
+    if (!target) return;
     // Relevés AVANT la suppression : la cascade emporte les rattachements,
     // et il n'y aurait plus personne à prévenir après coup.
     const shared = (await db.workspaces.findAccessibleByUser(userId)).filter((w) => w.kind === 'shared');
     const members = await db.workspaceMembers.listByWorkspaceIds(shared.map((w) => w.id));
+    const notes = await notifyModulesAccountDeleted(userId);
 
     await db.users.delete(userId);
     invalidateAccess();
     forgetSessionsOf(userId);
+    if (serverMail.configured) {
+        const mail = accountDeletedMail({
+            username: target.username,
+            by: by.userId === userId ? 'self' : 'admin',
+            at: Math.floor(Date.now() / 1000),
+            notes,
+            site: ORIGINS.site
+        });
+        // Le compte est parti : un mail qui échoue ne le fait pas revenir.
+        void serverMail
+            .send(target.email, mail)
+            .catch((e: Error) => logger.warn({ err: e.message }, 'Mail de suppression de compte non envoyé'));
+    }
     if (!live) return;
     live.evictEverywhere(userId);
     // Les espaces qu'il possédait ont disparu avec lui : leurs salles se vident.

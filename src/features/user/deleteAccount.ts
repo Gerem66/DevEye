@@ -3,7 +3,6 @@ import { userDeleteAccount } from '@deveye/types';
 import { verifyPassword } from '@/auth/argon';
 import { assertAttemptAllowed, LockedOutError, recordFailedAttempt } from '@/Services/attempts';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
-import { notifyModulesAccountDeleted } from '../_sdk/register';
 import { deleteUserEverywhere } from '../_users';
 
 /**
@@ -44,8 +43,6 @@ export const userDeleteAccountFeature: FeatureDefinition<
             throw new FeatureError('forbidden', 'Le dernier administrateur du site ne peut pas supprimer son compte');
         }
 
-        // Les modules d'abord : un abonnement ne survit pas au compte.
-        await notifyModulesAccountDeleted(ctx.userId);
         // La socket qui porte cette commande est celle du compte : fermée dans
         // le handler, elle emporterait la réponse. Un tour de boucle plus tard,
         // la réponse est partie ; les sessions, elles, sont déjà oubliées.

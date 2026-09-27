@@ -207,6 +207,11 @@ cd DevEye/client && npm run ci          # lint + typecheck + build
 Test manuel : `cd DevEye && npm run dev` (serveur + Vite). Se connecter,
 ouvrir la feature.
 
+Pour la page Tests et débogage (`Docs/DEBUG.md`) : les écrans internes de la
+feature se nomment par `useSubView('<segment statique>')`, ses mails se
+déclarent dans `mailSamples`, et un parcours critique mérite un scénario
+`e2e` qui ne laisse rien derrière lui.
+
 ---
 
 ## G. Workflow `@deveye/types` ↔ `node_modules`

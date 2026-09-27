@@ -10,6 +10,7 @@ import {
     invalidate,
     useLiveSegment,
     useResource,
+    useSubView,
     useWorkspacePermissions
 } from 'deveye-sdk-client';
 import { api } from './api';
@@ -65,6 +66,7 @@ export default function Backup(_props: FeatureViewProps) {
     };
 
     const opened = jobs?.find((j) => j.id === openedId) ?? null;
+    useSubView(opened === null ? null : 'job');
 
     // La fiche ouverte est déclarée à la présence par son identifiant :
     // rejoignable, et cible de « Régler dans <espace> » d'un élément projeté.

@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { AUDIENCE_ITEMS_PROVIDER, type AudienceItemsProvider } from '@deveye/types/sdk';
+import { AUDIENCE_ITEMS_PROVIDER, AUDIENCE_SELF_PROVIDER, type AudienceItemsProvider } from '@deveye/types/sdk';
 import type { FeatureServer, SdkCipher } from '@deveye/types/sdk/server';
 
 import { audienceHandlers } from './handlers';
@@ -9,8 +9,10 @@ import { audienceCopy } from './copy';
 import { audienceMove } from './move';
 import { createRepo, type AudienceRepo } from './repo';
 import { audienceRoutes } from './routes';
+import { createSelfProvider } from './self';
 import { AudienceIngest } from './service';
 import { readJson, setIngest, type StoredSite } from './_shared';
+import { audienceE2e } from './e2e';
 
 /**
  * Le nom d'un site, déchiffré par le codec ouvert de `workspaceId`, son
@@ -48,6 +50,7 @@ async function labelOf(
  */
 export const serverEntry: FeatureServer<AudienceRepo> = {
     createRepo,
+    e2e: audienceE2e,
     features: audienceHandlers,
     migrationsDir: path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations'),
     quotas: { sites: { list: (repo, owned) => repo.listStock(owned) } },
@@ -73,7 +76,7 @@ export const serverEntry: FeatureServer<AudienceRepo> = {
                 await ingest.stop();
                 setIngest(null);
             },
-            providers: { [AUDIENCE_ITEMS_PROVIDER]: items },
+            providers: { [AUDIENCE_ITEMS_PROVIDER]: items, [AUDIENCE_SELF_PROVIDER]: createSelfProvider(deps, ingest) },
             // Les mêmes quatre routes à chaque appel ; c'est l'écouteur qui change.
             publicRoutes: (app) => audienceRoutes(app, ingest)
         };

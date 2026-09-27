@@ -11,6 +11,7 @@ import {
     useLiveOutlines,
     useLiveSegment,
     useResourceVersion,
+    useSubView,
     useWorkspaceMembers,
     useWorkspacePermissions,
     withSecrecy
@@ -267,6 +268,7 @@ export function FeatureProjects(_props: FeatureViewProps) {
      * et ils n'ont pas d'actions à droite.
      */
     const sideView = showMine || showArchived;
+    useSubView(opened ? 'project' : showMine ? 'my-tasks' : showArchived ? 'archived' : null);
 
     /**
      * Ranger n'a de sens que sur le portefeuille vivant : les archives se lisent

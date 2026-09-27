@@ -11,6 +11,8 @@ export interface Mailer {
     /** Faux sans `SMTP_HOST` : à l'appelant de dire quoi faire à la place. */
     readonly configured: boolean;
     send(message: MailMessage): Promise<void>;
+    /** La poignée de main avec le serveur SMTP, sans rien envoyer. */
+    verify(): Promise<void>;
 }
 
 export interface MailerConfig {
@@ -36,12 +38,18 @@ export function transportOptions(config: MailerConfig) {
 /** Les mails que le serveur envoie en son nom, hors de tout espace. */
 export function createMailer(config: MailerConfig): Mailer {
     let transport: Transporter | null = null;
+    const open = (): Transporter => {
+        if (!config.host) throw new Error('SMTP non configuré');
+        transport ??= nodemailer.createTransport(transportOptions(config));
+        return transport;
+    };
     return {
         configured: Boolean(config.host),
         async send({ to, subject, text, html }) {
-            if (!config.host) throw new Error('SMTP non configuré');
-            transport ??= nodemailer.createTransport(transportOptions(config));
-            await transport.sendMail({ from: config.from, to, subject, text, html });
+            await open().sendMail({ from: config.from, to, subject, text, html });
+        },
+        async verify() {
+            await open().verify();
         }
     };
 }

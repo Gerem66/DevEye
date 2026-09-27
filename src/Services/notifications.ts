@@ -258,6 +258,30 @@ export function webhookBody(kind: NotificationChannelKind, alert: Alert): Record
     return { content: text, text, ...alert.payload };
 }
 
+/** L'alerte d'exemple : celle des essais de canal, et du testeur de mails. */
+export function sampleAlert(label: string): Alert {
+    const now = Math.floor(Date.now() / 1000);
+    return {
+        subject: `DevEye : essai de notification (${label})`,
+        body: `Ceci est un envoi d’essai émis depuis DevEye le ${formatMoment(now)}.\n\nSi vous lisez ce message, ce canal fonctionne.`,
+        payload: { event: 'test', label, at: now },
+        embeds: [
+            {
+                title: 'Essai de notification',
+                description: `Ce canal (**${label}**) est correctement relié à DevEye.`,
+                color: 0x5865f2,
+                timestamp: new Date(now * 1000).toISOString(),
+                footer: { text: 'DevEye · essai' }
+            }
+        ]
+    };
+}
+
+/** Une alerte telle qu'un canal e-mail l'envoie : du texte seul. */
+export function alertMail(alert: Alert): { subject: string; text: string } {
+    return { subject: alert.subject, text: alert.body };
+}
+
 /** Livre une alerte sur un seul canal, et dit s'il l'a acceptée. */
 async function deliverOne(channel: ResolvedChannel, alert: Alert, logger: Logger): Promise<boolean> {
     if (channel.email) {
@@ -267,8 +291,7 @@ async function deliverOne(channel: ResolvedChannel, alert: Alert, logger: Logger
         if (!transport) return false;
         const sent = await transport.send(channel.email.accountId, channel.email.workspaceId, {
             to: channel.email.to,
-            subject: alert.subject,
-            text: alert.body
+            ...alertMail(alert)
         });
         if (!sent) logger.warn({ channel: channel.id }, 'Alert mail refused by the mail transport');
         return sent;

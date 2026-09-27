@@ -5,6 +5,8 @@ import Button from '@/Components/Button';
 import { Dialog } from '@/Components/Dialog';
 import { useLiveOutline } from '@/live/useLiveOutline';
 import { pushLiveSettings } from '@/stores/live';
+import { useOverlayView } from '@/telemetry/useView';
+import { viewSegment } from '@/telemetry/views';
 import { useCurrentUser } from '@/stores/currentUser';
 import { consumeItemSettings } from '@/stores/settingsRequest';
 import { getActiveWorkspaceId, useActiveWorkspace, useWorkspacePermissions } from '@/stores/workspace';
@@ -258,6 +260,11 @@ export function FeatureSettingsDialog({ open, onClose, scope, initialSection, on
         if (!shown) return;
         return pushLiveSettings(settingsValue);
     }, [shown, settingsValue]);
+    useOverlayView(
+        shown && current
+            ? `settings/${viewSegment(scope.feature)}${scope.kind === 'item' ? '/item' : ''}/${viewSegment(current)}`
+            : null
+    );
 
     const items: SideNavItem<SettingsSectionId>[] = sections.map((s) => ({
         id: s.id,

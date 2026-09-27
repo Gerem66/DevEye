@@ -5,6 +5,7 @@ import {
     SegmentedControl,
     TextInput,
     useLiveSegment,
+    useSubView,
     useWorkspacePermissions
 } from 'deveye-sdk-client';
 import type { FeatureViewProps } from '@deveye/types/sdk/client';
@@ -176,6 +177,7 @@ export default function Cve(_props: FeatureViewProps) {
 
     // La CVE ouverte est le niveau profond ; la racine `view:cve` vient de l'accueil.
     const liveTarget = useLiveSegment('l1', selectedId);
+    useSubView(selected ? 'entry' : null);
     useEffect(() => {
         if (!liveTarget) return;
         setSelectedId(liveTarget.value);
@@ -385,7 +387,7 @@ export function CveWidget() {
         <div className={styles.widget}>
             <div className={styles.widgetStat}>
                 <span className={`${styles.widgetValue} ${!loading && serious.length > 0 ? styles.widgetAlert : ''}`}>
-                    {loading ? '—' : serious.length}
+                    {loading ? '–' : serious.length}
                 </span>
                 <span className={styles.widgetLabel}>
                     {serious.length > 1 ? 'graves cette semaine' : 'grave cette semaine'}

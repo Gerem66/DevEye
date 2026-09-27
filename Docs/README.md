@@ -30,6 +30,7 @@ Ce dossier porte le transverse ; la doc d'une feature vit dans son module,
 | [NOTIFICATIONS.md](./NOTIFICATIONS.md)   | les canaux par feature et la sélection par élément                              |
 | [MAINTENANCE.md](./MAINTENANCE.md)       | fermer le site ou une feature à l'instant, depuis l'interface, la base ou l'env |
 | [LOGS.md](./LOGS.md)                     | où regarder en production : audit, sortie standard, alertes Système             |
+| [DEBUG.md](./DEBUG.md)                   | la page Tests et débogage : essais sans résidu, mesures, mails, suivi d'usage   |
 
 ## Features
 

@@ -8,6 +8,7 @@ import { createDomainHooks } from './domains';
 import { invoicingHandlers } from './handlers';
 import { createRepo, type InvoicingRepo } from './repo';
 import { createService } from './service';
+import { invoicingMailSamples } from './documentMail';
 
 const nameSchema = invoicingClientInputSchema.pick({ name: true });
 
@@ -16,6 +17,7 @@ export const serverEntry: FeatureServer<InvoicingRepo> = {
     features: invoicingHandlers,
     migrationsDir: path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations'),
     createService,
+    mailSamples: invoicingMailSamples,
     domains: createDomainHooks(),
     /**
      * Fourni bien que rien ne soit partageable : sans lui, l'écran des canaux

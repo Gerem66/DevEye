@@ -202,6 +202,11 @@ export class LiveHub {
      * Inscrit une connexion `/ws`, avant tout `live.here` : le battement de cœur
      * doit couvrir toutes les sockets, pas seulement les vues instrumentées.
      */
+    /** Les sockets de navigateur ouvertes : ce que les Mesures relèvent avec leurs chiffres. */
+    socketCount(): number {
+        return this.bySocket.size;
+    }
+
     register(socket: WebSocket, userId: number, sessionId: string): LiveTransport {
         const conn: LiveConn = {
             connId: randomUUID(),

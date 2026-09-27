@@ -312,6 +312,52 @@ describe('registerModules : les sentinelles', () => {
         assert.equal(moduleManifest('x-sdkstockhalf'), undefined);
     });
 
+    it('refuse un échantillon de mail envoyé par le serveur sans la capacité, et des clés en double', () => {
+        const sample = {
+            key: 'hello',
+            label: 'Bonjour',
+            sender: 'server' as const,
+            build: () => ({ subject: 's', paragraphs: [] })
+        };
+        assert.throws(
+            () =>
+                registerModules([{ manifest: manifest('x-sdkmail'), server: { features: [], mailSamples: [sample] } }]),
+            /exige la capacité 'accounts.mail'/
+        );
+        assert.throws(
+            () =>
+                registerModules([
+                    {
+                        manifest: manifest('x-sdkmail2', { nativeCapabilities: ['accounts.mail'] }),
+                        server: { features: [], mailSamples: [sample, sample] }
+                    }
+                ]),
+            /mailSamples : clé « hello » déclarée deux fois/
+        );
+        assert.equal(moduleManifest('x-sdkmail'), undefined);
+    });
+
+    it('refuse un scénario d’essai au nom invalide, et une entrée e2e vide', () => {
+        const step = { label: 'Rien', run: () => Promise.resolve() };
+        assert.throws(
+            () =>
+                registerModules([
+                    {
+                        manifest: manifest('x-sdke2e'),
+                        server: { features: [], e2e: { scenarios: [{ id: 'Pas bon', label: 'x', steps: [step] }] } }
+                    }
+                ]),
+            /e2e : clé « Pas bon » invalide/
+        );
+        assert.throws(
+            () =>
+                registerModules([
+                    { manifest: manifest('x-sdke2e2'), server: { features: [], e2e: { scenarios: [] } } }
+                ]),
+            /e2e déclaré vide/
+        );
+    });
+
     it('moduleManifest retrouve un module enregistré par son id', () => {
         assert.equal(moduleManifest('x-sdkregister')?.id, 'x-sdkregister');
         assert.equal(moduleManifest('x-absent'), undefined);

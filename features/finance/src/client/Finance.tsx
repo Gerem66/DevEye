@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ErrorNote, useActiveWorkspace, useLiveSegment, useResource, useWorkspacePermissions } from 'deveye-sdk-client';
+import {
+    ErrorNote,
+    useActiveWorkspace,
+    useLiveSegment,
+    useResource,
+    useSubView,
+    useWorkspacePermissions
+} from 'deveye-sdk-client';
 import type { FinanceTransaction } from '../contracts/domain';
 
 import AccountDialog from './AccountDialog';
@@ -63,6 +70,7 @@ export default function Finance() {
     const [importing, setImporting] = useState<number | null | undefined>(undefined);
 
     const liveTarget = useLiveSegment('l1', segmentOf(view));
+    useSubView(view.kind === 'home' ? null : view.kind);
     useEffect(() => {
         if (!liveTarget || liveTarget.value === null) return;
         setView(viewOf(liveTarget.value));

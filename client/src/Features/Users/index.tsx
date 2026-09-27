@@ -96,6 +96,14 @@ export default function FeatureUsers() {
                                         <div className={styles.rowText}>
                                             <span className={styles.rowTitle}>
                                                 {u.username} {self && <span className={styles.defaultTag}>vous</span>}
+                                                {u.test && (
+                                                    <span
+                                                        className={styles.defaultTag}
+                                                        title='Un compte d’essai de la page Tests et débogage, supprimé à la fin de l’essai'
+                                                    >
+                                                        essai
+                                                    </span>
+                                                )}
                                             </span>
                                             <span className={styles.rowMeta}>
                                                 {u.email} · {u.workspaceCount} espace(s) · dernière connexion{' '}

@@ -10,6 +10,7 @@ import {
     useLiveItemTarget,
     useLiveOutlines,
     useResourceVersion,
+    useSubView,
     useWorkspaceMembers,
     useWorkspacePermissions
 } from 'deveye-sdk-client';
@@ -89,6 +90,7 @@ export function FeatureGit(_props: FeatureViewProps) {
         setOpenedId(id);
     });
     const outlineFor = useLiveOutlines('l1');
+    useSubView(opened ? 'repo' : null);
 
     const reload = useCallback(async () => {
         if (reloadRef.current) return reloadRef.current;

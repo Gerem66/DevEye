@@ -38,8 +38,6 @@ export interface TopNavbarProps {
     /** Les entrées de compte des modules (`manifest.accountEntry`), rangées sous « Sécurité ». */
     accountEntries?: readonly { id: string; label: string; icon: string }[];
     onOpenAccountEntry?: (id: string, e: ReactMouseEvent) => void;
-    /** Open the logs feature (admins only). Click carries the force-reload modifier. */
-    onOpenLogs?: (e: ReactMouseEvent) => void;
     /** Open the settings panel. Absent = pas le droit de changer l'apparence. */
     onOpenSettings?: () => void;
     /** Enter the home grid organization (edit) mode. Absent = pas le droit. */
@@ -57,12 +55,10 @@ export interface TopNavbarProps {
     onRemoveRemote?: (instanceId: number) => void;
     /** Ouvrir la création d'un espace. */
     onCreateWorkspace?: () => void;
-    /** Ouvrir la page des retours des utilisateurs (admin). */
-    onOpenFeedback?: (e: ReactMouseEvent) => void;
-    /** Ouvrir la page d'administration des comptes (admin). */
-    onOpenUsers?: (e: ReactMouseEvent) => void;
-    /** Ouvrir la page Maintenance (admin). */
-    onOpenMaintenance?: (e: ReactMouseEvent) => void;
+    /** Les pages système, réservées aux administrateurs : vide pour les autres. */
+    adminPages?: readonly { id: string; label: string; icon: string }[];
+    /** Le clic porte le modificateur de rechargement forcé. */
+    onOpenAdminPage?: (id: string, e: ReactMouseEvent) => void;
     /**
      * Le bandeau des administrateurs, à l'accueil : le site est en maintenance,
      * ou il l'a levée alors que `MAINTENANCE=1` reste posé.
@@ -91,7 +87,6 @@ export default function TopNavbar({
     onOpenSecurity,
     accountEntries,
     onOpenAccountEntry,
-    onOpenLogs,
     onOpenSettings,
     onOrganize,
     organizing,
@@ -102,9 +97,8 @@ export default function TopNavbar({
     onRemoveRemote,
     onCreateWorkspace,
     onManageWorkspace,
-    onOpenFeedback,
-    onOpenUsers,
-    onOpenMaintenance,
+    adminPages,
+    onOpenAdminPage,
     maintenanceBanner,
     onDismissMaintenanceBanner,
     aboutBody
@@ -286,11 +280,11 @@ export default function TopNavbar({
                             </span>
                         </span>
                         {maintenanceBanner === 'site'
-                            ? onOpenMaintenance && (
+                            ? onOpenAdminPage && (
                                   <Button
                                       variant='secondary'
                                       className={styles.organizeBannerDone}
-                                      onClick={onOpenMaintenance}
+                                      onClick={(e) => onOpenAdminPage('maintenance', e)}
                                   >
                                       Gérer
                                   </Button>
@@ -421,76 +415,26 @@ export default function TopNavbar({
                                     <span className={`icon icon-${entry.icon}`} /> {entry.label}
                                 </button>
                             ))}
-                            {/* Second separator: groups the system pages (Logs,
-                                Retours, Utilisateurs, Maintenance) apart from
-                                the account pages above. */}
-                            {(onOpenLogs || onOpenFeedback || onOpenUsers || onOpenMaintenance) && (
-                                <hr className={styles.divider} />
-                            )}
-                            {onOpenLogs && (
+                            {/* Second separator: groups the system pages apart
+                                from the account pages above. */}
+                            {adminPages && adminPages.length > 0 && <hr className={styles.divider} />}
+                            {adminPages?.map((page) => (
                                 <button
+                                    key={page.id}
                                     className={styles.menuItem}
                                     onClick={(e) => {
-                                        onOpenLogs(e);
+                                        onOpenAdminPage?.(page.id, e);
                                         setMenuOpen(false);
                                     }}
                                 >
-                                    <span className='icon icon-activity' /> Logs
+                                    <span className={`icon icon-${page.icon}`} /> {page.label}
                                     <span
                                         className={`icon icon-shield ${styles.adminBadge}`}
                                         title='Réservé aux administrateurs'
                                         aria-label='Réservé aux administrateurs'
                                     />
                                 </button>
-                            )}
-                            {onOpenFeedback && (
-                                <button
-                                    className={styles.menuItem}
-                                    onClick={(e) => {
-                                        onOpenFeedback(e);
-                                        setMenuOpen(false);
-                                    }}
-                                >
-                                    <span className='icon icon-bug' /> Retours
-                                    <span
-                                        className={`icon icon-shield ${styles.adminBadge}`}
-                                        title='Réservé aux administrateurs'
-                                        aria-label='Réservé aux administrateurs'
-                                    />
-                                </button>
-                            )}
-                            {onOpenUsers && (
-                                <button
-                                    className={styles.menuItem}
-                                    onClick={(e) => {
-                                        onOpenUsers(e);
-                                        setMenuOpen(false);
-                                    }}
-                                >
-                                    <span className='icon icon-users' /> Utilisateurs
-                                    <span
-                                        className={`icon icon-shield ${styles.adminBadge}`}
-                                        title='Réservé aux administrateurs'
-                                        aria-label='Réservé aux administrateurs'
-                                    />
-                                </button>
-                            )}
-                            {onOpenMaintenance && (
-                                <button
-                                    className={styles.menuItem}
-                                    onClick={(e) => {
-                                        onOpenMaintenance(e);
-                                        setMenuOpen(false);
-                                    }}
-                                >
-                                    <span className='icon icon-wrench' /> Maintenance
-                                    <span
-                                        className={`icon icon-shield ${styles.adminBadge}`}
-                                        title='Réservé aux administrateurs'
-                                        aria-label='Réservé aux administrateurs'
-                                    />
-                                </button>
-                            )}
+                            ))}
                             <hr className={styles.divider} />
                             <button
                                 className={`${styles.menuItem} ${styles.danger}`}

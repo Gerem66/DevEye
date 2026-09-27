@@ -21,6 +21,8 @@ export interface UsersRepo {
         role?: 'user' | 'admin';
         /** Secondes : quand les conditions du site ont été acceptées ; `null` sans site. */
         termsAcceptedAt?: number | null;
+        /** L'essai de bout en bout qui crée ce compte jetable ; `null` pour une personne. */
+        e2eRun?: string | null;
     }): Promise<UserRow>;
     updateLastLogin(id: number, lastLogin: number): Promise<void>;
     /** Rattache le compte à son espace personnel, juste après l'avoir créé. */
@@ -100,14 +102,14 @@ export function usersRepo(pool: Q): UsersRepo {
             );
             return r.rows;
         },
-        async create({ email, username, passwordHash, role = 'user', termsAcceptedAt = null }) {
+        async create({ email, username, passwordHash, role = 'user', termsAcceptedAt = null, e2eRun = null }) {
             // `personal_workspace_id` est NOT NULL mais l'espace ne peut pas
             // exister avant le compte (FK propriétaire) : 0 le temps de créer
             // l'espace, puis `setPersonalWorkspace` referme le cycle.
             const res = await pool.query(
-                `INSERT INTO users (email, username, password_hash, role, settings, personal_workspace_id, terms_accepted_at)
-                 VALUES (?, ?, ?, ?, CAST('[]' AS JSON), 0, ?)`,
-                [email, username, passwordHash, role, termsAcceptedAt]
+                `INSERT INTO users (email, username, password_hash, role, settings, personal_workspace_id, terms_accepted_at, e2e_run)
+                 VALUES (?, ?, ?, ?, CAST('[]' AS JSON), 0, ?, ?)`,
+                [email, username, passwordHash, role, termsAcceptedAt, e2eRun]
             );
             // La colonne a un défaut vide : un compte neuf prend sa teinte ici.
             await pool.query('UPDATE users SET color = ? WHERE id = ?', [
@@ -161,10 +163,11 @@ export function usersRepo(pool: Q): UsersRepo {
                 workspace_count: number;
                 last_login: number;
                 created: number;
+                e2e_run: string | null;
             }>(
                 `SELECT u.id, u.username, u.email, u.avatar, u.role, u.status,
                         (SELECT COUNT(*) FROM workspace_members m WHERE m.user_id = u.id) AS workspace_count,
-                        u.last_login, u.created
+                        u.last_login, u.created, u.e2e_run
                  FROM users u ORDER BY u.created ASC`
             );
             return r.rows.map((x) => ({
@@ -176,7 +179,8 @@ export function usersRepo(pool: Q): UsersRepo {
                 status: x.status === 'suspended' ? ('suspended' as const) : ('active' as const),
                 workspaceCount: Number(x.workspace_count),
                 lastLogin: Number(x.last_login),
-                created: Number(x.created)
+                created: Number(x.created),
+                test: x.e2e_run !== null
             }));
         },
         async listAdminIds() {

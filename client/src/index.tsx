@@ -8,6 +8,7 @@ import App from './App.js';
 import ErrorBoundary from './Components/ErrorBoundary';
 import { installErrorTrace } from './diagnostics/trace';
 import { suppressNativeDrags } from './nativeDrag';
+import { startTracking } from './telemetry/tracking';
 
 // Before anything renders: a stray drag on a link, an image or a text selection
 // can freeze the whole page.
@@ -17,6 +18,7 @@ suppressNativeDrags();
 // retrouver dans un signalement, pas seulement dans la console de celui qui
 // pense à l'ouvrir.
 installErrorTrace();
+startTracking();
 
 const container = document.getElementById('root');
 const root = createRoot(container ?? document.body);

@@ -51,6 +51,11 @@ import { registerProxyRoute } from '@/Services/domains/proxy';
 import { createDomainVerifier } from '@/Services/domains/verifier';
 import { createLogRetention } from '@/Services/logRetention';
 import { createMailer } from '@/Services/mailer';
+import { serverMail } from '@/Services/serverMail';
+import { createDebugService } from '@/Services/debug';
+import { runGate } from '@/Services/debug/e2e/gate';
+import { mailbox } from '@/Services/debug/e2e/mailbox';
+import { trackingRoutes } from '@/Services/debug/selfTracking/routes';
 import { createSignupService } from '@/Services/signup';
 import { maintenance, MaintenanceError } from '@/Services/maintenance';
 import { describeError, systemAlerts } from '@/Services/systemAlerts';
@@ -224,7 +229,10 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     });
     await app.register(fastifyRateLimit, {
         max: env.RATE_LIMIT_MAX,
-        timeWindow: env.RATE_LIMIT_WINDOW
+        timeWindow: env.RATE_LIMIT_WINDOW,
+        // Les requêtes d'un essai en cours, depuis ce serveur même : un essai
+        // relancé atteindrait sinon les plafonds de l'inscription.
+        allowList: (req) => runGate.allows(req.raw)
     });
     await app.register(fastifyWebsocket, { options: { maxPayload: WS_MAX_PAYLOAD } });
 
@@ -340,13 +348,16 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     // des sockets : un module d'infrastructure (bail, clés) doit être prêt
     // avant la première trame d'agent.
     setSdkHost(hub, deps.db, live);
-    const mailer = createMailer({
-        host: env.SMTP_HOST,
-        port: env.SMTP_PORT,
-        user: env.SMTP_USER,
-        password: env.SMTP_PASSWORD,
-        from: env.SMTP_FROM
-    });
+    const mailer = mailbox.tap(
+        createMailer({
+            host: env.SMTP_HOST,
+            port: env.SMTP_PORT,
+            user: env.SMTP_USER,
+            password: env.SMTP_PASSWORD,
+            from: env.SMTP_FROM
+        })
+    );
+    serverMail.init(mailer);
     const signup = createSignupService({
         db: deps.db,
         mailer,
@@ -358,7 +369,17 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     const hostServices = [
         createDomainVerifier({ db: deps.db, crypt: deps.crypt, logger, live }),
         signup,
-        createLogRetention({ db: deps.db, logger })
+        createLogRetention({ db: deps.db, logger }),
+        createDebugService({
+            db: deps.db,
+            crypt: deps.crypt,
+            live,
+            hub,
+            audit,
+            logger,
+            mailer,
+            signupOpen: () => signup.isOpen()
+        })
     ];
     // Lue avant tout démarrage : un service en arrêt complet ne démarre pas, et
     // `MAINTENANCE=1` ferme le site avant la première connexion.
@@ -377,6 +398,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         return [...modules, ...host];
     };
 
+    await trackingRoutes(app);
     await authRoutes(app, { db: deps.db, crypt: deps.crypt, audit, live });
     await signupRoutes(app, { db: deps.db, audit, live, signup });
     await agentRoutes(app, { db: deps.db, hub, live, audit });

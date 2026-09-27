@@ -4,7 +4,9 @@ import type { FeatureService } from '@deveye/types/sdk/server';
 import type { SignupStatus } from '@deveye/types';
 
 import type { Database } from '@/db';
+import { openAccount } from '@/Services/accounts';
 import type { Mailer } from '@/Services/mailer';
+import { renderAccountMail } from '@/Services/mailLayout';
 import { sha256hex } from '@/Utils/hash';
 import { existingAccountMail, verificationMail } from './mails';
 
@@ -90,10 +92,9 @@ export function createSignupService(deps: SignupDeps): SignupService {
             // Une adresse déjà inscrite reçoit la même réponse qu'une adresse
             // neuve : cette route, ouverte à tous, ne dit pas qui a un compte.
             if (await db.users.findByEmail(address)) {
-                const mail = existingAccountMail(origin);
                 if (mailer.configured) {
                     await mailer
-                        .send({ to: address, ...mail })
+                        .send({ to: address, ...renderAccountMail(existingAccountMail(origin)) })
                         .catch((e: Error) => logger.error({ err: e.message }, 'Envoi du mail impossible'));
                 } else {
                     logger.warn({ email: address }, 'SMTP non configuré : inscription demandée sur un compte existant');
@@ -126,7 +127,7 @@ export function createSignupService(deps: SignupDeps): SignupService {
                 return { ok: true, watchToken };
             }
             try {
-                await mailer.send({ to: address, ...verificationMail(username, url) });
+                await mailer.send({ to: address, ...renderAccountMail(verificationMail(username, url)) });
             } catch (e) {
                 logger.error({ err: (e as Error).message }, 'Envoi du mail de validation impossible');
                 return { ok: false, reason: 'mail_failed' };
@@ -166,22 +167,18 @@ export function createSignupService(deps: SignupDeps): SignupService {
                 if (!(await tx.pendingSignups.markCompleted(row.id, now()))) return { ok: false, reason: 'not_found' };
 
                 const role = existing === 0 ? 'admin' : 'user';
-                const user = await tx.users.create({
+                const { user, personalWorkspaceId } = await openAccount(tx, {
                     email: row.email,
                     username: row.username,
                     passwordHash,
                     role,
                     termsAcceptedAt: row.terms_accepted_at
                 });
-                // L'espace personnel ne peut pas exister avant le compte (sa FK
-                // propriétaire le référence) : compte, espace, puis rattachement.
-                const personal = await tx.workspaces.createPersonal(user.id, row.username);
-                await tx.users.setPersonalWorkspace(user.id, personal.id);
                 return {
                     ok: true,
                     account: {
                         userId: user.id,
-                        personalWorkspaceId: personal.id,
+                        personalWorkspaceId,
                         username: row.username,
                         email: row.email,
                         role,

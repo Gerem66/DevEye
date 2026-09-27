@@ -1,5 +1,6 @@
 import { hashPassword } from '@/auth/argon';
 import { logger } from '@/logger';
+import { openAccount } from '@/Services/accounts';
 
 import { createDatabase, type Database } from './index';
 import type { DbPool } from './pool';
@@ -14,9 +15,6 @@ const DEV_FEATURES = ['devices', 'weather', 'password'];
 /**
  * Idempotently create a development account on an otherwise empty database.
  * Runs only when SEED_DEV=true, so it never touches a real database.
- *
- * Passe par les repos plutôt que par du SQL brut, pour ne pas diverger de
- * l'inscription (compte + espace personnel).
  */
 export async function seedDevAccount(pool: DbPool): Promise<void> {
     const db: Database = createDatabase(pool);
@@ -29,17 +27,14 @@ export async function seedDevAccount(pool: DbPool): Promise<void> {
         return;
     }
 
-    const passwordHash = await hashPassword(DEV_PASSWORD);
-    const user = await db.users.create({
+    const { personalWorkspaceId } = await openAccount(db, {
         email: DEV_EMAIL,
         username: DEV_USERNAME,
-        passwordHash,
-        role: 'admin'
+        passwordHash: await hashPassword(DEV_PASSWORD),
+        role: 'admin',
+        termsAcceptedAt: null
     });
-
-    const personal = await db.workspaces.createPersonal(user.id, DEV_USERNAME);
-    await db.users.setPersonalWorkspace(user.id, personal.id);
-    await db.workspaces.updateFeatures(personal.id, DEV_FEATURES);
+    await db.workspaces.updateFeatures(personalWorkspaceId, DEV_FEATURES);
 
     logger.warn(
         { username: DEV_USERNAME, email: DEV_EMAIL },

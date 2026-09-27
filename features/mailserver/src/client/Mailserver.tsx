@@ -12,6 +12,7 @@ import {
     useLiveItemTarget,
     useLiveOutlines,
     useResourceVersion,
+    useSubView,
     useWorkspacePermissions
 } from 'deveye-sdk-client';
 import type { FeatureViewProps } from '@deveye/types/sdk/client';
@@ -44,6 +45,7 @@ export function FeatureMailserver(_props: FeatureViewProps) {
         if (Number.isInteger(id) && mailboxes?.some((m) => m.id === id)) setOpenedId(id);
     });
     const outlineFor = useLiveOutlines('l1');
+    useSubView(opened && openedId === opened.mailbox.id ? 'mailbox' : null);
 
     useEffect(() => {
         api.send('mailserver.list', {})

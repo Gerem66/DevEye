@@ -64,6 +64,8 @@ export interface IngestRequest {
     ip: string;
     userAgent: string;
     events: AudienceEventInput[];
+    /** Déposé par le serveur lui-même (le suivi d'usage de DevEye) : l'`Origin` ne se contrôle pas. */
+    trusted?: true;
 }
 
 /**
@@ -298,7 +300,7 @@ export class AudienceIngest {
     async accept(req: IngestRequest): Promise<void> {
         const site = await this.resolveSite(req.key);
         if (!site || !this.receiving(site)) return;
-        if (!originAllowed(site.origins, req.origin, site.platform)) return;
+        if (!req.trusted && !originAllowed(site.origins, req.origin, site.platform)) return;
         if (looksLikeBot(req.userAgent)) return;
         const usage = await this.planUsage(site.workspaceId);
         if (this.planFull(usage, site.workspaceId)) return;

@@ -1,3 +1,7 @@
+import type { SdkAccountMailMessage } from '@deveye/types/sdk/server';
+
+import type { MailMessage } from '@/Services/mailer';
+
 // Un mail ne lit aucune feuille de style : les teintes du thème sont recopiées
 // ici, et nulle part ailleurs côté serveur.
 const ACCENT = '#22d3ee';
@@ -44,4 +48,14 @@ export function mailText({ paragraphs, notice, button, footnote }: MailContent):
         ...(button ? [`${button.label} : ${button.url}`] : []),
         ...(footnote ? [footnote] : [])
     ].join('\n\n');
+}
+
+/** Un mail du serveur prêt à partir : le même contenu en HTML et en texte, le sujet sur une ligne. */
+export function renderAccountMail(message: SdkAccountMailMessage): Omit<MailMessage, 'to'> {
+    return {
+        // Un saut de ligne dans un en-tête en ouvrirait un autre.
+        subject: message.subject.replace(/\s+/g, ' ').trim(),
+        text: mailText(message),
+        html: mailHtml(message)
+    };
 }

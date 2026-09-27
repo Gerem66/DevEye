@@ -5,6 +5,7 @@ import {
     FeatureSettingsButton,
     safeHref,
     StatusBadge,
+    useSubView,
     type ConfirmRequest
 } from 'deveye-sdk-client';
 import type {
@@ -58,6 +59,7 @@ export function ServiceDetail({ service, onBack, onCheckNow, onAcceptBaseline }:
     const [busyIncidents, setBusyIncidents] = useState(true);
     const [busyChecks, setBusyChecks] = useState(true);
     const [journalOpen, setJournalOpen] = useState(false);
+    useSubView(journalOpen ? 'service/journal' : 'service');
     // A failed refresh must never masquerade as "there is nothing here": the last
     // good data stays on screen and this says so. Cleared when a cycle starts.
     const [staleError, setStaleError] = useState<string | null>(null);
@@ -286,7 +288,7 @@ export function ServiceDetail({ service, onBack, onCheckNow, onAcceptBaseline }:
                                     {/* Un incident d'intégrité nomme ses fichiers, un par ligne, sous le résumé. */}
                                     <span className={styles.incidentBody}>
                                         <span className={styles.incidentError}>
-                                            {incident.error?.split('\n')[0] ?? '—'}
+                                            {incident.error?.split('\n')[0] ?? '–'}
                                         </span>
                                         {(incident.error?.includes('\n') ?? false) && (
                                             <ul className={styles.driftLines}>
@@ -320,7 +322,7 @@ export function ServiceDetail({ service, onBack, onCheckNow, onAcceptBaseline }:
                                         aria-hidden='true'
                                     />
                                     <span className={styles.checkWhen}>{formatMoment(check.at)}</span>
-                                    <span className={styles.checkStatus}>{check.httpStatus ?? '—'}</span>
+                                    <span className={styles.checkStatus}>{check.httpStatus ?? '–'}</span>
                                     <span className={styles.checkMs}>{formatMs(check.responseMs)}</span>
                                     <span className={styles.checkError}>{check.error ?? ''}</span>
                                 </li>

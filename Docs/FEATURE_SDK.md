@@ -679,7 +679,8 @@ chaque appel), `keys` (`sealBytes`/`openBytes` sous la clé serveur,
 `derive(salt, info, length)` : HKDF sur la même clé, jamais stockée),
 `secrecy.redeem(ticket)` (le ticket d'un module rendu en `{ userId,
 workspaceId, payload, cipher: { server, private | null } }`), `origins`,
-`accounts` (capacité `accounts.read` : `find`, `findByEmail`, `list`, `search`),
+`accounts` (capacité `accounts.read` : `find`, `findByEmail`, `list`, `search` ;
+`SdkAccount.e2e` dit un compte jetable des essais de bout en bout, jamais une personne),
 `accountMail` (capacité `accounts.mail` : `send(userId, message)` écrit à
 l'adresse du compte, jamais une autre, par l'expéditeur du serveur (`SMTP_*`,
 celui de l'inscription) ; le module donne du texte brut, paragraphes, encadré,
@@ -772,6 +773,16 @@ Une variable posée vide compte comme posée ; `optional` fait taire celles
 qu'une installation peut ne pas utiliser (clés OAuth, Stripe, certificat
 fourni) ; un secret n'est jamais écrit. Une spec mal formée arrête le démarrage
 (`registerModules`).
+
+Toujours par entrée serveur, pour la page Tests et débogage (`Docs/DEBUG.md`) :
+`mailSamples`, chaque mail du module construit par son vrai constructeur sur
+des données d'exemple (`sender: 'server'` exige `accounts.mail`), et `e2e`,
+ses scénarios de bout en bout et le `sweep()` de ce qu'ils laisseraient hors de
+ses tables. Clés en `[a-z][a-zA-Z0-9]*`, uniques, vérifiées par
+`registerModules`. Côté service, `onAccountDeleted` peut rendre une phrase que
+le mail de confirmation de suppression du compte porte (un abonnement résilié).
+Le suivi d'usage de DevEye passe par `AUDIENCE_SELF_PROVIDER`, qu'offre
+Audience.
 
 Par entrée client (`FeatureClient`) : `providers`, le jumeau client des
 providers de service, que les écrans de l'app lisent par

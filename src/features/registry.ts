@@ -3,6 +3,7 @@ import { agentFeatures } from './agent';
 import { feedbackFeatures } from './feedback';
 import { homeFeatures } from './home';
 import { adminFeatures } from './admin';
+import { debugFeatures } from './debug';
 import { liveHereFeature } from './live/here';
 import { logsFeatures } from './logs';
 import { notifyFeatures } from './notify';
@@ -73,6 +74,7 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     ...logsFeatures,
     ...feedbackFeatures,
     ...adminFeatures,
+    ...debugFeatures,
     ...homeFeatures,
     ...notifyFeatures,
     ...sharingFeatures,

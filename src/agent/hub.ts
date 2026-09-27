@@ -356,6 +356,11 @@ export class MonitorHub {
         this.publishPresence(deviceId, false);
     }
 
+    /** Les agents connectés à cet instant. */
+    onlineCount(): number {
+        return this.agents.size;
+    }
+
     isOnline(deviceId: string): boolean {
         return this.agents.has(deviceId);
     }

@@ -12,6 +12,7 @@ import type { AudienceSite } from '../contracts/domain';
 import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 
 import { eventsUsage } from './planUsage';
+import { createSiteRecord } from './sites';
 
 import {
     generatePublicKey,
@@ -130,38 +131,12 @@ export const audienceSiteAddFeature = defineSdkFeature({
     mutates: true,
     access: { level: 'write' },
     handler: async (ctx: Ctx, input) => {
-        const ref = nameRef(input.name);
-        if (await ctx.repo.findByName(ctx.workspaceId, ref)) {
-            throw new FeatureError('validation', 'Un site porte déjà ce nom dans cet espace.');
-        }
-
-        await ctx.quota.assert('sites', async (owned) => (await ctx.repo.countInWorkspaces(owned)) + 1);
-
-        const cipher = ctx.cipher();
-        const body: StoredSite = {
-            name: input.name.trim(),
-            description: input.description.trim(),
-            transitPaths: packTransitPaths(input.transitPaths)
-        };
-        const created = await ctx.repo.create({
-            workspaceId: ctx.workspaceId,
-            publicKey: generatePublicKey(),
-            nameRef: ref,
-            platform: input.platform,
-            visitorMode: input.visitorMode,
-            origins: packOrigins(input.origins),
-            active: input.active,
-            retentionDays: input.retentionDays,
-            formsAuto: input.formsAuto,
-            submissionIpQuota: input.submissionIpQuota,
-            submissionBanQuota: input.submissionBanQuota,
-            formHourlyQuota: input.formHourlyQuota,
-            eventIpQuota: input.eventIpQuota,
-            content: await cipher.encrypt(JSON.stringify(body))
-        });
-        ingestOf()?.invalidate();
-        ctx.audit({ action: 'audience.siteAdd', description: `Site de suivi « ${body.name} » déclaré` });
-
+        const created = await createSiteRecord(
+            { repo: ctx.repo, cipher: ctx.cipher(), quota: ctx.quota },
+            ctx.workspaceId,
+            input
+        );
+        ctx.audit({ action: 'audience.siteAdd', description: `Site de suivi « ${input.name.trim()} » déclaré` });
         return { site: await reloadHomeSite(ctx, created.id) };
     }
 });

@@ -14,6 +14,7 @@ import { pageHandlers } from './pages';
 import { createRepo, type UptimeRepo } from './repo';
 import { UptimeMonitor } from './service';
 import { createStatusPages } from './statusPage/routes';
+import { uptimeE2e } from './e2e';
 
 /**
  * Le nom d'un service, déchiffré par le codec ouvert de son espace. Un service
@@ -51,6 +52,7 @@ async function labelOf(
 export const serverEntry: FeatureServer<UptimeRepo> = {
     env: UPTIME_ENV,
     createRepo,
+    e2e: uptimeE2e,
     features: [...uptimeHandlers, ...pageHandlers],
     migrationsDir: path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations'),
     domains: createDomainHooks(),

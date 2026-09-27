@@ -10,6 +10,7 @@ import {
     useLiveSegment,
     useResourceVersion,
     useStickyOffset,
+    useSubView,
     withSecrecy
 } from 'deveye-sdk-client';
 import type { MinimalUser } from '@deveye/types';
@@ -156,6 +157,7 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
     const tabTarget = useLiveSegment('l2', `tab:${tab}`);
     const cardTarget = useLiveSegment('l3', cardDialog?.card ? `card:${cardDialog.card.id}` : null);
     const outlineForTab = useLiveOutlines('l2');
+    useSubView(`project/${tab}`);
 
     // Rejoindre quelqu'un, c'est aussi arriver sur son onglet.
     useEffect(() => {

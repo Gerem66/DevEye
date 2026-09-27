@@ -4,7 +4,6 @@ import { invalidateAccess } from '../_access';
 import { schedulePlanReconcile } from '@/Services/planPauses';
 import { forgetSessionsOf } from '@/Services/SecureStore';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
-import { notifyModulesAccountDeleted } from '../_sdk/register';
 import { deleteUserEverywhere } from '../_users';
 import { adminMaintenanceFeatures } from './maintenance';
 import { notifyAdmins } from './notify';
@@ -120,8 +119,6 @@ export const adminDeleteUserFeature: FeatureDefinition<
         const target = await ctx.db.users.findById(input.userId);
         if (!target) throw new FeatureError('not_found', 'Compte introuvable');
 
-        // Les modules d'abord : un abonnement ne survit pas au compte.
-        await notifyModulesAccountDeleted(input.userId);
         await deleteUserEverywhere(ctx, input.userId, { userId: ctx.userId, workspaceId: ctx.workspaceId });
 
         ctx.audit({

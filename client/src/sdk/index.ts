@@ -118,6 +118,7 @@ export { WsError } from '@/api/ws';
 export { isSocketOpen, onServerEvent, onSocketOpen } from './events';
 export { formatBytesFr } from '@/format';
 export { invalidate, onResourceChange, useResourceVersion, type ExternalResourceKey } from '@/stores/invalidation';
+export { useSubView } from '@/telemetry/useView';
 
 // ── Le live ────────────────────────────────────────────────────────────────
 export { useLiveSegment } from '@/live/useLiveSegment';

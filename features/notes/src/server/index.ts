@@ -5,6 +5,7 @@ import { createRepo, type NotesRepo } from './repo';
 import { notesCopy } from './copy';
 import { notesMove } from './move';
 import { tryDecryptPayload } from './_shared';
+import { notesE2e } from './e2e';
 
 /**
  * Pas de `migrationsDir` : les tables des Notes datent du socle de l'app.
@@ -16,6 +17,7 @@ import { tryDecryptPayload } from './_shared';
  */
 export const serverEntry: FeatureServer<NotesRepo> = {
     createRepo,
+    e2e: notesE2e,
     features: notesHandlers,
     items: {
         homeOf: async (repo, itemId, workspaceId) =>

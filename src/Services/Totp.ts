@@ -111,6 +111,11 @@ export function verifyTotp(
     return null;
 }
 
+/** The code an authenticator app shows at `now`: what the end-to-end runner types. */
+export function totpCode(secret: string, now: number = Date.now()): string {
+    return hotp(base32Decode(secret), Math.floor(now / 1000 / STEP_SECONDS));
+}
+
 /** Generate N recovery codes, 16 characters over a 31-symbol alphabet (~79 bits each). */
 export function generateBackupCodes(count = 10): string[] {
     const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';

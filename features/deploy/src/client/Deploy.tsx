@@ -8,6 +8,7 @@ import {
     useLiveItemTarget,
     useLiveOutlines,
     useResourceVersion,
+    useSubView,
     useWorkspaceMembers,
     useWorkspacePermissions
 } from 'deveye-sdk-client';
@@ -75,6 +76,7 @@ export function FeatureDeploy(_props: FeatureViewProps) {
         setOpenedId(id);
     });
     const outlineFor = useLiveOutlines('l1');
+    useSubView(openedId === null ? null : 'target');
 
     const reload = useCallback(async () => {
         try {

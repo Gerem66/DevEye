@@ -2,9 +2,9 @@ import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 import { MAIL_TRANSPORT_PROVIDER, type MailTransportProvider } from '@deveye/types/sdk';
 
 import { invoicingSend, invoicingMailAccounts } from '../../contracts/commands';
-import { formatDate, formatMoney, kindLabel } from '../../contracts/display';
+import { kindLabel } from '../../contracts/display';
 import { invoicingClientContentSchema, type DocumentKind } from '../../contracts/domain';
-import { escapeHtml, renderPaper } from '../paper';
+import { documentMail } from '../documentMail';
 import { paperInputOf } from '../paperInput';
 import {
     assertClient,
@@ -96,7 +96,6 @@ export const send = defineSdkFeature({
             throw clientError('validation', 'Ce client n’a pas d’adresse e-mail : complétez sa fiche.');
         }
 
-        const kind = row.kind as DocumentKind;
         const paper = await paperInputOf(ctx, row);
         // Le lien n'est ajouté que s'il existe déjà : l'envoi ne crée pas de
         // porte publique à l'insu de qui l'expédie.
@@ -104,41 +103,11 @@ export const send = defineSdkFeature({
             row.public_token === null
                 ? null
                 : `${await publicOriginOf(ctx, settings)}/f/${encodeURIComponent(row.public_token)}`;
-
-        const title = `${kindLabel(kind)} ${row.number_label ?? ''}`.trim();
-        const amount = formatMoney(paper.totals.grossCents, row.currency);
-        const deadline =
-            kind === 'quote'
-                ? row.valid_until === null
-                    ? ''
-                    : ` Il est valable jusqu’au ${formatDate(row.valid_until)}.`
-                : row.due_on === null
-                  ? ''
-                  : ` Son règlement est attendu avant le ${formatDate(row.due_on)}.`;
-
-        const intro = input.message.trim();
-        const lines = [
-            `Bonjour,`,
-            '',
-            `${intro.length > 0 ? intro : `Vous trouverez ci-dessous ${kindLabel(kind).toLowerCase()} ${row.number_label ?? ''} d’un montant de ${amount}.`.replace(/\s+/g, ' ')}${deadline}`,
-            ...(url === null ? [] : ['', `Le document en ligne : ${url}`]),
-            '',
-            settings.issuer.legalName
-        ];
-
-        // `text` reste obligatoire quoi qu'il arrive : un destinataire dont le
-        // client n'affiche pas le HTML ne doit rien perdre.
-        const html = `<div style="font-family:Helvetica,Arial,sans-serif;max-width:40rem;margin:0 auto">
-<p>${escapeHtml(lines[2])}</p>
-${url === null ? '' : `<p><a href="${escapeHtml(url)}">Ouvrir le document en ligne</a></p>`}
-</div>
-${renderPaper(paper)}`;
+        const title = `${kindLabel(row.kind as DocumentKind)} ${row.number_label ?? ''}`.trim();
 
         const sent = await transport.send(settings.mailSenderId, ctx.workspaceId, {
             to,
-            subject: `${title} · ${settings.issuer.legalName}`,
-            text: lines.join('\n'),
-            html
+            ...documentMail({ paper, url, message: input.message })
         });
 
         if (sent) await ctx.repo.markSent(row.id, ctx.workspaceId, now());

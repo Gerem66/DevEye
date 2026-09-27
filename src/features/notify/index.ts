@@ -15,7 +15,7 @@ import {
     notifyRouteTest
 } from '@deveye/types';
 
-import { formatMoment, resolveChannelIds, sendTest } from '@/Services/notifications';
+import { resolveChannelIds, sampleAlert, sendTest } from '@/Services/notifications';
 
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import { moduleItems } from '../_sdk/register';
@@ -67,25 +67,6 @@ async function itemLabelOf(ctx: FeatureContext, feature: NotificationFeature, it
 async function homeWorkspaceOf(ctx: FeatureContext, feature: NotificationFeature, itemId: number): Promise<number> {
     const share = await ctx.db.itemSharing.findShare(ctx.workspaceId, feature, String(itemId));
     return share?.home_workspace_id ?? ctx.workspaceId;
-}
-
-/** L'alerte d'exemple, la même pour tous les essais. */
-function testAlert(label: string) {
-    const now = Math.floor(Date.now() / 1000);
-    return {
-        subject: `DevEye — essai de notification (${label})`,
-        body: `Ceci est un envoi d’essai émis depuis DevEye le ${formatMoment(now)}.\n\nSi vous lisez ce message, ce canal fonctionne.`,
-        payload: { event: 'test', label, at: now },
-        embeds: [
-            {
-                title: 'Essai de notification',
-                description: `Ce canal (**${label}**) est correctement relié à DevEye.`,
-                color: 0x5865f2,
-                timestamp: new Date(now * 1000).toISOString(),
-                footer: { text: 'DevEye · essai' }
-            }
-        ]
-    };
 }
 
 /**
@@ -183,7 +164,7 @@ const channelTest = defineFeature({
         if (!row) throw new FeatureError('not_found', 'Canal introuvable');
         assertChannelAccess(ctx, row.feature);
         const channels = await resolveChannelIds(ctx.db, ctx.secure.open, ctx.workspaceId, [row.id]);
-        return sendTest(channels, testAlert(channels[0]?.label ?? 'canal'), ctx.logger);
+        return sendTest(channels, sampleAlert(channels[0]?.label ?? 'canal'), ctx.logger);
     }
 });
 
@@ -251,7 +232,7 @@ const routeTest = defineFeature({
         assertRouteAccess(ctx, input.feature, 'write');
         const channels = await resolveChannelsFor(ctx, input.feature, input.itemId);
         const label = input.feature === SYSTEM_NOTIFICATION_TARGET ? SYSTEM_NOTIFICATION_INFO.label : input.feature;
-        return sendTest(channels, testAlert(label), ctx.logger);
+        return sendTest(channels, sampleAlert(label), ctx.logger);
     }
 });
 

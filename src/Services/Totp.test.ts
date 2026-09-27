@@ -3,7 +3,14 @@ import crypto from 'node:crypto';
 import { describe, it } from 'node:test';
 
 import Encryption from './Encryption';
-import { generateBackupCodes, generateTotpSecret, hashBackupCode, normalizeBackupCode, verifyTotp } from './Totp';
+import {
+    generateBackupCodes,
+    generateTotpSecret,
+    hashBackupCode,
+    normalizeBackupCode,
+    totpCode,
+    verifyTotp
+} from './Totp';
 
 /** Le code attendu pour un pas donné, refait ici pour ne pas dépendre de l'horloge. */
 function codeAt(secretBase32: string, step: number): string {
@@ -65,5 +72,16 @@ describe('les codes de secours', () => {
         const b = new Encryption('c'.repeat(32), 'd'.repeat(32));
         assert.equal(hashBackupCode(a, 'ABCD-EFGH-JKLM-NPQR'), hashBackupCode(a, 'abcdefghjklmnpqr'));
         assert.notEqual(hashBackupCode(a, 'ABCD-EFGH-JKLM-NPQR'), hashBackupCode(b, 'ABCD-EFGH-JKLM-NPQR'));
+    });
+});
+
+describe('totpCode', () => {
+    it('rend le code qu’une application afficherait, accepté une fois', () => {
+        const { secret } = generateTotpSecret('essai');
+        const now = 1_790_000_000_000;
+        const code = totpCode(secret, now);
+        const step = verifyTotp(code, secret, null, now);
+        assert.equal(step, Math.floor(now / 30_000));
+        assert.equal(verifyTotp(code, secret, step, now), null);
     });
 });

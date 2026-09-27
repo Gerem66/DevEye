@@ -65,6 +65,9 @@ export type ResourceKey =
     | 'workspace.session'
     /** La page Utilisateurs : les comptes du site. */
     | 'admin.userList'
+    /** La page Tests et débogage : l'essai en cours et le suivi d'usage, partagés entre administrateurs. */
+    | 'debug.overview'
+    | 'debug.tracking'
     /** L'offre du compte, dite par le module qui en tient une. */
     | 'user.plan'
     | 'projects.count'
@@ -136,8 +139,8 @@ const TOPIC_KEYS: Partial<Record<LiveTopic, ResourceKey[]>> = {
     /* Réglages de compte, diffusés dans l'espace personnel de leur auteur. Seule
        l'offre se relit : un module la change depuis un service, sans commande. */
     account: ['user.plan'],
-    /* Un compte a changé : reçu par compte, jamais en salle. */
-    admin: ['admin.userList']
+    /* Un compte a changé, ou un réglage d'administration : reçu par compte, jamais en salle. */
+    admin: ['admin.userList', 'debug.overview', 'debug.tracking']
 };
 
 /**

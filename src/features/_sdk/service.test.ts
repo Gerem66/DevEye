@@ -48,7 +48,11 @@ function fakeHost() {
     const listByWorkspaceCalls: number[] = [];
     const searchCalls: { query: string; limit: number }[] = [];
     const sent: MailMessage[] = [];
-    const mailer = { configured: true, send: async (message: MailMessage) => void sent.push(message) };
+    const mailer = {
+        configured: true,
+        send: async (message: MailMessage) => void sent.push(message),
+        verify: async () => {}
+    };
     const logger = {
         debug() {},
         info() {},
@@ -72,11 +76,27 @@ function fakeHost() {
             users: {
                 findById: async (id: number) =>
                     id === 7
-                        ? { id: 7, email: 'alice@exemple.fr', username: 'alice', role: 'user', created: 12 }
+                        ? {
+                              id: 7,
+                              email: 'alice@exemple.fr',
+                              username: 'alice',
+                              role: 'user',
+                              created: 12,
+                              e2e_run: null
+                          }
                         : null,
                 search: async (query: string, limit: number) => {
                     searchCalls.push({ query, limit });
-                    return [{ id: 7, email: 'alice@exemple.fr', username: 'alice', role: 'admin', created: 12 }];
+                    return [
+                        {
+                            id: 7,
+                            email: 'alice@exemple.fr',
+                            username: 'alice',
+                            role: 'admin',
+                            created: 12,
+                            e2e_run: null
+                        }
+                    ];
                 },
                 findByIds: async (ids: number[]) =>
                     [
@@ -309,7 +329,7 @@ describe('createServiceDeps : accounts', () => {
         const { host, searchCalls } = fakeHost();
         const { accounts } = createServiceDeps(host, manifest(ID, ['accounts.read']), null, NO_PROVIDERS);
         assert.deepEqual(await accounts.search('  alice '), [
-            { id: 7, email: 'alice@exemple.fr', username: 'alice', isAdmin: true, created: 12_000 }
+            { id: 7, email: 'alice@exemple.fr', username: 'alice', isAdmin: true, e2e: false, created: 12_000 }
         ]);
         await accounts.search('', 999);
         await accounts.search('', 0);

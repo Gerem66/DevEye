@@ -2,12 +2,14 @@ import { isExternalFeatureId, registerExternalFeature, type LiveTopic } from '@d
 import { DEVEYE_ICON_PATH, externalDescriptorOf, validateManifest, type FeatureManifest } from '@deveye/types/sdk';
 import type {
     FeatureAgentHooks,
+    FeatureE2eEntry,
     FeatureServer,
     FeatureService,
     SdkCipher,
     SdkDnsRecord,
     SdkDomain,
     SdkDomainProbe,
+    SdkMailSample,
     SdkMovePlan,
     SdkPlanPauseChange,
     SdkQueryable,
@@ -92,6 +94,28 @@ function sdkQueryable(q: Queryable): SdkQueryable {
     };
 }
 
+const DEBUG_KEY = /^[a-z][a-zA-Z0-9]*$/;
+
+/** Les échantillons de mails et les scénarios d'essai d'un module : des clés propres, uniques, et la capacité qu'ils supposent. */
+function debugEntriesProblem({ manifest, server }: InstalledFeatureModule): string | null {
+    const samples = server.mailSamples ?? [];
+    const scenarios = server.e2e?.scenarios ?? [];
+    for (const [what, keys] of [
+        ['mailSamples', samples.map((m) => m.key)],
+        ['e2e', scenarios.map((sc) => sc.id)]
+    ] as const) {
+        const bad = keys.find((k) => !DEBUG_KEY.test(k));
+        if (bad !== undefined) return `${what} : clé « ${bad} » invalide`;
+        const twice = keys.find((k, i) => keys.indexOf(k) !== i);
+        if (twice !== undefined) return `${what} : clé « ${twice} » déclarée deux fois`;
+    }
+    if (samples.some((m) => m.sender === 'server') && !(manifest.nativeCapabilities ?? []).includes('accounts.mail')) {
+        return "un échantillon envoyé par le serveur exige la capacité 'accounts.mail'";
+    }
+    if (server.e2e && scenarios.length === 0 && !server.e2e.sweep) return 'e2e déclaré vide';
+    return null;
+}
+
 /**
  * Enregistre les modules installés, une fois, au chargement du registre :
  * toute violation lève et empêche le démarrage.
@@ -144,6 +168,8 @@ export function registerModules(installed: readonly InstalledFeatureModule[]): v
                 );
             }
         }
+        const debugProblem = debugEntriesProblem(mod);
+        if (debugProblem) throw new Error(`Module « ${manifest.id} » : ${debugProblem}`);
         if (manifest.accountEntry?.signupHint) {
             const other = MODULES.find((m) => m.manifest.accountEntry?.signupHint);
             if (other) {
@@ -440,9 +466,11 @@ export async function notifyModulePlanPause(featureId: string, change: SdkPlanPa
  * Un compte va être supprimé : chaque service qui l'écoute termine ce qu'il
  * tient pour lui ailleurs (un abonnement). Avant la suppression, et sans
  * avaler l'erreur : un module qui échoue, ou qu'une maintenance tient à
- * l'arrêt, laisserait un abonnement tourner sur un compte disparu.
+ * l'arrêt, laisserait un abonnement tourner sur un compte disparu. Rend les
+ * notes des modules pour le mail de confirmation.
  */
-export async function notifyModulesAccountDeleted(userId: number): Promise<void> {
+export async function notifyModulesAccountDeleted(userId: number): Promise<string[]> {
+    const notes: string[] = [];
     for (const s of SERVICES) {
         if (!s.service.onAccountDeleted) continue;
         if (s.halted) {
@@ -451,8 +479,37 @@ export async function notifyModulesAccountDeleted(userId: number): Promise<void>
                 `Le module « ${s.manifest.label} » est en maintenance : réessayez plus tard.`
             );
         }
-        await s.service.onAccountDeleted(userId);
+        const note = await s.service.onAccountDeleted(userId);
+        if (note) notes.push(note.paragraph);
     }
+    return notes;
+}
+
+/** Les échantillons de mails des modules installés, pour le testeur de la page Tests et débogage. */
+export function moduleMailSamples(): { featureId: string; label: string; samples: readonly SdkMailSample[] }[] {
+    return MODULES.filter((mod) => mod.server.mailSamples?.length).map((mod) => ({
+        featureId: mod.manifest.id,
+        label: mod.manifest.label,
+        samples: mod.server.mailSamples!
+    }));
+}
+
+/**
+ * Les scénarios d'essai des modules installés, avec le repo que leurs étapes
+ * reçoivent. Un module arrêté par la maintenance est écarté par l'appelant.
+ */
+export function moduleE2eEntries(db: Database): {
+    featureId: string;
+    label: string;
+    entry: FeatureE2eEntry<unknown>;
+    repo: unknown;
+}[] {
+    return MODULES.filter((mod) => mod.server.e2e).map((mod) => ({
+        featureId: mod.manifest.id,
+        label: mod.manifest.label,
+        entry: mod.server.e2e!,
+        repo: mod.repoFor(db)
+    }));
 }
 
 /** Les fonctionnalités installées qui gèrent des domaines. */

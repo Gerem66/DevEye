@@ -845,7 +845,7 @@
     min-height: 60vh;
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-md);
-    background: #fff;
+    background: var(--paper);
 }
 
 /* Une rangée qui ne mène nulle part : même silhouette, sans le geste. */

@@ -7,7 +7,8 @@ import {
     PlanPausedBadge,
     StatusBadge,
     useLiveSegment,
-    useStickyOffset
+    useStickyOffset,
+    useSubView
 } from 'deveye-sdk-client';
 import type { AudienceEventsQuota, AudienceForm, AudienceSite, AudienceUsage } from '../contracts/domain';
 
@@ -74,6 +75,7 @@ export function SiteDetail({
     // Présence : « qui regarde quoi dans ce site ». `Audience` possède `l1` (le
     // site), cette fiche possède `l2` (la section) : un seul déclarant par niveau.
     useLiveSegment('l2', section);
+    useSubView(section === null ? 'site' : `site/${section}`);
 
     // La barre de période des sections colle juste sous cet en-tête. Sa hauteur est
     // mesurée et non écrite en dur : elle change dès que le nom du site passe à la ligne

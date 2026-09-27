@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 
 import type { PendingSignupRow } from '@/db/repos/pendingSignups';
 import type { MailMessage } from '@/Services/mailer';
+import { renderAccountMail } from '@/Services/mailLayout';
 import { createSignupService, SIGNUP_TTL_SECONDS, type SignupDeps } from './index';
 import { existingAccountMail, verificationMail } from './mails';
 
@@ -106,7 +107,8 @@ function harness(options: { mode?: 'open' | 'closed'; smtp?: boolean; users?: Fa
             configured: options.smtp ?? true,
             send: async (message) => {
                 sent.push(message);
-            }
+            },
+            verify: async () => {}
         },
         logger: {
             info: () => undefined,
@@ -235,7 +237,7 @@ describe("l'inscription", () => {
 
 describe('les mails', () => {
     it('annoncent les 2 h et portent le lien', () => {
-        const mail = verificationMail('alice', 'https://deveye.test/signup/verify#abc');
+        const mail = renderAccountMail(verificationMail('alice', 'https://deveye.test/signup/verify#abc'));
         for (const body of [mail.text, mail.html]) {
             assert.match(body, /2 h/);
             assert.match(body, /signup\/verify#abc/);
@@ -244,7 +246,7 @@ describe('les mails', () => {
     });
 
     it('échappent le pseudo dans le HTML', () => {
-        assert.doesNotMatch(verificationMail('<b>x', 'https://deveye.test/').html, /<b>x/);
-        assert.match(existingAccountMail('https://deveye.test').html, /Se connecter/);
+        assert.doesNotMatch(renderAccountMail(verificationMail('<b>x', 'https://deveye.test/')).html, /<b>x/);
+        assert.match(renderAccountMail(existingAccountMail('https://deveye.test')).html, /Se connecter/);
     });
 });

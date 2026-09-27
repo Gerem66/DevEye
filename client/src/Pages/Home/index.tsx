@@ -53,7 +53,8 @@ import {
     useSiteMaintenance
 } from '@/stores/maintenance';
 import { armFrameProbe } from '@/perf/frameBudget';
-import { noteView } from '@/diagnostics/trace';
+import { useRootView } from '@/telemetry/useView';
+import { ViewScope } from '@/telemetry/ViewScope';
 import { LiveProvider } from '@/live/LiveProvider';
 import { LiveCursors } from '@/live/LiveCursors';
 import { CursorChatInput } from '@/live/CursorChatInput';
@@ -78,6 +79,7 @@ import FeatureLogs from '@/Features/Logs';
 import FeatureWorkspace from '@/Features/Workspace';
 import FeatureUsers from '@/Features/Users';
 import FeatureMaintenance from '@/Features/Maintenance';
+import FeatureDebug from '@/Features/Debug';
 
 import { catalogEntries, featureCatalog, featureCatalogEntry } from './catalog';
 import { EmptyHome } from './EmptyHome';
@@ -129,6 +131,16 @@ function accountViewHost(featureId: string, View: ComponentType<AccountViewProps
         const [hint] = useState(() => takeAccountViewHint(featureId));
         return <View close={closeFeature} isAdmin={user.role === 'admin'} hint={hint} />;
     };
+}
+
+/** Les pages système du menu du compte, dans cet ordre ; leur titre et leur icône sont ceux de leur vue. */
+const ADMIN_VIEW_IDS = ['logs', 'feedback', 'users', 'maintenance', 'debug'] as const;
+
+function adminMenu(): { id: string; label: string; icon: string }[] {
+    return ADMIN_VIEW_IDS.map((id) => {
+        const view = staticViews().find((v) => v.id === id)!;
+        return { id, label: view.title, icon: view.icon };
+    });
 }
 
 /** Lues une fois : les modules installés ne changent pas en cours de session. */
@@ -212,6 +224,14 @@ const buildStaticViews = (): ViewConfig[] => [
         cacheDurationMinutes: 0,
         hasCard: false,
         FullComponent: FeatureMaintenance
+    },
+    {
+        id: 'debug',
+        title: 'Tests et débogage',
+        icon: 'sandbox',
+        cacheDurationMinutes: 0,
+        hasCard: false,
+        FullComponent: FeatureDebug
     },
     {
         id: 'workspace',
@@ -683,9 +703,7 @@ export default function HomePage() {
     // Le fil des vues ouvertes, que joindra un signalement de bug. Posé sur
     // l'état et non sur `handleExpand`, qui peut refuser l'ouverture : on note
     // ce qui s'est affiché, pas ce qui a été demandé.
-    useEffect(() => {
-        noteView(expandedWidget ?? 'home');
-    }, [expandedWidget]);
+    useRootView(expandedWidget ?? 'home');
 
     /**
      * Les trois scènes qui coûtent : le montage de l'accueil, l'ouverture d'une
@@ -853,6 +871,10 @@ export default function HomePage() {
     const accountMenuEntries = useMemo(
         () => accountMenu().filter((entry) => !hiddenFeatures.has(entry.id)),
         [hiddenFeatures]
+    );
+    const adminPages = useMemo(
+        () => (isAdmin ? adminMenu().filter((page) => page.id !== 'feedback' || feedbackEnabled) : []),
+        [isAdmin, feedbackEnabled]
     );
 
     const views = staticViews();
@@ -1257,14 +1279,8 @@ export default function HomePage() {
                     onOpenSecurity={(e) => handleExpand('security', isForceReload(e))}
                     accountEntries={accountMenuEntries}
                     onOpenAccountEntry={(id, e) => handleExpand(accountViewId(id), isForceReload(e))}
-                    onOpenLogs={user.role === 'admin' ? (e) => handleExpand('logs', isForceReload(e)) : undefined}
-                    onOpenFeedback={
-                        user.role === 'admin' && feedbackEnabled
-                            ? (e) => handleExpand('feedback', isForceReload(e))
-                            : undefined
-                    }
-                    onOpenUsers={user.role === 'admin' ? (e) => handleExpand('users', isForceReload(e)) : undefined}
-                    onOpenMaintenance={isAdmin ? (e) => handleExpand('maintenance', isForceReload(e)) : undefined}
+                    adminPages={adminPages}
+                    onOpenAdminPage={(id, e) => handleExpand(id, isForceReload(e))}
                     maintenanceBanner={maintenanceBanner}
                     onDismissMaintenanceBanner={dismissEnvNotice}
                     onOpenSettings={canAppearance ? () => setSettingsOpen(true) : undefined}
@@ -1382,7 +1398,9 @@ export default function HomePage() {
 
                     return (
                         <FeatureKeepAlive key={`${workspaceEpoch}-${id}-${gen}`} target={target}>
-                            <config.FullComponent {...featureProps} />
+                            <ViewScope id={id}>
+                                <config.FullComponent {...featureProps} />
+                            </ViewScope>
                         </FeatureKeepAlive>
                     );
                 })}

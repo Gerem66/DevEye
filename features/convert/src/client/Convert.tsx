@@ -8,6 +8,7 @@ import {
     invalidate,
     onServerEvent,
     useResource,
+    useSubView,
     useWorkspacePermissions
 } from 'deveye-sdk-client';
 import type { FeatureViewProps } from '@deveye/types/sdk/client';
@@ -222,6 +223,7 @@ export default function Convert(_props: FeatureViewProps) {
     ];
     const family = caps.data?.families.find((f) => f.kind === kind);
     const atRoot = state.view === 'kinds' || kind === null;
+    useSubView(atRoot ? null : state.view);
 
     return (
         <div className={styles.root}>

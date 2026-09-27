@@ -12,6 +12,7 @@ import {
     useLiveItemTarget,
     useLiveSegment,
     useResourceVersion,
+    useSubView,
     withSecrecy
 } from 'deveye-sdk-client';
 import type { FeatureViewProps } from '@deveye/types/sdk/client';
@@ -54,7 +55,7 @@ const BACKFILL_BATCH_SIZE = 100;
  * extra round trips (and, against Gmail/Outlook, throttling) rather than speed.
  */
 const SEARCH_DEBOUNCE_MS = 700;
-/** Results are shown in one go — no paging — so this is also the ceiling. */
+/** Results are shown in one go, with no paging, so this is also the ceiling. */
 const SEARCH_RESULT_LIMIT = 200;
 
 /** Page cursor pointing just past `message`, or null when there is no row to resume from. */
@@ -93,7 +94,7 @@ export default function Mail(_props: FeatureViewProps) {
      * explicite se heurte au refus du serveur, qui l'explique.
      */
     const selectedPausedRef = useRef(false);
-    // Which of panel A's two slides is showing — its own bit of state,
+    // Which of panel A's two slides is showing: its own bit of state,
     // independent of the selection (see AccountPanel), also used here to
     // widen the column while the (more space-hungry) account list shows.
     const [showAccountList, setShowAccountList] = useState(true);
@@ -122,7 +123,7 @@ export default function Mail(_props: FeatureViewProps) {
 
     const [messages, setMessages] = useState<MailMessageSummary[]>([]);
     const [nextCursor, setNextCursor] = useState<MailMessageCursor | null>(null);
-    /** The folder has no older mail left on the server — the scroll can stop. */
+    /** The folder has no older mail left on the server: the scroll can stop. */
     const [reachedFolderStart, setReachedFolderStart] = useState(false);
     const [messagesLoading, setMessagesLoading] = useState(false);
     /**
@@ -144,7 +145,7 @@ export default function Mail(_props: FeatureViewProps) {
 
     /** Raw search box content. Empty = not searching; the paginated list shows instead. */
     const [search, setSearch] = useState('');
-    /** `null` while not searching — distinct from `[]`, which means "searched, found nothing". */
+    /** `null` while not searching, distinct from `[]`, which means "searched, found nothing". */
     const [searchResults, setSearchResults] = useState<MailMessageSummary[] | null>(null);
     const [searching, setSearching] = useState(false);
     const [searchTruncated, setSearchTruncated] = useState(false);
@@ -267,6 +268,7 @@ export default function Mail(_props: FeatureViewProps) {
     // leur envoie mutuellement leurs curseurs par-dessus des popups qui ne
     // montrent pas la même chose.
     const messageTarget = useLiveSegment('l3', openMessageId === null ? null : String(openMessageId));
+    useSubView(selectedAccountId !== null && !showAccountList ? 'account' : null);
 
     // Le dossier visé attend l'arborescence de son compte. La cible est redonnée
     // à chaque rendu tant qu'elle n'est pas atteinte : cette garde attend que les
@@ -286,7 +288,7 @@ export default function Mail(_props: FeatureViewProps) {
             const res = await api.send('mail.getSettings', {});
             setRenderMode(res.settings.bodyRenderMode);
         } catch {
-            // Keep the previous mode — a settings-load hiccup shouldn't block reading mail.
+            // Keep the previous mode: a settings-load hiccup shouldn't block reading mail.
         }
     }, []);
 
@@ -866,7 +868,7 @@ export default function Mail(_props: FeatureViewProps) {
         const count = searchResults.length;
         if (count === 0) return `Aucun message ne correspond${scope || ''}.`;
         const noun = `${count} message${count > 1 ? 's' : ''}`;
-        if (searchTruncated) return `Plus de ${noun} — affichage des ${SEARCH_RESULT_LIMIT} plus récents.`;
+        if (searchTruncated) return `Plus de ${noun} : affichage des ${SEARCH_RESULT_LIMIT} plus récents.`;
         return `${noun} trouvé${count > 1 ? 's' : ''}${scope}.`;
     })();
 
