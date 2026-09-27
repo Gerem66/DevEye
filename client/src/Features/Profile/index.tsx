@@ -10,6 +10,7 @@ import SegmentedControl from '@/Components/SegmentedControl';
 import type { FeatureProps } from '@/Features/types';
 import { ACCEPTED_TYPES, avatarSrc, fileToAvatarDataUrl } from './avatar';
 import { DeleteAccountDialog } from './DeleteAccountDialog';
+import { ExportDataDialog } from './ExportDataDialog';
 import { PasswordDialog } from './PasswordDialog';
 import { UsernameDialog } from './UsernameDialog';
 import { USER_COLOR_OPTIONS, userColorVar } from './userColors';
@@ -48,6 +49,7 @@ export default function FeatureProfile({ user }: FeatureProps) {
     const [passwordOpen, setPasswordOpen] = useState(false);
     const [usernameOpen, setUsernameOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
+    const [exportOpen, setExportOpen] = useState(false);
 
     const securityScore =
         (user.security.twoFactor ? 1 : 0) +
@@ -300,8 +302,16 @@ export default function FeatureProfile({ user }: FeatureProps) {
                     </section>
 
                     <section className={styles.section}>
-                        <span className={styles.sectionLabel}>Suppression</span>
+                        <span className={styles.sectionLabel}>Vos données</span>
                         <div className={styles.card}>
+                            <div className={styles.sessionZone}>
+                                <p className={styles.hint}>
+                                    Téléchargez une archive de tout ce que contient votre compte.
+                                </p>
+                                <Button variant='secondary' icon='download' onClick={() => setExportOpen(true)}>
+                                    Exporter mes données
+                                </Button>
+                            </div>
                             <div className={styles.sessionZone}>
                                 <p className={styles.hint}>
                                     Supprime votre compte, vos espaces et tout ce qu’ils contiennent. Irréversible.
@@ -317,7 +327,15 @@ export default function FeatureProfile({ user }: FeatureProps) {
 
             <UsernameDialog open={usernameOpen} onClose={() => setUsernameOpen(false)} />
             <PasswordDialog open={passwordOpen} onClose={() => setPasswordOpen(false)} />
-            <DeleteAccountDialog open={deleteOpen} onClose={() => setDeleteOpen(false)} />
+            <DeleteAccountDialog
+                open={deleteOpen}
+                onClose={() => setDeleteOpen(false)}
+                onExport={() => {
+                    setDeleteOpen(false);
+                    setExportOpen(true);
+                }}
+            />
+            <ExportDataDialog open={exportOpen} onClose={() => setExportOpen(false)} />
 
             <Dialog
                 open={avatarError !== null}

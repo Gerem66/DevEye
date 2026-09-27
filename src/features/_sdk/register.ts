@@ -54,6 +54,9 @@ import { logger } from '@/logger';
 import { maintenance, replyMaintenance, type MaintenanceServices } from '@/Services/maintenance';
 import { touchPlanPauses, type StockSource } from '@/Services/planPauses';
 import type { UsageSource } from '@/Services/quotaUsage';
+import type Encryption from '@/Services/Encryption';
+import type { ExportModule } from '@/Services/accountExport/run';
+import { serverKeysOf } from './host';
 import { createSdkContext, ORIGINS } from './context';
 import { createDomainsContext, sdkFleetDomains, type DomainsHost } from './domains';
 import { createQuota, quotaCounter } from './quota';
@@ -82,7 +85,7 @@ const MODULES: RegisteredModule[] = [];
 const BY_ID = new Map<string, RegisteredModule>();
 
 /** Le `Queryable` de l'app, réduit à la surface promise au SDK. */
-function sdkQueryable(q: Queryable): SdkQueryable {
+export function sdkQueryable(q: Queryable): SdkQueryable {
     return {
         query: async <T extends object>(sql: string, params?: unknown[]) => {
             const r = await q.query<never>(sql, params);
@@ -463,6 +466,61 @@ export function moduleUsageSources(db: Database): UsageSource[] {
             })
         }));
     });
+}
+
+/** Ce que chaque module exporte des données d'un compte, lié à son repo et à ses clés. */
+export function moduleAccountExports(db: Database, crypt: Encryption): ExportModule[] {
+    return MODULES.map((mod) => ({
+        id: mod.manifest.id,
+        label: mod.manifest.label,
+        entry: mod.server.accountExport,
+        repo: mod.repoFor(db),
+        keys: serverKeysOf(crypt, mod.manifest.id)
+    }));
+}
+
+/** Les parties d'un export que le titulaire peut laisser de côté, `<featureId>.<clé>`. */
+export function optionalExportKeys(): Set<string> {
+    return new Set(
+        MODULES.flatMap((mod) =>
+            Object.entries(mod.server.accountExport?.files ?? {})
+                .filter(([, files]) => files.optional === true)
+                .map(([key]) => `${mod.manifest.id}.${key}`)
+        )
+    );
+}
+
+/** Les modules qui exportent et qu'une maintenance complète tient à l'arrêt : un export les manquerait. */
+export function haltedExportModules(isHalted: (featureId: string) => boolean): string[] {
+    return MODULES.filter((mod) => mod.server.accountExport && isHalted(mod.manifest.id)).map(
+        (mod) => mod.manifest.label
+    );
+}
+
+/** Les parties lourdes d'un export, mesurées sur les espaces du compte, pour la popup. */
+export async function moduleExportParts(
+    db: Database,
+    userId: number,
+    workspaceIds: readonly number[]
+): Promise<{ key: string; label: string; bytes: number; optional: boolean }[]> {
+    const parts: { key: string; label: string; bytes: number; optional: boolean }[] = [];
+    for (const mod of MODULES) {
+        for (const [key, files] of Object.entries(mod.server.accountExport?.files ?? {})) {
+            const bytes = await files.bytes({
+                repo: mod.repoFor(db),
+                q: sdkQueryable(db.queryable),
+                userId,
+                workspaceIds
+            });
+            parts.push({
+                key: `${mod.manifest.id}.${key}`,
+                label: files.label,
+                bytes,
+                optional: files.optional === true
+            });
+        }
+    }
+    return parts;
 }
 
 /** Les stocks du manifest et leur lister : un flux n'atteint jamais le moteur des pauses. */

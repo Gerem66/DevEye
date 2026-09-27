@@ -12,6 +12,8 @@ import { sharingFeatures } from './sharing';
 import { secrecyFeatures } from './secrecy';
 import { twoFactorFeatures } from './twofa';
 import { userDeleteAccountFeature } from './user/deleteAccount';
+import { userExportPrepareFeature } from './user/exportPrepare';
+import { userExportPreviewFeature } from './user/exportPreview';
 import { userSetAvatarFeature } from './user/setAvatar';
 import { userPlanFeature } from './user/plan';
 import { userSetColorFeature } from './user/setColor';
@@ -68,6 +70,8 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     userSetSettingFeature,
     userSetUsernameFeature,
     userDeleteAccountFeature,
+    userExportPreviewFeature,
+    userExportPrepareFeature,
     ...agentFeatures,
     ...twoFactorFeatures,
     ...secrecyFeatures,

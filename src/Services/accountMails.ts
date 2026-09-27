@@ -34,3 +34,30 @@ export function accountDeletedMail({ username, by, at, notes, site }: AccountDel
         ].join(' ')
     };
 }
+
+export interface AccountExportedFacts {
+    username: string;
+    /** Secondes. */
+    at: number;
+    /** Le site vitrine, où vivent les pages légales ; `null` sans site. */
+    site: string | null;
+}
+
+/** L'archive porte le coffre en clair : le titulaire doit savoir qu'elle existe, où qu'elle ait été téléchargée. */
+export function accountExportedMail({ username, at, site }: AccountExportedFacts): SdkAccountMailMessage {
+    const moment = new Date(at * 1000).toLocaleString('fr-FR', {
+        dateStyle: 'long',
+        timeStyle: 'short',
+        timeZone: 'Europe/Paris'
+    });
+    return {
+        subject: 'Vos données DevEye ont été exportées',
+        paragraphs: [
+            `Bonjour ${username},`,
+            `L’export de toutes les données de votre compte a été téléchargé le ${moment}, depuis une session ouverte avec votre mot de passe.`,
+            'Cette archive contient vos données en clair, y compris votre coffre de mots de passe et vos notes privées. Gardez-la en lieu sûr, et supprimez-la quand vous n’en avez plus besoin.'
+        ],
+        notice: 'Si vous n’êtes pas à l’origine de cet export, changez votre mot de passe tout de suite : cela ferme toutes vos sessions.',
+        ...(site ? { footnote: `Pour toute question, nos coordonnées sont sur ${site}/mentions-legales` } : {})
+    };
+}

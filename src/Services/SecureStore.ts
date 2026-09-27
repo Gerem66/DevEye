@@ -274,6 +274,7 @@ export function forgetSessionsOf(userId: number, keepSessionId?: string): void {
         if (entry.userId === userId && sessionId !== keepSessionId) dropDek(sessionId, entry);
     }
     discardPendingDeksForUser(userId);
+    revokeExportDeksOf(userId);
 }
 
 /**
@@ -342,6 +343,7 @@ function sweep(now: number): void {
         if (isExpired(entry, now)) dropDek(sessionId, entry);
     }
     sweepPendingDeks(now);
+    sweepExportDeks(now);
 }
 
 let sweeper: ReturnType<typeof setInterval> | null = null;
@@ -414,6 +416,77 @@ export function discardPendingDeksForUser(userId: number): void {
             pendingDeks.delete(token);
         }
     }
+}
+
+/**
+ * La DEK d'un compte prêtée à UN export de ses données : déballée au moment où
+ * le titulaire donne son mot de passe, gardée sous un jeton à usage unique le
+ * temps qu'il clique sur le lien, puis rendue le temps d'écrire l'archive.
+ * Jamais posée dans la session : l'export ne déverrouille rien d'autre.
+ */
+interface LentDek {
+    userId: number;
+    dek: Buffer;
+    /** Échéance du retrait ; un prêt retiré vaut jusqu'à `release`. */
+    expiresAt: number;
+    claimed: boolean;
+}
+
+const lentDeks = new Map<string, LentDek>();
+
+/** Le temps de cliquer sur le lien, comme le lien lui-même. */
+const LENT_DEK_TTL_MS = 5 * 60_000;
+
+function wipeLent(token: string, entry: LentDek): void {
+    entry.dek.fill(0);
+    lentDeks.delete(token);
+}
+
+function sweepExportDeks(now: number): void {
+    for (const [token, entry] of lentDeks) {
+        if (!entry.claimed && now >= entry.expiresAt) wipeLent(token, entry);
+    }
+}
+
+/** Un changement de mot de passe, une suspension, une suppression : un prêt en cours meurt, retiré ou non. */
+function revokeExportDeksOf(userId: number): void {
+    for (const [token, entry] of lentDeks) {
+        if (entry.userId === userId) wipeLent(token, entry);
+    }
+}
+
+/** Prête une copie de la DEK du compte à un export ; rend le jeton de son retrait. */
+export function lendExportDek(userId: number, dek: Buffer): string {
+    sweepExportDeks(Date.now());
+    const token = randomBytes(18).toString('base64url');
+    lentDeks.set(token, { userId, dek: Buffer.from(dek), expiresAt: Date.now() + LENT_DEK_TTL_MS, claimed: false });
+    return token;
+}
+
+/**
+ * Retire la clé prêtée, une seule fois et pour ce compte seulement. Le codec
+ * rendu lève `locked` dès que le prêt est révoqué ; `release` efface la clé.
+ */
+export function claimExportCipher(token: string, userId: number): { cipher: Cipher; release(): void } | null {
+    const entry = lentDeks.get(token);
+    if (!entry || entry.claimed || entry.userId !== userId || Date.now() >= entry.expiresAt) {
+        if (entry && !entry.claimed) wipeLent(token, entry);
+        return null;
+    }
+    entry.claimed = true;
+    const cipher = new DekCipher(() => {
+        if (lentDeks.get(token) !== entry) {
+            return Promise.reject(new FeatureError('locked', 'La clé prêtée à cet export a été retirée'));
+        }
+        return Promise.resolve(entry.dek);
+    });
+    return { cipher, release: () => (lentDeks.get(token) === entry ? wipeLent(token, entry) : undefined) };
+}
+
+/** Rend une clé prêtée sans s'en servir : le lien a été remplacé, ou n'a jamais servi. */
+export function discardExportDek(token: string): void {
+    const entry = lentDeks.get(token);
+    if (entry) wipeLent(token, entry);
 }
 
 /**

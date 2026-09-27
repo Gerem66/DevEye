@@ -28,6 +28,7 @@ import { signupRoutes } from '@/auth/signupRoutes';
 import { federatedOriginOf, federationEnabled } from '@/auth/federation';
 import { FEDERATION_COOKIE, openFederationOrigins } from '@/auth/federationCookie';
 import { authRoutes } from '@/auth/routes';
+import { accountExportRoutes } from '@/Services/accountExport/route';
 import { logger } from '@/logger';
 import { env, TRUST_PROXY } from '@/Utils/Env';
 import { registerWS } from '@/ws/handler';
@@ -400,6 +401,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
 
     await trackingRoutes(app);
     await authRoutes(app, { db: deps.db, crypt: deps.crypt, audit, live });
+    await accountExportRoutes(app, { db: deps.db, crypt: deps.crypt, audit });
     await signupRoutes(app, { db: deps.db, audit, live, signup });
     await agentRoutes(app, { db: deps.db, hub, live, audit });
     // Routes publiques des modules (capacité `routes.public`), aussi montées

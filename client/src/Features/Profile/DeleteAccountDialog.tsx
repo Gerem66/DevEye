@@ -12,6 +12,8 @@ import styles from './style.module.css';
 interface DeleteAccountDialogProps {
     open: boolean;
     onClose: () => void;
+    /** Ouvre l'export des données, à proposer avant l'irréversible. */
+    onExport: () => void;
 }
 
 const FALLBACK = 'La suppression a échoué.';
@@ -22,7 +24,7 @@ function humanize(err: unknown): string {
 }
 
 /** La fin du compte : le mot de passe redit, puis plus rien à fermer, le serveur a déjà tout coupé. */
-export function DeleteAccountDialog({ open, onClose }: DeleteAccountDialogProps) {
+export function DeleteAccountDialog({ open, onClose, onExport }: DeleteAccountDialogProps) {
     const { logout } = useAuth();
     const [password, setPassword] = useState('');
     const [error, setError] = useState<string | null>(null);
@@ -41,10 +43,13 @@ export function DeleteAccountDialog({ open, onClose }: DeleteAccountDialogProps)
             setError('Le mot de passe est requis.');
             return;
         }
+        // Le compte de cette instance, même quand un espace distant est affiché.
+        const local = ws.connectionFor(null);
+        if (!local) return;
         setError(null);
         setLoading(true);
         try {
-            await ws.send('user.deleteAccount', { password });
+            await local.send('user.deleteAccount', { password });
             await logout();
         } catch (err) {
             setError(humanize(err));
@@ -74,6 +79,13 @@ export function DeleteAccountDialog({ open, onClose }: DeleteAccountDialogProps)
                     Votre compte, votre espace personnel, les espaces partagés dont vous êtes propriétaire et tout ce
                     qu’ils contiennent seront supprimés. Un abonnement en cours est résilié immédiatement, sans
                     remboursement de la période entamée. Cette action est irréversible.
+                </p>
+                <p className={styles.hint}>
+                    Vous voulez garder une copie ?{' '}
+                    <button type='button' className={styles.inlineLink} onClick={onExport}>
+                        Exportez d’abord vos données
+                    </button>
+                    .
                 </p>
                 <label className={styles.field}>
                     <span className={styles.fieldLabel}>Votre mot de passe, pour confirmer</span>

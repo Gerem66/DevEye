@@ -12,6 +12,9 @@ import {
     rememberSessionDek,
     stashPendingDek,
     claimPendingDek,
+    claimExportCipher,
+    discardExportDek,
+    lendExportDek,
     sweepSessionDeksForTest,
     touchSessionDek
 } from './SecureStore';
@@ -102,5 +105,43 @@ describe('Encryption.encryptWithKey', () => {
     it('refuse une clé effacée plutôt que de sceller sous des zéros', () => {
         assert.throws(() => Encryption.encryptWithKey(Buffer.alloc(32), 'x'), /wiped/);
         assert.throws(() => Encryption.decryptWithKeyRaw(Buffer.alloc(32), 'AAAA'), /wiped/);
+    });
+});
+
+describe('la clé prêtée à un export', () => {
+    it('se retire une fois, pour ce compte seulement, et s’efface à la fin', async () => {
+        const dek = Buffer.alloc(32, 9);
+        const token = lendExportDek(7, dek);
+        assert.equal(claimExportCipher(token, 8), null, 'un autre compte n’y touche pas');
+
+        const other = lendExportDek(7, dek);
+        const lent = claimExportCipher(other, 7);
+        assert.ok(lent);
+        assert.equal(claimExportCipher(other, 7), null, 'une seule fois');
+        const blob = await lent.cipher.encrypt('coffre');
+        assert.equal(await lent.cipher.decrypt(blob), 'coffre');
+        lent.release();
+        await assert.rejects(lent.cipher.decrypt(blob), { code: 'locked' });
+        assert.ok(
+            dek.every((b) => b === 9),
+            'le prêt est une copie'
+        );
+    });
+
+    it('meurt au bout de cinq minutes sans avoir servi', () => {
+        at(2_000_000);
+        const token = lendExportDek(7, Buffer.alloc(32, 1));
+        at(2_000_000 + 5 * 60_000);
+        assert.equal(claimExportCipher(token, 7), null);
+    });
+
+    it('se révoque avec les sessions du compte, même retirée', async () => {
+        const lent = claimExportCipher(lendExportDek(7, Buffer.alloc(32, 2)), 7);
+        assert.ok(lent);
+        forgetSessionsOf(7);
+        await assert.rejects(lent.cipher.encrypt('x'), { code: 'locked' });
+        const discarded = lendExportDek(7, Buffer.alloc(32, 3));
+        discardExportDek(discarded);
+        assert.equal(claimExportCipher(discarded, 7), null);
     });
 });
