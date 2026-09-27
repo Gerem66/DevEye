@@ -72,6 +72,14 @@ export interface MessageRow {
     blob_id: number;
 }
 
+/** Un message tel que l'export le relit : où le ranger, et la référence de son corps. */
+export interface ExportMessageRow {
+    id: number;
+    folder_id: number;
+    internal_date: number;
+    ref: string;
+}
+
 export interface QueueRow {
     id: number;
     workspace_id: number;
@@ -135,6 +143,7 @@ export interface MailserverRepo {
     countInWorkspaces(workspaceIds: readonly number[]): Promise<number>;
     /** Ce que compte {@link countInWorkspaces}, de la plus ancienne à la plus récente. */
     listInWorkspaces(workspaceIds: readonly number[]): Promise<SdkStockItem[]>;
+    usedBytesInWorkspaces(workspaceIds: readonly number[]): Promise<number>;
     createMailbox(input: {
         workspaceId: number;
         domainId: number;
@@ -211,6 +220,8 @@ export interface MailserverRepo {
     messageMeta(id: number): Promise<string | null>;
     setFlags(id: number, flags: number, keywords: string): Promise<void>;
     deleteMessage(id: number): Promise<void>;
+    /** Les messages d'une boîte après `afterId`, par id croissant : une boîte ne se charge jamais d'un bloc. */
+    exportPage(mailboxId: number, afterId: number, limit: number): Promise<ExportMessageRow[]>;
 
     enqueue(input: {
         workspaceId: number;
@@ -368,6 +379,15 @@ export function createRepo(q: SdkQueryable): MailserverRepo {
                 [[...workspaceIds]]
             );
             return rows.map((row) => ({ id: String(row.id), workspaceId: Number(row.workspace_id) }));
+        },
+
+        async usedBytesInWorkspaces(workspaceIds) {
+            if (workspaceIds.length === 0) return 0;
+            const rows = await q.query<{ bytes: number | string | null }>(
+                `SELECT COALESCE(SUM(used_bytes), 0) AS bytes FROM ft_mailserver_mailboxes WHERE ${COUNTED_IN}`,
+                [[...workspaceIds]]
+            );
+            return Number(rows[0]?.bytes ?? 0);
         },
         async findByAddress(address) {
             const row = one(
@@ -629,6 +649,18 @@ export function createRepo(q: SdkQueryable): MailserverRepo {
 
         async deleteMessage(id) {
             await q.execute('DELETE FROM ft_mailserver_messages WHERE id = ?', [id]);
+        },
+
+        async exportPage(mailboxId, afterId, limit) {
+            const rows = await q.query<ExportMessageRow>(
+                `SELECT m.id, m.folder_id, m.internal_date, b.ref
+                   FROM ft_mailserver_messages m
+                   JOIN ft_mailserver_blobs b ON b.id = m.blob_id
+                  WHERE m.mailbox_id = ? AND m.id > ?
+                  ORDER BY m.id LIMIT ${Math.max(1, Math.floor(limit))}`,
+                [mailboxId, afterId]
+            );
+            return rows.map((row) => ({ ...row, id: Number(row.id), internal_date: Number(row.internal_date) }));
         },
 
         async enqueue(input) {

@@ -11,9 +11,15 @@ import { appVersion } from '@/version';
 import { createDatabase } from '@/db';
 import { runMigrations } from '@/db/migrate';
 import { assertSealFormat } from '@/Services/sealFormat';
-import { createDbPool, testConnection } from '@/db/pool';
+import { createDbPool, getQueryable, testConnection } from '@/db/pool';
 import { seedDevAccount } from '@/db/seedDev';
-import { moduleMigrationDirs, warnUnsetModuleEnv } from '@/features/_sdk/register';
+import {
+    moduleExportDeclarations,
+    moduleMigrationDirs,
+    sdkQueryable,
+    warnUnsetModuleEnv
+} from '@/features/_sdk/register';
+import { assertExportCoverage } from '@/Services/accountExport/coverage';
 // L'import du registre déclenche l'enregistrement des modules installés :
 // leurs migrations et services deviennent visibles ci-dessous.
 import '@/features/registry';
@@ -60,6 +66,10 @@ async function main() {
 
     try {
         await assertSealFormat(pool);
+        const uncovered = await assertExportCoverage(sdkQueryable(getQueryable(pool)), moduleExportDeclarations());
+        if (uncovered.length > 0) {
+            logger.warn({ tables: uncovered }, 'Export des données : tables sans sort, absentes des archives');
+        }
     } catch (e) {
         logger.fatal((e as Error).message);
         process.exit(1);

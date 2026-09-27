@@ -3,11 +3,12 @@ import { fileURLToPath } from 'node:url';
 
 import type { FeatureServer } from '@deveye/types/sdk/server';
 
+import { createAccountExport } from './accountExport';
 import { backupHandlers } from './handlers';
 import { createRepo, type BackupRepo } from './repo';
 import { BackupEngine } from './service';
 import { setEngine } from './_shared';
-import { BACKUP_ENV } from './env';
+import { BACKUP_ENV, env } from './env';
 
 /**
  * `items` : ce que le partage et les routes de notification savent des
@@ -21,6 +22,7 @@ export const serverEntry: FeatureServer<BackupRepo> = {
     features: backupHandlers,
     migrationsDir: path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations'),
     quotas: { storage: { count: (repo, owned) => repo.storedBytesInWorkspaces(owned) } },
+    accountExport: createAccountExport(env.BACKUP_STORAGE_DIR),
     createService(deps) {
         const engine = new BackupEngine(deps);
         return {

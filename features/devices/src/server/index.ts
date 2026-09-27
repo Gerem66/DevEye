@@ -1,5 +1,6 @@
 import type { FeatureServer } from '@deveye/types/sdk/server';
 
+import { devicesAccountExport } from './accountExport';
 import { devicesHandlers } from './handlers';
 import { devicesMove } from './move';
 import { createRepo, type DevicesRepo } from './repo';
@@ -49,5 +50,6 @@ export const serverEntry: FeatureServer<DevicesRepo> = {
         labelOf: async (repo, _cipher, itemId, workspaceId) =>
             (await repo.devices.findVisible(itemId, workspaceId))?.name ?? null,
         move: devicesMove
-    }
+    },
+    accountExport: devicesAccountExport
 };

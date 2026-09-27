@@ -14,7 +14,7 @@ import type { AuditLog } from '@/Services/AuditLog';
 import type Encryption from '@/Services/Encryption';
 import { claimExportCipher, discardExportDek } from '@/Services/SecureStore';
 import { serverMail } from '@/Services/serverMail';
-import { writeAccountExport } from './run';
+import { exportQueryable, writeAccountExport } from './run';
 import { beginExport, endExport, redeemExportTicket } from './tickets';
 import { ZipWriter } from './zip';
 
@@ -133,7 +133,7 @@ export async function accountExportRoutes(app: FastifyInstance, { db, crypt, aud
                         {
                             db,
                             crypt,
-                            q: sdkQueryable(db.queryable),
+                            q: exportQueryable(sdkQueryable(db.queryable)),
                             modules: moduleAccountExports(db, crypt),
                             instance: ORIGINS.app,
                             logger

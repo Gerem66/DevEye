@@ -136,6 +136,26 @@ mot de passe est disponible en clair) et cachée sous la `sessionId` émise, via
       efface le cookie de challenge et `discardPendingDek` (libération immédiate) ;
     - une 2FA désactivée entre les deux étapes libère aussi la DEK.
 
+## La DEK prêtée à une exportation
+
+L'export des données d'un compte ([ACCOUNT_EXPORT.md](./ACCOUNT_EXPORT.md))
+écrit l'étage gardé en clair : il lui faut la DEK, sans déverrouiller la
+session. `user.exportPrepare` la déballe par le mot de passe qu'il vient de
+vérifier (ou par la clé serveur quand le mot de passe ne la protège pas), et
+la **prête** sous un jeton opaque (`lendExportDek`, `src/Services/SecureStore.ts`),
+sur le modèle de la DEK en attente du 2FA :
+
+- **jamais posée dans la session** : l'export ne déverrouille rien d'autre, et
+  le coffre reste fermé dans l'app ;
+- retirée **une seule fois**, par le téléchargement, pour ce compte seul
+  (`claimExportCipher`) ; le jeton du prêt ne voyage jamais, seul celui du lien
+  est dans l'URL ;
+- un prêt non retiré meurt à 5 minutes, et un nouveau lien efface le
+  précédent ;
+- effacée (octets mis à zéro) à la fin de l'export comme à son abandon ;
+- `forgetSessionsOf` (changement de mot de passe, suspension, suppression) la
+  révoque même en cours d'export : le codec lève `locked` et l'archive s'arrête.
+
 ## Notes privées
 
 Application directe des deux étages ci-dessus (`features/notes/src/server/handlers.ts`) :

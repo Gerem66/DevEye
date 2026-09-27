@@ -11,6 +11,7 @@ import {
 } from '@deveye/types/sdk';
 import type { FeatureServer, FeatureServiceDeps, SdkCipher } from '@deveye/types/sdk/server';
 
+import { databaseAccountExport } from './accountExport';
 import { assertReadOnly, explainError, openSession, singleNumber } from './engine';
 import { databaseHandlers } from './handlers';
 import { databaseCopy } from './copy';
@@ -179,5 +180,6 @@ export const serverEntry: FeatureServer<DatabaseRepo> = {
         move: databaseMove,
         copy: databaseCopy
     },
-    quotas: { connections: { list: (repo, owned) => repo.listStock(owned) } }
+    quotas: { connections: { list: (repo, owned) => repo.listStock(owned) } },
+    accountExport: databaseAccountExport
 };

@@ -55,6 +55,7 @@ import { maintenance, replyMaintenance, type MaintenanceServices } from '@/Servi
 import { touchPlanPauses, type StockSource } from '@/Services/planPauses';
 import type { UsageSource } from '@/Services/quotaUsage';
 import type Encryption from '@/Services/Encryption';
+import type { CoverageModule } from '@/Services/accountExport/coverage';
 import type { ExportModule } from '@/Services/accountExport/run';
 import { serverKeysOf } from './host';
 import { createSdkContext, ORIGINS } from './context';
@@ -477,6 +478,11 @@ export function moduleAccountExports(db: Database, crypt: Encryption): ExportMod
         repo: mod.repoFor(db),
         keys: serverKeysOf(crypt, mod.manifest.id)
     }));
+}
+
+/** La déclaration d'export de chaque module, pour le contrôle du boot. */
+export function moduleExportDeclarations(): CoverageModule[] {
+    return MODULES.map((mod) => ({ id: mod.manifest.id, entry: mod.server.accountExport }));
 }
 
 /** Les parties d'un export que le titulaire peut laisser de côté, `<featureId>.<clé>`. */

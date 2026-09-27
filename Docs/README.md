@@ -26,6 +26,7 @@ Ce dossier porte le transverse ; la doc d'une feature vit dans son module,
 | [LIVE.md](./LIVE.md)                     | la présence en direct : roster, curseurs, invalidation poussée, téléportation   |
 | [SETTINGS.md](./SETTINGS.md)             | la coquille de réglages unique, son bouton commun, ses onglets                  |
 | [QUOTAS.md](./QUOTAS.md)                 | offres et quotas, l'entrée de compte d'un module, illimité sans fournisseur     |
+| [ACCOUNT_EXPORT.md](./ACCOUNT_EXPORT.md) | l'export des données d'un compte : l'archive, le sort de chaque table           |
 | [SOURCES.md](./SOURCES.md)               | les sources d'une feature : jetons, destinations, clés d'API                    |
 | [NOTIFICATIONS.md](./NOTIFICATIONS.md)   | les canaux par feature et la sélection par élément                              |
 | [MAINTENANCE.md](./MAINTENANCE.md)       | fermer le site ou une feature à l'instant, depuis l'interface, la base ou l'env |

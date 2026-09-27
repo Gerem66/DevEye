@@ -10,12 +10,14 @@ import { issuedThisMonth, QUOTA_KEYS } from './planUsage';
 import { createRepo, type InvoicingRepo } from './repo';
 import { createService } from './service';
 import { invoicingMailSamples } from './documentMail';
+import { invoicingAccountExport } from './accountExport';
 
 const nameSchema = invoicingClientInputSchema.pick({ name: true });
 
 export const serverEntry: FeatureServer<InvoicingRepo> = {
     createRepo,
     features: invoicingHandlers,
+    accountExport: invoicingAccountExport,
     migrationsDir: path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations'),
     createService,
     mailSamples: invoicingMailSamples,

@@ -150,7 +150,7 @@ export function ExportDataDialog({ open, onClose }: ExportDataDialogProps) {
                                     {
                                         value: 'lite',
                                         label: `Tout sauf ${single.label}`,
-                                        description: `Une archive plus légère : ${single.label} sont déjà sur vos appareils.`
+                                        description: `Une archive plus légère, sans ${single.label}.`
                                     }
                                 ]}
                             />

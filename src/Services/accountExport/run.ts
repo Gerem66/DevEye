@@ -56,6 +56,8 @@ interface FeatureReport {
     skipped: { table: string; reason: string }[];
     unreadable: number;
     errors: string[];
+    /** Les fichiers écrits sous ses dossiers. */
+    files: number;
 }
 
 export interface ExportReport {
@@ -64,7 +66,8 @@ export interface ExportReport {
     instance: string;
     account: { id: number; username: string };
     workspaces: { id: number; name: string; kind: string; folder: string }[];
-    leftOut: string[];
+    /** Les parties que le titulaire a laissées de côté, `<featureId>.<clé>`, et leur nom. */
+    leftOut: { key: string; label: string }[];
     features: FeatureReport[];
 }
 
@@ -80,6 +83,30 @@ function parseJson(value: unknown): unknown {
     } catch {
         return value;
     }
+}
+
+/**
+ * Les lectures d'un export. Le pilote rend une colonne `DATE` en objet `Date`
+ * à minuit heure locale, que l'ISO décalerait d'un jour à Paris : elle sort en
+ * date de calendrier.
+ */
+export function exportQueryable(q: SdkQueryable): SdkQueryable {
+    const pad = (n: number): string => String(n).padStart(2, '0');
+    const cell = (value: unknown): unknown =>
+        value instanceof Date &&
+        value.getHours() === 0 &&
+        value.getMinutes() === 0 &&
+        value.getSeconds() === 0 &&
+        value.getMilliseconds() === 0
+            ? `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`
+            : value;
+    return {
+        query: async <T extends object>(sql: string, params?: unknown[]) =>
+            (await q.query<Record<string, unknown>>(sql, params)).map(
+                (row) => Object.fromEntries(Object.entries(row).map(([k, v]) => [k, cell(v)])) as T
+            ),
+        execute: q.execute
+    };
 }
 
 /** Une image en data URL, rendue en octets et en extension ; `null` pour tout le reste (un nom de fichier par défaut). */
@@ -110,8 +137,12 @@ export async function writeAccountExport(zip: ZipWriter, host: ExportHost, req: 
     const account = await db.users.findById(req.userId);
     if (!account) throw new FeatureError('not_found', 'Compte introuvable');
 
-    const add = (path: string, source: Uint8Array | AsyncIterable<Uint8Array>, opts?: { compress?: boolean }) =>
-        zip.add(names.take(path), source, opts);
+    const written: string[] = [];
+    const add = (path: string, source: Uint8Array | AsyncIterable<Uint8Array>, opts?: { compress?: boolean }) => {
+        const taken = names.take(path);
+        written.push(taken);
+        return zip.add(taken, source, opts);
+    };
     const json = (path: string, value: unknown) => add(path, Buffer.from(`${JSON.stringify(value, null, 2)}\n`));
     const rows = async (path: string, source: AsyncIterable<unknown>): Promise<void> => {
         const it = source[Symbol.asyncIterator]();
@@ -213,7 +244,15 @@ export async function writeAccountExport(zip: ZipWriter, host: ExportHost, req: 
     const reports = new Map<string, FeatureReport>(
         modules.map((m) => [
             m.id,
-            { id: m.id, label: m.label, status: m.entry ? 'ok' : 'notCovered', skipped: [], unreadable: 0, errors: [] }
+            {
+                id: m.id,
+                label: m.label,
+                status: m.entry ? 'ok' : 'notCovered',
+                skipped: [],
+                unreadable: 0,
+                errors: [],
+                files: 0
+            }
         ])
     );
     for (const m of modules) {
@@ -360,17 +399,27 @@ export async function writeAccountExport(zip: ZipWriter, host: ExportHost, req: 
         }
     }
 
-    const features = [...reports.values()].map((r) => ({
-        ...r,
-        status: (r.status === 'ok' && r.unreadable > 0 ? 'partial' : r.status) as FeatureStatus
-    }));
+    const features = [...reports.values()].map((r) => {
+        const roots = [
+            `Compte/${safeSegment(r.label)}/`,
+            ...folders.map((f) => `${f.folder}/${safeSegment(r.label)}/`)
+        ];
+        return {
+            ...r,
+            status: (r.status === 'ok' && r.unreadable > 0 ? 'partial' : r.status) as FeatureStatus,
+            files: written.filter((path) => roots.some((root) => path.startsWith(root))).length
+        };
+    });
     const report: ExportReport = {
         format: 'deveye-account-export/1',
         generatedAt: new Date().toISOString(),
         instance: host.instance,
         account: { id: account.id, username: account.username },
         workspaces: folders,
-        leftOut: [...req.leaveOut],
+        leftOut: [...req.leaveOut].map((key) => {
+            const [id, part] = key.split('.');
+            return { key, label: host.modules.find((m) => m.id === id)?.entry?.files?.[part]?.label ?? key };
+        }),
         features
     };
     await add('LISEZMOI.txt', Buffer.from(readme(report, memberships.length)));
@@ -481,7 +530,10 @@ async function workspaceSheet(
 
 /** Ce que l'archive contient, pour qui l'ouvre sans rien savoir de DevEye. */
 function readme(report: ExportReport, foreign: number): string {
-    const skipped = report.features.flatMap((f) => f.skipped.map((s) => `- ${f.label} : ${s.reason}`));
+    // Les exclusions d'une fonctionnalité dont l'archive ne porte rien n'apprendraient rien : export.json les garde.
+    const skipped = report.features
+        .filter((f) => f.files > 0)
+        .flatMap((f) => f.skipped.map((s) => `- ${f.label} : ${s.reason}`));
     const notCovered = report.features.filter((f) => f.status === 'notCovered').map((f) => f.label);
     const failed = report.features.filter((f) => f.errors.length > 0).map((f) => `- ${f.label} : ${f.errors[0]}`);
     const unreadable = report.features.reduce((n, f) => n + f.unreadable, 0);
@@ -506,9 +558,9 @@ function readme(report: ExportReport, foreign: number): string {
                   `- ${foreign} espace(s) dont vous n’êtes que membre : listés dans Compte/compte.json, leurs données appartiennent à leur propriétaire.`
               ]
             : []),
-        ...report.leftOut.map((key) => `- ${key} : laissé de côté à votre demande.`),
+        ...report.leftOut.map(({ label }) => `- ${label} : à votre demande.`),
         ...(notCovered.length > 0
-            ? ['', `Pas encore exportable, préférences seulement : ${notCovered.join(', ')}.`]
+            ? ['', `Ces fonctionnalités n’exportent que leurs préférences : ${notCovered.join(', ')}.`]
             : []),
         ...(failed.length > 0 ? ['', 'Erreurs', ...failed] : []),
         ...(unreadable > 0 ? ['', `${unreadable} valeur(s) chiffrée(s) illisible(s), laissée(s) vide(s).`] : []),

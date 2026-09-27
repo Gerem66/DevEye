@@ -4,11 +4,13 @@ import { fileURLToPath } from 'node:url';
 import type { FeatureServer } from '@deveye/types/sdk/server';
 
 import { mailboxContentSchema, unseal } from './_shared';
+import { createAccountExport } from './accountExport';
 import { createDomainHooks } from './domains';
+import { diskBlobStore } from './engine/blobs';
 import { mailserverHandlers } from './handlers';
 import { createRepo, type MailserverRepo } from './repo';
 import { createMailService } from './service';
-import { MAILSERVER_ENV } from './env';
+import { env, MAILSERVER_ENV } from './env';
 
 /**
  * Pas d'entrée `move` : une adresse vit sur un domaine de son espace, qui ne la
@@ -25,6 +27,7 @@ export const serverEntry: FeatureServer<MailserverRepo> = {
     quotas: {
         addresses: { list: (repo, owned) => repo.listInWorkspaces(owned) }
     },
+    accountExport: createAccountExport(diskBlobStore(env.MAILSERVER_STORAGE_DIR)),
     items: {
         homeOf: async (repo, itemId, workspaceId) =>
             (await repo.findVisible(Number(itemId), workspaceId))?.workspace_id ?? null,

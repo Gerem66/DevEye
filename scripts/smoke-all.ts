@@ -147,6 +147,13 @@ async function main(): Promise<void> {
     await waitForServer(server, logFile);
     console.log(`serveur prêt sur ${BASE_URL} (journal : ${path.relative(ROOT, logFile)})\n`);
 
+    // Toutes les migrations viennent de passer : chaque table doit avoir un
+    // sort dans l'export des données d'un compte, que le boot ne fait que signaler.
+    if (only.size === 0 && !run(TSX, [path.join(ROOT, 'scripts', 'export-coverage.ts')])) {
+        stopServer();
+        fail('des tables n’ont aucun sort dans l’export des données (Docs/ACCOUNT_EXPORT.md)');
+    }
+
     const failed: string[] = [];
     for (const m of modules) {
         const from = fs.statSync(logFile).size;

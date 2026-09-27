@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { SENTINEL_AGENT_CONFIG_PROVIDER, type SentinelAgentConfigProvider } from '@deveye/types/sdk';
 import type { FeatureServer } from '@deveye/types/sdk/server';
 
+import { sentinelAccountExport } from './accountExport';
 import { SentinelEngine } from './engine';
 import { sentinelHandlers } from './handlers';
 import { createRepo, type SentinelRepo } from './repo';
@@ -24,6 +25,7 @@ export const serverEntry: FeatureServer<SentinelRepo> = {
     env: SENTINEL_ENV,
     createRepo,
     features: sentinelHandlers,
+    accountExport: sentinelAccountExport,
     migrationsDir: path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations'),
     createService(deps) {
         const engine = new SentinelEngine(deps);

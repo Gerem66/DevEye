@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { UPTIME_ITEMS_PROVIDER, type UptimeItemsProvider } from '@deveye/types/sdk';
 import type { FeatureServer, SdkCipher } from '@deveye/types/sdk/server';
 
+import { uptimeAccountExport } from './accountExport';
 import { uptimeHandlers } from './handlers';
 import { setMonitor, setStatusPages } from './_shared';
 import { uptimeCopy } from './copy';
@@ -100,5 +101,6 @@ export const serverEntry: FeatureServer<UptimeRepo> = {
         labelOf: (repo, cipher, itemId, workspaceId) => labelOf(repo, cipher, Number(itemId), workspaceId),
         move: uptimeMove,
         copy: uptimeCopy
-    }
+    },
+    accountExport: uptimeAccountExport
 };

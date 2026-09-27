@@ -44,6 +44,17 @@ l'ouvrait et il ne protégeait rien : la protection réelle est le chiffrement.
 - « Retenir sur cet appareil » garde le jeton de rafraîchissement dans le
   navigateur, jamais le mot de passe. Voir `FEDERATION.md`.
 
+## 1 ter. Mot de passe d'un geste sur le compte : suppression et export
+
+- Fichiers : `DevEye/client/src/Features/Profile/DeleteAccountDialog.tsx` et
+  `ExportDataDialog.tsx`, dans la carte « Vos données » du Profil.
+- Commandes WS : `user.deleteAccount` et `user.exportPrepare`, même compteur d'essais
+  (`verifyPassword`), envoyées sur `ws.connectionFor(null)` : le compte visé est
+  toujours celui de cette instance, même quand un espace distant est ouvert.
+- Ce n'est pas un déverrouillage : l'export reçoit une DEK prêtée à lui seul
+  (voir `SECURITY_MODEL.md`, « La DEK prêtée à une exportation »), la session
+  reste verrouillée.
+
 ## 2. Notes privées — **aucun prompt dédié**
 
 Les notes n'ont plus de mot de passe par note : une note marquée « privée » est

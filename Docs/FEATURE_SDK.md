@@ -759,6 +759,16 @@ repli de l'écouteur, le client sur l'app (d'où `index: false` à
 fastify-static, qui enregistrait sinon `/` lui-même) et 404 sur la surface
 publique. Le module route par le `domain` reçu, jamais par l'en-tête.
 
+Toujours par entrée serveur : `accountExport`, la part du module dans l'export
+des données d'un compte ([ACCOUNT_EXPORT.md](./ACCOUNT_EXPORT.md)). Chaque table
+possédée y a un sort (écrite par l'hôte, `'custom'` pour les crochets `account`
+et `workspace`, ou `{ skip }` avec sa raison), `store.omit` tait les clés
+secrètes du `FeatureStore` que l'hôte exporte sinon, et `files` mesure les
+parties lourdes pour la popup. La déclaration est confrontée au schéma réel
+au boot (`assertExportCoverage`) ; les crochets reçoivent les deux étages du
+compte pour la durée de l'export (`cipher`, `open`) et un `signal` qui tombe
+quand le téléchargement s'arrête.
+
 L'hôte sert aussi, sur les deux écouteurs et donc sous tout domaine client,
 l'icône de DevEye en 64 pixels à `DEVEYE_ICON_PATH` (`/deveye-icon.png`,
 `src/assets/deveye-icon.png`) : l'icône d'onglet d'une page publique qui n'en a

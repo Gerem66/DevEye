@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { DEPLOY_ITEMS_PROVIDER, type DeployItemsProvider } from '@deveye/types/sdk';
 import type { FeatureServer, SdkCipher } from '@deveye/types/sdk/server';
 
+import { deployAccountExport } from './accountExport';
 import { deployHandlers } from './handlers';
 import { deployCopy } from './copy';
 import { deployMove } from './move';
@@ -77,5 +78,6 @@ export const serverEntry: FeatureServer<DeployRepo> = {
         move: deployMove,
         copy: deployCopy
     },
-    quotas: { targets: { list: (repo, owned) => repo.listStockTargets(owned) } }
+    quotas: { targets: { list: (repo, owned) => repo.listStockTargets(owned) } },
+    accountExport: deployAccountExport
 };

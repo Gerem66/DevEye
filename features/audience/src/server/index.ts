@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { AUDIENCE_ITEMS_PROVIDER, AUDIENCE_SELF_PROVIDER, type AudienceItemsProvider } from '@deveye/types/sdk';
 import type { FeatureServer, SdkCipher } from '@deveye/types/sdk/server';
 
+import { audienceAccountExport } from './accountExport';
 import { audienceHandlers } from './handlers';
 import { audienceCopy } from './copy';
 import { audienceMove } from './move';
@@ -91,5 +92,6 @@ export const serverEntry: FeatureServer<AudienceRepo> = {
         labelOf: (repo, cipher, itemId, workspaceId) => labelOf(repo, cipher, Number(itemId), workspaceId),
         move: audienceMove,
         copy: audienceCopy
-    }
+    },
+    accountExport: audienceAccountExport
 };

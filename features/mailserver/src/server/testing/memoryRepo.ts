@@ -71,6 +71,10 @@ export function memoryRepo(): MemoryRepo {
                     .sort((a, b) => a.created - b.created || a.id - b.id)
                     .map((m) => ({ id: String(m.id), workspaceId: m.workspace_id }))
             ),
+        usedBytesInWorkspaces: (workspaceIds) =>
+            Promise.resolve(
+                mailboxes.filter((m) => workspaceIds.includes(m.workspace_id)).reduce((n, m) => n + m.used_bytes, 0)
+            ),
         createMailbox(input) {
             const id = nextId();
             mailboxes.push({
@@ -296,6 +300,19 @@ export function memoryRepo(): MemoryRepo {
             messages.splice(0, messages.length, ...messages.filter((m) => m.id !== id));
             return Promise.resolve();
         },
+        exportPage: (mailboxId, afterId, limit) =>
+            Promise.resolve(
+                messages
+                    .filter((m) => m.mailbox_id === mailboxId && m.id > afterId)
+                    .sort((a, b) => a.id - b.id)
+                    .flatMap((m) => {
+                        const blob = blobs.find((b) => b.id === m.blob_id);
+                        return blob
+                            ? [{ id: m.id, folder_id: m.folder_id, internal_date: m.internal_date, ref: blob.ref }]
+                            : [];
+                    })
+                    .slice(0, limit)
+            ),
 
         enqueue(input) {
             const id = nextId();

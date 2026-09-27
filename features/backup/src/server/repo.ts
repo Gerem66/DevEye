@@ -9,6 +9,16 @@ import type { SdkQueryable } from '@deveye/types/sdk/server';
 
 type Q = SdkQueryable;
 
+/** Une archive présente à une destination `local`, telle que l'export la relit. */
+export interface LocalArchiveRow {
+    id: number;
+    source_kind: string;
+    encrypted: number;
+    size_bytes: number | string;
+    finished_at: number | null;
+    content: string;
+}
+
 /**
  * Trois tables, un dépôt : elles ne se lisent jamais séparément. Tout est
  * chiffré à l'étage ouvert (l'ordonnanceur lit sans session) ; ne restent en
@@ -130,6 +140,8 @@ export interface BackupRepo {
     markPruned(id: number): Promise<void>;
     /** Les exécutions restées `running` après une mort du processus, soldées au démarrage. */
     failStaleRuns(before: number): Promise<number>;
+    /** Les archives encore présentes aux destinations `local` des travaux de cet espace. */
+    listLocalArchives(workspaceId: number): Promise<LocalArchiveRow[]>;
 }
 
 const DEST_SELECT = `
@@ -482,6 +494,17 @@ export function createRepo(q: Q): BackupRepo {
                 [Math.floor(Date.now() / 1000), before]
             );
             return res.affectedRows;
-        }
+        },
+
+        listLocalArchives: (workspaceId) =>
+            q.query<LocalArchiveRow>(
+                `SELECT r.id, j.source_kind, r.encrypted, r.size_bytes, r.finished_at, r.content
+                   FROM backup_runs r
+                   JOIN backup_jobs j ON j.id = r.job_id
+                   JOIN backup_destinations d ON d.id = j.destination_id
+                  WHERE r.status = 'success' AND r.pruned = 0 AND d.kind = 'local' AND j.workspace_id = ?
+                  ORDER BY r.id`,
+                [workspaceId]
+            )
     };
 }

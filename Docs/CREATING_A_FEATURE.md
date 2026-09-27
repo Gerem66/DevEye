@@ -79,6 +79,12 @@ Tout passe par des schémas zod partagés. Le serveur **et** le client importent
     appliqué une version intermédiaire du fichier avant qu'elle ne soit stabilisée
     — ce qui masque le problème en local tout en le laissant intact en prod).
 
+    Toute table neuve a un sort dans l'export des données d'un compte, dans la
+    même livraison : `CORE_EXPORT_TABLES` pour une table de l'app, la
+    déclaration `accountExport` pour celle d'un module
+    ([ACCOUNT_EXPORT.md](./ACCOUNT_EXPORT.md)). Sans lui, le smoke de la CI
+    refuse la migration.
+
 2. **Repo** — `src/db/repos/<feature>.ts` : `export interface XRepo { … }` +
    `export function xRepo(pool: Queryable): XRepo`. Requêtes paramétrées
    uniquement (`?`). Le `content` sensible est **chiffré** (voir section E).
@@ -257,9 +263,10 @@ de types → workflow publish), puis réinstaller côté serveur/client.
 | 13  | `DevEye/client/src/Components/TopNavbar/TopNavbar.tsx` | entrée menu (page structurelle)                                     |
 | 14  | `DevEye/client/src/stores/invalidation.ts`             | clé `ResourceKey` + `invalidate()` aux mutations (si widget résumé) |
 
-Selon ce que la feature fait, quatre chantiers transverses ont chacun leur doc
+Selon ce que la feature fait, cinq chantiers transverses ont chacun leur doc
 et leur checklist propre : toute configuration → `Docs/SETTINGS.md` (la
 coquille unique et son bouton commun, obligatoires) ; des réglages d'espace
 réutilisables que les éléments désignent → `Docs/SOURCES.md` ; des alertes →
 `Docs/NOTIFICATIONS.md` §8 ; des éléments partageables entre espaces →
-`Docs/SHARING.md`.
+`Docs/SHARING.md` ; des tables ou des fichiers → `Docs/ACCOUNT_EXPORT.md`
+(leur sort dans l'export des données d'un compte).

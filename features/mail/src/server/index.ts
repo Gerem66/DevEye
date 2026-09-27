@@ -1,6 +1,7 @@
 import { MAIL_TRANSPORT_PROVIDER } from '@deveye/types/sdk';
 import type { FeatureServer } from '@deveye/types/sdk/server';
 
+import { mailAccountExport } from './accountExport';
 import { mailHandlers } from './handlers';
 import { mailCopy } from './copy';
 import { mailMove } from './move';
@@ -60,5 +61,6 @@ export const serverEntry: FeatureServer<MailRepo> = {
         move: mailMove,
         copy: mailCopy
     },
-    quotas: { accounts: { list: (repo, owned) => repo.accounts.listStock(owned) } }
+    quotas: { accounts: { list: (repo, owned) => repo.accounts.listStock(owned) } },
+    accountExport: mailAccountExport
 };

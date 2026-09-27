@@ -6,6 +6,7 @@ import { notesCopy } from './copy';
 import { notesMove } from './move';
 import { tryDecryptPayload } from './_shared';
 import { notesE2e } from './e2e';
+import { notesAccountExport } from './accountExport';
 
 /**
  * Pas de `migrationsDir` : les tables des Notes datent du socle de l'app.
@@ -18,6 +19,7 @@ import { notesE2e } from './e2e';
 export const serverEntry: FeatureServer<NotesRepo> = {
     createRepo,
     e2e: notesE2e,
+    accountExport: notesAccountExport,
     features: notesHandlers,
     items: {
         homeOf: async (repo, itemId, workspaceId) =>

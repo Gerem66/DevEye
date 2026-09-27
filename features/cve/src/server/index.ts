@@ -6,6 +6,7 @@ import type { FeatureServer } from '@deveye/types/sdk/server';
 import { cveHandlers } from './handlers';
 import { createRepo, type CveRepo } from './repo';
 import { createService } from './service';
+import { cveAccountExport } from './accountExport';
 
 /**
  * Pas d'entrée `items` : `shareTier: 'never'`, une CVE est publique et n'a rien
@@ -14,6 +15,7 @@ import { createService } from './service';
 export const serverEntry: FeatureServer<CveRepo> = {
     createRepo,
     features: cveHandlers,
+    accountExport: cveAccountExport,
     migrationsDir: path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations'),
     createService: (deps) => createService(deps)
 };

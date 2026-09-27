@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { PROJECTS_USAGE_PROVIDER } from '@deveye/types/sdk';
 import type { FeatureServer } from '@deveye/types/sdk/server';
 
+import { projectsAccountExport } from './accountExport';
 import { projectsHandlers } from './handlers';
 import { projectsCopy } from './copy';
 import { createDomainHooks } from './domains';
@@ -73,5 +74,6 @@ export const serverEntry: FeatureServer<ProjectsRepo> = {
             (await repo.projects.findById(Number(itemId), workspaceId))?.security_tier === 'open',
         move: projectsMove,
         copy: projectsCopy
-    }
+    },
+    accountExport: projectsAccountExport
 };

@@ -7,6 +7,7 @@ import { FINANCE_ENV } from './env';
 import { financeHandlers } from './handlers';
 import { createRepo, type FinanceRepo } from './repo';
 import { createService } from './service';
+import { financeAccountExport } from './accountExport';
 
 /**
  * Les tables datent du socle (`084_finance.sql`) ; `migrations/` porte leurs
@@ -17,6 +18,7 @@ export const serverEntry: FeatureServer<FinanceRepo> = {
     env: FINANCE_ENV,
     createRepo,
     features: financeHandlers,
+    accountExport: financeAccountExport,
     migrationsDir: path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations'),
     createService,
     quotas: { bankConnections: { list: (repo, owned) => repo.listStockConnections(owned) } }

@@ -1,6 +1,7 @@
 import { GIT_ITEMS_PROVIDER, type GitItemsProvider } from '@deveye/types/sdk';
 import type { FeatureServer, SdkCipher } from '@deveye/types/sdk/server';
 
+import { gitAccountExport } from './accountExport';
 import { gitHandlers } from './handlers';
 import { gitCopy } from './copy';
 import { gitMove } from './move';
@@ -63,5 +64,6 @@ export const serverEntry: FeatureServer<GitRepo> = {
         move: gitMove,
         copy: gitCopy
     },
-    quotas: { repos: { list: (repo, owned) => repo.listStockRepos(owned) } }
+    quotas: { repos: { list: (repo, owned) => repo.listStockRepos(owned) } },
+    accountExport: gitAccountExport
 };

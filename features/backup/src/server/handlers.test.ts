@@ -266,7 +266,8 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
         listRunsPresent: async (jobId) =>
             runs.filter((r) => r.job_id === jobId && r.status === 'success' && r.pruned === 0),
         markPruned: async () => undefined,
-        failStaleRuns: async () => 0
+        failStaleRuns: async () => 0,
+        listLocalArchives: async () => []
     };
 }
 
