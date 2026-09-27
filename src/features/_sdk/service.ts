@@ -16,6 +16,8 @@ import { createQuota, modulePauses } from './quota';
 import { serverKeysOf } from './host';
 import { ORIGINS, publishFrame } from './context';
 import { createOpenCipher, createSecureStore } from '@/Services/SecureStore';
+import type { Mailer } from '@/Services/mailer';
+import { mailHtml, mailText } from '@/Services/mailLayout';
 import { verifyModuleTicket } from '@/auth/jwt';
 import { maintenance } from '@/Services/maintenance';
 import type { Logger } from 'pino';
@@ -39,6 +41,8 @@ export interface ModuleServiceHost {
     logger: Logger;
     /** Un service écrit sans socket pour diffuser : c'est le hub qu'il avertit. */
     live: LiveHub;
+    /** L'expéditeur du serveur, celui de l'inscription : `accountMail` écrit en son nom. */
+    mailer: Mailer;
 }
 
 /**
@@ -90,14 +94,20 @@ export function createServiceDeps(
 
     // La même erreur qu'en requête (`facade.ts`), nommant la capacité manquante.
     const capabilities = new Set(manifest.nativeCapabilities ?? []);
-    const gate = (cap: 'agents' | 'devices.read' | 'telemetry.read' | 'accounts.read' | 'members.read') => (): void => {
-        if (!capabilities.has(cap)) {
-            throw new FeatureError('forbidden', `Module « ${manifest.id} » : declare '${cap}' in nativeCapabilities`);
-        }
-    };
+    const gate =
+        (cap: 'agents' | 'devices.read' | 'telemetry.read' | 'accounts.read' | 'accounts.mail' | 'members.read') =>
+        (): void => {
+            if (!capabilities.has(cap)) {
+                throw new FeatureError(
+                    'forbidden',
+                    `Module « ${manifest.id} » : declare '${cap}' in nativeCapabilities`
+                );
+            }
+        };
     const gateAgents = gate('agents');
     const gateDevices = gate('devices.read');
     const gateAccounts = gate('accounts.read');
+    const gateMail = gate('accounts.mail');
     const gateMembers = gate('members.read');
     const keys = serverKeysOf(host.crypt, manifest.id);
 
@@ -211,6 +221,27 @@ export function createServiceDeps(
                 gateAccounts();
                 const capped = Math.min(Math.max(1, Math.trunc(limit ?? 20)), 50);
                 return (await host.db.users.search(query.trim(), capped)).map(toSdkAccount);
+            }
+        },
+        accountMail: {
+            get configured() {
+                return host.mailer.configured;
+            },
+            send: async (userId, message) => {
+                gateMail();
+                if (!host.mailer.configured) {
+                    throw new FeatureError('conflict', 'Aucun serveur SMTP configuré (SMTP_HOST)');
+                }
+                const row = await host.db.users.findById(userId);
+                if (!row) throw new FeatureError('not_found', `Compte ${userId} introuvable`);
+                await host.mailer.send({
+                    to: row.email,
+                    // Un saut de ligne dans un en-tête en ouvrirait un autre.
+                    subject: message.subject.replace(/\s+/g, ' ').trim(),
+                    text: mailText(message),
+                    html: mailHtml(message)
+                });
+                return row.email;
             }
         },
         audit: (entry) => {

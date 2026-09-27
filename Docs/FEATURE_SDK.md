@@ -679,6 +679,12 @@ chaque appel), `keys` (`sealBytes`/`openBytes` sous la clé serveur,
 `derive(salt, info, length)` : HKDF sur la même clé, jamais stockée),
 `secrecy.redeem(ticket)` (le ticket d'un module rendu en `{ userId,
 workspaceId, payload, cipher: { server, private | null } }`), `origins`,
+`accounts` (capacité `accounts.read` : `find`, `findByEmail`, `list`, `search`),
+`accountMail` (capacité `accounts.mail` : `send(userId, message)` écrit à
+l'adresse du compte, jamais une autre, par l'expéditeur du serveur (`SMTP_*`,
+celui de l'inscription) ; le module donne du texte brut, paragraphes, encadré,
+bouton et note, et l'hôte le met en page et l'échappe dans `mailLayout.ts` ;
+`configured` est faux sans SMTP, et `send` lève alors `conflict`),
 `domains` (`findByHost(host)` tous espaces confondus, `get(workspaceId, id)`,
 `listVerified(workspaceId)` : de quoi router une requête entrante par son nom
 d'hôte), `createTicker` (boucle avec garde de réentrance), `logger`. Un service peut

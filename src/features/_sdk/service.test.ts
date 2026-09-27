@@ -8,6 +8,7 @@ import type { MonitorHub } from '@/agent/hub';
 import type { Database } from '@/db';
 import type { LiveHub } from '@/live/hub';
 import type { AuditEvent } from '@/Services/AuditLog';
+import type { MailMessage } from '@/Services/mailer';
 import { setSdkHost } from './host';
 import { createServiceDeps, type ModuleServiceHost } from './service';
 import type { SdkProviders } from '@deveye/types/sdk/server';
@@ -46,6 +47,8 @@ function fakeHost() {
     const records: AuditEvent[] = [];
     const listByWorkspaceCalls: number[] = [];
     const searchCalls: { query: string; limit: number }[] = [];
+    const sent: MailMessage[] = [];
+    const mailer = { configured: true, send: async (message: MailMessage) => void sent.push(message) };
     const logger = {
         debug() {},
         info() {},
@@ -67,6 +70,10 @@ function fakeHost() {
                 }
             },
             users: {
+                findById: async (id: number) =>
+                    id === 7
+                        ? { id: 7, email: 'alice@exemple.fr', username: 'alice', role: 'user', created: 12 }
+                        : null,
                 search: async (query: string, limit: number) => {
                     searchCalls.push({ query, limit });
                     return [{ id: 7, email: 'alice@exemple.fr', username: 'alice', role: 'admin', created: 12 }];
@@ -106,9 +113,10 @@ function fakeHost() {
                 records.push(event);
             }
         },
-        logger: logger as unknown as Logger
+        logger: logger as unknown as Logger,
+        mailer
     } as unknown as ModuleServiceHost;
-    return { host, errors, records, listByWorkspaceCalls, searchCalls };
+    return { host, errors, records, listByWorkspaceCalls, searchCalls, sent, mailer };
 }
 
 setSdkHost(
@@ -305,6 +313,45 @@ describe('createServiceDeps : accounts', () => {
             { query: '', limit: 50 },
             { query: '', limit: 1 }
         ]);
+    });
+});
+
+describe('createServiceDeps : accountMail', () => {
+    const message = {
+        subject: 'Votre abonnement\r\nBcc: x@exemple.fr',
+        paragraphs: ['Bonjour <alice>,'],
+        notice: 'Date limite : le 14 octobre',
+        button: { label: 'Gérer', url: 'https://deveye.test/?account=x' }
+    };
+
+    it("sans 'accounts.mail' : forbidden, rien ne part", async () => {
+        const { host, sent } = fakeHost();
+        const { accountMail } = createServiceDeps(host, manifest(ID, ['accounts.read']), null, NO_PROVIDERS);
+        await assert.rejects(accountMail.send(7, message), forbidden);
+        assert.deepEqual(sent, []);
+    });
+
+    it("à l'adresse du compte seulement, sujet sur une ligne, contenu échappé et encadré", async () => {
+        const { host, sent } = fakeHost();
+        const { accountMail } = createServiceDeps(host, manifest(ID, ['accounts.mail']), null, NO_PROVIDERS);
+        assert.equal(await accountMail.send(7, message), 'alice@exemple.fr');
+        assert.equal(sent.length, 1);
+        assert.equal(sent[0].to, 'alice@exemple.fr');
+        assert.equal(sent[0].subject, 'Votre abonnement Bcc: x@exemple.fr');
+        assert.match(sent[0].html, /Bonjour &lt;alice&gt;,/);
+        assert.match(sent[0].html, /border:2px solid[^>]*>Date limite : le 14 octobre</);
+        assert.match(sent[0].text, /----------\nDate limite : le 14 octobre\n----------/);
+        assert.match(sent[0].text, /Gérer : https:\/\/deveye\.test\/\?account=x/);
+    });
+
+    it('compte inconnu : not_found ; sans SMTP : conflict, et `configured` le dit', async () => {
+        const { host, sent, mailer } = fakeHost();
+        const { accountMail } = createServiceDeps(host, manifest(ID, ['accounts.mail']), null, NO_PROVIDERS);
+        await assert.rejects(accountMail.send(9, message), { name: 'FeatureError', code: 'not_found' });
+        mailer.configured = false;
+        assert.equal(accountMail.configured, false);
+        await assert.rejects(accountMail.send(7, message), { name: 'FeatureError', code: 'conflict' });
+        assert.deepEqual(sent, []);
     });
 });
 

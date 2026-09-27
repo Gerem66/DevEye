@@ -326,20 +326,21 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     // des sockets : un module d'infrastructure (bail, clés) doit être prêt
     // avant la première trame d'agent.
     setSdkHost(hub, deps.db, live);
+    const mailer = createMailer({
+        host: env.SMTP_HOST,
+        port: env.SMTP_PORT,
+        user: env.SMTP_USER,
+        password: env.SMTP_PASSWORD,
+        from: env.SMTP_FROM
+    });
     const signup = createSignupService({
         db: deps.db,
-        mailer: createMailer({
-            host: env.SMTP_HOST,
-            port: env.SMTP_PORT,
-            user: env.SMTP_USER,
-            password: env.SMTP_PASSWORD,
-            from: env.SMTP_FROM
-        }),
+        mailer,
         logger,
         mode: env.SIGNUP_MODE,
         origin: env.PUBLIC_ORIGIN.replace(/\/+$/, '')
     });
-    createModuleServices({ db: deps.db, crypt: deps.crypt, audit, logger, live });
+    createModuleServices({ db: deps.db, crypt: deps.crypt, audit, logger, live, mailer });
     const hostServices = [createDomainVerifier({ db: deps.db, crypt: deps.crypt, logger, live }), signup];
     // Lue avant tout démarrage : un service en arrêt complet ne démarre pas, et
     // `MAINTENANCE=1` ferme le site avant la première connexion.
