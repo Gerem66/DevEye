@@ -10,15 +10,15 @@ import { catalogEntries, type FeatureCatalogEntry } from './catalog';
  * bouge ; un id dont le module n'est pas installé disparaît de lui-même.
  */
 
-/** Ce dont un utilisateur se sert au quotidien, sans supposer son métier. */
+/** Ce dont un indépendant qui a des clients se sert au quotidien. */
 export const RECOMMENDED_FEATURE_IDS: readonly HomeFeatureId[] = [
     'devices',
     'uptime',
+    'projects',
+    'invoicing',
     'mail',
     'notes',
-    'password',
-    'weather',
-    'projects'
+    'password'
 ];
 
 /** Un modèle d'accueil : une section toute posée, nommée d'un usage. */
@@ -30,24 +30,34 @@ export interface HomeStarter {
     features: readonly HomeFeatureId[];
 }
 
+/**
+ * Les quatre groupes du site vitrine (`features.groups` de DevEye-Site), pour
+ * que l'accueil tienne la promesse lue avant l'inscription.
+ */
 export const HOME_STARTERS: readonly HomeStarter[] = [
     {
-        id: 'dev',
-        label: 'Développeur',
-        icon: 'branch',
-        features: ['projects', 'git', 'audience', 'notes']
+        id: 'work',
+        label: 'Travailler',
+        icon: 'projects',
+        features: ['projects', 'invoicing', 'finance', 'x-rdv', 'mail', 'notes', 'password']
     },
     {
-        id: 'devops',
-        label: 'DevOps',
+        id: 'supervise',
+        label: 'Superviser',
+        icon: 'activity',
+        features: ['devices', 'uptime', 'audience']
+    },
+    {
+        id: 'ship',
+        label: 'Livrer',
         icon: 'rocket',
-        features: ['database', 'deploy', 'uptime', 'devices', 'backup']
+        features: ['git', 'deploy', 'database', 'backup']
     },
     {
-        id: 'perso',
-        label: 'Perso',
-        icon: 'home',
-        features: ['weather', 'mail', 'notes', 'password', 'finance']
+        id: 'secure',
+        label: 'Sécuriser',
+        icon: 'shield',
+        features: ['sentinel', 'cve', 'x-audit', 'osint']
     }
 ];
 

@@ -1,3 +1,6 @@
+import { useState } from 'react';
+
+import Button from '@/Components/Button';
 import { addSectionWith } from '@/stores/homeLayout';
 import { HOME_STARTERS, starterFeatures } from './starters';
 import styles from './Dashboard.module.css';
@@ -10,11 +13,13 @@ export interface EmptyHomeProps {
 }
 
 /**
- * L'accueil neuf : des modèles qui posent chacun une section garnie d'un clic,
- * et le chemin manuel en retrait. Un modèle ne se confirme pas, le mode
- * organisation défait tout.
+ * L'accueil neuf : des modèles à cocher, qui posent chacun une section garnie,
+ * et le chemin manuel en retrait. Rien ne se confirme, le mode organisation
+ * défait tout.
  */
 export function EmptyHome({ canLayout, onCompose }: EmptyHomeProps) {
+    const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set());
+
     if (!canLayout) {
         return (
             <div className={styles.emptyHome}>
@@ -30,41 +35,74 @@ export function EmptyHome({ canLayout, onCompose }: EmptyHomeProps) {
         ({ entries }) => entries.length > 0
     );
 
+    const toggle = (id: string) =>
+        setPicked((prev) => {
+            const next = new Set(prev);
+            if (!next.delete(id)) next.add(id);
+            return next;
+        });
+
+    const place = () => {
+        for (const { starter, entries } of starters) {
+            if (picked.has(starter.id))
+                addSectionWith(
+                    starter.label,
+                    entries.map((entry) => entry.id)
+                );
+        }
+    };
+
     return (
         <div className={styles.emptyHome}>
             <span className={`icon icon-plus ${styles.emptyHomeIcon}`} />
             <span className={styles.emptyHomeTitle}>Votre accueil est vide</span>
             <span className={styles.emptyHomeHint}>
-                Partez d’un modèle, ou composez votre première section : appareils, fonctionnalités et raccourcis y
-                cohabitent.
+                {starters.length > 0
+                    ? 'Choisissez ce que cet espace doit suivre : chaque choix pose une section, que vous réorganiserez à votre guise.'
+                    : 'Composez votre première section : appareils, fonctionnalités et raccourcis y cohabitent.'}
             </span>
 
             {starters.length > 0 && (
-                <div className={styles.starters}>
-                    {starters.map(({ starter, entries }) => (
-                        <button
-                            key={starter.id}
-                            type='button'
-                            className={styles.starter}
-                            onClick={() =>
-                                addSectionWith(
-                                    starter.label,
-                                    entries.map((entry) => entry.id)
-                                )
-                            }
-                        >
-                            <span className={styles.starterHead}>
-                                <span className={`icon icon-${starter.icon} ${styles.starterIcon}`} />
-                                <span className={styles.starterName}>{starter.label}</span>
-                            </span>
-                            {/* Ce que le clic va poser, lu au catalogue plutôt que
-                                redit dans un texte à maintenir. */}
-                            <span className={styles.starterFeatures}>
-                                {entries.map((entry) => entry.title).join(', ')}
-                            </span>
-                        </button>
-                    ))}
-                </div>
+                <>
+                    <div className={styles.starters}>
+                        {starters.map(({ starter, entries }) => {
+                            const on = picked.has(starter.id);
+                            return (
+                                <button
+                                    key={starter.id}
+                                    type='button'
+                                    aria-pressed={on}
+                                    className={`${styles.starter} ${on ? styles.starterPicked : ''}`}
+                                    onClick={() => toggle(starter.id)}
+                                >
+                                    <span className={styles.starterHead}>
+                                        <span className={`icon icon-${starter.icon} ${styles.starterIcon}`} />
+                                        <span className={styles.starterName}>{starter.label}</span>
+                                        <span
+                                            className={
+                                                on ? `icon icon-check-circle ${styles.starterMark}` : styles.starterRing
+                                            }
+                                        />
+                                    </span>
+                                    {/* Ce que le choix va poser, lu au catalogue plutôt que
+                                        redit dans un texte à maintenir. */}
+                                    <span className={styles.starterFeatures}>
+                                        {entries.map((entry) => (
+                                            <span key={entry.id} className={styles.starterChip}>
+                                                <span className={`icon icon-${entry.icon} ${styles.starterChipIcon}`} />
+                                                {entry.title}
+                                            </span>
+                                        ))}
+                                    </span>
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    <Button className={styles.starterPlace} disabled={picked.size === 0} onClick={place}>
+                        {picked.size > 1 ? `Poser les ${picked.size} sections` : 'Poser la section'}
+                    </Button>
+                </>
             )}
 
             <button type='button' className={styles.emptyManual} onClick={onCompose}>
