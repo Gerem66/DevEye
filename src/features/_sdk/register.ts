@@ -457,6 +457,7 @@ export function moduleUsageSources(db: Database): UsageSource[] {
         const count = quotaCounter(mod.server.quotas, mod.repoFor(db));
         return (mod.manifest.quotas ?? []).map((spec) => ({
             fullKey: `${mod.manifest.id}.${spec.key}`,
+            kind: spec.stock ? ('stock' as const) : spec.perOperation ? ('perOperation' as const) : ('flow' as const),
             measure: async (_owner: number, owned: readonly number[]) => ({
                 used: spec.perOperation ? null : await count(spec.key, owned)
             })

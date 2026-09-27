@@ -16,17 +16,17 @@ describe("l'utilisation d'un compte", () => {
         try {
             const seen: (readonly number[])[] = [];
             const sources: UsageSource[] = [
-                { fullKey: 'x.things', measure: async (_o, owned) => (seen.push(owned), { used: 5 }) },
-                { fullKey: 'x.each', measure: async () => ({ used: null }) },
-                { fullKey: 'core.members', measure: async () => ({ used: 4, paused: 1 }) }
+                { fullKey: 'x.things', kind: 'stock', measure: async (_o, owned) => (seen.push(owned), { used: 5 }) },
+                { fullKey: 'x.each', kind: 'perOperation', measure: async () => ({ used: null }) },
+                { fullKey: 'core.members', kind: 'stock', measure: async () => ({ used: 4, paused: 1 }) }
             ];
             const usage = await usageOf(db, sources, 3);
             assert.deepEqual(usage, {
                 userId: 3,
                 quotas: {
-                    'x.things': { used: 5, paused: 2 },
-                    'x.each': { used: null, paused: 0 },
-                    'core.members': { used: 4, paused: 1 }
+                    'x.things': { kind: 'stock', used: 5, paused: 2 },
+                    'x.each': { kind: 'perOperation', used: null, paused: 0 },
+                    'core.members': { kind: 'stock', used: 4, paused: 1 }
                 }
             });
             assert.deepEqual(seen, [[30, 31]]);
@@ -39,6 +39,7 @@ describe("l'utilisation d'un compte", () => {
         const sources: UsageSource[] = [
             {
                 fullKey: 'x.broken',
+                kind: 'flow',
                 measure: () => Promise.reject(new Error('table absente'))
             }
         ];
@@ -51,6 +52,7 @@ describe("l'utilisation d'un compte", () => {
         const sources: UsageSource[] = [
             {
                 fullKey: 'x.slow',
+                kind: 'flow',
                 measure: async (owner) => {
                     inFlight++;
                     peak = Math.max(peak, inFlight);

@@ -112,7 +112,7 @@ Deux lectures, pour dire où l'on en est avant le refus :
   compté alors). Une limite par opération lève.
 - `ctx.deveye.usage.of(userId)` / `ofMany(userIds)` et `deps.usage` (capacité
   `'accounts.usage'`) : toutes les limites de l'app pour un compte, bornées ou
-  non, `{ used, paused }` par clé. Un membre ne lit que la sienne, un
+  non, `{ kind, used, paused }` par clé (`kind` : stock, flux ou par opération). Un membre ne lit que la sienne, un
   administrateur global celle de tous ; côté service, la capacité seule en garde
   l'accès. C'est ce que le module d'offre montre à côté des limites qu'il fixe.
 

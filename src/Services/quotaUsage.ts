@@ -9,6 +9,7 @@ import { planPauseCounts } from '@/Services/planPauses';
  */
 export interface UsageSource {
     fullKey: string;
+    kind: SdkAccountQuotaUse['kind'];
     measure(
         ownerUserId: number,
         ownerWorkspaceIds: readonly number[]
@@ -35,6 +36,7 @@ export async function usageOf(
             throw new Error(`Utilisation « ${source.fullKey} » illisible : ${(e as Error).message}`);
         }
         quotas[source.fullKey] = {
+            kind: source.kind,
             used: measured.used,
             paused: measured.paused ?? pausedCounts[source.fullKey] ?? 0
         };

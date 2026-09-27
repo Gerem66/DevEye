@@ -177,8 +177,8 @@ describe('createFacade : la garde des capacités', () => {
 
 describe('createFacade : usage', () => {
     const usages: SdkAccountUsage[] = [
-        { userId: OWNER, quotas: { 'uptime.monitors': { used: 3, paused: 0 } } },
-        { userId: 42, quotas: { 'uptime.monitors': { used: 9, paused: 2 } } }
+        { userId: OWNER, quotas: { 'uptime.monitors': { kind: 'stock', used: 3, paused: 0 } } },
+        { userId: 42, quotas: { 'uptime.monitors': { kind: 'stock', used: 9, paused: 2 } } }
     ];
 
     it('son propre compte, oui ; celui d’un autre, réservé à l’administrateur', async () => {

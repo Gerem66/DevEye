@@ -43,10 +43,12 @@ export function coreUsageSources(
     return [
         {
             fullKey: 'workspace.shared',
+            kind: 'stock',
             measure: async (owner) => ({ used: (await db.workspaces.listOwnedShared(owner)).length })
         },
         {
             fullKey: 'workspace.members',
+            kind: 'stock',
             measure: async (owner) => {
                 const shared = await db.workspaces.listOwnedShared(owner);
                 if (shared.length === 0) return { used: 0, paused: 0 };
@@ -64,6 +66,7 @@ export function coreUsageSources(
         },
         {
             fullKey: 'domains.hosts',
+            kind: 'stock',
             measure: async (_owner, owned) => {
                 const rows = await db.featureDomains.rowsOf(owned, moduleWebDomainFeatures());
                 const paused = rows.filter((row) => isPlanPaused('domains.hosts', String(row.id)));
