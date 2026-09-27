@@ -118,68 +118,72 @@ export default function MailSection() {
                 </p>
                 {error && <div className={styles.errorBanner}>{error}</div>}
                 {notice && <div className={styles.infoBanner}>{notice}</div>}
-                <div className={styles.card}>
+                <div className={`${styles.card} ${styles.formCard}`}>
                     <div className={styles.form}>
-                        <label className={styles.field}>
-                            <span className={styles.fieldLabel}>Destinataire</span>
-                            <TextInput
-                                type='email'
-                                value={to}
-                                placeholder='vous@exemple.fr'
-                                onChange={(e) => setTo(e.target.value)}
-                                autoComplete='email'
-                            />
-                        </label>
-                        <div className={styles.field}>
-                            <span className={styles.fieldLabel}>Mail</span>
-                            <SearchSelect
-                                value={key}
-                                options={options}
-                                onChange={setKey}
-                                aria-label='Mail à envoyer'
-                                searchPlaceholder='Chercher un mail'
-                                emptyText='Aucun mail de ce nom'
-                            />
-                        </div>
-                        {sample?.sender === 'server' ? (
-                            <div className={styles.field}>
-                                <span className={styles.fieldLabel}>Expéditeur</span>
-                                <span className={styles.rowMeta}>
-                                    {catalog.server.configured
-                                        ? `Le serveur : ${catalog.server.from ?? 'adresse de SMTP_FROM'}`
-                                        : 'Aucun serveur SMTP configuré (SMTP_HOST) : ce mail ne peut pas partir.'}
-                                </span>
-                            </div>
-                        ) : (
+                        <div className={styles.formRow}>
                             <label className={styles.field}>
-                                <span className={styles.fieldLabel}>Expéditeur</span>
-                                {catalog.senders.length > 0 ? (
-                                    <SelectInput value={senderId} onChange={(e) => setSenderId(e.target.value)}>
-                                        {catalog.senders.map((s) => (
-                                            <option
-                                                key={`${s.workspaceId}:${s.accountId}`}
-                                                value={`${s.workspaceId}:${s.accountId}`}
-                                            >
-                                                {s.address} ({s.workspaceName})
-                                            </option>
-                                        ))}
-                                    </SelectInput>
-                                ) : (
-                                    <span className={styles.rowMeta}>
-                                        Ce mail part d’une boîte d’espace, et aucun de vos espaces n’en a une prête à
-                                        envoyer.
-                                    </span>
-                                )}
+                                <span className={styles.fieldLabel}>Destinataire</span>
+                                <TextInput
+                                    type='email'
+                                    value={to}
+                                    placeholder='vous@exemple.fr'
+                                    onChange={(e) => setTo(e.target.value)}
+                                    autoComplete='email'
+                                />
                             </label>
-                        )}
-                        <div className={styles.actions}>
-                            <Button
-                                icon='mail'
-                                disabled={busy || !sample || !validTo || !senderReady}
-                                onClick={() => void send()}
-                            >
-                                {busy ? 'Envoi…' : 'Envoyer'}
-                            </Button>
+                            <div className={styles.field}>
+                                <span className={styles.fieldLabel}>Mail</span>
+                                <SearchSelect
+                                    value={key}
+                                    options={options}
+                                    onChange={setKey}
+                                    aria-label='Mail à envoyer'
+                                    searchPlaceholder='Chercher un mail'
+                                    emptyText='Aucun mail de ce nom'
+                                />
+                            </div>
+                        </div>
+                        <div className={styles.formRow}>
+                            {sample?.sender === 'server' ? (
+                                <div className={styles.field}>
+                                    <span className={styles.fieldLabel}>Expéditeur</span>
+                                    <span className={styles.rowMeta}>
+                                        {catalog.server.configured
+                                            ? `Le serveur : ${catalog.server.from ?? 'adresse de SMTP_FROM'}`
+                                            : 'Aucun serveur SMTP configuré (SMTP_HOST) : ce mail ne peut pas partir.'}
+                                    </span>
+                                </div>
+                            ) : (
+                                <label className={styles.field}>
+                                    <span className={styles.fieldLabel}>Expéditeur</span>
+                                    {catalog.senders.length > 0 ? (
+                                        <SelectInput value={senderId} onChange={(e) => setSenderId(e.target.value)}>
+                                            {catalog.senders.map((s) => (
+                                                <option
+                                                    key={`${s.workspaceId}:${s.accountId}`}
+                                                    value={`${s.workspaceId}:${s.accountId}`}
+                                                >
+                                                    {s.address} ({s.workspaceName})
+                                                </option>
+                                            ))}
+                                        </SelectInput>
+                                    ) : (
+                                        <span className={styles.rowMeta}>
+                                            Ce mail part d’une boîte d’espace, et aucun de vos espaces n’en a une prête
+                                            à envoyer.
+                                        </span>
+                                    )}
+                                </label>
+                            )}
+                            <div className={`${styles.actions} ${styles.formEnd}`}>
+                                <Button
+                                    icon='mail'
+                                    disabled={busy || !sample || !validTo || !senderReady}
+                                    onClick={() => void send()}
+                                >
+                                    {busy ? 'Envoi…' : 'Envoyer'}
+                                </Button>
+                            </div>
                         </div>
                     </div>
                 </div>

@@ -149,12 +149,10 @@ export default function E2eSection({ activeRunId }: { activeRunId: number | null
                                     disabled={Boolean(s.skip) || running}
                                     onChange={(on) => toggle(s.id, on)}
                                 >
-                                    <span className={styles.rowText}>
-                                        <span className={styles.rowTitle}>{s.label}</span>
-                                        <span className={styles.rowMeta}>
-                                            {s.sourceLabel}
-                                            {s.skip ? ` · ${s.skip}` : ''}
-                                        </span>
+                                    <span className={styles.rowTitle}>{s.label}</span>
+                                    <span className={styles.rowMeta}>
+                                        {s.sourceLabel}
+                                        {s.skip ? ` · ${s.skip}` : ''}
                                     </span>
                                 </Checkbox>
                             </div>

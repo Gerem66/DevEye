@@ -1,6 +1,8 @@
+import { DEVEYE_ICON_PATH } from '@deveye/types/sdk';
 import type { SdkAccountMailMessage } from '@deveye/types/sdk/server';
 
 import type { MailMessage } from '@/Services/mailer';
+import { env } from '@/Utils/Env';
 
 // Un mail ne lit aucune feuille de style : les teintes du thème sont recopiées
 // ici, et nulle part ailleurs côté serveur.
@@ -9,6 +11,8 @@ const ACCENT_TINT = '#ecfeff';
 const ON_ACCENT = '#05222a';
 const TEXT = '#1b2430';
 const MUTED = '#5b6672';
+/** L'icône que sert le serveur lui-même : le mail pointe vers elle plutôt que de la joindre. */
+const LOGO_URL = `${env.PUBLIC_ORIGIN.replace(/\/+$/, '')}${DEVEYE_ICON_PATH}`;
 
 /** Le contenu d'un mail, en texte brut : la mise en page l'échappe. */
 export interface MailContent {
@@ -33,7 +37,7 @@ export function mailHtml({ paragraphs, notice, button, footnote }: MailContent):
         : '';
     const small = footnote ? `<p style="margin:0;font-size:13px;color:${MUTED}">${escapeHtml(footnote)}</p>` : '';
     return `<div style="font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:15px;line-height:1.5;color:${TEXT};max-width:480px;margin:0 auto;padding:24px">
-<p style="margin:0 0 24px;font-size:20px"><b>Dev</b>Eye</p>
+<p style="margin:0 0 24px;font-size:20px;line-height:32px"><img src="${escapeHtml(LOGO_URL)}" width="32" height="32" alt="" style="display:inline-block;vertical-align:middle;border:0;margin-right:8px"><b>Dev</b>Eye</p>
 ${body}${box}
 ${link}
 ${small}

@@ -1,9 +1,8 @@
 import { useState, type ReactNode } from 'react';
 
-import { Dialog } from '@/Components/Dialog';
-import SideNav, { type SideNavItem } from '@/Components/FeatureSettings/SideNav';
 import SegmentedControl from '@/Components/SegmentedControl';
 import Switch from '@/Components/Switch';
+import Tabs, { type TabDef } from '@/Features/Workspace/Tabs';
 import { setRenderMode, useRenderState, type RenderMode } from '@/stores/render';
 import Buttons from './sections/Buttons';
 import Feedback from './sections/Feedback';
@@ -14,22 +13,23 @@ import Layout from './sections/Layout';
 import Overlays from './sections/Overlays';
 import Tokens from './sections/Tokens';
 import { GalleryDisabled } from './Specimen';
+import debugStyles from '../Debug.module.css';
 import styles from './Gallery.module.css';
 
-type SectionId = 'tokens' | 'icons' | 'buttons' | 'inputs' | 'feedback' | 'overlays' | 'layout' | 'identity';
+type FamilyId = 'tokens' | 'icons' | 'buttons' | 'inputs' | 'feedback' | 'overlays' | 'layout' | 'identity';
 
-const SECTIONS: SideNavItem<SectionId>[] = [
-    { id: 'tokens', label: 'Jetons du thème', icon: 'appearance' },
-    { id: 'icons', label: 'Icônes', icon: 'star' },
+const FAMILIES: TabDef<FamilyId>[] = [
     { id: 'buttons', label: 'Boutons', icon: 'square-check' },
     { id: 'inputs', label: 'Saisie', icon: 'edit' },
     { id: 'feedback', label: 'Retours', icon: 'info' },
     { id: 'overlays', label: 'Fenêtres', icon: 'expand' },
     { id: 'layout', label: 'Mise en page', icon: 'list' },
-    { id: 'identity', label: 'Identité', icon: 'user' }
+    { id: 'identity', label: 'Identité', icon: 'user' },
+    { id: 'tokens', label: 'Jetons du thème', icon: 'appearance' },
+    { id: 'icons', label: 'Icônes', icon: 'star' }
 ];
 
-const CONTENT: Record<SectionId, () => ReactNode> = {
+const CONTENT: Record<FamilyId, () => ReactNode> = {
     tokens: () => <Tokens />,
     icons: () => <Icons />,
     buttons: () => <Buttons />,
@@ -44,21 +44,17 @@ const CONTENT: Record<SectionId, () => ReactNode> = {
  * Tous les composants de l'interface, en vrai et manipulables : pour juger
  * de leur cohérence d'un coup d'œil, dans chaque mode de rendu.
  */
-export default function GalleryDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-    const [section, setSection] = useState<SectionId>('buttons');
+export default function Gallery() {
+    const [family, setFamily] = useState<FamilyId>('buttons');
     const [disabled, setDisabled] = useState(false);
     const [opaque, setOpaque] = useState(false);
     const render = useRenderState();
 
     return (
-        <Dialog
-            open={open}
-            onClose={onClose}
-            title='Composants de l’interface'
-            width={1200}
-            fill
-            headerAction={
-                <div className={styles.toolbar}>
+        <section className={debugStyles.section}>
+            <div className={debugStyles.sectionHead}>
+                <span className={debugStyles.sectionLabel}>Composants de l’interface</span>
+                <div className={debugStyles.actions}>
                     <SegmentedControl
                         value={render.mode}
                         onChange={(mode: RenderMode) => setRenderMode(mode)}
@@ -69,17 +65,19 @@ export default function GalleryDialog({ open, onClose }: { open: boolean; onClos
                             { value: 'lite', label: 'Léger' }
                         ]}
                     />
-                    <Switch checked={disabled} onChange={setDisabled} label='Tout désactiver' />
-                    <Switch checked={opaque} onChange={setOpaque} label='Fond opaque' />
+                    <Switch
+                        checked={disabled}
+                        onChange={setDisabled}
+                        label='Tout désactiver'
+                        className={styles.toolSwitch}
+                    />
+                    <Switch checked={opaque} onChange={setOpaque} label='Fond opaque' className={styles.toolSwitch} />
                 </div>
-            }
-        >
+            </div>
+            <Tabs tabs={FAMILIES} active={family} onSelect={setFamily} />
             <GalleryDisabled.Provider value={disabled}>
-                <div className={`${styles.layout} ${opaque ? styles.opaque : ''}`}>
-                    <SideNav items={SECTIONS} active={section} onSelect={setSection} label='Familles de composants' />
-                    <div className={styles.panel}>{CONTENT[section]()}</div>
-                </div>
+                <div className={`${styles.content} ${opaque ? styles.opaque : ''}`}>{CONTENT[family]()}</div>
             </GalleryDisabled.Provider>
-        </Dialog>
+        </section>
     );
 }

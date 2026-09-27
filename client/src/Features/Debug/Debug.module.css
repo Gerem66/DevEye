@@ -1,7 +1,36 @@
+/* La racine vaut au moins la zone défilante : sous le titre, la colonne des
+   sections court jusqu'en bas de la popup, son filet compris. */
 .container {
     display: flex;
     flex-direction: column;
     gap: var(--space-lg);
+    min-height: 100%;
+}
+
+.layout {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 200px minmax(0, 1fr);
+    gap: var(--space-lg);
+}
+
+.panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+    min-width: 0;
+}
+
+@media (max-width: 720px) {
+    .layout {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .layout > nav {
+        padding: 0 0 var(--space-sm);
+        border-right: none;
+        border-bottom: 1px solid var(--glass-border);
+    }
 }
 
 .header {
@@ -42,26 +71,6 @@
     font-family: var(--font-mono);
     font-size: 0.78rem;
     color: var(--text-muted);
-}
-
-.layout {
-    display: grid;
-    grid-template-columns: 200px minmax(0, 1fr);
-    gap: var(--space-lg);
-    align-items: start;
-}
-
-.panel {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-lg);
-    min-width: 0;
-}
-
-@media (max-width: 720px) {
-    .layout {
-        grid-template-columns: minmax(0, 1fr);
-    }
 }
 
 .errorBanner,
@@ -156,8 +165,12 @@
     border-top: 1px solid var(--glass-border);
 }
 
+/* Le survol déborde d'un cran de chaque côté, le texte reste aligné sur celui
+   des rangées voisines. */
 .rowButton {
-    width: 100%;
+    width: calc(100% + 2 * var(--space-sm));
+    margin: 0 calc(-1 * var(--space-sm));
+    padding: var(--space-sm);
     background: none;
     border: none;
     border-radius: var(--radius-sm);
@@ -325,10 +338,31 @@
     color: var(--text-primary);
 }
 
+.formCard {
+    padding: var(--space-md);
+}
+
 .form {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
+    display: flex;
+    flex-direction: column;
     gap: var(--space-md);
+}
+
+.formEnd {
+    justify-content: flex-end;
+}
+
+.formRow {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-md);
+    align-items: end;
+}
+
+@media (max-width: 720px) {
+    .formRow {
+        grid-template-columns: minmax(0, 1fr);
+    }
 }
 
 .field {

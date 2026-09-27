@@ -1,31 +1,21 @@
-.layout {
-    display: grid;
-    grid-template-columns: 180px minmax(0, 1fr);
-    gap: var(--space-lg);
-    height: min(680px, 75vh);
-    min-height: 0;
-}
-
-.panel {
+.content {
     display: flex;
     flex-direction: column;
     gap: var(--space-xl);
-    min-width: 0;
-    overflow-y: auto;
-    padding-right: var(--space-sm);
+    padding-top: var(--space-sm);
 }
 
-.opaque .panel {
+/* Le fond opaque passe sous les spécimens eux-mêmes : rien ne bouge d'un
+   mode à l'autre. */
+.opaque .variants {
     background: var(--surface-popup-solid);
-    border-radius: var(--radius-md);
-    padding: var(--space-md);
 }
 
-.toolbar {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: var(--space-md);
+/* Sélecteur doublé pour passer devant le `.labelled` de l'interrupteur, pensé
+   pour une colonne de formulaire. */
+.toolSwitch.toolSwitch {
+    width: auto;
+    margin: 0;
 }
 
 .specimen {
@@ -211,9 +201,9 @@
     border-radius: var(--radius-pill);
 }
 
+/* La largeur seule : la hauteur est celle d'une vraie tuile (`--tile-min-height`). */
 .widgetFrame {
     width: 260px;
-    height: 180px;
 }
 
 .demoText {

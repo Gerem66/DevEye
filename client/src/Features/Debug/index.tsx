@@ -5,9 +5,9 @@ import { ws, WsError } from '@/api/ws';
 import SideNav, { type SideNavItem } from '@/Components/FeatureSettings/SideNav';
 import { StatusBadge } from '@/Components/StatusBadge';
 import { useResourceVersion } from '@/stores/invalidation';
+import Gallery from './Gallery/Gallery';
 import BenchSection from './sections/BenchSection';
 import E2eSection from './sections/E2eSection';
-import GallerySection from './sections/GallerySection';
 import MailSection from './sections/MailSection';
 import TrackingSection from './sections/TrackingSection';
 import styles from './Debug.module.css';
@@ -106,7 +106,7 @@ export default function FeatureDebug() {
                     {section === 'bench' && <BenchSection activeRunId={active?.kind === 'bench' ? active.id : null} />}
                     {section === 'mail' && <MailSection />}
                     {section === 'tracking' && <TrackingSection />}
-                    {section === 'gallery' && <GallerySection />}
+                    {section === 'gallery' && <Gallery />}
                 </div>
             </div>
         </div>

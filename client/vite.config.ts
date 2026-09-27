@@ -233,7 +233,9 @@ export default defineConfig(({ command }) => {
                 // Sans cette entrée, Vite le cherche parmi ses propres fichiers
                 // et rend un 404 — la balise semble alors cassée alors que le
                 // serveur la sert parfaitement sur le port 3000.
-                '/t.js': { target: serverOrigin, changeOrigin: true }
+                '/t.js': { target: serverOrigin, changeOrigin: true },
+                // L'icône des mails et des pages publiques, servie par le serveur.
+                '/deveye-icon.png': { target: serverOrigin, changeOrigin: true }
             }
         },
         build: {
