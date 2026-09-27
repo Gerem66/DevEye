@@ -91,7 +91,9 @@ describe('les listes du stock', () => {
         assert.deepEqual(Object.keys(serverEntry.quotas ?? {}).sort(), [...stock].sort());
 
         const { q, calls } = recording([{ id: 4, workspace_id: 1 }]);
-        assert.deepEqual(await serverEntry.quotas?.pages.list(createRepo(q), [1]), [{ id: 'page:4', workspaceId: 1 }]);
+        assert.deepEqual(await serverEntry.quotas?.pages.list?.(createRepo(q), [1]), [
+            { id: 'page:4', workspaceId: 1 }
+        ]);
         assert.match(calls[0].sql, /ft_uptime_pages/);
     });
 });

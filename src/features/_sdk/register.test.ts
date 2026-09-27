@@ -21,6 +21,7 @@ import {
     moduleManifest,
     moduleManifests,
     moduleProvider,
+    quotaEntryProblems,
     registerModules
 } from './register';
 import type { ModuleServiceHost } from './service';
@@ -290,14 +291,14 @@ describe('registerModules : les sentinelles', () => {
         assert.equal(moduleManifest('x-sdkdomhalf'), undefined);
     });
 
-    it('refuse un stock sans sa liste, et une liste sans stock déclaré', () => {
+    it('refuse server.quotas qui ne suit pas le manifest : un stock se liste, un flux se compte', () => {
         const stock = [{ key: 'things', label: 'choses', stock: true as const }];
         assert.throws(
             () =>
                 registerModules([
                     { manifest: manifest('x-sdkstockhalf', { quotas: stock }), server: { features: [] } }
                 ]),
-            /quota stock et server.quotas vont ensemble \(things\)/
+            /server.quotas ne suit pas manifest.quotas \(things : un stock se liste\)/
         );
         assert.throws(
             () =>
@@ -307,9 +308,32 @@ describe('registerModules : les sentinelles', () => {
                         server: { features: [], quotas: { things: { list: () => Promise.resolve([]) } } }
                     }
                 ]),
-            /quota stock et server.quotas vont ensemble \(things\)/
+            /things : un flux se compte/
         );
         assert.equal(moduleManifest('x-sdkstockhalf'), undefined);
+    });
+
+    it('quotaEntryProblems : chaque sorte de limite, et ce qui n’est pas déclaré', () => {
+        const list = () => Promise.resolve([]);
+        const count = () => Promise.resolve(0);
+        const m = manifest('x-sdkquotas', {
+            quotas: [
+                { key: 'stock', label: 's', stock: true },
+                { key: 'flow', label: 'f' },
+                { key: 'each', label: 'e', unit: 'bytes', perOperation: true }
+            ]
+        });
+        assert.deepEqual(quotaEntryProblems(m, { stock: { list }, flow: { count } }), []);
+        assert.deepEqual(
+            quotaEntryProblems(m, { stock: { list, count }, flow: { list }, each: { count }, other: { count } }),
+            [
+                'stock : un stock se liste',
+                'flow : un flux se compte',
+                'each : une limite par opération ne se compte pas',
+                'other : non déclaré'
+            ]
+        );
+        assert.deepEqual(quotaEntryProblems(m, undefined), ['stock : un stock se liste', 'flow : un flux se compte']);
     });
 
     it('refuse un échantillon de mail envoyé par le serveur sans la capacité, et des clés en double', () => {

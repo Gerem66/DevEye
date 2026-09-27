@@ -25,7 +25,6 @@ import {
     visitorRef
 } from './normalize';
 import { countAnswers } from './answers';
-import { eventsUsage } from './planUsage';
 import type { AudienceRepo, PendingEventRow } from './repo';
 import { validateSubmission, type ValidationReason } from './validate';
 import { nameRef, parseOrigins, readJson } from './_shared';
@@ -609,11 +608,7 @@ export class AudienceIngest {
     private async readPlanUsage(workspaceId: number, warned: boolean): Promise<PlanUsage> {
         const usage: PlanUsage = { at: Date.now(), limit: null, count: 0, warned };
         try {
-            const read = await eventsUsage(
-                this.deps.quotaFor(workspaceId),
-                this.deps.repo,
-                Math.floor(Date.now() / 1000)
-            );
+            const read = await this.deps.quotaFor(workspaceId).usage('events');
             if (read) {
                 usage.limit = read.limit;
                 // Acceptés mais pas encore écrits : la base ne les compte pas.

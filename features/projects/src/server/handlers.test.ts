@@ -2554,7 +2554,7 @@ describe('la page publique d’un projet', () => {
         assert.equal((await get(one, { projectId: 1 })).limit, 2);
         // Le stock compte les pages, pas les projets : un projet déplacé, qui les
         // laisse derrière lui, n'entre pas dans l'offre de la cible à ce titre.
-        const stock = await serverEntry.quotas?.pages.list(repo, [1, 9]);
+        const stock = await serverEntry.quotas?.pages.list?.(repo, [1, 9]);
         assert.deepEqual(
             stock?.map((item) => item.id),
             ['public:3', 'public:1']

@@ -352,7 +352,7 @@ function ingestWith(
     quotaLimits?: Record<string, number>,
     pausedItems?: Record<string, readonly string[]>
 ) {
-    const deps = createTestServiceDeps({ repo, quotaLimits, pausedItems });
+    const deps = createTestServiceDeps({ repo, quotaLimits, pausedItems, quotas: serverEntry.quotas });
     const ingest = new AudienceIngest(deps);
     return {
         deps,

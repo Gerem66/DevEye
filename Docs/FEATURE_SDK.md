@@ -634,7 +634,10 @@ garde de l'app, et avec `{ extras }` elle éprouve les permissions d'Appareils
 de l'appelant sur CET appareil, surcharges comprises, qu'un module ne peut pas
 nommer dans son `access` ; `list()` rend les appareils de l'espace et ceux qui
 y sont projetés, l'administrateur global compris), `workspaces.read` (`list()`, tous les
-espaces, administrateur seulement), `telemetry.read` (`snapshot`,
+espaces, administrateur seulement), `accounts.usage` (`usage.of(userId)` : ce qu'un
+compte utilise de chaque limite de l'app, le sien ou, pour l'administrateur global,
+celui de tous ; `usage.ofMany`, administrateur seulement, cadencé par l'hôte ; voir
+`Docs/QUOTAS.md`), `telemetry.read` (`snapshot`,
 `pinInstant`, réservée aux ids natifs) et `agents` (`requestScan`,
 `pushConfig`, les deux ordres du cycle de vie `disconnectAgent` /
 `requestDestroy`, `servedManifest`, les requêtes sync,
@@ -679,8 +682,10 @@ chaque appel), `keys` (`sealBytes`/`openBytes` sous la clé serveur,
 `derive(salt, info, length)` : HKDF sur la même clé, jamais stockée),
 `secrecy.redeem(ticket)` (le ticket d'un module rendu en `{ userId,
 workspaceId, payload, cipher: { server, private | null } }`), `origins`,
-`accounts` (capacité `accounts.read` : `find`, `findByEmail`, `list`, `search` ;
-`SdkAccount.e2e` dit un compte jetable des essais de bout en bout, jamais une personne),
+`accounts` (capacité `accounts.read` : `find`, `findByEmail`, `list`, `search`, `all` ;
+`SdkAccount.e2e` dit un compte jetable des essais de bout en bout, jamais une personne,
+`suspended` un compte suspendu), `usage` (capacité `accounts.usage` : `of`, `ofMany`,
+sans appelant à éprouver),
 `accountMail` (capacité `accounts.mail` : `send(userId, message)` écrit à
 l'adresse du compte, jamais une autre, par l'expéditeur du serveur (`SMTP_*`,
 celui de l'inscription) ; le module donne du texte brut, paragraphes, encadré,

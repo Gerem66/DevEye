@@ -1,5 +1,5 @@
 import { ACCOUNT_PLAN_PROVIDER, type AccountPlan, type AccountPlanProvider } from '@deveye/types/sdk';
-import type { SdkProviders } from '@deveye/types/sdk/server';
+import type { SdkProviders, SdkQuotaUse } from '@deveye/types/sdk/server';
 
 import { FeatureError } from '@deveye/types/sdk/server';
 
@@ -104,4 +104,19 @@ export async function assertPlanLimit(
             plan: plan?.id
         }
     );
+}
+
+/**
+ * Où en est un compte face à une limite : ce qu'un écran dit avant le refus.
+ * `null` quand elle est illimitée, et rien n'est compté alors.
+ */
+export async function planUsage(
+    db: Pick<Database, 'workspaces'>,
+    providers: SdkProviders,
+    logger: QuotaLogger,
+    check: { ownerUserId: number; fullKey: string; used(ownerWorkspaceIds: readonly number[]): Promise<number> }
+): Promise<SdkQuotaUse | null> {
+    const limit = limitIn(await planOf(providers, check.ownerUserId, logger), check.fullKey);
+    if (limit === null) return null;
+    return { used: await check.used(await ownedWorkspaceIds(db, check.ownerUserId)), limit };
 }

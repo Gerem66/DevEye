@@ -71,22 +71,11 @@ function requireEnableBanking() {
 export const financeConnectionListFeature = defineSdkFeature({
     ...financeConnectionList,
     handler: async (ctx: Ctx) => {
-        const [rows, links, limit] = await Promise.all([
+        const [rows, links, quota] = await Promise.all([
             ctx.repo.listConnections(ctx.workspaceId),
             ctx.repo.listBankLinks(ctx.workspaceId),
-            ctx.quota.limit(QUOTA)
+            ctx.quota.usage(QUOTA)
         ]);
-        let quota = null;
-        if (limit !== null) {
-            // `assert` est la seule voie vers les espaces du propriétaire : le
-            // compteur y est lu en rendant 0, qui ne fait rien refuser.
-            let used = 0;
-            await ctx.quota.assert(QUOTA, async (owned) => {
-                used = await ctx.repo.countConnectionsInWorkspaces(owned);
-                return 0;
-            });
-            quota = { limit, used };
-        }
         return {
             connections: await Promise.all(
                 rows.map(async (row) => toConnection(row, await readConnection(ctx, row), paused(ctx, row.id)))

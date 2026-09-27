@@ -7,6 +7,7 @@ import type { FeatureServer, SdkCipher } from '@deveye/types/sdk/server';
 import { audienceHandlers } from './handlers';
 import { audienceCopy } from './copy';
 import { audienceMove } from './move';
+import { monthKey } from './normalize';
 import { createRepo, type AudienceRepo } from './repo';
 import { audienceRoutes } from './routes';
 import { createSelfProvider } from './self';
@@ -53,7 +54,10 @@ export const serverEntry: FeatureServer<AudienceRepo> = {
     e2e: audienceE2e,
     features: audienceHandlers,
     migrationsDir: path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations'),
-    quotas: { sites: { list: (repo, owned) => repo.listStock(owned) } },
+    quotas: {
+        sites: { list: (repo, owned) => repo.listStock(owned) },
+        events: { count: (repo, owned) => repo.monthlyEvents(owned, monthKey(Math.floor(Date.now() / 1000))) }
+    },
     createService(deps) {
         const ingest = new AudienceIngest(deps);
         // Projets ne stocke que des identifiants : avant d'en relier un, il demande si

@@ -112,7 +112,7 @@ describe('la limite de stock `agents`', () => {
             execute: () => Promise.reject(new Error('aucune écriture attendue'))
         };
         const repo = createRepo(q);
-        const listed = await serverEntry.quotas?.agents.list(repo, [1, 2]);
+        const listed = await serverEntry.quotas?.agents.list?.(repo, [1, 2]);
         assert.deepEqual(listed, [
             { id: 'aaaa', workspaceId: 1 },
             { id: 'bbbb', workspaceId: 2 }

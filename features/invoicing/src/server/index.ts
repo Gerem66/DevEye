@@ -6,6 +6,7 @@ import type { FeatureServer } from '@deveye/types/sdk/server';
 import { invoicingClientInputSchema } from '../contracts/domain';
 import { createDomainHooks } from './domains';
 import { invoicingHandlers } from './handlers';
+import { issuedThisMonth, QUOTA_KEYS } from './planUsage';
 import { createRepo, type InvoicingRepo } from './repo';
 import { createService } from './service';
 import { invoicingMailSamples } from './documentMail';
@@ -19,6 +20,10 @@ export const serverEntry: FeatureServer<InvoicingRepo> = {
     createService,
     mailSamples: invoicingMailSamples,
     domains: createDomainHooks(),
+    quotas: {
+        [QUOTA_KEYS.quote]: { count: issuedThisMonth('quote') },
+        [QUOTA_KEYS.invoice]: { count: issuedThisMonth('invoice') }
+    },
     /**
      * Fourni bien que rien ne soit partageable : sans lui, l'écran des canaux
      * de notification ne saurait pas nommer le client qu'une route vise, et

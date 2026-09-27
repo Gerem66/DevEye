@@ -1,4 +1,10 @@
-import type { SdkFeatureContext, SdkOrigins, SdkProviders, SdkSocketTransport } from '@deveye/types/sdk/server';
+import type {
+    FeatureServer,
+    SdkFeatureContext,
+    SdkOrigins,
+    SdkProviders,
+    SdkSocketTransport
+} from '@deveye/types/sdk/server';
 import { env } from '@/Utils/Env';
 import { signModuleTicket } from '@/auth/jwt';
 import { sdkLive, serverKeysOf } from './host';
@@ -12,12 +18,13 @@ import {
 import type { NotificationFeature } from '@deveye/types';
 
 import type { FeatureContext } from '@/features/_define';
+import { accountUsages } from '@/features/_quota';
 import { shareScope } from '@/features/_sharing';
 import { sdkDomains } from './domains';
 import { createFacade } from './facade';
 import { moduleManifest } from './register';
 import { accountChanged } from './live';
-import { createQuota } from './quota';
+import { createQuota, quotaCounter } from './quota';
 import { createFeatureStore } from './store';
 
 /**
@@ -43,7 +50,8 @@ export function createSdkContext(
     ctx: FeatureContext,
     manifest: FeatureManifest,
     repo: unknown,
-    providers: SdkProviders
+    providers: SdkProviders,
+    quotas: FeatureServer['quotas']
 ): SdkFeatureContext {
     const extras = resolveExtras(manifest.extraPermissions, ctx.isOwner, ctx.extrasFor(manifest.id));
     return {
@@ -71,6 +79,7 @@ export function createSdkContext(
             manifest,
             logger: ctx.logger,
             providers,
+            accountUsages: (ids) => accountUsages(ctx.db, ids),
             // Les permissions d'Appareils de l'appelant sur une machine, surcharges
             // de l'élément comprises : ce que `agent.dockerAction` éprouve pour lui.
             assertDeviceExtras: async (deviceId, keys) => {
@@ -116,7 +125,14 @@ export function createSdkContext(
         },
         // Le compte visé est le propriétaire de l'espace, pas l'appelant : dans
         // un espace partagé, ce qu'un membre crée pèse sur l'offre de son hôte.
-        quota: createQuota(ctx.db, providers, manifest, () => Promise.resolve(ctx.workspace.ownerUserId), ctx.logger),
+        quota: createQuota(
+            ctx.db,
+            providers,
+            manifest,
+            quotaCounter(quotas, repo),
+            () => Promise.resolve(ctx.workspace.ownerUserId),
+            ctx.logger
+        ),
         items: {
             // Liées à la feature du module : un module ne peut pas interroger
             // les restrictions d'une autre.

@@ -1,9 +1,15 @@
 import type { FeatureManifest } from '@deveye/types/sdk';
-import { FeatureError, type SdkPlanPauses, type SdkProviders, type SdkQuota } from '@deveye/types/sdk/server';
+import {
+    FeatureError,
+    type FeatureServer,
+    type SdkPlanPauses,
+    type SdkProviders,
+    type SdkQuota
+} from '@deveye/types/sdk/server';
 
 import type { Database } from '@/db';
 import { isPlanPaused, planPausedIds } from '@/Services/planPauses';
-import { assertPlanLimit, limitIn, planOf } from '@/Services/quota';
+import { assertPlanLimit, limitIn, planOf, planUsage } from '@/Services/quota';
 
 function specOf(manifest: FeatureManifest, key: string) {
     const spec = manifest.quotas?.find((q) => q.key === key);
@@ -25,6 +31,19 @@ export function modulePauses(manifest: FeatureManifest): SdkPlanPauses {
     };
 }
 
+/** Ce que compte une clé d'un module, sur les espaces de son propriétaire. */
+export type QuotaCounter = (key: string, ownerWorkspaceIds: readonly number[]) => Promise<number>;
+
+/** Le compteur des quotas d'un module, lié à son repo : un stock par sa liste, un flux par son compte. */
+export function quotaCounter(entries: FeatureServer['quotas'], repo: unknown): QuotaCounter {
+    return async (key, ownerWorkspaceIds) => {
+        const entry = entries?.[key];
+        if (entry?.list) return (await entry.list(repo, ownerWorkspaceIds)).length;
+        if (entry?.count) return entry.count(repo, ownerWorkspaceIds);
+        throw new FeatureError('validation', `Quota « ${key} » : rien ne le compte`);
+    };
+}
+
 /**
  * Les quotas d'un module, contre l'offre d'un compte. `ownerOf` dit lequel : le
  * propriétaire de l'espace, résolu à l'appel (un service ne le connaît pas
@@ -34,6 +53,7 @@ export function createQuota(
     db: Pick<Database, 'workspaces'>,
     providers: SdkProviders,
     manifest: FeatureManifest,
+    count: QuotaCounter,
     ownerOf: () => Promise<number | null>,
     logger: { error(obj: object, msg: string): void }
 ): SdkQuota {
@@ -56,6 +76,21 @@ export function createQuota(
                 label: spec.label,
                 unit: spec.unit,
                 countAfter
+            });
+        },
+        usage: async (key) => {
+            if (specOf(manifest, key).perOperation) {
+                throw new FeatureError(
+                    'validation',
+                    `Quota « ${key} » de ${manifest.id} : limite par opération, rien à compter`
+                );
+            }
+            const ownerUserId = await ownerOf();
+            if (ownerUserId === null) return null;
+            return planUsage(db, providers, logger, {
+                ownerUserId,
+                fullKey: `${manifest.id}.${key}`,
+                used: (owned) => count(key, owned)
             });
         },
         assertActive: async (key, itemId) => {

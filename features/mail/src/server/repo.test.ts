@@ -51,7 +51,7 @@ describe('mail : la pause d’offre en SQL', () => {
         const repo = createRepo(q);
 
         await repo.accounts.countInWorkspaces([1, 6]);
-        const listed = await serverEntry.quotas!.accounts.list(repo, [1, 6]);
+        const listed = await serverEntry.quotas!.accounts.list!(repo, [1, 6]);
         assert.deepEqual(listed, [
             { id: '2', workspaceId: 1 },
             { id: '9', workspaceId: 6 }

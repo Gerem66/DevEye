@@ -51,7 +51,7 @@ describe('git : la pause d’offre en SQL', () => {
         const repo = createRepo(q);
 
         await repo.countReposInWorkspaces([1, 4]);
-        const listed = await serverEntry.quotas!.repos.list(repo, [1, 4]);
+        const listed = await serverEntry.quotas!.repos.list!(repo, [1, 4]);
         assert.deepEqual(listed, [
             { id: '3', workspaceId: 1 },
             { id: '8', workspaceId: 4 }

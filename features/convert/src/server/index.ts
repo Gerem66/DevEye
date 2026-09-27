@@ -14,5 +14,9 @@ export const serverEntry: FeatureServer<ConvertRepo> = {
     createRepo,
     features: convertHandlers,
     migrationsDir: path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations'),
+    quotas: {
+        activeJobs: { count: (repo, owned) => repo.openJobs(owned) },
+        resultBytes: { count: (repo, owned) => repo.resultBytes(owned) }
+    },
     createService: (deps) => createService(deps)
 };

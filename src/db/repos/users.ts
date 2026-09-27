@@ -3,11 +3,16 @@ import type { Queryable } from '../pool';
 
 type Q = Queryable;
 
+/** Ce qu'un compte montre de lui hors de sa session : ni avatar, ni secret. */
+export type AccountRow = Pick<UserRow, 'id' | 'email' | 'username' | 'role' | 'status' | 'e2e_run' | 'created'>;
+
 export interface UsersRepo {
     findById(id: number): Promise<UserRow | null>;
     findByUsername(username: string): Promise<UserRow | null>;
     findByEmail(email: string): Promise<UserRow | null>;
     findByIds(ids: number[]): Promise<UserRow[]>;
+    /** Tous les comptes, les plus anciens d'abord, sans avatar ni secret : ce qu'un relevé d'administration lit. */
+    all(): Promise<AccountRow[]>;
     /**
      * Les comptes dont le pseudo ou l'adresse contient `query`, par pseudo. Une
      * requête tout en chiffres vise aussi cet id, classé premier. Vide : les
@@ -77,6 +82,12 @@ export function usersRepo(pool: Q): UsersRepo {
         async findByIds(ids) {
             if (ids.length === 0) return [];
             const r = await pool.query<UserRow>('SELECT * FROM users WHERE id IN (?)', [ids]);
+            return r.rows;
+        },
+        async all() {
+            const r = await pool.query<AccountRow>(
+                'SELECT id, email, username, role, status, e2e_run, created FROM users ORDER BY id ASC'
+            );
             return r.rows;
         },
         async search(query, limit) {

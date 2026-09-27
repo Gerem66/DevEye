@@ -1,5 +1,6 @@
 import type {
     DevEyeFacade,
+    FeatureServer,
     FeatureService,
     FeatureServiceDeps,
     SdkCipher,
@@ -12,7 +13,8 @@ import type { Database } from '@/db';
 import type Encryption from '@/Services/Encryption';
 import { FeatureError } from '@deveye/types/sdk/server';
 import { accountChanged, toSdkAccount } from './live';
-import { createQuota, modulePauses } from './quota';
+import { createQuota, modulePauses, quotaCounter } from './quota';
+import { accountUsages } from '@/features/_quota';
 import { serverKeysOf } from './host';
 import { ORIGINS, publishFrame } from './context';
 import { createOpenCipher, createSecureStore } from '@/Services/SecureStore';
@@ -56,7 +58,8 @@ export function createServiceDeps(
     host: ModuleServiceHost,
     manifest: FeatureManifest,
     repo: unknown,
-    providers: SdkProviders
+    providers: SdkProviders,
+    quotas: FeatureServer['quotas']
 ): FeatureServiceDeps {
     const ciphers = new Map<number, SdkCipher>();
     const cipherFor = (workspaceId: number): SdkCipher => {
@@ -82,7 +85,8 @@ export function createServiceDeps(
             workspaceKind: 'shared',
             manifest,
             logger: host.logger,
-            providers
+            providers,
+            accountUsages: (ids) => accountUsages(host.db, ids)
         });
     const facades = new Map<number, DevEyeFacade>();
     const facadeFor = (workspaceId: number): DevEyeFacade => {
@@ -96,7 +100,16 @@ export function createServiceDeps(
     // La même erreur qu'en requête (`facade.ts`), nommant la capacité manquante.
     const capabilities = new Set(manifest.nativeCapabilities ?? []);
     const gate =
-        (cap: 'agents' | 'devices.read' | 'telemetry.read' | 'accounts.read' | 'accounts.mail' | 'members.read') =>
+        (
+            cap:
+                | 'agents'
+                | 'devices.read'
+                | 'telemetry.read'
+                | 'accounts.read'
+                | 'accounts.usage'
+                | 'accounts.mail'
+                | 'members.read'
+        ) =>
         (): void => {
             if (!capabilities.has(cap)) {
                 throw new FeatureError(
@@ -108,6 +121,7 @@ export function createServiceDeps(
     const gateAgents = gate('agents');
     const gateDevices = gate('devices.read');
     const gateAccounts = gate('accounts.read');
+    const gateUsage = gate('accounts.usage');
     const gateMail = gate('accounts.mail');
     const gateMembers = gate('members.read');
     const keys = serverKeysOf(host.crypt, manifest.id);
@@ -199,6 +213,7 @@ export function createServiceDeps(
                 host.db,
                 providers,
                 manifest,
+                quotaCounter(quotas, repo),
                 async () => (await host.db.workspaces.findById(workspaceId))?.owner_user_id ?? null,
                 host.logger
             ),
@@ -222,6 +237,23 @@ export function createServiceDeps(
                 gateAccounts();
                 const capped = Math.min(Math.max(1, Math.trunc(limit ?? 20)), 50);
                 return (await host.db.users.search(query.trim(), capped)).map(toSdkAccount);
+            },
+            all: async () => {
+                gateAccounts();
+                return (await host.db.users.all()).map(toSdkAccount);
+            }
+        },
+        // Sans l'appelant d'une commande : la capacité seule en garde l'accès.
+        usage: {
+            of: async (userId) => {
+                gateUsage();
+                const [found] = await accountUsages(host.db, [userId]);
+                if (!found) throw new FeatureError('not_found', `Compte ${userId} introuvable`);
+                return found;
+            },
+            ofMany: async (userIds) => {
+                gateUsage();
+                return accountUsages(host.db, userIds);
             }
         },
         accountMail: {

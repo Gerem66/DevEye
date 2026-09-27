@@ -18,6 +18,7 @@ import { env } from './env';
 import type { ConvertRepo } from './repo';
 import { DOWNLOAD_PATH, UPLOAD_PATH } from './routes';
 import { createService } from './service';
+import { serverEntry } from './index';
 import { jobPaths } from './storage';
 import { memoryRepo, type MemoryRepo } from './testing';
 
@@ -220,7 +221,11 @@ describe('de la montée au résultat', () => {
 
     it('arrête une conversion dont le résultat dépasserait la réserve de l’offre, et le dit', async (t) => {
         if (!hasFfmpeg()) return t.skip('ffmpeg absent de ce poste');
-        const tight = createTestServiceDeps<ConvertRepo>({ repo, quotaLimits: { resultBytes: 100 } });
+        const tight = createTestServiceDeps<ConvertRepo>({
+            repo,
+            quotaLimits: { resultBytes: 100 },
+            quotas: serverEntry.quotas
+        });
         const service = createService(tight, { fx: () => Promise.reject(new Error('hors ligne')) });
         const id = await seed(repo, 'wav', 'mp3');
         const paths = jobPaths(1, id);

@@ -197,22 +197,10 @@ export function createService(deps: FeatureServiceDeps<ConvertRepo>, seam: Conve
         }
     }
 
-    /**
-     * Ce que l'offre du propriétaire de l'espace laisse encore aux résultats en
-     * attente, en octets. `null` : aucune limite. `assert` ne sert ici qu'à
-     * apprendre quels espaces comptent pour cette offre : le compteur qu'on lui
-     * rend est nul, il ne refuse donc jamais.
-     */
+    /** Ce que l'offre du propriétaire de l'espace laisse encore aux résultats en attente, en octets. `null` : aucune limite. */
     async function resultRoom(workspaceId: number): Promise<number | null> {
-        const quota = deps.quotaFor(workspaceId);
-        const limit = await quota.limit('resultBytes');
-        if (limit === null) return null;
-        let held = 0;
-        await quota.assert('resultBytes', async (owned) => {
-            held = await deps.repo.resultBytes(owned);
-            return 0;
-        });
-        return Math.max(0, limit - held);
+        const use = await deps.quotaFor(workspaceId).usage('resultBytes');
+        return use && Math.max(0, use.limit - use.used);
     }
 
     /** Prévient à la fin d'un travail assez long pour qu'on ait quitté l'écran. */

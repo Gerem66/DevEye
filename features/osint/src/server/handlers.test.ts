@@ -17,6 +17,7 @@ import type { SdkFeatureContext } from '@deveye/types/sdk/server';
 import { createTestContext } from '@deveye/types/sdk/testing';
 
 import { osintHandlers } from './handlers';
+import { serverEntry } from './index';
 import type { OsintRepo } from './repo';
 
 /**
@@ -168,7 +169,7 @@ describe('osint.probe — les gardes', () => {
 describe('la limite mensuelle', () => {
     it('compte chaque recherche, rejeu compris, et refuse au-delà de l’offre', async () => {
         const repo = fakeRepo();
-        const ctx = createTestContext({ repo, quotaLimits: { lookupsPerMonth: 2 } });
+        const ctx = createTestContext({ repo, quotaLimits: { lookupsPerMonth: 2 }, quotas: serverEntry.quotas });
 
         await handlerFor(osintLookup)(ctx, { query: 'github.com', fromHistory: false });
         const replay = await handlerFor(osintLookup)(ctx, { query: 'github.com', fromHistory: true });

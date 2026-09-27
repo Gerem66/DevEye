@@ -8,6 +8,7 @@ import { DEFAULT_SETTINGS } from '../contracts/defaults';
 import type { InvoicingSettings } from '../contracts/domain';
 import { memoryRepo } from './_memoryRepo';
 import { settingsGet, settingsSave } from './handlers/settings';
+import { serverEntry } from './index';
 
 const MANIFEST = {
     extraPermissions: [
@@ -47,7 +48,8 @@ describe('invoicing.config', () => {
         const ctx = createTestContext({
             repo,
             quotaLimits: { quotesPerMonth: 3, invoicesPerMonth: 3 },
-            ownerWorkspaceIds: [1, 7]
+            ownerWorkspaceIds: [1, 7],
+            quotas: serverEntry.quotas
         });
 
         const res = await settingsGet.handler(ctx, {});
@@ -57,7 +59,11 @@ describe('invoicing.config', () => {
     });
 
     it('n’annonce que ce qui est borné', async () => {
-        const ctx = createTestContext({ repo: memoryRepo(), quotaLimits: { invoicesPerMonth: 3 } });
+        const ctx = createTestContext({
+            repo: memoryRepo(),
+            quotaLimits: { invoicesPerMonth: 3 },
+            quotas: serverEntry.quotas
+        });
         const res = await settingsGet.handler(ctx, {});
         assert.deepEqual(res.usage, { quotes: null, invoices: { limit: 3, used: 0 } });
     });
@@ -65,7 +71,8 @@ describe('invoicing.config', () => {
     it('lit une limite à zéro comme une limite, pas comme une absence', async () => {
         const ctx = createTestContext({
             repo: memoryRepo(),
-            quotaLimits: { quotesPerMonth: 0, invoicesPerMonth: 0 }
+            quotaLimits: { quotesPerMonth: 0, invoicesPerMonth: 0 },
+            quotas: serverEntry.quotas
         });
         const res = await settingsGet.handler(ctx, {});
         assert.deepEqual(res.usage, { quotes: { limit: 0, used: 0 }, invoices: { limit: 0, used: 0 } });

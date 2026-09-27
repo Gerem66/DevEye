@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 
 import { ACCOUNT_PLAN_PROVIDER, type AccountPlan } from '@deveye/types/sdk';
 
-import { assertPlanLimit, limitIn, planOf, sizeFr } from './quota';
+import { assertPlanLimit, limitIn, planOf, planUsage, sizeFr } from './quota';
 
 const logger = { error: () => undefined };
 const FREE: AccountPlan = { id: 'free', label: 'Gratuite', limits: { 'uptime.monitors': 5 } };
@@ -88,5 +88,31 @@ describe('la comparaison à une offre', () => {
             }),
             /1 Go de stockage/
         );
+    });
+});
+
+describe('où en est un compte', () => {
+    const db = { workspaces: { listOwnedIds: async () => [1, 2] } } as never;
+    const PLAN: AccountPlan = { id: 'free', label: 'Gratuite', limits: { 'x.things': 0, 'x.flow': 10 } };
+
+    it('ne compte rien sans offre ni pour une clé illimitée', async () => {
+        let counted = 0;
+        const used = async () => (counted++, 3);
+        assert.equal(await planUsage(db, providers(), logger, { ownerUserId: 7, fullKey: 'x.flow', used }), null);
+        const bounded = providers(() => Promise.resolve(PLAN));
+        assert.equal(await planUsage(db, bounded, logger, { ownerUserId: 7, fullKey: 'x.other', used }), null);
+        assert.equal(counted, 0);
+    });
+
+    it('compte sur les espaces du propriétaire, et garde une limite à 0', async () => {
+        let seen: readonly number[] = [];
+        const bounded = providers(() => Promise.resolve(PLAN));
+        const use = await planUsage(db, bounded, logger, {
+            ownerUserId: 7,
+            fullKey: 'x.things',
+            used: async (owned) => ((seen = owned), 2)
+        });
+        assert.deepEqual(use, { used: 2, limit: 0 });
+        assert.deepEqual(seen, [1, 2]);
     });
 });

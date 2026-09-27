@@ -174,7 +174,7 @@ describe('la limite de l’offre', () => {
             execute: () => Promise.reject(new Error('aucune écriture attendue'))
         };
         const repo = createRepo(q);
-        const listed = await serverEntry.quotas?.addresses.list(repo, [1, 2]);
+        const listed = await serverEntry.quotas?.addresses.list?.(repo, [1, 2]);
         assert.deepEqual(listed, [
             { id: '7', workspaceId: 1 },
             { id: '3', workspaceId: 2 }

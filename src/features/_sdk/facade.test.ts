@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 import type { Logger } from 'pino';
 import { MAIL_TRANSPORT_PROVIDER, type FeatureManifest, type NativeCapability } from '@deveye/types/sdk';
 import type { MailTransportProvider } from '@deveye/types/sdk';
-import type { SdkCipher } from '@deveye/types/sdk/server';
+import type { SdkAccountUsage, SdkCipher } from '@deveye/types/sdk/server';
 
 import type { MonitorHub } from '@/agent/hub';
 import type { Database } from '@/db';
@@ -98,7 +98,8 @@ function facadeWith(
     caps: readonly NativeCapability[],
     db: object = {},
     isAdmin = false,
-    providers: Readonly<Record<string, unknown>> = {}
+    providers: Readonly<Record<string, unknown>> = {},
+    usages: readonly SdkAccountUsage[] = []
 ) {
     return createFacade({
         db: db as Database,
@@ -110,7 +111,8 @@ function facadeWith(
         workspaceKind: isAdmin ? 'personal' : 'shared',
         manifest: manifest(caps),
         logger,
-        providers: { get: <T>(key: string) => providers[key] as T | undefined }
+        providers: { get: <T>(key: string) => providers[key] as T | undefined },
+        accountUsages: (ids) => Promise.resolve(ids.flatMap((id) => usages.filter((u) => u.userId === id)))
     });
 }
 
@@ -147,6 +149,11 @@ describe('createFacade : la garde des capacités', () => {
         await assert.rejects(facade.members.list(), forbidden);
     });
 
+    it('usage : of et ofMany', async () => {
+        await assert.rejects(facade.usage.of(OWNER), forbidden);
+        await assert.rejects(facade.usage.ofMany([OWNER]), forbidden);
+    });
+
     it('devices : authorize, list, isOnline', async () => {
         await assert.rejects(facade.devices.authorize('dev-1'), forbidden);
         await assert.rejects(facade.devices.list(), forbidden);
@@ -165,6 +172,30 @@ describe('createFacade : la garde des capacités', () => {
         await assert.rejects(facade.mail.listAccounts(), /Declare 'mail\.accounts'/);
         await assert.rejects(facade.members.list(), /Declare 'members\.read'/);
         assert.throws(() => facade.agents.isOnline('dev-1'), /Declare 'agents'/);
+    });
+});
+
+describe('createFacade : usage', () => {
+    const usages: SdkAccountUsage[] = [
+        { userId: OWNER, quotas: { 'uptime.monitors': { used: 3, paused: 0 } } },
+        { userId: 42, quotas: { 'uptime.monitors': { used: 9, paused: 2 } } }
+    ];
+
+    it('son propre compte, oui ; celui d’un autre, réservé à l’administrateur', async () => {
+        const member = facadeWith(['accounts.usage'], {}, false, {}, usages);
+        assert.equal((await member.usage.of(OWNER)).quotas['uptime.monitors'].used, 3);
+        await assert.rejects(member.usage.of(42), forbidden);
+        await assert.rejects(member.usage.ofMany([OWNER]), forbidden);
+    });
+
+    it('un administrateur lit tout le monde, dans l’ordre demandé, sans les inconnus', async () => {
+        const admin = facadeWith(['accounts.usage'], {}, true, {}, usages);
+        assert.equal((await admin.usage.of(42)).quotas['uptime.monitors'].paused, 2);
+        assert.deepEqual(
+            (await admin.usage.ofMany([42, 7, OWNER])).map((u) => u.userId),
+            [42, OWNER]
+        );
+        await assert.rejects(admin.usage.of(7), { name: 'FeatureError', code: 'not_found' });
     });
 });
 

@@ -1,6 +1,7 @@
 import type {
     AgentsFacade,
     DevEyeFacade,
+    SdkAccountUsage,
     SdkCipher,
     SdkDevice,
     SdkProviders,
@@ -50,6 +51,8 @@ export interface FacadeDeps {
      * d'appelant dont éprouver les droits.
      */
     assertDeviceExtras?: (deviceId: string, extras: readonly string[]) => Promise<void>;
+    /** Ce qu'utilisent ces comptes (`_quota.ts`), injecté pour ne pas lier la façade au registre. */
+    accountUsages(userIds: readonly number[]): Promise<SdkAccountUsage[]>;
 }
 
 /** L'agent borne une action à 30 minutes ; le serveur l'attend un peu plus longtemps. */
@@ -137,6 +140,22 @@ export function createFacade(deps: FacadeDeps): DevEyeFacade {
                 const row = deps.userId ? await deps.db.users.findById(deps.userId) : null;
                 if (!row) throw new FeatureError('not_found', 'Compte introuvable');
                 return toSdkAccount(row);
+            }
+        },
+        usage: {
+            async of(userId) {
+                gate('accounts.usage');
+                if (userId !== deps.userId && !deps.isAdmin) {
+                    throw new FeatureError('forbidden', 'Réservé à l’administrateur');
+                }
+                const [found] = await deps.accountUsages([userId]);
+                if (!found) throw new FeatureError('not_found', 'Compte introuvable');
+                return found;
+            },
+            async ofMany(userIds) {
+                gate('accounts.usage');
+                if (!deps.isAdmin) throw new FeatureError('forbidden', 'Réservé à l’administrateur');
+                return deps.accountUsages(userIds);
             }
         },
         workspaces: {

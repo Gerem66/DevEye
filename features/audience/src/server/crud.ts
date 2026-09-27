@@ -11,7 +11,6 @@ import {
 import type { AudienceSite } from '../contracts/domain';
 import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 
-import { eventsUsage } from './planUsage';
 import { createSiteRecord } from './sites';
 
 import {
@@ -77,7 +76,7 @@ export const audienceListFeature = defineSdkFeature({
             ctx.sharing.scope(),
             projectCountsOf(ctx),
             // Une offre illisible ne doit pas priver l'espace de sa liste.
-            eventsUsage(ctx.quota, ctx.repo, Math.floor(Date.now() / 1000)).catch(() => null)
+            ctx.quota.usage('events').catch(() => null)
         ]);
         return {
             eventsQuota,

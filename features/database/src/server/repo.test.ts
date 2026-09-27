@@ -51,7 +51,7 @@ describe('database : la pause d’offre en SQL', () => {
         const repo = createRepo(q);
 
         await repo.countInWorkspaces([1, 3]);
-        const listed = await serverEntry.quotas!.connections.list(repo, [1, 3]);
+        const listed = await serverEntry.quotas!.connections.list!(repo, [1, 3]);
         assert.deepEqual(listed, [
             { id: '5', workspaceId: 1 },
             { id: '6', workspaceId: 3 }

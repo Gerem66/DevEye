@@ -10,6 +10,7 @@ import {
     financeAccountBankLink,
     financeBankList,
     financeConnectionAddQonto,
+    financeConnectionList,
     financeConnectionStart,
     financeConnectionSync,
     financeStatementImport,
@@ -21,6 +22,7 @@ import { bankHttp, centsOf } from './banks/types';
 import { sealConnection, type StoredConnection } from './banking';
 import { env } from './env';
 import { financeRoutes, type FinanceRouteSeam } from './routes';
+import { serverEntry } from './index';
 import { createService } from './service';
 import { addDays, today, type Ctx } from './_shared';
 import { fakeRepo, handlerFor, type FakeRepo } from './_testing';
@@ -61,7 +63,7 @@ const header = (init: RequestInit, name: string) => new Headers(init.headers).ge
 
 async function book(overrides: { quotaLimits?: Record<string, number> } = {}) {
     const repo = fakeRepo();
-    const ctx = createTestContext({ repo, ...overrides });
+    const ctx = createTestContext({ repo, quotas: serverEntry.quotas, ...overrides });
     const { account } = await handlerFor(financeAccountAdd)(ctx, {
         account: {
             name: 'Compte pro',
@@ -242,6 +244,7 @@ describe('Qonto', () => {
             handlerFor(financeConnectionAddQonto)(b.ctx, { label: 'B', login: 'org-1', secretKey: 'secret' }),
             (e: { code?: string }) => e.code === 'quota_exceeded'
         );
+        assert.deepEqual((await handlerFor(financeConnectionList)(b.ctx, {})).quota, { used: 1, limit: 1 });
         const paused = createTestContext({
             repo: b.repo,
             pausedItems: { bankConnections: [String(first.connection.id)] }

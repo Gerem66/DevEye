@@ -7,11 +7,12 @@ import { createTestContext } from '@deveye/types/sdk/testing';
 import { addDays, startOfMonth, todayIn } from '../contracts/calendar';
 import { docRow, emptyStore, memoryRepo, type MemoryStore } from './_memoryRepo';
 import { dashboard, paymentRemove, paymentSave } from './handlers/payments';
+import { serverEntry } from './index';
 
 const DAY = todayIn('Europe/Paris');
 
 function ctxOf(store: MemoryStore, over: Record<string, unknown> = {}) {
-    return createTestContext({ repo: memoryRepo(store), workspaceId: 1, ...over });
+    return createTestContext({ repo: memoryRepo(store), workspaceId: 1, quotas: serverEntry.quotas, ...over });
 }
 
 function payment(over: Record<string, unknown> = {}) {

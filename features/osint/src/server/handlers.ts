@@ -22,7 +22,7 @@ import { defineSdkFeature, FeatureError, type SdkFeatureContext } from '@deveye/
 
 import { PROBES, probeAccepts, probesFor, readCache, runProbe, writeCache } from './probes';
 import type { OsintRepo } from './repo';
-import { lookupUsage, monthKey, ticketFor, ticketValid } from './usage';
+import { monthKey, ticketFor, ticketValid } from './usage';
 
 type Ctx = SdkFeatureContext<OsintRepo>;
 
@@ -146,7 +146,7 @@ export const osintHandlers = [
     }),
     defineSdkFeature({
         ...osintUsage,
-        handler: async (ctx: Ctx) => ({ usage: await lookupUsage(ctx.quota, ctx.repo, monthKey()) })
+        handler: async (ctx: Ctx) => ({ usage: await ctx.quota.usage(OSINT_LOOKUP_QUOTA) })
     }),
     defineSdkFeature({
         ...osintHistory,

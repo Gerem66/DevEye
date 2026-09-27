@@ -57,7 +57,7 @@ describe('deploy : la pause d’offre en SQL', () => {
         const repo = createRepo(q);
 
         await repo.countTargetsInWorkspaces([1, 2]);
-        const listed = await serverEntry.quotas!.targets.list(repo, [1, 2]);
+        const listed = await serverEntry.quotas!.targets.list!(repo, [1, 2]);
         assert.deepEqual(listed, [
             { id: '3', workspaceId: 1 },
             { id: '7', workspaceId: 2 }

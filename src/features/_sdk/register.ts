@@ -53,9 +53,10 @@ import type {
 import { logger } from '@/logger';
 import { maintenance, replyMaintenance, type MaintenanceServices } from '@/Services/maintenance';
 import { touchPlanPauses, type StockSource } from '@/Services/planPauses';
+import type { UsageSource } from '@/Services/quotaUsage';
 import { createSdkContext, ORIGINS } from './context';
 import { createDomainsContext, sdkFleetDomains, type DomainsHost } from './domains';
-import { createQuota } from './quota';
+import { createQuota, quotaCounter } from './quota';
 import { createServiceDeps, type ModuleServiceHost } from './service';
 
 /**
@@ -147,17 +148,13 @@ export function registerModules(installed: readonly InstalledFeatureModule[]): v
         if (Boolean(manifest.domains) !== Boolean(mod.server.domains)) {
             throw new Error(`Module « ${manifest.id} » : manifest.domains et server.domains vont ensemble`);
         }
-        // Même appariement pour un stock : sans son lister, rien ne se mettrait
-        // en pause, et un lister sans stock déclaré ne serait jamais appelé.
-        const stocks = (manifest.quotas ?? []).filter((q) => q.stock).map((q) => q.key);
-        const listed = Object.keys(mod.server.quotas ?? {});
-        const unpaired = [
-            ...stocks.filter((key) => !listed.includes(key)),
-            ...listed.filter((key) => !stocks.includes(key))
-        ];
-        if (unpaired.length > 0) {
+        // Toute limite doit pouvoir se compter, pour dire à un compte où il en
+        // est : un stock par la liste qui décide aussi de ses pauses, un flux
+        // par son compteur.
+        const quotaFaults = quotaEntryProblems(manifest, mod.server.quotas);
+        if (quotaFaults.length > 0) {
             throw new Error(
-                `Module « ${manifest.id} » : quota stock et server.quotas vont ensemble (${unpaired.join(', ')})`
+                `Module « ${manifest.id} » : server.quotas ne suit pas manifest.quotas (${quotaFaults.join(', ')})`
             );
         }
         if (manifest.accountOnly) {
@@ -269,7 +266,13 @@ export function moduleFeatureHandlers(): FeatureDefinition<string, never, never>
                     // L'administrateur global, en plus du droit de feature :
                     // les gestes de flotte (appairer, révoquer, supprimer).
                     if (def.access?.admin) ctx.assertAdmin();
-                    const sdkCtx = createSdkContext(ctx, mod.manifest, mod.repoFor(ctx.db), PROVIDERS);
+                    const sdkCtx = createSdkContext(
+                        ctx,
+                        mod.manifest,
+                        mod.repoFor(ctx.db),
+                        PROVIDERS,
+                        mod.server.quotas
+                    );
                     const out = await def.handler(sdkCtx, input as never);
                     // Une suppression a pu libérer une place : le plus ancien en
                     // pause la reprend, sans que le module ait à y penser.
@@ -380,6 +383,7 @@ export function moduleItems(
                     db,
                     PROVIDERS,
                     mod.manifest,
+                    quotaCounter(mod.server.quotas, repo),
                     async () => (await db.workspaces.findById(to))?.owner_user_id ?? null,
                     logger
                 );
@@ -428,23 +432,64 @@ export function moduleStocks(
 ): { fullKey: string; label: string; list(ownerWorkspaceIds: readonly number[]): Promise<readonly SdkStockItem[]> }[] {
     const mod = BY_ID.get(featureId);
     if (!mod) return [];
-    return Object.entries(mod.server.quotas ?? {}).map(([key, stock]) => ({
-        fullKey: `${featureId}.${key}`,
-        label: mod.manifest.quotas?.find((q) => q.key === key)?.label ?? key,
-        list: (ownerWorkspaceIds) => stock.list(mod.repoFor(db), ownerWorkspaceIds)
+    return stockListers(mod).map(({ spec, list }) => ({
+        fullKey: `${featureId}.${spec.key}`,
+        label: spec.label,
+        list: (ownerWorkspaceIds) => list(mod.repoFor(db), ownerWorkspaceIds)
     }));
 }
 
 /** Les limites de stock des modules (`stock: true`), chacune liée au repo de son module. */
 export function moduleStockSources(db: Database): StockSource[] {
     return MODULES.flatMap((mod) =>
-        Object.entries(mod.server.quotas ?? {}).map(([key, stock]) => ({
-            fullKey: `${mod.manifest.id}.${key}`,
+        stockListers(mod).map(({ spec, list }) => ({
+            fullKey: `${mod.manifest.id}.${spec.key}`,
             featureId: mod.manifest.id,
             overLimit: async (_owner: number, ownerWorkspaceIds: readonly number[], limit: number) =>
-                (await stock.list(mod.repoFor(db), ownerWorkspaceIds)).slice(limit)
+                (await list(mod.repoFor(db), ownerWorkspaceIds)).slice(limit)
         }))
     );
+}
+
+/** Ce que compte chaque quota des modules, lié au repo de son module ; `null` pour une limite par opération. */
+export function moduleUsageSources(db: Database): UsageSource[] {
+    return MODULES.flatMap((mod) => {
+        const count = quotaCounter(mod.server.quotas, mod.repoFor(db));
+        return (mod.manifest.quotas ?? []).map((spec) => ({
+            fullKey: `${mod.manifest.id}.${spec.key}`,
+            measure: async (_owner: number, owned: readonly number[]) => ({
+                used: spec.perOperation ? null : await count(spec.key, owned)
+            })
+        }));
+    });
+}
+
+/** Les stocks du manifest et leur lister : un flux n'atteint jamais le moteur des pauses. */
+function stockListers(mod: RegisteredModule) {
+    return (mod.manifest.quotas ?? []).flatMap((spec) => {
+        const list = spec.stock ? mod.server.quotas?.[spec.key]?.list : undefined;
+        return list ? [{ spec, list }] : [];
+    });
+}
+
+/** Ce qui manque ou déborde dans `server.quotas` au regard du manifest. Vide : tout va. */
+export function quotaEntryProblems(manifest: FeatureManifest, entries: FeatureServer['quotas']): string[] {
+    const specs = manifest.quotas ?? [];
+    const problems: string[] = [];
+    for (const spec of specs) {
+        const entry = entries?.[spec.key];
+        if (spec.perOperation) {
+            if (entry) problems.push(`${spec.key} : une limite par opération ne se compte pas`);
+        } else if (spec.stock) {
+            if (!entry?.list || entry.count) problems.push(`${spec.key} : un stock se liste`);
+        } else if (!entry?.count || entry.list) {
+            problems.push(`${spec.key} : un flux se compte`);
+        }
+    }
+    for (const key of Object.keys(entries ?? {})) {
+        if (!specs.some((spec) => spec.key === key)) problems.push(`${key} : non déclaré`);
+    }
+    return problems;
 }
 
 /**
@@ -574,7 +619,9 @@ export function createModuleServices(host: ModuleServiceHost): FeatureService[] 
     const providers = new Map<string, string>();
     return MODULES.flatMap((m) => {
         if (!m.server.createService) return [];
-        const service = m.server.createService(createServiceDeps(host, m.manifest, m.repoFor(host.db), PROVIDERS));
+        const service = m.server.createService(
+            createServiceDeps(host, m.manifest, m.repoFor(host.db), PROVIDERS, m.server.quotas)
+        );
         for (const key of Object.keys(service.providers ?? {})) {
             const other = providers.get(key);
             if (other) throw new Error(`Provider « ${key} » offert par « ${other} » et « ${m.manifest.id} »`);

@@ -7,12 +7,13 @@ comportement d'une installation auto-hébergée, et il ne demande aucun réglage
 
 ## Les trois rôles
 
-| Qui                      | Quoi                                                                                                                 | Où                                        |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| Un module qui crée       | déclare `manifest.quotas` (`{ key, label, stock? }`) et appelle `ctx.quota.assert(key, compteur)` avant de créer     | son manifest, son handler de création     |
-| Un module qui a un stock | liste ses éléments (`server.quotas.<clé>.list`) et exclut ceux en pause de ce qu'il fait tourner                     | son entrée serveur, ses listes d'échéance |
-| Le cœur                  | résout le compte visé, lit son offre, compare, lève `quota_exceeded`, et tient les pauses                            | `src/Services/quota.ts`, `planPauses.ts`  |
-| Le fournisseur d'offre   | offre `ACCOUNT_PLAN_PROVIDER` : `planFor(userId, { fresh? })` rend `{ id, label, limits, trialEndsAt?, changesAt? }` | `FeatureService.providers` du module      |
+| Qui                      | Quoi                                                                                                                            | Où                                       |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| Un module qui crée       | déclare `manifest.quotas` (`{ key, label, stock?, perOperation? }`) et appelle `ctx.quota.assert(key, compteur)` avant de créer | son manifest, son handler de création    |
+| Un module qui compte     | donne à chaque quota de quoi le compter : `server.quotas.<clé>.list` pour un stock, `.count` pour un flux                       | son entrée serveur                       |
+| Un module qui a un stock | exclut les éléments en pause de ce qu'il fait tourner                                                                           | ses listes d'échéance                    |
+| Le cœur                  | résout le compte visé, lit son offre, compare, lève `quota_exceeded`, et tient les pauses                                       | `src/Services/quota.ts`, `planPauses.ts` |
+| Le fournisseur d'offre   | offre `ACCOUNT_PLAN_PROVIDER` : `planFor(userId, { fresh? })` rend `{ id, label, limits, trialEndsAt?, changesAt? }`            | `FeatureService.providers` du module     |
 
 Les limites sont nommées `<featureId>.<quotaKey>` (`uptime.monitors`). Une clé
 absente de `limits` est illimitée.
@@ -22,8 +23,9 @@ absente de `limits` est illimitée.
 - **Le compte visé est le propriétaire de l'espace**, pas l'appelant : dans un
   espace partagé, ce qu'un membre crée pèse sur l'offre de celui qui l'héberge.
   Le compteur reçoit donc les ids de **tous** les espaces de ce propriétaire.
-- **Le compteur n'est jamais appelé quand c'est illimité** : sans fournisseur, un
-  quota ne coûte aucune requête.
+- **Le compteur n'est jamais appelé quand c'est illimité** (`assert` comme
+  `ctx.quota.usage`) : sans fournisseur, un quota ne coûte aucune requête. Seul
+  le relevé d'un compte (`'accounts.usage'`, plus bas) compte toujours.
 - **Rien n'est jamais supprimé.** Après un retour à une offre plus basse, une
   limite de flux refuse l'usage suivant, une limite de stock met l'excédent en
   pause (voir plus bas).
@@ -33,11 +35,16 @@ absente de `limits` est illimitée.
 - La limite est souple : compter puis insérer n'est pas atomique, deux créations
   simultanées peuvent la dépasser d'une unité.
 
-## Stock et flux
+## Stock, flux et limite par opération
 
 Une limite est un **flux** quand elle se vérifie à chaque usage : les vues d'un
-mois, la taille d'un fichier, les octets stockés au moment d'un envoi. Rien de
-plus à faire : dès que l'offre baisse, l'usage suivant est refusé.
+mois, les octets stockés au moment d'un envoi. Le module la compte
+(`server.quotas.<clé>.count`, le compteur même que son `assert` appelle) ; dès
+que l'offre baisse, l'usage suivant est refusé, et ce qui est déjà là reste.
+
+Une limite **par opération** (`perOperation: true`) borne un seul geste, la
+taille d'UN fichier à convertir : rien ne s'accumule, rien ne se compte, et
+aucune entrée `server.quotas` ne la suit.
 
 Une limite est un **stock** (`stock: true`) quand ce qu'elle compte existe et
 coûte tant qu'il existe : une sonde, un appareil, un domaine. Créer au-delà est
@@ -45,8 +52,9 @@ refusé comme pour un flux, et quand l'offre passe sous ce qui existe, **l'hôte
 l'excédent en pause** :
 
 - les plus anciens restent actifs, rangés par création sur tous les espaces du
-  propriétaire : le module les liste du plus ancien au plus récent, sous le même
-  `WHERE` que son compteur ;
+  propriétaire : le module les liste (`server.quotas.<clé>.list`) du plus ancien
+  au plus récent, sous le même `WHERE` que son compteur, et cette liste fait
+  aussi son compte ;
 - l'état de pause vit à part (`quota_pauses`), distinct de l'interrupteur de
   l'utilisateur, qui retrouve son propre réglage à la reprise ;
 - un élément en pause reste lisible, modifiable et supprimable, et rien de lui ne
@@ -91,6 +99,39 @@ chaque jour rattrape ce qu'aucun déclencheur n'a vu.
   déplacement vérifie l'offre de la cible pour les identifiants qui sont celui
   de l'élément déplacé, et une page qui reste derrière lui n'a pas à peser.
 
+Le boot refuse un module dont `server.quotas` ne suit pas son manifest : un stock
+sans liste, un flux sans compteur, une limite par opération comptée, une clé non
+déclarée (`quotaEntryProblems`, `_sdk/register.ts`).
+
+## L'usage d'un compte
+
+Deux lectures, pour dire où l'on en est avant le refus :
+
+- `ctx.quota.usage(key)` : le propriétaire de l'espace face à une limite du
+  module, `{ used, limit }`, ou `null` quand elle est illimitée (rien n'est
+  compté alors). Une limite par opération lève.
+- `ctx.deveye.usage.of(userId)` / `ofMany(userIds)` et `deps.usage` (capacité
+  `'accounts.usage'`) : toutes les limites de l'app pour un compte, bornées ou
+  non, `{ used, paused }` par clé. Un membre ne lit que la sienne, un
+  administrateur global celle de tous ; côté service, la capacité seule en garde
+  l'accès. C'est ce que le module d'offre montre à côté des limites qu'il fixe.
+
+Ce que `used` veut dire :
+
+| Sorte               | `used`                                                                                   |
+| ------------------- | ---------------------------------------------------------------------------------------- |
+| stock               | ce qui existe, en pause compris (`paused` en dit combien)                                |
+| flux                | le mois en cours (UTC ; Facturation, le fuseau par défaut), ou les octets tenus          |
+| par opération       | `null`                                                                                   |
+| `workspace.members` | l'espace partagé le plus peuplé, propriétaire compris ; `paused` est celui de cet espace |
+| `domains.hosts`     | les noms distincts ; `paused` compte des noms, pas des lignes                            |
+
+Le compte porte sur les espaces que le compte **possède**, jamais sur ceux où il
+n'est que membre. `src/Services/quotaUsage.ts` mesure les sources une à une, et
+quatre comptes à la fois au plus pour `ofMany` (environ 28 petites requêtes par
+compte) : un relevé de tous les comptes laisse le reste du pool aux membres. Une
+source qui tombe fait échouer la lecture entière, en nommant sa clé.
+
 ## Ce que le cœur borne lui-même
 
 Les espaces et les domaines ne sont pas des modules : le cœur applique trois limites sans manifest,
@@ -102,6 +143,9 @@ modules (`assertPlanLimit`, `src/Services/quota.ts`).
 | `workspace.shared`  | les espaces partagés qu'un compte possède | `features/workspace/add.ts`     |
 | `workspace.members` | les membres d'UN espace partagé           | `features/workspace/members.ts` |
 | `domains.hosts`     | les noms web distincts de ses espaces     | `features/domain/index.ts`      |
+
+Leur usage se lit par `coreUsageSources` (`src/features/_quota.ts`), sous la
+règle de chaque garde.
 
 En pause, un espace partagé ferme ses portes à ses membres, mais pas à son
 propriétaire ; un membre en pause (les derniers arrivés d'abord, jamais le

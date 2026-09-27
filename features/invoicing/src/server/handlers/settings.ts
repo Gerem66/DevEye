@@ -3,13 +3,13 @@ import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 import { invoicingConfigGet, invoicingConfigSave } from '../../contracts/commands';
 import { invoicingSettingsSchema } from '../../contracts/domain';
 import { monthUsage } from '../planUsage';
-import { now, seal, settingsOf, settingsRow, today, WRITE, type Ctx } from '../_shared';
+import { now, seal, settingsOf, settingsRow, WRITE, type Ctx } from '../_shared';
 
 export const settingsGet = defineSdkFeature({
     ...invoicingConfigGet,
     handler: async (ctx: Ctx) => {
         const settings = await settingsOf(ctx);
-        const usage = await monthUsage(ctx.quota, ctx.repo, today(settings));
+        const usage = await monthUsage(ctx.quota);
         return { settings, usage };
     }
 });

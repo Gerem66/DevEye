@@ -25,7 +25,7 @@ export const manifest = {
      * (`resultBytes`).
      */
     quotas: [
-        { key: 'fileBytes', label: 'par fichier à convertir', unit: 'bytes' },
+        { key: 'fileBytes', label: 'par fichier à convertir', unit: 'bytes', perOperation: true },
         { key: 'activeJobs', label: 'conversions en cours à la fois' },
         { key: 'resultBytes', label: 'de résultats en attente de téléchargement', unit: 'bytes' }
     ],

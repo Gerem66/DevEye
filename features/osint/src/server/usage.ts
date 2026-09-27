@@ -1,9 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
-import { OSINT_LOOKUP_QUOTA, type OsintTarget, type OsintUsage } from '../contracts/domain';
-import type { SdkQuota, SdkServerKeys } from '@deveye/types/sdk/server';
-
-import type { OsintRepo } from './repo';
+import type { OsintTarget } from '../contracts/domain';
+import type { SdkServerKeys } from '@deveye/types/sdk/server';
 
 /** AAAAMM en UTC, comme `ft_audience_usage` : le mois sur lequel la limite se compte. */
 export function monthKey(nowMs: number = Date.now()): number {
@@ -33,24 +31,4 @@ export function ticketValid(
     const expected = Buffer.from(ticketFor(keys, workspaceId, target, month));
     const given = Buffer.from(ticket);
     return given.length === expected.length && timingSafeEqual(given, expected);
-}
-
-/**
- * Les recherches du mois face à l'offre du propriétaire, `null` quand rien ne
- * les borne. `assert` est la seule voie vers ses espaces : on y lit le compte,
- * et le `0` rendu ne fait rien refuser. L'écran et le refus lisent ainsi le même.
- */
-export async function lookupUsage(
-    quota: SdkQuota,
-    repo: Pick<OsintRepo, 'lookupsIn'>,
-    month: number
-): Promise<OsintUsage | null> {
-    const limit = await quota.limit(OSINT_LOOKUP_QUOTA);
-    if (limit === null) return null;
-    let used = 0;
-    await quota.assert(OSINT_LOOKUP_QUOTA, async (owned) => {
-        used = await repo.lookupsIn(owned, month);
-        return 0;
-    });
-    return { used, limit };
 }

@@ -34,7 +34,7 @@ describe('la liste du stock', () => {
             { id: 2, workspace_id: 1 },
             { id: 9, workspace_id: 3 }
         ]);
-        assert.deepEqual(await serverEntry.quotas?.sites.list(createRepo(q), [1, 3]), [
+        assert.deepEqual(await serverEntry.quotas?.sites.list?.(createRepo(q), [1, 3]), [
             { id: '2', workspaceId: 1 },
             { id: '9', workspaceId: 3 }
         ]);
@@ -54,9 +54,13 @@ describe('la liste du stock', () => {
         assert.equal(calls.length, 0);
     });
 
-    it('tient chaque quota `stock` du manifest, et lui seul', () => {
-        const stock = (manifest.quotas ?? []).filter((quota) => 'stock' in quota && quota.stock).map((q) => q.key);
-        assert.deepEqual(Object.keys(serverEntry.quotas ?? {}), stock);
-        assert.deepEqual(stock, ['sites']);
+    it('compte chaque quota du manifest : le stock par sa liste, les vues du mois par leur compteur', async () => {
+        assert.deepEqual(
+            Object.keys(serverEntry.quotas ?? {}),
+            (manifest.quotas ?? []).map((q) => q.key)
+        );
+        const { q, calls } = recording([{ total: 42 }]);
+        assert.equal(await serverEntry.quotas?.events.count?.(createRepo(q), [1, 3]), 42);
+        assert.match(calls[0].sql, /ft_audience_usage/);
     });
 });

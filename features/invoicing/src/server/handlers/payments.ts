@@ -131,7 +131,7 @@ export const dashboard = defineSdkFeature({
             ctx.repo.quotesPending(ctx.workspaceId, day),
             ctx.repo.monthlySeries(ctx.workspaceId, startOfMonth(addDays(day, -365)), day),
             ctx.repo.actionable(ctx.workspaceId, day, addDays(day, SOON_DAYS), ACTIONABLE_LIMIT),
-            monthUsage(ctx.quota, ctx.repo, day)
+            monthUsage(ctx.quota)
         ]);
 
         // Les derniers documents et les derniers clients, dans la même lecture :

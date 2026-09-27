@@ -168,4 +168,4 @@ export async function assertClient(ctx: Ctx, clientId: number | null, level: 're
 }
 
 /** Le contrat de `SdkQuota`, réduit à ce dont les handlers ont besoin. */
-export type Quota = Pick<SdkQuota, 'limit' | 'assert'>;
+export type Quota = Pick<SdkQuota, 'limit' | 'assert' | 'usage'>;

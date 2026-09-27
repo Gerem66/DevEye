@@ -101,7 +101,7 @@ describe('createSdkContext : la projection', () => {
     it('ne laisse passer que le contrat : identité, espace sans propriétaire, droits résolus', () => {
         const repo = { name: 'repo' };
         const f = fakeCtx({ canWrite: true });
-        const sdk = createSdkContext(f.ctx, manifest(), repo, NO_PROVIDERS);
+        const sdk = createSdkContext(f.ctx, manifest(), repo, NO_PROVIDERS, undefined);
         assert.equal(sdk.userId, 7);
         assert.equal(sdk.workspaceId, 3);
         assert.deepEqual(sdk.workspace, { id: 3, kind: 'shared', name: 'Équipe' });
@@ -116,7 +116,7 @@ describe('createSdkContext : la projection', () => {
 
     it("cipher() est l'étage ouvert, cipher('private') l'étage gardé", () => {
         const f = fakeCtx();
-        const sdk = createSdkContext(f.ctx, manifest(), null, NO_PROVIDERS);
+        const sdk = createSdkContext(f.ctx, manifest(), null, NO_PROVIDERS, undefined);
         assert.equal(sdk.cipher(), f.open);
         assert.equal(sdk.cipher('server'), f.open);
         assert.equal(sdk.cipher('private'), f.secure);
@@ -124,7 +124,7 @@ describe('createSdkContext : la projection', () => {
 
     it("audit transmet l'entrée telle quelle, metadata rabattu sur null", () => {
         const f = fakeCtx();
-        const sdk = createSdkContext(f.ctx, manifest(), null, NO_PROVIDERS);
+        const sdk = createSdkContext(f.ctx, manifest(), null, NO_PROVIDERS, undefined);
         sdk.audit({ action: 'x.do', description: 'fait' });
         sdk.audit({ action: 'x.warn', description: 'alerte', level: 'warning', metadata: { n: 1 } });
         assert.deepEqual(f.audits, [
@@ -156,7 +156,7 @@ describe('createSdkContext : items.forget', () => {
                     ? { detach: async (...args: unknown[]) => (detached.push(args), 1) }
                     : undefined) as T | undefined
         };
-        const sdk = createSdkContext(f.ctx, manifest({ id: 'git' }), null, providers);
+        const sdk = createSdkContext(f.ctx, manifest({ id: 'git' }), null, providers, undefined);
         await sdk.items.forget('5');
         assert.deepEqual(forgotten, [['git', '5', 3]]);
         // Le domicile d'abord, puis chaque espace projeté, une fois chacun.
@@ -177,14 +177,14 @@ describe('createSdkContext : items.forget', () => {
         const providers: SdkProviders = {
             get: <T>() => ({ detach: async (...args: unknown[]) => (detached.push(args), 1) }) as T
         };
-        await createSdkContext(f.ctx, manifest({ id: 'devices' }), null, providers).items.forget('uuid-1');
+        await createSdkContext(f.ctx, manifest({ id: 'devices' }), null, providers, undefined).items.forget('uuid-1');
         assert.deepEqual(detached, []);
     });
 });
 
 describe('createSdkContext : canExtra (toggle)', () => {
     const can = (over: Fake, key: string): boolean =>
-        createSdkContext(fakeCtx(over).ctx, manifest(), null, NO_PROVIDERS).canExtra(key);
+        createSdkContext(fakeCtx(over).ctx, manifest(), null, NO_PROVIDERS, undefined).canExtra(key);
 
     it('une clé inconnue du manifest : faux, même accordée', () => {
         assert.equal(can({ extras: { ghost: true } }, 'ghost'), false);
@@ -214,7 +214,7 @@ describe('createSdkContext : canExtra (toggle)', () => {
 
 describe('createSdkContext : extraValue (choice)', () => {
     const value = (over: Fake, key: string): string =>
-        createSdkContext(fakeCtx(over).ctx, manifest(), null, NO_PROVIDERS).extraValue(key);
+        createSdkContext(fakeCtx(over).ctx, manifest(), null, NO_PROVIDERS, undefined).extraValue(key);
 
     it('une clé inconnue du manifest : chaîne vide', () => {
         assert.equal(value({ extras: { ghost: 'all' } }, 'ghost'), '');
@@ -269,7 +269,7 @@ describe('createSdkContext : transport', () => {
 
     it("sans la capacité 'agents' : forbidden sur chaque méthode, socket présent ou non", () => {
         const m = fakeMonitor();
-        const sdk = createSdkContext(fakeCtx({ monitor: m.monitor }).ctx, manifest(), null, NO_PROVIDERS);
+        const sdk = createSdkContext(fakeCtx({ monitor: m.monitor }).ctx, manifest(), null, NO_PROVIDERS, undefined);
         assert.throws(() => sdk.transport.subscribeSync([1]), forbidden);
         assert.throws(() => sdk.transport.unsubscribeSync([1]), forbidden);
         assert.throws(() => sdk.transport.sendSyncChunk({} as never), forbidden);
@@ -278,14 +278,14 @@ describe('createSdkContext : transport', () => {
     });
 
     it('avec la capacité mais hors socket : internal', () => {
-        const sdk = createSdkContext(fakeCtx().ctx, withAgents, null, NO_PROVIDERS);
+        const sdk = createSdkContext(fakeCtx().ctx, withAgents, null, NO_PROVIDERS, undefined);
         assert.throws(() => sdk.transport.subscribeSync([1]), { name: 'FeatureError', code: 'internal' });
         assert.throws(() => sdk.transport.syncChunkBuffered(), { name: 'FeatureError', code: 'internal' });
     });
 
     it('avec la capacité et le socket : délègue à la part sync du monitor', () => {
         const m = fakeMonitor();
-        const sdk = createSdkContext(fakeCtx({ monitor: m.monitor }).ctx, withAgents, null, NO_PROVIDERS);
+        const sdk = createSdkContext(fakeCtx({ monitor: m.monitor }).ctx, withAgents, null, NO_PROVIDERS, undefined);
         sdk.transport.subscribeSync([1, 2]);
         sdk.transport.unsubscribeSync([2]);
         const chunk = { shareId: 1, seq: 0 };
@@ -310,21 +310,21 @@ describe('createSdkContext : la voie de poussée', () => {
     );
 
     it("sans la capacité 'live.publish' : forbidden, et rien ne part", () => {
-        const sdk = createSdkContext(fakeCtx().ctx, manifest(), null, NO_PROVIDERS);
+        const sdk = createSdkContext(fakeCtx().ctx, manifest(), null, NO_PROVIDERS, undefined);
         assert.throws(() => sdk.live.publish('x-contexttest.frame', { a: 1 }), forbidden);
         assert.deepEqual(published, []);
     });
 
     it('un événement hors du préfixe du module : validation', () => {
         const m = manifest({ caps: ['live.publish'] });
-        const sdk = createSdkContext(fakeCtx().ctx, m, null, NO_PROVIDERS);
+        const sdk = createSdkContext(fakeCtx().ctx, m, null, NO_PROVIDERS, undefined);
         assert.throws(() => sdk.live.publish('other.frame', {}), { name: 'FeatureError', code: 'validation' });
         assert.deepEqual(published, []);
     });
 
     it("avec la capacité : la trame part dans l'espace de l'appel, sous la feature du module", () => {
         const m = manifest({ caps: ['live.publish'] });
-        const sdk = createSdkContext(fakeCtx().ctx, m, null, NO_PROVIDERS);
+        const sdk = createSdkContext(fakeCtx().ctx, m, null, NO_PROVIDERS, undefined);
         sdk.live.publish('x-contexttest.frame', { cells: [1, 2] });
         assert.deepEqual(published, [
             { workspaceId: 3, feature: 'x-contexttest', event: 'x-contexttest.frame', payload: { cells: [1, 2] } }

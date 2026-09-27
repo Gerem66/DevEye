@@ -24,6 +24,7 @@ import { FeatureError, type SdkFeatureContext } from '@deveye/types/sdk/server';
 import { createTestContext } from '@deveye/types/sdk/testing';
 
 import { audienceHandlers } from './handlers';
+import { serverEntry } from './index';
 import { dayKey, labelRef } from './normalize';
 import type { AudienceRepo, AudienceSiteWithStatsRow } from './repo';
 import type { AudienceIngest } from './service';
@@ -362,7 +363,10 @@ describe('audience.count et audience.list', () => {
     it('dit où en sont les vues du mois face à l’offre, ou rien quand aucune ne les borne', async () => {
         const repo = seed(fakeRepo(), site({ id: 1, workspace_id: 1 }));
         repo.monthlyEvents = async () => 14;
-        const bounded = await handlerFor(audienceList)(createTestContext({ repo, quotaLimits: { events: 10 } }), {});
+        const bounded = await handlerFor(audienceList)(
+            createTestContext({ repo, quotaLimits: { events: 10 }, quotas: serverEntry.quotas }),
+            {}
+        );
         assert.deepEqual(bounded.eventsQuota, { limit: 10, used: 14 });
         const free = await handlerFor(audienceList)(createTestContext({ repo }), {});
         assert.equal(free.eventsQuota, null);
@@ -373,7 +377,10 @@ describe('audience.count et audience.list', () => {
         repo.monthlyEvents = async () => {
             throw new Error('base injoignable');
         };
-        const listed = await handlerFor(audienceList)(createTestContext({ repo, quotaLimits: { events: 10 } }), {});
+        const listed = await handlerFor(audienceList)(
+            createTestContext({ repo, quotaLimits: { events: 10 }, quotas: serverEntry.quotas }),
+            {}
+        );
         assert.equal(listed.sites.length, 1);
         assert.equal(listed.eventsQuota, null);
     });

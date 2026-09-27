@@ -20,6 +20,7 @@ export const serverEntry: FeatureServer<BackupRepo> = {
     createRepo,
     features: backupHandlers,
     migrationsDir: path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations'),
+    quotas: { storage: { count: (repo, owned) => repo.storedBytesInWorkspaces(owned) } },
     createService(deps) {
         const engine = new BackupEngine(deps);
         return {
