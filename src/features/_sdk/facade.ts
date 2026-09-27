@@ -253,7 +253,6 @@ export function agentsFacade(gate: () => void): AgentsFacade {
         pushConfig: (deviceId) => (gate(), pushAgentConfig(deviceId)),
         requestDestroy: (deviceId) => (gate(), sdkHub().requestDestroy(deviceId)),
         disconnectAgent: (deviceId) => (gate(), sdkHub().disconnectAgent(deviceId)),
-        resetAgentSession: (deviceId) => (gate(), sdkHub().resetAgentSession(deviceId)),
         // Le manifest des binaires servis ; la distribution elle-même reste à l'app.
         servedManifest: () => (gate(), readServedManifestCached(agentDistDir())),
         requestSyncConfig: (deviceId, payload) => (gate(), sdkHub().requestSyncConfig(deviceId, payload)),

@@ -38,7 +38,6 @@ declare const styles: {
     readonly headerText: string;
     readonly hint: string;
     readonly icon: string;
-    readonly iconApprove: string;
     readonly iconBtn: string;
     readonly iconDanger: string;
     readonly infoRow: string;
@@ -48,7 +47,6 @@ declare const styles: {
     readonly miniItem: string;
     readonly miniList: string;
     readonly miniName: string;
-    readonly minutesInput: string;
     readonly more: string;
     readonly nameEditBtn: string;
     readonly noCodes: string;
@@ -58,11 +56,6 @@ declare const styles: {
     readonly osHint: string;
     readonly osName: string;
     readonly osTile: string;
-    readonly pendingActions: string;
-    readonly pendingBtn: string;
-    readonly pendingCancel: string;
-    readonly pendingForce: string;
-    readonly pendingHint: string;
     readonly serviceBox: string;
     readonly serviceNoteError: string;
     readonly serviceNoteOk: string;

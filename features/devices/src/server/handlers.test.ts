@@ -22,12 +22,10 @@ import {
     devicesLinkCodeCreate,
     devicesLinkCodeList,
     devicesLinkCodeRevoke,
-    devicesLinkCodeSetAutoApprove,
     devicesList,
     devicesMetrics,
     devicesPresence,
     devicesProcessesAt,
-    devicesReactivate,
     devicesRename,
     devicesReorder,
     devicesRequestDelete,
@@ -131,9 +129,8 @@ interface StoredCode {
     code: string;
     user_id: number;
     workspace_id: number;
-    expires_at: number | null;
+    expires_at: number;
     used_at: number | null;
-    auto_approve: boolean;
 }
 
 interface StoredInstant {
@@ -174,19 +171,7 @@ function fakeRepo(deviceRows: DeviceRow[], shares: Record<string, number[]> = {}
     const copy = (r: DeviceRow | undefined): DeviceRow | null => (r ? { ...r } : null);
     const find = (id: string) => deviceRows.find((r) => r.id === id);
     const now = () => Math.floor(Date.now() / 1000);
-    const activeCode = (userId: number, code: string) =>
-        codes.find(
-            (c) =>
-                c.code === code &&
-                c.user_id === userId &&
-                c.used_at === null &&
-                (c.expires_at === null || c.expires_at > now())
-        );
-    const toLinkCode = (c: StoredCode): LinkCode => ({
-        code: c.code,
-        expiresAt: c.expires_at,
-        autoApprove: c.auto_approve
-    });
+    const toLinkCode = (c: StoredCode): LinkCode => ({ code: c.code, expiresAt: c.expires_at });
     const inRange = (from: number, to: number) => (i: StoredInstant) => i.ts >= from && i.ts <= to;
     const expired = (days: number) => (i: StoredInstant) => !i.pinned && i.ts < Date.now() - days * DAY_MS;
 
@@ -253,6 +238,7 @@ function fakeRepo(deviceRows: DeviceRow[], shares: Record<string, number[]> = {}
                 if (!r) return;
                 r.status = 'archived';
                 r.token_hash = '';
+                r.token_hash_prev = null;
                 r.status_before_delete = null;
                 r.delete_error = null;
             },
@@ -268,31 +254,25 @@ function fakeRepo(deviceRows: DeviceRow[], shares: Record<string, number[]> = {}
             }
         },
         linkCodes: {
-            async create({ userId, workspaceId, ttlSeconds, autoApprove }) {
+            async create({ userId, workspaceId, ttlSeconds }) {
                 const created: StoredCode = {
                     code: `CODE-${++seq}`,
                     user_id: userId,
                     workspace_id: workspaceId,
-                    expires_at: ttlSeconds === null ? null : now() + ttlSeconds,
-                    used_at: null,
-                    auto_approve: autoApprove
+                    expires_at: now() + ttlSeconds,
+                    used_at: null
                 };
                 codes.push(created);
                 return toLinkCode(created);
             },
-            listActive: async (userId) =>
+            listActive: async (workspaceId) =>
                 codes
-                    .filter((c) => c.user_id === userId && c.used_at === null)
-                    .filter((c) => c.expires_at === null || c.expires_at > now())
+                    .filter((c) => c.workspace_id === workspaceId && c.used_at === null && c.expires_at > now())
                     .map(toLinkCode),
-            async setAutoApprove(userId, code, autoApprove) {
-                const target = activeCode(userId, code);
-                if (!target) return null;
-                target.auto_approve = autoApprove;
-                return toLinkCode(target);
-            },
-            async revoke(userId, code) {
-                const index = codes.findIndex((c) => c.code === code && c.user_id === userId && c.used_at === null);
+            async revoke(workspaceId, code) {
+                const index = codes.findIndex(
+                    (c) => c.code === code && c.workspace_id === workspaceId && c.used_at === null
+                );
                 if (index === -1) return false;
                 codes.splice(index, 1);
                 return true;
@@ -524,14 +504,14 @@ describe('devices.list', () => {
 });
 
 describe("le cycle de vie d'un appareil", () => {
-    it("l'approbation active l'appareil et remet sa session agent à zéro", async () => {
+    it("l'approbation active un appareil en attente, sans ordre au hub : son agent n'est pas connecté", async () => {
         const repo = fakeRepo([row({ id: DEVICE_A, status: 'pending' })], { [DEVICE_A]: [1] });
         const ctx = contextFor(repo, { isAdmin: true });
         const out = await handlerFor(devicesConfirm)(ctx, { deviceId: DEVICE_A });
         devicesConfirm.output.parse(out);
         assert.equal(out.device.status, 'active');
         assert.equal(repo.deviceRows[0].status, 'active');
-        assert.deepEqual(agentOrders(ctx, 'resetAgentSession'), [DEVICE_A]);
+        assert.deepEqual(ctx.recorded.agentRequests, []);
         assert.deepEqual(
             ctx.recorded.audits.map((a) => a.action),
             ['devices.confirm']
@@ -545,28 +525,26 @@ describe("le cycle de vie d'un appareil", () => {
         assert.equal(repo.deviceRows[0].status, 'pending');
     });
 
-    it("un appareil révoqué ne s'approuve pas : il se réactive", async () => {
-        const repo = fakeRepo([row({ id: DEVICE_A, status: 'revoked' })]);
+    it("seul un appareil en attente s'approuve : un archivé n'a plus de jeton", async () => {
+        const repo = fakeRepo([row({ id: DEVICE_A }), row({ id: DEVICE_B, status: 'archived', token_hash: '' })]);
         const ctx = contextFor(repo, { isAdmin: true });
         await assert.rejects(handlerFor(devicesConfirm)(ctx, { deviceId: DEVICE_A }), failsWith('conflict'));
-        assert.deepEqual(ctx.recorded.agentRequests, []);
+        await assert.rejects(handlerFor(devicesConfirm)(ctx, { deviceId: DEVICE_B }), failsWith('conflict'));
+        assert.equal(repo.deviceRows[1].status, 'archived');
+        assert.deepEqual(ctx.recorded.audits, []);
     });
 
-    it('la révocation coupe la session agent tout de suite', async () => {
-        const repo = fakeRepo([row({ id: DEVICE_A })]);
+    it('la révocation archive, efface le jeton, coupe la session, et ne se refait pas', async () => {
+        const repo = fakeRepo([row({ id: DEVICE_A, token_hash_prev: 'old' })]);
         const ctx = contextFor(repo, { isAdmin: true });
         const out = await handlerFor(devicesRevoke)(ctx, { deviceId: DEVICE_A });
-        assert.equal(out.device.status, 'revoked');
+        devicesRevoke.output.parse(out);
+        assert.equal(out.device.status, 'archived');
+        assert.equal(repo.deviceRows[0].token_hash, '');
+        assert.equal(repo.deviceRows[0].token_hash_prev, null);
         assert.deepEqual(agentOrders(ctx, 'disconnectAgent'), [DEVICE_A]);
-    });
-
-    it("la réactivation n'accepte qu'un appareil révoqué, et remet la session à zéro", async () => {
-        const repo = fakeRepo([row({ id: DEVICE_A }), row({ id: DEVICE_B, status: 'revoked' })]);
-        const ctx = contextFor(repo, { isAdmin: true });
-        await assert.rejects(handlerFor(devicesReactivate)(ctx, { deviceId: DEVICE_A }), failsWith('conflict'));
-        const out = await handlerFor(devicesReactivate)(ctx, { deviceId: DEVICE_B });
-        assert.equal(out.device.status, 'active');
-        assert.deepEqual(agentOrders(ctx, 'resetAgentSession'), [DEVICE_B]);
+        assert.deepEqual(agentOrders(ctx, 'requestDestroy'), []);
+        await assert.rejects(handlerFor(devicesRevoke)(ctx, { deviceId: DEVICE_A }), failsWith('conflict'));
     });
 
     it('annuler une suppression rend une place de l’offre : refusé quand elle est pleine', async () => {
@@ -694,6 +672,34 @@ describe("la garde d'un appareil", () => {
         await assert.rejects(handlerFor(devicesRename)(ctx, { deviceId: DEVICE_A, name: 'x' }), failsWith('forbidden'));
     });
 
+    it('un appareil projeté ici se lit, mais se gère depuis son domicile', async () => {
+        const repo = fakeRepo([row({ id: DEVICE_A, workspace_id: 1, name: 'Chez lui', status: 'pending' })], {
+            [DEVICE_A]: [2]
+        });
+        repo.points.push({ ts: 1000, pinned: false });
+        const ctx = contextFor(repo, { isAdmin: true, workspaceId: 2 });
+        for (const call of [
+            () => handlerFor(devicesConfirm)(ctx, { deviceId: DEVICE_A }),
+            () => handlerFor(devicesRevoke)(ctx, { deviceId: DEVICE_A }),
+            () => handlerFor(devicesRename)(ctx, { deviceId: DEVICE_A, name: 'Ailleurs' }),
+            () => handlerFor(devicesDelete)(ctx, { deviceId: DEVICE_A }),
+            () => handlerFor(devicesDeleteSnapshots)(ctx, { deviceId: DEVICE_A, from: 0, to: 9000 })
+        ]) {
+            await assert.rejects(call(), failsWith('forbidden'));
+        }
+        assert.deepEqual(
+            repo.deviceRows.map((r) => [r.name, r.status]),
+            [['Chez lui', 'pending']]
+        );
+        assert.equal(repo.points.length, 1);
+        assert.deepEqual(ctx.recorded.agentRequests, []);
+        const out = await handlerFor(devicesList)(ctx, {});
+        assert.deepEqual(
+            out.devices.map((d) => [d.id, d.foreign]),
+            [[DEVICE_A, true]]
+        );
+    });
+
     it('un appareil en lecture seule pour ce rôle se lit, mais ne se règle pas', async () => {
         const repo = fleet();
         const ctx = contextFor(repo, { itemRestrictions: { [DEVICE_A]: 'read' } });
@@ -711,79 +717,54 @@ describe('les codes de liaison', () => {
         const repo = fakeRepo([]);
         const ctx = contextFor(repo, { isAdmin: true, workspaceId: 2 });
         const before = Math.floor(Date.now() / 1000);
-        const out = await handlerFor(devicesLinkCodeCreate)(ctx, { autoApprove: false });
+        const out = await handlerFor(devicesLinkCodeCreate)(ctx, {});
         devicesLinkCodeCreate.output.parse(out);
         assert.equal(repo.codes[0].workspace_id, 2);
         assert.equal(repo.codes[0].user_id, 1);
-        assert.ok(out.expiresAt !== null && out.expiresAt >= before + 120 && out.expiresAt <= before + 121);
+        assert.ok(out.expiresAt >= before + 120 && out.expiresAt <= before + 121);
         assert.equal(ctx.recorded.audits[0].action, 'devices.linkCodeCreate');
         assert.doesNotMatch(ctx.recorded.audits[0].description, /CODE-/);
     });
 
-    it("un code sans durée prend celle du serveur, et range toujours dans l'espace actif", async () => {
-        const repo = fakeRepo([]);
-        const ctx = contextFor(repo, { workspaceId: 3 });
-        const before = Math.floor(Date.now() / 1000);
-        const out = await handlerFor(devicesLinkCodeCreate)(ctx, { autoApprove: true });
-        assert.ok(out.expiresAt !== null && out.expiresAt > before, 'un code expire toujours');
-        assert.equal(out.autoApprove, true);
-        assert.equal(repo.codes[0].workspace_id, 3);
+    it('une durée se borne à une heure, et un code sans expiration est refusé dès le contrat', () => {
+        assert.equal(devicesLinkCodeCreate.input.safeParse({ ttlSeconds: 3600 }).success, true);
+        assert.equal(devicesLinkCodeCreate.input.safeParse({ ttlSeconds: 7200 }).success, false);
+        assert.equal(devicesLinkCodeCreate.input.safeParse({ ttlSeconds: null }).success, false);
     });
 
-    it('un code sans expiration est refusé dès le contrat', () => {
-        assert.equal(devicesLinkCodeCreate.input.safeParse({ autoApprove: false, ttlSeconds: null }).success, false);
-    });
-
-    it('la liste ne rend que les codes encore valables de leur émetteur', async () => {
+    it("la liste rend les codes encore valables de l'espace, quel que soit leur émetteur", async () => {
         const repo = fakeRepo([]);
         const now = Math.floor(Date.now() / 1000);
         repo.codes.push(
-            { code: 'MINE-OK1', user_id: 1, workspace_id: 1, expires_at: null, used_at: null, auto_approve: false },
-            { code: 'MINE-USED', user_id: 1, workspace_id: 1, expires_at: null, used_at: now, auto_approve: false },
-            { code: 'MINE-OLD', user_id: 1, workspace_id: 1, expires_at: now - 1, used_at: null, auto_approve: false },
-            { code: 'THEIRS', user_id: 2, workspace_id: 1, expires_at: null, used_at: null, auto_approve: false }
+            { code: 'MINE-OK1', user_id: 1, workspace_id: 1, expires_at: now + 60, used_at: null },
+            { code: 'MINE-USED', user_id: 1, workspace_id: 1, expires_at: now + 60, used_at: now },
+            { code: 'MINE-OLD', user_id: 1, workspace_id: 1, expires_at: now - 1, used_at: null },
+            { code: 'COLLEAGUE', user_id: 2, workspace_id: 1, expires_at: now + 60, used_at: null },
+            { code: 'ELSEWHERE', user_id: 1, workspace_id: 2, expires_at: now + 60, used_at: null }
         );
         const out = await handlerFor(devicesLinkCodeList)(contextFor(repo, { isAdmin: true }), {});
         assert.deepEqual(
             out.codes.map((c) => c.code),
-            ['MINE-OK1']
+            ['MINE-OK1', 'COLLEAGUE']
         );
     });
 
-    it("l'auto-approbation se retouche sur un code saisi à la main, comparé en majuscules", async () => {
+    it("la révocation retire un code de l'espace, pas d'un autre, et ne se refait pas", async () => {
         const repo = fakeRepo([]);
-        repo.codes.push({
-            code: 'ABCD-EFGH',
-            user_id: 1,
-            workspace_id: 1,
-            expires_at: null,
-            used_at: null,
-            auto_approve: false
-        });
-        const ctx = contextFor(repo, { isAdmin: true });
-        const out = await handlerFor(devicesLinkCodeSetAutoApprove)(ctx, { code: ' abcd-efgh ', autoApprove: true });
-        assert.deepEqual(out, { code: 'ABCD-EFGH', expiresAt: null, autoApprove: true });
-        await assert.rejects(
-            handlerFor(devicesLinkCodeSetAutoApprove)(ctx, { code: 'NOPE-NOPE', autoApprove: true }),
-            failsWith('not_found')
+        const later = Math.floor(Date.now() / 1000) + 60;
+        repo.codes.push(
+            { code: 'ABCD-EFGH', user_id: 2, workspace_id: 1, expires_at: later, used_at: null },
+            { code: 'WXYZ-2345', user_id: 1, workspace_id: 2, expires_at: later, used_at: null }
         );
-    });
-
-    it('la révocation retire le code de son émetteur, et ne se refait pas', async () => {
-        const repo = fakeRepo([]);
-        repo.codes.push({
-            code: 'ABCD-EFGH',
-            user_id: 1,
-            workspace_id: 1,
-            expires_at: null,
-            used_at: null,
-            auto_approve: false
-        });
         const ctx = contextFor(repo, { isAdmin: true });
         const out = await handlerFor(devicesLinkCodeRevoke)(ctx, { code: 'abcd-efgh' });
         assert.deepEqual(out, { code: 'ABCD-EFGH' });
-        assert.deepEqual(repo.codes, []);
+        assert.deepEqual(
+            repo.codes.map((c) => c.code),
+            ['WXYZ-2345']
+        );
         await assert.rejects(handlerFor(devicesLinkCodeRevoke)(ctx, { code: 'ABCD-EFGH' }), failsWith('not_found'));
+        await assert.rejects(handlerFor(devicesLinkCodeRevoke)(ctx, { code: 'WXYZ-2345' }), failsWith('not_found'));
     });
 });
 
@@ -958,7 +939,6 @@ describe('le contrat', () => {
         const write = new Set([
             'devices.confirm',
             'devices.revoke',
-            'devices.reactivate',
             'devices.rename',
             'devices.reorder',
             'devices.setConfig',
@@ -970,7 +950,6 @@ describe('le contrat', () => {
             'devices.deleteSnapshots',
             'devices.linkCodeCreate',
             'devices.linkCodeList',
-            'devices.linkCodeSetAutoApprove',
             'devices.linkCodeRevoke'
         ]);
         const reads = new Set([

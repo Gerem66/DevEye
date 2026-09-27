@@ -17,8 +17,11 @@ declare const styles: {
     readonly activityIcon: string;
     readonly activityLabel: string;
     readonly activityPulse: string;
+    readonly agentReason: string;
     readonly agentVersionWarn: string;
     readonly archived: string;
+    readonly archivedGroup: string;
+    readonly awaiting: string;
     readonly calDay: string;
     readonly calEmpty: string;
     readonly calGrid: string;
@@ -55,6 +58,7 @@ declare const styles: {
     readonly dayButton: string;
     readonly dayPickerWrap: string;
     readonly deviceCard: string;
+    readonly deviceCardArchived: string;
     readonly deviceCardDragging: string;
     readonly deviceCardInfo: string;
     readonly deviceCardName: string;
@@ -227,6 +231,7 @@ declare const styles: {
     readonly pairCardIcon: string;
     readonly panelScroll: string;
     readonly pausedTag: string;
+    readonly pendingTag: string;
     readonly pkgBar: string;
     readonly pkgBarErr: string;
     readonly pkgBarFill: string;

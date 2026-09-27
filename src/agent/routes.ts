@@ -170,7 +170,8 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, live, audit }
             return null;
         }
         const { device } = authenticated;
-        if (device.status === 'revoked' || device.status === 'archived') {
+        // Ce que la socket n'admet pas ne télécharge rien non plus.
+        if (device.status !== 'active') {
             void reply.code(403).send(err('forbidden', 'Device not allowed'));
             return null;
         }
@@ -205,19 +206,35 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, live, audit }
             if (!parsed.success) {
                 return reply.code(400).send(err('validation', 'Invalid enrollment payload', parsed.error.flatten()));
             }
-            const { code, name, fingerprint, platform } = parsed.data;
+            const { name, fingerprint, platform } = parsed.data;
+            const code = parsed.data.code.trim().toUpperCase();
 
-            const consumed = await db.linkCodes.consume(code.trim().toUpperCase());
-            if (!consumed) {
+            const peeked = await db.linkCodes.peek(code);
+            if (!peeked) {
                 return reply.code(401).send(err('auth_invalid', 'Invalid or expired link code'));
             }
-            const ownerId = consumed.userId;
-            const workspaceId = consumed.workspaceId;
+            const { userId: ownerId, workspaceId } = peeked;
 
-            // Re-enrolling the same machine reuses its device record (new token).
             // L'unicité se mesure par espace : la même machine peut être appairée
             // une fois dans chacun.
             const existing = await db.devices.findByWorkspaceFingerprint(workspaceId, fingerprint);
+            // Une machine neuve prend une place de l'offre, vérifiée avant de
+            // consommer le code : un refus ne doit pas le brûler.
+            if (!existing && !(await withinAgentQuota(db, workspaceId, app.log))) {
+                return reply
+                    .code(403)
+                    .send(
+                        err(
+                            'quota_exceeded',
+                            'Limite d’appareils de l’offre atteinte : libérez une place dans DevEye ou changez d’offre. Le code de liaison reste valable.',
+                            { key: 'devices.agents' }
+                        )
+                    );
+            }
+            if (!(await db.linkCodes.consume(code))) {
+                return reply.code(401).send(err('auth_invalid', 'Invalid or expired link code'));
+            }
+
             let deviceId: string;
             if (existing) {
                 deviceId = existing.id;
@@ -228,6 +245,7 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, live, audit }
                     name,
                     fingerprint,
                     platform,
+                    status: 'active',
                     tokenHash: ''
                 });
                 deviceId = created.id;
@@ -237,19 +255,14 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, live, audit }
             // L'ancien jeton d'une machine réappairée tombe avec : pas de condensé précédent.
             await db.devices.setTokenHashes(deviceId, sha256hex(deviceToken), null);
 
-            // (Re)set the device to a clean enrolled state: pending unless the code
-            // auto-approves. Done on re-enrollment too, so a previously
-            // archived/revoked machine is re-paired instead of staying hidden.
-            // L'empreinte est déclarée par l'appelant : un réappairage reprend la
-            // fiche d'une machine existante (son historique, ses partages), donc
-            // il attend toujours une approbation, même sous un code qui approuve
-            // d'office. Sans cela, un code de liaison suffirait à saisir une machine.
-            // Un code qui approuve d'office ne passe pas par-dessus l'offre du
-            // propriétaire de l'espace : au-delà, l'appareil attend, et c'est son
-            // approbation à la main qui dira la limite.
-            const autoApproved =
-                consumed.autoApprove && !existing && (await withinAgentQuota(db, workspaceId, app.log));
-            await db.devices.markEnrolled(deviceId, autoApproved ? 'active' : 'pending');
+            if (existing) {
+                // L'empreinte est déclarée par l'appelant : un réappairage reprend
+                // la fiche d'une machine (son historique, ses partages), donc il
+                // attend toujours une approbation. La session ouverte sous
+                // l'ancien jeton tombe avec lui.
+                hub.disconnectAgent(deviceId);
+                await db.devices.markEnrolled(deviceId, 'pending');
+            }
             // L'appairage passe par cette route HTTP, pas par une commande WS :
             // sans ce signal, rien n'avertirait l'espace.
             live.changed(workspaceId, ['devices'], null);
@@ -261,11 +274,9 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, live, audit }
                 uid: ownerId,
                 ip: req.ip,
                 description: existing
-                    ? `Réappairage d'un appareil existant, son ancien jeton est révoqué (en attente d'approbation) : « ${existing.name} »`
-                    : autoApproved
-                      ? `Appareil appairé et approuvé automatiquement : « ${name} »`
-                      : `Appareil appairé (en attente d'approbation) : « ${name} »`,
-                metadata: { deviceId, platform, reenrolled: Boolean(existing), autoApprove: autoApproved }
+                    ? `Réappairage d'un appareil existant, son ancien jeton est invalidé (en attente d'approbation) : « ${existing.name} »`
+                    : `Appareil appairé et actif : « ${name} »`,
+                metadata: { deviceId, platform, reenrolled: Boolean(existing) }
             });
 
             const row = await db.devices.findById(deviceId);

@@ -5,40 +5,20 @@ import { ack, reply, type AgentSession, type PayloadOf } from './session';
 
 /**
  * Telemetry the agent streams: the OS/security `agent.report` and metric batches.
- * A metric snapshot is one *instant* — graph signals plus the process list that
- * explains them — so there is a single ingestion path and processes are stored
- * under the very timestamp of their metric row. Both persist only once the owner
- * has confirmed the device (status `active`) — the same gate, applied here so an
- * unapproved or revoked agent is acknowledged but never recorded. A persistence
- * failure replies `agent.error`.
+ * A metric snapshot is one *instant* (graph signals plus the process list that
+ * explains them), so there is a single ingestion path and processes are stored
+ * under the very timestamp of their metric row. A persistence failure replies
+ * `agent.error`.
  */
 
 /**
- * True (and acks an empty receipt) when the device isn't yet allowed to persist.
- *
- * `s.device` est l'instantané pris à la connexion, et un agent reste connecté
- * des semaines : un appareil approuvé pendant que son agent est en ligne
- * resterait « pending » pour toute la session. On relit donc le statut avant
- * de refuser, et seulement dans ce cas : le chemin normal ne coûte rien.
+ * Vrai (et accuse un reçu vide) quand rien ne doit être enregistré. La socket
+ * n'admet que `active`, et `pending_deletion` le temps de l'ordre
+ * d'auto-destruction, qui ne persiste rien. La mise en pause coupe la socket :
+ * ceci couvre la trame en vol.
  */
-async function gated(s: AgentSession): Promise<boolean> {
-    // L'agent est déconnecté à la mise en pause ; ceci couvre la trame en vol.
-    if (isPlanPaused('devices.agents', s.device.id)) {
-        ack(s, 0);
-        return true;
-    }
-    if (s.device.status === 'active') return false;
-
-    const fresh = await s.db.devices.findById(s.device.id);
-    if (fresh) s.device = fresh;
-    if (s.device.status === 'active') {
-        s.logger.info('Device approved while its agent was connected — telemetry resumes');
-        return false;
-    }
-
-    // Sans cette trace, rien ne distingue « pas encore autorisé » de « l'agent
-    // ne collecte pas ».
-    s.logger.warn({ status: s.device.status }, 'Telemetry dropped: device is not active');
+export function gated(s: AgentSession): boolean {
+    if (s.device.status === 'active' && !isPlanPaused('devices.agents', s.device.id)) return false;
     ack(s, 0);
     return true;
 }
@@ -62,7 +42,7 @@ function persistFailed(s: AgentSession, e: unknown, what: string): void {
 }
 
 export async function handleReport(s: AgentSession, payload: PayloadOf<typeof AGENT_REPORT>): Promise<void> {
-    if (await gated(s)) return;
+    if (gated(s)) return;
     try {
         await s.db.devices.setReport(s.device.id, JSON.stringify(payload.report));
         s.hub.publishReport(s.device.id, payload.report);
@@ -80,7 +60,7 @@ export async function handleMetricsBatch(
     s: AgentSession,
     payload: PayloadOf<typeof AGENT_METRICS_BATCH>
 ): Promise<void> {
-    if (await gated(s)) return;
+    if (gated(s)) return;
     const { snapshots } = payload;
     try {
         await s.db.metrics.insertBatch(s.device.id, snapshots);

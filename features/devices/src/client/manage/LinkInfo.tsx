@@ -13,13 +13,13 @@ export function LinkInfo() {
                     <code>deveye-agent link &lt;code&gt; --server &lt;url&gt;</code>
                 </li>
                 <li>
-                    Par défaut l&apos;appareil apparaît « En attente » — approuvez-le pour démarrer la collecte. Un code
-                    en <b>auto-approbation</b> l&apos;active directement à la liaison.
+                    L&apos;appareil est actif dès la liaison. Relier à nouveau une machine déjà connue de l&apos;espace
+                    la remet « En attente d&apos;approbation » : approuvez-la depuis sa fiche, popup « Agent ».
                 </li>
             </ol>
             <p>
-                Un code est à usage unique et peut avoir une durée de validité. L&apos;auto-approbation se règle à la
-                génération ou se bascule ensuite depuis le tableau.
+                Un code est à usage unique et expire, une heure au plus. Tout membre qui gère les appareils de
+                l&apos;espace voit les codes actifs et peut les invalider.
             </p>
         </div>
     );

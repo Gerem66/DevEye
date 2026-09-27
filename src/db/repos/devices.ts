@@ -17,6 +17,7 @@ export interface CreateDeviceInput {
     name: string;
     fingerprint: string;
     platform: string;
+    status: DeviceStatus;
     tokenHash: string;
 }
 
@@ -42,7 +43,7 @@ export interface DevicesRepo {
     setReport(id: string, reportJson: string): Promise<void>;
     /**
      * Reset a device to a freshly-enrolled state (status + cleared deletion
-     * bookkeeping), so a previously archived/revoked machine re-pairs cleanly.
+     * bookkeeping), so an archived machine re-pairs cleanly.
      */
     markEnrolled(id: string, status: DeviceStatus): Promise<void>;
     countActiveInWorkspaces(workspaceIds: readonly number[]): Promise<number>;
@@ -92,12 +93,12 @@ export function devicesRepo(pool: Q): DevicesRepo {
             );
             return r.rows;
         },
-        async create({ ownerId, workspaceId, name, fingerprint, platform, tokenHash }) {
+        async create({ ownerId, workspaceId, name, fingerprint, platform, status, tokenHash }) {
             const id = randomUUID();
             await pool.query(
                 `INSERT INTO devices (id, owner_id, workspace_id, name, fingerprint, platform, status, token_hash)
-                 VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`,
-                [id, ownerId, workspaceId, name, fingerprint, platform, tokenHash]
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                [id, ownerId, workspaceId, name, fingerprint, platform, status, tokenHash]
             );
             // Un nouvel appareil atterrit à la fin de la liste de son espace :
             // l'ordre appartient à l'utilisateur.
@@ -177,35 +178,36 @@ export function devicesRepo(pool: Q): DevicesRepo {
 /**
  * Les codes de liaison, côté consommation (l'enrôlement échange un code contre
  * un appareil). L'émission et la révocation sont les commandes
- * `devices.linkCode*` du module.
+ * `devices.linkCode*` du module. L'enrôlement relit le code avant de le
+ * consommer : un refus de l'offre ne doit pas le brûler.
  */
 export interface LinkCodesRepo {
-    consume(code: string): Promise<{ userId: number; workspaceId: number; autoApprove: boolean } | null>;
+    /** L'émetteur et l'espace d'un code encore valable, sans le consommer. */
+    peek(code: string): Promise<{ userId: number; workspaceId: number } | null>;
+    /** Consomme le code s'il est encore valable. Faux si un autre l'a pris entre-temps. */
+    consume(code: string): Promise<boolean>;
 }
 
 export function linkCodesRepo(pool: Q): LinkCodesRepo {
     return {
+        async peek(code) {
+            const now = Math.floor(Date.now() / 1000);
+            const r = await pool.query<{ user_id: number; workspace_id: number }>(
+                'SELECT user_id, workspace_id FROM device_link_codes WHERE code = ? AND used_at IS NULL AND expires_at >= ?',
+                [code, now]
+            );
+            const row = r.rows[0];
+            return row ? { userId: row.user_id, workspaceId: row.workspace_id } : null;
+        },
         async consume(code) {
             // Marquer et valider d'un seul coup : deux enrôlements simultanés avec
             // le même code ne passent pas tous les deux.
             const now = Math.floor(Date.now() / 1000);
             const res = await pool.query(
-                `UPDATE device_link_codes SET used_at = ?
-                 WHERE code = ? AND used_at IS NULL AND (expires_at IS NULL OR expires_at >= ?)`,
+                'UPDATE device_link_codes SET used_at = ? WHERE code = ? AND used_at IS NULL AND expires_at >= ?',
                 [now, code, now]
             );
-            if (res.rowCount !== 1) return null;
-            const r = await pool.query<{ user_id: number; workspace_id: number; auto_approve: number }>(
-                'SELECT user_id, workspace_id, auto_approve FROM device_link_codes WHERE code = ?',
-                [code]
-            );
-            const row = r.rows[0];
-            if (!row) return null;
-            return {
-                userId: row.user_id,
-                workspaceId: row.workspace_id,
-                autoApprove: Number(row.auto_approve) === 1
-            };
+            return res.rowCount === 1;
         }
     };
 }

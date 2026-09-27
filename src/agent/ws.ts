@@ -1,5 +1,6 @@
 import type { WebSocket } from '@fastify/websocket';
 import {
+    AGENT_CLOSE_PENDING_APPROVAL,
     AGENT_CONFIG,
     AGENT_DESTROY,
     AGENT_DESTROYED,
@@ -252,8 +253,9 @@ export async function registerAgentWS(
 ): Promise<void> {
     app.get('/agent', { websocket: true }, async (socket, req) => {
         // Stealth: every authentication/authorization failure ends the connection
-        // the same way, so a probe can't tell an invalid token from an unknown,
-        // revoked or archived device.
+        // the same way, so a probe can't tell an invalid token from an unknown
+        // or archived device. Only a valid token learns its device is pending
+        // (`AGENT_CLOSE_PENDING_APPROVAL`).
         const deny = () => socket.close(1008);
 
         // The agent fires `agent.hello` the instant the socket opens, while the
@@ -277,8 +279,10 @@ export async function registerAgentWS(
         const authenticated = await authenticateDevice(db, presentedToken.token);
         if (!authenticated) return deny();
         const { device, claims, presented } = authenticated;
-        // Revoked and archived devices are refused identically to unknown ones.
-        if (device.status === 'revoked' || device.status === 'archived') return deny();
+        if (device.status === 'archived') return deny();
+        // Réappairé et pas encore approuvé : ni config, ni hooks, ni ordres. Ce
+        // code dit à l'agent de réessayer court au lieu de reculer comme un refusé.
+        if (device.status === 'pending') return socket.close(AGENT_CLOSE_PENDING_APPROVAL);
         if (device.status === 'active' && isPlanPaused('devices.agents', device.id)) {
             if (admitPausedAgent(claims, presented, Math.floor(Date.now() / 1000)) === 'deny') return deny();
             // L'agent ne lit une rotation qu'une fois sa config reçue. Aucun

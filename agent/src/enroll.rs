@@ -8,8 +8,10 @@ use crate::protocol::{ApiResult, EnrollData, EnrollRequest};
 /// Enroll this machine with the server using a short-lived link code.
 ///
 /// On success, updates and persists `config` with the returned device id, token
-/// and order-signing key, and returns the device's status (`active` when the code auto-approves,
-/// otherwise `pending`). The code is consumed server-side and cannot be reused.
+/// and order-signing key, and returns the device's status: `active` on a first
+/// link, `pending` when the workspace already knew this machine (it then waits
+/// for approval). The code is consumed server-side and cannot be reused; a
+/// refusal by the plan leaves it valid.
 pub async fn enroll(config: &mut Config, code: &str) -> Result<String> {
     let url = format!("{}/api/agent/enroll", config.server.trim_end_matches('/'));
     let body = EnrollRequest {
@@ -42,6 +44,10 @@ pub async fn enroll(config: &mut Config, code: &str) -> Result<String> {
     })?;
 
     if !result.ok {
+        // The plan's refusal is written for the person at the keyboard.
+        if let Some(e) = result.error.as_ref().filter(|e| e.code == "quota_exceeded") {
+            bail!("enrollment refused: {}", e.message);
+        }
         let msg = result
             .error
             .map(|e| format!("{}: {}", e.code, e.message))

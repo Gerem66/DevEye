@@ -580,8 +580,8 @@ Ce que le SDK a gagné : `ctx.isAdmin` et `access: { admin: true }` (le
 dispatcheur exige l'administrateur global en plus du droit de feature ; les
 appareils n'en relèvent plus, mais les pages système oui) ; la capacité
 `workspaces.read` (`ctx.deveye.workspaces.list`, administrateur seulement) ;
-sur la façade `agents`, les trois ordres du cycle de vie
-(`resetAgentSession`, `disconnectAgent`, `requestDestroy`) et
+sur la façade `agents`, les deux ordres du cycle de vie
+(`disconnectAgent`, `requestDestroy`) et
 `servedManifest()` (le manifest des binaires servis, pour signaler un agent
 à mettre à jour sans que le module ne lise le disque) ; côté client,
 `SettingsPanelProps` (la portée d'un élément de la coquille porte un id
@@ -636,8 +636,8 @@ nommer dans son `access` ; `list()` rend les appareils de l'espace et ceux qui
 y sont projetés, l'administrateur global compris), `workspaces.read` (`list()`, tous les
 espaces, administrateur seulement), `telemetry.read` (`snapshot`,
 `pinInstant`, réservée aux ids natifs) et `agents` (`requestScan`,
-`pushConfig`, les trois ordres du cycle de vie `resetAgentSession` /
-`disconnectAgent` / `requestDestroy`, `servedManifest`, les requêtes sync,
+`pushConfig`, les deux ordres du cycle de vie `disconnectAgent` /
+`requestDestroy`, `servedManifest`, les requêtes sync,
 `dockerRun` / `dockerInventory`, et `archiveFolder` : l'archive `.tar.gz` d'un
 dossier, faite par l'agent et tirée par crédits au rythme du consommateur,
 annulée sur la machine quand on quitte la boucle)),

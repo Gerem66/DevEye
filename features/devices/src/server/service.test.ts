@@ -45,7 +45,7 @@ function fakeRepo(pruned: string[]): DevicesRepo {
             delete: unused,
             reorder: unused
         },
-        linkCodes: { create: unused, listActive: unused, setAutoApprove: unused, revoke: unused },
+        linkCodes: { create: unused, listActive: unused, revoke: unused },
         metrics: {
             query: unused,
             availableDaySummaries: unused,

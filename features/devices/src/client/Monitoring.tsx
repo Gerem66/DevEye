@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+    Button,
     openInfo,
     PlanPausedBadge,
     PlanPausedNotice,
@@ -139,6 +140,12 @@ export default function Monitoring({ onPair, pairing }: MonitoringProps) {
     /** Un glissé est en cours : la liste ne doit pas bouger dessous. */
     const dragging = useRef(false);
     const devices = ordered ?? stored;
+    // Les archivés (révoqués ou supprimés) se rangent à part, repliés : leur
+    // historique se consulte et s'efface, rien d'autre.
+    const live = devices.filter((d) => d.status !== 'archived');
+    const archived = devices.filter((d) => d.status === 'archived');
+    const [showArchived, setShowArchived] = useState(false);
+    const archivedOpen = showArchived || archived.some((d) => d.id === selectedId);
 
     // Le serveur reprend la main dès qu'il a répondu, jamais pendant un glissé.
     useEffect(() => {
@@ -156,12 +163,18 @@ export default function Monitoring({ onPair, pairing }: MonitoringProps) {
      */
     const reorder = useCallback((ids: (string | number)[]) => {
         const byId = new Map(currentList.current.map((d) => [d.id, d]));
-        setOrdered(ids.flatMap((id) => byId.get(String(id)) ?? []));
-        api.send('devices.reorder', { ids: ids.map(String) }).catch(() => setOrdered(null));
+        // La commande veut la liste complète : les archivés, qu'on ne glisse
+        // pas, ferment la marche.
+        const full = [
+            ...ids.map(String),
+            ...currentList.current.filter((d) => d.status === 'archived').map((d) => d.id)
+        ];
+        setOrdered(full.flatMap((id) => byId.get(id) ?? []));
+        api.send('devices.reorder', { ids: full }).catch(() => setOrdered(null));
     }, []);
 
     const drag = useDragReorder<HTMLDivElement, HTMLSpanElement>({
-        ids: devices.map((d) => d.id),
+        ids: live.map((d) => d.id),
         rowSelector: '[data-device-card]',
         onReorder: reorder,
         onDragStateChange: (active) => {
@@ -177,7 +190,8 @@ export default function Monitoring({ onPair, pairing }: MonitoringProps) {
         if (devices.length === 0) {
             if (selectedId !== null) setSelectedId(null);
         } else if (selectedId === null || !devices.some((d) => d.id === selectedId)) {
-            setSelectedId(devices[0].id);
+            // Un appareil vivant d'abord : les archivés sont repliés.
+            setSelectedId((devices.find((d) => d.status !== 'archived') ?? devices[0]).id);
         }
     }, [devices, selectedId]);
 
@@ -189,6 +203,73 @@ export default function Monitoring({ onPair, pairing }: MonitoringProps) {
         if (liveTarget.value === null) return;
         if (devices.some((d) => d.id === liveTarget.value)) setSelectedId(liveTarget.value);
     }, [liveTarget, devices]);
+
+    /** Une carte de la liste. Seules les cartes vivantes se réordonnent. */
+    const renderCard = (d: FleetDevice, reorderable: boolean) => {
+        const canUpdate = d.online && agentUpdatable(d) && canWriteOn(d.id);
+        return (
+            <div
+                key={d.id}
+                role='button'
+                tabIndex={0}
+                data-device-card={reorderable ? '' : undefined}
+                className={`${styles.deviceCard} ${d.id === selectedId ? styles.selected : ''} ${drag.draggingId === d.id ? styles.deviceCardDragging : ''} ${reorderable ? '' : styles.deviceCardArchived}`}
+                {...outlineOf(d.id)}
+                onClick={() => setSelectedId(d.id)}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') setSelectedId(d.id);
+                }}
+            >
+                {/* Seule la poignée renonce au défilement tactile. */}
+                {canWrite && reorderable && (
+                    <button
+                        type='button'
+                        className={styles.grip}
+                        aria-label='Réordonner l’appareil'
+                        onPointerDown={(e) => drag.onGripPointerDown(e, d.id)}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <span className='icon icon-drag' />
+                    </button>
+                )}
+                <div className={`${styles.statusDot} ${d.online ? styles.online : styles.offline}`} />
+                <div className={styles.deviceCardInfo}>
+                    <span className={styles.deviceCardName}>
+                        {d.name}
+                        {/* Venu d'un autre espace : il se règle et se
+                            supprime chez lui, pas d'ici. */}
+                        {d.foreign && <span className={styles.sharedTag}>partagé</span>}
+                        {/* Relié à nouveau : son agent attend qu'on l'approuve. */}
+                        {d.status === 'pending' && <span className={styles.pendingTag}>en attente</span>}
+                    </span>
+                    <span className={styles.deviceCardPlatform}>
+                        {d.platform}
+                        {d.agentVersion && ` · v${d.agentVersion}`}
+                    </span>
+                    {d.planPaused && <PlanPausedBadge className={styles.pausedTag} />}
+                </div>
+                {canUpdate && (
+                    <button
+                        className={styles.cardUpdateBtn}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            void updater.update(d.id);
+                        }}
+                        disabled={updater.isBusy(d.id)}
+                        title={
+                            d.latestAgentVersion
+                                ? `Mettre à jour l’agent vers la v${d.latestAgentVersion}`
+                                : 'Mettre à jour l’agent'
+                        }
+                    >
+                        <span
+                            className={`icon ${updater.isBusy(d.id) ? `icon-spinner ${styles.spinning}` : 'icon-cloud'}`}
+                        />
+                    </button>
+                )}
+            </div>
+        );
+    };
 
     return (
         <div className={styles.container}>
@@ -227,74 +308,29 @@ export default function Monitoring({ onPair, pairing }: MonitoringProps) {
                         {/* Boîte intérieure, et non `.deviceListFull` : elle ancre
                             la barre d'insertion et suit le défilement. */}
                         <div ref={drag.listRef} className={styles.deviceCards}>
-                            {devices.map((d) => {
-                                const canUpdate = d.online && agentUpdatable(d) && canWriteOn(d.id);
-                                return (
-                                    <div
-                                        key={d.id}
-                                        role='button'
-                                        tabIndex={0}
-                                        data-device-card=''
-                                        className={`${styles.deviceCard} ${d.id === selectedId ? styles.selected : ''} ${drag.draggingId === d.id ? styles.deviceCardDragging : ''}`}
-                                        {...outlineOf(d.id)}
-                                        onClick={() => setSelectedId(d.id)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter' || e.key === ' ') setSelectedId(d.id);
-                                        }}
-                                    >
-                                        {/* Seule la poignée renonce au défilement tactile. */}
-                                        {canWrite && (
-                                            <button
-                                                type='button'
-                                                className={styles.grip}
-                                                aria-label='Réordonner l’appareil'
-                                                onPointerDown={(e) => drag.onGripPointerDown(e, d.id)}
-                                                onClick={(e) => e.stopPropagation()}
-                                            >
-                                                <span className='icon icon-drag' />
-                                            </button>
-                                        )}
-                                        <div
-                                            className={`${styles.statusDot} ${d.online ? styles.online : styles.offline}`}
-                                        />
-                                        <div className={styles.deviceCardInfo}>
-                                            <span className={styles.deviceCardName}>
-                                                {d.name}
-                                                {/* Venu d'un autre espace : il se règle et se
-                                                    supprime chez lui, pas d'ici. */}
-                                                {d.foreign && <span className={styles.sharedTag}>partagé</span>}
-                                            </span>
-                                            <span className={styles.deviceCardPlatform}>
-                                                {d.platform}
-                                                {d.agentVersion && ` · v${d.agentVersion}`}
-                                            </span>
-                                            {d.planPaused && <PlanPausedBadge className={styles.pausedTag} />}
-                                        </div>
-                                        {canUpdate && (
-                                            <button
-                                                className={styles.cardUpdateBtn}
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    void updater.update(d.id);
-                                                }}
-                                                disabled={updater.isBusy(d.id)}
-                                                title={
-                                                    d.latestAgentVersion
-                                                        ? `Mettre à jour l’agent vers la v${d.latestAgentVersion}`
-                                                        : 'Mettre à jour l’agent'
-                                                }
-                                            >
-                                                <span
-                                                    className={`icon ${updater.isBusy(d.id) ? `icon-spinner ${styles.spinning}` : 'icon-cloud'}`}
-                                                />
-                                            </button>
-                                        )}
-                                    </div>
-                                );
-                            })}
+                            {live.map((d) => renderCard(d, true))}
                             <span ref={drag.barRef} className={styles.dropBar} aria-hidden='true' />
                         </div>
                         {onPair && <PairCard onPair={onPair} pairing={pairing} />}
+                        {archived.length > 0 && (
+                            <div className={styles.archivedGroup}>
+                                <div>
+                                    <Button
+                                        variant='ghost'
+                                        icon='archive'
+                                        onClick={() => setShowArchived(!archivedOpen)}
+                                        aria-expanded={archivedOpen}
+                                    >
+                                        {archivedOpen ? 'Masquer les archivés' : `Archivés (${archived.length})`}
+                                    </Button>
+                                </div>
+                                {archivedOpen && (
+                                    <div className={styles.deviceCards}>
+                                        {archived.map((d) => renderCard(d, false))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
 
                     {/* Right: per-device panel, scrolling independently of the list. */}

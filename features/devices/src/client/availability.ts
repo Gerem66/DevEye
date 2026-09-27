@@ -32,6 +32,18 @@ export const ARCHIVED: Unavailable = {
     reason: 'Appareil archivé : son agent n’existe plus'
 };
 
+/** Réappairé et pas encore approuvé : la socket refuse son agent. */
+export const PENDING: Unavailable = {
+    icon: 'icon-clock',
+    reason: 'Appareil en attente d’approbation : son agent n’est pas admis'
+};
+
+/** Ce que le serveur réserve à l'administrateur global (`access.admin`), quel que soit le rôle. */
+export const ADMIN_ONLY: Unavailable = {
+    icon: 'icon-lock',
+    reason: 'Réservé à l’administrateur de l’instance'
+};
+
 /** L'agent répond, mais cette version-là ne sait pas encore faire la chose. */
 export const OLD_AGENT: Unavailable = {
     icon: 'icon-cloud',
@@ -72,6 +84,7 @@ export function firstReason(...reasons: (Unavailable | false | undefined)[]): Un
 export function agentReach(device: FleetDevice): Unavailable | undefined {
     return firstReason(
         device.status === 'archived' && ARCHIVED,
+        device.status === 'pending' && PENDING,
         device.planPaused && PLAN_PAUSED,
         !device.online && OFFLINE
     );

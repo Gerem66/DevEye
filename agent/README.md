@@ -75,18 +75,22 @@ published whenever the agent (or the DevEye version) changes.
 
 ## Quick start
 
-1. In the DevEye web UI, open **Appareils** (top-right menu) → **Ajouter un
-   appareil** to generate a one-time link code.
+1. In the DevEye web UI, open **Appareils** → **Appairer un appareil** to
+   generate a one-time link code (valid one hour at most).
 2. Enroll this machine:
     ```sh
     deveye-agent link ABCD-EFGH --server https://deveye.example.com
     ```
     A plain `http://` server is refused unless it is this machine (see
     [the transport](#what-the-server-can-do-here-and-how-to-limit-it)).
-3. Back in **Appareils**, **approve** the device (it starts as “En attente”).
-   Until approved, the server drops its metrics — this is the gate that makes a
-   device trusted. You can revoke or delete it later there too.
-4. Start streaming:
+3. A machine new to the workspace is **active at once**, if the plan allows one
+   more device (otherwise `link` says so and the code stays valid). Linking a
+   machine the workspace already knew takes over its record and puts it back to
+   “En attente d’approbation”: its agent is refused until someone approves it in
+   **Appareils** (Agent popup), and retries every 30 s. Revoking a device
+   archives it and wipes its token; only a new `link` brings it back.
+4. Start streaming (restart the agent if it was already running: it still holds
+   the old token):
     ```sh
     deveye-agent run            # foreground
     deveye-agent run --detach   # background (writes a PID file)
@@ -107,7 +111,7 @@ connect, so the dashboard shows data without waiting a full interval.
 | `unlink`                                                                    | Forget the local enrollment (deletes the config + token).                                                                                                                                                                                                                                                                              |
 | `uninstall [--yes] [--purge-shares]`                                        | **Retrait complet** de la machine : autostart, linger, processus, config, jeton, journal, caches, binaire. Voir [Retrait complet](#retrait-complet-uninstall).                                                                                                                                                                         |
 
-Test a freshly approved device end-to-end:
+Test a freshly linked device end-to-end:
 
 ```sh
 deveye-agent run --once     # one instant + report, then exits

@@ -8,7 +8,6 @@ import {
     devicesDeleteFeature,
     devicesForceDeleteFeature,
     devicesListFeature,
-    devicesReactivateFeature,
     devicesRenameFeature,
     devicesReorderFeature,
     devicesRequestDeleteFeature,
@@ -25,12 +24,7 @@ import {
     devicesSnapshotsFeature,
     devicesStorageFeature
 } from './history';
-import {
-    devicesLinkCodeCreateFeature,
-    devicesLinkCodeListFeature,
-    devicesLinkCodeRevokeFeature,
-    devicesLinkCodeSetAutoApproveFeature
-} from './linkCodes';
+import { devicesLinkCodeCreateFeature, devicesLinkCodeListFeature, devicesLinkCodeRevokeFeature } from './linkCodes';
 import type { DevicesRepo } from './repo';
 
 /** Les commandes du module, dans le même ordre que `devicesCommands` : les deux listes se comparent. */
@@ -38,7 +32,6 @@ export const devicesHandlers: readonly SdkFeatureDefinition<DevicesRepo, string,
     devicesListFeature,
     devicesConfirmFeature,
     devicesRevokeFeature,
-    devicesReactivateFeature,
     devicesRenameFeature,
     devicesReorderFeature,
     devicesSetConfigFeature,
@@ -56,6 +49,5 @@ export const devicesHandlers: readonly SdkFeatureDefinition<DevicesRepo, string,
     devicesSetSnapshotsPinnedFeature,
     devicesLinkCodeCreateFeature,
     devicesLinkCodeListFeature,
-    devicesLinkCodeSetAutoApproveFeature,
     devicesLinkCodeRevokeFeature
 ];

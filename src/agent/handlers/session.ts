@@ -27,7 +27,10 @@ export interface AgentSession {
     ownerId: number;
     /** Client IP of the agent connection, recorded on audited actions. */
     ip: string;
-    /** Mis à jour sur place quand le statut change sous la session (cf. `gated`). */
+    /**
+     * La ligne lue à la connexion. Un changement de statut coupe la session
+     * (révoquer, archiver, mettre en pause) : l'instantané ne ment pas longtemps.
+     */
     device: DeviceRow;
 }
 

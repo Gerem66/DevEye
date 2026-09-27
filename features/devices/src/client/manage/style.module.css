@@ -308,12 +308,6 @@
     flex-shrink: 0;
 }
 
-.pendingHint {
-    font-size: 0.78rem;
-    color: var(--warning);
-    margin: 0;
-}
-
 .deleteErrorHint {
     display: flex;
     align-items: center;
@@ -462,59 +456,9 @@
     }
 }
 
-/* Pending-deletion actions: two full-width labeled buttons stacked, so long
-   labels always stay aligned and inside the card. */
-.pendingActions {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-sm);
-    margin-top: auto;
-    padding-top: var(--space-sm);
-    border-top: 1px solid var(--glass-border);
-}
-
-.pendingBtn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-xs);
-    width: 100%;
-    height: 34px;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--glass-border);
-    background: transparent;
-    font-size: 0.82rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition:
-        background var(--transition-fast),
-        border-color var(--transition-fast),
-        color var(--transition-fast);
-}
-
-.pendingCancel {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: var(--on-accent);
-}
-
-.pendingCancel:hover {
-    background: var(--accent-hover);
-    border-color: var(--accent-hover);
-}
-
-.pendingForce {
-    color: var(--danger);
-}
-
-.pendingForce:hover {
-    background: var(--danger-bg);
-    border-color: var(--danger);
-}
-
 /* ─── Link-code dialog (rendered inside the shared <Dialog/>) ──────────────── */
 
-/* Generation controls: validity selector (+ optional minutes) and Generate. */
+/* Generation controls: validity selector and Generate. */
 .genRow {
     display: flex;
     align-items: center;
@@ -526,11 +470,6 @@
 .genRow > select {
     flex: 1;
     min-width: 150px;
-}
-
-.minutesInput {
-    width: 110px;
-    flex-shrink: 0;
 }
 
 .genError {
@@ -665,15 +604,6 @@
     height: 15px;
     margin-top: 1px;
     background-color: var(--warning);
-}
-
-/* Auto-approval toggle in the codes table. Compound selector so it overrides
-   `.iconBtn`'s border regardless of order. */
-.iconBtn.iconApprove,
-.iconBtn.iconApprove:hover {
-    color: var(--accent);
-    border-color: var(--accent);
-    background: var(--accent-bg);
 }
 
 .noCodes {

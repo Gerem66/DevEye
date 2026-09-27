@@ -7,7 +7,6 @@ import {
     devicesDelete,
     devicesForceDelete,
     devicesList,
-    devicesReactivate,
     devicesRename,
     devicesReorder,
     devicesRequestDelete,
@@ -15,13 +14,13 @@ import {
     devicesSetConfig
 } from '../contracts/commands';
 import type { DevicesRepo } from './repo';
-import { computeAgentUpdate, loadDevice, rowToDevice, toDevice, WRITE } from './_shared';
+import { computeAgentUpdate, loadHomeDevice, rowToDevice, toDevice, WRITE } from './_shared';
 
 /**
  * La flotte de l'espace : la liste, le cycle de vie d'un appareil, son nom, sa
  * configuration de collecte et son rang. Tout relève du droit `devices: write`
- * de l'espace, doublé de la restriction par élément que `loadDevice` applique.
- * Les ordres au hub passent par la façade `agents`.
+ * de l'espace, doublé de la restriction par élément et du domicile que
+ * `loadHomeDevice` applique. Les ordres au hub passent par la façade `agents`.
  */
 
 export const devicesListFeature = defineSdkFeature<
@@ -68,14 +67,15 @@ export const devicesConfirmFeature = defineSdkFeature<
     mutates: true,
     access: WRITE,
     handler: async (ctx, input) => {
-        const row = await loadDevice(ctx, input.deviceId, 'write');
-        if (row.status === 'revoked') throw new FeatureError('conflict', 'Device is revoked');
+        const row = await loadHomeDevice(ctx, input.deviceId);
+        // Un archivé n'a plus de jeton : l'activer ferait une fiche sans agent.
+        if (row.status !== 'pending') {
+            throw new FeatureError('conflict', 'Seul un appareil en attente d’approbation s’approuve');
+        }
         await assertAgentQuota(ctx);
+        // L'agent n'est pas connecté (la socket refuse un appareil en attente) :
+        // il est admis à sa prochaine tentative.
         await ctx.repo.devices.setStatus(row.id, 'active');
-        // Le statut vit aussi dans la session agent, figée à la connexion : sans
-        // cette remise à zéro, un agent déjà connecté verrait sa télémétrie
-        // jetée en silence.
-        ctx.deveye.agents.resetAgentSession(row.id);
         const updated = (await ctx.repo.devices.findById(row.id)) ?? { ...row, status: 'active' as const };
         ctx.audit({
             action: 'devices.confirm',
@@ -97,43 +97,18 @@ export const devicesRevokeFeature = defineSdkFeature<
     mutates: true,
     access: WRITE,
     handler: async (ctx, input) => {
-        const row = await loadDevice(ctx, input.deviceId, 'write');
-        await ctx.repo.devices.setStatus(row.id, 'revoked');
-        // La session agent porte un instantané du statut : sans cette coupure,
-        // l'agent révoqué continuerait d'écrire jusqu'à sa prochaine reconnexion.
+        const row = await loadHomeDevice(ctx, input.deviceId);
+        if (row.status === 'archived') throw new FeatureError('conflict', 'Appareil déjà archivé');
+        // Unilatéral et immédiat, là où `requestDelete` demande à l'agent de
+        // s'effacer : le jeton tombe, la session aussi, et seul un nouvel
+        // appairage fait revenir la machine.
+        await ctx.repo.devices.archive(row.id);
         ctx.deveye.agents.disconnectAgent(row.id);
-        const updated = (await ctx.repo.devices.findById(row.id)) ?? { ...row, status: 'revoked' as const };
+        const updated = (await ctx.repo.devices.findById(row.id)) ?? { ...row, status: 'archived' as const };
         ctx.audit({
             action: 'devices.revoke',
             level: 'warning',
-            description: `Appareil révoqué : « ${row.name} »`,
-            metadata: { deviceId: row.id, ownerId: row.owner_id }
-        });
-        return { device: await toDevice(ctx, updated) };
-    }
-});
-
-export const devicesReactivateFeature = defineSdkFeature<
-    DevicesRepo,
-    typeof devicesReactivate.command,
-    typeof devicesReactivate.input,
-    typeof devicesReactivate.output
->({
-    ...devicesReactivate,
-    mutates: true,
-    access: WRITE,
-    handler: async (ctx, input) => {
-        const row = await loadDevice(ctx, input.deviceId, 'write');
-        if (row.status !== 'revoked') {
-            throw new FeatureError('conflict', 'Only a revoked device can be reactivated');
-        }
-        await assertAgentQuota(ctx);
-        await ctx.repo.devices.setStatus(row.id, 'active');
-        ctx.deveye.agents.resetAgentSession(row.id);
-        const updated = (await ctx.repo.devices.findById(row.id)) ?? { ...row, status: 'active' as const };
-        ctx.audit({
-            action: 'devices.reactivate',
-            description: `Appareil réactivé : « ${row.name} »`,
+            description: `Appareil révoqué et archivé : « ${row.name} »`,
             metadata: { deviceId: row.id, ownerId: row.owner_id }
         });
         return { device: await toDevice(ctx, updated) };
@@ -150,7 +125,7 @@ export const devicesRenameFeature = defineSdkFeature<
     mutates: true,
     access: WRITE,
     handler: async (ctx, input) => {
-        const row = await loadDevice(ctx, input.deviceId, 'write');
+        const row = await loadHomeDevice(ctx, input.deviceId);
         await ctx.repo.devices.rename(row.id, input.name);
         const updated = (await ctx.repo.devices.findById(row.id)) ?? { ...row, name: input.name };
         ctx.audit({
@@ -204,7 +179,7 @@ export const devicesSetConfigFeature = defineSdkFeature<
     mutates: true,
     access: WRITE,
     handler: async (ctx, input) => {
-        const row = await loadDevice(ctx, input.deviceId, 'write');
+        const row = await loadHomeDevice(ctx, input.deviceId);
         const { deviceId: _id, ...patch } = input;
         await ctx.repo.devices.setConfig(row.id, patch);
         const updated = (await ctx.repo.devices.findById(row.id)) ?? row;
@@ -232,7 +207,7 @@ export const devicesRequestDeleteFeature = defineSdkFeature<
     mutates: true,
     access: WRITE,
     handler: async (ctx, input) => {
-        const row = await loadDevice(ctx, input.deviceId, 'write');
+        const row = await loadHomeDevice(ctx, input.deviceId);
         if (row.status === 'archived' || row.status === 'pending_deletion') {
             throw new FeatureError('conflict', 'Device is already being deleted');
         }
@@ -261,8 +236,8 @@ export const devicesCancelDeleteFeature = defineSdkFeature<
     mutates: true,
     access: WRITE,
     handler: async (ctx, input) => {
-        const row = await loadDevice(ctx, input.deviceId, 'write');
-        // Revenir actif, c'est reprendre une place de l'offre, comme une réactivation.
+        const row = await loadHomeDevice(ctx, input.deviceId);
+        // Revenir actif, c'est reprendre une place de l'offre, comme une approbation.
         if ((row.status_before_delete ?? 'active') === 'active') await assertAgentQuota(ctx);
         await ctx.repo.devices.cancelDeletion(row.id);
         const updated = (await ctx.repo.devices.findById(row.id)) ?? row;
@@ -285,7 +260,7 @@ export const devicesForceDeleteFeature = defineSdkFeature<
     mutates: true,
     access: WRITE,
     handler: async (ctx, input) => {
-        const row = await loadDevice(ctx, input.deviceId, 'write');
+        const row = await loadHomeDevice(ctx, input.deviceId);
         if (row.status === 'archived') {
             throw new FeatureError('conflict', 'Device is already archived');
         }
@@ -318,7 +293,7 @@ export const devicesDeleteFeature = defineSdkFeature<
     mutates: true,
     access: WRITE,
     handler: async (ctx, input) => {
-        const row = await loadDevice(ctx, input.deviceId, 'write');
+        const row = await loadHomeDevice(ctx, input.deviceId);
         await ctx.repo.devices.delete(row.id);
         ctx.audit({
             action: 'devices.delete',

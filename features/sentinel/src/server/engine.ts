@@ -343,8 +343,8 @@ export class SentinelEngine {
 
     private async evaluate(deviceId: string, pending: Pending): Promise<void> {
         const device = await this.deps.devices.find(deviceId);
-        // Le garde est ici en plus de l'ingestion : un appareil peut être archivé,
-        // ou la surveillance coupée, pendant qu'une file attend.
+        // La socket n'admet qu'un appareil actif, mais une file peut attendre
+        // pendant qu'il est révoqué ou archivé, ou que la surveillance est coupée.
         if (!device || device.status !== 'active') return;
         const config = await this.deps.repo.deviceConfig.get(deviceId);
         if (!config || config.enabled !== 1) return;

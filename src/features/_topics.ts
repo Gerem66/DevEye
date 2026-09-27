@@ -159,7 +159,7 @@ const NON_MUTATING = new Set([
 
 /** Verbes qui trahissent une écriture, pour le contrôle de démarrage. */
 const MUTATION_VERB =
-    /\.(add|set|create|update|edit|delete|remove|rename|reorder|archive|restore|assign|enable|disable|revoke|confirm|reactivate|move|send|clear|pause|resume|attach|detach|leave|elevate|drop|upgrade|sync|reset|backfill|regen|recover|setup)/i;
+    /\.(add|set|create|update|edit|delete|remove|rename|reorder|archive|restore|assign|enable|disable|revoke|confirm|move|send|clear|pause|resume|attach|detach|leave|elevate|drop|upgrade|sync|reset|backfill|regen|recover|setup)/i;
 
 /**
  * Bâtit la table et signale les oublis. Un `mutates` oublié n'est qu'un

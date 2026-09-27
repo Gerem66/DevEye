@@ -1373,8 +1373,8 @@ pub struct EnrollData {
     /// config: high-impact orders are refused unless they carry its signature.
     #[serde(rename = "orderSigningKey")]
     pub order_signing_key: String,
-    /// The enrolled device, so the agent can report the real status (a code with
-    /// auto-approval lands the device directly as `active`, not `pending`).
+    /// The enrolled device, so the agent can report the real status: `active` on
+    /// a first link, `pending` on a re-link awaiting approval.
     #[serde(default)]
     pub device: Option<EnrolledDevice>,
 }

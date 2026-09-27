@@ -1,4 +1,4 @@
-import { Button, Dialog, TextInput } from 'deveye-sdk-client';
+import { Button, ConfirmDialog, Dialog, TextInput } from 'deveye-sdk-client';
 import type { Device } from '@deveye/types';
 
 import type { DeviceActions } from './useDeviceActions';
@@ -6,8 +6,9 @@ import styles from './style.module.css';
 
 /**
  * Les dialogues de confirmation des gestes qui engagent : renommer, interrompre
- * l'agent, supprimer. Montés par la fiche d'un appareil, à côté de son menu
- * d'actions ({@link deviceLifecycleActions}) qui les ouvre.
+ * l'agent, supprimer, et le dialogue commun qui confirme l'approbation, la
+ * révocation et l'effacement. Montés par la fiche d'un appareil, à côté de son
+ * menu d'actions et de sa popup « Agent » qui les ouvrent.
  */
 export function DeviceDialogs({ actions, device }: { actions: DeviceActions; device: Device }) {
     // Les conséquences d'un arrêt dépendent du démarrage auto de la machine.
@@ -144,6 +145,8 @@ export function DeviceDialogs({ actions, device }: { actions: DeviceActions; dev
                         : 'Démarrage auto inactif : l’appareil restera hors ligne et ne pourra plus être administré à distance (configuration, mises à jour, terminal, fichiers…) jusqu’à un relancement manuel de l’agent sur la machine.'}
                 </p>
             </Dialog>
+
+            <ConfirmDialog request={actions.confirmRequest} onClose={actions.closeConfirm} />
         </>
     );
 }

@@ -396,26 +396,14 @@ export class MonitorHub {
 
     /**
      * Coupe la session d'un agent sur-le-champ : la session capture le statut à
-     * la connexion, révoquer sans fermer la socket laisserait l'agent écrire
-     * jusqu'à sa reconnexion. 1008 (« policy violation ») et non 1012 : l'agent
-     * ne doit pas se ruer sur une reconnexion.
+     * la connexion, révoquer, archiver ou réappairer sans fermer la socket
+     * laisserait l'agent écrire jusqu'à sa reconnexion. 1008 (« policy
+     * violation ») et non 1012 : l'agent ne doit pas se ruer sur une reconnexion.
      */
     disconnectAgent(deviceId: string): boolean {
         const socket = this.agents.get(deviceId);
         if (!socket) return false;
         socket.close(1008);
-        return true;
-    }
-
-    /**
-     * Coupe la session pour qu'elle se rétablisse avec un statut à jour (un
-     * appareil approuvé alors que son agent est déjà connecté). 1012 (« service
-     * restart »), pour que l'agent revienne au lieu de renoncer.
-     */
-    resetAgentSession(deviceId: string): boolean {
-        const socket = this.agents.get(deviceId);
-        if (!socket) return false;
-        socket.close(1012, 'Device configuration changed');
         return true;
     }
 

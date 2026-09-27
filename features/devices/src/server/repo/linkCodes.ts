@@ -4,45 +4,32 @@ import type { SdkQueryable } from '@deveye/types/sdk/server';
 
 export interface LinkCode {
     code: string;
-    expiresAt: number | null;
-    autoApprove: boolean;
+    expiresAt: number;
 }
 
 /**
  * La table `device_link_codes`, côté émission. La consommation d'un code
  * (l'enrôlement, `POST /api/agent/enroll`) reste au socle : route publique,
- * sans session.
+ * sans session. Un code appartient à l'espace qu'il vise : quiconque y tient
+ * `devices: write` le relit et le révoque.
  */
 export interface LinkCodeRepo {
     create(input: {
-        /** Émetteur du code. */
+        /** Émetteur du code, pour le journal. */
         userId: number;
         /** Espace dans lequel la machine sera rangée à l'enrôlement. */
         workspaceId: number;
-        /** `null` mints a code that never expires. */
         ttlSeconds: number;
-        autoApprove: boolean;
     }): Promise<LinkCode>;
-    /** Les codes encore valables (ni consommés ni expirés) de cet émetteur. */
-    listActive(userId: number): Promise<LinkCode[]>;
-    /** Toggle auto-approval on one of the caller's still-active codes (else null). */
-    setAutoApprove(userId: number, code: string, autoApprove: boolean): Promise<LinkCode | null>;
-    /** Delete one of the caller's still-active codes. Returns true if removed. */
-    revoke(userId: number, code: string): Promise<boolean>;
+    /** Les codes encore valables (ni consommés ni expirés) de cet espace. */
+    listActive(workspaceId: number): Promise<LinkCode[]>;
+    /** Supprime un code encore valable de cet espace. Vrai s'il a été retiré. */
+    revoke(workspaceId: number, code: string): Promise<boolean>;
 }
 
 interface LinkCodeRow {
     code: string;
-    expires_at: number | null;
-    auto_approve: number;
-}
-
-function toLinkCode(row: LinkCodeRow): LinkCode {
-    return {
-        code: row.code,
-        expiresAt: row.expires_at === null ? null : Number(row.expires_at),
-        autoApprove: Number(row.auto_approve) === 1
-    };
+    expires_at: number;
 }
 
 function randomCode(): string {
@@ -58,44 +45,29 @@ function randomCode(): string {
 
 export function linkCodeRepo(q: SdkQueryable): LinkCodeRepo {
     return {
-        async create({ userId, workspaceId, ttlSeconds, autoApprove }) {
-            const now = Math.floor(Date.now() / 1000);
-            const expiresAt = now + ttlSeconds;
+        async create({ userId, workspaceId, ttlSeconds }) {
+            const expiresAt = Math.floor(Date.now() / 1000) + ttlSeconds;
             const code = randomCode();
             await q.execute(
-                'INSERT INTO device_link_codes (code, user_id, workspace_id, expires_at, auto_approve) VALUES (?, ?, ?, ?, ?)',
-                [code, userId, workspaceId, expiresAt, autoApprove ? 1 : 0]
+                'INSERT INTO device_link_codes (code, user_id, workspace_id, expires_at) VALUES (?, ?, ?, ?)',
+                [code, userId, workspaceId, expiresAt]
             );
-            return { code, expiresAt, autoApprove };
+            return { code, expiresAt };
         },
-        async listActive(userId) {
+        async listActive(workspaceId) {
             const now = Math.floor(Date.now() / 1000);
             const rows = await q.query<LinkCodeRow>(
-                `SELECT code, expires_at, auto_approve FROM device_link_codes
-                 WHERE user_id = ? AND used_at IS NULL AND (expires_at IS NULL OR expires_at > ?)
-                 ORDER BY expires_at IS NULL DESC, expires_at ASC`,
-                [userId, now]
+                `SELECT code, expires_at FROM device_link_codes
+                 WHERE workspace_id = ? AND used_at IS NULL AND expires_at > ?
+                 ORDER BY expires_at ASC`,
+                [workspaceId, now]
             );
-            return rows.map(toLinkCode);
+            return rows.map((row) => ({ code: row.code, expiresAt: Number(row.expires_at) }));
         },
-        async setAutoApprove(userId, code, autoApprove) {
-            const now = Math.floor(Date.now() / 1000);
-            const upd = await q.execute(
-                `UPDATE device_link_codes SET auto_approve = ?
-                 WHERE code = ? AND user_id = ? AND used_at IS NULL AND (expires_at IS NULL OR expires_at > ?)`,
-                [autoApprove ? 1 : 0, code, userId, now]
-            );
-            if (upd.affectedRows === 0) return null;
-            const rows = await q.query<LinkCodeRow>(
-                'SELECT code, expires_at, auto_approve FROM device_link_codes WHERE code = ?',
-                [code]
-            );
-            return rows[0] ? toLinkCode(rows[0]) : null;
-        },
-        async revoke(userId, code) {
+        async revoke(workspaceId, code) {
             const r = await q.execute(
-                'DELETE FROM device_link_codes WHERE code = ? AND user_id = ? AND used_at IS NULL',
-                [code, userId]
+                'DELETE FROM device_link_codes WHERE code = ? AND workspace_id = ? AND used_at IS NULL',
+                [code, workspaceId]
             );
             return r.affectedRows > 0;
         }

@@ -47,6 +47,7 @@ export function DeviceWidget({ deviceId, hideStatus }: DeviceWidgetProps) {
 
     const online = device.online;
     const archived = device.status === 'archived';
+    const pending = device.status === 'pending';
     const paused = device.planPaused && !archived;
     const showUsage = online && !archived && !paused && !!usage;
     const cores = device.report?.os.cores ?? 0;
@@ -57,7 +58,7 @@ export function DeviceWidget({ deviceId, hideStatus }: DeviceWidgetProps) {
     const disk = usage ? Math.round(pct(usage.diskUsedBytes, usage.diskTotalBytes)) : null;
 
     const statusKind = archived ? styles.archived : online ? styles.online : styles.offline;
-    const statusLabel = archived ? 'Archivé' : online ? 'En ligne' : 'Hors ligne';
+    const statusLabel = archived ? 'Archivé' : pending ? 'En attente' : online ? 'En ligne' : 'Hors ligne';
 
     return (
         <div className={styles.widget}>
@@ -89,13 +90,15 @@ export function DeviceWidget({ deviceId, hideStatus }: DeviceWidgetProps) {
                 <span className={styles.hint}>
                     {paused
                         ? 'Reprend dans les minutes qui suivent, dès que l’offre le permet'
-                        : online && !archived
-                          ? 'Mesure en cours…'
-                          : archived
-                            ? 'Historique en lecture seule'
-                            : device.lastSeen
-                              ? `Vu il y a ${formatAgo(device.lastSeen * 1000)}`
-                              : 'Jamais connecté'}
+                        : pending
+                          ? 'Approuvez-le dans Appareils pour qu’il reprenne'
+                          : online && !archived
+                            ? 'Mesure en cours…'
+                            : archived
+                              ? 'Historique en lecture seule'
+                              : device.lastSeen
+                                ? `Vu il y a ${formatAgo(device.lastSeen * 1000)}`
+                                : 'Jamais connecté'}
                 </span>
             )}
         </div>

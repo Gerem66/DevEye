@@ -1,8 +1,7 @@
 import { useRef, useState } from 'react';
 import { DEVICE_SERVICE_EVENT, deviceServicePushSchema, type DeviceServicePush } from '@deveye/types';
-import { acquireMetrics, onServerEvent, openInfo } from 'deveye-sdk-client';
+import { acquireMetrics, onServerEvent, openInfo, type ConfirmRequest } from 'deveye-sdk-client';
 
-import { startAgentUpdate, useAgentUpdates } from '../agentUpdates';
 import { agent, api } from '../api';
 import styles from './style.module.css';
 
@@ -52,8 +51,9 @@ function awaitServiceResult(deviceId: string): {
 
 /**
  * Les gestes de gestion d'un appareil et leur état en vol, en un objet que le
- * menu d'actions de sa fiche et les dialogues se partagent. Le partage entre
- * espaces n'est pas ici : c'est l'onglet « Partage » de la coquille commune.
+ * menu d'actions de sa fiche, sa popup « Agent » et les dialogues se
+ * partagent. Le partage entre espaces n'est pas ici : c'est l'onglet
+ * « Partage » de la coquille commune.
  */
 export function useDeviceActions(refresh: () => Promise<void> | void) {
     // Refresh, wait for the agent to re-report its scope, refresh again: a
@@ -64,8 +64,6 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
         await refresh();
     };
     const [actionError, setActionError] = useState<string | null>(null);
-    // Socket-global, so the card spins in lock-step with the Monitoring surfaces.
-    const { isUpdating } = useAgentUpdates();
     // Which toggle (per device) is mid-change, so only that one shows a loader.
     const [serviceBusy, setServiceBusy] = useState<{ id: string; kind: 'autostart' | 'privilege' } | null>(null);
     // Verdict de la dernière action de service, sur la carte visée : le bandeau
@@ -101,55 +99,69 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
     const [stopping, setStopping] = useState(false);
     const [restartingId, setRestartingId] = useState<string | null>(null);
 
-    const confirmDevice = async (id: string) => {
+    // Approuver, révoquer, effacer : des gestes qui engagent, confirmés par le
+    // dialogue commun, qui dit en deux phrases ce qu'ils font.
+    const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(null);
+
+    const approve = async (id: string) => {
         setActionError(null);
         try {
             await api.send('devices.confirm', { deviceId: id });
             await refresh();
-        } catch {
-            setActionError('Approbation impossible.');
+        } catch (e) {
+            setActionError(e instanceof Error ? e.message : 'Approbation impossible.');
         }
     };
 
-    const revokeDevice = async (id: string) => {
+    const revoke = async (id: string) => {
         setActionError(null);
         try {
             await api.send('devices.revoke', { deviceId: id });
             await refresh();
-        } catch {
-            setActionError('Révocation impossible.');
-        }
-    };
-
-    const reactivateDevice = async (id: string) => {
-        setActionError(null);
-        try {
-            await api.send('devices.reactivate', { deviceId: id });
-            await refresh();
-        } catch {
-            setActionError('Réactivation impossible.');
-        }
-    };
-
-    const updateAgent = async (id: string) => {
-        setActionError(null);
-        try {
-            await startAgentUpdate(id);
         } catch (e) {
-            // Surface the server's reason (offline, already up to date, unsigned…).
-            setActionError(e instanceof Error ? e.message : "Mise à jour de l'agent impossible.");
+            setActionError(e instanceof Error ? e.message : 'Révocation impossible.');
         }
     };
 
-    /** Push a self-update to several agents at once (the "Tout mettre à jour" button). */
-    const updateAllAgents = async (ids: string[]) => {
+    const purge = async (id: string) => {
         setActionError(null);
-        const results = await Promise.allSettled(ids.map((id) => startAgentUpdate(id)));
-        const failed = results.filter((r) => r.status === 'rejected').length;
-        if (failed > 0) {
-            setActionError(`Mise à jour impossible pour ${failed} appareil${failed > 1 ? 's' : ''}.`);
+        try {
+            await api.send('devices.delete', { deviceId: id });
+            await refresh();
+        } catch (e) {
+            setActionError(e instanceof Error ? e.message : 'Effacement impossible.');
         }
     };
+
+    const askApprove = (target: { id: string; name: string }) =>
+        setConfirmRequest({
+            title: `Approuver « ${target.name} » ?`,
+            description:
+                'Cette machine était déjà connue de l’espace et vient d’être reliée à nouveau. L’approuver, c’est reconnaître que c’est bien elle : son agent se reconnecte dans la minute et reprend la collecte, le terminal et les fichiers. Si vous n’attendiez pas ce nouvel appairage, révoquez plutôt son accès.',
+            confirmLabel: 'Approuver',
+            tone: 'primary',
+            onConfirm: () => void approve(target.id)
+        });
+
+    const askRevoke = (target: { id: string; name: string }) =>
+        setConfirmRequest({
+            title: `Révoquer l’accès de « ${target.name} » ?`,
+            description:
+                'Son agent est coupé tout de suite et son jeton détruit. L’appareil passe dans les archivés : son historique reste consultable, plus rien n’est relevé ni pilotable. Pour le reprendre, reliez la machine avec un nouveau code, puis approuvez-la. L’agent reste installé sur la machine : pour l’en retirer, supprimez l’appareil.',
+            confirmLabel: 'Révoquer l’accès',
+            tone: 'danger',
+            onConfirm: () => void revoke(target.id)
+        });
+
+    const askPurge = (target: { id: string; name: string }) =>
+        setConfirmRequest({
+            title: `Effacer « ${target.name} » et son historique ?`,
+            description:
+                'Définitif : la fiche et tous ses relevés disparaissent, dans tous les espaces où l’appareil est partagé.',
+            confirmLabel: 'Effacer',
+            tone: 'danger',
+            onConfirm: () => void purge(target.id)
+        });
 
     const setAutostart = async (id: string, enabled: boolean) => {
         setActionError(null);
@@ -371,7 +383,6 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
 
     return {
         actionError,
-        isUpdating,
         serviceBusy,
         deviceNote,
         deleteTarget,
@@ -391,11 +402,11 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
         confirmStopAgent,
         restartAgent,
         restartingId,
-        confirmDevice,
-        revokeDevice,
-        reactivateDevice,
-        updateAgent,
-        updateAllAgents,
+        confirmRequest,
+        closeConfirm: () => setConfirmRequest(null),
+        askApprove,
+        askRevoke,
+        askPurge,
         setAutostart,
         elevateDevice,
         dropPrivilegesDevice,

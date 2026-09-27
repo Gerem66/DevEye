@@ -379,6 +379,19 @@
     background: var(--accent-bg);
 }
 
+/* Révoqué ou supprimé : consultable, plus vivant. */
+.deviceCardArchived {
+    color: var(--text-muted);
+}
+
+/* Les archivés, sous l'appairage, repliés par défaut. */
+.archivedGroup {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    margin-top: var(--space-sm);
+}
+
 .statusDot {
     width: 8px;
     height: 8px;
@@ -415,6 +428,17 @@
     border-radius: 4px;
     background: var(--accent-bg);
     color: var(--accent);
+    font-size: 0.65rem;
+    vertical-align: middle;
+}
+
+/* Réappairé, en attente d'approbation : la teinte des avertissements. */
+.pendingTag {
+    margin-left: 0.4rem;
+    padding: 0.05rem 0.3rem;
+    border-radius: 4px;
+    background: var(--warning-bg);
+    color: var(--warning);
     font-size: 0.65rem;
     vertical-align: middle;
 }
@@ -508,6 +532,12 @@
     background: var(--accent-bg);
     color: var(--text-muted);
     border: 1px solid var(--glass-border);
+}
+
+.onlineBadge.awaiting {
+    background: var(--warning-bg);
+    color: var(--warning);
+    border: 1px solid var(--warning);
 }
 
 .offlineMsg,
@@ -826,7 +856,7 @@
     font-style: italic;
 }
 
-/* Update-available value inside the "Agent" group: accent text + leading glyph. */
+/* Update-available version in the « Agent » popup: accent text + leading glyph. */
 .agentVersionWarn {
     display: inline-flex;
     align-items: center;
@@ -2216,15 +2246,16 @@
         background var(--transition-fast),
         border-color var(--transition-fast);
 }
-.powerRow:hover:not(:disabled) {
+.powerRow:hover:not(:disabled, [aria-disabled='true']) {
     background: var(--glass-bg);
     border-color: var(--accent);
 }
-.powerRow:disabled {
+.powerRow:disabled,
+.powerRow[aria-disabled='true'] {
     opacity: 0.5;
     cursor: default;
 }
-.powerRowDanger:hover:not(:disabled) {
+.powerRowDanger:hover:not(:disabled, [aria-disabled='true']) {
     border-color: var(--danger);
 }
 .powerIcon {
@@ -2246,6 +2277,14 @@
 .powerDesc {
     color: var(--text-secondary);
     font-size: 0.82rem;
+}
+/* Ce qui empêche un geste de la popup Agent, sous sa description. */
+.agentReason {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    color: var(--text-muted);
+    font-size: 0.8rem;
 }
 .powerConfirm {
     display: flex;

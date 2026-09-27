@@ -1,4 +1,4 @@
-import { Button, Dialog, SelectInput, Switch, TextInput } from 'deveye-sdk-client';
+import { Button, Dialog, SelectInput } from 'deveye-sdk-client';
 
 import { formatExpiry } from './format';
 import type { LinkCodes } from './useLinkCodes';
@@ -11,7 +11,7 @@ export function LinkCodesDialog({ links, onDownload }: { links: LinkCodes; onDow
             open={links.showLinkModal}
             onClose={links.closeModal}
             title='Codes de liaison'
-            description="Générez un code, puis utilisez-le dans l'agent DevEye pour lier un appareil."
+            description='Générez un code, puis utilisez-le dans l’agent DevEye : l’appareil est actif dès la liaison.'
             onSubmit={() => void links.generateLinkCode()}
             headerAction={
                 <button
@@ -44,31 +44,11 @@ export function LinkCodesDialog({ links, onDownload }: { links: LinkCodes; onDow
                     <option value='300'>Valide 5 minutes</option>
                     <option value='900'>Valide 15 minutes</option>
                     <option value='3600'>Valide 1 heure</option>
-                    <option value='86400'>Valide 24 heures</option>
-                    <option value='2592000'>Valide 30 jours</option>
-                    <option value='custom'>Durée personnalisée…</option>
                 </SelectInput>
-                {links.ttlPreset === 'custom' && (
-                    <TextInput
-                        type='number'
-                        min='1'
-                        value={links.customMinutes}
-                        onChange={(e) => links.setCustomMinutes(e.target.value)}
-                        className={styles.minutesInput}
-                        aria-label='Durée en minutes'
-                        placeholder='minutes'
-                    />
-                )}
                 <Button onClick={links.generateLinkCode} disabled={links.generatingCode}>
                     {links.generatingCode ? 'Génération…' : 'Générer'}
                 </Button>
             </div>
-            <Switch
-                checked={links.autoApprove}
-                onChange={links.setAutoApprove}
-                label='Approuver automatiquement à la liaison'
-                hint='Sinon l’appareil reste « En attente » jusqu’à votre approbation (recommandé).'
-            />
             {links.genError && <p className={styles.genError}>{links.genError}</p>}
 
             {/* Table of active (pending) codes. */}
@@ -95,20 +75,6 @@ export function LinkCodesDialog({ links, onDownload }: { links: LinkCodes; onDow
                                 </td>
                                 <td className={styles.validityCell}>{formatExpiry(c.expiresAt)}</td>
                                 <td className={styles.codeRowActions}>
-                                    <button
-                                        className={`${styles.iconBtn} ${c.autoApprove ? styles.iconApprove : ''}`}
-                                        onClick={() => links.toggleAutoApprove(c.code, !c.autoApprove)}
-                                        aria-pressed={c.autoApprove}
-                                        title={
-                                            c.autoApprove
-                                                ? 'Auto-approbation activée — cliquer pour désactiver'
-                                                : 'Auto-approbation désactivée — cliquer pour activer'
-                                        }
-                                    >
-                                        <span
-                                            className={`icon ${c.autoApprove ? 'icon-check-circle' : 'icon-x-circle'}`}
-                                        />
-                                    </button>
                                     <button
                                         className={`${styles.iconBtn} ${links.copiedCode === c.code ? styles.copied : ''}`}
                                         onClick={() => links.copyCode(c.code)}

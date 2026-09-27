@@ -63,12 +63,18 @@ const MIN_CONNECT_SNAPSHOT_GAP: Duration = Duration::from_secs(60);
 /// qu'un vrai démarrage perde quoi que ce soit (le jalon est alors `None`).
 /// Détail dans `features/sentinel/README.md`.
 const MIN_CONNECT_WORK_GAP: Duration = Duration::from_secs(15 * 60);
-/// Échelle de reprise après un vrai refus du serveur (appareil révoqué, inconnu
-/// ou pas encore approuvé), doublée à chaque refus consécutif et remise à zéro
-/// dès qu'une session s'établit : un appareil qu'on vient d'approuver revient
-/// en une minute, un refus permanent finit à un essai par quart d'heure.
+/// Échelle de reprise après un vrai refus du serveur (appareil inconnu, révoqué
+/// ou supprimé : seul un nouveau `link` le fait revenir), doublée à chaque refus
+/// consécutif et remise à zéro dès qu'une session s'établit : un refus
+/// permanent finit à un essai par quart d'heure.
 const REJECTED_MIN: Duration = Duration::from_secs(60);
 const REJECTED_MAX: Duration = Duration::from_secs(15 * 60);
+/// Close code of an authenticated agent whose device waits for approval (a
+/// re-link). Mirrors `AGENT_CLOSE_PENDING_APPROVAL` in `@deveye/types`.
+const CLOSE_PENDING_APPROVAL: u16 = 4001;
+/// Retry delay while the device waits for approval: short and fixed, so an
+/// approval in DevEye takes effect within half a minute.
+const PENDING_RETRY: Duration = Duration::from_secs(30);
 /// How often to send the OS/security report.
 const REPORT_INTERVAL: Duration = Duration::from_secs(60 * 60);
 /// Default used until the server pushes `agent.config` (≈immediately on
@@ -104,6 +110,19 @@ const AUTH_INTERVAL: Duration = Duration::from_secs(60 * 60);
 /// Tirage uniforme dans `[min, max]`, pour désynchroniser une flotte entière :
 /// un recul exponentiel nu garde les agents en phase (chacun double au même
 /// instant que les autres).
+/// How a close frame received before the config ends the session. `1008` is
+/// the ONLY code by which the server refuses an agent (`deny()` in
+/// `src/agent/ws.ts`, identical for unknown, revoked and removed devices);
+/// `CLOSE_PENDING_APPROVAL` means "linked again, not yet approved". Any other
+/// code is an accident: `1012` "session replaced", `1001` server shutdown.
+fn outcome_of_close(code: Option<CloseCode>) -> SessionOutcome {
+    match code {
+        Some(CloseCode::Policy) => SessionOutcome::Rejected,
+        Some(CloseCode::Library(CLOSE_PENDING_APPROVAL)) => SessionOutcome::PendingApproval,
+        _ => SessionOutcome::Established,
+    }
+}
+
 fn jittered(min: Duration, max: Duration) -> Duration {
     if max <= min {
         return min;
@@ -240,7 +259,17 @@ pub async fn run(mut config: Config, opts: RunOptions) -> Result<()> {
                 warn!(
                     retry_secs = delay.as_secs(),
                     streak = rejected_streak,
-                    "server rejected this agent (revoked, removed or not yet approved); retrying later"
+                    "refused by the server (unknown, revoked or removed device): run `deveye-agent link` again on this machine"
+                );
+                tokio::time::sleep(delay).await;
+            }
+            Ok(SessionOutcome::PendingApproval) => {
+                backoff = MIN_BACKOFF;
+                rejected_streak = 0;
+                let delay = jittered(PENDING_RETRY, PENDING_RETRY + PENDING_RETRY / 3);
+                info!(
+                    retry_secs = delay.as_secs(),
+                    "device awaiting approval in DevEye (Appareils, Agent popup); retrying"
                 );
                 tokio::time::sleep(delay).await;
             }
@@ -275,6 +304,9 @@ enum SessionOutcome {
     /// Réservé à une fermeture 1008, le SEUL code par lequel le serveur refuse un
     /// agent (`deny()` dans `src/agent/ws.ts`).
     Rejected,
+    /// The server closed us at the handshake with `CLOSE_PENDING_APPROVAL`: the
+    /// device was linked again and waits for approval → retry on `PENDING_RETRY`.
+    PendingApproval,
     /// La machine sort de veille : la socket est presque certainement morte, et
     /// on le sait sans attendre le prochain ping → reconnexion immédiate.
     Woke,
@@ -410,26 +442,18 @@ async fn stream_session(
             Ok(Some(Ok(Message::Ping(payload)))) => {
                 sink.send(Message::Pong(payload)).await.ok();
             }
-            // C'est ici que se décide « refusé » contre « incident de
-            // transport » : `1008` est le SEUL code par lequel le serveur refuse
-            // un agent (`deny()` dans `src/agent/ws.ts`, identique pour révoqué /
-            // inconnu / non approuvé). Tout autre code est un accident : `1012`
-            // « session remplacée », `1001` arrêt du serveur.
+            // C'est ici que se décide « refusé » ou « en attente » contre
+            // « incident de transport » (voir `outcome_of_close`).
             Ok(Some(Ok(Message::Close(frame)))) => {
                 let code = frame.map(|f| f.code);
-                let rejected = code == Some(CloseCode::Policy);
-                warn!(?code, rejected, "server closed during the config window");
-                return Ok(if rejected {
-                    SessionOutcome::Rejected
-                } else {
-                    SessionOutcome::Established
-                });
+                warn!(?code, "server closed during the config window");
+                return Ok(outcome_of_close(code));
             }
             Ok(Some(Ok(_))) => {}
             Ok(Some(Err(e))) => return Err(e).context("WebSocket stream error"),
             // Flux terminé sans trame de fermeture : c'est une fin de transport
-            // brutale, pas un refus. Un refus, lui, arrive toujours par un
-            // `Close(1008)` traité juste au-dessus.
+            // brutale, pas un refus. Un refus ou une attente arrive toujours par
+            // une trame de fermeture, traitée juste au-dessus.
             Ok(None) => return Ok(SessionOutcome::Established),
             Err(_) => break, // timeout: fall back to defaults
         }
@@ -1272,6 +1296,26 @@ fn log_server_text(txt: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn close_codes_at_the_handshake() {
+        assert!(matches!(
+            outcome_of_close(Some(CloseCode::Policy)),
+            SessionOutcome::Rejected
+        ));
+        assert!(matches!(
+            outcome_of_close(Some(CloseCode::from(CLOSE_PENDING_APPROVAL))),
+            SessionOutcome::PendingApproval
+        ));
+        assert!(matches!(
+            outcome_of_close(Some(CloseCode::Restart)),
+            SessionOutcome::Established
+        ));
+        assert!(matches!(
+            outcome_of_close(None),
+            SessionOutcome::Established
+        ));
+    }
 
     /// `now` est construit en avant d'une base, jamais en arrière : un `Instant`
     /// fraîchement lu peut être proche de l'origine de la plateforme, et lui

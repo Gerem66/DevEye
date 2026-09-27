@@ -237,7 +237,17 @@ serveur contrôle les machines**, à ceci près.
   jeton voyage dans l'en-tête `Authorization`, jamais dans l'URL ; il expire à 30
   jours et le serveur le remplace à la connexion avant (`token_hash_prev` garde
   l'ancien valable tant que le nouveau n'a pas servi). Tout refus ferme la socket
-  du même `1008` : une sonde n'apprend rien.
+  du même `1008` : une sonde n'apprend rien. Seul un agent qui présente un jeton
+  valide pour un appareil en attente d'approbation reçoit `4001`, qui lui dit de
+  réessayer : il connaissait déjà son statut par la réponse d'enrôlement.
+- **L'appairage.** Un code de liaison vaut une heure au plus, sert une fois et
+  vise un espace ; tout membre qui y gère les appareils le voit et peut
+  l'invalider. Une machine neuve est active dès la liaison, si l'offre du
+  propriétaire le permet (vérifié avant de consommer le code). Une empreinte
+  déjà connue de l'espace reprend la fiche existante : son ancien jeton tombe,
+  sa session aussi, et l'appareil attend qu'on l'approuve, refusé à la socket
+  jusque-là, puisque l'empreinte est déclarée par l'appelant. Révoquer archive
+  l'appareil et détruit son jeton : seul un nouvel appairage le fait revenir.
 - **L'auto-mise à jour** ne dépend pas du serveur : sha256 du binaire et
   signature Ed25519 de la CI, clé publique gravée à la compilation, échec fermé
   sans clé, et seule la cible de ce binaire se télécharge. Un serveur compromis

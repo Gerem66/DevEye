@@ -285,20 +285,19 @@ async fn link(
     config.check_transport()?;
 
     let status = enroll::enroll(&mut config, &code).await?;
-    let approved = status == "active";
     let id = config.device_id.as_deref().unwrap_or("?");
     info!(device_id = id, %status, "Device enrolled");
-    if approved {
-        println!(
-            "✓ Enrolled as \"{}\" (id {}) — automatically approved.\n  Start the agent:\n    deveye-agent run            # foreground\n    deveye-agent run --detach   # background",
-            config.name, id
-        );
+    if status == "active" {
+        println!("✓ Enrolled as \"{}\" (id {}) and active.", config.name, id);
     } else {
         println!(
-            "✓ Enrolled as \"{}\" (id {}).\n  Approve it in DevEye → Appareils, then start the agent:\n    deveye-agent run            # foreground\n    deveye-agent run --detach   # background",
+            "✓ Re-linked as \"{}\" (id {}): this machine was already known to the workspace.\n  Approve it in DevEye (Appareils, Agent popup); the agent waits until then.",
             config.name, id
         );
     }
+    println!(
+        "  Start the agent:\n    deveye-agent run            # foreground\n    deveye-agent run --detach   # background\n  If it is already running, restart it: it still holds the old token."
+    );
     Ok(())
 }
 

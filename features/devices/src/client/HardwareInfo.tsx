@@ -1,5 +1,7 @@
-import type { Device, DeviceReport, NetInterfaceKind } from '@deveye/types';
-import { agentUpdatable } from './agentVersion';
+import { useState } from 'react';
+import { Button } from 'deveye-sdk-client';
+import type { Device, DeviceReport, NetInterface, NetInterfaceKind } from '@deveye/types';
+
 import { pct } from './utils';
 import styles from './style.module.css';
 
@@ -48,10 +50,51 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
     );
 }
 
+/** Ce qu'une machine fabrique elle-même (ponts Docker, VPN, boucle locale) : replié par défaut. */
+const FOLDED_KINDS: readonly NetInterfaceKind[] = ['virtual', 'loopback'];
+
 /**
- * Body of the per-device hardware/agent dialog: the static inventory the agent
- * reports, plus how and when it collected it. `hardware` is `null` on legacy
- * reports: what the report carries is still shown.
+ * Les interfaces réseau, physiques d'abord. Les virtuelles se comptent par
+ * dizaines sur un hôte Docker : repliées derrière un bouton, sauf quand il n'y
+ * a qu'elles.
+ */
+function Connectivity({ interfaces, bluetooth }: { interfaces: NetInterface[]; bluetooth: string | null }) {
+    const [showFolded, setShowFolded] = useState(false);
+    const physical = interfaces.filter((n) => !FOLDED_KINDS.includes(n.kind));
+    const folded = interfaces.filter((n) => FOLDED_KINDS.includes(n.kind));
+    const foldable = physical.length > 0 && folded.length > 0;
+    const shown = foldable && !showFolded ? physical : interfaces;
+
+    return (
+        <section className={styles.hwGroup}>
+            <h4 className={styles.hwGroupTitle}>Connectivité</h4>
+            <dl className={styles.hwRows}>
+                {shown.length > 0 ? (
+                    shown.map((n) => (
+                        <Row key={n.name} label={`${NET_KIND[n.kind].label} · ${n.name}`} value={n.mac ?? '—'} />
+                    ))
+                ) : (
+                    <Row label='Interfaces réseau' value='Aucune détectée' />
+                )}
+                <Row label='Bluetooth' value={bluetooth ?? 'Non détecté'} />
+            </dl>
+            {foldable && (
+                <div>
+                    <Button variant='ghost' onClick={() => setShowFolded((v) => !v)}>
+                        {showFolded
+                            ? 'Masquer les interfaces virtuelles'
+                            : `Afficher ${folded.length} interface${folded.length > 1 ? 's' : ''} virtuelle${folded.length > 1 ? 's' : ''}`}
+                    </Button>
+                </div>
+            )}
+        </section>
+    );
+}
+
+/**
+ * Body of the per-device hardware dialog: the static inventory the agent
+ * reports. `hardware` is `null` on legacy reports: what the report carries is
+ * still shown. What the agent itself is lives in the « Agent » popup.
  */
 export function HardwareInfo({ report, device }: { report: DeviceReport | null; device: Device }) {
     if (!report) {
@@ -114,20 +157,7 @@ export function HardwareInfo({ report, device }: { report: DeviceReport | null; 
                         </Group>
                     )}
 
-                    <Group title='Connectivité'>
-                        {interfaces.length > 0 ? (
-                            interfaces.map((n) => (
-                                <Row
-                                    key={n.name}
-                                    label={`${NET_KIND[n.kind].label} · ${n.name}`}
-                                    value={n.mac ?? '—'}
-                                />
-                            ))
-                        ) : (
-                            <Row label='Interfaces réseau' value='Aucune détectée' />
-                        )}
-                        <Row label='Bluetooth' value={hw.bluetooth ?? 'Non détecté'} />
-                    </Group>
+                    <Connectivity interfaces={interfaces} bluetooth={hw.bluetooth} />
                 </>
             ) : (
                 <p className={styles.hwLegacyNote}>
@@ -147,38 +177,6 @@ export function HardwareInfo({ report, device }: { report: DeviceReport | null; 
                     ))}
                 </Group>
             )}
-
-            <Group title='Agent'>
-                {device.agentVersion && (
-                    <Row
-                        label='Version'
-                        value={
-                            agentUpdatable(device) ? (
-                                <span
-                                    className={styles.agentVersionWarn}
-                                    title={
-                                        device.latestAgentVersion
-                                            ? `Version disponible : v${device.latestAgentVersion}`
-                                            : undefined
-                                    }
-                                >
-                                    <span className='icon icon-cloud' />v{device.agentVersion} · mise à jour disponible
-                                </span>
-                            ) : (
-                                `v${device.agentVersion}`
-                            )
-                        }
-                    />
-                )}
-                {report.agent && <Row label='Compte' value={report.agent.user || 'inconnu'} />}
-                {report.agent && (
-                    <Row
-                        label='Privilèges'
-                        value={report.agent.privileged ? (device.platform === 'windows' ? 'élevé' : 'root') : 'limité'}
-                    />
-                )}
-                <Row label='Relevé le' value={new Date(report.collectedAt).toLocaleString('fr-FR')} />
-            </Group>
         </div>
     );
 }

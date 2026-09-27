@@ -69,8 +69,16 @@ export async function authorizeReachableDevice(ctx: FeatureContext, deviceId: st
     // La permission que la commande déclare, éprouvée contre CET appareil : le
     // dispatcheur ne l'a vue qu'à l'échelle de la fonctionnalité.
     await ctx.assertItemExtras('devices', row.id);
-    // Avant « hors ligne » : un appareil en pause l'est aussi, mais la raison à
-    // dire est l'offre, avec son invite.
+    // Avant « hors ligne » : la socket refuse ces deux-là, la raison à dire
+    // est leur statut.
+    if (row.status === 'pending') {
+        throw new FeatureError('conflict', 'Cet appareil attend une approbation : son agent n’est pas admis');
+    }
+    if (row.status === 'archived') {
+        throw new FeatureError('conflict', 'Cet appareil est archivé : son agent n’existe plus');
+    }
+    // Un appareil en pause est hors ligne aussi, mais la raison à dire est
+    // l'offre, avec son invite.
     if (isPlanPaused('devices.agents', row.id)) {
         throw new FeatureError('quota_exceeded', 'Cet appareil est en pause : il dépasse la limite de l’offre.', {
             key: 'devices.agents',

@@ -9,7 +9,6 @@ import {
     linkCodeRequestSchema,
     linkCodeResponseSchema,
     linkCodesListResponseSchema,
-    linkCodeUpdateSchema,
     presenceEventSchema
 } from '@deveye/types';
 
@@ -37,14 +36,17 @@ export const devicesList = {
     output: z.object({ devices: z.array(fleetDeviceSchema) })
 };
 
-/** Confirm a `pending` device, moving it to `active`. */
+/** Approve a re-linked device (`pending`), moving it to `active`. */
 export const devicesConfirm = {
     command: 'devices.confirm' as const,
     input: z.object({ deviceId }),
     output: z.object({ device: fleetDeviceSchema })
 };
 
-/** Revoke a device: its token is rejected and it can no longer push metrics. */
+/**
+ * Revoke a device at once: it is archived, its token wiped and its agent
+ * disconnected. Linking the machine again brings it back as `pending`.
+ */
 export const devicesRevoke = {
     command: 'devices.revoke' as const,
     input: z.object({ deviceId }),
@@ -100,13 +102,6 @@ export const devicesSetConfig = {
     output: z.object({ device: fleetDeviceSchema })
 };
 
-/** Reactivate a revoked device, moving it back to `active`. */
-export const devicesReactivate = {
-    command: 'devices.reactivate' as const,
-    input: z.object({ deviceId }),
-    output: z.object({ device: fleetDeviceSchema })
-};
-
 /**
  * Request a managed deletion. The device moves to `pending_deletion`: the agent
  * is told to self-destruct (now if online, else on its next connection), after
@@ -149,7 +144,6 @@ const lifecycleCommands = [
     devicesList,
     devicesConfirm,
     devicesRevoke,
-    devicesReactivate,
     devicesRename,
     devicesReorder,
     devicesSetConfig,
@@ -329,8 +323,8 @@ const metricsCommands = [
 ] as const;
 
 /**
- * Les codes de liaison : ce qu'un administrateur émet pour enrôler une machine
- * (l'agent le présente à `POST /api/devices/enroll`, route publique de
+ * Les codes de liaison : ce qu'un membre de l'espace émet pour y enrôler une
+ * machine (l'agent le présente à `POST /api/agent/enroll`, route publique de
  * l'infrastructure, qui reste en HTTP).
  */
 export const devicesLinkCodeCreate = {
@@ -345,24 +339,13 @@ export const devicesLinkCodeList = {
     output: linkCodesListResponseSchema
 };
 
-export const devicesLinkCodeSetAutoApprove = {
-    command: 'devices.linkCodeSetAutoApprove' as const,
-    input: linkCodeUpdateSchema.extend({ code: z.string().min(1) }),
-    output: linkCodeResponseSchema
-};
-
 export const devicesLinkCodeRevoke = {
     command: 'devices.linkCodeRevoke' as const,
     input: z.object({ code: z.string().min(1) }),
     output: z.object({ code: z.string() })
 };
 
-const linkCodeCommands = [
-    devicesLinkCodeCreate,
-    devicesLinkCodeList,
-    devicesLinkCodeSetAutoApprove,
-    devicesLinkCodeRevoke
-] as const;
+const linkCodeCommands = [devicesLinkCodeCreate, devicesLinkCodeList, devicesLinkCodeRevoke] as const;
 
 /** Toutes les commandes du module : la flotte, les métriques stockées, les codes de liaison. */
 export const devicesCommands = [...lifecycleCommands, ...metricsCommands, ...linkCodeCommands] as const;

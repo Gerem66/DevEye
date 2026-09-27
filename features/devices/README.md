@@ -22,20 +22,19 @@ Deux préfixes de commandes, et c'est la frontière :
   publique) et la distribution des binaires (`src/agent/routes.ts`), la
   composition de `agent.config` (`src/agent/config.ts`), et **la garde
   unique** `authorizeDevice` (`src/agent/authorize.ts`).
-- **`devices.*`, la feature, module `features/devices`.** Vingt-trois
-  commandes : la flotte de l'espace (liste, approbation, révocation,
-  réactivation, renommage, rangement, configuration de collecte,
-  suppression), l'historique stocké (métriques, présence, processus,
-  disponibilité, instantanés, épinglage, stockage) et les **codes de liaison**
-  (`devices.linkCodeCreate` / `linkCodeList` / `linkCodeSetAutoApprove` /
-  `linkCodeRevoke`), qui étaient quatre routes HTTP de session et sont
-  devenues des commandes de socket comme les autres (seule leur
-  _consommation_, l'enrôlement, reste en HTTP : elle est publique). La
-  rétention est un service du module.
+- **`devices.*`, la feature, module `features/devices`.** Vingt et une
+  commandes : la flotte de l'espace (liste, approbation d'un réappairage,
+  révocation, renommage, rangement, configuration de collecte, suppression),
+  l'historique stocké (métriques, présence, processus, disponibilité,
+  instantanés, épinglage, stockage) et les **codes de liaison**
+  (`devices.linkCodeCreate` / `linkCodeList` / `linkCodeRevoke`), des
+  commandes de socket comme les autres (seule leur _consommation_,
+  l'enrôlement, reste en HTTP : elle est publique). La rétention est un
+  service du module.
 
-Le module parle au hub par la façade `agents` du SDK : `resetAgentSession`
-(approbation, réactivation), `disconnectAgent` (révocation, suppression
-forcée), `requestDestroy` (suppression gérée), `pushConfig` (cadence ou
+Le module parle au hub par la façade `agents` du SDK : `disconnectAgent`
+(révocation, suppression forcée), `requestDestroy` (suppression gérée),
+`pushConfig` (cadence ou
 capture changée ; l'app recompose la config entière, part des modules
 comprise) et `servedManifest` (le manifest des binaires servis, pour signaler
 un agent à mettre à jour). Il atteint un appareil par
@@ -43,7 +42,9 @@ un agent à mettre à jour). Il atteint un appareil par
 domicile de l'appareil, ou une projection vers l'espace actif) et la liste de
 l'espace par `ctx.deveye.devices.list`. Tout ce qui appaire, range, règle ou
 efface déclare `access: { level: 'write' }`, doublé de `ctx.items.assert` sur
-la ligne visée ; le reste se lit sous le droit `devices`. Plus rien n'exige
+la ligne visée et, pour ce qui gère la fiche, de son domicile
+(`loadHomeDevice` : un espace où l'appareil n'est que projeté le lit sans le
+gérer) ; le reste se lit sous le droit `devices`. Plus rien n'exige
 l'administrateur global.
 
 **Tables partagées, assumé.** Les cinq tables (`devices`, `device_link_codes`,
@@ -58,21 +59,22 @@ socle.
 ### Carte du module `features/devices`
 
 ```
-src/contracts/commands.ts   les 25 commandes devices.* (les anciens features/device.ts
-                            et features/metrics.ts du package, plus les codes de liaison)
+src/contracts/commands.ts   les 21 commandes devices.* : la flotte, l'historique, les
+                            codes de liaison
 src/manifest.ts             nativeCapabilities: agents, devices.read, workspaces.read ;
                             resources: devices.list ; settings feature/item « general » ;
                             topbarWidget (appareils en ligne)
 src/server/index.ts         serverEntry : createRepo, features, createService (rétention)
 src/server/env.ts           MONITORING_RETENTION_DAYS, LINK_CODE_TTL_SECONDS
 src/server/_shared.ts       loadDevice (garde + restriction + ligne entière),
-                            toDevice / rowToDevice, computeAgentUpdate, l'accès WRITE
-src/server/fleet.ts         les 11 commandes de flotte
+                            loadHomeDevice (en plus, le domicile), toDevice /
+                            rowToDevice, computeAgentUpdate, l'accès WRITE
+src/server/fleet.ts         les 10 commandes de flotte
 src/server/history.ts       les 8 commandes d'historique
-src/server/linkCodes.ts     les 4 commandes de codes de liaison
+src/server/linkCodes.ts     les 3 commandes de codes de liaison
 src/server/service.ts       RetentionSweep : le balayage horaire, sur un ticker du SDK
 src/server/repo/            devices, linkCodes, metrics, presence, processSamples
-src/server/*.test.ts        handlers (35) et service (2), sur le harnais du SDK
+src/server/*.test.ts        handlers (39) et service (4), sur le harnais du SDK
 ```
 
 Le client, `src/client/` :
@@ -97,16 +99,20 @@ DeviceWidget.tsx            la tuile d'un appareil (DeviceWidget du provider), a
 deviceUsage.ts, agentUpdates.ts, agentVersion.ts, useAgentUpdate.tsx,
 utils.ts                    les stores et utilitaires du client
 availability.ts             pourquoi une entrée du menu est inerte, et dans quel ordre
+AgentPanel.tsx              la popup « Agent » : état de l'agent, démarrage auto,
+                            privilèges, mise à jour, redémarrage, interruption,
+                            approbation d'un réappairage, révocation
 Connections.tsx, DeviceActionsMenu.tsx, GraphDetail.tsx, HardwareInfo.tsx, MiniGraph.tsx,
 MonitoringInfo.tsx, MonthPicker.tsx, OpenPorts.tsx, PrivilegeInfo.tsx, Timeline.tsx, ports.ts
                             les composants du panneau
 style.module.css, terminalFont.css
-manage/useLinkCodes.tsx     les quatre devices.linkCode*
+manage/useLinkCodes.tsx     les trois devices.linkCode*
 manage/LinkCodesDialog.tsx, manage/LinkInfo.tsx
                             l'appairage : émettre un code, et comment s'en servir
 manage/useDeviceActions.tsx, manage/lifecycleActions.ts, manage/DeviceDialogs.tsx
-                            le cycle de vie d'un appareil, ses entrées de menu et
-                            ses dialogues de confirmation
+                            le cycle de vie d'un appareil, les entrées de fiche du
+                            menu « Fonctions » (renommer, supprimer, effacer) et
+                            les dialogues de confirmation
 manage/DownloadAgent.tsx    la distribution des binaires, sur /api/agent/* en HTTP
 manage/format.ts, manage/style.module.css
 ```
@@ -282,20 +288,37 @@ maintenable**.
 
 ## Cycle de vie d'un appareil & suppression
 
-Statuts (`devices.status`) : `pending` → `active`, `revoked` (réversible via
-`devices.reactivate`), `pending_deletion`, `archived`.
+Statuts (`devices.status`) : `pending`, `active`, `pending_deletion`,
+`archived`.
 
 - **Appairage** : qui tient `devices: write` émet un code
-  (`devices.linkCodeCreate`, toujours pour l'espace actif), l'agent le présente à
-  `POST /api/agent/enroll` qui crée l'appareil (`pending`, ou `active` si le
-  code approuve d'office) et diffuse `devices` à l'espace.
-- **Approbation** (`devices.confirm`) : l'appareil passe `active` et le hub
-  remet sa session à zéro (`agents.resetAgentSession`) : sans cela, un agent
-  déjà connecté verrait sa télémétrie accusée puis jetée.
-- **Révocation** (`devices.revoke`) : la session est coupée tout de suite
-  (`agents.disconnectAgent`), l'agent refusé à la reconnexion. Réactivable.
-- **Suppression gérée** (`devices.requestDelete`, menu d'actions de la fiche) : passe en
-  `pending_deletion` en mémorisant le statut précédent (`status_before_delete`).
+  (`devices.linkCodeCreate`, toujours pour l'espace actif, une heure au plus),
+  l'agent le présente à `POST /api/agent/enroll`. La route relit le code sans
+  le consommer, puis :
+    - **empreinte inconnue de l'espace** : l'offre du propriétaire doit
+      admettre un appareil de plus (sinon `403 quota_exceeded`, le code reste
+      valable), l'appareil est créé `active`, l'agent se connecte aussitôt ;
+    - **empreinte connue** (réappairage) : la fiche existante est reprise, son
+      ancien jeton tombe, sa session ouverte est coupée
+      (`hub.disconnectAgent`), et l'appareil passe `pending`. L'empreinte est
+      déclarée par l'appelant : sans approbation, un code suffirait à saisir
+      une machine et ses partages.
+      Dans les deux cas, `devices` est diffusé à l'espace.
+- **En attente** : la socket refuse l'agent avec le code `4001`
+  (`AGENT_CLOSE_PENDING_APPROVAL`), qui lui dit de réessayer toutes les 30 s.
+  Ni config, ni hooks de modules, ni ordres, ni binaire d'auto-mise à jour ;
+  `authorizeReachableDevice` le dit en clair. Un appareil en attente ne compte
+  pas dans l'offre.
+- **Approbation** (`devices.confirm`, popup « Agent ») : un appareil `pending`
+  seulement, dans la limite de l'offre. Il passe `active`, son agent est admis
+  à la tentative suivante.
+- **Révocation** (`devices.revoke`, popup « Agent ») : unilatérale et
+  immédiate. L'appareil est archivé (jeton effacé), la session coupée
+  (`agents.disconnectAgent`). Seul un nouvel appairage le fait revenir, en
+  attente. L'agent reste installé sur la machine.
+- **Suppression gérée** (`devices.requestDelete`, menu « Fonctions ») : passe
+  en `pending_deletion` en mémorisant le statut précédent
+  (`status_before_delete`).
     - Agent **en ligne** → ordre `agent.destroy` immédiat (`agents.requestDestroy`).
     - Agent **hors ligne** → l'ordre part à sa prochaine connexion (`agent/ws.ts`).
     - L'agent **s'auto-détruit** (`config.rs::self_destruct` : config + token + pid +
@@ -305,32 +328,56 @@ Statuts (`devices.status`) : `pending` → `active`, `revoked` (réversible via
       stocke `delete_error` (affiché sur la fiche). La suppression est **interrompue**.
     - Annulable (`devices.cancelDelete`) tant que l'agent ne s'est pas reconnecté.
 - **Archive** : l'appareil n'est plus gérable mais reste **consultable
-  en lecture seule** (voyage temporel). Ses données sont **figées**
-  (les balayages de rétention **excluent** `status='archived'`). Pas de config, pas
-  d'approbation. L'agent est refusé définitivement. `devices.forceDelete`
-  archive sans attendre l'auto-destruction (agent disparu), en coupant la
-  session.
-- **Purge dure** (`devices.delete`, bouton de la page Monitoring) : supprime la
-  ligne + tout l'historique (cascade FK). Disponible quel que soit l'état (agent
-  connecté ou non) ; ne déclenche **pas** d'auto-destruction.
+  en lecture seule** (voyage temporel), rangé dans le groupe « Archivés » de la
+  liste. Ses données sont **figées** (les balayages de rétention **excluent**
+  `status='archived'`). Pas de config, pas d'approbation. L'agent est refusé
+  (`1008`) jusqu'à un nouvel appairage. `devices.forceDelete` archive sans
+  attendre l'auto-destruction (agent disparu), en coupant la session.
+- **Purge dure** (`devices.delete`, « Effacer l'appareil et son historique »
+  sur un archivé) : supprime la ligne + tout l'historique (cascade FK), pour
+  tous les espaces ; ne déclenche **pas** d'auto-destruction.
+- **Domicile** : tout ce qui gère la fiche (approuver, révoquer, renommer,
+  régler, supprimer, effacer l'historique) passe par `loadHomeDevice`. Un
+  espace où l'appareil est projeté le lit et pilote son agent selon ses
+  permissions, sans le gérer.
+
+### La fiche, côté client
+
+- **« Fonctions »** : Matériel, explorateur, terminal, logs, conteneurs,
+  commandes système, mises à jour système, **Agent**, puis la fiche (renommer,
+  supprimer, ou effacer un archivé). Rien n'est masqué : une entrée inerte
+  porte son motif (`availability.ts`).
+- **« Matériel »** : l'inventaire seul. Les interfaces virtuelles et la boucle
+  locale sont repliées derrière un bouton quand des interfaces physiques
+  existent.
+- **« Agent »** (`AgentPanel.tsx`) : l'état (version, compte, privilèges,
+  démarrage, transport, politique locale), le démarrage automatique, l'élévation
+  en service système ou la rétrogradation, la mise à jour, le redémarrage,
+  l'interruption, l'approbation d'un réappairage et la révocation. Démarrage
+  auto, élévation et mise à jour relèvent de l'administrateur global
+  (`access.admin` des commandes `agent.*`) ; l'entrée le dit. Approuver,
+  révoquer et effacer passent par le dialogue de confirmation commun, qui dit
+  en deux phrases ce que fait le geste.
 
 ### Invariants de sécurité à préserver
 
 - **Furtivité** (`agent/ws.ts`) : tout échec d'auth/autorisation (jeton absent /
-  invalide, appareil inconnu, révoqué, archivé, empreinte de jeton fausse) **se
-  ferme exactement de la même façon** (`close(1008)`, sans raison). De l'extérieur,
-  impossible de distinguer ces cas — c'est volontaire (anti-énumération). Seuls
-  `pending`/`active` sont acceptés ; `pending_deletion` l'est juste le temps de
-  recevoir l'ordre d'auto-destruction.
-- **Backoff de rejet** (`agent/runner.rs`) : une fermeture au handshake (avant la
-  config) = `SessionOutcome::Rejected` → nouvelle tentative **toutes les heures**
-  (`REJECTED_RETRY`), pas en boucle serrée. Une session établie qui se ferme
-  reconnecte vite.
-- **Les codes de liaison sont des secrets d'enrôlement.** Émis, relus,
-  retouchés et révoqués par leur émetteur seul, sous `devices: write` ; un
-  code se compare en majuscules sans ses espaces ; le journal dit qu'un code a
-  été émis (espace, durée, auto-approbation), jamais sa valeur. L'enrôlement
-  est plafonné par adresse (`rateLimit` de la route).
+  invalide, appareil inconnu, archivé, empreinte de jeton fausse) **se ferme
+  exactement de la même façon** (`close(1008)`, sans raison). De l'extérieur,
+  impossible de distinguer ces cas : c'est voulu (anti-énumération). Seul un
+  jeton valide d'un appareil `pending` reçoit `4001` ; son porteur connaissait
+  déjà ce statut par la réponse d'enrôlement. Seul `active` est admis ;
+  `pending_deletion` l'est juste le temps de recevoir l'ordre
+  d'auto-destruction.
+- **Reprise** (`agent/runner.rs`) : une fermeture `1008` au handshake (avant la
+  config) = `SessionOutcome::Rejected`, nouvelle tentative de 1 min à 15 min
+  en doublant, pas en boucle serrée ; `4001` = `PendingApproval`, toutes les
+  30 s. Une session établie qui se ferme reconnecte vite.
+- **Les codes de liaison sont des secrets d'enrôlement.** Émis, relus et
+  révoqués par l'espace qu'ils visent, sous `devices: write` ; une heure au
+  plus, usage unique ; un code se compare en majuscules sans ses espaces ; le
+  journal dit qu'un code a été émis (espace, durée), jamais sa valeur.
+  L'enrôlement est plafonné par adresse (`rateLimit` de la route).
 
 ## Pièges connus
 

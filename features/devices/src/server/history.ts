@@ -12,7 +12,7 @@ import {
 } from '../contracts/commands';
 import { env } from './env';
 import type { DevicesRepo } from './repo';
-import { assertDevice, loadDevice, WRITE } from './_shared';
+import { assertDevice, loadHomeDevice, WRITE } from './_shared';
 
 /**
  * L'historique d'un appareil, lu et entretenu en base : métriques, présence,
@@ -138,7 +138,7 @@ export const devicesDeleteSnapshotsFeature = defineSdkFeature<
     // Effacer l'historique d'une machine n'est pas de la lecture.
     access: WRITE,
     handler: async (ctx, input) => {
-        const device = await loadDevice(ctx, input.deviceId, 'write');
+        const device = await loadHomeDevice(ctx, input.deviceId);
         const { snapshots } = await ctx.repo.processSamples.deleteRange(input.deviceId, input.from, input.to);
         if (snapshots > 0) {
             const single = input.from === input.to;
@@ -166,7 +166,7 @@ export const devicesSetSnapshotsPinnedFeature = defineSdkFeature<
     // Désépingler peut supprimer sur-le-champ : même niveau que la suppression.
     access: WRITE,
     handler: async (ctx, input) => {
-        const device = await loadDevice(ctx, input.deviceId, 'write');
+        const device = await loadHomeDevice(ctx, input.deviceId);
         const { deviceId, from, to, pinned } = input;
 
         // Pin/unpin the whole instant (process list + metric point). Le compte

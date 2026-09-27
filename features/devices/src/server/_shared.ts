@@ -46,6 +46,20 @@ export async function loadDevice(
     return row;
 }
 
+/**
+ * Comme {@link loadDevice} en écriture, mais exige que l'appareil soit chez
+ * l'appelant : l'approuver, retirer son accès, le renommer, le régler, l'effacer
+ * ou effacer son historique relèvent de son domicile. Un espace où il n'est que
+ * projeté le lit, et pilote son agent selon ses permissions.
+ */
+export async function loadHomeDevice(ctx: DevicesContext, deviceId: string): Promise<DeviceRow> {
+    const row = await loadDevice(ctx, deviceId, 'write');
+    if (row.workspace_id !== ctx.workspaceId) {
+        throw new FeatureError('forbidden', 'Cet appareil appartient à un autre espace : il se gère depuis là-bas.');
+    }
+    return row;
+}
+
 /** Whether/where a device's agent can self-update, derived from the served manifest. */
 export interface AgentUpdateInfo {
     /** Version of the served binary set (manifest), or null when nothing is synced. */

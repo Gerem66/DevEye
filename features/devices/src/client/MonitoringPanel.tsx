@@ -25,6 +25,7 @@ import {
     type ProcessSample
 } from '@deveye/types';
 import type { DaySummary } from '../contracts/commands';
+import { AgentPanel } from './AgentPanel';
 import { HardwareInfo } from './HardwareInfo';
 import { Connections } from './Connections';
 import { DeviceActionsMenu, type DeviceAction } from './DeviceActionsMenu';
@@ -248,6 +249,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     const [dockerOpen, setDockerOpen] = useState(false);
     const [terminalOpen, setTerminalOpen] = useState(false);
     const [filesOpen, setFilesOpen] = useState(false);
+    const [agentOpen, setAgentOpen] = useState(false);
     const updater = useAgentUpdate();
     const [storage, setStorage] = useState<{ snapshots: number; processes: number; bytes: number } | null>(null);
     const [deleteOpen, setDeleteOpen] = useState(false);
@@ -687,6 +689,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     const lastKnown = liveSnapshot;
     const online = selected?.online ?? false;
     const archived = selected?.status === 'archived';
+    const pending = selected?.status === 'pending';
     const paused = (selected?.planPaused ?? false) && !archived;
     const cores = report?.os.cores ?? 0;
     const valuesMuted = !online && focus.kind === 'live';
@@ -1025,7 +1028,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
 
     const deviceActions: DeviceAction[] = [
         // Le seul geste qui ne dépend de rien : il relit le dernier rapport reçu.
-        { icon: 'icon-cpu', label: 'Matériel & agent', onClick: showHardwareInfo },
+        { icon: 'icon-cpu', label: 'Matériel', onClick: showHardwareInfo },
         remote('files', 'Explorateur de fichiers', () => setFilesOpen(true), 'icon-folder'),
         remote('terminal', 'Terminal distant', () => setTerminalOpen(true), 'icon-terminal', 'terminal'),
         remote('logs', 'Logs de l’appareil', () => setLogsOpen(true), 'icon-logs'),
@@ -1041,8 +1044,11 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         },
         remote('system', 'Commandes système', () => setPowerOpen(true), 'icon-power', 'power'),
         remote('system', 'Mises à jour système', () => setPackagesOpen(true), 'icon-database', 'pkgUpgrade'),
-        // Le cycle de vie de l'appareil ferme la liste : approuver, renommer,
-        // révoquer, supprimer, sous le droit d'écriture de l'espace.
+        // Ce que l'agent est et ce qui se fait sur lui. La popup se lit même hors
+        // ligne : chacun de ses gestes dit ce qui l'empêche.
+        { icon: 'icon-wrench', label: 'Agent', onClick: () => setAgentOpen(true) },
+        // La fiche ferme la liste : renommer, supprimer, sous le droit
+        // d'écriture de l'espace.
         ...deviceLifecycleActions(selected, actions, canWrite)
     ];
 
@@ -1063,6 +1069,8 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                     )}
                     {archived ? (
                         <span className={`${styles.onlineBadge} ${styles.archived}`}>Archivé</span>
+                    ) : pending ? (
+                        <span className={`${styles.onlineBadge} ${styles.awaiting}`}>En attente d’approbation</span>
                     ) : (
                         <span className={`${styles.onlineBadge} ${online ? styles.online : styles.offline}`}>
                             {online ? 'En ligne' : 'Hors ligne'}
@@ -1123,6 +1131,12 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                     <span className='icon icon-pause' />
                     En pause : l’appareil dépasse la limite de l’offre, son agent n’est plus accepté et rien n’est
                     relevé. Rien n’est supprimé, et il reprend dans les minutes qui suivent, dès que l’offre le permet.
+                </div>
+            ) : pending ? (
+                <div className={styles.offlineBanner}>
+                    <span className='icon icon-clock' />
+                    En attente d’approbation : cette machine a été reliée à nouveau, son agent n’est pas admis tant que
+                    personne ne l’a approuvée (popup « Agent »).
                 </div>
             ) : (
                 !online && (
@@ -1535,6 +1549,25 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 description='Actions exécutées sur l’appareil par l’agent (selon ses privilèges et l’OS).'
             >
                 {powerOpen && <PowerMenu deviceId={selected.id} />}
+            </Dialog>
+
+            <Dialog
+                open={agentOpen}
+                onClose={() => setAgentOpen(false)}
+                title={`Agent — « ${selected.name} »`}
+                description='L’agent DevEye installé sur l’appareil : son état, sa persistance, ses privilèges et son accès.'
+                width={620}
+            >
+                {agentOpen && (
+                    <AgentPanel
+                        device={selected}
+                        report={report}
+                        actions={actions}
+                        canWrite={canWrite}
+                        updater={updater}
+                        onShowPrivilegeInfo={showPrivilegeInfo}
+                    />
+                )}
             </Dialog>
 
             <Dialog
