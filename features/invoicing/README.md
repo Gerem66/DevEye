@@ -138,12 +138,14 @@ features disent la même chose au centime.
   avec un lien vers sa page, comme le font Stripe et Qonto ; le PDF s'obtient
   depuis l'app par le dialogue d'impression du navigateur. Une vraie pièce
   jointe demanderait un moteur de rendu navigateur côté serveur.
-- **Pas de Factur-X ni de plateforme de dématérialisation.** La réforme
-  française impose l'émission en données structurées aux TPE et PME à une date
-  qui a déjà glissé deux fois ; le modèle de données est taillé pour cet export
-  (SIREN et numéro de TVA des deux parties en champs propres, ventilation par
-  taux reconstituable, identité de pièce immuable), mais rien ne le produit
-  encore.
+- **Pas de Factur-X, et DevEye n'est pas une plateforme agréée.** La réforme
+  française fait passer les factures entre entreprises par une plateforme
+  agréée : la réception est obligatoire pour toutes depuis le 1er septembre 2026,
+  l'émission le devient pour les TPE et PME le 1er septembre 2027. Les CGU et
+  l'onglet Général des réglages le disent à l'utilisateur. Le modèle de données
+  est taillé pour l'export structuré (SIREN et numéro de TVA des deux parties
+  en champs propres, ventilation par taux reconstituable, identité de pièce
+  immuable), mais rien ne le produit encore.
 - **La réponse en ligne d'un devis** (accord ou refus) vaut un « bon pour accord »
   horodaté, pas une signature électronique qualifiée.
 - **Le carnet de clients se trie en mémoire** : le nom est chiffré, et le

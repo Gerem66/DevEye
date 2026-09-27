@@ -134,6 +134,10 @@ export default function IssuerPanel({ canWrite }: SettingsPanelProps) {
                 Ce que vos devis et vos factures portent en tête. Tant que la dénomination et le SIRET manquent, aucun
                 document ne peut être émis : ce sont des mentions obligatoires.
             </p>
+            <p className={`${shell.sectionHint} ${shell.panelLead}`}>
+                DevEye n’est pas une plateforme agréée de facturation électronique : il ne transmet pas vos factures à
+                l’administration fiscale et ne reçoit pas celles de vos fournisseurs.
+            </p>
 
             <div className={styles.logoRow}>
                 {issuer.logo === '' ? (
