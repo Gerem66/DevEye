@@ -59,8 +59,9 @@ docker compose up -d    # http://localhost:3000
 
 [docker-compose.yml](./docker-compose.yml) démarre l'app et sa base MySQL, avec
 leurs volumes (les dossiers `*_STORAGE_ROOT` du `.env`, et deux volumes nommés). Le premier compte se crée par
-« Créer un compte » : sur une base vide l'inscription est ouverte quel que soit
-`SIGNUP_MODE`, et ce premier inscrit devient l'administrateur. Sans `SMTP_HOST`,
+« Créer un compte » : sur une base vide l'inscription est ouverte même fermée,
+et ce premier inscrit devient l'administrateur, qui l'ouvre ensuite aux autres
+depuis la page « Accès et maintenance ». Sans `SMTP_HOST`,
 le lien de validation s'affiche dans le journal du serveur
 (`docker compose logs app`).
 

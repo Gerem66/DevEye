@@ -9,6 +9,7 @@ import type { Mailer } from '@/Services/mailer';
 import { renderAccountMail } from '@/Services/mailLayout';
 import { sha256hex } from '@/Utils/hash';
 import { existingAccountMail, verificationMail } from './mails';
+import { readSignups } from './setting';
 
 /** Durée de vie du lien, écrite en clair dans le mail (« 2 h ») : les deux changent ensemble. */
 export const SIGNUP_TTL_SECONDS = 2 * 3600;
@@ -21,11 +22,10 @@ interface SignupLogger {
 }
 
 export interface SignupDeps {
-    db: Pick<Database, 'users' | 'workspaces' | 'pendingSignups' | 'transaction'>;
+    db: Pick<Database, 'users' | 'workspaces' | 'pendingSignups' | 'instanceSettings' | 'transaction'>;
     mailer: Mailer;
     logger: SignupLogger;
-    mode: 'open' | 'closed';
-    /** Origine de l'application, sans barre finale. */
+    /** Origine de l'application, sans barre finale : celle sous laquelle le réglage des inscriptions se range. */
     origin: string;
     now?: () => number;
 }
@@ -65,11 +65,11 @@ export interface SignupService extends FeatureService {
 const newToken = (): string => randomBytes(32).toString('base64url');
 
 export function createSignupService(deps: SignupDeps): SignupService {
-    const { db, mailer, logger, mode, origin } = deps;
+    const { db, mailer, logger, origin } = deps;
     const now = deps.now ?? ((): number => Math.floor(Date.now() / 1000));
     let timer: ReturnType<typeof setInterval> | null = null;
 
-    const isOpen = async (): Promise<boolean> => mode === 'open' || (await db.users.count()) === 0;
+    const isOpen = async (): Promise<boolean> => (await readSignups(db, origin)).open || (await db.users.count()) === 0;
 
     const sweep = async (): Promise<number> => {
         try {
@@ -160,7 +160,7 @@ export function createSignupService(deps: SignupDeps): SignupService {
                 const existing = await tx.users.countForUpdate();
                 // Une demande née sur une base vide ne survit pas à l'arrivée du
                 // premier compte quand les inscriptions sont fermées.
-                if (mode === 'closed' && existing > 0) return { ok: false, reason: 'closed' };
+                if (existing > 0 && !(await readSignups(tx, origin)).open) return { ok: false, reason: 'closed' };
                 if ((await tx.users.findByEmail(row.email)) || (await tx.users.findByUsername(row.username))) {
                     return { ok: false, reason: 'conflict' };
                 }

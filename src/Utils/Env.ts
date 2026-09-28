@@ -108,10 +108,6 @@ export const env = {
     // Une telle session ne porte jamais de cookie (`auth/federation.ts`).
     FEDERATION_ORIGINS: getEnvVar('FEDERATION_ORIGINS', 'string', false),
 
-    // Qui peut se créer un compte. Fermé, personne, sauf sur une base sans aucun
-    // compte : le premier inscrit devient alors l'administrateur du site.
-    SIGNUP_MODE: getEnvVar('SIGNUP_MODE', 'enum', ['open', 'closed'], false) || 'closed',
-
     // L'expéditeur des mails du serveur (validation d'une inscription). Sans
     // `SMTP_HOST`, rien ne part : le lien est écrit dans le journal du serveur.
     SMTP_HOST: getEnvVar('SMTP_HOST', 'string', false),

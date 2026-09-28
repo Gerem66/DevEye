@@ -15,7 +15,7 @@ import { getActiveInstanceId, onWorkspaceChange } from './workspace';
  * la rapportent : à l'ouverture (trame `session`), puis à chaque changement.
  * Une instance distante a la sienne, qui ne regarde que ses espaces.
  */
-const OPEN: MaintenanceState = { site: false, message: '', features: {} };
+const OPEN: MaintenanceState = { site: false, message: '', features: {}, priority: false };
 const byInstance = new Map<number | null, MaintenanceState>();
 const listeners = new Set<() => void>();
 

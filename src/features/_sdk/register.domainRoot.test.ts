@@ -158,7 +158,7 @@ describe('domainRoot en maintenance', () => {
         start: async () => undefined
     };
 
-    before(() => maintenance.init({ db, live, logger: logger as never, services }));
+    before(() => maintenance.init({ db, live, logger: logger as never, services, hasPlanProvider: () => false }));
     after(() => maintenance.close());
 
     it('ferme la racine d’un domaine client avec le site', async () => {

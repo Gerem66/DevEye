@@ -70,11 +70,13 @@ function engine(opts: {
     plan: () => Promise<AccountPlan | null>;
     sources: StockSource[];
     applied?: PlanPauseChange[][];
+    limitIn?: PlanPausesHost['limitIn'];
 }) {
     return createPlanPauses({
         db: opts.db,
         logger: quiet,
         planOf: opts.plan,
+        limitIn: opts.limitIn ?? ((plan, fullKey) => plan?.limits[fullKey] ?? null),
         sources: () => opts.sources,
         applied: (_owner, changes) => {
             opts.applied?.push([...changes]);
@@ -86,7 +88,7 @@ function engine(opts: {
 const plan =
     (limits: Record<string, number>, extra: Partial<AccountPlan> = {}) =>
     () =>
-        Promise.resolve<AccountPlan>({ id: 'free', label: 'Gratuite', limits, ...extra });
+        Promise.resolve<AccountPlan>({ id: 'free', label: 'Gratuite', limits, priority: false, ...extra });
 
 describe('les pauses de l’offre', () => {
     it('gardent les plus anciens et mettent les plus récents en pause', async () => {
@@ -117,6 +119,22 @@ describe('les pauses de l’offre', () => {
                 }
             ]
         ]);
+    });
+
+    it('lisent la limite par l’hôte : un compte tenu par la priorité a tout en pause, même sans limite', async () => {
+        const mem = memoryDb();
+        const held = { on: true };
+        const e = engine({
+            db: mem.db,
+            plan: plan({}),
+            sources: [source('uptime.monitors', ['1', '2'])],
+            limitIn: (p, fullKey) => (held.on ? 0 : (p?.limits[fullKey] ?? null))
+        });
+        await e.reconcile(1);
+        assert.deepEqual(e.paused('uptime.monitors').sort(), ['1', '2']);
+        held.on = false;
+        await e.reconcile(1);
+        assert.deepEqual(e.paused('uptime.monitors'), []);
     });
 
     it('reprennent tout quand la limite disparaît, sans même lister', async () => {
@@ -233,6 +251,7 @@ describe('les pauses de l’offre', () => {
                 seen.push(userId);
                 return Promise.resolve(null);
             },
+            limitIn: () => null,
             sources: () => [],
             applied: () => Promise.resolve()
         });

@@ -1,12 +1,16 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { after, before, describe, it } from 'node:test';
 
 import { ACCOUNT_PLAN_PROVIDER, type AccountPlan } from '@deveye/types/sdk';
+import type { FeatureError } from '@deveye/types/sdk/server';
 
-import { assertPlanLimit, limitIn, planOf, planUsage, sizeFr } from './quota';
+import type { Database } from '@/db';
+import type { LiveHub } from '@/live/hub';
+import { maintenance } from './maintenance';
+import { assertPlanLimit, isHeld, limitIn, planOf, planUsage, sizeFr } from './quota';
 
 const logger = { error: () => undefined };
-const FREE: AccountPlan = { id: 'free', label: 'Gratuite', limits: { 'uptime.monitors': 5 } };
+const FREE: AccountPlan = { id: 'free', label: 'Gratuite', limits: { 'uptime.monitors': 5 }, priority: false };
 
 const providers = (planFor?: () => Promise<AccountPlan>) => ({
     get: <T>(key: string) => (key === ACCOUNT_PLAN_PROVIDER && planFor ? ({ planFor } as T) : undefined)
@@ -44,7 +48,8 @@ describe('la comparaison à une offre', () => {
     const PLAN: AccountPlan = {
         id: 'free',
         label: 'Gratuite',
-        limits: { 'workspace.members': 2, 'x.storage': 1024 ** 3 }
+        limits: { 'workspace.members': 2, 'x.storage': 1024 ** 3 },
+        priority: false
     };
     const bounded = providers(() => Promise.resolve(PLAN));
 
@@ -93,7 +98,12 @@ describe('la comparaison à une offre', () => {
 
 describe('où en est un compte', () => {
     const db = { workspaces: { listOwnedIds: async () => [1, 2] } } as never;
-    const PLAN: AccountPlan = { id: 'free', label: 'Gratuite', limits: { 'x.things': 0, 'x.flow': 10 } };
+    const PLAN: AccountPlan = {
+        id: 'free',
+        label: 'Gratuite',
+        limits: { 'x.things': 0, 'x.flow': 10 },
+        priority: false
+    };
 
     it('ne compte rien sans offre ni pour une clé illimitée', async () => {
         let counted = 0;
@@ -114,5 +124,66 @@ describe('où en est un compte', () => {
         });
         assert.deepEqual(use, { used: 2, limit: 0 });
         assert.deepEqual(seen, [1, 2]);
+    });
+});
+
+describe('la priorité aux abonnés', () => {
+    const db = { workspaces: { listOwnedIds: async () => [1] } } as never;
+    const site = { priority: true };
+    const fakeDb = {
+        users: { listAdminIds: async () => [] },
+        maintenance: {
+            site: async () => ({
+                active: false,
+                message: null,
+                envNoticeDismissed: false,
+                updated: 0,
+                updatedBy: null,
+                priority: site.priority,
+                priorityUpdated: null,
+                priorityBy: null
+            }),
+            features: async () => []
+        }
+    } as unknown as Database;
+
+    before(() =>
+        maintenance.init({
+            db: fakeDb,
+            live: { broadcast() {}, closeWhere() {} } as unknown as LiveHub,
+            logger: logger as never,
+            services: { installed: () => [], hasService: () => false, stop: async () => {}, start: async () => {} },
+            hasPlanProvider: () => true
+        })
+    );
+    after(() => maintenance.close());
+
+    const PRO: AccountPlan = { id: 'pro', label: 'Pro', limits: { 'uptime.monitors': 50 }, priority: true };
+
+    it('tient à 0 toute limite d’un compte sans priorité, même une clé illimitée', () => {
+        assert.equal(isHeld(FREE), true);
+        assert.equal(limitIn(FREE, 'uptime.monitors'), 0);
+        assert.equal(limitIn(FREE, 'git.repos'), 0);
+        assert.equal(limitIn(PRO, 'uptime.monitors'), 50);
+        assert.equal(limitIn(PRO, 'git.repos'), null);
+        // Sans module de facturation, personne n'est tenu.
+        assert.equal(limitIn(null, 'uptime.monitors'), null);
+    });
+
+    it('refuse la création sans compter, avec le motif de la priorité', async () => {
+        await assert.rejects(
+            assertPlanLimit(
+                db,
+                providers(() => Promise.resolve(FREE)),
+                logger,
+                {
+                    ownerUserId: 7,
+                    fullKey: 'uptime.monitors',
+                    label: 'services surveillés',
+                    countAfter: () => assert.fail('compté')
+                }
+            ),
+            (e: FeatureError) => e.code === 'quota_exceeded' && (e.details as { priority?: boolean }).priority === true
+        );
     });
 });

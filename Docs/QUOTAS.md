@@ -13,7 +13,7 @@ comportement d'une installation auto-hébergée, et il ne demande aucun réglage
 | Un module qui compte     | donne à chaque quota de quoi le compter : `server.quotas.<clé>.list` pour un stock, `.count` pour un flux                       | son entrée serveur                       |
 | Un module qui a un stock | exclut les éléments en pause de ce qu'il fait tourner                                                                           | ses listes d'échéance                    |
 | Le cœur                  | résout le compte visé, lit son offre, compare, lève `quota_exceeded`, et tient les pauses                                       | `src/Services/quota.ts`, `planPauses.ts` |
-| Le fournisseur d'offre   | offre `ACCOUNT_PLAN_PROVIDER` : `planFor(userId, { fresh? })` rend `{ id, label, limits, trialEndsAt?, changesAt? }`            | `FeatureService.providers` du module     |
+| Le fournisseur d'offre   | offre `ACCOUNT_PLAN_PROVIDER` : `planFor(userId, { fresh? })` rend `{ id, label, limits, priority, trialEndsAt?, changesAt? }`  | `FeatureService.providers` du module     |
 
 Les limites sont nommées `<featureId>.<quotaKey>` (`uptime.monitors`). Une clé
 absente de `limits` est illimitée.
@@ -80,10 +80,36 @@ pas « illimité », elle relancerait tout.
 | une commande qui modifie, dans un module où le compte a des pauses                           | l'enveloppe des handlers (`_sdk/register.ts`)                     |
 | un membre qui part, un domaine retiré, un espace supprimé, un déplacement                    | les commandes du cœur                                             |
 | le démarrage et chaque jour (tous les propriétaires), chaque heure (ceux qui ont des pauses) | le service lui-même                                               |
+| la priorité aux abonnés donnée ou levée (tous les propriétaires, en fond)                    | `Services/maintenance.ts`                                         |
 
 Le balayage du démarrage passe sur **tous** les propriétaires : une limite neuve
 ou abaissée arrive avec un déploiement, avant qu'aucune pause n'existe. Celui de
 chaque jour rattrape ce qu'aucun déclencheur n'a vu.
+
+### La priorité aux abonnés
+
+Le levier d'une forte affluence (page « Accès et maintenance »,
+`site_maintenance.priority`, commun à tous les serveurs qui partagent la base
+comme `quota_pauses`). Le fournisseur dit qui passe en priorité
+(`AccountPlan.priority`) ; le cœur en tire les conséquences, et aucun module n'a
+rien à faire :
+
+- `limitIn` rend 0 à toute clé d'un compte sans priorité (`isHeld`) : toute
+  lecture de limite passe par là, celle du réconciliateur comprise (injectée
+  dans son hôte). Son stock entier se met en pause et ses créations sont
+  refusées, flux compris. `planOf` reste brut : `user.plan` dit la vraie offre.
+- Le refus porte `details.priority` et son propre motif, dans
+  `assertPlanLimit` comme dans `assertActive`.
+- Donner ou lever la priorité passe sur tous les propriétaires, en fond :
+  quelques minutes pour mille comptes, les gestes des comptes passant devant.
+  Le journal en dit le début et la fin.
+- Sans fournisseur, personne n'est tenu, et la page ne propose pas le réglage.
+
+Ce qui ne passe pas par les pauses continue : les sauvegardes vers le stockage
+de l'utilisateur, les minuteurs de Rdv, les relances de Facturation et de
+Finances, la passe lente de Sentinel. Les requêtes d'échéance excluent chaque
+élément en pause par `NOT IN (...)` : la liste compte alors tous les éléments
+des comptes gratuits, sans souci pour quelques milliers.
 
 ### Aux points d'étranglement
 
@@ -186,7 +212,7 @@ raison, et les descentes comme les suppressions restent possibles.
   déclenchée par le client WS : aucun module n'a à traiter ce refus. Son bouton
   « Voir les offres » n'existe que si un module a une entrée de compte. Avec
   `details.paused`, elle dit qu'un élément est en pause plutôt qu'une création
-  refusée.
+  refusée ; avec `details.priority`, que le service est réservé aux abonnés.
 - `PlanPausedBadge` marque un élément en pause, `PlanPausedNotice` en tête d'une
   liste dit combien et pourquoi ; `usePlanPauses()` rend les comptes par clé,
   que l'écran de l'offre affiche.
@@ -194,6 +220,9 @@ raison, et les descentes comme les suppressions restent possibles.
   appelle `live.accountChanged(userId)`, le sujet `account` relit `user.plan`.
   `null` veut dire « en chargement » **ou** « aucun fournisseur », jamais
   « offre gratuite ».
+- `usePriorityHold()` : la priorité aux abonnés tient ce compte. L'accueil
+  montre alors un bandeau avec « Voir les offres », et les textes de pause
+  disent la vraie raison.
 
 ## L'entrée de compte
 

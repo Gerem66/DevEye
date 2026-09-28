@@ -74,7 +74,8 @@ registerModules([
                 stop() {},
                 providers: {
                     [ACCOUNT_PLAN_PROVIDER]: {
-                        planFor: () => Promise.resolve(plan ?? { id: 'admin', label: 'Admin', limits: {} })
+                        planFor: () =>
+                            Promise.resolve(plan ?? { id: 'admin', label: 'Admin', limits: {}, priority: true })
                     }
                 }
             })
@@ -265,7 +266,8 @@ describe('domain.* : les domaines web et l’offre', () => {
     const limited = (limit: number): AccountPlan => ({
         id: 'free',
         label: 'Gratuite',
-        limits: { 'domains.hosts': limit }
+        limits: { 'domains.hosts': limit },
+        priority: false
     });
 
     it('la liste dit le mode des certificats et l’usage, seulement pour des domaines web', async () => {

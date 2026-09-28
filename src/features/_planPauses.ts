@@ -10,7 +10,7 @@ import {
     type PlanPausesHost,
     type StockSource
 } from '@/Services/planPauses';
-import { planOfStrict } from '@/Services/quota';
+import { limitIn, planOfStrict } from '@/Services/quota';
 import { invalidateAccess } from './_access';
 import { moduleProvider, moduleStockSources, moduleWebDomainFeatures, notifyModulePlanPause } from './_sdk/register';
 
@@ -139,6 +139,7 @@ export function createPlanPausesService(host: { db: Database; logger: PlanPauses
         db: host.db,
         logger: host.logger,
         planOf: (userId) => planOfStrict(providers, userId),
+        limitIn,
         sources: () => [...moduleStockSources(host.db), ...coreStockSources(host.db)],
         applied: (owner, changes) => applyPlanPauseChanges(host, owner, changes)
     });

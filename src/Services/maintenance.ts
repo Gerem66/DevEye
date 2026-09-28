@@ -13,6 +13,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Database } from '@/db';
 import type { LiveHub } from '@/live/hub';
 import type { logger as appLogger } from '@/logger';
+import { scheduleAllPlanReconciles } from '@/Services/planPauses';
 import { env } from '@/Utils/Env';
 
 export const DEFAULT_SITE_MESSAGE =
@@ -40,12 +41,15 @@ interface Deps {
     live: LiveHub;
     logger: typeof appLogger;
     services: MaintenanceServices;
+    /** Un module tient les offres : sans lui, personne n'est abonné et la priorité n'a pas de sens. */
+    hasPlanProvider(): boolean;
 }
 
 interface Snapshot {
     site: boolean;
     message: string | null;
     features: ReadonlyMap<string, FeatureMaintenanceLevel>;
+    priority: boolean;
 }
 
 /** Un refus d'entrée pendant la maintenance du site, rendu en 503 par l'app. */
@@ -59,6 +63,7 @@ export class MaintenanceError extends Error {
 const sameSnapshot = (a: Snapshot, b: Snapshot): boolean =>
     a.site === b.site &&
     a.message === b.message &&
+    a.priority === b.priority &&
     a.features.size === b.features.size &&
     [...a.features].every(([id, level]) => b.features.get(id) === level);
 
@@ -69,7 +74,7 @@ const sameSnapshot = (a: Snapshot, b: Snapshot): boolean =>
  * modifié à la main, et chaque changement passe par `apply`, une seule fois.
  */
 class MaintenanceStore {
-    private current: Snapshot = { site: false, message: null, features: new Map() };
+    private current: Snapshot = { site: false, message: null, features: new Map(), priority: false };
     private deps: Deps | null = null;
     // Les changements d'état s'appliquent l'un après l'autre.
     private chain: Promise<unknown> = Promise.resolve();
@@ -106,6 +111,15 @@ class MaintenanceStore {
         return this.current.message ?? DEFAULT_SITE_MESSAGE;
     }
 
+    /** Les comptes sans offre prioritaire lisent 0 à toute limite (`Services/quota.ts`). */
+    priority(): boolean {
+        return this.current.priority;
+    }
+
+    priorityAvailable(): boolean {
+        return this.need().hasPlanProvider();
+    }
+
     featureLevel(featureId: string): FeatureMaintenanceLevel | null {
         return this.current.features.get(featureId) ?? null;
     }
@@ -138,7 +152,8 @@ class MaintenanceStore {
         return {
             site: this.current.site,
             message: this.message(),
-            features: Object.fromEntries(this.current.features)
+            features: Object.fromEntries(this.current.features),
+            priority: this.current.priority
         };
     }
 
@@ -156,8 +171,8 @@ class MaintenanceStore {
         return !site.envNoticeDismissed;
     }
 
-    async adminState(): Promise<AdminMaintenance> {
-        const { db, services } = this.need();
+    async adminState(): Promise<Omit<AdminMaintenance, 'signups'>> {
+        const { db, services, hasPlanProvider } = this.need();
         const [site, rows] = await Promise.all([db.maintenance.site(), db.maintenance.features()]);
         const byId = new Map(rows.map((r) => [r.feature, r]));
         return {
@@ -168,6 +183,12 @@ class MaintenanceStore {
                 envSeeded: env.MAINTENANCE,
                 updated: site.updated,
                 updatedBy: site.updatedBy
+            },
+            priority: {
+                active: site.priority,
+                available: hasPlanProvider(),
+                updated: site.priorityUpdated,
+                updatedBy: site.priorityBy
             },
             features: services.installed().map((id) => {
                 const row = byId.get(id);
@@ -188,6 +209,13 @@ class MaintenanceStore {
             return this.apply(await this.read());
         });
         await settled;
+    }
+
+    async setPriority(active: boolean, by: number): Promise<void> {
+        await this.enqueue(async () => {
+            await this.need().db.maintenance.setPriority(active, by);
+            return this.apply(await this.read());
+        });
     }
 
     /** Rend la main une fois le service de la feature arrêté ou relancé, s'il y a lieu. */
@@ -235,7 +263,7 @@ class MaintenanceStore {
                 logger.warn({ feature: row.feature }, 'maintenance : feature inconnue, ligne ignorée');
             }
         }
-        return { site: site.active, message: site.message, features };
+        return { site: site.active, message: site.message, features, priority: site.priority };
     }
 
     /**
@@ -249,13 +277,19 @@ class MaintenanceStore {
         if (sameSnapshot(prev, next)) return { settled: Promise.resolve() };
         const { db, live, logger, services } = this.need();
         this.current = next;
-        logger.warn({ site: next.site, features: Object.fromEntries(next.features) }, 'maintenance : nouvel état');
+        logger.warn(
+            { site: next.site, priority: next.priority, features: Object.fromEntries(next.features) },
+            'maintenance : nouvel état'
+        );
 
         live.broadcast(MAINTENANCE_EVENT, this.clientState());
         if (!prev.site && next.site) {
             const admins = new Set(await db.users.listAdminIds());
             live.closeWhere((userId) => !admins.has(userId), MAINTENANCE_CLOSE_CODE, 'maintenance');
         }
+        // Les limites lues changent pour tous les comptes sans offre prioritaire :
+        // la passe des pauses les met en pause, ou les reprend.
+        if (prev.priority !== next.priority) scheduleAllPlanReconciles();
 
         const settling: Promise<void>[] = [];
         for (const id of new Set([...prev.features.keys(), ...next.features.keys()])) {

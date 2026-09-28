@@ -4,6 +4,7 @@ import Button from '@/Components/Button';
 import { openInfo } from '@/Components/InfoPopup';
 import { useAuth } from '@/auth/AuthProvider';
 import { avatarSrc } from '@/Features/Profile/avatar';
+import { openAccountView } from '@/stores/accountView';
 import { useActiveWorkspace } from '@/stores/workspace';
 import { DeploymentStatus } from './DeploymentStatus';
 import { ConnectionStatus } from './ConnectionStatus';
@@ -21,6 +22,27 @@ const COLLAPSE = { duration: 0.28, ease: [0.22, 1, 0.36, 1] } as const;
  *  so the opacity has time to reach zero before the icon gets clipped. */
 const COLLAPSE_EXIT = { duration: 0.22, ease: [0.55, 0, 1, 0.45] } as const;
 const FADE = { duration: 0.22, ease: [0.22, 1, 0.36, 1] } as const;
+
+export type SiteBanner = 'site' | 'priority' | 'env' | 'held';
+
+const BANNER: Record<SiteBanner, { icon: string; title: string; hint: string }> = {
+    site: { icon: 'wrench', title: 'Site en maintenance', hint: 'Seuls les administrateurs y ont accès.' },
+    priority: {
+        icon: 'star',
+        title: 'Priorité aux abonnés active',
+        hint: 'Tout ce qui tourne pour les comptes gratuits est en pause.'
+    },
+    env: {
+        icon: 'wrench',
+        title: 'MAINTENANCE=1 est encore posée',
+        hint: 'Le prochain redémarrage remettra le site en maintenance.'
+    },
+    held: {
+        icon: 'pause',
+        title: 'Forte affluence : priorité aux abonnés',
+        hint: 'Ce qui tourne pour votre compte est en pause, rien n’est supprimé, et tout reprendra de soi-même.'
+    }
+};
 const BACK_BTN_SIZE = 34;
 /** Le menu s'attarde après une bascule : le temps de couvrir le début du
  *  chargement, et de voir les actions d'espace rejoindre l'espace choisi. */
@@ -60,10 +82,12 @@ export interface TopNavbarProps {
     /** Le clic porte le modificateur de rechargement forcé. */
     onOpenAdminPage?: (id: string, e: ReactMouseEvent) => void;
     /**
-     * Le bandeau des administrateurs, à l'accueil : le site est en maintenance,
-     * ou il l'a levée alors que `MAINTENANCE=1` reste posé.
+     * Le bandeau de l'accueil. Pour l'administrateur : le site est en
+     * maintenance, la priorité aux abonnés est active, ou la maintenance est
+     * levée alors que `MAINTENANCE=1` reste posé. Pour un compte que la priorité
+     * tient : tout ce qui tourne pour lui est en pause.
      */
-    maintenanceBanner?: 'site' | 'env';
+    siteBanner?: SiteBanner;
     /** Fermer le rappel de `MAINTENANCE=1`, pour tous les administrateurs. */
     onDismissMaintenanceBanner?: () => void;
     /** Ouvrir la page de gestion de l'espace courant. */
@@ -99,7 +123,7 @@ export default function TopNavbar({
     onManageWorkspace,
     adminPages,
     onOpenAdminPage,
-    maintenanceBanner,
+    siteBanner,
     onDismissMaintenanceBanner,
     aboutBody
 }: TopNavbarProps) {
@@ -256,9 +280,9 @@ export default function TopNavbar({
                         )}
                     </motion.div>
                 )}
-                {!organizing && !viewTitle && maintenanceBanner && (
+                {!organizing && !viewTitle && siteBanner && (
                     <motion.div
-                        key='maintenanceBanner'
+                        key='siteBanner'
                         className={styles.organizeBanner}
                         role='status'
                         initial={{ opacity: 0 }}
@@ -266,39 +290,37 @@ export default function TopNavbar({
                         exit={{ opacity: 0 }}
                         transition={FADE}
                     >
-                        <span className={`icon icon-wrench ${styles.organizeBannerIcon} ${styles.maintenanceIcon}`} />
+                        <span
+                            className={`icon icon-${BANNER[siteBanner].icon} ${styles.organizeBannerIcon} ${styles.maintenanceIcon}`}
+                        />
                         <span className={styles.organizeBannerText}>
-                            <span className={styles.organizeBannerTitle}>
-                                {maintenanceBanner === 'site'
-                                    ? 'Site en maintenance'
-                                    : 'MAINTENANCE=1 est encore posée'}
-                            </span>
-                            <span className={styles.organizeBannerHint}>
-                                {maintenanceBanner === 'site'
-                                    ? 'Seuls les administrateurs y ont accès.'
-                                    : 'Le prochain redémarrage remettra le site en maintenance.'}
-                            </span>
+                            <span className={styles.organizeBannerTitle}>{BANNER[siteBanner].title}</span>
+                            <span className={styles.organizeBannerHint}>{BANNER[siteBanner].hint}</span>
                         </span>
-                        {maintenanceBanner === 'site'
-                            ? onOpenAdminPage && (
-                                  <Button
-                                      variant='secondary'
-                                      className={styles.organizeBannerDone}
-                                      onClick={(e) => onOpenAdminPage('maintenance', e)}
-                                  >
-                                      Gérer
-                                  </Button>
-                              )
-                            : onDismissMaintenanceBanner && (
-                                  <Button
-                                      variant='ghost'
-                                      icon='x'
-                                      className={styles.organizeBannerDone}
-                                      onClick={onDismissMaintenanceBanner}
-                                      title='Ne plus afficher ce rappel'
-                                      aria-label='Ne plus afficher ce rappel'
-                                  />
-                              )}
+                        {(siteBanner === 'site' || siteBanner === 'priority') && onOpenAdminPage && (
+                            <Button
+                                variant='secondary'
+                                className={styles.organizeBannerDone}
+                                onClick={(e) => onOpenAdminPage('maintenance', e)}
+                            >
+                                Gérer
+                            </Button>
+                        )}
+                        {siteBanner === 'env' && onDismissMaintenanceBanner && (
+                            <Button
+                                variant='ghost'
+                                icon='x'
+                                className={styles.organizeBannerDone}
+                                onClick={onDismissMaintenanceBanner}
+                                title='Ne plus afficher ce rappel'
+                                aria-label='Ne plus afficher ce rappel'
+                            />
+                        )}
+                        {siteBanner === 'held' && (accountEntries?.length ?? 0) > 0 && (
+                            <Button className={styles.organizeBannerDone} onClick={() => openAccountView()}>
+                                Voir les offres
+                            </Button>
+                        )}
                     </motion.div>
                 )}
             </AnimatePresence>

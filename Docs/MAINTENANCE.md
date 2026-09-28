@@ -1,11 +1,31 @@
-# Maintenance
+# Accès et maintenance
 
 Fermer le site entier, ou une seule fonctionnalité, pour tout le monde et à
 l'instant : une faille, un bug, un emballement. Ou réserver une fonctionnalité
 aux administrateurs, le temps de l'essayer en production avant de l'ouvrir.
-Depuis l'interface (menu du profil, « Maintenance », réservé aux
+Depuis l'interface (menu du profil, « Accès et maintenance », réservé aux
 administrateurs), depuis la base quand l'interface ne répond plus, ou dès le
 démarrage par une variable d'environnement.
+
+La même page tient l'accès au service : ouvrir ou fermer les inscriptions, et
+donner la priorité aux abonnés quand l'afflux dépasse le serveur.
+
+## L'accès
+
+- **Inscriptions** : fermées par défaut. Le réglage se range par origine
+  publique (`instance_settings`, nom `signups`), comme tout réglage d'un
+  serveur qui peut partager sa base avec un autre : chacun ouvre les siennes.
+  Une base sans aucun compte laisse toujours entrer le premier, qui naît
+  administrateur. Relu à chaque étape de l'inscription.
+- **Priorité aux abonnés** : les comptes dont l'offre n'a pas `priority`
+  (Gratuite, l'essai sans carte, Restreinte) restent connectés, mais toute
+  limite leur vaut 0. Tout ce qu'ils font tourner se met donc en pause par le
+  mécanisme des offres (`Docs/QUOTAS.md`), leurs créations sont refusées, et
+  tout reprend seul à la levée. Commune à tous les serveurs qui partagent la
+  base, parce que les pauses le sont aussi. Sans module qui tient les offres,
+  elle n'est pas proposée. Comme pour Restreinte, les espaces partagés d'un
+  compte tenu se ferment à leurs membres, et ses pages publiques et ses
+  domaines se mettent en pause.
 
 ## Les niveaux
 
@@ -15,6 +35,7 @@ démarrage par une variable d'environnement.
 | Feature en préversion    | les administrateurs | ses commandes, aux autres comptes                                             | son service de fond, ses routes publiques              |
 | Feature en maintenance   | les administrateurs | ses commandes et ses routes publiques (pages Rdv, traceur Audience, webhooks) | son service de fond                                    |
 | Feature en arrêt complet | personne            | idem, et même les administrateurs                                             | rien : son service est arrêté, ses hooks agent ignorés |
+| Priorité aux abonnés     | tout le monde       | aux comptes sans priorité : toute création, tout ce qui tourne pour eux       | les abonnés, entiers                                   |
 
 La préversion laisse ses routes publiques ouvertes : seuls les administrateurs y
 créent quelque chose, et ce qu'elles servent est à eux (le défi ACME du serveur
@@ -44,8 +65,12 @@ facturation ne sautent jamais à cause d'une maintenance.
   autres modules (`moduleClientProvider` la tient pour absente). La présence ne
   dit pas qu'un administrateur s'y trouve. Chez l'administrateur, la tuile porte
   une pastille « Préversion ».
+- **Priorité aux abonnés** : un compte tenu voit à l'accueil un bandeau qui le
+  dit, avec « Voir les offres » ; ses éléments portent « Priorité aux
+  abonnés », et un refus de création le dit aussi. Il peut s'abonner sans
+  attendre : tout repart pour lui aussitôt.
 - **Administrateur** : un bandeau à l'accueil tant que le site est en
-  maintenance.
+  maintenance, ou la priorité donnée.
 
 ## Sans l'interface
 
@@ -60,6 +85,9 @@ INSERT INTO feature_maintenance (feature, level) VALUES ('rdv', 'requests');
 UPDATE feature_maintenance SET level = 'full' WHERE feature = 'rdv';
 INSERT INTO feature_maintenance (feature, level) VALUES ('mailserver', 'preview');
 DELETE FROM feature_maintenance WHERE feature = 'rdv';
+UPDATE site_maintenance SET priority = 1;
+INSERT INTO instance_settings (name, origin, value) VALUES ('signups', 'https://app.deveye.fr', 'open')
+    ON DUPLICATE KEY UPDATE value = VALUES(value);
 ```
 
 `site_maintenance.message` à `NULL` vaut le texte par défaut.
@@ -80,8 +108,11 @@ en direct). Chaque démarrage sous la variable le réarme.
 - `src/Services/maintenance.ts` : l'état, lu de façon synchrone par les gardes ;
   chaque changement (interface, relecture) passe par `apply`, qui diffuse
   `maintenance.state` à toutes les sockets, ferme en `4503` celles des
-  non-administrateurs quand le site se ferme, puis arrête ou relance les
-  services. Les changements s'appliquent l'un après l'autre.
+  non-administrateurs quand le site se ferme, relance la passe des pauses quand
+  la priorité change, puis arrête ou relance les services. Les changements
+  s'appliquent l'un après l'autre.
+- `src/Services/quota.ts` : `isHeld` et `limitIn`, par où la priorité agit.
+- `src/Services/signup/setting.ts` : le réglage des inscriptions.
 - `src/ws/handler.ts` : la poignée de main, la trame `session` (qui porte l'état
   initial), et `assertFeature` / `assertDeclaredFeature`, le passage obligé de
   toute commande vers une feature, qu'elle la déclare ou la reçoive en entrée.

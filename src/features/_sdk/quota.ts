@@ -9,7 +9,7 @@ import {
 
 import type { Database } from '@/db';
 import { isPlanPaused, planPausedIds } from '@/Services/planPauses';
-import { assertPlanLimit, limitIn, planOf, planUsage } from '@/Services/quota';
+import { assertPlanLimit, isHeld, limitIn, planOf, planUsage } from '@/Services/quota';
 
 function specOf(manifest: FeatureManifest, key: string) {
     const spec = manifest.quotas?.find((q) => q.key === key);
@@ -98,6 +98,13 @@ export function createQuota(
             const ownerUserId = await ownerOf();
             const plan = ownerUserId === null ? null : await planOf(providers, ownerUserId, logger);
             const fullKey = `${manifest.id}.${key}`;
+            if (isHeld(plan)) {
+                throw new FeatureError(
+                    'quota_exceeded',
+                    'En pause : forte affluence, le service est réservé aux abonnés pour le moment. Tout reprend de soi-même à la fin de cette période.',
+                    { key: fullKey, limit: 0, plan: plan?.id, paused: true, priority: true }
+                );
+            }
             const limit = limitIn(plan, fullKey);
             throw new FeatureError(
                 'quota_exceeded',

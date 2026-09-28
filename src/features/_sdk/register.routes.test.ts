@@ -226,7 +226,7 @@ describe('routes publiques en maintenance', () => {
         start: async () => undefined
     };
 
-    before(() => maintenance.init({ db, live, logger: logger as never, services }));
+    before(() => maintenance.init({ db, live, logger: logger as never, services, hasPlanProvider: () => false }));
     after(() => maintenance.close());
 
     it('répond 503 lisible à un visiteur et en enveloppe à un programme, le site fermé', async () => {

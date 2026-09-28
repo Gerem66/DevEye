@@ -6,6 +6,7 @@ import { MAINTENANCE_CLOSE_CODE, MAINTENANCE_EVENT, type FeatureMaintenanceLevel
 import type { Database } from '@/db';
 import type { FeatureMaintenanceRow, SiteMaintenanceRow } from '@/db/repos/maintenance';
 import type { LiveHub } from '@/live/hub';
+import { attachPlanPauses, type PlanPauses } from '@/Services/planPauses';
 import { env } from '@/Utils/Env';
 import {
     DEFAULT_SITE_MESSAGE,
@@ -26,6 +27,9 @@ function fakeDb(rows: { site?: Partial<SiteMaintenanceRow>; features?: Record<st
         envNoticeDismissed: false,
         updated: 0,
         updatedBy: null,
+        priority: false,
+        priorityUpdated: null,
+        priorityBy: null,
         ...rows.site
     };
     const features = new Map(Object.entries(rows.features ?? {}));
@@ -39,6 +43,9 @@ function fakeDb(rows: { site?: Partial<SiteMaintenanceRow>; features?: Record<st
             setSite: async (active: boolean, message: string | null) => {
                 site.active = active;
                 site.message = message;
+            },
+            setPriority: async (active: boolean) => {
+                site.priority = active;
             },
             seedFromEnv: async () => {
                 seeded += 1;
@@ -93,7 +100,13 @@ async function boot(
     const db = fakeDb(rows);
     const live = fakeLive();
     const services = fakeServices(delays);
-    await maintenance.init({ db: db.db, live: live.live, logger, services: services.services });
+    await maintenance.init({
+        db: db.db,
+        live: live.live,
+        logger,
+        services: services.services,
+        hasPlanProvider: () => true
+    });
     return { ...db, ...live, ...services };
 }
 
@@ -163,6 +176,27 @@ describe('maintenance : le site', () => {
         const t = await boot();
         await maintenance.setSite(false, null, ADMIN);
         assert.deepEqual(t.broadcasts, []);
+    });
+});
+
+describe('maintenance : la priorité aux abonnés', () => {
+    it('prévient tous les écrans et relance la passe des pauses, sans fermer aucune socket', async () => {
+        let passes = 0;
+        attachPlanPauses({ scheduleAll: () => void passes++ } as unknown as PlanPauses);
+        try {
+            const t = await boot();
+            await maintenance.setPriority(true, ADMIN);
+            assert.equal(maintenance.priority(), true);
+            assert.equal((t.broadcasts[0]?.data as { priority: boolean }).priority, true);
+            assert.equal(t.closes.length, 0);
+            assert.equal(passes, 1);
+            await maintenance.setPriority(true, ADMIN);
+            assert.equal(passes, 1);
+            await maintenance.setPriority(false, ADMIN);
+            assert.equal(passes, 2);
+        } finally {
+            attachPlanPauses(null);
+        }
     });
 });
 

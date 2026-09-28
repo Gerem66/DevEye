@@ -305,7 +305,7 @@ export class DevEyeWs {
 
         // Refusée à l'ouverture : la fermeture `MAINTENANCE_CLOSE_CODE` suit.
         if (msg.command === 'session' && !msg.payload.ok && msg.payload.error.code === 'maintenance') {
-            this.emitMaintenance({ site: true, message: msg.payload.error.message, features: {} });
+            this.emitMaintenance({ site: true, message: msg.payload.error.message, features: {}, priority: false });
         }
 
         if (msg.command === MAINTENANCE_EVENT && msg.payload.ok) {
@@ -322,8 +322,13 @@ export class DevEyeWs {
                 if (msg.payload.ok) pending.resolve(msg.payload.data);
                 else {
                     if (msg.payload.error.code === 'quota_exceeded') {
-                        const details = msg.payload.error.details as { paused?: unknown } | undefined;
-                        notifyQuotaExceeded(msg.payload.error.message, details?.paused === true);
+                        const details = msg.payload.error.details as
+                            { paused?: unknown; priority?: unknown } | undefined;
+                        notifyQuotaExceeded(
+                            msg.payload.error.message,
+                            details?.paused === true,
+                            details?.priority === true
+                        );
                     }
                     pending.reject(
                         new WsError(msg.payload.error.code, msg.payload.error.message, msg.payload.error.details)

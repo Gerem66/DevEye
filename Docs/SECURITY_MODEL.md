@@ -217,9 +217,10 @@ Remplace l'ancien système de verrou par note (mot de passe dédié par note,
       (l'adresse inscrite reçoit un mail qui le lui dit). Seul le pseudo pris est
       révélé. Chaque demande compte aussi contre l'adresse visée (portée `signup`
       du verrouillage progressif), en plus de la limite par IP.
-    - `SIGNUP_MODE=closed` (défaut) ferme l'inscription, sauf sur une base sans
-      aucun compte : le premier inscrit naît administrateur, le compte étant
-      compté sous verrou dans la transaction qui le crée.
+    - Fermée par défaut (page « Accès et maintenance », réglage rangé par
+      origine dans `instance_settings`, relu à chaque étape), sauf sur une base
+      sans aucun compte : le premier inscrit naît administrateur, le compte
+      étant compté sous verrou dans la transaction qui le crée.
     - Sans `SMTP_HOST`, le lien est écrit dans le journal du serveur.
 - **Sessions** : changer de mot de passe ou récupérer le coffre révoque toutes
   les autres sessions du compte (jetons de rafraîchissement, DEK en mémoire,

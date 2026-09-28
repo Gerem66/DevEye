@@ -16,6 +16,7 @@ import {
     publicMaintenanceSchema,
     serverStatusSchema
 } from '@deveye/types';
+import { ACCOUNT_PLAN_PROVIDER } from '@deveye/types/sdk';
 
 import { agentRoutes } from '@/agent/routes';
 import { registerAgentWS } from '@/agent/ws';
@@ -38,6 +39,7 @@ import {
     keepRawBody,
     moduleAgentHooks,
     modulePublicRoutes,
+    moduleProvider,
     moduleServiceControl,
     parseFormFields,
     startModuleServices,
@@ -363,7 +365,6 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         db: deps.db,
         mailer,
         logger,
-        mode: env.SIGNUP_MODE,
         origin: env.PUBLIC_ORIGIN.replace(/\/+$/, '')
     });
     createModuleServices({ db: deps.db, crypt: deps.crypt, audit, logger, live, mailer });
@@ -384,7 +385,13 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     ];
     // Lue avant tout démarrage : un service en arrêt complet ne démarre pas, et
     // `MAINTENANCE=1` ferme le site avant la première connexion.
-    await maintenance.init({ db: deps.db, live, logger, services: moduleServiceControl });
+    await maintenance.init({
+        db: deps.db,
+        live,
+        logger,
+        services: moduleServiceControl,
+        hasPlanProvider: () => moduleProvider(ACCOUNT_PLAN_PROVIDER) !== undefined
+    });
     // Avant les modules : leur premier tour lit déjà ce que l'offre tient en pause.
     const planPauses = createPlanPausesService({ db: deps.db, logger, live });
     await planPauses.start();

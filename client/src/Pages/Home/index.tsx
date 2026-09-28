@@ -52,6 +52,7 @@ import {
     useMaintenanceEnvNotice,
     useSiteMaintenance
 } from '@/stores/maintenance';
+import { usePriorityHold } from '@/stores/accountPlan';
 import { armFrameProbe } from '@/perf/frameBudget';
 import { useRootView } from '@/telemetry/useView';
 import { ViewScope } from '@/telemetry/ViewScope';
@@ -60,7 +61,7 @@ import { LiveCursors } from '@/live/LiveCursors';
 import { CursorChatInput } from '@/live/CursorChatInput';
 import { useLiveSegment } from '@/live/useLiveSegment';
 import { startTeleport } from '@/stores/live';
-import { TopNavbar } from '@/Components/TopNavbar';
+import { TopNavbar, type SiteBanner } from '@/Components/TopNavbar';
 import { QuotaPrompt } from '@/Components/QuotaPrompt';
 import { WidgetGrid } from '@/Components/WidgetGrid';
 import { WidgetPopup, FeatureKeepAlive } from '@/Components/WidgetPopup';
@@ -219,7 +220,7 @@ const buildStaticViews = (): ViewConfig[] => [
     },
     {
         id: 'maintenance',
-        title: 'Maintenance',
+        title: 'Accès et maintenance',
         icon: 'wrench',
         cacheDurationMinutes: 0,
         hasCard: false,
@@ -572,17 +573,23 @@ export default function HomePage() {
         (viewId: string): TileLock | undefined => (allowedToOpen(viewId) ? maintenanceLockOf(viewId) : 'rights'),
         [allowedToOpen, maintenanceLockOf]
     );
-    // Le bandeau ne parle que de cette instance-ci, à son administrateur.
+    // À l'administrateur, le bandeau ne parle que de cette instance-ci ; à un
+    // compte que la priorité tient, de l'instance où il se trouve.
     const siteMaintenance = useSiteMaintenance();
     const envNotice = useMaintenanceEnvNotice();
     const localAdmin = useLocalUser()?.role === 'admin';
-    const maintenanceBanner = !localAdmin
-        ? undefined
-        : siteMaintenance.site
-          ? ('site' as const)
-          : envNotice
-            ? ('env' as const)
-            : undefined;
+    const priorityHold = usePriorityHold();
+    const siteBanner: SiteBanner | undefined = localAdmin
+        ? siteMaintenance.site
+            ? 'site'
+            : siteMaintenance.priority
+              ? 'priority'
+              : envNotice
+                ? 'env'
+                : undefined
+        : priorityHold
+          ? 'held'
+          : undefined;
     const dismissEnvNotice = useCallback(() => {
         setMaintenanceEnvNotice(false);
         void ws.local.send('admin.maintenanceDismissNotice', {}).catch(() => {});
@@ -1281,7 +1288,7 @@ export default function HomePage() {
                     onOpenAccountEntry={(id, e) => handleExpand(accountViewId(id), isForceReload(e))}
                     adminPages={adminPages}
                     onOpenAdminPage={(id, e) => handleExpand(id, isForceReload(e))}
-                    maintenanceBanner={maintenanceBanner}
+                    siteBanner={siteBanner}
                     onDismissMaintenanceBanner={dismissEnvNotice}
                     onOpenSettings={canAppearance ? () => setSettingsOpen(true) : undefined}
                     onOrganize={canLayout ? () => startOrganizing() : undefined}

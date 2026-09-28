@@ -14,8 +14,12 @@ interface FakeUser {
     role: string;
 }
 
+const ORIGIN = 'https://deveye.test';
+
 function harness(options: { mode?: 'open' | 'closed'; smtp?: boolean; users?: FakeUser[] } = {}) {
     const users: FakeUser[] = [...(options.users ?? [])];
+    // Le réglage des inscriptions, par origine.
+    const settings = new Map<string, string>([[ORIGIN, options.mode ?? 'open']]);
     const pending: PendingSignupRow[] = [];
     const sent: MailMessage[] = [];
     const warnings: { url?: string }[] = [];
@@ -98,6 +102,12 @@ function harness(options: { mode?: 'open' | 'closed'; smtp?: boolean; users?: Fa
                 return before - pending.length;
             }
         },
+        instanceSettings: {
+            get: async (name: string, origin: string) => {
+                const value = name === 'signups' ? settings.get(origin) : undefined;
+                return value === undefined ? null : { origin, value, updated: 1, updatedBy: null };
+            }
+        },
         transaction: async <T>(fn: (tx: unknown) => Promise<T>): Promise<T> => fn(db)
     };
 
@@ -115,13 +125,21 @@ function harness(options: { mode?: 'open' | 'closed'; smtp?: boolean; users?: Fa
             warn: (obj) => warnings.push(obj as { url?: string }),
             error: () => undefined
         },
-        mode: options.mode ?? 'open',
-        origin: 'https://deveye.test',
+        origin: ORIGIN,
         now: () => clock
     });
 
     const tokenOf = (message: MailMessage): string => /#([\w-]+)/.exec(message.text)?.[1] ?? '';
-    return { service, users, pending, sent, warnings, tokenOf, advance: (seconds: number) => (clock += seconds) };
+    return {
+        service,
+        users,
+        pending,
+        sent,
+        warnings,
+        settings,
+        tokenOf,
+        advance: (seconds: number) => (clock += seconds)
+    };
 }
 
 const ALICE = { username: 'alice', email: 'alice@exemple.fr', plan: null, termsAcceptedAt: null };
@@ -217,6 +235,19 @@ describe("l'inscription", () => {
                 reason: 'closed'
             }
         );
+    });
+
+    it('suit le réglage de son origine, relu à chaque étape', async () => {
+        const root = { id: 1, email: 'root@exemple.fr', username: 'root', role: 'admin' };
+        const h = harness({ users: [root] });
+        h.settings.delete(ORIGIN);
+        h.settings.set('https://autre.test', 'open');
+        assert.equal(await h.service.isOpen(), false);
+
+        h.settings.set(ORIGIN, 'open');
+        await h.service.request(ALICE);
+        h.settings.set(ORIGIN, 'closed');
+        assert.deepEqual(await h.service.complete(h.tokenOf(h.sent[0]), 'hash'), { ok: false, reason: 'closed' });
     });
 
     it('ouverte, donne le rôle ordinaire dès qu’un compte existe', async () => {

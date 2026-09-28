@@ -7,6 +7,7 @@ import { Dialog } from '@/Components/Dialog';
 import SegmentedControl from '@/Components/SegmentedControl';
 import Switch from '@/Components/Switch';
 import { moduleManifest } from '@/sdk/registry';
+import { useResourceVersion } from '@/stores/invalidation';
 import { useMaintenance } from '@/stores/maintenance';
 import styles from './Maintenance.module.css';
 
@@ -27,7 +28,8 @@ const LEVEL_OPTIONS = [
     { value: 'full', label: 'Arrêt complet', title: 'Fermée à tous, et son travail de fond s’arrête' }
 ] as const;
 
-function since(epoch: number, by: AdminMaintenance['site']['updatedBy']): string {
+function since(epoch: number | null, by: AdminMaintenance['site']['updatedBy']): string {
+    if (epoch === null) return '';
     const at = new Date(epoch * 1000).toLocaleString('fr-FR', {
         day: 'numeric',
         month: 'short',
@@ -38,9 +40,9 @@ function since(epoch: number, by: AdminMaintenance['site']['updatedBy']): string
 }
 
 /**
- * Page « Maintenance » : fermer le site ou une fonctionnalité, pour tout le
- * monde, à l'instant. Réservée à l'administrateur global ; chaque commande est
- * gardée serveur.
+ * Page « Accès et maintenance » : qui peut s'inscrire, qui passe en priorité,
+ * et fermer le site ou une fonctionnalité à l'instant. Réservée à
+ * l'administrateur global ; chaque commande est gardée serveur.
  */
 export default function FeatureMaintenance() {
     const [state, setState] = useState<AdminMaintenance | null>(null);
@@ -49,6 +51,7 @@ export default function FeatureMaintenance() {
     const [error, setError] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
     const [confirmSite, setConfirmSite] = useState(false);
+    const [confirmPriority, setConfirmPriority] = useState(false);
 
     const load = useCallback(async () => {
         try {
@@ -64,10 +67,12 @@ export default function FeatureMaintenance() {
 
     // Chaque changement est diffusé à tous les écrans : celui d'un autre
     // administrateur, ou une ligne modifiée à la main en base, relit la page.
+    // Les inscriptions, rangées par serveur, arrivent par le sujet `admin`.
     const live = useMaintenance();
+    const version = useResourceVersion('admin.maintenanceGet');
     useEffect(() => {
         void load();
-    }, [load, live]);
+    }, [load, live, version]);
 
     const run = async (fn: () => Promise<AdminMaintenance>, fallback: string): Promise<boolean> => {
         setError(null);
@@ -87,7 +92,7 @@ export default function FeatureMaintenance() {
         return <div className={styles.container}>{error && <div className={styles.errorBanner}>{error}</div>}</div>;
     }
 
-    const { site } = state;
+    const { site, priority, signups } = state;
     const shownMessage = site.message ?? site.defaultMessage;
     const trimmed = (draft ?? '').trim();
     // Le texte par défaut ne s'enregistre pas tel quel : il suivrait sinon ses
@@ -102,18 +107,72 @@ export default function FeatureMaintenance() {
         if (!messageChanged || (await setSite(site.active, nextMessage))) setDraft(null);
     };
 
+    const setPriority = (active: boolean): Promise<boolean> =>
+        run(() => ws.send('admin.maintenancePriority', { active }), 'Changement impossible.');
+
     return (
         <div className={styles.container}>
             <div className={styles.headerText}>
-                <h2 className={styles.title}>Maintenance</h2>
+                <h2 className={styles.title}>Accès et maintenance</h2>
                 <p className={styles.subtitle}>
-                    Fermer le site ou une fonctionnalité, pour tout le monde, à l’instant.
+                    Qui peut s’inscrire, qui passe en priorité, et fermer le site ou une fonctionnalité à l’instant.
                 </p>
             </div>
 
             {error && <div className={styles.errorBanner}>{error}</div>}
 
             <div className={styles.sections}>
+                <section className={styles.section}>
+                    <span className={styles.sectionLabel}>Accès</span>
+                    <div className={styles.card}>
+                        <div className={styles.row}>
+                            <span className={`icon icon-users ${styles.rowIcon}`} />
+                            <div className={styles.rowText}>
+                                <span className={styles.rowTitle}>Inscriptions ouvertes</span>
+                                <span className={styles.rowMeta}>
+                                    {signups.open
+                                        ? 'Quiconque peut se créer un compte depuis la page de connexion.'
+                                        : 'Personne ne peut se créer de compte.'}{' '}
+                                    Sur ce serveur seulement ({signups.origin}).
+                                    {signups.updated !== null && ` ${since(signups.updated, signups.updatedBy)}.`}
+                                </span>
+                            </div>
+                            <Switch
+                                checked={signups.open}
+                                disabled={busy}
+                                onChange={(open) =>
+                                    void run(
+                                        () => ws.send('admin.maintenanceSignups', { open }),
+                                        'Changement impossible.'
+                                    )
+                                }
+                                aria-label='Inscriptions ouvertes'
+                            />
+                        </div>
+                        <div className={styles.row}>
+                            <span
+                                className={`icon icon-star ${styles.rowIcon} ${priority.active ? styles.active : ''}`}
+                            />
+                            <div className={styles.rowText}>
+                                <span className={styles.rowTitle}>Priorité aux abonnés</span>
+                                <span className={styles.rowMeta}>
+                                    {priority.active
+                                        ? `${since(priority.updated, priority.updatedBy)}. Les comptes gratuits restent connectés, mais tout ce qui tourne pour eux est en pause.`
+                                        : priority.available
+                                          ? 'En cas de forte affluence : les comptes gratuits restent connectés, mais tout ce qui tourne pour eux se met en pause jusqu’à la levée.'
+                                          : 'Aucun module ne tient les offres sur ce serveur : personne n’est abonné.'}
+                                </span>
+                            </div>
+                            <Switch
+                                checked={priority.active}
+                                disabled={busy || (!priority.available && !priority.active)}
+                                onChange={(on) => (on ? setConfirmPriority(true) : void setPriority(false))}
+                                aria-label='Priorité aux abonnés'
+                            />
+                        </div>
+                    </div>
+                </section>
+
                 <section className={styles.section}>
                     <span className={styles.sectionLabel}>Site</span>
                     <div className={styles.card}>
@@ -226,6 +285,30 @@ export default function FeatureMaintenance() {
                             }}
                         >
                             Mettre en maintenance
+                        </Button>
+                    </>
+                }
+            />
+
+            <Dialog
+                open={confirmPriority}
+                onClose={() => setConfirmPriority(false)}
+                title='Donner la priorité aux abonnés ?'
+                description='Les comptes gratuits restent connectés, mais tout ce qui tourne pour eux se met en pause dans les minutes qui suivent, et ils ne peuvent plus rien créer. Rien n’est supprimé, et tout reprend de soi-même à la levée. Le réglage vaut pour tous les serveurs qui partagent cette base.'
+                footer={
+                    <>
+                        <Button variant='secondary' onClick={() => setConfirmPriority(false)}>
+                            Annuler
+                        </Button>
+                        <Button
+                            variant='danger'
+                            disabled={busy}
+                            onClick={() => {
+                                setConfirmPriority(false);
+                                void setPriority(true);
+                            }}
+                        >
+                            Donner la priorité
                         </Button>
                     </>
                 }

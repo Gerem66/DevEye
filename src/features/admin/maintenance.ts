@@ -2,18 +2,31 @@ import {
     adminMaintenanceDismissNotice,
     adminMaintenanceFeature,
     adminMaintenanceGet,
-    adminMaintenanceSite
+    adminMaintenancePriority,
+    adminMaintenanceSignups,
+    adminMaintenanceSite,
+    type AdminMaintenance
 } from '@deveye/types';
 
+import type { Database } from '@/db';
+import { ORIGINS } from '@/features/_sdk/context';
 import { moduleServiceControl } from '@/features/_sdk/register';
 import { maintenance } from '@/Services/maintenance';
+import { readSignups, writeSignups } from '@/Services/signup/setting';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
+import { notifyAdmins } from './notify';
 
 /**
  * La page Maintenance. Chaque changement est diffusé à tous les écrans par
  * `Services/maintenance.ts`, les pages des autres administrateurs comprises.
  */
 const ADMIN = { admin: true, scope: 'account' } as const;
+
+/** Les inscriptions se rangent par origine : celles de ce serveur seulement. */
+async function pageState(db: Database): Promise<AdminMaintenance> {
+    const [state, signups] = await Promise.all([maintenance.adminState(), readSignups(db, ORIGINS.app)]);
+    return { ...state, signups: { ...signups, origin: ORIGINS.app } };
+}
 
 export const adminMaintenanceGetFeature: FeatureDefinition<
     typeof adminMaintenanceGet.command,
@@ -22,7 +35,7 @@ export const adminMaintenanceGetFeature: FeatureDefinition<
 > = defineFeature({
     ...adminMaintenanceGet,
     access: ADMIN,
-    handler: async () => maintenance.adminState()
+    handler: async (ctx) => pageState(ctx.db)
 });
 
 export const adminMaintenanceSiteFeature: FeatureDefinition<
@@ -43,7 +56,7 @@ export const adminMaintenanceSiteFeature: FeatureDefinition<
                 description: input.active ? 'Site mis en maintenance' : 'Maintenance du site levée'
             });
         }
-        return maintenance.adminState();
+        return pageState(ctx.db);
     }
 });
 
@@ -76,7 +89,54 @@ export const adminMaintenanceFeatureFeature: FeatureDefinition<
             description: `Fonctionnalité « ${input.feature} » ${LEVEL_AUDIT[input.level ?? 'open']}`,
             metadata: { feature: input.feature, level: input.level }
         });
-        return maintenance.adminState();
+        return pageState(ctx.db);
+    }
+});
+
+export const adminMaintenancePriorityFeature: FeatureDefinition<
+    typeof adminMaintenancePriority.command,
+    typeof adminMaintenancePriority.input,
+    typeof adminMaintenancePriority.output
+> = defineFeature({
+    ...adminMaintenancePriority,
+    access: ADMIN,
+    handler: async (ctx, input) => {
+        if (input.active && !maintenance.priorityAvailable()) {
+            throw new FeatureError('validation', 'Aucun module ne tient les offres : personne n’est abonné');
+        }
+        const before = maintenance.priority();
+        await maintenance.setPriority(input.active, ctx.userId);
+        if (before !== input.active) {
+            ctx.audit({
+                action: input.active ? 'maintenance.priorityOn' : 'maintenance.priorityOff',
+                level: 'warning',
+                category: 'system',
+                description: input.active ? 'Priorité aux abonnés activée' : 'Priorité aux abonnés levée'
+            });
+        }
+        return pageState(ctx.db);
+    }
+});
+
+export const adminMaintenanceSignupsFeature: FeatureDefinition<
+    typeof adminMaintenanceSignups.command,
+    typeof adminMaintenanceSignups.input,
+    typeof adminMaintenanceSignups.output
+> = defineFeature({
+    ...adminMaintenanceSignups,
+    access: ADMIN,
+    handler: async (ctx, input) => {
+        await writeSignups(ctx.db, ORIGINS.app, input.open, ctx.userId);
+        ctx.audit({
+            action: input.open ? 'maintenance.signupsOpen' : 'maintenance.signupsClosed',
+            level: 'warning',
+            category: 'system',
+            description: input.open ? 'Inscriptions ouvertes' : 'Inscriptions fermées',
+            metadata: { origin: ORIGINS.app }
+        });
+        // Le réglage ne passe pas par l'état diffusé : les pages des autres administrateurs se relisent.
+        if (ctx.live) await notifyAdmins(ctx.db, ctx.live, ctx.workspaceId, ctx.userId);
+        return pageState(ctx.db);
     }
 });
 
@@ -98,5 +158,7 @@ export const adminMaintenanceFeatures: FeatureDefinition<string, any, any>[] = [
     adminMaintenanceGetFeature,
     adminMaintenanceSiteFeature,
     adminMaintenanceFeatureFeature,
+    adminMaintenancePriorityFeature,
+    adminMaintenanceSignupsFeature,
     adminMaintenanceDismissNoticeFeature
 ];

@@ -4,6 +4,7 @@ import type { SdkProviders, SdkQuotaUse } from '@deveye/types/sdk/server';
 import { FeatureError } from '@deveye/types/sdk/server';
 
 import type { Database } from '@/db';
+import { maintenance } from '@/Services/maintenance';
 import { notePlanChangesAt } from '@/Services/planPauses';
 
 interface QuotaLogger {
@@ -44,8 +45,24 @@ export async function planOfStrict(providers: SdkProviders, userId: number): Pro
     return provider ? provider.planFor(userId, { fresh: true }) : null;
 }
 
-/** La limite d'une clé `<featureId>.<quotaKey>` pour ce compte, `null` = illimité. */
+/**
+ * Le compte passe après les abonnés : la priorité est donnée et son offre n'en
+ * a pas. Sans module de facturation, personne n'est tenu.
+ */
+export function isHeld(plan: AccountPlan | null): boolean {
+    return maintenance.priority() && plan !== null && !plan.priority;
+}
+
+/** Le refus d'une création pendant la priorité aux abonnés. */
+export const PRIORITY_REFUSAL =
+    'Forte affluence : le service est réservé aux abonnés pour le moment. Cette création redeviendra possible à la fin de cette période, ou dès maintenant avec une offre payante.';
+
+/**
+ * La limite d'une clé `<featureId>.<quotaKey>` pour ce compte, `null` = illimité.
+ * Toute lecture d'une limite passe par ici : un compte tenu lit 0 partout.
+ */
 export function limitIn(plan: AccountPlan | null, fullKey: string): number | null {
+    if (isHeld(plan)) return 0;
     return plan?.limits[fullKey] ?? null;
 }
 
@@ -90,6 +107,14 @@ export async function assertPlanLimit(
     check: PlanLimitCheck
 ): Promise<void> {
     const plan = await planOf(providers, check.ownerUserId, logger);
+    if (isHeld(plan)) {
+        throw new FeatureError('quota_exceeded', PRIORITY_REFUSAL, {
+            key: check.fullKey,
+            limit: 0,
+            plan: plan?.id,
+            priority: true
+        });
+    }
     const limit = limitIn(plan, check.fullKey);
     if (limit === null) return;
     const count = await check.countAfter(await ownedWorkspaceIds(db, check.ownerUserId));

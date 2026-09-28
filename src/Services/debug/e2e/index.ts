@@ -17,6 +17,12 @@ import { countResidue, sweepTestResidue } from './sweep';
 
 const BOOT_SWEEP_DELAY_MS = 30_000;
 const SITE_DOWN = 'Le site est en maintenance : les comptes d’essai ne pourraient pas se connecter.';
+const PRIORITY_ON =
+    'Priorité aux abonnés active : les comptes d’essai, sans abonnement, auraient tout en pause. Levez-la le temps des essais.';
+
+/** Ce qui empêche tout essai sur ce serveur, dit tel quel dans la page. */
+const blockedBy = (): string | null =>
+    maintenance.siteDown() ? SITE_DOWN : maintenance.priority() ? PRIORITY_ON : null;
 
 export interface E2eServiceDeps extends E2eDeps {
     runs: RunRegistry;
@@ -54,12 +60,13 @@ export function createE2e(deps: E2eServiceDeps) {
             return {
                 scenarios: list,
                 residue: deps.runs.active() ? 0 : await countResidue(deps.db),
-                blocked: maintenance.siteDown() ? SITE_DOWN : null
+                blocked: blockedBy()
             };
         },
 
         async start(launcher: Launcher, ids: readonly string[]): Promise<number> {
-            if (maintenance.siteDown()) throw new FeatureError('maintenance', SITE_DOWN);
+            const blocked = blockedBy();
+            if (blocked) throw new FeatureError(maintenance.siteDown() ? 'maintenance' : 'validation', blocked);
             const all = scenarios();
             const selected = all.filter((sc) => ids.includes(sc.id));
             const unknown = ids.filter((id) => !all.some((sc) => sc.id === id));

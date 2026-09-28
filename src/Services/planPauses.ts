@@ -34,6 +34,8 @@ export interface PlanPausesHost {
     logger: { warn(obj: object, msg: string): void; error(obj: object, msg: string): void };
     /** Jamais d'un cache. `null` : aucun fournisseur, donc aucune limite. Lève quand le fournisseur lève. */
     planOf(userId: number): Promise<AccountPlan | null>;
+    /** La limite telle que le cœur la lit : 0 pour un compte que la priorité aux abonnés tient. */
+    limitIn(plan: AccountPlan | null, fullKey: string): number | null;
     sources(): readonly StockSource[];
     /** Les effets de ce qu'une passe vient d'écrire : crochets des modules, accès, diffusion. */
     applied(ownerUserId: number, changes: readonly PlanPauseChange[]): Promise<void>;
@@ -52,6 +54,8 @@ export interface PlanPauses {
     hasPausesIn(ownerUserId: number, featureId: string): boolean;
     /** Une passe pour ce compte, bientôt, avant le balayage de fond. */
     schedule(ownerUserId: number): void;
+    /** Une passe pour tous les propriétaires, en fond : les gestes des comptes passent devant. */
+    scheduleAll(): void;
     /** Une passe, tout de suite. */
     reconcile(ownerUserId: number): Promise<void>;
     /** L'offre de ce compte change d'elle-même à cet instant (ms) : une passe l'attend. */
@@ -173,7 +177,7 @@ export function createPlanPauses(host: PlanPausesHost): PlanPauses {
         const owned = await db.workspaces.listOwnedIds(owner);
         const changes: PlanPauseChange[] = [];
         for (const source of host.sources()) {
-            const limit = plan?.limits[source.fullKey] ?? null;
+            const limit = host.limitIn(plan, source.fullKey);
             let want: readonly SdkStockItem[] = [];
             if (limit !== null) {
                 try {
@@ -208,6 +212,9 @@ export function createPlanPauses(host: PlanPausesHost): PlanPauses {
         }
         return undefined;
     };
+    // La passe sur tous les propriétaires qu'un changement de priorité demande,
+    // suivie jusqu'à sa fin : elle peut durer, et l'administrateur la guette.
+    let sweepingAll: { owners: number; since: number } | null = null;
     const drain = async (): Promise<void> => {
         for (let owner = next(); owner !== undefined && running; owner = next()) {
             try {
@@ -215,6 +222,13 @@ export function createPlanPauses(host: PlanPausesHost): PlanPauses {
             } catch (err) {
                 logger.error({ err, userId: owner }, 'Passe des pauses d’offre en échec');
             }
+        }
+        if (sweepingAll && urgent.size === 0 && background.size === 0) {
+            logger.warn(
+                { owners: sweepingAll.owners, ms: now() - sweepingAll.since },
+                'Pauses d’offre : passe sur tous les comptes terminée'
+            );
+            sweepingAll = null;
         }
     };
     const kick = (): void => {
@@ -282,6 +296,16 @@ export function createPlanPauses(host: PlanPausesHost): PlanPauses {
         hasPausesIn: (owner, featureId) =>
             [...(byOwner.get(owner)?.keys() ?? [])].some((key) => key.startsWith(`${featureId}.`)),
         schedule: (owner) => enqueue(urgent, owner),
+        scheduleAll() {
+            db.workspaces
+                .listOwnerIds()
+                .then((owners) => {
+                    sweepingAll = { owners: owners.length, since: now() };
+                    logger.warn({ owners: owners.length }, 'Pauses d’offre : passe sur tous les comptes');
+                    for (const owner of owners) enqueue(background, owner);
+                })
+                .catch((err: unknown) => logger.error({ err }, 'Passe des pauses d’offre non planifiée'));
+        },
         reconcile,
         noteChangesAt
     };
@@ -308,6 +332,10 @@ export function planPauseCounts(ownerUserId: number): Record<string, number> {
 
 export function schedulePlanReconcile(ownerUserId: number): void {
     INSTANCE?.schedule(ownerUserId);
+}
+
+export function scheduleAllPlanReconciles(): void {
+    INSTANCE?.scheduleAll();
 }
 
 /** Après un geste d'un module : une place a pu se libérer, si ce compte a quelque chose en pause chez lui. */
