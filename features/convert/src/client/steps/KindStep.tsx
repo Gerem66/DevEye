@@ -1,6 +1,7 @@
+import { Dropzone } from 'deveye-sdk-client';
+
 import { CATALOGUE, type ConvertKind } from '../../contracts/catalogue';
 import type { ConvertFamily } from '../../contracts/domain';
-import { Dropzone } from '../Dropzone';
 import { Picto, type PictoId } from '../icons';
 import styles from '../style.module.css';
 
@@ -36,7 +37,7 @@ export function KindStep({ families, onKind, onFile, onTool }: KindStepProps) {
             <Dropzone
                 title='Déposez un fichier ici'
                 hint='ou cliquez pour le choisir. Son type est reconnu tout seul.'
-                onFile={onFile}
+                onFiles={([picked]) => onFile(picked.file)}
             />
             <h3 className={styles.sectionTitle}>Ou choisissez ce que vous voulez convertir</h3>
             <ul className={styles.cards}>

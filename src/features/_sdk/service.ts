@@ -273,6 +273,27 @@ export function createServiceDeps(
                 if (!row) throw new FeatureError('not_found', `Compte ${userId} introuvable`);
                 await host.mailer.send({ to: row.email, ...renderAccountMail(message) });
                 return row.email;
+            },
+            sendToAdmins: async (message) => {
+                gateMail();
+                if (!host.mailer.configured) {
+                    throw new FeatureError('conflict', 'Aucun serveur SMTP configuré (SMTP_HOST)');
+                }
+                const rendered = renderAccountMail(message);
+                const reached: string[] = [];
+                let refusal: unknown = null;
+                for (const id of await host.db.users.listAdminIds()) {
+                    const row = await host.db.users.findById(id);
+                    if (!row) continue;
+                    try {
+                        await host.mailer.send({ to: row.email, ...rendered });
+                        reached.push(row.email);
+                    } catch (err) {
+                        refusal ??= err;
+                    }
+                }
+                if (refusal !== null) throw refusal;
+                return reached;
             }
         },
         audit: (entry) => {

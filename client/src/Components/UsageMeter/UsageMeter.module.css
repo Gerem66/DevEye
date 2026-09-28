@@ -1,0 +1,54 @@
+/* Jauge discrète : un bouton sans fond quand elle mène aux offres. */
+.meter {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--space-xs);
+    padding: var(--space-xs) var(--space-sm);
+    border: none;
+    border-radius: var(--radius-md);
+    background: none;
+    color: var(--text-muted);
+    font: inherit;
+    font-size: 0.78rem;
+    line-height: 1.2;
+}
+
+button.meter {
+    cursor: pointer;
+    transition: background var(--transition-fast);
+}
+
+button.meter:hover,
+button.meter:focus-visible {
+    background: var(--glass-border);
+    color: var(--text-secondary);
+}
+
+.text {
+    white-space: nowrap;
+}
+
+.bar {
+    width: 96px;
+    height: 4px;
+    border-radius: var(--radius-pill);
+    background: var(--glass-border);
+    overflow: hidden;
+}
+
+.fill {
+    display: block;
+    height: 100%;
+    border-radius: var(--radius-pill);
+    background: var(--accent);
+    transition: width var(--transition-fast);
+}
+
+.fill[data-tone='warning'] {
+    background: var(--warning);
+}
+
+.fill[data-tone='danger'] {
+    background: var(--danger);
+}

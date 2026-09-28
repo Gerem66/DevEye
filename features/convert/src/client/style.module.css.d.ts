@@ -25,11 +25,7 @@ declare const styles: {
     readonly converterSide: string;
     readonly cropField: string;
     readonly cropGrid: string;
-    readonly dropzone: string;
     readonly dropzoneFill: string;
-    readonly dropzoneHint: string;
-    readonly dropzoneOver: string;
-    readonly dropzoneTitle: string;
     readonly field: string;
     readonly fieldFull: string;
     readonly fieldHalf: string;

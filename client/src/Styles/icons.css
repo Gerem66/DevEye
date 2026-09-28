@@ -257,6 +257,10 @@
     -webkit-mask-image: url(/icons/activity.svg);
     mask-image: url(/icons/activity.svg);
 }
+.icon.icon-upload {
+    -webkit-mask-image: url(/icons/upload.svg);
+    mask-image: url(/icons/upload.svg);
+}
 .icon.icon-uptime {
     -webkit-mask-image: url(/icons/uptime.svg);
     mask-image: url(/icons/uptime.svg);

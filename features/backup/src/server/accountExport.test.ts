@@ -1,11 +1,16 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { accountExportProblem, type SdkExportWriter, type SdkWorkspaceExportContext } from '@deveye/types/sdk/server';
+import {
+    accountExportProblem,
+    sealStream,
+    type SdkExportWriter,
+    type SdkWorkspaceExportContext
+} from '@deveye/types/sdk/server';
 import { createTestServiceDeps, memoryObjectStore } from '@deveye/types/sdk/testing';
 
 import { createAccountExport } from './accountExport';
-import { backupKey, sealStream } from './crypto';
+import { backupKey } from './crypto';
 import { serverEntry } from './index';
 import type { BackupRepo, LocalArchiveRow } from './repo';
 

@@ -349,7 +349,36 @@ ne protège pas : une compromission du serveur vivant (qui détient la clé).
 C'est le même niveau de garantie que les secrets liés à l'auth (2FA), et un
 cran en dessous des données « mot de passe »/notes, documenté ici pour que le
 choix reste explicite. Détails d'implémentation du format de conteneur :
-`src/backup/devb.ts`.
+`devb.ts` de `@deveye/types` (`sdk/server`).
+
+## Hébergement, lisible par le serveur par construction
+
+Le module Hébergement sert des fichiers à des visiteurs sans compte : le serveur
+doit donc pouvoir les lire, et ils ne passent pas par l'étage gardé.
+
+- Les octets vivent dans le magasin d'objets de l'hôte (disque, ou bucket
+  `STORAGE_S3_*`), scellés au conteneur `DEVB` v2 par une clé **dérivée** de la
+  clé serveur (`keys.derive('deveye-hosting', 'files-v1')`), jamais stockée. Le
+  bucket ne reçoit que du chiffré, et un envoi est scellé dans le dossier local
+  des envois avant d'y partir. La clé ne dépend d'aucun espace : partager ou
+  déplacer un pack ne relit pas un octet de fichier. Perdre `CRYPT_KEY_A/B`
+  rend tous les fichiers hébergés illisibles.
+- Les noms des packs, dossiers, fichiers et adresses sont chiffrés à l'étage
+  ouvert de l'espace. L'unicité d'un nom dans son dossier tient à un condensat
+  à clé (HMAC, clé dérivée), jamais au nom en clair.
+- Le mot de passe d'une adresse est haché (scrypt, sel propre). L'accès qu'il
+  ouvre est un cookie `HttpOnly`, `SameSite=Lax`, signé par une clé dérivée, qui
+  porte son échéance (une journée) et la version du mot de passe : le changer ou
+  le retirer ferme tous les accès ouverts.
+- Les pages publiques n'ont aucun script (`default-src 'none'`, formulaires sur
+  la même origine, `frame-ancestors 'none'`). Un fichier ne s'affiche dans le
+  navigateur que pour les types qui ne peuvent pas exécuter de code (images,
+  son, vidéo, texte brut), toujours avec `nosniff` et `CSP: sandbox` ; tout le
+  reste part en pièce jointe. Le téléchargement du propriétaire passe par un
+  ticket, sur l'origine de l'app, toujours en pièce jointe.
+- Les signalements sont scellés par la clé serveur (`keys.sealBytes`, liés à
+  leur référence) : ils se lisent sans aucun espace, survivent au pack, et ne
+  sont jamais montrés à qui a publié le contenu signalé.
 
 ## Uptime : l'étage ouvert appliqué à une tâche de fond
 

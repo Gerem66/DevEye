@@ -689,7 +689,10 @@ sur le disque sous `localDir`, ou dans le bucket `STORAGE_S3_*` sous
 `<préfixe>/<module>/` ; la base ne garde que la clé relative, jamais l'endroit où
 elle se résout, `spoolDir()` reste sur le disque pour ce qui ne s'écrit pas
 d'un bloc, comme un envoi repris, et `ephemeralRoot()` dit une racine sur aucun
-volume monté, que le module refuse en nommant sa variable),
+volume monté, que le module refuse en nommant sa variable ; le conteneur
+`DEVB` du SDK scelle ce qui y entre, `sealStream`, et le relit en entier ou par
+intervalle, `openSealedStream`, `openSealedRange`, et `contentDisposition`,
+`parseByteRange` servent un fichier en HTTP),
 `secrecy.redeem(ticket)` (le ticket d'un module rendu en `{ userId,
 workspaceId, payload, cipher: { server, private | null } }`), `origins`,
 `accounts` (capacité `accounts.read` : `find`, `findByEmail`, `list`, `search`, `all` ;
@@ -700,7 +703,9 @@ sans appelant à éprouver),
 l'adresse du compte, jamais une autre, par l'expéditeur du serveur (`SMTP_*`,
 celui de l'inscription) ; le module donne du texte brut, paragraphes, encadré,
 bouton et note, et l'hôte le met en page et l'échappe dans `mailLayout.ts` ;
-`configured` est faux sans SMTP, et `send` lève alors `conflict`),
+`configured` est faux sans SMTP, et `send` lève alors `conflict` ;
+`sendToAdmins(message)` écrit à chaque administrateur actif, pour ce que seul
+l'opérateur peut traiter, un signalement de contenu illicite par exemple),
 `domains` (`findByHost(host)` tous espaces confondus, `get(workspaceId, id)`,
 `listVerified(workspaceId)` : de quoi router une requête entrante par son nom
 d'hôte), `createTicker` (boucle avec garde de réentrance), `logger`. Un service peut

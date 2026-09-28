@@ -38,7 +38,10 @@ import type { ModuleServiceHost } from './service';
  */
 
 type Extra = Partial<
-    Pick<FeatureManifest, 'nativeCapabilities' | 'extraPermissions' | 'shareTier' | 'domains' | 'quotas'>
+    Pick<
+        FeatureManifest,
+        'nativeCapabilities' | 'extraPermissions' | 'shareTier' | 'hasItems' | 'itemNoun' | 'domains' | 'quotas'
+    >
 >;
 
 function manifest(id: FeatureId, extra: Extra = {}): FeatureManifest {
@@ -205,7 +208,10 @@ registerModules([
         server: external
     },
     { manifest: manifest('x-sdkbare'), server: { features: [] } },
-    { manifest: manifest('backup', { shareTier: 'open' }), server: movable as FeatureServer }
+    {
+        manifest: manifest('backup', { shareTier: 'open', hasItems: true, itemNoun: 'travail' }),
+        server: movable as FeatureServer
+    }
 ]);
 const services = createModuleServices(host);
 

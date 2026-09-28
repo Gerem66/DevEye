@@ -1,12 +1,11 @@
 import { useRef } from 'react';
-import { Button, formatBytesFr } from 'deveye-sdk-client';
+import { Button, Dropzone, formatBytesFr } from 'deveye-sdk-client';
 
 import { kindOf, sourceOf, type TargetFormat } from '../contracts/catalogue';
 import { outputDims } from '../contracts/estimate';
 import type { ConvertFamily } from '../contracts/domain';
 import type { Dims } from '../contracts/geometry';
 import { cropOf, num, sizeOf, type OptionValues } from '../contracts/options';
-import { Dropzone } from './Dropzone';
 import { formatDuration, KIND_NOUNS } from './format';
 import { Preview } from './Preview';
 import styles from './style.module.css';
@@ -55,11 +54,11 @@ export function FilePane({ wizard, family, target, values, sample, locked, resul
         return (
             <div className={styles.filePane}>
                 <Dropzone
-                    fill
+                    className={styles.dropzoneFill}
                     title={`Déposez ${KIND_NOUNS[state.kind]} ici`}
                     hint='ou cliquez pour choisir un fichier'
                     accept={accept}
-                    onFile={wizard.pickFile}
+                    onFiles={([picked]) => wizard.pickFile(picked.file)}
                 />
             </div>
         );

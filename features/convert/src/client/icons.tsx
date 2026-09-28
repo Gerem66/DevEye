@@ -5,7 +5,7 @@ import type { ReactElement } from 'react';
  * qu'à ce module. Au trait, en `currentColor` : la carte décide de la teinte.
  */
 
-export type PictoId = 'video' | 'audio' | 'image' | 'document' | 'currency' | 'units' | 'upload';
+export type PictoId = 'video' | 'audio' | 'image' | 'document' | 'currency' | 'units';
 
 const PATHS: Record<PictoId, ReactElement> = {
     video: (
@@ -45,12 +45,6 @@ const PATHS: Record<PictoId, ReactElement> = {
         <>
             <path d='M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.4 2.4 0 0 1 0-3.4l2.6-2.6a2.4 2.4 0 0 1 3.4 0z' />
             <path d='M14.5 12.5l2-2M11.5 9.5l2-2M8.5 6.5l2-2M17.5 15.5l2-2' />
-        </>
-    ),
-    upload: (
-        <>
-            <path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4' />
-            <path d='M17 8l-5-5-5 5M12 3v12' />
         </>
     )
 };

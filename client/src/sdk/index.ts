@@ -103,6 +103,19 @@ export { default as settingsStyles } from '@/Components/FeatureSettings/FeatureS
 export { CountWidget, useWorkspaceCount, type CountState } from '@/Components/CountWidget';
 /** Le glisser-déposer de réordonnancement, le seul geste de l'app pour ça. */
 export { useDragReorder } from '@/dragReorder';
+/** Les fichiers qui montent : choix, dépôt de dossiers entiers, envoi avec progression. */
+export { Dropzone, useFileDrop } from '@/Components/Dropzone';
+export {
+    filesOfDrop,
+    pickFiles,
+    saveFrom,
+    uploadFile,
+    UploadError,
+    type PickedFile,
+    type UploadHandle
+} from '@/upload';
+/** La jauge d'un quota dans l'en-tête d'une fonctionnalité. */
+export { UsageMeter } from '@/Components/UsageMeter';
 
 // ── Les données ────────────────────────────────────────────────────────────
 export { humanizeError, useResource } from '@/api/useResource';

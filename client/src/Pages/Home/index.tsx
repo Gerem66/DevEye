@@ -29,7 +29,7 @@ import { useResourceVersion } from '@/stores/invalidation';
 import { syncThemeFromServer } from '@/stores/theme';
 import { syncHomeLayoutFromServer } from '@/stores/homeLayout';
 import { useHomeLayout, findFolder, getHomeLayout, placedFeatureIds, pruneMissingDevices } from '@/stores/homeLayout';
-import { onOpenViewRequest, onSelectWorkspaceRequest } from '@/stores/viewRequest';
+import { onOpenViewRequest, onSelectWorkspaceRequest, requestOpenView } from '@/stores/viewRequest';
 import {
     ensureRemoteReady,
     getRemoteInstances,
@@ -40,9 +40,10 @@ import {
 } from '@/stores/remoteInstances';
 import { refreshSecrecyStatus, setUnlocked } from '@/stores/secrecy';
 import { accountViewFeature, accountViewId, openAccountView, takeAccountViewHint } from '@/stores/accountView';
+import { adminViewFeature, adminViewId } from '@/stores/adminView';
 import { takeSignupPlan } from '@/stores/signupPlan';
-import { accountEntries } from '@/sdk/registry';
-import type { AccountViewProps } from '@deveye/types/sdk/client';
+import { accountEntries, adminEntries } from '@/sdk/registry';
+import type { AccountViewProps, AdminViewProps } from '@deveye/types/sdk/client';
 import { useFeedbackEnabled } from '@/stores/feedbackEnabled';
 import {
     featureMaintenance,
@@ -134,11 +135,22 @@ function accountViewHost(featureId: string, View: ComponentType<AccountViewProps
     };
 }
 
+/**
+ * La page système d'un module. Le menu ne la montre qu'aux administrateurs ;
+ * ce garde couvre le reste des chemins qui ouvrent une vue.
+ */
+function adminViewHost(View: ComponentType<AdminViewProps>): ComponentType<FeatureProps> {
+    return function AdminViewHost({ user, closeFeature }) {
+        return user.role === 'admin' ? <View close={closeFeature} /> : null;
+    };
+}
+
 /** Les pages système du menu du compte, dans cet ordre ; leur titre et leur icône sont ceux de leur vue. */
 const ADMIN_VIEW_IDS = ['logs', 'feedback', 'users', 'maintenance', 'debug'] as const;
 
 function adminMenu(): { id: string; label: string; icon: string }[] {
-    return ADMIN_VIEW_IDS.map((id) => {
+    const ids = [...ADMIN_VIEW_IDS, ...adminEntries().map(({ manifest }) => adminViewId(manifest.id))];
+    return ids.map((id) => {
         const view = staticViews().find((v) => v.id === id)!;
         return { id, label: view.title, icon: view.icon };
     });
@@ -193,6 +205,14 @@ const buildStaticViews = (): ViewConfig[] => [
         cacheDurationMinutes: 0,
         hasCard: false,
         FullComponent: accountViewHost(manifest.id, client.AccountView!)
+    })),
+    ...adminEntries().map(({ manifest, client }) => ({
+        id: adminViewId(manifest.id),
+        title: manifest.adminEntry!.label,
+        icon: manifest.adminEntry!.icon ?? manifest.icon,
+        cacheDurationMinutes: 0,
+        hasCard: false,
+        FullComponent: adminViewHost(client.AdminView!)
     })),
     {
         id: 'logs',
@@ -258,9 +278,9 @@ function featureBehind(viewId: string): FeatureId | null {
     return null;
 }
 
-/** Le module derrière une vue, fonctionnalité ou entrée de compte : ce que ferme sa maintenance. */
+/** Le module derrière une vue, fonctionnalité, entrée de compte ou page système : ce que ferme sa maintenance. */
 function moduleBehind(viewId: string): string | null {
-    return featureBehind(viewId) ?? accountViewFeature(viewId);
+    return featureBehind(viewId) ?? accountViewFeature(viewId) ?? adminViewFeature(viewId);
 }
 
 /**
@@ -799,25 +819,34 @@ export default function HomePage() {
     // profile's link to the security page).
     useEffect(() => onOpenViewRequest((viewId) => handleExpand(viewId)), [handleExpand]);
 
-    // Deux arrivées ouvrent d'elles-mêmes une vue de compte : le retour d'un
-    // paiement (`?account=<module>`, dont le module lit le reste de l'URL) et la
-    // fin d'une inscription qui portait un indice (`/signup?plan=…`).
+    // Trois arrivées ouvrent d'elles-mêmes une vue : le retour d'un paiement
+    // (`?account=<module>`, dont le module lit le reste de l'URL), le lien d'un
+    // mail aux administrateurs vers la page système d'un module
+    // (`?admin=<module>`) et la fin d'une inscription qui portait un indice
+    // (`/signup?plan=…`).
     const arrivalHandled = useRef(false);
     useEffect(() => {
         if (arrivalHandled.current || switching) return;
         arrivalHandled.current = true;
         const url = new URL(window.location.href);
         const returning = url.searchParams.get('account');
+        const adminPage = url.searchParams.get('admin');
         const plan = takeSignupPlan();
         if (returning) {
             url.searchParams.delete('account');
             window.history.replaceState({}, '', url);
             if (accountEntries().some((m) => m.manifest.id === returning)) openAccountView(returning);
+        } else if (adminPage) {
+            url.searchParams.delete('admin');
+            window.history.replaceState({}, '', url);
+            if (isAdmin && adminEntries().some((m) => m.manifest.id === adminPage)) {
+                requestOpenView(adminViewId(adminPage));
+            }
         } else if (plan) {
             const target = accountEntries().find((m) => m.manifest.accountEntry?.signupHint);
             if (target) openAccountView(target.manifest.id, plan);
         }
-    }, [switching]);
+    }, [switching, isAdmin]);
 
     // Racine de l'arborescence de présence. Les niveaux plus profonds sont
     // déclarés par les features elles-mêmes, chacune ne connaissant que le sien.
@@ -880,8 +909,11 @@ export default function HomePage() {
         [hiddenFeatures]
     );
     const adminPages = useMemo(
-        () => (isAdmin ? adminMenu().filter((page) => page.id !== 'feedback' || feedbackEnabled) : []),
-        [isAdmin, feedbackEnabled]
+        () =>
+            isAdmin
+                ? adminMenu().filter((page) => (page.id !== 'feedback' || feedbackEnabled) && !isHiddenView(page.id))
+                : [],
+        [isAdmin, feedbackEnabled, isHiddenView]
     );
 
     const views = staticViews();

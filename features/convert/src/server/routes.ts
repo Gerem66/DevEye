@@ -1,7 +1,7 @@
 import { createReadStream, createWriteStream, promises as fs } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
 
-import type { FeatureServiceDeps, SdkPublicApp } from '@deveye/types/sdk/server';
+import { contentDisposition, type FeatureServiceDeps, type SdkPublicApp } from '@deveye/types/sdk/server';
 import { z } from 'zod';
 
 import { outputName, sourceOf, targetOf } from '../contracts/catalogue';
@@ -34,12 +34,6 @@ export type ConvertRouteDeps = Pick<
     FeatureServiceDeps<ConvertRepo>,
     'repo' | 'secrecy' | 'quotaFor' | 'live' | 'logger'
 >;
-
-/** `filename=` réduit à de l'ASCII sûr (un retour chariot ferait échouer la réponse), le vrai nom dans `filename*`. */
-export function contentDisposition(filename: string): string {
-    const ascii = filename.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '');
-    return `attachment; filename="${ascii.trim() || 'fichier'}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
-}
 
 async function redeem(deps: ConvertRouteDeps, query: unknown, purpose: ConvertTicket['purpose']) {
     const parsed = querySchema.safeParse(query);

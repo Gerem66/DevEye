@@ -7,7 +7,13 @@ import {
     type MailAccountRow,
     type MailSecurityTier
 } from '../contracts/domain';
-import type { FeatureServiceDeps, SdkCipher, SdkPublicApp, SdkRedeemedTicket } from '@deveye/types/sdk/server';
+import {
+    contentDisposition,
+    type FeatureServiceDeps,
+    type SdkCipher,
+    type SdkPublicApp,
+    type SdkRedeemedTicket
+} from '@deveye/types/sdk/server';
 
 import * as mailClient from './client';
 import type { MailOAuthCredentials } from './client';
@@ -85,18 +91,6 @@ function ticketAccountCipher(
 /** Le codec du palier qu'un consentement OAuth va créer, sous l'espace du ticket. */
 function ticketCipher(ticket: SdkRedeemedTicket, tier: MailSecurityTier): SdkCipher | null {
     return tier === 'open' ? ticket.cipher.server : ticket.cipher.private;
-}
-
-/**
- * `Content-Disposition` for a filename that came out of an untrusted email. The
- * plain `filename=` form is reduced to safe ASCII (a newline especially, which
- * Node rejects outright, turning a download into a 500); the real name rides in
- * the RFC 5987 `filename*` form, which browsers prefer when both are present.
- */
-export function contentDisposition(filename: string): string {
-    const ascii = filename.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '');
-    const fallback = ascii.trim() || 'fichier';
-    return `attachment; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
 }
 
 function escapeHtml(value: string): string {

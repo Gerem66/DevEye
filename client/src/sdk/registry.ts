@@ -71,6 +71,11 @@ export function cardModules(): readonly InstalledClientFeature[] {
     return MODULES.filter((m) => !m.manifest.accountOnly);
 }
 
+/** Les pages système que les modules ajoutent au menu, pour les administrateurs. */
+export function adminEntries(): readonly InstalledClientFeature[] {
+    return MODULES.filter((m) => m.manifest.adminEntry && m.client.AdminView);
+}
+
 /** Les entrées que les modules ajoutent au menu du compte, sous « Sécurité ». */
 export function accountEntries(): readonly InstalledClientFeature[] {
     return MODULES.filter((m) => m.manifest.accountEntry && m.client.AccountView);

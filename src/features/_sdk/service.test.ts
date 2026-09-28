@@ -109,6 +109,7 @@ function fakeHost() {
                         e2e_run: null
                     }
                 ],
+                listAdminIds: async () => [7, 11],
                 findByIds: async (ids: number[]) =>
                     [
                         { id: 7, username: 'alice', color: 'blue' },
@@ -435,6 +436,18 @@ describe('createServiceDeps : accountMail', () => {
         assert.equal(accountMail.configured, false);
         await assert.rejects(accountMail.send(7, message), { name: 'FeatureError', code: 'conflict' });
         assert.deepEqual(sent, []);
+    });
+
+    it("sendToAdmins : aux administrateurs actifs qu'on retrouve, sans SMTP : conflict", async () => {
+        const { host, sent, mailer } = fakeHost();
+        const { accountMail } = createServiceDeps(host, manifest(ID, ['accounts.mail']), null, NO_PROVIDERS, undefined);
+        assert.deepEqual(await accountMail.sendToAdmins(message), ['alice@exemple.fr']);
+        assert.deepEqual(
+            sent.map((m) => m.to),
+            ['alice@exemple.fr']
+        );
+        mailer.configured = false;
+        await assert.rejects(accountMail.sendToAdmins(message), { name: 'FeatureError', code: 'conflict' });
     });
 });
 

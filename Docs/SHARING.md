@@ -34,11 +34,11 @@ pas être projeté : ce n'est pas une prudence, c'est une impossibilité mécani
 
 Le registre porte la règle dans `shareTier` :
 
-|                                                                              | Partageable                                                                                      |
-| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `'open'` — Uptime, Bases, Déploiement, Git, Audience, Sauvegardes, Appareils | oui, sans condition                                                                              |
-| `'perItem'` — Notes, Mail, Projets                                           | selon la ligne : note ordinaire oui, note privée non ; compte mail « open » oui, « guarded » non |
-| `'never'` — Mots de passe, CloudSync, Météo, Finances, Sentinelle, OSINT     | non                                                                                              |
+|                                                                                           | Partageable                                                                                      |
+| ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `'open'` : Uptime, Bases, Déploiement, Git, Audience, Sauvegardes, Appareils, Hébergement | oui, sans condition                                                                              |
+| `'perItem'` : Notes, Mail, Projets                                                        | selon la ligne : note ordinaire oui, note privée non ; compte mail « open » oui, « guarded » non |
+| `'never'` : Mots de passe, CloudSync, Météo, Finances, Sentinelle, OSINT                  | non                                                                                              |
 
 Deux `never` méritent leur justification :
 
@@ -102,6 +102,7 @@ gestes :
 | Notes            | lire, éditer le corps, archiver, restaurer (chez elle, sous sa clé ; rangée à la racine, hors classement d'ici)                                                                           | classer (dossier, rang), passer en privée, détruire                                       |
 | Mail             | dossiers, lire, marquer, déplacer, envoyer, relever, renommer, cadence, pause                                                                                                             | supprimer le compte, changer de palier, identifiants et proxy, reconnexion OAuth          |
 | Appareils        | superviser, terminal, fichiers, logs, paquets, commandes système, ranger dans SA liste                                                                                                    | appairer, approuver, renommer, révoquer, régler la collecte, supprimer                    |
+| Hébergement      | parcourir, déposer (compté sur l'offre du domicile), renommer, déplacer, supprimer et télécharger des fichiers                                                                            | adresses, domaines, mot de passe, allure, nom et suppression du pack                      |
 | Projets          | tout l'arbre (colonnes, cartes, assignation parmi les membres d'ici, jalons, dépendances, discussion, historique), profil, statut, archivage, version manuelle ; liaisons lues et nommées | changer de palier, version suivie d'une release, relier / délier, classer le portefeuille |
 
 Le critère n'est pas le goût : un geste reste au domicile quand il **référence
@@ -346,17 +347,18 @@ déplacement : retirer une projection (`share.set`) ou supprimer l'élément
 
 ### Qui sait se déplacer, et pourquoi
 
-|                  | Ce que le déplacement emporte                       | Ce qu'il laisse                               |
-| ---------------- | --------------------------------------------------- | --------------------------------------------- |
-| Uptime           | le service, ses relevés, ses incidents              | rien                                          |
-| Notes            | la note                                             | son dossier, qui appartient à l'espace quitté |
-| Bases de données | la fiche, ses secrets, ses alertes                  | rien                                          |
-| Déploiement      | la cible et son historique                          | son jeton : elle arrive indéployable          |
-| Git              | le dépôt et tout son cache                          | son jeton : la synchronisation s'arrête       |
-| Audience         | le site, ses entonnoirs, ses libellés, son audience | rien (la clé publique ne bouge pas)           |
-| Appareils        | la ligne ; relevés et constats la suivent           | les exemptions Sentinelle, réglées par espace |
-| Mail             | le compte, ses dossiers, ses enveloppes             | un canal d'alerte d'ici qui expédiait par lui |
-| Projets          | tout l'arbre                                        | ses liaisons, dont les cibles restent         |
+|                  | Ce que le déplacement emporte                       | Ce qu'il laisse                                   |
+| ---------------- | --------------------------------------------------- | ------------------------------------------------- |
+| Uptime           | le service, ses relevés, ses incidents              | rien                                              |
+| Notes            | la note                                             | son dossier, qui appartient à l'espace quitté     |
+| Bases de données | la fiche, ses secrets, ses alertes                  | rien                                              |
+| Déploiement      | la cible et son historique                          | son jeton : elle arrive indéployable              |
+| Git              | le dépôt et tout son cache                          | son jeton : la synchronisation s'arrête           |
+| Audience         | le site, ses entonnoirs, ses libellés, son audience | rien (la clé publique ne bouge pas)               |
+| Appareils        | la ligne ; relevés et constats la suivent           | les exemptions Sentinelle, réglées par espace     |
+| Mail             | le compte, ses dossiers, ses enveloppes             | un canal d'alerte d'ici qui expédiait par lui     |
+| Projets          | tout l'arbre                                        | ses liaisons, dont les cibles restent             |
+| Hébergement      | le pack, ses fichiers et ses adresses               | leur domaine : elles reviennent à celle de DevEye |
 
 Un jeton mis à `NULL` n'est pas une avarie : les deux features savaient déjà dire
 « sans jeton », et en rattacher un est un geste du propriétaire, pas un effet de
@@ -366,7 +368,10 @@ bord d'un déplacement.
 peut pas exister sans destination (`destination_id` NOT NULL), et destination
 comme source sont des objets de l'espace qu'il quitterait. On ne peut même pas le
 laisser sans destination le temps d'en choisir une. Mots de passe, CloudSync,
-Finances et les features sans éléments ne sont pas concernées.
+Finances et les features sans éléments ne sont pas concernées. Hébergement se
+déplace et se partage, mais **ne se copie pas** : ses fichiers, scellés par une
+clé du serveur qui ne dépend d'aucun espace, ne bougent pas quand le pack change
+d'espace, et une copie devrait dupliquer des gigaoctets dans la transaction.
 
 Le refus par élément vit dans `plan` : un nom déjà pris là-bas (Bases, Audience),
 un dépôt déjà suivi, une empreinte déjà appairée. Il s'affiche au lieu de tomber

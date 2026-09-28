@@ -63,6 +63,7 @@ services:
       - ${BACKUP_STORAGE_ROOT:-./backup-data}:/data/backups
       - ${MAILSERVER_STORAGE_ROOT:-./mailserver-data}:/data/mailserver
       - ${CONVERT_STORAGE_ROOT:-./convert-data}:/data/convert
+      - ${HOSTING_STORAGE_ROOT:-./hosting-data}:/data/hosting
     ports:
       - '${LISTEN_PORT:-3000}:${LISTEN_PORT:-3000}'
       # Le serveur mail ne passe pas par le proxy HTTP. Pour le mettre en

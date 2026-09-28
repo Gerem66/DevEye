@@ -7,9 +7,13 @@ import {
     humanizeError,
     invalidate,
     onServerEvent,
+    saveFrom,
+    UploadError,
+    uploadFile,
     useResource,
     useSubView,
-    useWorkspacePermissions
+    useWorkspacePermissions,
+    type UploadHandle
 } from 'deveye-sdk-client';
 import type { FeatureViewProps } from '@deveye/types/sdk/client';
 
@@ -37,7 +41,6 @@ import { KindStep } from './steps/KindStep';
 import { OptionsStep } from './steps/OptionsStep';
 import styles from './style.module.css';
 import { Units } from './Units';
-import { saveFrom, UploadError, uploadFile, type UploadHandle } from './upload';
 import { useEstimate } from './useEstimate';
 import { useWizard } from './useWizard';
 
