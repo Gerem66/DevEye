@@ -74,7 +74,8 @@ function s3ObjectStore(s3: S3Client, featureId: string, spool: string): SdkObjec
             assertObjectKey(prefix.slice(0, -1));
             await s3.deletePrefix(base + prefix);
         },
-        spoolDir: () => spool
+        spoolDir: () => spool,
+        ephemeralRoot: () => Promise.resolve(null)
     };
 }
 

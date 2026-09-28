@@ -15,12 +15,53 @@ const PART_SUFFIX = '.deveye-part';
 const isMissing = (e: unknown): boolean => (e as NodeJS.ErrnoException).code === 'ENOENT';
 
 /**
+ * Le point de montage qui porte ce chemin : le montage le plus profond qui le
+ * préfixe, sur des frontières de segment (`/data/cloudsync-old` n'est pas dans
+ * `/data/cloudsync`).
+ */
+export function mountPointFor(resolved: string, points: readonly string[]): string {
+    let best = '';
+    for (const point of points) {
+        const inside = resolved === point || resolved.startsWith(point === '/' ? '/' : `${point}/`);
+        if (inside && point.length > best.length) best = point;
+    }
+    return best === '' ? '/' : best;
+}
+
+/**
+ * Le chemin est-il sur la couche d'écriture d'un conteneur ? Hors volume monté,
+ * un dossier y vit, invisible depuis l'hôte et effacé au redéploiement. Hors
+ * conteneur, ou sans `/proc` pour en juger, rien n'est refusé.
+ */
+async function isEphemeralContainerPath(resolved: string): Promise<boolean> {
+    const containerized = await fs
+        .access('/.dockerenv')
+        .then(() => true)
+        .catch(() => false);
+    if (!containerized) return false;
+    let mountinfo: string;
+    try {
+        mountinfo = await fs.readFile('/proc/self/mountinfo', 'utf8');
+    } catch {
+        return false;
+    }
+    // Format : id parent maj:min racine POINT_DE_MONTAGE options...
+    const points = mountinfo
+        .split('\n')
+        .map((line) => line.split(' ')[4])
+        .filter((point): point is string => point !== undefined && point.startsWith('/'));
+    return mountPointFor(resolved, points) === '/';
+}
+
+/**
  * Le magasin sur le disque du serveur : une clé est un chemin sous `root`.
  * Chaque écriture passe par un fichier voisin puis un `rename`, atomique sur
  * un même système de fichiers : un lecteur voit l'objet entier ou rien.
  */
 export function localObjectStore(root: string): SdkObjectStore {
     const base = path.resolve(root);
+    // Les montages ne changent pas sous un processus : jugé une fois.
+    let ephemeral: Promise<string | null> | null = null;
 
     const resolve = (key: string): string => {
         assertObjectKey(key);
@@ -114,6 +155,10 @@ export function localObjectStore(root: string): SdkObjectStore {
             if (!prefix.endsWith('/')) throw new Error(`Préfixe sans « / » final : « ${prefix} »`);
             await fs.rm(resolve(prefix.slice(0, -1)), { recursive: true, force: true });
         },
-        spoolDir: () => path.join(base, SPOOL_DIR)
+        spoolDir: () => path.join(base, SPOOL_DIR),
+        ephemeralRoot() {
+            ephemeral ??= isEphemeralContainerPath(base).then((yes) => (yes ? base : null));
+            return ephemeral;
+        }
     };
 }

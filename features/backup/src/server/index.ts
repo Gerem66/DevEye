@@ -9,6 +9,7 @@ import { createRepo, type BackupRepo } from './repo';
 import { BackupEngine } from './service';
 import { setEngine } from './_shared';
 import { BACKUP_ENV, env } from './env';
+import { hostedStorageProblem } from './sinks';
 
 /** Le magasin des destinations « sur le serveur », connu une fois le service créé. */
 let hosted: SdkObjectStore | null = null;
@@ -30,12 +31,17 @@ export const serverEntry: FeatureServer<BackupRepo> = {
         return hosted;
     }),
     createService(deps) {
-        hosted = deps.objects(env.BACKUP_STORAGE_DIR);
+        const store = deps.objects(env.BACKUP_STORAGE_DIR);
+        hosted = store;
         const engine = new BackupEngine(deps);
         return {
             start() {
                 setEngine(engine);
                 engine.start();
+                // Dit au démarrage ce que chaque sauvegarde « sur le serveur » refusera.
+                void hostedStorageProblem(store).then((problem) => {
+                    if (problem !== null) deps.logger.error({ dir: env.BACKUP_STORAGE_DIR }, problem);
+                });
             },
             stop() {
                 engine.stop();

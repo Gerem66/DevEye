@@ -45,7 +45,10 @@ En conteneur, la paire hôte/conteneur suit exactement celle de CloudSync :
 `BACKUP_STORAGE_ROOT` est le dossier de l'hôte (source du montage),
 `BACKUP_STORAGE_DIR` ce même dossier vu par le serveur. Les confondre revient à
 écrire dans la couche d'écriture du conteneur, donc à perdre les archives au
-redéploiement suivant.
+redéploiement suivant : c'est refusé. Sur une racine qu'aucun volume ne porte
+(`objects.ephemeralRoot()`), le contrôle de la destination échoue, chaque
+exécution aussi, avec la phrase qui nomme `BACKUP_STORAGE_DIR`, et le démarrage
+l'écrit au journal.
 
 ### `device` : un dossier d'une machine enrôlée
 

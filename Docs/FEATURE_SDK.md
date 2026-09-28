@@ -687,8 +687,9 @@ chaque appel), `keys` (`sealBytes`/`openBytes` sous la clé serveur,
 `Services/objectStorage`, pour les fichiers qu'un module garde pour ses membres ;
 sur le disque sous `localDir`, ou dans le bucket `STORAGE_S3_*` sous
 `<préfixe>/<module>/` ; la base ne garde que la clé relative, jamais l'endroit où
-elle se résout, et `spoolDir()` reste sur le disque pour ce qui ne s'écrit pas
-d'un bloc, comme un envoi repris),
+elle se résout, `spoolDir()` reste sur le disque pour ce qui ne s'écrit pas
+d'un bloc, comme un envoi repris, et `ephemeralRoot()` dit une racine sur aucun
+volume monté, que le module refuse en nommant sa variable),
 `secrecy.redeem(ticket)` (le ticket d'un module rendu en `{ userId,
 workspaceId, payload, cipher: { server, private | null } }`), `origins`,
 `accounts` (capacité `accounts.read` : `find`, `findByEmail`, `list`, `search`, `all` ;

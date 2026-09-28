@@ -48,6 +48,22 @@ export function safeRelPath(input: string): string {
 }
 
 /**
+ * Ce qui empêche le serveur de garder des archives, ou `null` : sa racine sur
+ * aucun volume monté (`BACKUP_STORAGE_DIR` qui ne vise pas la cible du
+ * montage), où elles disparaîtraient au prochain redéploiement sans un mot.
+ */
+export async function hostedStorageProblem(store: SdkObjectStore): Promise<string | null> {
+    const root = await store.ephemeralRoot();
+    if (root === null) return null;
+    return (
+        `Le stockage du serveur n'est pas utilisable : « ${root} » n'est sur aucun volume monté, les archives ` +
+        'y vivraient dans le conteneur et disparaîtraient au prochain redéploiement. À corriger par ' +
+        "l'administrateur du serveur : BACKUP_STORAGE_DIR doit désigner la cible du montage des sauvegardes " +
+        "(`/data/backups` par défaut), le dossier de l'hôte se réglant avec BACKUP_STORAGE_ROOT."
+    );
+}
+
+/**
  * « Sur le serveur » : le magasin d'objets de l'hôte, son disque ou son bucket
  * S3, cloisonné par espace (`ws-<id>/`). L'artefact enregistré est la clé
  * relative, jamais l'endroit où elle se résout : l'arbre se recopie ailleurs
@@ -70,6 +86,8 @@ export class HostedSink implements BackupSink {
     }
 
     async write(name: string, source: AsyncIterable<Buffer>): Promise<{ artifact: string; size: number }> {
+        const problem = await hostedStorageProblem(this.store);
+        if (problem !== null) throw new Error(problem);
         const key = `${this.prefix}${name}`;
         const { size } = await this.store.put(key, source);
         return { artifact: key, size };
@@ -86,6 +104,8 @@ export class HostedSink implements BackupSink {
 
     async probe(): Promise<BackupDestinationProbe> {
         try {
+            const problem = await hostedStorageProblem(this.store);
+            if (problem !== null) throw new Error(problem);
             const witness = `${this.prefix}.deveye-write-test-${crypto.randomBytes(6).toString('hex')}`;
             await this.store.put(witness, Buffer.from('deveye'));
             let readBack = 0;

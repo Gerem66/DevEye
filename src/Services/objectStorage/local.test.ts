@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 
-import { localObjectStore } from './local';
+import { localObjectStore, mountPointFor } from './local';
 
 /**
  * Le magasin sur disque est celui de toute installation sans bucket : une clé
@@ -81,5 +81,40 @@ describe('le magasin sur disque', () => {
             await assert.rejects(store.put(key, Buffer.from('x')), /invalide/, key);
         }
         await assert.rejects(store.deletePrefix('sans-barre'), /Préfixe/);
+    });
+
+    it('ne se dit pas éphémère hors conteneur', async () => {
+        assert.equal(await localObjectStore(path.join(root, 'ici')).ephemeralRoot(), null);
+    });
+});
+
+/**
+ * Un sous-dossier est porté par le montage du dessus ; seul ce qui retombe sur
+ * `/` vit sur la couche d'écriture du conteneur.
+ */
+describe('mountPointFor', () => {
+    /** Une liste de points de montage typique d'un conteneur applicatif. */
+    const CONTAINER = ['/', '/proc', '/dev', '/sys', '/etc/hosts', '/data/cloudsync', '/data/backups'];
+
+    it('rattache un sous-dossier au volume qui le porte', () => {
+        assert.equal(mountPointFor('/data/cloudsync/documents', CONTAINER), '/data/cloudsync');
+        assert.equal(mountPointFor('/data/cloudsync/a/b/c', CONTAINER), '/data/cloudsync');
+        assert.equal(mountPointFor('/data/backups', CONTAINER), '/data/backups');
+    });
+
+    it('retombe sur la racine pour un chemin hors volume', () => {
+        // Le chemin de l'hôte saisi comme chemin conteneur, ou une lettre de trop.
+        assert.equal(mountPointFor('/srv/DevEye-CloudSync/documents', CONTAINER), '/');
+        assert.equal(mountPointFor('/data/backup', CONTAINER), '/');
+    });
+
+    it('ne confond pas un préfixe de nom avec un préfixe de chemin', () => {
+        assert.equal(mountPointFor('/data/cloudsync-old/x', CONTAINER), '/');
+    });
+
+    it('retient le montage le plus profond', () => {
+        const nested = ['/', '/data', '/data/cloudsync'];
+        assert.equal(mountPointFor('/data/cloudsync/x', nested), '/data/cloudsync');
+        assert.equal(mountPointFor('/data/autre/x', nested), '/data');
     });
 });
