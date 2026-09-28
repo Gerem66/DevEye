@@ -589,7 +589,7 @@ describe('le partage entre accès et espaces', () => {
     });
 
     it('sert les espaces à tour de rôle', async () => {
-        const crowded = Array.from({ length: 8 }, (_, i) =>
+        const crowded = Array.from({ length: 20 }, (_, i) =>
             target({ id: i + 1, credential_id: 100 + i, synced_at: null })
         );
         const repo = fakeRepo(
@@ -602,8 +602,8 @@ describe('le partage entre accès et espaces', () => {
         const { sync, calls, beat } = syncByInstance(repo);
         await beat();
         await sync.idle();
-        // Six places, huit cibles d'un espace devant : celle de l'autre espace passe quand même.
-        assert.equal(calls.length, 6);
+        // Seize places, vingt cibles d'un espace devant : celle de l'autre espace passe quand même.
+        assert.equal(calls.length, 16);
         assert.ok(calls.includes('https://seul.fr#app-1'));
     });
 

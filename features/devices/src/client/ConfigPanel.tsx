@@ -21,15 +21,33 @@ const PLAN_DEFAULT = '__plan__';
 const METRIC_PRESETS = [10, 30, 60, 300]; // seconds
 const RET_PRESETS = [7, 30, 90, 365]; // days
 
+/** Mesuré : une liste gzip d'environ 580 programmes, puis ses 20 premiers. */
+const FULL_SAMPLE_BYTES = 4800;
+const TOP_SAMPLE_BYTES = 900;
+/** Le serveur réduit au top les listes complètes de plus de deux jours (`service.ts`). */
+const FULL_LIST_DAYS = 2;
+
 /**
- * Rough daily storage per device at a given cadence, visible before saving.
- * Based on the measured size of a gzipped process list (~4.8 KB for ~580
- * programs); `top` carries ~20 entries.
+ * Rough storage per device at a given cadence, visible before saving: what a
+ * day costs, and what the whole retention holds once the lists older than two
+ * days are cut down to their top.
  */
-function estimateDailyBytes(intervalSec: number, capture: ProcessCapture): number {
-    if (capture === 'off') return 0;
-    const perSample = capture === 'top' ? 900 : 4800;
-    return (86400 / intervalSec) * perSample;
+function estimateBytes(
+    intervalSec: number,
+    capture: ProcessCapture,
+    days: number
+): { daily: number; retained: number } {
+    if (capture === 'off') return { daily: 0, retained: 0 };
+    const samplesPerDay = 86400 / intervalSec;
+    if (capture === 'top') {
+        const daily = samplesPerDay * TOP_SAMPLE_BYTES;
+        return { daily, retained: daily * days };
+    }
+    const fullDays = Math.min(days, FULL_LIST_DAYS);
+    return {
+        daily: samplesPerDay * FULL_SAMPLE_BYTES,
+        retained: samplesPerDay * (fullDays * FULL_SAMPLE_BYTES + (days - fullDays) * TOP_SAMPLE_BYTES)
+    };
 }
 
 function formatBytes(bytes: number): string {
@@ -92,7 +110,7 @@ export function ConfigPanel({ deviceId, canWrite }: { deviceId: string; canWrite
         device?.effectiveMetricIntervalSeconds ??
         60;
     const estimateDays = resolve(retSel, retCustom) ?? DEFAULT_RETENTION_DAYS;
-    const dailyBytes = estimateDailyBytes(estimateSec, capture);
+    const estimate = estimateBytes(estimateSec, capture, estimateDays);
 
     const save = async (target: Device) => {
         const planDefault = metricSel === PLAN_DEFAULT;
@@ -159,7 +177,9 @@ export function ConfigPanel({ deviceId, canWrite }: { deviceId: string; canWrite
                     hint={
                         capture === 'off'
                             ? 'Aucun historique de processus enregistré.'
-                            : `≈ ${formatBytes(dailyBytes)} par jour, soit ~${formatBytes(dailyBytes * estimateDays)} conservés par appareil.`
+                            : capture === 'all' && estimateDays > FULL_LIST_DAYS
+                              ? `≈ ${formatBytes(estimate.daily)} par jour. Au-delà de deux jours, seul le top 20 d’un relevé est gardé : ~${formatBytes(estimate.retained)} conservés par appareil.`
+                              : `≈ ${formatBytes(estimate.daily)} par jour, soit ~${formatBytes(estimate.retained)} conservés par appareil.`
                     }
                 >
                     <SelectInput

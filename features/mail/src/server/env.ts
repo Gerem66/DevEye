@@ -10,8 +10,8 @@ export const MAIL_ENV = defineModuleEnv({
      * (synchronisés à la demande, pendant une session déverrouillée).
      */
     MAIL_SYNC_TICK_SECONDS: { kind: 'int', default: 120 },
-    /** Combien de boîtes se relèvent de front à chaque tour. */
-    MAIL_SYNC_CONCURRENCY: { kind: 'int', default: 4 },
+    /** Combien de boîtes se relèvent à la fois. Quatre fois autant sont prises par tour. */
+    MAIL_SYNC_CONCURRENCY: { kind: 'int', default: 8 },
     /**
      * Échéance au-delà de laquelle la relève d'un compte est abandonnée. Large,
      * parce qu'une première synchro parcourt tous les dossiers d'une boîte : elle

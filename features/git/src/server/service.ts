@@ -28,10 +28,15 @@ import { readJson } from './_shared';
  */
 
 /** Cadence de l'ordonnanceur. */
-const TICK_SECONDS = 120;
+const TICK_SECONDS = 30;
 
-/** Dépôts traités par tour : borne la rafale d'appels au fournisseur. */
-const BATCH = 3;
+/**
+ * Dépôts traités par tour, en même temps. Chacun interroge GitHub avec le jeton
+ * de son propriétaire, qui a son propre quota : ce qui est borné ici, c'est ce
+ * que le serveur fait en même temps (connexions à la base, déchiffrement), soit
+ * vingt dépôts par minute, deux cents à la cadence de dix minutes.
+ */
+const BATCH = 10;
 
 /** Délai minimal entre deux synchronisations d'un même dépôt. */
 const MIN_INTERVAL_SECONDS = 600;

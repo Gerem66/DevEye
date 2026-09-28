@@ -56,9 +56,16 @@ export type UptimeStatus = z.infer<typeof uptimeStatusSchema>;
 /**
  * How long a service keeps its **raw** per-ping rows. The daily rollup is never
  * pruned, so uptime ratios stay readable years back whatever this is set to.
- * `null` = keep every ping forever (the default).
+ * `null` = keep every ping forever.
  */
 export const uptimeRetentionSchema = z.number().int().positive().max(3650).nullable();
+
+/**
+ * What a new service keeps of its raw pings, in days. The raw rows are the
+ * bulk of what the app writes, and the daily rollup already carries the long
+ * history: three months of detail, then the day by day.
+ */
+export const UPTIME_DEFAULT_RETENTION_DAYS = 90;
 
 /** Window a chart or a ratio is computed over. */
 export const uptimeRangeSchema = z.enum(['24h', '7d', '30d', '90d', '1y', 'all']);

@@ -1,5 +1,5 @@
 import type { DatabaseProbe, DatabaseRow } from '../contracts/domain';
-import type { FeatureService, FeatureServiceDeps } from '@deveye/types/sdk/server';
+import { mapLimit, type FeatureService, type FeatureServiceDeps } from '@deveye/types/sdk/server';
 
 import { explainError, openSession, type EngineTarget, type Session } from './engine';
 import { buildNotice } from './notice';
@@ -18,8 +18,9 @@ import { PLAN_PAUSED_MESSAGE, readJson, type StoredAccess, type StoredAlert, typ
 /** Cadence de l'ordonnanceur ; la cadence par base est sa propre colonne. */
 const TICK_SECONDS = 30;
 
-/** Bases relevées par tour : borne la rafale de connexions sortantes. */
-const BATCH = 4;
+/** Bases relevées par tour, et connexions sortantes ouvertes à la fois. */
+const BATCH = 16;
+const CONCURRENCY = 6;
 
 /** La couture de test : l'ouverture de session, injectable ; rien d'autre ne se simule. */
 export interface DatabaseEngine {
@@ -51,7 +52,7 @@ export class DatabaseMonitor {
         try {
             const now = Math.floor(Date.now() / 1000);
             const due = await this.deps.repo.listDue(now, BATCH, this.deps.pauses.paused('connections').map(Number));
-            await Promise.all(due.map((row) => this.checkNow(row.id, row.workspace_id)));
+            await mapLimit(due, CONCURRENCY, (row) => this.checkNow(row.id, row.workspace_id));
         } catch (e) {
             this.deps.logger.error({ err: e }, 'Database monitor: tick failed');
         }

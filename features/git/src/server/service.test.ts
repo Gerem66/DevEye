@@ -421,7 +421,7 @@ describe('un premier tour', () => {
         const { deps, sync, versions, windows, compared, tick } = syncWith(store, remote);
         assert.deepEqual(
             deps.recorded.tickers.map((t) => t.intervalMs),
-            [120_000]
+            [30_000]
         );
         const before = NOW();
         await tick();

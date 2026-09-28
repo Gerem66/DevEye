@@ -1,4 +1,4 @@
-import type { FeatureService, FeatureServiceDeps } from '@deveye/types/sdk/server';
+import { mapLimit, type FeatureService, type FeatureServiceDeps } from '@deveye/types/sdk/server';
 
 import * as mailClient from './client';
 import { MAIL_SYNC_PROGRESS_EVENT, type MailSyncProgress } from '../contracts/domain';
@@ -100,9 +100,7 @@ export class MailSync {
                 env.MAIL_SYNC_CONCURRENCY * 4,
                 this.deps.pauses.paused('accounts').map(Number)
             );
-            for (let i = 0; i < due.length; i += env.MAIL_SYNC_CONCURRENCY) {
-                await Promise.all(due.slice(i, i + env.MAIL_SYNC_CONCURRENCY).map((row) => this.syncOne(row.id)));
-            }
+            await mapLimit(due, env.MAIL_SYNC_CONCURRENCY, (row) => this.syncOne(row.id));
         } catch (e) {
             this.deps.logger.error({ err: e instanceof Error ? e.message : String(e) }, 'Mail sync tick failed');
         }

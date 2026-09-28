@@ -367,6 +367,10 @@ function fakeRepo(deviceRows: DeviceRow[], shares: Record<string, number[]> = {}
             async pruneByRetention(defaultDays) {
                 calls.push(`samples.prune:${defaultDays}`);
                 return 0;
+            },
+            async thinBefore() {
+                calls.push('samples.thin');
+                return 0;
             }
         }
     };

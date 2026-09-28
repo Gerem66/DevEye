@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Button, Checkbox, Dialog, DialogCancelButton, SegmentedControl, TextInput } from 'deveye-sdk-client';
-import type { UptimeKind, UptimeMethod, UptimeService } from '../contracts/domain';
+import {
+    UPTIME_DEFAULT_RETENTION_DAYS,
+    type UptimeKind,
+    type UptimeMethod,
+    type UptimeService
+} from '../contracts/domain';
 
 import { KIND_OPTIONS, parsePaths } from './kinds';
 
@@ -50,7 +55,7 @@ const DEFAULTS: ServiceIdentity = {
 const TUNING_DEFAULTS: Omit<ServiceTuning, 'intervalSeconds'> = {
     timeoutSeconds: 10,
     failureThreshold: 2,
-    retentionDays: null
+    retentionDays: UPTIME_DEFAULT_RETENTION_DAYS
 };
 
 /**

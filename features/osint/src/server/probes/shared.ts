@@ -237,21 +237,6 @@ export async function runProbe(adapter: OsintProbeAdapter, ctx: OsintProbeContex
 
 /* -------------------------------- Utilitaires ----------------------------- */
 
-/** Exécute `fn` sur chaque élément, `limit` en vol au plus. Préserve l'ordre. */
-export async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
-    const out = new Array<R>(items.length);
-    let next = 0;
-    const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-        for (;;) {
-            const i = next++;
-            if (i >= items.length) return;
-            out[i] = await fn(items[i]);
-        }
-    });
-    await Promise.all(workers);
-    return out;
-}
-
 /** Les mots d'un nom, sans accents ni casse : `Hélène DE LA TOUR-MARTIN` → `helene de la tour martin`. */
 export function nameTokens(name: string): string[] {
     return name

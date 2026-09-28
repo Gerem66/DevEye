@@ -15,6 +15,7 @@ import {
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import {
+    UPTIME_DEFAULT_RETENTION_DAYS,
     UPTIME_INTEGRITY_INTERVAL_MIN,
     UPTIME_THRESHOLD_MAX,
     UPTIME_TIMEOUT_MAX,
@@ -45,13 +46,13 @@ const INTERVALS: { value: number; label: string }[] = [
  * jamais élagué : une rétention courte ne coûte que le détail ping par ping.
  */
 const RETENTIONS: { value: number | null; label: string }[] = [
-    { value: null, label: 'Tout garder (par défaut)' },
     { value: 7, label: '7 jours' },
     { value: 30, label: '30 jours' },
-    { value: 90, label: '90 jours' },
+    { value: UPTIME_DEFAULT_RETENTION_DAYS, label: '90 jours (par défaut)' },
     { value: 365, label: '1 an' },
     { value: 730, label: '2 ans' },
-    { value: 1825, label: '5 ans' }
+    { value: 1825, label: '5 ans' },
+    { value: null, label: 'Tout garder' }
 ];
 
 /** Tout ce qu'`uptime.update` prend : l'identité du service et ses réglages fins. */

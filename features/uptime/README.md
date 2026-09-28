@@ -42,7 +42,8 @@ par `ctx.items.restrictions()` / `ctx.items.assert()` (les restrictions par
 Chaque service est une URL et une cadence. Un ordonnanceur unique
 (`features/uptime/src/server/service.ts`, le service de fond du module) se
 réveille toutes les `UPTIME_TICK_SECONDS`, réclame les services dont la
-prochaine sonde est due et les exécute `UPTIME_CONCURRENCY` à la fois (des
+prochaine sonde est due (huit par place) et les exécute en pool,
+`UPTIME_CONCURRENCY` en vol à la fois, une sonde lente n'occupant que sa place (des
 variables lues par le module lui-même dans `src/server/env.ts`, pas par
 `Utils/Env`, et nommées au démarrage si elles restent à leur défaut).
 Il tourne **sans session ni mot de passe** : voir

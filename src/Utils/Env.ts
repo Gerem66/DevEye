@@ -35,7 +35,10 @@ export const env = {
     DB_DATABASE: getEnvVar('DB_DATABASE', 'string'),
     DB_USERNAME: getEnvVar('DB_USERNAME', 'string'),
     DB_PASSWORD: getEnvVar('DB_PASSWORD', 'string'),
-    DB_POOL_MAX: getEnvVar('DB_POOL_MAX', 'number', false) || 10,
+    // Partagé par les requêtes, les agents et toutes les tâches de fond, qui
+    // travaillent en parallèle : sous 20, elles font la queue derrière un tour
+    // d'Uptime ou de Git. MySQL en permet 151 par défaut.
+    DB_POOL_MAX: getEnvVar('DB_POOL_MAX', 'number', false) || 20,
 
     // Clé serveur : deux chaînes aléatoires distinctes, combinées par HKDF
     // (`Services/Encryption.ts`). Longueur vérifiée au boot, plus bas.

@@ -44,7 +44,7 @@ import { providerTargetOf, readJson, type StoredDeployment, type StoredTarget } 
  * place et ne retarde jamais les cibles d'une autre ; un espace à quarante
  * cibles ne produit pas quarante requêtes d'un coup.
  */
-const DEPLOY_CONCURRENCY = 6;
+const DEPLOY_CONCURRENCY = 16;
 
 /**
  * Délai d'une lecture de fond. Plus court que celui d'un geste : une instance

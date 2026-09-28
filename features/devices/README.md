@@ -178,6 +178,12 @@ n'agrège les processus par nom à travers le temps** : `nearest`, `snapshotTime
 `storage`, `deleteRange`, `setInstantsPinned`, `pruneByRetention` travaillent
 toutes sur `ts`.
 
+Au-delà de deux jours, le balayage horaire réduit une liste complète à ses 20
+premières lignes (`thinBefore`, `kind` passe à `top`), les instants épinglés
+exceptés : l'agent classe sa liste par CPU + part de mémoire, donc ce sont les 20
+qu'il aurait envoyés en capture « top ». Un instant passe d'environ 4,8 Ko à
+0,9 Ko : 30 jours à 60 s pèsent ~50 Mo par appareil au lieu de ~210.
+
 ## Invariants / points forts à préserver
 
 Ces choix sont volontaires ; les conserver garde la feature **stable et

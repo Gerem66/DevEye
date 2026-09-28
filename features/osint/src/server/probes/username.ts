@@ -1,6 +1,8 @@
 // Le garde SSRF est celui de l'app, partagé, pas propre au module.
 import { BROWSER_UA } from '@/Services/netFetch';
-import { field, mapLimit, tag, type OsintProbeAdapter, type OsintLink } from './shared';
+import { mapLimit } from '@deveye/types/sdk/server';
+
+import { field, tag, type OsintProbeAdapter, type OsintLink } from './shared';
 
 /**
  * Existence d'un pseudo sur une liste courte de sites vérifiés : l'approche

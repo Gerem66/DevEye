@@ -32,9 +32,10 @@ export function MonitoringInfo() {
                 Ces réglages (intervalle, processus capturés : <i>tous / top 20 / désactivé</i>, durée de conservation)
                 se règlent <b>par appareil</b> depuis l&apos;icône <span className='icon icon-settings' /> de ce
                 panneau, et sont appliqués en direct. La conservation est <b>unique</b> : mesures, présence et processus
-                d&apos;un même instant expirent ensemble. L&apos;icône <span className='icon icon-cpu' /> ouvre la fiche{' '}
-                <b>Matériel &amp; agent</b> : détail complet du matériel de la machine (CPU, RAM, GPU, réseau,
-                Bluetooth, disques) et identité de l&apos;agent.
+                d&apos;un même instant expirent ensemble. Au-delà de deux jours, un relevé ne garde que ses{' '}
+                <b>20 processus les plus actifs</b> (CPU et mémoire), sauf s&apos;il est épinglé. L&apos;icône{' '}
+                <span className='icon icon-cpu' /> ouvre la fiche <b>Matériel &amp; agent</b> : détail complet du
+                matériel de la machine (CPU, RAM, GPU, réseau, Bluetooth, disques) et identité de l&apos;agent.
             </p>
             <h4>Remonter le temps</h4>
             <p>La frise montre les périodes en ligne/hors ligne. Choisissez un jour avec les flèches, puis :</p>

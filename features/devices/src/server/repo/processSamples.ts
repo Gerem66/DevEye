@@ -1,10 +1,11 @@
-import { gunzip } from 'node:zlib';
+import { gunzip, gzip } from 'node:zlib';
 import { promisify } from 'node:util';
 
 import { reportProcessSchema, type ProcessKind, type ProcessSample, type ReportProcess } from '@deveye/types';
 import type { SdkQueryable } from '@deveye/types/sdk/server';
 
 const gunzipAsync = promisify(gunzip);
+const gzipAsync = promisify(gzip);
 
 /**
  * Don't return a process sample further than this from the requested instant:
@@ -57,6 +58,12 @@ export interface ProcessSampleRepo {
     ): Promise<{ snapshots: number }>;
     /** Delete samples past each device's retention (NULL → default); skips pinned. */
     pruneByRetention(defaultDays: number): Promise<number>;
+    /**
+     * Cut unpinned full lists older than `before` (ms) down to their first
+     * `keep` entries, oldest first, at most `limit` instants. Returns how many
+     * were cut: fewer than `limit` means none is left.
+     */
+    thinBefore(before: number, keep: number, limit: number): Promise<number>;
 }
 
 export function processSampleRepo(q: SdkQueryable): ProcessSampleRepo {
@@ -163,6 +170,45 @@ export function processSampleRepo(q: SdkQueryable): ProcessSampleRepo {
                 [defaultDays]
             );
             return r.affectedRows;
+        },
+        async thinBefore(before, keep, limit) {
+            const rows = await q.query<{ device_id: string; ts: number; payload: Buffer }>(
+                `SELECT device_id, ts, payload FROM device_process_samples
+                 WHERE kind = 'all' AND pinned = 0 AND ts < ?
+                 ORDER BY ts ASC
+                 LIMIT ${Math.max(1, Math.floor(limit))}`,
+                [before]
+            );
+            for (const row of rows) {
+                // L'agent envoie sa liste classée par CPU + part de mémoire, et
+                // l'ingestion la garde dans cet ordre : ses premières lignes sont
+                // exactement le top qu'il aurait envoyé. Un blob illisible le
+                // reste, marqué pour ne pas être relu à chaque passe.
+                let top: unknown[] | null = null;
+                try {
+                    const all = JSON.parse((await gunzipAsync(row.payload)).toString('utf8')) as unknown;
+                    if (Array.isArray(all)) top = all.slice(0, keep);
+                } catch {
+                    top = null;
+                }
+                if (top === null) {
+                    await q.execute(
+                        `UPDATE device_process_samples SET kind = 'top'
+                         WHERE device_id = ? AND ts = ? AND kind = 'all' AND pinned = 0`,
+                        [row.device_id, row.ts]
+                    );
+                    continue;
+                }
+                const payload = await gzipAsync(Buffer.from(JSON.stringify(top), 'utf8'));
+                // `pinned = 0` revérifié : un instant épinglé entre-temps garde sa liste.
+                await q.execute(
+                    `UPDATE device_process_samples
+                        SET kind = 'top', proc_count = ?, payload_bytes = ?, payload = ?
+                      WHERE device_id = ? AND ts = ? AND kind = 'all' AND pinned = 0`,
+                    [top.length, payload.length, payload, row.device_id, row.ts]
+                );
+            }
+            return rows.length;
         }
     };
 }

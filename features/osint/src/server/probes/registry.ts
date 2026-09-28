@@ -1,9 +1,10 @@
+import { mapLimit } from '@deveye/types/sdk/server';
+
 // Le garde SSRF est celui de l'app, partagé, pas propre au module.
 import { fetchJson } from '@/Services/netFetch';
 import {
     coversName,
     field,
-    mapLimit,
     nameTokens,
     tag,
     type OsintField,

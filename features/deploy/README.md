@@ -324,15 +324,15 @@ frise complète sans que personne n'ait ouvert sa fiche.
 
 ### 6.2 Des bornes, parce que c'est du sondage
 
-| Borne                         | Valeur                         | Ce qu'elle empêche                                                         |
-| ----------------------------- | ------------------------------ | -------------------------------------------------------------------------- |
-| `DEPLOY_TICK_SECONDS`         | 10 s                           | _c'est la cadence, voir 6.6_                                               |
-| `DEPLOY_CONCURRENCY`          | 6 cibles en vol, une par accès | quarante cibles en quarante requêtes d'un coup, une instance lente en tête |
-| `DEPLOY_SYNC_TIMEOUT_MS`      | 10 s par lecture de fond       | une instance muette qui garde sa place en vol                              |
-| `DEPLOY_MIN_INTERVAL_SECONDS` | 60 s **au repos**              | réinterroger une cible qui n'a rien à dire                                 |
-| `DEPLOY_BACKOFF_MAX_SECONDS`  | 15 min                         | marteler une instance en panne                                             |
-| `DEPLOY_IMPORT_LIMIT`         | 20 lignes / appel              | recopier des centaines d'entrées anciennes                                 |
-| `DEPLOY_STALE_SECONDS`        | 6 h                            | entretenir sans fin un déploiement que le fournisseur a oublié             |
+| Borne                         | Valeur                          | Ce qu'elle empêche                                                         |
+| ----------------------------- | ------------------------------- | -------------------------------------------------------------------------- |
+| `DEPLOY_TICK_SECONDS`         | 10 s                            | _c'est la cadence, voir 6.6_                                               |
+| `DEPLOY_CONCURRENCY`          | 16 cibles en vol, une par accès | quarante cibles en quarante requêtes d'un coup, une instance lente en tête |
+| `DEPLOY_SYNC_TIMEOUT_MS`      | 10 s par lecture de fond        | une instance muette qui garde sa place en vol                              |
+| `DEPLOY_MIN_INTERVAL_SECONDS` | 60 s **au repos**               | réinterroger une cible qui n'a rien à dire                                 |
+| `DEPLOY_BACKOFF_MAX_SECONDS`  | 15 min                          | marteler une instance en panne                                             |
+| `DEPLOY_IMPORT_LIMIT`         | 20 lignes / appel               | recopier des centaines d'entrées anciennes                                 |
+| `DEPLOY_STALE_SECONDS`        | 6 h                             | entretenir sans fin un déploiement que le fournisseur a oublié             |
 
 Une cible qui a un déploiement **en vol** échappe à l'intervalle au repos et
 passe à chaque tour : c'est là que l'état bouge à la minute.

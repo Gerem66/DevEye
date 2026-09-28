@@ -1,5 +1,5 @@
 import type { UptimeServiceRow, UptimeStatus } from '../contracts/domain';
-import type { FeatureService, FeatureServiceDeps, SdkCipher } from '@deveye/types/sdk/server';
+import { mapLimit, type FeatureService, type FeatureServiceDeps, type SdkCipher } from '@deveye/types/sdk/server';
 
 // Horodatage et durée partagés par tous les émetteurs de l'app : importés, pas recopiés.
 import { formatDuration, formatMoment } from '@/Services/notifications';
@@ -208,7 +208,7 @@ export class UptimeMonitor {
         await this.ticking;
     }
 
-    /** Claim every due service and probe them, `UPTIME_CONCURRENCY` at a time. */
+    /** Claim the due services and probe them, `UPTIME_CONCURRENCY` in flight at a time. */
     private tick(): Promise<void> {
         this.ticking ??= this.probeDue()
             .catch((e: unknown) =>
@@ -223,10 +223,10 @@ export class UptimeMonitor {
     private async probeDue(): Promise<void> {
         const now = Math.floor(Date.now() / 1000);
         const paused = this.deps.pauses.paused('monitors').map(Number);
-        const due = await this.deps.repo.services.listDue(now, env.UPTIME_CONCURRENCY * 4, paused);
-        for (let i = 0; i < due.length; i += env.UPTIME_CONCURRENCY) {
-            await Promise.all(due.slice(i, i + env.UPTIME_CONCURRENCY).map((row) => this.runOne(row)));
-        }
+        // Huit sondes par place et par tour : une sonde rapide libère la sienne
+        // aussitôt, et un service qui tient jusqu'à son délai ne retient qu'elle.
+        const due = await this.deps.repo.services.listDue(now, env.UPTIME_CONCURRENCY * 8, paused);
+        await mapLimit(due, env.UPTIME_CONCURRENCY, (row) => this.runOne(row));
     }
 
     /**

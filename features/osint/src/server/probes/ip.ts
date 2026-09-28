@@ -3,7 +3,9 @@ import { isIPv4 } from 'net';
 
 // Le garde SSRF est celui de l'app, partagé, pas propre au module.
 import { fetchJson, isPublicIp } from '@/Services/netFetch';
-import { field, mapLimit, type OsintProbeAdapter, type OsintTag, publicResolver, tag } from './shared';
+import { mapLimit } from '@deveye/types/sdk/server';
+
+import { field, type OsintProbeAdapter, type OsintTag, publicResolver, tag } from './shared';
 
 /* --------------------------------- Reverse -------------------------------- */
 

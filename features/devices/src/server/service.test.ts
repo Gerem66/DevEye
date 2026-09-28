@@ -61,7 +61,11 @@ function fakeRepo(pruned: string[]): DevicesRepo {
             storage: unused,
             deleteRange: unused,
             deleteExpiredInRange: unused,
-            pruneByRetention: prune('processSamples', 2)
+            pruneByRetention: prune('processSamples', 2),
+            thinBefore: async (before, keep) => {
+                pruned.push(`thin:${keep}:${Math.round((Date.now() - before) / 3_600_000)}h`);
+                return 0;
+            }
         }
     };
 }
@@ -76,7 +80,7 @@ describe('le balayage de rétention', () => {
         assert.equal(deps.recorded.tickers.length, 1);
         assert.equal(deps.recorded.tickers[0].intervalMs, 60 * 60 * 1000);
         await deps.recorded.tickers[0].tick();
-        assert.deepEqual(pruned.sort(), ['metrics:7', 'presence:7', 'processSamples:7']);
+        assert.deepEqual(pruned.sort(), ['metrics:7', 'presence:7', 'processSamples:7', 'thin:20:48h']);
         // Une purge ne prévient personne et ne s'audite pas.
         assert.deepEqual(deps.recorded.liveChanges, []);
         assert.deepEqual(deps.recorded.audits, []);
@@ -90,7 +94,7 @@ describe('le balayage de rétention', () => {
         // Le passage de démarrage n'est pas attendu par `start` : on laisse la
         // boucle d'événements le conclure.
         await new Promise((resolve) => setImmediate(resolve));
-        assert.equal(pruned.length, 3);
+        assert.equal(pruned.length, 4);
         await service.stop();
     });
 });
