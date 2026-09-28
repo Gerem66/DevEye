@@ -1,7 +1,9 @@
 import type { SessionBundle, User } from '@deveye/types';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ApiError, login as apiLogin, logout as apiLogout, me as apiMe, refresh as apiRefresh } from '../api/http';
+import { startActivityBeacon } from '../api/activity';
 import { ws } from '../api/ws';
+import { setAdmission } from '../stores/admission';
 import { refreshSecrecyStatus, setUnlocked } from '../stores/secrecy';
 import { resetHomeReady } from '../stores/homeReady';
 import { resetTheme, syncThemeFromServer } from '../stores/theme';
@@ -159,6 +161,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Idem pour la presence, sans quoi la session suivante repartirait avec le
         // roster et le lieu declare de la precedente.
         resetLive();
+        setAdmission(null);
         clearLocalTraces();
         setState({ status: 'anonymous', user: null });
     }, [cancelRetry]);
@@ -287,6 +290,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         return ws.onUnauthorized(() => void reauthenticate());
     }, [reauthenticate]);
+
+    const authenticated = state.status === 'authenticated';
+    useEffect(() => (authenticated ? startActivityBeacon() : undefined), [authenticated]);
 
     // Dans un espace d'une instance distante, `user` est le compte ouvert là-bas
     // (voir `stores/currentUser`) : ses membres, ses droits et ses curseurs

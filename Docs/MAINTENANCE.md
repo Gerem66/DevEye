@@ -7,8 +7,9 @@ Depuis l'interface (menu du profil, « Accès et maintenance », réservé aux
 administrateurs), depuis la base quand l'interface ne répond plus, ou dès le
 démarrage par une variable d'environnement.
 
-La même page tient l'accès au service : ouvrir ou fermer les inscriptions, et
-donner la priorité aux abonnés quand l'afflux dépasse le serveur.
+La même page tient l'accès au service : ouvrir ou fermer les inscriptions,
+donner la priorité aux abonnés quand l'afflux dépasse le serveur, et borner le
+nombre de comptes présents en même temps.
 
 ## L'accès
 
@@ -26,6 +27,23 @@ donner la priorité aux abonnés quand l'afflux dépasse le serveur.
   elle n'est pas proposée. Comme pour Restreinte, les espaces partagés d'un
   compte tenu se ferment à leurs membres, et ses pages publiques et ses
   domaines se mettent en pause.
+- **Places simultanées** : un plafond de comptes gratuits et un d'abonnés
+  tenant une socket en même temps, sans limite par défaut, par serveur
+  (`instance_settings`, nom `seats`, `{"free": 50, "paid": null}`). Au-delà, le
+  suivant attend dans une file, dans l'ordre d'arrivée, et entre de lui-même
+  quand une place se libère. L'administrateur et les comptes d'un essai de bout
+  en bout ne comptent pas ; sans module qui tient les offres, tout compte compte
+  parmi les gratuits. Tout est en mémoire, le processus étant seul.
+    - Un compte déjà présent entre sur un autre onglet sans attendre.
+    - Une place reste gardée 2 minutes après la dernière socket partie (un
+      rechargement, un aller-retour chez Stripe), et tout le monde entre pendant
+      les 2 minutes qui suivent un démarrage.
+    - Seule une place inactive depuis 20 minutes (aucun geste dans la page, sur
+      aucun onglet) va à qui attend, et seulement quand quelqu'un attend : les
+      requêtes des widgets ne comptent pas comme une activité. Baisser un
+      plafond ne déconnecte personne.
+    - Attendre n'ouvre pas la socket : un compte en file ne peut pas s'abonner
+      pour passer devant.
 
 ## Les niveaux
 
@@ -69,6 +87,10 @@ facturation ne sautent jamais à cause d'une maintenance.
   dit, avec « Voir les offres » ; ses éléments portent « Priorité aux
   abonnés », et un refus de création le dit aussi. Il peut s'abonner sans
   attendre : tout repart pour lui aussitôt.
+- **Places simultanées** : un compte en file voit une page façon login avec sa
+  position, qui relance toutes les 15 s et entre d'elle-même. Un compte dont la
+  place est partie le lit, avec « Reprendre » ; revenir sur l'onglet relance
+  aussi.
 - **Administrateur** : un bandeau à l'accueil tant que le site est en
   maintenance, ou la priorité donnée.
 
@@ -88,7 +110,11 @@ DELETE FROM feature_maintenance WHERE feature = 'rdv';
 UPDATE site_maintenance SET priority = 1;
 INSERT INTO instance_settings (name, origin, value) VALUES ('signups', 'https://app.deveye.fr', 'open')
     ON DUPLICATE KEY UPDATE value = VALUES(value);
+INSERT INTO instance_settings (name, origin, value) VALUES ('seats', 'https://app.deveye.fr', '{"free": 50, "paid": null}')
+    ON DUPLICATE KEY UPDATE value = VALUES(value);
 ```
+
+Les places sont relues toutes les minutes.
 
 `site_maintenance.message` à `NULL` vaut le texte par défaut.
 
@@ -113,6 +139,12 @@ en direct). Chaque démarrage sous la variable le réarme.
   s'appliquent l'un après l'autre.
 - `src/Services/quota.ts` : `isHeld` et `limitIn`, par où la priorité agit.
 - `src/Services/signup/setting.ts` : le réglage des inscriptions.
+- `src/Services/admission.ts` : les places et la file, décidées à la poignée de
+  main de `/ws` (après la garde de maintenance, juste avant l'inscription de la
+  socket, sans rien d'asynchrone entre les deux). Un refus envoie l'erreur
+  `queued` et sa position dans la trame `session`, puis ferme en `4429` ; une
+  place rendue ferme en `4408`. Le client dit l'activité par la trame
+  `session.active`, au plus une fois par minute (`client/src/api/activity.ts`).
 - `src/ws/handler.ts` : la poignée de main, la trame `session` (qui porte l'état
   initial), et `assertFeature` / `assertDeclaredFeature`, le passage obligé de
   toute commande vers une feature, qu'elle la déclare ou la reçoive en entrée.

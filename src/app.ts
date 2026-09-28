@@ -47,6 +47,8 @@ import {
 } from '@/features/_sdk/register';
 import { setSdkHost } from '@/features/_sdk/host';
 import { createPlanPausesService } from '@/features/_planPauses';
+import { admission } from '@/Services/admission';
+import { planOf } from '@/Services/quota';
 import { createAuditLog } from '@/Services/AuditLog';
 import { startAttemptSweeper } from '@/Services/attempts';
 import { startDekSweeper } from '@/Services/SecureStore';
@@ -392,6 +394,13 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         services: moduleServiceControl,
         hasPlanProvider: () => moduleProvider(ACCOUNT_PLAN_PROVIDER) !== undefined
     });
+    await admission.init({
+        db: deps.db,
+        live,
+        logger,
+        origin: env.PUBLIC_ORIGIN.replace(/\/+$/, ''),
+        planOf: (userId) => planOf({ get: <T>(key: string) => moduleProvider<T>(key) }, userId, logger)
+    });
     // Avant les modules : leur premier tour lit déjà ce que l'offre tient en pause.
     const planPauses = createPlanPausesService({ db: deps.db, logger, live });
     await planPauses.start();
@@ -399,6 +408,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     for (const svc of hostServices) await svc.start();
     const stopServices = async (): Promise<PromiseSettledResult<void>[]> => {
         await maintenance.close();
+        admission.close();
         const [modules, host] = await Promise.all([
             stopModuleServices(),
             Promise.allSettled([...hostServices, planPauses].map(async (svc) => svc.stop()))

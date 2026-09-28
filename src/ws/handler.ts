@@ -7,6 +7,8 @@ import {
     LIVE_SAY_COMMAND,
     LIVE_TYPING_COMMAND,
     MAINTENANCE_CLOSE_CODE,
+    QUEUE_CLOSE_CODE,
+    SESSION_ACTIVE_COMMAND,
     liveCursorFrameSchema,
     liveSayFrameSchema,
     liveTypingFrameSchema,
@@ -34,6 +36,7 @@ import type { LiveHub } from '@/live/hub';
 import { FeatureError } from '@/features/_define';
 import { featureHandlerMap } from '@/features/registry';
 import { topicsOf } from '@/features/_topics';
+import { admission } from '@/Services/admission';
 import { selfTracking } from '@/Services/debug/selfTracking';
 import { enterSessionCommand, exitSessionCommand, forgetSessionDek } from '@/Services/SecureStore';
 import { maintenance } from '@/Services/maintenance';
@@ -115,6 +118,21 @@ export async function registerWS(
             return;
         }
 
+        // La place se résout avant la décision, qui reste synchrone jusqu'à
+        // l'inscription de la socket : deux onglets ne passent pas sur une place.
+        const seat = await admission.seatOf(session.userId);
+        const verdict = admission.admit(session.userId, seat);
+        if (!verdict.ok) {
+            send(socket, {
+                command: 'session',
+                payload: err('queued', `Forte affluence : vous êtes n° ${verdict.position} dans la file d’attente.`, {
+                    position: verdict.position
+                })
+            });
+            socket.close(QUEUE_CLOSE_CODE, 'queued');
+            return;
+        }
+
         const reqLogger = logger.child({ userId: session.userId, sid: session.sessionId });
         reqLogger.info('WS connected');
         const tracker = selfTracking.forConnection(req, session.userId);
@@ -129,7 +147,7 @@ export async function registerWS(
         // Inscrite dès la poignée de main, avant tout `live.here` : le battement
         // de cœur doit couvrir toutes les sockets, pas seulement les vues
         // instrumentées. Entrer dans une salle reste conditionné à `live.here`.
-        const live = liveHub.register(socket, session.userId, session.sessionId);
+        const live = liveHub.register(socket, session.userId, session.sessionId, seat);
 
         const opening: SessionFrame = { userId: session.userId, maintenance: maintenance.clientState() };
         send(socket, { command: 'session', payload: ok(opening) });
@@ -159,6 +177,12 @@ export async function registerWS(
 
             const { command, payload, requestId: clientReqId, workspaceId } = parsed.data;
             const replyId = clientReqId ?? requestId;
+
+            // La personne vient de se servir de la page : sa place n'est pas inactive.
+            if (command === SESSION_ACTIVE_COMMAND) {
+                liveHub.noteActive(socket);
+                return;
+            }
 
             // Voie rapide des curseurs (~20 Hz), avant la recherche de commande :
             // pas de validation de scope, d'audit ni de réponse. L'espace de

@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
-import { MAINTENANCE_MESSAGE_MAX, type AdminMaintenance, type FeatureMaintenanceLevel } from '@deveye/types';
+import {
+    MAINTENANCE_MESSAGE_MAX,
+    type AdminMaintenance,
+    type FeatureMaintenanceLevel,
+    type SeatCaps
+} from '@deveye/types';
 
 import { ws, WsError } from '@/api/ws';
 import Button from '@/Components/Button';
 import { Dialog } from '@/Components/Dialog';
+import { NumberInput } from '@/Components/NumberInput';
 import SegmentedControl from '@/Components/SegmentedControl';
 import Switch from '@/Components/Switch';
 import { moduleManifest } from '@/sdk/registry';
@@ -12,6 +18,12 @@ import { useMaintenance } from '@/stores/maintenance';
 import styles from './Maintenance.module.css';
 
 type Level = FeatureMaintenanceLevel | 'open';
+
+/** Les présents et la file changent sans rien diffuser : la page les relit à ce rythme. */
+const SEATS_POLL_MS = 15_000;
+const SEATS_MAX = 1_000_000;
+
+const capText = (cap: number | null): string => (cap === null ? 'sans limite' : String(cap));
 
 const LEVEL_OPTIONS = [
     { value: 'open', label: 'Ouverte' },
@@ -52,6 +64,8 @@ export default function FeatureMaintenance() {
     const [busy, setBusy] = useState(false);
     const [confirmSite, setConfirmSite] = useState(false);
     const [confirmPriority, setConfirmPriority] = useState(false);
+    /** Les plafonds en cours d'édition, fenêtre ouverte ; `null` fenêtre fermée. */
+    const [seatsDraft, setSeatsDraft] = useState<SeatCaps | null>(null);
 
     const load = useCallback(async () => {
         try {
@@ -73,6 +87,10 @@ export default function FeatureMaintenance() {
     useEffect(() => {
         void load();
     }, [load, live, version]);
+    useEffect(() => {
+        const timer = setInterval(() => void load(), SEATS_POLL_MS);
+        return () => clearInterval(timer);
+    }, [load]);
 
     const run = async (fn: () => Promise<AdminMaintenance>, fallback: string): Promise<boolean> => {
         setError(null);
@@ -92,7 +110,9 @@ export default function FeatureMaintenance() {
         return <div className={styles.container}>{error && <div className={styles.errorBanner}>{error}</div>}</div>;
     }
 
-    const { site, priority, signups } = state;
+    const { site, priority, signups, seats } = state;
+    // Sans module qui tient les offres, tout compte compte parmi les gratuits.
+    const noPlans = !priority.available;
     const shownMessage = site.message ?? site.defaultMessage;
     const trimmed = (draft ?? '').trim();
     // Le texte par défaut ne s'enregistre pas tel quel : il suivrait sinon ses
@@ -109,6 +129,14 @@ export default function FeatureMaintenance() {
 
     const setPriority = (active: boolean): Promise<boolean> =>
         run(() => ws.send('admin.maintenancePriority', { active }), 'Changement impossible.');
+
+    const saveSeats = async (): Promise<void> => {
+        if (!seatsDraft) return;
+        const caps = noPlans ? { free: seatsDraft.free, paid: null } : seatsDraft;
+        if (await run(() => ws.send('admin.maintenanceSeats', caps), 'Changement impossible.')) setSeatsDraft(null);
+    };
+    const seatsChanged = seatsDraft !== null && (seatsDraft.free !== seats.free || seatsDraft.paid !== seats.paid);
+    const capped = seats.free !== null || seats.paid !== null;
 
     return (
         <div className={styles.container}>
@@ -169,6 +197,26 @@ export default function FeatureMaintenance() {
                                 onChange={(on) => (on ? setConfirmPriority(true) : void setPriority(false))}
                                 aria-label='Priorité aux abonnés'
                             />
+                        </div>
+                        <div className={styles.row}>
+                            <span className={`icon icon-clock ${styles.rowIcon} ${capped ? styles.active : ''}`} />
+                            <div className={styles.rowText}>
+                                <span className={styles.rowTitle}>Places simultanées</span>
+                                <span className={styles.rowMeta}>
+                                    {noPlans
+                                        ? `Comptes : ${capText(seats.free)}. ${seats.present.free} présents, ${seats.waiting.free} en attente.`
+                                        : `Gratuits : ${capText(seats.free)}, abonnés : ${capText(seats.paid)}. Présents : ${seats.present.free} gratuits, ${seats.present.paid} abonnés. En attente : ${seats.waiting.free + seats.waiting.paid}.`}{' '}
+                                    Sur ce serveur seulement.
+                                </span>
+                            </div>
+                            <Button
+                                variant='secondary'
+                                icon='edit'
+                                disabled={busy}
+                                onClick={() => setSeatsDraft({ free: seats.free, paid: seats.paid })}
+                            >
+                                Modifier
+                            </Button>
                         </div>
                     </div>
                 </section>
@@ -313,6 +361,57 @@ export default function FeatureMaintenance() {
                     </>
                 }
             />
+
+            <Dialog
+                open={seatsDraft !== null}
+                onClose={() => setSeatsDraft(null)}
+                title='Places simultanées'
+                description='Au-delà, les suivants attendent dans une file et entrent d’eux-mêmes dès qu’une place se libère. Une place inactive depuis 20 minutes va à qui attend ; baisser un plafond ne déconnecte personne. Les administrateurs ne comptent pas. Vide : sans limite.'
+                onSubmit={() => void saveSeats()}
+                dirty={seatsChanged}
+                onSave={() => void saveSeats()}
+                footer={
+                    <>
+                        <Button variant='secondary' onClick={() => setSeatsDraft(null)}>
+                            Annuler
+                        </Button>
+                        <Button disabled={busy || !seatsChanged} onClick={() => void saveSeats()}>
+                            Enregistrer
+                        </Button>
+                    </>
+                }
+            >
+                {seatsDraft && (
+                    <div className={styles.capFields}>
+                        <div className={styles.capField}>
+                            <label htmlFor='seats-free'>{noPlans ? 'Comptes' : 'Comptes gratuits'}</label>
+                            <NumberInput
+                                id='seats-free'
+                                value={seatsDraft.free}
+                                onChange={(free) => setSeatsDraft({ ...seatsDraft, free })}
+                                min={1}
+                                max={SEATS_MAX}
+                                placeholder='Sans limite'
+                                live
+                            />
+                        </div>
+                        {!noPlans && (
+                            <div className={styles.capField}>
+                                <label htmlFor='seats-paid'>Abonnés</label>
+                                <NumberInput
+                                    id='seats-paid'
+                                    value={seatsDraft.paid}
+                                    onChange={(paid) => setSeatsDraft({ ...seatsDraft, paid })}
+                                    min={1}
+                                    max={SEATS_MAX}
+                                    placeholder='Sans limite'
+                                    live
+                                />
+                            </div>
+                        )}
+                    </div>
+                )}
+            </Dialog>
 
             <Dialog
                 open={draft !== null}

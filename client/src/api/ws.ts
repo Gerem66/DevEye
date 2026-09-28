@@ -1,9 +1,12 @@
 import {
     clientMessageSchema,
     featureCommandRegistry,
+    IDLE_CLOSE_CODE,
     MAINTENANCE_CLOSE_CODE,
     MAINTENANCE_EVENT,
     maintenanceStateSchema,
+    QUEUE_CLOSE_CODE,
+    queueRefusalSchema,
     serverMessageSchema,
     sessionFrameSchema,
     type ClientMessage,
@@ -18,6 +21,7 @@ import {
 import { getActiveInstanceId, getActiveWorkspaceId, onWorkspaceChange } from '../stores/workspace';
 import { traceCall } from '../diagnostics/trace';
 import { notifyQuotaExceeded } from '@/stores/quotaPrompt';
+import { setAdmission, type Admission } from '@/stores/admission';
 import { forgetMaintenance, setMaintenance } from '@/stores/maintenance';
 import { randomUuid } from '@/randomUuid';
 
@@ -78,6 +82,9 @@ const POST_BACKPRESSURE_BYTES = 64 * 1024;
 /** Refusée pour maintenance : un essai à ce rythme, pas de rafale contre un serveur qui se défend. */
 const MAINTENANCE_RETRY_MS = 60_000;
 
+/** En file d'attente : le serveur oublie qui ne relance pas sa demande dans la minute. */
+const QUEUE_RETRY_MS = 15_000;
+
 export class DevEyeWs {
     private socket: WebSocket | null = null;
     private _state: ConnectionState = 'idle';
@@ -90,6 +97,7 @@ export class DevEyeWs {
     private _hasConnected = false;
     private readonly unauthorizedListeners = new Set<() => void>();
     private readonly maintenanceListeners = new Set<(state: MaintenanceState) => void>();
+    private readonly admissionListeners = new Set<(admission: Admission) => void>();
     /** Une ouverture en cours : l'adresse d'une instance distante s'obtient avant la socket. */
     private opening: Promise<void> | null = null;
     /** Ce qui attend la trame `session` de la socket en cours d'ouverture. */
@@ -144,6 +152,16 @@ export class DevEyeWs {
 
     private emitMaintenance(state: MaintenanceState): void {
         for (const fn of this.maintenanceListeners) fn(state);
+    }
+
+    /** L'entrée sur ce serveur quand des places simultanées font attendre. */
+    onAdmission(fn: (admission: Admission) => void): () => void {
+        this.admissionListeners.add(fn);
+        return () => this.admissionListeners.delete(fn);
+    }
+
+    private emitAdmission(admission: Admission): void {
+        for (const fn of this.admissionListeners) fn(admission);
     }
 
     private setState(s: ConnectionState): void {
@@ -233,6 +251,16 @@ export class DevEyeWs {
                     this.scheduleReconnect(MAINTENANCE_RETRY_MS);
                     return;
                 }
+                if (ev.code === QUEUE_CLOSE_CODE) {
+                    this.scheduleReconnect(QUEUE_RETRY_MS);
+                    return;
+                }
+                // Sa place est allée à quelqu'un qui attendait : on ne revient
+                // qu'avec la personne (retour sur l'onglet, bouton « Reprendre »).
+                if (ev.code === IDLE_CLOSE_CODE) {
+                    this.emitAdmission({ kind: 'released' });
+                    return;
+                }
                 if (!this.intentionallyClosed) this.scheduleReconnect();
             });
         });
@@ -296,11 +324,18 @@ export class DevEyeWs {
 
         if (msg.command === 'session' && msg.payload.ok) {
             this.reconnectAttempt = 0;
+            this.emitAdmission(null);
             const frame = sessionFrameSchema.safeParse(msg.payload.data);
             if (frame.success && frame.data.maintenance) this.emitMaintenance(frame.data.maintenance);
             const ready = this.onSession;
             this.onSession = null;
             ready?.();
+        }
+
+        // En file d'attente : la fermeture `QUEUE_CLOSE_CODE` suit.
+        if (msg.command === 'session' && !msg.payload.ok && msg.payload.error.code === 'queued') {
+            const refusal = queueRefusalSchema.safeParse(msg.payload.error.details);
+            if (refusal.success) this.emitAdmission({ kind: 'queued', position: refusal.data.position });
         }
 
         // Refusée à l'ouverture : la fermeture `MAINTENANCE_CLOSE_CODE` suit.
@@ -501,10 +536,14 @@ class WsRouter {
         // Hors du filtre de la socket active : les tuiles d'une instance et sa
         // page de maintenance suivent son état même quand on est ailleurs.
         const offMaintenance = conn.onMaintenance((state) => setMaintenance(instanceId, state));
+        // La salle d'attente ne parle que de ce serveur-ci : une instance
+        // distante qui fait attendre se contente de relancer.
+        const offAdmission = instanceId === null ? conn.onAdmission(setAdmission) : () => undefined;
         return () => {
             offMessage();
             offState();
             offMaintenance();
+            offAdmission();
         };
     }
 
@@ -582,6 +621,12 @@ class WsRouter {
 
     post(command: string, payload: unknown): void {
         this.active()?.post(command, payload);
+    }
+
+    /** À toutes les sockets ouvertes, celle d'ici et les distantes. */
+    postEverywhere(command: string, payload: unknown): void {
+        this.local.post(command, payload);
+        for (const { conn } of this.remotes.values()) conn.post(command, payload);
     }
 
     send<N extends FeatureCommandName>(

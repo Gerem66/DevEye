@@ -3,6 +3,7 @@ import {
     adminMaintenanceFeature,
     adminMaintenanceGet,
     adminMaintenancePriority,
+    adminMaintenanceSeats,
     adminMaintenanceSignups,
     adminMaintenanceSite,
     type AdminMaintenance
@@ -11,6 +12,7 @@ import {
 import type { Database } from '@/db';
 import { ORIGINS } from '@/features/_sdk/context';
 import { moduleServiceControl } from '@/features/_sdk/register';
+import { admission } from '@/Services/admission';
 import { maintenance } from '@/Services/maintenance';
 import { readSignups, writeSignups } from '@/Services/signup/setting';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
@@ -22,10 +24,14 @@ import { notifyAdmins } from './notify';
  */
 const ADMIN = { admin: true, scope: 'account' } as const;
 
-/** Les inscriptions se rangent par origine : celles de ce serveur seulement. */
+/** Les inscriptions et les places se rangent par origine : celles de ce serveur seulement. */
 async function pageState(db: Database): Promise<AdminMaintenance> {
     const [state, signups] = await Promise.all([maintenance.adminState(), readSignups(db, ORIGINS.app)]);
-    return { ...state, signups: { ...signups, origin: ORIGINS.app } };
+    return {
+        ...state,
+        signups: { ...signups, origin: ORIGINS.app },
+        seats: { ...admission.settings(), ...admission.stats(), origin: ORIGINS.app }
+    };
 }
 
 export const adminMaintenanceGetFeature: FeatureDefinition<
@@ -140,6 +146,29 @@ export const adminMaintenanceSignupsFeature: FeatureDefinition<
     }
 });
 
+const capLabel = (cap: number | null): string => (cap === null ? 'sans limite' : String(cap));
+
+export const adminMaintenanceSeatsFeature: FeatureDefinition<
+    typeof adminMaintenanceSeats.command,
+    typeof adminMaintenanceSeats.input,
+    typeof adminMaintenanceSeats.output
+> = defineFeature({
+    ...adminMaintenanceSeats,
+    access: ADMIN,
+    handler: async (ctx, input) => {
+        await admission.setCaps(input, ctx.userId);
+        ctx.audit({
+            action: 'maintenance.seats',
+            level: 'warning',
+            category: 'system',
+            description: `Places simultanées : gratuits ${capLabel(input.free)}, abonnés ${capLabel(input.paid)}`,
+            metadata: { origin: ORIGINS.app, free: input.free, paid: input.paid }
+        });
+        if (ctx.live) await notifyAdmins(ctx.db, ctx.live, ctx.workspaceId, ctx.userId);
+        return pageState(ctx.db);
+    }
+});
+
 export const adminMaintenanceDismissNoticeFeature: FeatureDefinition<
     typeof adminMaintenanceDismissNotice.command,
     typeof adminMaintenanceDismissNotice.input,
@@ -160,5 +189,6 @@ export const adminMaintenanceFeatures: FeatureDefinition<string, any, any>[] = [
     adminMaintenanceFeatureFeature,
     adminMaintenancePriorityFeature,
     adminMaintenanceSignupsFeature,
+    adminMaintenanceSeatsFeature,
     adminMaintenanceDismissNoticeFeature
 ];

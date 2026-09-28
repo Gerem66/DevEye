@@ -15,6 +15,7 @@ import {
     type LivePath,
     type LivePeer,
     type LiveTopic,
+    type Seat,
     type ServerMessage,
     type UserColor
 } from '@deveye/types';
@@ -88,6 +89,10 @@ export interface LiveConn {
     readonly userId: number;
     readonly sessionId: string;
     readonly joinedAt: number;
+    /** La place qu'il occupe (`Services/admission.ts`) ; `null` : exempté, non compté. */
+    readonly seat: Seat | null;
+    /** Le dernier geste de la personne dans cet onglet (`session.active`), en ms épochales. */
+    activeAt: number;
 
     /** Salle courante ; `null` tant qu'aucun `live.here` n'a abouti. */
     workspaceId: number | null;
@@ -207,13 +212,16 @@ export class LiveHub {
         return this.bySocket.size;
     }
 
-    register(socket: WebSocket, userId: number, sessionId: string): LiveTransport {
+    register(socket: WebSocket, userId: number, sessionId: string, seat: Seat | null = null): LiveTransport {
+        const now = Date.now();
         const conn: LiveConn = {
             connId: randomUUID(),
             socket,
             userId,
             sessionId,
-            joinedAt: Date.now(),
+            joinedAt: now,
+            seat,
+            activeAt: now,
             workspaceId: null,
             path: [],
             color: null,
@@ -242,6 +250,39 @@ export class LiveHub {
         if (!conn) return;
         this.bySocket.delete(socket);
         this.leaveRoom(conn);
+        if (!this.holdsSocket(conn.userId)) this.lastSocketGone?.(conn.userId, conn.seat);
+    }
+
+    private lastSocketGone: ((userId: number, seat: Seat | null) => void) | null = null;
+
+    /** La dernière socket d'un compte vient de partir : l'admission lui garde sa place un moment. */
+    onLastSocketGone(fn: (userId: number, seat: Seat | null) => void): void {
+        this.lastSocketGone = fn;
+    }
+
+    noteActive(socket: WebSocket): void {
+        const conn = this.bySocket.get(socket);
+        if (conn) conn.activeAt = Date.now();
+    }
+
+    holdsSocket(userId: number): boolean {
+        for (const conn of this.bySocket.values()) if (conn.userId === userId) return true;
+        return false;
+    }
+
+    /** Les comptes assis dans cette catégorie, et le plus récent geste de leurs onglets. */
+    seated(seat: Seat): Map<number, number> {
+        const out = new Map<number, number>();
+        for (const conn of this.bySocket.values()) {
+            if (conn.seat === seat) out.set(conn.userId, Math.max(out.get(conn.userId) ?? 0, conn.activeAt));
+        }
+        return out;
+    }
+
+    closeUser(userId: number, code: number, reason: string): void {
+        for (const conn of [...this.bySocket.values()]) {
+            if (conn.userId === userId) conn.socket.close(code, reason);
+        }
     }
 
     /**
@@ -782,7 +823,7 @@ export class LiveHub {
 
         const byPath = new Map<string, LiveConn[]>();
         for (const conn of room) {
-            const key = conn.path.join(' ');
+            const key = conn.path.join('\0');
             const group = byPath.get(key);
             if (group) group.push(conn);
             else byPath.set(key, [conn]);

@@ -171,7 +171,7 @@ class MaintenanceStore {
         return !site.envNoticeDismissed;
     }
 
-    async adminState(): Promise<Omit<AdminMaintenance, 'signups'>> {
+    async adminState(): Promise<Omit<AdminMaintenance, 'signups' | 'seats'>> {
         const { db, services, hasPlanProvider } = this.need();
         const [site, rows] = await Promise.all([db.maintenance.site(), db.maintenance.features()]);
         const byId = new Map(rows.map((r) => [r.feature, r]));

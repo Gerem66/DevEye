@@ -5,12 +5,14 @@ import HomePage from './Pages/Home/index.js';
 import LoginPage from './Pages/Login/index.js';
 import MaintenancePage from './Pages/Maintenance';
 import SignupPage from './Pages/Signup';
+import WaitingRoomPage from './Pages/WaitingRoom';
 import { readSignupRoute, type SignupRoute } from './Pages/Signup/route';
 import { useRootView } from './telemetry/useView';
 import { SecrecyGate } from './Components/SecrecyGate';
 import ErrorBoundary from './Components/ErrorBoundary';
 import { ReportButton } from './Components/ReportButton';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
+import { useAdmission } from './stores/admission';
 import { useLocalUser } from './stores/currentUser';
 import { refreshPublicMaintenance, useSiteMaintenance } from './stores/maintenance';
 
@@ -35,16 +37,21 @@ function AppRoot() {
     // Tout compte d'ici hors l'administrateur. Sa session reste ouverte : elle
     // reprend à la levée, sans nouvelle connexion.
     const heldOut = maintenance.site && !(status === 'authenticated' && localUser?.role === 'admin');
+    // Les places simultanées le font attendre : la session est ouverte, la socket relance.
+    const admission = useAdmission();
+    const waiting = status === 'authenticated' && admission !== null;
     useRootView(
         heldOut
             ? adminLogin
                 ? 'auth/login'
                 : 'auth/maintenance'
-            : signup && (signup.kind === 'verify' || status !== 'authenticated')
-              ? `auth/signup${signup.kind === 'verify' ? '/verify' : ''}`
-              : status === 'anonymous'
-                ? 'auth/login'
-                : null
+            : waiting
+              ? 'auth/queue'
+              : signup && (signup.kind === 'verify' || status !== 'authenticated')
+                ? `auth/signup${signup.kind === 'verify' ? '/verify' : ''}`
+                : status === 'anonymous'
+                  ? 'auth/login'
+                  : null
     );
 
     // Sans socket ni bundle, seul l'état public dit la maintenance.
@@ -92,6 +99,7 @@ function AppRoot() {
         );
     }
     if (heldOut) return <LoginPage onBack={() => setAdminLogin(false)} />;
+    if (waiting) return <WaitingRoomPage admission={admission} onLogout={() => void logout()} />;
 
     return (
         <>
