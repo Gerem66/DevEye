@@ -8,6 +8,10 @@
 //! compromised download path (or release host) can't make the agent run an
 //! unsigned binary.
 //!
+//! Nor is an older version: a compromised server could push an old signed
+//! release, blind to the policy switches this machine has set since. The staged
+//! binary is asked its version before it replaces the running one.
+//!
 //! Swap is atomic: on Unix we rename the new file over the running executable
 //! (the kernel keeps the old inode alive until exit); on Windows we move the
 //! running .exe aside first (it can't be overwritten while open) and drop the new
@@ -16,7 +20,7 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use base64::{engine::general_purpose::STANDARD, Engine};
 use ed25519_dalek::{Signature, VerifyingKey};
 use sha2::{Digest, Sha256};
@@ -85,9 +89,14 @@ pub async fn apply(
         .verify_strict(&expected, &signature)
         .map_err(|_| anyhow!("signature verification failed — refusing to install"))?;
 
-    info!(%version, "update verified (sha256 + signature); swapping binary");
     let exe = std::env::current_exe().context("locating current executable")?;
-    swap_binary(&exe, &bytes).context("swapping in the new binary")?;
+    let staged = stage(&exe, &bytes)?;
+    if let Err(e) = ensure_not_older(&staged) {
+        let _ = std::fs::remove_file(&staged);
+        return Err(e);
+    }
+    info!(%version, "update verified (sha256 + signature + version); swapping binary");
+    swap_binary(&staged, &exe).context("swapping in the new binary")?;
     // Return the (stable) install path: after the swap it holds the new binary,
     // whereas `current_exe()` may now resolve to the unlinked old inode on Linux.
     Ok(exe)
@@ -121,16 +130,59 @@ fn decode_hex32(hex: &str) -> Result<[u8; 32]> {
     Ok(out)
 }
 
-/// Atomically replace the running executable at `exe` with `bytes`.
-#[cfg(unix)]
-fn swap_binary(exe: &Path, bytes: &[u8]) -> Result<()> {
-    use std::os::unix::fs::PermissionsExt;
+/// Write the new binary next to the running one, executable: the same
+/// directory keeps the final rename atomic.
+fn stage(exe: &Path, bytes: &[u8]) -> Result<PathBuf> {
     let dir = exe.parent().unwrap_or_else(|| Path::new("."));
-    let tmp = dir.join(format!(".deveye-agent.new-{}", std::process::id()));
+    let tmp = dir.join(format!(
+        ".deveye-agent.new-{}{}",
+        std::process::id(),
+        std::env::consts::EXE_SUFFIX
+    ));
     std::fs::write(&tmp, bytes).with_context(|| format!("writing {}", tmp.display()))?;
-    std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o755))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o755))?;
+    }
+    Ok(tmp)
+}
+
+/// Refuse a binary older than this one. It is signed, so what it says of its
+/// version can be believed; one that cannot say is refused too.
+fn ensure_not_older(staged: &Path) -> Result<()> {
+    let out = Command::new(staged)
+        .arg("--version")
+        .output()
+        .context("running the new binary")?;
+    let text = String::from_utf8_lossy(&out.stdout);
+    let theirs = text
+        .split_whitespace()
+        .last()
+        .and_then(parse_version)
+        .context("update refused: the new binary reports no version")?;
+    match parse_version(env!("DEVEYE_VERSION")) {
+        Some(ours) if theirs < ours => bail!(
+            "update refused: {} is older than this agent ({})",
+            text.trim(),
+            env!("DEVEYE_VERSION")
+        ),
+        _ => Ok(()),
+    }
+}
+
+/// `major.minor.patch`, a pre-release or build suffix ignored.
+fn parse_version(v: &str) -> Option<(u64, u64, u64)> {
+    let core = v.trim().trim_start_matches('v').split(['-', '+']).next()?;
+    let mut parts = core.split('.').map(|p| p.parse::<u64>().ok());
+    Some((parts.next()??, parts.next()??, parts.next()??))
+}
+
+/// Atomically replace the running executable at `exe` with the staged binary.
+#[cfg(unix)]
+fn swap_binary(staged: &Path, exe: &Path) -> Result<()> {
     // Same-directory rename is atomic; the running process keeps the old inode.
-    std::fs::rename(&tmp, exe).with_context(|| format!("renaming over {}", exe.display()))?;
+    std::fs::rename(staged, exe).with_context(|| format!("renaming over {}", exe.display()))?;
     Ok(())
 }
 
@@ -138,11 +190,11 @@ fn swap_binary(exe: &Path, bytes: &[u8]) -> Result<()> {
 /// running image aside (`.old`) and drop the new binary in its place. The `.old`
 /// file is cleaned up by [`cleanup_after_update`] on the next start.
 #[cfg(windows)]
-fn swap_binary(exe: &Path, bytes: &[u8]) -> Result<()> {
+fn swap_binary(staged: &Path, exe: &Path) -> Result<()> {
     let old = old_path(exe);
     let _ = std::fs::remove_file(&old); // a leftover from a previous update
     std::fs::rename(exe, &old).with_context(|| format!("moving {} aside", exe.display()))?;
-    std::fs::write(exe, bytes).with_context(|| format!("writing {}", exe.display()))?;
+    std::fs::rename(staged, exe).with_context(|| format!("renaming into {}", exe.display()))?;
     Ok(())
 }
 
@@ -240,6 +292,16 @@ mod tests {
         assert!(ensure_own_target(env!("DEVEYE_TARGET")).is_ok());
         assert!(ensure_own_target("../../etc/passwd").is_err());
         assert!(ensure_own_target("windows-x86_64-not-mine").is_err());
+    }
+
+    #[test]
+    fn versions_compare_by_number_and_ignore_suffixes() {
+        assert_eq!(parse_version("0.20.4"), Some((0, 20, 4)));
+        assert_eq!(parse_version("v1.2.3-rc1"), Some((1, 2, 3)));
+        assert!(parse_version("0.9.10") > parse_version("0.9.9"));
+        assert!(parse_version("0.21.0") > parse_version("0.20.12"));
+        assert_eq!(parse_version("deveye-agent"), None);
+        assert_eq!(parse_version("1.2"), None);
     }
 
     #[test]

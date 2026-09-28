@@ -261,18 +261,36 @@ serveur contrôle les machines**, à ceci près.
   du même `1008` : une sonde n'apprend rien. Seul un agent qui présente un jeton
   valide pour un appareil en attente d'approbation reçoit `4001`, qui lui dit de
   réessayer : il connaissait déjà son statut par la réponse d'enrôlement.
-- **L'appairage.** Un code de liaison vaut une heure au plus, sert une fois et
-  vise un espace ; tout membre qui y gère les appareils le voit et peut
-  l'invalider. Une machine neuve est active dès la liaison, si l'offre du
-  propriétaire le permet (vérifié avant de consommer le code). Une empreinte
-  déjà connue de l'espace reprend la fiche existante : son ancien jeton tombe,
-  sa session aussi, et l'appareil attend qu'on l'approuve, refusé à la socket
-  jusque-là, puisque l'empreinte est déclarée par l'appelant. Révoquer archive
-  l'appareil et détruit son jeton : seul un nouvel appairage le fait revenir.
+- **L'appairage.** Un code de liaison vaut sept jours au plus, sert le nombre
+  de machines choisi à l'émission et vise un espace ; tout membre qui y gère
+  les appareils le voit et peut l'invalider. Un code long ou à plusieurs usages
+  compte 12 caractères ; les échecs verrouillent l'adresse, et un code dont
+  l'émetteur ne gère plus les appareils de l'espace ne vaut plus rien. Une
+  machine neuve est active dès la liaison, si l'offre du propriétaire le permet
+  (vérifié avant de dépenser un usage). Une empreinte déjà connue de l'espace
+  reprend la fiche existante, avec un code à usage unique seulement : son
+  ancien jeton tombe, sa session aussi, et l'appareil attend qu'on l'approuve,
+  refusé à la socket jusque-là, puisque l'empreinte est déclarée par
+  l'appelant. Un code à plusieurs usages la refuse, pour que deux clones ne se
+  prennent pas leur fiche. Révoquer archive l'appareil et détruit son jeton :
+  seul un nouvel appairage le fait revenir.
+- **Les droits décidés sur la machine.** `[policy]` (dix interrupteurs :
+  terminal, lecture et écriture de fichiers, alimentation, mises à jour,
+  élévation, auto-destruction, Docker, déploiements, CloudSync) se fixe à la
+  liaison (`--deny`, `--monitor-only`) et ne change que sur la machine
+  (`deveye-agent policy`) ; aucun ordre du serveur n'y touche, et la rotation
+  du jeton réécrit le fichier tel qu'il est sur disque. La surveillance
+  (mesures, rapports, inventaire Docker) n'est jamais refusée.
+- **Le script d'installation** (`/install.sh`, `/install.ps1`) exécute ce que
+  le serveur envoie : un serveur compromis servirait un script sans les `--deny`
+  demandés. Pour une machine où cela compte, le binaire publié et un `link`
+  tapé à la main s'en passent. Il ne porte aucun secret ; l'origine y est
+  validée avant d'être posée entre apostrophes.
 - **L'auto-mise à jour** ne dépend pas du serveur : sha256 du binaire et
   signature Ed25519 de la CI, clé publique gravée à la compilation, échec fermé
   sans clé, et seule la cible de ce binaire se télécharge. Un serveur compromis
-  ne pousse pas de binaire.
+  ne pousse pas de binaire, ni une version plus ancienne que celle en marche,
+  qui ignorerait les interrupteurs ajoutés depuis.
 - **Ce qui remonte.** Tout seul : métriques, programmes (nom, chemin, compte,
   jamais la ligne de commande ni l'environnement), ports et connexions, posture,
   matériel, et pour Sentinelle des empreintes et des issues d'authentification

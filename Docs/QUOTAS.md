@@ -81,6 +81,7 @@ pas « illimité », elle relancerait tout.
 | un membre qui part, un domaine retiré, un espace supprimé, un déplacement                    | les commandes du cœur                                             |
 | le démarrage et chaque jour (tous les propriétaires), chaque heure (ceux qui ont des pauses) | le service lui-même                                               |
 | la priorité aux abonnés donnée ou levée (tous les propriétaires, en fond)                    | `Services/maintenance.ts`                                         |
+| un appareil neuf qui s'enrôle (des enrôlements simultanés passent tous la vérification)      | `src/agent/routes.ts`                                             |
 
 Le balayage du démarrage passe sur **tous** les propriétaires : une limite neuve
 ou abaissée arrive avec un déploiement, avant qu'aucune pause n'existe. Celui de

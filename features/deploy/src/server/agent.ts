@@ -71,6 +71,7 @@ export function machineOf(device: SdkDevice): DeployMachine {
         name: device.name,
         online: device.online,
         capable: agent?.probes.includes(COMPOSE_DEPLOY_PROBE) ?? false,
-        allowed: agent?.policy.dockerDeploy ?? true
+        // Un déploiement est une action Docker : la machine doit permettre les deux.
+        allowed: agent ? agent.policy.docker && agent.policy.dockerDeploy : true
     };
 }

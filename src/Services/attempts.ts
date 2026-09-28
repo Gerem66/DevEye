@@ -2,13 +2,14 @@ import { FeatureError } from '@/features/_define';
 
 /**
  * Le verrouillage progressif de tout ce qui vérifie un secret : connexion,
- * code 2FA, déverrouillage du coffre, code de récupération. La limite de débit
+ * code 2FA, déverrouillage du coffre, code de récupération, code de liaison
+ * d'un appareil. La limite de débit
  * HTTP ne voit qu'une poignée de main WebSocket, et compte par adresse : ici on
  * compte par cible (compte, identifiant, challenge), en mémoire du processus.
  * Un redémarrage remet les compteurs à zéro, ce qui est acceptable pour un
  * frein ; la trace, elle, est dans l'audit.
  */
-export type AttemptScope = 'login' | 'signup' | 'twofa' | 'unlock' | 'recover' | 'password';
+export type AttemptScope = 'login' | 'signup' | 'twofa' | 'unlock' | 'recover' | 'password' | 'linkcode';
 
 interface AttemptEntry {
     failures: number;

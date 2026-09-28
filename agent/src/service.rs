@@ -166,6 +166,20 @@ pub fn start(system: bool) -> Result<()> {
     start_impl(system)
 }
 
+/// Can this machine run the service at all? Checked by `link --autostart`
+/// before the link code is spent, since the install itself comes after.
+pub fn preflight(system: bool) -> Result<()> {
+    if system {
+        require_privilege()?;
+    }
+    preflight_impl(system)
+}
+
+/// Restart the installed service, so the agent reads its config again.
+pub fn restart(system: bool) -> Result<()> {
+    restart_impl(system)
+}
+
 /// Remove whatever autostart service is installed (user or system).
 pub fn uninstall() -> Result<()> {
     uninstall_impl()
@@ -337,6 +351,24 @@ mod imp {
             Command::new("launchctl").arg("load").arg("-w").arg(&path),
             "launchctl load",
         )
+    }
+
+    /// A per-user agent lives in a login session: over SSH, without one,
+    /// `bootstrap gui/<uid>` fails.
+    pub fn preflight_impl(system: bool) -> Result<()> {
+        if system {
+            return Ok(());
+        }
+        run_checked(
+            Command::new("launchctl").args(["print", &domain(false)]),
+            "launchctl print",
+        )
+        .context("no login session for this user: run as root for a system service")
+    }
+
+    /// `start_impl` already begins with a `bootout`.
+    pub fn restart_impl(system: bool) -> Result<()> {
+        start_impl(system)
     }
 
     pub fn uninstall_impl() -> Result<()> {
@@ -588,13 +620,42 @@ mod imp {
     }
 
     pub fn start_impl(system: bool) -> Result<()> {
+        systemctl(system, "start")
+    }
+
+    pub fn restart_impl(system: bool) -> Result<()> {
+        systemctl(system, "restart")
+    }
+
+    fn systemctl(system: bool, verb: &str) -> Result<()> {
         let mut cmd = Command::new("systemctl");
-        if system {
-            cmd.args(["start", UNIT]);
-        } else {
-            cmd.args(["--user", "start", UNIT]);
+        if !system {
+            cmd.arg("--user");
         }
-        run_checked(&mut cmd, "systemctl start")
+        cmd.args([verb, UNIT]);
+        run_checked(&mut cmd, &format!("systemctl {verb}"))
+    }
+
+    /// Alpine (OpenRC), most containers and WSL1 have no systemd; `su` and
+    /// `sudo -u` leave a user without a session bus.
+    pub fn preflight_impl(system: bool) -> Result<()> {
+        if !std::path::Path::new("/run/systemd/system").is_dir() {
+            bail!(
+                "systemd is not running on this machine: leave out --autostart and start the \
+                 agent another way (`deveye-agent run --detach`)"
+            );
+        }
+        if !system {
+            run_checked(
+                Command::new("systemctl").args(["--user", "show-environment"]),
+                "systemctl --user",
+            )
+            .context(
+                "no user session bus (su or sudo -u?): log in as this user, or run as root \
+                 for a system service",
+            )?;
+        }
+        Ok(())
     }
 
     pub fn uninstall_impl() -> Result<()> {
@@ -758,6 +819,19 @@ mod imp {
         Ok(())
     }
 
+    /// `schtasks /Create` itself says whether elevation was missing.
+    pub fn preflight_impl(_system: bool) -> Result<()> {
+        Ok(())
+    }
+
+    /// `/End` fails when the task is not running: nothing to stop then.
+    pub fn restart_impl(system: bool) -> Result<()> {
+        let _ = Command::new("schtasks")
+            .args(["/End", "/TN", TASK])
+            .output();
+        start_impl(system)
+    }
+
     // Windows uses a single task name for both scopes; `install(system)` already
     // replaces it, so there's no separate per-user task to remove after elevating.
     pub fn uninstall_user_impl() -> Result<()> {
@@ -787,8 +861,8 @@ mod imp {
 }
 
 use imp::{
-    disable_linger_impl, install_impl, installed_scope_impl, start_impl, uninstall_impl,
-    uninstall_user_impl,
+    disable_linger_impl, install_impl, installed_scope_impl, preflight_impl, restart_impl,
+    start_impl, uninstall_impl, uninstall_user_impl,
 };
 
 #[cfg(test)]

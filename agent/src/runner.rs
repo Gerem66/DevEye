@@ -123,7 +123,7 @@ fn outcome_of_close(code: Option<CloseCode>) -> SessionOutcome {
     }
 }
 
-fn jittered(min: Duration, max: Duration) -> Duration {
+pub(crate) fn jittered(min: Duration, max: Duration) -> Duration {
     if max <= min {
         return min;
     }
@@ -780,11 +780,11 @@ async fn stream_session(
                             // in memory even if the save fails: the server still
                             // accepts the old one until the new one has been used.
                             Ok(ServerMessage::TokenRotate { token }) => {
-                                config.device_token = Some(token);
-                                match config.save() {
+                                match Config::persist_rotated_token(device_id, &token) {
                                     Ok(()) => info!("device token rotated"),
                                     Err(e) => warn!(error = %e, "rotated token could not be saved"),
                                 }
+                                config.device_token = Some(token);
                             }
                             // Persistence/privilege change (install autostart, elevate…).
                             Ok(ServerMessage::Service { action }) => {

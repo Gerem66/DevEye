@@ -4,7 +4,8 @@
 //! machine's operator allows the server to order (`[policy]`), and, once
 //! enrolled, the device id, the device token and the server's order-signing key.
 //! The file lives at `$DEVEYE_CONFIG` or `<config-dir>/deveye/agent.toml`, and is
-//! read once at start: edit it, then restart the agent.
+//! read once at start: edit it (or run `deveye-agent policy`), then restart the
+//! agent.
 
 use std::net::IpAddr;
 use std::path::{Path, PathBuf};
@@ -29,6 +30,13 @@ pub const SIBLING_FILES: [&str; 3] = ["agent.pid", "agent.log", "agent.state"];
 /// Un partage par fichier, donc un balayage par motif et non par nom.
 pub const SYNC_INDEX_PREFIX: &str = "sync-";
 pub const SYNC_INDEX_SUFFIX: &str = ".index.json";
+
+/// The server an agent links to when nothing names one. A self-hosted build
+/// sets `DEVEYE_DEFAULT_SERVER` at compile time.
+pub const DEFAULT_SERVER: &str = match option_env!("DEVEYE_DEFAULT_SERVER") {
+    Some(server) => server,
+    None => "https://app.deveye.fr",
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -65,11 +73,14 @@ pub struct Config {
 /// it: it is the one thing on the device the server does not decide. Everything
 /// defaults to allowed; set a key to `false` to get monitoring without that
 /// kind of remote control.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Policy {
     /// `term.open`: an interactive shell.
     pub allow_terminal: bool,
+    /// `files.list`, `files.analyze`, `files.search`, `files.download`,
+    /// `files.archive`: browsing, searching and downloading files.
+    pub allow_files_read: bool,
     /// `files.mutate`, `files.upload`: delete, rename, create, write.
     pub allow_files_write: bool,
     /// `agent.power`: shut down, reboot, suspend, lock.
@@ -80,37 +91,210 @@ pub struct Policy {
     pub allow_service_elevate: bool,
     /// `agent.destroy`: wiping the agent's config and binary on device deletion.
     pub allow_destroy: bool,
+    /// `docker.action`: every container action (start, stop, remove, prune, deploy).
+    pub allow_docker: bool,
     /// `docker.action` `composeDeploy`: pulling a compose service's image and
-    /// recreating it, what a deployment from the server does.
+    /// recreating it, what a deployment from the server does. Needs `allow_docker` too.
     pub allow_docker_deploy: bool,
+    /// `sync.*`: CloudSync shares, the server reading and writing a synced folder.
+    pub allow_sync: bool,
 }
 
 impl Default for Policy {
     fn default() -> Self {
         Self {
             allow_terminal: true,
+            allow_files_read: true,
             allow_files_write: true,
             allow_power: true,
             allow_pkg_upgrade: true,
             allow_service_elevate: true,
             allow_destroy: true,
+            allow_docker: true,
             allow_docker_deploy: true,
+            allow_sync: true,
+        }
+    }
+}
+
+/// One switch of `[policy]`, as the command line names it
+/// (`--deny terminal,power`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum PolicyKey {
+    Terminal,
+    FilesRead,
+    FilesWrite,
+    Power,
+    PkgUpgrade,
+    ServiceElevate,
+    Destroy,
+    Docker,
+    DockerDeploy,
+    Sync,
+    /// Every switch at once.
+    All,
+}
+
+impl PolicyKey {
+    /// The switches themselves, `all` aside.
+    pub const SWITCHES: [PolicyKey; 10] = [
+        PolicyKey::Terminal,
+        PolicyKey::FilesRead,
+        PolicyKey::FilesWrite,
+        PolicyKey::Power,
+        PolicyKey::PkgUpgrade,
+        PolicyKey::ServiceElevate,
+        PolicyKey::Destroy,
+        PolicyKey::Docker,
+        PolicyKey::DockerDeploy,
+        PolicyKey::Sync,
+    ];
+
+    /// The key in `agent.toml`.
+    pub fn toml_key(self) -> &'static str {
+        match self {
+            PolicyKey::Terminal => "allow_terminal",
+            PolicyKey::FilesRead => "allow_files_read",
+            PolicyKey::FilesWrite => "allow_files_write",
+            PolicyKey::Power => "allow_power",
+            PolicyKey::PkgUpgrade => "allow_pkg_upgrade",
+            PolicyKey::ServiceElevate => "allow_service_elevate",
+            PolicyKey::Destroy => "allow_destroy",
+            PolicyKey::Docker => "allow_docker",
+            PolicyKey::DockerDeploy => "allow_docker_deploy",
+            PolicyKey::Sync => "allow_sync",
+            PolicyKey::All => "all",
+        }
+    }
+
+    /// What it covers, for the operator reading `status` or `policy`.
+    pub fn label(self) -> &'static str {
+        match self {
+            PolicyKey::Terminal => "terminal",
+            PolicyKey::FilesRead => "file browsing and downloads",
+            PolicyKey::FilesWrite => "file writes",
+            PolicyKey::Power => "power",
+            PolicyKey::PkgUpgrade => "package upgrades",
+            PolicyKey::ServiceElevate => "elevation",
+            PolicyKey::Destroy => "remote removal",
+            PolicyKey::Docker => "container actions",
+            PolicyKey::DockerDeploy => "deployments",
+            PolicyKey::Sync => "CloudSync shares",
+            PolicyKey::All => "everything",
+        }
+    }
+
+    /// `all` stands for every switch.
+    fn expand(keys: &[PolicyKey]) -> impl Iterator<Item = PolicyKey> + '_ {
+        keys.iter().flat_map(|&key| {
+            if key == PolicyKey::All {
+                PolicyKey::SWITCHES.to_vec()
+            } else {
+                vec![key]
+            }
+        })
+    }
+
+    /// The switches an order needs, every one of them.
+    fn gating(command: &str, action: Option<&str>) -> &'static [PolicyKey] {
+        use PolicyKey::*;
+        match command {
+            "term.open" => &[Terminal],
+            "files.list" | "files.analyze" | "files.search" | "files.download"
+            | "files.archive" => &[FilesRead],
+            "files.mutate" | "files.upload" => &[FilesWrite],
+            "agent.power" => &[Power],
+            "pkg.upgrade" => &[PkgUpgrade],
+            "agent.service" if action == Some("elevate") => &[ServiceElevate],
+            "agent.destroy" => &[Destroy],
+            "docker.action" if action == Some("composeDeploy") => &[Docker, DockerDeploy],
+            "docker.action" => &[Docker],
+            c if c.starts_with("sync.") => &[Sync],
+            _ => &[],
         }
     }
 }
 
 impl Policy {
+    fn switch(&mut self, key: PolicyKey) -> &mut bool {
+        match key {
+            PolicyKey::Terminal => &mut self.allow_terminal,
+            PolicyKey::FilesRead => &mut self.allow_files_read,
+            PolicyKey::FilesWrite => &mut self.allow_files_write,
+            PolicyKey::Power => &mut self.allow_power,
+            PolicyKey::PkgUpgrade => &mut self.allow_pkg_upgrade,
+            PolicyKey::ServiceElevate => &mut self.allow_service_elevate,
+            PolicyKey::Destroy => &mut self.allow_destroy,
+            PolicyKey::Docker => &mut self.allow_docker,
+            PolicyKey::DockerDeploy => &mut self.allow_docker_deploy,
+            PolicyKey::Sync => &mut self.allow_sync,
+            PolicyKey::All => unreachable!("`all` is expanded before it reaches a switch"),
+        }
+    }
+
+    fn get(&self, key: PolicyKey) -> bool {
+        match key {
+            PolicyKey::Terminal => self.allow_terminal,
+            PolicyKey::FilesRead => self.allow_files_read,
+            PolicyKey::FilesWrite => self.allow_files_write,
+            PolicyKey::Power => self.allow_power,
+            PolicyKey::PkgUpgrade => self.allow_pkg_upgrade,
+            PolicyKey::ServiceElevate => self.allow_service_elevate,
+            PolicyKey::Destroy => self.allow_destroy,
+            PolicyKey::Docker => self.allow_docker,
+            PolicyKey::DockerDeploy => self.allow_docker_deploy,
+            PolicyKey::Sync => self.allow_sync,
+            PolicyKey::All => unreachable!("`all` is expanded before it reaches a switch"),
+        }
+    }
+
+    /// Whether this switch (or, for `all`, every switch) is allowed.
+    pub fn allows(&self, key: PolicyKey) -> bool {
+        PolicyKey::expand(&[key]).all(|k| self.get(k))
+    }
+
+    /// Refuse these switches. Returns whether anything changed.
+    pub fn deny(&mut self, keys: &[PolicyKey]) -> bool {
+        self.set(keys, false)
+    }
+
+    /// Allow these switches again. Returns whether anything changed.
+    pub fn allow(&mut self, keys: &[PolicyKey]) -> bool {
+        self.set(keys, true)
+    }
+
+    fn set(&mut self, keys: &[PolicyKey], value: bool) -> bool {
+        let mut changed = false;
+        for key in PolicyKey::expand(keys) {
+            let switch = self.switch(key);
+            changed |= *switch != value;
+            *switch = value;
+        }
+        changed
+    }
+
+    /// The switches this machine refuses.
+    pub fn refused(&self) -> Vec<PolicyKey> {
+        PolicyKey::SWITCHES
+            .into_iter()
+            .filter(|&key| !self.allows(key))
+            .collect()
+    }
+
     /// The policy as the device report carries it, so the server UI can grey out
     /// what this machine will refuse.
     pub fn wire(&self) -> AgentPolicy {
         AgentPolicy {
             terminal: self.allow_terminal,
+            files_read: self.allow_files_read,
             files_write: self.allow_files_write,
             power: self.allow_power,
             pkg_upgrade: self.allow_pkg_upgrade,
             service_elevate: self.allow_service_elevate,
             destroy: self.allow_destroy,
+            docker: self.allow_docker,
             docker_deploy: self.allow_docker_deploy,
+            sync: self.allow_sync,
         }
     }
 
@@ -119,22 +303,12 @@ impl Policy {
     /// one action of a command (`agent.service` `elevate`, `docker.action`
     /// `composeDeploy`).
     pub fn refusal(&self, command: &str, action: Option<&str>) -> Option<String> {
-        let key = match command {
-            "term.open" if !self.allow_terminal => "allow_terminal",
-            "files.mutate" | "files.upload" if !self.allow_files_write => "allow_files_write",
-            "agent.power" if !self.allow_power => "allow_power",
-            "pkg.upgrade" if !self.allow_pkg_upgrade => "allow_pkg_upgrade",
-            "agent.service" if action == Some("elevate") && !self.allow_service_elevate => {
-                "allow_service_elevate"
-            }
-            "agent.destroy" if !self.allow_destroy => "allow_destroy",
-            "docker.action" if action == Some("composeDeploy") && !self.allow_docker_deploy => {
-                "allow_docker_deploy"
-            }
-            _ => return None,
-        };
+        let key = PolicyKey::gating(command, action)
+            .iter()
+            .find(|&&key| !self.allows(key))?;
         Some(format!(
-            "refused by local policy ({key} = false in agent.toml)"
+            "refused by local policy ({} = false in agent.toml)",
+            key.toml_key()
         ))
     }
 }
@@ -212,6 +386,19 @@ impl Config {
         write_private(&path, toml.as_bytes())
             .with_context(|| format!("writing {}", path.display()))?;
         Ok(())
+    }
+
+    /// Write a rotated device token into the file as it is on disk now, not as
+    /// this process loaded it: what the operator changed meanwhile (`[policy]`)
+    /// stays. Refused when the file holds another enrollment (a re-link since):
+    /// the rotated token then belongs to no one.
+    pub fn persist_rotated_token(device_id: &str, token: &str) -> Result<()> {
+        let mut on_disk = Self::load()?;
+        if on_disk.device_id.as_deref() != Some(device_id) {
+            bail!("agent.toml now holds another enrollment");
+        }
+        on_disk.device_token = Some(token.to_string());
+        on_disk.save()
     }
 
     /// Is this path the agent's own directory, or inside it? The server may
@@ -440,42 +627,73 @@ mod tests {
     #[test]
     fn policy_refuses_each_gated_order_and_nothing_else() {
         let cases = [
-            ("term.open", None),
-            ("files.mutate", None),
-            ("files.upload", None),
-            ("agent.power", None),
-            ("pkg.upgrade", None),
-            ("agent.service", Some("elevate")),
-            ("agent.destroy", None),
-            ("docker.action", Some("composeDeploy")),
+            ("term.open", None, PolicyKey::Terminal),
+            ("files.list", None, PolicyKey::FilesRead),
+            ("files.analyze", None, PolicyKey::FilesRead),
+            ("files.search", None, PolicyKey::FilesRead),
+            ("files.download", None, PolicyKey::FilesRead),
+            ("files.archive", None, PolicyKey::FilesRead),
+            ("files.mutate", None, PolicyKey::FilesWrite),
+            ("files.upload", None, PolicyKey::FilesWrite),
+            ("agent.power", None, PolicyKey::Power),
+            ("pkg.upgrade", None, PolicyKey::PkgUpgrade),
+            ("agent.service", Some("elevate"), PolicyKey::ServiceElevate),
+            ("agent.destroy", None, PolicyKey::Destroy),
+            ("docker.action", Some("restart"), PolicyKey::Docker),
+            (
+                "docker.action",
+                Some("composeDeploy"),
+                PolicyKey::DockerDeploy,
+            ),
+            ("sync.config", None, PolicyKey::Sync),
+            ("sync.applyChunk", None, PolicyKey::Sync),
         ];
         let open = Policy::default();
-        let closed = Policy {
-            allow_terminal: false,
-            allow_files_write: false,
-            allow_power: false,
-            allow_pkg_upgrade: false,
-            allow_service_elevate: false,
-            allow_destroy: false,
-            allow_docker_deploy: false,
-        };
-        for (command, action) in cases {
+        for (command, action, key) in cases {
             assert!(
                 open.refusal(command, action).is_none(),
                 "{command} allowed by default"
             );
+            let mut closed = Policy::default();
+            closed.deny(&[key]);
             let why = closed.refusal(command, action).expect(command);
-            assert!(why.contains("agent.toml"), "{why}");
+            assert!(why.contains(key.toml_key()), "{why}");
         }
+        // A deployment is a container action: refusing Docker refuses it too.
+        let mut no_docker = Policy::default();
+        no_docker.deny(&[PolicyKey::Docker]);
+        assert!(no_docker
+            .refusal("docker.action", Some("composeDeploy"))
+            .is_some());
+
         // What the policy does not name stays allowed, even fully closed.
-        for command in ["agent.collect", "files.list", "term.input", "agent.update"] {
+        let mut closed = Policy::default();
+        closed.deny(&[PolicyKey::All]);
+        for command in [
+            "agent.collect",
+            "term.input",
+            "agent.update",
+            "docker.inventory",
+        ] {
             assert!(closed.refusal(command, None).is_none(), "{command}");
         }
         assert!(closed
             .refusal("agent.service", Some("install-user"))
             .is_none());
-        // Seul le déploiement se ferme : les autres actions Docker restent.
-        assert!(closed.refusal("docker.action", Some("restart")).is_none());
+    }
+
+    #[test]
+    fn allow_and_deny_report_whether_anything_changed() {
+        let mut policy = Policy::default();
+        assert!(policy.deny(&[PolicyKey::Terminal, PolicyKey::Power]));
+        assert!(!policy.deny(&[PolicyKey::Terminal]));
+        assert_eq!(
+            policy.refused(),
+            vec![PolicyKey::Terminal, PolicyKey::Power]
+        );
+        assert!(!policy.allows(PolicyKey::All));
+        assert!(policy.allow(&[PolicyKey::All]));
+        assert_eq!(policy, Policy::default());
     }
 
     #[test]

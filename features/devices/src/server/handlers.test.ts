@@ -5,6 +5,7 @@ import type { z, ZodType } from 'zod';
 import type { AgentManifest, DeviceRow, MetricSeriesPoint, PresenceEvent, ProcessSample } from '@deveye/types';
 import {
     FeatureError,
+    type FeatureServer,
     type SdkDevice,
     type SdkFeatureContext,
     type SdkWorkspaceSummary
@@ -50,6 +51,7 @@ process.env.LINK_CODE_TTL_SECONDS = '120';
 delete process.env.MONITORING_RETENTION_DAYS;
 const { devicesHandlers } = await import('./handlers');
 const { computeAgentUpdate } = await import('./_shared');
+const { serverEntry } = await import('./index');
 
 /** Le handler d'un contrat, typé par ce contrat (le registre est hétérogène). */
 function handlerFor<C extends { command: string; input: ZodType; output: ZodType }>(contract: C) {
@@ -130,7 +132,8 @@ interface StoredCode {
     user_id: number;
     workspace_id: number;
     expires_at: number;
-    used_at: number | null;
+    max_uses: number;
+    uses: number;
 }
 
 interface StoredInstant {
@@ -171,7 +174,13 @@ function fakeRepo(deviceRows: DeviceRow[], shares: Record<string, number[]> = {}
     const copy = (r: DeviceRow | undefined): DeviceRow | null => (r ? { ...r } : null);
     const find = (id: string) => deviceRows.find((r) => r.id === id);
     const now = () => Math.floor(Date.now() / 1000);
-    const toLinkCode = (c: StoredCode): LinkCode => ({ code: c.code, expiresAt: c.expires_at });
+    const toLinkCode = (c: StoredCode): LinkCode => ({
+        code: c.code,
+        expiresAt: c.expires_at,
+        maxUses: c.max_uses,
+        uses: c.uses
+    });
+    const usable = (c: StoredCode) => c.uses < c.max_uses && c.expires_at > now();
     const inRange = (from: number, to: number) => (i: StoredInstant) => i.ts >= from && i.ts <= to;
     const expired = (days: number) => (i: StoredInstant) => !i.pinned && i.ts < Date.now() - days * DAY_MS;
 
@@ -254,24 +263,23 @@ function fakeRepo(deviceRows: DeviceRow[], shares: Record<string, number[]> = {}
             }
         },
         linkCodes: {
-            async create({ userId, workspaceId, ttlSeconds }) {
+            async create({ userId, workspaceId, ttlSeconds, maxUses }) {
                 const created: StoredCode = {
                     code: `CODE-${++seq}`,
                     user_id: userId,
                     workspace_id: workspaceId,
                     expires_at: now() + ttlSeconds,
-                    used_at: null
+                    max_uses: maxUses,
+                    uses: 0
                 };
                 codes.push(created);
                 return toLinkCode(created);
             },
             listActive: async (workspaceId) =>
-                codes
-                    .filter((c) => c.workspace_id === workspaceId && c.used_at === null && c.expires_at > now())
-                    .map(toLinkCode),
+                codes.filter((c) => c.workspace_id === workspaceId && usable(c)).map(toLinkCode),
             async revoke(workspaceId, code) {
                 const index = codes.findIndex(
-                    (c) => c.code === code && c.workspace_id === workspaceId && c.used_at === null
+                    (c) => c.code === code && c.workspace_id === workspaceId && c.uses < c.max_uses
                 );
                 if (index === -1) return false;
                 codes.splice(index, 1);
@@ -377,6 +385,8 @@ interface CtxOverrides {
     /** Ce que la façade révèle ; par défaut, chaque ligne du dépôt, A seule en ligne. */
     devices?: readonly SdkDevice[];
     quotaLimits?: Record<string, number>;
+    /** Les compteurs du module, pour ce que `ctx.quota.usage` relit. */
+    quotas?: FeatureServer<DevicesRepo>['quotas'];
     /** Les appareils que l'offre tient en pause, sous la clé `agents`. */
     pausedItems?: Record<string, readonly string[]>;
 }
@@ -713,7 +723,7 @@ describe("la garde d'un appareil", () => {
 });
 
 describe('les codes de liaison', () => {
-    it("un code s'émet dans l'espace actif, sous la durée de l'environnement, et se journalise sans sa valeur", async () => {
+    it("un code s'émet dans l'espace actif, sous la durée de l'environnement, pour une machine, et se journalise sans sa valeur", async () => {
         const repo = fakeRepo([]);
         const ctx = contextFor(repo, { isAdmin: true, workspaceId: 2 });
         const before = Math.floor(Date.now() / 1000);
@@ -722,39 +732,79 @@ describe('les codes de liaison', () => {
         assert.equal(repo.codes[0].workspace_id, 2);
         assert.equal(repo.codes[0].user_id, 1);
         assert.ok(out.expiresAt >= before + 120 && out.expiresAt <= before + 121);
+        assert.deepEqual([out.maxUses, out.uses], [1, 0]);
         assert.equal(ctx.recorded.audits[0].action, 'devices.linkCodeCreate');
         assert.doesNotMatch(ctx.recorded.audits[0].description, /CODE-/);
     });
 
-    it('une durée se borne à une heure, et un code sans expiration est refusé dès le contrat', () => {
-        assert.equal(devicesLinkCodeCreate.input.safeParse({ ttlSeconds: 3600 }).success, true);
-        assert.equal(devicesLinkCodeCreate.input.safeParse({ ttlSeconds: 7200 }).success, false);
-        assert.equal(devicesLinkCodeCreate.input.safeParse({ ttlSeconds: null }).success, false);
+    it('un code sert le nombre de machines demandé', async () => {
+        const repo = fakeRepo([]);
+        const out = await handlerFor(devicesLinkCodeCreate)(contextFor(repo, { isAdmin: true }), {
+            ttlSeconds: 3600,
+            maxUses: 25
+        });
+        assert.deepEqual([out.maxUses, out.uses], [25, 0]);
+        assert.equal(repo.codes[0].max_uses, 25);
     });
 
-    it("la liste rend les codes encore valables de l'espace, quel que soit leur émetteur", async () => {
+    it("une durée se borne à sept jours, un nombre d'usages à mille, et rien ne se passe de borne", () => {
+        const accepts = (input: unknown) => devicesLinkCodeCreate.input.safeParse(input).success;
+        assert.equal(accepts({ ttlSeconds: 7 * 86400 }), true);
+        assert.equal(accepts({ ttlSeconds: 8 * 86400 }), false);
+        assert.equal(accepts({ ttlSeconds: null }), false);
+        assert.equal(accepts({ maxUses: 1000 }), true);
+        assert.equal(accepts({ maxUses: 1001 }), false);
+        assert.equal(accepts({ maxUses: 0 }), false);
+        assert.equal(accepts({ maxUses: 2.5 }), false);
+    });
+
+    it("la liste rend les codes de l'espace qui servent encore, quel que soit leur émetteur", async () => {
         const repo = fakeRepo([]);
         const now = Math.floor(Date.now() / 1000);
+        const code = (c: string, user: number, workspace: number, expires: number, uses: number, max = 1) => ({
+            code: c,
+            user_id: user,
+            workspace_id: workspace,
+            expires_at: expires,
+            max_uses: max,
+            uses
+        });
         repo.codes.push(
-            { code: 'MINE-OK1', user_id: 1, workspace_id: 1, expires_at: now + 60, used_at: null },
-            { code: 'MINE-USED', user_id: 1, workspace_id: 1, expires_at: now + 60, used_at: now },
-            { code: 'MINE-OLD', user_id: 1, workspace_id: 1, expires_at: now - 1, used_at: null },
-            { code: 'COLLEAGUE', user_id: 2, workspace_id: 1, expires_at: now + 60, used_at: null },
-            { code: 'ELSEWHERE', user_id: 1, workspace_id: 2, expires_at: now + 60, used_at: null }
+            code('MINE-OK1', 1, 1, now + 60, 0),
+            code('MINE-USED', 1, 1, now + 60, 1),
+            code('MINE-HALF', 1, 1, now + 60, 2, 5),
+            code('MINE-SPENT', 1, 1, now + 60, 5, 5),
+            code('MINE-OLD', 1, 1, now - 1, 0),
+            code('COLLEAGUE', 2, 1, now + 60, 0),
+            code('ELSEWHERE', 1, 2, now + 60, 0)
         );
         const out = await handlerFor(devicesLinkCodeList)(contextFor(repo, { isAdmin: true }), {});
+        devicesLinkCodeList.output.parse(out);
         assert.deepEqual(
-            out.codes.map((c) => c.code),
-            ['MINE-OK1', 'COLLEAGUE']
+            out.codes.map((c) => `${c.code} ${c.uses}/${c.maxUses}`),
+            ['MINE-OK1 0/1', 'MINE-HALF 2/5', 'COLLEAGUE 0/1']
         );
     });
 
-    it("la révocation retire un code de l'espace, pas d'un autre, et ne se refait pas", async () => {
+    it("la liste nomme le serveur que l'agent joint, et l'offre du propriétaire quand elle borne", async () => {
+        const repo = fleet();
+        const unlimited = await handlerFor(devicesLinkCodeList)(contextFor(repo, { isAdmin: true }), {});
+        assert.equal(unlimited.server, 'https://deveye.test');
+        assert.equal(unlimited.quota, null);
+
+        const bounded = await handlerFor(devicesLinkCodeList)(
+            contextFor(repo, { isAdmin: true, quotaLimits: { agents: 5 }, quotas: serverEntry.quotas }),
+            {}
+        );
+        assert.deepEqual(bounded.quota, { used: 2, limit: 5 });
+    });
+
+    it("la révocation retire un code de l'espace, même entamé, pas d'un autre, se journalise et ne se refait pas", async () => {
         const repo = fakeRepo([]);
         const later = Math.floor(Date.now() / 1000) + 60;
         repo.codes.push(
-            { code: 'ABCD-EFGH', user_id: 2, workspace_id: 1, expires_at: later, used_at: null },
-            { code: 'WXYZ-2345', user_id: 1, workspace_id: 2, expires_at: later, used_at: null }
+            { code: 'ABCD-EFGH', user_id: 2, workspace_id: 1, expires_at: later, max_uses: 3, uses: 1 },
+            { code: 'WXYZ-2345', user_id: 1, workspace_id: 2, expires_at: later, max_uses: 1, uses: 0 }
         );
         const ctx = contextFor(repo, { isAdmin: true });
         const out = await handlerFor(devicesLinkCodeRevoke)(ctx, { code: 'abcd-efgh' });
@@ -763,6 +813,8 @@ describe('les codes de liaison', () => {
             repo.codes.map((c) => c.code),
             ['WXYZ-2345']
         );
+        assert.equal(ctx.recorded.audits[0].action, 'devices.linkCodeRevoke');
+        assert.doesNotMatch(JSON.stringify(ctx.recorded.audits[0]), /ABCD/);
         await assert.rejects(handlerFor(devicesLinkCodeRevoke)(ctx, { code: 'ABCD-EFGH' }), failsWith('not_found'));
         await assert.rejects(handlerFor(devicesLinkCodeRevoke)(ctx, { code: 'WXYZ-2345' }), failsWith('not_found'));
     });

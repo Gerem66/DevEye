@@ -1,5 +1,5 @@
 import { Switch, useCurrentUser } from 'deveye-sdk-client';
-import type { AgentPolicy, AgentServiceScope, DeviceReport } from '@deveye/types';
+import type { AgentServiceScope, DeviceReport } from '@deveye/types';
 
 import type { FleetDevice } from '../contracts/commands';
 import { agentUpdatable } from './agentVersion';
@@ -14,6 +14,7 @@ import {
     type Unavailable
 } from './availability';
 import type { DeviceActions } from './manage/useDeviceActions';
+import { POLICY_KEYS, POLICY_LABEL } from './policy';
 import type { useAgentUpdate } from './useAgentUpdate';
 import styles from './style.module.css';
 
@@ -21,16 +22,6 @@ const SCOPE_LABEL: Record<AgentServiceScope, string> = {
     none: 'Aucun : l’agent ne survit pas à un redémarrage',
     user: 'À l’ouverture de session',
     system: 'Au démarrage de la machine (service système)'
-};
-
-const POLICY_LABEL: Record<keyof AgentPolicy, string> = {
-    terminal: 'terminal',
-    filesWrite: 'écriture de fichiers',
-    power: 'commandes système',
-    pkgUpgrade: 'mises à jour système',
-    serviceElevate: 'élévation en root',
-    destroy: 'auto-destruction',
-    dockerDeploy: 'déploiements'
 };
 
 interface AgentAction {
@@ -115,7 +106,7 @@ export function AgentPanel({ device, report, actions, canWrite, updater, onShowP
     const reach = agentReach(device);
     const fleet = firstReason(!canWrite && NO_WRITE, device.foreign && FOREIGN);
     const adminOnly = firstReason(!isAdmin && ADMIN_ONLY, fleet, reach);
-    const refused = agent ? (Object.keys(POLICY_LABEL) as (keyof AgentPolicy)[]).filter((k) => !agent.policy[k]) : [];
+    const refused = agent ? POLICY_KEYS.filter((k) => !agent.policy[k]) : [];
 
     const elevated = agent?.privileged === true && scope === 'system';
     const privilege: AgentAction = {

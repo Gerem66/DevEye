@@ -75,7 +75,7 @@ export const devicesAccountExport: FeatureAccountExport<DevicesRepo> = {
         },
         // Un blob gzip par instant : décompressé par `workspace`, s'il est gardé.
         device_process_samples: 'custom',
-        device_link_codes: { skip: 'Les codes d’appairage ne servent qu’une fois, puis expirent.' }
+        device_link_codes: { skip: 'Les codes d’appairage expirent en sept jours au plus.' }
     },
     files: {
         processes: {

@@ -1029,7 +1029,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     const deviceActions: DeviceAction[] = [
         // Le seul geste qui ne dépend de rien : il relit le dernier rapport reçu.
         { icon: 'icon-cpu', label: 'Matériel', onClick: showHardwareInfo },
-        remote('files', 'Explorateur de fichiers', () => setFilesOpen(true), 'icon-folder'),
+        remote('files', 'Explorateur de fichiers', () => setFilesOpen(true), 'icon-folder', 'filesRead'),
         remote('terminal', 'Terminal distant', () => setTerminalOpen(true), 'icon-terminal', 'terminal'),
         remote('logs', 'Logs de l’appareil', () => setLogsOpen(true), 'icon-logs'),
         {
@@ -1601,7 +1601,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             >
                 {dockerOpen && (
                     <Suspense fallback={<p className={styles.waitingMsg}>Chargement des conteneurs…</p>}>
-                        <DockerPanel deviceId={selected.id} />
+                        <DockerPanel deviceId={selected.id} actionable={policy?.docker ?? true} />
                     </Suspense>
                 )}
             </Dialog>

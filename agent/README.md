@@ -75,47 +75,155 @@ published whenever the agent (or the DevEye version) changes.
 
 ## Quick start
 
-1. In the DevEye web UI, open **Appareils** → **Appairer un appareil** to
-   generate a one-time link code (valid one hour at most).
-2. Enroll this machine:
+1. In the DevEye web UI, open **Appareils** → **Appairer un appareil**. Pick the
+   system and what DevEye may do on the machine, then generate a link code.
+2. Paste the command the dialog shows into a terminal of the machine. On Linux
+   and macOS:
     ```sh
-    deveye-agent link ABCD-EFGH --server https://deveye.example.com
+    curl -fsSL https://app.deveye.fr/install.sh | sh -s -- ABCD-EFGH --autostart
     ```
-    A plain `http://` server is refused unless it is this machine (see
-    [the transport](#what-the-server-can-do-here-and-how-to-limit-it)).
+    and in PowerShell on Windows:
+    ```powershell
+    & ([scriptblock]::Create((irm https://app.deveye.fr/install.ps1))) ABCD-EFGH --autostart
+    ```
+    The script downloads the agent built for this machine (the code stands for
+    a session, no use of it is spent), installs it (`/usr/local/bin` as root,
+    `~/.local/bin` otherwise; `Program Files` or the user's AppData on Windows),
+    then runs `deveye-agent link` with the options that follow the code. With
+    `sudo sh` (or an administrator PowerShell), `--autostart` installs a system
+    service.
 3. A machine new to the workspace is **active at once**, if the plan allows one
    more device (otherwise `link` says so and the code stays valid). Linking a
    machine the workspace already knew takes over its record and puts it back to
    “En attente d’approbation”: its agent is refused until someone approves it in
    **Appareils** (Agent popup), and retries every 30 s. Revoking a device
    archives it and wipes its token; only a new `link` brings it back.
-4. Start streaming (restart the agent if it was already running: it still holds
-   the old token):
-    ```sh
-    deveye-agent run            # foreground
-    deveye-agent run --detach   # background (writes a PID file)
-    ```
 
-The first sample and a health/security report are sent **immediately** on
-connect, so the dashboard shows data without waiting a full interval.
+Without the script: download the binary from **Télécharger l’agent**, then
+`deveye-agent link ABCD-EFGH` and `deveye-agent run` (or `link --autostart`). A
+plain `http://` server is refused unless it is this machine (see
+[the transport](#what-the-server-can-do-here-and-how-to-limit-it)). The first
+sample and a health/security report are sent **immediately** on connect, so the
+dashboard shows data without waiting a full interval.
+
+The installer is only as trustworthy as the server that serves it: `curl | sh`
+runs what that server sends, with the `--deny` options it was given. For a
+machine where that matters, take the released binary and run `link` yourself;
+self-updates, on the other hand, only ever install a binary signed by the
+release CI (see [update.rs](src/update.rs)).
 
 ## Commands
 
-| Command                                                                     | Description                                                                                                                                                                                                                                                                                                                            |
-| --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `link <code> --server <url> [--name <name>]`                                | Enroll using a one-time code. Platform is auto-detected; name defaults to the hostname. Re-linking keeps the machine identity.                                                                                                                                                                                                         |
-| `run [--once] [--interval <secs>] [--detach] [--managed] [--config <path>]` | Run the monitoring loop. `--once`: collect+send a single cycle then exit (handy to test). `--interval`: seconds between samples (default 30). `--detach`: background + PID file. `--managed` / `--config`: **internal**, injected by the installed service — see [Supervision](#supervision---managed) below; never pass them by hand. |
-| `stop`                                                                      | Stop a backgrounded agent (reads the PID file, sends SIGTERM).                                                                                                                                                                                                                                                                         |
-| `status`                                                                    | Print platform, server, enrollment and running state.                                                                                                                                                                                                                                                                                  |
-| `service install [--system] \| uninstall \| status`                         | Manage the autostart service (launchd / systemd / Task Scheduler). Per-user by default, `--system` needs root. Also driven from the UI (« Démarrage auto »).                                                                                                                                                                           |
-| `unlink`                                                                    | Forget the local enrollment (deletes the config + token).                                                                                                                                                                                                                                                                              |
-| `uninstall [--yes] [--purge-shares]`                                        | **Retrait complet** de la machine : autostart, linger, processus, config, jeton, journal, caches, binaire. Voir [Retrait complet](#retrait-complet-uninstall).                                                                                                                                                                         |
+| Command                                                                                                      | Description                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `link <code> [--server <url>] [--name <name>] [--deny <list>] [--monitor-only] [--shuffle-id] [--autostart]` | Enroll with a link code. The server defaults to the one saved by a previous link, else `https://app.deveye.fr`. `--deny` and `--monitor-only` refuse kinds of orders ([the policy](#what-the-server-can-do-here-and-how-to-limit-it)); on a re-link they only add refusals. `--shuffle-id`: see [cloned machines](#cloned-machines). `--autostart`: then install and start the service, system-wide as root. Re-linking keeps the machine identity. |
+| `run [--once] [--interval <secs>] [--detach] [--managed] [--config <path>]`                                  | Run the monitoring loop. Not linked yet, it enrolls first with `DEVEYE_LINK_CODE` ([fleets](#linking-a-fleet)). `--once`: collect+send a single cycle then exit (handy to test). `--interval`: seconds between samples (default 30). `--detach`: background + PID file. `--managed` / `--config`: **internal**, injected by the installed service — see [Supervision](#supervision---managed) below; never pass them by hand.                       |
+| `policy [--allow <list>] [--deny <list>] [--monitor-only]`                                                   | Show what this machine lets the server order, or change it, then restart the agent so it applies.                                                                                                                                                                                                                                                                                                                                                   |
+| `stop`                                                                                                       | Stop a backgrounded agent (reads the PID file, sends SIGTERM).                                                                                                                                                                                                                                                                                                                                                                                      |
+| `status`                                                                                                     | Print platform, server, enrollment and running state.                                                                                                                                                                                                                                                                                                                                                                                               |
+| `service install [--system] \| uninstall \| status`                                                          | Manage the autostart service (launchd / systemd / Task Scheduler). Per-user by default, `--system` needs root. Also driven from the UI (« Démarrage auto »).                                                                                                                                                                                                                                                                                        |
+| `unlink`                                                                                                     | Forget the local enrollment (deletes the config + token).                                                                                                                                                                                                                                                                                                                                                                                           |
+| `uninstall [--yes] [--purge-shares]`                                                                         | **Retrait complet** de la machine : autostart, linger, processus, config, jeton, journal, caches, binaire. Voir [Retrait complet](#retrait-complet-uninstall).                                                                                                                                                                                                                                                                                      |
 
 Test a freshly linked device end-to-end:
 
 ```sh
 deveye-agent run --once     # one instant + report, then exits
 ```
+
+## Linking a fleet
+
+A link code serves as many machines as it was generated for (a thousand at
+most), for up to seven days, in one workspace. Every new machine takes a device
+of the plan; one the plan has no room for is refused, and the code stays valid.
+Keep both numbers as small as the rollout allows, and revoke the code once it is
+done: whoever holds it can link a machine to the workspace until then.
+
+Everything `link` takes can come from the environment, which is how an image or
+a provisioning tool links machines without a human at the keyboard:
+
+| Variable                 | Stands for                                                                                |
+| ------------------------ | ----------------------------------------------------------------------------------------- |
+| `DEVEYE_LINK_CODE`       | the code; `run` enrolls with it when the machine is not linked yet, and only then         |
+| `DEVEYE_SERVER`          | `--server`                                                                                |
+| `DEVEYE_NAME`            | `--name` (the hostname otherwise)                                                         |
+| `DEVEYE_DENY`            | `--deny`, e.g. `terminal,power`; on an agent already linked, added at every start         |
+| `DEVEYE_MONITOR_ONLY`    | `--monitor-only` (`1`, `true`, `yes`)                                                     |
+| `DEVEYE_SHUFFLE_ID`      | `--shuffle-id` (`1`, `true`, `yes`)                                                       |
+| `DEVEYE_CONFIG`          | the config file, instead of `<config-dir>/deveye/agent.toml`                              |
+| `DEVEYE_MANAGED`         | same as `run --managed`                                                                   |
+| `DEVEYE_ALLOW_PLAINTEXT` | `1` accepts a plain `http://` server that is not this machine (as `--insecure-plaintext`) |
+| `RUST_LOG`               | log level (`info` by default)                                                             |
+
+A machine that is linked ignores `DEVEYE_LINK_CODE`, so it can stay in a unit or
+an image: nothing happens twice, and a revoked device never comes back on its
+own (only a new `link` does). Under a service manager, a failed enrollment never
+ends the agent (it would be relaunched at once): it retries a network failure
+within five minutes, a full plan every quarter of an hour or so, and stops
+calling the server for a code that is invalid, spent or refused, waiting for a
+`link` made by hand.
+
+**cloud-init**, once per instance:
+
+```yaml
+runcmd:
+    - curl -fsSL https://app.deveye.fr/install.sh | sh -s -- ABCD-EFGH-JKLM --autostart --deny terminal
+```
+
+**Ansible**, keeping the code out of the logs:
+
+```yaml
+- name: Link to DevEye
+  ansible.builtin.shell: curl -fsSL https://app.deveye.fr/install.sh | sh -s -- --autostart
+  args:
+      creates: /root/.config/deveye/agent.toml
+  environment:
+      DEVEYE_LINK_CODE: '{{ deveye_link_code }}'
+  no_log: true
+```
+
+**systemd**, for an image that links at first boot: put the code in a file only
+root reads (a unit file is readable by every user), then run the agent as usual.
+
+```ini
+# /etc/systemd/system/deveye-agent.service.d/link.conf
+[Service]
+EnvironmentFile=/etc/deveye/link.env
+```
+
+```sh
+# /etc/deveye/link.env, mode 0600
+DEVEYE_LINK_CODE=ABCD-EFGH-JKLM
+DEVEYE_SHUFFLE_ID=1
+```
+
+**Docker**: a container has no machine-id, and its hostname changes with every
+recreation. Keep the config on a volume, with a random identity drawn once:
+
+```sh
+docker run -d --restart unless-stopped --name deveye-agent \
+  -v deveye-agent:/data -e DEVEYE_CONFIG=/data/agent.toml \
+  -e DEVEYE_LINK_CODE=ABCD-EFGH-JKLM -e DEVEYE_SHUFFLE_ID=1 -e DEVEYE_NAME=web-1 \
+  <image with deveye-agent> deveye-agent run --managed
+```
+
+### Cloned machines
+
+A machine is known to DevEye by its fingerprint: `/etc/machine-id` on Linux,
+the `IOPlatformUUID` on macOS, the `MachineGuid` on Windows. VMs cloned from an
+image that kept its `machine-id` share it, and would share one device record.
+So a code that serves several machines refuses one the workspace already knows
+(`conflict`), rather than let a clone take over its sibling's record.
+
+- An image sealed with an empty `/etc/machine-id` (the systemd way) needs
+  nothing: each clone draws its own at first boot.
+- Otherwise, link with `--shuffle-id` (or `DEVEYE_SHUFFLE_ID=1`): the agent draws
+  a random identity, stored in its config, instead of reading the machine's.
+  Running the same command again keeps it; on a machine that was linked under
+  its machine-id, it links as a new device and says so.
+- Never clone a machine that is already linked: the copies would share one
+  token and knock each other off the server. `deveye-agent unlink` before
+  sealing the image.
 
 ### System scope: two traps the per-user scope never hits
 
@@ -237,7 +345,10 @@ format, et [`uninstall`](#retrait-complet-uninstall) pour tout reprendre.
 
 The directory is `0700` and every file in it `0600`: the config holds the device
 token, the log may hold server frames, the sync caches name every file of a
-share. The config is read once, at start: **edit it, then restart the agent**.
+share. The config is read once, at start: **edit it, then restart the agent**
+(`deveye-agent policy` does both for the policy). A token the server rotates
+meanwhile is written into the file as it is on disk, so an edit made while the
+agent runs stays.
 
 ## What the server can do here, and how to limit it
 
@@ -249,17 +360,28 @@ service). Three things bound that.
 **The local policy.** The `[policy]` section of `agent.toml` says what this
 machine accepts, and no server order can change it. Set a key to `false` to keep
 monitoring without that kind of remote control; the matching buttons are greyed
-out in DevEye, and `deveye-agent status` lists what is refused.
+out in DevEye, and `deveye-agent status` lists what is refused. It is decided at
+`link` (`--deny terminal,power`, or `--monitor-only` for every key) and changed
+on the machine only, with `deveye-agent policy --allow <list>` / `--deny <list>`,
+which restarts the agent so it applies.
 
-| Key                     | Refuses                                                            |
-| ----------------------- | ------------------------------------------------------------------ |
-| `allow_terminal`        | opening a shell                                                    |
-| `allow_files_write`     | delete, rename, create, upload (browsing and download stay)        |
-| `allow_power`           | shut down, reboot, suspend, hibernate, lock                        |
-| `allow_pkg_upgrade`     | system package upgrades                                            |
-| `allow_service_elevate` | asking the desktop to turn the agent into a root service           |
-| `allow_destroy`         | wiping the agent when the device is deleted (uninstall it by hand) |
-| `allow_docker_deploy`   | deployments: pulling a compose service's image and recreating it   |
+| Key                     | `--deny` value    | Refuses                                                            |
+| ----------------------- | ----------------- | ------------------------------------------------------------------ |
+| `allow_terminal`        | `terminal`        | opening a shell                                                    |
+| `allow_files_read`      | `files-read`      | browsing, searching, downloading and archiving files               |
+| `allow_files_write`     | `files-write`     | delete, rename, create, upload                                     |
+| `allow_power`           | `power`           | shut down, reboot, suspend, hibernate, lock                        |
+| `allow_pkg_upgrade`     | `pkg-upgrade`     | system package upgrades                                            |
+| `allow_service_elevate` | `service-elevate` | asking the desktop to turn the agent into a root service           |
+| `allow_destroy`         | `destroy`         | wiping the agent when the device is deleted (uninstall it by hand) |
+| `allow_docker`          | `docker`          | every container action (the inventory stays readable)              |
+| `allow_docker_deploy`   | `docker-deploy`   | deployments: pulling a compose service's image and recreating it   |
+| `allow_sync`            | `sync`            | CloudSync shares: the server reading and writing a synced folder   |
+
+`all` stands for every key. Monitoring (metrics, reports, the Docker inventory)
+is never refused: it is what the agent is for. Nor can the server install an
+older agent to get around a key it does not know: a self-update to a version
+older than the running one is refused.
 
 Whatever the policy, the explorer never writes into the agent's own directory:
 that is where the policy lives. Be honest about the limit: a machine that allows

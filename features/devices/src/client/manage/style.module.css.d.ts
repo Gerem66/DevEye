@@ -14,8 +14,12 @@ declare const styles: {
     readonly archRowDisabled: string;
     readonly 'clients-spin': string;
     readonly codeCell: string;
+    readonly codePick: string;
     readonly codeRowActions: string;
+    readonly codeRowSelected: string;
     readonly codeTable: string;
+    readonly command: string;
+    readonly commandActions: string;
     readonly container: string;
     readonly copied: string;
     readonly deleteErrorHint: string;
@@ -56,6 +60,12 @@ declare const styles: {
     readonly osHint: string;
     readonly osName: string;
     readonly osTile: string;
+    readonly pairHead: string;
+    readonly pairHint: string;
+    readonly pairLabel: string;
+    readonly pairOptions: string;
+    readonly pairSection: string;
+    readonly policyGrid: string;
     readonly serviceBox: string;
     readonly serviceNoteError: string;
     readonly serviceNoteOk: string;
@@ -75,6 +85,7 @@ declare const styles: {
     readonly toggleRow: string;
     readonly updateAllBtn: string;
     readonly updateNote: string;
+    readonly usesField: string;
     readonly validityCell: string;
     readonly widgetContent: string;
     readonly widgetEmpty: string;

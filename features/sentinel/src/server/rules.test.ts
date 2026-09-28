@@ -252,12 +252,15 @@ describe('Règles de ports', () => {
                             probes: [],
                             policy: {
                                 terminal: true,
+                                filesRead: true,
                                 filesWrite: true,
                                 power: true,
                                 pkgUpgrade: true,
                                 serviceElevate: true,
                                 destroy: true,
-                                dockerDeploy: true
+                                docker: true,
+                                dockerDeploy: true,
+                                sync: true
                             },
                             insecureTransport: false
                         },

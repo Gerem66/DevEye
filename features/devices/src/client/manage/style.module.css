@@ -458,18 +458,87 @@
 
 /* ─── Link-code dialog (rendered inside the shared <Dialog/>) ──────────────── */
 
-/* Generation controls: validity selector and Generate. */
+/* Une étape de la fenêtre : son intitulé, puis ce qu'on y choisit. */
+.pairSection {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-lg);
+}
+
+.pairLabel {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+/* L'intitulé de la commande et le choix de sa forme, sur une ligne quand elle suffit. */
+.pairHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.pairHint {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.pairOptions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-lg);
+}
+
+/* Les droits « sur mesure », une case par interrupteur de la machine. */
+.policyGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: var(--space-xs) var(--space-md);
+}
+
+/* La commande à copier : entière et lisible, repliée plutôt que tronquée. */
+.command {
+    margin: 0;
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    user-select: all;
+}
+
+.commandActions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+/* Generation controls: validity, number of machines, then Generate. */
 .genRow {
     display: flex;
     align-items: center;
     gap: var(--space-sm);
-    margin-bottom: var(--space-md);
     flex-wrap: wrap;
 }
 
-.genRow > select {
-    flex: 1;
-    min-width: 150px;
+.usesField {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    font-size: 0.82rem;
+    color: var(--text-secondary);
 }
 
 .genError {
@@ -635,6 +704,19 @@
     vertical-align: middle;
 }
 
+/* Le code de la ligne choisit celui de la commande. */
+.codePick {
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+    text-align: left;
+}
+
+.codeRowSelected td {
+    background: var(--accent-bg);
+}
+
 .codeCell {
     font-family: var(--font-mono);
     font-size: 1.1rem;
@@ -706,8 +788,8 @@
 .manualCommand {
     display: block;
     padding: var(--space-sm);
-    background: var(--surface-2, var(--surface));
-    border: 1px solid var(--border);
+    background: var(--surface-subtle);
+    border: 1px solid var(--glass-border);
     border-radius: var(--radius-sm);
     color: var(--text-primary);
     font-family: var(--font-mono, monospace);

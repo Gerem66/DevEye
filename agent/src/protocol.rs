@@ -169,12 +169,15 @@ pub struct AgentInfo {
 #[serde(rename_all = "camelCase")]
 pub struct AgentPolicy {
     pub terminal: bool,
+    pub files_read: bool,
     pub files_write: bool,
     pub power: bool,
     pub pkg_upgrade: bool,
     pub service_elevate: bool,
     pub destroy: bool,
+    pub docker: bool,
     pub docker_deploy: bool,
+    pub sync: bool,
 }
 
 /// One detected package manager + its pending state (mirrors @deveye/types

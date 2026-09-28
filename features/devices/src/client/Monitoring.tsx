@@ -106,23 +106,21 @@ function MonitoringTitle({
 }
 
 interface MonitoringProps {
-    /** Ouvre le dialogue des codes de liaison ; absent quand le rôle n'appaire pas. */
+    /** Ouvre le dialogue d'appairage ; absent quand le rôle n'appaire pas. */
     onPair?: () => void;
-    /** Un code est en cours de génération : le bouton attend. */
-    pairing?: boolean;
 }
 
 /** Le geste d'appairage, au bout de la liste qu'il allonge. */
-function PairCard({ onPair, pairing }: { onPair: () => void; pairing?: boolean }) {
+function PairCard({ onPair }: { onPair: () => void }) {
     return (
-        <button type='button' className={styles.pairCard} onClick={onPair} disabled={pairing}>
+        <button type='button' className={styles.pairCard} onClick={onPair}>
             <span className={`icon icon-plus ${styles.pairCardIcon}`} />
-            {pairing ? 'Génération du code…' : 'Appairer un appareil'}
+            Appairer un appareil
         </button>
     );
 }
 
-export default function Monitoring({ onPair, pairing }: MonitoringProps) {
+export default function Monitoring({ onPair }: MonitoringProps) {
     const { devices: stored, loading } = useDevices();
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const updater = useAgentUpdate();
@@ -287,7 +285,7 @@ export default function Monitoring({ onPair, pairing }: MonitoringProps) {
                         <p className={styles.hint}>
                             Appairez une machine, ou partagez un appareil d’un autre espace depuis ses réglages.
                         </p>
-                        {onPair && <PairCard onPair={onPair} pairing={pairing} />}
+                        {onPair && <PairCard onPair={onPair} />}
                     </div>
                 </>
             ) : (
@@ -311,7 +309,7 @@ export default function Monitoring({ onPair, pairing }: MonitoringProps) {
                             {live.map((d) => renderCard(d, true))}
                             <span ref={drag.barRef} className={styles.dropBar} aria-hidden='true' />
                         </div>
-                        {onPair && <PairCard onPair={onPair} pairing={pairing} />}
+                        {onPair && <PairCard onPair={onPair} />}
                         {archived.length > 0 && (
                             <div className={styles.archivedGroup}>
                                 <div>

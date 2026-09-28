@@ -178,13 +178,14 @@ export function devicesRepo(pool: Q): DevicesRepo {
 /**
  * Les codes de liaison, côté consommation (l'enrôlement échange un code contre
  * un appareil). L'émission et la révocation sont les commandes
- * `devices.linkCode*` du module. L'enrôlement relit le code avant de le
- * consommer : un refus de l'offre ne doit pas le brûler.
+ * `devices.linkCode*` du module. Un code sert `max_uses` fois avant son
+ * échéance, `used_at` date son dernier usage. L'enrôlement relit le code avant
+ * d'en dépenser un usage : un refus de l'offre ne doit pas le brûler.
  */
 export interface LinkCodesRepo {
-    /** L'émetteur et l'espace d'un code encore valable, sans le consommer. */
-    peek(code: string): Promise<{ userId: number; workspaceId: number } | null>;
-    /** Consomme le code s'il est encore valable. Faux si un autre l'a pris entre-temps. */
+    /** L'émetteur, l'espace et le nombre d'usages d'un code encore valable, sans en dépenser. */
+    peek(code: string): Promise<{ userId: number; workspaceId: number; maxUses: number } | null>;
+    /** Dépense un usage du code s'il en reste. Faux si d'autres ont pris les derniers entre-temps. */
     consume(code: string): Promise<boolean>;
 }
 
@@ -192,19 +193,19 @@ export function linkCodesRepo(pool: Q): LinkCodesRepo {
     return {
         async peek(code) {
             const now = Math.floor(Date.now() / 1000);
-            const r = await pool.query<{ user_id: number; workspace_id: number }>(
-                'SELECT user_id, workspace_id FROM device_link_codes WHERE code = ? AND used_at IS NULL AND expires_at >= ?',
+            const r = await pool.query<{ user_id: number; workspace_id: number; max_uses: number }>(
+                'SELECT user_id, workspace_id, max_uses FROM device_link_codes WHERE code = ? AND uses < max_uses AND expires_at >= ?',
                 [code, now]
             );
             const row = r.rows[0];
-            return row ? { userId: row.user_id, workspaceId: row.workspace_id } : null;
+            return row ? { userId: row.user_id, workspaceId: row.workspace_id, maxUses: row.max_uses } : null;
         },
         async consume(code) {
-            // Marquer et valider d'un seul coup : deux enrôlements simultanés avec
-            // le même code ne passent pas tous les deux.
+            // Compter et valider d'un seul coup : deux enrôlements simultanés ne
+            // prennent pas tous les deux le dernier usage.
             const now = Math.floor(Date.now() / 1000);
             const res = await pool.query(
-                'UPDATE device_link_codes SET used_at = ? WHERE code = ? AND used_at IS NULL AND expires_at >= ?',
+                'UPDATE device_link_codes SET uses = uses + 1, used_at = ? WHERE code = ? AND uses < max_uses AND expires_at >= ?',
                 [now, code, now]
             );
             return res.rowCount === 1;

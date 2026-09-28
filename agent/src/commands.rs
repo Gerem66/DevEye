@@ -715,8 +715,8 @@ where
 /// Tell the server an order was refused before execution (bad or missing
 /// signature, local policy, the agent's own directory), through the reply the
 /// server already waits for on that order: the operator sees why, a lock the
-/// server took is released, a pending deletion is aborted. `agent.lifecycle` has
-/// no reply frame: its refusal is only logged.
+/// server took is released, a pending deletion is aborted. `agent.lifecycle` and
+/// `sync.config` have no reply frame: their refusal is only logged.
 pub(crate) async fn refuse_order<S>(
     sink: &mut S,
     device_id: &str,
@@ -762,6 +762,95 @@ pub(crate) async fn refuse_order<S>(
                     op_id: text("opId"),
                     op,
                     ok: false,
+                    error,
+                },
+            )
+            .await;
+        }
+        "files.list" | "files.analyze" | "files.search" | "files.download" | "files.archive" => {
+            let op_id = text("opId");
+            let event = match command {
+                "files.list" => crate::files::FilesEvent::Listing {
+                    op_id,
+                    listing: None,
+                    error,
+                },
+                "files.analyze" => crate::files::FilesEvent::Usage {
+                    op_id,
+                    entries: Vec::new(),
+                    error,
+                },
+                "files.search" => crate::files::FilesEvent::Matches {
+                    op_id,
+                    matches: Vec::new(),
+                    truncated: false,
+                    error,
+                },
+                "files.download" => crate::files::FilesEvent::Chunk {
+                    op_id,
+                    data: Vec::new(),
+                    done: true,
+                    error,
+                },
+                _ => crate::files::FilesEvent::ArchiveEnd {
+                    op_id,
+                    stats: Default::default(),
+                    error,
+                },
+            };
+            send_files_event(sink, device_id, event).await;
+        }
+        "sync.scan" => {
+            let share_id = payload.get("shareId").and_then(|v| v.as_i64()).unwrap_or(0);
+            send_sync_event(
+                sink,
+                device_id,
+                SyncEvent::Index {
+                    session_id: text("sessionId"),
+                    share_id,
+                    entries: Vec::new(),
+                    done: true,
+                    scanned: false,
+                    fingerprint: None,
+                    error,
+                },
+            )
+            .await;
+        }
+        "sync.push" => {
+            send_sync_event(
+                sink,
+                device_id,
+                SyncEvent::Chunk {
+                    op_id: text("opId"),
+                    data: Vec::new(),
+                    done: true,
+                    hash: None,
+                    size: None,
+                    mtime: None,
+                    error,
+                },
+            )
+            .await;
+        }
+        "sync.applyChunk" | "sync.applyStart" | "sync.applyDir" | "sync.applyLocal"
+        | "sync.move" | "sync.delete" => {
+            let op = match command {
+                "sync.applyChunk" => "apply",
+                "sync.applyStart" => "applyReady",
+                "sync.applyDir" => "applyDir",
+                "sync.applyLocal" => "applyLocal",
+                "sync.move" => "move",
+                _ => "delete",
+            };
+            send_sync_event(
+                sink,
+                device_id,
+                SyncEvent::OpResult {
+                    op_id: text("opId"),
+                    op,
+                    ok: false,
+                    resume_from: None,
                     error,
                 },
             )

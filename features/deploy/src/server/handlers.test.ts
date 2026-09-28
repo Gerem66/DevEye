@@ -780,14 +780,15 @@ describe('les cibles portées par une machine', () => {
     });
 
     it('dit quelles machines savent déployer, et lesquelles l’acceptent', async () => {
-        const report = (probes: string[], dockerDeploy: boolean) =>
-            ({ agent: { probes, policy: { dockerDeploy } } }) as unknown as SdkDevice['report'];
+        const report = (probes: string[], dockerDeploy: boolean, docker = true) =>
+            ({ agent: { probes, policy: { docker, dockerDeploy } } }) as unknown as SdkDevice['report'];
         const ctx = createTestContext({
             repo: fakeRepo(),
             devices: [
                 testDevice({ id: 'a', name: 'récent', report: report(['docker', 'composeDeploy'], true) }),
                 testDevice({ id: 'b', name: 'ancien', report: report(['docker'], true) }),
-                testDevice({ id: 'c', name: 'fermé', report: report(['composeDeploy'], false), online: false })
+                testDevice({ id: 'c', name: 'fermé', report: report(['composeDeploy'], false), online: false }),
+                testDevice({ id: 'd', name: 'sans Docker', report: report(['composeDeploy'], true, false) })
             ]
         });
         const out = await handlerFor(deployMachines)(ctx, {});
@@ -796,7 +797,8 @@ describe('les cibles portées par une machine', () => {
             [
                 ['récent', true, true, true],
                 ['ancien', true, false, true],
-                ['fermé', false, true, false]
+                ['fermé', false, true, false],
+                ['sans Docker', true, true, false]
             ]
         );
     });

@@ -12,11 +12,13 @@ mod exclusions;
 mod files;
 mod identity;
 mod integrity;
+mod link;
 mod logs;
 mod metrics;
 mod orders;
 mod ownership;
 mod packages;
+mod policy_cmd;
 mod power;
 mod protocol;
 mod report;
@@ -58,10 +60,10 @@ use std::process::{Command as PCommand, Stdio};
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
-use tracing::info;
 use tracing_subscriber::EnvFilter;
 
-use crate::config::Config;
+use crate::config::{Config, PolicyKey};
+use crate::link::LinkOptions;
 use crate::runner::RunOptions;
 
 #[derive(Parser)]
@@ -73,21 +75,17 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Enroll this machine using a one-time link code from the DevEye UI.
+    /// Enroll this machine using a link code from the DevEye UI.
     Link {
         /// The link code (e.g. ABCD-EFGH).
+        #[arg(env = "DEVEYE_LINK_CODE", hide_env_values = true)]
         code: String,
-        /// DevEye server base URL.
-        #[arg(long, default_value = "http://localhost:3000")]
-        server: String,
-        /// Override the device name (defaults to the hostname).
+        #[command(flatten)]
+        options: LinkOptions,
+        /// Then install the autostart service and start it: a system service
+        /// when run as root, a per-user one otherwise.
         #[arg(long)]
-        name: Option<String>,
-        /// Accept a plain http:// server that is not this machine. The device
-        /// token and everything the server orders (a shell included) then travel
-        /// in clear: only for a network you fully trust.
-        #[arg(long)]
-        insecure_plaintext: bool,
+        autostart: bool,
     },
     /// Run the monitoring loop. Foreground by default.
     Run {
@@ -107,6 +105,25 @@ enum Command {
         managed: bool,
         /// Use this config file instead of the default location. Baked into the
         /// service definition so a system service finds the enrolled config.
+        #[arg(long)]
+        config: Option<String>,
+        /// Not linked yet, the agent enrolls with `DEVEYE_LINK_CODE` and these.
+        /// Once linked, only the refusals act: they are added at start.
+        #[command(flatten, next_help_heading = "Linking (with DEVEYE_LINK_CODE)")]
+        link: LinkOptions,
+    },
+    /// Show or change what the server may order on this machine.
+    Policy {
+        /// Allow these kinds of orders again (comma-separated, or `all`).
+        #[arg(long, value_enum, value_delimiter = ',')]
+        allow: Vec<PolicyKey>,
+        /// Refuse these kinds of orders (comma-separated, or `all`).
+        #[arg(long, value_enum, value_delimiter = ',')]
+        deny: Vec<PolicyKey>,
+        /// Refuse every kind of remote control (`--deny all`).
+        #[arg(long)]
+        monitor_only: bool,
+        /// Use this config file instead of the default location.
         #[arg(long)]
         config: Option<String>,
     },
@@ -178,17 +195,31 @@ async fn main() -> Result<()> {
     match Cli::parse().command {
         Command::Link {
             code,
-            server,
-            name,
-            insecure_plaintext,
-        } => link(code, server, name, insecure_plaintext).await,
+            options,
+            autostart,
+        } => link::link(&code, &options, autostart).await,
         Command::Run {
             once,
             interval,
             detach,
             managed,
             config,
-        } => run(once, interval, detach, managed, config).await,
+            link,
+        } => run(once, interval, detach, managed, config, link).await,
+        Command::Policy {
+            allow,
+            mut deny,
+            monitor_only,
+            config,
+        } => {
+            if let Some(path) = config {
+                std::env::set_var("DEVEYE_CONFIG", path);
+            }
+            if monitor_only {
+                deny.push(PolicyKey::All);
+            }
+            policy_cmd::run(policy_cmd::Change { allow, deny })
+        }
         Command::Stop => stop(),
         Command::Status => {
             status();
@@ -251,62 +282,13 @@ fn service_cmd(action: ServiceCmd) -> Result<()> {
     }
 }
 
-async fn link(
-    code: String,
-    server: String,
-    name: Option<String>,
-    insecure_plaintext: bool,
-) -> Result<()> {
-    // A re-link keeps what belongs to the machine: its fingerprint, its policy,
-    // its accepted sync roots.
-    let mut config = if Config::exists() {
-        let mut c = Config::load()?;
-        c.server = server;
-        if let Some(n) = name {
-            c.name = n;
-        }
-        c
-    } else {
-        Config {
-            server,
-            name: name.unwrap_or_else(identity::hostname),
-            fingerprint: identity::machine_fingerprint(),
-            device_id: None,
-            device_token: None,
-            order_key: None,
-            allow_plaintext: false,
-            sync_roots: Vec::new(),
-            policy: config::Policy::default(),
-        }
-    };
-    config.allow_plaintext = insecure_plaintext;
-    // Before the link code leaves this machine: enrollment is the exchange that
-    // mints the token.
-    config.check_transport()?;
-
-    let status = enroll::enroll(&mut config, &code).await?;
-    let id = config.device_id.as_deref().unwrap_or("?");
-    info!(device_id = id, %status, "Device enrolled");
-    if status == "active" {
-        println!("✓ Enrolled as \"{}\" (id {}) and active.", config.name, id);
-    } else {
-        println!(
-            "✓ Re-linked as \"{}\" (id {}): this machine was already known to the workspace.\n  Approve it in DevEye (Appareils, Agent popup); the agent waits until then.",
-            config.name, id
-        );
-    }
-    println!(
-        "  Start the agent:\n    deveye-agent run            # foreground\n    deveye-agent run --detach   # background\n  If it is already running, restart it: it still holds the old token."
-    );
-    Ok(())
-}
-
 async fn run(
     once: bool,
     interval: u64,
     detach: bool,
     managed: bool,
     config_path: Option<String>,
+    link: LinkOptions,
 ) -> Result<()> {
     // A `--config` points Config at a specific file (services bake an absolute
     // path so a system service finds the enrolled config). Set it before loading.
@@ -319,14 +301,10 @@ async fn run(
     // Sweep any binary a previous self-update left behind (Windows `.old`).
     update::cleanup_after_update();
 
-    let config = Config::load().context("loading config (run `link` first)")?;
-    let transport = config.check_transport()?;
-    let _ = POLICY.set(config.policy.clone());
-    let _ = INSECURE_TRANSPORT.set(transport == config::Transport::PlaintextRemote);
-
     // Single-instance guard: duplicate instances share one device token and each
     // streams its own snapshots, so the server sees doubled data with no error
     // anywhere. `--once` stays allowed: a one-shot probe, throttled server-side.
+    // Before enrolling: two agents enrolling at once would make two devices.
     if !once {
         if let Some(existing) = state::read_running() {
             anyhow::bail!(
@@ -337,6 +315,13 @@ async fn run(
             );
         }
     }
+
+    link::ensure_linked(&link, crate::managed()).await?;
+    let mut config = Config::load().context("loading config (run `link` first)")?;
+    link::tighten(&mut config, &link)?;
+    let transport = config.check_transport()?;
+    let _ = POLICY.set(config.policy.clone());
+    let _ = INSECURE_TRANSPORT.set(transport == config::Transport::PlaintextRemote);
 
     if detach {
         if once {
@@ -444,7 +429,7 @@ pub(crate) fn kill_process(pid: &str) -> Result<()> {
 
 fn status() {
     if !Config::exists() {
-        println!("Not enrolled. Run: deveye-agent link <code> --server <url>");
+        println!("Not enrolled. Run: deveye-agent link <code>");
         return;
     }
     let c = match Config::load() {
@@ -523,19 +508,7 @@ fn status() {
     status_row("Autostart", &autostart);
 
     // Only what this machine refuses: an all-default policy says nothing.
-    let refused: Vec<&str> = [
-        ("terminal", c.policy.allow_terminal),
-        ("file writes", c.policy.allow_files_write),
-        ("power", c.policy.allow_power),
-        ("package upgrades", c.policy.allow_pkg_upgrade),
-        ("elevation", c.policy.allow_service_elevate),
-        ("remote removal", c.policy.allow_destroy),
-        ("deployments", c.policy.allow_docker_deploy),
-    ]
-    .iter()
-    .filter(|(_, allowed)| !allowed)
-    .map(|(name, _)| *name)
-    .collect();
+    let refused: Vec<&str> = c.policy.refused().iter().map(|k| k.label()).collect();
     if !refused.is_empty() {
         println!();
         status_section("Local policy");
@@ -590,4 +563,22 @@ fn unlink() -> Result<()> {
         println!("Nothing to remove (not enrolled).");
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_link_code_can_come_from_the_environment() {
+        std::env::set_var("DEVEYE_LINK_CODE", "ABCD-EFGH");
+        let cli = Cli::try_parse_from(["deveye-agent", "link", "--autostart"]);
+        std::env::remove_var("DEVEYE_LINK_CODE");
+        match cli.unwrap().command {
+            Command::Link {
+                code, autostart, ..
+            } => assert!(code == "ABCD-EFGH" && autostart),
+            _ => panic!("not a link"),
+        }
+    }
 }

@@ -1,9 +1,13 @@
-/** Human-readable validity for a link code (one hour at most). */
+/** Human-readable validity for a link code (seven days at most). */
 export function formatExpiry(expiresAt: number): string {
     const secs = expiresAt - Math.floor(Date.now() / 1000);
     if (secs <= 0) return 'Expiré';
     const mins = Math.ceil(secs / 60);
-    return mins < 60 ? `Expire dans ${mins} min` : 'Expire dans 1 h';
+    if (mins < 60) return `Expire dans ${mins} min`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `Expire dans ${hours} h`;
+    const days = Math.floor(hours / 24);
+    return `Expire dans ${days} jour${days > 1 ? 's' : ''}`;
 }
 
 /** Relative "last seen" label; `null` → never. */

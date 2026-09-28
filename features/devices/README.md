@@ -292,18 +292,25 @@ Statuts (`devices.status`) : `pending`, `active`, `pending_deletion`,
 `archived`.
 
 - **Appairage** : qui tient `devices: write` émet un code
-  (`devices.linkCodeCreate`, toujours pour l'espace actif, une heure au plus),
-  l'agent le présente à `POST /api/agent/enroll`. La route relit le code sans
-  le consommer, puis :
+  (`devices.linkCodeCreate`, toujours pour l'espace actif, sept jours au plus,
+  pour 1 à 1000 machines), l'agent le présente à `POST /api/agent/enroll`. La
+  route relit le code sans en dépenser d'usage (verrouillage de l'adresse sur
+  les échecs, émetteur qui gère toujours les appareils de l'espace), puis :
     - **empreinte inconnue de l'espace** : l'offre du propriétaire doit
       admettre un appareil de plus (sinon `403 quota_exceeded`, le code reste
-      valable), l'appareil est créé `active`, l'agent se connecte aussitôt ;
-    - **empreinte connue** (réappairage) : la fiche existante est reprise, son
-      ancien jeton tombe, sa session ouverte est coupée
-      (`hub.disconnectAgent`), et l'appareil passe `pending`. L'empreinte est
-      déclarée par l'appelant : sans approbation, un code suffirait à saisir
-      une machine et ses partages.
-      Dans les deux cas, `devices` est diffusé à l'espace.
+      valable), l'appareil est créé `active`, l'agent se connecte aussitôt.
+      Des enrôlements simultanés passent tous cette vérification : la passe
+      des pauses (`schedulePlanReconcile`) tient les surnuméraires ;
+    - **empreinte connue** (réappairage), avec un code à usage unique : la
+      fiche existante est reprise, son ancien jeton tombe, sa session ouverte
+      est coupée (`hub.disconnectAgent`), et l'appareil passe `pending`.
+      L'empreinte est déclarée par l'appelant : sans approbation, un code
+      suffirait à saisir une machine et ses partages ;
+    - **empreinte connue avec un code à plusieurs usages** : `409 conflict`,
+      sans rien dépenser. Deux clones d'une même image ne se volent pas leur
+      fiche en silence (`--shuffle-id` côté agent).
+      L'usage dépensé, la fiche et le jeton s'écrivent dans une transaction ;
+      `devices` est diffusé à l'espace.
 - **En attente** : la socket refuse l'agent avec le code `4001`
   (`AGENT_CLOSE_PENDING_APPROVAL`), qui lui dit de réessayer toutes les 30 s.
   Ni config, ni hooks de modules, ni ordres, ni binaire d'auto-mise à jour ;
@@ -383,10 +390,20 @@ Statuts (`devices.status`) : `pending`, `active`, `pending_deletion`,
   en doublant, pas en boucle serrée ; `4001` = `PendingApproval`, toutes les
   30 s. Une session établie qui se ferme reconnecte vite.
 - **Les codes de liaison sont des secrets d'enrôlement.** Émis, relus et
-  révoqués par l'espace qu'ils visent, sous `devices: write` ; une heure au
-  plus, usage unique ; un code se compare en majuscules sans ses espaces ; le
-  journal dit qu'un code a été émis (espace, durée), jamais sa valeur.
-  L'enrôlement est plafonné par adresse (`rateLimit` de la route).
+  révoqués par l'espace qu'ils visent, sous `devices: write` ; sept jours et
+  mille usages au plus, `used_at` date le dernier ; 8 caractères pour un code
+  court à usage unique, 12 au-delà d'une heure ou d'un usage ; un code se
+  compare en majuscules sans ses espaces ; le journal dit qu'un code a été émis
+  (espace, durée, usages) ou invalidé, jamais sa valeur. L'enrôlement et le
+  téléchargement du script (`/api/agent/install/:target`, code dans l'en-tête
+  `X-DevEye-Link-Code`) partagent le verrouillage par adresse
+  (`attempts.ts`, portée `linkcode`), jamais remis à zéro par un succès.
+- **La commande d'installation** (`manage/installCommand.ts`) nomme le
+  serveur que renvoie `devices.linkCodeList` (`ctx.origins.app`, jamais
+  l'adresse du navigateur) et porte les droits choisis en options de `link`
+  (`--deny`, `--monitor-only`) : c'est la machine qui les retient.
+  `/install.sh` et `/install.ps1` sont servis par l'app (`src/agent/routes.ts`),
+  rendus une fois depuis `agent/install/`.
 
 ## Pièges connus
 

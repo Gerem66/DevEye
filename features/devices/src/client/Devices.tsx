@@ -24,7 +24,7 @@ export default function Devices(_props: FeatureViewProps) {
     return (
         <div className={styles.view}>
             <div className={styles.viewBody}>
-                <Monitoring onPair={canWrite ? links.openLinkModal : undefined} pairing={links.generatingCode} />
+                <Monitoring onPair={canWrite ? links.openLinkModal : undefined} />
             </div>
             <LinkCodesDialog links={links} onDownload={() => setShowDownload(true)} />
             <DownloadAgent open={showDownload} onClose={() => setShowDownload(false)} />

@@ -51,6 +51,22 @@ pub fn machine_fingerprint() -> String {
     hostname()
 }
 
+/// Marks a fingerprint drawn at random rather than read from the machine.
+const RANDOM_PREFIX: &str = "random-";
+
+/// A fingerprint that owes nothing to the machine (`link --shuffle-id`): clones
+/// of one image share its machine-id, and would share its DevEye record too.
+pub fn random_fingerprint() -> String {
+    let bytes: [u8; 16] = rand::random();
+    let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
+    format!("{RANDOM_PREFIX}{hex}")
+}
+
+/// Whether this fingerprint was drawn by [`random_fingerprint`].
+pub fn is_random(fingerprint: &str) -> bool {
+    fingerprint.starts_with(RANDOM_PREFIX)
+}
+
 /// Read the hardware IOPlatformUUID on macOS via `ioreg`.
 #[cfg(target_os = "macos")]
 fn macos_platform_uuid() -> Option<String> {

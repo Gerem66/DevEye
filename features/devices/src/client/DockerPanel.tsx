@@ -97,7 +97,8 @@ function newOpId(): string {
     return crypto.randomUUID();
 }
 
-export function DockerPanel({ deviceId }: { deviceId: string }) {
+/** `actionable` : faux quand la machine refuse les actions Docker (`[policy]`), l'inventaire restant lisible. */
+export function DockerPanel({ deviceId, actionable }: { deviceId: string; actionable: boolean }) {
     const [inventory, setInventory] = useState<DockerInventory | null>(null);
     const [listError, setListError] = useState<string | null>(null);
     const [refreshing, setRefreshing] = useState(false);
@@ -214,7 +215,7 @@ export function DockerPanel({ deviceId }: { deviceId: string }) {
     const statById = useMemo(() => new Map(stats.map((s) => [s.id, s])), [stats]);
     const inv = inventory ?? EMPTY;
     const reachable = inv.engines.filter((e) => e.reachable);
-    const busy = op !== null && !op.done;
+    const busy = (op !== null && !op.done) || !actionable;
 
     const run = useCallback(
         (engine: ContainerEngine, action: DockerAction, target: string | null) => {
@@ -286,6 +287,12 @@ export function DockerPanel({ deviceId }: { deviceId: string }) {
             </div>
 
             {listError && <p className={styles.dockerError}>{listError}</p>}
+            {!actionable && (
+                <p className={styles.dockerHint}>
+                    Cette machine refuse les actions sur ses conteneurs (politique locale de l’agent) : l’inventaire
+                    reste lisible.
+                </p>
+            )}
 
             {inventory === null && !listError ? (
                 <p className={styles.waitingMsg}>Inventaire en cours…</p>

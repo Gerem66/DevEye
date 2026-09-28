@@ -5,9 +5,9 @@
 #   - Linux: ~/.config/deveye/agent.toml
 #   - macOS: ~/Library/Application Support/deveye/agent.toml
 #
-# It is read once, at start: edit it, then restart the agent. The agent rewrites
-# it when the server rotates the device token, so an edit made while it runs may
-# be lost.
+# It is read once, at start: edit it, then restart the agent (for [policy],
+# `deveye-agent policy` does both). A token the server rotates is written into
+# the file as it is on disk, so an edit made while the agent runs stays.
 
 # HTTP base URL of the DevEye server. Plain http:// is refused for anything but
 # this machine, unless `allow_plaintext` is set (link with --insecure-plaintext).
@@ -17,7 +17,8 @@ server = "https://deveye.example.com"
 name = "my-laptop"
 
 # Stable machine fingerprint (auto-derived: machine-id on Linux,
-# IOPlatformUUID on macOS).
+# IOPlatformUUID on macOS, MachineGuid on Windows; `random-...` when linked
+# with --shuffle-id).
 fingerprint = "0123456789abcdef0123456789abcdef"
 
 # Set automatically by `deveye-agent link <code>`:
@@ -36,12 +37,16 @@ sync_roots = []
 
 # What the server may order on this machine. The server cannot change this
 # section. Set a key to false for monitoring without that kind of remote control;
-# the matching buttons are greyed out in DevEye.
+# the matching buttons are greyed out in DevEye. `link --deny` and
+# `deveye-agent policy` write it too.
 [policy]
 allow_terminal = true          # an interactive shell
-allow_files_write = true       # delete, rename, create, upload (browsing and download stay)
+allow_files_read = true        # browse, search, download, archive files
+allow_files_write = true       # delete, rename, create, upload
 allow_power = true             # shut down, reboot, suspend, lock
 allow_pkg_upgrade = true       # system package upgrades
 allow_service_elevate = true   # asking the desktop to make the agent a root service
 allow_destroy = true           # wiping the agent when the device is deleted in DevEye
+allow_docker = true            # every container action (the inventory stays readable)
 allow_docker_deploy = true     # deployments: pull a compose service's image and recreate it
+allow_sync = true              # CloudSync shares: the server reading and writing a synced folder
