@@ -22,7 +22,7 @@ use tokio::sync::mpsc::Sender;
 use tracing::{info, warn};
 
 use crate::protocol::{SyncIndexEntry, SyncShareAssignment};
-use transfer::{Applier, ApplyOutcome};
+use transfer::{Applier, ApplyOutcome, PushCredits, PushWindow, PUSH_ACK_TIMEOUT};
 use watcher::ShareWatcher;
 
 /// Événements que les tâches sync renvoient à la boucle (qui les met sur le fil).
@@ -50,6 +50,8 @@ pub enum SyncEvent {
         size: Option<u64>,
         mtime: Option<i64>,
         error: Option<String>,
+        /// Rank of the frame within a windowed push, `None` on a free stream.
+        seq: Option<u64>,
     },
     /// Crédit de flux d'un download.
     Ack { op_id: String, seq: u64 },
@@ -100,6 +102,7 @@ pub struct SyncManager {
     /// Les partages dont la racine a été refusée, et pourquoi : le serveur
     /// l'apprend par la réponse à sa première opération.
     refused: HashMap<i64, String>,
+    push_credits: PushCredits,
 }
 
 impl SyncManager {
@@ -110,6 +113,7 @@ impl SyncManager {
             applier: Applier::default(),
             sync_roots,
             refused: HashMap::new(),
+            push_credits: PushCredits::default(),
         }
     }
 
@@ -318,16 +322,29 @@ impl SyncManager {
     /// Upload d'un fichier local (thread dédié). `start_offset` reprend un
     /// transfert coupé : le serveur a gardé un partiel et ne redemande que la
     /// suite. Le plafond de débit vient de la config du partage.
-    pub fn start_push(&self, op_id: String, share_id: i64, rel_path: String, start_offset: u64) {
+    /// `window` caps the unacknowledged data frames (`None`: stream freely).
+    pub fn start_push(
+        &self,
+        op_id: String,
+        share_id: i64,
+        rel_path: String,
+        start_offset: u64,
+        window: Option<u32>,
+    ) {
         match self.assignment(share_id) {
-            Some(a) => transfer::spawn_push(
-                op_id,
-                PathBuf::from(&a.local_path),
-                rel_path,
-                start_offset,
-                a.rate_up_bps,
-                self.tx.clone(),
-            ),
+            Some(a) => {
+                let window = window
+                    .map(|w| PushWindow::register(&self.push_credits, &op_id, w, PUSH_ACK_TIMEOUT));
+                transfer::spawn_push(
+                    op_id,
+                    PathBuf::from(&a.local_path),
+                    rel_path,
+                    start_offset,
+                    a.rate_up_bps,
+                    window,
+                    self.tx.clone(),
+                )
+            }
             None => {
                 let _ = self.tx.try_send(SyncEvent::Chunk {
                     op_id,
@@ -337,8 +354,22 @@ impl SyncManager {
                     size: None,
                     mtime: None,
                     error: Some(self.unknown_reason(share_id)),
+                    seq: window.map(|_| 0),
                 });
             }
+        }
+    }
+
+    /// One credit back for a windowed push. An unknown op (already over) is ignored.
+    pub fn push_ack(&self, op_id: &str, seq: u64) {
+        let credit = self
+            .push_credits
+            .lock()
+            .expect("push credits lock")
+            .get(op_id)
+            .cloned();
+        if let Some(credit) = credit {
+            credit.ack(seq);
         }
     }
 
@@ -543,5 +574,14 @@ impl Drop for SyncManager {
         // Fin de session : les temporaires d'installs en cours sont nettoyés
         // (les watchers, eux, s'arrêtent via leur propre Drop).
         self.applier.abort_all();
+        // Pushes waiting for a credit would otherwise sit out the full timeout.
+        for credit in self
+            .push_credits
+            .lock()
+            .expect("push credits lock")
+            .values()
+        {
+            credit.close();
+        }
     }
 }

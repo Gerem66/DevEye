@@ -13,7 +13,8 @@
 use std::collections::HashMap;
 use std::io::{Read, Seek, Write};
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::{Arc, Condvar, Mutex};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{bail, Context, Result};
 use filetime::FileTime;
@@ -169,6 +170,112 @@ impl UploadThrottle {
     }
 }
 
+/// How long a windowed push waits for a credit before giving up.
+pub const PUSH_ACK_TIMEOUT: Duration = Duration::from_secs(120);
+
+/// Credits of the windowed pushes in flight, by op id.
+pub type PushCredits = Arc<Mutex<HashMap<String, Arc<PushCredit>>>>;
+
+#[derive(Default)]
+struct CreditState {
+    /// Highest acknowledged seq + 1: acks may arrive out of order or twice.
+    acked: u64,
+    /// The session is gone: nobody will ever ack again.
+    closed: bool,
+}
+
+/// Acknowledgements received for one windowed push.
+#[derive(Default)]
+pub struct PushCredit {
+    state: Mutex<CreditState>,
+    cv: Condvar,
+}
+
+impl PushCredit {
+    pub fn ack(&self, seq: u64) {
+        let mut state = self.state.lock().expect("credit lock");
+        state.acked = state.acked.max(seq.saturating_add(1));
+        self.cv.notify_all();
+    }
+
+    pub fn close(&self) {
+        self.state.lock().expect("credit lock").closed = true;
+        self.cv.notify_all();
+    }
+
+    /// Blocks until data frame `seq` fits in the window. The timeout restarts on
+    /// every credit received: a slow server is fine, a silent one is not.
+    fn wait_for(&self, seq: u64, window: u64, timeout: Duration) -> Result<()> {
+        let mut state = self.state.lock().expect("credit lock");
+        let mut deadline = Instant::now() + timeout;
+        let mut seen = state.acked;
+        loop {
+            if state.closed {
+                bail!("session terminée");
+            }
+            if seq.saturating_sub(state.acked) < window {
+                return Ok(());
+            }
+            if state.acked > seen {
+                seen = state.acked;
+                deadline = Instant::now() + timeout;
+            }
+            let now = Instant::now();
+            if now >= deadline {
+                bail!(
+                    "serveur silencieux : accusé de réception attendu depuis {} s",
+                    timeout.as_secs()
+                );
+            }
+            state = self
+                .cv
+                .wait_timeout(state, deadline - now)
+                .expect("credit lock")
+                .0;
+        }
+    }
+}
+
+/// The acknowledgement window of one push. Dropping it unregisters the op so
+/// its credit slot never outlives the push.
+pub struct PushWindow {
+    size: u64,
+    timeout: Duration,
+    credit: Arc<PushCredit>,
+    op_id: String,
+    registry: PushCredits,
+}
+
+impl PushWindow {
+    pub fn register(registry: &PushCredits, op_id: &str, size: u32, timeout: Duration) -> Self {
+        let credit = Arc::new(PushCredit::default());
+        registry
+            .lock()
+            .expect("push credits lock")
+            .insert(op_id.to_string(), credit.clone());
+        Self {
+            size: u64::from(size.max(1)),
+            timeout,
+            credit,
+            op_id: op_id.to_string(),
+            registry: registry.clone(),
+        }
+    }
+}
+
+impl Drop for PushWindow {
+    fn drop(&mut self) {
+        let mut registry = self.registry.lock().expect("push credits lock");
+        // A push re-issued under the same op id owns the slot now: leave it be.
+        if registry
+            .get(&self.op_id)
+            .is_some_and(|c| Arc::ptr_eq(c, &self.credit))
+        {
+            registry.remove(&self.op_id);
+        }
+    }
+}
+
 /// Lit un fichier local en chunks sur un thread dédié et les streame.
 pub fn spawn_push(
     op_id: String,
@@ -176,10 +283,22 @@ pub fn spawn_push(
     rel_path: String,
     start_offset: u64,
     rate_up_bps: Option<u64>,
+    window: Option<PushWindow>,
     tx: Sender<SyncEvent>,
 ) {
     std::thread::spawn(move || {
-        if let Err(e) = push(&op_id, &root, &rel_path, start_offset, rate_up_bps, &tx) {
+        let mut next_seq = 0u64;
+        let outcome = push(
+            &op_id,
+            &root,
+            &rel_path,
+            start_offset,
+            rate_up_bps,
+            window.as_ref(),
+            &mut next_seq,
+            &tx,
+        );
+        if let Err(e) = outcome {
             let _ = tx.blocking_send(SyncEvent::Chunk {
                 op_id,
                 data: Vec::new(),
@@ -188,17 +307,22 @@ pub fn spawn_push(
                 size: None,
                 mtime: None,
                 error: Some(e.to_string()),
+                seq: window.as_ref().map(|_| next_seq),
             });
         }
     });
 }
 
+/// `next_seq` is the rank of the next frame, left at the failed one on error.
+#[allow(clippy::too_many_arguments)]
 fn push(
     op_id: &str,
     root: &Path,
     rel_path: &str,
     start_offset: u64,
     rate_up_bps: Option<u64>,
+    window: Option<&PushWindow>,
+    next_seq: &mut u64,
     tx: &Sender<SyncEvent>,
 ) -> Result<()> {
     let path = confined_join(root, rel_path)?;
@@ -238,6 +362,9 @@ fn push(
         }
         hasher.update(&buf[..n]);
         size += n as u64;
+        if let Some(w) = window {
+            w.credit.wait_for(*next_seq, w.size, w.timeout)?;
+        }
         if let Some(t) = throttle.as_mut() {
             t.take(n as u64);
         }
@@ -249,9 +376,12 @@ fn push(
             size: None,
             mtime: None,
             error: None,
+            seq: window.map(|_| *next_seq),
         })
         .map_err(|_| anyhow::anyhow!("session terminée"))?;
+        *next_seq += 1;
     }
+    // The terminal frame is sent without waiting for credit.
     tx.blocking_send(SyncEvent::Chunk {
         op_id: op_id.to_string(),
         data: Vec::new(),
@@ -260,6 +390,7 @@ fn push(
         size: Some(size),
         mtime: Some(mtime),
         error: None,
+        seq: window.map(|_| *next_seq),
     })
     .map_err(|_| anyhow::anyhow!("session terminée"))?;
     Ok(())
@@ -817,5 +948,163 @@ mod tests {
         );
 
         std::fs::remove_dir_all(&root).ok();
+    }
+
+    /// A share root holding `name` with `chunks` full chunks plus a short tail.
+    fn share_with_file(name: &str, chunks: usize) -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        let bytes: Vec<u8> = (0..chunks * PUSH_CHUNK + 10).map(|i| i as u8).collect();
+        std::fs::write(dir.path().join(name), bytes).unwrap();
+        dir
+    }
+
+    struct Frame {
+        done: bool,
+        seq: Option<u64>,
+        error: Option<String>,
+    }
+
+    fn next_frame(rx: &mut tokio::sync::mpsc::Receiver<SyncEvent>) -> Frame {
+        match rx.blocking_recv().expect("frame") {
+            SyncEvent::Chunk {
+                done, seq, error, ..
+            } => Frame { done, seq, error },
+            _ => panic!("expected a chunk"),
+        }
+    }
+
+    fn wait_unregistered(registry: &PushCredits, op_id: &str) {
+        let started = Instant::now();
+        while registry.lock().unwrap().contains_key(op_id) {
+            assert!(
+                started.elapsed() < Duration::from_secs(2),
+                "credit slot leaked"
+            );
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    #[test]
+    fn windowed_push_never_exceeds_its_window_and_completes_on_acks() {
+        let dir = share_with_file("f.bin", 5);
+        let registry = PushCredits::default();
+        let window = PushWindow::register(&registry, "op", 2, Duration::from_secs(10));
+        let credit = registry.lock().unwrap().get("op").cloned().unwrap();
+        let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+        spawn_push(
+            "op".into(),
+            dir.path().to_path_buf(),
+            "f.bin".into(),
+            0,
+            None,
+            Some(window),
+            tx,
+        );
+
+        let mut sent = 0u64;
+        let mut acked = 0u64;
+        loop {
+            let frame = next_frame(&mut rx);
+            assert_eq!(frame.seq, Some(sent), "frames are numbered in order");
+            if frame.done {
+                assert!(frame.error.is_none(), "{:?}", frame.error);
+                break;
+            }
+            sent += 1;
+            assert!(sent - acked <= 2, "more than the window in flight");
+            if sent - acked == 2 {
+                std::thread::sleep(Duration::from_millis(50));
+                // Only the terminal frame may pass a full window.
+                if let Ok(SyncEvent::Chunk { done, seq, .. }) = rx.try_recv() {
+                    assert!(
+                        done && seq == Some(sent),
+                        "no data frame past a full window"
+                    );
+                    break;
+                }
+                // A duplicate and a stale ack change nothing.
+                credit.ack(acked);
+                credit.ack(acked);
+                if acked > 0 {
+                    credit.ack(acked - 1);
+                }
+                acked += 1;
+            }
+        }
+        assert_eq!(sent, 6, "five full chunks and the tail");
+        wait_unregistered(&registry, "op");
+    }
+
+    #[test]
+    fn free_push_carries_no_seq_and_never_waits() {
+        let dir = share_with_file("f.bin", 3);
+        let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+        spawn_push(
+            "op".into(),
+            dir.path().to_path_buf(),
+            "f.bin".into(),
+            0,
+            None,
+            None,
+            tx,
+        );
+        let mut data = 0;
+        loop {
+            let frame = next_frame(&mut rx);
+            assert_eq!(frame.seq, None);
+            if frame.done {
+                assert!(frame.error.is_none(), "{:?}", frame.error);
+                break;
+            }
+            data += 1;
+        }
+        assert_eq!(data, 4);
+    }
+
+    #[test]
+    fn silent_server_fails_the_push() {
+        let dir = share_with_file("f.bin", 3);
+        let registry = PushCredits::default();
+        let window = PushWindow::register(&registry, "op", 1, Duration::from_millis(100));
+        let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+        spawn_push(
+            "op".into(),
+            dir.path().to_path_buf(),
+            "f.bin".into(),
+            0,
+            None,
+            Some(window),
+            tx,
+        );
+        let first = next_frame(&mut rx);
+        assert_eq!((first.done, first.seq), (false, Some(0)));
+        let failed = next_frame(&mut rx);
+        assert!(failed.done);
+        assert_eq!(failed.seq, Some(1), "the error frame is numbered too");
+        assert!(
+            failed.error.unwrap().contains("serveur silencieux"),
+            "the failure says the server went quiet"
+        );
+        wait_unregistered(&registry, "op");
+    }
+
+    #[test]
+    fn credit_takes_the_highest_ack_and_wakes_on_close() {
+        let credit = PushCredit::default();
+        credit.ack(3);
+        credit.ack(1);
+        assert!(credit.wait_for(5, 2, Duration::ZERO).is_ok());
+        assert!(credit.wait_for(6, 2, Duration::ZERO).is_err());
+
+        let credit = Arc::new(PushCredit::default());
+        let closer = credit.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(20));
+            closer.close();
+        });
+        let started = Instant::now();
+        let err = credit.wait_for(1, 1, Duration::from_secs(10)).unwrap_err();
+        assert!(started.elapsed() < Duration::from_secs(2));
+        assert_eq!(err.to_string(), "session terminée");
     }
 }

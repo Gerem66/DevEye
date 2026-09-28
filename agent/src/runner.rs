@@ -916,8 +916,12 @@ async fn stream_session(
                                 sync_mgr.start_scan(session_id, share_id, mode);
                             }
                             // CloudSync: upload one file (off-loop; streams via sync_rx).
-                            Ok(ServerMessage::SyncPush { op_id, share_id, rel_path, start_offset }) => {
-                                sync_mgr.start_push(op_id, share_id, rel_path, start_offset);
+                            Ok(ServerMessage::SyncPush { op_id, share_id, rel_path, start_offset, window }) => {
+                                sync_mgr.start_push(op_id, share_id, rel_path, start_offset, window);
+                            }
+                            // CloudSync: one credit back for a windowed push (never blocks).
+                            Ok(ServerMessage::SyncPushAck { op_id, seq }) => {
+                                sync_mgr.push_ack(&op_id, seq);
                             }
                             // CloudSync: install one download chunk. Applied inline
                             // (sequentially) like FilesUpload, so chunks of one op never race.

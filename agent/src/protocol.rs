@@ -856,6 +856,9 @@ pub enum ClientMessage {
         mtime: Option<i64>,
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>,
+        /// Rank of the frame within a windowed push, `None` on a free stream.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        seq: Option<u64>,
     },
     /// CloudSync: flow-control credit — chunk `seq` of a `sync.applyChunk` landed.
     #[serde(rename = "sync.ack")]
@@ -1143,6 +1146,17 @@ pub enum ServerMessage {
         /// Reprise : octets déjà détenus par le serveur, à ne pas renvoyer.
         #[serde(rename = "startOffset", default)]
         start_offset: u64,
+        /// Unacknowledged data frames allowed in flight. Absent (an older
+        /// server): stream freely.
+        #[serde(default)]
+        window: Option<u32>,
+    },
+    /// CloudSync: data frame `seq` of a windowed push was written, one credit back.
+    #[serde(rename = "sync.pushAck")]
+    SyncPushAck {
+        #[serde(rename = "opId")]
+        op_id: String,
+        seq: u64,
     },
     /// CloudSync: one download chunk to install (hash/size/mtime repeated on
     /// every frame; ack each chunk; on `done` verify then rename atomically).
@@ -1386,4 +1400,43 @@ pub struct EnrollData {
 pub struct EnrolledDevice {
     #[serde(default)]
     pub status: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn push_window_is_optional_and_acks_parse() {
+        let old = r#"{"command":"sync.push","payload":{"opId":"o","shareId":1,"relPath":"a"}}"#;
+        let Ok(ServerMessage::SyncPush { window, .. }) = serde_json::from_str(old) else {
+            panic!("sync.push");
+        };
+        assert_eq!(window, None);
+
+        let ack = r#"{"command":"sync.pushAck","payload":{"opId":"o","seq":7}}"#;
+        let Ok(ServerMessage::SyncPushAck { op_id, seq }) = serde_json::from_str(ack) else {
+            panic!("sync.pushAck");
+        };
+        assert_eq!((op_id.as_str(), seq), ("o", 7));
+    }
+
+    #[test]
+    fn chunk_seq_is_left_out_of_a_free_stream() {
+        let chunk = |seq| ClientMessage::SyncChunk {
+            device_id: "d".into(),
+            op_id: "o".into(),
+            data: String::new(),
+            done: true,
+            hash: None,
+            size: None,
+            mtime: None,
+            error: None,
+            seq,
+        };
+        let free = serde_json::to_value(chunk(None)).unwrap();
+        assert!(free["payload"].get("seq").is_none());
+        let windowed = serde_json::to_value(chunk(Some(4))).unwrap();
+        assert_eq!(windowed["payload"]["seq"], 4);
+    }
 }

@@ -31,6 +31,7 @@ import {
     AGENT_SYNC_DELETE,
     AGENT_SYNC_MOVE,
     AGENT_SYNC_PUSH,
+    AGENT_SYNC_PUSH_ACK,
     AGENT_SYNC_SCAN,
     AGENT_TERM_CLOSE,
     AGENT_TERM_INPUT,
@@ -87,6 +88,7 @@ import {
     type AgentSyncDeletePayload,
     type AgentSyncMovePayload,
     type AgentSyncPushPayload,
+    type AgentSyncPushAckPayload,
     type AgentSyncScanPayload,
     type AgentTermClosePayload,
     type AgentTermInputPayload,
@@ -999,6 +1001,11 @@ export class MonitorHub {
     /** Ask a connected agent to upload one file (streams `sync.chunk`). No-op if offline. */
     requestSyncPush(deviceId: string, payload: AgentSyncPushPayload): boolean {
         return this.sendToAgent(deviceId, AGENT_SYNC_PUSH, payload);
+    }
+
+    /** One credit back for a windowed upload: the agent may send one more frame. No-op if offline. */
+    requestSyncPushAck(deviceId: string, payload: AgentSyncPushAckPayload): boolean {
+        return this.sendToAgent(deviceId, AGENT_SYNC_PUSH_ACK, payload);
     }
 
     /** Send one download chunk for the agent to install. No-op if offline. */

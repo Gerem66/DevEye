@@ -677,6 +677,7 @@ where
             size,
             mtime,
             error,
+            seq,
         } => ClientMessage::SyncChunk {
             device_id: device_id.to_string(),
             op_id,
@@ -686,6 +687,7 @@ where
             size,
             mtime,
             error,
+            seq,
         },
         SyncEvent::Ack { op_id, seq } => ClientMessage::SyncAck {
             device_id: device_id.to_string(),
@@ -829,6 +831,7 @@ pub(crate) async fn refuse_order<S>(
                     size: None,
                     mtime: None,
                     error,
+                    seq: None,
                 },
             )
             .await;
