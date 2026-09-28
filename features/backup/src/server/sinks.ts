@@ -1,15 +1,14 @@
 import crypto from 'crypto';
 import fs from 'fs/promises';
-import path from 'path';
-import { createWriteStream } from 'fs';
-import { pipeline } from 'stream/promises';
-import { Readable } from 'stream';
 
 import type { BackupDestinationProbe } from '../contracts/domain';
 
-import type { AgentsFacade } from '@deveye/types/sdk/server';
+import type { AgentsFacade, SdkObjectStore } from '@deveye/types/sdk/server';
 import { env } from './env';
-import { S3Client, type S3Config } from './s3';
+// Le client S3 de l'hôte, partagé avec son stockage objet : une signature SigV4
+// écrite deux fois serait corrigée une fois. Il passe par le garde des appels
+// sortants, l'adresse étant saisie par un membre.
+import { S3Client, type S3Config } from '@/Services/objectStorage/s3';
 
 /**
  * Écrire une archive quelque part. Trois règles non négociables : jamais
@@ -48,91 +47,65 @@ export function safeRelPath(input: string): string {
     return segments.join('/');
 }
 
-/** Un dossier du serveur sous `BACKUP_STORAGE_DIR`, cloisonné par espace (`ws-<id>/`). */
-export class LocalSink implements BackupSink {
-    private readonly dir: string;
+/**
+ * « Sur le serveur » : le magasin d'objets de l'hôte, son disque ou son bucket
+ * S3, cloisonné par espace (`ws-<id>/`). L'artefact enregistré est la clé
+ * relative, jamais l'endroit où elle se résout : l'arbre se recopie ailleurs
+ * et ses archives se relisent telles quelles.
+ */
+export class HostedSink implements BackupSink {
+    private readonly prefix: string;
 
-    constructor(workspaceId: number, relPath: string) {
-        const root = path.resolve(env.BACKUP_STORAGE_DIR, `ws-${workspaceId}`);
+    constructor(
+        private readonly store: SdkObjectStore,
+        workspaceId: number,
+        relPath: string
+    ) {
         const rel = safeRelPath(relPath);
-        const dir = rel === '' ? root : path.resolve(root, rel);
-        // `safeRelPath` refuse déjà `..` ; le confinement reste vrai si cette
-        // règle s'assouplit un jour.
-        if (dir !== root && !dir.startsWith(`${root}${path.sep}`)) {
-            throw new Error('Dossier de sauvegarde hors de la racine autorisée.');
-        }
-        this.dir = dir;
+        this.prefix = `ws-${workspaceId}/${rel === '' ? '' : `${rel}/`}`;
     }
 
     describe(name: string): string {
-        return path.join(this.dir, name);
+        return `${this.store.describe()}, ${this.prefix}${name}`;
     }
 
     async write(name: string, source: AsyncIterable<Buffer>): Promise<{ artifact: string; size: number }> {
-        await fs.mkdir(this.dir, { recursive: true });
-        const finalPath = path.join(this.dir, name);
-        // Temporaire puis renommage : un `rename` dans le même dossier est
-        // atomique, donc le nom définitif n'existe jamais à moitié écrit.
-        const tmpPath = `${finalPath}.part`;
-        let size = 0;
-        try {
-            await pipeline(
-                Readable.from(
-                    (async function* () {
-                        for await (const chunk of source) {
-                            size += chunk.length;
-                            yield chunk;
-                        }
-                    })()
-                ),
-                createWriteStream(tmpPath)
-            );
-            await fs.rename(tmpPath, finalPath);
-        } catch (e) {
-            await fs.rm(tmpPath, { force: true }).catch(() => {});
-            throw e;
-        }
-        return { artifact: finalPath, size };
+        const key = `${this.prefix}${name}`;
+        const { size } = await this.store.put(key, source);
+        return { artifact: key, size };
     }
 
     async remove(artifact: string): Promise<void> {
-        // Le chemin vient de la base : il n'est supprimé que s'il est bien dans
-        // ce dépôt, quoi qu'une ligne ancienne ou altérée prétende.
-        const resolved = path.resolve(artifact);
-        if (!resolved.startsWith(this.dir + path.sep)) {
+        // La clé vient de la base : elle n'est effacée que si elle est bien
+        // dans ce dossier, quoi qu'une ligne altérée prétende.
+        if (!artifact.startsWith(this.prefix) || artifact.split('/').includes('..')) {
             throw new Error('Archive hors du dossier de destination : suppression refusée');
         }
-        await fs.rm(resolved, { force: true });
+        await this.store.delete(artifact);
     }
 
     async probe(): Promise<BackupDestinationProbe> {
         try {
-            await fs.mkdir(this.dir, { recursive: true });
-            const witness = path.join(this.dir, `.deveye-write-test-${crypto.randomBytes(6).toString('hex')}`);
-            await fs.writeFile(witness, 'deveye');
-            await fs.rm(witness, { force: true });
+            const witness = `${this.prefix}.deveye-write-test-${crypto.randomBytes(6).toString('hex')}`;
+            await this.store.put(witness, Buffer.from('deveye'));
+            let readBack = 0;
+            for await (const chunk of this.store.get(witness)) readBack += chunk.length;
+            await this.store.delete(witness);
+            if (readBack !== 6) throw new Error("Le fichier témoin n'a pas été relu à l'identique.");
 
-            const [used, free] = await Promise.all([this.dirSize(), this.freeBytes()]);
-            return { ok: true, error: null, usedBytes: used, freeBytes: free };
+            let used = 0;
+            for await (const object of this.store.list(this.prefix)) used += object.size;
+            return { ok: true, error: null, usedBytes: used, freeBytes: await this.freeBytes() };
         } catch (e) {
             return { ok: false, error: (e as Error).message, usedBytes: null, freeBytes: null };
         }
     }
 
-    private async dirSize(): Promise<number> {
-        let total = 0;
-        const entries = await fs.readdir(this.dir, { withFileTypes: true }).catch(() => []);
-        for (const entry of entries) {
-            if (!entry.isFile()) continue;
-            const stat = await fs.stat(path.join(this.dir, entry.name)).catch(() => null);
-            if (stat) total += stat.size;
-        }
-        return total;
-    }
-
+    /** Un bucket ne dit rien de l'espace restant : seul le disque du serveur répond. */
     private async freeBytes(): Promise<number | null> {
+        if (this.store.kind !== 'local') return null;
         try {
-            const fsStat = await fs.statfs(this.dir);
+            const fsStat = await fs.statfs(env.BACKUP_STORAGE_DIR);
             return Number(fsStat.bavail) * Number(fsStat.bsize);
         } catch {
             return null;
@@ -385,8 +358,8 @@ export class S3Sink implements BackupSink {
             await this.client.deleteObject(key);
             if (readBack !== 6) throw new Error("L'objet témoin n'a pas été relu à l'identique.");
 
-            const objects = await this.client.listObjects(this.prefix);
-            const used = objects.reduce((sum, o) => sum + o.size, 0);
+            let used = 0;
+            for await (const object of this.client.listObjects(this.prefix)) used += object.size;
             // S3 ne dit rien de l'espace restant : la notion n'existe pas côté
             // protocole, et un quota de bucket ne se lit pas par cette API.
             return { ok: true, error: null, usedBytes: used, freeBytes: null };

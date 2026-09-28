@@ -146,6 +146,7 @@ body {
 .latency svg { flex: 1 1 auto; min-width: 0; height: 30px; overflow: visible; }
 .latency path { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .latency strong { color: var(--ink); }
+.cadence { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
 
 .incidents, .history { margin: 0; padding: 0; list-style: none; }
 .incidents li, .history li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 10px 0; border-top: 1px solid var(--line); }

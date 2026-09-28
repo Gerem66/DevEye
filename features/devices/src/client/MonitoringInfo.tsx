@@ -10,9 +10,13 @@ export function MonitoringInfo() {
             <h4>Une seule cadence de collecte</h4>
             <ul>
                 <li>
-                    <b>Un relevé (~60 s par défaut)</b> : chaque tick de l&apos;agent produit un <b>instant</b> — les
-                    mesures (CPU, RAM, disque, réseau, charge, température, GPU, utilisateurs, connexions) <i>et</i> la
-                    liste des processus, sous un seul et même horodatage. Ce sont les repères cliquables de la frise.
+                    <b>
+                        Un relevé (par défaut chaque minute sur une offre payante, toutes les 5 min sur l&apos;offre
+                        gratuite)
+                    </b>{' '}
+                    : chaque tick de l&apos;agent produit un <b>instant</b> — les mesures (CPU, RAM, disque, réseau,
+                    charge, température, GPU, utilisateurs, connexions) <i>et</i> la liste des processus, sous un seul
+                    et même horodatage. Ce sont les repères cliquables de la frise.
                 </li>
                 <li>
                     <b>Toutes les heures</b> : l&apos;état de sécurité (pare-feu, chiffrement, SIP, mises à jour), les{' '}

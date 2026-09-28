@@ -17,6 +17,7 @@ import { MonitoringInfo } from './MonitoringInfo';
 import MonitoringPanel from './MonitoringPanel';
 import { useDevices } from './store';
 import { useAgentUpdate } from './useAgentUpdate';
+import { formatEvery } from './utils';
 import styles from './style.module.css';
 
 export function MonitoringWidget() {
@@ -243,6 +244,7 @@ export default function Monitoring({ onPair }: MonitoringProps) {
                     <span className={styles.deviceCardPlatform}>
                         {d.platform}
                         {d.agentVersion && ` · v${d.agentVersion}`}
+                        {d.status === 'active' && ` · relevé ${formatEvery(d.effectiveMetricIntervalSeconds)}`}
                     </span>
                     {d.planPaused && <PlanPausedBadge className={styles.pausedTag} />}
                 </div>

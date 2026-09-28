@@ -32,7 +32,7 @@ export function sdkHub(): MonitorHub {
     return HUB;
 }
 
-function sdkDb(): Database {
+export function sdkDb(): Database {
     if (!DB) throw new Error('SDK: base non attachée (setSdkHost manquant au boot)');
     return DB;
 }
@@ -48,7 +48,7 @@ export async function pushAgentConfig(deviceId: string): Promise<boolean> {
     if (!hub.isOnline(deviceId)) return false;
     const row = await sdkDb().devices.findById(deviceId);
     if (!row) return false;
-    return hub.pushConfig(deviceId, await agentConfigFor(row));
+    return hub.pushConfig(deviceId, await agentConfigFor(sdkDb(), row));
 }
 
 /**

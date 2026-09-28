@@ -12,6 +12,7 @@ import {
 } from '@/Services/planPauses';
 import { limitIn, planOfStrict } from '@/Services/quota';
 import { invalidateAccess } from './_access';
+import { pushAgentConfig } from './_sdk/host';
 import { moduleProvider, moduleStockSources, moduleWebDomainFeatures, notifyModulePlanPause } from './_sdk/register';
 
 type Db = Pick<Database, 'workspaces' | 'workspaceMembers' | 'featureDomains'>;
@@ -129,6 +130,20 @@ export async function applyPlanPauseChanges(
     if (account) live.userChanged(owner, account.personal_workspace_id, ['account'], null);
 }
 
+/**
+ * Les agents dont la cadence suit l'offre la reçoivent de nouveau, sans
+ * attendre leur reconnexion. Seuls les appareils chez eux dans un espace du
+ * compte : un appareil projeté suit l'offre de son propre propriétaire.
+ */
+async function reapplyAgentCadence(host: { db: Database; live: LiveHub }, owner: number): Promise<void> {
+    for (const workspaceId of await host.db.workspaces.listOwnedIds(owner)) {
+        const rows = await host.db.devices.listByWorkspace(workspaceId);
+        const home = rows.filter((row) => row.workspace_id === workspaceId && row.metric_interval_seconds === null);
+        for (const row of home) await pushAgentConfig(row.id);
+        if (home.length > 0) host.live.changed(workspaceId, ['devices'], null);
+    }
+}
+
 /** Le service de l'hôte qui tient les pauses d'offre à jour. Démarré avant les modules, qui lisent le miroir. */
 export function createPlanPausesService(host: { db: Database; logger: PlanPausesHost['logger']; live: LiveHub }): {
     start(): Promise<void>;
@@ -141,7 +156,8 @@ export function createPlanPausesService(host: { db: Database; logger: PlanPauses
         planOf: (userId) => planOfStrict(providers, userId),
         limitIn,
         sources: () => [...moduleStockSources(host.db), ...coreStockSources(host.db)],
-        applied: (owner, changes) => applyPlanPauseChanges(host, owner, changes)
+        applied: (owner, changes) => applyPlanPauseChanges(host, owner, changes),
+        tierChanged: (owner) => reapplyAgentCadence(host, owner)
     });
     attachPlanPauses(engine);
     return {

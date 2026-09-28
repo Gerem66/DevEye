@@ -639,7 +639,9 @@ compte utilise de chaque limite de l'app, le sien ou, pour l'administrateur glob
 celui de tous ; `usage.ofMany`, administrateur seulement, cadencé par l'hôte ; voir
 `Docs/QUOTAS.md`), `telemetry.read` (`snapshot`,
 `pinInstant`, réservée aux ids natifs) et `agents` (`requestScan`,
-`pushConfig`, les deux ordres du cycle de vie `disconnectAgent` /
+`pushConfig`, `metricIntervals` (la cadence effective de chaque appareil, la
+sienne ou le défaut de l'offre du propriétaire de son espace d'origine), les
+deux ordres du cycle de vie `disconnectAgent` /
 `requestDestroy`, `servedManifest`, les requêtes sync,
 `dockerRun` / `dockerInventory`, et `archiveFolder` : l'archive `.tar.gz` d'un
 dossier, faite par l'agent et tirée par crédits au rythme du consommateur,
@@ -653,7 +655,8 @@ publique du service rend contre les codecs de l'appelant), `keys` (les mêmes
 dérivations qu'un service),
 `items` (`restrictions()`, `assert(itemId, level)`, `forget(itemId)` : les
 restrictions du dispatcheur liées à LA feature du module, et le ménage d'un
-élément supprimé), `sharing.scope()` (les projections vers l'espace actif,
+élément supprimé), `quota` (les limites de l'offre du propriétaire, et
+`paid()` pour un défaut qui coûte à l'hôte ; voir `QUOTAS.md`), `sharing.scope()` (les projections vers l'espace actif,
 `shareScope` de `_sharing.ts` ; refusé sous `shareTier: 'never'`), `audit`,
 `domains` (`list()`, `get(id)`, `verified()` : les domaines de LA feature du
 module dans l'espace actif ; refusé sans `domains` au manifest), `logger`,
@@ -680,6 +683,12 @@ deviceId, extras)` pour les permissions d'Appareils sur une machine, sous
 `devices.read` ; un verdict `{ ok }` ou `{ ok: false, reason }`, relu à
 chaque appel), `keys` (`sealBytes`/`openBytes` sous la clé serveur,
 `derive(salt, info, length)` : HKDF sur la même clé, jamais stockée),
+`objects(localDir)` (capacité `objects` : le magasin d'objets de l'hôte,
+`Services/objectStorage`, pour les fichiers qu'un module garde pour ses membres ;
+sur le disque sous `localDir`, ou dans le bucket `STORAGE_S3_*` sous
+`<préfixe>/<module>/` ; la base ne garde que la clé relative, jamais l'endroit où
+elle se résout, et `spoolDir()` reste sur le disque pour ce qui ne s'écrit pas
+d'un bloc, comme un envoi repris),
 `secrecy.redeem(ticket)` (le ticket d'un module rendu en `{ userId,
 workspaceId, payload, cipher: { server, private | null } }`), `origins`,
 `accounts` (capacité `accounts.read` : `find`, `findByEmail`, `list`, `search`, `all` ;

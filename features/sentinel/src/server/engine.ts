@@ -612,7 +612,7 @@ export class SentinelEngine {
             const config = await this.deps.repo.deviceConfig.get(deviceId);
             if (!config || config.enabled !== 1) continue;
             if (config.learning_until !== null && now < config.learning_until) continue;
-            const interval = (device.metricIntervalSeconds ?? 60) * 1000;
+            const interval = device.effectiveMetricIntervalSeconds * 1000;
             const stale = await this.deps.repo.baseline.staleSince(
                 device.id,
                 'process',

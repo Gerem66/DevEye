@@ -92,6 +92,22 @@ async function startFakeS3(): Promise<FakeS3> {
                 return;
             }
 
+            if (req.method === 'POST' && url.searchParams.has('delete')) {
+                assert.ok(req.headers['content-md5'], 'DeleteObjects exige un Content-MD5');
+                const keys = [...body.toString('utf8').matchAll(/<Key>([\s\S]*?)<\/Key>/g)].map((m) => m[1]);
+                for (const k of keys) objects.delete(k);
+                res.writeHead(200, { 'content-type': 'application/xml' });
+                res.end('<DeleteResult></DeleteResult>');
+                return;
+            }
+
+            if (req.method === 'HEAD') {
+                const stored = objects.get(key);
+                res.writeHead(stored ? 200 : 404, stored ? { 'content-length': String(stored.length) } : {});
+                res.end();
+                return;
+            }
+
             if (req.method === 'DELETE') {
                 objects.delete(key);
                 res.writeHead(204);
@@ -115,6 +131,13 @@ async function startFakeS3(): Promise<FakeS3> {
                 if (!stored) {
                     res.writeHead(404, { 'content-type': 'application/xml' });
                     res.end('<Error><Code>NoSuchKey</Code><Message>absent</Message></Error>');
+                    return;
+                }
+                const range = /^bytes=(\d+)-(\d*)$/.exec(req.headers.range ?? '');
+                if (range) {
+                    const end = range[2] ? Number(range[2]) + 1 : stored.length;
+                    res.writeHead(206);
+                    res.end(stored.subarray(Number(range[1]), end));
                     return;
                 }
                 res.writeHead(200);
@@ -152,6 +175,12 @@ function clientFor(port: number): S3Client {
         secretAccessKey: 'SECRET',
         pathStyle: true
     });
+}
+
+async function listAll(client: S3Client, prefix: string): Promise<{ key: string; size: number }[]> {
+    const out: { key: string; size: number }[] = [];
+    for await (const object of client.listObjects(prefix)) out.push(object);
+    return out;
 }
 
 async function* chunked(data: Buffer, size: number): AsyncGenerator<Buffer> {
@@ -209,11 +238,39 @@ describe('dépôt S3', () => {
             for await (const chunk of client.getObject('nuit/base.sql.gz')) parts.push(chunk);
             assert.deepEqual(Buffer.concat(parts), data);
 
-            const listed = await client.listObjects('nuit/');
-            assert.deepEqual(listed, [{ key: 'nuit/base.sql.gz', size: data.length }]);
+            assert.deepEqual(await listAll(client, 'nuit/'), [{ key: 'nuit/base.sql.gz', size: data.length }]);
+            assert.deepEqual(await client.headObject('nuit/base.sql.gz'), { size: data.length });
 
             await client.deleteObject('nuit/base.sql.gz');
-            assert.deepEqual(await client.listObjects('nuit/'), []);
+            assert.deepEqual(await listAll(client, 'nuit/'), []);
+            assert.equal(await client.headObject('nuit/base.sql.gz'), null);
+        } finally {
+            await s3.close();
+        }
+    });
+
+    it('relit une plage d’octets, bornes incluses', async () => {
+        const s3 = await startFakeS3();
+        try {
+            const client = clientFor(s3.port);
+            const data = crypto.randomBytes(1000);
+            await client.putStream('blob', chunked(data, 1000));
+            const tail: Buffer[] = [];
+            for await (const chunk of client.getObject('blob', { start: 984, end: 999 })) tail.push(chunk);
+            assert.deepEqual(Buffer.concat(tail), data.subarray(984));
+        } finally {
+            await s3.close();
+        }
+    });
+
+    it('efface tout un préfixe, et rien d’autre', async () => {
+        const s3 = await startFakeS3();
+        try {
+            const client = clientFor(s3.port);
+            for (const key of ['a/1', 'a/2', 'a/b/3', 'ab/4'])
+                await client.putStream(key, chunked(Buffer.from(key), 8));
+            await client.deletePrefix('a/');
+            assert.deepEqual([...s3.objects.keys()], ['ab/4']);
         } finally {
             await s3.close();
         }

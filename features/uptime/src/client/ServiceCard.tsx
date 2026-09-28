@@ -1,7 +1,7 @@
 import { PlanPausedBadge, StatusBadge, useLiveOutline } from 'deveye-sdk-client';
 import type { UptimeService } from '../contracts/domain';
 
-import { formatDuration, formatMs } from '../contracts/format';
+import { formatDuration, formatEvery, formatMs } from '../contracts/format';
 import { formatAgo } from './format';
 import Ratios from './Ratios';
 import StatusBars from './StatusBars';
@@ -95,6 +95,7 @@ export function ServiceCard({ service, onOpen, dragging, onDragPointerDown }: Se
                 <p className={styles.cardUrl}>{service.url}</p>
                 <p className={styles.cardMeta}>
                     {formatAgo(service.lastCheckedAt)}
+                    {service.enabled && ` · ${formatEvery(service.intervalSeconds)}`}
                     {service.lastResponseMs !== null && ` · ${formatMs(service.lastResponseMs)}`}
                     {service.lastError && ` · ${service.lastError}`}
                 </p>

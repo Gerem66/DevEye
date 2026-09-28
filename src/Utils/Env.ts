@@ -88,6 +88,21 @@ export const env = {
     DOMAIN_PROXY_CERT_RESOLVER: getEnvVar('DOMAIN_PROXY_CERT_RESOLVER', 'string', false) || 'letsencrypt',
     DOMAIN_PROXY_ENTRYPOINT: getEnvVar('DOMAIN_PROXY_ENTRYPOINT', 'string', false) || 'websecure',
 
+    // Le stockage objet des fichiers que les modules gardent pour leurs membres
+    // (partages CloudSync, sauvegardes « sur le serveur ») : un bucket S3 au lieu
+    // du disque (`Services/objectStorage`). Vide, chaque module écrit sous son
+    // dossier local. L'adresse vient de l'opérateur, pas d'un membre : un S3 du
+    // réseau privé (MinIO, Garage) est joignable sans OUTBOUND_ALLOW_PRIVATE.
+    STORAGE_S3_ENDPOINT: getEnvVar('STORAGE_S3_ENDPOINT', 'string', false),
+    STORAGE_S3_REGION: getEnvVar('STORAGE_S3_REGION', 'string', false),
+    STORAGE_S3_BUCKET: getEnvVar('STORAGE_S3_BUCKET', 'string', false),
+    STORAGE_S3_ACCESS_KEY_ID: getEnvVar('STORAGE_S3_ACCESS_KEY_ID', 'string', false),
+    STORAGE_S3_SECRET_ACCESS_KEY: getEnvVar('STORAGE_S3_SECRET_ACCESS_KEY', 'string', false),
+    // `https://hôte/bucket/clé` (MinIO, Garage) plutôt que `https://bucket.hôte/clé`.
+    STORAGE_S3_PATH_STYLE: getEnvVar('STORAGE_S3_PATH_STYLE', 'boolean', false) ?? false,
+    // Pour loger plusieurs instances dans un même bucket : `prod`, `demo`.
+    STORAGE_S3_PREFIX: getEnvVar('STORAGE_S3_PREFIX', 'string', false),
+
     // Les variables propres à un module (SENTINEL_*, MAIL_SYNC_*, OAUTH_*,
     // MONITORING_RETENTION_DAYS, LINK_CODE_TTL_SECONDS) sont lues par le module.
 
@@ -186,6 +201,15 @@ if (env.DOMAIN_PROXY_TOKEN) {
 }
 if (env.SMTP_HOST && !env.SMTP_FROM) {
     throw new Error('SMTP_FROM est requis dès que SMTP_HOST est renseigné.');
+}
+// Un S3 à moitié décrit écrirait sur le disque sans le dire : on refuse.
+if (env.STORAGE_S3_ENDPOINT) {
+    const missing = (
+        ['STORAGE_S3_REGION', 'STORAGE_S3_BUCKET', 'STORAGE_S3_ACCESS_KEY_ID', 'STORAGE_S3_SECRET_ACCESS_KEY'] as const
+    ).filter((name) => !env[name]);
+    if (missing.length > 0) {
+        throw new Error(`${missing.join(', ')} requis dès que STORAGE_S3_ENDPOINT est renseigné.`);
+    }
 }
 if (env.CRYPT_KEY_A === env.CRYPT_KEY_B) {
     throw new Error('CRYPT_KEY_A et CRYPT_KEY_B doivent différer.');

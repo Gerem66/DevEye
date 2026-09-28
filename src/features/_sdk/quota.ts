@@ -9,7 +9,7 @@ import {
 
 import type { Database } from '@/db';
 import { isPlanPaused, planPausedIds } from '@/Services/planPauses';
-import { assertPlanLimit, isHeld, limitIn, planOf, planUsage } from '@/Services/quota';
+import { assertPlanLimit, isHeld, isPaidAccount, limitIn, planOf, planUsage } from '@/Services/quota';
 
 function specOf(manifest: FeatureManifest, key: string) {
     const spec = manifest.quotas?.find((q) => q.key === key);
@@ -92,6 +92,10 @@ export function createQuota(
                 fullKey: `${manifest.id}.${key}`,
                 used: (owned) => count(key, owned)
             });
+        },
+        paid: async () => {
+            const ownerUserId = await ownerOf();
+            return ownerUserId === null || isPaidAccount(providers, ownerUserId, logger);
         },
         assertActive: async (key, itemId) => {
             if (!pauses.isPaused(key, itemId)) return;

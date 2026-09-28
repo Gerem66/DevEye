@@ -58,6 +58,7 @@ import {
     formatBytes,
     formatBytesFr,
     formatDuration,
+    formatEvery,
     formatRate,
     formatUptime,
     nearestBy,
@@ -66,8 +67,6 @@ import {
 import styles from './style.module.css';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-/** Mirrors the server's default collection cadence (`DEFAULT_METRIC_INTERVAL_SECONDS`). */
-const DEFAULT_INTERVAL_S = 60;
 /** Graphs shown before "Afficher plus" (≈ 2 rows at 3 columns on a wide panel). */
 const COLLAPSED_GRAPHS = 6;
 
@@ -307,7 +306,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     const idRef = useRef<string>(deviceId);
     idRef.current = deviceId;
 
-    const intervalMs = (selected?.metricIntervalSeconds ?? DEFAULT_INTERVAL_S) * 1000;
+    const intervalMs = (selected?.effectiveMetricIntervalSeconds ?? 60) * 1000;
 
     // The time window the graphs cover, derived from the focus.
     const graphWindow = useMemo(() => {
@@ -1072,7 +1071,10 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                     ) : pending ? (
                         <span className={`${styles.onlineBadge} ${styles.awaiting}`}>En attente d’approbation</span>
                     ) : (
-                        <span className={`${styles.onlineBadge} ${online ? styles.online : styles.offline}`}>
+                        <span
+                            className={`${styles.onlineBadge} ${online ? styles.online : styles.offline}`}
+                            title={`Relevé ${formatEvery(selected.effectiveMetricIntervalSeconds)}`}
+                        >
                             {online ? 'En ligne' : 'Hors ligne'}
                         </span>
                     )}

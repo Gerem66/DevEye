@@ -18,6 +18,12 @@ export const UPTIME_KEYWORD_MAX_LENGTH = 200;
 /** Bounds of a service's cadence, in seconds (30 s → 24 h). */
 export const UPTIME_INTERVAL_MIN = 30;
 export const UPTIME_INTERVAL_MAX = 86400;
+/**
+ * The cadence a new service gets when none is given, by the owner's plan: a
+ * free account's probes are the bulk of what the server sends and writes, and
+ * most keep the default.
+ */
+export const UPTIME_DEFAULT_INTERVAL_SECONDS = { paid: 60, free: 300 } as const;
 /** Bounds of a single request's timeout, in seconds. */
 export const UPTIME_TIMEOUT_MIN = 1;
 export const UPTIME_TIMEOUT_MAX = 120;

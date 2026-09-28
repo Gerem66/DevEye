@@ -349,6 +349,8 @@ describe('createFacade : devices', () => {
         ownerUserId: 7,
         workspaceId: WS,
         metricIntervalSeconds: null,
+        // Sans module d'offre, l'instance est auto-hébergée : la cadence des offres payantes.
+        effectiveMetricIntervalSeconds: 60,
         report: null
     });
     function devicesDb() {
@@ -360,7 +362,8 @@ describe('createFacade : devices', () => {
                     return rows.find((r) => r.id === id) ?? null;
                 },
                 listByWorkspace: async () => rows
-            }
+            },
+            workspaces: { findById: async (id: number) => ({ id, owner_user_id: 7 }) }
         };
         return { db, findVisibleCalls };
     }

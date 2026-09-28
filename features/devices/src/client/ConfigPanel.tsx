@@ -7,19 +7,16 @@ import {
     settingsStyles as shell,
     TextInput
 } from 'deveye-sdk-client';
-import {
-    DEFAULT_METRIC_INTERVAL_SECONDS,
-    DEFAULT_PROCESS_CAPTURE,
-    DEFAULT_RETENTION_DAYS,
-    type Device,
-    type ProcessCapture
-} from '@deveye/types';
+import { DEFAULT_PROCESS_CAPTURE, DEFAULT_RETENTION_DAYS, type Device, type ProcessCapture } from '@deveye/types';
 
 import { api } from './api';
 import { refreshDevices, useDevices } from './store';
 import styles from './style.module.css';
+import { formatInterval } from './utils';
 
 const CUSTOM = '__custom__';
+/** La cadence laissée à l'offre du propriétaire : `null` en base, suivie si l'offre change. */
+const PLAN_DEFAULT = '__plan__';
 
 const METRIC_PRESETS = [10, 30, 60, 300]; // seconds
 const RET_PRESETS = [7, 30, 90, 365]; // days
@@ -57,8 +54,8 @@ export function ConfigPanel({ deviceId, canWrite }: { deviceId: string; canWrite
     const editable = canWrite && device !== null && device.status !== 'archived';
 
     // Each numeric field = a select value (preset string or CUSTOM) + custom text.
-    const [metricSel, setMetricSel] = useState(String(DEFAULT_METRIC_INTERVAL_SECONDS));
-    const [metricCustom, setMetricCustom] = useState(String(DEFAULT_METRIC_INTERVAL_SECONDS));
+    const [metricSel, setMetricSel] = useState(PLAN_DEFAULT);
+    const [metricCustom, setMetricCustom] = useState('');
     const [capture, setCapture] = useState<ProcessCapture>(DEFAULT_PROCESS_CAPTURE);
     const [retSel, setRetSel] = useState(String(DEFAULT_RETENTION_DAYS));
     const [retCustom, setRetCustom] = useState(String(DEFAULT_RETENTION_DAYS));
@@ -73,12 +70,12 @@ export function ConfigPanel({ deviceId, canWrite }: { deviceId: string; canWrite
             setSel(presets.includes(v) ? String(v) : CUSTOM);
             setCustom(String(v));
         };
-        init(
-            METRIC_PRESETS,
-            device.metricIntervalSeconds ?? DEFAULT_METRIC_INTERVAL_SECONDS,
-            setMetricSel,
-            setMetricCustom
-        );
+        if (device.metricIntervalSeconds === null) {
+            setMetricSel(PLAN_DEFAULT);
+            setMetricCustom(String(device.effectiveMetricIntervalSeconds));
+        } else {
+            init(METRIC_PRESETS, device.metricIntervalSeconds, setMetricSel, setMetricCustom);
+        }
         init(RET_PRESETS, device.retentionDays ?? DEFAULT_RETENTION_DAYS, setRetSel, setRetCustom);
         setCapture(device.processCapture ?? DEFAULT_PROCESS_CAPTURE);
         setError(null);
@@ -90,14 +87,18 @@ export function ConfigPanel({ deviceId, canWrite }: { deviceId: string; canWrite
     };
 
     // Pour l'estimation vivante.
-    const estimateSec = resolve(metricSel, metricCustom) ?? DEFAULT_METRIC_INTERVAL_SECONDS;
+    const estimateSec =
+        (metricSel === PLAN_DEFAULT ? null : resolve(metricSel, metricCustom)) ??
+        device?.effectiveMetricIntervalSeconds ??
+        60;
     const estimateDays = resolve(retSel, retCustom) ?? DEFAULT_RETENTION_DAYS;
     const dailyBytes = estimateDailyBytes(estimateSec, capture);
 
     const save = async (target: Device) => {
-        const metricSec = resolve(metricSel, metricCustom);
+        const planDefault = metricSel === PLAN_DEFAULT;
+        const metricSec = planDefault ? null : resolve(metricSel, metricCustom);
         const retentionDays = resolve(retSel, retCustom);
-        if (metricSec === null || retentionDays === null) {
+        if ((!planDefault && metricSec === null) || retentionDays === null) {
             setError('Une valeur personnalisée est invalide.');
             throw new Error('valeur invalide');
         }
@@ -105,7 +106,7 @@ export function ConfigPanel({ deviceId, canWrite }: { deviceId: string; canWrite
         try {
             await api.send('devices.setConfig', {
                 deviceId: target.id,
-                metricIntervalSeconds: clamp(Math.round(metricSec), 5, 3600),
+                metricIntervalSeconds: metricSec === null ? null : clamp(Math.round(metricSec), 5, 3600),
                 processCapture: capture,
                 retentionDays: clamp(Math.round(retentionDays), 1, 3650)
             });
@@ -138,6 +139,11 @@ export function ConfigPanel({ deviceId, canWrite }: { deviceId: string; canWrite
                 <ConfigChoice
                     label='Intervalle de collecte'
                     unit='s'
+                    planDefault={
+                        device.metricIntervalSeconds === null
+                            ? `Selon l’offre (${formatInterval(device.effectiveMetricIntervalSeconds)})`
+                            : 'Selon l’offre'
+                    }
                     presets={METRIC_PRESETS.map((v) => ({
                         value: v,
                         label: v >= 60 ? `${v / 60} min` : `${v} s`
@@ -211,6 +217,8 @@ function ConfigRow({ label, hint, children }: { label: string; hint?: ReactNode;
 interface ConfigChoiceProps {
     label: string;
     unit: string;
+    /** Le libellé de l'option qui s'en remet à l'offre, s'il y en a une. */
+    planDefault?: string;
     presets: { value: number; label: string }[];
     sel: string;
     custom: string;
@@ -219,10 +227,21 @@ interface ConfigChoiceProps {
     onCustom: (s: string) => void;
 }
 
-function ConfigChoice({ label, unit, presets, sel, custom, disabled, onSel, onCustom }: ConfigChoiceProps) {
+function ConfigChoice({
+    label,
+    unit,
+    planDefault,
+    presets,
+    sel,
+    custom,
+    disabled,
+    onSel,
+    onCustom
+}: ConfigChoiceProps) {
     return (
         <ConfigRow label={label}>
             <SelectInput value={sel} disabled={disabled} onChange={(e) => onSel(e.target.value)} aria-label={label}>
+                {planDefault && <option value={PLAN_DEFAULT}>{planDefault}</option>}
                 {presets.map((p) => (
                     <option key={p.value} value={String(p.value)}>
                         {p.label}

@@ -17,11 +17,12 @@ import { randomUUID } from 'node:crypto';
 import type { Database } from '@/db';
 import type { Logger } from 'pino';
 import { authorizeDevice } from '@/agent/authorize';
+import { metricIntervalOf, metricIntervalsOf } from '@/agent/cadence';
 import { parseDeviceReport } from '@/agent/mappers';
 import { editMessage, postMessage } from '@/Services/discord';
 import { deliver, discordChannels, hasChannel, resolveChannelIds, resolveRoute } from '@/Services/notifications';
 import { toSdkAccount } from './live';
-import { pushAgentConfig, sdkHub } from './host';
+import { pushAgentConfig, sdkDb, sdkHub } from './host';
 import { agentDistDir, readServedManifestCached } from '@/agent/sync';
 
 /**
@@ -189,7 +190,8 @@ export function createFacade(deps: FacadeDeps): DevEyeFacade {
             // transport et de la feature.
             async authorize(deviceId, options) {
                 gate('devices.read');
-                const device = toSdkDevice(await authorizeDevice(deps, deviceId));
+                const row = await authorizeDevice(deps, deviceId);
+                const device = toSdkDevice(row, await metricIntervalOf(deps.db, row));
                 const extras = options?.extras ?? [];
                 if (extras.length > 0) {
                     if (!deps.assertDeviceExtras) {
@@ -207,7 +209,8 @@ export function createFacade(deps: FacadeDeps): DevEyeFacade {
             async list() {
                 gate('devices.read');
                 const rows = await deps.db.devices.listByWorkspace(deps.workspaceId);
-                return rows.map(toSdkDevice);
+                const intervals = await metricIntervalsOf(deps.db, rows);
+                return rows.map((row) => toSdkDevice(row, intervals.get(row.id) as number));
             },
             isOnline(deviceId) {
                 gate('devices.read');
@@ -220,7 +223,7 @@ export function createFacade(deps: FacadeDeps): DevEyeFacade {
 }
 
 /** Ce que la façade révèle d'une ligne appareil : l'identité, l'état, le rapport. */
-export function toSdkDevice(row: DeviceRow): SdkDevice {
+export function toSdkDevice(row: DeviceRow, effectiveMetricIntervalSeconds: number): SdkDevice {
     return {
         id: row.id,
         name: row.name,
@@ -229,6 +232,7 @@ export function toSdkDevice(row: DeviceRow): SdkDevice {
         ownerUserId: row.owner_id,
         workspaceId: row.workspace_id,
         metricIntervalSeconds: row.metric_interval_seconds === null ? null : Number(row.metric_interval_seconds),
+        effectiveMetricIntervalSeconds,
         report: parseDeviceReport(row.report_json)
     };
 }
@@ -270,6 +274,7 @@ export function agentsFacade(gate: () => void): AgentsFacade {
         isOnline: (deviceId) => (gate(), sdkHub().isOnline(deviceId)),
         requestScan: (deviceId) => (gate(), sdkHub().requestScan(deviceId)),
         pushConfig: (deviceId) => (gate(), pushAgentConfig(deviceId)),
+        metricIntervals: (devices) => (gate(), metricIntervalsOf(sdkDb(), devices)),
         requestDestroy: (deviceId) => (gate(), sdkHub().requestDestroy(deviceId)),
         disconnectAgent: (deviceId) => (gate(), sdkHub().disconnectAgent(deviceId)),
         // Le manifest des binaires servis ; la distribution elle-même reste à l'app.

@@ -48,6 +48,8 @@ export interface StatusServiceView {
     ratio: number | null;
     /** `null` quand la page ne montre pas le temps de réponse. */
     latency: { points: (number | null)[]; avgMs: number | null } | null;
+    /** La cadence des sondes, en secondes ; `null` pour un service en pause, qui n'en a pas. */
+    intervalSeconds: number | null;
 }
 
 export interface StatusIncidentView {
@@ -159,9 +161,11 @@ export function buildStatusView(input: StatusViewInput): StatusPageView {
         const inWindow = [...days.values()].filter((d) => Number(d.day) >= firstDay);
         const checks = inWindow.reduce((total, d) => total + Number(d.checks), 0);
         const upChecks = inWindow.reduce((total, d) => total + Number(d.up_checks), 0);
+        const state = stateOf(row, planPaused);
         return {
             name,
-            state: stateOf(row, planPaused),
+            state,
+            intervalSeconds: state === 'paused' ? null : Number(row.interval_seconds),
             bars: barsOf(days, incidents, firstDay, input.now),
             ratio: checks > 0 ? upChecks / checks : null,
             latency: input.showLatency

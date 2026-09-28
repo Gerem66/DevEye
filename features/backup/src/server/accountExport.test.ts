@@ -1,11 +1,8 @@
 import assert from 'node:assert/strict';
-import fs from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
-import { after, before, describe, it } from 'node:test';
+import { describe, it } from 'node:test';
 
 import { accountExportProblem, type SdkExportWriter, type SdkWorkspaceExportContext } from '@deveye/types/sdk/server';
-import { createTestServiceDeps } from '@deveye/types/sdk/testing';
+import { createTestServiceDeps, memoryObjectStore } from '@deveye/types/sdk/testing';
 
 import { createAccountExport } from './accountExport';
 import { backupKey, sealStream } from './crypto';
@@ -72,33 +69,27 @@ const run = (id: number, artifact: string, over: Partial<LocalArchiveRow> = {}):
 });
 
 describe('l’export des sauvegardes', () => {
-    let storage: string;
-    before(async () => {
-        storage = await fs.mkdtemp(path.join(os.tmpdir(), 'backup-export-'));
-        await fs.mkdir(path.join(storage, `ws-${WS}`, 'nuit'), { recursive: true });
-    });
-    after(() => fs.rm(storage, { recursive: true, force: true }));
-
     it('déclare chacune de ses tables sans faute', () => {
         assert.ok(serverEntry.accountExport);
         assert.equal(accountExportProblem(serverEntry.accountExport), null);
     });
 
     it('écrit chaque archive ouverte, et tait celles de la base de DevEye', async () => {
-        const plainFile = path.join(storage, `ws-${WS}`, 'base-1.sql.gz');
-        const sealedFile = path.join(storage, `ws-${WS}`, 'nuit', 'partage-2.tar.gz.enc');
-        const serverFile = path.join(storage, `ws-${WS}`, 'deveye-3.sql.gz');
-        await fs.writeFile(plainFile, 'clair');
-        await fs.writeFile(sealedFile, await collect(sealStream(backupKey(keys), once(Buffer.from('scellé')))));
-        await fs.writeFile(serverFile, 'tous les comptes');
+        const store = memoryObjectStore();
+        await store.put(`ws-${WS}/base-1.sql.gz`, Buffer.from('clair'));
+        await store.put(
+            `ws-${WS}/nuit/partage-2.tar.gz.enc`,
+            await collect(sealStream(backupKey(keys), once(Buffer.from('scellé'))))
+        );
+        await store.put(`ws-${WS}/deveye-3.sql.gz`, Buffer.from('tous les comptes'));
 
         const { out, files } = recordingWriter();
         const rows = [
-            run(1, plainFile),
-            run(2, sealedFile, { encrypted: 1 }),
-            run(3, serverFile, { source_kind: 'deveye' })
+            run(1, `ws-${WS}/base-1.sql.gz`),
+            run(2, `ws-${WS}/nuit/partage-2.tar.gz.enc`, { encrypted: 1 }),
+            run(3, `ws-${WS}/deveye-3.sql.gz`, { source_kind: 'deveye' })
         ];
-        await createAccountExport(storage).workspace?.(contextFor(rows, out));
+        await createAccountExport(() => store).workspace?.(contextFor(rows, out));
 
         assert.deepEqual([...files.keys()].sort(), [
             'Archives/LISEZMOI.txt',
@@ -111,12 +102,14 @@ describe('l’export des sauvegardes', () => {
         assert.equal(files.get('Archives/base-1.sql.gz')?.mtime, 1_700_000_000);
     });
 
-    it('ne suit aucun chemin hors du dossier de l’espace, et le dit', async () => {
+    it('ne suit aucune clé hors du dossier de l’espace, et le dit', async () => {
+        const store = memoryObjectStore();
+        await store.put('ws-6/autre.sql.gz', Buffer.from('ailleurs'));
         const { out, files } = recordingWriter();
-        const outside = path.join(storage, 'ws-6', 'autre.sql.gz');
         await assert.rejects(
-            createAccountExport(storage).workspace?.(contextFor([run(4, outside), run(5, '/etc/passwd')], out)) ??
-                Promise.resolve(),
+            createAccountExport(() => store).workspace?.(
+                contextFor([run(4, 'ws-6/autre.sql.gz'), run(5, `ws-${WS}/../ws-6/autre.sql.gz`)], out)
+            ) ?? Promise.resolve(),
             /2 archive/
         );
         assert.equal(files.size, 0);

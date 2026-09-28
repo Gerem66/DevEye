@@ -13,7 +13,15 @@ import {
     uptimeSetEnabled,
     uptimeUpdate
 } from '../contracts/commands';
-import type { UptimePoint, UptimeRange, UptimeResolution, UptimeService, UptimeServiceRow } from '../contracts/domain';
+import {
+    UPTIME_DEFAULT_INTERVAL_SECONDS,
+    UPTIME_INTEGRITY_INTERVAL_MIN,
+    type UptimePoint,
+    type UptimeRange,
+    type UptimeResolution,
+    type UptimeService,
+    type UptimeServiceRow
+} from '../contracts/domain';
 import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 
 // Le garde des appels sortants, partagé par toute l'app : refuser l'adresse à
@@ -184,6 +192,11 @@ export const uptimeHandlers = [
             const draft = input.service;
             if (!isAllowedOutboundUrl(draft.url)) throw new FeatureError('validation', OUTBOUND_REFUSED_MESSAGE);
             await ctx.quota.assert('monitors', async (owned) => (await ctx.repo.services.countInWorkspaces(owned)) + 1);
+            const intervalSeconds =
+                draft.intervalSeconds ??
+                (draft.kind === 'integrity'
+                    ? UPTIME_INTEGRITY_INTERVAL_MIN
+                    : UPTIME_DEFAULT_INTERVAL_SECONDS[(await ctx.quota.paid()) ? 'paid' : 'free']);
             const row = await ctx.repo.services.create({
                 userId: ctx.userId,
                 workspaceId: ctx.workspaceId,
@@ -196,7 +209,7 @@ export const uptimeHandlers = [
                 kind: draft.kind,
                 method: draft.method,
                 expectedStatus: draft.expectedStatus,
-                intervalSeconds: draft.intervalSeconds,
+                intervalSeconds,
                 timeoutSeconds: draft.timeoutSeconds,
                 failureThreshold: draft.failureThreshold,
                 retentionDays: draft.retentionDays,

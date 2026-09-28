@@ -18,7 +18,7 @@ import type {
 } from '../contracts/domain';
 
 import { api } from './api';
-import { formatDuration, formatMs, formatRatio } from '../contracts/format';
+import { formatDuration, formatEvery, formatMs, formatRatio } from '../contracts/format';
 import { formatAgo, formatMoment, rangeWindow, RANGES } from './format';
 import MeasuresBrowser from './MeasuresBrowser';
 import Pane from './Pane';
@@ -338,9 +338,9 @@ export function ServiceDetail({ service, onBack, onCheckNow, onAcceptBaseline }:
             <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
 
             <p className={styles.detailFoot}>
-                Dernière mesure {formatAgo(service.lastCheckedAt)} · conservation détaillée{' '}
-                {service.retentionDays === null ? 'illimitée' : `${service.retentionDays} jours`} · résumé journalier
-                conservé indéfiniment.
+                Dernière mesure {formatAgo(service.lastCheckedAt)} · relevé {formatEvery(service.intervalSeconds)} ·
+                conservation détaillée {service.retentionDays === null ? 'illimitée' : `${service.retentionDays} jours`}{' '}
+                · résumé journalier conservé indéfiniment.
             </p>
         </div>
     );

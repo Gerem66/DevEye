@@ -31,6 +31,8 @@ import { deviceVerdict, memberVerdict } from '../_access';
 import { sdkFleetDomains } from './domains';
 import { createFeatureStore } from './store';
 import { sdkHub } from './host';
+import { objectStoreFor } from '@/Services/objectStorage';
+import { metricIntervalOf } from '@/agent/cadence';
 
 /**
  * Les dépendances d'un service d'arrière-plan de module : tout est résolu
@@ -109,6 +111,7 @@ export function createServiceDeps(
                 | 'accounts.usage'
                 | 'accounts.mail'
                 | 'members.read'
+                | 'objects'
         ) =>
         (): void => {
             if (!capabilities.has(cap)) {
@@ -124,6 +127,7 @@ export function createServiceDeps(
     const gateUsage = gate('accounts.usage');
     const gateMail = gate('accounts.mail');
     const gateMembers = gate('members.read');
+    const gateObjects = gate('objects');
     const keys = serverKeysOf(host.crypt, manifest.id);
 
     return {
@@ -194,7 +198,7 @@ export function createServiceDeps(
             find: async (deviceId) => {
                 gateDevices();
                 const row = await host.db.devices.findById(deviceId);
-                return row ? toSdkDevice(row) : null;
+                return row ? toSdkDevice(row, await metricIntervalOf(host.db, row)) : null;
             },
             isOnline: (deviceId) => (gateDevices(), sdkHub().isOnline(deviceId))
         },
@@ -286,6 +290,10 @@ export function createServiceDeps(
         },
         agents: agentsFacade(gateAgents),
         keys,
+        objects: (localDir) => {
+            gateObjects();
+            return objectStoreFor(manifest.id, localDir);
+        },
         providers,
         createTicker: ({ intervalMs, tick }): FeatureService => {
             // setInterval + garde de réentrance + unref ; stop() attend le tour en vol,

@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import type { FeatureServer } from '@deveye/types/sdk/server';
+import type { FeatureServer, SdkObjectStore } from '@deveye/types/sdk/server';
 
 import { createAccountExport } from './accountExport';
 import { backupHandlers } from './handlers';
@@ -9,6 +9,9 @@ import { createRepo, type BackupRepo } from './repo';
 import { BackupEngine } from './service';
 import { setEngine } from './_shared';
 import { BACKUP_ENV, env } from './env';
+
+/** Le magasin des destinations « sur le serveur », connu une fois le service créé. */
+let hosted: SdkObjectStore | null = null;
 
 /**
  * `items` : ce que le partage et les routes de notification savent des
@@ -22,8 +25,12 @@ export const serverEntry: FeatureServer<BackupRepo> = {
     features: backupHandlers,
     migrationsDir: path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations'),
     quotas: { storage: { count: (repo, owned) => repo.storedBytesInWorkspaces(owned) } },
-    accountExport: createAccountExport(env.BACKUP_STORAGE_DIR),
+    accountExport: createAccountExport(() => {
+        if (!hosted) throw new Error('Sauvegardes : service non démarré');
+        return hosted;
+    }),
     createService(deps) {
+        hosted = deps.objects(env.BACKUP_STORAGE_DIR);
         const engine = new BackupEngine(deps);
         return {
             start() {

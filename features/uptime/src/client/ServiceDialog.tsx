@@ -1,11 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button, Checkbox, Dialog, DialogCancelButton, SegmentedControl, TextInput } from 'deveye-sdk-client';
-import {
-    UPTIME_INTEGRITY_INTERVAL_MIN,
-    type UptimeKind,
-    type UptimeMethod,
-    type UptimeService
-} from '../contracts/domain';
+import type { UptimeKind, UptimeMethod, UptimeService } from '../contracts/domain';
 
 import { KIND_OPTIONS, parsePaths } from './kinds';
 
@@ -47,9 +42,12 @@ const DEFAULTS: ServiceIdentity = {
     enabled: true
 };
 
-/** Les réglages fins d'un service neuf, avant qu'on ne les touche dans ses réglages. */
-const TUNING_DEFAULTS: ServiceTuning = {
-    intervalSeconds: 60,
+/**
+ * Les réglages fins d'un service neuf, avant qu'on ne les touche dans ses
+ * réglages. Sans cadence : le serveur applique celle de l'offre du
+ * propriétaire de l'espace, et une plus lente à un contrôle d'intégrité.
+ */
+const TUNING_DEFAULTS: Omit<ServiceTuning, 'intervalSeconds'> = {
     timeoutSeconds: 10,
     failureThreshold: 2,
     retentionDays: null
@@ -99,8 +97,6 @@ export function ServiceDialog({ open, onClose, onSaved }: ServiceDialogProps) {
         const payload = {
             ...draft,
             ...TUNING_DEFAULTS,
-            // Un contrôle d'intégrité relit tout un site : sa cadence part plus lente.
-            intervalSeconds: integrity ? UPTIME_INTEGRITY_INTERVAL_MIN : TUNING_DEFAULTS.intervalSeconds,
             name,
             url,
             paths: integrity ? parsePaths(draft.paths) : [],

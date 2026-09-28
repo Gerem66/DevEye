@@ -1,16 +1,27 @@
 import crypto from 'crypto';
 
-// Le garde des appels sortants, partagé par toute l'app : l'adresse du service est
-// saisie par un membre, et chaque requête porte une signature de ses clés.
+import type { Response } from 'undici';
+
 import { safeFetch } from '@/Services/netFetch';
 
 /**
  * Client S3 minimal (déposer, relire, lister, effacer), écrit ici plutôt que
- * d'importer `@aws-sdk/client-s3` et sa centaine de paquets pour six requêtes
- * figées : le protocole tient en une signature SigV4. Compatible Garage,
- * MinIO, Scaleway, Backblaze et AWS ; la seule différence qui compte est
- * `pathStyle`.
+ * d'importer `@aws-sdk/client-s3` et sa centaine de paquets pour quelques
+ * requêtes figées : le protocole tient en une signature SigV4. Compatible
+ * Garage, MinIO, Scaleway, Backblaze et AWS ; la seule différence qui compte
+ * est `pathStyle`. Deux usages : les destinations de sauvegarde qu'un membre
+ * saisit, et le stockage objet de l'hôte.
  */
+
+/**
+ * Le transport d'une requête signée. Par défaut le garde des appels sortants :
+ * une adresse saisie par un membre ne vise jamais le réseau interne. Le
+ * stockage de l'hôte passe le sien, l'adresse venant de l'opérateur.
+ */
+export type S3Fetch = (
+    url: string,
+    init: { method: string; headers: Record<string, string>; body?: Buffer; signal: AbortSignal }
+) => Promise<Response>;
 
 export interface S3Config {
     /** `https://s3.exemple.fr` — schéma compris, sans chemin. */
@@ -34,6 +45,9 @@ export interface S3Object {
  * 160 Gio, et jamais plus de 16 Mio de clair en mémoire.
  */
 export const S3_PART_BYTES = 16 * 1024 * 1024;
+
+/** Le plus grand lot qu'une requête `DeleteObjects` accepte. */
+const DELETE_BATCH = 1000;
 
 /** Au-delà, on passe en envoi multiple plutôt qu'en un seul `PUT`. */
 const SINGLE_PUT_LIMIT = S3_PART_BYTES;
@@ -91,7 +105,10 @@ export class S3Client {
     private readonly origin: string;
     private readonly basePath: string;
 
-    constructor(private readonly config: S3Config) {
+    constructor(
+        private readonly config: S3Config,
+        private readonly fetcher: S3Fetch = (url, init) => safeFetch(url, init)
+    ) {
         let url: URL;
         try {
             url = new URL(config.endpoint);
@@ -164,7 +181,7 @@ export class S3Client {
             `SignedHeaders=${signedHeaders}, Signature=${signature}`;
 
         const url = `${this.origin}${canonicalUri}${canonicalQuery ? `?${canonicalQuery}` : ''}`;
-        const res = await safeFetch(url, {
+        const res = await this.fetcher(url, {
             method: req.method,
             headers,
             body: req.method === 'GET' || req.method === 'HEAD' ? undefined : body,
@@ -192,9 +209,21 @@ export class S3Client {
         await this.send({ method: 'DELETE', key });
     }
 
-    /** Le contenu d'un objet, en flux. */
-    async *getObject(key: string): AsyncGenerator<Buffer> {
-        const res = await this.send({ method: 'GET', key });
+    /** La taille d'un objet, `null` s'il n'existe pas. */
+    async headObject(key: string): Promise<{ size: number } | null> {
+        try {
+            const res = await this.send({ method: 'HEAD', key });
+            return { size: Number(res.headers.get('content-length') ?? 0) };
+        } catch (e) {
+            if (e instanceof S3Error && e.status === 404) return null;
+            throw e;
+        }
+    }
+
+    /** Le contenu d'un objet, en flux. `range` est inclusif, comme l'en-tête HTTP. */
+    async *getObject(key: string, range?: { start: number; end?: number }): AsyncGenerator<Buffer> {
+        const headers = range ? { range: `bytes=${range.start}-${range.end ?? ''}` } : undefined;
+        const res = await this.send({ method: 'GET', key, headers });
         if (!res.body) return;
         const reader = res.body.getReader();
         for (;;) {
@@ -204,9 +233,8 @@ export class S3Client {
         }
     }
 
-    /** Les objets sous un préfixe, pagination suivie jusqu'au bout. */
-    async listObjects(prefix: string): Promise<S3Object[]> {
-        const out: S3Object[] = [];
+    /** Les objets sous un préfixe, page par page : un partage peut en compter des dizaines de milliers. */
+    async *listObjects(prefix: string): AsyncGenerator<S3Object> {
         let token: string | null = null;
         do {
             const query: Record<string, string> = { 'list-type': '2', prefix, 'max-keys': '1000' };
@@ -216,14 +244,55 @@ export class S3Client {
             for (const block of xml.match(/<Contents>[\s\S]*?<\/Contents>/g) ?? []) {
                 const key = /<Key>([\s\S]*?)<\/Key>/.exec(block)?.[1];
                 const size = /<Size>(\d+)<\/Size>/.exec(block)?.[1];
-                if (key !== undefined) out.push({ key: decodeXml(key), size: Number(size ?? 0) });
+                if (key !== undefined) yield { key: decodeXml(key), size: Number(size ?? 0) };
             }
             token = /<IsTruncated>true<\/IsTruncated>/.test(xml)
                 ? (/<NextContinuationToken>([\s\S]*?)<\/NextContinuationToken>/.exec(xml)?.[1] ?? null)
                 : null;
             if (token) token = decodeXml(token);
         } while (token);
-        return out;
+    }
+
+    /**
+     * Efface des objets par lots de mille, le maximum d'une requête. Le service
+     * répond 200 même quand une clé échoue : l'échec se lit dans le corps.
+     */
+    async deleteObjects(keys: readonly string[]): Promise<void> {
+        for (let i = 0; i < keys.length; i += DELETE_BATCH) {
+            const batch = keys.slice(i, i + DELETE_BATCH);
+            const body = Buffer.from(
+                '<Delete><Quiet>true</Quiet>' +
+                    batch.map((key) => `<Object><Key>${escapeXml(key)}</Key></Object>`).join('') +
+                    '</Delete>',
+                'utf8'
+            );
+            const res = await this.send({
+                method: 'POST',
+                query: { delete: '' },
+                body,
+                headers: {
+                    'content-type': 'application/xml',
+                    'content-length': String(body.length),
+                    // Exigé par S3 pour cette seule opération.
+                    'content-md5': crypto.createHash('md5').update(body).digest('base64')
+                }
+            });
+            const xml = await res.text();
+            if (/<Error>/.test(xml)) throw new S3Error(explainS3(200, xml), 200);
+        }
+    }
+
+    /** Tout ce qui vit sous un préfixe. */
+    async deletePrefix(prefix: string): Promise<void> {
+        let batch: string[] = [];
+        for await (const object of this.listObjects(prefix)) {
+            batch.push(object.key);
+            if (batch.length >= DELETE_BATCH) {
+                await this.deleteObjects(batch);
+                batch = [];
+            }
+        }
+        if (batch.length > 0) await this.deleteObjects(batch);
     }
 
     /**
@@ -232,7 +301,11 @@ export class S3Client {
      * multiple est abandonné explicitement : S3 facture les parties d'un envoi
      * jamais terminé, invisibles au listage.
      */
-    async putStream(key: string, source: AsyncIterable<Buffer>, contentType?: string): Promise<number> {
+    async putStream(
+        key: string,
+        source: AsyncIterable<Uint8Array> | Iterable<Uint8Array>,
+        contentType?: string
+    ): Promise<number> {
         const pending: Buffer[] = [];
         let pendingLen = 0;
         let total = 0;
@@ -247,7 +320,8 @@ export class S3Client {
         };
 
         try {
-            for await (const chunk of source) {
+            for await (const bytes of source) {
+                const chunk = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
                 pending.push(chunk);
                 pendingLen += chunk.length;
                 total += chunk.length;

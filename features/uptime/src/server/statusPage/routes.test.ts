@@ -251,6 +251,13 @@ describe('la pause de l’offre', () => {
         assert.equal(res.status, 200);
         // Le service 1 était en panne : en pause, seul le service 2 est surveillé.
         assert.ok(res.body.includes('Le service fonctionne'));
+        // Sa cadence ne se dit plus : il n'est plus sondé.
+        assert.equal(res.body.split('Vérifié chaque minute').length - 1, 1);
+    });
+
+    it('dit discrètement à quelle cadence chaque service est vérifié', async () => {
+        const res = await statusPage(mount([page()]));
+        assert.equal(res.body.split('<p class="cadence">Vérifié chaque minute</p>').length - 1, 2);
     });
 });
 

@@ -313,8 +313,10 @@ chiffrement par enveloppe utilisateur : la synchro tourne en tâche de fond,
 que la session soit verrouillée ou non, et des fichiers de plusieurs Go ne
 peuvent pas vivre en base. À la place :
 
-- les contenus vivent dans un **blob store disque** par partage
-  (`<storage_path>/blobs/…`), adressés par le SHA-256 de leur clair ;
+- les contenus vivent dans un **blob store** par partage, sur le disque du
+  serveur ou dans le bucket S3 de l'hôte (`<storage_key>/blobs/…`), adressés
+  par le SHA-256 de leur clair ; le bucket ne reçoit que des blobs déjà
+  chiffrés, jamais la clé ;
 - chaque blob est chiffré **AES-256-GCM en flux** par une **BMK** (Blob Master
   Key, 32 octets) générée au premier boot, wrappée par la clé serveur
   (`deps.keys.sealBytes`, soit `crypt.seal`, même schéma que le

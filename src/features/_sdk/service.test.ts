@@ -302,6 +302,7 @@ describe('createServiceDeps : devicesFor', () => {
             ownerUserId: 7,
             workspaceId: 4,
             metricIntervalSeconds: null,
+            effectiveMetricIntervalSeconds: 60,
             report: null
         });
         assert.deepEqual(await devices.list(), [

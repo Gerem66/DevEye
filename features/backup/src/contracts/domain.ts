@@ -24,7 +24,8 @@ export const BACKUP_USERNAME_MAX = 255;
 export const BACKUP_SECRET_MAX = 8192;
 
 /**
- * `local` : un dossier du serveur sous `BACKUP_STORAGE_DIR`. `device` : un
+ * `local` : sur le serveur, dans le magasin d'objets de l'hôte (son disque
+ * sous `BACKUP_STORAGE_DIR`, ou son bucket S3). `device` : un
  * dossier d'une machine enrôlée, écrit par son agent. `s3` : un service
  * compatible S3 (Garage, MinIO, Scaleway, Backblaze, AWS). `sftp` : un
  * serveur SSH (NAS, VPS). `webdav` : Nextcloud, Synology, kDrive.

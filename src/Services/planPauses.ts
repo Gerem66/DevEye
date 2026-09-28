@@ -1,4 +1,4 @@
-import type { AccountPlan } from '@deveye/types/sdk';
+import { isPaidPlan, type AccountPlan } from '@deveye/types/sdk';
 import type { SdkPlanPauseChange, SdkStockItem } from '@deveye/types/sdk/server';
 
 import type { Database } from '@/db';
@@ -39,6 +39,12 @@ export interface PlanPausesHost {
     sources(): readonly StockSource[];
     /** Les effets de ce qu'une passe vient d'écrire : crochets des modules, accès, diffusion. */
     applied(ownerUserId: number, changes: readonly PlanPauseChange[]): Promise<void>;
+    /**
+     * Le compte passe d'une offre payante à la gratuite, ou l'inverse : ce qui
+     * suit l'offre par défaut (la cadence des agents) se réapplique. Jamais à
+     * la première passe d'un compte, que le démarrage a déjà servi.
+     */
+    tierChanged?(ownerUserId: number): Promise<void>;
     now?(): number;
 }
 
@@ -80,6 +86,7 @@ export function createPlanPauses(host: PlanPausesHost): PlanPauses {
     const mirror = new Map<string, Map<string, MirrorEntry>>();
     const byOwner = new Map<number, Map<string, number>>();
     const recheckKnown = new Map<number, number>();
+    const paidOf = new Map<number, boolean>();
 
     const count = (owner: number, key: string, delta: number): void => {
         const keys = byOwner.get(owner) ?? new Map<string, number>();
@@ -174,6 +181,14 @@ export function createPlanPauses(host: PlanPausesHost): PlanPauses {
             return;
         }
         noteChangesAt(owner, plan?.changesAt);
+        const paid = isPaidPlan(plan);
+        const wasPaid = paidOf.get(owner);
+        paidOf.set(owner, paid);
+        if (wasPaid !== undefined && wasPaid !== paid && host.tierChanged) {
+            await host
+                .tierChanged(owner)
+                .catch((err: unknown) => logger.error({ err, userId: owner }, 'Changement d’offre non répercuté'));
+        }
         const owned = await db.workspaces.listOwnedIds(owner);
         const changes: PlanPauseChange[] = [];
         for (const source of host.sources()) {

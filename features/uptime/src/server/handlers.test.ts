@@ -360,6 +360,20 @@ describe("l'ordonnanceur", () => {
         assert.equal(ctx.recorded.audits[0].action, 'uptime.add');
     });
 
+    it('donne à un service sans cadence celle de l’offre du propriétaire', async () => {
+        setMonitor(null);
+        const { intervalSeconds: _omitted, ...withoutCadence } = { ...DRAFT, enabled: false };
+        for (const [paid, kind, expected] of [
+            [true, 'http', 60],
+            [false, 'http', 300],
+            [true, 'integrity', 300]
+        ] as const) {
+            const ctx = createTestContext({ repo: seed(fakeRepo()), paid });
+            const added = await handlerFor(uptimeAdd)(ctx, { service: { ...withoutCadence, kind } });
+            assert.equal(added.service.intervalSeconds, expected, `${kind}, payant : ${paid}`);
+        }
+    });
+
     it('refuse un service de plus que l’offre, compté sur tous les espaces du propriétaire', async () => {
         setMonitor(null);
         const repo = seed(fakeRepo());

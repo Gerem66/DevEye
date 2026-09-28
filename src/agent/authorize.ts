@@ -2,6 +2,7 @@ import type { Device, DeviceRow } from '@deveye/types';
 
 import { FeatureError, type FeatureContext } from '@/features/_define';
 import { isPlanPaused } from '@/Services/planPauses';
+import { metricIntervalOf } from './cadence';
 import { computeAgentUpdate, deviceRowToDevice } from './mappers';
 import { agentDistDir, readServedManifestCached } from './sync';
 
@@ -40,6 +41,7 @@ export async function toDevice(ctx: FeatureContext, row: DeviceRow): Promise<Dev
     const manifest = await readServedManifestCached(agentDistDir());
     return deviceRowToDevice(
         row,
+        await metricIntervalOf(ctx.db, row),
         online(ctx, [row.id])[row.id] ?? false,
         computeAgentUpdate(row, manifest),
         row.workspace_id !== ctx.workspaceId

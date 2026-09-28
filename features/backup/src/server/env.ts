@@ -6,7 +6,11 @@ import { defineModuleEnv, readModuleEnv } from '@deveye/types/sdk/server';
  * le serveur.
  */
 export const BACKUP_ENV = defineModuleEnv({
-    /** La racine des destinations `local`, cloisonnée par espace en dessous. */
+    /**
+     * La racine des destinations `local`, cloisonnée par espace en dessous. Avec
+     * un bucket configuré (`STORAGE_S3_*`), les archives y partent et ce dossier
+     * ne garde que le spool.
+     */
     BACKUP_STORAGE_DIR: { kind: 'path', default: '/data/backups' },
     /** La cadence de l'ordonnanceur : à quelle fréquence il cherche les travaux dus. */
     BACKUP_TICK_SECONDS: { kind: 'int', default: 60 },

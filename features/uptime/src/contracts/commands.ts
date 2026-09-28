@@ -39,25 +39,41 @@ const integrityPathSchema = z
     .refine((p) => !/(^|\/)\.\.(\/|$)/.test(p), 'Chemin invalide');
 
 /** Everything the user may set on a service. `kind` is fixed at creation. */
-const uptimeDraftSchema = z
-    .object({
-        kind: uptimeKindSchema,
-        name: z.string().min(1).max(UPTIME_NAME_MAX_LENGTH),
-        url: z.url({ protocol: /^https?$/ }).max(UPTIME_URL_MAX_LENGTH),
-        paths: z.array(integrityPathSchema).max(UPTIME_INTEGRITY_PATHS_MAX),
-        method: uptimeMethodSchema,
-        expectedStatus: z.number().int().min(100).max(599).nullable(),
-        keyword: z.string().max(UPTIME_KEYWORD_MAX_LENGTH).nullable(),
-        intervalSeconds: z.number().int().min(UPTIME_INTERVAL_MIN).max(UPTIME_INTERVAL_MAX),
-        timeoutSeconds: z.number().int().min(UPTIME_TIMEOUT_MIN).max(UPTIME_TIMEOUT_MAX),
-        failureThreshold: z.number().int().min(1).max(UPTIME_THRESHOLD_MAX),
-        retentionDays: uptimeRetentionSchema,
-        enabled: z.boolean()
-    })
-    .refine((d) => d.kind !== 'integrity' || d.intervalSeconds >= UPTIME_INTEGRITY_INTERVAL_MIN, {
-        message: `Un contrôle d’intégrité relit tout un site : au plus toutes les ${UPTIME_INTEGRITY_INTERVAL_MIN / 60} minutes.`,
-        path: ['intervalSeconds']
-    });
+const uptimeDraftFields = z.object({
+    kind: uptimeKindSchema,
+    name: z.string().min(1).max(UPTIME_NAME_MAX_LENGTH),
+    url: z.url({ protocol: /^https?$/ }).max(UPTIME_URL_MAX_LENGTH),
+    paths: z.array(integrityPathSchema).max(UPTIME_INTEGRITY_PATHS_MAX),
+    method: uptimeMethodSchema,
+    expectedStatus: z.number().int().min(100).max(599).nullable(),
+    keyword: z.string().max(UPTIME_KEYWORD_MAX_LENGTH).nullable(),
+    intervalSeconds: z.number().int().min(UPTIME_INTERVAL_MIN).max(UPTIME_INTERVAL_MAX),
+    timeoutSeconds: z.number().int().min(UPTIME_TIMEOUT_MIN).max(UPTIME_TIMEOUT_MAX),
+    failureThreshold: z.number().int().min(1).max(UPTIME_THRESHOLD_MAX),
+    retentionDays: uptimeRetentionSchema,
+    enabled: z.boolean()
+});
+
+const integrityCadence = {
+    message: `Un contrôle d’intégrité relit tout un site : au plus toutes les ${UPTIME_INTEGRITY_INTERVAL_MIN / 60} minutes.`,
+    path: ['intervalSeconds']
+};
+
+const uptimeDraftSchema = uptimeDraftFields.refine(
+    (d) => d.kind !== 'integrity' || d.intervalSeconds >= UPTIME_INTEGRITY_INTERVAL_MIN,
+    integrityCadence
+);
+
+/** A new service may leave its cadence out: the server then applies the owner plan's default. */
+const uptimeNewDraftSchema = uptimeDraftFields
+    .extend({ intervalSeconds: uptimeDraftFields.shape.intervalSeconds.optional() })
+    .refine(
+        (d) =>
+            d.kind !== 'integrity' ||
+            d.intervalSeconds === undefined ||
+            d.intervalSeconds >= UPTIME_INTEGRITY_INTERVAL_MIN,
+        integrityCadence
+    );
 
 /**
  * List the workspace's services in the user's own order, each carrying its live
@@ -88,7 +104,7 @@ export const uptimeCount = {
 
 export const uptimeAdd = {
     command: 'uptime.add' as const,
-    input: z.object({ service: uptimeDraftSchema }),
+    input: z.object({ service: uptimeNewDraftSchema }),
     output: z.object({ service: uptimeServiceSchema })
 };
 

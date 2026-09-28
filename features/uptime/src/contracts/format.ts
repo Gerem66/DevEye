@@ -24,3 +24,19 @@ export function formatDuration(seconds: number): string {
     if (hours < 24) return `${hours} h ${minutes % 60} min`;
     return `${Math.floor(hours / 24)} j ${hours % 24} h`;
 }
+
+/** « 30 s », « 5 min », « 6 h », « 1 j » : une cadence, dans son unité ronde. */
+export function formatInterval(seconds: number): string {
+    if (seconds < 60) return `${seconds} s`;
+    if (seconds % 86400 === 0) return `${seconds / 86400} j`;
+    if (seconds % 3600 === 0) return `${seconds / 3600} h`;
+    if (seconds % 60 === 0) return `${seconds / 60} min`;
+    return `${Math.floor(seconds / 60)} min ${seconds % 60} s`;
+}
+
+const EVERY: Readonly<Record<number, string>> = { 60: 'chaque minute', 3600: 'chaque heure', 86400: 'chaque jour' };
+
+/** « chaque minute », « toutes les 5 min ». */
+export function formatEvery(seconds: number): string {
+    return EVERY[seconds] ?? `toutes les ${formatInterval(seconds)}`;
+}

@@ -55,6 +55,7 @@ export function parseDeviceReport(reportJson: string | null): DeviceReport | nul
  */
 export function deviceRowToDevice(
     row: DeviceRow,
+    effectiveMetricIntervalSeconds: number,
     online: boolean,
     update: AgentUpdateInfo = { latest: null, available: false },
     foreign = false
@@ -74,6 +75,7 @@ export function deviceRowToDevice(
         agentUpdateAvailable: update.available,
         report: parseDeviceReport(row.report_json),
         metricIntervalSeconds: row.metric_interval_seconds === null ? null : Number(row.metric_interval_seconds),
+        effectiveMetricIntervalSeconds,
         processCapture: (row.process_capture as ProcessCapture | null) ?? null,
         retentionDays: row.retention_days === null ? null : Number(row.retention_days),
         terminalDefaultUser: row.terminal_default_user ?? null,

@@ -52,7 +52,8 @@ export.json                 le même rapport, pour un programme
 
 JSON en UTF-8, dates ISO 8601, une longue table en tableau écrit ligne à ligne.
 Le courrier hébergé est en `.eml`, les fichiers (CloudSync, sauvegardes
-locales, images) tels quels. **Tout est en clair**, étage gardé compris : le
+« sur le serveur », images) tels quels, relus du magasin d'objets de l'hôte, son
+disque ou son bucket S3 (`deps.objects`). **Tout est en clair**, étage gardé compris : le
 titulaire a donné son mot de passe pour ça, et la popup le prévient.
 
 Portée : l'espace personnel et les espaces partagés que le compte **possède**.

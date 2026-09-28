@@ -21,7 +21,7 @@ import { buildNotice } from './notice';
 import type { BackupRepo } from './repo';
 import { nextRunAt } from './schedule';
 import { SftpSink } from './sftp';
-import { DeviceSink, LocalSink, S3Sink, type BackupSink } from './sinks';
+import { DeviceSink, HostedSink, S3Sink, type BackupSink } from './sinks';
 import { cloudSyncSource, databaseSource, deveyeSource, deviceFolderSource, type BackupArtifact } from './sources';
 import { WebDavSink } from './webdav';
 import type { StoredDestination, StoredFolder, StoredJob, StoredRun } from './_shared';
@@ -171,7 +171,7 @@ export class BackupEngine {
 
         switch (kind) {
             case 'local':
-                return new LocalSink(row.workspace_id, stored.path);
+                return new HostedSink(this.deps.objects(env.BACKUP_STORAGE_DIR), row.workspace_id, stored.path);
 
             case 'device': {
                 if (!row.device_id) {

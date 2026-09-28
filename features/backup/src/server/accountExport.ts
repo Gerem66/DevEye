@@ -1,7 +1,6 @@
-import fs from 'node:fs';
 import path from 'node:path';
 
-import type { FeatureAccountExport, SdkWorkspaceExportContext } from '@deveye/types/sdk/server';
+import type { FeatureAccountExport, SdkObjectStore, SdkWorkspaceExportContext } from '@deveye/types/sdk/server';
 
 import { backupKey, openSealedStream } from './crypto';
 import type { BackupRepo, LocalArchiveRow } from './repo';
@@ -25,11 +24,11 @@ async function artifactOf(ctx: SdkWorkspaceExportContext<BackupRepo>, content: s
 
 /**
  * Les destinations sans leur secret, les travaux, leurs exécutions, et les
- * archives gardées sur le disque du serveur, ouvertes. `storageDir` : la
- * racine des destinations `local`, hors de laquelle aucun chemin lu en base
- * n'est suivi.
+ * archives gardées sur le serveur, ouvertes. `hosted` : le magasin des
+ * destinations `local` ; aucune clé lue en base n'est suivie hors de
+ * l'espace exporté (`ws-<id>/`).
  */
-export function createAccountExport(storageDir: string): FeatureAccountExport<BackupRepo> {
+export function createAccountExport(hosted: () => SdkObjectStore): FeatureAccountExport<BackupRepo> {
     return {
         tables: {
             backup_destinations: {
@@ -75,22 +74,28 @@ export function createAccountExport(storageDir: string): FeatureAccountExport<Ba
         async workspace(ctx) {
             if (!ctx.includes('archives')) return;
             const rows = await ctx.repo.listLocalArchives(ctx.workspace.id);
-            const root = path.resolve(storageDir, `ws-${ctx.workspace.id}`);
+            const store = hosted();
+            const root = `ws-${ctx.workspace.id}/`;
             const key = backupKey(ctx.keys);
             let unreadable = 0;
             for (const row of rows) {
                 if (ctx.signal.aborted) return;
                 if (!exportable(row)) continue;
                 const artifact = await artifactOf(ctx, row.content);
-                const file = artifact === null ? null : path.resolve(artifact);
-                if (file === null || !file.startsWith(`${root}${path.sep}`) || !fs.existsSync(file)) {
+                if (
+                    artifact === null ||
+                    !artifact.startsWith(root) ||
+                    artifact.split('/').includes('..') ||
+                    (await store.head(artifact)) === null
+                ) {
                     unreadable++;
                     continue;
                 }
                 const sealed = Number(row.encrypted) === 1;
-                const name = sealed ? path.basename(file).replace(/\.enc$/, '') : path.basename(file);
-                const stream = fs.createReadStream(file);
-                const source = stream as AsyncIterable<Buffer>;
+                const name = sealed
+                    ? path.posix.basename(artifact).replace(/\.enc$/, '')
+                    : path.posix.basename(artifact);
+                const source = store.get(artifact);
                 try {
                     await ctx.out.file(`Archives/${name}`, sealed ? openSealedStream(key, source) : source, {
                         mtime: row.finished_at === null ? undefined : Number(row.finished_at),
@@ -99,8 +104,6 @@ export function createAccountExport(storageDir: string): FeatureAccountExport<Ba
                 } catch (e) {
                     if (ctx.signal.aborted) throw e;
                     unreadable++;
-                } finally {
-                    stream.destroy();
                 }
             }
             if (rows.some((row) => !exportable(row))) {

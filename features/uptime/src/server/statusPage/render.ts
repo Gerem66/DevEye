@@ -1,7 +1,7 @@
 import { DEVEYE_ICON_PATH } from '@deveye/types/sdk';
 
 import { UPTIME_PAGE_DAYS } from '../../contracts/domain';
-import { formatDuration, formatMs, formatRatio } from '../../contracts/format';
+import { formatDuration, formatEvery, formatMs, formatRatio } from '../../contracts/format';
 import { escapeHtml } from './html';
 import { STATUS_STYLE } from './style';
 import type {
@@ -180,6 +180,7 @@ function renderService(service: StatusServiceView): string {
                     <span>Aujourd’hui</span>
                 </div>
                 ${renderLatency(service)}
+                ${service.intervalSeconds === null ? '' : `<p class="cadence">Vérifié ${formatEvery(service.intervalSeconds)}</p>`}
             </li>`;
 }
 

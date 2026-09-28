@@ -100,6 +100,7 @@ export function parseDeviceReport(reportJson: string | null): DeviceReport | nul
  */
 export function rowToDevice(
     row: DeviceRow,
+    effectiveMetricIntervalSeconds: number,
     online: boolean,
     update: AgentUpdateInfo,
     foreign: boolean,
@@ -120,6 +121,7 @@ export function rowToDevice(
         agentUpdateAvailable: update.available,
         report: parseDeviceReport(row.report_json),
         metricIntervalSeconds: row.metric_interval_seconds === null ? null : Number(row.metric_interval_seconds),
+        effectiveMetricIntervalSeconds,
         processCapture: (row.process_capture as ProcessCapture | null) ?? null,
         retentionDays: row.retention_days === null ? null : Number(row.retention_days),
         terminalDefaultUser: row.terminal_default_user ?? null,
@@ -133,8 +135,10 @@ export function rowToDevice(
 /** Une ligne, avec sa présence en direct, son état de mise à jour, son origine et sa pause d'offre. */
 export async function toDevice(ctx: DevicesContext, row: DeviceRow): Promise<FleetDevice> {
     const manifest = await ctx.deveye.agents.servedManifest();
+    const intervals = await ctx.deveye.agents.metricIntervals([row]);
     return rowToDevice(
         row,
+        intervals.get(row.id) as number,
         ctx.deveye.devices.isOnline(row.id),
         computeAgentUpdate(row, manifest),
         row.workspace_id !== ctx.workspaceId,

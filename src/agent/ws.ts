@@ -288,7 +288,7 @@ export async function registerAgentWS(
             // L'agent ne lit une rotation qu'une fois sa config reçue. Aucun
             // gestionnaire n'est branché : ce qu'il envoie d'ici là est ignoré.
             const pausedLog = logger.child({ deviceId: device.id, ownerId: claims.oid });
-            send(socket, { command: AGENT_CONFIG, payload: await agentConfigFor(device) });
+            send(socket, { command: AGENT_CONFIG, payload: await agentConfigFor(db, device) });
             await rotateTokenIfDue(db, socket, device, claims, presented, pausedLog);
             setTimeout(() => socket.close(1012), PAUSED_ROTATION_GRACE_MS).unref();
             return;
@@ -313,7 +313,7 @@ export async function registerAgentWS(
             reqLogger.info('Agent connected');
             const wasOnlineInHub = hub.isOnline(deviceId);
             hub.agentOnline(deviceId, socket);
-            send(socket, { command: AGENT_CONFIG, payload: await agentConfigFor(device) });
+            send(socket, { command: AGENT_CONFIG, payload: await agentConfigFor(db, device) });
             await rotateTokenIfDue(db, socket, device, claims, presented, reqLogger);
             // Les modules (CloudSync) poussent leurs assignations et rattrapent
             // le retard éventuel.

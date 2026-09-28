@@ -1,4 +1,4 @@
-import { ACCOUNT_PLAN_PROVIDER, type AccountPlan, type AccountPlanProvider } from '@deveye/types/sdk';
+import { ACCOUNT_PLAN_PROVIDER, isPaidPlan, type AccountPlan, type AccountPlanProvider } from '@deveye/types/sdk';
 import type { SdkProviders, SdkQuotaUse } from '@deveye/types/sdk/server';
 
 import { FeatureError } from '@deveye/types/sdk/server';
@@ -34,6 +34,11 @@ export async function planOf(
         logger.error({ err: (e as Error).message, userId }, 'Offre du compte illisible, aucune limite appliquée');
         return null;
     }
+}
+
+/** Le compte paie-t-il ? Ce qui règle une valeur par défaut coûteuse (une cadence), jamais un refus. */
+export async function isPaidAccount(providers: SdkProviders, userId: number, logger: QuotaLogger): Promise<boolean> {
+    return isPaidPlan(await planOf(providers, userId, logger));
 }
 
 /**

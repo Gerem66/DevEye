@@ -24,6 +24,7 @@ import { readInstaller, renderInstaller } from './installers';
 import { orderSigningPublicKey } from './orders';
 import type { AuditLog } from '@/Services/AuditLog';
 import { agentDistDir, readSyncedManifest } from './sync';
+import { metricIntervalOf } from './cadence';
 import { deviceRowToDevice } from './mappers';
 import type { MonitorHub } from './hub';
 import type { LiveHub } from '@/live/hub';
@@ -382,7 +383,7 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, live, audit }
                         deviceId,
                         deviceToken,
                         orderSigningKey: orderSigningPublicKey,
-                        device: deviceRowToDevice(row, hub.isOnline(deviceId))
+                        device: deviceRowToDevice(row, await metricIntervalOf(db, row), hub.isOnline(deviceId))
                     })
                 )
             );

@@ -71,8 +71,13 @@ function engine(opts: {
     sources: StockSource[];
     applied?: PlanPauseChange[][];
     limitIn?: PlanPausesHost['limitIn'];
+    tierChanged?: number[];
 }) {
     return createPlanPauses({
+        tierChanged: (owner) => {
+            opts.tierChanged?.push(owner);
+            return Promise.resolve();
+        },
         db: opts.db,
         logger: quiet,
         planOf: opts.plan,
@@ -259,5 +264,24 @@ describe('les pauses de l’offre', () => {
         await new Promise((resolve) => setTimeout(resolve, 700));
         await e.stop();
         assert.deepEqual(seen.sort(), [1, 2]);
+    });
+});
+
+describe('le passage d’une offre payante à la gratuite', () => {
+    it('se répercute à chaque bascule, jamais à la première passe d’un compte', async () => {
+        const tierChanged: number[] = [];
+        let current: AccountPlan | null = { id: 'pro', label: 'Pro', limits: {}, priority: true };
+        const e = engine({ db: memoryDb().db, plan: () => Promise.resolve(current), sources: [], tierChanged });
+        await e.reconcile(1);
+        assert.deepEqual(tierChanged, [], 'le démarrage a déjà servi la bonne cadence');
+        await e.reconcile(1);
+        assert.deepEqual(tierChanged, []);
+        current = { id: 'free', label: 'Gratuite', limits: {}, priority: false };
+        await e.reconcile(1);
+        assert.deepEqual(tierChanged, [1]);
+        // Un essai de Pro compte comme payant, même sans priorité.
+        current = { id: 'pro', label: 'Pro (essai)', limits: {}, priority: false };
+        await e.reconcile(1);
+        assert.deepEqual(tierChanged, [1, 1]);
     });
 });

@@ -207,6 +207,27 @@ propriétaire de cet espace. CloudSync l'interroge une fois par session, avant l
 première montée : une session qui dépasserait l'offre s'arrête entière, avec sa
 raison, et les descentes comme les suppressions restent possibles.
 
+## Des valeurs par défaut selon l'offre
+
+Ce qui coûte à l'hôte sans être borné peut partir d'un défaut plus sobre pour
+un compte qui ne paie pas, que chacun change s'il le veut : la plupart gardent
+le défaut, et ce sont eux qui font le volume. `ctx.quota.paid()` (et
+`deps.quotaFor(ws).paid()`) dit si l'offre du propriétaire paie : Pro, essai
+compris, une offre accordée sur Pro (`priority`), un administrateur, ou aucun
+fournisseur (auto-hébergé). La même règle, `isPaidPlan(plan)` dans
+`@deveye/types/sdk`, sert le cœur. Ce n'est jamais un refus, qui passe par
+`limit` et `assert`.
+
+| Défaut                            | Payant | Gratuit | Où                                                      |
+| --------------------------------- | ------ | ------- | ------------------------------------------------------- |
+| Cadence d'un service Uptime neuf  | 1 min  | 5 min   | `uptime.add` sans `intervalSeconds`                     |
+| Cadence de collecte d'un appareil | 1 min  | 5 min   | `metric_interval_seconds` à `NULL` (`agent/cadence.ts`) |
+
+Un service Uptime garde la cadence reçue à sa création. Un appareil laissé au
+défaut la suit : quand le réconciliateur voit un compte passer d'une offre
+payante à la gratuite ou l'inverse, la configuration de ses agents leur est
+repoussée (`tierChanged`, `_planPauses.ts`).
+
 ## Côté client
 
 - `quota_exceeded` ouvre partout la même invite (`Components/QuotaPrompt`),

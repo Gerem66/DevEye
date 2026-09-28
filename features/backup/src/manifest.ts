@@ -24,7 +24,7 @@ export const manifest = {
      * dossier, `devices.read` pour n'accepter qu'une machine de l'espace et y
      * éprouver le droit Fichiers, `members.read` pour nommer l'auteur d'un travail.
      */
-    nativeCapabilities: ['agents', 'devices.read', 'members.read'],
+    nativeCapabilities: ['agents', 'devices.read', 'members.read', 'objects'],
     extraPermissions: [
         {
             key: 'deviceFolders',

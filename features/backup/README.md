@@ -27,14 +27,19 @@ d'accès.
 
 ## Les destinations
 
-### `local` : un dossier du serveur
+### `local` : sur le serveur
 
-Sous `BACKUP_STORAGE_DIR` (`/data/backups` par défaut), cloisonné par espace
-(`ws-<id>/`). Le plus simple à mettre en route.
+Dans le magasin d'objets de l'hôte (`deps.objects`) : son disque sous
+`BACKUP_STORAGE_DIR` (`/data/backups` par défaut), ou son bucket S3
+(`STORAGE_S3_*`) sous `<préfixe>/backup/`, cloisonné par espace (`ws-<id>/`). Le
+plus simple à mettre en route. Une exécution ne garde que la clé de son archive
+(`ws-<id>/<dossier>/<nom>`), jamais l'endroit où elle se résout : l'arbre se
+recopie sur un autre disque ou dans un autre bucket, et ses archives s'y relisent
+telles quelles.
 
-⚠️ **Elle vit sur le même disque que ce qu'elle sauvegarde.** Elle protège d'une
-erreur logicielle (une table effacée, une migration ratée), jamais d'une panne
-de la machine. C'est un premier palier, pas le seul.
+⚠️ **Sans bucket, elle vit sur le même disque que ce qu'elle sauvegarde.** Elle
+protège d'une erreur logicielle (une table effacée, une migration ratée), jamais
+d'une panne de la machine. C'est un premier palier, pas le seul.
 
 En conteneur, la paire hôte/conteneur suit exactement celle de CloudSync :
 `BACKUP_STORAGE_ROOT` est le dossier de l'hôte (source du montage),
@@ -69,7 +74,8 @@ qu'une archive absente, parce qu'on croit être couvert.
 Garage, MinIO, Scaleway, Backblaze, AWS. Le seul des trois qui sorte les octets
 du réseau local.
 
-Le client S3 est écrit dans `features/backup/src/server/s3.ts` : signature SigV4, `PUT` simple
+Le client S3 est celui de l'hôte, `src/Services/objectStorage/s3.ts`, partagé
+avec son magasin d'objets : signature SigV4, `PUT` simple
 en dessous de 16 Mio, envoi multiple au-delà, avec abandon explicite en cas
 d'échec (S3 facture les parties d'un envoi jamais terminé, et elles sont
 invisibles au listage).

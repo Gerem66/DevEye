@@ -38,10 +38,12 @@ export const devicesListFeature = defineSdkFeature<
         const hidden = await ctx.items.restrictions();
         const visible = rows.filter((r) => hidden.get(r.id) !== 'none');
         const manifest = await ctx.deveye.agents.servedManifest();
+        const intervals = await ctx.deveye.agents.metricIntervals(visible);
         return {
             devices: visible.map((r) =>
                 rowToDevice(
                     r,
+                    intervals.get(r.id) as number,
                     ctx.deveye.devices.isOnline(r.id),
                     computeAgentUpdate(r, manifest),
                     r.workspace_id !== ctx.workspaceId,

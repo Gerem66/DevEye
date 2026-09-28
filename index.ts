@@ -20,6 +20,7 @@ import {
     warnUnsetModuleEnv
 } from '@/features/_sdk/register';
 import { assertExportCoverage } from '@/Services/accountExport/coverage';
+import { announceObjectStorage } from '@/Services/objectStorage';
 // L'import du registre déclenche l'enregistrement des modules installés :
 // leurs migrations et services deviennent visibles ci-dessous.
 import '@/features/registry';
@@ -54,6 +55,7 @@ process.on('unhandledRejection', (e) => crash('Unhandled rejection', e));
 
 async function main() {
     warnUnsetModuleEnv();
+    void announceObjectStorage(logger);
 
     const pool = createDbPool();
     const dbReady = await testConnection(pool);
