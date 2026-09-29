@@ -14,6 +14,7 @@ import {
     err,
     ok,
     publicMaintenanceSchema,
+    SECRECY_STATE_EVENT,
     serverStatusSchema
 } from '@deveye/types';
 import { ACCOUNT_PLAN_PROVIDER } from '@deveye/types/sdk';
@@ -51,7 +52,7 @@ import { admission } from '@/Services/admission';
 import { planOf } from '@/Services/quota';
 import { createAuditLog } from '@/Services/AuditLog';
 import { startAttemptSweeper } from '@/Services/attempts';
-import { startDekSweeper } from '@/Services/SecureStore';
+import { onSessionDekChange, startDekSweeper } from '@/Services/SecureStore';
 import { registerProxyRoute } from '@/Services/domains/proxy';
 import { createDomainVerifier } from '@/Services/domains/verifier';
 import { createLogRetention } from '@/Services/logRetention';
@@ -338,6 +339,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     live.setShareLinks((workspaceId, feature) => deps.db.itemSharing.linkedWorkspaces(workspaceId, feature));
     live.startHeartbeat();
     startDekSweeper();
+    onSessionDekChange((sessionId, push) => live.toSession(sessionId, SECRECY_STATE_EVENT, push));
     startAttemptSweeper();
     // Même battement pour les sockets agent : une machine éteinte ne referme
     // jamais la sienne, et restait « en ligne » jusqu'au keepalive TCP du noyau.

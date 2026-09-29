@@ -111,7 +111,16 @@ Handlers dans `src/features/secrecy/index.ts`. Quand elle est **ON** :
       la session n'est jamais tenue pour « déverrouillée », chaque action chiffrée
       redemande le mot de passe.
 - Un handler verrouillé renvoie `FeatureError('locked')` → le client affiche le
-  prompt de mot de passe habituel.
+  prompt de mot de passe habituel, même s'il se croyait encore déverrouillé.
+- **Le client suit le serveur.** Chaque mise en cache et chaque effacement de la
+  DEK (déverrouillage, verrouillage, expiration trouvée par le balayeur ou une
+  lecture, socket fermée, sessions révoquées) est poussé en `secrecy.state` à
+  toutes les sockets ouvertes de la session (`onSessionDekChange`, câblé au
+  boot sur `LiveHub.toSession`). Les glissements ne sont pas poussés : à
+  l'échéance de son compte à rebours, le client relit `secrecy.status` plutôt
+  que de se verrouiller d'office, et le store relit aussi l'état à chaque
+  (re)connexion, ce qui couvre ce qu'une socket fermée n'a pas entendu. Toute
+  fermeture de socket efface la DEK de la session, donc de ses autres onglets.
 
 ## Pré-cache de la DEK au login
 

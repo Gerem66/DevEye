@@ -15,6 +15,7 @@ import {
     claimExportCipher,
     discardExportDek,
     lendExportDek,
+    onSessionDekChange,
     sweepSessionDeksForTest,
     touchSessionDek
 } from './SecureStore';
@@ -25,6 +26,7 @@ const realNow = Date.now;
 afterEach(() => {
     Date.now = realNow;
     for (const s of SESSIONS) forgetSessionDek(s);
+    onSessionDekChange(null);
 });
 
 function at(ms: number): void {
@@ -98,6 +100,50 @@ describe('le cache de DEK par session', () => {
         assert.equal(peekDekExpiry('s1'), start + DEK_ABSOLUTE_TTL_MS);
         at(start + DEK_ABSOLUTE_TTL_MS + 1);
         assert.equal(peekDekExpiry('s1'), null);
+    });
+});
+
+describe('l’avis de verrouillage aux sockets de la session', () => {
+    function record(): Array<[string, boolean, number | null]> {
+        const seen: Array<[string, boolean, number | null]> = [];
+        onSessionDekChange((sessionId, push) => seen.push([sessionId, push.unlocked, push.unlockedUntil]));
+        return seen;
+    }
+
+    it('annonce le déverrouillage puis l’expiration trouvée par le balayage, jamais un glissement', () => {
+        const seen = record();
+        at(1_000_000);
+        rememberSessionDek('s1', 1, Buffer.alloc(32, 1), 10_000);
+        at(1_005_000);
+        touchSessionDek('s1');
+        holdSessionDek('s1', true, 10_000);
+        holdSessionDek('s1', false, 10_000);
+        assert.deepEqual(seen, [['s1', true, 1_010_000]]);
+        sweepSessionDeksForTest(1_100_000);
+        assert.deepEqual(seen, [
+            ['s1', true, 1_010_000],
+            ['s1', false, null]
+        ]);
+    });
+
+    it('annonce l’oubli explicite, une fois, et pas celui d’une session sans DEK', () => {
+        rememberSessionDek('s1', 1, Buffer.alloc(32, 2));
+        rememberSessionDek('s2', 1, Buffer.alloc(32, 3));
+        const seen = record();
+        forgetSessionDek('s1');
+        forgetSessionDek('s1');
+        forgetSessionDek('s3');
+        forgetSessionsOf(1);
+        assert.deepEqual(seen, [
+            ['s1', false, null],
+            ['s2', false, null]
+        ]);
+    });
+
+    it('une DEK à usage unique s’annonce sans échéance', () => {
+        const seen = record();
+        rememberSessionDek('s1', 1, Buffer.alloc(32, 4), 0);
+        assert.deepEqual(seen, [['s1', true, null]]);
     });
 });
 

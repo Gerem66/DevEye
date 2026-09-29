@@ -1,5 +1,5 @@
 import { useEffect, useSyncExternalStore } from 'react';
-import type { SecrecyStatus } from '@deveye/types';
+import { SECRECY_STATE_EVENT, secrecyStatePushSchema, type SecrecyStatus } from '@deveye/types';
 
 import { ws, WsError } from '@/api/ws';
 import { getActiveInstanceId } from './workspace';
@@ -105,7 +105,12 @@ function armGraceTimer(durationMs: number = windowMs): void {
     set({ unlockedUntil: Date.now() + safe });
     graceTimer = setTimeout(() => {
         graceTimer = null;
-        set({ unlocked: false, unlockedUntil: null });
+        // Un autre onglet de la session a pu faire glisser la fenêtre : le
+        // serveur tranche, et sa lecture efface une DEK réellement expirée.
+        void ws.send('secrecy.status', {}).then(
+            ({ status }) => applyStatus(status),
+            () => set({ unlocked: false, unlockedUntil: null })
+        );
     }, safe);
 }
 
@@ -330,6 +335,8 @@ export async function withSecrecy<T>(run: () => Promise<T>): Promise<T> {
         return out;
     } catch (e) {
         if (e instanceof WsError && e.code === 'locked') {
+            // Le serveur a oublié la DEK sans que ce client le sache encore.
+            setUnlocked(false);
             await ensureUnlocked();
             const out = await run();
             touchSecrecy();
@@ -374,3 +381,17 @@ export async function refreshSecrecyStatus(): Promise<void> {
         // Leave state as-is on transient errors.
     }
 }
+
+/**
+ * Le serveur annonce chaque déverrouillage et chaque effacement de la DEK de la
+ * session, et la relecture à chaque (re)connexion couvre ce qu'une socket
+ * fermée n'a pas pu entendre, dont le changement d'instance.
+ */
+ws.onMessage((msg) => {
+    if (msg.command !== SECRECY_STATE_EVENT || !msg.payload.ok || !state.enabled) return;
+    const push = secrecyStatePushSchema.safeParse(msg.payload.data);
+    if (push.success) setUnlocked(push.data.unlocked, push.data.unlockedUntil);
+});
+ws.onStateChange((s) => {
+    if (s === 'open') void refreshSecrecyStatus();
+});

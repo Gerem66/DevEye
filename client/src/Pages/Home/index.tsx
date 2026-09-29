@@ -38,7 +38,7 @@ import {
     restoreRemoteSessions,
     useRemoteInstances
 } from '@/stores/remoteInstances';
-import { refreshSecrecyStatus, setUnlocked } from '@/stores/secrecy';
+import { setUnlocked } from '@/stores/secrecy';
 import { accountViewFeature, accountViewId, openAccountView, takeAccountViewHint } from '@/stores/accountView';
 import { adminViewFeature, adminViewId } from '@/stores/adminView';
 import { takeSignupPlan } from '@/stores/signupPlan';
@@ -1096,11 +1096,9 @@ export default function HomePage() {
                 // L'id est publié d'abord : `workspace.activate` part alors avec la
                 // bonne enveloppe, et le dispatcheur en vérifie l'appartenance.
                 setActiveWorkspace(workspaceId, instanceId);
-                // Le coffre est celui du compte de l'instance où l'on arrive.
-                if (instanceId !== from.activeInstanceId) {
-                    setUnlocked(false);
-                    void refreshSecrecyStatus();
-                }
+                // Le coffre est celui du compte de l'instance où l'on arrive : le
+                // store le relit à l'ouverture de sa socket.
+                if (instanceId !== from.activeInstanceId) setUnlocked(false);
                 const res = await ws.send('workspace.activate', {});
                 setPermissions(res.permissions);
                 syncThemeFromServer(res.theme);

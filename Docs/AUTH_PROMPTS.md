@@ -15,13 +15,17 @@ savoir lequel réutiliser au lieu d'en réinventer un.
 - Portée : session (DEK mise en cache côté serveur, fenêtre de grâce
   glissante, voir `@/stores/secrecy`).
 - Helper d'usage : `ensureUnlocked()` de `@/stores/secrecy`, enrobé par
-  `withSecrecy()` (réessai automatique sur code `locked`, fenêtre de grâce
-  glissée à chaque action réussie). Le barrel `deveye-sdk-client` les
+  `withSecrecy()` (sur code `locked`, le store passe verrouillé, l'invite
+  s'ouvre et la requête est rejouée une fois ; fenêtre de grâce glissée à
+  chaque action réussie). Le barrel `deveye-sdk-client` les
   réexporte pour les modules (`ensureSecrecyUnlocked`, `withSecrecy`).
 - Annulation : `ensureUnlocked()` rejette une `UnlockCancelledError` (nom
   stable, `e.name === 'UnlockCancelledError'`, la classe n'étant pas exportée
   par le barrel) ; une feature qui n'a rien à montrer sans le mot de passe se
   referme dessus (le Coffre).
+- État : le store suit les avis `secrecy.state` du serveur et relit le statut à
+  chaque connexion ; une feature qui affiche du contenu déchiffré lit
+  `useSecrecy()` et se vide quand `unlocked` retombe (Notes, Mots de passe).
 - Pattern : le store passe `prompting` à vrai, le dialogue s'ouvre, puis
   `resolveUnlock()` / `cancelUnlock()` libèrent les appelants en attente
   (plusieurs appels concurrents partagent la même invite).

@@ -4,7 +4,7 @@ import { ApiError, login as apiLogin, logout as apiLogout, me as apiMe, refresh 
 import { startActivityBeacon } from '../api/activity';
 import { ws } from '../api/ws';
 import { setAdmission } from '../stores/admission';
-import { refreshSecrecyStatus, setUnlocked } from '../stores/secrecy';
+import { setUnlocked } from '../stores/secrecy';
 import { resetHomeReady } from '../stores/homeReady';
 import { resetTheme, syncThemeFromServer } from '../stores/theme';
 import { resetHomeLayout, syncHomeLayoutFromServer } from '../stores/homeLayout';
@@ -175,16 +175,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setState((prev) => (prev.status === 'unknown' ? { status: 'anonymous', user: null } : prev));
     }, [cancelRetry]);
 
-    /** La session est ouverte : publier le bundle, rouvrir la socket, relire le secret. */
+    /** La session est ouverte : publier le bundle, rouvrir la socket (le store du coffre se relit à l'ouverture). */
     const startSession = useCallback(
         async (bundle: SessionBundle) => {
             cancelRetry();
             setState(applyBundle(bundle));
             await ws.connect().catch(() => {});
-            // Fire-and-forget: the secrecy state updates its store reactively and
-            // nothing on the reveal path waits on it, so awaiting here would only
-            // serialise an extra round-trip onto the critical load.
-            void refreshSecrecyStatus();
         },
         [cancelRetry]
     );

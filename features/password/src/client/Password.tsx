@@ -10,6 +10,7 @@ import {
     useActiveWorkspace,
     useLiveSegment,
     useResourceVersion,
+    useSecrecy,
     withSecrecy
 } from 'deveye-sdk-client';
 import type { FeatureViewProps } from '@deveye/types/sdk/client';
@@ -67,6 +68,24 @@ function Password({ closeFeature }: FeatureViewProps) {
         setActionError(null);
         void reload();
     }, [reload]);
+
+    /**
+     * Le coffre qui se referme (délai écoulé, verrouillé ailleurs, connexion
+     * perdue) emporte la liste et ce qui était révélé, puis redemande le mot de
+     * passe ; déverrouillé ailleurs, la liste se relit.
+     */
+    const { enabled, unlocked } = useSecrecy();
+    const wasUnlocked = useRef(unlocked);
+    useEffect(() => {
+        if (!enabled || unlocked === wasUnlocked.current) return;
+        wasUnlocked.current = unlocked;
+        if (!unlocked) {
+            setLoaded(false);
+            setAllPasswords([]);
+            setActionError(null);
+        }
+        void reload();
+    }, [enabled, unlocked, reload]);
 
     /**
      * Sans `withSecrecy`, délibérément : relire la liste sur une session

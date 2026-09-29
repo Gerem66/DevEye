@@ -417,6 +417,13 @@ export class LiveHub {
         }
     }
 
+    /** Toutes les connexions d'une session de connexion, quels que soient leur onglet et leur salle. */
+    toSession(sessionId: string, command: string, data: unknown): void {
+        for (const conn of this.bySocket.values()) {
+            if (conn.sessionId === sessionId) this.send(conn, command, data);
+        }
+    }
+
     closeSession(sessionId: string): void {
         for (const conn of [...this.bySocket.values()]) {
             if (conn.sessionId === sessionId) conn.socket.close(4401, 'session revoked');

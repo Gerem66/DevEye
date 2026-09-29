@@ -2,7 +2,7 @@ import { randomBytes } from 'crypto';
 
 import { FeatureError } from '@/features/_define';
 import type { Database } from '@/db';
-import type { UserSecretKeyRow, WorkspaceRow } from '@deveye/types';
+import type { SecrecyStatePush, UserSecretKeyRow, WorkspaceRow } from '@deveye/types';
 import Encryption from './Encryption';
 import { SecretKeyService } from './SecretKeyService';
 
@@ -87,11 +87,24 @@ let dekEntrySeq = 0;
  */
 const sessionDeks = new Map<string, DekEntry>();
 
+type DekChangeListener = (sessionId: string, push: SecrecyStatePush) => void;
+let dekChangeListener: DekChangeListener | null = null;
+
+/**
+ * Hear every unlock and every wipe of a session DEK, whatever caused it: the
+ * boot wires it to the session's sockets so the client never shows a vault the
+ * server already forgot. Sliding the window is not reported.
+ */
+export function onSessionDekChange(fn: DekChangeListener | null): void {
+    dekChangeListener = fn;
+}
+
 /** Wipe + drop an entry. */
 function dropDek(sessionId: string, entry: DekEntry | undefined): void {
     if (!entry) return;
     entry.dek.fill(0); // best-effort wipe of key material
     sessionDeks.delete(sessionId);
+    dekChangeListener?.(sessionId, { unlocked: false, unlockedUntil: null });
 }
 
 /** Past its grace and its hold, or past the absolute ceiling. */
@@ -243,6 +256,7 @@ export function rememberSessionDek(
             holdStartedAt: 0,
             hardExpiresAt
         });
+        dekChangeListener?.(sessionId, { unlocked: true, unlockedUntil: null });
         return;
     }
     sessionDeks.set(sessionId, {
@@ -258,6 +272,7 @@ export function rememberSessionDek(
         holdStartedAt: 0,
         hardExpiresAt
     });
+    dekChangeListener?.(sessionId, { unlocked: true, unlockedUntil: now + graceMs });
 }
 
 export function forgetSessionDek(sessionId: string): void {
