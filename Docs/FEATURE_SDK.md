@@ -774,6 +774,13 @@ repli de l'écouteur, le client sur l'app (d'où `index: false` à
 fastify-static, qui enregistrait sinon `/` lui-même) et 404 sur la surface
 publique. Le module route par le `domain` reçu, jamais par l'en-tête.
 
+Un service qui dépend d'autre chose que du processus et de la base (un port
+qu'il ouvre, un moteur qu'il lance) le dit par `health()` : `up`, `degraded`
+ou `down`, avec une raison lisible par le public. La page d'état l'interroge
+chaque minute par `moduleServiceHealth` (`_sdk/register.ts`), borné à 2 s et
+jamais sur un service qu'une maintenance tient à l'arrêt ; le reste, tâches
+de fond et commandes qui échouent, l'hôte le voit seul (`STATUS_PAGE.md`).
+
 Toujours par entrée serveur : `accountExport`, la part du module dans l'export
 des données d'un compte ([ACCOUNT_EXPORT.md](./ACCOUNT_EXPORT.md)). Chaque table
 possédée y a un sort (écrite par l'hôte, `'custom'` pour les crochets `account`

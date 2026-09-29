@@ -54,6 +54,7 @@ import { createAuditLog } from '@/Services/AuditLog';
 import { startAttemptSweeper } from '@/Services/attempts';
 import { onSessionDekChange, startDekSweeper } from '@/Services/SecureStore';
 import { registerProxyRoute } from '@/Services/domains/proxy';
+import { registerStatusProbeRoutes } from '@/Services/statusProbe';
 import { createDomainVerifier } from '@/Services/domains/verifier';
 import { createLogRetention } from '@/Services/logRetention';
 import { createMailer } from '@/Services/mailer';
@@ -320,7 +321,13 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     // Boot/deployment readiness (agent sync + future steps). Public + cheap so
     // the client can show a discreet topbar zone until the server is fully ready.
     app.get('/api/status', { logLevel: 'silent' }, async () =>
-        ok(serverStatusSchema.parse({ ...status.snapshot(), federation: federationEnabled() }))
+        ok(
+            serverStatusSchema.parse({
+                ...status.snapshot(),
+                federation: federationEnabled(),
+                statusPageUrl: env.STATUS_PAGE_URL ? env.STATUS_PAGE_URL.replace(/\/+$/, '') : null
+            })
+        )
     );
 
     // Ce que la page de maintenance d'un visiteur sans session peut savoir.
@@ -329,6 +336,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     );
 
     registerProxyRoute(app, deps.db.featureDomains);
+    registerStatusProbeRoutes(app, { db: deps.db, crypt: deps.crypt });
 
     const hub = new MonitorHub();
     // Construit avant les services de fond : ils lui adressent leurs changements

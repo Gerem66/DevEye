@@ -8,7 +8,7 @@ import type {
 
 import { MAIL_TRANSPORT_PROVIDER, type MailTransportProvider } from '@deveye/types/sdk';
 
-import type { DiscordMessage } from '@/Services/discord';
+import { alertMail, formatMoment, webhookBody, type Alert } from '@/Services/alertCore';
 import type { Cipher } from '@/Services/SecureStore';
 import type { Database } from '@/db';
 import { moduleProvider } from '@/features/_sdk/register';
@@ -194,47 +194,6 @@ export async function resolveChannelIds(
     return resolved.filter((c): c is ResolvedChannel => c !== null);
 }
 
-/** Date et heure dans le corps d'une alerte, en français, les mêmes pour tous les émetteurs. */
-export function formatMoment(epochSeconds: number): string {
-    return new Date(epochSeconds * 1000).toLocaleString('fr-FR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-    });
-}
-
-/** « 2 h 5 min », « 45 s » — une durée lisible dans un corps d'alerte. */
-export function formatDuration(seconds: number): string {
-    if (seconds < 60) return `${seconds} s`;
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `${minutes} min`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours} h ${minutes % 60} min`;
-    return `${Math.floor(hours / 24)} j ${hours % 24} h`;
-}
-
-/** Ce qu'une alerte porte, indépendamment du canal qui la transporte. */
-export interface Alert {
-    subject: string;
-    body: string;
-    /**
-     * Champs structurés du webhook, en plus de `content`/`text`. Permet à un
-     * point d'entrée maison de filtrer sans analyser du texte.
-     */
-    payload: Record<string, unknown>;
-    /** La mise en page Discord de cette alerte, quand la feature en a une ; sinon le texte. */
-    embeds?: DiscordMessage['embeds'];
-}
-
-/**
- * Tronqué sous la limite stricte de 2000 caractères de Discord, qui rejette le
- * message entier au-delà plutôt que de le couper.
- */
-const WEBHOOK_TEXT_MAX = 1900;
-
 /** Un webhook refusé, expliqué : les mots du fournisseur valent mieux qu'« HTTP 400 ». */
 async function webhookRejection(response: Response): Promise<string> {
     const detail = await response
@@ -242,20 +201,6 @@ async function webhookRejection(response: Response): Promise<string> {
         .then((body) => body.slice(0, 200).trim())
         .catch(() => '');
     return detail ? `Le webhook a répondu ${response.status} : ${detail}` : `Le webhook a répondu ${response.status}`;
-}
-
-/**
- * La charge utile envoyée au webhook, décidée par le type du canal. Sur un
- * canal `webhook`, trois têtes : `content` pour Discord, `text` pour Slack, les
- * champs structurés pour un point d'entrée maison. Sur un canal `discord`
- * fourni d'embeds, `content` est retiré : le garder afficherait l'alerte deux fois.
- */
-export function webhookBody(kind: NotificationChannelKind, alert: Alert): Record<string, unknown> {
-    const text = alert.body.slice(0, WEBHOOK_TEXT_MAX);
-    if (kind === 'discord' && alert.embeds && alert.embeds.length > 0) {
-        return { embeds: alert.embeds, ...alert.payload };
-    }
-    return { content: text, text, ...alert.payload };
 }
 
 /** L'alerte d'exemple : celle des essais de canal, et du testeur de mails. */
@@ -275,11 +220,6 @@ export function sampleAlert(label: string): Alert {
             }
         ]
     };
-}
-
-/** Une alerte telle qu'un canal e-mail l'envoie : du texte seul. */
-export function alertMail(alert: Alert): { subject: string; text: string } {
-    return { subject: alert.subject, text: alert.body };
 }
 
 /** Livre une alerte sur un seul canal, et dit s'il l'a acceptée. */

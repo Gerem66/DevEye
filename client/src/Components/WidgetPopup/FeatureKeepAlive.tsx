@@ -10,6 +10,8 @@ export interface FeatureKeepAliveProps {
      * holder so the component — and all its state — stays mounted while closed.
      */
     target: HTMLElement | null;
+    /** Le module derrière la vue, pour mener à sa page d'état si elle plante. */
+    featureId?: string | null;
     children: ReactNode;
 }
 
@@ -20,7 +22,7 @@ export interface FeatureKeepAliveProps {
  * the open popup body and a hidden holder. State is fully preserved; the
  * component only unmounts when the dashboard stops rendering it.
  */
-export default function FeatureKeepAlive({ target, children }: FeatureKeepAliveProps) {
+export default function FeatureKeepAlive({ target, featureId, children }: FeatureKeepAliveProps) {
     // Persistent portal container. `display: contents` keeps it layout-neutral
     // so the feature behaves as a direct child of whatever hosts it.
     const [container] = useState<HTMLDivElement>(() => {
@@ -50,7 +52,7 @@ export default function FeatureKeepAlive({ target, children }: FeatureKeepAliveP
             {/* Une fonctionnalité qui plante ne blanchit qu'elle-même : la
                 frontière suit l'arbre React, pas le DOM où le portail l'emmène. */}
             {createPortal(
-                <ErrorBoundary variant='view' canReport>
+                <ErrorBoundary variant='view' canReport featureId={featureId}>
                     {children}
                 </ErrorBoundary>,
                 container

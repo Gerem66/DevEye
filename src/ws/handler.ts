@@ -39,6 +39,7 @@ import { topicsOf } from '@/features/_topics';
 import { admission } from '@/Services/admission';
 import { selfTracking } from '@/Services/debug/selfTracking';
 import { enterSessionCommand, exitSessionCommand, forgetSessionDek } from '@/Services/SecureStore';
+import { featureHealth } from '@/Services/featureHealth';
 import { maintenance } from '@/Services/maintenance';
 import { describeError, systemAlerts } from '@/Services/systemAlerts';
 import { env, isDev } from '@/Utils/Env';
@@ -461,6 +462,7 @@ export async function registerWS(
                 const outputParse = def.output.safeParse(result);
                 if (!outputParse.success) {
                     reqLogger.error({ command, err: outputParse.error.flatten() }, 'Handler returned invalid output');
+                    if (def.access?.feature) featureHealth.commandFailed(def.access.feature);
                     systemAlerts.report({
                         key: `ws:${command}`,
                         level: 'error',
@@ -528,6 +530,7 @@ export async function registerWS(
                 // L'objet entier, pas son message : pino sérialise la pile et la
                 // chaîne des `cause` sous la clé `err`.
                 reqLogger.error({ command, err: e }, 'Feature handler threw');
+                if (def.access?.feature) featureHealth.commandFailed(def.access.feature);
                 systemAlerts.report({
                     key: `ws:${command}`,
                     level: 'error',

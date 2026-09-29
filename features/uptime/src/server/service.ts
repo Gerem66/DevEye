@@ -2,7 +2,7 @@ import type { UptimeServiceRow, UptimeStatus } from '../contracts/domain';
 import { mapLimit, type FeatureService, type FeatureServiceDeps, type SdkCipher } from '@deveye/types/sdk/server';
 
 // Horodatage et durée partagés par tous les émetteurs de l'app : importés, pas recopiés.
-import { formatDuration, formatMoment } from '@/Services/notifications';
+import { formatDuration, formatMoment } from '@/Services/alertCore';
 // Le garde des appels sortants, partagé par toute l'app : la sonde suit une
 // adresse qu'un membre a saisie, et rend son statut et la présence d'un mot-clé.
 import { safeFetch, UnsafeTargetError } from '@/Services/netFetch';

@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, it, mock } from 'node:test';
 
-import { HOUR_MS, HOURLY_MAX, KEY_WINDOW_MS, composeAlert, createThrottle, describeError } from './systemAlerts';
+import { HOUR_MS, HOURLY_MAX, KEY_WINDOW_MS, composeAlert, createThrottle } from './alertCore';
+import { describeError } from './systemAlerts';
 
 describe('createThrottle', () => {
     it('une clé ne repart qu’après sa fenêtre, avec le compte de ses répétitions', () => {

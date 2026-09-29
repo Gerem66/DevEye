@@ -93,6 +93,10 @@ facturation ne sautent jamais à cause d'une maintenance.
   aussi.
 - **Administrateur** : un bandeau à l'accueil tant que le site est en
   maintenance, ou la priorité donnée.
+- **Page d'état** (`STATUS_PAGE.md`) : la maintenance y compte comme une
+  indisponibilité, avec son message ; la priorité aux abonnés, comme une
+  perturbation. La page de maintenance et la fenêtre d'une feature fermée y
+  renvoient.
 
 ## Sans l'interface
 

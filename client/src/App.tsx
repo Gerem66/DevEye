@@ -15,6 +15,7 @@ import { AuthProvider, useAuth } from './auth/AuthProvider';
 import { useAdmission } from './stores/admission';
 import { useLocalUser } from './stores/currentUser';
 import { refreshPublicMaintenance, useSiteMaintenance } from './stores/maintenance';
+import { primeStatusPage } from './stores/statusPage';
 
 import './Styles/theme.css';
 import './Styles/fonts.css';
@@ -53,6 +54,8 @@ function AppRoot() {
                   ? 'auth/login'
                   : null
     );
+
+    useEffect(() => primeStatusPage(), []);
 
     // Sans socket ni bundle, seul l'état public dit la maintenance.
     useEffect(() => {

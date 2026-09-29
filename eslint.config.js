@@ -7,7 +7,7 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default [
-    { ignores: ['dist', 'node_modules'] },
+    { ignores: ['dist', 'node_modules', 'statuspage/dist'] },
     { files: ['**/*.{js,mjs,cjs,ts}'] },
     // Le code client des modules in-repo (`features/*/src/client`) est du React
     // navigateur : le lint du client ne remonte pas jusqu'ici, donc c'est ce

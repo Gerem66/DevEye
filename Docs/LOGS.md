@@ -66,10 +66,11 @@ channel`.
 
 ## 4. Ce que DevEye ne peut pas dire de lui-même
 
-Quand le processus est tombé, rien en lui ne prévient. Une **sonde externe**
-(UptimeRobot, Better Stack, healthchecks.io) sur `/api/health` des deux domaines
-couvre ce cas. `/api/health` ne répond que de la vivacité du processus, pas de
-la base.
+Quand le processus est tombé, rien en lui ne prévient. La **page d'état**
+(`STATUS_PAGE.md`), dans son propre conteneur, le mesure de l'extérieur et
+prévient par les destinations de la cible Système, qu'elle garde pour ce
+moment-là. Sans elle, une sonde externe (UptimeRobot, Better Stack) sur
+`/api/health` des deux domaines couvre la vivacité du processus, pas la base.
 
 ## 5. Conservation
 

@@ -11,7 +11,7 @@ import type {
 // L'horodatage et la durée des corps d'alerte sont ceux de l'app, partagés par
 // tous ses émetteurs : un avis de déploiement horodaté autrement qu'une alerte
 // de disponibilité semblerait venir d'un autre produit.
-import { formatDuration, formatMoment } from '@/Services/notifications';
+import { formatDuration, formatMoment } from '@/Services/alertCore';
 
 import { composeTargetOf, type ComposeService } from './agent';
 import { buildNotice, estimateFromHistory, firstLine } from './notice';

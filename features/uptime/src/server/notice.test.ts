@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 
 // `webhookBody` est la fonction de l'app qui décide, par type de canal, si
 // l'embed remplace le texte.
-import { webhookBody, type Alert } from '@/Services/notifications';
+import { webhookBody, type Alert } from '@/Services/alertCore';
 
 import { buildNotice } from './notice';
 

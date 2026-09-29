@@ -22,6 +22,7 @@ import type { Mailer } from '@/Services/mailer';
 import { renderAccountMail } from '@/Services/mailLayout';
 import { verifyModuleTicket } from '@/auth/jwt';
 import { maintenance } from '@/Services/maintenance';
+import { featureHealth } from '@/Services/featureHealth';
 import { describeError, systemAlerts } from '@/Services/systemAlerts';
 import type { Logger } from 'pino';
 import type { AuditLog } from '@/Services/AuditLog';
@@ -321,10 +322,13 @@ export function createServiceDeps(
             // pour qu'un start() rapproché ne croise pas ses restes.
             let timer: ReturnType<typeof setInterval> | null = null;
             let ticking: Promise<void> | null = null;
+            const health = featureHealth.ticker(manifest.id);
             const run = async (): Promise<void> => {
                 try {
                     await tick();
+                    health.succeeded();
                 } catch (e) {
+                    health.failed();
                     host.logger.error({ feature: manifest.id, err: e }, 'Module tick failed');
                     systemAlerts.report({
                         key: `tick:${manifest.id}`,
@@ -349,6 +353,7 @@ export function createServiceDeps(
                     if (timer) clearInterval(timer);
                     timer = null;
                     await ticking;
+                    health.forget();
                 }
             };
         },

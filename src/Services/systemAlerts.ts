@@ -4,8 +4,15 @@ import { SYSTEM_NOTIFICATION_TARGET } from '@deveye/types';
 import type { Database } from '@/db';
 import type Encryption from '@/Services/Encryption';
 import { createOpenCipher } from '@/Services/SecureStore';
-import { COLOR_DANGER, COLOR_INFO, block, footer } from '@/Services/notices/shared';
-import { deliver, formatMoment, resolveRoute, type Alert } from '@/Services/notifications';
+import {
+    HOURLY_MAX,
+    composeAlert,
+    createThrottle,
+    formatMoment,
+    type Alert,
+    type SystemAlertEvent
+} from '@/Services/alertCore';
+import { deliver, resolveRoute } from '@/Services/notifications';
 import { env } from '@/Utils/Env';
 
 /**
@@ -15,99 +22,6 @@ import { env } from '@/Utils/Env';
  * passent, jamais une erreur d'utilisateur : un webhook cassé ou une boîte
  * injoignable regardent leur propriétaire.
  */
-
-export type SystemAlertLevel = 'info' | 'error' | 'critical';
-
-export interface SystemAlertEvent {
-    /** Regroupe les répétitions : une même clé ne repart qu'après `KEY_WINDOW_MS`. */
-    key: string;
-    level: SystemAlertLevel;
-    title: string;
-    /** Message, commande, extrait de pile : rendu en bloc de code. */
-    detail?: string;
-}
-
-export const KEY_WINDOW_MS = 10 * 60_000;
-export const HOUR_MS = 3600_000;
-export const HOURLY_MAX = 20;
-
-type Verdict = { send: true; repeats: number } | { send: false };
-
-/**
- * L'anti-rafale : une alerte par clé et par fenêtre, et un plafond horaire
- * au-delà duquel les alertes sont retenues puis résumées en une seule. Les
- * répétitions d'une clé sont comptées et annoncées avec son alerte suivante.
- */
-export function createThrottle(onHeld: (held: number, since: number) => void) {
-    const keys = new Map<string, { last: number; repeats: number }>();
-    let windowStart = -Infinity;
-    let sent = 0;
-    let held = 0;
-    let summary: ReturnType<typeof setTimeout> | null = null;
-
-    return {
-        admit(key: string, now: number): Verdict {
-            if (now - windowStart >= HOUR_MS) {
-                windowStart = now;
-                sent = 0;
-            }
-            const entry = keys.get(key);
-            if (entry && now - entry.last < KEY_WINDOW_MS) {
-                entry.repeats++;
-                return { send: false };
-            }
-            if (sent >= HOURLY_MAX) {
-                held++;
-                if (!summary) {
-                    const since = windowStart;
-                    summary = setTimeout(
-                        () => {
-                            summary = null;
-                            const count = held;
-                            held = 0;
-                            if (count > 0) onHeld(count, since);
-                        },
-                        Math.max(0, windowStart + HOUR_MS - now)
-                    );
-                    summary.unref();
-                }
-                return { send: false };
-            }
-            sent++;
-            const repeats = entry?.repeats ?? 0;
-            keys.set(key, { last: now, repeats: 0 });
-            return { send: true, repeats };
-        }
-    };
-}
-
-/** L'alerte telle que tous les canaux la reçoivent. */
-export function composeAlert(event: SystemAlertEvent, repeats: number, at: number, origin: string): Alert {
-    const lines = [event.title];
-    if (event.detail) lines.push('', event.detail);
-    if (repeats > 0) lines.push('', `Répétée ${repeats} fois depuis l’alerte précédente.`);
-    lines.push('', `Instance : ${origin}`, `Le ${formatMoment(at)}`);
-    const description = [
-        event.detail ? block(event.detail) : '',
-        repeats > 0 ? `Répétée ${repeats} fois depuis l’alerte précédente.` : ''
-    ]
-        .filter(Boolean)
-        .join('\n');
-    return {
-        subject: `[DevEye] ${event.title}`,
-        body: lines.join('\n'),
-        payload: { event: 'system_alert', key: event.key, level: event.level, repeats, origin, at },
-        embeds: [
-            {
-                title: event.title,
-                ...(description ? { description } : {}),
-                color: event.level === 'info' ? COLOR_INFO : COLOR_DANGER,
-                timestamp: new Date(at * 1000).toISOString(),
-                footer: footer(origin)
-            }
-        ]
-    };
-}
 
 export interface SystemAlertsDeps {
     db: Database;

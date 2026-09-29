@@ -13,6 +13,7 @@ import type {
     SdkMovePlan,
     SdkPlanPauseChange,
     SdkQueryable,
+    SdkServiceHealth,
     SdkStockItem
 } from '@deveye/types/sdk/server';
 import {
@@ -738,6 +739,30 @@ export const moduleServiceControl: MaintenanceServices = {
         s.halted = false;
     }
 };
+
+/** Le temps laissé à `health()` : au-delà, le module est dit dégradé. */
+export const SERVICE_HEALTH_MS = 2_000;
+
+/**
+ * Le verdict d'un service sur lui-même (`FeatureService.health`), `null` quand
+ * il n'en donne pas ou qu'une maintenance le tient à l'arrêt. Ne lève jamais.
+ */
+export async function moduleServiceHealth(featureId: string): Promise<SdkServiceHealth | null> {
+    const s = SERVICES.find((x) => x.manifest.id === featureId);
+    if (!s || s.halted || !s.service.health) return null;
+    const late: SdkServiceHealth = { state: 'degraded', reason: 'Répond lentement' };
+    try {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const deadline = new Promise<SdkServiceHealth>((resolve) => {
+            timer = setTimeout(() => resolve(late), SERVICE_HEALTH_MS);
+            timer.unref();
+        });
+        return await Promise.race([Promise.resolve(s.service.health()), deadline]).finally(() => clearTimeout(timer));
+    } catch (e) {
+        s.logger.error({ module: featureId, err: e }, 'Module health check failed');
+        return { state: 'degraded' };
+    }
+}
 
 /**
  * L'agrégat des hooks agent des modules qui déclarent la capacité 'agents'.

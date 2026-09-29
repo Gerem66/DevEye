@@ -348,6 +348,8 @@ pas.
 - **Qui la reçoit** : `systemRouteWorkspaces()` rend les espaces qui ont une
   route système et dont le propriétaire est un admin actif. Un admin rétrogradé
   cesse d'être prévenu sans qu'on nettoie sa route.
+- **Quand DevEye est tombé** : la page d'état garde une copie de ces
+  destinations et les prévient elle-même (`STATUS_PAGE.md`).
 - **Côté client** : la coquille accepte `ShellScope` (une fonctionnalité, un
   élément ou la cible système) à ses entrées seulement ; les sections propres
   aux fonctionnalités gardent `SettingsScope`. La page Logs porte le bouton.

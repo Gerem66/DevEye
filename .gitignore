@@ -30,3 +30,6 @@ client/src/Styles/icons.local.css
 /backup-data/
 /mailserver-data/
 /hosting-data/
+
+# La base de la page d’état en dev
+/statuspage/data/

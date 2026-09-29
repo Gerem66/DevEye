@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 
+import StatusPageLink from '@/Components/StatusPageLink';
 import { LoginScene } from '@/Pages/Login/Scene';
 import { TextLink } from '@/Pages/Login/TextLink';
 import { refreshPublicMaintenance } from '@/stores/maintenance';
@@ -32,6 +33,7 @@ export default function MaintenancePage({ message, onAdminLogin }: MaintenancePa
             <div className='maintenance' role='status'>
                 <span className='icon icon-wrench' aria-hidden='true' />
                 <p className='maintenance-message'>{message}</p>
+                <StatusPageLink>Suivre l’état des services</StatusPageLink>
             </div>
         </LoginScene>
     );

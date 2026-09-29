@@ -35,7 +35,8 @@
     "features/*/src/contracts",
     "features/*/src/manifest.ts",
     "features/*/src/index.ts",
-    "scripts/**/*.ts"
+    "scripts/**/*.ts",
+    "statuspage/**/*.ts"
   ],
   "exclude": ["node_modules", "dist"]
 }

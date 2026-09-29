@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 
-import type { FeatureServiceDeps, SdkPublicApp } from '@deveye/types/sdk/server';
+import type { FeatureServiceDeps, SdkPublicApp, SdkServiceHealth } from '@deveye/types/sdk/server';
 
 import type { ListenerState } from '../../contracts/domain';
 import { type EngineHandle, now } from '../_shared';
@@ -16,6 +16,7 @@ import { createAuthenticator } from './auth';
 import { diskBlobStore } from './blobs';
 import { createDelivery } from './delivery';
 import { createEventRecorder } from './events';
+import { listenersHealth } from './health';
 import { createMailStore } from './mailstore';
 import { Notifier } from './notifier';
 import { TlsStore } from './tls';
@@ -37,6 +38,7 @@ type ListenerName = ListenerState['name'];
 export interface Engine {
     start(): Promise<void>;
     stop(): Promise<void>;
+    health(): SdkServiceHealth;
     handle: EngineHandle;
     publicRoutes(app: SdkPublicApp): void;
 }
@@ -289,6 +291,8 @@ export function createEngine(deps: FeatureServiceDeps<MailserverRepo>): Engine {
                 new Promise((resolve) => setTimeout(resolve, STOP_DEADLINE_MS).unref())
             ]);
         },
+
+        health: () => listenersHealth(configured ? Object.values(states) : []),
 
         publicRoutes(app) {
             if (!configured || usesFiles) return;

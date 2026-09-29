@@ -18,6 +18,13 @@ export const env = {
     // accepter et l'app y renvoie. Vide (auto-hébergé) : ni case, ni liens.
     SITE_URL: getEnvVar('SITE_URL', 'string', false),
 
+    // La page d'état publique qui surveille ce serveur (`statuspage/`), dans un
+    // autre conteneur : l'app y renvoie quand quelque chose ne répond pas. Vide,
+    // aucun lien. Le jeton ouvre les deux routes qu'elle interroge
+    // (`Services/statusProbe.ts`) ; vide, elles n'existent pas.
+    STATUS_PAGE_URL: getEnvVar('STATUS_PAGE_URL', 'string', false),
+    STATUS_PROBE_TOKEN: getEnvVar('STATUS_PROBE_TOKEN', 'string', false),
+
     // Port du second écouteur, celui qu'on expose sur Internet (`publicApp.ts`) :
     // il n'enregistre que les routes publiques des modules. Vide, pas de second
     // serveur, et ces routes restent joignables sur le port principal.
@@ -201,6 +208,14 @@ if (env.DOMAIN_PROXY_TOKEN) {
     if (!env.DOMAIN_PROXY_UPSTREAM) {
         throw new Error('DOMAIN_PROXY_UPSTREAM est requis dès que DOMAIN_PROXY_TOKEN est renseigné.');
     }
+}
+if (env.STATUS_PROBE_TOKEN && env.STATUS_PROBE_TOKEN.length < SECRET_MIN_LENGTH) {
+    throw new Error(`STATUS_PROBE_TOKEN doit faire au moins ${SECRET_MIN_LENGTH} caractères (openssl rand -hex 32).`);
+}
+// Livrée telle quelle au client, qui en fait un lien : une valeur qui n'est pas
+// une adresse web serait un lien cassé, ou pire.
+if (env.STATUS_PAGE_URL && !/^https?:\/\/[^\s/]+/.test(env.STATUS_PAGE_URL)) {
+    throw new Error('STATUS_PAGE_URL doit être une adresse http(s), par exemple https://statut.deveye.fr.');
 }
 if (env.SMTP_HOST && !env.SMTP_FROM) {
     throw new Error('SMTP_FROM est requis dès que SMTP_HOST est renseigné.');

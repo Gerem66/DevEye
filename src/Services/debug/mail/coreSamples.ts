@@ -1,7 +1,8 @@
 import type { SdkMailSample } from '@deveye/types/sdk/server';
 
 import { accountDeletedMail } from '@/Services/accountMails';
-import { alertMail, sampleAlert } from '@/Services/notifications';
+import { alertMail } from '@/Services/alertCore';
+import { sampleAlert } from '@/Services/notifications';
 import { existingAccountMail, verificationMail } from '@/Services/signup/mails';
 
 const HOLDER = 'Camille';

@@ -69,6 +69,7 @@ import { WidgetPopup, FeatureKeepAlive } from '@/Components/WidgetPopup';
 import { Wallpaper } from '@/Components/Wallpaper';
 import { SettingsPanel } from '@/Components/SettingsPanel';
 import { InfoPopup, openInfo } from '@/Components/InfoPopup';
+import StatusPageLink from '@/Components/StatusPageLink';
 import { ConfirmDialog, type ConfirmRequest } from '@/Components/ConfirmDialog';
 import { RemoteLogin } from '@/Components/RemoteLogin';
 import CreateWorkspacePopup, { CREATE_WORKSPACE_POPUP, type CreateWorkspaceChoice } from './popup-create-workspace';
@@ -430,7 +431,12 @@ export default function HomePage() {
     /** Le retrait de l'accueil derrière un dossier déployé est un mouvement : il
      *  se coupe, le flou reste (voir `.recessed`). */
     const reducedMotion = useReducedMotion() === true;
-    const { epoch: workspaceEpoch } = useWorkspaceState();
+    const { epoch: workspaceEpoch, activeInstanceId } = useWorkspaceState();
+    // La page d'état suit ce serveur : les modules d'une instance distante n'y figurent pas.
+    const statusFeatureOf = useCallback(
+        (viewId: string): string | null => (activeInstanceId === null ? moduleBehind(viewId) : null),
+        [activeInstanceId]
+    );
     const currentWorkspace = useActiveWorkspace();
     const layout = useHomeLayout();
     const { devices, loading: devicesLoading, error: devicesError } = useDevices();
@@ -658,10 +664,13 @@ export default function HomePage() {
                 void openInfo({
                     title: 'En maintenance',
                     body: (
-                        <p>
-                            « {viewTitleOf(widgetId)} » est en maintenance pour le moment. Elle rouvrira dès que
-                            possible, réessayez un peu plus tard.
-                        </p>
+                        <>
+                            <p>
+                                « {viewTitleOf(widgetId)} » est en maintenance pour le moment. Elle rouvrira dès que
+                                possible, réessayez un peu plus tard.
+                            </p>
+                            <StatusPageLink featureId={statusFeatureOf(widgetId)}>Suivre son état</StatusPageLink>
+                        </>
                     ),
                     width: 400
                 });
@@ -676,7 +685,16 @@ export default function HomePage() {
             doExpand(widgetId, forceReset, morphFrom);
             return true;
         },
-        [switching, expandedWidget, doExpand, isHiddenView, allowedToOpen, maintenanceLockOf, viewTitleOf]
+        [
+            switching,
+            expandedWidget,
+            doExpand,
+            isHiddenView,
+            allowedToOpen,
+            maintenanceLockOf,
+            viewTitleOf,
+            statusFeatureOf
+        ]
     );
 
     /**
@@ -891,10 +909,13 @@ export default function HomePage() {
             void openInfo({
                 title: 'En maintenance',
                 body: (
-                    <p>
-                        « {viewTitleOf(open)} » vient de passer en maintenance. Elle rouvrira dès que possible,
-                        réessayez un peu plus tard.
-                    </p>
+                    <>
+                        <p>
+                            « {viewTitleOf(open)} » vient de passer en maintenance. Elle rouvrira dès que possible,
+                            réessayez un peu plus tard.
+                        </p>
+                        <StatusPageLink featureId={statusFeatureOf(open)}>Suivre son état</StatusPageLink>
+                    </>
                 ),
                 width: 400
             });
@@ -902,7 +923,15 @@ export default function HomePage() {
         for (const id of mountedFeatures) {
             if (id !== open && (isHiddenView(id) || maintenanceLockOf(id))) unmountFeature(id);
         }
-    }, [isHiddenView, maintenanceLockOf, mountedFeatures, requestCloseFeature, unmountFeature, viewTitleOf]);
+    }, [
+        isHiddenView,
+        maintenanceLockOf,
+        mountedFeatures,
+        requestCloseFeature,
+        unmountFeature,
+        viewTitleOf,
+        statusFeatureOf
+    ]);
 
     const accountMenuEntries = useMemo(
         () => accountMenu().filter((entry) => !hiddenFeatures.has(entry.id)),
@@ -1434,7 +1463,11 @@ export default function HomePage() {
                     const target = popupConfig?.id === id ? popupBodyEl : null;
 
                     return (
-                        <FeatureKeepAlive key={`${workspaceEpoch}-${id}-${gen}`} target={target}>
+                        <FeatureKeepAlive
+                            key={`${workspaceEpoch}-${id}-${gen}`}
+                            target={target}
+                            featureId={statusFeatureOf(id)}
+                        >
                             <ViewScope id={id}>
                                 <config.FullComponent {...featureProps} />
                             </ViewScope>

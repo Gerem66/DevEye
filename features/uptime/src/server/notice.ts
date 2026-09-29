@@ -5,7 +5,7 @@ import { COLOR_DANGER, COLOR_SUCCESS, COLOR_WARNING, block, duration, moment, tr
  * L'avis de disponibilité tel que Discord doit le montrer : un état devient un
  * embed, sans base, réseau ni chiffrement. Le corps en clair continue de partir
  * par mail, Slack et webhook générique ; `deliver` ne remplace `content` par les
- * embeds que pour un webhook Discord (voir `Services/notifications.ts`).
+ * embeds que pour un webhook Discord (voir `Services/alertCore.ts`).
  */
 
 /** Ce qu'un avis de disponibilité peut annoncer. */

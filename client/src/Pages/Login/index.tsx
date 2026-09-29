@@ -6,6 +6,7 @@ import { ApiError, get, post } from '../../api/http';
 import { useAuth } from '../../auth/AuthProvider';
 import { isHomeReady, onHomeReady } from '../../stores/homeReady';
 import { TextInput } from '../../Components';
+import StatusPageLink from '../../Components/StatusPageLink';
 import { z } from 'zod';
 import { TextLink } from './TextLink';
 import './style.css';
@@ -393,7 +394,13 @@ function LoginPage({ onSignup, onBack }: LoginPageProps) {
                     )}
                 </div>
 
-                {unreachable && <p className='unreachable'>Serveur injoignable, reprise automatique…</p>}
+                {unreachable && (
+                    <p className='unreachable'>
+                        Serveur injoignable, reprise automatique…
+                        <br />
+                        <StatusPageLink>État des services</StatusPageLink>
+                    </p>
+                )}
             </div>
         </div>
     );

@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 
 import Button from '@/Components/Button';
+import StatusPageLink from '@/Components/StatusPageLink';
 import { noteRenderError } from '@/diagnostics/trace';
 import { requestOpenReport } from '@/stores/reportRequest';
 
@@ -14,6 +15,8 @@ interface Props {
     variant: 'page' | 'view';
     /** Propose le signalement : faux là où le bouton de signalement n'est plus monté. */
     canReport?: boolean;
+    /** Le module affiché, pour mener à sa page d'état ; absent, la vue d'ensemble. */
+    featureId?: string | null;
     children: ReactNode;
 }
 
@@ -69,6 +72,9 @@ export default class ErrorBoundary extends Component<Props, State> {
                         </Button>
                     )}
                 </div>
+                <StatusPageLink featureId={this.props.featureId}>
+                    {page ? 'État des services' : 'État de cette fonctionnalité'}
+                </StatusPageLink>
             </div>
         );
     }
