@@ -102,7 +102,7 @@ gestes :
 | Notes            | lire, éditer le corps, archiver, restaurer (chez elle, sous sa clé ; rangée à la racine, hors classement d'ici)                                                                           | classer (dossier, rang), passer en privée, détruire                                       |
 | Mail             | dossiers, lire, marquer, déplacer, envoyer, relever, renommer, cadence, pause                                                                                                             | supprimer le compte, changer de palier, identifiants et proxy, reconnexion OAuth          |
 | Appareils        | superviser, terminal, fichiers, logs, paquets, commandes système, ranger dans SA liste                                                                                                    | appairer, approuver, renommer, révoquer, régler la collecte, supprimer                    |
-| Hébergement      | parcourir, déposer (compté sur l'offre du domicile), renommer, déplacer, supprimer et télécharger des fichiers                                                                            | adresses, domaines, mot de passe, allure, nom et suppression du pack                      |
+| Hébergement      | parcourir, déposer (compté sur l'offre du domicile), renommer, déplacer, supprimer et télécharger des fichiers                                                                            | adresses, domaines, mot de passe, allure, nom et suppression du dossier                   |
 | Projets          | tout l'arbre (colonnes, cartes, assignation parmi les membres d'ici, jalons, dépendances, discussion, historique), profil, statut, archivage, version manuelle ; liaisons lues et nommées | changer de palier, version suivie d'une release, relier / délier, classer le portefeuille |
 
 Le critère n'est pas le goût : un geste reste au domicile quand il **référence
@@ -358,7 +358,7 @@ déplacement : retirer une projection (`share.set`) ou supprimer l'élément
 | Appareils        | la ligne ; relevés et constats la suivent           | les exemptions Sentinelle, réglées par espace     |
 | Mail             | le compte, ses dossiers, ses enveloppes             | un canal d'alerte d'ici qui expédiait par lui     |
 | Projets          | tout l'arbre                                        | ses liaisons, dont les cibles restent             |
-| Hébergement      | le pack, ses fichiers et ses adresses               | leur domaine : elles reviennent à celle de DevEye |
+| Hébergement      | le dossier, ses fichiers et ses adresses            | leur domaine : elles reviennent à celle de DevEye |
 
 Un jeton mis à `NULL` n'est pas une avarie : les deux features savaient déjà dire
 « sans jeton », et en rattacher un est un geste du propriétaire, pas un effet de
@@ -370,7 +370,7 @@ comme source sont des objets de l'espace qu'il quitterait. On ne peut même pas 
 laisser sans destination le temps d'en choisir une. Mots de passe, CloudSync,
 Finances et les features sans éléments ne sont pas concernées. Hébergement se
 déplace et se partage, mais **ne se copie pas** : ses fichiers, scellés par une
-clé du serveur qui ne dépend d'aucun espace, ne bougent pas quand le pack change
+clé du serveur qui ne dépend d'aucun espace, ne bougent pas quand le dossier change
 d'espace, et une copie devrait dupliquer des gigaoctets dans la transaction.
 
 Le refus par élément vit dans `plan` : un nom déjà pris là-bas (Bases, Audience),

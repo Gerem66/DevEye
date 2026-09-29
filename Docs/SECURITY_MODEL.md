@@ -361,9 +361,9 @@ doit donc pouvoir les lire, et ils ne passent pas par l'étage gardé.
   clé serveur (`keys.derive('deveye-hosting', 'files-v1')`), jamais stockée. Le
   bucket ne reçoit que du chiffré, et un envoi est scellé dans le dossier local
   des envois avant d'y partir. La clé ne dépend d'aucun espace : partager ou
-  déplacer un pack ne relit pas un octet de fichier. Perdre `CRYPT_KEY_A/B`
+  déplacer un dossier ne relit pas un octet de fichier. Perdre `CRYPT_KEY_A/B`
   rend tous les fichiers hébergés illisibles.
-- Les noms des packs, dossiers, fichiers et adresses sont chiffrés à l'étage
+- Les noms des dossiers, sous-dossiers, fichiers et adresses sont chiffrés à l'étage
   ouvert de l'espace. L'unicité d'un nom dans son dossier tient à un condensat
   à clé (HMAC, clé dérivée), jamais au nom en clair.
 - Le mot de passe d'une adresse est haché (scrypt, sel propre). L'accès qu'il
@@ -377,7 +377,7 @@ doit donc pouvoir les lire, et ils ne passent pas par l'étage gardé.
   reste part en pièce jointe. Le téléchargement du propriétaire passe par un
   ticket, sur l'origine de l'app, toujours en pièce jointe.
 - Les signalements sont scellés par la clé serveur (`keys.sealBytes`, liés à
-  leur référence) : ils se lisent sans aucun espace, survivent au pack, et ne
+  leur référence) : ils se lisent sans aucun espace, survivent au dossier, et ne
   sont jamais montrés à qui a publié le contenu signalé.
 
 ## Uptime : l'étage ouvert appliqué à une tâche de fond
