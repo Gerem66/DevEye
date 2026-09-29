@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "acme-client": "^5.4.0",
-    "mailauth": "^5.0.3",
+    "mailauth": "^7.1.0",
     "nodemailer": "^10.0.10",
     "smtp-server": "^3.19.13"
   },
