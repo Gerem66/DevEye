@@ -24,7 +24,7 @@ import { featureAccessIn, resolveItemHome, usageProvider } from './_shared';
  */
 
 function isProjectLinkable(feature: FeatureId): boolean {
-    return (PROJECT_LINKED_FEATURES as readonly FeatureId[]).includes(feature);
+    return PROJECT_LINKED_FEATURES.includes(feature);
 }
 
 /** L'état complet, relu après chaque écriture plutôt que reconstruit. */

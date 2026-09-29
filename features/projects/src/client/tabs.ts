@@ -1,16 +1,17 @@
-import type { FeatureAccess, WorkspaceFeatureId } from '@deveye/types';
+import type { FeatureAccess, FeatureId } from '@deveye/types';
+import { HOSTING_CLIENT_PROVIDER } from '@deveye/types/sdk';
 import type { Project, ProjectLinkCounts } from '../contracts/domain';
 
 /**
  * Les onglets d'un projet : le Tableau, seul obligatoire et seul à ouvrir le
- * projet, la Vue d'ensemble et la Frise que le projet déclare, et cinq suspendus à
+ * projet, la Vue d'ensemble et la Frise que le projet déclare, et six suspendus à
  * leurs liaisons, qui paraissent au premier élément et se replient dans le menu
  * « + » de la barre avec le dernier. L'histoire du projet est dans ses réglages :
  * on l'ouvre rarement, pour une question précise.
  */
 
 /** Les onglets qui ne montrent que des liaisons, donc escamotables. */
-export type ProjectFeatureTabId = 'git' | 'database' | 'audience' | 'deploy' | 'uptime';
+export type ProjectFeatureTabId = 'git' | 'database' | 'audience' | 'deploy' | 'uptime' | 'x-hosting';
 
 export type ProjectTabId = 'overview' | 'board' | 'timeline' | ProjectFeatureTabId;
 
@@ -27,7 +28,9 @@ export interface ProjectTabAddAction {
      * dialogue qui s'ouvre travaille dans la feature visée, sans quoi l'entrée
      * mène à un formulaire qu'on ne peut pas remplir.
      */
-    requires: { feature: WorkspaceFeatureId; level: FeatureAccess };
+    requires: { feature: FeatureId; level: FeatureAccess };
+    /** Un module privé : le geste n'est offert que si ce contrat client est installé. */
+    provider?: string;
 }
 
 export interface ProjectTab {
@@ -80,6 +83,17 @@ export const PROJECT_FEATURE_TABS: ProjectFeatureTab[] = [
         label: 'Uptime',
         icon: 'uptime',
         add: { key: 'uptime', label: 'Ajouter un uptime', requires: { feature: 'uptime', level: 'write' } }
+    },
+    {
+        id: 'x-hosting',
+        label: 'Dossiers',
+        icon: 'folder',
+        add: {
+            key: 'x-hosting',
+            label: 'Ajouter un dossier',
+            requires: { feature: 'x-hosting', level: 'write' },
+            provider: HOSTING_CLIENT_PROVIDER
+        }
     }
 ];
 

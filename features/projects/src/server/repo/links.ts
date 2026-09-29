@@ -2,6 +2,7 @@ import type {
     ProjectAudienceLinkRow,
     ProjectDatabaseLinkRow,
     ProjectDeployLinkRow,
+    ProjectHostingLinkRow,
     ProjectRepoLinkRow,
     ProjectUptimeLinkRow
 } from '../../contracts/domain';
@@ -18,16 +19,16 @@ export interface ProjectUsageRow {
 
 /**
  * Les objets d'espace rattachés à un projet : services surveillés, bases de données,
- * cibles de déploiement, dépôts git et sites suivis. Seul l'identifiant de la cible
+ * cibles de déploiement, dépôts git, sites suivis et dossiers d'Hébergement. Seul l'identifiant de la cible
  * est stocké, rien d'identifiant donc rien à chiffrer, et la cible garde ses propres
  * droits : c'est la feature visée qui tranche. Non exclusif dans les deux sens, ce
  * sont des objets d'espace et non des propriétés d'un projet.
  *
- * Les cinq tables sont celles de Projets, pas des modules visés : ceux-ci n'en
+ * Les six tables sont celles de Projets, pas des modules visés : ceux-ci n'en
  * lisent aucune, Projets ne lit les leurs que pour l'ordre d'affichage, et ce qu'ils
  * ont besoin de savoir des projets leur est offert par `PROJECTS_USAGE_PROVIDER`.
  *
- * Une même forme pour les cinq familles : `list*Ids` rend les identifiants dans
+ * Une même forme pour les six familles : `list*Ids` rend les identifiants dans
  * l'ordre d'affichage de la feature visée, `list*Usage` les projets qui relient un
  * élément (titre encore chiffré), `count*Links` une entrée par élément relié de
  * l'espace, un élément absent valant zéro, `unlinkAll*` sert la conversion d'un
@@ -79,6 +80,15 @@ export interface ProjectLinksRepo {
     detachSite(siteId: number, workspaceId: number): Promise<number>;
     listSiteUsage(siteId: number, workspaceId: number): Promise<ProjectUsageRow[]>;
     countSiteLinks(workspaceId: number): Promise<Map<number, number>>;
+
+    // -- liaison projet → dossier d'Hébergement ---------------------------
+    listPackIds(projectId: number, workspaceId: number): Promise<number[]>;
+    linkPack(projectId: number, workspaceId: number, packId: number): Promise<void>;
+    unlinkPack(projectId: number, workspaceId: number, packId: number): Promise<boolean>;
+    unlinkAllPacks(projectId: number, workspaceId: number): Promise<void>;
+    detachPack(packId: number, workspaceId: number): Promise<number>;
+    listPackUsage(packId: number, workspaceId: number): Promise<ProjectUsageRow[]>;
+    countPackLinks(workspaceId: number): Promise<Map<number, number>>;
 }
 
 export function projectLinksRepo(q: SdkQueryable): ProjectLinksRepo {
@@ -402,6 +412,67 @@ export function projectLinksRepo(q: SdkQueryable): ProjectLinksRepo {
                 [workspaceId]
             );
             return new Map(rows.map((row) => [Number(row.site_id), Number(row.n)]));
+        },
+
+        async listPackIds(projectId, workspaceId) {
+            // Dans l'ordre des liaisons : la table du module peut manquer, on ne
+            // joint rien dessus.
+            const rows = await q.query<{ pack_id: number }>(
+                `SELECT pack_id
+                   FROM ft_projects_hosting_links
+                  WHERE project_id = ? AND workspace_id = ?
+                  ORDER BY created ASC, pack_id ASC`,
+                [projectId, workspaceId]
+            );
+            return rows.map((row) => Number(row.pack_id));
+        },
+        async linkPack(projectId, workspaceId, packId) {
+            await q.execute(
+                `INSERT INTO ft_projects_hosting_links (project_id, pack_id, workspace_id)
+                 VALUES (?, ?, ?)
+                 ON DUPLICATE KEY UPDATE workspace_id = VALUES(workspace_id)`,
+                [projectId, packId, workspaceId]
+            );
+        },
+        async unlinkPack(projectId, workspaceId, packId) {
+            const res = await q.execute(
+                'DELETE FROM ft_projects_hosting_links WHERE project_id = ? AND workspace_id = ? AND pack_id = ?',
+                [projectId, workspaceId, packId]
+            );
+            return res.affectedRows > 0;
+        },
+        async unlinkAllPacks(projectId, workspaceId) {
+            await q.execute('DELETE FROM ft_projects_hosting_links WHERE project_id = ? AND workspace_id = ?', [
+                projectId,
+                workspaceId
+            ]);
+        },
+        async listPackUsage(packId, workspaceId) {
+            return q.query<ProjectUsageRow>(
+                `SELECT p.id AS project_id, p.status, p.content
+                   FROM ft_projects_hosting_links l
+                   JOIN projects p ON p.id = l.project_id
+                  WHERE l.pack_id = ? AND l.workspace_id = ? AND p.security_tier = 'open'
+                  ORDER BY p.sort_order ASC, p.id ASC`,
+                [packId, workspaceId]
+            );
+        },
+        async detachPack(packId, workspaceId) {
+            const res = await q.execute(
+                'DELETE FROM ft_projects_hosting_links WHERE pack_id = ? AND workspace_id = ?',
+                [packId, workspaceId]
+            );
+            return res.affectedRows;
+        },
+        async countPackLinks(workspaceId) {
+            const rows = await q.query<Pick<ProjectHostingLinkRow, 'pack_id'> & { n: number }>(
+                `SELECT pack_id, COUNT(*) AS n
+                   FROM ft_projects_hosting_links
+                  WHERE workspace_id = ?
+                  GROUP BY pack_id`,
+                [workspaceId]
+            );
+            return new Map(rows.map((row) => [Number(row.pack_id), Number(row.n)]));
         }
     };
 }

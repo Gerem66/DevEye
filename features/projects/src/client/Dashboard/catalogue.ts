@@ -8,7 +8,7 @@ import type { DashboardTile, Project, ProjectLinkCounts } from '../../contracts/
  */
 
 /** Les familles dont une tuile résume un élément relié. */
-export type TileFeature = 'git' | 'database' | 'audience' | 'deploy' | 'uptime';
+export type TileFeature = 'git' | 'database' | 'audience' | 'deploy' | 'uptime' | 'x-hosting';
 
 export type TileSize = 'normal' | 'wide';
 
@@ -39,7 +39,7 @@ const TASK_TILES: TileSpec[] = [
 ];
 
 /** L'ordre naturel des familles : ce qu'on livre, puis ce que ça donne. */
-const FEATURE_ORDER: TileFeature[] = ['deploy', 'uptime', 'audience', 'database', 'git'];
+const FEATURE_ORDER: TileFeature[] = ['deploy', 'uptime', 'audience', 'database', 'git', 'x-hosting'];
 
 /**
  * Le catalogue d'un projet. Un projet confidentiel ne relie rien, et un projet
@@ -63,7 +63,8 @@ export function linkCountsOf(links: DashboardLinks): ProjectLinkCounts {
         database: links.database.length,
         audience: links.audience.length,
         deploy: links.deploy.length,
-        uptime: links.uptime.length
+        uptime: links.uptime.length,
+        'x-hosting': links['x-hosting'].length
     };
 }
 

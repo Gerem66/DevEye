@@ -378,6 +378,15 @@ export const projectSetSecurityTierFeature = defineSdkFeature({
                 });
             }
 
+            const packs = await ctx.repo.links.listPackIds(input.projectId, home);
+            if (packs.length > 0) {
+                await ctx.repo.links.unlinkAllPacks(input.projectId, home);
+                await recordEvent(ctx, existing, {
+                    kind: 'projects.hostingUnlink',
+                    label: `${packs.length} dossier${packs.length > 1 ? 's' : ''} délié${packs.length > 1 ? 's' : ''} (projet passé en confidentiel)`
+                });
+            }
+
             const targets = await ctx.repo.links.unlinkAllDeployTargets(input.projectId, home);
             if (targets > 0) {
                 await recordEvent(ctx, existing, {

@@ -76,6 +76,15 @@ const LINKS: Record<
             await repo.links.unlinkRepo(projectId, workspaceId, itemId);
         }
     },
+    'x-hosting': {
+        usage: (repo, itemId, workspaceId) => repo.links.listPackUsage(itemId, workspaceId),
+        counts: (repo, workspaceId) => repo.links.countPackLinks(workspaceId),
+        detach: (repo, itemId, workspaceId) => repo.links.detachPack(itemId, workspaceId),
+        link: (repo, projectId, itemId, workspaceId) => repo.links.linkPack(projectId, workspaceId, itemId),
+        unlink: async (repo, projectId, itemId, workspaceId) => {
+            await repo.links.unlinkPack(projectId, workspaceId, itemId);
+        }
+    },
     uptime: {
         usage: (repo, itemId, workspaceId) => repo.links.listServiceUsage(itemId, workspaceId),
         counts: (repo, workspaceId) => repo.links.countServiceLinks(workspaceId),

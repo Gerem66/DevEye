@@ -106,7 +106,7 @@ function useFeatureSections(scope: SettingsScope | null): SectionDef[] {
          */
         const pushProjectsSection = (into: SectionDef[]): void => {
             if (scope.kind !== 'item') return;
-            if (!(PROJECT_LINKED_FEATURES as readonly FeatureId[]).includes(scope.feature)) return;
+            if (!PROJECT_LINKED_FEATURES.includes(scope.feature)) return;
             if (!moduleManifest('projects') || !permissions.canFeature('projects')) return;
             into.push({ id: 'projects', label: 'Projets', icon: 'projects' });
         };

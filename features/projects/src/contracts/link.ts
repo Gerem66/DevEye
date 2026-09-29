@@ -45,7 +45,8 @@ export const projectLinkCountsSchema = z.object({
     database: z.number().int().nonnegative(),
     audience: z.number().int().nonnegative(),
     deploy: z.number().int().nonnegative(),
-    uptime: z.number().int().nonnegative()
+    uptime: z.number().int().nonnegative(),
+    'x-hosting': z.number().int().nonnegative()
 });
 export type ProjectLinkCounts = z.infer<typeof projectLinkCountsSchema>;
 
@@ -90,6 +91,14 @@ export interface ProjectRepoLinkRow {
 export interface ProjectAudienceLinkRow {
     project_id: number;
     site_id: number;
+    workspace_id: number;
+    created: number;
+}
+
+/** Ligne SQL (serveur uniquement) : la liaison projet → dossier d'Hébergement, un module privé. */
+export interface ProjectHostingLinkRow {
+    project_id: number;
+    pack_id: number;
     workspace_id: number;
     created: number;
 }

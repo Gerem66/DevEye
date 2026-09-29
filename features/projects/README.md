@@ -13,8 +13,9 @@ transverses du dépôt : [Docs/WORKSPACES.md](../../Docs/WORKSPACES.md),
 [Docs/SHARING.md](../../Docs/SHARING.md).
 
 > ⚠️ **Les objets d'espace ne sont pas ici.** Dépôts ([Git](../git/README.md)), bases
-> ([Bases de données](../database/README.md)), sites suivis ([Audience](../audience/README.md))
-> et cibles de déploiement ([Déploiements](../deploy/README.md)) sont des features de
+> ([Bases de données](../database/README.md)), sites suivis ([Audience](../audience/README.md)),
+> cibles de déploiement ([Déploiements](../deploy/README.md)) et dossiers de
+> fichiers (Hébergement, module privé) sont des features de
 > premier rang : un projet n'en garde qu'une **liaison**, et l'onglet
 > correspondant n'est qu'une vue sur la feature.
 
@@ -118,11 +119,12 @@ appartient à l'espace.
 | **Audience**         | les sites suivis reliés, une vue sur la feature Audience, voir [Audience](../audience/README.md)       |
 | **Déploiements**     | les cibles reliées, une vue sur la feature Déploiements, voir [Déploiements](../deploy/README.md)      |
 | **Uptime**           | les services surveillés rattachés, une vue sur la feature Uptime, voir [Uptime](../uptime/README.md)   |
+| **Dossiers**         | les dossiers d'Hébergement rattachés, parcourus et aperçus sur place ; absent sans le module privé     |
 | **Historique**       | frise verticale des faits marquants, blocs archivés en lecture seule                                   |
 
 ### La barre d'onglets suit le contenu du projet
 
-**Un onglet obligatoire, deux au choix, cinq à la demande.** Le **Tableau** ne se
+**Un onglet obligatoire, deux au choix, six à la demande.** Le **Tableau** ne se
 retire pas et ouvre toujours le projet : un projet sans tableau n'a plus de travail
 à montrer. La **Frise** et la **Vue d'ensemble** se déclarent dans l'onglet Général
 des réglages, en colonnes claires (`projects.show_timeline`, `projects.show_overview`) :
@@ -131,7 +133,7 @@ doit pouvoir s'ouvrir sans rien réclamer. La frise vient d'office, la vue d'ens
 se demande : elle résume, elle ne fait pas travailler, et un projet neuf n'a rien à
 y montrer. L'**Historique** n'est plus un onglet de la barre mais le dernier onglet
 des réglages du projet : on l'ouvre rarement, pour une question précise, et il
-occupait la barre toute la journée pour ça. Les cinq autres ne
+occupait la barre toute la journée pour ça. Les six autres ne
 montrent que des **liaisons** vers des objets d'espace : tant qu'un projet n'en
 a aucune, ils n'affichaient qu'une phrase disant qu'il n'y a rien, quatre fois
 de suite, et il fallait les ouvrir un par un pour s'en apercevoir.
@@ -157,7 +159,7 @@ Trois conséquences à connaître :
   projet qui a des dépôts, et dedans la phrase qui explique ce qui lui manque :
   l'escamoter lui cacherait l'existence même du lien. Le « + », lui, n'offre que
   ce que l'appelant peut vraiment ajouter (voir `tabs.ts`, `add.requires`).
-- **Un projet confidentiel n'a pas de « + »** : les cinq liaisons lui sont
+- **Un projet confidentiel n'a pas de « + »** : les six liaisons lui sont
   refusées (§1.4). Ses compteurs se lisent quand même : il peut porter des
   services surveillés rattachés avant sa conversion, et l'onglet Uptime reste
   le seul endroit d'où les atteindre.
@@ -186,7 +188,7 @@ en clair (`project_cards.required_open_count`), écrit par `cardAdd` et
 libre, et le serveur, qui ne voit aucun titre, rend les identifiants retenus que
 le client nomme.
 
-### Les cinq onglets d'intégration ont la même forme
+### Les six onglets d'intégration ont la même forme
 
 Un ou plusieurs objets rattachés, **chacun dans son cadre** (y compris quand il
 n'y en a qu'un : le cadre dit où finit ce que l'onglet montre), un en-tête
@@ -401,7 +403,10 @@ rendu déclarable.
 
 **Les liaisons battent deux sujets** (`mutates: ['projects', 'git']`,
 `['projects', 'deploy']`, `['projects', 'database']`, `['projects', 'audience']`) :
-la fiche d'un dépôt montre les projets qui l'utilisent, et doit suivre. Dans
+la fiche d'un dépôt montre les projets qui l'utilisent, et doit suivre. Sauf
+Hébergement : module privé, son sujet n'existe pas sur une instance qui ne l'a
+pas, et le démarrage y refuserait `['projects', 'x-hosting']`. Ses liaisons ne
+battent que `projects`. Dans
 l'autre sens, le module ravive `projects` lui-même quand un autre module écrit
 chez lui par son contrat (§4) : une frise qui reçoit un déploiement, une
 version qui suit une release (`deps.live.changed`).
@@ -431,8 +436,8 @@ droits, accueil), le descripteur du registre (`featureDescriptor('projects')`,
 statut d'un projet par le contrat d'usage), et les couplages déclarés dans
 `sdk/providers.ts` : `PROJECTS_USAGE_PROVIDER` (ce que Projets offre) et
 `UPTIME_ITEMS_PROVIDER`, `GIT_ITEMS_PROVIDER`, `DEPLOY_ITEMS_PROVIDER`,
-`DATABASE_ITEMS_PROVIDER`, `AUDIENCE_ITEMS_PROVIDER`, `DATABASE_MEASURE_PROVIDER`
-(ce que Projets lit). `PROJECT_LINKED_FEATURES` y dit les cinq familles qu'un
+`DATABASE_ITEMS_PROVIDER`, `AUDIENCE_ITEMS_PROVIDER`, `HOSTING_ITEMS_PROVIDER`,
+`DATABASE_MEASURE_PROVIDER` (ce que Projets lit). `PROJECT_LINKED_FEATURES` y dit les six familles qu'un
 projet relie, que la coquille de réglages lit pour son onglet « Projets ».
 
 ### Contrats : `features/projects/src/contracts/`
@@ -443,7 +448,7 @@ board.ts      colonnes, cartes, priorité, sous-tâches
 chat.ts       messages
 plan.ts       jalons, dépendances
 history.ts    événements de la frise verticale (genres `projects.*`, `card.*`, `milestone.*`, `deploy.*`)
-link.ts       « mes tâches », compteurs d'onglets, lignes des cinq tables de liaison
+link.ts       « mes tâches », compteurs d'onglets, lignes des six tables de liaison
 dashboard.ts  la vue d'ensemble : agencement des tuiles, indicateurs sur mesure, ligne SQL
 domain.ts     le barrel des sept
 commands.ts   les commandes du module (préfixe unique `projects.`)
@@ -451,7 +456,7 @@ commands.ts   les commandes du module (préfixe unique `projects.`)
 
 `src/manifest.ts` étale le descripteur (dont `shareTier: 'perItem'`, que le
 module tient : §4, « Le partage ») et déclare ce que le registre ne porte
-pas : `category: 'work'`, les liens vers les cinq features reliées, les cinq clés de
+pas : `category: 'work'`, les liens vers les six features reliées, les cinq clés de
 ressources (`projects.count`, `projects.list`, `projects.board`,
 `projects.myTasks`, `projects.messages`), les quatre que le sujet `projects`
 ravive, le sujet secondaire `projectsChat`, la capacité `members.read` (les
@@ -479,6 +484,7 @@ repoLink.ts         le pointeur vers les dépôts (GIT_ITEMS_PROVIDER)
 deployLink.ts       le pointeur vers les cibles (DEPLOY_ITEMS_PROVIDER)
 databaseLink.ts     le pointeur vers les bases (DATABASE_ITEMS_PROVIDER)
 audienceLink.ts     le pointeur vers les sites (AUDIENCE_ITEMS_PROVIDER)
+hostingLink.ts      le pointeur vers les dossiers d'Hébergement (HOSTING_ITEMS_PROVIDER)
 dashboard.ts        la vue d'ensemble : agencement, indicateurs (DATABASE_MEASURE_PROVIDER), garde « base reliée »
 publication.ts      la page publique côté réglages : lire, publier, changer le lien ; le chemin sous un domaine
 publicPage/         les routes publiques du tableau, la racine d'un domaine, la vue, le rendu HTML, le style, le script
@@ -490,7 +496,7 @@ repo/board.ts       project_columns, project_cards, les non-lus
 repo/chat.ts        project_messages, project_card_reads
 repo/plan.ts        project_milestones, project_card_deps
 repo/history.ts     project_events
-repo/links.ts       les cinq tables de liaison, leurs lectures, leurs comptes et leurs usages
+repo/links.ts       les six tables de liaison, leurs lectures, leurs comptes et leurs usages
 repo/dashboard.ts   ft_projects_dashboard_tiles : l'agencement et les indicateurs
 repo/publication.ts ft_projects_public : la page publique d'un projet, la file d'un domaine, le stock de l'offre
 repo/rekey.ts       la liste des cellules chiffrées suspendues à un projet (conversion d'étage)
@@ -498,6 +504,7 @@ migrations/001_event_kinds.sql   les genres d'événements stockés passent de `
 migrations/003_dashboard.sql     ft_projects_dashboard_tiles, première table propre au module
 migrations/007_public_pages.sql  ft_projects_public
 migrations/008_public_look.sql   son thème, son accent, le dépli des sous-tâches
+migrations/010_hosting_links.sql ft_projects_hosting_links, sans clé étrangère vers un module privé
 handlers.test.ts    les handlers sur le harnais du SDK (dépôt en mémoire)
 testing/            le dépôt de la page publique en mémoire, pour les tests
 usageProvider.test.ts   le contrat publié, sur le harnais sessionless
@@ -508,8 +515,8 @@ Côté app, seules les migrations du socle : `060_projects_core.sql` (9 tables),
 `061_projects_integrations.sql`, `064_git_repos.sql` (sort le git du projet),
 `067` à `069`, `077` et `080` (les tables de liaison). Les treize tables sont
 dans l'allowlist de `deveye-feature.json` : historiques, jamais déplacées,
-dispensées du préfixe `ft_projects_`. Les tables de la vue d'ensemble et de la
-page publique, elles, sont propres au module et le portent ; `uninstall.sql` ne
+dispensées du préfixe `ft_projects_`. Les tables de la vue d'ensemble, de la
+page publique et de la liaison aux dossiers, elles, sont propres au module et le portent ; `uninstall.sql` ne
 détruit qu'elles, le SQL de démontage ne pouvant pas toucher aux tables
 historiques.
 
@@ -538,6 +545,7 @@ History/           frise verticale, carte archivée en lecture seule
 Git/               compose le contrat client du module Git (`GIT_CLIENT_PROVIDER`), dégrade sans lui
 Database/          compose le contrat client du module Bases de données (`DATABASE_CLIENT_PROVIDER`), dégrade sans lui
 Audience/          compose le contrat client du module Audience (`AUDIENCE_CLIENT_PROVIDER`), dégrade sans lui
+Hosting/           compose le contrat client d'Hébergement (`HOSTING_CLIENT_PROVIDER`) ; son « + » n'est offert qu'installé
 Dashboard/         la vue d'ensemble : catalogue de tuiles, compteurs de tâches, indicateurs sur mesure
 Deploy/            compose le contrat client du module Déploiements (`DEPLOY_CLIENT_PROVIDER`), dégrade sans lui
 Uptime/            compose le contrat client du module Uptime (`UPTIME_CLIENT_PROVIDER`), dégrade sans lui
@@ -566,7 +574,7 @@ frise mentirait.
 
 ### Les contrats entre modules
 
-Projets **publie** un contrat et en **consomme** cinq, tous par `providers`
+Projets **publie** un contrat et en **consomme** six, tous par `providers`
 (l'hôte les cherche à l'appel parmi les services des modules installés ; l'app
 n'en offre plus aucun elle-même depuis ce rapatriement, `registerNativeProvider`
 a disparu avec Projets natif).
@@ -626,9 +634,9 @@ des questions de sens que les Notes et le Mail n'avaient pas :
   visibles d'ici, chacun lu sous son codec), et ses non-lus sont ceux de
   l'appelant, par personne, comme aujourd'hui : le point de lecture est posé
   chez le projet, au nom de qui lit.
-- **Les liaisons.** Visibles depuis la fenêtre, **par leur nom**. Les cinq
+- **Les liaisons.** Visibles depuis la fenêtre, **par leur nom**. Les six
   listes (`repoList`, `deployList`, `databaseList`, `audienceList`,
-  `uptimeList`) gardent leurs identifiants et rendent `labels` : une entrée par
+  `uptimeList`, `hostingList`) gardent leurs identifiants et rendent `labels` : une entrée par
   identifiant, toujours remplie (chez soi aussi), obtenue par le contrat
   d'éléments de la feature visée (`labelOf(id, domicile)`, sous le codec
   ouvert du domicile du projet, jamais de l'espace actif), `null` sans module

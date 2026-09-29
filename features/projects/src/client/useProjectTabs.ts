@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useResourceVersion, useWorkspacePermissions } from 'deveye-sdk-client';
+import { moduleClientProvider, useResourceVersion, useWorkspacePermissions } from 'deveye-sdk-client';
 import { api } from './api';
 import type { Project, ProjectLinkCounts } from '../contracts/domain';
 import {
@@ -12,7 +12,7 @@ import {
 } from './tabs';
 
 /** L'état de départ, et celui d'un projet gardé. */
-const NONE: ProjectLinkCounts = { git: 0, database: 0, audience: 0, deploy: 0, uptime: 0 };
+const NONE: ProjectLinkCounts = { git: 0, database: 0, audience: 0, deploy: 0, uptime: 0, 'x-hosting': 0 };
 
 /** Une ligne du menu « + » : le geste, et l'onglet qu'il fait naître. */
 export interface ProjectTabAddable {
@@ -96,7 +96,9 @@ export function useProjectTabs(project: Project, canWrite: boolean): ProjectTabs
         canWrite && !guarded && !project.foreign && counts !== null
             ? PROJECT_FEATURE_TABS.filter(
                   (tab) =>
-                      counts[tab.id] === 0 && permissions.canFeature(tab.add.requires.feature, tab.add.requires.level)
+                      counts[tab.id] === 0 &&
+                      permissions.canFeature(tab.add.requires.feature, tab.add.requires.level) &&
+                      (tab.add.provider === undefined || moduleClientProvider(tab.add.provider) !== undefined)
               ).map((tab) => ({ tab, action: tab.add }))
             : [];
 

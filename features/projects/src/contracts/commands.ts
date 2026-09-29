@@ -506,6 +506,32 @@ export const projectAudienceUnlink = {
     output: z.object({ siteIds: z.array(z.number().int().positive()) })
 };
 
+// ---------------------------------------------------------- hébergement
+
+/** Les dossiers d'Hébergement rattachés au projet, dans l'ordre des liaisons, et leur nom. */
+export const projectHostingList = {
+    command: 'projects.hostingList' as const,
+    input: z.object({ projectId }),
+    output: z.object({
+        packIds: z.array(z.number().int().positive()),
+        labels: z.array(projectLinkLabelSchema)
+    })
+};
+
+/** Rattache un dossier au projet. Idempotente, refusée sur un projet confidentiel. Domicile seulement. */
+export const projectHostingLink = {
+    command: 'projects.hostingLink' as const,
+    input: z.object({ projectId, packId: z.number().int().positive() }),
+    output: z.object({ packIds: z.array(z.number().int().positive()) })
+};
+
+/** Retire la liaison, domicile seulement. Le dossier, lui, n'est pas touché. */
+export const projectHostingUnlink = {
+    command: 'projects.hostingUnlink' as const,
+    input: z.object({ projectId, packId: z.number().int().positive() }),
+    output: z.object({ packIds: z.array(z.number().int().positive()) })
+};
+
 // ---------------------------------------------------------- déploiement
 
 /**
@@ -645,7 +671,8 @@ export const projectDashboard = {
             database: z.array(z.number().int().positive()),
             audience: z.array(z.number().int().positive()),
             deploy: z.array(z.number().int().positive()),
-            uptime: z.array(z.number().int().positive())
+            uptime: z.array(z.number().int().positive()),
+            'x-hosting': z.array(z.number().int().positive())
         })
     })
 };
@@ -782,6 +809,9 @@ export const projectCommands = [
     projectAudienceList,
     projectAudienceLink,
     projectAudienceUnlink,
+    projectHostingList,
+    projectHostingLink,
+    projectHostingUnlink,
     projectDashboard,
     projectDashboardArrange,
     projectDashboardKpiSave,

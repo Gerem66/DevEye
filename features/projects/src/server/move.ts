@@ -32,7 +32,7 @@ const OWNED_TABLES = [
 ];
 
 /**
- * Les cinq familles de liaison, qui appartiennent à Projets. Une liaison ne
+ * Les six familles de liaison, qui appartiennent à Projets. Une liaison ne
  * traverse pas une frontière d'espace : ce que le projet reliait ici reste ici,
  * et la liaison part.
  */
@@ -41,7 +41,8 @@ const LINK_TABLES = [
     { table: 'project_database_links', label: 'bases de données' },
     { table: 'project_deploy_links', label: 'cibles de déploiement' },
     { table: 'project_repo_links', label: 'dépôts git' },
-    { table: 'project_audience_links', label: 'sites suivis' }
+    { table: 'project_audience_links', label: 'sites suivis' },
+    { table: 'ft_projects_hosting_links', label: 'dossiers' }
 ];
 
 /** Ce que le projet relie, par famille : de quoi nommer ce qu'il va perdre. */

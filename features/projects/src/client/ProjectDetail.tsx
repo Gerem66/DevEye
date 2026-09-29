@@ -34,6 +34,7 @@ import { Databases } from './Database/Databases';
 import { Audience } from './Audience/Audience';
 import { Deploy } from './Deploy/Deploy';
 import { Uptime } from './Uptime/Uptime';
+import { Hosting } from './Hosting/Hosting';
 import { Overview } from './Dashboard/Overview';
 import { AddFeatureDialog } from './AddFeatureDialog';
 import { ProjectTabs } from './ProjectTabs';
@@ -67,7 +68,8 @@ const FEATURE_TAB_VIEWS: Record<ProjectFeatureTabId, ComponentType<{ project: Pr
     database: Databases,
     audience: Audience,
     deploy: Deploy,
-    uptime: Uptime
+    uptime: Uptime,
+    'x-hosting': Hosting
 };
 
 export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDetailProps) {

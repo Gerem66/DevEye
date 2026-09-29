@@ -110,6 +110,12 @@ export const projectsAccountExport: FeatureAccountExport<ProjectsRepo> = {
             key: ['project_id', 'site_id'],
             dates: { created: 's' }
         },
+        ft_projects_hosting_links: {
+            file: 'liens-hebergement.json',
+            where: 'workspace_id = ?',
+            key: ['project_id', 'pack_id'],
+            dates: { created: 's' }
+        },
         project_uptime_links: {
             file: 'liens-uptime.json',
             where: 'workspace_id = ?',

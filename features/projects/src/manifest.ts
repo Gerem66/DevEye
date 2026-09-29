@@ -24,7 +24,8 @@ export const manifest = {
         { to: 'deploy', what: 'suit ses cibles de mise en production' },
         { to: 'database', what: "suit les bases qu'il utilise" },
         { to: 'audience', what: "suit les sites qu'il produit" },
-        { to: 'uptime', what: "suit les services qu'il fait tourner" }
+        { to: 'uptime', what: "suit les services qu'il fait tourner" },
+        { to: 'x-hosting', what: 'rattache ses dossiers de fichiers' }
     ],
     /**
      * Le détail ouvert (tableau, frise, liaisons, historique) tient dans une seule

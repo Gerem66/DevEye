@@ -8,6 +8,9 @@ import {
     projectAudienceLink,
     projectAudienceList,
     projectAudienceUnlink,
+    projectHostingLink,
+    projectHostingList,
+    projectHostingUnlink,
     projectBoard,
     projectCardAdd,
     projectCardArchive,
@@ -76,6 +79,7 @@ import {
     DATABASE_MEASURE_PROVIDER,
     DEPLOY_ITEMS_PROVIDER,
     GIT_ITEMS_PROVIDER,
+    HOSTING_ITEMS_PROVIDER,
     UPTIME_ITEMS_PROVIDER
 } from '@deveye/types/sdk';
 import { FeatureError, type SdkCipher, type SdkFeatureContext } from '@deveye/types/sdk/server';
@@ -139,7 +143,7 @@ interface FakeRepo extends ProjectsRepo {
         milestones: ProjectMilestoneRow[];
         deps: ProjectCardDepRow[];
         events: ProjectEventRow[];
-        links: Record<'uptime' | 'database' | 'deploy' | 'repo' | 'site', LinkRow[]>;
+        links: Record<'uptime' | 'database' | 'deploy' | 'repo' | 'site' | 'pack', LinkRow[]>;
         dashboard: DashboardTileRow[];
     };
 }
@@ -251,7 +255,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
         milestones: [],
         deps: [],
         events: [],
-        links: { uptime: [], database: [], deploy: [], repo: [], site: [] },
+        links: { uptime: [], database: [], deploy: [], repo: [], site: [], pack: [] },
         dashboard: []
     };
     // `locate` rend la ligne vivante, pour les mutations ; `find` en rend une copie,
@@ -727,7 +731,16 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
             },
             listSiteUsage: usage('site', false),
             countSiteLinks: counts('site'),
-            detachSite: detach('site')
+            detachSite: detach('site'),
+            listPackIds: ids('pack'),
+            linkPack: link('pack'),
+            unlinkPack: unlink('pack'),
+            unlinkAllPacks: async (projectId, ws) => {
+                await unlinkAll('pack')(projectId, ws);
+            },
+            listPackUsage: usage('pack', true),
+            countPackLinks: counts('pack'),
+            detachPack: detach('pack')
         },
         dashboard: {
             list: async (projectId, ws) =>
@@ -941,6 +954,7 @@ describe('le registre des commandes', () => {
             'projects.uptimeList',
             'projects.databaseList',
             'projects.audienceList',
+            'projects.hostingList',
             'projects.dashboard',
             'projects.publication'
         ]);
@@ -979,6 +993,10 @@ describe('le registre des commandes', () => {
         assert.deepEqual(topicsOf('projects.audienceLink'), ['projects', 'audience']);
         assert.deepEqual(topicsOf('projects.uptimeLink'), ['projects', 'uptime']);
         assert.deepEqual(topicsOf('projects.uptimeUnlink'), ['projects', 'uptime']);
+        // Hébergement est un module privé : nommer son sujet ferait refuser le
+        // démarrage d'une instance qui ne l'a pas.
+        assert.deepEqual(topicsOf('projects.hostingLink'), ['projects']);
+        assert.deepEqual(topicsOf('projects.hostingUnlink'), ['projects']);
         assert.equal(topicsOf('projects.cardAdd'), true);
         // Aucune liste ne nomme un sujet que le boot refuserait : les nôtres et ceux
         // des cinq features reliées.
@@ -1200,6 +1218,7 @@ describe('projects.setSecurityTier : la conversion d’étage', () => {
         repo.rows.links.repo.push({ project_id: 1, workspace_id: 1, item_id: 5 });
         repo.rows.links.database.push({ project_id: 1, workspace_id: 1, item_id: 6 });
         repo.rows.links.site.push({ project_id: 1, workspace_id: 1, item_id: 7 });
+        repo.rows.links.pack.push({ project_id: 1, workspace_id: 1, item_id: 4 });
         repo.rows.links.deploy.push({ project_id: 1, workspace_id: 1, item_id: 8 });
         repo.rows.links.uptime.push({ project_id: 1, workspace_id: 1, item_id: 9 });
     }
@@ -1230,10 +1249,14 @@ describe('projects.setSecurityTier : la conversion d’étage', () => {
         // Les liaisons aux objets d'espace tombent ; les services surveillés, que le
         // module ne relie pas par un contrat d'espace ouvert, restent.
         assert.deepEqual(
-            [repo.rows.links.repo, repo.rows.links.database, repo.rows.links.site, repo.rows.links.deploy].map(
-                (l) => l.length
-            ),
-            [0, 0, 0, 0]
+            [
+                repo.rows.links.repo,
+                repo.rows.links.database,
+                repo.rows.links.site,
+                repo.rows.links.pack,
+                repo.rows.links.deploy
+            ].map((l) => l.length),
+            [0, 0, 0, 0, 0]
         );
         assert.equal(repo.rows.links.uptime.length, 1);
 
@@ -1245,6 +1268,7 @@ describe('projects.setSecurityTier : la conversion d’étage', () => {
             'projects.repoUnlink',
             'projects.databaseUnlink',
             'projects.audienceUnlink',
+            'projects.hostingUnlink',
             'projects.deployUnlink',
             'projects.securityTier'
         ]);
@@ -1792,7 +1816,40 @@ describe('les liaisons par les contrats d’éléments', () => {
         repo.rows.links.deploy.push({ project_id: 1, workspace_id: 1, item_id: 8 });
         repo.rows.links.uptime.push({ project_id: 1, workspace_id: 1, item_id: 9 });
         const counted = await handlerFor(projectLinkCounts)(contextWith(repo, { unlocked: false }), { projectId: 1 });
-        assert.deepEqual(counted.counts, { git: 1, database: 2, audience: 0, deploy: 1, uptime: 1 });
+        assert.deepEqual(counted.counts, {
+            git: 1,
+            database: 2,
+            audience: 0,
+            deploy: 1,
+            uptime: 1,
+            'x-hosting': 0
+        });
+    });
+
+    it('un dossier se relie par le contrat d’Hébergement, module absent refusé, et se délie sans y toucher', async () => {
+        const repo = fakeRepo();
+        seedTwoTiers(repo);
+        await assert.rejects(
+            handlerFor(projectHostingLink)(contextWith(repo), { projectId: 1, packId: 4 }),
+            failsWith('validation')
+        );
+        const providers = {
+            [HOSTING_ITEMS_PROVIDER]: {
+                exists: async (id: number) => id === 4,
+                labelOf: async (id: number) => (id === 4 ? 'Livrables' : null)
+            }
+        };
+        const ctx = contextWith(repo, { providers });
+        await assert.rejects(handlerFor(projectHostingLink)(ctx, { projectId: 1, packId: 5 }), failsWith('not_found'));
+        assert.deepEqual((await handlerFor(projectHostingLink)(ctx, { projectId: 1, packId: 4 })).packIds, [4]);
+        assert.deepEqual((await handlerFor(projectHostingLink)(ctx, { projectId: 1, packId: 4 })).packIds, [4]);
+        assert.deepEqual(await handlerFor(projectHostingList)(ctx, { projectId: 1 }), {
+            packIds: [4],
+            labels: [{ id: 4, label: 'Livrables' }]
+        });
+        const counted = await handlerFor(projectLinkCounts)(ctx, { projectId: 1 });
+        assert.equal(counted.counts['x-hosting'], 1);
+        assert.deepEqual((await handlerFor(projectHostingUnlink)(ctx, { projectId: 1, packId: 4 })).packIds, []);
     });
 });
 
@@ -2167,7 +2224,8 @@ describe('le partage inter-espaces', () => {
             database: 1,
             audience: 1,
             deploy: 1,
-            uptime: 1
+            uptime: 1,
+            'x-hosting': 0
         });
     });
 
@@ -2308,8 +2366,15 @@ describe('la vue d’ensemble d’un projet', () => {
         // Rien n'est semé : le catalogue est du code, la table ne porte que
         // ce qui a été arrangé.
         assert.deepEqual(first.tiles, []);
-        assert.deepEqual(first.links, { git: [], database: [6], audience: [], deploy: [], uptime: [9] });
-        assert.deepEqual(first.counts, { git: 0, database: 1, audience: 0, deploy: 0, uptime: 1 });
+        assert.deepEqual(first.links, {
+            git: [],
+            database: [6],
+            audience: [],
+            deploy: [],
+            uptime: [9],
+            'x-hosting': []
+        });
+        assert.deepEqual(first.counts, { git: 0, database: 1, audience: 0, deploy: 0, uptime: 1, 'x-hosting': 0 });
 
         // Le projet gardé se lit quand même : rangs et masquages sont en clair.
         const guarded = await handlerFor(projectDashboard)(ctx, { projectId: 2 });
