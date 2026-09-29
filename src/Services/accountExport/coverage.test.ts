@@ -43,6 +43,12 @@ describe('exportCoverage', () => {
         assert.deepEqual(report.uncovered, ['ft_notes', 'ft_old_thing']);
     });
 
+    it('tait les tables du socle d’un module absent, et les exige de lui une fois installé', async () => {
+        const q = schema({ ...CORE, sync_files: ['id'] });
+        assert.deepEqual((await exportCoverage(q, [])).uncovered, []);
+        assert.deepEqual((await exportCoverage(q, [{ id: 'cloudsync', entry: undefined }])).uncovered, ['sync_files']);
+    });
+
     it('refuse une colonne chiffrée ni ouverte ni tue', async () => {
         const report = await exportCoverage(
             schema({ ...CORE, ft_notes: ['id', 'workspace_id', 'content_enc', 'title_enc'] }),

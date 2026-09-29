@@ -40,6 +40,29 @@ export const CORE_EXPORT_TABLES: Readonly<Record<string, 'host' | { skip: string
     _migrations: { skip: 'Le registre des migrations appartient au serveur.' }
 };
 
+/**
+ * Les tables que les migrations du socle créent pour un module qui n'est pas
+ * dans ce dépôt : elles existent sur toute base, module installé ou non. Le
+ * module, installé, déclare leur sort ; absent, elles dorment sans données et
+ * ne manquent pas de sort.
+ */
+export const DORMANT_MODULE_TABLES: Readonly<Record<string, readonly string[]>> = {
+    // Migrations 031, 032, 052, 081 à 083, 111 et 131.
+    cloudsync: [
+        'sync_meta',
+        'sync_shares',
+        'sync_share_devices',
+        'sync_exclusions',
+        'sync_files',
+        'sync_device_files',
+        'sync_versions',
+        'sync_sessions',
+        'sync_events',
+        'sync_snapshots',
+        'sync_snapshot_files'
+    ]
+};
+
 export interface CoverageModule {
     id: string;
     entry: FeatureAccountExport<unknown> | undefined;
@@ -105,7 +128,13 @@ export async function exportCoverage(q: SdkQueryable, modules: readonly Coverage
             }
         }
     }
-    const uncovered = [...columns.keys()].filter((t) => !owner.has(t)).sort();
+    const installed = new Set(modules.map((m) => m.id));
+    const dormant = new Set(
+        Object.entries(DORMANT_MODULE_TABLES)
+            .filter(([id]) => !installed.has(id))
+            .flatMap(([, tables]) => tables)
+    );
+    const uncovered = [...columns.keys()].filter((t) => !owner.has(t) && !dormant.has(t)).sort();
     return { faults, uncovered };
 }
 

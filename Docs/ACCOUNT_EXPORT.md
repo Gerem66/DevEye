@@ -96,6 +96,11 @@ désinstallé sans son `uninstall.sql`. Le smoke de la CI (`npm run ci:smoke`),
 sur une base neuve, la refuse : une migration qui crée une table sans lui
 donner de sort ne passe pas.
 
+Seule exception, `DORMANT_MODULE_TABLES` : les tables que des migrations du
+socle créent pour un module hors de ce dépôt (les `sync_*` de CloudSync). Elles
+existent sur toute base ; le module installé déclare leur sort, absent (la CI
+publique), elles dorment vides et ne comptent pas.
+
 `npx tsx scripts/export-coverage.ts` fait le même relevé contre la base du
 `.env` (ou `DB_DATABASE`).
 
