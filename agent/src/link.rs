@@ -183,6 +183,7 @@ fn start_service(system: bool) -> Result<()> {
     service::start(system)?;
     let scope = if system { "system" } else { "per-user" };
     println!("✓ Autostart ({scope}) installed and started.");
+    crate::tray::start_after_link(system);
     Ok(())
 }
 

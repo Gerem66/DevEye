@@ -89,6 +89,7 @@ pub(crate) async fn handle_update<S>(
     S: SinkExt<Message> + Unpin,
     S::Error: std::error::Error + Send + Sync + 'static,
 {
+    let _busy = crate::live_status::begin(crate::live_status::Task::Update);
     match crate::update::apply(config, target_id, version, sha256, signature).await {
         Ok(exe) => {
             info!(%version, "update installed; restarting");

@@ -157,7 +157,16 @@ pub fn install(system: bool, config: Option<&str>) -> Result<()> {
     if system {
         require_privilege()?;
     }
-    install_impl(system, config)
+    install_impl(system, config)?;
+    let scope = if system {
+        crate::tray::autostart::Scope::System
+    } else {
+        crate::tray::autostart::Scope::User
+    };
+    if let Err(e) = crate::tray::autostart::ensure_if_desktop(scope) {
+        tracing::warn!(error = %e, "cannot register the tray icon at login");
+    }
+    Ok(())
 }
 
 /// Démarre le service déjà installé. Utilisé par le passage de relais, une fois
@@ -178,6 +187,15 @@ pub fn preflight(system: bool) -> Result<()> {
 /// Restart the installed service, so the agent reads its config again.
 pub fn restart(system: bool) -> Result<()> {
     restart_impl(system)
+}
+
+/// Stop the installed service until the next boot (or login, for a per-user
+/// one), without disabling it.
+pub fn stop(system: bool) -> Result<()> {
+    if system {
+        require_privilege()?;
+    }
+    stop_impl(system)
 }
 
 /// Remove whatever autostart service is installed (user or system).
@@ -369,6 +387,15 @@ mod imp {
     /// `start_impl` already begins with a `bootout`.
     pub fn restart_impl(system: bool) -> Result<()> {
         start_impl(system)
+    }
+
+    /// `bootout` without touching the plist: `RunAtLoad` loads it again at the
+    /// next boot or login. Stopping alone would be undone by `KeepAlive`.
+    pub fn stop_impl(system: bool) -> Result<()> {
+        run_checked(
+            Command::new("launchctl").args(["bootout", &service_target(system)]),
+            "launchctl bootout",
+        )
     }
 
     pub fn uninstall_impl() -> Result<()> {
@@ -627,6 +654,12 @@ mod imp {
         systemctl(system, "restart")
     }
 
+    /// `Restart=always` does not relaunch a unit stopped on purpose; `enable`
+    /// starts it again at the next boot.
+    pub fn stop_impl(system: bool) -> Result<()> {
+        systemctl(system, "stop")
+    }
+
     fn systemctl(system: bool, verb: &str) -> Result<()> {
         let mut cmd = Command::new("systemctl");
         if !system {
@@ -824,6 +857,14 @@ mod imp {
         Ok(())
     }
 
+    /// The task has no restart policy: ended, it waits for its next trigger.
+    pub fn stop_impl(_system: bool) -> Result<()> {
+        run_checked(
+            Command::new("schtasks").args(["/End", "/TN", TASK]),
+            "schtasks /End",
+        )
+    }
+
     /// `/End` fails when the task is not running: nothing to stop then.
     pub fn restart_impl(system: bool) -> Result<()> {
         let _ = Command::new("schtasks")
@@ -862,7 +903,7 @@ mod imp {
 
 use imp::{
     disable_linger_impl, install_impl, installed_scope_impl, preflight_impl, restart_impl,
-    start_impl, uninstall_impl, uninstall_user_impl,
+    start_impl, stop_impl, uninstall_impl, uninstall_user_impl,
 };
 
 #[cfg(test)]

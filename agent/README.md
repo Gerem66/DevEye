@@ -119,9 +119,10 @@ release CI (see [update.rs](src/update.rs)).
 | `link <code> [--server <url>] [--name <name>] [--deny <list>] [--monitor-only] [--shuffle-id] [--autostart]` | Enroll with a link code. The server defaults to the one saved by a previous link, else `https://app.deveye.fr`. `--deny` and `--monitor-only` refuse kinds of orders ([the policy](#what-the-server-can-do-here-and-how-to-limit-it)); on a re-link they only add refusals. `--shuffle-id`: see [cloned machines](#cloned-machines). `--autostart`: then install and start the service, system-wide as root. Re-linking keeps the machine identity. |
 | `run [--once] [--interval <secs>] [--detach] [--managed] [--config <path>]`                                  | Run the monitoring loop. Not linked yet, it enrolls first with `DEVEYE_LINK_CODE` ([fleets](#linking-a-fleet)). `--once`: collect+send a single cycle then exit (handy to test). `--interval`: seconds between samples (default 30). `--detach`: background + PID file. `--managed` / `--config`: **internal**, injected by the installed service — see [Supervision](#supervision---managed) below; never pass them by hand.                       |
 | `policy [--allow <list>] [--deny <list>] [--monitor-only]`                                                   | Show what this machine lets the server order, or change it, then restart the agent so it applies.                                                                                                                                                                                                                                                                                                                                                   |
-| `stop`                                                                                                       | Stop a backgrounded agent (reads the PID file, sends SIGTERM).                                                                                                                                                                                                                                                                                                                                                                                      |
+| `stop`                                                                                                       | Stop the running agent: the installed service until the next boot or login (`systemctl stop`, `launchctl bootout`, `schtasks /End`), else a backgrounded one (PID file, SIGTERM).                                                                                                                                                                                                                                                                   |
 | `status`                                                                                                     | Print platform, server, enrollment and running state.                                                                                                                                                                                                                                                                                                                                                                                               |
 | `service install [--system] \| uninstall \| status`                                                          | Manage the autostart service (launchd / systemd / Task Scheduler). Per-user by default, `--system` needs root. Also driven from the UI (« Démarrage auto »).                                                                                                                                                                                                                                                                                        |
+| `tray show \| hide`                                                                                          | Show or hide the DevEye icon in the notification area, for this user. See [Notification-area icon](#notification-area-icon-tray).                                                                                                                                                                                                                                                                                                                   |
 | `unlink`                                                                                                     | Forget the local enrollment (deletes the config + token).                                                                                                                                                                                                                                                                                                                                                                                           |
 | `uninstall [--yes] [--purge-shares]`                                                                         | **Retrait complet** de la machine : autostart, linger, processus, config, jeton, journal, caches, binaire. Voir [Retrait complet](#retrait-complet-uninstall).                                                                                                                                                                                                                                                                                      |
 
@@ -265,10 +266,13 @@ deveye-agent uninstall --purge-shares   # + la corbeille locale des partages Clo
 2. le « linger » systemd qu'une install utilisateur avait allumé — rien ne
    l'éteignait jusqu'ici, et il survivait à l'agent ;
 3. l'agent en marche, y compris un `run --detach` que le service ne connaît pas ;
-4. le dossier de config (`agent.toml`, `agent.pid`, `agent.log`, `agent.state`,
-   `sync-*.index.json`), puis le dossier lui-même s'il est vide ;
-5. les `.deveye-tmp` des partages CloudSync ;
-6. les résidus d'une mise à jour interrompue, puis **son propre binaire**.
+4. l'[icône de la zone de notification](#notification-area-icon-tray) : ses
+   processus, ses entrées de démarrage et l'état publié pour elle ;
+5. le dossier de config (`agent.toml`, `agent.pid`, `agent.log`, `agent.state`,
+   `status.json`, `tray-hidden`, `tray.lock`, `sync-*.index.json`), puis le
+   dossier lui-même s'il est vide ;
+6. les `.deveye-tmp` des partages CloudSync ;
+7. les résidus d'une mise à jour interrompue, puis **son propre binaire**.
 
 Trois choses à savoir :
 
@@ -303,7 +307,7 @@ The value is frozen at startup (`MANAGED` `OnceLock` in `src/main.rs`) and it
 exists as an explicit flag because a process cannot reliably detect
 cross-platform that it is supervised.
 
-It has exactly three effects:
+It has exactly four effects:
 
 1. **Restart after self-update** (`update::restart_and_exit`). After swapping
    its binary, a _managed_ agent simply `exit(0)`s — systemd (`Restart=always`)
@@ -324,10 +328,62 @@ It has exactly three effects:
 3. **Reported to the server** (`managed` field of the agent report), so the
    server/UI know whether the agent runs under supervision.
 
+4. **The tray icon is registered at login** on every start, so machines
+   installed before the icon existed get it with an update (see
+   [Notification-area icon](#notification-area-icon-tray)).
+
 **In dev: don't use it.** Nothing relaunches you on exit, so a `--managed`
 agent would die for good at its first self-update. The flag only makes sense
 when something actually guarantees the relaunch — that is precisely the
 information it encodes.
+
+## Notification-area icon (`tray`)
+
+On a machine with a desktop, the DevEye eye sits in the notification area (the
+menu bar on macOS). Its menu shows the agent's state (connected, connecting,
+waiting for approval, offline, stopped) and what it is doing (CloudSync
+transfers, a self-update, a deployment, package upgrades), then **Open DevEye**
+(the server this machine is linked to), **Hide icon** and **Quit DevEye**. While
+the agent works, the eye's highlight circles the pupil; when it is not
+connected, the eye turns grey.
+
+```sh
+deveye-agent tray show   # show the icon again, now and at every login
+deveye-agent tray hide   # hide it for this user; the agent keeps running
+```
+
+- **One process per desktop session** (`deveye-agent tray run`): the agent
+  usually runs as root or SYSTEM, where no icon can be shown. The icon starts at
+  login from an entry written when the service is installed, and again on every
+  supervised start:
+
+    | OS      | System service (every user)                         | Per-user service                                     |
+    | ------- | --------------------------------------------------- | ---------------------------------------------------- |
+    | Linux   | `/etc/xdg/autostart/deveye-agent-tray.desktop`      | `~/.config/autostart/deveye-agent-tray.desktop`      |
+    | macOS   | `/Library/LaunchAgents/com.deveye.agent.tray.plist` | `~/Library/LaunchAgents/com.deveye.agent.tray.plist` |
+    | Windows | `HKLM\…\Run`, value `DevEyeTray`                    | `HKCU\…\Run`, value `DevEyeTray`                     |
+
+    The agent writes the Linux entry only where a display manager lists a session
+    (`/usr/share/xsessions`, `/usr/share/wayland-sessions`): a headless server
+    gets nothing.
+
+- **The agent publishes its state** for the icon, on every change and every 5 s:
+  `/run/deveye-agent/status.json` (`/var/run/…` on macOS,
+  `HKLM\Software\DevEye\AgentStatus` on Windows) for a privileged agent,
+  readable by every user and writable by root or administrators only; the
+  config directory (`HKCU` on Windows) for a per-user one. It holds no secret:
+  state, version, server URL. A status older than 20 s means the agent is gone.
+  After an update, the icon relaunches itself from the agent's new binary.
+- **Hiding is per user** (a `tray-hidden` marker in `<config-dir>/deveye/`); the
+  login entry stays, so each user of a shared machine keeps their own choice.
+- **Quit stops the agent** until the next boot (next login for a per-user
+  service), as `deveye-agent stop` does. For a system service it asks for the
+  administrator password (polkit, the macOS dialog, UAC).
+- **Linux** speaks StatusNotifierItem over D-Bus: KDE and most panels show it
+  natively, **GNOME** only with the "AppIndicator and KStatusNotifierItem
+  Support" extension (on by default on Ubuntu).
+- **Windows**: started at login, the console window of the agent binary may
+  flash for an instant before the icon leaves it.
 
 ## Configuration & files
 
@@ -340,7 +396,8 @@ The agent writes its own config during `link`. Location: `$DEVEYE_CONFIG`, or
 
 Alongside it, when running: `agent.pid` (for `stop`/`status`), `agent.state` (the
 runtime facts `status` reports), `sync-<shareId>.index.json` (caches de scan
-CloudSync) and, when detached, `agent.log`. See `agent.example.toml` for the file
+CloudSync), for a per-user agent `status.json` (what the
+[tray icon](#notification-area-icon-tray) reads) and, when detached, `agent.log`. See `agent.example.toml` for the file
 format, et [`uninstall`](#retrait-complet-uninstall) pour tout reprendre.
 
 The directory is `0700` and every file in it `0600`: the config holds the device

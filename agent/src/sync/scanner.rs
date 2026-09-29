@@ -85,6 +85,7 @@ pub fn spawn_scan(
     clean: Arc<Mutex<CleanMark>>,
 ) {
     std::thread::spawn(move || {
+        let _busy = crate::live_status::begin(crate::live_status::Task::SyncScan);
         let share_id = assignment.share_id;
         let epoch = events.as_ref().map(|e| e.load(Ordering::Relaxed));
         match scan(&session_id, &assignment, &tx) {

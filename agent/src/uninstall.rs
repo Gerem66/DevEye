@@ -112,6 +112,12 @@ pub fn run(opts: Options) -> Result<()> {
         stop_agent(dir, &mut report);
     }
 
+    // L'icône de chaque session, et ce qui la relance à l'ouverture de session.
+    crate::tray::stop_all();
+    crate::tray::autostart::remove_all();
+    crate::live_status::remove_all();
+    report.done("icône de la zone de notification retirée");
+
     for dir in &dirs {
         wipe_config_dir(dir, &mut report);
     }
@@ -276,6 +282,8 @@ fn stop_agent(dir: &Path, report: &mut Report) {
 fn wipe_config_dir(dir: &Path, report: &mut Report) {
     let mut names: Vec<String> = vec![CONFIG_FILE.to_string()];
     names.extend(SIBLING_FILES.iter().map(|n| n.to_string()));
+    names.extend(crate::tray::USER_FILES.iter().map(|n| n.to_string()));
+    names.push(crate::live_status::USER_FILE.to_string());
     // Le fichier de config peut porter un autre nom (`DEVEYE_CONFIG`).
     if let Some(actual) = Config::path().file_name().and_then(|n| n.to_str()) {
         if !names.iter().any(|n| n == actual) && Config::path().parent() == Some(dir) {

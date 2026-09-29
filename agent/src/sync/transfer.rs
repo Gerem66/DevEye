@@ -287,6 +287,7 @@ pub fn spawn_push(
     tx: Sender<SyncEvent>,
 ) {
     std::thread::spawn(move || {
+        let _busy = crate::live_status::begin(crate::live_status::Task::SyncTransfer);
         let mut next_seq = 0u64;
         let outcome = push(
             &op_id,
@@ -408,6 +409,8 @@ struct ApplyState {
     next_seq: u64,
     /// Permissions à poser sur le fichier installé (`None` = ne pas toucher).
     mode: Option<u32>,
+    /// A download counts as running while its state is held.
+    _busy: crate::live_status::Busy,
 }
 
 /// Installe les downloads chunk par chunk. Les frames d'une même op arrivent
@@ -529,6 +532,7 @@ impl Applier {
                     written: held.bytes,
                     next_seq: 0,
                     mode,
+                    _busy: crate::live_status::begin(crate::live_status::Task::SyncTransfer),
                 },
             );
         }

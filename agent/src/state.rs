@@ -28,7 +28,7 @@ pub struct RuntimeState {
 
 /// Date de démarrage d'un processus vivant, telle que `sysinfo` la calcule :
 /// même source à l'écriture et à la relecture, pour comparer deux mesures identiques.
-fn start_time(pid: u32) -> Option<u64> {
+pub(crate) fn start_time(pid: u32) -> Option<u64> {
     let pid = Pid::from_u32(pid);
     let mut sys = System::new();
     sys.refresh_processes(ProcessesToUpdate::Some(&[pid]), true);

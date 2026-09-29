@@ -13,6 +13,7 @@ mod files;
 mod identity;
 mod integrity;
 mod link;
+mod live_status;
 mod logs;
 mod metrics;
 mod orders;
@@ -28,9 +29,12 @@ mod sockets;
 mod state;
 mod sync;
 mod terminal;
+mod tray;
 mod tunnel;
 mod uninstall;
 mod update;
+#[cfg(windows)]
+mod winreg;
 
 use std::fs;
 use std::sync::OnceLock;
@@ -128,7 +132,8 @@ enum Command {
         #[arg(long)]
         config: Option<String>,
     },
-    /// Stop a backgrounded agent (started with `run --detach`).
+    /// Stop the running agent: the installed service until the next boot or
+    /// login, or a backgrounded one (`run --detach`).
     Stop,
     /// Print local enrollment and running status.
     Status,
@@ -136,6 +141,11 @@ enum Command {
     Service {
         #[command(subcommand)]
         action: ServiceCmd,
+    },
+    /// The DevEye icon in the desktop's notification area.
+    Tray {
+        #[command(subcommand)]
+        action: TrayCmd,
     },
     /// List detected package managers + their pending updates (diagnostic).
     Packages,
@@ -184,8 +194,18 @@ enum ServiceCmd {
     Status,
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+#[derive(Subcommand)]
+enum TrayCmd {
+    /// Show the icon (what the desktop starts at login).
+    #[command(hide = true)]
+    Run,
+    /// Show the icon again, now and at every login.
+    Show,
+    /// Hide the icon for this user; the agent keeps running.
+    Hide,
+}
+
+fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
@@ -193,7 +213,23 @@ async fn main() -> Result<()> {
         .with_target(false)
         .init();
 
-    match Cli::parse().command {
+    let command = Cli::parse().command;
+    // The icon owns the main thread, which macOS requires of any UI.
+    if let Command::Tray {
+        action: TrayCmd::Run,
+    } = command
+    {
+        return tray::run();
+    }
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .context("starting the runtime")?
+        .block_on(dispatch(command))
+}
+
+async fn dispatch(command: Command) -> Result<()> {
+    match command {
         Command::Link {
             code,
             options,
@@ -227,6 +263,11 @@ async fn main() -> Result<()> {
             Ok(())
         }
         Command::Service { action } => service_cmd(action),
+        Command::Tray { action } => match action {
+            TrayCmd::Run => tray::run(),
+            TrayCmd::Show => tray::show(),
+            TrayCmd::Hide => tray::hide(),
+        },
         Command::Packages => {
             for m in packages::detect() {
                 let n = m
@@ -338,6 +379,17 @@ async fn run(
         std::process::id().to_string().as_bytes(),
     );
     state::write_running();
+    if !once {
+        tokio::spawn(live_status::publish(config.server.clone()));
+        // A supervised agent is an installed one: the icon comes with it,
+        // including on machines installed before the icon existed.
+        if crate::managed() {
+            let scope = tray::autostart::Scope::for_privileged(report::is_privileged());
+            if let Err(e) = tray::autostart::ensure_if_desktop(scope) {
+                tracing::warn!(error = %e, "cannot register the tray icon at login");
+            }
+        }
+    }
 
     let opts = RunOptions {
         once,
@@ -346,6 +398,7 @@ async fn run(
     let result = runner::run(config, opts).await;
     let _ = fs::remove_file(Config::pid_path());
     state::clear();
+    live_status::withdraw();
     result
 }
 
@@ -378,16 +431,33 @@ fn spawn_detached(interval: u64) -> Result<()> {
 }
 
 fn stop() -> Result<()> {
+    // A supervised agent killed by pid would be relaunched by its manager.
+    let scope = service::installed_scope();
+    let service_stopped = scope != service::ServiceScope::None;
+    if service_stopped {
+        service::stop(scope == service::ServiceScope::System)?;
+        println!(
+            "✓ Service ({}) stopped until the next boot or login.",
+            scope.as_wire()
+        );
+    }
+    // Killed, the agent cannot withdraw its status: the tray would show it
+    // alive until the status goes stale.
+    live_status::remove_all();
     let pid_path = Config::pid_path();
     let pid = match fs::read_to_string(&pid_path) {
         Ok(s) => s.trim().to_string(),
         Err(_) => {
-            println!("No running agent (no PID file).");
+            if !service_stopped {
+                println!("No running agent (no PID file).");
+            }
             return Ok(());
         }
     };
     if !process_alive(&pid) {
-        println!("Agent not running (stale PID file removed).");
+        if !service_stopped {
+            println!("Agent not running (stale PID file removed).");
+        }
         let _ = fs::remove_file(&pid_path);
         state::clear();
         return Ok(());

@@ -26,6 +26,7 @@ use tracing::{debug, info, warn};
 
 use crate::commands;
 use crate::config::Config;
+use crate::live_status::{self, Conn, Task};
 use crate::metrics::Collector;
 use crate::protocol::{ClientMessage, DeviceReport, MetricSnapshot, ServerMessage};
 use crate::report;
@@ -234,6 +235,7 @@ pub async fn run(mut config: Config, opts: RunOptions) -> Result<()> {
         {
             Ok(SessionOutcome::Established) => {
                 let delay = jittered(RECONNECT_DELAY_MIN, RECONNECT_DELAY_MAX);
+                offline_until(delay);
                 info!(
                     delay_ms = delay.as_millis() as u64,
                     "connection closed by server, reconnecting"
@@ -256,6 +258,7 @@ pub async fn run(mut config: Config, opts: RunOptions) -> Result<()> {
                 let step = REJECTED_MIN * 2u32.saturating_pow(rejected_streak.min(8));
                 let delay = jittered(REJECTED_MIN, step.min(REJECTED_MAX));
                 rejected_streak = rejected_streak.saturating_add(1);
+                live_status::set_conn(Conn::Rejected);
                 warn!(
                     retry_secs = delay.as_secs(),
                     streak = rejected_streak,
@@ -267,6 +270,7 @@ pub async fn run(mut config: Config, opts: RunOptions) -> Result<()> {
                 backoff = MIN_BACKOFF;
                 rejected_streak = 0;
                 let delay = jittered(PENDING_RETRY, PENDING_RETRY + PENDING_RETRY / 3);
+                live_status::set_conn(Conn::PendingApproval);
                 info!(
                     retry_secs = delay.as_secs(),
                     "device awaiting approval in DevEye (Appareils, Agent popup); retrying"
@@ -287,12 +291,20 @@ pub async fn run(mut config: Config, opts: RunOptions) -> Result<()> {
                 // que `backoff` tout rond. C'est ce qui disperse réellement une
                 // flotte, là où un recul exponentiel nu la garde en phase.
                 let delay = jittered(MIN_BACKOFF, backoff);
+                offline_until(delay);
                 warn!(error = %e, backoff_secs = delay.as_secs(), "session error, retrying");
                 tokio::time::sleep(delay).await;
                 backoff = (backoff * 2).min(MAX_BACKOFF);
             }
         }
     }
+}
+
+/// Published for the tray: disconnected, next attempt after `delay`.
+fn offline_until(delay: Duration) {
+    live_status::set_conn(Conn::Offline {
+        retry_at: live_status::now_secs() + delay.as_secs(),
+    });
 }
 
 /// How a connected session ended, so the caller can pick a reconnect delay.
@@ -370,6 +382,7 @@ async fn stream_session(
     queue: &mut VecDeque<MetricSnapshot>,
     marks: &mut ConnectMarks,
 ) -> Result<SessionOutcome> {
+    live_status::set_conn(Conn::Connecting);
     let (ws_stream, _) = tokio_tungstenite::connect_async(config.ws_request()?)
         .await
         .context("connecting to agent WebSocket")?;
@@ -458,6 +471,7 @@ async fn stream_session(
             Err(_) => break, // timeout: fall back to defaults
         }
     }
+    live_status::set_conn(Conn::Connected);
 
     // On connect: one immediate instant (so a fresh dashboard isn't blank),
     // skipped when the last one is recent (a reconnect loop must not mint an
@@ -1034,10 +1048,12 @@ async fn stream_session(
                             // celle qui tourne.
                             Ok(ServerMessage::PkgUpgrade { manager }) => {
                                 if pkg_running.insert(manager.clone()) {
-                                    tokio::spawn(crate::packages::run_upgrade(
-                                        manager,
-                                        pkg_tx.clone(),
-                                    ));
+                                    let busy = live_status::begin(Task::Packages);
+                                    let upgrade = crate::packages::run_upgrade(manager, pkg_tx.clone());
+                                    tokio::spawn(async move {
+                                        let _busy = busy;
+                                        upgrade.await
+                                    });
                                 } else {
                                     warn!(%manager, "upgrade already running — request ignored");
                                 }
@@ -1073,13 +1089,18 @@ async fn stream_session(
                                     if long {
                                         docker_long = Some(op_id.clone());
                                     }
-                                    tokio::spawn(crate::docker::run_action(
+                                    let busy = long.then(|| live_status::begin(Task::Deploy));
+                                    let run = crate::docker::run_action(
                                         engine,
                                         action,
                                         target,
                                         op_id,
                                         docker_tx.clone(),
-                                    ));
+                                    );
+                                    tokio::spawn(async move {
+                                        let _busy = busy;
+                                        run.await
+                                    });
                                 }
                             }
                             Ok(ServerMessage::Ack { received }) => debug!(received, "ack"),

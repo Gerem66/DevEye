@@ -104,18 +104,25 @@ fn applescript_escape(s: &str) -> String {
     s.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
-#[cfg(target_os = "macos")]
 fn run_elevated_install() -> Result<()> {
+    let config = enrolled_config();
+    run_elevated(&["service", "install", "--system", "--config", &config])
+}
+
+/// Run this executable with `args` as root/administrator, behind the OS
+/// authorization prompt, and wait for it. Fails when the prompt is declined.
+#[cfg(target_os = "macos")]
+pub fn run_elevated(args: &[&str]) -> Result<()> {
     let exe = current_exe_str()?;
     // `do shell script … with administrator privileges` shows the native auth
     // dialog and runs the command as root. Two quoting layers so an exe path with a
-    // space or quote can't break out: the inner shell command single-quotes the
-    // path, then the whole command is escaped for the AppleScript string literal.
-    let shell_cmd = format!(
-        "{} service install --system --config {}",
-        shell_quote(&exe),
-        shell_quote(&enrolled_config())
-    );
+    // space or quote can't break out: the inner shell command single-quotes each
+    // word, then the whole command is escaped for the AppleScript string literal.
+    let shell_cmd = std::iter::once(exe.as_str())
+        .chain(args.iter().copied())
+        .map(shell_quote)
+        .collect::<Vec<_>>()
+        .join(" ");
     let script = format!(
         "do shell script \"{}\" with administrator privileges",
         applescript_escape(&shell_cmd)
@@ -128,32 +135,47 @@ fn run_elevated_install() -> Result<()> {
 }
 
 #[cfg(target_os = "linux")]
-fn run_elevated_install() -> Result<()> {
+pub fn run_elevated(args: &[&str]) -> Result<()> {
     let exe = current_exe_str()?;
-    let status = Command::new("pkexec")
-        .arg(&exe)
-        .args(["service", "install", "--system", "--config"])
-        .arg(enrolled_config())
-        .status()?;
+    let status = Command::new("pkexec").arg(&exe).args(args).status()?;
     if !status.success() {
         bail!("pkexec elevation did not complete");
     }
     Ok(())
 }
 
+/// One argument of a Windows command line, quoted when it needs to be.
 #[cfg(target_os = "windows")]
-fn run_elevated_install() -> Result<()> {
+fn windows_arg(arg: &str) -> String {
+    if !arg.is_empty() && !arg.contains([' ', '\t', '"']) {
+        return arg.to_string();
+    }
+    format!("\"{}\"", arg.replace('"', "\\\""))
+}
+
+#[cfg(target_os = "windows")]
+pub fn run_elevated(args: &[&str]) -> Result<()> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
     let exe = current_exe_str()?;
     // Start-Process -Verb RunAs triggers UAC; -Wait blocks until it finishes.
     // A PowerShell single-quoted string escapes an embedded quote by doubling it,
     // so a path containing `'` can't terminate the -FilePath argument early.
     let exe_ps = exe.replace('\'', "''");
-    let cfg_ps = enrolled_config().replace('\'', "''");
+    let args_ps = args
+        .iter()
+        .map(|a| windows_arg(a))
+        .collect::<Vec<_>>()
+        .join(" ")
+        .replace('\'', "''");
     let ps = format!(
-        "Start-Process -FilePath '{exe_ps}' -ArgumentList 'service install --system --config \"{cfg_ps}\"' -Verb RunAs -Wait",
+        "Start-Process -FilePath '{exe_ps}' -ArgumentList '{args_ps}' -Verb RunAs -WindowStyle Hidden -Wait",
     );
+    // Started from the tray, a console program would open its own window.
     let status = Command::new("powershell")
         .args(["-NoProfile", "-Command", &ps])
+        .creation_flags(CREATE_NO_WINDOW)
         .status()?;
     if !status.success() {
         bail!("UAC elevation did not complete");

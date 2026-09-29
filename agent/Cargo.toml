@@ -68,6 +68,26 @@ unicode-normalization = "0.1"
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
+# Notification-area icon (`deveye-agent tray`). Linux speaks StatusNotifierItem
+# over D-Bus in pure Rust: GTK/appindicator would not link into the static musl
+# builds. `zbus` (already under `ksni`) also sends the desktop notifications.
+[target.'cfg(target_os = "linux")'.dependencies]
+ksni = "0.3"
+zbus = { version = "5", default-features = false, features = ["tokio"] }
+
+[target.'cfg(any(windows, target_os = "macos"))'.dependencies]
+tray-icon = { version = "0.25", default-features = false }
+
+# The icon's event loop, which `tray-icon` leaves to the application.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSApplication", "NSEvent", "NSResponder", "NSRunningApplication"] }
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSDate", "NSObjCRuntime", "NSRunLoop", "NSString"] }
+
+# The icon's message loop, the status published in the registry, the UI language.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Globalization", "Win32_Security", "Win32_System_Console", "Win32_System_Registry", "Win32_UI_HiDpi", "Win32_UI_WindowsAndMessaging"] }
+
 # Used by build.rs to read the version out of the root package.json.
 [dev-dependencies]
 tempfile = "3"
