@@ -72,6 +72,7 @@ import { InfoPopup, openInfo } from '@/Components/InfoPopup';
 import StatusPageLink from '@/Components/StatusPageLink';
 import { ConfirmDialog, type ConfirmRequest } from '@/Components/ConfirmDialog';
 import { RemoteLogin } from '@/Components/RemoteLogin';
+import { useHint } from '@/Components/Hint';
 import CreateWorkspacePopup, { CREATE_WORKSPACE_POPUP, type CreateWorkspaceChoice } from './popup-create-workspace';
 
 // Structural feature views (no grid card)
@@ -86,6 +87,7 @@ import FeatureDebug from '@/Features/Debug';
 
 import { catalogEntries, featureCatalog, featureCatalogEntry } from './catalog';
 import { EmptyHome } from './EmptyHome';
+import { OrganizeButton } from './organize/OrganizeButton';
 import { isForceReload } from './forceReload';
 import { deviceKey } from './tiles/tileVisual';
 import { DeviceTileCard, FeatureTileCard, FolderTileCard, ShortcutTileCard } from './tiles/HomeTileCard';
@@ -449,6 +451,10 @@ export default function HomePage() {
     // `can`, recréé à chaque rendu) pour servir de dépendances stables.
     const canAppearance = can('workspace.appearance');
     const canLayout = can('workspace.layout');
+    // Éligible dès que l'espace se laisse organiser, bouton visible ou non : la
+    // bulle de la version, qui passe après, ne vient pas s'intercaler le temps
+    // d'une fonctionnalité ouverte.
+    const layoutHint = useHint('homeLayoutHintDismissed', canLayout);
 
     const [expandedWidget, setExpandedWidget] = useState<string | null>(null);
     const [settingsOpen, setSettingsOpen] = useState(false);
@@ -1265,6 +1271,7 @@ export default function HomePage() {
         setOpenFolder(null);
         setAutoAddSection(autoAdd);
         setEditing(true);
+        layoutHint.dismiss();
     };
 
     /**
@@ -1488,6 +1495,13 @@ export default function HomePage() {
                         enterRemote(instanceId, wanted);
                     }}
                 />
+                {canLayout && !editing && !expandedWidget && !openFolder && (
+                    <OrganizeButton
+                        onOrganize={() => startOrganizing()}
+                        hinted={layoutHint.show}
+                        onDismissHint={layoutHint.dismiss}
+                    />
+                )}
                 <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
 
                 {/* Shared info dialog, registered once here so any feature's "i" button

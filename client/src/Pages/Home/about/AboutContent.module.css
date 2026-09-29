@@ -50,7 +50,7 @@
 }
 
 /* Largeur fixe : les vignettes s'alignent d'une fiche à l'autre, et le texte
-   part toujours de la même colonne — c'est ce qui rend la liste parcourable. */
+   part toujours de la même colonne : c'est ce qui rend la liste parcourable. */
 .featureArt {
     width: 116px;
 }
@@ -157,8 +157,8 @@
     list-style: none;
     margin: 0;
     padding: 0;
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--space-xs) var(--space-md);
     font-size: 0.85rem;
 }
@@ -223,4 +223,260 @@
     font-size: 0.75rem;
     color: var(--text-muted);
     font-style: italic;
+}
+
+/* Nouveautés : la carte de l'aperçu et l'historique partagent la même liste. */
+.latest {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    padding: var(--space-md);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+}
+
+.releaseHead {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.releaseHead strong {
+    font-size: 0.9rem;
+}
+
+.releaseHead span {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.changes {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* L'étiquette a une largeur fixe : les phrases partent toutes de la même colonne. */
+.change {
+    display: grid;
+    grid-template-columns: 76px minmax(0, 1fr);
+    align-items: baseline;
+    gap: var(--space-sm);
+    font-size: 0.82rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+
+.kind {
+    justify-self: start;
+    padding: 1px 7px;
+    border-radius: var(--radius-pill);
+    font-size: 0.68rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.kindAdded {
+    color: var(--success);
+    background: var(--success-bg);
+}
+
+.kindImproved {
+    color: var(--accent);
+    background: var(--accent-bg);
+}
+
+.kindFixed {
+    color: var(--warning);
+    background: var(--warning-bg);
+}
+
+.kindRemoved {
+    color: var(--text-secondary);
+    background: var(--surface-subtle);
+}
+
+.more {
+    align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--accent);
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.more .icon {
+    width: 14px;
+    height: 14px;
+}
+
+.more:hover,
+.more:focus-visible {
+    color: var(--accent-hover);
+}
+
+.releases {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+}
+
+.release {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.jumps {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-sm);
+}
+
+@media (max-width: 520px) {
+    .jumps,
+    .legalLinks {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+.jump {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color var(--transition-fast);
+}
+
+.jump:hover,
+.jump:focus-visible {
+    border-color: var(--glass-border-strong);
+}
+
+.jumpIcon {
+    flex-shrink: 0;
+    color: var(--accent);
+}
+
+.jumpText {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+    flex: 1;
+}
+
+.jumpText strong {
+    font-size: 0.85rem;
+}
+
+.jumpText span {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.jumpChevron {
+    flex-shrink: 0;
+    width: 14px;
+    color: var(--text-muted);
+}
+
+.outLinks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+}
+
+.outLink {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-pill);
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    text-decoration: none;
+    transition:
+        color var(--transition-fast),
+        border-color var(--transition-fast);
+}
+
+.outLink .icon {
+    width: 14px;
+    height: 14px;
+}
+
+.outLink:hover,
+.outLink:focus-visible {
+    color: var(--text-primary);
+    border-color: var(--glass-border-strong);
+}
+
+.inlineLink {
+    color: var(--accent);
+    text-decoration: underline;
+    text-underline-offset: 0.15em;
+}
+
+.credits {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.credit {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: var(--space-md);
+    padding: 6px 0;
+    border-bottom: 1px solid var(--glass-border);
+    font-size: 0.82rem;
+}
+
+.credit:last-child {
+    border-bottom: none;
+}
+
+.credit strong {
+    color: var(--text-primary);
+}
+
+.creditPurpose {
+    grid-column: 1;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+.creditLicense {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-self: center;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    white-space: nowrap;
 }

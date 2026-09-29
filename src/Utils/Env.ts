@@ -25,6 +25,10 @@ export const env = {
     STATUS_PAGE_URL: getEnvVar('STATUS_PAGE_URL', 'string', false),
     STATUS_PROBE_TOKEN: getEnvVar('STATUS_PROBE_TOKEN', 'string', false),
 
+    // Où ce serveur offre son code source, comme l'AGPL le demande à qui s'en
+    // sert en ligne : l'« À propos » y renvoie. Vide, aucun lien.
+    SOURCE_URL: getEnvVar('SOURCE_URL', 'string', false),
+
     // Port du second écouteur, celui qu'on expose sur Internet (`publicApp.ts`) :
     // il n'enregistre que les routes publiques des modules. Vide, pas de second
     // serveur, et ces routes restent joignables sur le port principal.
@@ -212,10 +216,13 @@ if (env.DOMAIN_PROXY_TOKEN) {
 if (env.STATUS_PROBE_TOKEN && env.STATUS_PROBE_TOKEN.length < SECRET_MIN_LENGTH) {
     throw new Error(`STATUS_PROBE_TOKEN doit faire au moins ${SECRET_MIN_LENGTH} caractères (openssl rand -hex 32).`);
 }
-// Livrée telle quelle au client, qui en fait un lien : une valeur qui n'est pas
-// une adresse web serait un lien cassé, ou pire.
+// Livrées telles quelles au client, qui en fait des liens : une valeur qui n'est
+// pas une adresse web serait un lien cassé, ou pire.
 if (env.STATUS_PAGE_URL && !/^https?:\/\/[^\s/]+/.test(env.STATUS_PAGE_URL)) {
     throw new Error('STATUS_PAGE_URL doit être une adresse http(s), par exemple https://statut.deveye.fr.');
+}
+if (env.SOURCE_URL && !/^https?:\/\/[^\s/]+/.test(env.SOURCE_URL)) {
+    throw new Error('SOURCE_URL doit être une adresse http(s), par exemple https://github.com/Gerem66/DevEye.');
 }
 if (env.SMTP_HOST && !env.SMTP_FROM) {
     throw new Error('SMTP_FROM est requis dès que SMTP_HOST est renseigné.');

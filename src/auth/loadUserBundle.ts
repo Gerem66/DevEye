@@ -116,6 +116,7 @@ export async function loadUserBundle(
             : { isOwner: false, capabilities: [], features: [], itemOverrides: [] },
         feedbackEnabled: env.FEEDBACK_ENABLED,
         siteUrl: ORIGINS.site,
+        sourceUrl: env.SOURCE_URL || null,
         maintenanceEnvNotice: isAdmin && (await maintenance.envNotice())
     };
 }

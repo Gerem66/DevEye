@@ -1,16 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import type { UserSettingFlag } from '@deveye/types';
 
-import { ws } from '@/api/ws';
-import { useAuth } from '@/auth/AuthProvider';
+import { Hint, useHint } from '@/Components/Hint';
 import { useFeedbackEnabled } from '@/stores/feedbackEnabled';
 import { onOpenReportRequest } from '@/stores/reportRequest';
-import { FeedbackHint } from './FeedbackHint';
 import { ReportDialog } from './ReportDialog';
 
 import styles from './ReportButton.module.css';
-
-const HINT_DISMISSED: UserSettingFlag = 'feedbackHintDismissed';
 
 /**
  * Le bouton de signalement, en bas à gauche et au-dessus de tout le reste
@@ -26,7 +21,7 @@ const HINT_DISMISSED: UserSettingFlag = 'feedbackHintDismissed';
  */
 export function ReportButton() {
     const enabled = useFeedbackEnabled();
-    const { user, updateUser } = useAuth();
+    const hint = useHint('feedbackHintDismissed', enabled);
     const [open, setOpen] = useState(false);
     const [context, setContext] = useState<string | null>(null);
 
@@ -38,25 +33,8 @@ export function ReportButton() {
 
     if (!enabled) return null;
 
-    const showHint = user != null && !user.settings.includes(HINT_DISMISSED);
-
-    /**
-     * Le drapeau vit sur le compte : la bulle ne revient donc ni au
-     * rechargement ni sur une autre machine. L'état local part devant, un
-     * serveur qui refuse n'a pas à la faire réapparaître sous les yeux ; la
-     * session suivante la reproposera.
-     */
-    const dismissHint = (): void => {
-        if (!user || user.settings.includes(HINT_DISMISSED)) return;
-        updateUser({ settings: [...user.settings, HINT_DISMISSED] });
-        void ws.send('user.setSetting', { flag: HINT_DISMISSED, enabled: true }).then(
-            (res) => updateUser({ settings: res.settings }),
-            () => {}
-        );
-    };
-
     const openDialog = (from: string | null = null): void => {
-        dismissHint();
+        hint.dismiss();
         setContext(from);
         setOpen(true);
     };
@@ -66,10 +44,15 @@ export function ReportButton() {
         <>
             {!open && (
                 <>
-                    {showHint && <FeedbackHint onDismiss={dismissHint} />}
+                    {hint.show && (
+                        <Hint title='Bienvenue sur DevEye' placement='corner-left' onDismiss={hint.dismiss}>
+                            La plateforme est toute jeune. Un bug, une idée, une remarque ? Ce bouton nous l’envoie
+                            directement.
+                        </Hint>
+                    )}
                     <button
                         type='button'
-                        className={`${styles.trigger} ${showHint ? styles.triggerHinted : ''}`}
+                        className={`${styles.trigger} ${hint.show ? styles.triggerHinted : ''}`}
                         onClick={() => openDialog()}
                         title='Signaler un bug ou faire un retour'
                         aria-label='Signaler un bug ou faire un retour'

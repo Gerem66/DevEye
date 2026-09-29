@@ -1,0 +1,51 @@
+/*
+ * Le miroir du bouton de signalement, dans le coin bas-droit. Il reste sous les
+ * popups et les dialogues : il n'a rien à proposer par-dessus une fenêtre.
+ */
+.trigger {
+    position: fixed;
+    bottom: var(--space-lg);
+    right: var(--space-lg);
+    z-index: var(--z-base);
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-pill);
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-backdrop);
+    box-shadow: var(--shadow-sm);
+    color: var(--text-secondary);
+
+    cursor: pointer;
+    /* `filter` et non `opacity` : la propriété reste libre pour une animation. */
+    filter: opacity(0.45);
+    transition:
+        filter var(--transition-fast),
+        color var(--transition-fast),
+        border-color var(--transition-fast),
+        transform var(--transition-fast);
+}
+
+.trigger:hover,
+.trigger:focus-visible,
+.triggerHinted {
+    filter: opacity(1);
+    color: var(--accent);
+    border-color: var(--glass-border-strong);
+}
+
+.trigger:hover,
+.trigger:focus-visible {
+    transform: translateY(-1px);
+}
+
+.trigger .icon {
+    width: 18px;
+    height: 18px;
+}

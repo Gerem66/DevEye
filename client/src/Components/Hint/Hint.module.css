@@ -1,0 +1,120 @@
+.hint {
+    width: 280px;
+    max-width: calc(100vw - 2 * var(--space-lg));
+    padding: var(--space-md);
+    padding-right: calc(var(--space-md) + 18px);
+
+    border: 1px solid var(--glass-border-strong);
+    border-radius: var(--radius-md);
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-backdrop);
+    -webkit-backdrop-filter: var(--glass-backdrop);
+    box-shadow: var(--shadow-md);
+}
+
+/* La flèche : un carré tourné dont on ne garde que les deux côtés visibles. */
+.hint::after {
+    content: '';
+    position: absolute;
+    width: 11px;
+    height: 11px;
+    border: 0 solid var(--glass-border-strong);
+    background: var(--glass-bg);
+    transform: rotate(45deg);
+}
+
+/*
+ * Au-dessus d'une pastille de 36px posée dans un coin bas, alignée sur son bord :
+ * la flèche tombe alors pile sur son milieu, à un demi-côté près.
+ */
+.cornerLeft,
+.cornerRight {
+    position: fixed;
+    bottom: calc(var(--space-lg) + 36px + var(--space-sm));
+}
+
+.cornerLeft::after,
+.cornerRight::after {
+    bottom: -6px;
+    border-right-width: 1px;
+    border-bottom-width: 1px;
+}
+
+/* Le bouton de signalement passe par-dessus tout, sa bulle avec lui. */
+.cornerLeft {
+    left: var(--space-lg);
+    z-index: var(--z-report);
+}
+
+.cornerLeft::after {
+    left: 12px;
+}
+
+.cornerRight {
+    right: var(--space-lg);
+    z-index: var(--z-base);
+}
+
+.cornerRight::after {
+    right: 12px;
+}
+
+.below {
+    position: absolute;
+    top: calc(100% + var(--space-sm));
+    left: 0;
+}
+
+.below::after {
+    top: -6px;
+    left: 12px;
+    border-left-width: 1px;
+    border-top-width: 1px;
+}
+
+.close {
+    position: absolute;
+    top: var(--space-xs);
+    right: var(--space-xs);
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.close:hover,
+.close:focus-visible {
+    background: var(--glass-bg-light);
+    color: var(--text-primary);
+}
+
+.close .icon {
+    width: 14px;
+    height: 14px;
+}
+
+.title {
+    margin: 0 0 var(--space-xs);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.body {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    line-height: 1.5;
+}

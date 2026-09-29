@@ -1,0 +1,384 @@
+export type ChangeKind = 'added' | 'improved' | 'fixed' | 'removed';
+
+export interface ChangelogEntry {
+    version: string;
+    date: string;
+    changes: { kind: ChangeKind; text: string }[];
+}
+
+/**
+ * Les notes de version, la plus récente en tête. La première porte la version de
+ * `package.json` (`npm run check:changelog`).
+ */
+export const CHANGELOG: readonly ChangelogEntry[] = [
+    {
+        version: '0.21.0',
+        date: '2026-09-29',
+        changes: [
+            { kind: 'added', text: 'Export de toutes vos données depuis le Profil' },
+            {
+                kind: 'added',
+                text: 'Installation d’un appareil en une seule ligne de commande, avec des codes d’appairage réutilisables'
+            },
+            { kind: 'added', text: 'Icône de l’agent dans la zone de notification, qui indique son état' },
+            { kind: 'added', text: 'Bases de données jointes par l’intermédiaire d’un de vos appareils' },
+            { kind: 'added', text: 'Page d’état publique pour suivre la disponibilité de DevEye' },
+            {
+                kind: 'added',
+                text: 'Nouveautés, services externes et crédits réunis dans l’À propos, ouvert par le numéro de version'
+            },
+            {
+                kind: 'improved',
+                text: 'Appareils : mises à jour système réunies dans un tableau, à approuver depuis le bandeau'
+            }
+        ]
+    },
+    {
+        version: '0.20.3',
+        date: '2026-09-27',
+        changes: [
+            { kind: 'added', text: 'Finances : connexions bancaires directes et import de relevés CSV ou OFX' },
+            { kind: 'added', text: 'Uptime : pages de statut publiques, servies aussi sur votre propre domaine' },
+            { kind: 'added', text: 'Projets : une page publique pour présenter le tableau d’un projet' },
+            { kind: 'added', text: 'Sauvegardes : fichiers d’une machine, et destinations SFTP et WebDAV' },
+            {
+                kind: 'added',
+                text: 'Déploiements : GitHub Actions à côté de Dokploy, et services d’une machine déployés par son agent'
+            },
+            {
+                kind: 'added',
+                text: 'Conditions acceptées à l’inscription, et suppression de votre compte par vous-même'
+            }
+        ]
+    },
+    {
+        version: '0.20.1',
+        date: '2026-09-24',
+        changes: [
+            { kind: 'added', text: 'Certificats HTTPS obtenus automatiquement pour vos domaines' },
+            { kind: 'improved', text: 'Facturation : devis et factures ouverts sous le domaine de l’émetteur' },
+            { kind: 'improved', text: 'Vérification d’un domaine qui explique chaque échec en clair' }
+        ]
+    },
+    {
+        version: '0.20.0',
+        date: '2026-09-24',
+        changes: [
+            { kind: 'added', text: 'Convertisseur : fichiers, images, vidéos, devises et unités' },
+            { kind: 'added', text: 'Facturation : devis et factures, acceptés en ligne par vos clients' },
+            { kind: 'added', text: 'Page de maintenance quand le site ou une fonctionnalité est fermé' },
+            { kind: 'improved', text: 'Projets : frise réglable, jalons colorés et colonnes réorganisables' },
+            { kind: 'improved', text: 'Mail : relève plus rapide, liste des messages affichée sans attente' },
+            { kind: 'improved', text: 'Réglages : fil d’Ariane, et bouton Enregistrer au pied des fenêtres' }
+        ]
+    },
+    {
+        version: '0.19.1',
+        date: '2026-09-20',
+        changes: [
+            { kind: 'added', text: 'Connexion à une autre instance DevEye, dont les espaces s’ajoutent aux vôtres' },
+            { kind: 'added', text: 'Copie d’un élément vers un autre espace' },
+            { kind: 'fixed', text: 'Sécurité renforcée de l’agent' }
+        ]
+    },
+    {
+        version: '0.19.0',
+        date: '2026-09-20',
+        changes: [
+            { kind: 'added', text: 'Inscription libre en trois étapes, validée par e-mail' },
+            { kind: 'added', text: 'Serveur mail : des adresses hébergées par DevEye, ajoutées à Mail en un clic' },
+            {
+                kind: 'added',
+                text: 'Offres avec des limites par fonctionnalité : services, appareils, dépôts, boîtes mail'
+            },
+            { kind: 'added', text: 'Audience : les retours des visiteurs de vos sites' },
+            { kind: 'improved', text: 'Mail : ajout d’une boîte en étapes, avec le logo de chaque fournisseur' },
+            { kind: 'fixed', text: 'Sécurité renforcée des comptes, des sessions et des appareils' }
+        ]
+    },
+    {
+        version: '0.18.2',
+        date: '2026-09-03',
+        changes: [
+            { kind: 'improved', text: 'La tuile d’un appareil ouvre directement sa fiche dans Appareils' },
+            { kind: 'added', text: 'Changement de pseudo' },
+            { kind: 'improved', text: 'Un élément se modifie dans l’onglet Général de ses réglages' },
+            { kind: 'fixed', text: 'Déplacement d’un élément vers un autre espace en quelques secondes' },
+            {
+                kind: 'fixed',
+                text: 'Comptes rafraîchis en direct, et inscription sans passage par l’écran de connexion'
+            }
+        ]
+    },
+    {
+        version: '0.18.0',
+        date: '2026-09-02',
+        changes: [
+            {
+                kind: 'added',
+                text: 'Texte libre affiché à côté de votre curseur pour les autres membres, touche « / »'
+            },
+            { kind: 'added', text: 'Bouton de signalement pour envoyer un retour ou décrire un bug' },
+            { kind: 'improved', text: 'Deux tuiles par rangée sur téléphone' },
+            { kind: 'fixed', text: 'Tuiles des fonctionnalités complémentaires verrouillées comme les autres' }
+        ]
+    },
+    {
+        version: '0.17.2',
+        date: '2026-09-01',
+        changes: [
+            { kind: 'added', text: 'Veille CVE : fil des vulnérabilités, recherche et CVE épinglées' },
+            { kind: 'added', text: 'Puce « Mon IP » dans la barre du haut' },
+            { kind: 'added', text: 'Déplacement d’un élément vers un autre espace' },
+            { kind: 'improved', text: 'Permissions réglables élément par élément, appareils compris' },
+            {
+                kind: 'added',
+                text: 'Appareils : conteneurs gérés depuis la fiche, et historique long terme parcourable'
+            },
+            { kind: 'improved', text: 'Un accueil vide propose des modèles pour démarrer' }
+        ]
+    },
+    {
+        version: '0.16.0',
+        date: '2026-08-29',
+        changes: [
+            { kind: 'added', text: 'Finances : gestion des finances pour les particuliers et les petites entreprises' },
+            { kind: 'added', text: 'Sauvegardes programmées vers un dossier, une machine ou un stockage S3' },
+            {
+                kind: 'added',
+                text: 'Partage d’éléments entre espaces : Notes, Mail, Projets, Uptime, Déploiements et plus'
+            },
+            { kind: 'improved', text: 'Notifications par canaux, choisis pour chaque élément' },
+            { kind: 'improved', text: 'Réglages présentés de la même façon dans toutes les fonctionnalités' },
+            { kind: 'improved', text: 'Accueil : dossiers au glisser, catalogue d’ajout unique et fiche « À propos »' }
+        ]
+    },
+    {
+        version: '0.13.5',
+        date: '2026-08-16',
+        changes: [
+            { kind: 'added', text: 'Accueil : des dossiers pour regrouper plusieurs tuiles' },
+            {
+                kind: 'improved',
+                text: 'CloudSync : interface plus lisible, dossier cloud créé à partir d’un simple nom'
+            },
+            { kind: 'improved', text: 'Uptime : bande d’état sur chaque service et détail au survol' },
+            { kind: 'improved', text: 'Sentinelle : un constat se marque comme réglé' },
+            { kind: 'fixed', text: 'CloudSync : plus de blocage après un arrêt brutal' }
+        ]
+    },
+    {
+        version: '0.13.1',
+        date: '2026-08-14',
+        changes: [
+            { kind: 'added', text: 'Déploiements : historique complet et journal en direct depuis Dokploy' },
+            {
+                kind: 'improved',
+                text: 'Déploiements : applications chargées d’elles-mêmes, services surveillés en blocs'
+            },
+            {
+                kind: 'improved',
+                text: 'Projets : les onglets suivent le contenu du projet, et « + » propose l’action utile'
+            },
+            { kind: 'improved', text: 'OSINT : la tuile d’accueil montre les sondes et les clés' }
+        ]
+    },
+    {
+        version: '0.13.0',
+        date: '2026-08-13',
+        changes: [
+            { kind: 'added', text: 'Audience : statistiques de fréquentation de vos sites, avec entonnoirs' },
+            { kind: 'added', text: 'Projets : onglet Audience et en-tête qui reste visible au défilement' },
+            { kind: 'improved', text: 'Sentinelle : notifications sur ses propres canaux, écran plus ramassé' },
+            { kind: 'improved', text: 'Explorateur de fichiers : chemins Windows et chemin cliquable par dossier' },
+            { kind: 'fixed', text: 'Journaux d’un appareil : une lecture trop longue s’arrête et le signale' }
+        ]
+    },
+    {
+        version: '0.12.0',
+        date: '2026-08-12',
+        changes: [
+            {
+                kind: 'added',
+                text: 'OSINT : enquête sur un domaine, une adresse IP, un numéro, un e-mail ou un pseudo'
+            },
+            {
+                kind: 'added',
+                text: 'Sentinelle : surveillance de la sécurité des appareils, constats et ligne de base'
+            },
+            { kind: 'added', text: 'Monitoring : téléchargement d’un dossier entier en archive' },
+            { kind: 'added', text: 'Monitoring : conteneurs parmi les sources de journaux' },
+            { kind: 'improved', text: 'Profil : score de sécurité cliquable, et curseurs en direct désactivables' },
+            { kind: 'fixed', text: 'Notes : annulation, flèches et sélection de nouveau fiables' }
+        ]
+    },
+    {
+        version: '0.10.5',
+        date: '2026-08-11',
+        changes: [
+            {
+                kind: 'improved',
+                text: 'Mises à jour des paquets : une mise à jour en cours est visible et protégée pour tous'
+            },
+            { kind: 'improved', text: 'Appareils : les réglages de démarrage disent ce qu’ils ont fait' },
+            { kind: 'fixed', text: 'Un appareil éteint n’apparaît plus en ligne' },
+            { kind: 'fixed', text: 'Démarrage automatique de l’agent installé sans conflit' },
+            { kind: 'fixed', text: 'Extinction à distance sur macOS' }
+        ]
+    },
+    {
+        version: '0.10.2',
+        date: '2026-08-10',
+        changes: [
+            { kind: 'added', text: 'Un appareil peut être partagé entre plusieurs espaces' },
+            { kind: 'improved', text: 'Monitoring : une seule durée de conservation par appareil' },
+            { kind: 'improved', text: 'Mail : la synchronisation en arrière-plan garde la boîte à jour' },
+            { kind: 'improved', text: 'Apparence et disposition d’un espace partagé mises à jour en direct' },
+            { kind: 'fixed', text: 'Sécurité renforcée des commandes sensibles des appareils' }
+        ]
+    },
+    {
+        version: '0.10.0',
+        date: '2026-08-10',
+        changes: [
+            { kind: 'added', text: 'Projets : tâches, sous-tâches, frise et messages pour chaque projet' },
+            { kind: 'added', text: 'Bases de données : inventaire, alertes et gestion des tables' },
+            { kind: 'added', text: 'Git : dépôts de l’espace, avec historique et demandes de fusion' },
+            { kind: 'improved', text: 'Présence en direct jusque dans l’onglet ou la tâche ouverte par un membre' },
+            { kind: 'improved', text: 'Monitoring : ordre des appareils au glisser-déposer' },
+            { kind: 'improved', text: 'Cases à cocher aux couleurs du thème partout' }
+        ]
+    },
+    {
+        version: '0.9.0',
+        date: '2026-08-06',
+        changes: [
+            { kind: 'added', text: 'Espaces partagés : invitations par lien et gestion des membres' },
+            { kind: 'added', text: 'Rôles et permissions dans chaque espace' },
+            { kind: 'added', text: 'Présence en direct : membres connectés et curseurs visibles' },
+            { kind: 'added', text: 'Inscription sur invitation, et page Utilisateurs pour les administrateurs' },
+            { kind: 'improved', text: 'Uptime, Mail, Météo et CloudSync propres à chaque espace' },
+            { kind: 'fixed', text: 'Suspendre un compte coupe aussi sa session en cours' }
+        ]
+    },
+    {
+        version: '0.7.2',
+        date: '2026-08-04',
+        changes: [
+            { kind: 'improved', text: 'Accueil : sections ajoutées à la demande' },
+            { kind: 'improved', text: 'Mail et Uptime utilisables sur téléphone' },
+            { kind: 'improved', text: 'Monitoring : vue des ports retravaillée' },
+            { kind: 'fixed', text: 'Mail : liste des messages et boutons qui débordaient' },
+            { kind: 'fixed', text: 'Un glisser-déposer involontaire pouvait figer la page' }
+        ]
+    },
+    {
+        version: '0.7.0',
+        date: '2026-08-04',
+        changes: [
+            { kind: 'added', text: 'Mail : lecture et envoi depuis vos boîtes mail existantes' },
+            { kind: 'added', text: 'Mots de passe : génération aléatoire depuis le formulaire' },
+            { kind: 'added', text: 'Fenêtre « À propos » qui liste les services externes utilisés' },
+            { kind: 'improved', text: 'Uptime : services réordonnés à la souris comme au doigt' }
+        ]
+    },
+    {
+        version: '0.6.7',
+        date: '2026-07-31',
+        changes: [
+            { kind: 'improved', text: 'Uptime : ordre des services choisi par glisser-déposer' },
+            { kind: 'removed', text: 'Uptime : tri automatique des services en panne, remplacé par votre ordre' },
+            { kind: 'fixed', text: 'Uptime : alertes acceptées par Discord et Slack' }
+        ]
+    },
+    {
+        version: '0.6.6',
+        date: '2026-07-31',
+        changes: [
+            { kind: 'added', text: 'Uptime : surveillance de vos services, historique et alertes en cas de panne' },
+            { kind: 'added', text: 'Notes : archivage au lieu d’une suppression définitive' },
+            { kind: 'improved', text: 'Notes : placement libre au glisser-déposer et couleurs du texte' },
+            {
+                kind: 'improved',
+                text: 'Monitoring : fonctions de l’appareil réunies dans un menu, frise navigable au clavier'
+            },
+            { kind: 'improved', text: 'Explorateur de fichiers : affichage des fichiers cachés' },
+            { kind: 'fixed', text: 'Monitoring : plus d’avalanche de relevés après une reconnexion' }
+        ]
+    },
+    {
+        version: '0.6.0',
+        date: '2026-07-04',
+        changes: [
+            { kind: 'added', text: 'CloudSync : synchronisation chiffrée de dossiers entre vos appareils' },
+            { kind: 'added', text: 'Terminal : choix de l’utilisateur par défaut et du comportement à la fermeture' },
+            {
+                kind: 'improved',
+                text: 'Explorateur de fichiers : clic sur toute la ligne et dossier parent accessible'
+            },
+            { kind: 'improved', text: 'Mise à jour de l’agent sur plusieurs appareils à la fois' },
+            { kind: 'fixed', text: 'Terminal : les symboles de l’invite s’affichent correctement' }
+        ]
+    },
+    {
+        version: '0.5.3',
+        date: '2026-06-29',
+        changes: [
+            { kind: 'added', text: 'Monitoring : explorateur de fichiers avec recherche, téléchargement et envoi' },
+            { kind: 'added', text: 'Monitoring : terminal distant interactif' },
+            { kind: 'added', text: 'Monitoring : lecture des journaux de l’appareil, système, Docker ou fichiers' },
+            { kind: 'added', text: 'Monitoring : extinction, redémarrage, mise en veille et verrouillage à distance' },
+            { kind: 'fixed', text: 'Verrouillage d’un Mac à distance' }
+        ]
+    },
+    {
+        version: '0.5.2',
+        date: '2026-06-28',
+        changes: [
+            { kind: 'added', text: 'Raccourcis Twitch : pastille en direct et ancienneté du dernier live' },
+            { kind: 'improved', text: 'Redémarrage instantané de l’agent après une mise à jour' },
+            { kind: 'improved', text: 'Icônes chargées dès le démarrage' },
+            { kind: 'fixed', text: 'Désactiver le démarrage automatique n’arrête plus l’agent en cours' }
+        ]
+    },
+    {
+        version: '0.5.0',
+        date: '2026-06-28',
+        changes: [
+            { kind: 'added', text: 'Accueil organisable en catégories : appareils, fonctionnalités et raccourcis' },
+            { kind: 'added', text: 'Notes : titres, listes, séparateurs, mise en forme et export PDF' },
+            { kind: 'added', text: 'Mise à jour automatique de l’agent, et des paquets de l’appareil' },
+            { kind: 'improved', text: 'Reconnexion automatique, avec un bandeau quand la connexion est perdue' },
+            {
+                kind: 'improved',
+                text: 'Fenêtres : Entrée valide, Échap ferme, et confirmation avant de perdre une saisie'
+            }
+        ]
+    },
+    {
+        version: '0.2.5',
+        date: '2026-06-22',
+        changes: [
+            { kind: 'added', text: 'Page Appareils pour les administrateurs, avec téléchargement de l’agent' },
+            { kind: 'added', text: 'Agent disponible sur Windows' },
+            { kind: 'added', text: 'Galerie d’apparence qui garde jusqu’à cinq fonds d’écran' },
+            { kind: 'added', text: 'Monitoring : privilèges de l’agent, ports ouverts et détail des connexions' },
+            { kind: 'improved', text: 'Compteurs des Notes et des Mots de passe visibles même verrouillés' }
+        ]
+    },
+    {
+        version: '0.2.0',
+        date: '2026-06-21',
+        changes: [
+            { kind: 'added', text: 'Tableau de bord d’accueil avec widgets et fond d’écran personnalisable' },
+            { kind: 'added', text: 'Mots de passe chiffrés, déverrouillés par votre mot de passe de compte' },
+            { kind: 'added', text: 'Notes avec cases à cocher, dossiers et verrouillage par mot de passe' },
+            {
+                kind: 'added',
+                text: 'Monitoring de vos appareils par un agent : santé, sécurité, processus et graphiques'
+            },
+            { kind: 'added', text: 'Météo avec ville principale et prévisions' },
+            { kind: 'added', text: 'Double authentification, et journal d’activité pour les administrateurs' }
+        ]
+    }
+];

@@ -116,6 +116,12 @@
     color: var(--accent);
 }
 
+/* Tant que la bulle de présentation la désigne, la pastille sort de sa réserve. */
+.versionHinted {
+    background: var(--glass-bg-light);
+    color: var(--accent);
+}
+
 /* Positioning context for the in-place version/title crossfade. */
 .metaSlot {
     position: relative;
@@ -543,6 +549,7 @@
 
     .brandText,
     .version,
+    .versionHint,
     .identity,
     .status {
         display: none;

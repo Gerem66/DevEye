@@ -15,6 +15,7 @@ import { forgetRemoteSessions, patchRemoteUser, syncRemoteInstances } from '../s
 import { getActiveInstanceId } from '../stores/workspace';
 import { setFeedbackEnabled } from '../stores/feedbackEnabled';
 import { setSiteUrl } from '../stores/siteUrl';
+import { setSourceUrl } from '../stores/sourceUrl';
 import { setMaintenanceEnvNotice, setPublicMaintenance } from '../stores/maintenance';
 import { devicesProvider } from '../devicesProvider';
 
@@ -83,6 +84,7 @@ function applyBundle(bundle: SessionBundle): AuthState {
     }
     setFeedbackEnabled(bundle.feedbackEnabled);
     setSiteUrl(bundle.siteUrl);
+    setSourceUrl(bundle.sourceUrl);
     setMaintenanceEnvNotice(bundle.maintenanceEnvNotice);
     return { status: 'authenticated', user: bundle.user };
 }

@@ -1,6 +1,7 @@
 import { type MouseEvent as ReactMouseEvent, type ReactNode, useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Button from '@/Components/Button';
+import { Hint, useHint } from '@/Components/Hint';
 import { openInfo } from '@/Components/InfoPopup';
 import { useAuth } from '@/auth/AuthProvider';
 import { avatarSrc } from '@/Features/Profile/avatar';
@@ -171,6 +172,8 @@ export default function TopNavbar({
     }, [menuOpen]);
 
     const inFeature = Boolean(viewTitle);
+    const versionShown = !(inFeature && viewTitle);
+    const aboutHint = useHint('aboutHintDismissed', versionShown && !organizing);
 
     return (
         <nav className={`${styles.navbar} ${inFeature ? styles.blurred : ''}`}>
@@ -229,24 +232,36 @@ export default function TopNavbar({
                             <motion.button
                                 key='version'
                                 type='button'
-                                className={styles.version}
+                                className={`${styles.version} ${aboutHint.show ? styles.versionHinted : ''}`}
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
                                 exit={{ opacity: 0 }}
                                 transition={FADE}
-                                onClick={() =>
+                                onClick={() => {
+                                    aboutHint.dismiss();
                                     void openInfo({
                                         title: `À propos de DevEye · ${version}`,
                                         body: aboutBody,
                                         width: 640
-                                    })
-                                }
+                                    });
+                                }}
                                 title='À propos de DevEye'
                             >
                                 {version}
                             </motion.button>
                         )}
                     </AnimatePresence>
+                    {aboutHint.show && (
+                        <Hint
+                            title='Quoi de neuf ?'
+                            placement='below'
+                            className={styles.versionHint}
+                            onDismiss={aboutHint.dismiss}
+                        >
+                            Ce numéro de version ouvre les nouveautés de chaque mise à jour, le tour des fonctionnalités
+                            et les documents légaux.
+                        </Hint>
+                    )}
                 </div>
             </div>
 

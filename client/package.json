@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "check:sdk": "tsc -p tsconfig.sdkcheck.json",
     "check:css": "node scripts/check-css-modules.mjs",
-    "ci": "npm run check:css && npm run lint && npm run typecheck && npm run check:sdk && npm run build",
+    "check:changelog": "node scripts/check-changelog.mjs",
+    "ci": "npm run check:css && npm run check:changelog && npm run lint && npm run typecheck && npm run check:sdk && npm run build",
     "test": "echo \"Error: no test specified\" && exit 1",
     "gen:css-types": "tcm src --include '**/*.module.css'",
     "clean": "rm -rf ./build ./dist ./node_modules package-lock.json"
