@@ -44,7 +44,9 @@ async function request(fetcher: Fetch, url: string, init: RequestInit = {}): Pro
     }
 }
 
-const serverError = (status: number): string => `Erreur du serveur (${status})`;
+/** Un 404 dit le plus souvent une adresse mal réglée, pas un serveur en panne. */
+const serverError = (status: number): string =>
+    status >= 500 ? `Erreur du serveur (${status})` : `Réponse inattendue (${status})`;
 
 async function drain(response: Response): Promise<void> {
     await response.body?.cancel().catch(() => undefined);

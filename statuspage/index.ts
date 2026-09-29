@@ -95,7 +95,8 @@ async function loop(): Promise<void> {
 const channelsTimer = setInterval(() => void alerts.refreshChannels(), CHANNELS_REFRESH_MS);
 
 server.listen(env.port, () => {
-    console.info(`Page d’état à l’écoute sur le port ${env.port}, surveille ${env.appUrl}`);
+    const watched = env.publicUrl ? `${env.appUrl} et ${env.publicUrl}/api/health` : env.appUrl;
+    console.info(`Page d’état à l’écoute sur le port ${env.port}, surveille ${watched}`);
     void alerts.refreshChannels();
     void loop();
 });
