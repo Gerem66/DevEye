@@ -377,6 +377,7 @@ which restarts the agent so it applies.
 | `allow_docker`          | `docker`          | every container action (the inventory stays readable)              |
 | `allow_docker_deploy`   | `docker-deploy`   | deployments: pulling a compose service's image and recreating it   |
 | `allow_sync`            | `sync`            | CloudSync shares: the server reading and writing a synced folder   |
+| `allow_tunnel`          | `tunnel`          | tunnels: a module reaching a service of this machine (a database)  |
 
 `all` stands for every key. Monitoring (metrics, reports, the Docker inventory)
 is never refused: it is what the agent is for. Nor can the server install an
@@ -387,8 +388,8 @@ Whatever the policy, the explorer never writes into the agent's own directory:
 that is where the policy lives. Be honest about the limit: a machine that allows
 the terminal to a root agent has allowed everything else with it.
 
-**Signed orders.** The orders above, plus `agent.service`, `agent.lifecycle` and
-every Docker action, must carry the server's Ed25519 signature (`ORDER_SIGNING_KEY` on the server),
+**Signed orders.** The orders above, plus `agent.service`, `agent.lifecycle`,
+every Docker action and `tunnel.open`, must carry the server's Ed25519 signature (`ORDER_SIGNING_KEY` on the server),
 over the exact payload, a nonce and a timestamp. The agent pins the public key at
 `link` (`order_key`), refuses an unsigned or replayed order, and refuses one
 whose timestamp is more than five minutes off (keep the clock right). Holding the
@@ -407,6 +408,14 @@ a system directory (`/etc`, `/usr`, `/var/lib`, `C:\Windows`, ...), the
 filesystem root and its own directory, and a path that a symlink would lead out
 of the share. `sync_roots = ["/data", "/home/lea/Sync"]` narrows it to the
 directories you name (and opens a system one if you name it).
+
+**Tunnel targets.** A tunnel is a TCP connection this machine opens for the
+server, so that a DevEye module reaches a service only this machine sees: the
+Database module uses it for a database listening on `127.0.0.1`. By default it
+reaches this machine's loopback and nothing else, so a linked machine is not a
+door into its network. `tunnel_targets = ["db.lan", "192.168.1.20"]` opens the
+hosts you name; a name is resolved once and the connection goes to the addresses
+checked, never to the name again.
 
 The systemd system unit carries only `RestrictRealtime` and `LockPersonality`:
 anything stricter (`ProtectSystem`, `NoNewPrivileges`, a reduced capability set)

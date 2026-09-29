@@ -64,6 +64,10 @@ pub struct Config {
     /// system one. A share whose root is elsewhere is refused.
     #[serde(default)]
     pub sync_roots: Vec<String>,
+    /// Hosts beyond this machine that a tunnel may reach (a database on the
+    /// LAN), as names or IPs. Empty: this machine's loopback only.
+    #[serde(default)]
+    pub tunnel_targets: Vec<String>,
     /// What the server may order here. Kept last: TOML wants tables after values.
     #[serde(default)]
     pub policy: Policy,
@@ -98,6 +102,9 @@ pub struct Policy {
     pub allow_docker_deploy: bool,
     /// `sync.*`: CloudSync shares, the server reading and writing a synced folder.
     pub allow_sync: bool,
+    /// `tunnel.open`: a module reaching a service of this machine (a database
+    /// on its loopback, or a host of `tunnel_targets`).
+    pub allow_tunnel: bool,
 }
 
 impl Default for Policy {
@@ -113,6 +120,7 @@ impl Default for Policy {
             allow_docker: true,
             allow_docker_deploy: true,
             allow_sync: true,
+            allow_tunnel: true,
         }
     }
 }
@@ -131,13 +139,14 @@ pub enum PolicyKey {
     Docker,
     DockerDeploy,
     Sync,
+    Tunnel,
     /// Every switch at once.
     All,
 }
 
 impl PolicyKey {
     /// The switches themselves, `all` aside.
-    pub const SWITCHES: [PolicyKey; 10] = [
+    pub const SWITCHES: [PolicyKey; 11] = [
         PolicyKey::Terminal,
         PolicyKey::FilesRead,
         PolicyKey::FilesWrite,
@@ -148,6 +157,7 @@ impl PolicyKey {
         PolicyKey::Docker,
         PolicyKey::DockerDeploy,
         PolicyKey::Sync,
+        PolicyKey::Tunnel,
     ];
 
     /// The key in `agent.toml`.
@@ -163,6 +173,7 @@ impl PolicyKey {
             PolicyKey::Docker => "allow_docker",
             PolicyKey::DockerDeploy => "allow_docker_deploy",
             PolicyKey::Sync => "allow_sync",
+            PolicyKey::Tunnel => "allow_tunnel",
             PolicyKey::All => "all",
         }
     }
@@ -180,6 +191,7 @@ impl PolicyKey {
             PolicyKey::Docker => "container actions",
             PolicyKey::DockerDeploy => "deployments",
             PolicyKey::Sync => "CloudSync shares",
+            PolicyKey::Tunnel => "tunnels to local services",
             PolicyKey::All => "everything",
         }
     }
@@ -210,6 +222,7 @@ impl PolicyKey {
             "docker.action" if action == Some("composeDeploy") => &[Docker, DockerDeploy],
             "docker.action" => &[Docker],
             c if c.starts_with("sync.") => &[Sync],
+            "tunnel.open" => &[Tunnel],
             _ => &[],
         }
     }
@@ -228,6 +241,7 @@ impl Policy {
             PolicyKey::Docker => &mut self.allow_docker,
             PolicyKey::DockerDeploy => &mut self.allow_docker_deploy,
             PolicyKey::Sync => &mut self.allow_sync,
+            PolicyKey::Tunnel => &mut self.allow_tunnel,
             PolicyKey::All => unreachable!("`all` is expanded before it reaches a switch"),
         }
     }
@@ -244,6 +258,7 @@ impl Policy {
             PolicyKey::Docker => self.allow_docker,
             PolicyKey::DockerDeploy => self.allow_docker_deploy,
             PolicyKey::Sync => self.allow_sync,
+            PolicyKey::Tunnel => self.allow_tunnel,
             PolicyKey::All => unreachable!("`all` is expanded before it reaches a switch"),
         }
     }
@@ -295,6 +310,7 @@ impl Policy {
             docker: self.allow_docker,
             docker_deploy: self.allow_docker_deploy,
             sync: self.allow_sync,
+            tunnel: self.allow_tunnel,
         }
     }
 
@@ -575,6 +591,7 @@ mod tests {
             order_key: None,
             allow_plaintext: false,
             sync_roots: Vec::new(),
+            tunnel_targets: Vec::new(),
             policy: Policy::default(),
         }
     }

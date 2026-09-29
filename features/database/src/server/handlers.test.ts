@@ -240,7 +240,14 @@ const projects: ProjectsUsageProvider = {
     applyVersion: async () => undefined
 };
 
-const ACCESS = { kind: 'direct' as const, host: '', port: null, username: '', auth: 'password' as const };
+const ACCESS = {
+    kind: 'direct' as const,
+    host: '',
+    port: null,
+    username: '',
+    auth: 'password' as const,
+    deviceId: null
+};
 
 /** Le brouillon complet qu'attend `database.update` (le contrat prend la base entière). */
 const DRAFT = {
@@ -464,6 +471,60 @@ describe('database.add', () => {
             ctx.recorded.audits.map((a) => a.action),
             ['database.add']
         );
+    });
+});
+
+describe('l’accès par un appareil', () => {
+    const deviceId = '5b0f3c1e-8d2a-4f6b-9c7e-1a2b3c4d5e6f';
+    const body = {
+        engine: 'postgres' as const,
+        name: 'Locale',
+        host: '127.0.0.1',
+        port: 5432,
+        database: 'app',
+        username: 'dev',
+        password: '',
+        access: { ...ACCESS, kind: 'device' as const, deviceId },
+        monitorEnabled: false,
+        intervalSeconds: 300,
+        autoLoadTables: false
+    };
+
+    it('exige d’ouvrir le réseau de l’appareil, et retient qui l’a choisi', async () => {
+        const refused = createTestContext({ repo: fakeRepo(), refuseDeviceExtras: true });
+        await assert.rejects(handlerFor(databaseAdd)(refused, body), failsWith('forbidden'));
+        await assert.rejects(
+            handlerFor(databaseAdd)(createTestContext({ repo: fakeRepo() }), {
+                ...body,
+                access: { ...body.access, deviceId: null }
+            }),
+            failsWith('validation')
+        );
+
+        const repo = fakeRepo();
+        const out = await handlerFor(databaseAdd)(createTestContext({ repo, userId: 7 }), body);
+        assert.equal(out.database.access.kind, 'device');
+        assert.equal(out.database.access.deviceId, deviceId);
+        assert.deepEqual(JSON.parse(repo.rows[0].access_content ?? ''), {
+            kind: 'device',
+            host: '',
+            port: null,
+            username: '',
+            auth: 'password',
+            deviceId,
+            authorUserId: 7
+        });
+    });
+
+    it('un autre mode d’accès ne retient ni appareil ni auteur', async () => {
+        const repo = fakeRepo();
+        await handlerFor(databaseAdd)(createTestContext({ repo, userId: 7 }), {
+            ...body,
+            access: { ...ACCESS, deviceId }
+        });
+        const stored = JSON.parse(repo.rows[0].access_content ?? '');
+        assert.equal(stored.deviceId, null);
+        assert.equal(stored.authorUserId, null);
     });
 });
 

@@ -132,6 +132,7 @@ import type { AgentFolderArchive, AgentFolderArchiveSummary } from '@deveye/type
 import { accessEpochNow } from '@/features/_access';
 import { logger } from '@/logger';
 import { agentFrame } from './orders';
+import { AgentTunnels } from './tunnels';
 
 /**
  * Période du balayage de vivacité des agents. Deux tours sans `pong` ferment la
@@ -213,6 +214,8 @@ export class MonitorHub {
      */
     /** Archives de dossier en cours, par appareil et opération. */
     private readonly archives = new Map<string, ArchiveFlow>();
+    /** Les connexions TCP que les agents relaient pour les modules. */
+    readonly tunnels = new AgentTunnels((deviceId) => this.agents.get(deviceId));
     private readonly fileOpWaiters = new Map<string, (result: { ok: boolean; error?: string }) => void>();
     /**
      * Les actions Docker qu'un appelant sans socket attend (un déploiement) :
@@ -349,6 +352,7 @@ export class MonitorHub {
         // Avant le filtre ci-dessous : une session remplacée emporte ses archives,
         // la nouvelle n'en sait rien.
         this.failArchives(socket, 'La machine s’est déconnectée pendant l’archive.');
+        this.tunnels.failSocket(socket, 'La machine s’est déconnectée.');
         // Only forget the agent if the socket closing is the one we still hold: a
         // fast reconnect may have replaced it, and a late close from the old
         // socket must not evict the new one.

@@ -18,8 +18,11 @@ export const manifest = {
      * relevé du service de fond (jamais à un tour sans relevé).
      */
     resources: ['database.count', 'database.list', 'database.detail'],
-    /** Les canaux d'alerte de l'espace, par base. */
-    nativeCapabilities: ['notify'],
+    /**
+     * Les canaux d'alerte de l'espace, par base ; les appareils et leurs
+     * agents pour joindre une base qui n'écoute que sur une machine.
+     */
+    nativeCapabilities: ['notify', 'agents', 'devices.read'],
     quotas: [{ key: 'connections', label: 'bases de données', stock: true }],
     links: [
         { to: 'mail', what: 'envoie ses alertes par un compte Mail' },

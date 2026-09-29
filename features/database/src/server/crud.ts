@@ -1,6 +1,7 @@
 import {
     databaseAdd,
     databaseCount,
+    databaseDevices,
     databaseGet,
     databaseList,
     databaseRemove,
@@ -22,26 +23,38 @@ import {
     type StoredAccess,
     type StoredDatabase
 } from './_shared';
+import { authorizeDevice, deviceOptions } from './device';
 
 /**
  * Les bases de l'espace : inventaire, réglages, suppression, ordre. Rien ici ne
  * joint un serveur ; `probe.ts` s'en charge, sur demande.
  */
 
-/** Ce que le client envoie pour décrire un accès, sans son secret. */
-function accessBody(input: {
-    kind: StoredAccess['kind'];
-    host: string;
-    port: number | null;
-    username: string;
-    auth: StoredAccess['auth'];
-}): StoredAccess {
+/**
+ * Ce que le client envoie pour décrire un accès, sans son secret. Par un
+ * appareil, l'appelant doit pouvoir en ouvrir le réseau, et il en devient
+ * l'auteur : le relevé cesse quand il perd ce droit.
+ */
+async function accessBody(
+    ctx: Ctx,
+    input: {
+        kind: StoredAccess['kind'];
+        host: string;
+        port: number | null;
+        username: string;
+        auth: StoredAccess['auth'];
+        deviceId: string | null;
+    }
+): Promise<StoredAccess> {
+    const device = input.kind === 'device' ? await authorizeDevice(ctx, input.deviceId) : null;
     return {
         kind: input.kind,
         host: input.host.trim(),
         port: input.port,
         username: input.username.trim(),
-        auth: input.auth
+        auth: input.auth,
+        deviceId: device?.id ?? null,
+        authorUserId: device ? ctx.userId : null
     };
 }
 
@@ -137,7 +150,7 @@ export const databaseCrudFeatures = [
                 nameRef: ref,
                 content: await cipher.encrypt(JSON.stringify(body)),
                 secretEnc: input.password ? await cipher.encrypt(input.password) : null,
-                accessContent: await cipher.encrypt(JSON.stringify(accessBody(input.access))),
+                accessContent: await cipher.encrypt(JSON.stringify(await accessBody(ctx, input.access))),
                 accessSecretEnc: input.access.secret ? await cipher.encrypt(input.access.secret) : null,
                 monitorEnabled: input.monitorEnabled,
                 intervalSeconds: input.intervalSeconds
@@ -193,7 +206,7 @@ export const databaseCrudFeatures = [
                         : input.password
                           ? await cipher.encrypt(input.password)
                           : null,
-                accessContent: await cipher.encrypt(JSON.stringify(accessBody(input.access))),
+                accessContent: await cipher.encrypt(JSON.stringify(await accessBody(ctx, input.access))),
                 accessSecretEnc:
                     input.access.secret === undefined
                         ? undefined
@@ -236,5 +249,10 @@ export const databaseCrudFeatures = [
             await ctx.repo.reorder(ctx.workspaceId, input.ids);
             return { ids: input.ids };
         }
+    }),
+    defineSdkFeature({
+        ...databaseDevices,
+        access: { level: 'write' },
+        handler: async (ctx: Ctx) => ({ devices: await deviceOptions(ctx) })
     })
 ];

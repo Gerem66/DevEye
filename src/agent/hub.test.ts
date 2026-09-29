@@ -157,3 +157,73 @@ describe('MonitorHub : archive de dossier', () => {
         await assert.rejects(next, /résolution de \/srv\/www/);
     });
 });
+
+describe('MonitorHub : tunnel TCP', () => {
+    /** Ouvre un tunnel et le confirme comme le ferait l'agent. */
+    async function openedTunnel() {
+        const hub = new MonitorHub();
+        const agent = fakeAgent();
+        hub.agentOnline(DEVICE, agent.socket);
+        const pending = hub.tunnels.open(DEVICE, { host: '127.0.0.1', port: 5432 });
+        const order = agent.sent[0];
+        assert.equal(order.command, 'tunnel.open');
+        assert.equal(order.payload.window, 8);
+        const tunnelId = order.payload.tunnelId as string;
+        hub.tunnels.opened(DEVICE, agent.socket, { deviceId: DEVICE, tunnelId });
+        return { hub, agent, tunnelId, stream: await pending };
+    }
+
+    const chunk = (tunnelId: string, text: string) => ({
+        deviceId: DEVICE,
+        tunnelId,
+        data: Buffer.from(text).toString('base64')
+    });
+
+    it('relaie dans les deux sens et rend les crédits par paquets', async () => {
+        const { hub, agent, tunnelId, stream } = await openedTunnel();
+        for (let i = 0; i < 8; i++) hub.tunnels.data(DEVICE, agent.socket, chunk(tunnelId, `r${i}`));
+        const read: string[] = [];
+        stream.on('data', (b: Buffer) => read.push(b.toString()));
+        await settle();
+        assert.equal(read.join(''), 'r0r1r2r3r4r5r6r7');
+        const credits = agent.sent.filter((f) => f.command === 'tunnel.credit').map((f) => f.payload.credits);
+        assert.deepEqual(credits, [8]);
+
+        await new Promise<void>((resolve, reject) =>
+            stream.write(Buffer.alloc(70 * 1024, 1), (e) => (e ? reject(e) : resolve()))
+        );
+        const writes = agent.sent.filter((f) => f.command === 'tunnel.write');
+        assert.equal(writes.length, 2, 'découpé en pièces de 64 Kio');
+
+        stream.destroy();
+        assert.equal(agent.sent.at(-1)?.command, 'tunnel.close');
+    });
+
+    it('rend le refus de la machine à l’ouverture', async () => {
+        const hub = new MonitorHub();
+        const agent = fakeAgent();
+        hub.agentOnline(DEVICE, agent.socket);
+        const pending = hub.tunnels.open(DEVICE, { host: '10.0.0.5', port: 3306 });
+        const tunnelId = agent.sent[0].payload.tunnelId as string;
+        hub.tunnels.closed(DEVICE, agent.socket, { deviceId: DEVICE, tunnelId, error: 'cible refusée' });
+        await assert.rejects(pending, /cible refusée/);
+        assert.equal(agent.sent.filter((f) => f.command === 'tunnel.close').length, 0);
+    });
+
+    it('échoue quand la machine se déconnecte ou déborde de ses crédits', async () => {
+        const first = await openedTunnel();
+        const offline = new Promise<Error>((resolve) => first.stream.once('error', resolve));
+        first.hub.agentOffline(DEVICE, first.agent.socket);
+        assert.match((await offline).message, /déconnectée/);
+
+        const second = await openedTunnel();
+        const overflow = new Promise<Error>((resolve) => second.stream.once('error', resolve));
+        for (let i = 0; i < 9; i++) second.hub.tunnels.data(DEVICE, second.agent.socket, chunk(second.tunnelId, 'x'));
+        assert.match((await overflow).message, /plus que ce qui lui était permis/);
+        assert.equal(second.agent.sent.at(-1)?.command, 'tunnel.close');
+    });
+
+    it('rejette sans machine connectée', async () => {
+        await assert.rejects(new MonitorHub().tunnels.open(DEVICE, { host: '127.0.0.1', port: 5432 }), /pas connectée/);
+    });
+});

@@ -311,6 +311,12 @@ serveur contrôle les machines**, à ceci près.
   qui n'est pas celui du terminal. L'agent refuse un dossier système, la racine,
   son propre dossier, un chemin qu'un lien symbolique ferait sortir du partage,
   et, si `sync_roots` est renseigné sur la machine, tout ce qui n'y figure pas.
+- **Tunnels** : une connexion TCP que la machine ouvre pour un module (une base
+  de données sur sa boucle locale), sous un droit d'Appareils qui n'est pas
+  celui du terminal (« Accès au réseau de l'appareil »). L'agent ne joint que sa
+  propre boucle locale, plus les hôtes que `tunnel_targets` nomme sur la
+  machine, et refuse tout sous `allow_tunnel = false`. Ce que le serveur lit
+  est borné par des crédits : un agent qui déborde voit son tunnel fermé.
 - **Le service système** ne porte que `RestrictRealtime` et `LockPersonality` :
   tout ce que systemd confinerait de plus s'appliquerait au shell de l'opérateur
   et aux mises à jour de paquets, qui sont les enfants de l'agent.

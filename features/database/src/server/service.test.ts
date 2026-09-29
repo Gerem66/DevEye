@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { createServer, type AddressInfo } from 'node:net';
+import { PassThrough } from 'node:stream';
 import { describe, it } from 'node:test';
 
 import type { DatabaseAlertRow, DatabaseRow, DatabaseRows } from '../contracts/domain';
@@ -10,7 +12,11 @@ import {
     type DatabaseItemsProvider,
     type DatabaseMeasureProvider
 } from '@deveye/types/sdk';
-import { createTestServiceDeps } from '@deveye/types/sdk/testing';
+import { createTestServiceDeps, testDevice } from '@deveye/types/sdk/testing';
+
+// L'accès d'une sauvegarde ouvre un vrai relais : le test lui donne une base
+// en boucle locale, que le garde des connexions sortantes refuse par défaut.
+import { setAllowPrivateForTest } from '@/Services/netFetch';
 
 import type { Inventory, Session } from './engine';
 import { serverEntry } from './index';
@@ -298,8 +304,17 @@ describe('la pause d’offre', () => {
         assert.equal(repo.rows[1].last_check_at, null);
     });
 
-    it('Projets ne l’ouvre pas, et rend la raison ; Sauvegardes l’ouvre, que borne son propre stockage', async () => {
-        const repo = fakeRepo([row({ id: 2 })]);
+    it('Projets ne l’ouvre pas, et rend la raison ; Sauvegardes l’ouvre, que borne son propre stockage', async (t) => {
+        const server = createServer((socket) => socket.end());
+        await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+        const { port } = server.address() as AddressInfo;
+        setAllowPrivateForTest(true);
+        t.after(async () => {
+            setAllowPrivateForTest(false);
+            await new Promise<void>((resolve) => server.close(() => resolve()));
+        });
+        const content = { name: 'Prod', host: '127.0.0.1', port, database: 'shop', username: 'ro' };
+        const repo = fakeRepo([row({ id: 2, content: JSON.stringify(content) })]);
         const service = serverEntry.createService?.(
             createTestServiceDeps({ repo, pausedItems: { connections: ['2'] } })
         );
@@ -431,5 +446,63 @@ describe('DATABASE_ITEMS_PROVIDER : labelOf', () => {
         assert.equal(await provider.labelOf(1, 1), 'Prod');
         assert.equal(await provider.labelOf(42, 1), null);
         assert.equal(await provider.labelOf(1, 2), null);
+    });
+});
+
+describe('l’accès par un appareil', () => {
+    const deviceId = '5b0f3c1e-8d2a-4f6b-9c7e-1a2b3c4d5e6f';
+    const access = JSON.stringify({
+        kind: 'device',
+        host: '',
+        port: null,
+        username: '',
+        auth: 'password',
+        deviceId,
+        authorUserId: 7
+    });
+    const device = (probes: string[], online = true) =>
+        testDevice({
+            id: deviceId,
+            name: 'Poste',
+            online,
+            report: { agent: { probes } } as unknown as ReturnType<typeof testDevice>['report']
+        });
+
+    it('passe par l’agent de l’appareil tant que l’auteur en garde le droit', async () => {
+        const repo = fakeRepo([row({ access_content: access })]);
+        const asked: { userId: number; extras: readonly string[] }[] = [];
+        const deps = createTestServiceDeps({
+            repo,
+            devices: [device(['tunnel'])],
+            access: {
+                device: async (_workspaceId, userId, _deviceId, extras) => {
+                    asked.push({ userId, extras });
+                    return { ok: true };
+                }
+            },
+            openTcp: async () => new PassThrough()
+        });
+        const target = await new DatabaseMonitor(deps).targetOf(repo.rows[0], 1);
+        assert.deepEqual(asked, [{ userId: 7, extras: ['network'] }]);
+        assert.ok(target.access.relay);
+        await target.access.relay({ host: '127.0.0.1', port: 5432 });
+        assert.deepEqual(deps.recorded.agentRequests, [{ method: 'openTcp', deviceId }]);
+    });
+
+    it('dit pourquoi elle ne passe plus : droit retiré, appareil hors ligne, agent trop ancien', async () => {
+        const repo = fakeRepo([row({ access_content: access })]);
+        const refused = createTestServiceDeps({
+            repo,
+            devices: [device(['tunnel'])],
+            access: { device: async () => ({ ok: false, reason: 'not_granted' }) }
+        });
+        await assert.rejects(
+            new DatabaseMonitor(refused).targetOf(repo.rows[0], 1),
+            /ne peut plus en ouvrir le réseau \(la permission lui a été retirée\)/
+        );
+        const offline = createTestServiceDeps({ repo, devices: [device(['tunnel'], false)] });
+        await assert.rejects(new DatabaseMonitor(offline).targetOf(repo.rows[0], 1), /« Poste » est hors ligne/);
+        const old = createTestServiceDeps({ repo, devices: [device([])] });
+        await assert.rejects(new DatabaseMonitor(old).targetOf(repo.rows[0], 1), /à mettre à jour/);
     });
 });

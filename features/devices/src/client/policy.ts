@@ -17,7 +17,8 @@ export const POLICY_LABEL: Record<PolicyKey, string> = {
     destroy: 'auto-destruction',
     docker: 'conteneurs Docker',
     dockerDeploy: 'déploiements',
-    sync: 'partages CloudSync'
+    sync: 'partages CloudSync',
+    tunnel: 'accès au réseau'
 };
 
 /** Dans l'ordre où l'agent les liste. */
@@ -34,5 +35,6 @@ export const POLICY_FLAG: Record<PolicyKey, string> = {
     destroy: 'destroy',
     docker: 'docker',
     dockerDeploy: 'docker-deploy',
-    sync: 'sync'
+    sync: 'sync',
+    tunnel: 'tunnel'
 };

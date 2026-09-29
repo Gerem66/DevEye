@@ -326,6 +326,7 @@ export function agentsFacade(gate: () => void): AgentsFacade {
                 },
                 options?.signal
             )
-        )
+        ),
+        openTcp: (deviceId, target) => (gate(), sdkHub().tunnels.open(deviceId, target))
     };
 }

@@ -20,6 +20,7 @@ use crate::packages::PkgEvent;
 use crate::protocol::ClientMessage;
 use crate::sync::SyncEvent;
 use crate::terminal::TermEvent;
+use crate::tunnel::TunnelEvent;
 
 /// Self-destruct on the server's request. On success the agent wipes its local
 /// state, reports it, and **exits the process** (never returns). On failure it
@@ -510,6 +511,35 @@ where
     }
 }
 
+/// Forward one tunnel event to the server (bytes base64-encoded), stamping it
+/// with the device id.
+pub(crate) async fn send_tunnel_event<S>(sink: &mut S, device_id: &str, ev: TunnelEvent)
+where
+    S: SinkExt<Message> + Unpin,
+    S::Error: std::error::Error + Send + Sync + 'static,
+{
+    let device_id = device_id.to_string();
+    let msg = match ev {
+        TunnelEvent::Opened { tunnel_id } => ClientMessage::TunnelOpened {
+            device_id,
+            tunnel_id,
+        },
+        TunnelEvent::Data { tunnel_id, data } => ClientMessage::TunnelData {
+            device_id,
+            tunnel_id,
+            data: base64::engine::general_purpose::STANDARD.encode(&data),
+        },
+        TunnelEvent::Closed { tunnel_id, error } => ClientMessage::TunnelClosed {
+            device_id,
+            tunnel_id,
+            error,
+        },
+    };
+    if let Ok(text) = serde_json::to_string(&msg) {
+        let _ = sink.send(Message::Text(text)).await;
+    }
+}
+
 /// Forward one file-explorer event to the server, stamping it with the device id.
 pub(crate) async fn send_files_event<S>(sink: &mut S, device_id: &str, ev: FilesEvent)
 where
@@ -739,6 +769,17 @@ pub(crate) async fn refuse_order<S>(
     };
     let error = Some(reason.to_string());
     match command {
+        "tunnel.open" => {
+            send_tunnel_event(
+                sink,
+                device_id,
+                TunnelEvent::Closed {
+                    tunnel_id: text("tunnelId"),
+                    error,
+                },
+            )
+            .await;
+        }
         "term.open" => {
             send_term_event(
                 sink,

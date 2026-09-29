@@ -260,7 +260,8 @@ describe('Règles de ports', () => {
                                 destroy: true,
                                 docker: true,
                                 dockerDeploy: true,
-                                sync: true
+                                sync: true,
+                                tunnel: true
                             },
                             insecureTransport: false
                         },

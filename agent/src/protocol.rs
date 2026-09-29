@@ -178,6 +178,7 @@ pub struct AgentPolicy {
     pub docker: bool,
     pub docker_deploy: bool,
     pub sync: bool,
+    pub tunnel: bool,
 }
 
 /// One detected package manager + its pending state (mirrors @deveye/types
@@ -691,6 +692,33 @@ pub enum ClientMessage {
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>,
     },
+    /// The TCP connection of a `tunnel.open` is up.
+    #[serde(rename = "tunnel.opened")]
+    TunnelOpened {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        #[serde(rename = "tunnelId")]
+        tunnel_id: String,
+    },
+    /// Bytes read from a tunnel's target (`data` is base64). Spends one credit.
+    #[serde(rename = "tunnel.data")]
+    TunnelData {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        #[serde(rename = "tunnelId")]
+        tunnel_id: String,
+        data: String,
+    },
+    /// A tunnel ended; `error` unless the target closed it.
+    #[serde(rename = "tunnel.closed")]
+    TunnelClosed {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        #[serde(rename = "tunnelId")]
+        tunnel_id: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
     /// A chunk of PTY output for a terminal session (`data` is base64 of raw bytes).
     #[serde(rename = "term.output")]
     TermOutput {
@@ -1043,6 +1071,36 @@ pub enum ServerMessage {
         #[serde(rename = "sessionId")]
         session_id: String,
     },
+    /// Open a TCP connection from this machine to `host:port` and relay it,
+    /// `window` credits up front (see `tunnel.rs`).
+    #[serde(rename = "tunnel.open")]
+    TunnelOpen {
+        #[serde(rename = "tunnelId")]
+        tunnel_id: String,
+        host: String,
+        port: u16,
+        window: u32,
+    },
+    /// Bytes (base64) for a tunnel's target.
+    #[serde(rename = "tunnel.write")]
+    TunnelWrite {
+        #[serde(rename = "tunnelId")]
+        tunnel_id: String,
+        data: String,
+    },
+    /// More credits for a tunnel.
+    #[serde(rename = "tunnel.credit")]
+    TunnelCredit {
+        #[serde(rename = "tunnelId")]
+        tunnel_id: String,
+        credits: u32,
+    },
+    /// Close a tunnel; nothing goes back, the server has forgotten it.
+    #[serde(rename = "tunnel.close")]
+    TunnelClose {
+        #[serde(rename = "tunnelId")]
+        tunnel_id: String,
+    },
     /// List a directory (replies `files.listing`).
     #[serde(rename = "files.list")]
     FilesList {
@@ -1321,8 +1379,9 @@ pub enum ServerMessage {
 
 /// The orders that must carry the server's signature (mirrors
 /// `SIGNED_AGENT_COMMANDS` in @deveye/types): what runs code, writes or deletes
-/// files, changes the agent's privileges or its life, or drives its containers.
-pub const SIGNED_COMMANDS: [&str; 9] = [
+/// files, changes the agent's privileges or its life, drives its containers, or
+/// reaches into its network.
+pub const SIGNED_COMMANDS: [&str; 10] = [
     "term.open",
     "files.mutate",
     "files.upload",
@@ -1332,6 +1391,7 @@ pub const SIGNED_COMMANDS: [&str; 9] = [
     "pkg.upgrade",
     "agent.lifecycle",
     "docker.action",
+    "tunnel.open",
 ];
 
 /// Signature carried next to `command` and `payload` (see `orders.rs`).

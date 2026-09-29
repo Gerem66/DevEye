@@ -1,22 +1,42 @@
-import { createServer, type AddressInfo, type Server, type Socket } from 'net';
+import { connect as netConnect, createServer, type AddressInfo, type Server, type Socket } from 'net';
+import type { Duplex } from 'stream';
 import { Client as SshClient } from 'ssh2';
 import { SocksClient } from 'socks';
 import type { DatabaseAccessKind, DatabaseSshAuth } from '../contracts/domain';
 
+// Le garde des connexions sortantes, partagé par toute l'app : la base, le
+// rebond et le proxy sont saisis par un membre, et `publicLookup` referme la
+// fenêtre entre la vérification et la connexion (rebinding DNS).
+import {
+    assertAllowedOutboundHost,
+    OUTBOUND_HOST_REFUSED_MESSAGE,
+    publicLookup,
+    UnsafeTargetError
+} from '@/Services/netFetch';
+
 /**
- * Joindre une base par un rebond SSH ou un proxy SOCKS5. Un écouteur local sur
- * `127.0.0.1:0` plutôt qu'une socket passée au pilote : `pg` n'en accepte pas.
- * Un tunnel est toujours rendu avec son `close()`, que l'appelant appelle dans
- * un `finally` ; oublié, il laisse un écouteur et une session SSH.
+ * Joindre une base, en direct, par un rebond SSH, par un proxy SOCKS5 ou par
+ * l'agent d'un appareil. Un
+ * écouteur local sur `127.0.0.1:0` plutôt qu'une socket passée au pilote : `pg`
+ * n'en accepte pas, et `pg_dump` ne se connecte qu'à un hôte. Le direct y passe
+ * aussi : sinon le pilote résoudrait le nom lui-même, hors du garde. Un tunnel
+ * est toujours rendu avec son `close()`, que l'appelant appelle dans un
+ * `finally` ; oublié, il laisse un écouteur et une session SSH.
  */
 
 /** Un chemin ouvert vers l'hôte cible, et de quoi le refermer. */
 export interface Tunnel {
-    /** L'hôte à donner au pilote : l'écouteur local, ou l'hôte réel en direct. */
+    /** L'hôte à donner au pilote : toujours l'écouteur local. */
     host: string;
     port: number;
     close: () => Promise<void>;
 }
+
+/**
+ * Une connexion ouverte par l'agent d'un appareil vers l'hôte de la base, de
+ * son côté. Droits, présence et version de l'agent sont vérifiés avant.
+ */
+export type DeviceRelay = (target: { host: string; port: number }) => Promise<Duplex>;
 
 export interface TunnelConfig {
     kind: DatabaseAccessKind;
@@ -27,6 +47,8 @@ export interface TunnelConfig {
     auth: DatabaseSshAuth;
     /** Mot de passe SSH ou clé privée ; jamais rendu au client. */
     secret: string | null;
+    /** Le relais de l'appareil choisi, en mode `device`. */
+    relay: DeviceRelay | null;
 }
 
 const SSH_DEFAULT_PORT = 22;
@@ -34,14 +56,32 @@ const SOCKS_DEFAULT_PORT = 1080;
 
 const CONNECT_TIMEOUT_MS = 12_000;
 
-/** Un tunnel qui ne fait rien : l'accès direct, sous la même forme. */
-function direct(host: string, port: number): Tunnel {
-    return { host, port, close: async () => {} };
+/**
+ * Une connexion TCP depuis le serveur vers un hôte saisi par un membre. Hors
+ * `OUTBOUND_ALLOW_PRIVATE`, une adresse privée ou locale est refusée.
+ */
+async function guardedConnect(host: string, port: number): Promise<Socket> {
+    await assertAllowedOutboundHost(host);
+    return new Promise<Socket>((resolve, reject) => {
+        const socket = netConnect({ host, port, lookup: publicLookup, timeout: CONNECT_TIMEOUT_MS });
+        socket.once('connect', () => {
+            socket.setTimeout(0);
+            resolve(socket);
+        });
+        socket.once('timeout', () => {
+            socket.destroy();
+            reject(new Error(`${host}:${port} n’a pas répondu dans le délai imparti.`));
+        });
+        socket.once('error', (e: NodeJS.ErrnoException) =>
+            reject(e.code === 'ENOTPUBLIC' ? new UnsafeTargetError(OUTBOUND_HOST_REFUSED_MESSAGE) : e)
+        );
+    });
 }
 
 /** Ouvre le chemin décrit par `config` vers `target` ; ne lève que des messages lisibles. */
 export async function openTunnel(config: TunnelConfig, target: { host: string; port: number }): Promise<Tunnel> {
-    if (config.kind === 'direct') return direct(target.host, target.port);
+    if (config.kind === 'direct') return openDirect(target);
+    if (config.kind === 'device') return openDeviceTunnel(config.relay, target);
     if (config.host.trim() === '') {
         throw new Error(
             config.kind === 'ssh'
@@ -94,7 +134,33 @@ async function localForwarder(connect: () => Promise<Socket>, onClose: () => Pro
     };
 }
 
+async function openDirect(target: { host: string; port: number }): Promise<Tunnel> {
+    const connect = () => guardedConnect(target.host, target.port);
+    // Un refus ou une base injoignable se disent ici : derrière le relais, le
+    // pilote ne verrait qu'une connexion coupée.
+    const probe = await connect();
+    probe.destroy();
+    return localForwarder(connect, async () => {});
+}
+
+/** Pas de garde du serveur : la cible est sur le réseau de l'appareil, que borne son agent. */
+async function openDeviceTunnel(relay: DeviceRelay | null, target: { host: string; port: number }): Promise<Tunnel> {
+    if (!relay) throw new Error('Aucun appareil n’est choisi pour joindre cette base.');
+    // Un flux duplex, comme un canal SSH : tout ce dont le relais local a besoin.
+    const connect = async () => (await relay(target)) as unknown as Socket;
+    const probe = await connect();
+    probe.destroy();
+    return localForwarder(connect, async () => {});
+}
+
 async function openSshTunnel(config: TunnelConfig, target: { host: string; port: number }): Promise<Tunnel> {
+    let sock: Socket;
+    try {
+        sock = await guardedConnect(config.host, config.port ?? SSH_DEFAULT_PORT);
+    } catch (e) {
+        if (e instanceof UnsafeTargetError) throw e;
+        throw new Error(`Rebond SSH impossible : ${e instanceof Error ? e.message : String(e)}`);
+    }
     const client = new SshClient();
 
     await new Promise<void>((resolve, reject) => {
@@ -113,8 +179,7 @@ async function openSshTunnel(config: TunnelConfig, target: { host: string; port:
         });
 
         client.connect({
-            host: config.host,
-            port: config.port ?? SSH_DEFAULT_PORT,
+            sock,
             username: config.username,
             // La clé reste en mémoire, jamais écrite sur disque.
             ...(config.auth === 'key'
@@ -152,14 +217,23 @@ async function openSocksTunnel(config: TunnelConfig, target: { host: string; por
         ...(config.username ? { userId: config.username, password: config.secret ?? '' } : {})
     };
 
+    // La destination est résolue par le proxy, de son côté : seul le proxy
+    // lui-même passe par le garde.
     const connect = async (): Promise<Socket> => {
-        const { socket } = await SocksClient.createConnection({
-            proxy,
-            command: 'connect',
-            destination: { host: target.host, port: target.port },
-            timeout: CONNECT_TIMEOUT_MS
-        });
-        return socket;
+        const existing = await guardedConnect(proxy.host, proxy.port);
+        try {
+            const { socket } = await SocksClient.createConnection({
+                proxy,
+                command: 'connect',
+                destination: { host: target.host, port: target.port },
+                timeout: CONNECT_TIMEOUT_MS,
+                existing_socket: existing
+            });
+            return socket;
+        } catch (e) {
+            existing.destroy();
+            throw e;
+        }
     };
 
     // Même raison que côté SSH : savoir tout de suite si le proxy accepte la
@@ -168,6 +242,7 @@ async function openSocksTunnel(config: TunnelConfig, target: { host: string; por
         const probe = await connect();
         probe.destroy();
     } catch (e) {
+        if (e instanceof UnsafeTargetError) throw e;
         throw new Error(`Proxy SOCKS injoignable : ${e instanceof Error ? e.message : String(e)}`);
     }
 

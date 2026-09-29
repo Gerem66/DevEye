@@ -51,6 +51,9 @@ export interface StoredAccess {
     port: number | null;
     username: string;
     auth: TunnelConfig['auth'];
+    /** En mode `device`, l'appareil, et le membre dont le droit le couvre. */
+    deviceId?: string | null;
+    authorUserId?: number | null;
 }
 
 /**
@@ -159,7 +162,8 @@ export async function toDatabase(
             port: access?.port ?? null,
             username: access?.username ?? '',
             auth: access?.auth ?? 'password',
-            hasSecret: row.access_secret_enc !== null && row.access_secret_enc !== ''
+            hasSecret: row.access_secret_enc !== null && row.access_secret_enc !== '',
+            deviceId: access?.deviceId ?? null
         },
         monitorEnabled: row.monitor_enabled === 1,
         intervalSeconds: row.interval_seconds,

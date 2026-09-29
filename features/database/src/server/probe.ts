@@ -1,6 +1,7 @@
 import { databaseInspect, databaseQuery, databaseTest, databaseTestDraft } from '../contracts/commands';
 import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 
+import { authorizeDevice, relayOf } from './device';
 import { explainError, openSession, type Session } from './engine';
 import { loadDatabase, monitorOf, reloadDatabase, type Ctx } from './_shared';
 
@@ -81,9 +82,16 @@ export const databaseProbeFeatures = [
                 }
             }
 
+            // Un refus de droit lève, comme à l'enregistrement : ce n'est pas
+            // un échec de connexion.
+            const device = input.access.kind === 'device' ? await authorizeDevice(ctx, input.access.deviceId) : null;
+
             const started = Date.now();
             let session: Session | null = null;
             try {
+                const relay = device
+                    ? relayOf(ctx.deveye.agents, device, ctx.deveye.devices.isOnline(device.id))
+                    : null;
                 session = await openSession({
                     engine: input.engine,
                     host: input.host,
@@ -91,7 +99,7 @@ export const databaseProbeFeatures = [
                     database: input.database,
                     username: input.username,
                     password,
-                    access: { ...input.access, secret: accessSecret }
+                    access: { ...input.access, secret: accessSecret, relay }
                 });
                 const version = await session.serverVersion();
                 return { probe: { ok: true, serverVersion: version, elapsedMs: Date.now() - started, error: null } };

@@ -645,7 +645,9 @@ deux ordres du cycle de vie `disconnectAgent` /
 `requestDestroy`, `servedManifest`, les requêtes sync,
 `dockerRun` / `dockerInventory`, et `archiveFolder` : l'archive `.tar.gz` d'un
 dossier, faite par l'agent et tirée par crédits au rythme du consommateur,
-annulée sur la machine quand on quitte la boucle)),
+annulée sur la machine quand on quitte la boucle, et `openTcp` : une connexion
+TCP que l'agent ouvre de son côté vers sa boucle locale ou un hôte de
+`tunnel_targets`, rendue en flux duplex tiré par crédits)),
 `transport` (socket appelant, `agents`), `live.publish(event, payload)` (la voie
 de poussée, capacité `live.publish` : une trame nommée sous le préfixe du module,
 aux connexions de la salle qui ont `read` sur sa feature ; voir LIVE.md §4),

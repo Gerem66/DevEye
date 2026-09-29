@@ -48,7 +48,7 @@ export const manifest = {
     /**
      * Piloter une machine et gérer la flotte sont deux choses : `read`/`write`
      * gouvernent la liste (voir, appairer, approuver, renommer, révoquer,
-     * régler), ces quatre-là gouvernent ce qu'on fait DE la machine. Elles
+     * régler), celles-ci gouvernent ce qu'on fait DE la machine. Elles
      * n'en découlent pas : un gestionnaire de parc n'a pas besoin d'un shell
      * root, et un support en a besoin sans pouvoir révoquer quoi que ce soit.
      * Chacune exige la lecture, et la restriction par élément s'applique
@@ -79,6 +79,13 @@ export const manifest = {
             label: 'Conteneurs Docker',
             description:
                 'Voir et piloter les conteneurs, images, volumes et réseaux des appareils de l’espace : démarrer, arrêter, redémarrer, mettre à jour, mais aussi supprimer et nettoyer.',
+            type: 'toggle'
+        },
+        {
+            key: 'network',
+            label: 'Accès au réseau de l’appareil',
+            description:
+                'Laisser une autre fonctionnalité joindre un service de l’appareil par son agent, comme une base de données qui n’écoute que sur la machine.',
             type: 'toggle'
         },
         {

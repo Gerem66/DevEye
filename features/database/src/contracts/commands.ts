@@ -12,6 +12,7 @@ import {
     databaseCellSchema,
     databaseCombinatorSchema,
     databaseConditionSchema,
+    databaseDeviceSchema,
     databaseEngineSchema,
     databaseExecutionSchema,
     databaseExportFormatSchema,
@@ -49,6 +50,7 @@ const accessInput = z.object({
     port: z.number().int().min(1).max(65535).nullable(),
     username: z.string().max(DATABASE_USER_MAX_LENGTH),
     auth: databaseSshAuthSchema,
+    deviceId: z.uuid().nullable(),
     /**
      * Mot de passe SSH ou clé privée. Absent = on garde celui en place ; une
      * chaîne vide l'efface. Le client ne le reçoit jamais.
@@ -115,6 +117,13 @@ export const databaseUpdate = {
         autoLoadTables: z.boolean()
     }),
     output: z.object({ database: databaseSchema })
+};
+
+/** Les appareils de l'espace par lesquels joindre une base, pour le formulaire d'accès. */
+export const databaseDevices = {
+    command: 'database.devices' as const,
+    input: z.object({}),
+    output: z.object({ devices: z.array(databaseDeviceSchema) })
 };
 
 /** Retire la base, ses alertes et ses liaisons ; les projets liés ne perdent que leur base. */
@@ -348,6 +357,7 @@ export const databaseCommands = [
     databaseGet,
     databaseAdd,
     databaseUpdate,
+    databaseDevices,
     databaseRemove,
     databaseReorder,
     databaseTest,

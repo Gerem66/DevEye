@@ -28,6 +28,7 @@ mod sockets;
 mod state;
 mod sync;
 mod terminal;
+mod tunnel;
 mod uninstall;
 mod update;
 

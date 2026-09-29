@@ -23,8 +23,10 @@ export type DatabaseEngine = z.infer<typeof databaseEngineSchema>;
 /**
  * `direct` : le serveur joint l'hôte lui-même. `ssh` : tunnel TCP ouvert dans
  * le processus, sans binaire externe ni clé sur disque. `socks` : proxy SOCKS5.
+ * `device` : l'agent d'un appareil joint l'hôte de son côté (une base qui
+ * n'écoute que sur la machine).
  */
-export const databaseAccessKindSchema = z.enum(['direct', 'ssh', 'socks']);
+export const databaseAccessKindSchema = z.enum(['direct', 'ssh', 'socks', 'device']);
 export type DatabaseAccessKind = z.infer<typeof databaseAccessKindSchema>;
 
 export const databaseSshAuthSchema = z.enum(['password', 'key']);
@@ -43,10 +45,25 @@ export const databaseAccessSchema = z.object({
     /** Utilisateur SSH ; vide pour un proxy SOCKS anonyme. */
     username: z.string().max(DATABASE_USER_MAX_LENGTH),
     auth: databaseSshAuthSchema,
-    /** Un secret est enregistré (mot de passe ou clé privée) — jamais lequel. */
-    hasSecret: z.boolean()
+    /** Un secret est enregistré (mot de passe ou clé privée), jamais lequel. */
+    hasSecret: z.boolean(),
+    /** L'appareil par lequel passer en mode `device`. */
+    deviceId: z.uuid().nullable()
 });
 export type DatabaseAccess = z.infer<typeof databaseAccessSchema>;
+
+/**
+ * Un appareil de l'espace, vu depuis l'accès d'une base. `blocked` dit ce qui
+ * empêche de le choisir (droit, agent, réglage de la machine) : un appareil
+ * qu'on ne peut pas choisir reste visible, c'est ainsi qu'on apprend pourquoi.
+ */
+export const databaseDeviceSchema = z.object({
+    id: z.uuid(),
+    name: z.string(),
+    online: z.boolean(),
+    blocked: z.string().nullable()
+});
+export type DatabaseDevice = z.infer<typeof databaseDeviceSchema>;
 
 export const databaseSchema = z.object({
     id: z.number().int().positive(),

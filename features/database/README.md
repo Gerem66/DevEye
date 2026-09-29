@@ -216,20 +216,40 @@ pas de l'autre.
 
 ## 4. Les tunnels
 
-Trois chemins, décrits par `access.kind` :
+Quatre chemins, décrits par `access.kind` :
 
-| Chemin   | Quand                                                    |
-| -------- | -------------------------------------------------------- |
-| `direct` | le serveur joint l'hôte lui-même                         |
-| `ssh`    | on a un compte sur une machine du réseau (rebond)        |
-| `socks`  | un VPN est déjà monté ailleurs et expose un proxy SOCKS5 |
+| Chemin   | Quand                                                         |
+| -------- | ------------------------------------------------------------- |
+| `direct` | le serveur joint l'hôte lui-même                              |
+| `ssh`    | on a un compte sur une machine du réseau (rebond)             |
+| `socks`  | un VPN est déjà monté ailleurs et expose un proxy SOCKS5      |
+| `device` | la base n'est joignable que depuis un appareil qui a un agent |
+
+**Par un appareil.** L'agent ouvre la connexion de son côté et la relaie sur sa
+session (`agents.openTcp`) : l'hôte et le port sont ceux que voit la machine,
+`127.0.0.1` pour une base qui n'écoute que sur elle. Trois verrous : le droit
+« Accès au réseau de l'appareil » d'Appareils, vérifié à l'enregistrement puis
+à chaque connexion pour le membre qui a choisi l'appareil (`authorUserId` dans
+`access_content`, sans colonne) ; la version de l'agent (sonde `tunnel`) ; et la
+machine elle-même, qui ne joint que sa boucle locale sauf hôtes listés dans
+`tunnel_targets`, et refuse tout sous `allow_tunnel = false`. Une base à un
+appareil hors ligne échoue avec ce motif, comme une base éteinte.
 
 **Un écouteur local, pas une socket passée au pilote.** `mysql2` accepte une
 socket existante, `pg` non — il veut ouvrir la sienne vers un hôte et un port. Un
 petit écouteur sur `127.0.0.1:0` donne aux deux pilotes ce qu'ils savent
 consommer, sans rien supposer de leur implémentation. `127.0.0.1` et non
 `0.0.0.0` : ce relais n'a aucune raison d'être joignable de l'extérieur, et
-l'exposer ouvrirait un accès à la base sans authentification.
+l'exposer ouvrirait un accès à la base sans authentification. Le `direct` y
+passe aussi, pour que le nom soit résolu sous le garde et non par le pilote.
+
+**Le garde des appels sortants.** L'hôte de la base en `direct`, le rebond SSH
+et le proxy SOCKS sont saisis par un membre : chacun passe par
+`assertAllowedOutboundHost` puis `publicLookup` (le rebinding DNS entre les
+deux). Une adresse privée ou locale n'est joignable que sur une installation
+qui les ouvre (`OUTBOUND_ALLOW_PRIVATE`) ; sinon, un compte viserait le réseau
+interne du serveur, sa propre base comprise. La cible derrière un rebond ou un
+proxy est résolue de l'autre côté, et n'est pas gardée.
 
 La clé privée reste **en mémoire** : jamais de fichier temporaire, qui
 survivrait à un arrêt brutal.
@@ -364,9 +384,11 @@ rules.ts       compare, runConditions, isFiring, renderMessage (fonctions pures)
 service.ts     DatabaseMonitor : relevé périodique + évaluation + notification,
                sur FeatureServiceDeps (ticker, cipherFor, notify, live.changed)
 engine.ts      adaptateurs MySQL et PostgreSQL, les deux gardes d'instruction
-tunnel.ts      SSH (ssh2) et SOCKS5 (socks)
+tunnel.ts      direct, SSH (ssh2) et SOCKS5 (socks) sous le garde sortant, appareil
+device.ts      le droit réseau d'un appareil, la liste du formulaire, le relais
 notice.ts      la mise en page Discord d'une alerte
-*.test.ts      handlers, rules, explore (l'export), engine (les gardes), service
+*.test.ts      handlers, rules, explore (l'export), engine (les gardes), service,
+               tunnel (le garde sortant, l'appareil)
 ```
 
 Côté Projets (le module `features/projects`) : la table de liaison et ses

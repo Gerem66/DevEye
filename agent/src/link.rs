@@ -103,6 +103,7 @@ pub fn prepare(options: &LinkOptions) -> Result<Config> {
             order_key: None,
             allow_plaintext: false,
             sync_roots: Vec::new(),
+            tunnel_targets: Vec::new(),
             policy: config::Policy::default(),
         },
     };

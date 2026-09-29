@@ -7,6 +7,9 @@ import {
     AGENT_ERROR,
     AGENT_FILES_ARCHIVE_CHUNK,
     AGENT_FILES_ARCHIVE_END,
+    AGENT_TUNNEL_CLOSED,
+    AGENT_TUNNEL_DATA,
+    AGENT_TUNNEL_OPENED,
     AGENT_FILES_ARCHIVE_PROGRESS,
     AGENT_FILES_CHUNK,
     AGENT_FILES_LISTING,
@@ -82,6 +85,9 @@ import {
     handleSyncOpResult,
     handleTermExit,
     handleTermOutput,
+    handleTunnelClosed,
+    handleTunnelData,
+    handleTunnelOpened,
     handleUpdated,
     type AgentSession
 } from './handlers';
@@ -177,6 +183,12 @@ function dispatch(session: AgentSession, msg: AgentClientMessage): void | Promis
             return handleFilesArchiveProgress(session, msg.payload);
         case AGENT_FILES_ARCHIVE_END:
             return handleFilesArchiveEnd(session, msg.payload);
+        case AGENT_TUNNEL_OPENED:
+            return handleTunnelOpened(session, msg.payload);
+        case AGENT_TUNNEL_DATA:
+            return handleTunnelData(session, msg.payload);
+        case AGENT_TUNNEL_CLOSED:
+            return handleTunnelClosed(session, msg.payload);
         case AGENT_SYNC_CHANGED:
             return handleSyncChanged(session, msg.payload);
         case AGENT_SYNC_INDEX:

@@ -1,6 +1,8 @@
-import { SegmentedControl, TextInput } from 'deveye-sdk-client';
-import type { Database, DatabaseAccessKind, DatabaseSshAuth } from '../contracts/domain';
+import { useEffect, useState } from 'react';
+import { humanizeError, SegmentedControl, SelectInput, TextInput, useDevices } from 'deveye-sdk-client';
+import type { Database, DatabaseAccessKind, DatabaseDevice, DatabaseSshAuth } from '../contracts/domain';
 
+import { api } from './api';
 import { ENGINE_PORTS } from './format';
 import styles from './style.module.css';
 
@@ -25,6 +27,8 @@ export interface ConnectionForm {
     accessAuth: DatabaseSshAuth;
     /** Mot de passe SSH ou clé privée ; vide = celui enregistré reste en place. */
     accessSecret: string;
+    /** L'appareil par lequel passer ; vide tant qu'aucun n'est choisi. */
+    accessDeviceId: string;
 }
 
 export const EMPTY_CONNECTION: ConnectionForm = {
@@ -39,7 +43,8 @@ export const EMPTY_CONNECTION: ConnectionForm = {
     accessPort: '',
     accessUser: '',
     accessAuth: 'password',
-    accessSecret: ''
+    accessSecret: '',
+    accessDeviceId: ''
 };
 
 /** Les secrets ne redescendent jamais : ils partent vides. */
@@ -56,13 +61,20 @@ export function connectionOf(database: Database): ConnectionForm {
         accessPort: database.access.port === null ? '' : String(database.access.port),
         accessUser: database.access.username,
         accessAuth: database.access.auth,
-        accessSecret: ''
+        accessSecret: '',
+        accessDeviceId: database.access.deviceId ?? ''
     };
 }
 
-/** L'onglet Connexion est rempli ; l'accès a toujours un défaut valable. */
+/** L'onglet Connexion est rempli, et l'accès par un appareil en a choisi un. */
 export function connectionComplete(form: ConnectionForm): boolean {
-    return form.name.trim() !== '' && form.host.trim() !== '' && form.database.trim() !== '' && form.port.trim() !== '';
+    return (
+        form.name.trim() !== '' &&
+        form.host.trim() !== '' &&
+        form.database.trim() !== '' &&
+        form.port.trim() !== '' &&
+        (form.accessKind !== 'device' || form.accessDeviceId !== '')
+    );
 }
 
 /**
@@ -83,6 +95,7 @@ export function connectionTarget(form: ConnectionForm) {
             port: form.accessPort.trim() === '' ? null : Number(form.accessPort),
             username: form.accessUser.trim(),
             auth: form.accessAuth,
+            deviceId: form.accessKind === 'device' && form.accessDeviceId ? form.accessDeviceId : null,
             ...(form.accessSecret ? { secret: form.accessSecret } : {})
         }
     };
@@ -91,7 +104,12 @@ export function connectionTarget(form: ConnectionForm) {
 const ACCESS_KINDS: { value: DatabaseAccessKind; label: string; title: string }[] = [
     { value: 'direct', label: 'Direct', title: 'Le serveur joint l’hôte lui-même' },
     { value: 'ssh', label: 'Tunnel SSH', title: 'Rebond par une machine du réseau' },
-    { value: 'socks', label: 'Proxy SOCKS5', title: 'Un VPN déjà monté ailleurs' }
+    { value: 'socks', label: 'Proxy SOCKS5', title: 'Un VPN déjà monté ailleurs' },
+    {
+        value: 'device',
+        label: 'Par un appareil',
+        title: 'L’agent d’un de vos appareils joint la base depuis la machine, même si elle n’écoute que sur elle'
+    }
 ];
 
 const SSH_AUTHS: { value: DatabaseSshAuth; label: string }[] = [
@@ -188,9 +206,74 @@ export function ConnectionFields({
     );
 }
 
-/** Le chemin vers le serveur : direct, tunnel SSH ou proxy SOCKS, et ses identifiants. */
+/**
+ * Les appareils qu'on peut choisir, et pourquoi pas les autres. La liste vient
+ * du serveur, qui seul connaît les droits et les agents ; en lecture seule,
+ * les noms de l'espace suffisent à montrer celui qui est choisi.
+ */
+function useDeviceOptions(load: boolean): { devices: readonly DatabaseDevice[]; error: string | null } {
+    const workspace = useDevices();
+    const [loaded, setLoaded] = useState<DatabaseDevice[] | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    useEffect(() => {
+        if (!load) return;
+        let live = true;
+        api.send('database.devices', {}).then(
+            (res) => {
+                if (live) setLoaded(res.devices);
+            },
+            (e) => {
+                if (live) setError(humanizeError(e, 'La liste des appareils n’a pas pu être chargée.'));
+            }
+        );
+        return () => {
+            live = false;
+        };
+    }, [load]);
+    return {
+        devices: loaded ?? workspace.devices.map((d) => ({ id: d.id, name: d.name, online: d.online, blocked: null })),
+        error
+    };
+}
+
+/** L'appareil par lequel joindre la base : ses agents seuls voient ce qui n'écoute que sur la machine. */
+function DeviceField({ form, onChange, disabled }: FieldsProps) {
+    const { devices, error } = useDeviceOptions(form.accessKind === 'device' && !disabled);
+    const blocked = devices.filter((d) => d.blocked !== null);
+
+    return (
+        <label className={styles.field}>
+            <span className={styles.label}>Appareil</span>
+            <SelectInput
+                value={form.accessDeviceId}
+                disabled={disabled}
+                onChange={(e) => onChange({ accessDeviceId: e.target.value })}
+            >
+                <option value=''>Choisir un appareil…</option>
+                {devices.map((d) => (
+                    <option key={d.id} value={d.id} disabled={d.blocked !== null && d.id !== form.accessDeviceId}>
+                        {d.name}
+                        {d.online ? '' : ' (hors ligne)'}
+                    </option>
+                ))}
+            </SelectInput>
+            <span className={styles.hint}>
+                L’hôte et le port de la base sont ceux que voit l’appareil : <strong>127.0.0.1</strong> pour une base
+                qui n’écoute que sur lui. Hors ligne, la base est injoignable jusqu’à son retour.
+            </span>
+            {error && <span className={styles.hint}>{error}</span>}
+            {blocked.map((d) => (
+                <span key={d.id} className={styles.hint}>
+                    « {d.name} » : {d.blocked}
+                </span>
+            ))}
+        </label>
+    );
+}
+
+/** Le chemin vers le serveur : direct, tunnel SSH, proxy SOCKS ou appareil, et ses identifiants. */
 export function AccessFields({ form, onChange, disabled, existing }: FieldsProps) {
-    const tunnelled = form.accessKind !== 'direct';
+    const tunnelled = form.accessKind === 'ssh' || form.accessKind === 'socks';
     const kind = ACCESS_KINDS.find((k) => k.value === form.accessKind) ?? ACCESS_KINDS[0];
     const privateKey = form.accessKind === 'ssh' && form.accessAuth === 'key';
 
@@ -207,6 +290,8 @@ export function AccessFields({ form, onChange, disabled, existing }: FieldsProps
                 />
                 <span className={styles.hint}>{kind.title}.</span>
             </div>
+
+            {form.accessKind === 'device' && <DeviceField form={form} onChange={onChange} disabled={disabled} />}
 
             {tunnelled && (
                 <>

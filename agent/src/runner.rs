@@ -541,6 +541,10 @@ async fn stream_session(
     // the manager owns assignments + watchers and is dropped with the session.
     let (sync_tx, mut sync_rx) = tokio::sync::mpsc::channel::<crate::sync::SyncEvent>(256);
     let mut sync_mgr = crate::sync::SyncManager::new(sync_tx, config.sync_roots.clone());
+    // Tunnels: each relays one TCP connection under the server's credits; the
+    // manager drops them all when the session ends.
+    let (tunnel_tx, mut tunnel_rx) = tokio::sync::mpsc::channel::<crate::tunnel::TunnelEvent>(256);
+    let mut tunnels = crate::tunnel::TunnelManager::new(tunnel_tx, config.tunnel_targets.clone());
 
     loop {
         tokio::select! {
@@ -592,6 +596,12 @@ async fn stream_session(
                     terminals.close(session_id);
                 }
                 commands::send_term_event(&mut sink, device_id, ev).await;
+            }
+            Some(ev) = tunnel_rx.recv() => {
+                if let crate::tunnel::TunnelEvent::Closed { tunnel_id, .. } = &ev {
+                    tunnels.close(tunnel_id);
+                }
+                commands::send_tunnel_event(&mut sink, device_id, ev).await;
             }
             _ = ticker.tick() => {
                 let (snapshot, sockets) = collect(collector, &capture, false).await?;
@@ -849,6 +859,40 @@ async fn stream_session(
                             // Close a terminal session (the reader then emits a final exit).
                             Ok(ServerMessage::TermClose { session_id }) => {
                                 terminals.close(&session_id);
+                            }
+                            Ok(ServerMessage::TunnelOpen { tunnel_id, host, port, window }) => {
+                                if let Err(error) = tunnels.open(tunnel_id.clone(), host, port, window) {
+                                    commands::send_tunnel_event(
+                                        &mut sink,
+                                        device_id,
+                                        crate::tunnel::TunnelEvent::Closed { tunnel_id, error: Some(error) },
+                                    )
+                                    .await;
+                                }
+                            }
+                            Ok(ServerMessage::TunnelWrite { tunnel_id, data }) => {
+                                if let Ok(bytes) =
+                                    base64::engine::general_purpose::STANDARD.decode(data.as_bytes())
+                                {
+                                    if !tunnels.write(&tunnel_id, bytes) {
+                                        tunnels.close(&tunnel_id);
+                                        commands::send_tunnel_event(
+                                            &mut sink,
+                                            device_id,
+                                            crate::tunnel::TunnelEvent::Closed {
+                                                tunnel_id,
+                                                error: Some("La cible ne lit pas assez vite ce que le serveur lui envoie.".into()),
+                                            },
+                                        )
+                                        .await;
+                                    }
+                                }
+                            }
+                            Ok(ServerMessage::TunnelCredit { tunnel_id, credits }) => {
+                                tunnels.credit(&tunnel_id, credits);
+                            }
+                            Ok(ServerMessage::TunnelClose { tunnel_id }) => {
+                                tunnels.close(&tunnel_id);
                             }
                             // File explorer (all off-loop; stream via files_rx).
                             Ok(ServerMessage::FilesList { op_id, path }) => {
