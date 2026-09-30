@@ -16,15 +16,25 @@ import type {
     WorkspaceRow
 } from '@deveye/types';
 
+import type { DebugRunRaw } from './repos/debug';
 import type { FeatureDomainRow } from './repos/featureDomains';
 import type { FeatureKvRow } from './repos/featureKv';
 import type { FeedbackJoinRow } from './repos/feedback';
+import type { InstanceSettingRaw } from './repos/instanceSettings';
 import type { LogJoinRow } from './repos/logs';
+import type { FeatureMaintenanceRaw, SiteMaintenanceRaw } from './repos/maintenance';
+import type { BucketRow } from './repos/metrics';
 import type { PendingSignupRow } from './repos/pendingSignups';
 import type { ProcessSampleRow } from './repos/processSamples';
+import type { QuotaPauseRaw } from './repos/quotaPauses';
 import type { RefreshTokenRow } from './repos/refreshTokens';
+import type { AccountRow } from './repos/users';
+import type { WorkspaceListRow } from './repos/workspaces';
 import type { WorkspaceSecretKeyRow } from './repos/workspaceSecretKeys';
 import type { Tables } from './schema.generated';
+
+/** Le pseudo d'un compte joint en LEFT JOIN : absent quand le compte l'est. */
+type JoinedUsername = Pick<Tables['users'], 'username'>;
 
 /**
  * Les types de lignes des dépôts, confrontés au schéma réel. `Queryable.query<T>`
@@ -92,12 +102,29 @@ export type SchemaChecks = [
     Expect<RowOf<ItemRoleGrantRow, Tables['item_role_grants']>>,
     Expect<RowOf<NotificationChannelRow, Tables['notification_channels']>>,
     Expect<RowOf<NotificationRouteRow, Tables['notification_routes']>>,
-    Expect<RowOf<LogJoinRow, Tables['logs'] & Pick<Tables['users'], 'username'>>>,
+    Expect<RowOf<AccountRow, Tables['users']>>,
+    Expect<RowOf<WorkspaceListRow, Tables['workspaces']>>,
+    Expect<RowOf<BucketRow, Tables['device_metrics']>>,
+    Expect<RowOf<QuotaPauseRaw, Tables['quota_pauses']>>,
+    Expect<RowOf<DebugRunRaw, Tables['debug_runs'] & JoinedUsername>>,
+    Expect<RowOf<InstanceSettingRaw, Tables['instance_settings'] & JoinedUsername>>,
+    Expect<RowOf<FeatureMaintenanceRaw, Tables['feature_maintenance'] & JoinedUsername>>,
+    Expect<
+        RowOf<
+            SiteMaintenanceRaw,
+            Tables['site_maintenance'] &
+                JoinedUsername & {
+                    /** `p.username`, par une jointure externe sur le compte qui a posé la priorité. */
+                    priority_username: Tables['users']['username'] | null;
+                }
+        >
+    >,
+    Expect<RowOf<LogJoinRow, Tables['logs'] & JoinedUsername>>,
     Expect<
         RowOf<
             FeedbackJoinRow,
             Tables['feedback'] &
-                Pick<Tables['users'], 'username'> & {
+                JoinedUsername & {
                     /** `h.username`, par une jointure externe sur le compte qui a traité. */
                     handled_by_name: Tables['users']['username'] | null;
                 }

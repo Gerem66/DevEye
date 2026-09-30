@@ -1,3 +1,4 @@
+import { selectColumns } from '../columns';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;
@@ -28,31 +29,37 @@ export interface QuotaPausesRepo {
     takeDueRechecks(now: number): Promise<number[]>;
 }
 
-const fromRow = (row: {
+/** Ligne de `quota_pauses`. */
+export interface QuotaPauseRaw {
     quota_key: string;
     item_id: string;
     owner_user_id: number;
     workspace_id: number;
-}): QuotaPauseRow => ({
+}
+
+const COLUMNS = selectColumns<QuotaPauseRaw>(null, {
+    quota_key: true,
+    item_id: true,
+    owner_user_id: true,
+    workspace_id: true
+});
+
+const fromRow = (row: QuotaPauseRaw): QuotaPauseRow => ({
     quotaKey: row.quota_key,
     itemId: row.item_id,
     ownerUserId: Number(row.owner_user_id),
     workspaceId: Number(row.workspace_id)
 });
 
-type RawRow = Parameters<typeof fromRow>[0];
-
 export function quotaPausesRepo(pool: Q): QuotaPausesRepo {
     return {
         async all() {
-            const r = await pool.query<RawRow>(
-                'SELECT quota_key, item_id, owner_user_id, workspace_id FROM quota_pauses'
-            );
+            const r = await pool.query<QuotaPauseRaw>(`SELECT ${COLUMNS} FROM quota_pauses`);
             return r.rows.map(fromRow);
         },
         async ofOwnerKey(ownerUserId, quotaKey) {
-            const r = await pool.query<RawRow>(
-                `SELECT quota_key, item_id, owner_user_id, workspace_id FROM quota_pauses
+            const r = await pool.query<QuotaPauseRaw>(
+                `SELECT ${COLUMNS} FROM quota_pauses
                   WHERE owner_user_id = ? AND quota_key = ? FOR UPDATE`,
                 [ownerUserId, quotaKey]
             );

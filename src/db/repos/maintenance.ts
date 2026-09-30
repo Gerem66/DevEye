@@ -1,4 +1,5 @@
 import type { FeatureMaintenanceLevel } from '@deveye/types';
+import { selectColumns } from '../columns';
 import type { Queryable } from '../pool';
 
 interface Author {
@@ -42,23 +43,51 @@ type RawAuthor = { updated_by: number | null; username: string | null };
 const author = (row: RawAuthor): Author | null =>
     row.updated_by !== null && row.username !== null ? { id: row.updated_by, username: row.username } : null;
 
+/** La ligne unique de `site_maintenance`, jointe aux deux comptes qui l'ont touchée. */
+export interface SiteMaintenanceRaw extends RawAuthor {
+    active: number;
+    message: string | null;
+    env_notice_dismissed: number;
+    updated: number;
+    priority: number;
+    priority_updated: number | null;
+    priority_by: number | null;
+    priority_username: string | null;
+}
+
+/** Une ligne de `feature_maintenance`, jointe au compte qui l'a posée. */
+export interface FeatureMaintenanceRaw extends RawAuthor {
+    feature: string;
+    level: FeatureMaintenanceLevel;
+    updated: number;
+}
+
+const SITE_COLUMNS = selectColumns<SiteMaintenanceRaw>('m', {
+    active: true,
+    message: true,
+    env_notice_dismissed: true,
+    updated: true,
+    updated_by: true,
+    username: 'u.username',
+    priority: true,
+    priority_updated: true,
+    priority_by: true,
+    priority_username: 'p.username'
+});
+
+const FEATURE_COLUMNS = selectColumns<FeatureMaintenanceRaw>('m', {
+    feature: true,
+    level: true,
+    updated: true,
+    updated_by: true,
+    username: 'u.username'
+});
+
 export function maintenanceRepo(pool: Queryable): MaintenanceRepo {
     return {
         async site() {
-            const r = await pool.query<
-                RawAuthor & {
-                    active: number;
-                    message: string | null;
-                    env_notice_dismissed: number;
-                    updated: number;
-                    priority: number;
-                    priority_updated: number | null;
-                    priority_by: number | null;
-                    priority_username: string | null;
-                }
-            >(
-                `SELECT m.active, m.message, m.env_notice_dismissed, m.updated, m.updated_by, u.username,
-                        m.priority, m.priority_updated, m.priority_by, p.username AS priority_username
+            const r = await pool.query<SiteMaintenanceRaw>(
+                `SELECT ${SITE_COLUMNS}
                  FROM site_maintenance m
                  LEFT JOIN users u ON u.id = m.updated_by
                  LEFT JOIN users p ON p.id = m.priority_by
@@ -90,10 +119,8 @@ export function maintenanceRepo(pool: Queryable): MaintenanceRepo {
             };
         },
         async features() {
-            const r = await pool.query<
-                RawAuthor & { feature: string; level: FeatureMaintenanceLevel; updated: number }
-            >(
-                `SELECT m.feature, m.level, m.updated, m.updated_by, u.username
+            const r = await pool.query<FeatureMaintenanceRaw>(
+                `SELECT ${FEATURE_COLUMNS}
                  FROM feature_maintenance m LEFT JOIN users u ON u.id = m.updated_by`
             );
             return r.rows.map((row) => ({

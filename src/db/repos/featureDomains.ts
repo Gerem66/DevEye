@@ -1,3 +1,4 @@
+import { selectColumns } from '../columns';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;
@@ -34,8 +35,22 @@ export type FeatureDomainVerdict = Pick<
     | 'next_probe_at'
 >;
 
-const COLUMNS =
-    'id, workspace_id, feature, host, token, dns_state, dns_error, probe_state, probe_error, verified_at, checked_at, failures, next_probe_at, created';
+const COLUMNS = selectColumns<FeatureDomainRow>(null, {
+    id: true,
+    workspace_id: true,
+    feature: true,
+    host: true,
+    token: true,
+    dns_state: true,
+    dns_error: true,
+    probe_state: true,
+    probe_error: true,
+    verified_at: true,
+    checked_at: true,
+    failures: true,
+    next_probe_at: true,
+    created: true
+});
 
 /** mysql2 rend les BIGINT en chaînes selon la config : on normalise ici. */
 function normalise(row: FeatureDomainRow): FeatureDomainRow {

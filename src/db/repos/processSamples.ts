@@ -2,6 +2,7 @@ import { gunzip, gzip } from 'node:zlib';
 import { promisify } from 'node:util';
 
 import { reportProcessSchema, type ProcessKind, type ProcessSample, type ReportProcess } from '@deveye/types';
+import { selectColumns } from '../columns';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;
@@ -22,6 +23,8 @@ export interface ProcessSampleRow {
     kind: ProcessKind;
     payload: Buffer;
 }
+
+const SAMPLE_COLUMNS = selectColumns<ProcessSampleRow>(null, { ts: true, kind: true, payload: true });
 
 /**
  * Le dépôt du socle : l'ingestion (`insertSample`) et l'instant le plus proche
@@ -77,7 +80,7 @@ export function processSamplesRepo(pool: Q): ProcessSamplesRepo {
             const ts = await nearestTs(deviceId, at);
             if (ts === null || Math.abs(ts - at) > NEAREST_TOLERANCE_MS) return null;
             const r = await pool.query<ProcessSampleRow>(
-                'SELECT ts, kind, payload FROM device_process_samples WHERE device_id = ? AND ts = ?',
+                `SELECT ${SAMPLE_COLUMNS} FROM device_process_samples WHERE device_id = ? AND ts = ?`,
                 [deviceId, ts]
             );
             const row = r.rows[0];

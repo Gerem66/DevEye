@@ -1,7 +1,34 @@
 import type { MetricRow, MetricSeriesPoint, MetricSnapshot, MetricsResolution } from '@deveye/types';
+import { selectColumns } from '../columns';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;
+
+/** Ce que l'agrégat par seau rend : les mesures seules, l'instant du seau en `ts`. */
+export type BucketRow = Omit<MetricRow, 'id' | 'device_id' | 'pinned'>;
+
+/** Moyennes pour les jauges, maximums pour les compteurs et les totaux. */
+const BUCKET_COLUMNS = selectColumns<BucketRow>(null, {
+    ts: '(FLOOR(ts / ?) * ?)',
+    cpu_percent: 'AVG(cpu_percent)',
+    mem_used_bytes: 'AVG(mem_used_bytes)',
+    mem_total_bytes: 'MAX(mem_total_bytes)',
+    disk_used_bytes: 'AVG(disk_used_bytes)',
+    disk_total_bytes: 'MAX(disk_total_bytes)',
+    net_rx_bytes: 'MAX(net_rx_bytes)',
+    net_tx_bytes: 'MAX(net_tx_bytes)',
+    users_count: 'MAX(users_count)',
+    load_avg_1: 'AVG(load_avg_1)',
+    cpu_temp_c: 'AVG(cpu_temp_c)',
+    uptime_seconds: 'MAX(uptime_seconds)',
+    process_count: 'AVG(process_count)',
+    active_connections: 'AVG(active_connections)',
+    gpu_percent: 'AVG(gpu_percent)',
+    disk_read_bytes: 'MAX(disk_read_bytes)',
+    disk_write_bytes: 'MAX(disk_write_bytes)',
+    battery_percent: 'AVG(battery_percent)',
+    battery_charging: 'MAX(battery_charging)'
+});
 
 /**
  * Le dépôt du socle : l'ingestion (`insertBatch`), l'instant poussé à
@@ -53,7 +80,7 @@ function intNum(v: number | null): number | null {
     return v === null || v === undefined ? null : Math.round(Number(v));
 }
 
-function rowToSnapshot(r: MetricRow): MetricSeriesPoint {
+function rowToSnapshot(r: BucketRow): MetricSeriesPoint {
     return {
         timestamp: Math.round(Number(r.ts)),
         cpuPercent: Number(r.cpu_percent),
@@ -156,29 +183,9 @@ export function metricsRepo(pool: Q): MetricsRepo {
                 return r.rows.reverse().map(rowToSnapshot);
             }
 
-            // Downsample by time bucket (averages for gauges, max for counters).
             const bucketMs = BUCKET_SECONDS[resolution] * 1000;
-            const r = await pool.query<MetricRow & { bucket: number }>(
-                `SELECT
-                     (FLOOR(ts / ?) * ?)        AS ts,
-                     AVG(cpu_percent)           AS cpu_percent,
-                     AVG(mem_used_bytes)        AS mem_used_bytes,
-                     MAX(mem_total_bytes)       AS mem_total_bytes,
-                     AVG(disk_used_bytes)       AS disk_used_bytes,
-                     MAX(disk_total_bytes)      AS disk_total_bytes,
-                     MAX(net_rx_bytes)          AS net_rx_bytes,
-                     MAX(net_tx_bytes)          AS net_tx_bytes,
-                     MAX(users_count)           AS users_count,
-                     AVG(load_avg_1)            AS load_avg_1,
-                     AVG(cpu_temp_c)            AS cpu_temp_c,
-                     MAX(uptime_seconds)        AS uptime_seconds,
-                     AVG(process_count)         AS process_count,
-                     AVG(active_connections)    AS active_connections,
-                     AVG(gpu_percent)           AS gpu_percent,
-                     MAX(disk_read_bytes)       AS disk_read_bytes,
-                     MAX(disk_write_bytes)      AS disk_write_bytes,
-                     AVG(battery_percent)       AS battery_percent,
-                     MAX(battery_charging)      AS battery_charging
+            const r = await pool.query<BucketRow>(
+                `SELECT ${BUCKET_COLUMNS}
                  FROM device_metrics
                  WHERE device_id = ? AND ts BETWEEN ? AND ?
                  GROUP BY (FLOOR(ts / ?) * ?)

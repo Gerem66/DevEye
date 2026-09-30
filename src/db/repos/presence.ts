@@ -1,7 +1,12 @@
 import type { PresenceRow } from '@deveye/types';
+import { selectColumns } from '../columns';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;
+
+type OnlineRow = Pick<PresenceRow, 'online'>;
+
+const ONLINE_COLUMNS = selectColumns<OnlineRow>(null, { online: true });
 
 /**
  * Le dépôt du socle : la transition enregistrée par la socket agent
@@ -25,8 +30,8 @@ export function presenceRepo(pool: Q): PresenceRepo {
             ]);
         },
         async onlineAt(deviceId, at) {
-            const r = await pool.query<PresenceRow>(
-                `SELECT online FROM device_presence
+            const r = await pool.query<OnlineRow>(
+                `SELECT ${ONLINE_COLUMNS} FROM device_presence
                  WHERE device_id = ? AND ts <= ?
                  ORDER BY ts DESC
                  LIMIT 1`,

@@ -1,7 +1,24 @@
 import type { WorkspaceCapability, WorkspaceFeatureGrant, WorkspaceRoleRow } from '@deveye/types';
+import { selectColumns } from '../columns';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;
+
+const roleColumns = (alias: string | null): string =>
+    selectColumns<WorkspaceRoleRow>(alias, {
+        id: true,
+        workspace_id: true,
+        name: true,
+        color: true,
+        position: true,
+        capabilities: true,
+        features: true,
+        is_default: true,
+        created: true
+    });
+
+const COLUMNS = roleColumns(null);
+const JOINED_COLUMNS = roleColumns('r');
 
 export interface RoleInput {
     name: string;
@@ -30,27 +47,24 @@ export interface WorkspaceRolesRepo {
 }
 
 export function workspaceRolesRepo(pool: Q): WorkspaceRolesRepo {
-    const cols = 'id, workspace_id, name, color, position, capabilities, features, is_default, created';
-
     return {
         async listByWorkspace(workspaceId) {
             const r = await pool.query<WorkspaceRoleRow>(
-                `SELECT ${cols} FROM workspace_roles WHERE workspace_id = ? ORDER BY position ASC, id ASC`,
+                `SELECT ${COLUMNS} FROM workspace_roles WHERE workspace_id = ? ORDER BY position ASC, id ASC`,
                 [workspaceId]
             );
             return r.rows;
         },
         async findById(id, workspaceId) {
             const r = await pool.query<WorkspaceRoleRow>(
-                `SELECT ${cols} FROM workspace_roles WHERE id = ? AND workspace_id = ?`,
+                `SELECT ${COLUMNS} FROM workspace_roles WHERE id = ? AND workspace_id = ?`,
                 [id, workspaceId]
             );
             return r.rows[0] ?? null;
         },
         async findForMember(userId, workspaceId) {
             const r = await pool.query<WorkspaceRoleRow>(
-                `SELECT r.id, r.workspace_id, r.name, r.color, r.position, r.capabilities, r.features,
-                        r.is_default, r.created
+                `SELECT ${JOINED_COLUMNS}
                  FROM workspace_members m
                  INNER JOIN workspace_roles r ON r.id = m.role_id
                  WHERE m.user_id = ? AND m.workspace_id = ?`,
@@ -60,7 +74,7 @@ export function workspaceRolesRepo(pool: Q): WorkspaceRolesRepo {
         },
         async findDefault(workspaceId) {
             const r = await pool.query<WorkspaceRoleRow>(
-                `SELECT ${cols} FROM workspace_roles WHERE workspace_id = ? AND is_default = 1 LIMIT 1`,
+                `SELECT ${COLUMNS} FROM workspace_roles WHERE workspace_id = ? AND is_default = 1 LIMIT 1`,
                 [workspaceId]
             );
             return r.rows[0] ?? null;

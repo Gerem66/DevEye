@@ -1,4 +1,5 @@
 import { feedbackSnapshotSchema, type FeedbackEntry, type FeedbackKind, type FeedbackStatus } from '@deveye/types';
+import { selectColumns } from '../columns';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;
@@ -99,9 +100,22 @@ function toEntry(r: FeedbackJoinRow): FeedbackEntry {
     };
 }
 
-const SELECT_COLUMNS = `f.id, f.created, f.kind, f.status, f.uid, u.username, f.workspace_id,
-                        f.message, f.snapshot, f.ip, f.app_version, f.handled_at, f.handled_by,
-                        h.username AS handled_by_name`;
+const SELECT_COLUMNS = selectColumns<FeedbackJoinRow>('f', {
+    id: true,
+    created: true,
+    kind: true,
+    status: true,
+    uid: true,
+    username: 'u.username',
+    workspace_id: true,
+    message: true,
+    snapshot: true,
+    ip: true,
+    app_version: true,
+    handled_at: true,
+    handled_by: true,
+    handled_by_name: 'h.username'
+});
 
 const FROM_JOINED = `FROM feedback f
                      LEFT JOIN users u ON u.id = f.uid

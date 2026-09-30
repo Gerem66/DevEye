@@ -81,7 +81,7 @@ export function devicesRepo(pool: Q): DevicesRepo {
         async listByWorkspace(workspaceId) {
             // La frontière est l'espace : les appareils d'ici, et ceux qu'une
             // projection y rend visibles, rangés selon le rang d'ici.
-            const r = await pool.query<DeviceRow>(
+            const r = await pool.query<DeviceRow & { rank_in_ws: number }>(
                 `SELECT d.*, d.sort_order AS rank_in_ws FROM devices d WHERE d.workspace_id = ?
                  UNION ALL
                  SELECT d.*, sh.sort_order AS rank_in_ws FROM devices d

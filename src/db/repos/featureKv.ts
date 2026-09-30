@@ -1,3 +1,4 @@
+import { selectColumns } from '../columns';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;
@@ -10,6 +11,15 @@ export interface FeatureKvRow {
     value: string;
     updated: number;
 }
+
+const COLUMNS = selectColumns<FeatureKvRow>(null, {
+    workspace_id: true,
+    feature: true,
+    k: true,
+    mode: true,
+    value: true,
+    updated: true
+});
 
 /**
  * Le magasin clé-valeur des modules de features.
@@ -29,7 +39,7 @@ export function featureKvRepo(pool: Q): FeatureKvRepo {
     return {
         async get(workspaceId, feature, key) {
             const r = await pool.query<FeatureKvRow>(
-                'SELECT workspace_id, feature, k, mode, value, updated FROM feature_kv WHERE workspace_id = ? AND feature = ? AND k = ?',
+                `SELECT ${COLUMNS} FROM feature_kv WHERE workspace_id = ? AND feature = ? AND k = ?`,
                 [workspaceId, feature, key]
             );
             return r.rows[0] ?? null;

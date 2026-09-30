@@ -1,4 +1,5 @@
 import type { LogEntry } from '@deveye/types';
+import { selectColumns } from '../columns';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;
@@ -86,6 +87,20 @@ function parseMetadata(raw: unknown): Record<string, unknown> | null {
     }
     return null;
 }
+
+const JOIN_COLUMNS = selectColumns<LogJoinRow>('l', {
+    id: true,
+    date: true,
+    level: true,
+    source: true,
+    category: true,
+    action: true,
+    uid: true,
+    ip: true,
+    description: true,
+    metadata: true,
+    username: 'u.username'
+});
 
 function toEntry(r: LogJoinRow): LogEntry {
     return {
@@ -176,8 +191,7 @@ export function logsRepo(pool: Q): LogsRepo {
             const total = Number(countRes.rows[0]?.total ?? 0);
 
             const rows = await pool.query<LogJoinRow>(
-                `SELECT l.id, l.date, l.level, l.source, l.category, l.action, l.uid, l.ip,
-                        l.description, l.metadata, u.username
+                `SELECT ${JOIN_COLUMNS}
                  FROM logs l
                  LEFT JOIN users u ON u.id = l.uid
                  ${where}

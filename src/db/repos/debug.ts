@@ -1,4 +1,5 @@
 import type { DebugRunKind } from '@deveye/types';
+import { selectColumns } from '../columns';
 import type { Queryable } from '../pool';
 
 export type DebugRunStatus = 'running' | 'passed' | 'failed' | 'aborted';
@@ -52,7 +53,8 @@ export interface DebugRepo {
     purgeSignupsLike(pattern: string): Promise<number>;
 }
 
-type Raw = {
+/** La ligne d'un essai, jointe au compte qui l'a lancé. */
+export interface DebugRunRaw {
     id: number;
     kind: DebugRunKind;
     status: DebugRunStatus;
@@ -61,9 +63,9 @@ type Raw = {
     report: string;
     user_id: number | null;
     username: string | null;
-};
+}
 
-const toRow = (r: Raw): DebugRunRow => ({
+const toRow = (r: DebugRunRaw): DebugRunRow => ({
     id: r.id,
     kind: r.kind,
     status: r.status,
@@ -73,7 +75,16 @@ const toRow = (r: Raw): DebugRunRow => ({
     launchedBy: r.user_id !== null && r.username !== null ? { id: r.user_id, username: r.username } : null
 });
 
-const SELECT = `SELECT r.id, r.kind, r.status, r.started, r.finished, r.report, r.user_id, u.username
+const SELECT = `SELECT ${selectColumns<DebugRunRaw>('r', {
+    id: true,
+    kind: true,
+    status: true,
+    started: true,
+    finished: true,
+    report: true,
+    user_id: true,
+    username: 'u.username'
+})}
                 FROM debug_runs r LEFT JOIN users u ON u.id = r.user_id`;
 
 export function debugRepo(pool: Queryable): DebugRepo {
@@ -94,15 +105,14 @@ export function debugRepo(pool: Queryable): DebugRepo {
             ]);
         },
         async getRun(id, origin) {
-            const r = await pool.query<Raw>(`${SELECT} WHERE r.id = ? AND r.origin = ?`, [id, origin]);
+            const r = await pool.query<DebugRunRaw>(`${SELECT} WHERE r.id = ? AND r.origin = ?`, [id, origin]);
             return r.rows[0] ? toRow(r.rows[0]) : null;
         },
         async listRuns(origin, kind, limit) {
-            const r = await pool.query<Raw>(`${SELECT} WHERE r.origin = ? AND r.kind = ? ORDER BY r.id DESC LIMIT ?`, [
-                origin,
-                kind,
-                limit
-            ]);
+            const r = await pool.query<DebugRunRaw>(
+                `${SELECT} WHERE r.origin = ? AND r.kind = ? ORDER BY r.id DESC LIMIT ?`,
+                [origin, kind, limit]
+            );
             return r.rows.map(toRow);
         },
         async prune(origin, kind, keep) {

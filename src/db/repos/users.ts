@@ -1,10 +1,21 @@
 import { defaultUserColor, type AdminUser, type UserColor, type UserRow } from '@deveye/types';
+import { selectColumns } from '../columns';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;
 
 /** Ce qu'un compte montre de lui hors de sa session : ni avatar, ni secret. */
 export type AccountRow = Pick<UserRow, 'id' | 'email' | 'username' | 'role' | 'status' | 'e2e_run' | 'created'>;
+
+const ACCOUNT_COLUMNS = selectColumns<AccountRow>(null, {
+    id: true,
+    email: true,
+    username: true,
+    role: true,
+    status: true,
+    e2e_run: true,
+    created: true
+});
 
 export interface UsersRepo {
     findById(id: number): Promise<UserRow | null>;
@@ -85,9 +96,7 @@ export function usersRepo(pool: Q): UsersRepo {
             return r.rows;
         },
         async all() {
-            const r = await pool.query<AccountRow>(
-                'SELECT id, email, username, role, status, e2e_run, created FROM users ORDER BY id ASC'
-            );
+            const r = await pool.query<AccountRow>(`SELECT ${ACCOUNT_COLUMNS} FROM users ORDER BY id ASC`);
             return r.rows;
         },
         async search(query, limit) {

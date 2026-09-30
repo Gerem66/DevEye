@@ -1,3 +1,4 @@
+import { selectColumns } from '../columns';
 import type { Queryable } from '../pool';
 
 export interface InstanceSettingRow {
@@ -19,22 +20,38 @@ export interface InstanceSettingsRepo {
     listByName(name: string): Promise<InstanceSettingRow[]>;
 }
 
-type Raw = { origin: string; value: string; updated: number; updated_by: number | null; username: string | null };
+/** La ligne d'un réglage, jointe au compte qui l'a posé. */
+export interface InstanceSettingRaw {
+    origin: string;
+    value: string;
+    updated: number;
+    updated_by: number | null;
+    username: string | null;
+}
 
-const toRow = (r: Raw): InstanceSettingRow => ({
+const toRow = (r: InstanceSettingRaw): InstanceSettingRow => ({
     origin: r.origin,
     value: r.value,
     updated: Number(r.updated),
     updatedBy: r.updated_by !== null && r.username !== null ? { id: r.updated_by, username: r.username } : null
 });
 
-const SELECT = `SELECT s.origin, s.value, s.updated, s.updated_by, u.username
+const SELECT = `SELECT ${selectColumns<InstanceSettingRaw>('s', {
+    origin: true,
+    value: true,
+    updated: true,
+    updated_by: true,
+    username: 'u.username'
+})}
                 FROM instance_settings s LEFT JOIN users u ON u.id = s.updated_by`;
 
 export function instanceSettingsRepo(pool: Queryable): InstanceSettingsRepo {
     return {
         async get(name, origin) {
-            const r = await pool.query<Raw>(`${SELECT} WHERE s.name = ? AND s.origin = ?`, [name, origin]);
+            const r = await pool.query<InstanceSettingRaw>(`${SELECT} WHERE s.name = ? AND s.origin = ?`, [
+                name,
+                origin
+            ]);
             return r.rows[0] ? toRow(r.rows[0]) : null;
         },
         async put(name, origin, value, by) {
@@ -49,7 +66,7 @@ export function instanceSettingsRepo(pool: Queryable): InstanceSettingsRepo {
             await pool.query('DELETE FROM instance_settings WHERE name = ? AND origin = ?', [name, origin]);
         },
         async listByName(name) {
-            const r = await pool.query<Raw>(`${SELECT} WHERE s.name = ? ORDER BY s.origin`, [name]);
+            const r = await pool.query<InstanceSettingRaw>(`${SELECT} WHERE s.name = ? ORDER BY s.origin`, [name]);
             return r.rows.map(toRow);
         }
     };

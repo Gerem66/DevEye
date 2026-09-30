@@ -1,4 +1,5 @@
 import type { WorkspaceMemberRow, WorkspaceRow } from '@deveye/types';
+import { selectColumns } from '../columns';
 import type { Queryable } from '../pool';
 
 type Q = Queryable;
@@ -39,7 +40,15 @@ export interface WorkspacesRepo {
  * peuvent contenir des fonds d'écran en base64. On ne les rapatrie que quand on
  * en a besoin, jamais dans un listage d'espaces.
  */
-const LIST_COLUMNS = 'w.id, w.kind, w.name, w.logo, w.owner_user_id, w.features, w.created';
+const LIST_COLUMNS = selectColumns<WorkspaceListRow>('w', {
+    id: true,
+    kind: true,
+    name: true,
+    logo: true,
+    owner_user_id: true,
+    features: true,
+    created: true
+});
 
 export function workspacesRepo(pool: Q): WorkspacesRepo {
     return {
