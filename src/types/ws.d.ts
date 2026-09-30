@@ -13,11 +13,24 @@
  * précisément sur ce point, donc le serveur d'essai est réel, et ses types avec.
  */
 declare module 'ws' {
+    /**
+     * Les options de connexion que l'adaptateur pose : les en-têtes, et l'une
+     * des deux prises sur la couche transport (la résolution DNS du garde, ou
+     * la socket elle-même vers un relais local).
+     */
+    export interface ClientOptions {
+        headers?: Record<string, string>;
+        lookup?: typeof import('node:dns').lookup;
+        createConnection?: (options: {
+            host: string;
+            port: number;
+            path?: string;
+            servername?: string;
+        }) => import('node:stream').Duplex;
+    }
+
     export default class WebSocket {
-        constructor(
-            address: string,
-            options?: { headers?: Record<string, string>; lookup?: typeof import('node:dns').lookup }
-        );
+        constructor(address: string, options?: ClientOptions);
         on(event: 'message', listener: (data: Buffer | ArrayBuffer | Buffer[]) => void): this;
         on(event: 'close', listener: () => void): this;
         on(event: 'error', listener: (err: Error) => void): this;

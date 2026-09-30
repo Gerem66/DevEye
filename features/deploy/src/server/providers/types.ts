@@ -1,4 +1,5 @@
 import type { DeployCandidate, DeployCredentialProvider, DeployStatus, DeployTargetKind } from '../../contracts/domain';
+import type { DeviceRelay } from '@deveye/types/sdk/server';
 
 /**
  * Ce qu'un fournisseur de déploiement sait faire pour le module : proposer des
@@ -12,6 +13,8 @@ export interface ProviderAccess {
     /** Clé des caches du fournisseur : un catalogue vaut pour tout son accès. */
     credentialId: number;
     baseUrl: string | null;
+    /** L'agent qui joint l'instance à la place du serveur ; `null` quand le serveur la joint lui-même. */
+    relay: DeviceRelay | null;
     secret: string;
 }
 

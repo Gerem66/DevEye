@@ -1,6 +1,10 @@
-import WebSocket from 'ws';
+import { connect as netConnect } from 'node:net';
+import { connect as tlsConnect } from 'node:tls';
+import { Agent, buildConnector, fetch as undiciFetch, type RequestInit } from 'undici';
+import WebSocket, { type ClientOptions } from 'ws';
 
 import type { DeployCandidate } from '../../contracts/domain';
+import { openDeviceTunnel, type DeviceRelay } from '@deveye/types/sdk/server';
 
 // Le garde des appels sortants, partagé par toute l'app : l'adresse de l'instance
 // est saisie par un membre, et ses réponses lui reviennent.
@@ -50,17 +54,84 @@ export interface DokployTarget {
     environmentId: string | null;
 }
 
+/** Ce qu'un appareil joint, dans les messages du relais. */
+export const DOKPLOY_INSTANCE = 'cette instance Dokploy';
+
+/**
+ * Une instance à joindre : par le serveur, sous le garde des appels sortants,
+ * ou par l'agent d'un appareil (`relay`), qui seul borne alors ce qu'il
+ * atteint ; `baseUrl` est dans ce cas l'adresse telle que la machine la voit.
+ */
+export interface DokployInstance {
+    baseUrl: string;
+    apiKey: string;
+    relay: DeviceRelay | null;
+}
+
 function base(baseUrl: string): string {
     return new URL('/api/trpc', baseUrl).toString().replace(/\/+$/, '');
+}
+
+/** L'hôte et le port de l'instance, tels que l'appareil les joint. */
+function endpointOf(baseUrl: string): { host: string; port: number } {
+    const url = new URL(baseUrl);
+    return { host: url.hostname, port: Number(url.port) || (url.protocol === 'https:' ? 443 : 80) };
 }
 
 /** Le délai d'une lecture, sauf mention contraire : celui d'un geste de l'utilisateur. */
 const DEFAULT_TIMEOUT_MS = 30_000;
 
+interface RawResponse {
+    status: number;
+    ok: boolean;
+    text: string;
+}
+
+/** Ce qu'un appel fixe de sa requête ; le transport choisit le reste (redirections, dispatcher). */
+type CallInit = Pick<RequestInit, 'method' | 'headers' | 'body' | 'signal'>;
+
+/** Une requête par le serveur : le garde vérifie l'adresse et chaque redirection. */
+async function directRequest(url: string, init: CallInit): Promise<RawResponse> {
+    const res = await safeFetch(url, init);
+    return { status: res.status, ok: res.ok, text: await res.text() };
+}
+
+/**
+ * Une requête par l'appareil : un écouteur local relaie vers l'instance, et le
+ * connecteur d'undici s'y branche à la place de l'hôte, le nom de l'instance
+ * gardé pour TLS. Hors du garde, une redirection n'est pas suivie : elle
+ * mènerait où l'instance veut. Le corps est lu avant de refermer le relais.
+ */
+async function relayedRequest(
+    instance: DokployInstance,
+    relay: DeviceRelay,
+    url: string,
+    init: CallInit
+): Promise<RawResponse> {
+    const tunnel = await openDeviceTunnel(relay, endpointOf(instance.baseUrl), DOKPLOY_INSTANCE);
+    const direct = buildConnector({});
+    const dispatcher = new Agent({
+        connect: (options, callback) =>
+            direct({ ...options, hostname: tunnel.host, port: String(tunnel.port) }, callback)
+    });
+    try {
+        const res = await undiciFetch(url, { ...init, dispatcher, redirect: 'manual' });
+        if (res.status >= 300 && res.status < 400) {
+            throw new ProviderError(
+                `L’instance redirige ailleurs (HTTP ${res.status}) : donnez son adresse finale.`,
+                res.status
+            );
+        }
+        return { status: res.status, ok: res.ok, text: await res.text() };
+    } finally {
+        await dispatcher.close();
+        await tunnel.close();
+    }
+}
+
 async function call<T>(
-    baseUrl: string,
+    instance: DokployInstance,
     procedure: string,
-    apiKey: string,
     options: { input?: unknown; mutate?: boolean; timeoutMs?: number } = {}
 ): Promise<T> {
     // superjson : l'entrée voyage sous une clé `json`, en query pour une
@@ -68,31 +139,37 @@ async function call<T>(
     const wrapped = options.input === undefined ? undefined : JSON.stringify({ json: options.input });
     const url =
         !options.mutate && wrapped !== undefined
-            ? `${base(baseUrl)}/${procedure}?input=${encodeURIComponent(wrapped)}`
-            : `${base(baseUrl)}/${procedure}`;
+            ? `${base(instance.baseUrl)}/${procedure}?input=${encodeURIComponent(wrapped)}`
+            : `${base(instance.baseUrl)}/${procedure}`;
+    const init: CallInit = {
+        method: options.mutate ? 'POST' : 'GET',
+        headers: {
+            accept: 'application/json',
+            'x-api-key': instance.apiKey,
+            ...(options.mutate ? { 'content-type': 'application/json' } : {})
+        },
+        body: options.mutate ? (wrapped ?? '{"json":{}}') : undefined,
+        signal: AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS)
+    };
 
-    let res: Awaited<ReturnType<typeof safeFetch>>;
+    let res: RawResponse;
     try {
-        res = await safeFetch(url, {
-            method: options.mutate ? 'POST' : 'GET',
-            headers: {
-                accept: 'application/json',
-                'x-api-key': apiKey,
-                ...(options.mutate ? { 'content-type': 'application/json' } : {})
-            },
-            body: options.mutate ? (wrapped ?? '{"json":{}}') : undefined,
-            signal: AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS)
-        });
+        res = instance.relay
+            ? await relayedRequest(instance, instance.relay, url, init)
+            : await directRequest(url, init);
     } catch (e) {
+        if (e instanceof ProviderError) throw e;
         if (e instanceof UnsafeTargetError) throw new ProviderError(e.message, 0);
         // Le détail d'une panne réseau reste au journal : renvoyé tel quel, il
         // dirait à l'appelant ce qui écoute ou non derrière l'adresse saisie.
+        // Le relais, lui, parle : appareil hors ligne, cible refusée par l'agent.
+        if (instance.relay && e instanceof Error) throw new ProviderError(e.message, 0);
         throw new ProviderError('Instance Dokploy injoignable', 0);
     }
 
     let payload: unknown;
     try {
-        payload = await res.json();
+        payload = JSON.parse(res.text);
     } catch {
         throw new ProviderError(`Réponse Dokploy illisible (HTTP ${res.status}).`, res.status);
     }
@@ -302,31 +379,20 @@ export function dashboardUrl(baseUrl: string, target: DokployTarget): string | n
     return `${root}/dashboard/project/${target.projectId}/environment/${target.environmentId}/services/${target.kind}/${target.externalId}`;
 }
 
-export async function listTargets(
-    baseUrl: string,
-    apiKey: string,
-    options: ReadOptions = {}
-): Promise<DokployTarget[]> {
-    return readTargets(await call<unknown>(baseUrl, 'project.all', apiKey, options));
+export async function listTargets(instance: DokployInstance, options: ReadOptions = {}): Promise<DokployTarget[]> {
+    return readTargets(await call<unknown>(instance, 'project.all', options));
 }
 
 export async function listDeployments(
-    baseUrl: string,
-    apiKey: string,
+    instance: DokployInstance,
     kind: DokployKind,
     externalId: string,
     options: ReadOptions = {}
 ): Promise<RemoteDeployment[]> {
     const payload =
         kind === 'compose'
-            ? await call<unknown>(baseUrl, 'deployment.allByCompose', apiKey, {
-                  ...options,
-                  input: { composeId: externalId }
-              })
-            : await call<unknown>(baseUrl, 'deployment.all', apiKey, {
-                  ...options,
-                  input: { applicationId: externalId }
-              });
+            ? await call<unknown>(instance, 'deployment.allByCompose', { ...options, input: { composeId: externalId } })
+            : await call<unknown>(instance, 'deployment.all', { ...options, input: { applicationId: externalId } });
     return readDeployments(payload);
 }
 
@@ -340,25 +406,20 @@ export async function listDeployments(
  * gardé, journalisé ni mis en cache : seule l'adresse du dépôt en sort.
  */
 export async function fetchRepoUrl(
-    baseUrl: string,
-    apiKey: string,
+    instance: DokployInstance,
     kind: DokployKind,
     externalId: string,
     options: ReadOptions = {}
 ): Promise<string | null> {
     const row =
         kind === 'compose'
-            ? await call<unknown>(baseUrl, 'compose.one', apiKey, { ...options, input: { composeId: externalId } })
-            : await call<unknown>(baseUrl, 'application.one', apiKey, {
-                  ...options,
-                  input: { applicationId: externalId }
-              });
+            ? await call<unknown>(instance, 'compose.one', { ...options, input: { composeId: externalId } })
+            : await call<unknown>(instance, 'application.one', { ...options, input: { applicationId: externalId } });
     return row && typeof row === 'object' ? readRepoUrl(row as Record<string, unknown>) : null;
 }
 
 export async function triggerDeploy(
-    baseUrl: string,
-    apiKey: string,
+    instance: DokployInstance,
     kind: DokployKind,
     externalId: string,
     title: string,
@@ -368,7 +429,7 @@ export async function triggerDeploy(
         kind === 'compose'
             ? { composeId: externalId, title, description }
             : { applicationId: externalId, title, description };
-    await call<unknown>(baseUrl, kind === 'compose' ? 'compose.deploy' : 'application.deploy', apiKey, {
+    await call<unknown>(instance, kind === 'compose' ? 'compose.deploy' : 'application.deploy', {
         input,
         mutate: true
     });
@@ -404,20 +465,47 @@ const LOG_IDLE_MS = 1_000;
  *    qui conclut, et `timeoutMs` reste le plafond pour un déploiement en cours,
  *    qui émet sans discontinuer.
  */
-export function fetchDeploymentLog(
-    baseUrl: string,
-    apiKey: string,
+export async function fetchDeploymentLog(
+    instance: DokployInstance,
     logPath: string,
     options: { timeoutMs?: number } = {}
 ): Promise<string> {
+    if (!instance.relay) {
+        if (!isAllowedOutboundUrl(instance.baseUrl)) throw new UnsafeTargetError();
+        return readLogSocket(instance, logPath, { lookup: publicLookup as never }, options);
+    }
+    // Par l'appareil : la socket se branche sur le relais local, le nom de
+    // l'instance gardé pour TLS. `path` est celui de l'URL, que `tls.connect`
+    // prendrait pour un chemin de socket Unix.
+    const tunnel = await openDeviceTunnel(instance.relay, endpointOf(instance.baseUrl), DOKPLOY_INSTANCE);
+    const secure = new URL(instance.baseUrl).protocol === 'https:';
+    try {
+        return await readLogSocket(
+            instance,
+            logPath,
+            {
+                createConnection: (connection) => {
+                    const target = { ...connection, host: tunnel.host, port: tunnel.port, path: undefined };
+                    return secure ? tlsConnect({ ...target, servername: connection.host }) : netConnect(target);
+                }
+            },
+            options
+        );
+    } finally {
+        await tunnel.close();
+    }
+}
+
+function readLogSocket(
+    instance: DokployInstance,
+    logPath: string,
+    transport: ClientOptions,
+    options: { timeoutMs?: number }
+): Promise<string> {
     return new Promise((resolve, reject) => {
-        if (!isAllowedOutboundUrl(baseUrl)) {
-            reject(new UnsafeTargetError());
-            return;
-        }
-        const socket = new WebSocket(logSocketUrl(baseUrl, logPath), {
-            headers: { 'x-api-key': apiKey },
-            lookup: publicLookup as never
+        const socket = new WebSocket(logSocketUrl(instance.baseUrl, logPath), {
+            headers: { 'x-api-key': instance.apiKey },
+            ...transport
         });
         const chunks: string[] = [];
         let settled = false;
@@ -485,10 +573,10 @@ function kindOf(target: ProviderTarget): DokployKind {
     return target.kind === 'compose' ? 'compose' : 'application';
 }
 
-/** L'adresse de l'instance : sans elle, rien n'est adressable chez Dokploy. */
-function baseOf(access: Pick<ProviderAccess, 'baseUrl'>): string {
+/** L'instance d'un accès : sans adresse, rien n'est adressable chez Dokploy. */
+function instanceOf(access: ProviderAccess): DokployInstance {
     if (!access.baseUrl) throw new ProviderError('Cet accès Dokploy n’a pas d’adresse d’instance.', 0);
-    return access.baseUrl;
+    return { baseUrl: access.baseUrl, apiKey: access.secret, relay: access.relay };
 }
 
 /** Dokploy derrière le contrat du module, avec ses caches : un catalogue par instance, un dépôt par cible. */
@@ -518,7 +606,7 @@ export class DokployProvider implements DeployProviderAdapter {
     }
 
     async candidates(access: ProviderAccess): Promise<DeployCandidate[]> {
-        const targets = await this.client.listTargets(baseOf(access), access.secret);
+        const targets = await this.client.listTargets(instanceOf(access));
         return targets.map((t) => ({ kind: t.kind, externalId: t.externalId, name: t.name, path: t.path, ref: null }));
     }
 
@@ -528,8 +616,7 @@ export class DokployProvider implements DeployProviderAdapter {
         input: { title: string; description: string }
     ): Promise<void> {
         await this.client.triggerDeploy(
-            baseOf(access),
-            access.secret,
+            instanceOf(access),
             kindOf(target),
             target.externalId,
             input.title,
@@ -542,9 +629,9 @@ export class DokployProvider implements DeployProviderAdapter {
         target: ProviderTarget,
         options: ReadOptions = {}
     ): Promise<RemoteDeployment[]> {
-        const base = baseOf(access);
-        const rows = await this.client.listDeployments(base, access.secret, kindOf(target), target.externalId, options);
-        return rows.map((row) => ({ ...row, url: base }));
+        const instance = instanceOf(access);
+        const rows = await this.client.listDeployments(instance, kindOf(target), target.externalId, options);
+        return rows.map((row) => ({ ...row, url: instance.baseUrl }));
     }
 
     async noticeLog(
@@ -554,12 +641,12 @@ export class DokployProvider implements DeployProviderAdapter {
         options: ReadOptions = {}
     ): Promise<string> {
         if (!entry.logRef) return '';
-        return this.client.fetchDeploymentLog(baseOf(access), access.secret, entry.logRef, options);
+        return this.client.fetchDeploymentLog(instanceOf(access), entry.logRef, options);
     }
 
     async fullLog(access: ProviderAccess, _target: ProviderTarget, entry: RemoteDeployment): Promise<string> {
         if (!entry.logRef) throw new ProviderError('Aucun journal pour ce déploiement.', 404);
-        return this.client.fetchDeploymentLog(baseOf(access), access.secret, entry.logRef);
+        return this.client.fetchDeploymentLog(instanceOf(access), entry.logRef);
     }
 
     /**
@@ -599,15 +686,9 @@ export class DokployProvider implements DeployProviderAdapter {
         const cached = this.repos.get(key);
         if (cached && now - cached.at <= REPO_TTL_SECONDS) return cached.url;
         try {
-            const url = await this.client.fetchRepoUrl(
-                baseOf(access),
-                access.secret,
-                kindOf(target),
-                target.externalId,
-                {
-                    timeoutMs: BACKGROUND_TIMEOUT_MS
-                }
-            );
+            const url = await this.client.fetchRepoUrl(instanceOf(access), kindOf(target), target.externalId, {
+                timeoutMs: BACKGROUND_TIMEOUT_MS
+            });
             this.repos.set(key, { at: now, url });
             return url;
         } catch {
@@ -627,7 +708,7 @@ export class DokployProvider implements DeployProviderAdapter {
             let load = this.placeLoads.get(access.credentialId);
             if (!load) {
                 load = this.client
-                    .listTargets(baseOf(access), access.secret, { timeoutMs: BACKGROUND_TIMEOUT_MS })
+                    .listTargets(instanceOf(access), { timeoutMs: BACKGROUND_TIMEOUT_MS })
                     .finally(() => this.placeLoads.delete(access.credentialId));
                 this.placeLoads.set(access.credentialId, load);
             }

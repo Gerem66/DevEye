@@ -14,7 +14,7 @@ import {
     deployTargetSchema
 } from '../contracts/domain';
 import { PROJECTS_USAGE_PROVIDER, type ProjectsUsageProvider } from '@deveye/types/sdk';
-import { FeatureError, type SdkCipher, type SdkFeatureContext } from '@deveye/types/sdk/server';
+import { FeatureError, type DeviceRelay, type SdkCipher, type SdkFeatureContext } from '@deveye/types/sdk/server';
 
 import { PROVIDERS, providerOf } from './providers';
 import type { DeployProviderAdapter, ProviderAccess, ProviderTarget } from './providers/types';
@@ -78,6 +78,21 @@ export function startAgentDeploy(job: Parameters<DeploySync['startAgentDeploy']>
     if (!syncRef) return false;
     syncRef.startAgentDeploy(job);
     return true;
+}
+
+/**
+ * Le relais de l'appareil d'un accès, par le suivi de fond : c'est lui qui
+ * tient les dépendances qui revérifient le droit de l'auteur. Sans appareil,
+ * rien à monter.
+ */
+async function credentialRelay(credential: DeployCredentialRow): Promise<DeviceRelay | null> {
+    if (!credential.device_id) return null;
+    if (!syncRef) throw new FeatureError('internal', 'Le suivi des déploiements n’est pas démarré.');
+    try {
+        return await syncRef.relayFor(credential);
+    } catch (e) {
+        throw new FeatureError('validation', e instanceof Error ? e.message : String(e));
+    }
 }
 
 /** La fin du journal d'une machine en cours de déploiement, `null` si aucun ne tourne pour cette ligne. */
@@ -250,6 +265,7 @@ export function toCredential(row: DeployCredentialRow, useCount: number): Deploy
         provider: deployCredentialProviderSchema.catch('dokploy').parse(row.provider),
         label: row.label,
         baseUrl: row.base_url,
+        deviceId: row.device_id,
         hasSecret: row.secret_enc.length > 0,
         created: row.created,
         useCount
@@ -281,7 +297,12 @@ export async function loadAccess(
     const cipher = target ? await targetCipherFor(ctx, target) : ctx.cipher();
     return {
         provider,
-        access: { credentialId, baseUrl: credential.base_url, secret: await cipher.decrypt(credential.secret_enc) }
+        access: {
+            credentialId,
+            baseUrl: credential.base_url,
+            relay: await credentialRelay(credential),
+            secret: await cipher.decrypt(credential.secret_enc)
+        }
     };
 }
 

@@ -54,6 +54,8 @@ export { ProviderKeys } from '@/Components/FeatureSettings/sections/ProviderKeys
 export type { ProviderKeyRow } from '@/Components/FeatureSettings/sections/ProviderKeys';
 export { DeviceFolderPicker } from '@/Components/DeviceFolderPicker';
 export { DeviceFolderField } from '@/Components/DeviceFolderField';
+/** Le choix d'un appareil par lequel joindre un service (`relayDeviceOptions` côté serveur). */
+export { DeviceRelayField, useDeviceRelayOptions } from '@/Components/DeviceRelayField';
 export { PathExclusionsEditor } from '@/Components/PathExclusionsEditor';
 export type { PathExclusionItem } from '@/Components/PathExclusionsEditor';
 /**

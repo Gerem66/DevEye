@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react';
-import { humanizeError, SegmentedControl, SelectInput, TextInput, useDevices } from 'deveye-sdk-client';
-import type { Database, DatabaseAccessKind, DatabaseDevice, DatabaseSshAuth } from '../contracts/domain';
+import { DeviceRelayField, SegmentedControl, TextInput } from 'deveye-sdk-client';
+import type { Database, DatabaseAccessKind, DatabaseSshAuth } from '../contracts/domain';
 
 import { api } from './api';
 import { ENGINE_PORTS } from './format';
@@ -206,67 +205,23 @@ export function ConnectionFields({
     );
 }
 
-/**
- * Les appareils qu'on peut choisir, et pourquoi pas les autres. La liste vient
- * du serveur, qui seul connaît les droits et les agents ; en lecture seule,
- * les noms de l'espace suffisent à montrer celui qui est choisi.
- */
-function useDeviceOptions(load: boolean): { devices: readonly DatabaseDevice[]; error: string | null } {
-    const workspace = useDevices();
-    const [loaded, setLoaded] = useState<DatabaseDevice[] | null>(null);
-    const [error, setError] = useState<string | null>(null);
-    useEffect(() => {
-        if (!load) return;
-        let live = true;
-        api.send('database.devices', {}).then(
-            (res) => {
-                if (live) setLoaded(res.devices);
-            },
-            (e) => {
-                if (live) setError(humanizeError(e, 'La liste des appareils n’a pas pu être chargée.'));
-            }
-        );
-        return () => {
-            live = false;
-        };
-    }, [load]);
-    return {
-        devices: loaded ?? workspace.devices.map((d) => ({ id: d.id, name: d.name, online: d.online, blocked: null })),
-        error
-    };
-}
+const loadDevices = () => api.send('database.devices', {}).then((res) => res.devices);
 
 /** L'appareil par lequel joindre la base : ses agents seuls voient ce qui n'écoute que sur la machine. */
 function DeviceField({ form, onChange, disabled }: FieldsProps) {
-    const { devices, error } = useDeviceOptions(form.accessKind === 'device' && !disabled);
-    const blocked = devices.filter((d) => d.blocked !== null);
-
     return (
         <label className={styles.field}>
             <span className={styles.label}>Appareil</span>
-            <SelectInput
+            <DeviceRelayField
                 value={form.accessDeviceId}
                 disabled={disabled}
-                onChange={(e) => onChange({ accessDeviceId: e.target.value })}
-            >
-                <option value=''>Choisir un appareil…</option>
-                {devices.map((d) => (
-                    <option key={d.id} value={d.id} disabled={d.blocked !== null && d.id !== form.accessDeviceId}>
-                        {d.name}
-                        {d.online ? '' : ' (hors ligne)'}
-                    </option>
-                ))}
-            </SelectInput>
+                load={loadDevices}
+                onChange={(accessDeviceId) => onChange({ accessDeviceId })}
+            />
             <span className={styles.hint}>
                 L’hôte et le port de la base sont ceux que voit l’appareil : <strong>127.0.0.1</strong> pour une base
                 qui n’écoute que sur lui. Hors ligne, la base est injoignable jusqu’à son retour.
             </span>
-            {error && <span className={styles.hint}>{error}</span>}
-            {blocked.map((d) => (
-                <span key={d.id} className={styles.hint}>
-                    « {d.name} » : {d.blocked}
-                </span>
-            ))}
         </label>
     );
 }

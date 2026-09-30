@@ -1,13 +1,11 @@
 import type { DatabaseProbe, DatabaseRow } from '../contracts/domain';
-import { mapLimit, type FeatureService, type FeatureServiceDeps } from '@deveye/types/sdk/server';
+import { mapLimit, relayForAuthor, type FeatureService, type FeatureServiceDeps } from '@deveye/types/sdk/server';
 
-import { DENIALS, DEVICE_NETWORK_RIGHT, relayOf } from './device';
 import { explainError, openSession, type EngineTarget, type Session } from './engine';
 import { buildNotice } from './notice';
 import type { DatabaseRepo } from './repo';
 import { isFiring, renderMessage, runConditions } from './rules';
 import { PLAN_PAUSED_MESSAGE, readJson, type StoredAccess, type StoredAlert, type StoredDatabase } from './_shared';
-import type { DeviceRelay } from './tunnel';
 
 /**
  * Le relevé périodique des bases, et l'évaluation de leurs alertes. Éteint par
@@ -94,31 +92,10 @@ export class DatabaseMonitor {
             access: {
                 ...access,
                 secret: row.access_secret_enc ? await cipher.tryDecrypt(row.access_secret_enc) : null,
-                relay: access.kind === 'device' ? await this.relayFor(workspaceId, access) : null
+                relay:
+                    access.kind === 'device' ? await relayForAuthor(this.deps, workspaceId, access, 'cette base') : null
             }
         };
-    }
-
-    /**
-     * Le relais de l'appareil d'une base, tant que le membre qui l'a choisi
-     * garde le droit d'en ouvrir le réseau : l'enregistrement ne vaut pas
-     * permission pour toujours.
-     */
-    private async relayFor(workspaceId: number, access: StoredAccess): Promise<DeviceRelay> {
-        if (!access.deviceId || !access.authorUserId)
-            throw new Error('Aucun appareil n’est choisi pour joindre cette base.');
-        const may = await this.deps.access.device(workspaceId, access.authorUserId, access.deviceId, [
-            DEVICE_NETWORK_RIGHT
-        ]);
-        if (!may.ok) {
-            throw new Error(
-                `Le membre qui a choisi l’appareil de cette base ne peut plus en ouvrir le réseau (${DENIALS[may.reason]}) : ` +
-                    'un membre qui en a le droit doit enregistrer l’accès de nouveau.'
-            );
-        }
-        const device = await this.deps.devices.find(access.deviceId);
-        if (!device) throw new Error('L’appareil de cette base a été supprimé.');
-        return relayOf(this.deps.agents, device, this.deps.devices.isOnline(device.id));
     }
 
     private async runCheck(databaseId: number, workspaceId: number): Promise<DatabaseProbe> {

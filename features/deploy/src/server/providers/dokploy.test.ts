@@ -48,7 +48,8 @@ after(async () => {
 
 function fetchLog(timeoutMs: number): Promise<{ log: string; elapsed: number }> {
     const started = Date.now();
-    return fetchDeploymentLog(`http://127.0.0.1:${port}`, 'clé', '/un/chemin', { timeoutMs }).then((log) => ({
+    const instance = { baseUrl: `http://127.0.0.1:${port}`, apiKey: 'clé', relay: null };
+    return fetchDeploymentLog(instance, '/un/chemin', { timeoutMs }).then((log) => ({
         log,
         elapsed: Date.now() - started
     }));

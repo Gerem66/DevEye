@@ -3,6 +3,7 @@ import {
     deployCandidates,
     deployCount,
     deployCredentialAdd,
+    deployCredentialDevices,
     deployCredentialList,
     deployCredentialRemove,
     deployCredentialUpdate,
@@ -19,13 +20,14 @@ import {
 import { randomUUID } from 'node:crypto';
 
 import type { Deployment, DeployTarget, DeployTargetRow } from '../contracts/domain';
-import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
+import { authorizeRelayDevice, defineSdkFeature, FeatureError, relayDeviceOptions } from '@deveye/types/sdk/server';
 
 // Le garde des appels sortants, partagé par toute l'app : l'adresse refusée l'est
 // à l'écriture, là où le membre voit pourquoi.
 import { isAllowedOutboundUrl, OUTBOUND_REFUSED_MESSAGE } from '@/Services/netFetch';
 
 import { candidatesOf, machineOf, parseServiceId } from './agent';
+import { DOKPLOY_INSTANCE } from './providers/dokploy';
 import type { DeployProviderAdapter } from './providers/types';
 import {
     deviceNamesOf,
@@ -72,12 +74,25 @@ function assertKind(provider: DeployProviderAdapter, kind: string): void {
     }
 }
 
-/** L'adresse d'un accès : obligatoire et publique pour Dokploy, sans objet pour GitHub. */
-function baseUrlFor(provider: string, baseUrl: string | null): string | null {
-    if (provider !== 'dokploy') return null;
-    if (!baseUrl) throw new FeatureError('validation', 'Une instance Dokploy demande son adresse.');
-    if (!isAllowedOutboundUrl(baseUrl)) throw new FeatureError('validation', OUTBOUND_REFUSED_MESSAGE);
-    return baseUrl;
+/**
+ * Par où joindre une instance Dokploy : sans objet pour GitHub. Jointe par le
+ * serveur, l'adresse doit être publique ; jointe par un appareil, c'est son
+ * agent qui borne ce qu'il atteint, et l'appelant devient l'auteur du choix,
+ * dont le droit sur l'appareil sera revérifié à chaque usage.
+ */
+async function routeFor(
+    ctx: Ctx,
+    provider: string,
+    input: { baseUrl: string | null; deviceId: string | null }
+): Promise<{ baseUrl: string | null; deviceId: string | null; authorUserId: number | null }> {
+    if (provider !== 'dokploy') return { baseUrl: null, deviceId: null, authorUserId: null };
+    if (!input.baseUrl) throw new FeatureError('validation', 'Une instance Dokploy demande son adresse.');
+    if (input.deviceId) {
+        const device = await authorizeRelayDevice(ctx, input.deviceId, DOKPLOY_INSTANCE);
+        return { baseUrl: input.baseUrl, deviceId: device.id, authorUserId: ctx.userId };
+    }
+    if (!isAllowedOutboundUrl(input.baseUrl)) throw new FeatureError('validation', OUTBOUND_REFUSED_MESSAGE);
+    return { baseUrl: input.baseUrl, deviceId: null, authorUserId: null };
 }
 
 const PROVIDER_LABELS: Record<string, string> = { dokploy: 'Dokploy', github: 'GitHub' };
@@ -579,7 +594,7 @@ export const deployHandlers = [
                 workspaceId: ctx.workspaceId,
                 provider: input.provider,
                 label: input.label,
-                baseUrl: baseUrlFor(input.provider, input.baseUrl),
+                ...(await routeFor(ctx, input.provider, input)),
                 secretEnc: await ctx.cipher().encrypt(input.secret)
             });
             ctx.audit({
@@ -599,7 +614,7 @@ export const deployHandlers = [
             if (!existing) throw new FeatureError('not_found', 'Accès de déploiement introuvable');
             const row = await ctx.repo.updateCredential(input.credentialId, ctx.workspaceId, {
                 label: input.label,
-                baseUrl: baseUrlFor(existing.provider, input.baseUrl),
+                ...(await routeFor(ctx, existing.provider, input)),
                 // Secret absent = inchangé : le client ne l'a jamais reçu.
                 secretEnc: input.secret ? await ctx.cipher().encrypt(input.secret) : undefined
             });
@@ -607,6 +622,11 @@ export const deployHandlers = [
             const uses = await ctx.repo.countCredentialUses(ctx.workspaceId);
             return { credential: toCredential(row, uses.get(row.id) ?? 0) };
         }
+    }),
+    defineSdkFeature({
+        ...deployCredentialDevices,
+        access: { level: 'write' },
+        handler: async (ctx: Ctx) => ({ devices: await relayDeviceOptions(ctx, DOKPLOY_INSTANCE) })
     }),
     defineSdkFeature({
         ...deployCredentialRemove,

@@ -52,19 +52,6 @@ export const databaseAccessSchema = z.object({
 });
 export type DatabaseAccess = z.infer<typeof databaseAccessSchema>;
 
-/**
- * Un appareil de l'espace, vu depuis l'accès d'une base. `blocked` dit ce qui
- * empêche de le choisir (droit, agent, réglage de la machine) : un appareil
- * qu'on ne peut pas choisir reste visible, c'est ainsi qu'on apprend pourquoi.
- */
-export const databaseDeviceSchema = z.object({
-    id: z.uuid(),
-    name: z.string(),
-    online: z.boolean(),
-    blocked: z.string().nullable()
-});
-export type DatabaseDevice = z.infer<typeof databaseDeviceSchema>;
-
 export const databaseSchema = z.object({
     id: z.number().int().positive(),
     engine: databaseEngineSchema,

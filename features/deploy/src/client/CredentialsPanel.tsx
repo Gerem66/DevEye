@@ -2,12 +2,14 @@ import { useState } from 'react';
 import {
     Button,
     ConfirmDialog,
+    DeviceRelayField,
     Dialog,
     humanizeError,
     invalidate,
     SegmentedControl,
     settingsStyles as shell,
     TextInput,
+    useDevices,
     useResource,
     type ConfirmRequest
 } from 'deveye-sdk-client';
@@ -27,6 +29,20 @@ const PROVIDER_OPTIONS: readonly { value: DeployCredentialProvider; label: strin
     { value: 'github', label: 'GitHub', title: 'Un jeton GitHub, pour lancer des workflows GitHub Actions' }
 ];
 
+/** Par où le serveur joint une instance Dokploy. */
+type Route = 'direct' | 'device';
+
+const ROUTE_OPTIONS: readonly { value: Route; label: string; title: string }[] = [
+    { value: 'direct', label: 'Direct', title: 'Le serveur joint l’instance lui-même, sur Internet' },
+    {
+        value: 'device',
+        label: 'Par un appareil',
+        title: 'L’agent d’un de vos appareils joint l’instance depuis la machine, même si elle n’écoute que sur elle'
+    }
+];
+
+const loadDevices = () => api.send('deploy.credentialDevices', {}).then((res) => res.devices);
+
 /** Le formulaire ouvert : un accès existant, ou un nouveau. */
 type Editing = { credential: DeployCredential | null } | null;
 
@@ -38,7 +54,8 @@ type Editing = { credential: DeployCredential | null } | null;
  *
  * Un secret n'est jamais relu : le champ reste vide à la ré-ouverture, et vide
  * veut dire « garder celui en place ». L'adresse d'une instance Dokploy est
- * obligatoire ; le fournisseur d'un accès ne change plus après sa création.
+ * obligatoire ; jointe par un appareil, c'est celle que voit la machine. Le
+ * fournisseur d'un accès ne change plus après sa création.
  * Autonome : il suit `deploy.list`, qu'un accès retiré rend orpheline.
  */
 export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
@@ -48,10 +65,15 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
         'Impossible de charger les accès.'
     );
 
+    /** Le nom des appareils de l'espace, pour dire par lequel passe un accès. */
+    const { devices } = useDevices();
+
     const [editing, setEditing] = useState<Editing>(null);
     const [provider, setProvider] = useState<DeployCredentialProvider>('dokploy');
     const [label, setLabel] = useState('');
     const [baseUrl, setBaseUrl] = useState('');
+    const [route, setRoute] = useState<Route>('direct');
+    const [deviceId, setDeviceId] = useState('');
     const [secret, setSecret] = useState('');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -65,6 +87,8 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
         setProvider(credential?.provider ?? 'dokploy');
         setLabel(credential?.label ?? '');
         setBaseUrl(credential?.baseUrl ?? '');
+        setRoute(credential?.deviceId ? 'device' : 'direct');
+        setDeviceId(credential?.deviceId ?? '');
         setSecret('');
         setError(null);
     };
@@ -74,6 +98,11 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
         // Un service auto-hébergé sans adresse n'est pas adressable.
         if (provider === 'dokploy' && !baseUrl.trim()) {
             setError('Cette instance a besoin de l’adresse de son API.');
+            return;
+        }
+        const byDevice = provider === 'dokploy' && route === 'device';
+        if (byDevice && !deviceId) {
+            setError('Choisissez l’appareil par lequel joindre cette instance.');
             return;
         }
         const existing = editing?.credential ?? null;
@@ -86,6 +115,7 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
             return;
         }
         const address = provider === 'dokploy' ? baseUrl.trim() : null;
+        const device = byDevice ? deviceId : null;
 
         setBusy(true);
         setError(null);
@@ -95,6 +125,7 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
                     credentialId: existing.id,
                     label: label.trim(),
                     baseUrl: address,
+                    deviceId: device,
                     // Champ vide = inchangé : le serveur ne nous l'a jamais rendu.
                     ...(secret.trim() ? { secret: secret.trim() } : {})
                 });
@@ -103,6 +134,7 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
                     provider,
                     label: label.trim(),
                     baseUrl: address,
+                    deviceId: device,
                     secret: secret.trim()
                 });
             }
@@ -161,7 +193,14 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
                             <span className={shell.channelMeta}>
                                 {c.provider === 'github'
                                     ? 'GitHub Actions'
-                                    : `${PROVIDER_LABELS[c.provider]} · ${c.baseUrl ?? 'instance inconnue'}`}
+                                    : [
+                                          PROVIDER_LABELS[c.provider],
+                                          c.baseUrl ?? 'instance inconnue',
+                                          c.deviceId &&
+                                              `par « ${devices.find((d) => d.id === c.deviceId)?.name ?? 'un appareil'} »`
+                                      ]
+                                          .filter(Boolean)
+                                          .join(' · ')}
                             </span>
                         </span>
                         <span
@@ -255,14 +294,48 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
                     </label>
 
                     {provider === 'dokploy' && (
-                        <label className={shell.field}>
-                            <span className={shell.sectionLabel}>Adresse de l’instance</span>
-                            <TextInput
-                                value={baseUrl}
-                                placeholder='https://dokploy.exemple.fr'
-                                onChange={(e) => setBaseUrl(e.target.value)}
-                            />
-                        </label>
+                        <>
+                            <div className={shell.field}>
+                                <span className={shell.sectionLabel}>Chemin</span>
+                                <SegmentedControl
+                                    value={route}
+                                    options={ROUTE_OPTIONS}
+                                    onChange={setRoute}
+                                    aria-label='Chemin vers l’instance'
+                                />
+                                <span className={shell.fieldHint}>
+                                    {ROUTE_OPTIONS.find((o) => o.value === route)?.title}.
+                                </span>
+                            </div>
+
+                            {route === 'device' && (
+                                <label className={shell.field}>
+                                    <span className={shell.sectionLabel}>Appareil</span>
+                                    <DeviceRelayField value={deviceId} onChange={setDeviceId} load={loadDevices} />
+                                    <span className={shell.fieldHint}>
+                                        L’agent de l’appareil joint l’instance de son côté : elle n’a pas besoin d’être
+                                        sur Internet. Hors ligne, l’instance est injoignable jusqu’à son retour.
+                                    </span>
+                                </label>
+                            )}
+
+                            <label className={shell.field}>
+                                <span className={shell.sectionLabel}>Adresse de l’instance</span>
+                                <TextInput
+                                    value={baseUrl}
+                                    placeholder={
+                                        route === 'device' ? 'http://127.0.0.1:3000' : 'https://dokploy.exemple.fr'
+                                    }
+                                    onChange={(e) => setBaseUrl(e.target.value)}
+                                />
+                                {route === 'device' && (
+                                    <span className={shell.fieldHint}>
+                                        L’adresse telle que l’appareil la voit : <strong>http://127.0.0.1:3000</strong>{' '}
+                                        pour un Dokploy qui n’écoute que sur la machine.
+                                    </span>
+                                )}
+                            </label>
+                        </>
                     )}
 
                     <label className={shell.field}>

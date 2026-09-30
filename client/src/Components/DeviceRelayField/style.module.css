@@ -1,0 +1,6 @@
+/* Une raison sous le sélecteur : l'erreur de lecture, un appareil qu'on ne peut pas choisir. */
+.note {
+    font-size: 0.75rem;
+    line-height: 1.45;
+    color: var(--text-muted);
+}

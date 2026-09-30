@@ -12,7 +12,7 @@ import { ProviderError, type ProviderAccess, type ProviderTarget } from './types
  * et comment il ramène ses réponses aux quatre états du module.
  */
 
-const ACCESS: ProviderAccess = { credentialId: 1, baseUrl: null, secret: 'ghp_x' };
+const ACCESS: ProviderAccess = { credentialId: 1, baseUrl: null, relay: null, secret: 'ghp_x' };
 const TARGET: ProviderTarget = { kind: 'workflow', externalId: 'OxyFoo/site#42', ref: 'main' };
 
 type Reply = { status: number; body?: unknown; headers?: Record<string, string> };

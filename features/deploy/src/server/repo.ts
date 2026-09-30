@@ -76,13 +76,21 @@ export interface DeployRepo {
         provider: string;
         label: string;
         baseUrl: string | null;
+        deviceId: string | null;
+        authorUserId: number | null;
         secretEnc: string;
     }): Promise<DeployCredentialRow>;
     updateCredential(
         id: number,
         workspaceId: number,
         /** `secretEnc` absent = on garde le secret en place. */
-        input: { label: string; baseUrl: string | null; secretEnc?: string }
+        input: {
+            label: string;
+            baseUrl: string | null;
+            deviceId: string | null;
+            authorUserId: number | null;
+            secretEnc?: string;
+        }
     ): Promise<DeployCredentialRow | null>;
     /** Retire une clé. Les cibles qui s'en servaient restent, sans clé : indéployables, et le disent. */
     removeCredential(id: number, workspaceId: number): Promise<boolean>;
@@ -337,28 +345,31 @@ export function createRepo(q: SdkQueryable): DeployRepo {
             );
         },
         findCredential,
-        async createCredential({ workspaceId, provider, label, baseUrl, secretEnc }) {
+        async createCredential({ workspaceId, provider, label, baseUrl, deviceId, authorUserId, secretEnc }) {
             const res = await q.execute(
-                'INSERT INTO ft_deploy_credentials (workspace_id, provider, label, base_url, secret_enc) VALUES (?, ?, ?, ?, ?)',
-                [workspaceId, provider, label, baseUrl, secretEnc]
+                `INSERT INTO ft_deploy_credentials (workspace_id, provider, label, base_url, device_id, author_user_id, secret_enc)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                [workspaceId, provider, label, baseUrl, deviceId, authorUserId, secretEnc]
             );
             const rows = await q.query<DeployCredentialRow>('SELECT * FROM ft_deploy_credentials WHERE id = ?', [
                 res.insertId
             ]);
             return rows[0];
         },
-        async updateCredential(id, workspaceId, { label, baseUrl, secretEnc }) {
+        async updateCredential(id, workspaceId, { label, baseUrl, deviceId, authorUserId, secretEnc }) {
             // Secret absent = on garde celui en place : le client ne le reçoit
             // jamais, il ne peut donc pas le renvoyer inchangé.
             const res = secretEnc
                 ? await q.execute(
-                      `UPDATE ft_deploy_credentials SET label = ?, base_url = ?, secret_enc = ?
+                      `UPDATE ft_deploy_credentials
+                          SET label = ?, base_url = ?, device_id = ?, author_user_id = ?, secret_enc = ?
                         WHERE id = ? AND workspace_id = ?`,
-                      [label, baseUrl, secretEnc, id, workspaceId]
+                      [label, baseUrl, deviceId, authorUserId, secretEnc, id, workspaceId]
                   )
                 : await q.execute(
-                      'UPDATE ft_deploy_credentials SET label = ?, base_url = ? WHERE id = ? AND workspace_id = ?',
-                      [label, baseUrl, id, workspaceId]
+                      `UPDATE ft_deploy_credentials SET label = ?, base_url = ?, device_id = ?, author_user_id = ?
+                        WHERE id = ? AND workspace_id = ?`,
+                      [label, baseUrl, deviceId, authorUserId, id, workspaceId]
                   );
             if (res.affectedRows === 0) return null;
             return findCredential(id, workspaceId);

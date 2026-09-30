@@ -1,11 +1,19 @@
-import type { DeploymentRow, DeployStatus, DeployTargetRow, DeployTargetSyncRow } from '../contracts/domain';
 import type {
-    DevEyeFacade,
-    FeatureService,
-    FeatureServiceDeps,
-    SdkAlert,
-    SdkCipher,
-    SdkLiveChannel
+    DeployCredentialRow,
+    DeploymentRow,
+    DeployStatus,
+    DeployTargetRow,
+    DeployTargetSyncRow
+} from '../contracts/domain';
+import {
+    relayForAuthor,
+    type DeviceRelay,
+    type DevEyeFacade,
+    type FeatureService,
+    type FeatureServiceDeps,
+    type SdkAlert,
+    type SdkCipher,
+    type SdkLiveChannel
 } from '@deveye/types/sdk/server';
 
 // L'horodatage et la durée des corps d'alerte sont ceux de l'app, partagés par
@@ -16,6 +24,7 @@ import { formatDuration, formatMoment } from '@/Services/alertCore';
 import { composeTargetOf, type ComposeService } from './agent';
 import { buildNotice, estimateFromHistory, firstLine } from './notice';
 import { PROVIDERS, providerOf, type DeployProviders } from './providers';
+import { DOKPLOY_INSTANCE } from './providers/dokploy';
 import {
     ProviderError,
     type DeployProviderAdapter,
@@ -228,6 +237,22 @@ export class DeploySync {
     }
 
     /**
+     * Le relais de l'appareil d'un accès, tant que le membre qui l'a choisi
+     * garde le droit d'en ouvrir le réseau ; `null` quand le serveur joint
+     * l'instance lui-même. Lève un message lisible : appareil hors ligne,
+     * supprimé, droit perdu.
+     */
+    relayFor(credential: DeployCredentialRow): Promise<DeviceRelay | null> {
+        if (!credential.device_id) return Promise.resolve(null);
+        return relayForAuthor(
+            this.deps,
+            credential.workspace_id,
+            { deviceId: credential.device_id, authorUserId: credential.author_user_id },
+            DOKPLOY_INSTANCE
+        );
+    }
+
+    /**
      * L'arrêt attend les rapprochements, pas les déploiements par une machine :
      * ceux-là durent jusqu'à trente minutes, et le prochain démarrage les
      * reprend ({@link recover}).
@@ -404,6 +429,7 @@ export class DeploySync {
             access: {
                 credentialId: credential.id,
                 baseUrl: credential.base_url,
+                relay: await this.relayFor(credential),
                 secret: await cipher.decrypt(credential.secret_enc)
             },
             spec: providerTargetOf(target, stored),
@@ -830,7 +856,7 @@ export class DeploySync {
                 }),
                 repoUrl: async () => null
             },
-            access: { credentialId: 0, baseUrl: null, secret: '' },
+            access: { credentialId: 0, baseUrl: null, relay: null, secret: '' },
             spec: { kind: 'service', externalId: target.external_id, ref: null },
             name: run.name
         };

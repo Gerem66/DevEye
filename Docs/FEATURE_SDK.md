@@ -647,7 +647,11 @@ deux ordres du cycle de vie `disconnectAgent` /
 dossier, faite par l'agent et tirée par crédits au rythme du consommateur,
 annulée sur la machine quand on quitte la boucle, et `openTcp` : une connexion
 TCP que l'agent ouvre de son côté vers sa boucle locale ou un hôte de
-`tunnel_targets`, rendue en flux duplex tiré par crédits)),
+`tunnel_targets`, rendue en flux duplex tiré par crédits ; les helpers
+`deviceRelay` du SDK (`relayDeviceOptions`, `authorizeRelayDevice`,
+`relayForAuthor`, `openDeviceTunnel`) en font le choix d'un appareil, la
+revérification du droit de son auteur et l'écouteur local qu'un pilote ou un
+client HTTP sait joindre, avec le champ `DeviceRelayField` côté client)),
 `transport` (socket appelant, `agents`), `live.publish(event, payload)` (la voie
 de poussée, capacité `live.publish` : une trame nommée sous le préfixe du module,
 aux connexions de la salle qui ont `read` sur sa feature ; voir LIVE.md §4),

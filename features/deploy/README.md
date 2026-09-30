@@ -120,7 +120,7 @@ visible. Il portait sur les **lignes encore en vol** ; il porte désormais sur l
 | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Cibles**                   | toutes les cibles de l'espace, état du dernier déploiement, nombre de projets, rangeables au glisser-déposer                                                                |
 | **Fiche**                    | l'en-tête de la cible (retour, titre, actions, dont le bouton de réglages commun), « Déployer », et l'historique de ce qui est parti                                        |
-| **Réglages → Sources**       | les accès de l'espace, Dokploy (adresse + clé d'API) ou GitHub (jeton), avec ce que chacun dessert (voir `Docs/SOURCES.md`)                                                 |
+| **Réglages → Sources**       | les accès de l'espace, Dokploy (adresse + clé d'API, par le serveur ou par un appareil) ou GitHub (jeton), avec ce que chacun dessert (voir `Docs/SOURCES.md`)              |
 | **Réglages → Notifications** | les canaux de la feature (ses sources d'avis) ; chaque **cible** coche les siens dans ses propres réglages (092). Sur Discord, un message qui suit le déploiement en direct |
 | **Réglages d'une cible**     | général (accès, cible visée, type ou branche, intitulé, suppression), notifications, partage entre espaces et permissions par rôle (`Docs/SETTINGS.md`, `Docs/SHARING.md`)  |
 | **Onglet d'un projet**       | les cibles reliées — une vue sur cette feature, voir [Projets](../projects/README.md)                                                                                       |
@@ -174,6 +174,7 @@ src/server/providers/github.ts      GitHub Actions : workflow_dispatch, exécuti
 src/server/migrations/              ce que le module change à ses tables (001 : les fournisseurs)
 src/server/uninstall.sql            DROP de ft_deploy_credentials (les tables historiques restent)
 src/server/*.test.ts                handlers (harnais SDK), service (Dokploy simulé), notice (les calculs)
+src/server/providers/*.test.ts      le journal Dokploy sur une vraie WebSocket, l'instance jointe par un relais, GitHub simulé
 src/server/providers/*.test.ts      dokploy (vraie WebSocket), github (réseau simulé)
 
 src/client/index.tsx                clientEntry : widget, vue complète, panneaux Général et Sources, provider client
@@ -759,17 +760,17 @@ Dokploy (5 min) et le dépôt d'une cible (1 h) ; les exécutions d'un workflow
 GitHub avec leur ETag. Une cible portée par une machine n'a pas d'accès : c'est
 l'agent qui répond (`src/server/agent.ts`).
 
-|                   | Dokploy                                      | GitHub Actions                                                                | Une machine                                                               |
-| ----------------- | -------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| Accès             | adresse de l'instance + clé d'API            | jeton à grain fin, sans adresse                                               | aucun : la machine de l'espace, et la permission Docker de qui la déclare |
-| Cible             | application ou pile compose                  | workflow d'un dépôt sur une branche (`propriétaire/dépôt#id`)                 | service compose (`moteur/projet/service`)                                 |
-| Déclencher        | `application.deploy` / `compose.deploy`      | `workflow_dispatch` ; un workflow sans ce déclencheur est refusé, raison dite | `docker.action` `composeDeploy`, signé : `pull` puis `up --no-deps`       |
-| Historique        | `deployment.all` / `deployment.allByCompose` | les exécutions du workflow sur la branche, un 304 ne coûte rien               | le nôtre : rien n'est sondé                                               |
-| Rattachement      | par identifiant, sinon par date              | par date : l'API ne rend pas l'exécution qu'elle crée                         | direct : la ligne attend son verdict                                      |
-| Journal de l'avis | la queue du journal (WebSocket)              | les étapes des jobs : faites, en cours, à venir                               | les lignes de l'agent, au fil de l'action                                 |
-| Journal complet   | le même flux, lu jusqu'au silence            | le texte de chaque job, par une redirection que le jeton ne suit pas          | les 64 derniers Ko, gardés avec le déploiement                            |
-| Limite de débit   | aucune                                       | compteur épuisé : l'accès recule jusqu'à `x-ratelimit-reset`                  | une action longue à la fois par machine, verrou partagé avec Appareils    |
-| Offre             | compte dans `deploy.targets`                 | compte dans `deploy.targets`                                                  | hors `deploy.targets` : rien n'est sondé, les machines ont leur limite    |
+|                   | Dokploy                                                              | GitHub Actions                                                                | Une machine                                                               |
+| ----------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Accès             | adresse de l'instance + clé d'API, par le serveur ou par un appareil | jeton à grain fin, sans adresse                                               | aucun : la machine de l'espace, et la permission Docker de qui la déclare |
+| Cible             | application ou pile compose                                          | workflow d'un dépôt sur une branche (`propriétaire/dépôt#id`)                 | service compose (`moteur/projet/service`)                                 |
+| Déclencher        | `application.deploy` / `compose.deploy`                              | `workflow_dispatch` ; un workflow sans ce déclencheur est refusé, raison dite | `docker.action` `composeDeploy`, signé : `pull` puis `up --no-deps`       |
+| Historique        | `deployment.all` / `deployment.allByCompose`                         | les exécutions du workflow sur la branche, un 304 ne coûte rien               | le nôtre : rien n'est sondé                                               |
+| Rattachement      | par identifiant, sinon par date                                      | par date : l'API ne rend pas l'exécution qu'elle crée                         | direct : la ligne attend son verdict                                      |
+| Journal de l'avis | la queue du journal (WebSocket)                                      | les étapes des jobs : faites, en cours, à venir                               | les lignes de l'agent, au fil de l'action                                 |
+| Journal complet   | le même flux, lu jusqu'au silence                                    | le texte de chaque job, par une redirection que le jeton ne suit pas          | les 64 derniers Ko, gardés avec le déploiement                            |
+| Limite de débit   | aucune                                                               | compteur épuisé : l'accès recule jusqu'à `x-ratelimit-reset`                  | une action longue à la fois par machine, verrou partagé avec Appareils    |
+| Offre             | compte dans `deploy.targets`                                         | compte dans `deploy.targets`                                                  | hors `deploy.targets` : rien n'est sondé, les machines ont leur limite    |
 
 **Le jeton GitHub de Déploiements n'est pas celui de Git.** Git lit des dépôts
 (Contents en lecture) ; ici on lance des workflows (Actions en écriture).
@@ -791,9 +792,29 @@ entière à 30) et tient le message vivant au même rythme qu'une cible sondée.
 démarrage, `recover` passe en échec, sans avis, les déploiements par machine
 restés en vol : plus personne n'en recevra le verdict.
 
+**Une instance Dokploy hors d'Internet se joint par un appareil.** Le garde des
+appels sortants refuse une adresse privée (`OUTBOUND_ALLOW_PRIVATE`, à garder à
+`false` sur une instance partagée : l'ouvrir donnerait à tout compte le réseau
+de l'hôte, par toutes les fonctionnalités). Un accès Dokploy peut donc désigner
+un appareil : l'agent ouvre la connexion de son côté et la relaie
+(`agents.openTcp`, les helpers `openDeviceTunnel` et `relayForAuthor` du SDK,
+partagés avec Bases), et `base_url` est alors l'adresse que voit la machine,
+`http://127.0.0.1:3000` pour un Dokploy qui n'écoute que sur elle. Les appels
+tRPC passent par un écouteur local et un connecteur undici qui s'y branche, le
+nom de l'instance gardé pour TLS ; la WebSocket du journal reçoit sa propre
+`createConnection`. Hors du garde, une redirection n'est pas suivie. Les trois
+verrous sont ceux de Bases : le droit « Accès au réseau de l'appareil » du
+membre qui a choisi l'appareil (`author_user_id`), revérifié à chaque usage, le
+suivi de fond compris ; la version de l'agent (sonde `tunnel`) ; et la machine,
+qui ne joint que sa boucle locale sauf hôtes listés dans `tunnel_targets`. Un
+appareil hors ligne fait reculer l'accès comme une instance injoignable.
+
 La migration `migrations/001_providers.sql` a donné un `provider` aux accès,
 élargi `external_id` à 255 caractères, et ajouté `device_id` (clé étrangère
-vers `devices`, en cascade) avec son unicité par espace et par machine.
+vers `devices`, en cascade) avec son unicité par espace et par machine. La
+`002_device.sql` a donné aux accès leur `device_id` et leur `author_user_id`
+(clés étrangères mises à `NULL` à la suppression : l'accès reste, et dit ce
+qui lui manque).
 
 ## Modules privés au déploiement
 

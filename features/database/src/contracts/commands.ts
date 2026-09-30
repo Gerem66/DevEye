@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { deviceRelayOptionSchema } from '@deveye/types/sdk';
 import {
     DATABASE_ALERT_MESSAGE_MAX_LENGTH,
     DATABASE_ALERT_NAME_MAX_LENGTH,
@@ -12,7 +13,6 @@ import {
     databaseCellSchema,
     databaseCombinatorSchema,
     databaseConditionSchema,
-    databaseDeviceSchema,
     databaseEngineSchema,
     databaseExecutionSchema,
     databaseExportFormatSchema,
@@ -123,7 +123,7 @@ export const databaseUpdate = {
 export const databaseDevices = {
     command: 'database.devices' as const,
     input: z.object({}),
-    output: z.object({ devices: z.array(databaseDeviceSchema) })
+    output: z.object({ devices: z.array(deviceRelayOptionSchema) })
 };
 
 /** Retire la base, ses alertes et ses liaisons ; les projets liés ne perdent que leur base. */

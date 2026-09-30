@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { deviceRelayOptionSchema } from '@deveye/types/sdk';
 import {
     DEPLOY_DESCRIPTION_MAX_LENGTH,
     DEPLOY_EXTERNAL_ID_MAX_LENGTH,
@@ -180,7 +181,8 @@ const dokployBaseUrl = z.url({ protocol: /^https?$/ }).max(255);
 
 /**
  * Un accès. Une instance Dokploy exige son adresse : sans elle, rien n'est
- * adressable ; GitHub n'en a pas (`baseUrl` à `null`).
+ * adressable ; GitHub n'en a pas (`baseUrl` à `null`). Avec un appareil,
+ * l'adresse est celle que voit la machine, et son agent la joint.
  */
 export const deployCredentialAdd = {
     command: 'deploy.credentialAdd' as const,
@@ -188,6 +190,7 @@ export const deployCredentialAdd = {
         provider: deployCredentialProviderSchema,
         label: z.string().min(1).max(DEPLOY_CREDENTIAL_LABEL_MAX_LENGTH),
         baseUrl: dokployBaseUrl.nullable(),
+        deviceId: z.uuid().nullable(),
         secret: z.string().min(1).max(DEPLOY_CREDENTIAL_SECRET_MAX_LENGTH)
     }),
     output: z.object({ credential: deployCredentialSchema })
@@ -203,9 +206,17 @@ export const deployCredentialUpdate = {
         credentialId,
         label: z.string().min(1).max(DEPLOY_CREDENTIAL_LABEL_MAX_LENGTH),
         baseUrl: dokployBaseUrl.nullable(),
+        deviceId: z.uuid().nullable(),
         secret: z.string().min(1).max(DEPLOY_CREDENTIAL_SECRET_MAX_LENGTH).optional()
     }),
     output: z.object({ credential: deployCredentialSchema })
+};
+
+/** Les appareils de l'espace par lesquels joindre une instance Dokploy, pour le formulaire d'un accès. */
+export const deployCredentialDevices = {
+    command: 'deploy.credentialDevices' as const,
+    input: z.object({}),
+    output: z.object({ devices: z.array(deviceRelayOptionSchema) })
 };
 
 /**
@@ -234,5 +245,6 @@ export const deployCommands = [
     deployCredentialList,
     deployCredentialAdd,
     deployCredentialUpdate,
-    deployCredentialRemove
+    deployCredentialRemove,
+    deployCredentialDevices
 ] as const;

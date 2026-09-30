@@ -79,6 +79,8 @@ function credential(over: Partial<DeployCredentialRow> & { id: number; workspace
         provider: 'dokploy',
         label: `Clé ${over.id}`,
         base_url: 'https://dokploy.exemple.fr',
+        device_id: null,
+        author_user_id: null,
         secret_enc: 'clé-secrète',
         created: 1,
         ...over
@@ -622,6 +624,7 @@ describe('les clés Dokploy', () => {
             provider: 'dokploy',
             label: 'Prod',
             baseUrl: 'https://dokploy.exemple.fr',
+            deviceId: null,
             secret: 'sk-1'
         });
         assert.equal(out.credential.label, 'Prod');
@@ -641,18 +644,29 @@ describe('les clés Dokploy', () => {
         const ctx = createTestContext({ repo });
         const update = handlerFor(deployCredentialUpdate);
 
-        const kept = await update(ctx, { credentialId: 10, label: 'Renommée', baseUrl: 'https://autre.exemple.fr' });
+        const kept = await update(ctx, {
+            credentialId: 10,
+            label: 'Renommée',
+            baseUrl: 'https://autre.exemple.fr',
+            deviceId: null
+        });
         assert.deepEqual(
             [kept.credential.label, kept.credential.baseUrl, kept.credential.useCount],
             ['Renommée', 'https://autre.exemple.fr', 1]
         );
         assert.equal(repo.credentials[0].secret_enc, 'clé-secrète');
 
-        await update(ctx, { credentialId: 10, label: 'Renommée', baseUrl: 'https://autre.exemple.fr', secret: 'sk-2' });
+        await update(ctx, {
+            credentialId: 10,
+            label: 'Renommée',
+            baseUrl: 'https://autre.exemple.fr',
+            deviceId: null,
+            secret: 'sk-2'
+        });
         assert.equal(repo.credentials[0].secret_enc, 'sk-2');
 
         await assert.rejects(
-            update(ctx, { credentialId: 99, label: 'x', baseUrl: 'https://x' }),
+            update(ctx, { credentialId: 99, label: 'x', baseUrl: 'https://x', deviceId: null }),
             failsWith('not_found')
         );
     });

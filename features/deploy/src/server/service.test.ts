@@ -53,6 +53,8 @@ function credential(over: Partial<DeployCredentialRow> = {}): DeployCredentialRo
         provider: 'dokploy',
         label: 'Prod',
         base_url: 'https://dokploy.exemple.fr',
+        device_id: null,
+        author_user_id: null,
         secret_enc: 'clé',
         created: 1,
         ...over
@@ -543,7 +545,7 @@ function syncByInstance(repo: FakeRepo, options: { liveChannels?: readonly numbe
     const sync = new DeploySync(
         deps,
         withDokploy({
-            listDeployments: async (baseUrl, _key, _kind, externalId) => {
+            listDeployments: async ({ baseUrl }, _kind, externalId) => {
                 calls.push(`${baseUrl}#${externalId}`);
                 const answer = answers.get(baseUrl) ?? [];
                 if (answer instanceof Error) throw answer;

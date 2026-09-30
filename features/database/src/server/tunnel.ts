@@ -1,8 +1,9 @@
-import { connect as netConnect, createServer, type AddressInfo, type Server, type Socket } from 'net';
+import { connect as netConnect, type Socket } from 'net';
 import type { Duplex } from 'stream';
 import { Client as SshClient } from 'ssh2';
 import { SocksClient } from 'socks';
 import type { DatabaseAccessKind, DatabaseSshAuth } from '../contracts/domain';
+import { localForwarder, openDeviceTunnel, type DeviceRelay, type LocalTunnel } from '@deveye/types/sdk/server';
 
 // Le garde des connexions sortantes, partagé par toute l'app : la base, le
 // rebond et le proxy sont saisis par un membre, et `publicLookup` referme la
@@ -16,27 +17,13 @@ import {
 
 /**
  * Joindre une base, en direct, par un rebond SSH, par un proxy SOCKS5 ou par
- * l'agent d'un appareil. Un
- * écouteur local sur `127.0.0.1:0` plutôt qu'une socket passée au pilote : `pg`
- * n'en accepte pas, et `pg_dump` ne se connecte qu'à un hôte. Le direct y passe
- * aussi : sinon le pilote résoudrait le nom lui-même, hors du garde. Un tunnel
- * est toujours rendu avec son `close()`, que l'appelant appelle dans un
- * `finally` ; oublié, il laisse un écouteur et une session SSH.
+ * l'agent d'un appareil. Un écouteur local sur `127.0.0.1:0` plutôt qu'une
+ * socket passée au pilote : `pg` n'en accepte pas, et `pg_dump` ne se connecte
+ * qu'à un hôte. Le direct y passe aussi : sinon le pilote résoudrait le nom
+ * lui-même, hors du garde. Un tunnel est toujours rendu avec son `close()`,
+ * que l'appelant appelle dans un `finally` ; oublié, il laisse un écouteur et
+ * une session SSH.
  */
-
-/** Un chemin ouvert vers l'hôte cible, et de quoi le refermer. */
-export interface Tunnel {
-    /** L'hôte à donner au pilote : toujours l'écouteur local. */
-    host: string;
-    port: number;
-    close: () => Promise<void>;
-}
-
-/**
- * Une connexion ouverte par l'agent d'un appareil vers l'hôte de la base, de
- * son côté. Droits, présence et version de l'agent sont vérifiés avant.
- */
-export type DeviceRelay = (target: { host: string; port: number }) => Promise<Duplex>;
 
 export interface TunnelConfig {
     kind: DatabaseAccessKind;
@@ -79,9 +66,9 @@ async function guardedConnect(host: string, port: number): Promise<Socket> {
 }
 
 /** Ouvre le chemin décrit par `config` vers `target` ; ne lève que des messages lisibles. */
-export async function openTunnel(config: TunnelConfig, target: { host: string; port: number }): Promise<Tunnel> {
+export async function openTunnel(config: TunnelConfig, target: { host: string; port: number }): Promise<LocalTunnel> {
     if (config.kind === 'direct') return openDirect(target);
-    if (config.kind === 'device') return openDeviceTunnel(config.relay, target);
+    if (config.kind === 'device') return openDeviceTunnel(config.relay, target, 'cette base');
     if (config.host.trim() === '') {
         throw new Error(
             config.kind === 'ssh'
@@ -92,68 +79,16 @@ export async function openTunnel(config: TunnelConfig, target: { host: string; p
     return config.kind === 'ssh' ? openSshTunnel(config, target) : openSocksTunnel(config, target);
 }
 
-/**
- * Un écouteur local qui délègue chaque connexion entrante à `connect`. Une
- * erreur sur une connexion établie ne détruit que celle-ci, jamais le processus.
- */
-async function localForwarder(connect: () => Promise<Socket>, onClose: () => Promise<void>): Promise<Tunnel> {
-    const server: Server = createServer((client) => {
-        void (async () => {
-            try {
-                const remote = await connect();
-                client.pipe(remote);
-                remote.pipe(client);
-                const drop = () => {
-                    client.destroy();
-                    remote.destroy();
-                };
-                client.on('error', drop);
-                remote.on('error', drop);
-                remote.on('close', () => client.destroy());
-            } catch {
-                client.destroy();
-            }
-        })();
-    });
-
-    await new Promise<void>((resolve, reject) => {
-        server.once('error', reject);
-        // `127.0.0.1` et non `0.0.0.0` : exposé, ce relais ouvrirait un accès
-        // à la base sans authentification.
-        server.listen(0, '127.0.0.1', () => resolve());
-    });
-
-    const address = server.address() as AddressInfo;
-    return {
-        host: '127.0.0.1',
-        port: address.port,
-        close: async () => {
-            await new Promise<void>((resolve) => server.close(() => resolve()));
-            await onClose();
-        }
-    };
-}
-
-async function openDirect(target: { host: string; port: number }): Promise<Tunnel> {
+async function openDirect(target: { host: string; port: number }): Promise<LocalTunnel> {
     const connect = () => guardedConnect(target.host, target.port);
     // Un refus ou une base injoignable se disent ici : derrière le relais, le
     // pilote ne verrait qu'une connexion coupée.
     const probe = await connect();
     probe.destroy();
-    return localForwarder(connect, async () => {});
+    return localForwarder(connect);
 }
 
-/** Pas de garde du serveur : la cible est sur le réseau de l'appareil, que borne son agent. */
-async function openDeviceTunnel(relay: DeviceRelay | null, target: { host: string; port: number }): Promise<Tunnel> {
-    if (!relay) throw new Error('Aucun appareil n’est choisi pour joindre cette base.');
-    // Un flux duplex, comme un canal SSH : tout ce dont le relais local a besoin.
-    const connect = async () => (await relay(target)) as unknown as Socket;
-    const probe = await connect();
-    probe.destroy();
-    return localForwarder(connect, async () => {});
-}
-
-async function openSshTunnel(config: TunnelConfig, target: { host: string; port: number }): Promise<Tunnel> {
+async function openSshTunnel(config: TunnelConfig, target: { host: string; port: number }): Promise<LocalTunnel> {
     let sock: Socket;
     try {
         sock = await guardedConnect(config.host, config.port ?? SSH_DEFAULT_PORT);
@@ -190,12 +125,10 @@ async function openSshTunnel(config: TunnelConfig, target: { host: string; port:
     });
 
     const connect = () =>
-        new Promise<Socket>((resolve, reject) => {
+        new Promise<Duplex>((resolve, reject) => {
             client.forwardOut('127.0.0.1', 0, target.host, target.port, (err, stream) => {
                 if (err) reject(new Error(`Le rebond SSH a refusé la redirection : ${err.message}`));
-                // Un canal SSH expose l'interface d'un flux duplex : tout ce
-                // dont le relais a besoin.
-                else resolve(stream as unknown as Socket);
+                else resolve(stream);
             });
         });
 
@@ -209,7 +142,7 @@ async function openSshTunnel(config: TunnelConfig, target: { host: string; port:
     });
 }
 
-async function openSocksTunnel(config: TunnelConfig, target: { host: string; port: number }): Promise<Tunnel> {
+async function openSocksTunnel(config: TunnelConfig, target: { host: string; port: number }): Promise<LocalTunnel> {
     const proxy = {
         host: config.host,
         port: config.port ?? SOCKS_DEFAULT_PORT,
@@ -246,5 +179,5 @@ async function openSocksTunnel(config: TunnelConfig, target: { host: string; por
         throw new Error(`Proxy SOCKS injoignable : ${e instanceof Error ? e.message : String(e)}`);
     }
 
-    return localForwarder(connect, async () => {});
+    return localForwarder(connect);
 }

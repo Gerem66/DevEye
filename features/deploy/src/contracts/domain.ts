@@ -215,6 +215,12 @@ export const deployCredentialSchema = z.object({
     label: z.string().max(DEPLOY_CREDENTIAL_LABEL_MAX_LENGTH),
     /** Racine de l'instance Dokploy, auto-hébergée par définition ; `null` pour GitHub. */
     baseUrl: z.string().nullable(),
+    /**
+     * L'appareil dont l'agent joint l'instance Dokploy, quand elle n'est pas
+     * sur Internet (`baseUrl` est alors l'adresse vue par la machine) ; `null`
+     * quand le serveur la joint lui-même.
+     */
+    deviceId: z.uuid().nullable(),
     hasSecret: z.boolean(),
     created: z.number().int(),
     /** Combien de cibles s'en servent : ce qu'une suppression va couper. */
@@ -229,6 +235,9 @@ export interface DeployCredentialRow {
     provider: string;
     label: string;
     base_url: string | null;
+    device_id: string | null;
+    /** Le membre qui a choisi l'appareil : son droit sur la machine est revérifié à chaque usage. */
+    author_user_id: number | null;
     secret_enc: string;
     created: number;
 }

@@ -8,7 +8,7 @@ import {
     databaseReorder,
     databaseUpdate
 } from '../contracts/commands';
-import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
+import { authorizeRelayDevice, defineSdkFeature, FeatureError, relayDeviceOptions } from '@deveye/types/sdk/server';
 
 import {
     databaseCipherFor,
@@ -23,7 +23,6 @@ import {
     type StoredAccess,
     type StoredDatabase
 } from './_shared';
-import { authorizeDevice, deviceOptions } from './device';
 
 /**
  * Les bases de l'espace : inventaire, réglages, suppression, ordre. Rien ici ne
@@ -46,7 +45,7 @@ async function accessBody(
         deviceId: string | null;
     }
 ): Promise<StoredAccess> {
-    const device = input.kind === 'device' ? await authorizeDevice(ctx, input.deviceId) : null;
+    const device = input.kind === 'device' ? await authorizeRelayDevice(ctx, input.deviceId, 'cette base') : null;
     return {
         kind: input.kind,
         host: input.host.trim(),
@@ -253,6 +252,6 @@ export const databaseCrudFeatures = [
     defineSdkFeature({
         ...databaseDevices,
         access: { level: 'write' },
-        handler: async (ctx: Ctx) => ({ devices: await deviceOptions(ctx) })
+        handler: async (ctx: Ctx) => ({ devices: await relayDeviceOptions(ctx, 'cette base') })
     })
 ];

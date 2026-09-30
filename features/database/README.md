@@ -233,7 +233,11 @@ session (`agents.openTcp`) : l'hôte et le port sont ceux que voit la machine,
 `access_content`, sans colonne) ; la version de l'agent (sonde `tunnel`) ; et la
 machine elle-même, qui ne joint que sa boucle locale sauf hôtes listés dans
 `tunnel_targets`, et refuse tout sous `allow_tunnel = false`. Une base à un
-appareil hors ligne échoue avec ce motif, comme une base éteinte.
+appareil hors ligne échoue avec ce motif, comme une base éteinte. Le choix de
+l'appareil, ses refus, le relais de l'auteur et l'écouteur local sont les
+helpers `deviceRelay` du SDK serveur (`authorizeRelayDevice`,
+`relayDeviceOptions`, `relayForAuthor`, `openDeviceTunnel`) et le champ
+`DeviceRelayField` du SDK client, que Déploiements partage.
 
 **Un écouteur local, pas une socket passée au pilote.** `mysql2` accepte une
 socket existante, `pg` non — il veut ouvrir la sienne vers un hôte et un port. Un
