@@ -73,24 +73,25 @@ export interface Database {
     debug: DebugRepo;
 }
 
+/** Ouvre une transaction et y prête sa connexion le temps de `fn`. */
+export type BeginTransaction = <T>(fn: (q: Queryable) => Promise<T>) => Promise<T>;
+
 /**
  * Le pool plutôt qu'un `Queryable` : c'est lui, et lui seul, qui sait ouvrir une
  * transaction sur une connexion à part (cf. `Database.transaction`).
  */
 export function createDatabase(pool: DbPool): Database {
-    return buildDatabase(pool, getQueryable(pool), false);
+    return databaseOn(getQueryable(pool), (fn) => withTransaction(pool, fn));
 }
 
-function buildDatabase(pool: DbPool, q: Queryable, inTransaction: boolean): Database {
+/** Les dépôts sur ce `Queryable`, `begin` ouvrant leurs transactions. */
+export function databaseOn(q: Queryable, begin: BeginTransaction): Database {
     return {
         queryable: q,
         // Déjà dans une transaction, on y reste : MySQL n'en imbrique pas, et
         // en ouvrir une seconde prendrait une autre connexion, qui ne verrait
         // pas les écritures en cours et attendrait leurs verrous.
-        transaction: (fn) =>
-            inTransaction
-                ? fn(buildDatabase(pool, q, true))
-                : withTransaction(pool, (txQ) => fn(buildDatabase(pool, txQ, true))),
+        transaction: (fn) => begin((txQ) => fn(databaseOn(txQ, (inner) => inner(txQ)))),
         users: usersRepo(q),
         workspaces: workspacesRepo(q),
         workspaceMembers: workspaceMembersRepo(q),
