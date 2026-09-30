@@ -44,6 +44,7 @@ import { maintenance } from '@/Services/maintenance';
 import { describeError, systemAlerts } from '@/Services/systemAlerts';
 import { env, isDev } from '@/Utils/Env';
 import { logger } from '@/logger';
+import { appVersion } from '@/version';
 
 import type { Database } from '@/db';
 import type Encryption from '@/Services/Encryption';
@@ -150,7 +151,11 @@ export async function registerWS(
         // instrumentées. Entrer dans une salle reste conditionné à `live.here`.
         const live = liveHub.register(socket, session.userId, session.sessionId, seat);
 
-        const opening: SessionFrame = { userId: session.userId, maintenance: maintenance.clientState() };
+        const opening: SessionFrame = {
+            userId: session.userId,
+            version: appVersion(),
+            maintenance: maintenance.clientState()
+        };
         send(socket, { command: 'session', payload: ok(opening) });
 
         socket.on('message', async (raw: Buffer) => {

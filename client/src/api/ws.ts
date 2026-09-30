@@ -85,6 +85,27 @@ const MAINTENANCE_RETRY_MS = 60_000;
 /** En file d'attente : le serveur oublie qui ne relance pas sa demande dans la minute. */
 const QUEUE_RETRY_MS = 15_000;
 
+const RELOADED_FOR_KEY = 'deveye.reloadedFor';
+
+/**
+ * Le serveur a changé de version (un déploiement pendant la coupure) : la page
+ * recharge pour prendre le bundle qui va avec. Une seule fois par version
+ * serveur : un build servi en retard sur le serveur ferait sinon boucler.
+ */
+function reloadIfOutdated(serverVersion: string): void {
+    try {
+        if (serverVersion === __APP_VERSION__) {
+            sessionStorage.removeItem(RELOADED_FOR_KEY);
+            return;
+        }
+        if (sessionStorage.getItem(RELOADED_FOR_KEY) === serverVersion) return;
+        sessionStorage.setItem(RELOADED_FOR_KEY, serverVersion);
+    } catch {
+        return;
+    }
+    window.location.reload();
+}
+
 export class DevEyeWs {
     private socket: WebSocket | null = null;
     private _state: ConnectionState = 'idle';
@@ -98,6 +119,7 @@ export class DevEyeWs {
     private readonly unauthorizedListeners = new Set<() => void>();
     private readonly maintenanceListeners = new Set<(state: MaintenanceState) => void>();
     private readonly admissionListeners = new Set<(admission: Admission) => void>();
+    private readonly versionListeners = new Set<(version: string) => void>();
     /** Une ouverture en cours : l'adresse d'une instance distante s'obtient avant la socket. */
     private opening: Promise<void> | null = null;
     /** Ce qui attend la trame `session` de la socket en cours d'ouverture. */
@@ -162,6 +184,12 @@ export class DevEyeWs {
 
     private emitAdmission(admission: Admission): void {
         for (const fn of this.admissionListeners) fn(admission);
+    }
+
+    /** La version du serveur, à chaque ouverture. */
+    onServerVersion(fn: (version: string) => void): () => void {
+        this.versionListeners.add(fn);
+        return () => this.versionListeners.delete(fn);
     }
 
     private setState(s: ConnectionState): void {
@@ -327,6 +355,9 @@ export class DevEyeWs {
             this.emitAdmission(null);
             const frame = sessionFrameSchema.safeParse(msg.payload.data);
             if (frame.success && frame.data.maintenance) this.emitMaintenance(frame.data.maintenance);
+            if (frame.success && frame.data.version) {
+                for (const fn of this.versionListeners) fn(frame.data.version);
+            }
             const ready = this.onSession;
             this.onSession = null;
             ready?.();
@@ -539,11 +570,15 @@ class WsRouter {
         // La salle d'attente ne parle que de ce serveur-ci : une instance
         // distante qui fait attendre se contente de relancer.
         const offAdmission = instanceId === null ? conn.onAdmission(setAdmission) : () => undefined;
+        // Seul ce serveur-ci livre le bundle : une instance distante à une autre
+        // version est `incompatible` (remoteInstances), pas une raison de recharger.
+        const offVersion = instanceId === null ? conn.onServerVersion(reloadIfOutdated) : () => undefined;
         return () => {
             offMessage();
             offState();
             offMaintenance();
             offAdmission();
+            offVersion();
         };
     }
 
