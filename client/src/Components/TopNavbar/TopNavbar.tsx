@@ -242,7 +242,7 @@ export default function TopNavbar({
                                     void openInfo({
                                         title: `À propos de DevEye · ${version}`,
                                         body: aboutBody,
-                                        width: 640
+                                        width: 760
                                     });
                                 }}
                                 title='À propos de DevEye'

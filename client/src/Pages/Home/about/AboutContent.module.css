@@ -50,8 +50,10 @@
 }
 
 /* Largeur fixe : les vignettes s'alignent d'une fiche à l'autre, et le texte
-   part toujours de la même colonne : c'est ce qui rend la liste parcourable. */
-.featureArt {
+   part toujours de la même colonne : c'est ce qui rend la liste parcourable.
+   Deux classes pour l'emporter sur la largeur pleine de `FeatureArt`, quel que
+   soit l'ordre de chargement des feuilles. */
+.feature .featureArt {
     width: 116px;
 }
 
@@ -68,7 +70,7 @@
         flex-direction: column;
     }
 
-    .featureArt {
+    .feature .featureArt {
         width: 100%;
     }
 }
