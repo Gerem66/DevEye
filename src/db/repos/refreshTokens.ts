@@ -3,7 +3,7 @@ import type { Queryable } from '../pool';
 
 type Q = Queryable;
 
-interface RefreshTokenRow {
+export interface RefreshTokenRow {
     jti: string;
     user_id: number;
     session_id: string;

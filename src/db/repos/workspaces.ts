@@ -3,15 +3,21 @@ import type { Queryable } from '../pool';
 
 type Q = Queryable;
 
+/** Ce qu'un listage rend : `WorkspaceRow` sans ses deux MEDIUMTEXT. */
+export type WorkspaceListRow = Pick<
+    WorkspaceRow,
+    'id' | 'kind' | 'name' | 'logo' | 'owner_user_id' | 'features' | 'created'
+>;
+
 export interface WorkspacesRepo {
     findById(id: number): Promise<WorkspaceRow | null>;
     /** Espaces dont l'utilisateur est membre, personnel d'abord puis par ancienneté. */
-    findAccessibleByUser(userId: number): Promise<WorkspaceRow[]>;
+    findAccessibleByUser(userId: number): Promise<WorkspaceListRow[]>;
     /**
      * Tous les espaces, appartenance ignorée. Réservé à l'administration de la
      * flotte, qui propose le partage vers un espace dont l'admin n'est pas membre.
      */
-    listAll(): Promise<WorkspaceRow[]>;
+    listAll(): Promise<WorkspaceListRow[]>;
     /** Les espaces dont ce compte est propriétaire, personnel compris. */
     listOwnedIds(ownerUserId: number): Promise<number[]>;
     /** Ses espaces partagés, du plus ancien au plus récent : l'ordre où l'offre les garde ouverts. */
@@ -44,7 +50,7 @@ export function workspacesRepo(pool: Q): WorkspacesRepo {
         async findAccessibleByUser(userId) {
             // L'espace personnel en tête : c'est le repli implicite et la
             // première entrée du sélecteur.
-            const r = await pool.query<WorkspaceRow>(
+            const r = await pool.query<WorkspaceListRow>(
                 `SELECT ${LIST_COLUMNS} FROM workspaces w
                  INNER JOIN workspace_members m ON m.workspace_id = w.id
                  WHERE m.user_id = ?
@@ -71,7 +77,7 @@ export function workspacesRepo(pool: Q): WorkspacesRepo {
             return r.rows.map((row) => Number(row.owner_user_id));
         },
         async listAll() {
-            const r = await pool.query<WorkspaceRow>(
+            const r = await pool.query<WorkspaceListRow>(
                 `SELECT ${LIST_COLUMNS} FROM workspaces w
                  ORDER BY w.kind = 'personal' DESC, w.name ASC, w.id ASC`
             );

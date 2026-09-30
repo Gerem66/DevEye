@@ -17,7 +17,7 @@ const gunzipAsync = promisify(gunzip);
 const NEAREST_TOLERANCE_MS = 5 * 60 * 1000;
 
 /** One stored instant: the process list lives in `payload` as gzipped JSON. */
-interface ProcessSampleRow {
+export interface ProcessSampleRow {
     ts: number;
     kind: ProcessKind;
     payload: Buffer;

@@ -54,7 +54,7 @@ export interface LogsRepo {
 }
 
 /** Row shape of the list query (logs joined to users for the display name). */
-interface LogJoinRow {
+export interface LogJoinRow {
     id: number;
     date: number;
     level: number;
