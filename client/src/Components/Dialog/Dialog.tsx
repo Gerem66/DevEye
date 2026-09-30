@@ -1,4 +1,4 @@
-import { type KeyboardEvent, type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import { type KeyboardEvent, type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useDismissLayer } from './dismissLayer';
@@ -148,6 +148,38 @@ export default function Dialog({
         return () => window.removeEventListener('resize', onResize);
     }, []);
 
+    // Hors tall et fill, la hauteur suit le contenu mesuré : `height: 'auto'` n'a
+    // pas de valeur cible, et un contenu qui change (onglet, étape) sauterait au
+    // lieu de glisser. Plafonnée au `max-height`, au-delà duquel le dialogue défile.
+    const contentRef = useRef<HTMLDivElement>(null);
+    const [fitHeight, setFitHeight] = useState<number | null>(null);
+    const fits = !tall && !fill;
+    useLayoutEffect(() => {
+        const dialog = dialogRef.current;
+        const content = contentRef.current;
+        if (!open || !fits || !dialog || !content) return;
+        const sync = () => {
+            const cs = getComputedStyle(dialog);
+            const chrome =
+                parseFloat(cs.paddingTop) +
+                parseFloat(cs.paddingBottom) +
+                parseFloat(cs.borderTopWidth) +
+                parseFloat(cs.borderBottomWidth);
+            setFitHeight(Math.min(content.offsetHeight + chrome, parseFloat(cs.maxHeight) || Infinity));
+        };
+        sync();
+        const ro = new ResizeObserver(sync);
+        ro.observe(content);
+        window.addEventListener('resize', sync);
+        return () => {
+            ro.disconnect();
+            window.removeEventListener('resize', sync);
+            // Le prochain contenu (le dialogue d'info en porte plusieurs) repart de sa propre hauteur.
+            setFitHeight(null);
+        };
+    }, [open, fits]);
+    const height = tall ? tallHeight : fits && fitHeight !== null ? fitHeight : 'auto';
+
     // A close attempt either pops the confirmation (when dirty) or closes outright.
     const attemptClose = useCallback(() => {
         if (guarded) setConfirmDiscard(true);
@@ -229,10 +261,14 @@ export default function Dialog({
                         className={`${styles.dialog} ${tall ? styles.dialogTall : ''} ${fill ? styles.dialogFill : ''}`}
                         role='dialog'
                         aria-modal='true'
-                        initial={{ opacity: 0, scale: 0.94, maxWidth: width, height: tall ? tallHeight : 'auto' }}
-                        animate={{ opacity: 1, scale: 1, maxWidth: width, height: tall ? tallHeight : 'auto' }}
+                        initial={{ opacity: 0, scale: 0.94, maxWidth: width, height }}
+                        animate={{ opacity: 1, scale: 1, maxWidth: width, height }}
                         exit={{ opacity: 0, scale: 0.94 }}
                         transition={{ type: 'spring', stiffness: 320, damping: 30, mass: 0.9 }}
+                        // Pendant qu'elle grandit, la boîte est plus courte que son
+                        // contenu : sans ce drapeau, une barre de défilement clignoterait.
+                        onAnimationStart={() => dialogRef.current?.setAttribute('data-resizing', '')}
+                        onAnimationComplete={() => dialogRef.current?.removeAttribute('data-resizing')}
                     >
                         <div className={styles.corner}>
                             {headerAction}
@@ -242,17 +278,19 @@ export default function Dialog({
                                 </button>
                             )}
                         </div>
-                        {kicker && <div className={styles.kicker}>{kicker}</div>}
-                        {title && <h3 className={styles.title}>{title}</h3>}
-                        {description && <p className={styles.description}>{description}</p>}
-                        <DialogCloseContext.Provider value={attemptClose}>
-                            <DialogPrimaryContext.Provider value={registerPrimary}>
-                                <div className={`${styles.body} ${tall || fill ? styles.bodyFill : ''}`}>
-                                    {children}
-                                </div>
-                            </DialogPrimaryContext.Provider>
-                        </DialogCloseContext.Provider>
-                        {footer && <div className={styles.footer}>{footer}</div>}
+                        <div ref={contentRef} className={fits ? styles.measure : styles.passthrough}>
+                            {kicker && <div className={styles.kicker}>{kicker}</div>}
+                            {title && <h3 className={styles.title}>{title}</h3>}
+                            {description && <p className={styles.description}>{description}</p>}
+                            <DialogCloseContext.Provider value={attemptClose}>
+                                <DialogPrimaryContext.Provider value={registerPrimary}>
+                                    <div className={`${styles.body} ${tall || fill ? styles.bodyFill : ''}`}>
+                                        {children}
+                                    </div>
+                                </DialogPrimaryContext.Provider>
+                            </DialogCloseContext.Provider>
+                            {footer && <div className={styles.footer}>{footer}</div>}
+                        </div>
                     </motion.div>
                 </div>
             )}

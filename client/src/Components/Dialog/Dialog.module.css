@@ -33,6 +33,23 @@
     padding: var(--space-lg);
 }
 
+/* Pendant une animation de hauteur, la boîte est plus courte que son contenu. */
+.dialog[data-resizing] {
+    overflow-y: hidden;
+}
+
+/* Ce que mesure la hauteur animée. `flow-root` garde les marges des enfants
+   dedans : sinon elles traverseraient la mesure et le dialogue défilerait. */
+.measure {
+    display: flow-root;
+}
+
+/* En tall et fill, le titre, le corps et le pied restent les enfants directs de
+   la colonne flex. */
+.passthrough {
+    display: contents;
+}
+
 /* "Tall" mode: a fixed-height flex column (the height is animated inline by
    framer-motion). The title/footer stay pinned and the body becomes the only
    scroll area (see .bodyFill). */
