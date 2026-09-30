@@ -120,18 +120,12 @@ jobs:
         working-directory: client
         run: npm install
 
-      # Tables that pin no COLLATE inherit the database's, and the committed
-      # schema is generated on a base with the production collation.
-      - name: Give the database the production collation
-        run: >-
-          docker exec ${{ job.services.mysql.id }}
-          mysql -uroot -proot -e "ALTER DATABASE DevEye CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci"
-
       - name: Smoke every installed module
         run: npm run ci:smoke
 
-      # The smoke has just migrated the throwaway base from scratch: the
-      # committed schema must match it to the byte.
+      # The smoke has just migrated the throwaway base from scratch, on the
+      # server's default collation: the committed schema must match it to the
+      # byte, which proves the migrations pin their own.
       - name: Check the committed schema against the migrated database
         run: npm run gen:db-schema -- --check
 

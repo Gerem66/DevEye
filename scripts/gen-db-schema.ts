@@ -63,8 +63,12 @@ async function renderSql(q: Queryable, tables: string[]): Promise<string> {
         const r = await q.query<{ 'Create Table': string }>(`SHOW CREATE TABLE \`${table}\``);
         const create = r.rows[0]?.['Create Table'];
         if (!create) fail(`SHOW CREATE TABLE ${table} n'a rien rendu`);
-        // Le compteur suit les insertions : il ne décrit pas le schéma.
-        parts.push(`${create.replace(/ AUTO_INCREMENT=\d+/, '')};`, '');
+        // Le compteur suit les insertions : il ne décrit pas le schéma. Le jeu
+        // de caractères d'une colonne n'est affiché que si elle a été posée
+        // avec, ce qui dépend du chemin de migration suivi, et toute la base
+        // est en utf8mb4 : la collation seule dit tout.
+        const stable = create.replace(/ AUTO_INCREMENT=\d+/, '').replace(/ CHARACTER SET utf8mb4(?= COLLATE)/g, '');
+        parts.push(`${stable};`, '');
     }
     return parts.join('\n');
 }

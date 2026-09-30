@@ -127,7 +127,7 @@ CREATE TABLE `backup_destinations` (
   `id` int NOT NULL AUTO_INCREMENT,
   `workspace_id` int NOT NULL,
   `kind` varchar(16) COLLATE utf8mb4_general_ci NOT NULL,
-  `device_id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `device_id` char(36) COLLATE utf8mb4_general_ci DEFAULT NULL,
   `path_style` tinyint NOT NULL DEFAULT '1',
   `status` varchar(16) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'unknown',
   `checked_at` bigint DEFAULT NULL,
@@ -916,7 +916,7 @@ CREATE TABLE `notification_routes` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 CREATE TABLE `osint_lookups` (
-  `id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `id` char(36) COLLATE utf8mb4_general_ci NOT NULL,
   `workspace_id` int NOT NULL,
   `user_id` int NOT NULL,
   `kind` varchar(16) COLLATE utf8mb4_general_ci NOT NULL,

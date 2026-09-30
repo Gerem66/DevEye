@@ -68,9 +68,10 @@ Tout passe par des schémas zod partagés. Le serveur **et** le client importent
    migrations tournent automatiquement au démarrage (`db/migrate.ts`), une seule
    fois (table `_migrations`, clé = nom de fichier). MySQL : un fichier = exécuté
    en une requête (multi-statements, sur une connexion réservée aux migrations).
+   Tout `CREATE TABLE` écrit `COLLATE utf8mb4_general_ci` : sans le dire, la
+   table hérite de la base, qui n'a pas la même collation partout.
    Après toute migration du socle, `npm run gen:db-schema` sur une base migrée
-   en `utf8mb4_general_ci` (la collation de la production, dont les tables sans
-   `COLLATE` héritent) régénère `src/db/schema.sql` (la référence lisible) et
+   régénère `src/db/schema.sql` (la référence lisible) et
    `src/db/schema.generated.ts` (le type `Tables`), tous deux committés : la CI
    les compare à la base que son smoke vient de migrer, et
    `src/db/schema.assertions.ts` y confronte les types de lignes des dépôts.
