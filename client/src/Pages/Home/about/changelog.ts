@@ -12,6 +12,16 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: readonly ChangelogEntry[] = [
     {
+        version: '0.21.1',
+        date: '2026-09-30',
+        changes: [
+            {
+                kind: 'fixed',
+                text: 'À propos : illustrations des fonctionnalités à leur taille, et onglets sans barre de défilement'
+            }
+        ]
+    },
+    {
         version: '0.21.0',
         date: '2026-09-29',
         changes: [
