@@ -315,36 +315,49 @@
     pointer-events: none;
 }
 
-/* Poignée de réorganisation, cachée jusqu'au survol. `touch-action: none` rend
-   le geste possible au doigt (le défileur ne revendique pas le mouvement) et
-   reste cantonné à ces 16 px : ailleurs, la carte fait défiler la liste. */
+/* Poignée de réorganisation : au repos, sa marge négative absorbe sa largeur et
+   la gouttière de la carte, le contenu occupe toute la rangée ; le survol la fait
+   paraître en le poussant. `pointer-events` lui retire le pointeur au repos, où
+   elle se superpose au voyant. `touch-action: none` reste cantonné à ces 16 px :
+   ailleurs, la carte fait défiler la liste au doigt. */
 .grip {
+    --grip-width: 16px;
+
     flex-shrink: 0;
-    width: 16px;
+    width: var(--grip-width);
     height: 16px;
+    margin-right: calc(-1 * (var(--grip-width) + var(--space-sm)));
     padding: 0;
     border: none;
     background: transparent;
     color: var(--text-muted);
     cursor: grab;
     touch-action: none;
-    opacity: 0;
-    transition: opacity var(--transition-fast);
+    pointer-events: none;
+    /* `filter` et non `opacity`, que les surfaces animées revendiquent en style inline. */
+    filter: opacity(0);
+    transition:
+        margin-right var(--transition-fast),
+        filter var(--transition-fast);
 }
 
 .deviceCard:hover .grip,
 .deviceCard:focus-within .grip {
-    opacity: 1;
+    margin-right: 0;
+    pointer-events: auto;
+    filter: opacity(1);
 }
 
 .grip:active {
     cursor: grabbing;
 }
 
-/* Pas de survol au doigt : la poignée doit être là d'emblée. */
+/* Pas de survol au doigt : la poignée doit être là d'emblée, et à sa place. */
 @media (pointer: coarse) {
     .grip {
-        opacity: 1;
+        margin-right: 0;
+        pointer-events: auto;
+        filter: opacity(1);
     }
 }
 
