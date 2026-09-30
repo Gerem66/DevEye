@@ -23,7 +23,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { createDbPool, getQueryable, testConnection, type Queryable } from '@/db/pool';
+import { createDbPool, getQueryable, testConnection, withSqlFileConnection, type Queryable } from '@/db/pool';
 import { readFeatureConfig, resolveModuleDir, tablePrefix } from './lib/features-config';
 import { forbiddenUninstallTargets, scrubHomeLayout, scrubRoleGrants } from './lib/uninstall';
 import { sqlTableTargets } from './lib/sql-tables';
@@ -147,9 +147,10 @@ async function main(): Promise<void> {
 
     // --- exécution ----------------------------------------------------------
     if (uninstallSql) {
-        // Le fichier entier en une requête, comme une migration (pool en
-        // `multipleStatements`) : découper sur `;` casserait sur les commentaires.
-        await q.query(uninstallSql);
+        // Le fichier entier en une requête, comme une migration : découper sur
+        // `;` casserait sur les commentaires.
+        const sql = uninstallSql;
+        await withSqlFileConnection((c) => c.query(sql));
         console.log('\n✓ uninstall.sql exécuté');
     }
     for (const r of rows) {

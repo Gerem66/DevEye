@@ -1,4 +1,6 @@
 import mysql, {
+    type Connection,
+    type ConnectionOptions,
     type Pool,
     type PoolConnection,
     type PoolOptions,
@@ -26,7 +28,7 @@ export interface Queryable {
     query<T = RowDataPacket>(sql: string, params?: unknown[]): Promise<QueryResultLike<T>>;
 }
 
-type RawQueryable = Pick<Pool, 'query'> | Pick<PoolConnection, 'query'>;
+type RawQueryable = Pick<Pool, 'query'> | Pick<PoolConnection, 'query'> | Pick<Connection, 'query'>;
 
 function wrap(conn: RawQueryable): Queryable {
     return {
@@ -70,21 +72,41 @@ function serializeConnectionError(err: unknown): Record<string, unknown> {
     };
 }
 
-export function createDbPool(): DbPool {
-    const config: PoolOptions = {
+/** La base visée par l'environnement, commune au pool et aux connexions ponctuelles. */
+function connectionOptions(): ConnectionOptions {
+    return {
         host: env.DB_HOSTNAME,
         port: env.DB_PORT,
         database: env.DB_DATABASE,
         user: env.DB_USERNAME,
-        password: env.DB_PASSWORD,
+        password: env.DB_PASSWORD
+    };
+}
+
+export function createDbPool(): DbPool {
+    const config: PoolOptions = {
+        ...connectionOptions(),
         connectionLimit: env.DB_POOL_MAX,
         waitForConnections: true,
-        enableKeepAlive: true,
-        // Required for the migration runner which executes multi-statement SQL.
-        multipleStatements: true
+        enableKeepAlive: true
     };
 
     return mysql.createPool(config);
+}
+
+/**
+ * Une connexion éphémère qui accepte un fichier `.sql` entier en une requête
+ * (les migrations, l'`uninstall.sql` d'un module). Elle seule est en
+ * `multipleStatements` : le pool qui sert les requêtes ne sait pas empiler,
+ * pour qu'une injection y reste cantonnée à la requête où elle naît.
+ */
+export async function withSqlFileConnection<T>(fn: (q: Queryable) => Promise<T>): Promise<T> {
+    const conn = await mysql.createConnection({ ...connectionOptions(), multipleStatements: true });
+    try {
+        return await fn(wrap(conn));
+    } finally {
+        await conn.end();
+    }
 }
 
 /** Wrap a pool as a {@link Queryable} for repository construction. */

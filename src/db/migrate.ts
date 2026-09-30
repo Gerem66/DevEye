@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { logger } from '@/logger';
-import { getQueryable, type DbPool, type Queryable } from './pool';
+import { withSqlFileConnection, type Queryable } from './pool';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = path.join(__dirname, 'migrations');
@@ -22,9 +22,9 @@ async function applyDir(q: Queryable, applied: Set<string>, dir: string, prefix:
         if (applied.has(name)) continue;
         const sql = await fs.readFile(path.join(dir, file), 'utf8');
         logger.info({ migration: name }, 'Applying migration');
-        // MySQL DDL implicitly commits, so migrations cannot run inside a
-        // rollback-able transaction. The pool enables `multipleStatements`,
-        // letting the whole migration file run in a single query.
+        // Le DDL de MySQL committe implicitement : aucune transaction annulable
+        // n'est possible autour d'une migration. Le fichier entier part en une
+        // requête, sur la connexion multi-instructions.
         await q.query(sql);
         await q.query('INSERT INTO _migrations (name) VALUES (?)', [name]);
     }
@@ -36,22 +36,22 @@ async function applyDir(q: Queryable, applied: Set<string>, dir: string, prefix:
  * collision impossible. Tout le socle avant tous les modules (il fonde ce
  * qu'ils référencent), les modules dans l'ordre de la config.
  */
-export async function runMigrations(pool: DbPool, modules: readonly ModuleMigrations[] = []): Promise<void> {
-    const q = getQueryable(pool);
+export async function runMigrations(modules: readonly ModuleMigrations[] = []): Promise<void> {
+    await withSqlFileConnection(async (q) => {
+        await q.query(`
+            CREATE TABLE IF NOT EXISTS _migrations (
+                name        VARCHAR(255) PRIMARY KEY,
+                applied_at  BIGINT       NOT NULL DEFAULT (UNIX_TIMESTAMP())
+            )
+        `);
 
-    await q.query(`
-        CREATE TABLE IF NOT EXISTS _migrations (
-            name        VARCHAR(255) PRIMARY KEY,
-            applied_at  BIGINT       NOT NULL DEFAULT (UNIX_TIMESTAMP())
-        )
-    `);
+        const res = await q.query<{ name: string }>('SELECT name FROM _migrations');
+        const applied = new Set(res.rows.map((r) => r.name));
 
-    const res = await q.query<{ name: string }>('SELECT name FROM _migrations');
-    const applied = new Set(res.rows.map((r) => r.name));
-
-    await applyDir(q, applied, MIGRATIONS_DIR, '');
-    for (const mod of modules) {
-        await applyDir(q, applied, mod.dir, `${mod.id}/`);
-    }
+        await applyDir(q, applied, MIGRATIONS_DIR, '');
+        for (const mod of modules) {
+            await applyDir(q, applied, mod.dir, `${mod.id}/`);
+        }
+    });
     logger.info('Migrations up to date');
 }

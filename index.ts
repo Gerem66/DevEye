@@ -64,7 +64,7 @@ async function main() {
         process.exit(1);
     }
 
-    await runMigrations(pool, moduleMigrationDirs());
+    await runMigrations(moduleMigrationDirs());
 
     try {
         await assertSealFormat(pool);
