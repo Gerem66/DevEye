@@ -14,18 +14,20 @@ import { createOpenCipher } from '@/Services/SecureStore';
 import {
     STATUS_CHANNELS_PATH,
     STATUS_PROBE_PATH,
+    STATUS_TRACKING_PATH,
     type FeatureState,
     type StatusChannels,
-    type StatusProbe
+    type StatusProbe,
+    type StatusTracking
 } from '@/Services/statusProbeContract';
 import { appVersion } from '@/version';
 import { env } from '@/Utils/Env';
 
 /**
- * Les deux routes que la page d'état interroge : l'état du serveur et de
- * chaque module, et les destinations des alertes Système. Sur l'écouteur
- * principal, muettes sans le jeton (`STATUS_PROBE_TOKEN`) : un 404 ne dit pas
- * qu'elles existent.
+ * Les trois routes que la page d'état interroge : l'état du serveur et de
+ * chaque module, les destinations des alertes Système, et la balise Audience
+ * qu'elle embarque. Sur l'écouteur principal, muettes sans le jeton
+ * (`STATUS_PROBE_TOKEN`) : un 404 ne dit pas qu'elles existent.
  */
 
 /** La page passe toutes les minutes ; plusieurs pages ou un rechargement ne recalculent rien. */
@@ -109,7 +111,10 @@ async function systemChannels(db: Database, crypt: Encryption): Promise<StatusCh
     return { webhooks: [...webhooks.values()], emails: [...emails] };
 }
 
-export function registerStatusProbeRoutes(app: FastifyInstance, deps: { db: Database; crypt: Encryption }): void {
+export function registerStatusProbeRoutes(
+    app: FastifyInstance,
+    deps: { db: Database; crypt: Encryption; tracking(): StatusTracking }
+): void {
     const token = env.STATUS_PROBE_TOKEN;
     if (!token) return;
     const expected = Buffer.from(`Bearer ${token}`);
@@ -151,5 +156,9 @@ export function registerStatusProbeRoutes(app: FastifyInstance, deps: { db: Data
     app.get(STATUS_CHANNELS_PATH, { logLevel: 'silent' }, async (req, reply) => {
         if (!authorized(req.headers.authorization)) return reply.code(404).send();
         return reply.header('cache-control', 'no-store').send(await channels());
+    });
+    app.get(STATUS_TRACKING_PATH, { logLevel: 'silent' }, async (req, reply) => {
+        if (!authorized(req.headers.authorization)) return reply.code(404).send();
+        return reply.header('cache-control', 'no-store').send({ tracking: deps.tracking() });
     });
 }

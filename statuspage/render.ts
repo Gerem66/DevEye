@@ -1,6 +1,7 @@
 import { formatDuration, formatRatio } from '../features/uptime/src/contracts/format';
 import { escapeHtml } from '../features/uptime/src/server/statusPage/html';
 import { STATUS_STYLE } from '../features/uptime/src/server/statusPage/style';
+import type { StatusTracking } from '../src/Services/statusProbeContract';
 import {
     HISTORY_DAYS,
     PAGE_DAYS,
@@ -28,6 +29,14 @@ export interface RenderOptions {
     siteUrl: string | null;
     /** L'app, pour y retourner. */
     appUrl: string;
+    /** La balise Audience de la page, dans l'en-tête des pages servies ; `null`, aucune. */
+    tracking: StatusTracking;
+}
+
+/** La balise telle qu'Audience la donne à coller, bâtie sur la vraie clé et la vraie origine. */
+function trackingTag(tracking: StatusTracking): string {
+    if (!tracking) return '';
+    return `<script defer data-key="${escapeHtml(tracking.key)}" src="${escapeHtml(tracking.origin)}/t.js"></script>`;
 }
 
 /** Ce que la page ajoute aux jetons d'Uptime : la maintenance, et le sélecteur. */
@@ -277,6 +286,7 @@ function documentOf(input: {
         <link rel="icon" href="${ICON_PATH}" />
         <meta name="description" content="${escapeHtml(input.description)}" />
         <style>${STATUS_STYLE}${EXTRA_STYLE}</style>
+        ${input.script ? trackingTag(input.options.tracking) : ''}
     </head>
     <body>
         <div class="page">

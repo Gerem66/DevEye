@@ -62,6 +62,7 @@ import { serverMail } from '@/Services/serverMail';
 import { createDebugService } from '@/Services/debug';
 import { runGate } from '@/Services/debug/e2e/gate';
 import { mailbox } from '@/Services/debug/e2e/mailbox';
+import { selfTracking } from '@/Services/debug/selfTracking';
 import { trackingRoutes } from '@/Services/debug/selfTracking/routes';
 import { createSignupService } from '@/Services/signup';
 import { maintenance, MaintenanceError } from '@/Services/maintenance';
@@ -336,7 +337,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     );
 
     registerProxyRoute(app, deps.db.featureDomains);
-    registerStatusProbeRoutes(app, { db: deps.db, crypt: deps.crypt });
+    registerStatusProbeRoutes(app, { db: deps.db, crypt: deps.crypt, tracking: () => selfTracking.statusTracking() });
 
     const hub = new MonitorHub();
     // Construit avant les services de fond : ils lui adressent leurs changements

@@ -8,6 +8,7 @@ import { z } from 'zod';
 
 export const STATUS_PROBE_PATH = '/api/statuspage/probe';
 export const STATUS_CHANNELS_PATH = '/api/statuspage/channels';
+export const STATUS_TRACKING_PATH = '/api/statuspage/tracking';
 
 /** `maintenance` compte comme une indisponibilité : la page d'état le dit ainsi. */
 export const featureStateSchema = z.enum(['up', 'degraded', 'down', 'maintenance']);
@@ -41,3 +42,13 @@ export const statusChannelsSchema = z.object({
     emails: z.array(z.string())
 });
 export type StatusChannels = z.infer<typeof statusChannelsSchema>;
+
+/**
+ * La balise Audience que la page d'état embarque : la clé de son site et
+ * l'origine qui sert `/t.js`. `null`, rien à mesurer : site non déclaré,
+ * suivi en pause ou module absent.
+ */
+export const statusTrackingSchema = z.object({
+    tracking: z.object({ key: z.string().min(1), origin: z.string().url() }).nullable()
+});
+export type StatusTracking = z.infer<typeof statusTrackingSchema>['tracking'];

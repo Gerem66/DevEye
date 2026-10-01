@@ -1,13 +1,14 @@
 import { readFileSync } from 'node:fs';
 
 import { createMailer } from '../src/Services/mailer';
-import { STATUS_CHANNELS_PATH } from '../src/Services/statusProbeContract';
+import { STATUS_CHANNELS_PATH, STATUS_TRACKING_PATH } from '../src/Services/statusProbeContract';
 import { CHANNELS_REFRESH_MS, createAlerts } from './alerts';
 import { env } from './env';
 import { createMonitor } from './monitor';
 import { REQUEST_TIMEOUT_MS, runProbe } from './probe';
 import { createStatusServer } from './server';
 import { openStore } from './store';
+import { createTracking } from './tracking';
 import { buildView } from './view';
 
 /**
@@ -17,20 +18,23 @@ import { buildView } from './view';
 
 const store = openStore(env.dbPath);
 
+/** Une lecture chez DevEye, sous le jeton de la sonde. */
+async function askDevEye(path: string): Promise<unknown> {
+    const response = await fetch(`${env.appUrl}${path}`, {
+        headers: { authorization: `Bearer ${env.token}` },
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.json();
+}
+
 const alerts = createAlerts({
     store,
     live: env.environment === 'prod',
     origin: env.appUrl,
     mailer: createMailer(env.smtp),
     fallbackEmail: env.fallbackEmail,
-    fetchChannels: async () => {
-        const response = await fetch(`${env.appUrl}${STATUS_CHANNELS_PATH}`, {
-            headers: { authorization: `Bearer ${env.token}` },
-            signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response.json();
-    },
+    fetchChannels: () => askDevEye(STATUS_CHANNELS_PATH),
     post: async (url, body) => {
         const response = await fetch(url, {
             method: 'POST',
@@ -58,6 +62,8 @@ const monitor = createMonitor({
     warn: (message) => console.warn(message)
 });
 
+const tracking = createTracking({ store, fetchTracking: () => askDevEye(STATUS_TRACKING_PATH) });
+
 const icon = readFileSync(new URL('../src/assets/deveye-icon.png', import.meta.url));
 
 const server = createStatusServer({
@@ -73,6 +79,7 @@ const server = createStatusServer({
             featureId
         ),
     render: { siteUrl: env.siteUrl, appUrl: env.appUrl },
+    tracking: tracking.current,
     icon,
     lastTick: monitor.lastTick
 });
@@ -92,12 +99,18 @@ async function loop(): Promise<void> {
     timer = setTimeout(() => void loop(), Math.max(1000, env.intervalSeconds * 1000 - (Date.now() - started)));
 }
 
-const channelsTimer = setInterval(() => void alerts.refreshChannels(), CHANNELS_REFRESH_MS);
+/** Ce que la page relit chez DevEye hors mesure : les destinations des alertes et sa balise. */
+function refreshFromDevEye(): void {
+    void alerts.refreshChannels();
+    void tracking.refresh();
+}
+
+const channelsTimer = setInterval(refreshFromDevEye, CHANNELS_REFRESH_MS);
 
 server.listen(env.port, () => {
     const watched = env.publicUrl ? `${env.appUrl} et ${env.publicUrl}/api/health` : env.appUrl;
     console.info(`Page d’état à l’écoute sur le port ${env.port}, surveille ${watched}`);
-    void alerts.refreshChannels();
+    refreshFromDevEye();
     void loop();
 });
 

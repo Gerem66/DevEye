@@ -220,6 +220,18 @@
     font-size: 0.78rem;
 }
 
+/* Les arguments de construction du site vitrine, à copier d'un bloc. */
+.buildArgs {
+    margin: 0;
+    padding: var(--space-xs) var(--space-sm);
+    background: var(--surface-subtle);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    white-space: pre;
+    overflow-x: auto;
+}
+
 .passed {
     color: var(--success);
 }

@@ -43,6 +43,15 @@ La route de sonde (`src/Services/statusProbe.ts`) n'existe que si
 (`src/Services/statusProbeContract.ts`) : l'image de la page ne dépend d'aucune
 publication de `@deveye/types`.
 
+Toutes les 10 minutes, avec les destinations des alertes (§5), elle relit aussi
+sa propre balise Audience (`GET /api/statuspage/tracking`, même jeton) : la clé
+du site que l'administrateur a déclaré pour elle depuis Tests et débogage
+(`DEBUG.md` §4), et l'origine qui sert `/t.js`. Déclarée, la page l'embarque
+dans son en-tête et n'ouvre sa politique de sécurité qu'à cette origine ;
+retirée ou en pause, elle disparaît. Rien à régler dans l'env de la page, et
+DevEye absent, la dernière balise connue reste et échoue en silence comme tout
+script tiers.
+
 ### L'état d'un module
 
 Du plus fort au plus faible :

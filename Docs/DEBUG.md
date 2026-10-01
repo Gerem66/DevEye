@@ -132,6 +132,25 @@ jour à l'autre.
 l'administrateur et s'y branche ; « Utiliser un site existant » n'accepte
 qu'un site d'un de ses espaces, sans quoi l'usage de DevEye irait à un tiers.
 
+### Les pages publiques
+
+La page d'état (`STATUS_PAGE_URL`) et le site vitrine (`SITE_URL`) ont chacun
+leur site Audience à côté de celui de l'app, dans le même espace, mesuré par
+la balise publique comme un site tiers : une vue par page, les clics nommés,
+le plafond par adresse d'un site neuf. « Créer l'audience » les déclare avec
+celui de l'app ; « Créer les sites manquants » rattrape une adresse réglée
+après coup. Le réglage les garde sous `status` et `site`, et « Débrancher »
+les oublie avec le reste.
+
+- **La page d'état lit sa clé chez DevEye** (`GET /api/statuspage/tracking`,
+  sous le jeton de la sonde), au même rythme que les destinations des alertes :
+  rien à régler chez elle, et la pause du suivi lui retire sa balise.
+- **Le site vitrine, statique, la reçoit à sa construction** : la section donne
+  les deux arguments à coller (`PUBLIC_AUDIENCE_ORIGIN`, `PUBLIC_AUDIENCE_KEY`).
+  Son site porte aussi le formulaire `contact` (sujet, nom, e-mail, message,
+  tous requis), déclaré strict : c'est ce que sa fenêtre « Écris-moi » envoie,
+  et les messages se lisent dans les retours du site, dans Audience.
+
 ## 5. La galerie
 
 Tous les composants de l'interface, en vrai et manipulables, dans chaque mode

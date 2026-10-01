@@ -23,7 +23,7 @@ const view: StatusView = {
     picker: [{ id: 'x-rdv', label: 'Rendez-vous & co', state: 'up' }]
 };
 
-const options = { siteUrl: 'https://deveye.fr', appUrl: 'https://app.deveye.fr' };
+const options = { siteUrl: 'https://deveye.fr', appUrl: 'https://app.deveye.fr', tracking: null };
 
 describe('renderStatus', () => {
     it('échappe ce qui vient de DevEye, et ne met aucun script en ligne', () => {
@@ -32,6 +32,14 @@ describe('renderStatus', () => {
         assert.ok(html.includes('Rendez-vous &amp; co'));
         assert.ok(!/<script>/.test(html));
         assert.ok(html.includes('<script src="/page.js" defer></script>'));
+        assert.ok(!html.includes('/t.js'));
+    });
+
+    it('la balise Audience, quand DevEye en donne une, et jamais sur la page introuvable', () => {
+        const tracking = { key: 'pk_a"b', origin: 'https://api.deveye.fr' };
+        const html = renderStatus(view, { ...options, tracking });
+        assert.ok(html.includes('<script defer data-key="pk_a&quot;b" src="https://api.deveye.fr/t.js"></script>'));
+        assert.ok(!renderMissing({ ...options, tracking }).includes('/t.js'));
     });
 
     it('le sélecteur mène à la page de chaque fonctionnalité', () => {

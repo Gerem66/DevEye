@@ -4,15 +4,24 @@ import type { Database } from '@/db';
 
 const SETTING = 'selfTracking';
 
+/** Le site d'une page publique, mesuré par la balise ; absent tant qu'il n'est pas déclaré. */
+const companionSchema = z.object({
+    key: z.string().min(1),
+    siteId: z.number().int().positive()
+});
+
 const configSchema = z.object({
     key: z.string().min(1),
     siteId: z.number().int().positive(),
     workspaceId: z.number().int().positive(),
     enabled: z.boolean(),
-    excludeAdmins: z.boolean()
+    excludeAdmins: z.boolean(),
+    status: companionSchema.optional(),
+    site: companionSchema.optional()
 });
 
 export type TrackingConfig = z.infer<typeof configSchema>;
+export type TrackingCompanionKind = 'status' | 'site';
 
 export interface StoredTracking {
     config: TrackingConfig;

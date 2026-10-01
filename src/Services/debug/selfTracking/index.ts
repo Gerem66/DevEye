@@ -1,6 +1,11 @@
 import type { FastifyRequest } from 'fastify';
-import type { DebugTracking } from '@deveye/types';
-import { AUDIENCE_SELF_PROVIDER, type AudienceSelfEvent, type AudienceSelfProvider } from '@deveye/types/sdk';
+import type { DebugTracking, DebugTrackingCompanion } from '@deveye/types';
+import {
+    AUDIENCE_SELF_PROVIDER,
+    type AudienceSelfEvent,
+    type AudienceSelfFormField,
+    type AudienceSelfProvider
+} from '@deveye/types/sdk';
 
 import { ACCESS_COOKIE } from '@/auth/cookies';
 import { verifyAccessToken } from '@/auth/jwt';
@@ -8,13 +13,60 @@ import type { Database } from '@/db';
 import { FeatureError } from '@/features/_define';
 import { ORIGINS } from '@/features/_sdk/context';
 import { moduleProvider } from '@/features/_sdk/register';
+import type { StatusTracking } from '@/Services/statusProbeContract';
+import { env } from '@/Utils/Env';
 import { runGate } from '../e2e/gate';
 import { isTestEmail } from '../e2e/identity';
-import { clearTracking, otherTrackings, readTracking, writeTracking, type StoredTracking } from './config';
+import {
+    clearTracking,
+    otherTrackings,
+    readTracking,
+    writeTracking,
+    type StoredTracking,
+    type TrackingCompanionKind,
+    type TrackingConfig
+} from './config';
 import { authEvent, commandEvent, excluded, failureEvent, isStaticPath } from './events';
 
 /** Une même action d'une même connexion ne compte qu'une fois par fenêtre : un texte enregistré à la frappe n'est pas cent actions. */
 const THROTTLE_MS = 10_000;
+
+/** Ce que le site de chaque page publique dit de lui-même dans Audience. */
+const COMPANIONS: Record<TrackingCompanionKind, { label: string; description: string }> = {
+    status: {
+        label: 'Page d’état',
+        description: 'La page d’état publique de cette instance de DevEye, mesurée par sa balise.'
+    },
+    site: {
+        label: 'Site',
+        description:
+            'Le site vitrine de cette instance de DevEye, mesuré par sa balise. Sa fenêtre « Écris-moi » arrive dans le formulaire « contact ».'
+    }
+};
+
+/**
+ * Le formulaire de contact du site vitrine, tel que sa fenêtre l'envoie. Le
+ * sujet est un texte et non un choix fermé : ses libellés vivent dans le site,
+ * et un choix déclaré ici qui ne les reprendrait pas au mot près refuserait
+ * tout message.
+ */
+const SITE_CONTACT_FORM: { name: string; fields: readonly AudienceSelfFormField[] } = {
+    name: 'contact',
+    fields: [
+        { name: 'subject', kind: 'text', required: true },
+        { name: 'name', kind: 'text', required: true },
+        { name: 'email', kind: 'email', required: true },
+        { name: 'message', kind: 'text', required: true }
+    ]
+};
+
+/** Les pages publiques qui ont une adresse, dans l'ordre où l'écran les montre. */
+function companionTargets(): { kind: TrackingCompanionKind; url: string }[] {
+    const out: { kind: TrackingCompanionKind; url: string }[] = [];
+    if (env.STATUS_PAGE_URL) out.push({ kind: 'status', url: env.STATUS_PAGE_URL.replace(/\/+$/, '') });
+    if (ORIGINS.site) out.push({ kind: 'site', url: ORIGINS.site });
+    return out;
+}
 
 interface Visitor {
     ip: string;
@@ -83,6 +135,22 @@ const codeOf = (error: unknown): string => {
 async function reload(): Promise<void> {
     stored = db ? await readTracking(db, ORIGINS.app) : null;
     generation++;
+}
+
+/** Un site du même nom, laissé par un branchement précédent, ne bloque pas la création : le suivant est numéroté. */
+async function createNamed(
+    target: AudienceSelfProvider,
+    workspaceId: number,
+    name: string,
+    input: Omit<Parameters<AudienceSelfProvider['createSite']>[1], 'name'>
+): Promise<Awaited<ReturnType<AudienceSelfProvider['createSite']>>> {
+    for (let n = 1; ; n++) {
+        try {
+            return await target.createSite(workspaceId, { ...input, name: n === 1 ? name : `${name} (${n})` });
+        } catch (e) {
+            if (codeOf(e) !== 'validation' || n === 5) throw e;
+        }
+    }
 }
 
 /**
@@ -170,7 +238,22 @@ export const selfTracking = {
     async describe(): Promise<DebugTracking> {
         const target = provider();
         const others = db ? await otherTrackings(db, ORIGINS.app) : [];
-        const base = { origin: ORIGINS.app, audienceInstalled: Boolean(target), others, counters: { ...counters } };
+        const companions: DebugTrackingCompanion[] = await Promise.all(
+            companionTargets().map(async ({ kind, url }) => {
+                const held = stored?.config[kind];
+                if (!held) return { kind, url, site: null };
+                const site = target ? await target.findByKey(held.key) : null;
+                return { kind, url, site: { siteId: held.siteId, siteName: site?.name ?? null, key: held.key } };
+            })
+        );
+        const base = {
+            origin: ORIGINS.app,
+            ingestOrigin: ORIGINS.public,
+            audienceInstalled: Boolean(target),
+            companions,
+            others,
+            counters: { ...counters }
+        };
         if (!stored) return { ...base, config: null };
         const { config, updated, updatedBy } = stored;
         const site = target ? await target.findByKey(config.key) : null;
@@ -189,37 +272,50 @@ export const selfTracking = {
         };
     },
 
-    /** Crée le site dans l'espace personnel de l'administrateur, et s'y branche. */
+    /**
+     * Crée ce qui manque : le site de l'app dans l'espace personnel de
+     * l'administrateur s'il n'est pas branché, puis celui de chaque page
+     * publique qui n'en a pas encore, dans le même espace. Le réglage est
+     * écrit après chaque site, pour qu'un refus sur le suivant (la limite de
+     * l'offre) ne laisse pas un site créé que rien ne désigne.
+     */
     async create(admin: { id: number; workspaceId: number }): Promise<void> {
         const target = provider();
         if (!db || !target) throw new FeatureError('conflict', 'Le module Audience n’est pas installé');
-        if (stored)
-            throw new FeatureError('conflict', 'Ce serveur est déjà branché sur un site : débranchez-le d’abord.');
-        const host = new URL(ORIGINS.app).host;
-        let site: Awaited<ReturnType<AudienceSelfProvider['createSite']>> | null = null;
-        // Un site du même nom, laissé par un branchement précédent, ne bloque pas la création.
-        for (let n = 1; !site && n <= 5; n++) {
-            try {
-                site = await target.createSite(admin.workspaceId, {
-                    name: n === 1 ? `DevEye : ${host}` : `DevEye : ${host} (${n})`,
-                    host
-                });
-            } catch (e) {
-                if (codeOf(e) !== 'validation' || n === 5) throw e;
-            }
+        const missing = companionTargets().filter(({ kind }) => !stored?.config[kind]);
+        if (stored && missing.length === 0) {
+            throw new FeatureError('conflict', 'Tout est déjà déclaré : l’app et chacune de ses pages publiques.');
         }
-        await writeTracking(
-            db,
-            ORIGINS.app,
-            {
-                key: site!.publicKey,
-                siteId: site!.siteId,
-                workspaceId: site!.workspaceId,
+        let config: TrackingConfig;
+        if (stored) {
+            config = stored.config;
+        } else {
+            const host = new URL(ORIGINS.app).host;
+            const site = await createNamed(target, admin.workspaceId, `DevEye : ${host}`, {
+                host,
+                description: 'L’usage de cette instance de DevEye, relevé par le serveur lui-même.',
+                measuredBy: 'server'
+            });
+            config = {
+                key: site.publicKey,
+                siteId: site.siteId,
+                workspaceId: site.workspaceId,
                 enabled: true,
                 excludeAdmins: true
-            },
-            admin.id
-        );
+            };
+            await writeTracking(db, ORIGINS.app, config, admin.id);
+        }
+        for (const { kind, url } of missing) {
+            const host = new URL(url).host;
+            const site = await createNamed(target, config.workspaceId, `${COMPANIONS[kind].label} : ${host}`, {
+                host,
+                description: COMPANIONS[kind].description,
+                measuredBy: 'beacon'
+            });
+            if (kind === 'site') await target.declareForm(site.workspaceId, site.siteId, SITE_CONTACT_FORM);
+            config = { ...config, [kind]: { key: site.publicKey, siteId: site.siteId } };
+            await writeTracking(db, ORIGINS.app, config, admin.id);
+        }
         await reload();
     },
 
@@ -237,6 +333,7 @@ export const selfTracking = {
             db,
             ORIGINS.app,
             {
+                ...stored?.config,
                 key,
                 siteId: site.siteId,
                 workspaceId: site.workspaceId,
@@ -246,6 +343,13 @@ export const selfTracking = {
             adminId
         );
         await reload();
+    },
+
+    /** La balise de la page d'état, qu'elle vient lire ici : sa clé et l'origine qui sert le script. */
+    statusTracking(): StatusTracking {
+        const held = stored?.config.status;
+        if (!held || !active()) return null;
+        return { key: held.key, origin: ORIGINS.public };
     },
 
     async set(adminId: number, patch: { enabled: boolean; excludeAdmins: boolean }): Promise<void> {

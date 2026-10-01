@@ -30,7 +30,7 @@ export const debugTrackingCreateFeature = defineFeature({
     access: ADMIN,
     handler: async (ctx) => {
         await selfTracking.create({ id: ctx.userId, workspaceId: ctx.workspaceId });
-        return changed(ctx, 'Suivi d’usage : site Audience créé et branché');
+        return changed(ctx, 'Suivi d’usage : sites Audience manquants créés et branchés');
     }
 });
 

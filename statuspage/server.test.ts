@@ -18,9 +18,14 @@ const VIEW: StatusView = {
 describe('createStatusServer', () => {
     let base = '';
     let lastTick = Math.floor(Date.now() / 1000);
+    let tracking: { key: string; origin: string } | null = null;
     const server = createStatusServer({
-        view: (id) => (id === null || id === 'notes' ? { ...VIEW, feature: id ? { id, label: 'Notes' } : null } : null),
+        view: (id) =>
+            id === null || id === 'notes' || id === 'uptime'
+                ? { ...VIEW, feature: id ? { id, label: 'Notes' } : null }
+                : null,
         render: { siteUrl: null, appUrl: 'https://app.deveye.fr' },
+        tracking: () => tracking,
         icon: Buffer.from('png'),
         lastTick: () => lastTick
     });
@@ -36,6 +41,19 @@ describe('createStatusServer', () => {
         assert.equal(home.status, 200);
         assert.match(home.headers.get('content-security-policy') ?? '', /script-src 'self'/);
         assert.equal((await fetch(`${base}/notes`)).status, 200);
+    });
+
+    it('la balise ouvre la politique à sa seule origine, sur la page qui la porte', async () => {
+        tracking = { key: 'pk_test', origin: 'https://api.deveye.fr' };
+        // Un chemin pas encore en cache : la page gardée 15 s a été rendue sans balise.
+        const notes = await fetch(`${base}/uptime`);
+        const policy = notes.headers.get('content-security-policy') ?? '';
+        assert.match(policy, /script-src 'self' https:\/\/api\.deveye\.fr;/);
+        assert.match(policy, /connect-src 'self' https:\/\/api\.deveye\.fr;/);
+        assert.ok((await notes.text()).includes('https://api.deveye.fr/t.js'));
+        const missing = await fetch(`${base}/inconnue`);
+        assert.match(missing.headers.get('content-security-policy') ?? '', /script-src 'self';/);
+        tracking = null;
     });
 
     it('un chemin inconnu est une page introuvable', async () => {

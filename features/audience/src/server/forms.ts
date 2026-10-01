@@ -16,6 +16,7 @@ import {
     type AudienceForm,
     type AudienceFormClosure,
     type AudienceFormField,
+    type AudienceFormMode,
     type AudienceFormRow,
     type AudienceResultField,
     type AudienceSubmission
@@ -24,7 +25,7 @@ import { defineSdkFeature, FeatureError, type SdkCipher } from '@deveye/types/sd
 
 import { countAnswers } from './answers';
 import { ingestOf, loadHomeSite, loadSite, nameRef, readJson, readLabel, siteCipher, type Ctx } from './_shared';
-import type { AudienceSubmissionWithContextRow } from './repoForms';
+import type { AudienceFormsRepo, AudienceSubmissionWithContextRow } from './repoForms';
 
 /**
  * Les retours d'un site : les canaux qui les reçoivent, ce qu'ils ont reçu, et
@@ -111,45 +112,56 @@ export const audienceFormListFeature = defineSdkFeature({
     }
 });
 
+/**
+ * Déclare un formulaire sur un site : les gardes du nombre, du nom et des
+ * champs, puis la ligne chiffrée. Le geste d'un membre et le suivi d'usage de
+ * DevEye passent tous deux par ici.
+ */
+export async function createFormRecord(
+    { repo, cipher }: { repo: AudienceFormsRepo; cipher: SdkCipher },
+    siteId: number,
+    input: { name: string; mode: AudienceFormMode; fields: readonly AudienceFormField[] }
+): Promise<number> {
+    const count = await repo.countForms(siteId);
+    if (count >= AUDIENCE_MAX_FORMS) {
+        throw new FeatureError('validation', `Un site ne peut pas porter plus de ${AUDIENCE_MAX_FORMS} formulaires.`);
+    }
+    const ref = nameRef(input.name);
+    if (await repo.findFormByName(siteId, ref)) {
+        throw new FeatureError('validation', 'Un formulaire porte déjà ce nom sur ce site.');
+    }
+    // Deux questions du même nom rendraient la seconde inatteignable : le
+    // schéma est un objet, pas une liste, du côté de l'envoi.
+    const names = new Set(input.fields.map((field) => field.name.trim()));
+    if (names.size !== input.fields.length) {
+        throw new FeatureError('validation', 'Deux champs portent le même nom.');
+    }
+    if (input.mode === 'strict' && input.fields.length === 0) {
+        throw new FeatureError('validation', 'Un formulaire strict sans champ déclaré n’accepterait rien.');
+    }
+
+    const id = await repo.createForm({
+        siteId,
+        nameRef: ref,
+        content: await cipher.encrypt(input.name.trim()),
+        mode: input.mode,
+        formSchema: await sealSchema(cipher, input.mode, input.fields),
+        sortOrder: count
+    });
+    // Le nom déclaré est celui que l'ingestion cherchera : sans cet oubli, un
+    // envoi arrivé avant serait encore refusé pour la vie du processus.
+    ingestOf()?.invalidate();
+    return id;
+}
+
 export const audienceFormAddFeature = defineSdkFeature({
     ...audienceFormAdd,
     mutates: true,
     access: { level: 'write' },
     handler: async (ctx: Ctx, input) => {
         const site = await loadHomeSite(ctx, input.siteId);
-        const count = await ctx.repo.countForms(input.siteId);
-        if (count >= AUDIENCE_MAX_FORMS) {
-            throw new FeatureError(
-                'validation',
-                `Un site ne peut pas porter plus de ${AUDIENCE_MAX_FORMS} formulaires.`
-            );
-        }
-        const ref = nameRef(input.name);
-        if (await ctx.repo.findFormByName(input.siteId, ref)) {
-            throw new FeatureError('validation', 'Un formulaire porte déjà ce nom sur ce site.');
-        }
-        // Deux questions du même nom rendraient la seconde inatteignable : le
-        // schéma est un objet, pas une liste, du côté de l'envoi.
-        const names = new Set(input.fields.map((field) => field.name.trim()));
-        if (names.size !== input.fields.length) {
-            throw new FeatureError('validation', 'Deux champs portent le même nom.');
-        }
-        if (input.mode === 'strict' && input.fields.length === 0) {
-            throw new FeatureError('validation', 'Un formulaire strict sans champ déclaré n’accepterait rien.');
-        }
-
         const cipher = ctx.cipher();
-        const id = await ctx.repo.createForm({
-            siteId: input.siteId,
-            nameRef: ref,
-            content: await cipher.encrypt(input.name.trim()),
-            mode: input.mode,
-            formSchema: await sealSchema(cipher, input.mode, input.fields),
-            sortOrder: count
-        });
-        // Le nom déclaré est celui que l'ingestion cherchera : sans cet oubli, un
-        // envoi arrivé avant serait encore refusé pour la vie du processus.
-        ingestOf()?.invalidate();
+        const id = await createFormRecord({ repo: ctx.repo, cipher }, input.siteId, input);
         ctx.audit({
             action: 'audience.formAdd',
             description: `Formulaire de retours « ${input.name.trim()} » déclaré`,
