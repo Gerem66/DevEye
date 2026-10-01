@@ -59,6 +59,7 @@ import {
     DEVICE_TERM_EXIT_EVENT,
     DEVICE_TERM_OUTPUT_EVENT,
     METRICS_PUSH_EVENT,
+    PACKAGE_COUNT_EVENT,
     PACKAGE_DONE_EVENT,
     PACKAGE_LIST_EVENT,
     PACKAGE_PROGRESS_EVENT,
@@ -120,6 +121,7 @@ import {
     type MetricSeriesPoint,
     type ProcessSample,
     type MetricSnapshot,
+    type PackageCountPush,
     type PackageDonePush,
     type PackageListPush,
     type PackageManagerId,
@@ -428,7 +430,7 @@ export class MonitorHub {
         return this.sendToAgent(deviceId, AGENT_SERVICE, payload);
     }
 
-    /** Ask a connected agent to enumerate its package managers. No-op if offline. */
+    /** Ask a connected agent for its update tools, then their counts. No-op if offline. */
     requestPkgList(deviceId: string): boolean {
         return this.sendToAgent(deviceId, AGENT_PKG_LIST);
     }
@@ -1094,13 +1096,18 @@ export class MonitorHub {
     }
 
     /**
-     * Fan out a package-manager inventory to the device's subscribers, **enrichi**
-     * des mises à jour déjà en cours : l'agent énumère ses gestionnaires sans
-     * savoir lesquels le serveur a déjà lancés.
+     * Fan out the update tools present to the device's subscribers, **enrichi**
+     * des mises à jour déjà en cours : l'agent énumère ses outils sans savoir
+     * lesquels le serveur a déjà lancés.
      */
     publishPackageList(payload: Omit<PackageListPush, 'running'>): void {
         const running = this.runningUpgrades(payload.deviceId);
         this.publishToSubscribers(payload.deviceId, PACKAGE_LIST_EVENT, { ...payload, running });
+    }
+
+    /** Fan out one tool's pending count to the device's subscribers. */
+    publishPackageCount(payload: PackageCountPush): void {
+        this.publishToSubscribers(payload.deviceId, PACKAGE_COUNT_EVENT, payload);
     }
 
     /** Annonce qu'une mise à jour vient d'être acceptée pour ce gestionnaire. */

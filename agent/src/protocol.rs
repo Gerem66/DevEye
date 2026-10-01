@@ -181,13 +181,11 @@ pub struct AgentPolicy {
     pub tunnel: bool,
 }
 
-/// One detected package manager + its pending state (mirrors @deveye/types
-/// `packageManagerSchema`).
+/// One update tool present on the host (mirrors @deveye/types
+/// `packageManagerSchema`). Its pending count travels on its own (`PkgCount`).
 #[derive(Debug, Clone, Serialize)]
 pub struct PackageManagerInfo {
     pub id: &'static str,
-    #[serde(rename = "pendingCount")]
-    pub pending_count: Option<u32>,
     #[serde(rename = "needsRoot")]
     pub needs_root: bool,
     #[serde(rename = "rebootRequired")]
@@ -913,12 +911,22 @@ pub enum ClientMessage {
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>,
     },
-    /// Reply to `pkg.list`: the package managers present + their pending counts.
+    /// First reply to `pkg.list`: the update tools present, without counts.
     #[serde(rename = "pkg.listResult")]
     PkgListResult {
         #[serde(rename = "deviceId")]
         device_id: String,
         managers: Vec<PackageManagerInfo>,
+    },
+    /// Then one per managed tool of that list, as its probe finishes: its
+    /// pending count, `None` when the tool gave none.
+    #[serde(rename = "pkg.count")]
+    PkgCount {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        manager: String,
+        #[serde(rename = "pendingCount")]
+        pending_count: Option<u32>,
     },
     /// One live output line of an in-progress `pkg.upgrade`.
     #[serde(rename = "pkg.progress")]
@@ -1325,7 +1333,8 @@ pub enum ServerMessage {
         #[serde(rename = "relPath")]
         rel_path: String,
     },
-    /// Enumerate package managers + pending updates (replies `pkg.listResult`).
+    /// List the update tools present (replies `pkg.listResult`), then count
+    /// each managed one's pending updates (one `pkg.count` each).
     #[serde(rename = "pkg.list")]
     PkgList {},
     /// Apply all updates of one manager, streaming `pkg.progress` then `pkg.done`.

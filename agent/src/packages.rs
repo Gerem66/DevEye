@@ -1,12 +1,15 @@
-//! Package-update management: detect the managers present on the host with their
-//! pending-update counts, and apply a manager's updates while streaming output.
+//! Package-update management: list the update tools present on the host, count
+//! each managed one's pending updates, and apply a manager's updates while
+//! streaming output.
 //!
-//! Detection is best-effort and read-only (no root): a manager is reported only if
-//! its binary exists. Applying updates needs root for most system managers — if the
-//! agent isn't privileged we refuse with a clear message (elevate it first, see the
-//! service/privilege flow). Per-user managers (brew, flatpak --user) apply directly.
-//! Update tooling DevEye does not drive (rpm-ostree, fwupd, nix…) is reported too,
-//! without a count, so the device's table says what else keeps it up to date.
+//! Presence is a file check (the binary in `PATH`), read-only and instant; the
+//! counts shell out to each tool, one at a time, and leave as they come.
+//! Applying updates needs root for most system managers: if the agent isn't
+//! privileged we refuse with a clear message (elevate it first, see the
+//! service/privilege flow). Per-user managers (brew, flatpak --user) apply
+//! directly. Update tooling DevEye does not drive (rpm-ostree, fwupd, nix…) is
+//! listed too, without a count, so the device's table says what else keeps it
+//! up to date.
 
 use std::process::Stdio;
 use std::time::Duration;
@@ -22,6 +25,10 @@ use crate::protocol::PackageManagerInfo;
 /// into wire messages carrying the device id).
 pub enum PkgEvent {
     List(Vec<PackageManagerInfo>),
+    Count {
+        manager: &'static str,
+        pending: Option<u32>,
+    },
     Progress {
         manager: String,
         percent: Option<f64>,
@@ -35,14 +42,14 @@ pub enum PkgEvent {
     },
 }
 
-/// Échéance d'une sonde de détection. Large (`softwareupdate -l` interroge les
+/// Échéance d'une sonde de comptage. Large (`softwareupdate -l` interroge les
 /// serveurs d'Apple, `apt-get -s upgrade` attend le verrou dpkg) mais finie : un
-/// gestionnaire bloqué figerait sinon la détection entière.
+/// gestionnaire bloqué ne ferait sinon jamais partir son compte.
 const DETECT_TIMEOUT: Duration = Duration::from_secs(45);
 
-/// Run a detection command; `None` when the binary is absent (spawn error) or the
-/// probe timed out, else `(exit_success, stdout)`. Non-zero exits are still
-/// returned (some tools signal "updates available" via the exit code).
+/// Run a probe; `None` when the binary is absent (spawn error) or the probe
+/// timed out, else `(exit_success, stdout)`. Non-zero exits are still returned
+/// (some tools signal "updates available" via the exit code).
 fn probe(program: &str, args: &[&str]) -> Option<(bool, String)> {
     let out = crate::report::run_timeout(program, args, DETECT_TIMEOUT)?;
     Some((out.success, out.stdout))
@@ -106,10 +113,9 @@ fn flatpak_pending() -> Option<u32> {
     (!counts.is_empty()).then(|| counts.iter().sum())
 }
 
-fn mgr(id: &'static str, pending: Option<u32>, needs_root: bool) -> PackageManagerInfo {
+fn mgr(id: &'static str, needs_root: bool) -> PackageManagerInfo {
     PackageManagerInfo {
         id,
-        pending_count: pending,
         needs_root,
         reboot_required: reboot_required(id),
     }
@@ -119,7 +125,6 @@ fn mgr(id: &'static str, pending: Option<u32>, needs_root: bool) -> PackageManag
 fn unmanaged_mgr(id: &'static str) -> PackageManagerInfo {
     PackageManagerInfo {
         id,
-        pending_count: None,
         needs_root: false,
         reboot_required: false,
     }
@@ -131,8 +136,9 @@ const EXEC_SUFFIXES: &[&str] = &[".exe", ".cmd", ".bat", ".ps1"];
 const EXEC_SUFFIXES: &[&str] = &[""];
 
 /// Whether an executable of this name sits in `PATH` or at one of `fallbacks`
-/// (a service's `PATH` is short). A presence check only: these tools are
-/// listed, never run.
+/// (a service's `PATH` is short). A presence check only, nothing runs. A
+/// managed tool gets no fallback: it is listed only where its probe and its
+/// upgrade, which run through `PATH`, would find it.
 fn installed(name: &str, fallbacks: &[&str]) -> bool {
     let in_path = std::env::var_os("PATH").is_some_and(|paths| {
         std::env::split_paths(&paths).any(|dir| {
@@ -142,6 +148,14 @@ fn installed(name: &str, fallbacks: &[&str]) -> bool {
         })
     });
     in_path || fallbacks.iter().any(|p| std::path::Path::new(p).exists())
+}
+
+/// Whether a PowerShell module sits in a `PSModulePath` directory: a file
+/// check, where `Get-Module -ListAvailable` takes seconds.
+#[cfg(windows)]
+fn ps_module_installed(name: &str) -> bool {
+    std::env::var_os("PSModulePath")
+        .is_some_and(|paths| std::env::split_paths(&paths).any(|dir| dir.join(name).is_dir()))
 }
 
 /// Update tooling present on this host that DevEye does not drive.
@@ -237,93 +251,151 @@ fn reboot_required(_id: &str) -> bool {
     }
 }
 
-/// Enumerate the package managers present on this host + their pending counts.
-/// Synchronous (shells out); the caller runs it off the runtime via spawn_blocking.
-pub fn detect() -> Vec<PackageManagerInfo> {
+/// The update tools present on this host, those DevEye drives first. A file
+/// check only, answered at once: the counts follow, one by one.
+pub fn present() -> Vec<PackageManagerInfo> {
     let mut out = Vec::new();
 
     #[cfg(target_os = "macos")]
     {
-        if let Some((_, s)) = probe("brew", &["outdated", "--quiet"]) {
-            out.push(mgr("brew", Some(count_nonempty(&s)), false));
+        if installed("brew", &[]) {
+            out.push(mgr("brew", false));
         }
-        // softwareupdate is always present on macOS; `-l` is slow but on-demand.
-        if let Some((_, s)) = probe("softwareupdate", &["-l"]) {
-            let n = s
-                .lines()
-                .filter(|l| l.contains("* Label:") || l.trim_start().starts_with("* "))
-                .count() as u32;
-            out.push(mgr("softwareupdate", Some(n), true));
+        if installed("softwareupdate", &[]) {
+            out.push(mgr("softwareupdate", true));
         }
     }
 
     #[cfg(target_os = "linux")]
     {
-        if let Some((_, s)) = probe("apt-get", &["-s", "upgrade"]) {
-            let n = s.lines().filter(|l| l.starts_with("Inst ")).count() as u32;
-            out.push(mgr("apt", Some(n), true));
+        if installed("apt-get", &[]) {
+            out.push(mgr("apt", true));
         }
         // Sur une image atomique, dnf lit les dépôts mais ne peut rien
         // appliquer : c'est rpm-ostree qui tient le système.
-        if !std::path::Path::new("/run/ostree-booted").exists() {
-            if let Some((_, s)) = probe("dnf", &["-q", "check-update"]) {
-                out.push(mgr("dnf", Some(count_dnf_updates(&s)), true));
-            }
+        if installed("dnf", &[]) && !std::path::Path::new("/run/ostree-booted").exists() {
+            out.push(mgr("dnf", true));
         }
-        if let Some((_, s)) = probe("checkupdates", &[]) {
-            out.push(mgr("pacman", Some(count_nonempty(&s)), true));
+        if installed("pacman", &[]) {
+            out.push(mgr("pacman", true));
         }
-        if let Some((_, s)) = probe("pamac", &["checkupdates", "-q"]) {
-            out.push(mgr("pamac", Some(count_nonempty(&s)), false));
+        if installed("pamac", &[]) {
+            out.push(mgr("pamac", false));
         }
-        if let Some(n) = flatpak_pending() {
-            out.push(mgr("flatpak", Some(n), false));
+        if installed("flatpak", &[]) {
+            out.push(mgr("flatpak", false));
         }
-        if let Some((_, s)) = probe("snap", &["refresh", "--list"]) {
-            // "All snaps up to date." => 0; else a header line + one row per snap.
-            let n = if s.contains("up to date") {
-                0
-            } else {
-                count_nonempty(&s).saturating_sub(1)
-            };
-            out.push(mgr("snap", Some(n), true));
+        if installed("snap", &[]) {
+            out.push(mgr("snap", true));
         }
-        if let Some((_, s)) = probe("zypper", &["-q", "list-updates"]) {
-            // Table with a couple of header/separator lines; rows start with "v |".
-            let n = s
-                .lines()
-                .filter(|l| l.trim_start().starts_with("v |"))
-                .count() as u32;
-            out.push(mgr("zypper", Some(n), true));
+        if installed("zypper", &[]) {
+            out.push(mgr("zypper", true));
         }
     }
 
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     {
-        if let Some((_, s)) = probe("winget", &["upgrade", "--include-unknown"]) {
-            // Best-effort: rows after the header separator line (dashes).
-            let n = s
-                .lines()
-                .skip_while(|l| !l.trim_start().starts_with("---"))
-                .skip(1)
-                .filter(|l| !l.trim().is_empty())
-                .count() as u32;
-            out.push(mgr("winget", Some(n), false));
+        if installed("winget", &[]) {
+            out.push(mgr("winget", false));
         }
         // Windows Update via the PSWindowsUpdate module, when installed.
-        if let Some((ok, s)) = probe(
-            "powershell",
-            &["-NoProfile", "-Command", "if (Get-Module -ListAvailable PSWindowsUpdate) { (Get-WindowsUpdate).Count } else { 'na' }"],
-        ) {
-            if ok && !s.contains("na") {
-                let n = s.trim().parse::<u32>().ok();
-                out.push(mgr("windowsupdate", n, true));
-            }
+        if ps_module_installed("PSWindowsUpdate") {
+            out.push(mgr("windowsupdate", true));
         }
     }
 
     out.extend(unmanaged().into_iter().map(unmanaged_mgr));
     out
+}
+
+/// The pending-update count of one managed tool, by its own probe. `None` when
+/// it gave none: helper missing (`checkupdates` without pacman-contrib),
+/// timeout, or output the parser does not read.
+pub fn pending(manager: &str) -> Option<u32> {
+    match manager {
+        #[cfg(target_os = "macos")]
+        "brew" => probe("brew", &["outdated", "--quiet"]).map(|(_, s)| count_nonempty(&s)),
+        #[cfg(target_os = "macos")]
+        "softwareupdate" => probe("softwareupdate", &["-l"]).map(|(_, s)| {
+            s.lines()
+                .filter(|l| l.contains("* Label:") || l.trim_start().starts_with("* "))
+                .count() as u32
+        }),
+        #[cfg(target_os = "linux")]
+        "apt" => probe("apt-get", &["-s", "upgrade"])
+            .map(|(_, s)| s.lines().filter(|l| l.starts_with("Inst ")).count() as u32),
+        #[cfg(target_os = "linux")]
+        "dnf" => probe("dnf", &["-q", "check-update"]).map(|(_, s)| count_dnf_updates(&s)),
+        #[cfg(target_os = "linux")]
+        "pacman" => probe("checkupdates", &[]).map(|(_, s)| count_nonempty(&s)),
+        #[cfg(target_os = "linux")]
+        "pamac" => probe("pamac", &["checkupdates", "-q"]).map(|(_, s)| count_nonempty(&s)),
+        #[cfg(target_os = "linux")]
+        "flatpak" => flatpak_pending(),
+        #[cfg(target_os = "linux")]
+        "snap" => probe("snap", &["refresh", "--list"]).map(|(_, s)| {
+            // "All snaps up to date." => 0; else a header line + one row per snap.
+            if s.contains("up to date") {
+                0
+            } else {
+                count_nonempty(&s).saturating_sub(1)
+            }
+        }),
+        #[cfg(target_os = "linux")]
+        "zypper" => probe("zypper", &["-q", "list-updates"]).map(|(_, s)| {
+            // Table with a couple of header/separator lines; rows start with "v |".
+            s.lines()
+                .filter(|l| l.trim_start().starts_with("v |"))
+                .count() as u32
+        }),
+        #[cfg(windows)]
+        "winget" => probe("winget", &["upgrade", "--include-unknown"]).map(|(_, s)| {
+            // Best-effort: rows after the header separator line (dashes).
+            s.lines()
+                .skip_while(|l| !l.trim_start().starts_with("---"))
+                .skip(1)
+                .filter(|l| !l.trim().is_empty())
+                .count() as u32
+        }),
+        #[cfg(windows)]
+        "windowsupdate" => probe(
+            "powershell",
+            &["-NoProfile", "-Command", "(Get-WindowsUpdate).Count"],
+        )
+        .filter(|(ok, _)| *ok)
+        .and_then(|(_, s)| s.trim().parse::<u32>().ok()),
+        _ => None,
+    }
+}
+
+/// Whether DevEye drives this tool: it has an upgrade command.
+pub fn is_managed(id: &str) -> bool {
+    upgrade_command(id).is_ok()
+}
+
+/// Answer a `pkg.list`: the tools present at once, then each managed one's
+/// count as its probe finishes. One probe at a time: run together, they would
+/// fight over the OS package lock and the machine.
+pub async fn run_list(tx: Sender<PkgEvent>) {
+    let managers = tokio::task::spawn_blocking(present)
+        .await
+        .unwrap_or_default();
+    let managed: Vec<&'static str> = managers
+        .iter()
+        .map(|m| m.id)
+        .filter(|id| is_managed(id))
+        .collect();
+    if tx.send(PkgEvent::List(managers)).await.is_err() {
+        return;
+    }
+    for manager in managed {
+        let pending = tokio::task::spawn_blocking(move || pending(manager))
+            .await
+            .unwrap_or(None);
+        if tx.send(PkgEvent::Count { manager, pending }).await.is_err() {
+            return;
+        }
+    }
 }
 
 /// One command of an upgrade.

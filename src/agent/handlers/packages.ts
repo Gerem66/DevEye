@@ -1,17 +1,23 @@
-import { AGENT_PKG_DONE, AGENT_PKG_LIST_RESULT, AGENT_PKG_PROGRESS } from '@deveye/types';
+import { AGENT_PKG_COUNT, AGENT_PKG_DONE, AGENT_PKG_LIST_RESULT, AGENT_PKG_PROGRESS } from '@deveye/types';
 
 import { ack, type AgentSession, type PayloadOf } from './session';
 
 /**
- * Package-manager events streamed by the agent (`pkg.list` enumeration, live
- * `pkg.progress` lines, terminal `pkg.done`). All are fanned out to the device's
- * subscribed user sockets; only the start/end frames are acked (progress is a
- * fire-and-forget stream, so it isn't, to avoid ack flooding).
+ * Package-manager events streamed by the agent (`pkg.listResult` tools present,
+ * one `pkg.count` per managed tool, live `pkg.progress` lines, terminal
+ * `pkg.done`). All are fanned out to the device's subscribed user sockets;
+ * only the start/end frames are acked (progress is a fire-and-forget stream,
+ * so it isn't, to avoid ack flooding).
  */
 
 export function handlePkgListResult(s: AgentSession, payload: PayloadOf<typeof AGENT_PKG_LIST_RESULT>): void {
     s.hub.publishPackageList(payload);
     ack(s, payload.managers.length);
+}
+
+export function handlePkgCount(s: AgentSession, payload: PayloadOf<typeof AGENT_PKG_COUNT>): void {
+    s.hub.publishPackageCount(payload);
+    ack(s, 1);
 }
 
 export function handlePkgProgress(s: AgentSession, payload: PayloadOf<typeof AGENT_PKG_PROGRESS>): void {

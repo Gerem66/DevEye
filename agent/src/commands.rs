@@ -416,6 +416,11 @@ where
             device_id: device_id.to_string(),
             managers,
         },
+        PkgEvent::Count { manager, pending } => ClientMessage::PkgCount {
+            device_id: device_id.to_string(),
+            manager: manager.to_string(),
+            pending_count: pending,
+        },
         PkgEvent::Progress {
             manager,
             percent,

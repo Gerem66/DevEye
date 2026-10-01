@@ -269,9 +269,10 @@ async fn dispatch(command: Command) -> Result<()> {
             TrayCmd::Hide => tray::hide(),
         },
         Command::Packages => {
-            for m in packages::detect() {
-                let n = m
-                    .pending_count
+            for m in packages::present() {
+                let n = packages::is_managed(m.id)
+                    .then(|| packages::pending(m.id))
+                    .flatten()
                     .map(|c| c.to_string())
                     .unwrap_or_else(|| "?".into());
                 println!(

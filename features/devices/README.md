@@ -365,10 +365,15 @@ Statuts (`devices.status`) : `pending`, `active`, `pending_deletion`,
   existent.
 - **« Mises à jour système »** (`PackagesPanel.tsx`) : le total, puis un
   tableau des outils que l'agent a trouvés. Ceux que DevEye pilote d'abord,
-  système puis applications, avec leur compte et leur bouton ; en dessous,
-  grisés, ceux qu'il reconnaît sans les piloter (rpm-ostree, fwupd, nix…).
-  « Tout mettre à jour » les enchaîne un à un dans l'ordre du tableau, tant que
-  la fenêtre reste ouverte. Le compte Flatpak est le plan de `flatpak update`
+  système puis applications, avec leur compte et une case à cocher ; en
+  dessous, grisés, ceux qu'il reconnaît sans les piloter (rpm-ostree, fwupd,
+  nix…). L'agent répond en deux temps : les outils présents aussitôt (une
+  vérification de fichiers, `pkg.listResult`), puis le compte de chacun à
+  mesure que sa sonde finit (`pkg.count`), et une ligne tourne tant que le
+  sien n'est pas arrivé. Les outils qui ont des mises à jour sont cochés
+  d'office ; le bouton sous le tableau enchaîne les cochés un à un dans
+  l'ordre du tableau, tant que la fenêtre reste ouverte. Le compte Flatpak est
+  le plan de `flatpak update`
   lui-même, installation par installation : `remote-ls --updates` compare des
   identifiants de commit qu'un dépôt OCI (celui de Fedora) ne fait jamais
   correspondre, et affichait des mises à jour éternelles.

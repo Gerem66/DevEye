@@ -4,8 +4,9 @@ import { authorizeReachableDevice } from '@/agent/authorize';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 
 /**
- * Ask the agent to enumerate its package managers. The result streams back
- * asynchronously as a `package.list` push event (caller must be subscribed).
+ * Ask the agent for its update tools and their counts. They stream back
+ * asynchronously as a `package.list` push event, then one `package.count` per
+ * managed tool (caller must be subscribed).
  */
 export const agentListPackagesFeature: FeatureDefinition<
     typeof agentListPackages.command,

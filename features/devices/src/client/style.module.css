@@ -2163,15 +2163,7 @@
     flex-direction: column;
     gap: var(--space-md);
 }
-/* Le total d'abord, puis ce qu'on peut en faire. */
 .pkgSummary {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: var(--space-md);
-}
-.pkgSummaryText {
     display: flex;
     flex-direction: column;
     gap: 2px;
@@ -2189,8 +2181,10 @@
     color: var(--text-secondary);
     font-size: 0.82rem;
 }
-.pkgSummaryActions {
+.pkgActions {
     display: flex;
+    justify-content: flex-end;
+    flex-wrap: wrap;
     gap: var(--space-sm);
 }
 .pkgTable {
@@ -2234,10 +2228,25 @@
     white-space: nowrap;
     text-align: center;
 }
-.pkgActionCol {
+.pkgTable .pkgSelectCol {
     width: 1%;
-    white-space: nowrap;
-    text-align: right;
+    padding-right: 0;
+}
+.pkgRowSelectable {
+    cursor: pointer;
+}
+.pkgRowSelectable:hover td {
+    background: var(--surface-subtle);
+}
+.pkgRowSelected td {
+    background: var(--accent-bg);
+}
+.pkgCounting {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    color: var(--text-muted);
+    font-size: 0.82rem;
 }
 .pkgCount {
     display: inline-block;

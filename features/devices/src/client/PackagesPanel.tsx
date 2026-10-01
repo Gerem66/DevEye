@@ -1,11 +1,13 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
-import { acquireMetrics, Button, onServerEvent, WsError } from 'deveye-sdk-client';
+import { acquireMetrics, Button, Checkbox, onServerEvent, WsError } from 'deveye-sdk-client';
 import {
     isManagedPackageManager,
+    PACKAGE_COUNT_EVENT,
     PACKAGE_DONE_EVENT,
     PACKAGE_LIST_EVENT,
     PACKAGE_PROGRESS_EVENT,
     PACKAGE_STARTED_EVENT,
+    packageCountPushSchema,
     packageDonePushSchema,
     packageListPushSchema,
     packageProgressPushSchema,
@@ -51,9 +53,9 @@ const UNMANAGED: Record<UnmanagedUpdaterId, { label: string; desc: string }> = {
 const ORDER = Object.keys(MANAGERS) as PackageManagerId[];
 
 /**
- * Au-delà de quoi on cesse d'attendre l'inventaire : certains gestionnaires sont
- * lents (`softwareupdate -l`, le verrou dpkg), et ce délai couvre la somme des
- * sondes que l'agent plafonne une à une.
+ * Au-delà de quoi on cesse d'attendre, la liste des outils puis leurs comptes :
+ * certaines sondes sont lentes (`softwareupdate -l`, le verrou dpkg), et ce
+ * délai couvre leur somme, l'agent les plafonnant une à une.
  */
 const DETECT_TIMEOUT_MS = 150_000;
 
@@ -72,56 +74,87 @@ const ALREADY_RUNNING: UpgradeState = { percent: null, line: 'Mise à jour en co
 type Managed = PackageManager & { id: PackageManagerId };
 type Unmanaged = PackageManager & { id: UnmanagedUpdaterId };
 
+/** Le compte de chaque outil : absent tant que sa sonde n'a pas répondu, `null` si elle n'a rien donné. */
+type Counts = Partial<Record<PackageManagerId, number | null>>;
+
 const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
 
 /**
- * Les mises à jour du système et des applications d'un appareil, en un tableau :
- * chaque outil que DevEye pilote avec son compte et son bouton, puis, grisés, ceux
- * qu'il reconnaît sans les piloter. L'avancement ne vient jamais du clic mais des
- * événements du serveur (`package.started`, `.progress`, `.done`) et de la liste :
- * une mise à jour lancée ailleurs s'affiche de la même façon.
+ * Les mises à jour du système et des applications d'un appareil, en un tableau.
+ * L'agent répond en deux temps : les outils présents aussitôt, puis le compte
+ * de chacun à mesure que sa sonde finit, et chaque ligne tourne en attendant
+ * le sien. Ceux que DevEye pilote se cochent (ceux qui ont des mises à jour le
+ * sont d'office) et le bouton sous le tableau les enchaîne un à un ; ceux
+ * qu'il reconnaît sans les piloter suivent, grisés. L'avancement ne vient
+ * jamais du clic mais des événements du serveur (`package.started`, `.progress`,
+ * `.done`) et de la liste : une mise à jour lancée ailleurs s'affiche de la
+ * même façon.
  */
 export function PackagesPanel({ deviceId, privileged }: { deviceId: string; privileged: boolean | null }) {
     const [managers, setManagers] = useState<PackageManager[] | null>(null);
+    const [counts, setCounts] = useState<Counts>({});
     const [listError, setListError] = useState<string | null>(null);
     /** Avancement par gestionnaire : plusieurs peuvent tourner si lancés ailleurs. */
     const [upgrades, setUpgrades] = useState<Partial<Record<PackageManagerId, UpgradeState>>>({});
-    const [refreshing, setRefreshing] = useState(false);
+    const [selected, setSelected] = useState<Set<PackageManagerId>>(new Set());
     /**
-     * « Tout mettre à jour » : la file des outils restants, enchaînés un à un à
-     * chaque `package.done`. Elle vit avec la fenêtre : la fermer laisse finir
-     * l'outil en cours, sans lancer les suivants.
+     * La file des outils cochés restants, enchaînés un à un à chaque
+     * `package.done`. Elle vit avec la fenêtre : la fermer laisse finir l'outil
+     * en cours, sans lancer les suivants.
      */
     const [queue, setQueue] = useState<{ ids: PackageManagerId[]; total: number } | null>(null);
     const queueRef = useRef(queue);
     queueRef.current = queue;
     const managersRef = useRef(managers);
     managersRef.current = managers;
+    const countsRef = useRef(counts);
+    countsRef.current = counts;
+    const privilegedRef = useRef(privileged);
+    privilegedRef.current = privileged;
     const detectTimer = useRef<number | null>(null);
 
     // Ref-counted live subscription (released on unmount).
     useEffect(() => acquireMetrics(deviceId), [deviceId]);
 
-    /** Arme l'échéance d'attente d'un inventaire (une seule à la fois). */
-    const armDetect = useCallback((onTimeout: () => void) => {
-        if (detectTimer.current !== null) window.clearTimeout(detectTimer.current);
-        detectTimer.current = window.setTimeout(onTimeout, DETECT_TIMEOUT_MS);
+    const disarmDetect = useCallback(() => {
+        if (detectTimer.current === null) return;
+        window.clearTimeout(detectTimer.current);
+        detectTimer.current = null;
     }, []);
+
+    /** Arme l'échéance d'attente (une seule à la fois). */
+    const armDetect = useCallback(() => {
+        disarmDetect();
+        detectTimer.current = window.setTimeout(() => {
+            detectTimer.current = null;
+            const known = managersRef.current;
+            if (known === null) {
+                setListError('L’agent n’a pas répondu : la détection a peut-être échoué sur l’appareil.');
+                return;
+            }
+            // Les comptes jamais arrivés passent « inconnu » : aucune ligne ne
+            // tourne pour rien.
+            setCounts((prev) => {
+                const next = { ...prev };
+                for (const m of known) {
+                    if (isManagedPackageManager(m.id) && next[m.id] === undefined) next[m.id] = null;
+                }
+                return next;
+            });
+            setListError('Certains outils n’ont pas répondu : leur compte est inconnu.');
+        }, DETECT_TIMEOUT_MS);
+    }, [disarmDetect]);
 
     const requestList = useCallback(() => {
         setListError(null);
-        armDetect(() => {
-            setRefreshing(false);
-            setListError('L’agent n’a pas répondu : la détection a peut-être échoué sur l’appareil.');
-        });
+        armDetect();
         agent.send('agent.listPackages', { deviceId }).catch((e: unknown) => {
             // La raison vient du serveur (agent hors ligne, droits…) : l'afficher
             // telle quelle plutôt qu'un « aucun gestionnaire détecté » faux.
-            if (detectTimer.current !== null) window.clearTimeout(detectTimer.current);
-            setRefreshing(false);
+            disarmDetect();
             setListError(e instanceof Error ? e.message : 'Détection impossible.');
         });
-    }, [deviceId, armDetect]);
+    }, [deviceId, armDetect, disarmDetect]);
 
     const startUpgrade = useCallback(
         (manager: PackageManagerId) => {
@@ -155,10 +188,7 @@ export function PackagesPanel({ deviceId, privileged }: { deviceId: string; priv
         (finished: PackageManagerId) => {
             const current = queueRef.current;
             if (!current || current.ids[0] !== finished) return;
-            const rest = current.ids.slice(1).filter((id) => {
-                const m = managersRef.current?.find((x) => x.id === id);
-                return m === undefined || m.pendingCount !== 0;
-            });
+            const rest = current.ids.slice(1).filter((id) => countsRef.current[id] !== 0);
             if (rest.length === 0) {
                 setQueue(null);
                 return;
@@ -173,21 +203,40 @@ export function PackagesPanel({ deviceId, privileged }: { deviceId: string; priv
         // Changer d'appareil sans démonter ne doit pas laisser l'inventaire du
         // précédent.
         setManagers(null);
+        setCounts({});
+        setSelected(new Set());
         setUpgrades({});
-        setRefreshing(false);
         setQueue(null);
         const offs = [
             onServerEvent(PACKAGE_LIST_EVENT, packageListPushSchema, (d) => {
                 if (d.deviceId !== deviceId) return;
-                if (detectTimer.current !== null) window.clearTimeout(detectTimer.current);
                 setManagers(d.managers);
+                setCounts({});
+                setSelected(new Set());
                 setListError(null);
-                setRefreshing(false);
+                // Une liste relancée par le serveur (après une mise à jour) n'a
+                // pas d'échéance : ses comptes en ont besoin autant que les autres.
+                if (detectTimer.current === null) armDetect();
                 // Le serveur joint ce qui tourne déjà : le verrou est visible
                 // quand on (r)ouvre la fenêtre en cours de route.
                 setUpgrades((prev) => {
                     const next = { ...prev };
                     for (const manager of d.running) next[manager] = next[manager] ?? ALREADY_RUNNING;
+                    return next;
+                });
+            }),
+            onServerEvent(PACKAGE_COUNT_EVENT, packageCountPushSchema, (d) => {
+                if (d.deviceId !== deviceId) return;
+                setCounts((prev) => ({ ...prev, [d.manager]: d.pendingCount }));
+                // Coché d'office dès qu'il y a quelque chose à appliquer et que
+                // l'agent le pourrait.
+                const tool = managersRef.current?.find((m) => m.id === d.manager);
+                const rootMissing = tool?.needsRoot === true && privilegedRef.current === false;
+                const eligible = d.pendingCount !== null && d.pendingCount > 0 && !rootMissing;
+                setSelected((prev) => {
+                    const next = new Set(prev);
+                    if (eligible) next.add(d.manager);
+                    else next.delete(d.manager);
                     return next;
                 });
             }),
@@ -223,24 +272,22 @@ export function PackagesPanel({ deviceId, privileged }: { deviceId: string; priv
                 // Le serveur relance l'inventaire pour tous les abonnés : on
                 // l'attend sans le redemander, chaque demande est une détection
                 // sur la machine.
-                if (d.ok) {
-                    setRefreshing(true);
-                    armDetect(() => setRefreshing(false));
-                }
                 advanceQueue(d.manager);
             })
         ];
         requestList();
         return () => {
             offs.forEach((off) => off());
-            if (detectTimer.current !== null) window.clearTimeout(detectTimer.current);
+            disarmDetect();
         };
-    }, [deviceId, requestList, armDetect, advanceQueue]);
+    }, [deviceId, requestList, armDetect, disarmDetect, advanceQueue]);
 
-    const refresh = () => {
-        setRefreshing(true);
-        requestList();
-    };
+    // Tous les comptes sont là : plus rien à attendre.
+    useEffect(() => {
+        if (managers === null) return;
+        if (managers.some((m) => isManagedPackageManager(m.id) && counts[m.id] === undefined)) return;
+        disarmDetect();
+    }, [managers, counts, disarmDetect]);
 
     if (listError !== null && managers === null) {
         return (
@@ -255,11 +302,7 @@ export function PackagesPanel({ deviceId, privileged }: { deviceId: string; priv
         );
     }
     if (managers === null) {
-        return (
-            <p className={styles.pkgHint}>
-                Détection des systèmes de mises à jour… (elle interroge chaque outil présent et peut prendre une minute)
-            </p>
-        );
+        return <p className={styles.pkgHint}>Détection des outils présents sur l’appareil…</p>;
     }
 
     const managed = managers
@@ -272,13 +315,27 @@ export function PackagesPanel({ deviceId, privileged }: { deviceId: string; priv
     const busy = Object.values(upgrades).some((u) => u && !u.done);
     // Root requis sans l'avoir : l'agent refuserait, autant le dire ici.
     const rootMissing = (m: Managed) => m.needsRoot && privileged === false;
-    const eligible = managed.filter((m) => (m.pendingCount ?? 0) > 0 && !rootMissing(m));
-    const total = managed.reduce((sum, m) => sum + (m.pendingCount ?? 0), 0);
-    const unknown = managed.some((m) => m.pendingCount === null);
+    // Cochable : rien ne l'interdit, et son compte n'est pas zéro (inconnu ou
+    // encore attendu, il l'est). Pendant une file, les cases restent telles
+    // quelles, figées : elles disent ce qui passe.
+    const pickable = (m: Managed) => !rootMissing(m) && counts[m.id] !== 0;
+    const choosable = managed.filter(pickable);
+    const chosen = choosable.filter((m) => selected.has(m.id));
+    const counting = managed.some((m) => counts[m.id] === undefined);
+    const total = managed.reduce((sum, m) => sum + (counts[m.id] ?? 0), 0);
+    const unknown = managed.some((m) => counts[m.id] === null);
     const rebootRequired = managed.some((m) => m.rebootRequired);
 
-    const updateAll = () => {
-        const ids = eligible.map((m) => m.id);
+    const toggle = (id: PackageManagerId, on: boolean) =>
+        setSelected((prev) => {
+            const next = new Set(prev);
+            if (on) next.add(id);
+            else next.delete(id);
+            return next;
+        });
+
+    const updateChosen = () => {
+        const ids = chosen.map((m) => m.id);
         if (ids.length === 0) return;
         setQueue({ ids, total: ids.length });
         startUpgrade(ids[0]);
@@ -287,31 +344,21 @@ export function PackagesPanel({ deviceId, privileged }: { deviceId: string; priv
     return (
         <div className={styles.pkgPanel}>
             <div className={styles.pkgSummary}>
-                <div className={styles.pkgSummaryText}>
-                    <span className={`${styles.pkgTotal} ${total > 0 ? styles.pkgTotalPending : ''}`}>
-                        {refreshing ? 'Actualisation…' : plural(total, 'mise à jour', 'mises à jour')}
-                    </span>
-                    <span className={styles.pkgSummaryHint}>
-                        {managed.length === 0
-                            ? 'Aucun système de mises à jour que DevEye sache piloter sur cet appareil.'
-                            : total > 0
-                              ? 'Disponibles sur l’appareil, à appliquer outil par outil ou toutes d’un coup.'
-                              : unknown
-                                ? 'Le compte de certains outils est inconnu.'
-                                : 'Tout est à jour.'}
-                        {rebootRequired && ' Un redémarrage est requis pour finir celles déjà appliquées.'}
-                    </span>
-                </div>
-                <div className={styles.pkgSummaryActions}>
-                    <Button variant='secondary' icon='refresh' onClick={refresh} disabled={refreshing || busy}>
-                        Actualiser
-                    </Button>
-                    <Button onClick={updateAll} disabled={busy || eligible.length === 0}>
-                        {queue
-                            ? `En cours (${queue.total - queue.ids.length + 1}/${queue.total})…`
-                            : 'Tout mettre à jour'}
-                    </Button>
-                </div>
+                <span className={`${styles.pkgTotal} ${total > 0 ? styles.pkgTotalPending : ''}`}>
+                    {counting ? 'Recherche des mises à jour…' : plural(total, 'mise à jour', 'mises à jour')}
+                </span>
+                <span className={styles.pkgSummaryHint}>
+                    {managed.length === 0
+                        ? 'Aucun système de mises à jour que DevEye sache piloter sur cet appareil.'
+                        : counting
+                          ? 'Chaque outil est interrogé à son tour : les comptes arrivent au fur et à mesure.'
+                          : total > 0
+                            ? 'Cochez les outils à mettre à jour, puis lancez-les d’un coup : ils s’enchaînent un à un.'
+                            : unknown
+                              ? 'Le compte de certains outils est inconnu.'
+                              : 'Tout est à jour.'}
+                    {rebootRequired && ' Un redémarrage est requis pour finir celles déjà appliquées.'}
+                </span>
             </div>
 
             {listError !== null && <p className={styles.pkgErr}>{listError}</p>}
@@ -320,21 +367,48 @@ export function PackagesPanel({ deviceId, privileged }: { deviceId: string; priv
                 <table className={styles.pkgTable}>
                     <thead>
                         <tr>
+                            <th className={styles.pkgSelectCol}>
+                                {managed.length > 0 && (
+                                    <Checkbox
+                                        aria-label='Tout sélectionner'
+                                        checked={choosable.length > 0 && chosen.length === choosable.length}
+                                        disabled={busy || choosable.length === 0}
+                                        onChange={(on) => setSelected(new Set(on ? choosable.map((m) => m.id) : []))}
+                                    />
+                                )}
+                            </th>
                             <th>Système</th>
                             <th className={styles.pkgCountCol}>Mises à jour</th>
-                            <th aria-label='Action' />
                         </tr>
                     </thead>
                     <tbody>
                         {managed.map((m) => {
                             const meta = MANAGERS[m.id];
                             const state = upgrades[m.id];
-                            const running = state !== undefined && !state.done;
                             const missing = rootMissing(m);
-                            const pending = m.pendingCount;
+                            const count = counts[m.id];
+                            const picked = pickable(m) && selected.has(m.id);
+                            const canPick = !busy && pickable(m);
                             return (
                                 <Fragment key={m.id}>
-                                    <tr>
+                                    <tr
+                                        className={[
+                                            canPick ? styles.pkgRowSelectable : '',
+                                            picked ? styles.pkgRowSelected : ''
+                                        ]
+                                            .filter(Boolean)
+                                            .join(' ')}
+                                        onClick={canPick ? () => toggle(m.id, !picked) : undefined}
+                                    >
+                                        {/* La case gère son clic : la ligne ne doit pas le rejouer. */}
+                                        <td className={styles.pkgSelectCol} onClick={(e) => e.stopPropagation()}>
+                                            <Checkbox
+                                                aria-label={`Mettre à jour ${meta.label}`}
+                                                checked={picked}
+                                                disabled={!canPick}
+                                                onChange={(on) => toggle(m.id, on)}
+                                            />
+                                        </td>
                                         <td>
                                             <span className={styles.pkgName}>{meta.label}</span>
                                             <span className={styles.pkgDesc}>{meta.desc}</span>
@@ -346,34 +420,26 @@ export function PackagesPanel({ deviceId, privileged }: { deviceId: string; priv
                                             )}
                                         </td>
                                         <td className={styles.pkgCountCol}>
-                                            <span
-                                                className={`${styles.pkgCount} ${pending !== null && pending > 0 ? styles.pkgCountPending : ''}`}
-                                                title={
-                                                    pending === null
-                                                        ? 'Compte inconnu : l’outil ne l’a pas donné'
-                                                        : undefined
-                                                }
-                                            >
-                                                {refreshing ? '…' : pending === null ? '?' : pending}
-                                            </span>
-                                        </td>
-                                        <td className={styles.pkgActionCol}>
-                                            <Button
-                                                variant='secondary'
-                                                disabled={busy || pending === 0 || missing}
-                                                onClick={() => startUpgrade(m.id)}
-                                                title={
-                                                    running
-                                                        ? 'Mise à jour en cours sur l’appareil'
-                                                        : busy
-                                                          ? 'Une autre mise à jour est en cours sur cet appareil'
-                                                          : pending === 0
-                                                            ? 'Rien à mettre à jour'
+                                            {count === undefined ? (
+                                                <span className={styles.pkgCounting}>
+                                                    <span
+                                                        className={`icon icon-spinner ${styles.spinning}`}
+                                                        aria-hidden='true'
+                                                    />
+                                                    Recherche…
+                                                </span>
+                                            ) : (
+                                                <span
+                                                    className={`${styles.pkgCount} ${count !== null && count > 0 ? styles.pkgCountPending : ''}`}
+                                                    title={
+                                                        count === null
+                                                            ? 'Compte inconnu : l’outil ne l’a pas donné'
                                                             : undefined
-                                                }
-                                            >
-                                                {running ? 'En cours…' : 'Mettre à jour'}
-                                            </Button>
+                                                    }
+                                                >
+                                                    {count === null ? '?' : count}
+                                                </span>
+                                            )}
                                         </td>
                                     </tr>
                                     {state && (
@@ -420,19 +486,31 @@ export function PackagesPanel({ deviceId, privileged }: { deviceId: string; priv
                             const meta = UNMANAGED[m.id];
                             return (
                                 <tr key={m.id} className={styles.pkgUnmanaged}>
+                                    <td className={styles.pkgSelectCol} />
                                     <td>
                                         <span className={styles.pkgName}>{meta.label}</span>
                                         <span className={styles.pkgDesc}>{meta.desc}</span>
                                     </td>
-                                    <td className={styles.pkgCountCol} colSpan={2}>
-                                        Détecté, pas géré par DevEye
-                                    </td>
+                                    <td className={styles.pkgCountCol}>Détecté, pas géré par DevEye</td>
                                 </tr>
                             );
                         })}
                     </tbody>
                 </table>
             )}
+
+            <div className={styles.pkgActions}>
+                <Button variant='secondary' icon='refresh' onClick={requestList} disabled={counting || busy}>
+                    Actualiser
+                </Button>
+                <Button onClick={updateChosen} disabled={busy || chosen.length === 0}>
+                    {queue
+                        ? `En cours (${queue.total - queue.ids.length + 1}/${queue.total})…`
+                        : chosen.length > 0
+                          ? `Mettre à jour ${plural(chosen.length, 'outil', 'outils')}`
+                          : 'Mettre à jour'}
+                </Button>
+            </div>
         </div>
     );
 }

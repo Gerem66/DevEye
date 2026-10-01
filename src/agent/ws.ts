@@ -26,6 +26,7 @@ import {
     AGENT_AUTH_EVENTS,
     AGENT_INTEGRITY,
     AGENT_METRICS_BATCH,
+    AGENT_PKG_COUNT,
     AGENT_PKG_DONE,
     AGENT_PKG_LIST_RESULT,
     AGENT_PKG_PROGRESS,
@@ -72,6 +73,7 @@ import {
     handleDockerStatsResult,
     handleLogSourcesResult,
     handleMetricsBatch,
+    handlePkgCount,
     handlePkgDone,
     handlePkgListResult,
     handlePkgProgress,
@@ -201,6 +203,8 @@ function dispatch(session: AgentSession, msg: AgentClientMessage): void | Promis
             return handleSyncOpResult(session, msg.payload);
         case AGENT_PKG_LIST_RESULT:
             return handlePkgListResult(session, msg.payload);
+        case AGENT_PKG_COUNT:
+            return handlePkgCount(session, msg.payload);
         case AGENT_PKG_PROGRESS:
             return handlePkgProgress(session, msg.payload);
         case AGENT_PKG_DONE:

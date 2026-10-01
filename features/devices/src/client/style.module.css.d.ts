@@ -243,7 +243,7 @@ declare const styles: {
     readonly panelScroll: string;
     readonly pausedTag: string;
     readonly pendingTag: string;
-    readonly pkgActionCol: string;
+    readonly pkgActions: string;
     readonly pkgBar: string;
     readonly pkgBarErr: string;
     readonly pkgBarFill: string;
@@ -252,6 +252,7 @@ declare const styles: {
     readonly pkgCount: string;
     readonly pkgCountCol: string;
     readonly pkgCountPending: string;
+    readonly pkgCounting: string;
     readonly pkgDesc: string;
     readonly pkgErr: string;
     readonly pkgHint: string;
@@ -262,10 +263,11 @@ declare const styles: {
     readonly pkgPanel: string;
     readonly pkgProgressRow: string;
     readonly pkgReason: string;
+    readonly pkgRowSelectable: string;
+    readonly pkgRowSelected: string;
+    readonly pkgSelectCol: string;
     readonly pkgSummary: string;
-    readonly pkgSummaryActions: string;
     readonly pkgSummaryHint: string;
-    readonly pkgSummaryText: string;
     readonly pkgTable: string;
     readonly pkgTotal: string;
     readonly pkgTotalPending: string;

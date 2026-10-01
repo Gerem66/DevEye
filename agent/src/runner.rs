@@ -1045,15 +1045,9 @@ async fn stream_session(
                                 });
                                 commands::send_sync_event(&mut sink, device_id, ev).await;
                             }
-                            // Enumerate package managers (off-loop; replies via pkg_rx).
+                            // Update tools, then their counts (off-loop; replies via pkg_rx).
                             Ok(ServerMessage::PkgList {}) => {
-                                let tx = pkg_tx.clone();
-                                tokio::spawn(async move {
-                                    let managers = tokio::task::spawn_blocking(crate::packages::detect)
-                                        .await
-                                        .unwrap_or_default();
-                                    let _ = tx.send(crate::packages::PkgEvent::List(managers)).await;
-                                });
+                                tokio::spawn(crate::packages::run_list(pkg_tx.clone()));
                             }
                             // Apply a manager's updates (off-loop; streams via pkg_rx).
                             // Dernière barrière contre les exécutions doublées (le
