@@ -26,7 +26,7 @@ export interface SegmentedControlProps<T extends string> {
 
 /**
  * Un choix unique parmi deux à cinq options courtes, toutes visibles. Au-delà,
- * ou pour une liste qui vient des données, `SelectInput` reste le bon outil.
+ * ou pour une liste qui vient des données, `SearchSelect` reste le bon outil.
  */
 export default function SegmentedControl<T extends string>({
     options,

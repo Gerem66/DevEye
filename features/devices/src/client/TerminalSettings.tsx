@@ -4,13 +4,19 @@ import {
     humanizeError,
     ReadOnlyNotice,
     SaveButton,
-    SelectInput,
+    SearchSelect,
     settingsStyles as shell,
-    TextInput
+    TextInput,
+    type SearchSelectOption
 } from 'deveye-sdk-client';
 
 import { api } from './api';
 import { refreshDevices, useDevices } from './store';
+
+const EXIT_OPTIONS: readonly SearchSelectOption<'close' | 'keep'>[] = [
+    { value: 'close', label: 'Fermer le terminal' },
+    { value: 'keep', label: 'Garder ouvert (Relancer)' }
+];
 
 /**
  * Les réglages du terminal distant d'un appareil : sous quel compte une session
@@ -89,14 +95,13 @@ export function TerminalSettings({ deviceId, canWrite }: { deviceId: string; can
 
             <label className={shell.field}>
                 <span className={shell.sectionLabel}>À la fin de la session</span>
-                <SelectInput
+                <SearchSelect
                     value={closeOnExit ? 'close' : 'keep'}
+                    options={EXIT_OPTIONS}
+                    aria-label='À la fin de la session'
                     disabled={!editable}
-                    onChange={(e) => setCloseOnExit(e.target.value === 'close')}
-                >
-                    <option value='close'>Fermer le terminal</option>
-                    <option value='keep'>Garder ouvert (Relancer)</option>
-                </SelectInput>
+                    onChange={(v) => setCloseOnExit(v === 'close')}
+                />
             </label>
 
             {error && <p className={shell.errorText}>{error}</p>}

@@ -3,8 +3,8 @@ import {
     Button,
     humanizeError,
     ReadOnlyNotice,
+    SearchSelect,
     SegmentedControl,
-    SelectInput,
     useResourceVersion,
     useWorkspacePermissions
 } from 'deveye-sdk-client';
@@ -210,17 +210,16 @@ export function Forms({ site, canWrite, onCurrentForm }: FormsProps) {
                         onChange={(value) => setFormId(Number(value))}
                     />
                 ) : (
-                    <SelectInput
+                    <SearchSelect
                         value={String(current.id)}
                         aria-label='Formulaire'
-                        onChange={(e) => setFormId(Number(e.target.value))}
-                    >
-                        {forms.map((form) => (
-                            <option key={form.id} value={form.id}>
-                                {form.name} ({formatCount(form.submissions)})
-                            </option>
-                        ))}
-                    </SelectInput>
+                        onChange={(value) => setFormId(Number(value))}
+                        options={forms.map((form) => ({
+                            value: String(form.id),
+                            label: form.name,
+                            detail: formatCount(form.submissions)
+                        }))}
+                    />
                 )}
 
                 <SegmentedControl

@@ -1,5 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Button, Checkbox, Dialog, humanizeError, SegmentedControl, SelectInput, TextInput } from 'deveye-sdk-client';
+import {
+    Button,
+    Checkbox,
+    Dialog,
+    humanizeError,
+    SearchSelect,
+    SegmentedControl,
+    TextInput,
+    type SearchSelectOption
+} from 'deveye-sdk-client';
 import type { DatabaseAlert, DatabaseCombinator, DatabaseComparator, DatabaseCondition } from '../contracts/domain';
 
 import { api } from './api';
@@ -29,6 +38,10 @@ const COMBINATORS: { value: DatabaseCombinator; label: string; title: string }[]
     { value: 'and', label: 'Toutes (ET)', title: 'Toutes les conditions sont remplies' },
     { value: 'or', label: 'Au moins une (OU)', title: 'Au moins une condition est remplie' }
 ];
+
+const COMPARATOR_OPTIONS: readonly SearchSelectOption<DatabaseComparator>[] = (
+    Object.keys(COMPARATOR_LABELS) as DatabaseComparator[]
+).map((id) => ({ value: id, label: COMPARATOR_LABELS[id] }));
 
 interface TestResult {
     firing: boolean;
@@ -177,16 +190,12 @@ export function AlertDialog({ open, databaseId, alert, monitorEnabled, onClose, 
                                 <label className={styles.fieldNarrow}>
                                     <span className={styles.label}>Comparaison</span>
                                     {/* Six comparateurs : un de trop pour des segments. */}
-                                    <SelectInput
+                                    <SearchSelect
                                         value={condition.comparator}
-                                        onChange={(e) => patch(i, { comparator: e.target.value as DatabaseComparator })}
-                                    >
-                                        {(Object.keys(COMPARATOR_LABELS) as DatabaseComparator[]).map((id) => (
-                                            <option key={id} value={id}>
-                                                {COMPARATOR_LABELS[id]}
-                                            </option>
-                                        ))}
-                                    </SelectInput>
+                                        aria-label='Comparaison'
+                                        options={COMPARATOR_OPTIONS}
+                                        onChange={(comparator) => patch(i, { comparator })}
+                                    />
                                 </label>
                                 <label className={styles.fieldNarrow}>
                                     <span className={styles.label}>Seuil</span>

@@ -1,5 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Button, Dialog, humanizeError, invalidate, SelectInput, TextInput } from 'deveye-sdk-client';
+import {
+    Button,
+    Dialog,
+    humanizeError,
+    invalidate,
+    SearchSelect,
+    TextInput,
+    type SearchSelectOption
+} from 'deveye-sdk-client';
 import {
     AUDIENCE_FUNNEL_MAX_STEPS,
     AUDIENCE_FUNNEL_NAME_MAX_LENGTH,
@@ -10,6 +18,11 @@ import {
 
 import { api } from './api';
 import styles from './style.module.css';
+
+const STEP_KINDS: readonly SearchSelectOption<AudienceFunnelStepKind>[] = [
+    { value: 'path', label: 'Page vue' },
+    { value: 'event', label: 'Événement' }
+];
 
 interface FunnelDialogProps {
     open: boolean;
@@ -193,20 +206,15 @@ export function FunnelDialog({ open, siteId, funnel, onClose, onSaved }: FunnelD
                             {steps.map((step, index) => (
                                 <li key={index} className={styles.stepRow}>
                                     <span className={styles.stepIndex}>{index + 1}</span>
-                                    <SelectInput
+                                    <SearchSelect
                                         className={styles.stepKind}
                                         value={step.kind}
                                         // La ligne n'a pas la place d'un libellé visible :
-                                        // sans celui-ci, la marche s'annonce « liste » et
-                                        // « zone de texte », sans son rang.
+                                        // sans celui-ci, la marche s'annonce sans son rang.
                                         aria-label={`Type de la marche ${index + 1}`}
-                                        onChange={(e) =>
-                                            setStep(index, { kind: e.target.value as AudienceFunnelStepKind })
-                                        }
-                                    >
-                                        <option value='path'>Page vue</option>
-                                        <option value='event'>Événement</option>
-                                    </SelectInput>
+                                        onChange={(kind) => setStep(index, { kind })}
+                                        options={STEP_KINDS}
+                                    />
                                     {/* `TextInput` rend un conteneur sans largeur propre :
                                         dans une ligne flex il se réduit à son contenu et
                                         tronque la saisie alors que la place est libre. */}

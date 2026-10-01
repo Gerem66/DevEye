@@ -190,10 +190,16 @@ declare const styles: {
     readonly loader: string;
     readonly logAnchorGroup: string;
     readonly logCount: string;
+    readonly logDot: string;
+    readonly logDotOff: string;
+    readonly logDotOn: string;
     readonly logErr: string;
     readonly logHint: string;
+    readonly logKindIcon: string;
     readonly logLevelSelect: string;
     readonly logLine: string;
+    readonly logLineError: string;
+    readonly logLineWarning: string;
     readonly logLvl: string;
     readonly logLvlCritical: string;
     readonly logLvlDebug: string;
@@ -201,6 +207,7 @@ declare const styles: {
     readonly logLvlInfo: string;
     readonly logLvlNotice: string;
     readonly logLvlWarning: string;
+    readonly logMark: string;
     readonly logMsg: string;
     readonly logSearch: string;
     readonly logSentinel: string;
@@ -215,6 +222,7 @@ declare const styles: {
     readonly logUnit: string;
     readonly logUnitInput: string;
     readonly logView: string;
+    readonly logViewWrap: string;
     readonly logsPanel: string;
     readonly metricsPanel: string;
     readonly metricsPanelHeader: string;

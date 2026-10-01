@@ -7,8 +7,8 @@ import {
     DialogCancelButton,
     ErrorNote,
     NumberInput,
+    SearchSelect,
     SegmentedControl,
-    SelectInput,
     TextInput,
     type ConfirmRequest,
     type ErrorNoteInput
@@ -291,51 +291,46 @@ export function RecurringDialog({ base, open, recurring, onClose, onSaved }: Rec
                         <span className={styles.fieldLabel}>
                             {draft.kind === 'transfer' ? 'Depuis le compte' : 'Compte'}
                         </span>
-                        <SelectInput value={draft.accountId} onChange={(e) => set('accountId', Number(e.target.value))}>
-                            {base.accounts.map((account) => (
-                                <option key={account.id} value={account.id}>
-                                    {account.name}
-                                    {account.archived ? ' (archivé)' : ''}
-                                </option>
-                            ))}
-                        </SelectInput>
+                        <SearchSelect
+                            aria-label={draft.kind === 'transfer' ? 'Depuis le compte' : 'Compte'}
+                            value={String(draft.accountId)}
+                            onChange={(value) => set('accountId', Number(value))}
+                            options={base.accounts.map((account) => ({
+                                value: String(account.id),
+                                label: account.name,
+                                ...(account.archived ? { detail: 'archivé' } : {})
+                            }))}
+                        />
                     </label>
 
                     {draft.kind === 'transfer' ? (
                         <label className={styles.field}>
                             <span className={styles.fieldLabel}>Vers le compte</span>
-                            <SelectInput
-                                value={draft.transferAccountId ?? ''}
-                                onChange={(e) =>
-                                    set('transferAccountId', e.target.value === '' ? null : Number(e.target.value))
-                                }
-                            >
-                                <option value=''>Choisir…</option>
-                                {base.accounts
+                            <SearchSelect
+                                aria-label='Vers le compte'
+                                value={String(draft.transferAccountId ?? '')}
+                                placeholder='Choisir…'
+                                onChange={(value) => set('transferAccountId', Number(value))}
+                                options={base.accounts
                                     .filter((account) => account.id !== draft.accountId)
-                                    .map((account) => (
-                                        <option key={account.id} value={account.id}>
-                                            {account.name}
-                                        </option>
-                                    ))}
-                            </SelectInput>
+                                    .map((account) => ({ value: String(account.id), label: account.name }))}
+                            />
                         </label>
                     ) : (
                         <label className={styles.field}>
                             <span className={styles.fieldLabel}>Catégorie</span>
-                            <SelectInput
-                                value={draft.categoryId ?? ''}
-                                onChange={(e) =>
-                                    set('categoryId', e.target.value === '' ? null : Number(e.target.value))
-                                }
-                            >
-                                <option value=''>Sans catégorie</option>
-                                {categories.map((category) => (
-                                    <option key={category.id} value={category.id}>
-                                        {category.name}
-                                    </option>
-                                ))}
-                            </SelectInput>
+                            <SearchSelect
+                                aria-label='Catégorie'
+                                value={String(draft.categoryId ?? '')}
+                                onChange={(value) => set('categoryId', value === '' ? null : Number(value))}
+                                options={[
+                                    { value: '', label: 'Sans catégorie' },
+                                    ...categories.map((category) => ({
+                                        value: String(category.id),
+                                        label: category.name
+                                    }))
+                                ]}
+                            />
                         </label>
                     )}
                 </div>

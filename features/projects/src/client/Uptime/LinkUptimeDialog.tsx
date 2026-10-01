@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { UPTIME_CLIENT_PROVIDER } from '@deveye/types/sdk';
 import type { UptimeClientProvider, UptimeLinkedService } from '@deveye/types/sdk/client';
-import { Button, Dialog, humanizeError, moduleClientProvider, SelectInput } from 'deveye-sdk-client';
+import { Button, Dialog, humanizeError, moduleClientProvider, SearchSelect } from 'deveye-sdk-client';
 import { api } from '../api';
 import styles from '../style.module.css';
 
@@ -89,15 +89,16 @@ export function LinkUptimeDialog({ open, projectId, linkedIds, onClose, onSaved 
                     ) : (
                         <label className={styles.field}>
                             <span className={styles.label}>Service de l’espace</span>
-                            <SelectInput value={picked} onChange={(e) => setPicked(e.target.value)}>
-                                <option value=''>Choisir…</option>
-                                {free.map((service) => (
-                                    <option key={service.id} value={service.id}>
-                                        {service.name || `Service #${service.id}`}
-                                        {service.foreign && ' (partagé)'}
-                                    </option>
-                                ))}
-                            </SelectInput>
+                            <SearchSelect
+                                value={picked}
+                                onChange={setPicked}
+                                options={free.map((service) => ({
+                                    value: String(service.id),
+                                    label: `${service.name || `Service #${service.id}`}${service.foreign ? ' (partagé)' : ''}`
+                                }))}
+                                placeholder='Choisir…'
+                                aria-label='Service de l’espace'
+                            />
                         </label>
                     )}
 

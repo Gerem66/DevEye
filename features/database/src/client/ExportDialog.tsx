@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Dialog, humanizeError, SegmentedControl, SelectInput, TextInput } from 'deveye-sdk-client';
+import { Button, Dialog, humanizeError, SearchSelect, SegmentedControl, TextInput } from 'deveye-sdk-client';
 import type { DatabaseExportFormat, DatabaseIdRange, DatabaseTable } from '../contracts/domain';
 
 import { api } from './api';
@@ -165,16 +165,20 @@ export function ExportDialog({ open, databaseId, tables, table, onClose }: Expor
                 <div className={styles.section}>
                     <label className={styles.field}>
                         <span className={styles.label}>Portée</span>
-                        <SelectInput value={scope} onChange={(e) => setScope(e.target.value)}>
-                            <option value={WHOLE}>Toute la base</option>
-                            {listed.map((t) => (
-                                <option key={keyOf(t)} value={keyOf(t)}>
-                                    {t.name}
-                                    {t.rowCount === null ? '' : ` (${formatCount(t.rowCount)} l.)`}
-                                </option>
-                            ))}
-                            {listed.length === 0 && table && <option value={keyOf(table)}>{table.name}</option>}
-                        </SelectInput>
+                        <SearchSelect
+                            value={scope}
+                            aria-label='Portée'
+                            options={[
+                                { value: WHOLE, label: 'Toute la base' },
+                                ...listed.map((t) => ({
+                                    value: keyOf(t),
+                                    label: t.name,
+                                    detail: t.rowCount === null ? undefined : `${formatCount(t.rowCount)} l.`
+                                })),
+                                ...(listed.length === 0 && table ? [{ value: keyOf(table), label: table.name }] : [])
+                            ]}
+                            onChange={setScope}
+                        />
                     </label>
 
                     <div className={styles.field}>

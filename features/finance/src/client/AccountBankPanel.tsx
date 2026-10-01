@@ -4,7 +4,7 @@ import {
     FeatureSettingsButton,
     humanizeError,
     ReadOnlyNotice,
-    SelectInput,
+    SearchSelect,
     settingsStyles as shell,
     useResource
 } from 'deveye-sdk-client';
@@ -144,19 +144,19 @@ export default function AccountBankPanel({ scope, canWrite }: SettingsPanelProps
             <div className={shell.field}>
                 <span className={shell.sectionLabel}>Connexion bancaire</span>
                 <div className={shell.fieldWithAction}>
-                    <SelectInput
+                    <SearchSelect
                         aria-label='Connexion bancaire'
                         value={selectedId === null ? '' : String(selectedId)}
                         disabled={!canWrite || busy}
-                        onChange={(e) => chooseConnection(e.target.value)}
-                    >
-                        <option value=''>Aucune : import de relevé seulement</option>
-                        {connections.map((connection) => (
-                            <option key={connection.id} value={connection.id}>
-                                {connection.label}
-                            </option>
-                        ))}
-                    </SelectInput>
+                        onChange={chooseConnection}
+                        options={[
+                            { value: '', label: 'Aucune : import de relevé seulement' },
+                            ...connections.map((connection) => ({
+                                value: String(connection.id),
+                                label: connection.label
+                            }))
+                        ]}
+                    />
                     {canWrite && (
                         <FeatureSettingsButton
                             scope={{ kind: 'feature', feature: 'finance' }}
@@ -177,23 +177,22 @@ export default function AccountBankPanel({ scope, canWrite }: SettingsPanelProps
             {selected !== null && (
                 <div className={shell.field}>
                     <span className={shell.sectionLabel}>Compte chez {selected.bankName || 'la banque'}</span>
-                    <SelectInput
+                    <SearchSelect
                         aria-label='Compte chez la banque'
                         value={linkedHere ? link.externalAccountId : ''}
+                        placeholder='Choisir le compte…'
                         disabled={!canWrite || busy}
-                        onChange={(e) => e.target.value !== '' && void apply(selected.id, e.target.value)}
-                    >
-                        {!linkedHere && <option value=''>Choisir le compte…</option>}
-                        {selected.accounts.map((remote) => {
+                        onChange={(remoteId) => void apply(selected.id, remoteId)}
+                        options={selected.accounts.map((remote) => {
                             const taken = takenBy(selected, remote.id) !== null;
-                            return (
-                                <option key={remote.id} value={remote.id} disabled={taken}>
-                                    {remoteLabel(remote)}
-                                    {taken ? ' : déjà relié à un autre compte' : ''}
-                                </option>
-                            );
+                            return {
+                                value: remote.id,
+                                label: remoteLabel(remote),
+                                disabled: taken,
+                                ...(taken ? { detail: 'déjà relié à un autre compte' } : {})
+                            };
                         })}
-                    </SelectInput>
+                    />
                     {linkedHere && (
                         <span className={shell.fieldHint}>
                             Relevé depuis le {formatDate(link.since)} : ce qui précède vient de vos imports, ou du solde

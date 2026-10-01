@@ -27,6 +27,7 @@ import { authorizeRelayDevice, defineSdkFeature, FeatureError, relayDeviceOption
 import { isAllowedOutboundUrl, OUTBOUND_REFUSED_MESSAGE } from '@/Services/netFetch';
 
 import { candidatesOf, machineOf, parseServiceId } from './agent';
+import { recallHistoryEntry, rememberHistory } from './historyCache';
 import { DOKPLOY_INSTANCE } from './providers/dokploy';
 import type { DeployProviderAdapter } from './providers/types';
 import {
@@ -515,6 +516,7 @@ export const deployHandlers = [
             const spec = providerTargetOf(target, await readJson<Partial<StoredTarget>>(cipher, target.content));
             try {
                 const remote = await provider.history(access, spec);
+                rememberHistory(target.id, remote);
                 return {
                     entries: [...remote]
                         .sort((a, b) => b.startedAt - a.startedAt)
@@ -533,9 +535,11 @@ export const deployHandlers = [
         }
     }),
     /**
-     * Le journal complet d'un déploiement. Sa référence est retrouvée en
-     * repassant par l'historique plutôt que portée par le client : chez Dokploy,
-     * c'est un emplacement sur le disque du fournisseur, rien à exposer.
+     * Le journal complet d'un déploiement. Sa référence est retrouvée dans
+     * l'historique plutôt que portée par le client : chez Dokploy, c'est un
+     * emplacement sur le disque du fournisseur, rien à exposer. L'historique
+     * que le client vient de lister suffit le plus souvent ; le fournisseur
+     * n'est réinterrogé qu'au raté.
      */
     defineSdkFeature({
         ...deployLog,
@@ -559,10 +563,17 @@ export const deployHandlers = [
             const { provider, access } = await loadAccess(ctx, target.credential_id, target);
             const spec = providerTargetOf(target, await readJson<Partial<StoredTarget>>(cipher, target.content));
 
-            const remote = await provider.history(access, spec).catch((e: unknown) => {
-                throw refusal(e, 'Fournisseur injoignable.');
-            });
-            const match = remote.find((d) => d.externalId === input.externalId);
+            const match =
+                recallHistoryEntry(target.id, input.externalId) ??
+                (await provider.history(access, spec).then(
+                    (remote) => {
+                        rememberHistory(target.id, remote);
+                        return remote.find((d) => d.externalId === input.externalId) ?? null;
+                    },
+                    (e: unknown) => {
+                        throw refusal(e, 'Fournisseur injoignable.');
+                    }
+                ));
             if (!match) throw new FeatureError('not_found', 'Aucun journal pour ce déploiement.');
 
             try {

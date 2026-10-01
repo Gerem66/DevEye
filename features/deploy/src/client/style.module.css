@@ -460,23 +460,40 @@ button.blockLastDeploy {
 
 /* ------------------------------------------------------- le journal */
 
-/* Comme un terminal, plutôt que le fond des autres blocs : c'est un flux
-   brut du fournisseur, pas un contenu mis en forme par DevEye. */
-.logBox {
+/* Le journal prend la place qui reste dans le dialogue. */
+.logOutput {
     flex: 1;
-    min-height: 240px;
-    margin: 0;
-    padding: var(--space-md);
-    border-radius: var(--radius-md);
-    border: 1px solid var(--glass-border);
-    background: var(--surface-subtle);
-    color: var(--text-primary);
-    font-family: var(--font-mono);
-    font-size: 0.78rem;
-    line-height: 1.5;
-    white-space: pre-wrap;
-    word-break: break-word;
-    overflow: auto;
+    min-height: 0;
+}
+
+/* Le suivi d'un journal qui s'écrit encore, au pied du dialogue. */
+.logLive {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    margin-right: auto;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.logLiveDot {
+    width: 8px;
+    height: 8px;
+    border-radius: var(--radius-pill);
+    background: var(--accent);
+    animation: deployLivePulse 1.6s ease-in-out infinite;
+}
+
+@keyframes deployLivePulse {
+    50% {
+        filter: opacity(0.3);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .logLiveDot {
+        animation: none;
+    }
 }
 
 /* Un sélecteur de source et son « + ». `min-width: 0` pour qu'un intitulé long
@@ -487,7 +504,8 @@ button.blockLastDeploy {
     gap: var(--space-xs);
 }
 
-.fieldWithAction > select {
+/* Le champ vient toujours en premier ; la liste déroulante n'est pas un `select`. */
+.fieldWithAction > :first-child {
     flex: 1;
     min-width: 0;
 }

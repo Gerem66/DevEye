@@ -131,7 +131,7 @@ handler })` par commande. Le handler reçoit un `FeatureContext` (`ctx.db`,
 1. **Composant** — `src/Features/<Name>/index.tsx` (+ `style.module.css`).
    Props `FeatureProps` (`user`, `workspace`, …). Appels via
    `ws.send('x.action', input)` (typé, validé). Réutiliser les primitives :
-   `Button`, `TextInput`, `SelectInput`, `OpenPopup`, et les **CSS vars du thème**
+   `Button`, `TextInput`, `SearchSelect`, `LoadingVeil`, `LogOutput`, `OpenPopup`, et les **CSS vars du thème**
    (`var(--accent)`, `var(--space-md)`, `var(--text-primary)`… — jamais de
    couleurs en dur). UI en **français**.
     - Pattern déverrouillage : envelopper les appels chiffrés dans un helper qui

@@ -16,7 +16,7 @@ import { ws, WsError } from '@/api/ws';
 import Button from '@/Components/Button';
 import { FeatureSettingsButton } from '@/Components/FeatureSettings';
 import TextInput from '@/Components/TextInput';
-import SelectInput from '@/Components/SelectInput';
+import SearchSelect, { type SearchSelectOption } from '@/Components/SearchSelect';
 
 import styles from './style.module.css';
 
@@ -68,6 +68,11 @@ const LEVEL_LABELS: Record<LogLevelName, string> = {
     error: 'Erreur',
     critical: 'Critique'
 };
+
+const LEVEL_OPTIONS: readonly SearchSelectOption<LogLevelName | ''>[] = [
+    { value: '', label: 'Toutes' },
+    ...LOG_LEVEL_NAMES.map((lvl) => ({ value: lvl, label: LEVEL_LABELS[lvl] }))
+];
 
 /** A user id of 0 is the system / unauthenticated actor. */
 function userLabel(uid: number, username: string | null): string {
@@ -260,65 +265,80 @@ function FeatureLogs() {
 
                         <div className={styles.filterField}>
                             <label className={styles.filterLabel}>Utilisateur</label>
-                            <SelectInput value={filter.uid} onChange={(e) => set('uid', e.target.value)}>
-                                <option value=''>Tous</option>
-                                {facets?.users.map((u) => (
-                                    <option key={u.uid} value={String(u.uid)}>
-                                        {userLabel(u.uid, u.username)} ({u.count})
-                                    </option>
-                                ))}
-                            </SelectInput>
+                            <SearchSelect
+                                value={filter.uid}
+                                aria-label='Utilisateur'
+                                options={[
+                                    { value: '', label: 'Tous' },
+                                    ...(facets?.users ?? []).map((u) => ({
+                                        value: String(u.uid),
+                                        label: userLabel(u.uid, u.username),
+                                        detail: String(u.count)
+                                    }))
+                                ]}
+                                onChange={(v) => set('uid', v)}
+                            />
                         </div>
 
                         <div className={styles.filterField}>
                             <label className={styles.filterLabel}>Canal</label>
-                            <SelectInput value={filter.source} onChange={(e) => set('source', e.target.value)}>
-                                <option value=''>Tous</option>
-                                {facets?.sources.map((s) => (
-                                    <option key={s.value} value={s.value}>
-                                        {SOURCE_LABELS[s.value as LogSource] ?? s.value} ({s.count})
-                                    </option>
-                                ))}
-                            </SelectInput>
+                            <SearchSelect
+                                value={filter.source}
+                                aria-label='Canal'
+                                options={[
+                                    { value: '', label: 'Tous' },
+                                    ...(facets?.sources ?? []).map((s) => ({
+                                        value: s.value,
+                                        label: SOURCE_LABELS[s.value as LogSource] ?? s.value,
+                                        detail: String(s.count)
+                                    }))
+                                ]}
+                                onChange={(v) => set('source', v)}
+                            />
                         </div>
 
                         <div className={styles.filterField}>
                             <label className={styles.filterLabel}>Fonctionnalité</label>
-                            <SelectInput value={filter.category} onChange={(e) => set('category', e.target.value)}>
-                                <option value=''>Toutes</option>
-                                {facets?.categories.map((c) => (
-                                    <option key={c.value} value={c.value}>
-                                        {c.value} ({c.count})
-                                    </option>
-                                ))}
-                            </SelectInput>
+                            <SearchSelect
+                                value={filter.category}
+                                aria-label='Fonctionnalité'
+                                options={[
+                                    { value: '', label: 'Toutes' },
+                                    ...(facets?.categories ?? []).map((c) => ({
+                                        value: c.value,
+                                        label: c.value,
+                                        detail: String(c.count)
+                                    }))
+                                ]}
+                                onChange={(v) => set('category', v)}
+                            />
                         </div>
 
                         <div className={styles.filterField}>
                             <label className={styles.filterLabel}>Action</label>
-                            <SelectInput value={filter.action} onChange={(e) => set('action', e.target.value)}>
-                                <option value=''>Toutes</option>
-                                {facets?.actions.map((a) => (
-                                    <option key={a.value} value={a.value}>
-                                        {a.value} ({a.count})
-                                    </option>
-                                ))}
-                            </SelectInput>
+                            <SearchSelect
+                                value={filter.action}
+                                aria-label='Action'
+                                options={[
+                                    { value: '', label: 'Toutes' },
+                                    ...(facets?.actions ?? []).map((a) => ({
+                                        value: a.value,
+                                        label: a.value,
+                                        detail: String(a.count)
+                                    }))
+                                ]}
+                                onChange={(v) => set('action', v)}
+                            />
                         </div>
 
                         <div className={styles.filterField}>
                             <label className={styles.filterLabel}>Importance min.</label>
-                            <SelectInput
+                            <SearchSelect
                                 value={filter.levelMin}
-                                onChange={(e) => set('levelMin', e.target.value as LogLevelName | '')}
-                            >
-                                <option value=''>Toutes</option>
-                                {LOG_LEVEL_NAMES.map((lvl) => (
-                                    <option key={lvl} value={lvl}>
-                                        {LEVEL_LABELS[lvl]}
-                                    </option>
-                                ))}
-                            </SelectInput>
+                                aria-label='Importance minimale'
+                                options={LEVEL_OPTIONS}
+                                onChange={(v) => set('levelMin', v)}
+                            />
                         </div>
 
                         <div className={styles.filterField}>

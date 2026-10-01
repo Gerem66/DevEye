@@ -398,7 +398,7 @@
 }
 
 /* Le sélecteur garde sa largeur, le texte du compte prend le reste : sans ça
-   le `width: 100%` de SelectInput écrase pseudo et adresse. */
+   le `width: 100%` du déclencheur de SearchSelect écrase pseudo et adresse. */
 .memberRole {
     width: auto;
     max-width: 12rem;

@@ -8,8 +8,8 @@ import {
     invalidate,
     ReadOnlyNotice,
     SaveButton,
+    SearchSelect,
     SegmentedControl,
-    SelectInput,
     settingsStyles as shell,
     Switch,
     TextInput,
@@ -17,7 +17,6 @@ import {
     withSecrecy,
     type ConfirmRequest
 } from 'deveye-sdk-client';
-import type { ProjectStatus } from '@deveye/types';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import {
     PROJECT_ICON_MAX_LENGTH,
@@ -30,15 +29,7 @@ import {
 } from '../contracts/domain';
 
 import { ZOOM_LEVELS } from './Timeline/scale';
-import {
-    api,
-    dateInputToSeconds,
-    dateInputValue,
-    PROJECT_ICON_SIZE,
-    STATUS_LABELS,
-    STATUSES,
-    TAG_KIND_LABELS
-} from './api';
+import { api, dateInputToSeconds, dateInputValue, PROJECT_ICON_SIZE, STATUS_OPTIONS, TAG_KIND_OPTIONS } from './api';
 import styles from './style.module.css';
 
 function draftOf(project: Project): ProjectDraft {
@@ -258,17 +249,13 @@ export default function ProjectGeneralPanel({ scope, canWrite, gone }: SettingsP
             <div className={styles.row}>
                 <label className={styles.field}>
                     <span className={shell.sectionLabel}>Statut</span>
-                    <SelectInput
+                    <SearchSelect
                         value={draft.status}
                         disabled={!editable}
-                        onChange={(e) => set({ status: e.target.value as ProjectStatus })}
-                    >
-                        {STATUSES.map((s) => (
-                            <option key={s} value={s}>
-                                {STATUS_LABELS[s]}
-                            </option>
-                        ))}
-                    </SelectInput>
+                        options={STATUS_OPTIONS}
+                        onChange={(status) => set({ status })}
+                        aria-label='Statut'
+                    />
                 </label>
                 <label className={styles.field}>
                     <span className={shell.sectionLabel}>Début</span>
@@ -293,15 +280,13 @@ export default function ProjectGeneralPanel({ scope, canWrite, gone }: SettingsP
             <div className={shell.field}>
                 <span className={shell.sectionLabel}>Étiquettes</span>
                 <div className={styles.tagRow}>
-                    <SelectInput
+                    <SearchSelect
                         value={tagKind}
                         disabled={!editable}
                         aria-label='Famille de l’étiquette'
-                        onChange={(e) => setTagKind(e.target.value as ProjectTag['kind'])}
-                    >
-                        <option value='type'>{TAG_KIND_LABELS.type}</option>
-                        <option value='tech'>{TAG_KIND_LABELS.tech}</option>
-                    </SelectInput>
+                        options={TAG_KIND_OPTIONS}
+                        onChange={setTagKind}
+                    />
                     <TextInput
                         value={tagLabel}
                         maxLength={PROJECT_TAG_LABEL_MAX_LENGTH}

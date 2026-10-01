@@ -13,6 +13,7 @@ declare const styles: {
     readonly cardMain: string;
     readonly cardMeta: string;
     readonly cardName: string;
+    readonly deployLivePulse: string;
     readonly dropBar: string;
     readonly empty: string;
     readonly error: string;
@@ -34,7 +35,9 @@ declare const styles: {
     readonly itemRowClickable: string;
     readonly label: string;
     readonly lastDeployName: string;
-    readonly logBox: string;
+    readonly logLive: string;
+    readonly logLiveDot: string;
+    readonly logOutput: string;
     readonly overdue: string;
     readonly sectionTitle: string;
     readonly statusDot: string;

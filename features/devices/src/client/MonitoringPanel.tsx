@@ -1548,7 +1548,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             <Dialog
                 open={packagesOpen}
                 onClose={() => setPackagesOpen(false)}
-                title={`Mises à jour — « ${selected.name} »`}
+                title={`Mises à jour · « ${selected.name} »`}
                 description='Les systèmes de mises à jour détectés sur l’appareil, et ce qu’ils ont à appliquer.'
             >
                 {packagesOpen && (
@@ -1559,7 +1559,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             <Dialog
                 open={powerOpen}
                 onClose={() => setPowerOpen(false)}
-                title={`Commandes système — « ${selected.name} »`}
+                title={`Commandes système · « ${selected.name} »`}
                 description='Actions exécutées sur l’appareil par l’agent (selon ses privilèges et l’OS).'
             >
                 {powerOpen && <PowerMenu deviceId={selected.id} />}
@@ -1568,7 +1568,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             <Dialog
                 open={agentOpen}
                 onClose={() => setAgentOpen(false)}
-                title={`Agent — « ${selected.name} »`}
+                title={`Agent · « ${selected.name} »`}
                 description='L’agent DevEye installé sur l’appareil : son état, sa persistance, ses privilèges et son accès.'
                 width={620}
             >
@@ -1587,9 +1587,10 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             <Dialog
                 open={logsOpen}
                 onClose={() => setLogsOpen(false)}
-                title={`Logs — « ${selected.name} »`}
+                title={`Logs · « ${selected.name} »`}
                 description='Journal système, conteneurs Docker et fichiers de logs de l’appareil, avec recherche avancée.'
-                width={860}
+                width={1200}
+                tall
             >
                 {logsOpen && <LogsPanel deviceId={selected.id} />}
             </Dialog>
@@ -1597,7 +1598,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             <Dialog
                 open={dockerOpen}
                 onClose={() => setDockerOpen(false)}
-                title={`Conteneurs — « ${selected.name} »`}
+                title={`Conteneurs · « ${selected.name} »`}
                 description='Conteneurs, images, volumes et réseaux de l’appareil : état, ressources et gestion.'
                 width={920}
             >
@@ -1611,7 +1612,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             <Dialog
                 open={terminalOpen}
                 onClose={() => setTerminalOpen(false)}
-                title={`Terminal — « ${selected.name} »`}
+                title={`Terminal · « ${selected.name} »`}
                 description='Shell interactif distant. Compte et comportement configurables via ⚙.'
                 width={900}
             >
@@ -1625,7 +1626,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             <Dialog
                 open={filesOpen}
                 onClose={() => setFilesOpen(false)}
-                title={`Fichiers — « ${selected.name} »`}
+                title={`Fichiers · « ${selected.name} »`}
                 description='Explorateur de fichiers : navigation, analyse d’espace disque, recherche avancée et nettoyage.'
                 width={920}
             >

@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Button, ErrorNote, SegmentedControl, SelectInput, TextInput, useResource } from 'deveye-sdk-client';
+import { Button, ErrorNote, SearchSelect, SegmentedControl, TextInput, useResource } from 'deveye-sdk-client';
 import type { FinanceTransaction, FinanceTransactionKind } from '../contracts/domain';
 
 import TransactionRow, { useClearedToggle } from './TransactionRow';
@@ -151,41 +151,38 @@ export function Journal({ base, accountId: lockedAccountId, onEdit }: JournalPro
                 />
 
                 {lockedAccountId === undefined && (
-                    <SelectInput
+                    <SearchSelect
                         className={styles.filterSelect}
-                        value={pickedAccountId ?? ''}
+                        value={String(pickedAccountId ?? '')}
                         aria-label='Compte'
-                        onChange={(e) => {
-                            setPickedAccountId(e.target.value === '' ? null : Number(e.target.value));
+                        onChange={(value) => {
+                            setPickedAccountId(value === '' ? null : Number(value));
                             setPage(0);
                         }}
-                    >
-                        <option value=''>Tous les comptes</option>
-                        {base.accounts.map((account) => (
-                            <option key={account.id} value={account.id}>
-                                {account.name}
-                                {account.archived ? ' (archivé)' : ''}
-                            </option>
-                        ))}
-                    </SelectInput>
+                        options={[
+                            { value: '', label: 'Tous les comptes' },
+                            ...base.accounts.map((account) => ({
+                                value: String(account.id),
+                                label: account.name,
+                                ...(account.archived ? { detail: 'archivé' } : {})
+                            }))
+                        ]}
+                    />
                 )}
 
-                <SelectInput
+                <SearchSelect
                     className={styles.filterSelect}
-                    value={categoryId ?? ''}
+                    value={String(categoryId ?? '')}
                     aria-label='Catégorie'
-                    onChange={(e) => {
-                        setCategoryId(e.target.value === '' ? null : Number(e.target.value));
+                    onChange={(value) => {
+                        setCategoryId(value === '' ? null : Number(value));
                         setPage(0);
                     }}
-                >
-                    <option value=''>Toutes les catégories</option>
-                    {base.categories.map((category) => (
-                        <option key={category.id} value={category.id}>
-                            {category.name}
-                        </option>
-                    ))}
-                </SelectInput>
+                    options={[
+                        { value: '', label: 'Toutes les catégories' },
+                        ...base.categories.map((category) => ({ value: String(category.id), label: category.name }))
+                    ]}
+                />
 
                 <SegmentedControl
                     aria-label='Nature'

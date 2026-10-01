@@ -54,6 +54,16 @@
     font-variant-numeric: tabular-nums;
 }
 
+/* Sur le déclencheur, une précision longue (une image de conteneur) cède la
+   place au libellé. */
+.trigger .detail {
+    flex-shrink: 1;
+    max-width: 45%;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
 .chevron {
     width: 14px;
     color: var(--text-muted);
@@ -87,11 +97,53 @@
     color: var(--input-placeholder);
 }
 
+.filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+    flex-shrink: 0;
+    padding: var(--space-xs) var(--space-sm);
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.chip {
+    padding: 1px var(--space-sm);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast),
+        border-color var(--transition-fast);
+}
+
+.chip:hover {
+    background: var(--glass-bg-light);
+}
+
+.chip:focus-visible {
+    outline: 1px solid var(--input-focus);
+}
+
+.chipOn {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-bg);
+}
+
 .list {
     margin: 0;
     padding: var(--space-xs);
     list-style: none;
     overflow-y: auto;
+}
+
+.list:focus {
+    outline: none;
 }
 
 .option {

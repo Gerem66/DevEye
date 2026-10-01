@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 import Button from '@/Components/Button';
 import { Dialog } from '@/Components/Dialog';
-import SelectInput from '@/Components/SelectInput';
+import SearchSelect from '@/Components/SearchSelect';
 import TextInput from '@/Components/TextInput';
 import type { WorkspaceRole } from '@deveye/types';
 import { useAuth } from '@/auth/AuthProvider';
@@ -185,24 +185,18 @@ export default function FeatureWorkspace() {
                                             construction, et lui en donner un laisserait croire
                                             qu'on peut le lui retirer. */}
                                         {!owner && canManageMembers && (
-                                            <SelectInput
+                                            <SearchSelect
                                                 className={styles.memberRole}
                                                 value={String(roleOf(u.id) ?? '')}
-                                                onChange={(e) =>
-                                                    void admin.assignRole(
-                                                        u.id,
-                                                        e.target.value === '' ? null : Number(e.target.value)
-                                                    )
+                                                options={[
+                                                    { value: '', label: 'Aucun rôle' },
+                                                    ...admin.roles.map((r) => ({ value: String(r.id), label: r.name }))
+                                                ]}
+                                                onChange={(v) =>
+                                                    void admin.assignRole(u.id, v === '' ? null : Number(v))
                                                 }
                                                 aria-label={`Rôle de ${u.username}`}
-                                            >
-                                                <option value=''>Aucun rôle</option>
-                                                {admin.roles.map((r) => (
-                                                    <option key={r.id} value={r.id}>
-                                                        {r.name}
-                                                    </option>
-                                                ))}
-                                            </SelectInput>
+                                            />
                                         )}
                                         {isOwner && !owner && (
                                             <button

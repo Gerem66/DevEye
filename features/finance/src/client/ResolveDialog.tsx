@@ -6,8 +6,8 @@ import {
     DialogCancelButton,
     ErrorNote,
     moduleClientProvider,
+    SearchSelect,
     SegmentedControl,
-    SelectInput,
     TextInput,
     useWorkspacePermissions,
     type ErrorNoteInput
@@ -270,19 +270,16 @@ export function ResolveDialog({ base, lines, onClose }: ResolveDialogProps) {
                                     <span className={styles.fieldLabel}>
                                         {incoming ? 'Venu du compte' : 'Vers le compte'}
                                     </span>
-                                    <SelectInput
-                                        value={transferTo ?? ''}
-                                        onChange={(e) =>
-                                            setTransferTo(e.target.value === '' ? null : Number(e.target.value))
-                                        }
-                                    >
-                                        <option value=''>Choisir…</option>
-                                        {others.map((account) => (
-                                            <option key={account.id} value={account.id}>
-                                                {account.name}
-                                            </option>
-                                        ))}
-                                    </SelectInput>
+                                    <SearchSelect
+                                        aria-label={incoming ? 'Venu du compte' : 'Vers le compte'}
+                                        value={String(transferTo ?? '')}
+                                        placeholder='Choisir…'
+                                        onChange={(value) => setTransferTo(Number(value))}
+                                        options={others.map((account) => ({
+                                            value: String(account.id),
+                                            label: account.name
+                                        }))}
+                                    />
                                     <span className={styles.fieldHint}>
                                         L’autre moitié se rangera d’elle-même quand le relevé de ce compte arrivera.
                                     </span>
@@ -292,19 +289,18 @@ export function ResolveDialog({ base, lines, onClose }: ResolveDialogProps) {
                                     <div className={styles.formRow}>
                                         <label className={styles.field}>
                                             <span className={styles.fieldLabel}>Catégorie</span>
-                                            <SelectInput
-                                                value={categoryId ?? ''}
-                                                onChange={(e) =>
-                                                    setCategoryId(e.target.value === '' ? null : Number(e.target.value))
-                                                }
-                                            >
-                                                <option value=''>Sans catégorie</option>
-                                                {categories.map((category) => (
-                                                    <option key={category.id} value={category.id}>
-                                                        {category.name}
-                                                    </option>
-                                                ))}
-                                            </SelectInput>
+                                            <SearchSelect
+                                                aria-label='Catégorie'
+                                                value={String(categoryId ?? '')}
+                                                onChange={(value) => setCategoryId(value === '' ? null : Number(value))}
+                                                options={[
+                                                    { value: '', label: 'Sans catégorie' },
+                                                    ...categories.map((category) => ({
+                                                        value: String(category.id),
+                                                        label: category.name
+                                                    }))
+                                                ]}
+                                            />
                                         </label>
                                         {single && (
                                             <label className={styles.field}>

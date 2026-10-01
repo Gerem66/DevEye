@@ -6,7 +6,7 @@ import {
     invalidate,
     ReadOnlyNotice,
     SaveButton,
-    SelectInput,
+    SearchSelect,
     settingsStyles as shell,
     Switch,
     type ConfirmRequest
@@ -227,17 +227,13 @@ export default function DatabaseGeneralPanel({ scope, canWrite, gone }: Settings
             {draft.monitorEnabled && (
                 <div className={shell.field}>
                     <span className={shell.sectionLabel}>Fréquence de relève</span>
-                    <SelectInput
-                        value={draft.intervalSeconds}
+                    <SearchSelect
+                        value={String(draft.intervalSeconds)}
+                        aria-label='Fréquence de relève'
                         disabled={!editable}
-                        onChange={(e) => patch({ intervalSeconds: Number(e.target.value) })}
-                    >
-                        {intervals.map((i) => (
-                            <option key={i.value} value={i.value}>
-                                {i.label}
-                            </option>
-                        ))}
-                    </SelectInput>
+                        options={intervals.map((i) => ({ value: String(i.value), label: i.label }))}
+                        onChange={(v) => patch({ intervalSeconds: Number(v) })}
+                    />
                     <span className={shell.fieldHint}>
                         Chaque relevé ouvre une connexion, lit l’inventaire (version, taille, tables) et évalue les
                         alertes de la base. Rien de vos tables n’est copié.

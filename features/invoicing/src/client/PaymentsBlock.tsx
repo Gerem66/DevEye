@@ -5,9 +5,10 @@ import {
     Dialog,
     DialogCancelButton,
     humanizeError,
-    SelectInput,
+    SearchSelect,
     TextInput,
-    type ConfirmRequest
+    type ConfirmRequest,
+    type SearchSelectOption
 } from 'deveye-sdk-client';
 
 import type { InvoicingDoc, InvoicingPayment, PaymentMethod } from '../contracts/domain';
@@ -20,7 +21,7 @@ import styles from './style.module.css';
  * elles se corrigent et se retirent, contrairement à la facture elle-même.
  */
 
-const METHODS: { value: PaymentMethod; label: string }[] = [
+const METHODS: readonly SearchSelectOption<PaymentMethod>[] = [
     { value: 'transfer', label: 'Virement' },
     { value: 'card', label: 'Carte' },
     { value: 'check', label: 'Chèque' },
@@ -184,13 +185,7 @@ export default function PaymentsBlock({ doc, payments, canWrite, onChanged }: Pa
 
                     <label className={styles.dialogField}>
                         <span className={styles.dialogLabel}>Moyen</span>
-                        <SelectInput value={method} onChange={(e) => setMethod(e.target.value as PaymentMethod)}>
-                            {METHODS.map((entry) => (
-                                <option key={entry.value} value={entry.value}>
-                                    {entry.label}
-                                </option>
-                            ))}
-                        </SelectInput>
+                        <SearchSelect aria-label='Moyen' value={method} onChange={setMethod} options={METHODS} />
                     </label>
 
                     <label className={styles.dialogField}>

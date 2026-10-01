@@ -1091,13 +1091,13 @@
     font-size: 0.72rem;
 }
 
-/* `SelectInput` pose `width: 100%` : sans largeur imposée il réclamerait toute
-   la ligne et écraserait le champ de valeur. */
+/* Le déclencheur de `SearchSelect` pose `width: 100%` : sans largeur imposée il
+   réclamerait toute la ligne et écraserait le champ de valeur. */
 .stepKind {
     flex-shrink: 0;
 }
 
-/* Double sélecteur pour battre le `width: 100%` de `SelectInput` : à
+/* Double sélecteur pour battre le `width: 100%` de `SearchSelect` : à
    spécificité égale (0,1,0) c'est l'ordre d'injection qui tranche, deux classes
    locales montent à (0,2,0) et gagnent quel que soit cet ordre. */
 .stepRow .stepKind {
@@ -1681,7 +1681,7 @@
 /*
  * Une question de l'éditeur : nom, type, « requise », et la corbeille. Sur une
  * ligne tant que ça tient, en colonne dès que le dialogue rétrécit, parce qu'un
- * nom de question a besoin de place et qu'un `<select>` n'en cède pas.
+ * nom de question a besoin de place et qu'une liste déroulante n'en cède pas.
  */
 .fieldRow {
     display: grid;

@@ -6,12 +6,19 @@ import {
     Dialog,
     FeatureSettingsButton,
     humanizeError,
-    SelectInput,
+    SearchSelect,
     Switch,
     TextInput
 } from 'deveye-sdk-client';
 import { api } from './api';
-import { candidateKey, DESTINATION_LABELS, SCHEDULE_LABELS, WEEKDAYS } from './format';
+import {
+    candidateKey,
+    DAY_OPTIONS,
+    DESTINATION_LABELS,
+    HOUR_OPTIONS,
+    SCHEDULE_OPTIONS,
+    WEEKDAY_OPTIONS
+} from './format';
 import JobSourceFields, { EMPTY_FOLDER, type FolderDraft } from './JobSourceFields';
 import styles from './style.module.css';
 
@@ -183,14 +190,17 @@ export default function JobDialog({ open, destinations, onClose, onSaved }: JobD
                 <div className={styles.field}>
                     <span className={styles.fieldLabel}>Où l’écrire</span>
                     <div className={styles.fieldWithAction}>
-                        <SelectInput value={destinationId} onChange={(e) => setDestinationId(Number(e.target.value))}>
-                            {destinations.length === 0 && <option value={0}>Aucune destination déclarée</option>}
-                            {destinations.map((d) => (
-                                <option key={d.id} value={d.id}>
-                                    {d.name} ({DESTINATION_LABELS[d.kind]})
-                                </option>
-                            ))}
-                        </SelectInput>
+                        <SearchSelect
+                            value={String(destinationId)}
+                            aria-label='Où l’écrire'
+                            placeholder={destinations.length === 0 ? 'Aucune destination déclarée' : 'Choisir…'}
+                            options={destinations.map((d) => ({
+                                value: String(d.id),
+                                label: d.name,
+                                detail: DESTINATION_LABELS[d.kind]
+                            }))}
+                            onChange={(v) => setDestinationId(Number(v))}
+                        />
                         {/* Les destinations se déclarent dans Réglages → Sources ;
                             celle créée pendant ce temps est adoptée
                             (`onOpenChange` fige la liste connue). */}
@@ -214,55 +224,47 @@ export default function JobDialog({ open, destinations, onClose, onSaved }: JobD
                 <div className={styles.fieldRow}>
                     <label className={styles.field}>
                         <span className={styles.fieldLabel}>Cadence</span>
-                        <SelectInput
+                        <SearchSelect
                             value={schedule}
-                            onChange={(e) => setSchedule(e.target.value as BackupScheduleKind)}
-                        >
-                            {(Object.keys(SCHEDULE_LABELS) as BackupScheduleKind[]).map((k) => (
-                                <option key={k} value={k}>
-                                    {SCHEDULE_LABELS[k]}
-                                </option>
-                            ))}
-                        </SelectInput>
+                            aria-label='Cadence'
+                            options={SCHEDULE_OPTIONS}
+                            onChange={setSchedule}
+                        />
                     </label>
 
                     {schedule !== 'manual' && schedule !== 'hourly' && (
                         <label className={styles.field}>
                             <span className={styles.fieldLabel}>Heure</span>
-                            <SelectInput value={hour} onChange={(e) => setHour(Number(e.target.value))}>
-                                {Array.from({ length: 24 }, (_, h) => (
-                                    <option key={h} value={h}>
-                                        {String(h).padStart(2, '0')} h
-                                    </option>
-                                ))}
-                            </SelectInput>
+                            <SearchSelect
+                                value={String(hour)}
+                                aria-label='Heure'
+                                options={HOUR_OPTIONS}
+                                onChange={(v) => setHour(Number(v))}
+                            />
                         </label>
                     )}
 
                     {schedule === 'weekly' && (
                         <label className={styles.field}>
                             <span className={styles.fieldLabel}>Jour</span>
-                            <SelectInput value={weekday} onChange={(e) => setWeekday(Number(e.target.value))}>
-                                {WEEKDAYS.map((label, index) => (
-                                    <option key={label} value={index}>
-                                        {label}
-                                    </option>
-                                ))}
-                            </SelectInput>
+                            <SearchSelect
+                                value={String(weekday)}
+                                aria-label='Jour'
+                                options={WEEKDAY_OPTIONS}
+                                onChange={(v) => setWeekday(Number(v))}
+                            />
                         </label>
                     )}
 
                     {schedule === 'monthly' && (
                         <label className={styles.field}>
                             <span className={styles.fieldLabel}>Quantième</span>
-                            <SelectInput value={day} onChange={(e) => setDay(Number(e.target.value))}>
-                                {/* Borné à 28 : un travail au 31 ne partirait pas en février. */}
-                                {Array.from({ length: 28 }, (_, i) => (
-                                    <option key={i + 1} value={i + 1}>
-                                        {i + 1}
-                                    </option>
-                                ))}
-                            </SelectInput>
+                            <SearchSelect
+                                value={String(day)}
+                                aria-label='Quantième'
+                                options={DAY_OPTIONS}
+                                onChange={(v) => setDay(Number(v))}
+                            />
                         </label>
                     )}
                 </div>

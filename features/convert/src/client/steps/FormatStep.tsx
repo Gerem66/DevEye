@@ -1,4 +1,4 @@
-import { Button, SelectInput } from 'deveye-sdk-client';
+import { Button, SearchSelect } from 'deveye-sdk-client';
 
 import { kindOf, targetsFor } from '../../contracts/catalogue';
 import type { ConvertFamily } from '../../contracts/domain';
@@ -28,36 +28,35 @@ export function FormatStep({ wizard, family, fileProblem }: FormatStepProps) {
             <div className={styles.formats}>
                 <label className={styles.formatField}>
                     <span className={styles.fieldLabel}>Format du fichier</span>
-                    <SelectInput value={state.sourceId ?? ''} onChange={(e) => wizard.setSource(e.target.value)}>
-                        <option value='' disabled>
-                            Choisir…
-                        </option>
-                        {sources.map((s) => (
-                            <option key={s.id} value={s.id}>
-                                {s.id === detected?.id ? `${s.label} (détecté)` : s.label}
-                            </option>
-                        ))}
-                    </SelectInput>
+                    <SearchSelect
+                        aria-label='Format du fichier'
+                        value={state.sourceId ?? ''}
+                        placeholder='Choisir…'
+                        onChange={wizard.setSource}
+                        options={sources.map((s) => ({
+                            value: s.id,
+                            label: s.label,
+                            ...(s.id === detected?.id ? { detail: 'détecté' } : {})
+                        }))}
+                    />
                 </label>
                 <span className={styles.formatArrow} aria-hidden='true'>
                     →
                 </span>
                 <label className={styles.formatField}>
                     <span className={styles.fieldLabel}>Format voulu</span>
-                    <SelectInput
+                    <SearchSelect
+                        aria-label='Format voulu'
                         value={state.targetId ?? ''}
                         disabled={!state.sourceId}
-                        onChange={(e) => wizard.setTarget(e.target.value)}
-                    >
-                        <option value='' disabled>
-                            {state.sourceId ? 'Choisir…' : 'Choisissez d’abord le format du fichier'}
-                        </option>
-                        {targets.map((t) => (
-                            <option key={t.id} value={t.id}>
-                                {t.id === state.sourceId ? `${t.label} (compresser)` : t.label}
-                            </option>
-                        ))}
-                    </SelectInput>
+                        placeholder={state.sourceId ? 'Choisir…' : 'Choisissez d’abord le format du fichier'}
+                        onChange={wizard.setTarget}
+                        options={targets.map((t) => ({
+                            value: t.id,
+                            label: t.label,
+                            ...(t.id === state.sourceId ? { detail: 'compresser' } : {})
+                        }))}
+                    />
                 </label>
             </div>
 

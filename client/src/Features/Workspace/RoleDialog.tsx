@@ -12,7 +12,7 @@ import Button from '@/Components/Button';
 import Checkbox from '@/Components/Checkbox';
 import { Dialog } from '@/Components/Dialog';
 import SegmentedControl from '@/Components/SegmentedControl';
-import SelectInput from '@/Components/SelectInput';
+import SearchSelect from '@/Components/SearchSelect';
 import TextInput from '@/Components/TextInput';
 import { placedFeatureIds, useHomeLayout } from '@/stores/homeLayout';
 import { useHiddenFeatures } from '@/stores/maintenance';
@@ -418,21 +418,17 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
                                             return (
                                                 <div key={spec.key} className={styles.choiceRow}>
                                                     <span className={styles.grantFieldLabel}>{spec.label}</span>
-                                                    <SelectInput
+                                                    <SearchSelect
                                                         value={
                                                             typeof chosen[spec.key] === 'string'
                                                                 ? (chosen[spec.key] as string)
                                                                 : spec.default
                                                         }
+                                                        options={spec.options}
                                                         disabled={noAccess}
-                                                        onChange={(e) => setExtra(e.target.value)}
-                                                    >
-                                                        {spec.options.map((o) => (
-                                                            <option key={o.value} value={o.value}>
-                                                                {o.label}
-                                                            </option>
-                                                        ))}
-                                                    </SelectInput>
+                                                        aria-label={spec.label}
+                                                        onChange={setExtra}
+                                                    />
                                                     <span className={shell.fieldHint}>{spec.description}</span>
                                                 </div>
                                             );

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { GIT_CLIENT_PROVIDER } from '@deveye/types/sdk';
 import type { GitClientProvider, GitLinkedCandidate } from '@deveye/types/sdk/client';
-import { Button, Dialog, humanizeError, moduleClientProvider, SelectInput } from 'deveye-sdk-client';
+import { Button, Dialog, humanizeError, moduleClientProvider, SearchSelect } from 'deveye-sdk-client';
 import { api } from '../api';
 import styles from '../style.module.css';
 
@@ -88,21 +88,17 @@ export function LinkRepoDialog({ open, projectId, linkedRepoIds, onClose, onSave
                         <>
                             <label className={styles.field}>
                                 <span className={styles.label}>Dépôt de l’espace</span>
-                                <SelectInput
+                                <SearchSelect
                                     value={picked}
                                     disabled={free.length === 0}
-                                    onChange={(e) => setPicked(e.target.value)}
-                                >
-                                    <option value=''>
-                                        {free.length === 0 ? 'Aucun dépôt à relier' : 'Choisir un dépôt…'}
-                                    </option>
-                                    {free.map((r) => (
-                                        <option key={r.id} value={r.id}>
-                                            {r.owner}/{r.repo}
-                                            {r.foreign && ' (partagé)'}
-                                        </option>
-                                    ))}
-                                </SelectInput>
+                                    onChange={setPicked}
+                                    options={free.map((r) => ({
+                                        value: String(r.id),
+                                        label: `${r.owner}/${r.repo}${r.foreign ? ' (partagé)' : ''}`
+                                    }))}
+                                    placeholder={free.length === 0 ? 'Aucun dépôt à relier' : 'Choisir un dépôt…'}
+                                    aria-label='Dépôt de l’espace'
+                                />
                                 <span className={styles.hint}>
                                     Un dépôt peut servir plusieurs projets : en choisir un déjà utilisé ailleurs ne le
                                     retire à personne.

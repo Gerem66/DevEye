@@ -30,6 +30,15 @@ export interface SearchSelectOption<T extends string = string> {
     disabled?: boolean;
 }
 
+/** Une pastille sous la recherche, qui ne garde que les options passant `test`. */
+export interface SearchSelectFilter<T extends string = string> {
+    value: string;
+    label: string;
+    test: (option: SearchSelectOption<T>) => boolean;
+    /** Les pastilles d'une même clé s'excluent : en activer une relâche les autres. */
+    exclusive?: string;
+}
+
 export interface SearchSelectProps<T extends string> {
     value: T;
     options: readonly SearchSelectOption<T>[];
@@ -39,12 +48,22 @@ export interface SearchSelectProps<T extends string> {
     placeholder?: string;
     searchPlaceholder?: string;
     emptyText?: string;
+    /** Le champ de recherche : `'auto'` (défaut) ne l'affiche qu'à partir de huit choix. */
+    searchable?: boolean | 'auto';
+    /** Des pastilles sous la recherche, combinées en ET, remises à zéro à la fermeture. */
+    filters?: readonly SearchSelectFilter<T>[];
+    /** L'identifiant du déclencheur, pour le `htmlFor` d'un libellé. */
+    id?: string;
+    /** Le champ que le dialogue ouvrant doit saisir (`data-autofocus`). */
+    autoFocus?: boolean;
     disabled?: boolean;
     className?: string;
 }
 
 const LIST_MAX_HEIGHT = 300;
 const GAP = 4;
+/** En deçà, la liste se parcourt des yeux : le champ de recherche gênerait plus qu'il n'aiderait. */
+const AUTO_SEARCH_MIN = 8;
 
 /** Minuscules et sans accents : « etats » trouve « États-Unis ». */
 const fold = (text: string): string => text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
@@ -79,10 +98,9 @@ interface Anchor {
 }
 
 /**
- * Une liste déroulante dans laquelle on cherche. Pour une liste trop longue
- * pour être parcourue des yeux (devises, unités, pays) ou rangée en
- * catégories ; en deçà d'une dizaine de choix sans catégorie, `SelectInput`
- * reste plus simple.
+ * La liste déroulante de l'app. Le champ de recherche (minuscules, sans
+ * accents, les intitulés de groupe compris) n'apparaît qu'à partir de huit
+ * choix, ou sur demande ; des pastilles de filtre peuvent restreindre la liste.
  *
  * Le panneau passe par un portail vers `<body>`, comme `Dialog` : dans le corps
  * défilant d'un dialogue il serait rogné.
@@ -94,6 +112,10 @@ export function SearchSelect<T extends string>({
     placeholder = '…',
     searchPlaceholder = 'Rechercher…',
     emptyText = 'Aucun résultat',
+    searchable = 'auto',
+    filters,
+    id: triggerId,
+    autoFocus,
     disabled,
     className,
     ...aria
@@ -102,11 +124,15 @@ export function SearchSelect<T extends string>({
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
     const [active, setActive] = useState(0);
+    const [activeFilters, setActiveFilters] = useState<ReadonlySet<string>>(() => new Set());
     const [anchor, setAnchor] = useState<Anchor | null>(null);
     const trigger = useRef<HTMLButtonElement>(null);
     const panel = useRef<HTMLDivElement>(null);
     const search = useRef<HTMLInputElement>(null);
+    const list = useRef<HTMLUListElement>(null);
 
+    const hasSearch = searchable === 'auto' ? options.length >= AUTO_SEARCH_MIN : searchable;
+    const chips = filters ?? [];
     const selected = options.find((o) => o.value === value);
     const placed = anchor !== null;
     const ordered = useMemo(() => byGroup(options), [options]);
@@ -116,8 +142,12 @@ export function SearchSelect<T extends string>({
     );
     const matches = useMemo(() => {
         const terms = fold(query).split(/\s+/).filter(Boolean);
-        return ordered.filter((_, index) => terms.every((term) => haystacks[index].includes(term)));
-    }, [ordered, haystacks, query]);
+        const kept = chips.filter((chip) => activeFilters.has(chip.value));
+        return ordered.filter(
+            (option, index) =>
+                terms.every((term) => haystacks[index].includes(term)) && kept.every((chip) => chip.test(option))
+        );
+    }, [ordered, haystacks, query, chips, activeFilters]);
     // Les résultats par groupe ; `index` reste celui de la liste aplatie, que suivent le clavier et les ids.
     const sections = useMemo(() => {
         const out: { group: string | undefined; items: { option: SearchSelectOption<T>; index: number }[] }[] = [];
@@ -132,7 +162,22 @@ export function SearchSelect<T extends string>({
     const close = (refocus: boolean): void => {
         setOpen(false);
         setQuery('');
+        setActiveFilters(new Set());
         if (refocus) trigger.current?.focus();
+    };
+    const toggleFilter = (chip: SearchSelectFilter<T>): void => {
+        setActiveFilters((current) => {
+            const next = new Set(current);
+            if (next.has(chip.value)) {
+                next.delete(chip.value);
+                return next;
+            }
+            if (chip.exclusive !== undefined) {
+                for (const other of chips) if (other.exclusive === chip.exclusive) next.delete(other.value);
+            }
+            next.add(chip.value);
+            return next;
+        });
     };
     const pick = (next: T): void => {
         onChange(next);
@@ -178,16 +223,17 @@ export function SearchSelect<T extends string>({
         // `close` ne lit que des setters stables.
     }, [open]);
 
+    // Sans champ de recherche, c'est la liste qui prend le clavier.
     useEffect(() => {
-        if (open && placed) search.current?.focus();
-    }, [open, placed]);
+        if (open && placed) (hasSearch ? search.current : list.current)?.focus();
+    }, [open, placed, hasSearch]);
 
-    // À l'ouverture, le choix courant ; à chaque frappe, le premier résultat choisissable.
+    // À l'ouverture, le choix courant ; à chaque frappe ou filtre, le premier résultat choisissable.
     useEffect(() => {
         if (!open) return;
         const current = query === '' ? matches.findIndex((o) => o.value === value && !o.disabled) : -1;
         setActive(current >= 0 ? current : nextEnabled(matches, -1, 1));
-    }, [open, query]);
+    }, [open, query, activeFilters]);
 
     useEffect(() => {
         if (open) document.getElementById(`${id}-option-${active}`)?.scrollIntoView({ block: 'nearest' });
@@ -206,7 +252,8 @@ export function SearchSelect<T extends string>({
             const option = matches[active];
             if (option && !option.disabled) pick(option.value);
         } else if (event.key === 'Tab') {
-            close(false);
+            // Les pastilles suivent dans l'ordre du document : Tab y mène au lieu de fermer.
+            if (chips.length === 0 || event.shiftKey) close(false);
         }
     };
 
@@ -214,6 +261,8 @@ export function SearchSelect<T extends string>({
         <>
             <button
                 ref={trigger}
+                id={triggerId}
+                data-autofocus={autoFocus ? '' : undefined}
                 type='button'
                 className={`${styles.trigger} ${className ?? ''}`}
                 disabled={disabled}
@@ -248,34 +297,69 @@ export function SearchSelect<T extends string>({
                         className={styles.panel}
                         style={{ left: anchor.left, width: anchor.width, top: anchor.top, bottom: anchor.bottom }}
                     >
-                        <input
-                            ref={search}
-                            className={styles.search}
-                            type='text'
-                            role='combobox'
-                            aria-label={`${aria['aria-label']} : rechercher`}
-                            aria-expanded='true'
-                            aria-controls={`${id}-list`}
-                            aria-activedescendant={matches[active] ? `${id}-option-${active}` : undefined}
-                            aria-autocomplete='list'
-                            autoComplete='off'
-                            spellCheck={false}
-                            placeholder={searchPlaceholder}
-                            value={query}
-                            onChange={(event) => setQuery(event.target.value)}
-                            onKeyDown={onKeyDown}
-                        />
+                        {hasSearch && (
+                            <input
+                                ref={search}
+                                className={styles.search}
+                                type='text'
+                                role='combobox'
+                                aria-label={`${aria['aria-label']} : rechercher`}
+                                aria-expanded='true'
+                                aria-controls={`${id}-list`}
+                                aria-activedescendant={matches[active] ? `${id}-option-${active}` : undefined}
+                                aria-autocomplete='list'
+                                autoComplete='off'
+                                spellCheck={false}
+                                placeholder={searchPlaceholder}
+                                value={query}
+                                onChange={(event) => setQuery(event.target.value)}
+                                onKeyDown={onKeyDown}
+                            />
+                        )}
+                        {chips.length > 0 && (
+                            <div className={styles.filters} role='group' aria-label='Filtres'>
+                                {chips.map((chip, position) => {
+                                    const on = activeFilters.has(chip.value);
+                                    return (
+                                        <button
+                                            key={chip.value}
+                                            type='button'
+                                            className={`${styles.chip} ${on ? styles.chipOn : ''}`}
+                                            aria-pressed={on}
+                                            // `mousedown` empêché : le champ de recherche garde le focus.
+                                            onMouseDown={(event) => event.preventDefault()}
+                                            onClick={() => toggleFilter(chip)}
+                                            onKeyDown={(event) => {
+                                                if (
+                                                    event.key === 'Tab' &&
+                                                    !event.shiftKey &&
+                                                    position === chips.length - 1
+                                                ) {
+                                                    close(false);
+                                                }
+                                            }}
+                                        >
+                                            {chip.label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
                         <ul
+                            ref={list}
                             id={`${id}-list`}
                             role='listbox'
                             aria-label={aria['aria-label']}
+                            aria-activedescendant={!hasSearch && matches[active] ? `${id}-option-${active}` : undefined}
+                            tabIndex={hasSearch ? undefined : -1}
+                            onKeyDown={hasSearch ? undefined : onKeyDown}
                             className={styles.list}
                             style={{ maxHeight: anchor.maxHeight }}
                         >
                             {sections.map((section) => {
                                 const items = section.items.map(({ option, index }) => (
                                     <li
-                                        key={option.value}
+                                        key={index}
                                         id={`${id}-option-${index}`}
                                         role='option'
                                         aria-selected={option.value === value}

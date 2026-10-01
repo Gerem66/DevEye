@@ -4,12 +4,13 @@ import {
     Checkbox,
     humanizeError,
     ReadOnlyNotice,
-    SelectInput,
     SaveButton,
+    SearchSelect,
     settingsStyles as shell,
     StatusBadge,
     Switch,
-    useResource
+    useResource,
+    type SearchSelectOption
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 
@@ -28,6 +29,10 @@ import styles from './style.module.css';
 
 /** Fenêtres d'apprentissage proposées. La valeur libre n'apporterait rien ici. */
 const LEARNING_PRESETS = [1, 3, 7, 14, 30];
+const LEARNING_OPTIONS: readonly SearchSelectOption[] = LEARNING_PRESETS.map((d) => ({
+    value: String(d),
+    label: `${d} jour${d > 1 ? 's' : ''}`
+}));
 
 /** Cadences de relevé de persistance, en minutes. */
 const INTEGRITY_PRESETS = [
@@ -37,6 +42,10 @@ const INTEGRITY_PRESETS = [
     { value: 720, label: 'deux fois par jour' },
     { value: 1440, label: 'une fois par jour' }
 ];
+const INTEGRITY_OPTIONS: readonly SearchSelectOption[] = INTEGRITY_PRESETS.map((p) => ({
+    value: String(p.value),
+    label: p.label
+}));
 
 export default function SentinelDevicesPanel({ canWrite }: SettingsPanelProps) {
     const load = useCallback(async () => (await api.send('sentinel.overview', {})).devices, []);
@@ -168,17 +177,13 @@ function DeviceRow({ device, canWrite }: { device: DeviceSentinelState; canWrite
             {!device.enabled && (
                 <div className={shell.field}>
                     <span className={shell.sectionLabel}>Fenêtre d’apprentissage à l’activation</span>
-                    <SelectInput
+                    <SearchSelect
                         value={String(draft.learningDays)}
                         disabled={!canWrite || busy}
-                        onChange={(e) => setDraft((d) => ({ ...d, learningDays: Number(e.target.value) }))}
-                    >
-                        {LEARNING_PRESETS.map((d) => (
-                            <option key={d} value={d}>
-                                {d} jour{d > 1 ? 's' : ''}
-                            </option>
-                        ))}
-                    </SelectInput>
+                        onChange={(v) => setDraft((d) => ({ ...d, learningDays: Number(v) }))}
+                        options={LEARNING_OPTIONS}
+                        aria-label='Fenêtre d’apprentissage à l’activation'
+                    />
                     <span className={shell.fieldHint}>
                         Pendant cette période, tout ce qui tourne est appris comme normal et les écarts restent muets.
                         Les règles d’exécution, de posture et d’authentification, elles, répondent immédiatement.
@@ -188,17 +193,13 @@ function DeviceRow({ device, canWrite }: { device: DeviceSentinelState; canWrite
 
             <div className={shell.field}>
                 <span className={shell.sectionLabel}>Relevé de persistance</span>
-                <SelectInput
+                <SearchSelect
                     value={String(draft.integrityMinutes)}
                     disabled={!canWrite || busy}
-                    onChange={(e) => setDraft((d) => ({ ...d, integrityMinutes: Number(e.target.value) }))}
-                >
-                    {INTEGRITY_PRESETS.map((p) => (
-                        <option key={p.value} value={p.value}>
-                            {p.label}
-                        </option>
-                    ))}
-                </SelectInput>
+                    onChange={(v) => setDraft((d) => ({ ...d, integrityMinutes: Number(v) }))}
+                    options={INTEGRITY_OPTIONS}
+                    aria-label='Relevé de persistance'
+                />
                 <span className={shell.fieldHint}>
                     Empreinte cron, systemd, launchd, <code>authorized_keys</code> et les autres points d’installation
                     au démarrage. Seules les empreintes remontent, jamais le contenu des fichiers.

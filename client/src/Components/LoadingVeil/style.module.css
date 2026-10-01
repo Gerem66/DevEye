@@ -1,0 +1,60 @@
+.veil {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-backdrop-scrim);
+    -webkit-backdrop-filter: var(--glass-backdrop-scrim);
+    border-radius: inherit;
+    color: var(--accent);
+    pointer-events: none;
+}
+
+.top {
+    justify-content: flex-start;
+    padding-top: var(--space-xl);
+}
+
+/* Rien pendant le premier quart de seconde : une lecture qui tient dedans ne
+   doit pas faire clignoter la zone. */
+.delayed {
+    animation: veilIn 120ms ease-out 250ms both;
+}
+
+.spinner {
+    width: 24px;
+    height: 24px;
+    animation: veilSpin 0.9s linear infinite;
+}
+
+.label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+@keyframes veilSpin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes veilIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .spinner,
+    .delayed {
+        animation: none;
+    }
+}

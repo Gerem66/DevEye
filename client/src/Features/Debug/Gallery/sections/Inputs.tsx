@@ -5,7 +5,6 @@ import ChoiceCards from '@/Components/ChoiceCards';
 import NumberInput from '@/Components/NumberInput';
 import SearchSelect from '@/Components/SearchSelect';
 import SegmentedControl from '@/Components/SegmentedControl';
-import SelectInput from '@/Components/SelectInput';
 import Slider from '@/Components/Slider';
 import Switch from '@/Components/Switch';
 import TextInput from '@/Components/TextInput';
@@ -17,7 +16,22 @@ const CURRENCIES = [
     { value: 'GBP', label: 'Livre sterling', detail: 'GBP', group: 'Europe' },
     { value: 'USD', label: 'Dollar américain', detail: 'USD', group: 'Amériques' },
     { value: 'CAD', label: 'Dollar canadien', detail: 'CAD', group: 'Amériques' },
-    { value: 'JPY', label: 'Yen', detail: 'JPY', group: 'Asie', disabled: true }
+    { value: 'JPY', label: 'Yen', detail: 'JPY', group: 'Asie', disabled: true },
+    { value: 'CNY', label: 'Yuan', detail: 'CNY', group: 'Asie' },
+    { value: 'KRW', label: 'Won', detail: 'KRW', group: 'Asie' }
+];
+
+const CURRENCY_FILTERS = [
+    { value: 'eu', label: 'Europe', exclusive: 'zone', test: (o: { group?: string }) => o.group === 'Europe' },
+    { value: 'am', label: 'Amériques', exclusive: 'zone', test: (o: { group?: string }) => o.group === 'Amériques' },
+    { value: 'as', label: 'Asie', exclusive: 'zone', test: (o: { group?: string }) => o.group === 'Asie' },
+    { value: 'ok', label: 'Disponible', test: (o: { disabled?: boolean }) => !o.disabled }
+];
+
+const PERIODS = [
+    { value: 'day', label: 'Chaque jour' },
+    { value: 'week', label: 'Chaque semaine' },
+    { value: 'month', label: 'Chaque mois' }
 ];
 
 export default function Inputs() {
@@ -57,18 +71,21 @@ export default function Inputs() {
                     <NumberInput value={number} onChange={setNumber} min={0} max={100} step={5} disabled={disabled} />
                 </Variant>
             </Specimen>
-            <Specimen title='SelectInput et SearchSelect'>
-                <Variant label='SelectInput'>
-                    <SelectInput defaultValue='week' disabled={disabled}>
-                        <option value='day'>Chaque jour</option>
-                        <option value='week'>Chaque semaine</option>
-                        <option value='month'>Chaque mois</option>
-                    </SelectInput>
+            <Specimen title='SearchSelect' note='Le champ de recherche n’apparaît qu’à partir de huit choix.'>
+                <Variant label='trois choix, sans recherche'>
+                    <SearchSelect
+                        value={three}
+                        options={PERIODS}
+                        onChange={(v) => setThree(v as 'day' | 'week' | 'month')}
+                        aria-label='Période'
+                        disabled={disabled}
+                    />
                 </Variant>
-                <Variant label='SearchSelect groupé'>
+                <Variant label='groupé, avec pastilles'>
                     <SearchSelect
                         value={currency}
                         options={CURRENCIES}
+                        filters={CURRENCY_FILTERS}
                         onChange={setCurrency}
                         aria-label='Devise'
                         searchPlaceholder='Chercher une devise'

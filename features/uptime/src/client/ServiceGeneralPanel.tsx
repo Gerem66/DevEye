@@ -7,11 +7,12 @@ import {
     invalidate,
     ReadOnlyNotice,
     SaveButton,
+    SearchSelect,
     SegmentedControl,
-    SelectInput,
     settingsStyles as shell,
     TextInput,
-    type ConfirmRequest
+    type ConfirmRequest,
+    type SearchSelectOption
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import {
@@ -54,6 +55,10 @@ const RETENTIONS: { value: number | null; label: string }[] = [
     { value: 1825, label: '5 ans' },
     { value: null, label: 'Tout garder' }
 ];
+const RETENTION_OPTIONS: readonly SearchSelectOption[] = RETENTIONS.map((r) => ({
+    value: r.value === null ? '' : String(r.value),
+    label: r.label
+}));
 
 /** Tout ce qu'`uptime.update` prend : l'identité du service et ses réglages fins. */
 interface ServiceDraft extends ServiceTuning {
@@ -300,17 +305,13 @@ export default function ServiceGeneralPanel({ scope, canWrite, gone }: SettingsP
 
             <div className={shell.field}>
                 <span className={shell.sectionLabel}>Fréquence de relève</span>
-                <SelectInput
-                    value={draft.intervalSeconds}
+                <SearchSelect
+                    value={String(draft.intervalSeconds)}
                     disabled={!editable}
-                    onChange={(e) => set('intervalSeconds', Number(e.target.value))}
-                >
-                    {intervals.map((i) => (
-                        <option key={i.value} value={i.value}>
-                            {i.label}
-                        </option>
-                    ))}
-                </SelectInput>
+                    onChange={(v) => set('intervalSeconds', Number(v))}
+                    options={intervals.map((i) => ({ value: String(i.value), label: i.label }))}
+                    aria-label='Fréquence de relève'
+                />
             </div>
 
             <div className={shell.field}>
@@ -345,17 +346,13 @@ export default function ServiceGeneralPanel({ scope, canWrite, gone }: SettingsP
 
             <div className={shell.field}>
                 <span className={shell.sectionLabel}>Conservation de l’historique détaillé</span>
-                <SelectInput
+                <SearchSelect
                     value={draft.retentionDays === null ? '' : String(draft.retentionDays)}
                     disabled={!editable}
-                    onChange={(e) => set('retentionDays', e.target.value ? Number(e.target.value) : null)}
-                >
-                    {RETENTIONS.map((r) => (
-                        <option key={r.label} value={r.value === null ? '' : String(r.value)}>
-                            {r.label}
-                        </option>
-                    ))}
-                </SelectInput>
+                    onChange={(v) => set('retentionDays', v ? Number(v) : null)}
+                    options={RETENTION_OPTIONS}
+                    aria-label='Conservation de l’historique détaillé'
+                />
                 <span className={shell.fieldHint}>
                     Le résumé journalier (disponibilité, latence) est conservé indéfiniment quoi qu’il arrive.
                 </span>

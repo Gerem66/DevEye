@@ -3,7 +3,7 @@ import {
     Button,
     Dialog,
     FeatureSettingsButton,
-    SelectInput,
+    SearchSelect,
     TextInput,
     humanizeError,
     settingsStyles as shell,
@@ -123,17 +123,12 @@ export default function CreateDialog({
                                 onChange={(e) => setLocalPart(e.target.value)}
                             />
                             <span className={styles.at}>@</span>
-                            <SelectInput
+                            <SearchSelect
                                 aria-label='Domaine'
                                 value={chosen === null ? '' : String(chosen.id)}
-                                onChange={(e) => setDomainId(Number(e.target.value))}
-                            >
-                                {verified.map((domain) => (
-                                    <option key={domain.id} value={domain.id}>
-                                        {domain.host}
-                                    </option>
-                                ))}
-                            </SelectInput>
+                                onChange={(v) => setDomainId(Number(v))}
+                                options={verified.map((domain) => ({ value: String(domain.id), label: domain.host }))}
+                            />
                         </div>
                         <span className={shell.fieldHint}>
                             Minuscules, chiffres, et « . », « _ » ou « - » entre deux. L’adresse ne se change plus

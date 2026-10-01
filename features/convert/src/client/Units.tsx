@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { NumberInput, SearchSelect, SelectInput, type SearchSelectOption } from 'deveye-sdk-client';
+import { NumberInput, SearchSelect, type SearchSelectOption } from 'deveye-sdk-client';
 
 import { convertUnit, UNIT_CATEGORIES, type UnitCategory } from '../contracts/units';
 import { formatNumber } from './format';
@@ -7,6 +7,8 @@ import styles from './style.module.css';
 
 const optionsOf = (category: UnitCategory): SearchSelectOption[] =>
     category.units.map((u) => ({ value: u.id, label: u.label, detail: u.symbol }));
+
+const CATEGORY_OPTIONS: SearchSelectOption[] = UNIT_CATEGORIES.map((c) => ({ value: c.id, label: c.label }));
 
 /** Les unités physiques. Tout se calcule ici, dans le navigateur : rien ne part sur le réseau. */
 export function Units() {
@@ -31,13 +33,12 @@ export function Units() {
         <div className={styles.tool}>
             <label className={styles.formatField}>
                 <span className={styles.fieldLabel}>Grandeur</span>
-                <SelectInput value={category.id} onChange={(e) => pickCategory(e.target.value)}>
-                    {UNIT_CATEGORIES.map((c) => (
-                        <option key={c.id} value={c.id}>
-                            {c.label}
-                        </option>
-                    ))}
-                </SelectInput>
+                <SearchSelect
+                    aria-label='Grandeur'
+                    value={category.id}
+                    onChange={pickCategory}
+                    options={CATEGORY_OPTIONS}
+                />
             </label>
 
             <div className={styles.converter}>

@@ -1486,10 +1486,11 @@
     min-width: 0;
 }
 
-/* `TextInput` renders its <input> inside a wrapper div, so that wrapper — not
-   the input carrying `.composeRowInput` — is the row's flex child. Without this
-   it keeps its intrinsic width and the À/Cc/Cci fields end up narrower than the
-   `De` select, which is a plain <select> and stretches on its own. */
+/* `TextInput` rend son <input> dans un div enveloppant : c'est ce div, et non
+   l'input qui porte `.composeRowInput`, qui est l'enfant flex de la rangée. Sans
+   cette règle il garde sa largeur intrinsèque et les champs À/Cc/Cci finissent
+   plus étroits que le champ `De`, dont le bouton déclencheur de `SearchSelect`
+   porte `.composeRowInput` lui-même et s'étire tout seul. */
 .composeRow > div {
     flex: 1 1 auto;
     min-width: 0;

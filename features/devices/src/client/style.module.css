@@ -634,7 +634,8 @@
     min-width: 0;
 }
 
-.configField > select {
+/* Le champ, premier enfant, prend la ligne ; la saisie libre passe dessous. */
+.configField > :first-child {
     width: 100%;
     min-width: 0;
 }
@@ -2273,7 +2274,7 @@
 .pkgBar {
     height: 6px;
     border-radius: 3px;
-    background: var(--surface-2, var(--surface));
+    background: var(--surface-subtle);
     overflow: hidden;
 }
 .pkgBarFill {
@@ -2455,6 +2456,8 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-sm);
+    flex: 1;
+    min-height: 0;
 }
 .logToolbar {
     display: flex;
@@ -2463,7 +2466,7 @@
     gap: var(--space-sm);
 }
 .logSourceSelect {
-    flex: 1 1 180px;
+    flex: 1 1 260px;
     min-width: 0;
 }
 .logSearch {
@@ -2471,7 +2474,8 @@
     min-width: 0;
 }
 .logLevelSelect {
-    flex: 0 0 auto;
+    flex: 0 1 180px;
+    min-width: 0;
 }
 .logUnitInput {
     flex: 1 1 160px;
@@ -2533,10 +2537,20 @@
     color: var(--text-muted);
     font-size: 0.8rem;
 }
+/* Le voile se pose ici, en frère de la liste : dans la liste, il défilerait avec elle. */
+.logViewWrap {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    border-radius: var(--radius-sm);
+}
 .logView {
-    height: 52vh;
+    flex: 1;
+    min-height: 0;
     overflow: auto;
-    background: var(--surface-2, var(--surface));
+    background: var(--surface-subtle);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-sm);
     padding: var(--space-sm);
@@ -2554,6 +2568,12 @@
 }
 .logLine:hover {
     background: var(--glass-bg-light);
+}
+.logLineWarning {
+    background: var(--warning-bg);
+}
+.logLineError {
+    background: var(--danger-bg);
 }
 .logTs {
     flex-shrink: 0;
@@ -2594,6 +2614,30 @@
     min-width: 0;
     color: var(--text-primary);
 }
+/* Le jaune du navigateur jurerait avec tout le reste. */
+.logMark {
+    padding: 0 1px;
+    border-radius: 2px;
+    background: var(--accent-bg);
+    color: inherit;
+}
+/* L'état d'un conteneur devant son nom, dans le sélecteur de source. */
+.logDot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: var(--radius-pill);
+}
+.logDotOn {
+    background: var(--success);
+}
+.logDotOff {
+    background: var(--text-muted);
+}
+.logKindIcon {
+    width: 14px;
+    color: var(--text-muted);
+}
 .logHint {
     color: var(--text-muted);
     font-size: 0.85rem;
@@ -2629,7 +2673,7 @@
 .terminalHost {
     height: 58vh;
     width: 100%;
-    background: var(--surface-2, var(--surface));
+    background: var(--surface-subtle);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-sm);
     padding: var(--space-sm);
@@ -2786,7 +2830,7 @@
     flex: 1;
     height: 8px;
     min-width: 40px;
-    background: var(--surface-2, var(--surface));
+    background: var(--surface-subtle);
     border-radius: 4px;
     overflow: hidden;
 }
@@ -3024,15 +3068,9 @@
     color: var(--text-primary);
 }
 
+/* La sortie d'une opération, bornée : le reste de l'onglet doit rester visible. */
 .dockerOpLog {
-    margin: 0;
-    max-height: 160px;
-    overflow: auto;
-    white-space: pre-wrap;
-    word-break: break-word;
-    font-family: var(--font-mono, monospace);
     font-size: 0.7rem;
-    color: var(--text-secondary);
 }
 
 /* Une table large défile dans son propre cadre : la fenêtre ne bouge pas. */

@@ -248,7 +248,7 @@
 }
 
 /* Le sélecteur garde sa largeur, le texte du compte prend le reste : sans ça
-   le `width: 100%` de SelectInput écrase nom et adresse. */
+   le `width: 100%` du déclencheur de SearchSelect écrase nom et adresse. */
 .roleSelect {
     width: auto;
     flex-shrink: 0;

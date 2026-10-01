@@ -1,3 +1,4 @@
+import type { SearchSelectOption } from 'deveye-sdk-client';
 import type {
     BackupDestinationKind,
     BackupFolder,
@@ -78,6 +79,24 @@ export const RUN_LABELS: Record<BackupRunStatus, string> = {
 };
 
 export const WEEKDAYS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
+
+/** Les choix de cadence d'un travail, partagés par sa déclaration et son onglet Général. */
+export const SCHEDULE_OPTIONS: readonly SearchSelectOption<BackupScheduleKind>[] = (
+    Object.keys(SCHEDULE_LABELS) as BackupScheduleKind[]
+).map((k) => ({ value: k, label: SCHEDULE_LABELS[k] }));
+export const HOUR_OPTIONS: readonly SearchSelectOption[] = Array.from({ length: 24 }, (_, h) => ({
+    value: String(h),
+    label: `${String(h).padStart(2, '0')} h`
+}));
+export const WEEKDAY_OPTIONS: readonly SearchSelectOption[] = WEEKDAYS.map((label, index) => ({
+    value: String(index),
+    label
+}));
+/** Borné à 28 : un travail au 31 ne partirait pas en février. */
+export const DAY_OPTIONS: readonly SearchSelectOption[] = Array.from({ length: 28 }, (_, i) => ({
+    value: String(i + 1),
+    label: String(i + 1)
+}));
 
 /**
  * La clé d'une source, pour qu'une option porte à la fois le genre et ce

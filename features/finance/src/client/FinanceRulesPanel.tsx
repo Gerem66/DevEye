@@ -6,8 +6,8 @@ import {
     DialogCancelButton,
     humanizeError,
     ReadOnlyNotice,
+    SearchSelect,
     SegmentedControl,
-    SelectInput,
     settingsStyles as shell,
     TextInput,
     useResource,
@@ -270,26 +270,16 @@ export default function FinanceRulesPanel({ canWrite }: SettingsPanelProps) {
 
                         <label className={shell.field}>
                             <span className={shell.fieldLabel}>Range dans</span>
-                            <SelectInput
-                                value={editing.categoryId ?? ''}
-                                onChange={(e) =>
-                                    setEditing((d) =>
-                                        d
-                                            ? {
-                                                  ...d,
-                                                  categoryId: e.target.value === '' ? null : Number(e.target.value)
-                                              }
-                                            : d
-                                    )
-                                }
-                            >
-                                <option value=''>Choisir…</option>
-                                {choices.map((category) => (
-                                    <option key={category.id} value={category.id}>
-                                        {category.name}
-                                    </option>
-                                ))}
-                            </SelectInput>
+                            <SearchSelect
+                                aria-label='Range dans'
+                                value={String(editing.categoryId ?? '')}
+                                placeholder='Choisir…'
+                                onChange={(value) => setEditing((d) => (d ? { ...d, categoryId: Number(value) } : d))}
+                                options={choices.map((category) => ({
+                                    value: String(category.id),
+                                    label: category.name
+                                }))}
+                            />
                         </label>
 
                         {data?.vatEnabled && (

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AUDIENCE_CLIENT_PROVIDER } from '@deveye/types/sdk';
 import type { AudienceClientProvider, AudienceLinkedCandidate } from '@deveye/types/sdk/client';
-import { Button, Dialog, humanizeError, moduleClientProvider, SelectInput } from 'deveye-sdk-client';
+import { Button, Dialog, humanizeError, moduleClientProvider, SearchSelect } from 'deveye-sdk-client';
 import { api } from '../api';
 import styles from '../style.module.css';
 
@@ -85,25 +85,23 @@ export function LinkSiteDialog({ open, projectId, linkedIds, onClose, onSaved }:
                         <>
                             <label className={styles.field}>
                                 <span className={styles.label}>Site de l’espace</span>
-                                <SelectInput
+                                <SearchSelect
                                     value={picked}
                                     disabled={free.length === 0}
-                                    onChange={(e) => setPicked(e.target.value)}
-                                >
-                                    <option value=''>
-                                        {free.length === 0
+                                    onChange={setPicked}
+                                    options={free.map((site) => ({
+                                        value: String(site.id),
+                                        label: `${site.name}${site.foreign ? ' (partagé)' : ''}`
+                                    }))}
+                                    placeholder={
+                                        free.length === 0
                                             ? sites.length === 0
                                                 ? 'Aucun site n’est encore déclaré dans cet espace'
                                                 : 'Tous les sites de l’espace sont déjà reliés'
-                                            : 'Choisir un site…'}
-                                    </option>
-                                    {free.map((site) => (
-                                        <option key={site.id} value={site.id}>
-                                            {site.name}
-                                            {site.foreign && ' (partagé)'}
-                                        </option>
-                                    ))}
-                                </SelectInput>
+                                            : 'Choisir un site…'
+                                    }
+                                    aria-label='Site de l’espace'
+                                />
                                 <span className={styles.hint}>
                                     Un site peut servir plusieurs projets : en choisir un déjà suivi ailleurs ne le
                                     retire à personne.

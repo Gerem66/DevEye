@@ -1,4 +1,4 @@
-import { featureApi, WsError } from 'deveye-sdk-client';
+import { featureApi, WsError, type SearchSelectOption } from 'deveye-sdk-client';
 import type { ProjectStatus } from '@deveye/types';
 
 import { manifest } from '../manifest';
@@ -22,6 +22,12 @@ export const STATUS_LABELS: Record<ProjectStatus, string> = {
 /** Les statuts, dans l'ordre où un projet les traverse. */
 export const STATUSES: ProjectStatus[] = ['draft', 'active', 'paused', 'done'];
 
+/** Les mêmes, en choix d'un sélecteur : la déclaration et l'onglet Général d'un projet. */
+export const STATUS_OPTIONS: readonly SearchSelectOption<ProjectStatus>[] = STATUSES.map((s) => ({
+    value: s,
+    label: STATUS_LABELS[s]
+}));
+
 /** Côté de la vignette enregistrée, en pixels. La carte l'affiche à 36 px. */
 export const PROJECT_ICON_SIZE = 128;
 
@@ -29,6 +35,11 @@ export const TAG_KIND_LABELS: Record<ProjectTagKind, string> = {
     type: 'Type',
     tech: 'Techno'
 };
+
+export const TAG_KIND_OPTIONS: readonly SearchSelectOption<ProjectTagKind>[] = [
+    { value: 'type', label: TAG_KIND_LABELS.type },
+    { value: 'tech', label: TAG_KIND_LABELS.tech }
+];
 
 export const PRIORITY_LABELS: Record<ProjectPriority, string> = {
     none: 'Aucune',

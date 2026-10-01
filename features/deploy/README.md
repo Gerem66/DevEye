@@ -637,12 +637,19 @@ une demi-minute pour un journal déjà complet, sans que rien n'échoue ni
 n'apparaisse dans un journal d'erreurs.
 
 C'est le **silence après le dernier octet** qui conclut désormais
-(`LOG_IDLE_MS`, 1 s), et non l'attente d'une fermeture qui ne vient pas. Le
-plafond garde son sens pour un déploiement **en cours** : celui-là émet en
-continu, le silence n'arrive jamais, et c'est lui qui tranche —
+(`LOG_IDLE_MS`, 300 ms : le rejeu d'un `tail -n +1 -f` arrive en une rafale de
+trames à quelques millisecondes d'écart), et non l'attente d'une fermeture qui
+ne vient pas. Un déploiement **en cours** rend ce qu'il a au premier silence,
+et la popup le relit toutes les cinq secondes tant qu'il tourne ; le plafond ne
+tranche plus que pour un flux qui ne s'interrompt jamais :
 `DEPLOY_LOG_TIMEOUT_MS` vaut 3 s au lieu des 30 s du régime à la demande. Les
 lectures d'une même cible sont faites **en parallèle** : les enchaîner ferait
 dépasser l'intervalle dès deux déploiements simultanés.
+
+`deploy.log` retrouve la référence du journal dans l'historique que le client
+vient de lister (`historyCache.ts`, cinq minutes par cible) : l'aller-retour
+`deployment.all` qui précédait chaque ouverture ne se fait plus qu'au raté. Les
+journaux de jobs GitHub se lisent quatre à la fois, dans l'ordre des jobs.
 
 Les séquences ANSI sont retirées : Dokploy colore sa sortie de build, et un bloc
 de code Discord les rendrait telles quelles.

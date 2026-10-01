@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { ACCEPTED_TYPES, Button, Dialog, fileToSquareDataUrl, SelectInput, TextInput } from 'deveye-sdk-client';
-import type { ProjectStatus } from '@deveye/types';
-import { dateInputToSeconds, dateInputValue, PROJECT_ICON_SIZE, STATUS_LABELS, STATUSES, TAG_KIND_LABELS } from './api';
+import {
+    ACCEPTED_TYPES,
+    Button,
+    Dialog,
+    fileToSquareDataUrl,
+    SearchSelect,
+    TextInput,
+    type SearchSelectOption
+} from 'deveye-sdk-client';
+import { dateInputToSeconds, dateInputValue, PROJECT_ICON_SIZE, STATUS_OPTIONS, TAG_KIND_OPTIONS } from './api';
 import {
     PROJECT_ICON_MAX_LENGTH,
     PROJECT_MAX_TAGS,
@@ -41,6 +48,11 @@ const EMPTY: ProjectDraft = {
     startDate: null,
     dueDate: null
 };
+
+const TIER_OPTIONS: readonly SearchSelectOption<ProjectSecurityTier>[] = [
+    { value: 'open', label: 'Standard : chiffré, ouvert sans mot de passe' },
+    { value: 'guarded', label: 'Confidentiel : demande votre mot de passe' }
+];
 
 /**
  * Créer un projet. Rien d'autre : une fois né, un projet se règle dans l'onglet
@@ -185,16 +197,12 @@ export function ProjectDialog({ open, allowGuarded, busy, error, onClose, onSubm
                 <div className={styles.row}>
                     <label className={styles.field}>
                         <span className={styles.label}>Statut</span>
-                        <SelectInput
+                        <SearchSelect
                             value={draft.status}
-                            onChange={(e) => setDraft({ ...draft, status: e.target.value as ProjectStatus })}
-                        >
-                            {STATUSES.map((s) => (
-                                <option key={s} value={s}>
-                                    {STATUS_LABELS[s]}
-                                </option>
-                            ))}
-                        </SelectInput>
+                            options={STATUS_OPTIONS}
+                            onChange={(status) => setDraft({ ...draft, status })}
+                            aria-label='Statut'
+                        />
                     </label>
                     <label className={styles.field}>
                         <span className={styles.label}>Début</span>
@@ -217,10 +225,12 @@ export function ProjectDialog({ open, allowGuarded, busy, error, onClose, onSubm
                 <div className={styles.field}>
                     <span className={styles.label}>Étiquettes</span>
                     <div className={styles.tagRow}>
-                        <SelectInput value={tagKind} onChange={(e) => setTagKind(e.target.value as ProjectTag['kind'])}>
-                            <option value='type'>{TAG_KIND_LABELS.type}</option>
-                            <option value='tech'>{TAG_KIND_LABELS.tech}</option>
-                        </SelectInput>
+                        <SearchSelect
+                            value={tagKind}
+                            options={TAG_KIND_OPTIONS}
+                            onChange={setTagKind}
+                            aria-label='Famille de l’étiquette'
+                        />
                         <TextInput
                             value={tagLabel}
                             maxLength={PROJECT_TAG_LABEL_MAX_LENGTH}
@@ -253,10 +263,12 @@ export function ProjectDialog({ open, allowGuarded, busy, error, onClose, onSubm
                 {allowGuarded && (
                     <label className={styles.field}>
                         <span className={styles.label}>Confidentialité</span>
-                        <SelectInput value={tier} onChange={(e) => setTier(e.target.value as ProjectSecurityTier)}>
-                            <option value='open'>Standard : chiffré, ouvert sans mot de passe</option>
-                            <option value='guarded'>Confidentiel : demande votre mot de passe</option>
-                        </SelectInput>
+                        <SearchSelect
+                            value={tier}
+                            options={TIER_OPTIONS}
+                            onChange={setTier}
+                            aria-label='Confidentialité'
+                        />
                         <span className={styles.hint}>
                             Un projet confidentiel ne peut pas être synchronisé avec un dépôt git ni déclencher un
                             déploiement : ces tâches tournent sans session.

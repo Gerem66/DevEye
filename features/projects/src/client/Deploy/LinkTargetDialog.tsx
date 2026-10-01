@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { DEPLOY_CLIENT_PROVIDER } from '@deveye/types/sdk';
 import type { DeployClientProvider, DeployLinkedCandidate } from '@deveye/types/sdk/client';
-import { Button, Dialog, humanizeError, moduleClientProvider, SelectInput } from 'deveye-sdk-client';
+import { Button, Dialog, humanizeError, moduleClientProvider, SearchSelect } from 'deveye-sdk-client';
 import { api } from '../api';
 import styles from '../style.module.css';
 
@@ -93,15 +93,17 @@ export function LinkTargetDialog({ open, projectId, linkedIds, onClose, onSaved 
                             ) : (
                                 <label className={styles.field}>
                                     <span className={styles.label}>Cible de l’espace</span>
-                                    <SelectInput value={picked} onChange={(e) => setPicked(e.target.value)}>
-                                        <option value=''>Choisir…</option>
-                                        {free.map((target) => (
-                                            <option key={target.id} value={target.id}>
-                                                {target.name}
-                                                {target.foreign && ' (partagée)'} — {target.host}
-                                            </option>
-                                        ))}
-                                    </SelectInput>
+                                    <SearchSelect
+                                        value={picked}
+                                        onChange={setPicked}
+                                        options={free.map((target) => ({
+                                            value: String(target.id),
+                                            label: `${target.name}${target.foreign ? ' (partagée)' : ''}`,
+                                            detail: target.host
+                                        }))}
+                                        placeholder='Choisir…'
+                                        aria-label='Cible de l’espace'
+                                    />
                                     <span className={styles.hint}>
                                         Une cible peut servir plusieurs projets : en choisir une déjà utilisée ailleurs
                                         ne la retire à personne.

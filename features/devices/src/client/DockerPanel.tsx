@@ -1,6 +1,14 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { acquireMetrics, Button, ConfirmDialog, onServerEvent, SegmentedControl, StatusBadge } from 'deveye-sdk-client';
+import {
+    acquireMetrics,
+    Button,
+    ConfirmDialog,
+    LogOutput,
+    onServerEvent,
+    SegmentedControl,
+    StatusBadge
+} from 'deveye-sdk-client';
 import type { ConfirmRequest } from 'deveye-sdk-client';
 import {
     DEVICE_DOCKER_DONE_EVENT,
@@ -320,7 +328,15 @@ export function DockerPanel({ deviceId, actionable }: { deviceId: string; action
                                 {op.action}
                                 {op.done && (op.ok ? ' — terminé' : ` — échec : ${op.error ?? 'raison inconnue'}`)}
                             </span>
-                            {op.lines.length > 0 && <pre className={styles.dockerOpLog}>{op.lines.join('\n')}</pre>}
+                            {op.lines.length > 0 && (
+                                <LogOutput
+                                    text={op.lines.join('\n')}
+                                    toolbar={false}
+                                    maxHeight={160}
+                                    className={styles.dockerOpLog}
+                                    aria-label='Sortie de l’opération'
+                                />
+                            )}
                         </div>
                     )}
 

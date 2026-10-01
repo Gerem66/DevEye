@@ -6,8 +6,9 @@ import {
     isWinPath,
     joinPath,
     onServerEvent,
-    SelectInput,
-    TextInput
+    SearchSelect,
+    TextInput,
+    type SearchSelectOption
 } from 'deveye-sdk-client';
 import {
     DEVICE_FILES_CHUNK_EVENT,
@@ -101,7 +102,7 @@ function fmtDate(ms: number | null): string {
     return ms ? new Date(ms).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '';
 }
 
-const SEARCH_FIELDS: { value: FileSearchField; label: string }[] = [
+const SEARCH_FIELDS: readonly SearchSelectOption<FileSearchField>[] = [
     { value: 'name', label: 'Nom' },
     { value: 'extension', label: 'Extension' },
     { value: 'content', label: 'Contenu' }
@@ -772,13 +773,12 @@ function SearchView({
                     placeholder={form.field === 'extension' ? 'ex. log, png…' : 'Texte à rechercher'}
                     className={styles.filesSearchInput}
                 />
-                <SelectInput value={form.field} onChange={(e) => set('field', e.target.value as FileSearchField)}>
-                    {SEARCH_FIELDS.map((f) => (
-                        <option key={f.value} value={f.value}>
-                            {f.label}
-                        </option>
-                    ))}
-                </SelectInput>
+                <SearchSelect
+                    value={form.field}
+                    options={SEARCH_FIELDS}
+                    aria-label='Critère de recherche'
+                    onChange={(field) => set('field', field)}
+                />
                 {form.field !== 'extension' && (
                     <button
                         type='button'

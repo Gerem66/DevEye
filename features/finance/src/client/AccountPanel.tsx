@@ -5,8 +5,8 @@ import {
     humanizeError,
     ReadOnlyNotice,
     SaveButton,
+    SearchSelect,
     SegmentedControl,
-    SelectInput,
     settingsStyles as shell,
     Switch,
     TextInput,
@@ -237,23 +237,24 @@ export default function AccountPanel({ scope, canWrite, gone }: SettingsPanelPro
                     {link.receives && (
                         <label className={shell.field}>
                             <span className={shell.fieldLabel}>Rangés dans</span>
-                            <SelectInput
-                                value={link.categoryId ?? ''}
+                            <SearchSelect
+                                aria-label='Rangés dans'
+                                value={String(link.categoryId ?? '')}
                                 disabled={!canWrite}
-                                onChange={(e) =>
+                                onChange={(value) =>
                                     setLink((current) => ({
                                         ...current,
-                                        categoryId: e.target.value === '' ? null : Number(e.target.value)
+                                        categoryId: value === '' ? null : Number(value)
                                     }))
                                 }
-                            >
-                                <option value=''>Prestations (créée au besoin)</option>
-                                {incomeCategories.map((category) => (
-                                    <option key={category.id} value={category.id}>
-                                        {category.name}
-                                    </option>
-                                ))}
-                            </SelectInput>
+                                options={[
+                                    { value: '', label: 'Prestations (créée au besoin)' },
+                                    ...incomeCategories.map((category) => ({
+                                        value: String(category.id),
+                                        label: category.name
+                                    }))
+                                ]}
+                            />
                         </label>
                     )}
                 </div>

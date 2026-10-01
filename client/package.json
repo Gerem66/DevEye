@@ -12,8 +12,8 @@
     "check:sdk": "tsc -p tsconfig.sdkcheck.json",
     "check:css": "node scripts/check-css-modules.mjs",
     "check:changelog": "node scripts/check-changelog.mjs",
-    "ci": "npm run check:css && npm run check:changelog && npm run lint && npm run typecheck && npm run check:sdk && npm run build",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "ci": "npm run check:css && npm run check:changelog && npm run lint && npm run typecheck && npm run check:sdk && npm test && npm run build",
+    "test": "tsx --test \"src/**/*.test.ts\"",
     "gen:css-types": "tcm src --include '**/*.module.css'",
     "clean": "rm -rf ./build ./dist ./node_modules package-lock.json"
   },
@@ -52,6 +52,7 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "globals": "^16.3.0",
     "prettier": "^3.6.2",
+    "tsx": "^4.23.15",
     "typed-css-modules": "^0.9.1",
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.40.0",

@@ -4,7 +4,7 @@ import type { DeployClientProvider, SdkTileSummary } from '@deveye/types/sdk/cli
 
 import { api } from './api';
 import { formatAgo, isOrphan, STATUS_LABELS, statusTone } from './format';
-import { LogsDialog } from './LogsDialog';
+import { isLogLive, LogsDialog, type LogsTarget } from './LogsDialog';
 import { TargetDialog } from './TargetDialog';
 import { TargetView } from './TargetView';
 import styles from './style.module.css';
@@ -32,7 +32,7 @@ interface LinkedTargetProps {
 function LinkedTarget({ targetId, projectId, canWrite, onUnlink }: LinkedTargetProps) {
     const members = useWorkspaceMembers();
     /** Le journal ouvert depuis la ligne du dernier déploiement. */
-    const [logsFor, setLogsFor] = useState<string | null>(null);
+    const [logsFor, setLogsFor] = useState<LogsTarget | null>(null);
     const { data, error } = useResource(
         'deploy.detail',
         () => api.send('deploy.get', { targetId }),
@@ -54,7 +54,7 @@ function LinkedTarget({ targetId, projectId, canWrite, onUnlink }: LinkedTargetP
                 // L'historique complet est un panneau de la feature, pas de cet
                 // onglet : le dernier déploiement de l'en-tête suffit.
                 showHistory={false}
-                onOpenLogs={setLogsFor}
+                onOpenLogs={(externalId, status) => setLogsFor({ externalId, running: status === 'running' })}
                 after={
                     <>
                         {/* L'onglet d'un projet doit mener à la cible, par la
@@ -80,7 +80,8 @@ function LinkedTarget({ targetId, projectId, canWrite, onUnlink }: LinkedTargetP
             <LogsDialog
                 open={logsFor !== null}
                 targetId={targetId}
-                externalId={logsFor}
+                externalId={logsFor?.externalId ?? null}
+                live={isLogLive(logsFor, deployments)}
                 onClose={() => setLogsFor(null)}
             />
         </>

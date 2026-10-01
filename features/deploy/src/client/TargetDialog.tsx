@@ -5,8 +5,8 @@ import {
     FeatureSettingsButton,
     humanizeError,
     invalidate,
+    SearchSelect,
     SegmentedControl,
-    SelectInput,
     TextInput
 } from 'deveye-sdk-client';
 import {
@@ -294,28 +294,28 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
                         {machine ? (
                             <label className={styles.field}>
                                 <span className={styles.label}>Machine</span>
-                                <SelectInput
+                                <SearchSelect
                                     value={deviceId}
+                                    aria-label='Machine'
                                     disabled={machines === null || machines.length === 0}
-                                    onChange={(e) => setDeviceId(e.target.value)}
-                                >
-                                    <option value=''>
-                                        {machines === null
+                                    placeholder={
+                                        machines === null
                                             ? 'Chargement…'
                                             : machines.length === 0
                                               ? 'Aucune machine dans cet espace'
-                                              : 'Choisir…'}
-                                    </option>
-                                    {(machines ?? []).map((m) => {
+                                              : 'Choisir…'
+                                    }
+                                    options={(machines ?? []).map((m) => {
                                         const refusal = machineRefusal(m);
-                                        return (
-                                            <option key={m.id} value={m.id} disabled={refusal !== null}>
-                                                {m.name}
-                                                {refusal ? ` (${refusal})` : ''}
-                                            </option>
-                                        );
+                                        return {
+                                            value: m.id,
+                                            label: m.name,
+                                            detail: refusal ?? undefined,
+                                            disabled: refusal !== null
+                                        };
                                     })}
-                                </SelectInput>
+                                    onChange={setDeviceId}
+                                />
                                 <span className={styles.hint}>
                                     Son agent récupère l’image du service, puis le relance seul : rien ne se construit
                                     sur la machine. Il faut pouvoir en piloter les conteneurs (permission Docker des
@@ -326,14 +326,19 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
                             <label className={styles.field}>
                                 <span className={styles.label}>Accès</span>
                                 <div className={styles.fieldWithAction}>
-                                    <SelectInput value={credentialId} onChange={(e) => setCredentialId(e.target.value)}>
-                                        {(credentials ?? []).map((c) => (
-                                            <option key={c.id} value={c.id}>
-                                                {c.label} ·{' '}
-                                                {c.provider === 'github' ? PROVIDER_LABELS.github : c.baseUrl}
-                                            </option>
-                                        ))}
-                                    </SelectInput>
+                                    <SearchSelect
+                                        value={credentialId}
+                                        aria-label='Accès'
+                                        options={(credentials ?? []).map((c) => ({
+                                            value: String(c.id),
+                                            label: c.label,
+                                            detail:
+                                                c.provider === 'github'
+                                                    ? PROVIDER_LABELS.github
+                                                    : (c.baseUrl ?? undefined)
+                                        }))}
+                                        onChange={setCredentialId}
+                                    />
                                     {/* Le « + » ouvre Réglages → Sources par-dessus ;
                                         l'accès créé est adopté au retour. */}
                                     <FeatureSettingsButton
@@ -352,13 +357,13 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
                             yeux. Sa première ligne porte son état. */}
                         <label className={styles.field}>
                             <span className={styles.label}>Cible</span>
-                            <SelectInput
+                            <SearchSelect
                                 value={externalId}
-                                onChange={(e) => pick(e.target.value)}
+                                aria-label='Cible'
+                                onChange={pick}
                                 disabled={loadingCandidates || candidates.length === 0}
-                            >
-                                <option value=''>
-                                    {loadingCandidates
+                                placeholder={
+                                    loadingCandidates
                                         ? machine
                                             ? 'Interrogation de la machine…'
                                             : 'Interrogation du fournisseur…'
@@ -368,26 +373,27 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
                                               : github
                                                 ? 'Ce jeton ne donne accès à aucun workflow'
                                                 : 'Cette instance ne déclare aucune application'
-                                          : 'Choisir…'}
-                                </option>
-                                {/* Un identifiant saisi à la main, absent de la
-                                    liste : sans cette entrée, le sélecteur
-                                    afficherait « Choisir… ». */}
-                                {externalId !== '' && !candidates.some((c) => c.externalId === externalId) && (
-                                    <option value={externalId}>{externalId} (hors liste)</option>
-                                )}
-                                {candidates.map((c) => (
-                                    <option key={`${c.kind}:${c.externalId}`} value={c.externalId}>
-                                        {c.kind === 'compose' || c.kind === 'service'
-                                            ? '🧩 '
-                                            : c.kind === 'workflow'
-                                              ? '⚙️ '
-                                              : '📦 '}
-                                        {c.path ? `${c.path} | ` : ''}
-                                        {c.name}
-                                    </option>
-                                ))}
-                            </SelectInput>
+                                          : 'Choisir…'
+                                }
+                                options={[
+                                    // Un identifiant saisi à la main, absent de la
+                                    // liste : sans cette entrée, le sélecteur
+                                    // afficherait « Choisir… ».
+                                    ...(externalId !== '' && !candidates.some((c) => c.externalId === externalId)
+                                        ? [{ value: externalId, label: externalId, detail: 'hors liste' }]
+                                        : []),
+                                    ...candidates.map((c) => ({
+                                        value: c.externalId,
+                                        label: `${c.path ? `${c.path} | ` : ''}${c.name}`,
+                                        prefix:
+                                            c.kind === 'compose' || c.kind === 'service'
+                                                ? '🧩'
+                                                : c.kind === 'workflow'
+                                                  ? '⚙️'
+                                                  : '📦'
+                                    }))
+                                ]}
+                            />
                         </label>
 
                         {/* Repli manuel, pour une réponse que le décodeur ne

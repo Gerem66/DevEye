@@ -32,8 +32,15 @@ export type { ConfirmRequest } from '@/Components/ConfirmDialog';
 export { default as SegmentedControl } from '@/Components/SegmentedControl';
 export { default as NumberInput } from '@/Components/NumberInput';
 export { default as SearchSelect } from '@/Components/SearchSelect';
-export type { SearchSelectOption } from '@/Components/SearchSelect';
-export { default as SelectInput } from '@/Components/SelectInput';
+export type { SearchSelectFilter, SearchSelectOption } from '@/Components/SearchSelect';
+/** Le voile d'une relecture, et le journal brut lisible (couleurs, filtre, copie). */
+export { default as LoadingVeil } from '@/Components/LoadingVeil';
+export type { LoadingVeilProps } from '@/Components/LoadingVeil';
+export { default as LogOutput } from '@/Components/LogOutput';
+export type { LogOutputProps } from '@/Components/LogOutput';
+/** Copier une valeur, confirmé deux secondes par l'icône. */
+export { default as CopyButton } from '@/Components/CopyButton';
+export type { CopyButtonProps } from '@/Components/CopyButton';
 export { default as Slider } from '@/Components/Slider';
 export { StatusBadge } from '@/Components/StatusBadge';
 export { default as Switch } from '@/Components/Switch';

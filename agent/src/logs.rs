@@ -10,6 +10,8 @@
 //! behaves the same across every source kind.
 
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
@@ -42,6 +44,16 @@ const MAX_RAW: usize = 10_000;
 const MAX_RAW_CONTAINER: usize = 2_000;
 /// Per-line message cap, so a pathological line can't bloat a frame.
 const MAX_MSG: usize = 8192;
+/// Caps mirrored from the server's schema (`protocol/agent.ts`): a longer error
+/// or source detail gets the whole frame rejected, and the viewer then waits for
+/// a reply that never comes.
+const MAX_ERROR: usize = 500;
+const MAX_LABEL: usize = 256;
+/// One `log.lines` frame: this many lines or about this many bytes, whichever
+/// cap comes first. The server refuses WebSocket payloads above 12 MiB and one
+/// line can weigh `MAX_MSG` bytes, escaped.
+const CHUNK_LINES: usize = 500;
+const CHUNK_BYTES: usize = 1 << 20;
 
 /// Severities, coarsest → highest. Index = rank, used for the `levelMin` floor.
 const LEVELS: [&str; 6] = ["debug", "info", "notice", "warning", "error", "critical"];
@@ -170,17 +182,24 @@ fn json_level(msg: &str) -> Option<&'static str> {
     }
 }
 
-fn truncate_msg(s: String) -> String {
-    if s.len() <= MAX_MSG {
+/// Cut `s` to at most `max` bytes on a char boundary, marking the cut. Bytes are
+/// a safe measure for the server's UTF-16 caps: a char never has fewer bytes
+/// than code units.
+fn truncate_bytes(mut s: String, max: usize) -> String {
+    if s.len() <= max {
         return s;
     }
-    let mut end = MAX_MSG;
+    let mut end = max.saturating_sub('…'.len_utf8());
     while !s.is_char_boundary(end) {
         end -= 1;
     }
-    let mut t = s[..end].to_string();
-    t.push('…');
-    t
+    s.truncate(end);
+    s.push('…');
+    s
+}
+
+fn truncate_msg(s: String) -> String {
+    truncate_bytes(s, MAX_MSG)
 }
 
 /// Deadline for reading a source. None of these tools is naturally bounded (a
@@ -193,6 +212,10 @@ const READ_TIMEOUT: Duration = Duration::from_secs(45);
 pub(crate) const DETECT_TIMEOUT: Duration = Duration::from_secs(10);
 /// How often the deadline is checked while the child runs.
 const POLL_INTERVAL: Duration = Duration::from_millis(50);
+/// How long to wait for the pipe readers once the child is gone. Its pipes close
+/// with it, unless a grandchild inherited one: then a truncated read beats a
+/// query that never answers.
+const READER_GRACE: Duration = Duration::from_secs(2);
 
 /// Run a command under a deadline and hand back its `(stdout, stderr)`, killing it
 /// if it overruns. `label` is what the error blames (`docker logs`, `journalctl`…).
@@ -208,7 +231,7 @@ fn run_bounded<S: AsRef<std::ffi::OsStr>>(
     args: &[S],
     timeout: Duration,
 ) -> Result<(Vec<u8>, Vec<u8>)> {
-    run_bounded_capped(label, program, args, timeout, None)
+    run_bounded_capped(label, program, args, timeout, None, None)
 }
 
 /// Drain one pipe, stopping early once `max_lines` newlines have been seen across
@@ -217,10 +240,8 @@ fn run_bounded<S: AsRef<std::ffi::OsStr>>(
 fn drain_pipe(
     pipe: &mut dyn std::io::Read,
     max_lines: Option<usize>,
-    seen: &std::sync::atomic::AtomicUsize,
+    seen: &AtomicUsize,
 ) -> Vec<u8> {
-    use std::sync::atomic::Ordering;
-
     let mut buf = Vec::new();
     let Some(cap) = max_lines else {
         let _ = pipe.read_to_end(&mut buf);
@@ -244,17 +265,17 @@ fn drain_pipe(
 /// `run_bounded`, plus an optional line cap: reading a source from its beginning
 /// has no `--tail` to bound it, so the cap is what keeps a multi-GB journal from
 /// being swallowed whole. Reaching it kills the child, which is a success here, not
-/// the failure a non-zero status usually means.
+/// the failure a non-zero status usually means. A raised `cancel` flag kills it
+/// too, as a failure: the query it served has been replaced by a newer one.
 pub(crate) fn run_bounded_capped<S: AsRef<std::ffi::OsStr>>(
     label: &str,
     program: &str,
     args: &[S],
     timeout: Duration,
     max_lines: Option<usize>,
+    cancel: Option<&AtomicBool>,
 ) -> Result<(Vec<u8>, Vec<u8>)> {
     use std::process::Stdio;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::Arc;
 
     let mut child = Command::new(program)
         .args(args)
@@ -269,8 +290,14 @@ pub(crate) fn run_bounded_capped<S: AsRef<std::ffi::OsStr>>(
     let seen = Arc::new(AtomicUsize::new(0));
     let seen_out = Arc::clone(&seen);
     let seen_err = Arc::clone(&seen);
-    let out_reader = std::thread::spawn(move || drain_pipe(&mut out_pipe, max_lines, &seen_out));
-    let err_reader = std::thread::spawn(move || drain_pipe(&mut err_pipe, max_lines, &seen_err));
+    let (out_tx, out_rx) = std::sync::mpsc::channel();
+    let (err_tx, err_rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = out_tx.send(drain_pipe(&mut out_pipe, max_lines, &seen_out));
+    });
+    std::thread::spawn(move || {
+        let _ = err_tx.send(drain_pipe(&mut err_pipe, max_lines, &seen_err));
+    });
 
     let deadline = Instant::now() + timeout;
     let status = loop {
@@ -285,11 +312,16 @@ pub(crate) fn run_bounded_capped<S: AsRef<std::ffi::OsStr>>(
                     .wait()
                     .with_context(|| format!("attente de {label}"))?;
             }
+            None if cancel.is_some_and(|flag| flag.load(Ordering::Relaxed)) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                bail!("{label} : interrogation remplacée par une plus récente");
+            }
             None if Instant::now() >= deadline => {
                 let _ = child.kill();
                 let _ = child.wait();
                 bail!(
-                    "{label} : abandon après {} s — source trop volumineuse, resserrez la fenêtre de temps ou le filtre",
+                    "{label} : abandon après {} s, source trop volumineuse, resserrez la fenêtre de temps ou le filtre",
                     timeout.as_secs()
                 );
             }
@@ -297,15 +329,17 @@ pub(crate) fn run_bounded_capped<S: AsRef<std::ffi::OsStr>>(
         }
     };
 
-    // Le processus est terminé : les tuyaux sont fermés, les lecteurs rendent
-    // la main tout seuls.
-    let stdout = out_reader.join().unwrap_or_default();
-    let stderr = err_reader.join().unwrap_or_default();
-    // Le plafond atteint ferme le tuyau sous l'outil : le SIGPIPE (ou le kill) qui
-    // s'ensuit est la fin normale de la lecture, pas un échec à rapporter.
+    // The process is gone, so its pipes are closed and the readers return by
+    // themselves; `READER_GRACE` covers a grandchild still holding one.
+    let stdout = out_rx.recv_timeout(READER_GRACE).unwrap_or_default();
+    let stderr = err_rx.recv_timeout(READER_GRACE).unwrap_or_default();
+    // Hitting the cap closes the pipe under the tool: the SIGPIPE (or the kill)
+    // that follows is the normal end of the read, not a failure to report.
     let capped = max_lines.is_some_and(|cap| seen.load(Ordering::Relaxed) >= cap);
     if !capped && !status.success() {
-        bail!("{label}: {}", String::from_utf8_lossy(&stderr).trim());
+        // Bounded here already: with the label, the message must fit `MAX_ERROR`.
+        let diagnostic = truncate_bytes(String::from_utf8_lossy(&stderr).trim().to_string(), 400);
+        bail!("{label}: {diagnostic}");
     }
     Ok((stdout, stderr))
 }
@@ -390,8 +424,10 @@ pub fn detect_sources() -> Vec<LogSource> {
             out.push(LogSource {
                 id: format!("{bin}:{}", parts[0]),
                 kind: "docker",
-                label: parts[1].to_string(),
-                detail: parts.get(2).map(|image| format!("{bin} · {image}")),
+                label: truncate_bytes(parts[1].to_string(), MAX_LABEL),
+                detail: parts
+                    .get(2)
+                    .map(|image| truncate_bytes(format!("{bin} · {image}"), MAX_LABEL)),
                 running: parts.get(3).map(|s| s.eq_ignore_ascii_case("running")),
             });
         }
@@ -426,7 +462,14 @@ pub fn detect_sources() -> Vec<LogSource> {
 
 /// Run one log query: read raw lines from the source, then apply the uniform
 /// post-filter (text/regex, severity floor, time window) and cut out `window`.
-pub fn run_query(source_id: &str, filter: &LogFilter, window: LogWindow) -> Result<Vec<LogLine>> {
+/// `cancel`, once raised, stops the read: a newer query on the same source has
+/// taken over.
+pub fn run_query(
+    source_id: &str,
+    filter: &LogFilter,
+    window: LogWindow,
+    cancel: &AtomicBool,
+) -> Result<Vec<LogLine>> {
     let window = LogWindow {
         limit: window.limit.clamp(1, MAX_LIMIT),
         offset: window.offset.min(MAX_OFFSET),
@@ -456,18 +499,18 @@ pub fn run_query(source_id: &str, filter: &LogFilter, window: LogWindow) -> Resu
     let anchor = window.anchor;
 
     let raw = if source_id == "journald" {
-        read_journald(filter, raw_cap, anchor)?
+        read_journald(filter, raw_cap, anchor, cancel)?
     } else if let Some((bin, id)) = container {
-        read_container(bin, id, filter, raw_cap, anchor)?
+        read_container(bin, id, filter, raw_cap, anchor, cancel)?
     } else if let Some(path) = source_id
         .strip_prefix("file:")
         .filter(|p| FILE_SOURCES.contains(p))
     {
-        read_file(path, raw_cap, anchor)?
+        read_file(path, raw_cap, anchor, cancel)?
     } else if source_id == "oslog" {
-        read_oslog(raw_cap, anchor)?
+        read_oslog(raw_cap, anchor, cancel)?
     } else if let Some(channel) = source_id.strip_prefix("eventlog:") {
-        read_eventlog(channel, raw_cap)?
+        read_eventlog(channel, raw_cap, cancel)?
     } else {
         bail!("source de logs inconnue : {source_id}");
     };
@@ -559,7 +602,12 @@ fn post_filter(
     Ok(lines)
 }
 
-fn read_journald(filter: &LogFilter, raw_cap: usize, anchor: LogAnchor) -> Result<Vec<LogLine>> {
+fn read_journald(
+    filter: &LogFilter,
+    raw_cap: usize,
+    anchor: LogAnchor,
+    cancel: &AtomicBool,
+) -> Result<Vec<LogLine>> {
     let mut args: Vec<String> = vec!["-o".into(), "json".into(), "--no-pager".into()];
     // `-n` ne borne que par la queue : pour lire le début, on laisse journalctl
     // dérouler dans l'ordre et c'est le plafond de lignes qui l'arrête.
@@ -588,8 +636,14 @@ fn read_journald(filter: &LogFilter, raw_cap: usize, anchor: LogAnchor) -> Resul
         args.push(level_to_journald_priority(min).to_string());
     }
 
-    let (stdout, _) =
-        run_bounded_capped("journalctl", "journalctl", &args, READ_TIMEOUT, max_lines)?;
+    let (stdout, _) = run_bounded_capped(
+        "journalctl",
+        "journalctl",
+        &args,
+        READ_TIMEOUT,
+        max_lines,
+        Some(cancel),
+    )?;
     let text = String::from_utf8_lossy(&stdout);
     let mut lines = Vec::new();
     for raw in text.lines() {
@@ -655,6 +709,7 @@ fn read_container(
     filter: &LogFilter,
     raw_cap: usize,
     anchor: LogAnchor,
+    cancel: &AtomicBool,
 ) -> Result<Vec<LogLine>> {
     let mut args: Vec<String> = vec!["logs".into(), "--timestamps".into()];
     // Sans `--tail`, l'engin rejoue le conteneur depuis sa première ligne ; le
@@ -680,8 +735,14 @@ fn read_container(
     // The engine sends the container's stdout to our stdout and its stderr to our
     // stderr; both are real log output. Parse the leading RFC3339 timestamp added
     // by --timestamps, then merge the two streams chronologically.
-    let (stdout, stderr) =
-        run_bounded_capped(&format!("{bin} logs"), bin, &args, READ_TIMEOUT, max_lines)?;
+    let (stdout, stderr) = run_bounded_capped(
+        &format!("{bin} logs"),
+        bin,
+        &args,
+        READ_TIMEOUT,
+        max_lines,
+        Some(cancel),
+    )?;
     let mut lines = Vec::new();
     for data in [&stdout, &stderr] {
         for raw in String::from_utf8_lossy(data).lines() {
@@ -704,17 +765,42 @@ fn read_container(
     Ok(lines)
 }
 
-fn read_file(path: &str, raw_cap: usize, anchor: LogAnchor) -> Result<Vec<LogLine>> {
+/// Every 1024 lines of a plain file: the deadline and the cancel flag. The
+/// newest lines of a multi-GB file cost a full read, which nothing else bounds.
+fn file_budget(path: &str, deadline: Instant, cancel: &AtomicBool, seen: usize) -> Result<()> {
+    if !seen.is_multiple_of(1024) {
+        return Ok(());
+    }
+    if cancel.load(Ordering::Relaxed) {
+        bail!("lecture de {path} : interrogation remplacée par une plus récente");
+    }
+    if Instant::now() >= deadline {
+        bail!(
+            "lecture de {path} : abandon après {} s, fichier trop volumineux",
+            READ_TIMEOUT.as_secs()
+        );
+    }
+    Ok(())
+}
+
+fn read_file(
+    path: &str,
+    raw_cap: usize,
+    anchor: LogAnchor,
+    cancel: &AtomicBool,
+) -> Result<Vec<LogLine>> {
     use std::collections::VecDeque;
     use std::io::BufRead;
 
     let file = std::fs::File::open(path).with_context(|| format!("ouverture de {path}"))?;
     let reader = std::io::BufReader::new(file);
+    let deadline = Instant::now() + READ_TIMEOUT;
     let raw: Vec<String> = match anchor {
         // Ring buffer of the last `raw_cap` lines, so a multi-GB file stays bounded.
         LogAnchor::Newest => {
             let mut ring: VecDeque<String> = VecDeque::with_capacity(raw_cap.min(4096));
-            for line in reader.lines() {
+            for (seen, line) in reader.lines().enumerate() {
+                file_budget(path, deadline, cancel, seen)?;
                 let line = line.unwrap_or_default();
                 if ring.len() >= raw_cap {
                     ring.pop_front();
@@ -723,11 +809,14 @@ fn read_file(path: &str, raw_cap: usize, anchor: LogAnchor) -> Result<Vec<LogLin
             }
             ring.into()
         }
-        LogAnchor::Oldest => reader
-            .lines()
-            .take(raw_cap)
-            .map(|l| l.unwrap_or_default())
-            .collect(),
+        LogAnchor::Oldest => {
+            let mut head = Vec::with_capacity(raw_cap.min(4096));
+            for (seen, line) in reader.lines().take(raw_cap).enumerate() {
+                file_budget(path, deadline, cancel, seen)?;
+                head.push(line.unwrap_or_default());
+            }
+            head
+        }
     };
     Ok(raw
         .into_iter()
@@ -743,15 +832,17 @@ fn read_file(path: &str, raw_cap: usize, anchor: LogAnchor) -> Result<Vec<LogLin
 
 /// `LogAnchor::Oldest` reaches the start of the hour `log show` returns, not the
 /// start of the unified log: the tool is time-bounded, not line-bounded.
-fn read_oslog(raw_cap: usize, anchor: LogAnchor) -> Result<Vec<LogLine>> {
+fn read_oslog(raw_cap: usize, anchor: LogAnchor, cancel: &AtomicBool) -> Result<Vec<LogLine>> {
     // `log show` is time-based, not line-bounded; default to the last hour and cap
     // the lines afterwards (precise time windows are applied in post_filter only
-    // when the source carries timestamps — best-effort on macOS).
-    let (stdout, _) = run_bounded(
+    // when the source carries timestamps: best-effort on macOS).
+    let (stdout, _) = run_bounded_capped(
         "log show",
         "log",
         &["show", "--style", "syslog", "--no-pager", "--last", "1h"],
         READ_TIMEOUT,
+        None,
+        Some(cancel),
     )?;
     let text = String::from_utf8_lossy(&stdout);
     let mut lines: Vec<LogLine> = text
@@ -778,7 +869,7 @@ fn read_oslog(raw_cap: usize, anchor: LogAnchor) -> Result<Vec<LogLine>> {
 
 /// Always reads the newest events: `Get-WinEvent` only counts back from the top, so
 /// `LogAnchor::Oldest` reaches the start of that window, not the start of the channel.
-fn read_eventlog(channel: &str, raw_cap: usize) -> Result<Vec<LogLine>> {
+fn read_eventlog(channel: &str, raw_cap: usize, cancel: &AtomicBool) -> Result<Vec<LogLine>> {
     let max = raw_cap.min(MAX_RAW);
     let script = format!(
         "Get-WinEvent -LogName '{}' -MaxEvents {} -ErrorAction Stop | \
@@ -787,11 +878,13 @@ fn read_eventlog(channel: &str, raw_cap: usize) -> Result<Vec<LogLine>> {
         channel.replace('\'', "''"),
         max
     );
-    let (stdout, _) = run_bounded(
+    let (stdout, _) = run_bounded_capped(
         "Get-WinEvent",
         "powershell",
         &["-NoProfile", "-NonInteractive", "-Command", &script],
         READ_TIMEOUT,
+        None,
+        Some(cancel),
     )?;
     let text = String::from_utf8_lossy(&stdout);
     let parsed: serde_json::Value =
@@ -863,17 +956,42 @@ pub async fn detect_task(tx: Sender<LogEvent>) {
     let _ = tx.send(LogEvent::Sources(sources)).await;
 }
 
+/// Split a result into frames of at most `CHUNK_LINES` lines or about
+/// `CHUNK_BYTES` bytes: a page of fat container lines must not exceed what the
+/// server accepts in one WebSocket message.
+fn chunk_lines(lines: Vec<LogLine>) -> Vec<Vec<LogLine>> {
+    let mut chunks = Vec::new();
+    let mut current: Vec<LogLine> = Vec::new();
+    let mut bytes = 0usize;
+    for line in lines {
+        let cost = line.message.len() + line.unit.as_ref().map_or(0, String::len) + 48;
+        if !current.is_empty() && (current.len() >= CHUNK_LINES || bytes + cost > CHUNK_BYTES) {
+            chunks.push(std::mem::take(&mut current));
+            bytes = 0;
+        }
+        bytes += cost;
+        current.push(line);
+    }
+    if !current.is_empty() {
+        chunks.push(current);
+    }
+    chunks
+}
+
 /// Run a query off the runtime and stream the result in bounded chunks (the last
-/// carrying `done`). On failure, one terminal chunk carries the error.
+/// carrying `done`). On failure, one terminal chunk carries the error. A query
+/// cancelled midway still ends with its error frame: the viewer has moved on,
+/// the server's bookkeeping has not.
 pub async fn run_query_task(
     query_id: String,
     source_id: String,
     filter: LogFilter,
     window: LogWindow,
     tx: Sender<LogEvent>,
+    cancel: Arc<AtomicBool>,
 ) {
-    const CHUNK: usize = 500;
-    let res = tokio::task::spawn_blocking(move || run_query(&source_id, &filter, window)).await;
+    let res =
+        tokio::task::spawn_blocking(move || run_query(&source_id, &filter, window, &cancel)).await;
     let lines = match res {
         Ok(Ok(lines)) => lines,
         Ok(Err(e)) => return send_error(&tx, query_id, e.to_string()).await,
@@ -890,15 +1008,14 @@ pub async fn run_query_task(
             .await;
         return;
     }
-    let total = lines.len();
-    let mut sent = 0;
-    for chunk in lines.chunks(CHUNK) {
-        sent += chunk.len();
+    let chunks = chunk_lines(lines);
+    let total = chunks.len();
+    for (index, chunk) in chunks.into_iter().enumerate() {
         let _ = tx
             .send(LogEvent::Lines {
                 query_id: query_id.clone(),
-                lines: chunk.to_vec(),
-                done: sent >= total,
+                lines: chunk,
+                done: index + 1 == total,
                 error: None,
             })
             .await;
@@ -911,7 +1028,7 @@ async fn send_error(tx: &Sender<LogEvent>, query_id: String, error: String) {
             query_id,
             lines: vec![],
             done: true,
-            error: Some(error),
+            error: Some(truncate_bytes(error, MAX_ERROR)),
         })
         .await;
 }
@@ -928,7 +1045,7 @@ mod tests {
             "file:/var/log/../../etc/passwd",
             "file:/root/.ssh/id_ed25519",
         ] {
-            let err = run_query(source, &filter, newest(10, 0))
+            let err = run_query(source, &filter, newest(10, 0), &AtomicBool::new(false))
                 .unwrap_err()
                 .to_string();
             assert!(err.contains("inconnue"), "{source}: {err}");
@@ -1092,10 +1209,57 @@ mod tests {
             &["-c", "i=0; while :; do echo $i; i=$((i+1)); done"],
             Duration::from_secs(10),
             Some(50),
+            None,
         )
         .expect("le plafond n'est pas une erreur");
         let seen = String::from_utf8_lossy(&stdout).lines().count();
         assert!(seen >= 50, "au moins le plafond demandé, vu {seen}");
+    }
+
+    #[test]
+    fn truncate_bytes_cuts_on_a_char_boundary_within_the_cap() {
+        let cut = truncate_bytes("é".repeat(300), MAX_ERROR);
+        assert!(cut.len() <= MAX_ERROR, "{} octets", cut.len());
+        assert!(cut.ends_with('…'));
+        assert_eq!(truncate_bytes("court".into(), 10), "court");
+    }
+
+    #[test]
+    fn chunking_respects_both_caps() {
+        let many: Vec<LogLine> = (0..1200).map(|i| line(i, "x")).collect();
+        assert_eq!(
+            chunk_lines(many).iter().map(Vec::len).collect::<Vec<_>>(),
+            vec![500, 500, 200]
+        );
+        let fat: Vec<LogLine> = (0..10).map(|i| line(i, &"m".repeat(300 * 1024))).collect();
+        let chunks = chunk_lines(fat);
+        assert!(chunks.iter().all(|c| c.len() <= 3));
+        assert_eq!(chunks.iter().map(Vec::len).sum::<usize>(), 10);
+    }
+
+    /// A newer query on the same source raises the flag: the old read stops and
+    /// says so, instead of running to its deadline behind the user's back.
+    #[cfg(unix)]
+    #[test]
+    fn a_cancelled_command_is_reported_as_replaced() {
+        let cancel = Arc::new(AtomicBool::new(false));
+        let flag = Arc::clone(&cancel);
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(100));
+            flag.store(true, Ordering::Relaxed);
+        });
+        let started = Instant::now();
+        let err = run_bounded_capped(
+            "sleep",
+            "sleep",
+            &["30"],
+            Duration::from_secs(30),
+            None,
+            Some(&cancel),
+        )
+        .expect_err("l'annulation doit être une erreur");
+        assert!(err.to_string().contains("remplacée"), "{err}");
+        assert!(started.elapsed() < Duration::from_secs(5));
     }
 
     /// La raison d'être du helper : un outil qui ne rend jamais la main doit

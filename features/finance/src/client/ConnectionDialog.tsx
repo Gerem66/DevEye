@@ -7,9 +7,9 @@ import {
     humanizeError,
     SearchSelect,
     SegmentedControl,
-    SelectInput,
     settingsStyles as shell,
-    TextInput
+    TextInput,
+    type SearchSelectOption
 } from 'deveye-sdk-client';
 import {
     BANK_COUNTRIES,
@@ -36,6 +36,11 @@ const PSU_TYPES: { value: BankPsuType; label: string }[] = [
     { value: 'business', label: 'Compte professionnel' },
     { value: 'personal', label: 'Compte de particulier' }
 ];
+
+const COUNTRY_OPTIONS: SearchSelectOption[] = BANK_COUNTRIES.map((entry) => ({
+    value: entry.code,
+    label: entry.label
+}));
 
 /**
  * Relier une banque, ou corriger une connexion. Qonto se relie par la clé d'API
@@ -202,13 +207,12 @@ export default function ConnectionDialog({ open, connection, enableBanking, onCl
                     <>
                         <label className={shell.field}>
                             <span className={shell.sectionLabel}>Pays</span>
-                            <SelectInput value={country} onChange={(e) => setCountry(e.target.value)}>
-                                {BANK_COUNTRIES.map((entry) => (
-                                    <option key={entry.code} value={entry.code}>
-                                        {entry.label}
-                                    </option>
-                                ))}
-                            </SelectInput>
+                            <SearchSelect
+                                aria-label='Pays'
+                                value={country}
+                                onChange={setCountry}
+                                options={COUNTRY_OPTIONS}
+                            />
                         </label>
                         <div className={shell.field}>
                             <span className={shell.sectionLabel}>Banque</span>

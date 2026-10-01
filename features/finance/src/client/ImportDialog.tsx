@@ -4,8 +4,8 @@ import {
     Dialog,
     DialogCancelButton,
     ErrorNote,
+    SearchSelect,
     SegmentedControl,
-    SelectInput,
     type ErrorNoteInput
 } from 'deveye-sdk-client';
 import { STATEMENT_LINES_MAX, type StatementImportResult } from '../contracts/statement';
@@ -238,13 +238,12 @@ export function ImportDialog({ base, open, accountId: preset, onClose, onReview 
                         {accounts.length > 1 && (
                             <label className={styles.field}>
                                 <span className={styles.fieldLabel}>Compte</span>
-                                <SelectInput value={accountId} onChange={(e) => setAccountId(Number(e.target.value))}>
-                                    {accounts.map((entry) => (
-                                        <option key={entry.id} value={entry.id}>
-                                            {entry.name}
-                                        </option>
-                                    ))}
-                                </SelectInput>
+                                <SearchSelect
+                                    aria-label='Compte'
+                                    value={String(accountId)}
+                                    onChange={(value) => setAccountId(Number(value))}
+                                    options={accounts.map((entry) => ({ value: String(entry.id), label: entry.name }))}
+                                />
                             </label>
                         )}
                         <Dropzone busy={busy} onFile={(file) => void read(file)} />
@@ -453,15 +452,15 @@ function ColumnsForm({
         return { index, label: sample && sample !== name ? `${name} (${sample.slice(0, 24)})` : name };
     });
 
-    const select = (value: number | null, set: (index: number | null) => void, optional: boolean) => (
-        <SelectInput value={value ?? ''} onChange={(e) => set(e.target.value === '' ? null : Number(e.target.value))}>
-            {optional && <option value=''>Aucune</option>}
-            {columns.map((column) => (
-                <option key={column.index} value={column.index}>
-                    {column.label}
-                </option>
-            ))}
-        </SelectInput>
+    const columnOptions = columns.map((column) => ({ value: String(column.index), label: column.label }));
+
+    const select = (label: string, value: number | null, set: (index: number | null) => void, optional: boolean) => (
+        <SearchSelect
+            aria-label={label}
+            value={String(value ?? '')}
+            onChange={(next) => set(next === '' ? null : Number(next))}
+            options={optional ? [{ value: '', label: 'Aucune' }, ...columnOptions] : columnOptions}
+        />
     );
 
     return (
@@ -469,11 +468,12 @@ function ColumnsForm({
             <div className={styles.formRow}>
                 <label className={styles.field}>
                     <span className={styles.fieldLabel}>Date</span>
-                    {select(mapping.date, (index) => onChange({ date: index ?? 0 }), false)}
+                    {select('Date', mapping.date, (index) => onChange({ date: index ?? 0 }), false)}
                 </label>
                 <label className={styles.field}>
                     <span className={styles.fieldLabel}>Libellé</span>
                     {select(
+                        'Libellé',
                         mapping.label[0] ?? null,
                         (index) => onChange({ label: [index ?? 0, ...mapping.label.slice(1)] }),
                         false
@@ -482,6 +482,7 @@ function ColumnsForm({
                 <label className={styles.field}>
                     <span className={styles.fieldLabel}>Complément (facultatif)</span>
                     {select(
+                        'Complément (facultatif)',
                         mapping.label[1] ?? null,
                         (index) =>
                             onChange({
@@ -518,22 +519,22 @@ function ColumnsForm({
                     <>
                         <label className={styles.field}>
                             <span className={styles.fieldLabel}>Débit</span>
-                            {select(mapping.debit, (index) => onChange({ debit: index }), false)}
+                            {select('Débit', mapping.debit, (index) => onChange({ debit: index }), false)}
                         </label>
                         <label className={styles.field}>
                             <span className={styles.fieldLabel}>Crédit</span>
-                            {select(mapping.credit, (index) => onChange({ credit: index }), false)}
+                            {select('Crédit', mapping.credit, (index) => onChange({ credit: index }), false)}
                         </label>
                     </>
                 ) : (
                     <label className={styles.field}>
                         <span className={styles.fieldLabel}>Montant</span>
-                        {select(mapping.amount, (index) => onChange({ amount: index ?? 0 }), false)}
+                        {select('Montant', mapping.amount, (index) => onChange({ amount: index ?? 0 }), false)}
                     </label>
                 )}
                 <label className={styles.field}>
                     <span className={styles.fieldLabel}>Solde (facultatif)</span>
-                    {select(mapping.balance, (index) => onChange({ balance: index }), true)}
+                    {select('Solde (facultatif)', mapping.balance, (index) => onChange({ balance: index }), true)}
                 </label>
             </div>
 

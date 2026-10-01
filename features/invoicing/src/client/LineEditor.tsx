@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, FeatureSettingsButton, SelectInput, TextInput, randomUuid, useDragReorder } from 'deveye-sdk-client';
+import {
+    Button,
+    FeatureSettingsButton,
+    SearchSelect,
+    TextInput,
+    randomUuid,
+    useDragReorder,
+    type SearchSelectOption
+} from 'deveye-sdk-client';
 
 import { documentTotals, type MoneyLine } from '../contracts/money';
 import type {
@@ -42,7 +50,10 @@ interface Draft {
     vatRateBp: number;
 }
 
-const VAT_CHOICES = [0, 210, 550, 1000, 2000];
+const VAT_OPTIONS: SearchSelectOption[] = [0, 210, 550, 1000, 2000].map((bp) => ({
+    value: String(bp),
+    label: `${(bp / 100).toString().replace('.', ',')} %`
+}));
 
 function toDraft(line: InvoicingLine): Draft {
     return {
@@ -335,19 +346,14 @@ export default function LineEditor(props: LineEditorProps) {
                                         onKeyDown={(e) => onKeyDown(e, index, 'quantity')}
                                     />
 
-                                    <SelectInput
+                                    <SearchSelect
                                         className={styles.cellUnit}
                                         value={draft.unit}
                                         disabled={!canWrite}
                                         aria-label={`Unité, ligne ${index + 1}`}
-                                        onChange={(e) => patch(index, { unit: e.target.value as LineUnit })}
-                                    >
-                                        {UNIT_OPTIONS.map((option) => (
-                                            <option key={option.value} value={option.value}>
-                                                {option.label}
-                                            </option>
-                                        ))}
-                                    </SelectInput>
+                                        onChange={(unit) => patch(index, { unit })}
+                                        options={UNIT_OPTIONS}
+                                    />
 
                                     <TextInput
                                         ref={bind(`${draft.key}:unitPrice`)}
@@ -381,19 +387,14 @@ export default function LineEditor(props: LineEditorProps) {
                                             )}
                                         </span>
                                     ) : (
-                                        <SelectInput
+                                        <SearchSelect
                                             className={styles.cellVat}
                                             value={String(draft.vatRateBp)}
                                             disabled={!canWrite}
                                             aria-label={`Taux de TVA, ligne ${index + 1}`}
-                                            onChange={(e) => patch(index, { vatRateBp: Number(e.target.value) })}
-                                        >
-                                            {VAT_CHOICES.map((bp) => (
-                                                <option key={bp} value={String(bp)}>
-                                                    {(bp / 100).toString().replace('.', ',')} %
-                                                </option>
-                                            ))}
-                                        </SelectInput>
+                                            onChange={(value) => patch(index, { vatRateBp: Number(value) })}
+                                            options={VAT_OPTIONS}
+                                        />
                                     )}
 
                                     {/* Calculé, donc `output` ; muet, parce qu'un total

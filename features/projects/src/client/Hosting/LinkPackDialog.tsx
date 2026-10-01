@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { HOSTING_CLIENT_PROVIDER } from '@deveye/types/sdk';
 import type { HostingClientProvider, HostingLinkedCandidate } from '@deveye/types/sdk/client';
-import { Button, Dialog, humanizeError, moduleClientProvider, SelectInput } from 'deveye-sdk-client';
+import { Button, Dialog, humanizeError, moduleClientProvider, SearchSelect } from 'deveye-sdk-client';
 import { api } from '../api';
 import styles from '../style.module.css';
 
@@ -83,25 +83,23 @@ export function LinkPackDialog({ open, projectId, linkedIds, onClose, onSaved }:
                         <>
                             <label className={styles.field}>
                                 <span className={styles.label}>Dossier de l’espace</span>
-                                <SelectInput
+                                <SearchSelect
                                     value={picked}
                                     disabled={free.length === 0}
-                                    onChange={(e) => setPicked(e.target.value)}
-                                >
-                                    <option value=''>
-                                        {free.length === 0
+                                    onChange={setPicked}
+                                    options={free.map((pack) => ({
+                                        value: String(pack.id),
+                                        label: `${pack.name}${pack.foreign ? ' (partagé)' : ''}`
+                                    }))}
+                                    placeholder={
+                                        free.length === 0
                                             ? packs.length === 0
                                                 ? 'Aucun dossier n’existe encore dans cet espace'
                                                 : 'Tous les dossiers de l’espace sont déjà reliés'
-                                            : 'Choisir un dossier…'}
-                                    </option>
-                                    {free.map((pack) => (
-                                        <option key={pack.id} value={pack.id}>
-                                            {pack.name}
-                                            {pack.foreign && ' (partagé)'}
-                                        </option>
-                                    ))}
-                                </SelectInput>
+                                            : 'Choisir un dossier…'
+                                    }
+                                    aria-label='Dossier de l’espace'
+                                />
                                 <span className={styles.hint}>
                                     Un dossier peut servir plusieurs projets : en choisir un déjà relié ailleurs ne le
                                     retire à personne.

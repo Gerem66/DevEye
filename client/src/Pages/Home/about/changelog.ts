@@ -12,6 +12,34 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: readonly ChangelogEntry[] = [
     {
+        version: '0.21.4',
+        date: '2026-10-01',
+        changes: [
+            {
+                kind: 'added',
+                text: 'Appareils : la fenêtre des logs prend tout l’écran, filtre ses sources par type et par état, et copie les lignes affichées'
+            },
+            {
+                kind: 'added',
+                text: 'Déploiements : le journal se colore selon ce que dit chaque ligne, se filtre, se copie, et suit un déploiement en cours'
+            },
+            {
+                kind: 'added',
+                text: 'Notifications : une fonctionnalité qui prévient en son nom peut suivre les canaux cochés par ses éléments'
+            },
+            { kind: 'improved', text: 'Un seul menu déroulant partout, avec une recherche dès que la liste s’allonge' },
+            {
+                kind: 'improved',
+                text: 'Déploiements : le journal s’ouvre sans second appel au fournisseur, et les journaux de jobs GitHub se lisent en parallèle'
+            },
+            {
+                kind: 'fixed',
+                text: 'Appareils : une source de logs qui ne répond pas ne laisse plus la fenêtre charger sans fin'
+            },
+            { kind: 'fixed', text: 'Déploiements : un appareil hors ligne se revérifie à la minute' }
+        ]
+    },
+    {
         version: '0.21.3',
         date: '2026-10-01',
         changes: [

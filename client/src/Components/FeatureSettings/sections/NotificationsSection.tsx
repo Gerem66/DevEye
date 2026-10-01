@@ -16,7 +16,7 @@ import Button from '@/Components/Button';
 import Checkbox from '@/Components/Checkbox';
 import { Dialog } from '@/Components/Dialog';
 import { ConfirmDialog, type ConfirmRequest } from '@/Components/ConfirmDialog';
-import SelectInput from '@/Components/SelectInput';
+import SearchSelect, { type SearchSelectOption } from '@/Components/SearchSelect';
 import Term from '@/Components/Term';
 import TextInput from '@/Components/TextInput';
 import { moduleClientProvider } from '@/sdk/registry';
@@ -550,18 +550,16 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
                     <div className={styles.section}>
                         <label className={styles.field}>
                             <span className={styles.fieldLabel}>Type</span>
-                            <SelectInput
+                            {/* Un canal e-mail n'existe qu'avec le module Mail ; un
+                                canal déjà déclaré garde son type affiché. */}
+                            <SearchSelect
                                 value={draft.kind}
-                                onChange={(e) =>
-                                    setDraft({ ...draft, kind: e.target.value as NotificationChannelKind })
-                                }
-                            >
-                                {/* Un canal e-mail n'existe qu'avec le module Mail ; un
-                                    canal déjà déclaré garde son type affiché. */}
-                                {(mail || draft.kind === 'email') && <option value='email'>E-mail</option>}
-                                <option value='discord'>Discord : mise en page riche, suivi vivant</option>
-                                <option value='webhook'>Webhook : POST JSON générique</option>
-                            </SelectInput>
+                                aria-label='Type'
+                                options={KIND_OPTIONS.filter(
+                                    (o) => o.value !== 'email' || mail || draft.kind === 'email'
+                                )}
+                                onChange={(kind) => setDraft({ ...draft, kind })}
+                            />
                             <span className={styles.fieldHint}>{KIND_HINT[draft.kind]}</span>
                             {!mail && (
                                 <span className={styles.fieldHint}>
@@ -587,22 +585,21 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
                                 <label className={styles.field}>
                                     <span className={styles.fieldLabel}>Compte expéditeur</span>
                                     <div className={styles.fieldWithAction}>
-                                        <SelectInput
-                                            value={draft.mailAccountId ?? ''}
-                                            onChange={(e) =>
-                                                setDraft({
-                                                    ...draft,
-                                                    mailAccountId: e.target.value ? Number(e.target.value) : null
-                                                })
+                                        <SearchSelect
+                                            value={String(draft.mailAccountId ?? '')}
+                                            aria-label='Compte expéditeur'
+                                            options={[
+                                                { value: '', label: 'Aucun' },
+                                                ...senders.map((s) => ({
+                                                    value: String(s.id),
+                                                    label: s.label,
+                                                    detail: s.address
+                                                }))
+                                            ]}
+                                            onChange={(v) =>
+                                                setDraft({ ...draft, mailAccountId: v ? Number(v) : null })
                                             }
-                                        >
-                                            <option value=''>Aucun</option>
-                                            {senders.map((s) => (
-                                                <option key={s.id} value={s.id}>
-                                                    {s.label} ({s.address})
-                                                </option>
-                                            ))}
-                                        </SelectInput>
+                                        />
                                         {/* Le vrai dialogue de la feature Mail,
                                             par-dessus ; la boîte créée est
                                             sélectionnée ici au retour. */}
@@ -685,6 +682,12 @@ function looksLikeDiscord(url: string): boolean {
         return false;
     }
 }
+
+const KIND_OPTIONS: readonly SearchSelectOption<NotificationChannelKind>[] = [
+    { value: 'email', label: 'E-mail' },
+    { value: 'discord', label: 'Discord : mise en page riche, suivi vivant' },
+    { value: 'webhook', label: 'Webhook : POST JSON générique' }
+];
 
 const KIND_HINT: Record<NotificationChannelKind, string> = {
     email: 'Une boîte Mail « ouverte » de l’espace expédie le message.',

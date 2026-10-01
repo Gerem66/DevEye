@@ -7,8 +7,8 @@ import {
     invalidate,
     ReadOnlyNotice,
     SaveButton,
+    SearchSelect,
     SegmentedControl,
-    SelectInput,
     settingsStyles as shell,
     TextInput,
     type ConfirmRequest
@@ -241,23 +241,20 @@ export default function TargetGeneralPanel({ scope, canWrite, gone }: SettingsPa
                 <div className={shell.field}>
                     <span className={shell.sectionLabel}>Accès {PROVIDER_LABELS[target.provider]}</span>
                     <div className={shell.fieldWithAction}>
-                        <SelectInput
+                        {/* L'accès retiré : le champ vide dit l'état réel, jusqu'à
+                            ce qu'un accès soit choisi. */}
+                        <SearchSelect
                             value={credentialId}
                             disabled={!editable}
                             aria-label={`Accès ${PROVIDER_LABELS[target.provider]}`}
-                            onChange={(e) => setCredentialId(e.target.value)}
-                        >
-                            {/* L'accès retiré : l'entrée vide dit l'état réel, et
-                            disparaît dès qu'un accès est choisi. */}
-                            {credentialId === '' && (
-                                <option value=''>Aucun : accès retiré, déclenchement impossible</option>
-                            )}
-                            {usable.map((c) => (
-                                <option key={c.id} value={c.id}>
-                                    {c.provider === 'github' ? c.label : `${c.label} · ${c.baseUrl}`}
-                                </option>
-                            ))}
-                        </SelectInput>
+                            placeholder='Aucun : accès retiré, déclenchement impossible'
+                            options={usable.map((c) => ({
+                                value: String(c.id),
+                                label: c.label,
+                                detail: c.provider === 'github' ? undefined : (c.baseUrl ?? undefined)
+                            }))}
+                            onChange={setCredentialId}
+                        />
                         {/* Le bouton commun ouvre les réglages de la feature par-dessus,
                         et l'accès qui y est créé est adopté au retour. */}
                         {canWrite && (
@@ -279,14 +276,13 @@ export default function TargetGeneralPanel({ scope, canWrite, gone }: SettingsPa
             {/* Toujours présent, y compris vide : sa première ligne porte son état. */}
             <div className={shell.field}>
                 <span className={shell.sectionLabel}>Cible</span>
-                <SelectInput
+                <SearchSelect
                     value={externalId}
                     aria-label='Cible'
                     disabled={!editable || loadingCandidates || candidates.length === 0}
-                    onChange={(e) => pick(e.target.value)}
-                >
-                    <option value=''>
-                        {loadingCandidates
+                    onChange={pick}
+                    placeholder={
+                        loadingCandidates
                             ? onMachine
                                 ? 'Interrogation de la machine…'
                                 : 'Interrogation du fournisseur…'
@@ -296,26 +292,27 @@ export default function TargetGeneralPanel({ scope, canWrite, gone }: SettingsPa
                                   : workflow
                                     ? 'Ce jeton ne donne accès à aucun workflow'
                                     : 'Cette instance ne déclare aucune application'
-                              : 'Choisir…'}
-                    </option>
-                    {/* La cible réglée mais absente de la liste (retirée chez le
-                        fournisseur, ou saisie à la main) : sans cette entrée, le
-                        sélecteur afficherait « Choisir… ». */}
-                    {externalId !== '' && !candidates.some((c) => c.externalId === externalId) && (
-                        <option value={externalId}>{externalId} (hors liste)</option>
-                    )}
-                    {candidates.map((c) => (
-                        <option key={`${c.kind}:${c.externalId}`} value={c.externalId}>
-                            {c.kind === 'compose' || c.kind === 'service'
-                                ? '🧩 '
-                                : c.kind === 'workflow'
-                                  ? '⚙️ '
-                                  : '📦 '}
-                            {c.path ? `${c.path} | ` : ''}
-                            {c.name}
-                        </option>
-                    ))}
-                </SelectInput>
+                              : 'Choisir…'
+                    }
+                    options={[
+                        // La cible réglée mais absente de la liste (retirée chez le
+                        // fournisseur, ou saisie à la main) : sans cette entrée, le
+                        // sélecteur afficherait « Choisir… ».
+                        ...(externalId !== '' && !candidates.some((c) => c.externalId === externalId)
+                            ? [{ value: externalId, label: externalId, detail: 'hors liste' }]
+                            : []),
+                        ...candidates.map((c) => ({
+                            value: c.externalId,
+                            label: `${c.path ? `${c.path} | ` : ''}${c.name}`,
+                            prefix:
+                                c.kind === 'compose' || c.kind === 'service'
+                                    ? '🧩'
+                                    : c.kind === 'workflow'
+                                      ? '⚙️'
+                                      : '📦'
+                        }))
+                    ]}
+                />
             </div>
 
             {/* Repli manuel, pour une réponse que le décodeur ne reconnaît pas. */}

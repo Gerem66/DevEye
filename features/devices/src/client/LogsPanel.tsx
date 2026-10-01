@@ -1,5 +1,15 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { acquireMetrics, Button, onServerEvent, SelectInput, TextInput } from 'deveye-sdk-client';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+    acquireMetrics,
+    Button,
+    CopyButton,
+    LoadingVeil,
+    onServerEvent,
+    SearchSelect,
+    TextInput,
+    type SearchSelectFilter,
+    type SearchSelectOption
+} from 'deveye-sdk-client';
 import {
     DEVICE_LOG_LEVELS,
     DEVICE_LOG_LINES_EVENT,
@@ -48,7 +58,19 @@ const LEVEL_CLASS: Record<DeviceLogLevel, string> = {
     critical: styles.logLvlCritical
 };
 
-/** Group label for the source <optgroup>, by source kind. */
+/** Teinte de toute la rangée, pour ce qui mérite l'œil. */
+const LINE_TONE: Partial<Record<DeviceLogLevel, string>> = {
+    warning: styles.logLineWarning,
+    error: styles.logLineError,
+    critical: styles.logLineError
+};
+
+const LEVEL_OPTIONS: readonly SearchSelectOption<DeviceLogLevel | ''>[] = [
+    { value: '', label: 'Tous niveaux' },
+    ...DEVICE_LOG_LEVELS.map((level) => ({ value: level, label: `≥ ${LEVEL_LABELS[level]}` }))
+];
+
+/** Group label for the source list, by source kind. */
 const KIND_GROUP: Record<DeviceLogSourceKind, string> = {
     journald: 'Système',
     oslog: 'Système',
@@ -59,13 +81,24 @@ const KIND_GROUP: Record<DeviceLogSourceKind, string> = {
 
 const CONTAINER_GROUP = KIND_GROUP.docker;
 
+/** Mot-clé d'un conteneur qui tourne : la pastille « En cours » et la recherche le lisent. */
+const RUNNING_KEYWORDS = ['running', 'en cours'];
+
+/** Les pastilles du sélecteur de source ; celles d'un type absent ne s'affichent pas. */
+const SOURCE_FILTERS: readonly SearchSelectFilter[] = [
+    { value: 'system', label: 'Système', exclusive: 'kind', test: (o) => o.group === KIND_GROUP.journald },
+    { value: 'containers', label: 'Conteneurs', exclusive: 'kind', test: (o) => o.group === CONTAINER_GROUP },
+    { value: 'files', label: 'Fichiers', exclusive: 'kind', test: (o) => o.group === KIND_GROUP.syslog },
+    { value: 'running', label: 'En cours', test: (o) => o.keywords?.includes(RUNNING_KEYWORDS[0]) ?? false }
+];
+
 /**
  * Quand aucun conteneur n'est listé : l'agent ne peut pas distinguer « pas de
  * moteur » de « socket refusée », la note dit donc la condition.
  */
 const NO_CONTAINERS_HINT =
     'Aucun conteneur listé. L’agent les énumère avec « docker ps » / « podman ps » : il lui faut ' +
-    'donc accès au démon — service installé en root, ou son utilisateur dans le groupe « docker ».';
+    'donc accès au démon : service installé en root, ou son utilisateur dans le groupe « docker ».';
 
 const TIME_PRESETS: { label: string; seconds: number | null }[] = [
     { label: 'Tout', seconds: null },
@@ -84,6 +117,9 @@ const LIVE_INTERVAL_MS = 3000;
  */
 const QUERY_TIMEOUT_MS = 60_000;
 
+/** Au-delà, l'inventaire est réputé perdu : l'agent répond d'ordinaire en quelques secondes. */
+const SOURCES_TIMEOUT_MS = 20_000;
+
 /**
  * `replace` repart de l'extrémité choisie, `more` réclame la page suivante dans la
  * direction que dicte l'ancre : plus ancien depuis `newest`, plus récent depuis
@@ -97,6 +133,31 @@ type ScrollAction = 'bottom' | 'top' | 'keep' | null;
 /** Une ligne et sa clé de rendu, stable même quand une page s'insère en tête. */
 type KeyedLine = { key: number; line: DeviceLogLine };
 
+const formatTs = (ts: number | null): string => (ts ? new Date(ts).toLocaleString('fr-FR', { hour12: false }) : '·');
+
+const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** Les occurrences de la recherche dans un texte, surlignées. */
+function highlight(text: string, re: RegExp | null): ReactNode {
+    if (!re) return text;
+    const parts: ReactNode[] = [];
+    let from = 0;
+    for (const match of text.matchAll(re)) {
+        if (match[0] === '') continue;
+        const at = match.index;
+        if (at > from) parts.push(text.slice(from, at));
+        parts.push(
+            <mark key={at} className={styles.logMark}>
+                {match[0]}
+            </mark>
+        );
+        from = at + match[0].length;
+    }
+    if (parts.length === 0) return text;
+    if (from < text.length) parts.push(text.slice(from));
+    return parts;
+}
+
 /**
  * Log viewer for one device: its log sources (system journal, one entry per
  * container, files), filtered queries against the selected one, a live mode.
@@ -106,6 +167,7 @@ type KeyedLine = { key: number; line: DeviceLogLine };
 export function LogsPanel({ deviceId }: { deviceId: string }) {
     const [sources, setSources] = useState<DeviceLogSource[] | null>(null);
     const [sourcesLoading, setSourcesLoading] = useState(false);
+    const [sourcesTimedOut, setSourcesTimedOut] = useState(false);
     const [sourceId, setSourceId] = useState('');
     const [search, setSearch] = useState('');
     const [regex, setRegex] = useState(false);
@@ -119,11 +181,15 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
     const [error, setError] = useState<string | null>(null);
     const [live, setLive] = useState(false);
 
-    /** L'interrogation en vol : le routeur ne retient que ses trames. */
-    const pendingRef = useRef<{ queryId: string; mode: LoadMode; anchor: DeviceLogAnchor }>({
+    /**
+     * L'interrogation en vol : le routeur ne retient que ses trames. `silent`
+     * pour un tic du mode direct, qui ne doit pas voiler la liste toutes les 3 s.
+     */
+    const pendingRef = useRef<{ queryId: string; mode: LoadMode; anchor: DeviceLogAnchor; silent: boolean }>({
         queryId: '',
         mode: 'replace',
-        anchor: 'newest'
+        anchor: 'newest',
+        silent: false
     });
     const bufferRef = useRef<DeviceLogLine[]>([]);
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -138,6 +204,7 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
     /** Distance au bas du contenu, relevée avant une insertion en tête. */
     const bottomGapRef = useRef(0);
     const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const sourcesWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const clearWatchdog = useCallback(() => {
         if (watchdogRef.current !== null) {
@@ -145,9 +212,16 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
             watchdogRef.current = null;
         }
     }, []);
+    const clearSourcesWatchdog = useCallback(() => {
+        if (sourcesWatchdogRef.current !== null) {
+            clearTimeout(sourcesWatchdogRef.current);
+            sourcesWatchdogRef.current = null;
+        }
+    }, []);
 
-    // Le chien de garde survivrait au démontage du panneau.
+    // Les chiens de garde survivraient au démontage du panneau.
     useEffect(() => clearWatchdog, [clearWatchdog]);
+    useEffect(() => clearSourcesWatchdog, [clearSourcesWatchdog]);
 
     useEffect(() => acquireMetrics(deviceId), [deviceId]);
 
@@ -156,6 +230,7 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
     // Reset when the device changes; the effect below re-fetches its sources.
     useEffect(() => {
         setSources(null);
+        setSourcesTimedOut(false);
         setSourceId('');
         setLines([]);
         setAnchor('newest');
@@ -167,18 +242,28 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
     /** (Re)demande l'inventaire des sources : les conteneurs vont et viennent. */
     const requestSources = useCallback(() => {
         setSourcesLoading(true);
+        setSourcesTimedOut(false);
+        clearSourcesWatchdog();
+        // Sans réponse, le panneau dirait « détection… » pour toujours.
+        sourcesWatchdogRef.current = setTimeout(() => {
+            setSourcesLoading(false);
+            setSourcesTimedOut(true);
+        }, SOURCES_TIMEOUT_MS);
         void agent.send('agent.logSources', { deviceId }).catch(() => {
+            clearSourcesWatchdog();
             setSources([]);
             setSourcesLoading(false);
         });
-    }, [deviceId]);
+    }, [deviceId, clearSourcesWatchdog]);
 
     // Subscribe to the source/line pushes and ask for the source inventory.
     useEffect(() => {
         const offSources = onServerEvent(DEVICE_LOG_SOURCES_EVENT, deviceLogSourcesPushSchema, (d) => {
             if (d.deviceId !== deviceId) return;
+            clearSourcesWatchdog();
             setSources(d.sources);
             setSourcesLoading(false);
+            setSourcesTimedOut(false);
             // Une source disparue entre deux inventaires ne doit pas rester
             // sélectionnée : la requête suivante échouerait.
             setSourceId((cur) => (d.sources.some((s) => s.id === cur) ? cur : (d.sources[0]?.id ?? '')));
@@ -222,13 +307,13 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
             offSources();
             offLines();
         };
-    }, [deviceId, requestSources, clearWatchdog]);
+    }, [deviceId, requestSources, clearWatchdog, clearSourcesWatchdog]);
 
     const runQuery = useCallback(
-        (mode: LoadMode) => {
+        (mode: LoadMode, silent = false) => {
             if (!sourceId) return;
             const queryId = crypto.randomUUID();
-            pendingRef.current = { queryId, mode, anchor };
+            pendingRef.current = { queryId, mode, anchor, silent };
             bufferRef.current = [];
             setLoading(true);
             setError(null);
@@ -290,7 +375,7 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
         if (!live || !sourceId) return;
         const iv = setInterval(() => {
             if (loadingRef.current) return;
-            runQuery('replace');
+            runQuery('replace', true);
         }, LIVE_INTERVAL_MS);
         return () => clearInterval(iv);
     }, [live, sourceId, runQuery]);
@@ -345,8 +430,76 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
         return [...g.entries()];
     }, [sources]);
 
+    const sourceOptions = useMemo<SearchSelectOption[]>(
+        () =>
+            grouped.flatMap(([group, list]) =>
+                list.map((s) => ({
+                    value: s.id,
+                    label: s.label,
+                    group,
+                    detail: s.detail ?? undefined,
+                    keywords: s.running ? RUNNING_KEYWORDS : undefined,
+                    prefix:
+                        s.kind === 'docker' ? (
+                            <span className={`${styles.logDot} ${s.running ? styles.logDotOn : styles.logDotOff}`} />
+                        ) : (
+                            <span
+                                className={`icon ${s.kind === 'syslog' ? 'icon-file' : 'icon-server'} ${styles.logKindIcon}`}
+                            />
+                        )
+                }))
+            ),
+        [grouped]
+    );
+    // Une seule pastille ne trierait rien : la rangée n'apparaît qu'à partir de deux.
+    const sourceFilters = useMemo(() => {
+        const present = SOURCE_FILTERS.filter((f) => sourceOptions.some((o) => f.test(o)));
+        return present.length >= 2 ? present : [];
+    }, [sourceOptions]);
+
+    const copyValue = useMemo(
+        () =>
+            lines
+                .map(({ line }) =>
+                    [formatTs(line.ts), line.level?.toUpperCase(), line.unit, line.message].filter(Boolean).join('  ')
+                )
+                .join('\n'),
+        [lines]
+    );
+
+    // Les lignes affichées passent déjà le filtre de l'agent : il ne reste qu'à montrer où.
+    const highlightRe = useMemo(() => {
+        const term = search.trim();
+        if (!term) return null;
+        try {
+            return new RegExp(regex ? term : escapeRegExp(term), 'gi');
+        } catch {
+            return null;
+        }
+    }, [search, regex]);
+
     if (sources === null) {
-        return <p className={styles.logHint}>Détection des sources de logs…</p>;
+        return (
+            <div className={styles.logsPanel}>
+                {sourcesTimedOut ? (
+                    <>
+                        <p className={styles.logErr}>
+                            L’appareil n’a pas répondu à l’inventaire de ses sources de logs.
+                        </p>
+                        <div className={styles.logToolbar}>
+                            <Button variant='secondary' onClick={requestSources}>
+                                Réessayer
+                            </Button>
+                        </div>
+                    </>
+                ) : (
+                    <div className={styles.logViewWrap}>
+                        <div className={styles.logView} />
+                        <LoadingVeil label='Détection des sources de logs…' />
+                    </div>
+                )}
+            </div>
+        );
     }
     if (sources.length === 0) {
         return (
@@ -355,7 +508,7 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
                 <p className={styles.logHint}>{NO_CONTAINERS_HINT}</p>
                 <div className={styles.logToolbar}>
                     <Button variant='secondary' onClick={requestSources} disabled={sourcesLoading}>
-                        {sourcesLoading ? '…' : 'Réessayer'}
+                        Réessayer
                     </Button>
                 </div>
             </div>
@@ -363,36 +516,28 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
     }
 
     const sentinel = hasMore ? (
-        <div ref={sentinelRef} className={styles.logSentinel}>
-            {loading ? 'Chargement…' : ''}
-        </div>
+        <div ref={sentinelRef} className={styles.logSentinel} />
     ) : lines.length >= MAX_LOADED_LINES ? (
         <p className={styles.logSentinel}>
             Plafond de {MAX_LOADED_LINES.toLocaleString('fr-FR')} lignes atteint. Resserrez la recherche ou la fenêtre
             de temps.
         </p>
     ) : null;
+    const showVeil = loading && !pendingRef.current.silent;
 
     return (
         <div className={styles.logsPanel}>
             <div className={styles.logToolbar}>
-                <SelectInput
+                <SearchSelect
                     value={sourceId}
-                    onChange={(e) => setSourceId(e.target.value)}
-                    className={styles.logSourceSelect}
+                    options={sourceOptions}
+                    filters={sourceFilters}
+                    onChange={setSourceId}
                     aria-label='Source de logs'
-                >
-                    {grouped.map(([group, list]) => (
-                        <optgroup key={group} label={group}>
-                            {list.map((s) => (
-                                <option key={s.id} value={s.id}>
-                                    {s.label}
-                                    {s.kind === 'docker' ? (s.running ? ' ●' : ' ○') : ''}
-                                </option>
-                            ))}
-                        </optgroup>
-                    ))}
-                </SelectInput>
+                    placeholder='Choisir une source…'
+                    searchPlaceholder='Chercher une source…'
+                    className={styles.logSourceSelect}
+                />
                 <button
                     type='button'
                     className={styles.logToggle}
@@ -419,19 +564,13 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
                     .*
                 </button>
 
-                <SelectInput
+                <SearchSelect
                     value={levelMin}
-                    onChange={(e) => setLevelMin(e.target.value as DeviceLogLevel | '')}
-                    className={styles.logLevelSelect}
+                    options={LEVEL_OPTIONS}
+                    onChange={setLevelMin}
                     aria-label='Niveau minimum'
-                >
-                    <option value=''>Tous niveaux</option>
-                    {DEVICE_LOG_LEVELS.map((l) => (
-                        <option key={l} value={l}>
-                            ≥ {LEVEL_LABELS[l]}
-                        </option>
-                    ))}
-                </SelectInput>
+                    className={styles.logLevelSelect}
+                />
 
                 {selectedSource?.kind === 'journald' && (
                     <TextInput
@@ -452,7 +591,7 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
                     Live
                 </button>
                 <Button variant='secondary' onClick={() => runQuery('replace')} disabled={loading}>
-                    {loading ? '…' : 'Actualiser'}
+                    Actualiser
                 </Button>
             </div>
 
@@ -488,35 +627,41 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
                         Plus récent
                     </button>
                 </div>
-                <span className={styles.logCount}>
-                    {loading ? 'Chargement…' : `${lines.length} ligne${lines.length > 1 ? 's' : ''}`}
-                </span>
+                <span className={styles.logCount}>{`${lines.length} ligne${lines.length > 1 ? 's' : ''}`}</span>
+                <CopyButton value={copyValue} label='Copier les lignes affichées' />
             </div>
 
             {!sources.some((s) => s.kind === 'docker') && <p className={styles.logHint}>{NO_CONTAINERS_HINT}</p>}
 
-            <div className={styles.logView} ref={scrollRef}>
-                {error ? (
-                    <p className={styles.logErr}>{error}</p>
-                ) : lines.length === 0 && !loading ? (
-                    <p className={styles.logHint}>Aucune ligne pour ces critères.</p>
-                ) : (
-                    <>
-                        {anchor === 'newest' && sentinel}
-                        {lines.map(({ key, line: l }) => (
-                            <div key={key} className={styles.logLine}>
-                                <span className={styles.logTs}>
-                                    {l.ts ? new Date(l.ts).toLocaleString('fr-FR', { hour12: false }) : '—'}
-                                </span>
-                                {l.level && (
-                                    <span className={`${styles.logLvl} ${LEVEL_CLASS[l.level]}`}>{l.level}</span>
-                                )}
-                                {l.unit && <span className={styles.logUnit}>{l.unit}</span>}
-                                <span className={styles.logMsg}>{l.message}</span>
-                            </div>
-                        ))}
-                        {anchor === 'oldest' && sentinel}
-                    </>
+            <div className={styles.logViewWrap}>
+                <div className={styles.logView} ref={scrollRef}>
+                    {error ? (
+                        <p className={styles.logErr}>{error}</p>
+                    ) : lines.length === 0 && !loading ? (
+                        <p className={styles.logHint}>Aucune ligne pour ces critères.</p>
+                    ) : (
+                        <>
+                            {anchor === 'newest' && sentinel}
+                            {lines.map(({ key, line: l }) => (
+                                <div key={key} className={`${styles.logLine} ${(l.level && LINE_TONE[l.level]) || ''}`}>
+                                    <span className={styles.logTs}>{formatTs(l.ts)}</span>
+                                    {l.level && (
+                                        <span className={`${styles.logLvl} ${LEVEL_CLASS[l.level]}`}>{l.level}</span>
+                                    )}
+                                    {l.unit && <span className={styles.logUnit}>{highlight(l.unit, highlightRe)}</span>}
+                                    <span className={styles.logMsg}>{highlight(l.message, highlightRe)}</span>
+                                </div>
+                            ))}
+                            {anchor === 'oldest' && sentinel}
+                        </>
+                    )}
+                </div>
+                {showVeil && (
+                    <LoadingVeil
+                        delayed
+                        align={anchor === 'oldest' ? 'top' : 'center'}
+                        label={lines.length === 0 ? 'Lecture du journal…' : undefined}
+                    />
                 )}
             </div>
         </div>

@@ -13,7 +13,7 @@ import {
     ReadOnlyNotice,
     safeHref,
     SaveButton,
-    SelectInput,
+    SearchSelect,
     settingsStyles as shell,
     Switch,
     TextInput,
@@ -231,22 +231,20 @@ export default function ProjectPublicPanel({ scope, canWrite }: SettingsPanelPro
             <div className={shell.field}>
                 <span className={shell.sectionLabel}>Domaine</span>
                 <span className={shell.fieldWithAction}>
-                    <SelectInput
+                    <SearchSelect
                         aria-label='Domaine de la page publique'
                         value={draft.domainId === null ? '' : String(draft.domainId)}
                         disabled={!editable}
-                        onChange={(e) =>
-                            setDraft((d) => ({ ...d, domainId: e.target.value === '' ? null : Number(e.target.value) }))
-                        }
-                    >
-                        <option value=''>L’adresse de DevEye</option>
-                        {offered.map((domain) => (
-                            <option key={domain.id} value={String(domain.id)}>
-                                {domain.host}
-                                {domain.verifiedAt === null ? ' (en attente de vérification)' : ''}
-                            </option>
-                        ))}
-                    </SelectInput>
+                        onChange={(v) => setDraft((d) => ({ ...d, domainId: v === '' ? null : Number(v) }))}
+                        options={[
+                            { value: '', label: 'L’adresse de DevEye' },
+                            ...offered.map((domain) => ({
+                                value: String(domain.id),
+                                label: domain.host,
+                                detail: domain.verifiedAt === null ? 'en attente de vérification' : undefined
+                            }))
+                        ]}
+                    />
                     <FeatureSettingsButton
                         scope={{ kind: 'feature', feature: 'projects' }}
                         initialSection='domains'

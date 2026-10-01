@@ -13,7 +13,9 @@
 //! the tick already ran. The first instant is collected immediately on connect so
 //! the dashboard isn't blank.
 
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -542,6 +544,9 @@ async fn stream_session(
     // Log source/query tasks (a query shells out to journalctl/docker and can return
     // many lines) stream their results back through this channel, same as packages.
     let (log_tx, mut log_rx) = tokio::sync::mpsc::channel::<crate::logs::LogEvent>(256);
+    // The query in flight per source, with its cancel flag: a newer query on the
+    // same source replaces it, so flipping through sources never stacks reads.
+    let mut log_queries: HashMap<String, (String, Arc<AtomicBool>)> = HashMap::new();
     // Interactive terminals: PTY reader threads push output/exit events here; the
     // manager owns the live sessions and is dropped (killing shells) when we return.
     let (term_tx, mut term_rx) = tokio::sync::mpsc::channel::<crate::terminal::TermEvent>(1024);
@@ -592,6 +597,9 @@ async fn stream_session(
                 commands::send_docker_event(&mut sink, device_id, ev).await;
             }
             Some(ev) = log_rx.recv() => {
+                if let crate::logs::LogEvent::Lines { query_id, done: true, .. } = &ev {
+                    log_queries.retain(|_, (pending, _)| pending != query_id);
+                }
                 commands::send_log_event(&mut sink, device_id, ev).await;
             }
             Some(ev) = files_rx.recv() => {
@@ -831,6 +839,12 @@ async fn stream_session(
                                 offset,
                                 anchor,
                             }) => {
+                                let cancel = Arc::new(AtomicBool::new(false));
+                                if let Some((_, previous)) =
+                                    log_queries.insert(source_id.clone(), (query_id.clone(), Arc::clone(&cancel)))
+                                {
+                                    previous.store(true, Ordering::Relaxed);
+                                }
                                 tokio::spawn(crate::logs::run_query_task(
                                     query_id,
                                     source_id,
@@ -841,6 +855,7 @@ async fn stream_session(
                                         anchor: anchor.unwrap_or_default(),
                                     },
                                     log_tx.clone(),
+                                    cancel,
                                 ));
                             }
                             // Open an interactive terminal (PTY + shell).

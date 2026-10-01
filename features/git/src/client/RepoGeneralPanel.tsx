@@ -8,7 +8,7 @@ import {
     invalidate,
     ReadOnlyNotice,
     SaveButton,
-    SelectInput,
+    SearchSelect,
     settingsStyles as shell,
     type ConfirmRequest
 } from 'deveye-sdk-client';
@@ -175,19 +175,16 @@ export default function RepoGeneralPanel({ scope, canWrite, close, gone }: Setti
             <div className={shell.field}>
                 <span className={shell.sectionLabel}>Jeton d’accès</span>
                 <div className={shell.fieldWithAction}>
-                    <SelectInput
+                    <SearchSelect
                         value={credentialId === null ? '' : String(credentialId)}
                         disabled={!editable}
                         aria-label='Jeton d’accès'
-                        onChange={(e) => setCredentialId(e.target.value ? Number(e.target.value) : null)}
-                    >
-                        <option value=''>Aucun : synchronisation inactive</option>
-                        {credentials.map((c) => (
-                            <option key={c.id} value={c.id}>
-                                {c.label}
-                            </option>
-                        ))}
-                    </SelectInput>
+                        options={[
+                            { value: '', label: 'Aucun : synchronisation inactive' },
+                            ...credentials.map((c) => ({ value: String(c.id), label: c.label }))
+                        ]}
+                        onChange={(v) => setCredentialId(v ? Number(v) : null)}
+                    />
                     {/* Le bouton commun ouvre les réglages de la feature par-dessus,
                         et le jeton qui y est créé est adopté au retour. */}
                     {canWrite && (

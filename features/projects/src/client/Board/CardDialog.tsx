@@ -6,10 +6,10 @@ import {
     Dialog,
     NumberInput,
     SearchSelect,
-    SelectInput,
     TextInput,
     useLiveOutlines,
-    useLiveSegment
+    useLiveSegment,
+    type SearchSelectOption
 } from 'deveye-sdk-client';
 import type { MinimalUser } from '@deveye/types';
 import { compareFr, dateInputToSeconds, dateInputValue, PRIORITY_LABELS } from '../api';
@@ -34,6 +34,11 @@ import styles from '../style.module.css';
 export type CardTab = 'settings' | 'work' | 'chat';
 
 const CARD_TABS: readonly CardTab[] = ['settings', 'work', 'chat'];
+
+const PRIORITY_OPTIONS: readonly SearchSelectOption<ProjectPriority>[] = PROJECT_PRIORITIES.map((p) => ({
+    value: p,
+    label: PRIORITY_LABELS[p]
+}));
 
 interface CardDialogProps {
     open: boolean;
@@ -363,16 +368,12 @@ export function CardDialog({
                 </div>
                 <label className={styles.field}>
                     <span className={styles.label}>Priorité</span>
-                    <SelectInput
+                    <SearchSelect
                         value={draft.priority}
-                        onChange={(e) => patch({ priority: e.target.value as ProjectPriority })}
-                    >
-                        {PROJECT_PRIORITIES.map((p) => (
-                            <option key={p} value={p}>
-                                {PRIORITY_LABELS[p]}
-                            </option>
-                        ))}
-                    </SelectInput>
+                        options={PRIORITY_OPTIONS}
+                        onChange={(priority) => patch({ priority })}
+                        aria-label='Priorité'
+                    />
                 </label>
             </div>
 

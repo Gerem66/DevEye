@@ -7,7 +7,7 @@ import Button from '@/Components/Button';
 import { ConfirmDialog, type ConfirmRequest } from '@/Components/ConfirmDialog';
 import { Dialog } from '@/Components/Dialog';
 import { ProgressDialog } from '@/Components/ProgressDialog';
-import SelectInput from '@/Components/SelectInput';
+import SearchSelect from '@/Components/SearchSelect';
 import Switch from '@/Components/Switch';
 import { moduleManifest } from '@/sdk/registry';
 import { invalidate, type ResourceKey } from '@/stores/invalidation';
@@ -295,21 +295,16 @@ export default function SharingSection({ scope, onGone }: Props) {
                 <div className={styles.field}>
                     <span className={styles.fieldLabel}>Changer d’espace</span>
                     <div className={styles.fieldWithAction}>
-                        <SelectInput
+                        <SearchSelect
                             value={moveTo}
                             disabled={busy}
                             aria-label={`Déplacer ${dem} vers`}
-                            onChange={(e) => setMoveTo(e.target.value)}
-                        >
-                            <option value=''>Choisir un espace…</option>
-                            {state.workspaces
+                            placeholder='Choisir un espace…'
+                            options={state.workspaces
                                 .filter((w) => !w.isHome)
-                                .map((w) => (
-                                    <option key={w.workspaceId} value={w.workspaceId}>
-                                        {w.workspaceName}
-                                    </option>
-                                ))}
-                        </SelectInput>
+                                .map((w) => ({ value: String(w.workspaceId), label: w.workspaceName }))}
+                            onChange={setMoveTo}
+                        />
                         <Button variant='secondary' disabled={busy || moveTo === ''} onClick={askMove}>
                             Déplacer…
                         </Button>

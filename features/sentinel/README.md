@@ -339,7 +339,7 @@ Trois règles en découlent, à préserver :
 
 Côté forme, la feature emprunte tout à la DA : cartes en `--surface-widget`
 bordées de verre qui se soulèvent au survol (même grammaire que Bases de
-données), `StatusBadge` pour les états, `Checkbox`, `SelectInput` et `TextInput`
+données), `StatusBadge` pour les états, `Checkbox`, `SearchSelect` et `TextInput`
 du projet — jamais les contrôles natifs. Les quatre gravités réutilisent
 `--danger` et `--warning` plutôt que d'introduire une échelle chromatique de
 plus : un rouge qui ne serait pas celui du reste de l'application se lirait comme

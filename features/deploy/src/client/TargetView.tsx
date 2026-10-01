@@ -54,9 +54,10 @@ interface TargetViewProps {
     fullHistoryError?: string | null;
     /**
      * Ouvre le journal d'une ligne : celles de l'historique, et le dernier
-     * déploiement de l'en-tête. Absent, les deux restent inertes.
+     * déploiement de l'en-tête. L'état dit si le journal s'écrit encore.
+     * Absent, les deux restent inertes.
      */
-    onOpenLogs?: (externalId: string) => void;
+    onOpenLogs?: (externalId: string, status: DeployStatus) => void;
     /**
      * Affiche la section de l'historique complet sous l'en-tête. `false` dans
      * l'onglet d'un projet, qui se limite à l'identité et au dernier
@@ -198,7 +199,8 @@ export function TargetView({
     const lastRow = historyRows?.[0] ?? null;
     // Le journal du dernier déploiement, quand le fournisseur en tient un pour
     // lui : une ligne que le rapprochement n'a pas encore appariée n'en a pas.
-    const lastLogId = onOpenLogs && lastRow?.externalId ? lastRow.externalId : null;
+    const lastLog =
+        onOpenLogs && lastRow?.externalId ? { externalId: lastRow.externalId, status: lastRow.status } : null;
 
     const lastDeploy = target.lastStatus !== null && (
         <>
@@ -260,12 +262,12 @@ export function TargetView({
                             <p className={styles.blockLastDeploy}>
                                 <span className={styles.hint}>Aucun déploiement pour l’instant.</span>
                             </p>
-                        ) : lastLogId !== null ? (
+                        ) : lastLog !== null ? (
                             <button
                                 type='button'
                                 className={`${styles.blockLastDeploy} ${styles.itemRowClickable}`}
                                 title='Voir le journal'
-                                onClick={() => onOpenLogs?.(lastLogId)}
+                                onClick={() => onOpenLogs?.(lastLog.externalId, lastLog.status)}
                             >
                                 {lastDeploy}
                             </button>
@@ -325,7 +327,7 @@ export function TargetView({
                                                 type='button'
                                                 className={`${styles.itemRow} ${styles.itemRowClickable}`}
                                                 title='Voir le journal'
-                                                onClick={() => onOpenLogs?.(row.externalId as string)}
+                                                onClick={() => onOpenLogs?.(row.externalId as string, row.status)}
                                             >
                                                 {content}
                                             </button>

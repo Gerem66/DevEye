@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     Button,
+    SearchSelect,
     SegmentedControl,
-    SelectInput,
     TextInput,
     useResource,
-    useWorkspacePermissions
+    useWorkspacePermissions,
+    type SearchSelectOption
 } from 'deveye-sdk-client';
 
 import type { DocumentKind, DocumentStatus } from '../contracts/domain';
@@ -34,6 +35,8 @@ const STATES: { value: string; label: string; status: DocumentStatus | null; der
     { value: 'overdue', label: 'En retard', status: null, derived: 'overdue' },
     { value: 'cancelled', label: 'Annulés', status: 'cancelled', derived: null }
 ];
+
+const STATE_OPTIONS: SearchSelectOption[] = STATES.map((entry) => ({ value: entry.value, label: entry.label }));
 
 const PAGE = 50;
 
@@ -121,25 +124,20 @@ export default function DocumentsPage({ currency, onBack, onOpen, onNew }: Docum
                 />
 
                 <div className={styles.filterState}>
-                    <SelectInput value={state} aria-label='État' onChange={(e) => setState(e.target.value)}>
-                        {STATES.map((entry) => (
-                            <option key={entry.value} value={entry.value}>
-                                {entry.label}
-                            </option>
-                        ))}
-                    </SelectInput>
+                    <SearchSelect value={state} aria-label='État' onChange={setState} options={STATE_OPTIONS} />
                 </div>
 
                 {years.length > 1 && (
                     <div className={styles.filterYear}>
-                        <SelectInput value={year} aria-label='Année' onChange={(e) => setYear(e.target.value)}>
-                            <option value='all'>Toutes</option>
-                            {years.map((entry) => (
-                                <option key={entry} value={entry}>
-                                    {entry}
-                                </option>
-                            ))}
-                        </SelectInput>
+                        <SearchSelect
+                            value={year}
+                            aria-label='Année'
+                            onChange={setYear}
+                            options={[
+                                { value: 'all', label: 'Toutes' },
+                                ...years.map((entry) => ({ value: entry, label: entry }))
+                            ]}
+                        />
                     </div>
                 )}
 

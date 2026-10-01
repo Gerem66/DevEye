@@ -5,6 +5,8 @@ import CountBadge from '@/Components/CountBadge';
 import ErrorNote from '@/Components/ErrorNote';
 import ReadOnlyNotice from '@/Components/FeatureSettings/ReadOnlyNotice';
 import { openInfo } from '@/Components/InfoPopup';
+import LoadingVeil from '@/Components/LoadingVeil';
+import LogOutput from '@/Components/LogOutput';
 import { PlanPausedBadge, PlanPausedNotice } from '@/Components/PlanPause';
 import ProgressDialog from '@/Components/ProgressDialog';
 import { StatusBadge } from '@/Components/StatusBadge';
@@ -13,6 +15,23 @@ import { Specimen, useGalleryDisabled, Variant } from '../Specimen';
 import styles from '../Gallery.module.css';
 
 const TONES = ['online', 'offline', 'success', 'warning', 'danger', 'accent', 'neutral'] as const;
+
+const FILLER = Array.from({ length: 12 }, (_, i) => `Ligne ${i + 1} du contenu qui reste lisible sous le voile.`);
+
+const SAMPLE_LOG = [
+    '=== build ===',
+    '##[group]Run npm ci',
+    '2026-10-01T12:00:01.000Z npm warn deprecated inflight@1.0.6',
+    '2026-10-01T12:00:04.000Z added 412 packages in 3.2s',
+    '##[endgroup]',
+    '#12 [stage-1 3/7] RUN npm run build',
+    '#12 0.512 \u001b[32m✓\u001b[0m 42 modules transformed',
+    'Téléversement 10 %\rTéléversement 60 %\rTéléversement 100 %',
+    '#12 DONE 4.1s',
+    'Error: connect ECONNREFUSED 127.0.0.1:3306',
+    '##[error]Process completed with exit code 1.',
+    'Deployment completed'
+].join('\n');
 
 export default function Feedback() {
     const disabled = useGalleryDisabled();
@@ -67,6 +86,42 @@ export default function Feedback() {
                             Réessayer
                         </Button>
                     </ErrorNote>
+                </Variant>
+            </Specimen>
+            <Specimen title='LoadingVeil' note='Un frère de la zone défilante, dans un parent positionné.'>
+                <Variant label='centré'>
+                    <div className={styles.veilBox}>
+                        <div className={styles.veilScroll}>
+                            {FILLER.map((line) => (
+                                <p key={line} className={styles.demoText}>
+                                    {line}
+                                </p>
+                            ))}
+                        </div>
+                        <LoadingVeil />
+                    </div>
+                </Variant>
+                <Variant label='haut, avec libellé'>
+                    <div className={styles.veilBox}>
+                        <div className={styles.veilScroll}>
+                            {FILLER.map((line) => (
+                                <p key={line} className={styles.demoText}>
+                                    {line}
+                                </p>
+                            ))}
+                        </div>
+                        <LoadingVeil align='top' label='Lecture du journal…' />
+                    </div>
+                </Variant>
+            </Specimen>
+            <Specimen
+                title='LogOutput'
+                note='Codes ANSI retirés, retours chariot résolus, lignes colorées par ce qu’elles disent.'
+            >
+                <Variant label='journal de build' wide>
+                    <div className={styles.logBox}>
+                        <LogOutput text={SAMPLE_LOG} aria-label='Journal d’exemple' />
+                    </div>
                 </Variant>
             </Specimen>
             <Specimen title='ReadOnlyNotice'>

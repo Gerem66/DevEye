@@ -449,10 +449,12 @@ const LOG_TIMEOUT_MS = 30_000;
 
 /**
  * Silence après le dernier octet au bout duquel le journal est réputé complet.
- * C'est ce qui décide du temps d'ouverture de la popup : un journal complet
- * arrive en un seul message, ~200 ms après l'ouverture, puis plus rien.
+ * C'est ce qui décide du temps d'ouverture de la popup : le rejeu du fichier
+ * arrive en une rafale de trames à quelques millisecondes d'écart (un
+ * `tail -n +1 -f` côté Dokploy), puis plus rien. Un déploiement en cours rend
+ * ce qu'il a au premier silence ; le client le relit ensuite.
  */
-const LOG_IDLE_MS = 1_000;
+const LOG_IDLE_MS = 300;
 
 /**
  * Rejoue le journal d'un déploiement tel que Dokploy le stream, par un

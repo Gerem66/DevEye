@@ -1313,7 +1313,8 @@
     gap: var(--space-xs);
 }
 
-.fieldWithAction > select {
+/* Le champ vient toujours en premier ; la liste déroulante n'est pas un `select`. */
+.fieldWithAction > :first-child {
     flex: 1;
     min-width: 0;
 }

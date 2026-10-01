@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { DATABASE_CLIENT_PROVIDER } from '@deveye/types/sdk';
 import type { DatabaseClientProvider, DatabaseLinkedCandidate } from '@deveye/types/sdk/client';
-import { Button, Dialog, humanizeError, moduleClientProvider, SelectInput } from 'deveye-sdk-client';
+import { Button, Dialog, humanizeError, moduleClientProvider, SearchSelect } from 'deveye-sdk-client';
 import { api } from '../api';
 import styles from '../style.module.css';
 
@@ -84,23 +84,21 @@ export function LinkDatabaseDialog({ open, projectId, linkedIds, onClose, onSave
                         <>
                             <label className={styles.field}>
                                 <span className={styles.label}>Base de l’espace</span>
-                                <SelectInput
+                                <SearchSelect
                                     value={picked}
                                     disabled={free.length === 0}
-                                    onChange={(e) => setPicked(e.target.value)}
-                                >
-                                    <option value=''>
-                                        {free.length === 0 ? 'Aucune base à relier' : 'Choisir une base…'}
-                                    </option>
-                                    {free.map((d) => (
-                                        <option key={d.id} value={d.id}>
-                                            {d.name}
-                                            {d.foreign && ' (partagée)'} — {d.engineLabel}
-                                            {d.projectCount > 0 &&
-                                                ` — ${d.projectCount} projet${d.projectCount > 1 ? 's' : ''}`}
-                                        </option>
-                                    ))}
-                                </SelectInput>
+                                    onChange={setPicked}
+                                    options={free.map((d) => ({
+                                        value: String(d.id),
+                                        label: `${d.name}${d.foreign ? ' (partagée)' : ''}`,
+                                        detail:
+                                            d.projectCount > 0
+                                                ? `${d.engineLabel} · ${d.projectCount} projet${d.projectCount > 1 ? 's' : ''}`
+                                                : d.engineLabel
+                                    }))}
+                                    placeholder={free.length === 0 ? 'Aucune base à relier' : 'Choisir une base…'}
+                                    aria-label='Base de l’espace'
+                                />
                                 <span className={styles.hint}>
                                     Une base peut servir plusieurs projets : en choisir une déjà utilisée ailleurs ne la
                                     retire à personne.

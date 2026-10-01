@@ -8,10 +8,11 @@ import {
     openFeature,
     ReadOnlyNotice,
     SaveButton,
-    SelectInput,
+    SearchSelect,
     settingsStyles as shell,
     TextInput,
-    useDomains
+    useDomains,
+    type SearchSelectOption
 } from 'deveye-sdk-client';
 import { MAIL_CLIENT_PROVIDER } from '@deveye/types/sdk';
 import type { MailClientProvider, SettingsPanelProps } from '@deveye/types/sdk/client';
@@ -29,12 +30,12 @@ import styles from './style.module.css';
  */
 
 /** Une liste courte plutôt que les cent soixante codes ISO. */
-const CURRENCIES = [
-    { code: 'EUR', label: 'Euro (€)' },
-    { code: 'USD', label: 'Dollar américain ($)' },
-    { code: 'GBP', label: 'Livre sterling (£)' },
-    { code: 'CHF', label: 'Franc suisse (CHF)' },
-    { code: 'CAD', label: 'Dollar canadien (CA$)' }
+const CURRENCIES: SearchSelectOption[] = [
+    { value: 'EUR', label: 'Euro (€)' },
+    { value: 'USD', label: 'Dollar américain ($)' },
+    { value: 'GBP', label: 'Livre sterling (£)' },
+    { value: 'CHF', label: 'Franc suisse (CHF)' },
+    { value: 'CAD', label: 'Dollar canadien (CA$)' }
 ];
 
 /** Le logo tient dans la ligne scellée des réglages : une vignette, pas une image de presse. */
@@ -184,17 +185,13 @@ export default function IssuerPanel({ canWrite }: SettingsPanelProps) {
 
             <label className={shell.field}>
                 <span className={shell.fieldLabel}>Devise</span>
-                <SelectInput
+                <SearchSelect
+                    aria-label='Devise'
                     value={draft.currency}
                     disabled={!canWrite}
-                    onChange={(e) => patch({ currency: e.target.value })}
-                >
-                    {CURRENCIES.map((entry) => (
-                        <option key={entry.code} value={entry.code}>
-                            {entry.label}
-                        </option>
-                    ))}
-                </SelectInput>
+                    onChange={(currency) => patch({ currency })}
+                    options={CURRENCIES}
+                />
                 <span className={shell.fieldHint}>
                     Une seule devise par espace. Les documents déjà émis gardent la leur : changer de devise ne
                     convertit rien.
@@ -204,19 +201,20 @@ export default function IssuerPanel({ canWrite }: SettingsPanelProps) {
             <label className={shell.field}>
                 <span className={shell.fieldLabel}>Compte qui expédie vos documents</span>
                 <div className={shell.fieldWithAction}>
-                    <SelectInput
+                    <SearchSelect
+                        aria-label='Compte qui expédie vos documents'
                         value={draft.mailSenderId === null ? '' : String(draft.mailSenderId)}
                         disabled={!canWrite || senders === null || senders.length === 0}
-                        onChange={(e) => patch({ mailSenderId: e.target.value === '' ? null : Number(e.target.value) })}
-                    >
-                        <option value=''>Aucun</option>
-                        {(senders ?? []).map((sender) => (
-                            <option key={sender.id} value={String(sender.id)}>
-                                {sender.label}
-                                {sender.address.length > 0 && ` · ${sender.address}`}
-                            </option>
-                        ))}
-                    </SelectInput>
+                        onChange={(value) => patch({ mailSenderId: value === '' ? null : Number(value) })}
+                        options={[
+                            { value: '', label: 'Aucun' },
+                            ...(senders ?? []).map((sender) => ({
+                                value: String(sender.id),
+                                label: sender.label,
+                                ...(sender.address.length > 0 ? { detail: sender.address } : {})
+                            }))
+                        ]}
+                    />
                     <Button
                         variant='ghost'
                         icon='add'
@@ -249,23 +247,23 @@ export default function IssuerPanel({ canWrite }: SettingsPanelProps) {
 
             <label className={shell.field}>
                 <span className={shell.fieldLabel}>Adresse des liens envoyés à vos clients</span>
-                <SelectInput
+                <SearchSelect
+                    aria-label='Adresse des liens envoyés à vos clients'
                     value={draft.domainId === null ? '' : String(draft.domainId)}
                     disabled={!canWrite}
-                    onChange={(e) => patch({ domainId: e.target.value === '' ? null : Number(e.target.value) })}
-                >
-                    <option value=''>L’adresse de DevEye</option>
-                    {/* Le domaine choisi reste affiché s'il retombe : le taire ferait croire qu'il n'est plus choisi. */}
-                    {domains
-                        .filter((domain) => domain.verifiedAt !== null || domain.id === draft.domainId)
-                        .map((domain) => (
-                            <option key={domain.id} value={String(domain.id)}>
-                                {domain.verifiedAt === null
-                                    ? `${domain.host} (en attente de vérification)`
-                                    : domain.host}
-                            </option>
-                        ))}
-                </SelectInput>
+                    onChange={(value) => patch({ domainId: value === '' ? null : Number(value) })}
+                    options={[
+                        { value: '', label: 'L’adresse de DevEye' },
+                        // Le domaine choisi reste affiché s'il retombe : le taire ferait croire qu'il n'est plus choisi.
+                        ...domains
+                            .filter((domain) => domain.verifiedAt !== null || domain.id === draft.domainId)
+                            .map((domain) => ({
+                                value: String(domain.id),
+                                label: domain.host,
+                                ...(domain.verifiedAt === null ? { detail: 'en attente de vérification' } : {})
+                            }))
+                    ]}
+                />
                 <span className={shell.fieldHint}>
                     Chaque devis et facture s’ouvre à cette adresse. Seuls vos domaines vérifiés sont proposés : on les
                     déclare dans l’onglet Domaines. Les liens déjà envoyés restent valables.

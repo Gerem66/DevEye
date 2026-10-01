@@ -1,5 +1,5 @@
 import type { MinimalUser } from '@deveye/types';
-import { Checkbox, Dialog, SelectInput } from 'deveye-sdk-client';
+import { Checkbox, Dialog, SearchSelect } from 'deveye-sdk-client';
 import type { GitCommitAuthor } from '../contracts/domain';
 
 import styles from './style.module.css';
@@ -67,21 +67,17 @@ export function AuthorMapDialog({
                                 {author.name || 'Auteur inconnu'}
                                 <span className={styles.hint}>{author.email}</span>
                             </span>
-                            <SelectInput
+                            <SearchSelect
                                 className={styles.authorSelect}
                                 disabled={!canWrite}
                                 value={author.userId === null ? '' : String(author.userId)}
-                                onChange={(e) =>
-                                    onMap(author.authorRef, e.target.value ? Number(e.target.value) : null)
-                                }
-                            >
-                                <option value=''>Non rattaché</option>
-                                {members.map((m) => (
-                                    <option key={m.id} value={m.id}>
-                                        {m.username}
-                                    </option>
-                                ))}
-                            </SelectInput>
+                                aria-label={`Membre rattaché à ${author.name || author.email}`}
+                                options={[
+                                    { value: '', label: 'Non rattaché' },
+                                    ...members.map((m) => ({ value: String(m.id), label: m.username }))
+                                ]}
+                                onChange={(v) => onMap(author.authorRef, v ? Number(v) : null)}
+                            />
                         </li>
                     ))}
                 </ul>

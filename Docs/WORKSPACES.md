@@ -395,7 +395,7 @@ DB_DATABASE=DevEye_migtest LISTEN_PORT=3099 npx tsx index.ts   # ×2
   a planté franchement, **`weather_locations` a silencieusement renvoyé les
   mauvaises lignes**. Le test était trop faible ; il a été remplacé par un
   aller-retour écriture/lecture **entre deux espaces**.
-- **`SelectInput` et `TextInput` posent `width: 100%`.** Dans une ligne flex sans
+- **Le déclencheur de `SearchSelect` et `TextInput` posent `width: 100%`.** Dans une ligne flex sans
   contrainte, ils réclament toute la largeur et écrasent le texte voisin jusqu'à
   zéro. **Le motif est apparu trois fois** (dialogue de rôle, page Utilisateurs,
   liste des membres). À traiter à la source si l'occasion se présente.

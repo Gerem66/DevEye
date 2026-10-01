@@ -3,9 +3,10 @@ import {
     humanizeError,
     ReadOnlyNotice,
     SaveButton,
-    SelectInput,
+    SearchSelect,
     settingsStyles as shell,
-    TextInput
+    TextInput,
+    type SearchSelectOption
 } from 'deveye-sdk-client';
 import { DEFAULT_PROCESS_CAPTURE, DEFAULT_RETENTION_DAYS, type Device, type ProcessCapture } from '@deveye/types';
 
@@ -20,6 +21,12 @@ const PLAN_DEFAULT = '__plan__';
 
 const METRIC_PRESETS = [10, 30, 60, 300]; // seconds
 const RET_PRESETS = [7, 30, 90, 365]; // days
+
+const CAPTURE_OPTIONS: readonly SearchSelectOption<ProcessCapture>[] = [
+    { value: 'all', label: 'Tous' },
+    { value: 'top', label: 'Top 20 (CPU + mémoire)' },
+    { value: 'off', label: 'Désactivé' }
+];
 
 /** Mesuré : une liste gzip d'environ 580 programmes, puis ses 20 premiers. */
 const FULL_SAMPLE_BYTES = 4800;
@@ -182,16 +189,13 @@ export function ConfigPanel({ deviceId, canWrite }: { deviceId: string; canWrite
                               : `≈ ${formatBytes(estimate.daily)} par jour, soit ~${formatBytes(estimate.retained)} conservés par appareil.`
                     }
                 >
-                    <SelectInput
+                    <SearchSelect
                         value={capture}
+                        options={CAPTURE_OPTIONS}
                         disabled={!editable}
-                        onChange={(e) => setCapture(e.target.value as ProcessCapture)}
+                        onChange={setCapture}
                         aria-label='Processus capturés'
-                    >
-                        <option value='all'>Tous</option>
-                        <option value='top'>Top 20 (CPU + mémoire)</option>
-                        <option value='off'>Désactivé</option>
-                    </SelectInput>
+                    />
                 </ConfigRow>
                 <ConfigChoice
                     label='Conservation de l’historique'
@@ -260,15 +264,17 @@ function ConfigChoice({
 }: ConfigChoiceProps) {
     return (
         <ConfigRow label={label}>
-            <SelectInput value={sel} disabled={disabled} onChange={(e) => onSel(e.target.value)} aria-label={label}>
-                {planDefault && <option value={PLAN_DEFAULT}>{planDefault}</option>}
-                {presets.map((p) => (
-                    <option key={p.value} value={String(p.value)}>
-                        {p.label}
-                    </option>
-                ))}
-                <option value={CUSTOM}>Personnalisé…</option>
-            </SelectInput>
+            <SearchSelect
+                value={sel}
+                options={[
+                    ...(planDefault ? [{ value: PLAN_DEFAULT, label: planDefault }] : []),
+                    ...presets.map((p) => ({ value: String(p.value), label: p.label })),
+                    { value: CUSTOM, label: 'Personnalisé…' }
+                ]}
+                disabled={disabled}
+                onChange={onSel}
+                aria-label={label}
+            />
             {sel === CUSTOM && (
                 <span className={styles.configCustom}>
                     <TextInput

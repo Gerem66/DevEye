@@ -6,7 +6,7 @@ import {
     DialogCancelButton,
     formatBytesFr,
     Popup,
-    SelectInput,
+    SearchSelect,
     TextInput
 } from 'deveye-sdk-client';
 
@@ -146,17 +146,17 @@ export function ComposePopup() {
                 <div className={styles.composeHeader}>
                     <label className={styles.composeRow}>
                         <span className={styles.composeRowLabel}>De</span>
-                        <SelectInput
+                        <SearchSelect
                             className={styles.composeRowInput}
-                            value={accountId ?? ''}
-                            onChange={(e) => setAccountId(e.target.value ? Number(e.target.value) : null)}
-                        >
-                            {accounts.map((a) => (
-                                <option key={a.id} value={a.id}>
-                                    {a.displayName} ({a.emailAddress})
-                                </option>
-                            ))}
-                        </SelectInput>
+                            value={accountId === null ? '' : String(accountId)}
+                            onChange={(v) => setAccountId(v ? Number(v) : null)}
+                            options={accounts.map((a) => ({
+                                value: String(a.id),
+                                label: a.displayName,
+                                detail: a.emailAddress
+                            }))}
+                            aria-label='De'
+                        />
                     </label>
                     <label className={styles.composeRow}>
                         <span className={styles.composeRowLabel}>À</span>

@@ -7,8 +7,8 @@ import {
     humanizeError,
     invalidate,
     SaveButton,
+    SearchSelect,
     SegmentedControl,
-    SelectInput,
     openInfo,
     settingsStyles as shell,
     Switch,
@@ -273,18 +273,13 @@ export function FormEditor({ form, siteId, open, canWrite, onClose, onSaved }: F
                                     aria-label='Nom de la question'
                                     onChange={(e) => setField(index, { name: e.target.value })}
                                 />
-                                <SelectInput
+                                <SearchSelect
                                     value={field.kind}
                                     disabled={!canWrite}
                                     aria-label='Type'
-                                    onChange={(e) => setField(index, { kind: e.target.value as AudienceFieldKind })}
-                                >
-                                    {KIND_OPTIONS.map((option) => (
-                                        <option key={option.value} value={option.value}>
-                                            {option.label}
-                                        </option>
-                                    ))}
-                                </SelectInput>
+                                    onChange={(kind) => setField(index, { kind })}
+                                    options={KIND_OPTIONS}
+                                />
                                 <Switch
                                     checked={field.required}
                                     disabled={!canWrite}

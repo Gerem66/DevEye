@@ -6,7 +6,7 @@ import { humanizeError } from '@/api/useResource';
 import Button from '@/Components/Button';
 import { ConfirmDialog, type ConfirmRequest } from '@/Components/ConfirmDialog';
 import { ProgressDialog } from '@/Components/ProgressDialog';
-import SelectInput from '@/Components/SelectInput';
+import SearchSelect from '@/Components/SearchSelect';
 import { moduleManifest } from '@/sdk/registry';
 import { invalidate, type ResourceKey } from '@/stores/invalidation';
 import { isRemoteUsable, useRemoteInstances, useRemotePing } from '@/stores/remoteInstances';
@@ -158,19 +158,19 @@ export default function CopyItem({ feature, itemId }: Props) {
         <div className={styles.field}>
             <span className={styles.fieldLabel}>Copier vers</span>
             <div className={styles.fieldWithAction}>
-                <SelectInput
+                <SearchSelect
                     value={choice}
                     disabled={busy}
                     aria-label={`Copier ${dem} vers`}
-                    onChange={(e) => setChoice(e.target.value)}
-                >
-                    <option value=''>Choisir un espace…</option>
-                    {targets.map((t) => (
-                        <option key={t.key} value={t.key} disabled={t.unavailable !== null}>
-                            {t.unavailable ? `${t.name} (${t.unavailable})` : t.name}
-                        </option>
-                    ))}
-                </SelectInput>
+                    placeholder='Choisir un espace…'
+                    options={targets.map((t) => ({
+                        value: t.key,
+                        label: t.name,
+                        detail: t.unavailable ?? undefined,
+                        disabled: t.unavailable !== null
+                    }))}
+                    onChange={setChoice}
+                />
                 <Button variant='secondary' disabled={busy || choice === ''} onClick={ask}>
                     Copier…
                 </Button>

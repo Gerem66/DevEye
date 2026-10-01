@@ -67,7 +67,7 @@ describe('fetchDeploymentLog : conclure sans fermeture', () => {
     it('réarme le repos à chaque trame, sans tronquer', async () => {
         // Un journal qui arrive en plusieurs morceaux espacés ne doit pas être
         // coupé au premier silence : c'est le dernier qui compte.
-        behaviour = { chunks: ['a', 'b', 'c'], gapMs: 400, close: false };
+        behaviour = { chunks: ['a', 'b', 'c'], gapMs: 150, close: false };
         const { log } = await fetchLog(20_000);
         assert.equal(log, 'abc');
     });

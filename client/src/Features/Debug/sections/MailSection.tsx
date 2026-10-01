@@ -5,7 +5,6 @@ import { ws, WsError } from '@/api/ws';
 import Button from '@/Components/Button';
 import SearchSelect from '@/Components/SearchSelect';
 import SegmentedControl from '@/Components/SegmentedControl';
-import SelectInput from '@/Components/SelectInput';
 import TextInput from '@/Components/TextInput';
 import styles from '../Debug.module.css';
 
@@ -157,16 +156,16 @@ export default function MailSection() {
                                 <label className={styles.field}>
                                     <span className={styles.fieldLabel}>Expéditeur</span>
                                     {catalog.senders.length > 0 ? (
-                                        <SelectInput value={senderId} onChange={(e) => setSenderId(e.target.value)}>
-                                            {catalog.senders.map((s) => (
-                                                <option
-                                                    key={`${s.workspaceId}:${s.accountId}`}
-                                                    value={`${s.workspaceId}:${s.accountId}`}
-                                                >
-                                                    {s.address} ({s.workspaceName})
-                                                </option>
-                                            ))}
-                                        </SelectInput>
+                                        <SearchSelect
+                                            value={senderId}
+                                            aria-label='Expéditeur'
+                                            options={catalog.senders.map((s) => ({
+                                                value: `${s.workspaceId}:${s.accountId}`,
+                                                label: s.address,
+                                                detail: s.workspaceName
+                                            }))}
+                                            onChange={setSenderId}
+                                        />
                                     ) : (
                                         <span className={styles.rowMeta}>
                                             Ce mail part d’une boîte d’espace, et aucun de vos espaces n’en a une prête

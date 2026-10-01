@@ -4,10 +4,11 @@ import {
     Checkbox,
     Dialog,
     humanizeError,
+    SearchSelect,
     SegmentedControl,
-    SelectInput,
     TextInput,
-    useResource
+    useResource,
+    type SearchSelectOption
 } from 'deveye-sdk-client';
 import type { FeatureDomain } from '@deveye/types';
 import {
@@ -114,6 +115,22 @@ export default function StatusPageDialog({
         () => domains.filter((domain) => domain.verifiedAt !== null || domain.id === page?.domainId),
         [domains, page]
     );
+    const domainOptions: readonly SearchSelectOption[] = [
+        { value: '', label: 'L’adresse de DevEye' },
+        ...offered.map((domain) => {
+            const taken = domain.id === page?.domainId ? undefined : takenDomains.get(domain.id);
+            const notes = [
+                ...(domain.verifiedAt === null ? ['en attente de vérification'] : []),
+                ...(taken !== undefined ? [`sert déjà « ${taken} »`] : [])
+            ];
+            return {
+                value: String(domain.id),
+                label: domain.host,
+                detail: notes.length > 0 ? notes.join(', ') : undefined,
+                disabled: taken !== undefined
+            };
+        })
+    ];
 
     const full = draft.labels.size >= UPTIME_PAGE_SERVICES_MAX;
     const ready = draft.title.trim().length > 0 && draft.labels.size > 0;
@@ -227,22 +244,12 @@ export default function StatusPageDialog({
 
                 <label className={styles.field}>
                     <span className={styles.fieldLabel}>Adresse</span>
-                    <SelectInput
+                    <SearchSelect
                         value={draft.domainId === null ? '' : String(draft.domainId)}
-                        onChange={(e) => set('domainId', e.target.value === '' ? null : Number(e.target.value))}
-                    >
-                        <option value=''>L’adresse de DevEye</option>
-                        {offered.map((domain) => {
-                            const taken = domain.id === page?.domainId ? undefined : takenDomains.get(domain.id);
-                            return (
-                                <option key={domain.id} value={String(domain.id)} disabled={taken !== undefined}>
-                                    {domain.host}
-                                    {domain.verifiedAt === null ? ' (en attente de vérification)' : ''}
-                                    {taken !== undefined ? ` (sert déjà « ${taken} »)` : ''}
-                                </option>
-                            );
-                        })}
-                    </SelectInput>
+                        onChange={(v) => set('domainId', v === '' ? null : Number(v))}
+                        options={domainOptions}
+                        aria-label='Adresse'
+                    />
                     <span className={styles.fieldHint}>
                         Un domaine vérifié sert la page à sa racine, comme statut.monentreprise.fr. On les déclare dans
                         l’onglet Domaines ; l’adresse de DevEye fonctionne toujours.

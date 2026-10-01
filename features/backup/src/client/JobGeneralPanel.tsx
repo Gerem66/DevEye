@@ -16,7 +16,7 @@ import {
     invalidate,
     ReadOnlyNotice,
     SaveButton,
-    SelectInput,
+    SearchSelect,
     settingsStyles as shell,
     Switch,
     TextInput,
@@ -24,7 +24,16 @@ import {
     type ConfirmRequest
 } from 'deveye-sdk-client';
 import { api } from './api';
-import { candidateKey, DESTINATION_LABELS, folderInput, SCHEDULE_LABELS, sourceKey, WEEKDAYS } from './format';
+import {
+    candidateKey,
+    DAY_OPTIONS,
+    DESTINATION_LABELS,
+    folderInput,
+    HOUR_OPTIONS,
+    SCHEDULE_OPTIONS,
+    sourceKey,
+    WEEKDAY_OPTIONS
+} from './format';
 import JobSourceFields, { EMPTY_FOLDER, type FolderDraft } from './JobSourceFields';
 import styles from './style.module.css';
 
@@ -220,18 +229,17 @@ export default function JobGeneralPanel({ scope, canWrite, gone }: SettingsPanel
             <div className={shell.field}>
                 <span className={shell.sectionLabel}>Où l’écrire</span>
                 <div className={shell.fieldWithAction}>
-                    <SelectInput
-                        value={destinationId}
+                    <SearchSelect
+                        value={String(destinationId)}
                         disabled={!editable}
                         aria-label='Où l’écrire'
-                        onChange={(e) => setDestinationId(Number(e.target.value))}
-                    >
-                        {destinations.map((d) => (
-                            <option key={d.id} value={d.id}>
-                                {d.name} ({DESTINATION_LABELS[d.kind]})
-                            </option>
-                        ))}
-                    </SelectInput>
+                        options={destinations.map((d) => ({
+                            value: String(d.id),
+                            label: d.name,
+                            detail: DESTINATION_LABELS[d.kind]
+                        }))}
+                        onChange={(v) => setDestinationId(Number(v))}
+                    />
                     {/* Le bouton commun ouvre les réglages de la feature par-dessus,
                         et la destination qui y est créée est adoptée au retour
                         (`onOpenChange` fige la liste connue). */}
@@ -259,64 +267,51 @@ export default function JobGeneralPanel({ scope, canWrite, gone }: SettingsPanel
             <div className={styles.fieldRow}>
                 <label className={styles.field}>
                     <span className={shell.sectionLabel}>Cadence</span>
-                    <SelectInput
+                    <SearchSelect
                         value={schedule}
+                        aria-label='Cadence'
+                        options={SCHEDULE_OPTIONS}
                         disabled={!editable}
-                        onChange={(e) => setSchedule(e.target.value as BackupScheduleKind)}
-                    >
-                        {(Object.keys(SCHEDULE_LABELS) as BackupScheduleKind[]).map((k) => (
-                            <option key={k} value={k}>
-                                {SCHEDULE_LABELS[k]}
-                            </option>
-                        ))}
-                    </SelectInput>
+                        onChange={setSchedule}
+                    />
                 </label>
 
                 {schedule !== 'manual' && schedule !== 'hourly' && (
                     <label className={styles.field}>
                         <span className={shell.sectionLabel}>Heure</span>
-                        <SelectInput
-                            value={hour}
+                        <SearchSelect
+                            value={String(hour)}
+                            aria-label='Heure'
+                            options={HOUR_OPTIONS}
                             disabled={!editable}
-                            onChange={(e) => setHour(Number(e.target.value))}
-                        >
-                            {Array.from({ length: 24 }, (_, h) => (
-                                <option key={h} value={h}>
-                                    {String(h).padStart(2, '0')} h
-                                </option>
-                            ))}
-                        </SelectInput>
+                            onChange={(v) => setHour(Number(v))}
+                        />
                     </label>
                 )}
 
                 {schedule === 'weekly' && (
                     <label className={styles.field}>
                         <span className={shell.sectionLabel}>Jour</span>
-                        <SelectInput
-                            value={weekday}
+                        <SearchSelect
+                            value={String(weekday)}
+                            aria-label='Jour'
+                            options={WEEKDAY_OPTIONS}
                             disabled={!editable}
-                            onChange={(e) => setWeekday(Number(e.target.value))}
-                        >
-                            {WEEKDAYS.map((label, index) => (
-                                <option key={label} value={index}>
-                                    {label}
-                                </option>
-                            ))}
-                        </SelectInput>
+                            onChange={(v) => setWeekday(Number(v))}
+                        />
                     </label>
                 )}
 
                 {schedule === 'monthly' && (
                     <label className={styles.field}>
                         <span className={shell.sectionLabel}>Quantième</span>
-                        <SelectInput value={day} disabled={!editable} onChange={(e) => setDay(Number(e.target.value))}>
-                            {/* Borné à 28 : un travail au 31 ne partirait pas en février. */}
-                            {Array.from({ length: 28 }, (_, i) => (
-                                <option key={i + 1} value={i + 1}>
-                                    {i + 1}
-                                </option>
-                            ))}
-                        </SelectInput>
+                        <SearchSelect
+                            value={String(day)}
+                            aria-label='Quantième'
+                            options={DAY_OPTIONS}
+                            disabled={!editable}
+                            onChange={(v) => setDay(Number(v))}
+                        />
                     </label>
                 )}
             </div>

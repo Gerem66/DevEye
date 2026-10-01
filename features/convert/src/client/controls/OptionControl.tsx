@@ -1,4 +1,4 @@
-import { NumberInput, SegmentedControl, SelectInput, Slider, Switch } from 'deveye-sdk-client';
+import { NumberInput, SearchSelect, SegmentedControl, Slider, Switch } from 'deveye-sdk-client';
 
 import { scaledDims, type Dims } from '../../contracts/geometry';
 import {
@@ -82,13 +82,7 @@ export function OptionControl({ spec, value, sourceDims, croppedDims, onChange }
                         onChange={onChange}
                     />
                 ) : (
-                    <SelectInput aria-label={spec.label} value={current} onChange={(e) => onChange(e.target.value)}>
-                        {spec.options.map((o) => (
-                            <option key={o.value} value={o.value}>
-                                {o.detail ? `${o.label} (${o.detail})` : o.label}
-                            </option>
-                        ))}
-                    </SelectInput>
+                    <SearchSelect aria-label={spec.label} value={current} onChange={onChange} options={spec.options} />
                 );
             }
             case 'number':

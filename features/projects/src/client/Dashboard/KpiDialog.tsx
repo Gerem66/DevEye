@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Button, Dialog, humanizeError, SelectInput, TextInput } from 'deveye-sdk-client';
+import { Button, Dialog, humanizeError, SearchSelect, TextInput, type SearchSelectOption } from 'deveye-sdk-client';
 
 import { api } from '../api';
 import {
@@ -20,6 +20,14 @@ const COMPARATOR_LABELS: Record<DashboardComparator, string> = {
     eq: 'vaut',
     ne: 'diffère de'
 };
+
+const COMPARATOR_OPTIONS: readonly SearchSelectOption<DashboardComparator | ''>[] = [
+    { value: '', label: 'jamais' },
+    ...(Object.keys(COMPARATOR_LABELS) as DashboardComparator[]).map((value) => ({
+        value,
+        label: COMPARATOR_LABELS[value]
+    }))
+];
 
 interface KpiDialogProps {
     open: boolean;
@@ -143,14 +151,13 @@ export function KpiDialog({ open, projectId, editing, databases, onClose, onSave
 
                 <label className={styles.field}>
                     <span className={styles.label}>Base</span>
-                    <SelectInput value={databaseId} onChange={(e) => setDatabaseId(e.target.value)}>
-                        {databases.length === 0 && <option value=''>Aucune base reliée à ce projet</option>}
-                        {databases.map((d) => (
-                            <option key={d.id} value={d.id}>
-                                {d.name}
-                            </option>
-                        ))}
-                    </SelectInput>
+                    <SearchSelect
+                        value={databaseId}
+                        onChange={setDatabaseId}
+                        options={databases.map((d) => ({ value: String(d.id), label: d.name }))}
+                        placeholder={databases.length === 0 ? 'Aucune base reliée à ce projet' : 'Choisir une base…'}
+                        aria-label='Base'
+                    />
                     <span className={styles.hint}>
                         Seules les bases reliées à ce projet se mesurent. Reliez-en une dans l’onglet Bases de données.
                     </span>
@@ -185,17 +192,12 @@ export function KpiDialog({ open, projectId, editing, databases, onClose, onSave
                 <label className={styles.field}>
                     <span className={styles.label}>Teinter quand le nombre…</span>
                     <div className={styles.row}>
-                        <SelectInput
+                        <SearchSelect
                             value={comparator}
-                            onChange={(e) => setComparator(e.target.value as DashboardComparator | '')}
-                        >
-                            <option value=''>jamais</option>
-                            {Object.entries(COMPARATOR_LABELS).map(([value, label]) => (
-                                <option key={value} value={value}>
-                                    {label}
-                                </option>
-                            ))}
-                        </SelectInput>
+                            onChange={setComparator}
+                            options={COMPARATOR_OPTIONS}
+                            aria-label='Teinter quand le nombre…'
+                        />
                         {comparator !== '' && (
                             <TextInput
                                 value={threshold}

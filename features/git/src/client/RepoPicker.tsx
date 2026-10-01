@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { FeatureSettingsButton, humanizeError, SelectInput, TextInput } from 'deveye-sdk-client';
+import { FeatureSettingsButton, humanizeError, SearchSelect, TextInput } from 'deveye-sdk-client';
 import {
     GIT_REPO_NAME_MAX_LENGTH,
     GIT_REPO_OWNER_MAX_LENGTH,
@@ -35,6 +35,12 @@ interface RepoPickerProps {
  * long pour ne pas lancer un appel par lettre, assez court pour qu'on ne l'attende pas.
  */
 const LOOKUP_DEBOUNCE_MS = 500;
+
+/** Ce qui distingue un dépôt dans la liste : privé, archivé, déjà suivi. */
+function candidateDetail(c: GitRepoCandidate): string | undefined {
+    const marks = [c.private && 'privé', c.archived && 'archivé', c.known && 'déjà dans l’espace'].filter(Boolean);
+    return marks.length > 0 ? marks.join(' · ') : undefined;
+}
 
 /**
  * Désigner un dépôt chez le fournisseur : jeton, propriétaire, puis dépôt.
@@ -102,19 +108,15 @@ export function RepoPicker({ credentials, value, onChange, onSettingsOpenChange,
             <label className={styles.field}>
                 <span className={styles.label}>Jeton d’accès</span>
                 <div className={styles.fieldWithAction}>
-                    <SelectInput
+                    <SearchSelect
                         value={credentialId === null ? '' : String(credentialId)}
-                        onChange={(e) =>
-                            onChange({ ...value, credentialId: e.target.value ? Number(e.target.value) : null })
-                        }
-                    >
-                        <option value=''>Aucun — dépôts publics uniquement</option>
-                        {credentials.map((c) => (
-                            <option key={c.id} value={c.id}>
-                                {c.label}
-                            </option>
-                        ))}
-                    </SelectInput>
+                        aria-label='Jeton d’accès'
+                        options={[
+                            { value: '', label: 'Aucun : dépôts publics uniquement' },
+                            ...credentials.map((c) => ({ value: String(c.id), label: c.label }))
+                        ]}
+                        onChange={(v) => onChange({ ...value, credentialId: v ? Number(v) : null })}
+                    />
                     {/* Le bouton commun, ouvert sur l'onglet Sources : la seule
                         porte vers les jetons, ici comme ailleurs. */}
                     <FeatureSettingsButton
@@ -147,27 +149,24 @@ export function RepoPicker({ credentials, value, onChange, onSettingsOpenChange,
                 <span className={styles.label}>Dépôt</span>
 
                 {!useManual && (
-                    <SelectInput
+                    <SearchSelect
                         value={inList ? value.repo : ''}
+                        aria-label='Dépôt'
                         disabled={owner.length === 0 || looking || candidates === null}
-                        onChange={(e) => onChange({ ...value, repo: e.target.value })}
-                    >
-                        <option value=''>
-                            {owner.length === 0
+                        placeholder={
+                            owner.length === 0
                                 ? 'Saisissez d’abord un propriétaire'
                                 : looking
                                   ? 'Lecture chez GitHub…'
-                                  : `Choisir parmi ${candidates?.length ?? 0} dépôt${(candidates?.length ?? 0) > 1 ? 's' : ''}…`}
-                        </option>
-                        {candidates?.map((c) => (
-                            <option key={c.name} value={c.name}>
-                                {c.name}
-                                {c.private && ' · privé'}
-                                {c.archived && ' · archivé'}
-                                {c.known && ' · déjà dans l’espace'}
-                            </option>
-                        ))}
-                    </SelectInput>
+                                  : `Choisir parmi ${candidates?.length ?? 0} dépôt${(candidates?.length ?? 0) > 1 ? 's' : ''}…`
+                        }
+                        options={(candidates ?? []).map((c) => ({
+                            value: c.name,
+                            label: c.name,
+                            detail: candidateDetail(c)
+                        }))}
+                        onChange={(repo) => onChange({ ...value, repo })}
+                    />
                 )}
 
                 {useManual && (

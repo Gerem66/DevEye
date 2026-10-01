@@ -6,8 +6,8 @@ import {
     DeviceFolderField,
     Dialog,
     humanizeError,
+    SearchSelect,
     SegmentedControl,
-    SelectInput,
     Switch,
     TextInput,
     useDevices
@@ -238,15 +238,17 @@ export default function DestinationDialog({ open, destination, onClose, onSaved 
                 {kind === 'device' && (
                     <label className={styles.field}>
                         <span className={styles.fieldLabel}>Machine</span>
-                        <SelectInput value={deviceId} onChange={(e) => setDeviceId(e.target.value)}>
-                            <option value=''>Choisir une machine…</option>
-                            {devices.map((d) => (
-                                <option key={d.id} value={d.id}>
-                                    {d.name}
-                                    {d.online ? '' : ' (hors ligne)'}
-                                </option>
-                            ))}
-                        </SelectInput>
+                        <SearchSelect
+                            value={deviceId}
+                            aria-label='Machine'
+                            placeholder='Choisir une machine…'
+                            options={devices.map((d) => ({
+                                value: d.id,
+                                label: d.name,
+                                detail: d.online ? undefined : 'hors ligne'
+                            }))}
+                            onChange={setDeviceId}
+                        />
                         <span className={styles.fieldHint}>
                             L’agent y écrit les archives. Une machine hors ligne au moment d’un passage fait échouer ce
                             passage-là, pas les suivants.

@@ -17,7 +17,7 @@ import type { DeployHistoryEntry, DeployTarget, Deployment } from '../contracts/
 
 import { api } from './api';
 import { PROVIDER_TIMEOUT_MS, providerError } from './format';
-import LogsDialog from './LogsDialog';
+import LogsDialog, { isLogLive, type LogsTarget } from './LogsDialog';
 import TargetDialog from './TargetDialog';
 import TargetList from './TargetList';
 import TargetView, { TargetActions } from './TargetView';
@@ -50,8 +50,8 @@ export function FeatureDeploy(_props: FeatureViewProps) {
     const [historyError, setHistoryError] = useState<string | null>(null);
 
     const [addOpen, setAddOpen] = useState(false);
-    /** L'identifiant chez le fournisseur dont on regarde le journal ; `null` = popup fermée. */
-    const [logsFor, setLogsFor] = useState<string | null>(null);
+    /** La ligne dont on regarde le journal ; `null` = popup fermée. */
+    const [logsFor, setLogsFor] = useState<LogsTarget | null>(null);
 
     const listVersion = useResourceVersion('deploy.list');
     const detailVersion = useResourceVersion('deploy.detail');
@@ -247,7 +247,7 @@ export function FeatureDeploy(_props: FeatureViewProps) {
                         showActions={false}
                         fullHistory={history}
                         fullHistoryError={historyError}
-                        onOpenLogs={setLogsFor}
+                        onOpenLogs={(externalId, status) => setLogsFor({ externalId, running: status === 'running' })}
                     />
                 </>
             )}
@@ -258,7 +258,8 @@ export function FeatureDeploy(_props: FeatureViewProps) {
             <LogsDialog
                 open={logsFor !== null}
                 targetId={openedId}
-                externalId={logsFor}
+                externalId={logsFor?.externalId ?? null}
+                live={isLogLive(logsFor, history)}
                 onClose={() => setLogsFor(null)}
             />
         </div>

@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import type { DeviceRelayOption } from '@deveye/types/sdk';
 
 import { humanizeError } from '@/api/useResource';
+import SearchSelect, { type SearchSelectOption } from '@/Components/SearchSelect';
 import { useDevices } from '@/devicesProvider';
-import SelectInput from '../SelectInput';
 import styles from './style.module.css';
 
 /**
@@ -61,24 +61,26 @@ export interface DeviceRelayFieldProps {
 export function DeviceRelayField({ value, onChange, load, disabled, id, ...aria }: DeviceRelayFieldProps) {
     const { devices, error } = useDeviceRelayOptions(disabled ? null : load);
     const blocked = devices.filter((d) => d.blocked !== null);
+    const options: SearchSelectOption[] = [
+        { value: '', label: 'Aucun appareil' },
+        ...devices.map((d) => ({
+            value: d.id,
+            label: d.name,
+            detail: d.online ? undefined : 'hors ligne',
+            disabled: d.blocked !== null && d.id !== value
+        }))
+    ];
 
     return (
         <>
-            <SelectInput
+            <SearchSelect
                 id={id}
-                aria-label={aria['aria-label']}
+                aria-label={aria['aria-label'] ?? 'Appareil'}
                 value={value}
+                options={options}
                 disabled={disabled}
-                onChange={(e) => onChange(e.target.value)}
-            >
-                <option value=''>Choisir un appareil…</option>
-                {devices.map((d) => (
-                    <option key={d.id} value={d.id} disabled={d.blocked !== null && d.id !== value}>
-                        {d.name}
-                        {d.online ? '' : ' (hors ligne)'}
-                    </option>
-                ))}
-            </SelectInput>
+                onChange={onChange}
+            />
             {error && <span className={styles.note}>{error}</span>}
             {blocked.map((d) => (
                 <span key={d.id} className={styles.note}>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Button, Dialog, SegmentedControl, SelectInput, TextInput } from 'deveye-sdk-client';
+import { Button, Dialog, SearchSelect, SegmentedControl, TextInput, type SearchSelectOption } from 'deveye-sdk-client';
 import type {
     DatabaseCombinator,
     DatabaseFilter,
@@ -25,6 +25,10 @@ const COMBINATORS: { value: DatabaseCombinator; label: string; title: string }[]
     { value: 'and', label: 'Tous (ET)', title: 'Tous les critères sont remplis' },
     { value: 'or', label: 'Au moins un (OU)', title: 'Au moins un critère est rempli' }
 ];
+
+const OPERATOR_OPTIONS: readonly SearchSelectOption<DatabaseFilterOperator>[] = (
+    Object.keys(FILTER_OPERATOR_LABELS) as DatabaseFilterOperator[]
+).map((id) => ({ value: id, label: FILTER_OPERATOR_LABELS[id] }));
 
 /**
  * Chercher dans une table par triplets colonne / opérateur / valeur, jamais du
@@ -89,31 +93,21 @@ export function SearchDialog({ open, structure, filters, combinator, onClose, on
                             <div className={styles.fieldRow}>
                                 <label className={styles.field}>
                                     <span className={styles.label}>Colonne</span>
-                                    <SelectInput
+                                    <SearchSelect
                                         value={filter.column}
-                                        onChange={(e) => patch(i, { column: e.target.value })}
-                                    >
-                                        {structure.columns.map((c) => (
-                                            <option key={c.name} value={c.name}>
-                                                {c.name}
-                                            </option>
-                                        ))}
-                                    </SelectInput>
+                                        aria-label='Colonne'
+                                        options={structure.columns.map((c) => ({ value: c.name, label: c.name }))}
+                                        onChange={(column) => patch(i, { column })}
+                                    />
                                 </label>
                                 <label className={styles.field}>
                                     <span className={styles.label}>Condition</span>
-                                    <SelectInput
+                                    <SearchSelect
                                         value={filter.operator}
-                                        onChange={(e) =>
-                                            patch(i, { operator: e.target.value as DatabaseFilterOperator })
-                                        }
-                                    >
-                                        {(Object.keys(FILTER_OPERATOR_LABELS) as DatabaseFilterOperator[]).map((id) => (
-                                            <option key={id} value={id}>
-                                                {FILTER_OPERATOR_LABELS[id]}
-                                            </option>
-                                        ))}
-                                    </SelectInput>
+                                        aria-label='Condition'
+                                        options={OPERATOR_OPTIONS}
+                                        onChange={(operator) => patch(i, { operator })}
+                                    />
                                 </label>
                                 {OPERATOR_NEEDS_VALUE[filter.operator] && (
                                     <label className={styles.field}>

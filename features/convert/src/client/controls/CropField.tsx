@@ -1,5 +1,5 @@
 import { useId } from 'react';
-import { NumberInput, SelectInput, Slider } from 'deveye-sdk-client';
+import { NumberInput, SearchSelect, Slider } from 'deveye-sdk-client';
 
 import { cropRect, MIN_KEPT, type Dims } from '../../contracts/geometry';
 import type { CropValue } from '../../contracts/options';
@@ -56,25 +56,20 @@ export function CropField({ value, source, onChange }: CropFieldProps) {
     return (
         <div className={styles.cropField}>
             {source && (
-                <SelectInput
+                <SearchSelect
                     aria-label='Proportions du recadrage'
                     value={value ? preset : 'none'}
-                    onChange={(e) => {
-                        const ratio = RATIOS.find((r) => r.id === e.target.value);
+                    onChange={(next) => {
+                        const ratio = RATIOS.find((r) => r.id === next);
                         if (ratio) emit(centered(source, ratio.ratio));
-                        else if (e.target.value === 'none') onChange(null);
+                        else if (next === 'none') onChange(null);
                     }}
-                >
-                    <option value='none'>Ne pas recadrer</option>
-                    {RATIOS.map((r) => (
-                        <option key={r.id} value={r.id}>
-                            {r.label}
-                        </option>
-                    ))}
-                    <option value='custom' disabled={!value}>
-                        Réglé à la main
-                    </option>
-                </SelectInput>
+                    options={[
+                        { value: 'none', label: 'Ne pas recadrer' },
+                        ...RATIOS.map((r) => ({ value: r.id, label: r.label })),
+                        { value: 'custom', label: 'Réglé à la main', disabled: !value }
+                    ]}
+                />
             )}
 
             <div className={styles.cropGrid}>

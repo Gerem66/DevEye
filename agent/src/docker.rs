@@ -109,6 +109,7 @@ fn engine_status(bin: &str) -> Option<DockerEngineStatus> {
         &["version", "--format", "{{.Server.Version}}"],
         DETECT_TIMEOUT,
         None,
+        None,
     );
     match probe {
         Ok((stdout, _)) => Some(DockerEngineStatus {

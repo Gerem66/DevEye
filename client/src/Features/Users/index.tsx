@@ -4,7 +4,7 @@ import type { AdminUser } from '@deveye/types';
 import { ws, WsError } from '@/api/ws';
 import Button from '@/Components/Button';
 import { Dialog } from '@/Components/Dialog';
-import SelectInput from '@/Components/SelectInput';
+import SearchSelect, { type SearchSelectOption } from '@/Components/SearchSelect';
 import { StatusBadge } from '@/Components/StatusBadge';
 import { useAuth } from '@/auth/AuthProvider';
 import { avatarSrc } from '@/Features/Profile/avatar';
@@ -16,6 +16,11 @@ function when(epoch: number): string {
     if (!epoch) return 'jamais';
     return new Date(epoch * 1000).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
 }
+
+const ROLE_OPTIONS: readonly SearchSelectOption<'user' | 'admin'>[] = [
+    { value: 'user', label: 'Utilisateur' },
+    { value: 'admin', label: 'Administrateur' }
+];
 
 /**
  * Page « Utilisateurs » : la gestion des comptes à l'échelle du site, par
@@ -121,27 +126,22 @@ export default function FeatureUsers() {
                                         {/* Se retirer soi-même l'administration ou se suspendre
                                             laisserait potentiellement le site sans administrateur :
                                             le serveur le refuse, l'UI ne le propose pas. */}
-                                        <SelectInput
+                                        <SearchSelect
                                             className={styles.roleSelect}
                                             value={u.role}
+                                            options={ROLE_OPTIONS}
                                             disabled={self || busy}
-                                            onChange={(e) =>
+                                            onChange={(role) =>
                                                 void run(
                                                     () =>
                                                         ws
-                                                            .send('admin.setUserRole', {
-                                                                userId: u.id,
-                                                                role: e.target.value as 'user' | 'admin'
-                                                            })
+                                                            .send('admin.setUserRole', { userId: u.id, role })
                                                             .then(() => undefined),
                                                     'Changement de rôle impossible.'
                                                 )
                                             }
                                             aria-label={`Rôle de ${u.username}`}
-                                        >
-                                            <option value='user'>Utilisateur</option>
-                                            <option value='admin'>Administrateur</option>
-                                        </SelectInput>
+                                        />
 
                                         {!self && (
                                             <>

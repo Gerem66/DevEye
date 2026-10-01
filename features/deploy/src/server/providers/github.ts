@@ -37,6 +37,8 @@ const CANDIDATE_CONCURRENCY = 4;
 const CANDIDATES_TTL_SECONDS = 300;
 /** Jobs dont le journal complet est rapatrié. */
 const LOG_JOBS_MAX = 10;
+/** Journaux de jobs lus à la fois : l'ouverture ne doit pas les enchaîner. */
+const LOG_CONCURRENCY = 4;
 /** Au-delà, le journal complet ne garde que sa fin : un build verbeux pèse plusieurs mégaoctets. */
 const LOG_MAX_CHARS = 1_000_000;
 
@@ -367,12 +369,17 @@ export class GithubProvider implements DeployProviderAdapter {
     async fullLog(access: ProviderAccess, target: ProviderTarget, entry: RemoteDeployment): Promise<string> {
         if (!entry.logRef) throw new ProviderError('Aucun journal pour cette exécution.', 404);
         const { repo } = parseWorkflowId(target.externalId);
-        const jobs = await this.jobs(access, target, entry.logRef);
-        const parts: string[] = [];
-        for (const job of jobs.slice(0, LOG_JOBS_MAX)) {
-            const text = await this.jobLog(access, repo, job.id).catch(() => 'Journal indisponible pour ce job.');
-            parts.push(`=== ${job.name} ===\n${text}`);
-        }
+        const jobs = (await this.jobs(access, target, entry.logRef)).slice(0, LOG_JOBS_MAX);
+        // Rendus dans l'ordre des jobs, quel que soit l'ordre d'arrivée.
+        const parts = new Array<string>(jobs.length);
+        await eachLimited(
+            jobs.map((job, index) => ({ job, index })),
+            LOG_CONCURRENCY,
+            async ({ job, index }) => {
+                const text = await this.jobLog(access, repo, job.id).catch(() => 'Journal indisponible pour ce job.');
+                parts[index] = `=== ${job.name} ===\n${text}`;
+            }
+        );
         const log = parts.join('\n\n');
         return log.length > LOG_MAX_CHARS ? `…${log.slice(-LOG_MAX_CHARS)}` : log;
     }
