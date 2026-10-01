@@ -14,6 +14,7 @@ import { humanizeError } from '@/api/useResource';
 import { ws } from '@/api/ws';
 import Button from '@/Components/Button';
 import Checkbox from '@/Components/Checkbox';
+import { Switch } from '@/Components/Switch';
 import { Dialog } from '@/Components/Dialog';
 import { ConfirmDialog, type ConfirmRequest } from '@/Components/ConfirmDialog';
 import SelectInput from '@/Components/SelectInput';
@@ -128,9 +129,23 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
      */
     const showSelection = scope.kind === 'item' || descriptor.featureRoute;
     /** Les éléments cochent leurs propres canaux : à dire ici, où l'on les déclare. */
-    const itemsRouteThemselves = scope.kind === 'feature' && descriptor.hasItems && descriptor.featureRoute !== true;
-    const itemsRouteToo =
-        scope.kind === 'feature' && descriptor.hasItems && descriptor.featureRoute && descriptor.featureRouteHint;
+    const itemsRouteThemselves = scope.kind === 'feature' && descriptor.hasItems && !descriptor.featureRoute;
+    /**
+     * La fonctionnalité prévient aussi en son nom, à côté de ses éléments : sans
+     * sélection propre, ces avis suivent les canaux cochés par les éléments
+     * concernés. Un interrupteur dit lequel des deux régimes est en cours, et
+     * les cases ne se montrent que pour une sélection propre : des cases
+     * décochées sous des avis qui partent diraient le contraire du vrai.
+     */
+    const followsItems =
+        scope.kind === 'feature' &&
+        descriptor.hasItems &&
+        descriptor.featureRoute &&
+        descriptor.featureRouteHint !== null;
+    /** Une sélection propre est en cours, même encore vide. */
+    const [explicit, setExplicit] = useState(false);
+    const showChecks = showSelection && (!followsItems || explicit);
+    const itemNoun = descriptor.itemNoun ?? 'élément';
 
     const reload = useCallback(async () => {
         if (!showSelection) {
@@ -151,6 +166,7 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
         setManagedHere(route.managedHere);
         setHomeWorkspaceId(route.homeWorkspaceId);
         setSelected(route.route.channelIds);
+        setExplicit(route.route.channelIds.length > 0);
     }, [feature, itemId, showSelection]);
 
     useEffect(() => {
@@ -197,6 +213,24 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
         }, 'Enregistrement impossible.');
     };
 
+    /** Revenir au régime des éléments, c'est effacer la sélection propre. */
+    const toggleFollow = (follow: boolean): void => {
+        setExplicit(!follow);
+        if (!follow || selected.length === 0) return;
+        const before = selected;
+        setSelected([]);
+        void run(async () => {
+            try {
+                await ws.send('notify.routeSet', { feature, itemId, channelIds: [] });
+            } catch (e) {
+                setSelected(before);
+                setExplicit(true);
+                throw e;
+            }
+            invalidate('notify.routeGet');
+        }, 'Enregistrement impossible.');
+    };
+
     const startAdd = (): void => {
         setEditing(null);
         setDraft(emptyDraft(mail !== undefined));
@@ -209,7 +243,7 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
                 const created = await ws.send('notify.channelAdd', { ...draft, feature });
                 /* Créé depuis un élément, le canal est là pour lui : il part coché,
                    sans quoi l'utilisateur croit être prévenu et ne l'est pas. */
-                if (showSelection && canRoute) {
+                if (showChecks && canRoute) {
                     const before = selected;
                     const next = [...selected, created.channel.id];
                     setSelected(next);
@@ -330,23 +364,28 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
                 </p>
             )}
 
-            {/* Les éléments ont leurs cases ; celles d'ici portent ce qui ne
-                vise aucun d'eux en particulier. */}
-            {itemsRouteToo && (
-                <p className={styles.sectionHint}>
-                    Chaque {descriptor.itemNoun ?? 'élément'} coche ses canaux dans ses propres réglages. Les cases
-                    ci-dessous valent pour ce que {descriptor.label} dit en son nom propre :{' '}
-                    {descriptor.featureRouteHint}
-                </p>
+            {/* Les éléments ont leurs cases ; ce que la fonctionnalité dit en
+                son nom suit les leurs, sauf si on lui choisit les siens. */}
+            {followsItems && channels.length > 0 && (
+                <div className={styles.field}>
+                    <Switch
+                        checked={!explicit}
+                        disabled={!canRoute || busy}
+                        label={`Suivre les canaux cochés par les ${itemNoun}s`}
+                        hint={
+                            explicit
+                                ? `Cochez ci-dessous les canaux qui recevront ces avis. Sans aucun coché, ils suivent de nouveau les ${itemNoun}s.`
+                                : `${descriptor.featureRouteHint} Chaque avis part une fois, vers les canaux cochés par les ${itemNoun}s concernés.`
+                        }
+                        onChange={toggleFollow}
+                    />
+                </div>
             )}
 
-            {showSelection && channels.length > 0 && (
+            {showChecks && channels.length > 0 && (
                 <span className={styles.sectionLabel}>
-                    Cochez les canaux vers lesquels{' '}
-                    {scope.kind === 'item' ? `ce ${descriptor.itemNoun ?? 'élément'}` : descriptor.label} écrit.{' '}
-                    {itemsRouteToo
-                        ? `Sans aucun coché, ces avis suivent les canaux cochés par les ${descriptor.itemNoun ?? 'élément'}s concernés.`
-                        : 'Sans aucun coché, rien ne part.'}
+                    Cochez les canaux vers lesquels {scope.kind === 'item' ? `ce ${itemNoun}` : descriptor.label} écrit
+                    {followsItems ? ' en son nom propre.' : '. Sans aucun coché, rien ne part.'}
                 </span>
             )}
 
@@ -372,7 +411,7 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
 
                 {channels.map((channel) => (
                     <div key={channel.id} className={styles.channelRow}>
-                        {showSelection && (
+                        {showChecks && (
                             <Checkbox
                                 checked={selected.includes(channel.id)}
                                 disabled={!canRoute || busy}
@@ -499,8 +538,9 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
                     </Button>
                     {/* « Tester cet envoi » éprouve une **sélection** : elle
                         n'existe à cette échelle que si la fonctionnalité prévient
-                        en son nom propre. Chaque canal garde son essai sur sa ligne. */}
-                    {showSelection && (
+                        en son nom propre, et par ses propres canaux. Chaque canal
+                        garde son essai sur sa ligne. */}
+                    {showChecks && (
                         <Button variant='ghost' icon='play' disabled={busy} onClick={testRoute}>
                             Tester cet envoi
                         </Button>
