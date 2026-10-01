@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { describe, it, mock } from 'node:test';
 
 import type { DeployCredentialRow, DeploymentRow, DeployTargetRow } from '../contracts/domain';
+import { AGENT_TUNNEL_PROBE } from '@deveye/types';
 import { DEPLOY_ITEMS_PROVIDER, type DeployItemsProvider } from '@deveye/types/sdk';
+import type { SdkDevice } from '@deveye/types/sdk/server';
 import { createTestServiceDeps, testDevice } from '@deveye/types/sdk/testing';
 
 import { DokployProvider, type DokployClient, type DokployTarget } from './providers/dokploy';
@@ -259,6 +261,7 @@ function syncWith(
         liveChannels?: readonly number[];
         notifyAccepted?: boolean;
         pausedItems?: Record<string, readonly string[]>;
+        devices?: readonly SdkDevice[];
     } = {}
 ) {
     const deps = createTestServiceDeps({ repo, ...options });
@@ -469,6 +472,39 @@ describe('le lien avec l’instance', () => {
                 assert.equal(repo.credentials[0].unreachable_error, refusal.message);
                 assert.equal(deps.recorded.notifications.length, 1, refusal.message);
             }
+        }));
+
+    it('un appareil hors ligne se revérifie à la minute, sans recul, et son retour se voit aussitôt', () =>
+        withClock(async (advance) => {
+            // Un agent qui sait ouvrir un tunnel, mais une machine absente.
+            const device = {
+                ...testDevice({ id: 'dev-1', name: 'VPS2', online: false }),
+                report: { agent: { probes: [AGENT_TUNNEL_PROBE], policy: { tunnel: true } } }
+            } as unknown as SdkDevice;
+            const repo = fakeRepo(
+                [target({ id: 1, synced_at: 100, content: JSON.stringify({ name: 'Site' }) })],
+                [credential({ device_id: 'dev-1', author_user_id: 7 })]
+            );
+            const { deps, tick } = syncWith(repo, { devices: [device] });
+
+            // Trois essais à une minute d'écart : avec le recul qui double, le
+            // troisième n'aurait pas eu lieu avant quatre minutes.
+            await tick();
+            advance(61);
+            await tick();
+            advance(61);
+            await tick();
+            assert.equal(repo.credentials[0].unreachable_error, 'L’appareil « VPS2 » est hors ligne.');
+            assert.equal(deps.recorded.notifications.length, 1);
+
+            device.online = true;
+            advance(61);
+            await tick();
+            assert.equal(repo.credentials[0].unreachable_since, null);
+            assert.deepEqual(
+                deps.recorded.notifications.map((n) => n.subject),
+                ['[DevEye] Lien perdu avec l’instance de « Prod »', '[DevEye] Lien rétabli avec l’instance de « Prod »']
+            );
         }));
 
     it('après un redémarrage, une perte déjà en base ne se redit pas, mais son retour part', () =>

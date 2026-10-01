@@ -348,7 +348,9 @@ et ne retarde jamais les cibles d'une autre.
 
 Le recul se compte **par accès**, en mémoire, jamais dans `synced_at` (voir
 6.3) : 60 s au premier échec, doublé ensuite jusqu'à 15 min, remis à zéro au
-premier succès. Les cibles d'un accès en recul sont écartées dès la requête :
+premier succès. Exception : le relais d'un appareil qui ne s'ouvre pas (hors
+ligne, droit perdu) se constate sans rien envoyer, donc sans recul, toutes les
+minutes ; l'agent qui revient est vu à la minute, pas un quart d'heure après. Les cibles d'un accès en recul sont écartées dès la requête :
 une instance en panne ne tient plus la tête de file avec ses déploiements « en
 cours ». Ceux-ci passent quand même en suivi perdu à la borne des six heures
 (6.4).

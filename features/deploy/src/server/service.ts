@@ -119,6 +119,19 @@ const DEPLOY_STALE_SECONDS = 6 * 3600;
 
 /** Un déploiement dont l'issue est connue : c'est ce qui mérite un avis. */
 /**
+ * Le relais d'un appareil qui ne s'ouvre pas (hors ligne, droit perdu,
+ * supprimé) : une instance qu'on ne joint pas, comme le garde ou le réseau,
+ * mais constatée sans rien envoyer. Le recul ne s'applique pas : l'essai ne
+ * coûte rien, et l'agent qui revient doit être vu à la minute.
+ */
+class RelayUnavailableError extends ProviderError {
+    constructor(message: string) {
+        super(message, 0);
+        this.name = 'RelayUnavailableError';
+    }
+}
+
+/**
  * Un échec qui dit l'instance perdue, et non une cible en défaut : le garde, le
  * réseau ou le relais (statut 0), une clé refusée (401, 403). Une limite de
  * débit dit quand revenir ; un 404 ou un 500 parle d'une cible, pas du lien.
@@ -271,9 +284,7 @@ export class DeploySync {
                 DOKPLOY_INSTANCE
             );
         } catch (e) {
-            // Un relais qui ne s'ouvre pas est une instance qu'on ne joint pas :
-            // même statut que le garde ou le réseau, pour le recul et le lien perdu.
-            throw new ProviderError(e instanceof Error ? e.message : String(e), 0);
+            throw new RelayUnavailableError(e instanceof Error ? e.message : String(e));
         }
     }
 
@@ -417,7 +428,7 @@ export class DeploySync {
                 // valeur, sinon un premier import raté passerait pour fait.
                 const previous = this.credentialBackoff.get(credentialId) ?? { delay: 0, failures: 0 };
                 const delay =
-                    previous.delay === 0
+                    previous.delay === 0 || e instanceof RelayUnavailableError
                         ? DEPLOY_MIN_INTERVAL_SECONDS
                         : Math.min(previous.delay * 2, DEPLOY_BACKOFF_MAX_SECONDS);
                 const failures = previous.failures + 1;
