@@ -357,11 +357,14 @@ cours ». Ceux-ci passent quand même en suivi perdu à la borne des six heures
 (`DEPLOY_LINK_LOST_FAILURES`, soit environ trois minutes de recul), la ligne de
 l'accès garde la date et la cause (`unreachable_since`, `unreachable_error`,
 migration `003`), l'écran le montre (Sources, carte et fiche des cibles), et
-**un seul** avis « Lien perdu avec l’instance de « accès » » part, sur la route
-de la fonctionnalité elle-même (`item_id = 0`, cochée dans Réglages →
-Notifications de Déploiements, `notifications.feature` du registre) : dix cibles
+**un seul** avis « Lien perdu avec l’instance de « accès » » part : dix cibles
 sur la même instance tombent ensemble, et dix messages diraient une seule chose.
-L'avis nomme les cibles qui en dépendent (les cinq premières, le reste compté).
+Il suit la route de la fonctionnalité elle-même (`item_id = 0`, les cases de
+Réglages → Notifications de Déploiements, `notifications.feature` du registre) ;
+tant qu'elle n'a rien de coché, il suit les canaux cochés par les cibles de
+l'accès, chacun une fois (`notify.send(alert, { itemIds })`) : qui suit une
+cible apprend que son instance est tombée, sans rien régler de plus. L'avis
+nomme les cibles qui en dépendent (les cinq premières, le reste compté).
 Ne comptent que les échecs qui visent l'instance : le garde,
 le réseau ou le relais d'un appareil (statut 0), une clé refusée (401, 403). Une
 limite de débit dit quand revenir, un 404 ou un 500 parle d'une cible : ni l'un

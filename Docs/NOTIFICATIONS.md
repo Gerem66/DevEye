@@ -63,7 +63,11 @@ Finances) ; et de ceux qui préviennent **aussi** en leur nom propre, à côté 
 leurs éléments (`notifications.feature` du registre : Déploiements, pour le lien
 perdu avec l'instance d'un accès, qui concerne toutes ses cibles d'un coup). À
 l'échelle de la fonctionnalité, l'onglet Notifications montre alors les cases de
-cette route, avec la phrase qui dit ce qui part par là. (Zéro et non NULL : une
+cette route, avec la phrase qui dit ce qui part par là. Tant que rien n'y est
+coché, un tel avis suit les canaux cochés par les éléments qu'il concerne,
+chacun une fois (`notify.send(alert, { itemIds })`, l'union de leurs routes) :
+ce n'est pas un héritage deviné, ce sont des canaux que quelqu'un a cochés pour
+ces éléments-là. (Zéro et non NULL : une
 colonne d'une clé unique ne peut pas être nulle ; le contrat rend simplement
 `itemId` absent.)
 

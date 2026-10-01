@@ -327,8 +327,10 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
             {showSelection && channels.length > 0 && (
                 <span className={styles.sectionLabel}>
                     Cochez les canaux vers lesquels{' '}
-                    {scope.kind === 'item' ? `ce ${descriptor.itemNoun ?? 'élément'}` : descriptor.label} écrit. Sans
-                    aucun coché, rien ne part.
+                    {scope.kind === 'item' ? `ce ${descriptor.itemNoun ?? 'élément'}` : descriptor.label} écrit.{' '}
+                    {itemsRouteToo
+                        ? `Sans aucun coché, ces avis suivent les canaux cochés par les ${descriptor.itemNoun ?? 'élément'}s concernés.`
+                        : 'Sans aucun coché, rien ne part.'}
                 </span>
             )}
 

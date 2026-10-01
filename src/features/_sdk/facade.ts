@@ -82,7 +82,23 @@ export function createFacade(deps: FacadeDeps): DevEyeFacade {
             },
             async send(alert, opts) {
                 gate('notify');
-                const routed = await resolveRoute(deps.db, cipher, deps.workspaceId, feature, opts?.itemId);
+                // Plusieurs éléments à la fois : l'union de leurs routes, un canal
+                // partagé par deux éléments ne l'entendant qu'une fois.
+                const routed = opts?.itemIds
+                    ? [
+                          ...new Map(
+                              (
+                                  await Promise.all(
+                                      opts.itemIds.map((id) =>
+                                          resolveRoute(deps.db, cipher, deps.workspaceId, feature, id)
+                                      )
+                                  )
+                              )
+                                  .flat()
+                                  .map((c) => [c.id, c] as const)
+                          ).values()
+                      ]
+                    : await resolveRoute(deps.db, cipher, deps.workspaceId, feature, opts?.itemId);
                 // Un canal dont le message vivant a conclu a déjà tout dit : lui
                 // renvoyer l'avis en texte afficherait deux fois la même chose.
                 const except = new Set(opts?.except ?? []);
