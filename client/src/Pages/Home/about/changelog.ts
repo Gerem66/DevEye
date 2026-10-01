@@ -12,6 +12,21 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: readonly ChangelogEntry[] = [
     {
+        version: '0.21.3',
+        date: '2026-10-01',
+        changes: [
+            {
+                kind: 'added',
+                text: 'Déploiements : un avis sur vos canaux quand le lien avec une instance se perd, et quand il revient'
+            },
+            { kind: 'fixed', text: 'Le serveur n’empile plus les requêtes en base sous la charge' },
+            {
+                kind: 'fixed',
+                text: 'Auto-hébergement : toutes les tables prennent la même collation, même sur un MySQL 8 neuf'
+            }
+        ]
+    },
+    {
         version: '0.21.2',
         date: '2026-10-01',
         changes: [
@@ -19,11 +34,8 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
                 kind: 'added',
                 text: 'Déploiements : une instance Dokploy qui n’est pas sur Internet se joint par l’agent d’un de vos appareils'
             },
-            {
-                kind: 'added',
-                text: 'Déploiements : un avis sur vos canaux quand le lien avec une instance se perd, et quand il revient'
-            },
-            { kind: 'fixed', text: 'Le serveur n’empile plus les requêtes en base sous la charge' }
+            { kind: 'improved', text: 'La page se recharge d’elle-même après une mise à jour de DevEye' },
+            { kind: 'improved', text: 'Les fenêtres suivent la hauteur de leur contenu sans à-coup' }
         ]
     },
     {
