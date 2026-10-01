@@ -598,10 +598,9 @@ export class DeploySync {
     /**
      * L'avis d'un lien perdu ou rétabli : un seul par accès (dix cibles sur la
      * même instance tombent ensemble, et dix messages diraient une seule
-     * chose), qui nomme les cibles qui en dépendent. Il suit la route de la
-     * fonctionnalité elle-même ; tant qu'elle n'a rien de coché, les canaux
-     * cochés par ces cibles, chacun une fois : qui suit une cible apprend que
-     * son instance est tombée. `true` si au moins un canal a accepté.
+     * chose), qui nomme les cibles qui en dépendent, vers les canaux cochés
+     * par ces cibles, chacun une fois : qui suit une cible apprend que son
+     * instance est tombée. `true` si au moins un canal a accepté.
      */
     private async notifyLink(
         credential: DeployCredentialRow,
@@ -620,9 +619,7 @@ export class DeploySync {
             targets,
             ...state
         });
-        const notify = this.deps.deveyeFor(credential.workspace_id).notify;
-        if (await notify.hasRoute()) return notify.send(alert);
-        return notify.send(alert, { itemIds: rows.map((row) => row.id) });
+        return this.deps.deveyeFor(credential.workspace_id).notify.send(alert, { itemIds: rows.map((row) => row.id) });
     }
 
     /** L'hôte de l'instance et, le cas échéant, l'appareil qui la joint. */

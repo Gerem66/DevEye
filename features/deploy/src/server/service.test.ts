@@ -258,7 +258,6 @@ function syncWith(
     options: {
         liveChannels?: readonly number[];
         notifyAccepted?: boolean;
-        hasRoute?: boolean;
         pausedItems?: Record<string, readonly string[]>;
     } = {}
 ) {
@@ -372,7 +371,7 @@ describe('le lien avec l’instance', () => {
         await tick();
     }
 
-    it('trois échecs consécutifs marquent l’accès et le disent une fois, sur la route de la fonctionnalité', () =>
+    it('trois échecs consécutifs marquent l’accès et le disent une fois, aux canaux de ses cibles', () =>
         withClock(async (advance) => {
             const repo = twoTargets();
             const { deps, tick, answer } = syncWith(repo);
@@ -389,10 +388,10 @@ describe('le lien avec l’instance', () => {
             assert.notEqual(repo.credentials[0].unreachable_since, null);
             assert.equal(repo.credentials[0].unreachable_error, 'Instance Dokploy injoignable');
             assert.equal(repo.credentials[0].unreachable_notified, 1);
-            // Un seul avis pour l'accès, sans cible : la route de la fonctionnalité.
+            // Un seul avis pour l'accès, vers l'union des canaux de ses cibles.
             assert.deepEqual(
-                deps.recorded.notifications.map((n) => [n.itemId, n.subject]),
-                [[undefined, '[DevEye] Lien perdu avec l’instance de « Prod »']]
+                deps.recorded.notifications.map((n) => [n.itemIds, n.subject]),
+                [[[1, 2], '[DevEye] Lien perdu avec l’instance de « Prod »']]
             );
             const body = deps.recorded.notifications[0].body;
             assert.match(body, /Cibles : Site, API/);
@@ -404,19 +403,6 @@ describe('le lien avec l’instance', () => {
             advance(241);
             await tick();
             assert.equal(deps.recorded.notifications.length, 1);
-        }));
-
-    it('sans route propre, l’avis suit les canaux des cibles de l’accès, chacun une fois', () =>
-        withClock(async (advance) => {
-            const repo = twoTargets();
-            const { deps, tick, answer } = syncWith(repo, { hasRoute: false });
-            answer(null);
-            await failThrice(tick, advance);
-            assert.deepEqual(
-                deps.recorded.notifications.map((n) => [n.itemId, n.itemIds, n.subject]),
-                [[undefined, [1, 2], '[DevEye] Lien perdu avec l’instance de « Prod »']]
-            );
-            assert.equal(repo.credentials[0].unreachable_notified, 1);
         }));
 
     it('le retour efface la ligne et se dit à qui a entendu la perte', () =>

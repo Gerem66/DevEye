@@ -69,13 +69,8 @@ export function targetInfo(feature: FeatureId | SystemNotificationTarget): {
     hasItems: boolean;
     notifies: boolean;
     notificationsHint: string | null;
-    /**
-     * La fonctionnalité prévient-elle en son nom propre (route `item_id = 0`) ?
-     * Vrai sans éléments, quand rien ne part par élément, ou quand elle émet
-     * aussi pour elle-même ; `featureRouteHint` dit alors ce qui part par là.
-     */
+    /** La fonctionnalité prévient-elle en son nom propre (route `item_id = 0`) ? Sans éléments, ou sans rien par élément. */
     featureRoute: boolean;
-    featureRouteHint: string | null;
     itemNoun: string | null;
 } {
     if (feature === SYSTEM_NOTIFICATION_TARGET) {
@@ -85,19 +80,16 @@ export function targetInfo(feature: FeatureId | SystemNotificationTarget): {
             notifies: true,
             notificationsHint: SYSTEM_NOTIFICATION_INFO.hint,
             featureRoute: true,
-            featureRouteHint: null,
             itemNoun: null
         };
     }
     const descriptor = featureDescriptor(feature);
-    const notifications = descriptor.notifications;
     return {
         label: descriptor.label,
         hasItems: descriptor.hasItems,
         notifies: descriptor.notifies,
-        notificationsHint: notifications?.hint ?? null,
+        notificationsHint: descriptor.notifications?.hint ?? null,
         featureRoute: featureNotifiesItself(descriptor),
-        featureRouteHint: notifications?.feature ?? null,
         itemNoun: descriptor.itemNoun ?? null
     };
 }

@@ -57,22 +57,17 @@ se vide est **retirée** : depuis la 092, une sélection vide et une sélection
 jamais faite disent la même chose, le silence.
 
 `item_id = 0` désigne la fonctionnalité elle-même : le cas des émetteurs
-**sans éléments** (Sentinelle), dont les alertes ne visent rien de plus fin ;
+**sans éléments** (Sentinelle), dont les alertes ne visent rien de plus fin, et
 de ceux dont rien ne part au nom d'un élément (`notifications.perItem: false`,
-Finances) ; et de ceux qui préviennent **aussi** en leur nom propre, à côté de
-leurs éléments (`notifications.feature` du registre : Déploiements, pour le lien
-perdu avec l'instance d'un accès, qui concerne toutes ses cibles d'un coup). À
-l'échelle de la fonctionnalité, tant que rien n'est coché sur cette route, un
-tel avis suit les canaux cochés par les éléments qu'il concerne, chacun une fois
-(`notify.send(alert, { itemIds })`, l'union de leurs routes) : ce n'est pas un
-héritage deviné, ce sont des canaux que quelqu'un a cochés pour ces éléments-là.
-L'onglet Notifications le montre par un interrupteur « Suivre les canaux cochés
-par les cibles », allumé tant que la route est vide ; l'éteindre fait apparaître
-les cases d'une sélection propre, et les laisser toutes décochées rallume le
-régime des éléments. Des cases décochées sous des avis qui partent diraient le
-contraire du vrai. (Zéro et non NULL : une
-colonne d'une clé unique ne peut pas être nulle ; le contrat rend simplement
-`itemId` absent.)
+Finances) : l'onglet Notifications montre alors les cases de cette route à
+l'échelle de la fonctionnalité. (Zéro et non NULL : une colonne d'une clé unique
+ne peut pas être nulle ; le contrat rend simplement `itemId` absent.)
+
+Un avis qui concerne plusieurs éléments à la fois (l'instance qu'ils partagent
+est tombée, Déploiements) n'a pas de route à lui : il suit les canaux cochés
+par ces éléments, chacun une fois (`notify.send(alert, { itemIds })`, l'union
+de leurs routes). Ce n'est pas un héritage deviné, ce sont des canaux que
+quelqu'un a cochés pour ces éléments-là, et rien à régler de plus.
 
 Pour les émetteurs à éléments, **la sélection vit sur l'élément** : chaque
 cible coche un ou plusieurs canaux de sa feature dans ses propres réglages. La
