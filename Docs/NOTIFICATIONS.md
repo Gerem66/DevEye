@@ -57,9 +57,15 @@ se vide est **retirée** : depuis la 092, une sélection vide et une sélection
 jamais faite disent la même chose, le silence.
 
 `item_id = 0` désigne la fonctionnalité elle-même : le cas des émetteurs
-**sans éléments** (Sentinelle), dont les alertes ne visent rien de plus fin.
-(Zéro et non NULL : une colonne d'une clé unique ne peut pas être nulle ; le
-contrat rend simplement `itemId` absent.)
+**sans éléments** (Sentinelle), dont les alertes ne visent rien de plus fin ;
+de ceux dont rien ne part au nom d'un élément (`notifications.perItem: false`,
+Finances) ; et de ceux qui préviennent **aussi** en leur nom propre, à côté de
+leurs éléments (`notifications.feature` du registre : Déploiements, pour le lien
+perdu avec l'instance d'un accès, qui concerne toutes ses cibles d'un coup). À
+l'échelle de la fonctionnalité, l'onglet Notifications montre alors les cases de
+cette route, avec la phrase qui dit ce qui part par là. (Zéro et non NULL : une
+colonne d'une clé unique ne peut pas être nulle ; le contrat rend simplement
+`itemId` absent.)
 
 Pour les émetteurs à éléments, **la sélection vit sur l'élément** : chaque
 cible coche un ou plusieurs canaux de sa feature dans ses propres réglages. La
@@ -73,8 +79,8 @@ jusqu'à ce qu'on lui coche des canaux : rien ne part sans qu'on l'ait choisi.
 
 ### La règle de résolution
 
-1. la cible (élément, ou fonctionnalité sans éléments) a une route → **ses**
-   canaux ;
+1. la cible (élément, ou la fonctionnalité pour ce qu'elle dit en son nom) a
+   une route → **ses** canaux ;
 2. sinon → aucun canal.
 
 Rien n'est deviné ni hérité. Sans sélection enregistrée, rien ne part : c'est

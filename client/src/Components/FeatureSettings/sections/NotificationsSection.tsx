@@ -122,10 +122,14 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
 
     /**
      * La sélection se rend-elle ici ? Sur un élément toujours ; à l'échelle de
-     * la fonctionnalité seulement sans éléments, sinon cette échelle ne fait
-     * que lister les sources disponibles.
+     * la fonctionnalité quand elle prévient en son nom propre, sinon cette
+     * échelle ne fait que lister les sources disponibles.
      */
-    const showSelection = scope.kind === 'item' || !descriptor.hasItems;
+    const showSelection = scope.kind === 'item' || descriptor.featureRoute;
+    /** Les éléments cochent leurs propres canaux : à dire ici, où l'on les déclare. */
+    const itemsRouteThemselves = scope.kind === 'feature' && descriptor.hasItems && descriptor.featureRoute !== true;
+    const itemsRouteToo =
+        scope.kind === 'feature' && descriptor.hasItems && descriptor.featureRoute && descriptor.featureRouteHint;
 
     const reload = useCallback(async () => {
         if (!showSelection) {
@@ -303,10 +307,20 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
 
             {/* À cette échelle on déclare les sources ; le choix se fait sur
                 chaque élément, et le dire évite de chercher des cases ici. */}
-            {!showSelection && (
+            {itemsRouteThemselves && (
                 <p className={styles.sectionHint}>
                     Les canaux déclarés ici sont les sources disponibles : chaque {descriptor.itemNoun ?? 'élément'}{' '}
                     choisit les siens dans ses propres réglages.
+                </p>
+            )}
+
+            {/* Les éléments ont leurs cases ; celles d'ici portent ce qui ne
+                vise aucun d'eux en particulier. */}
+            {itemsRouteToo && (
+                <p className={styles.sectionHint}>
+                    Chaque {descriptor.itemNoun ?? 'élément'} coche ses canaux dans ses propres réglages. Les cases
+                    ci-dessous valent pour ce que {descriptor.label} dit en son nom propre :{' '}
+                    {descriptor.featureRouteHint}
                 </p>
             )}
 
@@ -466,8 +480,8 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
                         Ajouter un canal
                     </Button>
                     {/* « Tester cet envoi » éprouve une **sélection** : elle
-                        n'existe à cette échelle que sans éléments (Sentinelle).
-                        Chaque canal garde son essai individuel sur sa ligne. */}
+                        n'existe à cette échelle que si la fonctionnalité prévient
+                        en son nom propre. Chaque canal garde son essai sur sa ligne. */}
                     {showSelection && (
                         <Button variant='ghost' icon='play' disabled={busy} onClick={testRoute}>
                             Tester cet envoi

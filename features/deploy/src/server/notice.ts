@@ -245,12 +245,13 @@ function progressLine(state: NoticeState, elapsed: number): string {
     return `${bar}\n~${duration(Math.max(1, state.estimateSeconds - elapsed))} restantes (estimé).`;
 }
 
-/** Le lien d'un accès avec son instance, perdu ou rétabli, vu depuis une cible. */
+/** Le lien d'un accès avec son instance, perdu ou rétabli, et les cibles qui en dépendent. */
 export interface LinkNotice {
-    target: string;
     credential: string;
     /** L'hôte de l'instance, ou ce qui en tient lieu. */
     instance: string;
+    /** Les noms des cibles de l'accès, dans l'ordre de la liste. */
+    targets: readonly string[];
     /** `true` à la perte, `false` au retour. */
     lost: boolean;
     /** La cause, dans les mots du fournisseur ou du relais. */
@@ -259,25 +260,40 @@ export interface LinkNotice {
     at: number;
 }
 
+/** Cibles nommées dans un avis de lien : au-delà, on compte. */
+const LINK_TARGETS_NAMED = 5;
+
+/** « Site, API et 3 autres » : les premières nommées, le reste compté. */
+export function nameTargets(targets: readonly string[]): string {
+    if (targets.length === 0) return 'aucune cible';
+    const named = targets.slice(0, LINK_TARGETS_NAMED);
+    const rest = targets.length - named.length;
+    if (rest === 0) return named.join(', ');
+    return `${named.join(', ')} et ${rest} autre${rest > 1 ? 's' : ''}`;
+}
+
 /**
  * L'avis d'un lien perdu ou rétabli, mis en page pour Discord ; les deux sens
  * sont émis. Rend les embeds seuls : l'envoi passe par la façade `notify`.
  */
 export function buildLinkNotice(notice: LinkNotice): Record<string, unknown>[] {
+    const count = notice.targets.length;
     const fields: Record<string, unknown>[] = [
-        { name: '🎯 Cible', value: trim(notice.target), inline: true },
         { name: '🔑 Accès', value: trim(notice.credential), inline: true },
         { name: '🖥️ Instance', value: trim(notice.instance), inline: true },
-        { name: notice.lost ? '📅 Depuis' : '📅 Rétabli', value: moment(notice.at), inline: true }
+        { name: notice.lost ? '📅 Depuis' : '📅 Rétabli', value: moment(notice.at), inline: true },
+        { name: `🎯 ${count} cible${count > 1 ? 's' : ''}`, value: trim(nameTargets(notice.targets)) }
     ];
     if (notice.cause.trim()) fields.push({ name: '📋 Cause', value: block(trim(notice.cause)) });
 
     return [
         {
-            title: notice.lost ? `🔴 Lien perdu avec l’instance` : `🟢 Lien rétabli avec l’instance`,
+            title: notice.lost
+                ? `🔴 Lien perdu avec l’instance de « ${trim(notice.credential)} »`
+                : `🟢 Lien rétabli avec l’instance de « ${trim(notice.credential)} »`,
             description: notice.lost
-                ? `Le suivi de **${trim(notice.target)}** est interrompu : DevEye ne joint plus l’instance de l’accès **${trim(notice.credential)}**.`
-                : `Le suivi de **${trim(notice.target)}** a repris : DevEye joint de nouveau l’instance de l’accès **${trim(notice.credential)}**.`,
+                ? `DevEye ne joint plus l’instance : le suivi de ses ${count} cible${count > 1 ? 's' : ''} est interrompu.`
+                : `DevEye joint de nouveau l’instance : le suivi de ses ${count} cible${count > 1 ? 's' : ''} a repris.`,
             color: notice.lost ? COLOR_DANGER : COLOR_SUCCESS,
             fields,
             timestamp: new Date(notice.at * 1000).toISOString(),

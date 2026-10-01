@@ -22,7 +22,7 @@ import {
 import { formatDuration, formatMoment } from '@/Services/alertCore';
 
 import { composeTargetOf, type ComposeService } from './agent';
-import { buildLinkNotice, buildNotice, estimateFromHistory, firstLine, type LinkNotice } from './notice';
+import { buildLinkNotice, buildNotice, estimateFromHistory, firstLine, nameTargets, type LinkNotice } from './notice';
 import { PROVIDERS, providerOf, type DeployProviders } from './providers';
 import { DOKPLOY_INSTANCE } from './providers/dokploy';
 import {
@@ -596,31 +596,29 @@ export class DeploySync {
     }
 
     /**
-     * L'avis d'un lien perdu ou rétabli, vers les canaux de chaque cible de
-     * l'accès : les routes de Notifications sont par cible, et chaque message
-     * nomme la sienne. `true` si au moins un canal a accepté.
+     * L'avis d'un lien perdu ou rétabli : un seul par accès, sur la route de la
+     * fonctionnalité elle-même (dix cibles sur la même instance tombent
+     * ensemble, et dix messages diraient une seule chose). Il nomme les cibles
+     * qui en dépendent. `true` si au moins un canal a accepté.
      */
     private async notifyLink(
         credential: DeployCredentialRow,
         state: { lost: boolean; cause: string; at: number }
     ): Promise<boolean> {
-        const targets = await this.deps.repo.listTargetsOfCredential(credential.id);
-        if (targets.length === 0) return false;
+        const rows = await this.deps.repo.listTargetsOfCredential(credential.id);
         const cipher = this.deps.cipherFor(credential.workspace_id);
-        const notify = this.deps.deveyeFor(credential.workspace_id).notify;
-        const instance = await this.instanceLabel(credential);
-        let accepted = false;
-        for (const row of targets) {
-            const stored = await readJson<Partial<StoredTarget>>(cipher, row.content);
-            const alert = this.linkAlert({
-                target: stored?.name ?? `cible ${row.id}`,
-                credential: credential.label,
-                instance,
-                ...state
-            });
-            if (await notify.send(alert, { itemId: row.id })) accepted = true;
-        }
-        return accepted;
+        const targets = await Promise.all(
+            rows.map(
+                async (row) => (await readJson<Partial<StoredTarget>>(cipher, row.content))?.name ?? `cible ${row.id}`
+            )
+        );
+        const alert = this.linkAlert({
+            credential: credential.label,
+            instance: await this.instanceLabel(credential),
+            targets,
+            ...state
+        });
+        return this.deps.deveyeFor(credential.workspace_id).notify.send(alert);
     }
 
     /** L'hôte de l'instance et, le cas échéant, l'appareil qui la joint. */
@@ -633,24 +631,26 @@ export class DeploySync {
 
     /** Le corps de l'avis d'un lien perdu ou rétabli, en texte ; l'embed Discord suit. */
     private linkAlert(notice: LinkNotice): SdkAlert {
+        const count = notice.targets.length;
+        const plural = count > 1 ? 's' : '';
         const lines = [
             notice.lost
-                ? `Le suivi de ${notice.target} est interrompu : DevEye ne joint plus l’instance de l’accès « ${notice.credential} ».`
-                : `Le suivi de ${notice.target} a repris : DevEye joint de nouveau l’instance de l’accès « ${notice.credential} ».`,
+                ? `DevEye ne joint plus l’instance de l’accès « ${notice.credential} » : le suivi de ses ${count} cible${plural} est interrompu.`
+                : `DevEye joint de nouveau l’instance de l’accès « ${notice.credential} » : le suivi de ses ${count} cible${plural} a repris.`,
             '',
-            `Cible : ${notice.target}`,
             `Accès : ${notice.credential}`,
             `Instance : ${notice.instance}`,
+            `Cible${plural} : ${nameTargets(notice.targets)}`,
             `${notice.lost ? 'Depuis le' : 'Rétabli le'} : ${formatMoment(notice.at)}`
         ];
         if (notice.cause) lines.push(`Cause : ${notice.cause}`);
         return {
-            subject: `[DevEye] Lien ${notice.lost ? 'perdu' : 'rétabli'} avec l’instance : ${notice.target}`,
+            subject: `[DevEye] Lien ${notice.lost ? 'perdu' : 'rétabli'} avec l’instance de « ${notice.credential} »`,
             body: lines.join('\n'),
             payload: {
                 event: notice.lost ? 'deploy_link_lost' : 'deploy_link_restored',
-                target: notice.target,
                 credential: notice.credential,
+                targets: notice.targets,
                 at: notice.at
             },
             embeds: buildLinkNotice(notice)

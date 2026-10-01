@@ -371,7 +371,7 @@ describe('le lien avec l’instance', () => {
         await tick();
     }
 
-    it('trois échecs consécutifs marquent l’accès et préviennent chaque cible, une fois', () =>
+    it('trois échecs consécutifs marquent l’accès et le disent une fois, sur la route de la fonctionnalité', () =>
         withClock(async (advance) => {
             const repo = twoTargets();
             const { deps, tick, answer } = syncWith(repo);
@@ -388,21 +388,21 @@ describe('le lien avec l’instance', () => {
             assert.notEqual(repo.credentials[0].unreachable_since, null);
             assert.equal(repo.credentials[0].unreachable_error, 'Instance Dokploy injoignable');
             assert.equal(repo.credentials[0].unreachable_notified, 1);
+            // Un seul avis pour l'accès, sans cible : la route de la fonctionnalité.
             assert.deepEqual(
                 deps.recorded.notifications.map((n) => [n.itemId, n.subject]),
-                [
-                    [1, '[DevEye] Lien perdu avec l’instance : Site'],
-                    [2, '[DevEye] Lien perdu avec l’instance : API']
-                ]
+                [[undefined, '[DevEye] Lien perdu avec l’instance de « Prod »']]
             );
-            assert.match(deps.recorded.notifications[0].body, /Cause : Instance Dokploy injoignable/);
+            const body = deps.recorded.notifications[0].body;
+            assert.match(body, /Cibles : Site, API/);
+            assert.match(body, /Cause : Instance Dokploy injoignable/);
             assert.equal(deps.recorded.notifications[0].embeds, 1);
             assert.deepEqual(deps.recorded.liveChanges, [1]);
 
             // Un quatrième échec ne répète pas l'avis.
             advance(241);
             await tick();
-            assert.equal(deps.recorded.notifications.length, 2);
+            assert.equal(deps.recorded.notifications.length, 1);
         }));
 
     it('le retour efface la ligne et se dit à qui a entendu la perte', () =>
@@ -411,7 +411,7 @@ describe('le lien avec l’instance', () => {
             const { deps, tick, answer } = syncWith(repo);
             answer(null);
             await failThrice(tick, advance);
-            assert.equal(deps.recorded.notifications.length, 2);
+            assert.equal(deps.recorded.notifications.length, 1);
 
             answer({ remote: [] });
             advance(241);
@@ -419,11 +419,8 @@ describe('le lien avec l’instance', () => {
             assert.equal(repo.credentials[0].unreachable_since, null);
             assert.equal(repo.credentials[0].unreachable_notified, 0);
             assert.deepEqual(
-                deps.recorded.notifications.slice(2).map((n) => [n.itemId, n.subject]),
-                [
-                    [1, '[DevEye] Lien rétabli avec l’instance : Site'],
-                    [2, '[DevEye] Lien rétabli avec l’instance : API']
-                ]
+                deps.recorded.notifications.slice(1).map((n) => [n.itemId, n.subject]),
+                [[undefined, '[DevEye] Lien rétabli avec l’instance de « Prod »']]
             );
         }));
 
@@ -470,7 +467,7 @@ describe('le lien avec l’instance', () => {
                 answer(refusal);
                 await failThrice(tick, advance);
                 assert.equal(repo.credentials[0].unreachable_error, refusal.message);
-                assert.equal(deps.recorded.notifications.length, 2, refusal.message);
+                assert.equal(deps.recorded.notifications.length, 1, refusal.message);
             }
         }));
 
@@ -496,7 +493,7 @@ describe('le lien avec l’instance', () => {
             await tick();
             assert.deepEqual(
                 deps.recorded.notifications.map((n) => [n.itemId, n.subject]),
-                [[1, '[DevEye] Lien rétabli avec l’instance : Site']]
+                [[undefined, '[DevEye] Lien rétabli avec l’instance de « Prod »']]
             );
         }));
 });

@@ -356,10 +356,13 @@ cours ». Ceux-ci passent quand même en suivi perdu à la borne des six heures
 **Le lien perdu se dit.** Au troisième échec consécutif d'un accès
 (`DEPLOY_LINK_LOST_FAILURES`, soit environ trois minutes de recul), la ligne de
 l'accès garde la date et la cause (`unreachable_since`, `unreachable_error`,
-migration `003`), l'écran le montre (Sources, carte et fiche des cibles), et un
-avis « Lien perdu avec l’instance » part vers les canaux de **chaque cible** de
-l'accès, puisque les routes de Notifications sont par cible ; chaque message
-nomme la sienne. Ne comptent que les échecs qui visent l'instance : le garde,
+migration `003`), l'écran le montre (Sources, carte et fiche des cibles), et
+**un seul** avis « Lien perdu avec l’instance de « accès » » part, sur la route
+de la fonctionnalité elle-même (`item_id = 0`, cochée dans Réglages →
+Notifications de Déploiements, `notifications.feature` du registre) : dix cibles
+sur la même instance tombent ensemble, et dix messages diraient une seule chose.
+L'avis nomme les cibles qui en dépendent (les cinq premières, le reste compté).
+Ne comptent que les échecs qui visent l'instance : le garde,
 le réseau ou le relais d'un appareil (statut 0), une clé refusée (401, 403). Une
 limite de débit dit quand revenir, un 404 ou un 500 parle d'une cible : ni l'un
 ni l'autre ne sont un lien perdu. Au premier succès suivant, la ligne s'efface
