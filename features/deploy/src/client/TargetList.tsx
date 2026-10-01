@@ -55,10 +55,10 @@ interface TargetCardProps {
 }
 
 function TargetCard({ target, outline, dragging, onOpen, onDragPointerDown }: TargetCardProps) {
-    // Un accès retiré prime sur l'état du dernier déploiement : plus rien ne
-    // partira tant que la clé n'est pas revenue.
+    // Un accès retiré ou une instance perdue priment sur l'état du dernier
+    // déploiement : plus rien ne partira ni ne sera suivi tant que ça dure.
     const orphan = isOrphan(target);
-    const tone = orphan ? 'danger' : statusTone(target.lastStatus);
+    const tone = orphan || target.unreachable ? 'danger' : statusTone(target.lastStatus);
 
     return (
         <li className={`${styles.card} ${dragging ? styles.cardDragging : ''}`} data-target-card='' {...outline}>
@@ -106,8 +106,18 @@ function TargetCard({ target, outline, dragging, onOpen, onDragPointerDown }: Ta
                     </p>
                     <p className={styles.cardMeta}>{targetWhere(target)}</p>
                     <div className={styles.cardFoot}>
-                        <span className={styles.statusTag} data-tone={tone}>
-                            {orphan ? 'accès retiré' : target.lastStatus ? STATUS_LABELS[target.lastStatus] : 'jamais'}
+                        <span
+                            className={styles.statusTag}
+                            data-tone={tone}
+                            title={target.unreachable && !orphan ? target.unreachable.error : undefined}
+                        >
+                            {orphan
+                                ? 'accès retiré'
+                                : target.unreachable
+                                  ? 'instance injoignable'
+                                  : target.lastStatus
+                                    ? STATUS_LABELS[target.lastStatus]
+                                    : 'jamais'}
                         </span>
                         {target.planPaused && <PlanPausedBadge />}
                         <span>{formatAgo(target.lastDeployAt)}</span>

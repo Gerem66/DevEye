@@ -1,4 +1,10 @@
-import type { DeployCredentialRow, DeploymentRow, DeployTargetRow, DeployTargetSyncRow } from '../contracts/domain';
+import type {
+    DeployCredentialRow,
+    DeploymentRow,
+    DeployTargetNoticeRow,
+    DeployTargetRow,
+    DeployTargetSyncRow
+} from '../contracts/domain';
 import type { SdkQueryable, SdkStockItem } from '@deveye/types/sdk/server';
 
 /**
@@ -8,6 +14,8 @@ import type { SdkQueryable, SdkStockItem } from '@deveye/types/sdk/server';
  */
 export interface DeployTargetWithUsageRow extends DeployTargetRow {
     base_url: string | null;
+    unreachable_since: number | null;
+    unreachable_error: string | null;
     last_status: string | null;
     last_deploy_at: number | null;
 }
@@ -96,6 +104,15 @@ export interface DeployRepo {
     removeCredential(id: number, workspaceId: number): Promise<boolean>;
     /** Combien de cibles s'appuient sur chaque clé : ce qu'une suppression va couper, avant de cliquer. */
     countCredentialUses(workspaceId: number): Promise<Map<number, number>>;
+    /**
+     * Le lien perdu avec l'instance d'un accès. `since` ne s'écrit qu'une fois :
+     * la première perte fait foi, la cause suit la dernière.
+     */
+    markCredentialUnreachable(id: number, input: { since: number; error: string }): Promise<void>;
+    markCredentialNotified(id: number): Promise<void>;
+    clearCredentialUnreachable(id: number): Promise<void>;
+    /** Les cibles d'un accès, dans son espace : celles à prévenir d'un lien perdu ou rétabli. */
+    listTargetsOfCredential(credentialId: number): Promise<DeployTargetNoticeRow[]>;
 
     /**
      * Les cibles à réinterroger, la plus urgente d'abord, les espaces servis à
@@ -166,7 +183,7 @@ export interface DeployRepo {
  * par le service de fond.
  */
 const TARGET_WITH_USAGE = `
-    SELECT t.*, c.base_url,
+    SELECT t.*, c.base_url, c.unreachable_since, c.unreachable_error,
            d.status AS last_status,
            d.started_at AS last_deploy_at
       FROM deploy_targets t
@@ -398,6 +415,32 @@ export function createRepo(q: SdkQueryable): DeployRepo {
                 [workspaceId]
             );
             return new Map(rows.map((row) => [Number(row.credential_id), Number(row.uses)]));
+        },
+
+        async markCredentialUnreachable(id, { since, error }) {
+            await q.execute(
+                `UPDATE ft_deploy_credentials
+                    SET unreachable_since = COALESCE(unreachable_since, ?), unreachable_error = ?
+                  WHERE id = ?`,
+                [since, error, id]
+            );
+        },
+        async markCredentialNotified(id) {
+            await q.execute('UPDATE ft_deploy_credentials SET unreachable_notified = 1 WHERE id = ?', [id]);
+        },
+        async clearCredentialUnreachable(id) {
+            await q.execute(
+                `UPDATE ft_deploy_credentials
+                    SET unreachable_since = NULL, unreachable_error = NULL, unreachable_notified = 0
+                  WHERE id = ?`,
+                [id]
+            );
+        },
+        async listTargetsOfCredential(credentialId) {
+            return q.query<DeployTargetNoticeRow>(
+                'SELECT id, workspace_id, content FROM deploy_targets WHERE credential_id = ? ORDER BY id ASC',
+                [credentialId]
+            );
         },
 
         async listTargetsDue(limit, staleBefore, skipCredentialIds, pausedIds) {

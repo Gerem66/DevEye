@@ -19,7 +19,15 @@ import {
 } from '../contracts/domain';
 
 import { api } from './api';
-import { formatAgo, isOrphan, PROVIDER_TIMEOUT_MS, STATUS_LABELS, statusTone, targetWhere } from './format';
+import {
+    formatAgo,
+    formatSince,
+    isOrphan,
+    PROVIDER_TIMEOUT_MS,
+    STATUS_LABELS,
+    statusTone,
+    targetWhere
+} from './format';
 import styles from './style.module.css';
 
 interface TargetViewProps {
@@ -223,6 +231,13 @@ export function TargetView({
                                 <span>
                                     {targetWhere(target)}
                                     {target.ref ? ` · ${target.ref}` : ''}
+                                </span>
+                            )}
+                            {target.unreachable && !orphan && (
+                                <span className={styles.unreachable}>
+                                    {' '}
+                                    · suivi interrompu {formatSince(target.unreachable.since)}
+                                    {target.unreachable.error ? ` : ${target.unreachable.error}` : ''}
                                 </span>
                             )}
                             {target.projectCount > 1 && (

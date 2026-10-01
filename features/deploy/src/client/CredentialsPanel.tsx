@@ -22,7 +22,7 @@ import {
 } from '../contracts/domain';
 
 import { api } from './api';
-import { PROVIDER_LABELS } from './format';
+import { formatSince, PROVIDER_LABELS } from './format';
 
 const PROVIDER_OPTIONS: readonly { value: DeployCredentialProvider; label: string; title: string }[] = [
     { value: 'dokploy', label: 'Dokploy', title: 'Une instance Dokploy : son adresse et une clé d’API' },
@@ -202,6 +202,12 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
                                           .filter(Boolean)
                                           .join(' · ')}
                             </span>
+                            {c.unreachable && (
+                                <span className={shell.errorText}>
+                                    Injoignable {formatSince(c.unreachable.since)}
+                                    {c.unreachable.error ? ` : ${c.unreachable.error}` : ''}
+                                </span>
+                            )}
                         </span>
                         <span
                             className={`${shell.channelUsage} ${c.useCount === 0 ? shell.channelUsageIdle : ''}`}

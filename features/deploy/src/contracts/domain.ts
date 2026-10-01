@@ -49,6 +49,16 @@ export const deployTargetKindSchema = z.enum(['application', 'compose', 'workflo
 export type DeployTargetKind = z.infer<typeof deployTargetKindSchema>;
 
 /** Une cible de l'espace, et l'état de son dernier déclenchement. */
+/**
+ * Le lien perdu avec l'instance d'un accès : depuis quand, et la cause telle que
+ * le fournisseur ou le relais l'a dite. `null` : le suivi de fond la joint.
+ */
+export const deployUnreachableSchema = z.object({
+    since: z.number().int(),
+    error: z.string()
+});
+export type DeployUnreachable = z.infer<typeof deployUnreachableSchema>;
+
 export const deployTargetSchema = z.object({
     id: z.number().int().positive(),
     provider: deployProviderSchema,
@@ -74,6 +84,8 @@ export const deployTargetSchema = z.object({
     /** L'état du dernier déploiement, ou `null` si rien n'est jamais parti d'ici. */
     lastStatus: deployStatusSchema.nullable(),
     lastDeployAt: z.number().int().nullable(),
+    /** Le lien perdu avec l'instance de son accès : le suivi de la cible est interrompu. */
+    unreachable: deployUnreachableSchema.nullable(),
     /** Vient d'un autre espace qui le projette ici : l'écran le signale d'une pastille. */
     foreign: z.boolean(),
     /** Combien de projets la déploient. */
@@ -185,6 +197,13 @@ export interface DeployTargetSyncRow extends DeployTargetRow {
     in_flight: number;
 }
 
+/** Une cible à prévenir d'un lien perdu ou rétabli avec son accès. */
+export interface DeployTargetNoticeRow {
+    id: number;
+    workspace_id: number;
+    content: string;
+}
+
 /**
  * Une machine de l'espace, telle que le choix d'une cible la présente : un
  * agent trop ancien ne sait pas déployer, et la politique locale d'une machine
@@ -222,6 +241,8 @@ export const deployCredentialSchema = z.object({
      */
     deviceId: z.uuid().nullable(),
     hasSecret: z.boolean(),
+    /** Le lien perdu avec l'instance, tel que le suivi de fond l'a constaté. */
+    unreachable: deployUnreachableSchema.nullable(),
     created: z.number().int(),
     /** Combien de cibles s'en servent : ce qu'une suppression va couper. */
     useCount: z.number().int().nonnegative()
@@ -239,5 +260,10 @@ export interface DeployCredentialRow {
     /** Le membre qui a choisi l'appareil : son droit sur la machine est revérifié à chaque usage. */
     author_user_id: number | null;
     secret_enc: string;
+    /** Depuis quand le suivi de fond ne joint plus l'instance ; `null` : il la joint. */
+    unreachable_since: number | null;
+    unreachable_error: string | null;
+    /** Un canal a accepté l'avis de perte : le retour ne se dit qu'à qui l'a entendue. */
+    unreachable_notified: number;
     created: number;
 }

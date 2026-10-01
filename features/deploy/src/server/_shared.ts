@@ -5,7 +5,8 @@ import type {
     DeploymentRow,
     DeployTarget,
     DeployTargetKind,
-    DeployTargetRow
+    DeployTargetRow,
+    DeployUnreachable
 } from '../contracts/domain';
 import {
     deployCredentialProviderSchema,
@@ -202,6 +203,7 @@ export async function toTarget(
         ref: target.ref,
         lastStatus: normalizeStatus(row.last_status),
         lastDeployAt: row.last_deploy_at === null ? null : Number(row.last_deploy_at),
+        unreachable: unreachableOf(row),
         projectCount,
         planPaused,
         created: Number(row.created)
@@ -258,6 +260,14 @@ export async function toDeployment(cipher: SdkCipher, row: DeploymentRow): Promi
     };
 }
 
+/** Le lien perdu d'un accès, tel que ses colonnes le disent ; `null` tant qu'il tient. */
+export function unreachableOf(
+    row: Pick<DeployCredentialRow, 'unreachable_since' | 'unreachable_error'>
+): DeployUnreachable | null {
+    if (row.unreachable_since === null) return null;
+    return { since: Number(row.unreachable_since), error: row.unreachable_error ?? '' };
+}
+
 /** Un accès tel que le client le voit : jamais son secret, seulement sa présence. */
 export function toCredential(row: DeployCredentialRow, useCount: number): DeployCredential {
     return {
@@ -267,6 +277,7 @@ export function toCredential(row: DeployCredentialRow, useCount: number): Deploy
         baseUrl: row.base_url,
         deviceId: row.device_id,
         hasSecret: row.secret_enc.length > 0,
+        unreachable: unreachableOf(row),
         created: row.created,
         useCount
     };

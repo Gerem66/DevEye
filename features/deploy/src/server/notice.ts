@@ -244,3 +244,44 @@ function progressLine(state: NoticeState, elapsed: number): string {
     if (ratio >= 1) return `${bar}\nPlus long que d’habitude (moyenne : ${duration(state.estimateSeconds)}).`;
     return `${bar}\n~${duration(Math.max(1, state.estimateSeconds - elapsed))} restantes (estimé).`;
 }
+
+/** Le lien d'un accès avec son instance, perdu ou rétabli, vu depuis une cible. */
+export interface LinkNotice {
+    target: string;
+    credential: string;
+    /** L'hôte de l'instance, ou ce qui en tient lieu. */
+    instance: string;
+    /** `true` à la perte, `false` au retour. */
+    lost: boolean;
+    /** La cause, dans les mots du fournisseur ou du relais. */
+    cause: string;
+    /** Le début de la perte ; au retour, l'instant du retour. */
+    at: number;
+}
+
+/**
+ * L'avis d'un lien perdu ou rétabli, mis en page pour Discord ; les deux sens
+ * sont émis. Rend les embeds seuls : l'envoi passe par la façade `notify`.
+ */
+export function buildLinkNotice(notice: LinkNotice): Record<string, unknown>[] {
+    const fields: Record<string, unknown>[] = [
+        { name: '🎯 Cible', value: trim(notice.target), inline: true },
+        { name: '🔑 Accès', value: trim(notice.credential), inline: true },
+        { name: '🖥️ Instance', value: trim(notice.instance), inline: true },
+        { name: notice.lost ? '📅 Depuis' : '📅 Rétabli', value: moment(notice.at), inline: true }
+    ];
+    if (notice.cause.trim()) fields.push({ name: '📋 Cause', value: block(trim(notice.cause)) });
+
+    return [
+        {
+            title: notice.lost ? `🔴 Lien perdu avec l’instance` : `🟢 Lien rétabli avec l’instance`,
+            description: notice.lost
+                ? `Le suivi de **${trim(notice.target)}** est interrompu : DevEye ne joint plus l’instance de l’accès **${trim(notice.credential)}**.`
+                : `Le suivi de **${trim(notice.target)}** a repris : DevEye joint de nouveau l’instance de l’accès **${trim(notice.credential)}**.`,
+            color: notice.lost ? COLOR_DANGER : COLOR_SUCCESS,
+            fields,
+            timestamp: new Date(notice.at * 1000).toISOString(),
+            footer: { text: 'DevEye · suivi de déploiement' }
+        }
+    ];
+}

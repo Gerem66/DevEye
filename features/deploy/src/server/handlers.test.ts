@@ -82,6 +82,9 @@ function credential(over: Partial<DeployCredentialRow> & { id: number; workspace
         device_id: null,
         author_user_id: null,
         secret_enc: 'clé-secrète',
+        unreachable_since: null,
+        unreachable_error: null,
+        unreachable_notified: 0,
         created: 1,
         ...over
     };
@@ -119,9 +122,12 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
         const last = deployments
             .filter((d) => d.target_id === t.id)
             .sort((a, b) => b.started_at - a.started_at || b.id - a.id)[0];
+        const credential = credentials.find((c) => c.id === t.credential_id);
         return {
             ...t,
-            base_url: credentials.find((c) => c.id === t.credential_id)?.base_url ?? null,
+            base_url: credential?.base_url ?? null,
+            unreachable_since: credential?.unreachable_since ?? null,
+            unreachable_error: credential?.unreachable_error ?? null,
             last_status: last?.status ?? null,
             last_deploy_at: last?.started_at ?? null
         };
@@ -238,6 +244,10 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
             }
             return uses;
         },
+        markCredentialUnreachable: unused,
+        markCredentialNotified: unused,
+        clearCredentialUnreachable: unused,
+        listTargetsOfCredential: unused,
         listTargetsDue: unused,
         markTargetSynced: unused,
         async createDeployment(input) {

@@ -332,6 +332,7 @@ frise complète sans que personne n'ait ouvert sa fiche.
 | `DEPLOY_SYNC_TIMEOUT_MS`      | 10 s par lecture de fond        | une instance muette qui garde sa place en vol                              |
 | `DEPLOY_MIN_INTERVAL_SECONDS` | 60 s **au repos**               | réinterroger une cible qui n'a rien à dire                                 |
 | `DEPLOY_BACKOFF_MAX_SECONDS`  | 15 min                          | marteler une instance en panne                                             |
+| `DEPLOY_LINK_LOST_FAILURES`   | 3 échecs consécutifs            | crier au lien perdu sur un seul raté                                       |
 | `DEPLOY_IMPORT_LIMIT`         | 20 lignes / appel               | recopier des centaines d'entrées anciennes                                 |
 | `DEPLOY_STALE_SECONDS`        | 6 h                             | entretenir sans fin un déploiement que le fournisseur a oublié             |
 
@@ -351,6 +352,21 @@ premier succès. Les cibles d'un accès en recul sont écartées dès la requêt
 une instance en panne ne tient plus la tête de file avec ses déploiements « en
 cours ». Ceux-ci passent quand même en suivi perdu à la borne des six heures
 (6.4).
+
+**Le lien perdu se dit.** Au troisième échec consécutif d'un accès
+(`DEPLOY_LINK_LOST_FAILURES`, soit environ trois minutes de recul), la ligne de
+l'accès garde la date et la cause (`unreachable_since`, `unreachable_error`,
+migration `003`), l'écran le montre (Sources, carte et fiche des cibles), et un
+avis « Lien perdu avec l’instance » part vers les canaux de **chaque cible** de
+l'accès, puisque les routes de Notifications sont par cible ; chaque message
+nomme la sienne. Ne comptent que les échecs qui visent l'instance : le garde,
+le réseau ou le relais d'un appareil (statut 0), une clé refusée (401, 403). Une
+limite de débit dit quand revenir, un 404 ou un 500 parle d'une cible : ni l'un
+ni l'autre ne sont un lien perdu. Au premier succès suivant, la ligne s'efface
+et le retour se dit, mais seulement si un canal avait accepté la perte
+(`unreachable_notified`, comme l'incident d'Uptime) : jamais un « rétabli »
+sans « perdu ». L'état étant en base, un redémarrage ne répète pas la perte et
+n'oublie pas le retour.
 
 ### 6.3 `synced_at` porte deux rôles, et c'est voulu
 

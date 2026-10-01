@@ -23,11 +23,22 @@ export function formatAgo(at: number | null): string {
     if (at === null) return 'jamais déployé';
     const seconds = Math.max(0, Math.floor(Date.now() / 1000) - at);
     if (seconds < 60) return 'à l’instant';
+    return `il y a ${formatSpan(seconds)}`;
+}
+
+/** « depuis 3 min », pour un état qui dure. */
+export function formatSince(at: number): string {
+    const seconds = Math.max(0, Math.floor(Date.now() / 1000) - at);
+    if (seconds < 60) return 'depuis moins d’une minute';
+    return `depuis ${formatSpan(seconds)}`;
+}
+
+function formatSpan(seconds: number): string {
     const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `il y a ${minutes} min`;
+    if (minutes < 60) return `${minutes} min`;
     const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `il y a ${hours} h`;
-    return `il y a ${Math.floor(hours / 24)} j`;
+    if (hours < 24) return `${hours} h`;
+    return `${Math.floor(hours / 24)} j`;
 }
 
 /**

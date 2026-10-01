@@ -64,6 +64,11 @@
     color: var(--warning);
 }
 
+/* L'instance de l'accès ne répond plus : le suivi de la cible est interrompu. */
+.unreachable {
+    color: var(--danger);
+}
+
 /* ------------------------------------------------------------- la liste */
 
 .grid {

@@ -43,5 +43,6 @@ declare const styles: {
     readonly targetGroup: string;
     readonly textarea: string;
     readonly title: string;
+    readonly unreachable: string;
 };
 export = styles;

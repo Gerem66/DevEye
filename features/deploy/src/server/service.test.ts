@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { describe, it, mock } from 'node:test';
 
 import type { DeployCredentialRow, DeploymentRow, DeployTargetRow } from '../contracts/domain';
 import { DEPLOY_ITEMS_PROVIDER, type DeployItemsProvider } from '@deveye/types/sdk';
@@ -7,7 +7,7 @@ import { createTestServiceDeps, testDevice } from '@deveye/types/sdk/testing';
 
 import { DokployProvider, type DokployClient, type DokployTarget } from './providers/dokploy';
 import { GithubProvider } from './providers/github';
-import type { RemoteDeployment } from './providers/types';
+import { ProviderError, type RemoteDeployment } from './providers/types';
 import { serverEntry } from './index';
 import type { DeployRepo } from './repo';
 import { DeploySync } from './service';
@@ -56,6 +56,9 @@ function credential(over: Partial<DeployCredentialRow> = {}): DeployCredentialRo
         device_id: null,
         author_user_id: null,
         secret_enc: 'clé',
+        unreachable_since: null,
+        unreachable_error: null,
+        unreachable_notified: 0,
         created: 1,
         ...over
     };
@@ -129,6 +132,27 @@ function fakeRepo(
         updateCredential: unused,
         removeCredential: unused,
         countCredentialUses: unused,
+        markCredentialUnreachable: async (id, { since, error }) => {
+            const c = credentials.find((x) => x.id === id);
+            if (!c) return;
+            c.unreachable_since ??= since;
+            c.unreachable_error = error;
+        },
+        markCredentialNotified: async (id) => {
+            const c = credentials.find((x) => x.id === id);
+            if (c) c.unreachable_notified = 1;
+        },
+        clearCredentialUnreachable: async (id) => {
+            const c = credentials.find((x) => x.id === id);
+            if (!c) return;
+            c.unreachable_since = null;
+            c.unreachable_error = null;
+            c.unreachable_notified = 0;
+        },
+        listTargetsOfCredential: async (credentialId) =>
+            targets
+                .filter((t) => t.credential_id === credentialId)
+                .map((t) => ({ id: t.id, workspace_id: t.workspace_id, content: t.content })),
         findTargetByDevice: unused,
         countTargetsInWorkspaces: async (ids) => targets.filter((t) => ids.includes(t.workspace_id)).length,
         listStockTargets: unused,
@@ -238,22 +262,24 @@ function syncWith(
     } = {}
 ) {
     const deps = createTestServiceDeps({ repo, ...options });
-    let answers: Answers | null = { remote: [] };
+    /** Ce que l'instance répond ; `null` = injoignable, une erreur = ce refus précis. */
+    let answers: Answers | Error | null = { remote: [] };
+    const answerOrThrow = (): Answers => {
+        if (answers === null) throw new ProviderError('Instance Dokploy injoignable', 0);
+        if (answers instanceof Error) throw answers;
+        return answers;
+    };
     /** Lectures de la fiche d'une cible : une par cible et par heure, pas une par tour. */
     let repoReads = 0;
     const sync = new DeploySync(
         deps,
         withDokploy({
-            listDeployments: async () => {
-                if (!answers) throw new Error('Instance Dokploy injoignable');
-                return answers.remote;
-            },
-            listTargets: async () => answers?.catalog ?? [],
-            fetchDeploymentLog: async () => answers?.log ?? '',
+            listDeployments: async () => answerOrThrow().remote,
+            listTargets: async () => (answers && !(answers instanceof Error) ? answers.catalog : null) ?? [],
+            fetchDeploymentLog: async () => (answers && !(answers instanceof Error) ? answers.log : null) ?? '',
             fetchRepoUrl: async () => {
                 repoReads += 1;
-                if (!answers) throw new Error('Instance Dokploy injoignable');
-                return answers.repoUrl ?? null;
+                return answerOrThrow().repoUrl ?? null;
             }
         })
     );
@@ -266,8 +292,8 @@ function syncWith(
             await deps.recorded.tickers[0].tick();
             await sync.idle();
         },
-        /** Ce que l'instance répond au prochain tour ; `null` = injoignable. */
-        answer(next: Answers | null) {
+        /** Ce que l'instance répond au prochain tour ; `null` = injoignable, une erreur = ce refus. */
+        answer(next: Answers | Error | null) {
             answers = next;
         }
     };
@@ -315,6 +341,164 @@ describe('la boucle', () => {
         assert.equal(repo.targets[0].synced_at, null);
         assert.deepEqual(deps.recorded.liveChanges, []);
     });
+});
+
+describe('le lien avec l’instance', () => {
+    /**
+     * Le recul d'un accès est en secondes réelles : l'horloge est simulée, et
+     * chaque tour la pousse au-delà du recul en cours (60 s, 120 s, 240 s…).
+     */
+    function withClock<T>(run: (advance: (seconds: number) => void) => Promise<T>): Promise<T> {
+        mock.timers.enable({ apis: ['Date'], now: Date.now() });
+        return run((seconds) => mock.timers.tick(seconds * 1000)).finally(() => mock.timers.reset());
+    }
+
+    const twoTargets = () =>
+        fakeRepo(
+            [
+                target({ id: 1, synced_at: 100, content: JSON.stringify({ name: 'Site' }) }),
+                target({ id: 2, synced_at: 100, content: JSON.stringify({ name: 'API' }) })
+            ],
+            [credential()]
+        );
+
+    /** Trois tours en échec, le recul respecté entre deux. */
+    async function failThrice(tick: () => Promise<void>, advance: (seconds: number) => void): Promise<void> {
+        await tick();
+        advance(61);
+        await tick();
+        advance(121);
+        await tick();
+    }
+
+    it('trois échecs consécutifs marquent l’accès et préviennent chaque cible, une fois', () =>
+        withClock(async (advance) => {
+            const repo = twoTargets();
+            const { deps, tick, answer } = syncWith(repo);
+            answer(null);
+
+            await tick();
+            advance(61);
+            await tick();
+            assert.equal(repo.credentials[0].unreachable_since, null, 'deux échecs ne disent rien encore');
+            assert.equal(deps.recorded.notifications.length, 0);
+
+            advance(121);
+            await tick();
+            assert.notEqual(repo.credentials[0].unreachable_since, null);
+            assert.equal(repo.credentials[0].unreachable_error, 'Instance Dokploy injoignable');
+            assert.equal(repo.credentials[0].unreachable_notified, 1);
+            assert.deepEqual(
+                deps.recorded.notifications.map((n) => [n.itemId, n.subject]),
+                [
+                    [1, '[DevEye] Lien perdu avec l’instance : Site'],
+                    [2, '[DevEye] Lien perdu avec l’instance : API']
+                ]
+            );
+            assert.match(deps.recorded.notifications[0].body, /Cause : Instance Dokploy injoignable/);
+            assert.equal(deps.recorded.notifications[0].embeds, 1);
+            assert.deepEqual(deps.recorded.liveChanges, [1]);
+
+            // Un quatrième échec ne répète pas l'avis.
+            advance(241);
+            await tick();
+            assert.equal(deps.recorded.notifications.length, 2);
+        }));
+
+    it('le retour efface la ligne et se dit à qui a entendu la perte', () =>
+        withClock(async (advance) => {
+            const repo = twoTargets();
+            const { deps, tick, answer } = syncWith(repo);
+            answer(null);
+            await failThrice(tick, advance);
+            assert.equal(deps.recorded.notifications.length, 2);
+
+            answer({ remote: [] });
+            advance(241);
+            await tick();
+            assert.equal(repo.credentials[0].unreachable_since, null);
+            assert.equal(repo.credentials[0].unreachable_notified, 0);
+            assert.deepEqual(
+                deps.recorded.notifications.slice(2).map((n) => [n.itemId, n.subject]),
+                [
+                    [1, '[DevEye] Lien rétabli avec l’instance : Site'],
+                    [2, '[DevEye] Lien rétabli avec l’instance : API']
+                ]
+            );
+        }));
+
+    it('une perte qu’aucun canal n’a acceptée n’a pas de retour', () =>
+        withClock(async (advance) => {
+            const repo = twoTargets();
+            const { deps, tick, answer } = syncWith(repo, { notifyAccepted: false });
+            answer(null);
+            await failThrice(tick, advance);
+            assert.equal(repo.credentials[0].unreachable_notified, 0);
+
+            answer({ remote: [] });
+            advance(241);
+            await tick();
+            assert.equal(repo.credentials[0].unreachable_since, null);
+            assert.ok(deps.recorded.notifications.every((n) => n.subject.includes('perdu')));
+        }));
+
+    it('une limite de débit ou une cible en défaut ne sont pas un lien perdu', () =>
+        withClock(async (advance) => {
+            for (const refusal of [
+                new ProviderError('Trop de requêtes', 429, NOW() + 5),
+                new ProviderError('Dokploy a répondu 500.', 500)
+            ]) {
+                const repo = twoTargets();
+                const { deps, tick, answer } = syncWith(repo);
+                answer(refusal);
+                await failThrice(tick, advance);
+                advance(241);
+                await tick();
+                assert.equal(repo.credentials[0].unreachable_since, null, refusal.message);
+                assert.equal(deps.recorded.notifications.length, 0, refusal.message);
+            }
+        }));
+
+    it('une clé refusée ou un relais fermé comptent comme un lien perdu', () =>
+        withClock(async (advance) => {
+            for (const refusal of [
+                new ProviderError('Dokploy a répondu 401.', 401),
+                new ProviderError('L’appareil « Serveur » est hors ligne.', 0)
+            ]) {
+                const repo = twoTargets();
+                const { deps, tick, answer } = syncWith(repo);
+                answer(refusal);
+                await failThrice(tick, advance);
+                assert.equal(repo.credentials[0].unreachable_error, refusal.message);
+                assert.equal(deps.recorded.notifications.length, 2, refusal.message);
+            }
+        }));
+
+    it('après un redémarrage, une perte déjà en base ne se redit pas, mais son retour part', () =>
+        withClock(async (advance) => {
+            const repo = fakeRepo(
+                [target({ id: 1, synced_at: 100, content: JSON.stringify({ name: 'Site' }) })],
+                [
+                    credential({
+                        unreachable_since: NOW() - 600,
+                        unreachable_error: 'Instance Dokploy injoignable',
+                        unreachable_notified: 1
+                    })
+                ]
+            );
+            const { deps, tick, answer } = syncWith(repo);
+            answer(null);
+            await failThrice(tick, advance);
+            assert.equal(deps.recorded.notifications.length, 0);
+
+            answer({ remote: [] });
+            advance(241);
+            await tick();
+            assert.deepEqual(
+                deps.recorded.notifications.map((n) => [n.itemId, n.subject]),
+                [[1, '[DevEye] Lien rétabli avec l’instance : Site']]
+            );
+        }));
 });
 
 describe('la pause d’offre', () => {

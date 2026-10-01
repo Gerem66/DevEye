@@ -22,7 +22,7 @@ import {
 import { formatDuration, formatMoment } from '@/Services/alertCore';
 
 import { composeTargetOf, type ComposeService } from './agent';
-import { buildNotice, estimateFromHistory, firstLine } from './notice';
+import { buildLinkNotice, buildNotice, estimateFromHistory, firstLine, type LinkNotice } from './notice';
 import { PROVIDERS, providerOf, type DeployProviders } from './providers';
 import { DOKPLOY_INSTANCE } from './providers/dokploy';
 import {
@@ -63,6 +63,16 @@ const DEPLOY_SYNC_TIMEOUT_MS = 10_000;
 
 /** Plafond du recul d'un accès qui ne répond pas, doublé à chaque échec depuis {@link DEPLOY_MIN_INTERVAL_SECONDS}. */
 const DEPLOY_BACKOFF_MAX_SECONDS = 15 * 60;
+
+/**
+ * Échecs consécutifs d'un accès avant de dire le lien perdu : trois, soit
+ * environ trois minutes de recul. Un seul raté est un aléa ; trois, une
+ * instance qu'on ne joint plus.
+ */
+const DEPLOY_LINK_LOST_FAILURES = 3;
+
+/** La colonne qui garde la cause d'un lien perdu. */
+const UNREACHABLE_ERROR_MAX = 255;
 
 /**
  * Délai minimal entre deux rapprochements d'une même cible au repos. Une cible
@@ -108,6 +118,15 @@ const DEPLOY_MATCH_WINDOW_SECONDS = 120;
 const DEPLOY_STALE_SECONDS = 6 * 3600;
 
 /** Un déploiement dont l'issue est connue : c'est ce qui mérite un avis. */
+/**
+ * Un échec qui dit l'instance perdue, et non une cible en défaut : le garde, le
+ * réseau ou le relais (statut 0), une clé refusée (401, 403). Une limite de
+ * débit dit quand revenir ; un 404 ou un 500 parle d'une cible, pas du lien.
+ */
+function isLinkFailure(e: unknown): e is ProviderError {
+    return e instanceof ProviderError && e.retryAt === null && [0, 401, 403].includes(e.status);
+}
+
 function isTerminal(status: string): boolean {
     return status === 'success' || status === 'failed';
 }
@@ -214,7 +233,7 @@ export class DeploySync {
      * fait. Par accès et non par cible : c'est l'instance qui ne répond pas, et
      * ses cibles en vol ne doivent plus occuper la tête de file.
      */
-    private readonly credentialBackoff = new Map<number, { until: number; delay: number }>();
+    private readonly credentialBackoff = new Map<number, { until: number; delay: number; failures: number }>();
 
     /** Les déploiements par une machine en cours, par ligne de déploiement. */
     private readonly agentRuns = new Map<number, AgentRun>();
@@ -242,14 +261,20 @@ export class DeploySync {
      * l'instance lui-même. Lève un message lisible : appareil hors ligne,
      * supprimé, droit perdu.
      */
-    relayFor(credential: DeployCredentialRow): Promise<DeviceRelay | null> {
-        if (!credential.device_id) return Promise.resolve(null);
-        return relayForAuthor(
-            this.deps,
-            credential.workspace_id,
-            { deviceId: credential.device_id, authorUserId: credential.author_user_id },
-            DOKPLOY_INSTANCE
-        );
+    async relayFor(credential: DeployCredentialRow): Promise<DeviceRelay | null> {
+        if (!credential.device_id) return null;
+        try {
+            return await relayForAuthor(
+                this.deps,
+                credential.workspace_id,
+                { deviceId: credential.device_id, authorUserId: credential.author_user_id },
+                DOKPLOY_INSTANCE
+            );
+        } catch (e) {
+            // Un relais qui ne s'ouvre pas est une instance qu'on ne joint pas :
+            // même statut que le garde ou le réseau, pour le recul et le lien perdu.
+            throw new ProviderError(e instanceof Error ? e.message : String(e), 0);
+        }
     }
 
     /**
@@ -382,19 +407,23 @@ export class DeploySync {
     private launch(target: DeployTargetSyncRow, credentialId: number, now: number): void {
         this.busyCredentials.add(credentialId);
         const run = this.syncDeployTarget(target, now)
-            .then(() => {
+            .then(async (credential) => {
                 this.credentialBackoff.delete(credentialId);
+                if (credential && credential.unreachable_since !== null) await this.linkRestored(credential, now);
             })
             .catch(async (e: unknown) => {
                 // Un recul en mémoire plutôt qu'en base : c'est l'instance qui ne
                 // répond pas, pas la cible qui a changé. `synced_at` reste à sa
                 // valeur, sinon un premier import raté passerait pour fait.
-                const previous = this.credentialBackoff.get(credentialId)?.delay ?? 0;
+                const previous = this.credentialBackoff.get(credentialId) ?? { delay: 0, failures: 0 };
                 const delay =
-                    previous === 0 ? DEPLOY_MIN_INTERVAL_SECONDS : Math.min(previous * 2, DEPLOY_BACKOFF_MAX_SECONDS);
+                    previous.delay === 0
+                        ? DEPLOY_MIN_INTERVAL_SECONDS
+                        : Math.min(previous.delay * 2, DEPLOY_BACKOFF_MAX_SECONDS);
+                const failures = previous.failures + 1;
                 // Un fournisseur qui dit quand revenir (limite de débit) est écouté.
                 const retryAt = e instanceof ProviderError ? (e.retryAt ?? 0) : 0;
-                this.credentialBackoff.set(credentialId, { until: Math.max(now + delay, retryAt), delay });
+                this.credentialBackoff.set(credentialId, { until: Math.max(now + delay, retryAt), delay, failures });
                 this.deps.logger.warn(
                     { err: e instanceof Error ? e.message : String(e), targetId: target.id, retryInSeconds: delay },
                     'Deploy sync: cible non rapprochée'
@@ -402,6 +431,11 @@ export class DeploySync {
                 await this.sweepUnreachable(target, now).catch((err: unknown) =>
                     this.deps.logger.warn({ err, targetId: target.id }, 'Deploy sync: purge en échec')
                 );
+                if (failures >= DEPLOY_LINK_LOST_FAILURES && isLinkFailure(e)) {
+                    await this.linkLost(target, e.message, now).catch((err: unknown) =>
+                        this.deps.logger.warn({ err, credentialId }, 'Deploy sync: avis de lien perdu en échec')
+                    );
+                }
             })
             .finally(() => {
                 this.running.delete(target.id);
@@ -415,12 +449,12 @@ export class DeploySync {
      * atterri. On écrit AVANT de notifier : un avis parti sur un état non
      * enregistré repartirait au tour suivant.
      */
-    private async syncDeployTarget(target: DeployTargetSyncRow, now: number): Promise<void> {
-        if (target.credential_id === null) return;
+    private async syncDeployTarget(target: DeployTargetSyncRow, now: number): Promise<DeployCredentialRow | null> {
+        if (target.credential_id === null) return null;
 
         const cipher = this.deps.cipherFor(target.workspace_id);
         const credential = await this.deps.repo.findCredential(target.credential_id, target.workspace_id);
-        if (!credential) return;
+        if (!credential) return null;
         const stored = await readJson<Partial<StoredTarget>>(cipher, target.content);
         const provider = providerOf(this.providers, credential.provider);
         const open: OpenTarget = {
@@ -529,6 +563,98 @@ export class DeploySync {
         }
 
         await this.updateDeployNotices({ target: open, history: local, seen, firstImport, now });
+        return credential;
+    }
+
+    /**
+     * Le lien avec l'instance d'un accès est perdu : la ligne le dit, et les
+     * canaux des cibles de l'accès l'apprennent une fois. La cause suit le
+     * dernier échec ; la date reste celle de la première perte.
+     */
+    private async linkLost(target: DeployTargetSyncRow, cause: string, now: number): Promise<void> {
+        if (target.credential_id === null) return;
+        const credential = await this.deps.repo.findCredential(target.credential_id, target.workspace_id);
+        if (!credential) return;
+        const already = credential.unreachable_since !== null;
+        await this.deps.repo.markCredentialUnreachable(credential.id, {
+            since: now,
+            error: cause.slice(0, UNREACHABLE_ERROR_MAX)
+        });
+        if (already) return;
+        this.deps.live.changed(credential.workspace_id);
+        const accepted = await this.notifyLink(credential, { lost: true, cause, at: now });
+        if (accepted) await this.deps.repo.markCredentialNotified(credential.id);
+    }
+
+    /** Le lien est rétabli : la ligne s'efface, et le retour ne se dit qu'à qui a entendu la perte. */
+    private async linkRestored(credential: DeployCredentialRow, now: number): Promise<void> {
+        const heard = Number(credential.unreachable_notified) === 1;
+        const cause = credential.unreachable_error ?? '';
+        await this.deps.repo.clearCredentialUnreachable(credential.id);
+        this.deps.live.changed(credential.workspace_id);
+        if (heard) await this.notifyLink(credential, { lost: false, cause, at: now });
+    }
+
+    /**
+     * L'avis d'un lien perdu ou rétabli, vers les canaux de chaque cible de
+     * l'accès : les routes de Notifications sont par cible, et chaque message
+     * nomme la sienne. `true` si au moins un canal a accepté.
+     */
+    private async notifyLink(
+        credential: DeployCredentialRow,
+        state: { lost: boolean; cause: string; at: number }
+    ): Promise<boolean> {
+        const targets = await this.deps.repo.listTargetsOfCredential(credential.id);
+        if (targets.length === 0) return false;
+        const cipher = this.deps.cipherFor(credential.workspace_id);
+        const notify = this.deps.deveyeFor(credential.workspace_id).notify;
+        const instance = await this.instanceLabel(credential);
+        let accepted = false;
+        for (const row of targets) {
+            const stored = await readJson<Partial<StoredTarget>>(cipher, row.content);
+            const alert = this.linkAlert({
+                target: stored?.name ?? `cible ${row.id}`,
+                credential: credential.label,
+                instance,
+                ...state
+            });
+            if (await notify.send(alert, { itemId: row.id })) accepted = true;
+        }
+        return accepted;
+    }
+
+    /** L'hôte de l'instance et, le cas échéant, l'appareil qui la joint. */
+    private async instanceLabel(credential: DeployCredentialRow): Promise<string> {
+        const host = credential.base_url ? (URL.parse(credential.base_url)?.host ?? credential.base_url) : 'GitHub';
+        if (!credential.device_id) return host;
+        const device = await this.deps.devices.find(credential.device_id);
+        return `${host} (par l’appareil « ${device?.name ?? 'supprimé'} »)`;
+    }
+
+    /** Le corps de l'avis d'un lien perdu ou rétabli, en texte ; l'embed Discord suit. */
+    private linkAlert(notice: LinkNotice): SdkAlert {
+        const lines = [
+            notice.lost
+                ? `Le suivi de ${notice.target} est interrompu : DevEye ne joint plus l’instance de l’accès « ${notice.credential} ».`
+                : `Le suivi de ${notice.target} a repris : DevEye joint de nouveau l’instance de l’accès « ${notice.credential} ».`,
+            '',
+            `Cible : ${notice.target}`,
+            `Accès : ${notice.credential}`,
+            `Instance : ${notice.instance}`,
+            `${notice.lost ? 'Depuis le' : 'Rétabli le'} : ${formatMoment(notice.at)}`
+        ];
+        if (notice.cause) lines.push(`Cause : ${notice.cause}`);
+        return {
+            subject: `[DevEye] Lien ${notice.lost ? 'perdu' : 'rétabli'} avec l’instance : ${notice.target}`,
+            body: lines.join('\n'),
+            payload: {
+                event: notice.lost ? 'deploy_link_lost' : 'deploy_link_restored',
+                target: notice.target,
+                credential: notice.credential,
+                at: notice.at
+            },
+            embeds: buildLinkNotice(notice)
+        };
     }
 
     /**
