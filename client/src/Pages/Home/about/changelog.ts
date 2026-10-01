@@ -12,7 +12,7 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: readonly ChangelogEntry[] = [
     {
-        version: '0.21.4',
+        version: '0.21.5',
         date: '2026-10-01',
         changes: [
             {
@@ -22,10 +22,6 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
             {
                 kind: 'added',
                 text: 'Déploiements : le journal se colore selon ce que dit chaque ligne, se filtre, se copie, et suit un déploiement en cours'
-            },
-            {
-                kind: 'added',
-                text: 'Notifications : une fonctionnalité qui prévient en son nom peut suivre les canaux cochés par ses éléments'
             },
             { kind: 'improved', text: 'Un seul menu déroulant partout, avec une recherche dès que la liste s’allonge' },
             {
@@ -37,6 +33,24 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
                 text: 'Appareils : une source de logs qui ne répond pas ne laisse plus la fenêtre charger sans fin'
             },
             { kind: 'fixed', text: 'Déploiements : un appareil hors ligne se revérifie à la minute' }
+        ]
+    },
+    {
+        version: '0.21.4',
+        date: '2026-10-01',
+        changes: [
+            {
+                kind: 'added',
+                text: 'Notifications : une fonctionnalité qui prévient en son nom peut suivre les canaux cochés par ses éléments'
+            },
+            {
+                kind: 'added',
+                text: 'Audience : le site et la page d’état de DevEye sont mesurés, et le formulaire « Écris-moi » du site arrive dans ses retours'
+            },
+            {
+                kind: 'improved',
+                text: 'Déploiements : un seul avis par accès quand le lien se perd, qui nomme les cibles touchées'
+            }
         ]
     },
     {
