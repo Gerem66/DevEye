@@ -3,6 +3,7 @@ import {
     SYSTEM_NOTIFICATION_INFO,
     SYSTEM_NOTIFICATION_TARGET,
     featureDescriptor,
+    featureNotifiesItself,
     notifyChannelAdd,
     notifyChannelDelete,
     notifyChannelList,
@@ -203,12 +204,12 @@ const routeSet = defineFeature({
                 );
             }
         }
-        // La sélection vit sur l'élément : une route de fonctionnalité ne
-        // subsiste que pour les émetteurs sans éléments.
+        // La sélection vit sur l'élément : une route de fonctionnalité n'existe
+        // que pour ce qu'une fonctionnalité dit en son nom propre.
         if (
             input.feature !== SYSTEM_NOTIFICATION_TARGET &&
             input.itemId === undefined &&
-            featureDescriptor(input.feature).hasItems
+            !featureNotifiesItself(featureDescriptor(input.feature))
         ) {
             throw new FeatureError(
                 'validation',

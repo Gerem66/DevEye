@@ -1,9 +1,10 @@
 import {
+    featureDescriptor,
+    type FeatureId,
+    featureNotifiesItself,
+    itemNounForms,
     SYSTEM_NOTIFICATION_INFO,
     SYSTEM_NOTIFICATION_TARGET,
-    featureDescriptor,
-    itemNounForms,
-    type FeatureId,
     type SystemNotificationTarget
 } from '@deveye/types';
 
@@ -95,7 +96,7 @@ export function targetInfo(feature: FeatureId | SystemNotificationTarget): {
         hasItems: descriptor.hasItems,
         notifies: descriptor.notifies,
         notificationsHint: notifications?.hint ?? null,
-        featureRoute: !descriptor.hasItems || notifications?.perItem === false || notifications?.feature !== undefined,
+        featureRoute: featureNotifiesItself(descriptor),
         featureRouteHint: notifications?.feature ?? null,
         itemNoun: descriptor.itemNoun ?? null
     };

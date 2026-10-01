@@ -10,6 +10,7 @@ import {
 import { MAIL_CLIENT_PROVIDER } from '@deveye/types/sdk';
 import type { MailClientProvider } from '@deveye/types/sdk/client';
 
+import { humanizeError } from '@/api/useResource';
 import { ws } from '@/api/ws';
 import Button from '@/Components/Button';
 import Checkbox from '@/Components/Checkbox';
@@ -166,23 +167,32 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
             .catch(() => undefined);
     }, [canManage, mail]);
 
+    /** Un geste et son échec : le serveur dit pourquoi quand il le sait, `failure` sinon. */
     async function run(action: () => Promise<void>, failure: string): Promise<void> {
         setBusy(true);
         setStatus(null);
         try {
             await action();
-        } catch {
-            setStatus(failure);
+        } catch (e) {
+            setStatus(humanizeError(e, failure));
         } finally {
             setBusy(false);
         }
     }
 
     const toggleChannel = (id: number, on: boolean): void => {
+        const before = selected;
         const next = on ? [...selected, id] : selected.filter((c) => c !== id);
+        // Cochée tout de suite, décochée si le serveur refuse : une case qui
+        // reste cochée sur un échec dit le contraire de ce qui est enregistré.
         setSelected(next);
         void run(async () => {
-            await ws.send('notify.routeSet', { feature, itemId, channelIds: next });
+            try {
+                await ws.send('notify.routeSet', { feature, itemId, channelIds: next });
+            } catch (e) {
+                setSelected(before);
+                throw e;
+            }
             invalidate('notify.routeGet');
         }, 'Enregistrement impossible.');
     };
@@ -200,9 +210,15 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
                 /* Créé depuis un élément, le canal est là pour lui : il part coché,
                    sans quoi l'utilisateur croit être prévenu et ne l'est pas. */
                 if (showSelection && canRoute) {
+                    const before = selected;
                     const next = [...selected, created.channel.id];
                     setSelected(next);
-                    await ws.send('notify.routeSet', { feature, itemId, channelIds: next });
+                    try {
+                        await ws.send('notify.routeSet', { feature, itemId, channelIds: next });
+                    } catch (e) {
+                        setSelected(before);
+                        throw e;
+                    }
                     invalidate('notify.routeGet');
                 }
             } else {
