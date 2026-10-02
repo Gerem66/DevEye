@@ -12,6 +12,7 @@
 //! up to date.
 
 use std::process::Stdio;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
@@ -408,12 +409,16 @@ struct Step {
 struct UpgradeSpec {
     steps: Vec<Step>,
     needs_root: bool,
+    /// Ses commandes ont besoin d'un bus de session (voir `PrivateBus`).
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    session_bus: bool,
 }
 
 fn one(program: &'static str, args: Vec<&'static str>, needs_root: bool) -> UpgradeSpec {
     UpgradeSpec {
         steps: vec![Step { program, args }],
         needs_root,
+        session_bus: false,
     }
 }
 
@@ -442,11 +447,12 @@ fn upgrade_command(manager: &str) -> Result<UpgradeSpec> {
                 },
             ],
             needs_root: true,
+            session_bus: false,
         },
         "dnf" => one("dnf", vec!["-y", "upgrade"], true),
         "pacman" => one("pacman", vec!["-Syu", "--noconfirm"], true),
         "pamac" => one("pamac", vec!["upgrade", "--no-confirm"], false),
-        "flatpak" => one("flatpak", vec!["update", "-y", "--noninteractive"], false),
+        "flatpak" => flatpak_upgrade(),
         "snap" => one("snap", vec!["refresh"], true),
         "zypper" => one("zypper", vec!["-n", "update"], true),
         "brew" => one("brew", vec!["upgrade"], false),
@@ -474,6 +480,97 @@ fn upgrade_command(manager: &str) -> Result<UpgradeSpec> {
         other => bail!("gestionnaire non pris en charge : {other}"),
     };
     Ok(spec)
+}
+
+/// `flatpak update` s'authentifie auprès d'un dépôt OCI (celui de Fedora) par
+/// un service du bus de session. Un service système n'en a pas, et flatpak ne
+/// sait en lancer un qu'avec un affichage.
+fn flatpak_upgrade() -> UpgradeSpec {
+    UpgradeSpec {
+        session_bus: true,
+        ..one("flatpak", vec!["update", "-y", "--noninteractive"], false)
+    }
+}
+
+/// Un bus de session privé, le temps d'une mise à jour, quand l'agent n'en a
+/// pas. `dbus-run-session` ne convient pas : ce que son démon active
+/// (l'authentificateur OCI) hérite de la sortie de la commande et lui survit
+/// en la gardant ouverte. Ce démon-ci ne reçoit aucun tuyau, et tourne dans
+/// son propre groupe de processus, que la fin arrête en entier.
+#[cfg(target_os = "linux")]
+struct PrivateBus {
+    daemon: std::process::Child,
+    dir: std::path::PathBuf,
+    address: String,
+}
+
+#[cfg(target_os = "linux")]
+impl PrivateBus {
+    /// `None` quand l'agent a déjà un bus de session, ou que `dbus-daemon` manque :
+    /// la commande tourne alors sans, et son échec dira pourquoi.
+    async fn start_if_missing() -> Result<Option<Self>> {
+        if std::env::var_os("DBUS_SESSION_BUS_ADDRESS").is_some() || !installed("dbus-daemon", &[])
+        {
+            return Ok(None);
+        }
+        Self::start().await.map(Some)
+    }
+
+    async fn start() -> Result<Self> {
+        use std::os::unix::fs::DirBuilderExt;
+        use std::os::unix::process::CommandExt;
+
+        let dir = std::env::temp_dir().join(format!("deveye-bus-{:016x}", rand::random::<u64>()));
+        std::fs::DirBuilder::new()
+            .mode(0o700)
+            .create(&dir)
+            .context("dossier du bus de session privé")?;
+        let socket = dir.join("bus");
+        let address = format!("unix:path={}", socket.display());
+        let daemon = std::process::Command::new("dbus-daemon")
+            .args(["--session", "--nofork"])
+            .arg(format!("--address={address}"))
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .process_group(0)
+            .spawn();
+        let daemon = match daemon {
+            Ok(daemon) => daemon,
+            Err(e) => {
+                let _ = std::fs::remove_dir_all(&dir);
+                return Err(e).context("lancement de dbus-daemon");
+            }
+        };
+        // Construit d'abord : un échec plus bas passe par `drop`, qui nettoie.
+        let bus = PrivateBus {
+            daemon,
+            dir,
+            address,
+        };
+        for _ in 0..50 {
+            if socket.exists() {
+                return Ok(bus);
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        bail!("le bus de session privé n'a pas démarré");
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Drop for PrivateBus {
+    fn drop(&mut self) {
+        if let Ok(pgid) = i32::try_from(self.daemon.id()) {
+            // SAFETY: `kill` has no memory preconditions. A negative pid targets
+            // the daemon's own group, which holds only it and what it activated.
+            unsafe {
+                libc::kill(-pgid, libc::SIGTERM);
+            }
+        }
+        let _ = self.daemon.wait();
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
 }
 
 /// Extract a percentage (e.g. "42%", "12.5%") from a line, if present.
@@ -571,51 +668,92 @@ async fn upgrade_inner(manager: &str, tx: &Sender<PkgEvent>) -> Result<bool> {
     if spec.needs_root && !privileged() {
         bail!("Agent non privilégié — élevez-le en service système (root) pour appliquer les mises à jour de {manager}");
     }
+    #[cfg(target_os = "linux")]
+    let bus = match spec.session_bus {
+        true => PrivateBus::start_if_missing().await?,
+        false => None,
+    };
+    #[cfg(target_os = "linux")]
+    let bus_address = bus.as_ref().map(|b| b.address.as_str());
+    #[cfg(not(target_os = "linux"))]
+    let bus_address = None;
     for step in &spec.steps {
-        run_step(manager, step, tx).await?;
+        run_step(manager, step, bus_address, tx).await?;
     }
     Ok(reboot_required(manager))
 }
 
+/// Ce qu'on laisse aux lecteurs de sortie une fois la commande finie. Un
+/// processus qu'elle a lancé (un démon relancé par `apt`) peut garder ses
+/// tuyaux ouverts : sans délai, la mise à jour ne finirait jamais à l'écran.
+const DRAIN_GRACE: Duration = Duration::from_secs(3);
+
+/// Lit un flux de sortie ligne à ligne, en retenant la dernière lisible.
+fn stream_lines<R>(
+    reader: R,
+    manager: &str,
+    tx: &Sender<PkgEvent>,
+) -> (tokio::task::JoinHandle<()>, Arc<Mutex<Option<String>>>)
+where
+    R: tokio::io::AsyncRead + Unpin + Send + 'static,
+{
+    let last = Arc::new(Mutex::new(None));
+    let seen = Arc::clone(&last);
+    let tx = tx.clone();
+    let manager = manager.to_string();
+    let task = tokio::spawn(async move {
+        let mut lines = BufReader::new(reader).lines();
+        while let Ok(Some(line)) = lines.next_line().await {
+            if let Some(state) = last_state(&line) {
+                *seen.lock().unwrap_or_else(|e| e.into_inner()) = Some(state);
+            }
+            let _ = tx.send(progress(&manager, &line)).await;
+        }
+    });
+    (task, last)
+}
+
+async fn drain(task: tokio::task::JoinHandle<()>) {
+    let abort = task.abort_handle();
+    if tokio::time::timeout(DRAIN_GRACE, task).await.is_err() {
+        abort.abort();
+    }
+}
+
 /// Run one command, streaming both outputs as progress lines.
-async fn run_step(manager: &str, step: &Step, tx: &Sender<PkgEvent>) -> Result<()> {
-    let mut child = TokioCommand::new(step.program)
+async fn run_step(
+    manager: &str,
+    step: &Step,
+    session_bus: Option<&str>,
+    tx: &Sender<PkgEvent>,
+) -> Result<()> {
+    let mut command = TokioCommand::new(step.program);
+    command
         .args(&step.args)
         .env("DEBIAN_FRONTEND", "noninteractive")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::piped());
+    if let Some(address) = session_bus {
+        command.env("DBUS_SESSION_BUS_ADDRESS", address);
+    }
+    let mut child = command
         .spawn()
         .with_context(|| format!("lancement de {}", step.program))?;
 
     let stdout = child.stdout.take().context("stdout")?;
     let stderr = child.stderr.take().context("stderr")?;
-
-    // stderr in its own task so both streams flow live without one blocking the other.
-    let tx_err = tx.clone();
-    let mgr_err = manager.to_string();
-    let err_task = tokio::spawn(async move {
-        let mut last = None;
-        let mut lines = BufReader::new(stderr).lines();
-        while let Ok(Some(line)) = lines.next_line().await {
-            last = last_state(&line).or(last);
-            let _ = tx_err.send(progress(&mgr_err, &line)).await;
-        }
-        last
-    });
-
-    let mut last_out = None;
-    let mut lines = BufReader::new(stdout).lines();
-    while let Some(line) = lines.next_line().await.context("reading output")? {
-        last_out = last_state(&line).or(last_out);
-        let _ = tx.send(progress(manager, &line)).await;
-    }
-    let last_err = err_task.await.ok().flatten();
+    let (out_task, last_out) = stream_lines(stdout, manager, tx);
+    let (err_task, last_err) = stream_lines(stderr, manager, tx);
 
     let status = child.wait().await.context("waiting for process")?;
+    tokio::join!(drain(out_task), drain(err_task));
     if !status.success() {
+        let take = |last: Arc<Mutex<Option<String>>>| {
+            last.lock().unwrap_or_else(|e| e.into_inner()).take()
+        };
         // L'erreur d'un outil va sur stderr ; sinon, sa dernière ligne tout court.
-        let reason = last_err.or(last_out);
+        let reason = take(last_err).or_else(|| take(last_out));
         bail!(
             "{}",
             failure_message(step, status.code(), reason.as_deref())
@@ -723,6 +861,71 @@ grub2-tools.x86_64         1:2.12-10.fc41                updates\n\
             .args
             .contains(&"Dpkg::Options::=--force-confold"));
         assert!(upgrade_command("rpm-ostree").is_err());
+    }
+
+    #[test]
+    fn flatpak_upgrade_asks_for_a_session_bus() {
+        let spec = flatpak_upgrade();
+        assert!(spec.session_bus);
+        assert_eq!(spec.steps[0].program, "flatpak");
+        assert_eq!(spec.steps[0].args, ["update", "-y", "--noninteractive"]);
+        assert!(!upgrade_command("apt").expect("apt is driven").session_bus);
+    }
+
+    /// Le bus privé sert une commande, puis disparaît avec son dossier. Seulement
+    /// là où `dbus-daemon` et `gdbus` sont installés.
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn private_bus_serves_a_step_then_goes_away() {
+        if !installed("dbus-daemon", &[]) || !installed("gdbus", &[]) {
+            return;
+        }
+        let bus = PrivateBus::start().await.expect("bus privé");
+        let dir = bus.dir.clone();
+        let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+        tokio::spawn(async move { while rx.recv().await.is_some() {} });
+        let step = Step {
+            program: "gdbus",
+            args: vec![
+                "call",
+                "--session",
+                "--dest",
+                "org.freedesktop.DBus",
+                "--object-path",
+                "/org/freedesktop/DBus",
+                "--method",
+                "org.freedesktop.DBus.GetId",
+            ],
+        };
+        run_step("flatpak", &step, Some(&bus.address), &tx)
+            .await
+            .expect("la commande joint le bus privé");
+        let pid = bus.daemon.id();
+        drop(bus);
+        assert!(!dir.exists());
+        assert!(!std::path::Path::new(&format!("/proc/{pid}")).exists());
+    }
+
+    /// Un petit-fils qui garde la sortie ouverte ne fige pas la fin, et la
+    /// raison de l'échec est quand même lue.
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn a_lingering_grandchild_does_not_hang_the_step() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+        tokio::spawn(async move { while rx.recv().await.is_some() {} });
+        let step = Step {
+            program: "sh",
+            args: vec!["-c", "sleep 30 & echo 'error: raison' >&2; exit 1"],
+        };
+        let started = std::time::Instant::now();
+        let err = run_step("flatpak", &step, None, &tx)
+            .await
+            .expect_err("exit 1");
+        assert!(started.elapsed() < Duration::from_secs(10));
+        assert!(
+            err.to_string().ends_with("(code 1) : error: raison"),
+            "{err}"
+        );
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
