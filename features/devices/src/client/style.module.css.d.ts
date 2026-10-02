@@ -264,7 +264,6 @@ declare const styles: {
     readonly pkgProgressRow: string;
     readonly pkgReason: string;
     readonly pkgRowSelectable: string;
-    readonly pkgRowSelected: string;
     readonly pkgSelectCol: string;
     readonly pkgSummary: string;
     readonly pkgSummaryHint: string;

@@ -2191,20 +2191,13 @@
     width: 100%;
     border-collapse: collapse;
 }
-.pkgTable th {
-    text-align: left;
-    font-size: 0.75rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--text-muted);
-    padding: 0 var(--space-sm) var(--space-xs);
-    border-bottom: 1px solid var(--border);
-}
 .pkgTable td {
     padding: var(--space-sm);
     border-bottom: 1px solid var(--border);
     vertical-align: middle;
+}
+.pkgTable tr:first-child td {
+    border-top: 1px solid var(--border);
 }
 .pkgName {
     display: block;
@@ -2237,9 +2230,6 @@
 }
 .pkgRowSelectable:hover td {
     background: var(--surface-subtle);
-}
-.pkgRowSelected td {
-    background: var(--accent-bg);
 }
 .pkgCounting {
     display: inline-flex;

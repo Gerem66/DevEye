@@ -83,12 +83,12 @@ const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : 
  * Les mises à jour du système et des applications d'un appareil, en un tableau.
  * L'agent répond en deux temps : les outils présents aussitôt, puis le compte
  * de chacun à mesure que sa sonde finit, et chaque ligne tourne en attendant
- * le sien. Ceux que DevEye pilote se cochent (ceux qui ont des mises à jour le
- * sont d'office) et le bouton sous le tableau les enchaîne un à un ; ceux
- * qu'il reconnaît sans les piloter suivent, grisés. L'avancement ne vient
- * jamais du clic mais des événements du serveur (`package.started`, `.progress`,
- * `.done`) et de la liste : une mise à jour lancée ailleurs s'affiche de la
- * même façon.
+ * le sien. Ceux que DevEye pilote sont cochés d'office, on décoche ce qu'on
+ * veut garder, et le bouton sous le tableau enchaîne le reste un à un ; ceux
+ * qu'il reconnaît sans les piloter se déplient sous « Autres ». L'avancement
+ * ne vient jamais du clic mais des événements du serveur (`package.started`,
+ * `.progress`, `.done`) et de la liste : une mise à jour lancée ailleurs
+ * s'affiche de la même façon.
  */
 export function PackagesPanel({ deviceId, privileged }: { deviceId: string; privileged: boolean | null }) {
     const [managers, setManagers] = useState<PackageManager[] | null>(null);
@@ -96,7 +96,9 @@ export function PackagesPanel({ deviceId, privileged }: { deviceId: string; priv
     const [listError, setListError] = useState<string | null>(null);
     /** Avancement par gestionnaire : plusieurs peuvent tourner si lancés ailleurs. */
     const [upgrades, setUpgrades] = useState<Partial<Record<PackageManagerId, UpgradeState>>>({});
-    const [selected, setSelected] = useState<Set<PackageManagerId>>(new Set());
+    /** Tout est coché d'office : on retient ce que l'utilisateur a décoché. */
+    const [unchecked, setUnchecked] = useState<Set<PackageManagerId>>(new Set());
+    const [showOthers, setShowOthers] = useState(false);
     /**
      * La file des outils cochés restants, enchaînés un à un à chaque
      * `package.done`. Elle vit avec la fenêtre : la fermer laisse finir l'outil
@@ -109,8 +111,6 @@ export function PackagesPanel({ deviceId, privileged }: { deviceId: string; priv
     managersRef.current = managers;
     const countsRef = useRef(counts);
     countsRef.current = counts;
-    const privilegedRef = useRef(privileged);
-    privilegedRef.current = privileged;
     const detectTimer = useRef<number | null>(null);
 
     // Ref-counted live subscription (released on unmount).
@@ -204,7 +204,7 @@ export function PackagesPanel({ deviceId, privileged }: { deviceId: string; priv
         // précédent.
         setManagers(null);
         setCounts({});
-        setSelected(new Set());
+        setUnchecked(new Set());
         setUpgrades({});
         setQueue(null);
         const offs = [
@@ -212,7 +212,6 @@ export function PackagesPanel({ deviceId, privileged }: { deviceId: string; priv
                 if (d.deviceId !== deviceId) return;
                 setManagers(d.managers);
                 setCounts({});
-                setSelected(new Set());
                 setListError(null);
                 // Une liste relancée par le serveur (après une mise à jour) n'a
                 // pas d'échéance : ses comptes en ont besoin autant que les autres.
@@ -228,17 +227,6 @@ export function PackagesPanel({ deviceId, privileged }: { deviceId: string; priv
             onServerEvent(PACKAGE_COUNT_EVENT, packageCountPushSchema, (d) => {
                 if (d.deviceId !== deviceId) return;
                 setCounts((prev) => ({ ...prev, [d.manager]: d.pendingCount }));
-                // Coché d'office dès qu'il y a quelque chose à appliquer et que
-                // l'agent le pourrait.
-                const tool = managersRef.current?.find((m) => m.id === d.manager);
-                const rootMissing = tool?.needsRoot === true && privilegedRef.current === false;
-                const eligible = d.pendingCount !== null && d.pendingCount > 0 && !rootMissing;
-                setSelected((prev) => {
-                    const next = new Set(prev);
-                    if (eligible) next.add(d.manager);
-                    else next.delete(d.manager);
-                    return next;
-                });
             }),
             onServerEvent(PACKAGE_STARTED_EVENT, packageStartedPushSchema, (d) => {
                 if (d.deviceId !== deviceId) return;
@@ -320,17 +308,17 @@ export function PackagesPanel({ deviceId, privileged }: { deviceId: string; priv
     // quelles, figées : elles disent ce qui passe.
     const pickable = (m: Managed) => !rootMissing(m) && counts[m.id] !== 0;
     const choosable = managed.filter(pickable);
-    const chosen = choosable.filter((m) => selected.has(m.id));
+    const chosen = choosable.filter((m) => !unchecked.has(m.id));
     const counting = managed.some((m) => counts[m.id] === undefined);
     const total = managed.reduce((sum, m) => sum + (counts[m.id] ?? 0), 0);
     const unknown = managed.some((m) => counts[m.id] === null);
     const rebootRequired = managed.some((m) => m.rebootRequired);
 
     const toggle = (id: PackageManagerId, on: boolean) =>
-        setSelected((prev) => {
+        setUnchecked((prev) => {
             const next = new Set(prev);
-            if (on) next.add(id);
-            else next.delete(id);
+            if (on) next.delete(id);
+            else next.add(id);
             return next;
         });
 
@@ -353,7 +341,7 @@ export function PackagesPanel({ deviceId, privileged }: { deviceId: string; priv
                         : counting
                           ? 'Chaque outil est interrogé à son tour : les comptes arrivent au fur et à mesure.'
                           : total > 0
-                            ? 'Cochez les outils à mettre à jour, puis lancez-les d’un coup : ils s’enchaînent un à un.'
+                            ? 'Décochez ce que vous voulez garder, puis lancez le reste : les outils s’enchaînent un à un.'
                             : unknown
                               ? 'Le compte de certains outils est inconnu.'
                               : 'Tout est à jour.'}
@@ -363,41 +351,20 @@ export function PackagesPanel({ deviceId, privileged }: { deviceId: string; priv
 
             {listError !== null && <p className={styles.pkgErr}>{listError}</p>}
 
-            {managers.length > 0 && (
+            {(managed.length > 0 || (showOthers && unmanaged.length > 0)) && (
                 <table className={styles.pkgTable}>
-                    <thead>
-                        <tr>
-                            <th className={styles.pkgSelectCol}>
-                                {managed.length > 0 && (
-                                    <Checkbox
-                                        aria-label='Tout sélectionner'
-                                        checked={choosable.length > 0 && chosen.length === choosable.length}
-                                        disabled={busy || choosable.length === 0}
-                                        onChange={(on) => setSelected(new Set(on ? choosable.map((m) => m.id) : []))}
-                                    />
-                                )}
-                            </th>
-                            <th>Système</th>
-                            <th className={styles.pkgCountCol}>Mises à jour</th>
-                        </tr>
-                    </thead>
                     <tbody>
                         {managed.map((m) => {
                             const meta = MANAGERS[m.id];
                             const state = upgrades[m.id];
                             const missing = rootMissing(m);
                             const count = counts[m.id];
-                            const picked = pickable(m) && selected.has(m.id);
+                            const picked = pickable(m) && !unchecked.has(m.id);
                             const canPick = !busy && pickable(m);
                             return (
                                 <Fragment key={m.id}>
                                     <tr
-                                        className={[
-                                            canPick ? styles.pkgRowSelectable : '',
-                                            picked ? styles.pkgRowSelected : ''
-                                        ]
-                                            .filter(Boolean)
-                                            .join(' ')}
+                                        className={canPick ? styles.pkgRowSelectable : undefined}
                                         onClick={canPick ? () => toggle(m.id, !picked) : undefined}
                                     >
                                         {/* La case gère son clic : la ligne ne doit pas le rejouer. */}
@@ -482,21 +449,39 @@ export function PackagesPanel({ deviceId, privileged }: { deviceId: string; priv
                                 </Fragment>
                             );
                         })}
-                        {unmanaged.map((m) => {
-                            const meta = UNMANAGED[m.id];
-                            return (
-                                <tr key={m.id} className={styles.pkgUnmanaged}>
-                                    <td className={styles.pkgSelectCol} />
-                                    <td>
-                                        <span className={styles.pkgName}>{meta.label}</span>
-                                        <span className={styles.pkgDesc}>{meta.desc}</span>
-                                    </td>
-                                    <td className={styles.pkgCountCol}>Détecté, pas géré par DevEye</td>
-                                </tr>
-                            );
-                        })}
+                        {showOthers &&
+                            unmanaged.map((m) => {
+                                const meta = UNMANAGED[m.id];
+                                return (
+                                    <tr key={m.id} className={styles.pkgUnmanaged}>
+                                        <td className={styles.pkgSelectCol} />
+                                        <td>
+                                            <span className={styles.pkgName}>{meta.label}</span>
+                                            <span className={styles.pkgDesc}>{meta.desc}</span>
+                                        </td>
+                                        <td
+                                            className={styles.pkgCountCol}
+                                            title='Détecté sur l’appareil, mais DevEye ne le pilote pas'
+                                        >
+                                            Non géré
+                                        </td>
+                                    </tr>
+                                );
+                            })}
                     </tbody>
                 </table>
+            )}
+
+            {unmanaged.length > 0 && (
+                <button
+                    type='button'
+                    className={styles.expandGraphsBtn}
+                    aria-expanded={showOthers}
+                    title='Les autres outils de mise à jour détectés, que DevEye ne pilote pas'
+                    onClick={() => setShowOthers((v) => !v)}
+                >
+                    {showOthers ? 'Réduire' : 'Autres'}
+                </button>
             )}
 
             <div className={styles.pkgActions}>
