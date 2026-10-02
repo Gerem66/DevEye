@@ -705,7 +705,10 @@ async fn run_step(
         let _ = t.await;
     }
     if !status.success() {
-        bail!("{engine} {} a échoué (code {:?})", action, status.code());
+        match status.code() {
+            Some(code) => bail!("{engine} {action} a échoué (code {code})"),
+            None => bail!("{engine} {action} a été interrompu par un signal"),
+        }
     }
     Ok(())
 }

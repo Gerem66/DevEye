@@ -514,10 +514,56 @@ pub async fn run_upgrade(manager: String, tx: Sender<PkgEvent>) {
             manager,
             ok: false,
             reboot_required: false,
-            error: Some(e.to_string()),
+            error: Some(cap_error(&e.to_string())),
         },
     };
     let _ = tx.send(done).await;
+}
+
+/// Plafond du message d'échec, celui du schéma (`agentPkgDonePayloadSchema`,
+/// en unités UTF-16) : au-delà, le serveur rejetterait la trame entière et la
+/// mise à jour resterait « en cours » à l'écran.
+const ERROR_MAX: usize = 500;
+
+fn cap_error(message: &str) -> String {
+    if message.encode_utf16().count() <= ERROR_MAX {
+        return message.to_string();
+    }
+    let mut out = String::new();
+    let mut units = 0;
+    for c in message.chars() {
+        units += c.len_utf16();
+        if units > ERROR_MAX - 1 {
+            break;
+        }
+        out.push(c);
+    }
+    out.push('…');
+    out
+}
+
+/// La dernière ligne lisible d'une sortie : une barre de progression réécrit
+/// sa ligne par des retours chariot, seul le dernier état compte.
+fn last_state(line: &str) -> Option<String> {
+    let t = line
+        .rsplit('\r')
+        .find(|part| !part.trim().is_empty())?
+        .trim();
+    (!t.is_empty()).then(|| t.to_string())
+}
+
+/// Le message d'un échec : la commande, son code, et la dernière ligne que
+/// l'outil a écrite, qui en dit d'ordinaire la raison.
+fn failure_message(step: &Step, code: Option<i32>, reason: Option<&str>) -> String {
+    let code = match code {
+        Some(c) => format!("code {c}"),
+        None => "interrompue par un signal".to_string(),
+    };
+    let base = format!("{} {} a échoué ({code})", step.program, step.args.join(" "));
+    match reason {
+        Some(r) => format!("{base} : {r}"),
+        None => base,
+    }
 }
 
 async fn upgrade_inner(manager: &str, tx: &Sender<PkgEvent>) -> Result<bool> {
@@ -549,25 +595,30 @@ async fn run_step(manager: &str, step: &Step, tx: &Sender<PkgEvent>) -> Result<(
     let tx_err = tx.clone();
     let mgr_err = manager.to_string();
     let err_task = tokio::spawn(async move {
+        let mut last = None;
         let mut lines = BufReader::new(stderr).lines();
         while let Ok(Some(line)) = lines.next_line().await {
+            last = last_state(&line).or(last);
             let _ = tx_err.send(progress(&mgr_err, &line)).await;
         }
+        last
     });
 
+    let mut last_out = None;
     let mut lines = BufReader::new(stdout).lines();
     while let Some(line) = lines.next_line().await.context("reading output")? {
+        last_out = last_state(&line).or(last_out);
         let _ = tx.send(progress(manager, &line)).await;
     }
-    let _ = err_task.await;
+    let last_err = err_task.await.ok().flatten();
 
     let status = child.wait().await.context("waiting for process")?;
     if !status.success() {
+        // L'erreur d'un outil va sur stderr ; sinon, sa dernière ligne tout court.
+        let reason = last_err.or(last_out);
         bail!(
-            "{} {} a échoué (code {:?})",
-            step.program,
-            step.args.join(" "),
-            status.code()
+            "{}",
+            failure_message(step, status.code(), reason.as_deref())
         );
     }
     Ok(())
@@ -629,6 +680,38 @@ grub2-tools.x86_64         1:2.12-10.fc41                updates\n\
     grub2-tools.x86_64     1:2.12-9.fc41                 @updates\n";
         assert_eq!(count_dnf_updates(out), 2);
         assert_eq!(count_dnf_updates(""), 0);
+    }
+
+    #[test]
+    fn failure_says_the_tool_reason_with_a_plain_code() {
+        let step = Step {
+            program: "flatpak",
+            args: vec!["update", "-y"],
+        };
+        assert_eq!(
+            failure_message(&step, Some(1), Some("error: No remote refs found")),
+            "flatpak update -y a échoué (code 1) : error: No remote refs found"
+        );
+        assert_eq!(
+            failure_message(&step, None, None),
+            "flatpak update -y a échoué (interrompue par un signal)"
+        );
+        assert_eq!(
+            last_state("Téléchargement 10%\rTéléchargement 80%\r  ").as_deref(),
+            Some("Téléchargement 80%")
+        );
+        assert_eq!(last_state("   "), None);
+    }
+
+    #[test]
+    fn error_fits_the_schema_cap() {
+        let long = "é".repeat(ERROR_MAX + 50);
+        let capped = cap_error(&long);
+        assert_eq!(capped.encode_utf16().count(), ERROR_MAX);
+        assert!(capped.ends_with('…'));
+        assert_eq!(cap_error("court"), "court");
+        let emoji = "😀".repeat(ERROR_MAX);
+        assert!(cap_error(&emoji).encode_utf16().count() <= ERROR_MAX);
     }
 
     #[test]
