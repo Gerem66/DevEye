@@ -480,7 +480,7 @@ export function PackagesPanel({ deviceId, privileged }: { deviceId: string; priv
                     title='Les autres outils de mise à jour détectés, que DevEye ne pilote pas'
                     onClick={() => setShowOthers((v) => !v)}
                 >
-                    {showOthers ? 'Réduire' : 'Autres'}
+                    {showOthers ? 'Réduire' : `${unmanaged.length > 1 ? 'Autres' : 'Autre'} (${unmanaged.length})`}
                 </button>
             )}
 
