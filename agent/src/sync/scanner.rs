@@ -3,6 +3,7 @@
 //! La correction de TOUTE la synchro repose sur ce scan — pas de raccourci :
 //! seuls les fichiers réguliers comptent, les symlinks sont ignorés.
 
+use std::io::Read;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -18,8 +19,8 @@ use crate::protocol::{SyncIndexEntry, SyncShareAssignment};
 use crate::sync::fingerprint::{Fingerprint, FingerprintEntry};
 use crate::sync::index_cache::{CacheEntry, IndexCache};
 use crate::sync::paths::{is_reserved_top, rel_path_of, rel_path_problem};
-use crate::sync::transfer::sweep_trash;
-use crate::sync::{CleanMark, SyncEvent};
+use crate::sync::transfer::{sweep_partials, sweep_trash, PARTIAL_KEEP_DAYS};
+use crate::sync::{CleanMark, Keepalive, SyncEvent};
 
 /// Taille des lots `sync.index` (miroir de `SYNC_INDEX_BATCH_MAX`).
 const BATCH: usize = 500;
@@ -60,13 +61,28 @@ fn unix_mode(_meta: &std::fs::Metadata) -> Option<u32> {
     None
 }
 
-/// SHA-256 (hex) d'un fichier, lu en flux (jamais chargé entier en mémoire).
-pub fn hash_file(path: &std::path::Path) -> Result<String> {
+/// Bytes per read while hashing.
+const HASH_CHUNK: usize = 256 * 1024;
+
+/// Streamed SHA-256 (hex) of a file, never loaded whole in memory. `keepalive`
+/// ticks once per block, so a large file does not look like silence.
+pub fn hash_file(path: &std::path::Path, mut keepalive: Option<&mut Keepalive>) -> Result<String> {
     let mut file =
         std::fs::File::open(path).with_context(|| format!("ouverture de {}", path.display()))?;
     let mut hasher = Sha256::new();
-    std::io::copy(&mut file, &mut hasher)
-        .with_context(|| format!("lecture de {}", path.display()))?;
+    let mut buf = vec![0u8; HASH_CHUNK];
+    loop {
+        let n = file
+            .read(&mut buf)
+            .with_context(|| format!("lecture de {}", path.display()))?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+        if let Some(k) = keepalive.as_deref_mut() {
+            k.tick()?;
+        }
+    }
     Ok(format!("{:x}", hasher.finalize()))
 }
 
@@ -151,8 +167,12 @@ fn scan(
     std::fs::create_dir_all(&root).with_context(|| format!("création de {}", root.display()))?;
 
     // Entretien opportuniste : la corbeille locale est balayée ici, selon la
-    // rétention réglée sur le partage (30 jours par défaut).
+    // rétention réglée sur le partage (30 jours par défaut), et avec elle les
+    // partiels de téléchargement que plus personne ne reprend.
     sweep_trash(&root, assignment.trash_keep_days);
+    sweep_partials(&root, PARTIAL_KEEP_DAYS);
+    // A large new file hashes for minutes: the server must hear from the scan meanwhile.
+    let mut keepalive = Keepalive::new(tx.clone(), session_id);
 
     let excluded = CompiledExclusions::compile(&assignment.exclusions);
     let cache = IndexCache::load(assignment.share_id);
@@ -229,7 +249,7 @@ fn scan(
                 Some(c) if c.size == size && c.mtime == mtime && now_ms - mtime > RECENT_MS => {
                     c.hash.clone()
                 }
-                _ => match hash_file(&path) {
+                _ => match hash_file(&path, Some(&mut keepalive)) {
                     Ok(h) => h,
                     Err(e) => {
                         debug!(path = %path.display(), error = %e, "sync scan: unreadable file skipped");
@@ -330,4 +350,28 @@ pub fn fingerprint_of(cache: &IndexCache) -> String {
         });
     }
     fp.finish()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[test]
+    fn hash_file_ticks_its_keepalive() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("big.bin");
+        let bytes: Vec<u8> = (0..3 * HASH_CHUNK).map(|i| i as u8).collect();
+        std::fs::write(&path, &bytes).unwrap();
+        let expected = format!("{:x}", Sha256::digest(&bytes));
+
+        let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+        let mut keepalive = Keepalive::with_period(tx, "scan-1", Duration::ZERO);
+        assert_eq!(hash_file(&path, Some(&mut keepalive)).unwrap(), expected);
+        match rx.try_recv() {
+            Ok(SyncEvent::Busy { op_id }) => assert_eq!(op_id, "scan-1"),
+            _ => panic!("expected a busy frame"),
+        }
+        assert_eq!(hash_file(&path, None).unwrap(), expected);
+    }
 }

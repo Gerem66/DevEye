@@ -996,16 +996,22 @@ async fn stream_session(
                             Ok(ServerMessage::SyncPushAck { op_id, seq }) => {
                                 sync_mgr.push_ack(&op_id, seq);
                             }
-                            // CloudSync: install one download chunk. Applied inline
-                            // (sequentially) like FilesUpload, so chunks of one op never race.
+                            // CloudSync: install one download chunk, routed to the op's worker
+                            // thread; acks and the outcome come back through sync_rx.
                             Ok(ServerMessage::SyncApplyChunk { op_id, share_id, rel_path, seq, data, done, hash, size, mtime, mode, resume_from }) => {
-                                let bytes = base64::engine::general_purpose::STANDARD
-                                    .decode(data.as_bytes())
-                                    .unwrap_or_default();
-                                let events = tokio::task::block_in_place(|| {
-                                    sync_mgr.apply_chunk(&op_id, share_id, &rel_path, seq, &bytes, done, &hash, size, mtime, mode, resume_from)
-                                });
-                                for ev in events {
+                                let frame = crate::sync::ApplyFrame {
+                                    op_id,
+                                    rel_path,
+                                    seq,
+                                    data,
+                                    done,
+                                    expected_hash: hash,
+                                    expected_size: size,
+                                    mtime,
+                                    mode,
+                                    resume_from,
+                                };
+                                if let Some(ev) = sync_mgr.apply_chunk(frame, share_id) {
                                     commands::send_sync_event(&mut sink, device_id, ev).await;
                                 }
                             }
@@ -1024,19 +1030,14 @@ async fn stream_session(
                                 commands::send_sync_event(&mut sink, device_id, ev).await;
                             }
                             // CloudSync: install content already held elsewhere in the share
-                            // (rename/move) by local copy — nothing crosses the network.
+                            // (rename/move) by local copy, nothing crosses the network. Off-loop:
+                            // the source is hashed first; the outcome comes back through sync_rx.
                             Ok(ServerMessage::SyncApplyLocal { op_id, share_id, rel_path, source_rel_path, hash, size, mtime, mode }) => {
-                                let ev = tokio::task::block_in_place(|| {
-                                    sync_mgr.apply_local(&op_id, share_id, &rel_path, &source_rel_path, &hash, size, mtime, mode)
-                                });
-                                commands::send_sync_event(&mut sink, device_id, ev).await;
+                                sync_mgr.apply_local(&op_id, share_id, &rel_path, &source_rel_path, &hash, size, mtime, mode);
                             }
-                            // CloudSync: rename in place (no transfer, no trash).
+                            // CloudSync: rename in place (no transfer, no trash). Off-loop as above.
                             Ok(ServerMessage::SyncMove { op_id, share_id, from_rel_path, rel_path, hash, size, mtime, mode }) => {
-                                let ev = tokio::task::block_in_place(|| {
-                                    sync_mgr.move_file(&op_id, share_id, &from_rel_path, &rel_path, &hash, size, mtime, mode)
-                                });
-                                commands::send_sync_event(&mut sink, device_id, ev).await;
+                                sync_mgr.move_file(&op_id, share_id, &from_rel_path, &rel_path, &hash, size, mtime, mode);
                             }
                             // CloudSync: propagate a deletion (local trash, never unlink).
                             Ok(ServerMessage::SyncDelete { op_id, share_id, rel_path }) => {

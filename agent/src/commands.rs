@@ -744,6 +744,10 @@ where
             resume_from,
             error,
         },
+        SyncEvent::Busy { op_id } => ClientMessage::SyncBusy {
+            device_id: device_id.to_string(),
+            op_id,
+        },
     };
     if let Ok(text) = serde_json::to_string(&msg) {
         let _ = sink.send(Message::Text(text)).await;

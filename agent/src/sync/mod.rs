@@ -17,12 +17,16 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
+use anyhow::{bail, Result};
+use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::mpsc::Sender;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use crate::protocol::{SyncIndexEntry, SyncShareAssignment};
-use transfer::{Applier, ApplyOutcome, PushCredits, PushWindow, PUSH_ACK_TIMEOUT};
+pub use transfer::ApplyFrame;
+use transfer::{PushCredits, PushWindow, SharedCaches, PUSH_ACK_TIMEOUT};
 use watcher::ShareWatcher;
 
 /// Événements que les tâches sync renvoient à la boucle (qui les met sur le fil).
@@ -56,7 +60,7 @@ pub enum SyncEvent {
     /// Crédit de flux d'un download.
     Ack { op_id: String, seq: u64 },
     /// Issue d'une op locale (`apply` | `applyDir` | `applyLocal` | `applyReady`
-    /// | `delete` | `push`).
+    /// | `delete` | `move` | `push`).
     OpResult {
         op_id: String,
         op: &'static str,
@@ -65,6 +69,54 @@ pub enum SyncEvent {
         resume_from: Option<u64>,
         error: Option<String>,
     },
+    /// Still working on `op_id` locally (a scan uses its session id).
+    Busy { op_id: String },
+}
+
+/// Period of the `sync.busy` frames during long local work.
+pub const BUSY_EVERY: Duration = Duration::from_secs(15);
+
+/// Keeps the server waiting during long local work (re-reading a partial,
+/// hashing a large file): it drops an op silent for 60 s.
+pub struct Keepalive {
+    tx: Sender<SyncEvent>,
+    op_id: String,
+    period: Duration,
+    last: Instant,
+}
+
+impl Keepalive {
+    pub fn new(tx: Sender<SyncEvent>, op_id: &str) -> Self {
+        Self::with_period(tx, op_id, BUSY_EVERY)
+    }
+
+    pub fn with_period(tx: Sender<SyncEvent>, op_id: &str, period: Duration) -> Self {
+        Self {
+            tx,
+            op_id: op_id.to_string(),
+            period,
+            last: Instant::now(),
+        }
+    }
+
+    /// Once per block read. `Err` means the session is gone: stop the work and
+    /// touch nothing. A full channel proves the loop is alive; the frame is
+    /// retried on the next block.
+    pub fn tick(&mut self) -> Result<()> {
+        if self.last.elapsed() < self.period {
+            return Ok(());
+        }
+        match self.tx.try_send(SyncEvent::Busy {
+            op_id: self.op_id.clone(),
+        }) {
+            Ok(()) => {
+                self.last = Instant::now();
+                Ok(())
+            }
+            Err(TrySendError::Full(_)) => Ok(()),
+            Err(TrySendError::Closed(_)) => bail!("session terminée"),
+        }
+    }
 }
 
 /// Ce que l'agent sait de la fraîcheur d'un partage.
@@ -91,12 +143,16 @@ struct ShareState {
 
 /// Possède les assignations, les watchers et les installs en cours. Vit dans
 /// la session WebSocket (comme `TermManager`) : le drop en fin de session
-/// arrête les watchers et nettoie les temporaires ; le serveur re-pousse
-/// `sync.config` à la reconnexion.
+/// arrête les watchers et les travailleurs de téléchargement (leurs partiels
+/// restent, pour la reprise) ; le serveur re-pousse `sync.config` à la
+/// reconnexion.
 pub struct SyncManager {
     tx: Sender<SyncEvent>,
     shares: HashMap<i64, ShareState>,
-    applier: Applier,
+    /// One worker per download in progress, by op id; dropping the sender ends it.
+    applies: HashMap<String, Sender<ApplyFrame>>,
+    /// Index caches shared with the workers (freshness guard at install).
+    caches: SharedCaches,
     /// `sync_roots` de la config locale : où cette machine accepte un partage.
     sync_roots: Vec<String>,
     /// Les partages dont la racine a été refusée, et pourquoi : le serveur
@@ -110,7 +166,8 @@ impl SyncManager {
         Self {
             tx,
             shares: HashMap::new(),
-            applier: Applier::default(),
+            applies: HashMap::new(),
+            caches: SharedCaches::default(),
             sync_roots,
             refused: HashMap::new(),
             push_credits: PushCredits::default(),
@@ -156,7 +213,7 @@ impl SyncManager {
                 .is_some_and(|s| s.assignment.local_path != assignment.local_path)
             {
                 index_cache::IndexCache::remove(share_id);
-                self.applier.invalidate_cache(share_id);
+                transfer::invalidate_cache(&self.caches, share_id);
             }
             // La marque de propreté ne survit qu'à une assignation identique,
             // exclusions comprises : le cache de l'agent a été produit sous les
@@ -226,7 +283,7 @@ impl SyncManager {
         // et leur cache de scan n'a plus de raison d'être.
         for share_id in self.shares.keys() {
             index_cache::IndexCache::remove(*share_id);
-            self.applier.invalidate_cache(*share_id);
+            transfer::invalidate_cache(&self.caches, *share_id);
         }
         info!(count = next.len(), "sync: config applied");
         self.shares = next;
@@ -246,11 +303,11 @@ impl SyncManager {
     /// peut jamais laisser deux appareils divergents indéfiniment.
     ///
     /// `&mut` : le scan réécrit le cache d'index sur disque, donc la copie
-    /// mémorisée par l'applier doit être oubliée.
+    /// mémorisée pour les installations doit être oubliée.
     pub fn start_scan(&mut self, session_id: String, share_id: i64, mode: Option<String>) {
         let full = mode.as_deref() != Some("auto");
-        // La réponse rapide ne touche pas au cache d'index : l'applier peut
-        // garder le sien, puisque rien ne sera réécrit.
+        // La réponse rapide ne touche pas au cache d'index : les installations
+        // peuvent garder le leur, puisque rien ne sera réécrit.
         if !full {
             if let Some(fp) = self.clean_fingerprint(share_id) {
                 let _ = self.tx.try_send(SyncEvent::Index {
@@ -265,7 +322,7 @@ impl SyncManager {
                 return;
             }
         }
-        self.applier.invalidate_cache(share_id);
+        transfer::invalidate_cache(&self.caches, share_id);
         match self.shares.get(&share_id) {
             Some(s) if s.assignment.status == "active" => {
                 scanner::spawn_scan(
@@ -373,72 +430,81 @@ impl SyncManager {
         }
     }
 
-    /// Un chunk de download à installer (séquentiel, appelé inline par la boucle).
-    /// Retourne les événements à renvoyer au serveur.
-    #[allow(clippy::too_many_arguments)]
-    pub fn apply_chunk(
-        &mut self,
-        op_id: &str,
-        share_id: i64,
-        rel_path: &str,
-        seq: u64,
-        data: &[u8],
-        done: bool,
-        hash: &str,
-        size: u64,
-        mtime: i64,
-        mode: Option<u32>,
-        resume_from: u64,
-    ) -> Vec<SyncEvent> {
-        let Some(assignment) = self.assignment(share_id).cloned() else {
-            return vec![SyncEvent::OpResult {
-                op_id: op_id.to_string(),
-                op: "apply",
-                ok: false,
-                resume_from: None,
-                error: Some(self.unknown_reason(share_id)),
-            }];
-        };
-        let root = PathBuf::from(&assignment.local_path);
-        match self.applier.apply_chunk(
-            op_id,
-            share_id,
-            &root,
-            rel_path,
-            seq,
-            data,
-            done,
-            hash,
-            size,
-            mtime,
-            mode,
-            resume_from,
-        ) {
-            ApplyOutcome::Ack { seq } => vec![SyncEvent::Ack {
-                op_id: op_id.to_string(),
-                seq,
-            }],
-            ApplyOutcome::Installed { seq } => vec![
-                SyncEvent::Ack {
-                    op_id: op_id.to_string(),
-                    seq,
-                },
-                SyncEvent::OpResult {
-                    op_id: op_id.to_string(),
-                    op: "apply",
-                    ok: true,
-                    resume_from: None,
-                    error: None,
-                },
-            ],
-            ApplyOutcome::Failed { error } => vec![SyncEvent::OpResult {
-                op_id: op_id.to_string(),
-                op: "apply",
-                ok: false,
-                resume_from: None,
-                error: Some(error),
-            }],
+    /// Routes one download frame to its op's worker thread; acks and the
+    /// outcome come back through the channel. `Some` is an immediate refusal.
+    pub fn apply_chunk(&mut self, frame: ApplyFrame, share_id: i64) -> Option<SyncEvent> {
+        if !self.applies.contains_key(&frame.op_id) {
+            // A late frame of an op this side already failed, or from before a
+            // reconnection: no worker will ever want it.
+            if frame.seq != 0 {
+                return Some(apply_refused(
+                    &frame.op_id,
+                    format!("premier chunk inattendu (seq {})", frame.seq),
+                ));
+            }
+            let Some(root) = self.root_of(share_id) else {
+                return Some(apply_refused(&frame.op_id, self.unknown_reason(share_id)));
+            };
+            self.applies.retain(|_, worker| !worker.is_closed());
+            if self.applies.len() >= transfer::MAX_APPLY_OPS {
+                return Some(apply_refused(
+                    &frame.op_id,
+                    "trop de téléchargements en cours".to_string(),
+                ));
+            }
+            let (worker, frames) = tokio::sync::mpsc::channel(transfer::APPLY_QUEUE);
+            transfer::spawn_apply(
+                frame.op_id.clone(),
+                share_id,
+                root,
+                Arc::clone(&self.caches),
+                frames,
+                self.tx.clone(),
+            );
+            self.applies.insert(frame.op_id.clone(), worker);
         }
+        let op_id = frame.op_id.clone();
+        let done = frame.done;
+        let worker = self.applies.get(&op_id).expect("inserted above");
+        match worker.try_send(frame) {
+            Ok(()) => {
+                if done {
+                    self.applies.remove(&op_id);
+                }
+                None
+            }
+            // The worker already reported its failure and left.
+            Err(TrySendError::Closed(_)) => {
+                self.applies.remove(&op_id);
+                debug!(op_id, "sync: frame for a finished download dropped");
+                None
+            }
+            // The server never has more than its window in flight: a full
+            // queue is a protocol violation, not backpressure.
+            Err(TrySendError::Full(_)) => {
+                self.applies.remove(&op_id);
+                Some(apply_refused(
+                    &op_id,
+                    "chunks reçus plus vite que leur file ne les accepte".to_string(),
+                ))
+            }
+        }
+    }
+
+    fn root_of(&self, share_id: i64) -> Option<PathBuf> {
+        self.assignment(share_id)
+            .map(|a| PathBuf::from(&a.local_path))
+    }
+
+    /// The outcome of an op refused for a share this machine does not serve.
+    fn refuse(&self, op_id: &str, op: &'static str, share_id: i64) {
+        let _ = self.tx.try_send(SyncEvent::OpResult {
+            op_id: op_id.to_string(),
+            op,
+            ok: false,
+            resume_from: None,
+            error: Some(self.unknown_reason(share_id)),
+        });
     }
 
     /// Amorce d'un download : dit au serveur combien d'octets de clair on
@@ -481,8 +547,9 @@ impl SyncManager {
     }
 
     /// Installation par copie locale d'un contenu déjà présent dans le partage
-    /// (renommage/déplacement). Un échec n'est pas grave : le serveur retombe
-    /// sur le téléchargement chunké normal.
+    /// (renommage/déplacement), sur son propre thread : la source est hachée
+    /// d'abord, ce qui peut être long. L'issue revient par le canal. Un échec
+    /// n'est pas grave : le serveur retombe sur le téléchargement chunké normal.
     #[allow(clippy::too_many_arguments)]
     pub fn apply_local(
         &self,
@@ -494,30 +561,37 @@ impl SyncManager {
         size: u64,
         mtime: i64,
         mode: Option<u32>,
-    ) -> SyncEvent {
-        let outcome = match self.assignment(share_id) {
-            Some(a) => transfer::apply_local(
-                &PathBuf::from(&a.local_path),
-                rel_path,
-                source_rel_path,
-                hash,
-                size,
-                mtime,
-                mode,
-            )
-            .map_err(|e| e.to_string()),
-            None => Err(self.unknown_reason(share_id)),
+    ) {
+        let Some(root) = self.root_of(share_id) else {
+            self.refuse(op_id, "applyLocal", share_id);
+            return;
         };
-        SyncEvent::OpResult {
-            op_id: op_id.to_string(),
-            op: "applyLocal",
-            ok: outcome.is_ok(),
-            resume_from: None,
-            error: outcome.err(),
-        }
+        let (rel_path, source_rel_path, hash) = (
+            rel_path.to_string(),
+            source_rel_path.to_string(),
+            hash.to_string(),
+        );
+        transfer::spawn_local_op(
+            op_id.to_string(),
+            "applyLocal",
+            self.tx.clone(),
+            move |keepalive| {
+                transfer::apply_local(
+                    &root,
+                    &rel_path,
+                    &source_rel_path,
+                    &hash,
+                    size,
+                    mtime,
+                    mode,
+                    keepalive,
+                )
+            },
+        );
     }
 
-    /// Déplacement propagé : renommage sur place, sans corbeille ni transfert.
+    /// Déplacement propagé : renommage sur place, sans corbeille ni transfert,
+    /// sur son propre thread (la source est hachée d'abord).
     #[allow(clippy::too_many_arguments)]
     pub fn move_file(
         &self,
@@ -529,27 +603,33 @@ impl SyncManager {
         size: u64,
         mtime: i64,
         mode: Option<u32>,
-    ) -> SyncEvent {
-        let outcome = match self.assignment(share_id) {
-            Some(a) => transfer::move_file(
-                &PathBuf::from(&a.local_path),
-                from_rel_path,
-                rel_path,
-                hash,
-                size,
-                mtime,
-                mode,
-            )
-            .map_err(|e| e.to_string()),
-            None => Err(self.unknown_reason(share_id)),
+    ) {
+        let Some(root) = self.root_of(share_id) else {
+            self.refuse(op_id, "move", share_id);
+            return;
         };
-        SyncEvent::OpResult {
-            op_id: op_id.to_string(),
-            op: "move",
-            ok: outcome.is_ok(),
-            resume_from: None,
-            error: outcome.err(),
-        }
+        let (from_rel_path, rel_path, hash) = (
+            from_rel_path.to_string(),
+            rel_path.to_string(),
+            hash.to_string(),
+        );
+        transfer::spawn_local_op(
+            op_id.to_string(),
+            "move",
+            self.tx.clone(),
+            move |keepalive| {
+                transfer::move_file(
+                    &root,
+                    &from_rel_path,
+                    &rel_path,
+                    &hash,
+                    size,
+                    mtime,
+                    mode,
+                    keepalive,
+                )
+            },
+        );
     }
 
     /// Suppression propagée : corbeille locale, puis `sync.opResult`.
@@ -569,11 +649,23 @@ impl SyncManager {
     }
 }
 
+/// The `apply` outcome of a frame refused before any worker took it.
+fn apply_refused(op_id: &str, error: String) -> SyncEvent {
+    SyncEvent::OpResult {
+        op_id: op_id.to_string(),
+        op: "apply",
+        ok: false,
+        resume_from: None,
+        error: Some(error),
+    }
+}
+
 impl Drop for SyncManager {
     fn drop(&mut self) {
-        // Fin de session : les temporaires d'installs en cours sont nettoyés
-        // (les watchers, eux, s'arrêtent via leur propre Drop).
-        self.applier.abort_all();
+        // End of session: dropping the senders ends the download workers once
+        // their queued frames are written; partials stay for a later resume
+        // (the watchers stop through their own Drop).
+        self.applies.clear();
         // Pushes waiting for a credit would otherwise sit out the full timeout.
         for credit in self
             .push_credits
@@ -583,5 +675,55 @@ impl Drop for SyncManager {
         {
             credit.close();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn manager() -> (SyncManager, tokio::sync::mpsc::Receiver<SyncEvent>) {
+        let (tx, rx) = tokio::sync::mpsc::channel(8);
+        (SyncManager::new(tx, Vec::new()), rx)
+    }
+
+    fn frame(seq: u64) -> ApplyFrame {
+        ApplyFrame {
+            op_id: "op".into(),
+            rel_path: "a".into(),
+            seq,
+            data: String::new(),
+            done: false,
+            expected_hash: "0".repeat(64),
+            expected_size: 1,
+            mtime: 0,
+            mode: None,
+            resume_from: 0,
+        }
+    }
+
+    fn refusal(ev: Option<SyncEvent>) -> String {
+        match ev {
+            Some(SyncEvent::OpResult {
+                ok: false,
+                error: Some(error),
+                ..
+            }) => error,
+            _ => panic!("expected an immediate refusal"),
+        }
+    }
+
+    #[test]
+    fn a_first_frame_out_of_order_is_refused_without_a_worker() {
+        let (mut mgr, _rx) = manager();
+        assert!(refusal(mgr.apply_chunk(frame(3), 1)).contains("inattendu"));
+        assert!(mgr.applies.is_empty());
+    }
+
+    #[test]
+    fn a_frame_for_an_unknown_share_is_refused_without_a_worker() {
+        let (mut mgr, _rx) = manager();
+        assert!(refusal(mgr.apply_chunk(frame(0), 1)).contains("inconnu"));
+        assert!(mgr.applies.is_empty());
     }
 }

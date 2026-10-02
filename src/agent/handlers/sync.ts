@@ -1,5 +1,6 @@
 import {
     AGENT_SYNC_ACK,
+    AGENT_SYNC_BUSY,
     AGENT_SYNC_CHANGED,
     AGENT_SYNC_CHUNK,
     AGENT_SYNC_INDEX,
@@ -33,6 +34,11 @@ export async function handleSyncChunk(s: AgentSession, payload: PayloadOf<typeof
 
 export async function handleSyncAck(s: AgentSession, payload: PayloadOf<typeof AGENT_SYNC_ACK>): Promise<void> {
     s.hooks.onSyncAck(s.device.id, payload);
+}
+
+/** Pas d'AGENT_ACK : un battement n'appelle pas de réponse, comme `sync.ack`. */
+export async function handleSyncBusy(s: AgentSession, payload: PayloadOf<typeof AGENT_SYNC_BUSY>): Promise<void> {
+    s.hooks.onSyncBusy(s.device.id, payload);
 }
 
 export async function handleSyncOpResult(

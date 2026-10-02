@@ -34,6 +34,7 @@ import {
     AGENT_REPORT,
     AGENT_SERVICE_RESULT,
     AGENT_SYNC_ACK,
+    AGENT_SYNC_BUSY,
     AGENT_SYNC_CHANGED,
     AGENT_SYNC_CHUNK,
     AGENT_SYNC_INDEX,
@@ -81,6 +82,7 @@ import {
     handleReport,
     handleServiceResult,
     handleSyncAck,
+    handleSyncBusy,
     handleSyncChanged,
     handleSyncChunk,
     handleSyncIndex,
@@ -199,6 +201,8 @@ function dispatch(session: AgentSession, msg: AgentClientMessage): void | Promis
             return handleSyncChunk(session, msg.payload);
         case AGENT_SYNC_ACK:
             return handleSyncAck(session, msg.payload);
+        case AGENT_SYNC_BUSY:
+            return handleSyncBusy(session, msg.payload);
         case AGENT_SYNC_OP_RESULT:
             return handleSyncOpResult(session, msg.payload);
         case AGENT_PKG_LIST_RESULT:

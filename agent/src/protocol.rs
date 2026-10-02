@@ -864,8 +864,10 @@ pub enum ClientMessage {
         error: Option<String>,
     },
     /// CloudSync: one upload chunk (reply to `sync.push`); the final frame
-    /// carries the observed hash/size/mtime so the server can detect a file
-    /// that changed mid-read (it then discards the transfer).
+    /// carries the observed mtime, plus hash and size when the whole file was
+    /// read, so the server can detect a file that changed mid-read (it then
+    /// discards the transfer). A resumed push (`startOffset > 0`) sends no
+    /// hash: the server verifies the whole blob at finalize.
     #[serde(rename = "sync.chunk")]
     SyncChunk {
         #[serde(rename = "deviceId")]
@@ -910,6 +912,16 @@ pub enum ClientMessage {
         resume_from: Option<u64>,
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>,
+    },
+    /// CloudSync: the op is still being worked on locally (long re-read or
+    /// hash). Sent about every 15 s; the server only re-arms its silence
+    /// timeout. For a scan, `op_id` is the scan's session id.
+    #[serde(rename = "sync.busy")]
+    SyncBusy {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        #[serde(rename = "opId")]
+        op_id: String,
     },
     /// First reply to `pkg.list`: the update tools present, without counts.
     #[serde(rename = "pkg.listResult")]
@@ -1507,5 +1519,19 @@ mod tests {
         assert!(free["payload"].get("seq").is_none());
         let windowed = serde_json::to_value(chunk(Some(4))).unwrap();
         assert_eq!(windowed["payload"]["seq"], 4);
+    }
+
+    #[test]
+    fn busy_frame_carries_device_and_op() {
+        let busy = serde_json::to_value(ClientMessage::SyncBusy {
+            device_id: "d".into(),
+            op_id: "o".into(),
+        })
+        .unwrap();
+        assert_eq!(busy["command"], "sync.busy");
+        assert_eq!(
+            busy["payload"],
+            serde_json::json!({ "deviceId": "d", "opId": "o" })
+        );
     }
 }
