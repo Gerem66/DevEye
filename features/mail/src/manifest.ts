@@ -26,6 +26,8 @@ export const manifest = {
      * synchronisation qui a changé quelque chose.
      */
     resources: ['mail.accountCount', 'mail.accountList', 'mail.folderList', 'mail.messageList', 'mail.getSettings'],
+    /** Ouvrir un message le marque lu : seuls les compteurs de dossiers sont à relire. */
+    topics: [{ id: 'mailUnread', keys: ['mail.folderList'] }],
     /**
      * Le téléchargement d'une pièce jointe (une URL à ticket, un GET nu pour que
      * le navigateur télécharge nativement) et le retour OAuth, tous deux sur

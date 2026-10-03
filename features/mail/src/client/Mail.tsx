@@ -633,6 +633,9 @@ export default function Mail(_props: FeatureViewProps) {
                 setSelectedMessage(res.message);
                 // Reflect the read state in the list without a full reload.
                 patchMessage(messageId, { seen: true });
+                // L'émetteur n'est pas prévenu de sa propre écriture : le badge
+                // du dossier se relit ici.
+                void refreshFolders();
             } catch (e) {
                 setError(humanizeError(e, 'Ouverture du message impossible.'));
                 invalidate('mail.accountList');
@@ -640,7 +643,7 @@ export default function Mail(_props: FeatureViewProps) {
                 setMessageLoading(false);
             }
         },
-        [patchMessage]
+        [patchMessage, refreshFolders]
     );
 
     /**
@@ -759,11 +762,12 @@ export default function Mail(_props: FeatureViewProps) {
                 setSelectedMessage((prev) =>
                     prev && prev.id === message.id ? { ...prev, flags: { ...prev.flags, ...patch } } : prev
                 );
+                if (patch.seen !== undefined) void refreshFolders();
             } catch (e) {
                 setError(humanizeError(e, 'Action impossible.'));
             }
         },
-        [patchMessage]
+        [patchMessage, refreshFolders]
     );
 
     const toggleSeen = useCallback(
@@ -800,11 +804,12 @@ export default function Mail(_props: FeatureViewProps) {
                 await withSecrecy(() => api.send('mail.messageDelete', { messageId: message.id }));
                 dropMessage(message.id);
                 if (openMessageIdRef.current === message.id) closeMessage();
+                void refreshFolders();
             } catch (e) {
                 setError(humanizeError(e, 'Suppression impossible.'));
             }
         },
-        [dropMessage]
+        [dropMessage, refreshFolders]
     );
 
     const handleSelectMessage = useCallback(

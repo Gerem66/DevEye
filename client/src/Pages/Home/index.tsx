@@ -482,7 +482,7 @@ export default function HomePage() {
 
     // Set of view ids whose components are currently mounted (cached).
     const [mountedFeatures, setMountedFeatures] = useState<Set<string>>(new Set());
-    // Per-view "generation" counter — bumping it remounts the view (Ctrl+click reset).
+    // Per-view "generation" counter: bumping it remounts the view (Ctrl+click or Shift+click reset).
     const [featureGen, setFeatureGen] = useState<Map<string, number>>(new Map());
     // The open popup's body element — feature content is portaled into it.
     const [popupBodyEl, setPopupBodyEl] = useState<HTMLDivElement | null>(null);

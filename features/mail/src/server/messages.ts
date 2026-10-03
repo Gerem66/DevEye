@@ -163,6 +163,7 @@ export const mailMessageGetFeature = defineSdkFeature<
     typeof mailMessageGet.output
 >({
     ...mailMessageGet,
+    mutates: ['mailUnread'],
     handler: async (ctx, input) => {
         const { message, folder, account } = await loadMessageChain(ctx, input.messageId);
         await assertMailUnlocked(ctx, account.security_tier);

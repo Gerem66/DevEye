@@ -54,9 +54,9 @@ export interface TopNavbarProps {
     viewTitle?: string;
     /** Called when user clicks "back to home" in feature mode. */
     onBack?: () => void;
-    /** Open the profile feature. Receives the click (Ctrl/Cmd = force reload). */
+    /** Open the profile feature. Receives the click (Ctrl/Cmd or Shift = force reload). */
     onOpenProfile?: (e: ReactMouseEvent) => void;
-    /** Open the security feature. Receives the click (Ctrl/Cmd = force reload). */
+    /** Open the security feature. Receives the click (Ctrl/Cmd or Shift = force reload). */
     onOpenSecurity?: (e: ReactMouseEvent) => void;
     /** Les entrées de compte des modules (`manifest.accountEntry`), rangées sous « Sécurité ». */
     accountEntries?: readonly { id: string; label: string; icon: string }[];

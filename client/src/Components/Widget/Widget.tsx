@@ -67,6 +67,15 @@ const Widget = forwardRef<HTMLDivElement, WidgetProps>(function Widget(
             layoutId={interactive ? layoutKey : undefined}
             className={`${styles.widget} ${compact ? styles.compact : ''} ${interactive ? '' : styles.static} ${className ?? ''}`}
             onClick={interactive && !link ? (e: MouseEvent<HTMLDivElement>) => onExpand?.(e) : undefined}
+            // Maj+clic rouvre la vue à neuf : sans cela, le navigateur étend
+            // aussi la sélection de texte jusqu'au point cliqué.
+            onMouseDown={
+                interactive
+                    ? (e: MouseEvent) => {
+                          if (e.shiftKey) e.preventDefault();
+                      }
+                    : undefined
+            }
             whileHover={interactive ? { y: -4 } : undefined}
             whileTap={interactive ? { scale: 0.985 } : undefined}
             transition={{ type: 'spring', stiffness: 300, damping: 26, mass: 0.8 }}

@@ -37,7 +37,10 @@ export function FolderTree({ folders, selectedId, onSelect }: FolderTreeProps) {
                     <span className={`icon icon-${SPECIAL_ICONS[folder.specialUse] ?? 'folder'}`} />
                     <span className={styles.folderName}>{folder.name}</span>
                     {folder.unreadCount > 0 && (
-                        <CountBadge count={folder.unreadCount} aria-label={`${folder.unreadCount} unread`} />
+                        <CountBadge
+                            count={folder.unreadCount}
+                            aria-label={`${folder.unreadCount} non lu${folder.unreadCount > 1 ? 's' : ''}`}
+                        />
                     )}
                 </button>
             ))}

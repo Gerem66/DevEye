@@ -48,9 +48,9 @@ export function ShortcutTile({ item, hideBadge }: ShortcutTileProps) {
         };
     }, [item.template, item.url]);
 
-    // Ctrl/Cmd-click refreshes the preview (bypasses the server cache) instead of
+    // Ctrl/Cmd- or Shift-click refreshes the preview (bypasses the server cache) instead of
     // opening the link — the click bubbles to the Widget anchor, so preventDefault
-    // stops the navigation. Mirrors the Ctrl/Cmd force-reload on feature popups.
+    // stops the navigation. Mirrors the force-reload on feature popups.
     const onClick = useCallback(
         (e: ReactMouseEvent) => {
             if (!isForceReload(e)) return;
