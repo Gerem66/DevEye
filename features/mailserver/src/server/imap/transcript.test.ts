@@ -234,6 +234,19 @@ describe('le protocole à la main', () => {
         wire.close();
     });
 
+    it('APPEND au dossier ouvert annonce son EXISTS avant la ligne étiquetée, pas dans le SELECT suivant', async () => {
+        const wire = await Wire.open();
+        await wire.cmd('LOGIN carol@exemple.test secret-de-carol');
+        await wire.cmd('CREATE Tri');
+        await wire.cmd('SELECT Tri');
+        const message = sampleMessage('Trié').toString('latin1');
+        wire.raw(`q1 APPEND Tri {${message.length}+}\r\n${message}\r\n`);
+        assert.match(await wire.until(/^q1 [A-Z]+[^\r]*\r\n/m), /\* 1 EXISTS\r\nq1 OK/);
+        const selected = await wire.cmd('SELECT Sent');
+        assert.equal(selected.match(/^\* \d+ EXISTS/gm)?.length, 1);
+        wire.close();
+    });
+
     it('un inconnu ne fait pas allouer au serveur le littéral d’un APPEND', async () => {
         const wire = await Wire.open();
         wire.raw('z1 LOGIN carol@exemple.test {1000000}\r\n');

@@ -114,15 +114,26 @@ export class ImapSession {
     }
 
     ok(cmd: Command, text: string, code?: string): void {
-        this.send(tagged(cmd.tag, 'OK', text, code));
+        this.complete(cmd, tagged(cmd.tag, 'OK', text, code));
     }
 
     no(cmd: Command, text: string, code?: string): void {
-        this.send(tagged(cmd.tag, 'NO', text, code));
+        this.complete(cmd, tagged(cmd.tag, 'NO', text, code));
     }
 
     bad(cmd: Command, text: string): void {
-        this.send(tagged(cmd.tag, 'BAD', text));
+        this.complete(cmd, tagged(cmd.tag, 'BAD', text));
+    }
+
+    /**
+     * Ce qui attendait s'annonce AVANT la ligne étiquetée : écrit après, le
+     * client le lirait dans la réponse de sa commande suivante, un SELECT
+     * d'un autre dossier par exemple. FETCH, STORE et SEARCH par numéro de
+     * séquence ne doivent pas voir ces numéros bouger sous eux.
+     */
+    private complete(cmd: Command, line: Buffer): void {
+        if (!['FETCH', 'STORE', 'SEARCH'].includes(cmd.name)) this.flush();
+        this.send(line);
     }
 
     untagged(...values: ImapValue[]): void {
@@ -227,8 +238,6 @@ export class ImapSession {
             this.ctx.logger.error({ err: (error as Error).message, command: cmd.name }, 'IMAP : échec d’une commande');
             this.no(cmd, 'Internal error');
         }
-        // FETCH, STORE et SEARCH par numéro de séquence ne doivent pas voir ces numéros bouger sous eux.
-        if (!['FETCH', 'STORE', 'SEARCH'].includes(cmd.name)) this.flush();
     }
 
     private async run(cmd: Command): Promise<void> {
