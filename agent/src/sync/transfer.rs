@@ -35,7 +35,7 @@ use crate::ownership::adopt_owner;
 use crate::sync::index_cache::IndexCache;
 use crate::sync::paths::confined_join;
 use crate::sync::scanner::hash_file;
-use crate::sync::{Keepalive, SyncEvent};
+use crate::sync::{error_text, Keepalive, SyncEvent};
 
 /// Octets par chunk d'upload (le base64 reste sous le cap wire de ~1,4 M).
 const PUSH_CHUNK: usize = 256 * 1024;
@@ -55,7 +55,15 @@ const RENAME_BACKOFF_MS: [u64; 3] = [100, 300, 900];
 /// Message renvoyé quand la cible reste verrouillée : il doit rester lisible
 /// pour l'utilisateur, et surtout ne pas ressembler à une corruption.
 pub const LOCKED_HINT: &str =
-    "fichier verrouillé par une autre application — nouvelle tentative au prochain cycle";
+    "fichier verrouillé par une autre application, nouvelle tentative au prochain cycle";
+
+/// A target held by another program. Windows reports it as
+/// ERROR_SHARING_VIOLATION (32) or ERROR_LOCK_VIOLATION (33), which the std
+/// leaves `Uncategorized`; a read-only target or parent is `PermissionDenied`.
+fn is_lock_error(e: &std::io::Error) -> bool {
+    e.kind() == std::io::ErrorKind::PermissionDenied
+        || (cfg!(windows) && matches!(e.raw_os_error(), Some(32) | Some(33)))
+}
 
 /// `rename` avec réessais sur verrou. Sur Unix un rename ne bute jamais sur un
 /// fichier ouvert ; sous Windows si, et l'échec est presque toujours transitoire
@@ -66,7 +74,7 @@ fn rename_with_retry(src: &Path, dest: &Path) -> Result<()> {
         Err(e) => e,
     };
     for delay in RENAME_BACKOFF_MS {
-        if last.kind() != std::io::ErrorKind::PermissionDenied {
+        if !is_lock_error(&last) {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(delay));
@@ -75,7 +83,7 @@ fn rename_with_retry(src: &Path, dest: &Path) -> Result<()> {
             Err(e) => last = e,
         }
     }
-    if last.kind() == std::io::ErrorKind::PermissionDenied {
+    if is_lock_error(&last) {
         bail!("{LOCKED_HINT}");
     }
     Err(last.into())
@@ -322,7 +330,7 @@ pub fn spawn_push(
                 hash: None,
                 size: None,
                 mtime: None,
-                error: Some(e.to_string()),
+                error: Some(error_text(&e)),
                 seq: window.as_ref().map(|_| next_seq),
             });
         }
@@ -483,7 +491,7 @@ impl ApplyFailure {
     }
 
     fn retry(e: anyhow::Error) -> Self {
-        Self::Retryable(e.to_string())
+        Self::Retryable(error_text(&e))
     }
 }
 
@@ -672,22 +680,14 @@ fn install(
     let dest = confined_join(root, &frame.rel_path).map_err(ApplyFailure::retry)?;
 
     // Overwrite guard: a target that changed since the scan behind this
-    // download (size/mtime differ from the index cache) holds an unsynced
-    // local edit. Refuse the install; the next scan turns the divergence into
-    // a conflict, the loser archived server side.
+    // download holds an unsynced local edit. Refuse the install; the next scan
+    // turns the divergence into a conflict, the loser archived server side.
     if let Ok(meta) = std::fs::symlink_metadata(&dest) {
-        if meta.is_file() {
-            let fresh = cache_for(caches, share_id)
-                .entries
-                .get(&frame.rel_path)
-                .map(|c| c.size == meta.len() && c.mtime == mtime_millis(&meta))
-                .unwrap_or(false);
-            if !fresh {
-                return Err(ApplyFailure::Retryable(
-                    "le fichier local a changé depuis le scan : installation reportée (conflit au prochain cycle)"
-                        .to_string(),
-                ));
-            }
+        if meta.is_file() && !unchanged_since_scan(caches, share_id, &frame.rel_path, &meta) {
+            return Err(ApplyFailure::Retryable(
+                "le fichier local a changé depuis le scan : installation reportée (conflit au prochain cycle)"
+                    .to_string(),
+            ));
         }
     }
 
@@ -702,10 +702,24 @@ fn install(
     apply_mode(tmp_path, frame.mode);
     adopt_owner(root, tmp_path);
     rename_with_retry(tmp_path, &dest)
-        .context("installation (rename atomique)")
+        .context("installation")
         .map_err(ApplyFailure::retry)?;
     debug!(rel_path = %frame.rel_path, "sync: fichier installé");
     Ok(())
+}
+
+/// Does this local path still match what the last scan saw (size, mtime)? A
+/// path the cache does not know counts as changed: when in doubt, keep it.
+fn unchanged_since_scan(
+    caches: &SharedCaches,
+    share_id: i64,
+    rel_path: &str,
+    meta: &std::fs::Metadata,
+) -> bool {
+    cache_for(caches, share_id)
+        .entries
+        .get(rel_path)
+        .is_some_and(|c| c.size == meta.len() && c.mtime == mtime_millis(meta))
 }
 
 /// After a failure: a worthless partial goes; a valid prefix is trimmed to
@@ -735,7 +749,7 @@ pub fn spawn_local_op(
     std::thread::spawn(move || {
         let _busy = crate::live_status::begin(crate::live_status::Task::SyncTransfer);
         let mut keepalive = Keepalive::new(tx.clone(), &op_id);
-        let outcome = work(&mut keepalive).map_err(|e| e.to_string());
+        let outcome = work(&mut keepalive).map_err(|e| error_text(&e));
         let _ = tx.blocking_send(SyncEvent::OpResult {
             op_id,
             op,
@@ -841,6 +855,8 @@ fn verified_source(
 #[allow(clippy::too_many_arguments)]
 pub fn apply_local(
     root: &Path,
+    share_id: i64,
+    caches: &SharedCaches,
     rel_path: &str,
     source_rel_path: &str,
     hash: &str,
@@ -852,6 +868,12 @@ pub fn apply_local(
     let src = verified_source(root, source_rel_path, hash, size, keepalive)?;
 
     let dest = confined_join(root, rel_path)?;
+    // Same overwrite guard as a download: a local edit since the scan is not ours to erase.
+    if let Ok(meta) = std::fs::symlink_metadata(&dest) {
+        if meta.is_file() && !unchanged_since_scan(caches, share_id, rel_path, &meta) {
+            bail!("le fichier local a changé depuis le scan : copie locale reportée");
+        }
+    }
     let tmp_dir = root.join(".deveye-tmp");
     std::fs::create_dir_all(&tmp_dir).context("création du dossier temporaire")?;
     let tmp_path = tmp_dir.join(format!("copy-{}.part", uuid_like(rel_path, mtime)));
@@ -864,7 +886,7 @@ pub fn apply_local(
     adopt_owner(root, &tmp_path);
     if let Err(e) = rename_with_retry(&tmp_path, &dest) {
         let _ = std::fs::remove_file(&tmp_path);
-        return Err(e).context("installation (rename atomique)");
+        return Err(e).context("installation");
     }
     debug!(rel_path, source_rel_path, "sync: copie locale installée");
     Ok(())
@@ -916,11 +938,31 @@ pub fn move_file(
     Ok(())
 }
 
-/// Déplace un fichier vers `.deveye-trash/<horodatage>/<relPath>` (jamais unlink).
-pub fn delete_to_trash(root: &Path, rel_path: &str) -> Result<()> {
+/// Moves a file to `.deveye-trash/<timestamp>/<relPath>` (never an unlink),
+/// cautiously: a file changed since the scan is not ours to trash (the next
+/// scan sees the edit), and a directory only goes if it is really empty (the
+/// server only asks for one it saw empty; anything inside appeared since).
+pub fn delete_to_trash(
+    root: &Path,
+    share_id: i64,
+    caches: &SharedCaches,
+    rel_path: &str,
+) -> Result<()> {
     let src = confined_join(root, rel_path)?;
-    if !src.exists() {
-        return Ok(()); // Déjà parti localement : la suppression est idempotente.
+    let Ok(meta) = std::fs::symlink_metadata(&src) else {
+        return Ok(()); // Already gone locally: the deletion is idempotent.
+    };
+    if meta.is_dir() {
+        std::fs::remove_dir(&src)
+            .context("dossier non vide sur l'appareil : suppression reportée")?;
+        prune_empty_parents(root, &src);
+        return Ok(());
+    }
+    if !meta.is_file() {
+        bail!("la cible n'est pas un fichier régulier : suppression refusée");
+    }
+    if !unchanged_since_scan(caches, share_id, rel_path, &meta) {
+        bail!("le fichier a changé depuis le scan : suppression reportée");
     }
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -1581,5 +1623,89 @@ mod tests {
         let err = credit.wait_for(1, 1, Duration::from_secs(10)).unwrap_err();
         assert!(started.elapsed() < Duration::from_secs(2));
         assert_eq!(err.to_string(), "session terminée");
+    }
+
+    const CACHE_SHARE: i64 = 987_654;
+
+    /// Caches for `CACHE_SHARE` holding exactly one entry (none when `entry` is `None`).
+    fn caches_with(entry: Option<(&str, u64, i64)>) -> SharedCaches {
+        let caches = SharedCaches::default();
+        let mut cache = IndexCache::default();
+        if let Some((rel, size, mtime)) = entry {
+            cache.entries.insert(
+                rel.to_string(),
+                crate::sync::index_cache::CacheEntry {
+                    size,
+                    mtime,
+                    hash: String::new(),
+                    kind: "file".to_string(),
+                    mode: None,
+                },
+            );
+        }
+        caches.lock().unwrap().insert(CACHE_SHARE, Arc::new(cache));
+        caches
+    }
+
+    #[test]
+    fn delete_to_trash_refuses_a_file_changed_since_the_scan() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("x.txt");
+        std::fs::write(&file, b"hello").unwrap();
+        let meta = std::fs::metadata(&file).unwrap();
+
+        let stale = caches_with(Some(("x.txt", meta.len() + 1, mtime_millis(&meta))));
+        let err = delete_to_trash(dir.path(), CACHE_SHARE, &stale, "x.txt").unwrap_err();
+        assert!(error_text(&err).contains("a changé"), "{err}");
+        assert!(file.exists());
+
+        let fresh = caches_with(Some(("x.txt", meta.len(), mtime_millis(&meta))));
+        delete_to_trash(dir.path(), CACHE_SHARE, &fresh, "x.txt").unwrap();
+        assert!(!file.exists());
+        let stamp = std::fs::read_dir(dir.path().join(".deveye-trash"))
+            .unwrap()
+            .flatten()
+            .next()
+            .expect("a stamp dir");
+        assert!(stamp.path().join("x.txt").exists());
+    }
+
+    #[test]
+    fn delete_to_trash_refuses_a_path_absent_from_the_cache() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("x.txt"), b"hello").unwrap();
+        let err =
+            delete_to_trash(dir.path(), CACHE_SHARE, &caches_with(None), "x.txt").unwrap_err();
+        assert!(error_text(&err).contains("a changé"), "{err}");
+        assert!(dir.path().join("x.txt").exists());
+    }
+
+    #[test]
+    fn delete_to_trash_removes_only_an_empty_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let full = dir.path().join("full");
+        std::fs::create_dir(&full).unwrap();
+        std::fs::write(full.join("f.txt"), b"f").unwrap();
+        let caches = caches_with(None);
+        let err = delete_to_trash(dir.path(), CACHE_SHARE, &caches, "full").unwrap_err();
+        assert!(error_text(&err).contains("non vide"), "{err}");
+        assert!(full.join("f.txt").exists());
+
+        std::fs::create_dir(dir.path().join("empty")).unwrap();
+        delete_to_trash(dir.path(), CACHE_SHARE, &caches, "empty").unwrap();
+        assert!(!dir.path().join("empty").exists());
+    }
+
+    #[test]
+    fn error_text_joins_the_cause_chain() {
+        let err = anyhow::anyhow!("Permission denied").context("installation");
+        assert_eq!(error_text(&err), "installation : Permission denied");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn is_lock_error_recognizes_a_windows_sharing_violation() {
+        assert!(is_lock_error(&std::io::Error::from_raw_os_error(32)));
+        assert!(is_lock_error(&std::io::Error::from_raw_os_error(33)));
     }
 }

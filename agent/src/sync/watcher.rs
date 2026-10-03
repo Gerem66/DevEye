@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use tokio::sync::mpsc::Sender;
 use tracing::debug;
@@ -84,7 +84,11 @@ fn relevant(root: &Path, path: &Path) -> bool {
 }
 
 pub fn start(share_id: i64, root: PathBuf, tx: Sender<SyncEvent>) -> Result<ShareWatcher> {
-    std::fs::create_dir_all(&root).with_context(|| format!("création de {}", root.display()))?;
+    // The root is created by the scan's `ensure_root`, never here: a vanished
+    // volume must not come back as an empty folder.
+    if !root.is_dir() {
+        bail!("dossier du partage absent : {}", root.display());
+    }
 
     let pending = Arc::new(Mutex::new(Pending::default()));
     let events = Arc::new(AtomicU64::new(0));

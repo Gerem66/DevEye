@@ -571,20 +571,50 @@ fn default_dir_kind() -> String {
     "dir".to_string()
 }
 
+/// Why the scan could not index a path (mirrors `syncSkipReasonSchema`). The
+/// server treats the path, and anything under it, as unknown: never deleted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SyncSkipReason {
+    Unreadable,
+    Unportable,
+    Symlink,
+    Special,
+    NonUtf8,
+}
+
 /// One entry of a CloudSync scan (mirrors `syncIndexEntrySchema`). `mtime` is
 /// unix milliseconds; `hash` is the SHA-256 (hex) of the file content.
 #[derive(Debug, Clone, Serialize)]
 pub struct SyncIndexEntry {
     #[serde(rename = "relPath")]
     pub rel_path: String,
-    /// `file`, ou `dir` pour un dossier VIDE (les dossiers peuplés sont implicites).
+    /// `file`, `dir` for an EMPTY directory (populated ones are implicit), or
+    /// `skipped` for a path the scan saw but could not index.
     pub kind: String,
     pub hash: String,
     pub size: u64,
     pub mtime: i64,
-    /// Bits de permission Unix ; `None` sous Windows, que le serveur interprète
-    /// comme « inconnu » et non comme « aucune permission ».
+    /// Unix permission bits; `None` on Windows, which the server reads as
+    /// "unknown", not as "no permission".
     pub mode: Option<u32>,
+    /// Set on a `skipped` entry only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<SyncSkipReason>,
+}
+
+impl SyncIndexEntry {
+    pub fn skipped(rel_path: String, reason: SyncSkipReason) -> Self {
+        Self {
+            rel_path,
+            kind: "skipped".to_string(),
+            hash: String::new(),
+            size: 0,
+            mtime: 0,
+            mode: None,
+            reason: Some(reason),
+        }
+    }
 }
 
 /// Messages the agent sends to the server over the `/agent` WebSocket.

@@ -73,6 +73,16 @@ pub enum SyncEvent {
     Busy { op_id: String },
 }
 
+/// The whole cause chain of an error, outermost first, for a message the server
+/// shows as is: anyhow's `{}` keeps only the outer context, and "installation"
+/// alone says nothing of the locked file or the full disk behind it.
+pub fn error_text(e: &anyhow::Error) -> String {
+    e.chain()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(" : ")
+}
+
 /// Period of the `sync.busy` frames during long local work.
 pub const BUSY_EVERY: Duration = Duration::from_secs(15);
 
@@ -246,11 +256,13 @@ impl SyncManager {
                     (prev._watcher, events, clean)
                 }
                 None if active => {
-                    match watcher::start(
-                        share_id,
-                        PathBuf::from(&assignment.local_path),
-                        self.tx.clone(),
-                    ) {
+                    let root = PathBuf::from(&assignment.local_path);
+                    // A root gone missing under a share already scanned is never
+                    // recreated empty: no watcher, and the scan will say why.
+                    let started =
+                        scanner::ensure_root(&root, &index_cache::IndexCache::load(share_id))
+                            .and_then(|()| watcher::start(share_id, root, self.tx.clone()));
+                    match started {
                         Ok(w) => {
                             let events = w.events();
                             // Watcher tout neuf : son compteur repart de zéro, et
@@ -534,7 +546,7 @@ impl SyncManager {
     ) -> SyncEvent {
         let outcome = match self.assignment(share_id) {
             Some(a) => transfer::apply_dir(&PathBuf::from(&a.local_path), rel_path, kind, mode)
-                .map_err(|e| e.to_string()),
+                .map_err(|e| error_text(&e)),
             None => Err(self.unknown_reason(share_id)),
         };
         SyncEvent::OpResult {
@@ -566,6 +578,7 @@ impl SyncManager {
             self.refuse(op_id, "applyLocal", share_id);
             return;
         };
+        let caches = Arc::clone(&self.caches);
         let (rel_path, source_rel_path, hash) = (
             rel_path.to_string(),
             source_rel_path.to_string(),
@@ -578,6 +591,8 @@ impl SyncManager {
             move |keepalive| {
                 transfer::apply_local(
                     &root,
+                    share_id,
+                    &caches,
                     &rel_path,
                     &source_rel_path,
                     &hash,
@@ -633,19 +648,16 @@ impl SyncManager {
     }
 
     /// Suppression propagée : corbeille locale, puis `sync.opResult`.
-    pub fn delete(&self, op_id: &str, share_id: i64, rel_path: &str) -> SyncEvent {
-        let outcome = match self.assignment(share_id) {
-            Some(a) => transfer::delete_to_trash(&PathBuf::from(&a.local_path), rel_path)
-                .map_err(|e| e.to_string()),
-            None => Err(self.unknown_reason(share_id)),
+    pub fn delete(&self, op_id: &str, share_id: i64, rel_path: &str) {
+        let Some(root) = self.root_of(share_id) else {
+            self.refuse(op_id, "delete", share_id);
+            return;
         };
-        SyncEvent::OpResult {
-            op_id: op_id.to_string(),
-            op: "delete",
-            ok: outcome.is_ok(),
-            resume_from: None,
-            error: outcome.err(),
-        }
+        let (caches, rel_path) = (Arc::clone(&self.caches), rel_path.to_string());
+        // Its own thread: the rename may wait on a locked target.
+        transfer::spawn_local_op(op_id.to_string(), "delete", self.tx.clone(), move |_| {
+            transfer::delete_to_trash(&root, share_id, &caches, &rel_path)
+        });
     }
 }
 

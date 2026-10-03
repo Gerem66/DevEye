@@ -1040,11 +1040,9 @@ async fn stream_session(
                                 sync_mgr.move_file(&op_id, share_id, &from_rel_path, &rel_path, &hash, size, mtime, mode);
                             }
                             // CloudSync: propagate a deletion (local trash, never unlink).
+                            // Off-loop: the rename may wait on a lock; the outcome comes back through sync_rx.
                             Ok(ServerMessage::SyncDelete { op_id, share_id, rel_path }) => {
-                                let ev = tokio::task::block_in_place(|| {
-                                    sync_mgr.delete(&op_id, share_id, &rel_path)
-                                });
-                                commands::send_sync_event(&mut sink, device_id, ev).await;
+                                sync_mgr.delete(&op_id, share_id, &rel_path);
                             }
                             // Update tools, then their counts (off-loop; replies via pkg_rx).
                             Ok(ServerMessage::PkgList {}) => {

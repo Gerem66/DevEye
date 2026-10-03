@@ -11,9 +11,16 @@ use unicode_normalization::UnicodeNormalization;
 /// Dossiers réservés à la racine du partage (jamais synchronisés).
 pub const RESERVED_TOP_DIRS: [&str; 2] = [".deveye-trash", ".deveye-tmp"];
 
+/// Without regard to case: `.DEVEYE-TRASH/x` would otherwise land INSIDE the
+/// trash of a Windows or macOS peer.
 pub fn is_reserved_top(name: &str) -> bool {
-    RESERVED_TOP_DIRS.contains(&name)
+    RESERVED_TOP_DIRS
+        .iter()
+        .any(|reserved| name.eq_ignore_ascii_case(reserved))
 }
+
+/// Longest relative path the protocol carries, in UTF-8 bytes (mirror of `SYNC_REL_PATH_MAX`).
+pub const REL_PATH_MAX_BYTES: usize = 1024;
 
 fn nfc(value: &str) -> String {
     value.nfc().collect()
@@ -34,6 +41,20 @@ pub fn rel_path_of(root: &Path, abs: &Path) -> Option<String> {
         return None;
     }
     Some(parts.join("/"))
+}
+
+/// The wire path of an entry whose name may not be valid UTF-8, lossily
+/// (U+FFFD): only to name it as skipped, it never enters the index.
+pub fn rel_path_lossy(root: &Path, abs: &Path) -> Option<String> {
+    let stripped = abs.strip_prefix(root).ok()?;
+    let parts: Vec<String> = stripped
+        .components()
+        .filter_map(|comp| match comp {
+            Component::Normal(os) => Some(nfc(&os.to_string_lossy())),
+            _ => None,
+        })
+        .collect();
+    (!parts.is_empty()).then(|| parts.join("/"))
 }
 
 /// Caractères qu'un nom NTFS/Win32 ne peut pas porter. Miroir exact de
@@ -100,8 +121,8 @@ pub fn rel_path_problem(rel_path: &str) -> Option<String> {
     if rel_path.is_empty() {
         return Some("chemin vide".into());
     }
-    if rel_path.len() > 1024 {
-        return Some("chemin de plus de 1024 caractères".into());
+    if rel_path.len() > REL_PATH_MAX_BYTES {
+        return Some(format!("chemin de plus de {REL_PATH_MAX_BYTES} caractères"));
     }
     if rel_path.contains('\\') {
         return Some("antislash interdit dans un chemin".into());
@@ -381,6 +402,8 @@ mod tests {
             "docs/./x",
             ".deveye-trash/x",
             ".deveye-tmp/x",
+            ".DEVEYE-TRASH/x",
+            ".Deveye-Tmp/x",
             "a\\b",
             "a\u{0000}b",
             "",
@@ -435,5 +458,26 @@ mod tests {
         let abs = root.join("docs").join("rapport.pdf");
         assert_eq!(rel_path_of(root, &abs).unwrap(), "docs/rapport.pdf");
         assert!(rel_path_of(root, Path::new("/elsewhere/x")).is_none());
+    }
+
+    #[test]
+    fn reserved_top_dirs_ignore_case() {
+        assert!(is_reserved_top(".deveye-trash"));
+        assert!(is_reserved_top(".DEVEYE-TRASH"));
+        assert!(is_reserved_top(".Deveye-Tmp"));
+        assert!(!is_reserved_top("..deveye-trash"));
+        assert!(!is_reserved_top("deveye-trash"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rel_path_lossy_names_what_rel_path_of_cannot() {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt;
+        let root = Path::new("/data/share");
+        let abs = root.join(OsStr::from_bytes(b"caf\xe9.txt"));
+        assert!(rel_path_of(root, &abs).is_none());
+        assert_eq!(rel_path_lossy(root, &abs).unwrap(), "caf\u{FFFD}.txt");
+        assert!(rel_path_lossy(root, root).is_none());
     }
 }
