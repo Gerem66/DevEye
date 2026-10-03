@@ -12,7 +12,7 @@ import type {
     MailSettings,
     MailSettingsRow
 } from '../contracts/domain';
-import { FeatureError, type SdkCipher, type SdkFeatureContext } from '@deveye/types/sdk/server';
+import { FeatureError, logFailure, type SdkCipher, type SdkFeatureContext } from '@deveye/types/sdk/server';
 
 // Le garde des appels sortants, partagé par toute l'app : un hôte refusé est un
 // réglage à corriger, et se classe donc sans dépendre du texte de son message.
@@ -109,6 +109,11 @@ export function classifyMailError(error: unknown): Exclude<MailAccountStatus, 'o
         return 'unreachable';
     }
     return 'error';
+}
+
+/** Une boîte qui refuse l'accès, ne répond pas ou pointe hors des adresses permises regarde son propriétaire. */
+export function isOwnerSideMailError(error: unknown): boolean {
+    return error instanceof UnsafeTargetError || classifyMailError(error) !== 'error';
 }
 
 /**
@@ -566,7 +571,7 @@ export async function imapFor<T>(
         // ne reste qu'à rendre à l'appelant de quoi le montrer, au lieu du
         // « Internal server error » que l'hôte donne à toute erreur non typée.
         if (isFeatureError(e)) throw e;
-        ctx.logger.warn({ err: e, accountId: account.id }, 'Mail command failed');
+        logFailure(ctx.logger, isOwnerSideMailError(e), { err: e, accountId: account.id }, 'Mail command failed');
         throw mailCommandFailure(e);
     }
 }

@@ -46,7 +46,13 @@ export function createSystemAlerts(deps: SystemAlertsDeps, now: () => number = D
                     workspaces.map(async (workspaceId) => {
                         const cipher = createOpenCipher(deps.db, deps.crypt, workspaceId);
                         const channels = await resolveRoute(deps.db, cipher, workspaceId, SYSTEM_NOTIFICATION_TARGET);
-                        await deliver(channels, alert, deps.logger);
+                        // Le refus d'un canal se journalise côté utilisateur : celui de l'instance ne doit pas s'y perdre.
+                        if (channels.length > 0 && !(await deliver(channels, alert, deps.logger))) {
+                            deps.logger.warn(
+                                { workspaceId, subject: alert.subject },
+                                'System alert refused by every channel'
+                            );
+                        }
                     })
                 );
             } catch (e) {

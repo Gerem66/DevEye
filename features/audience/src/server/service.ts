@@ -490,8 +490,8 @@ export class AudienceIngest {
         if (site.formHourlyQuota > 0) {
             const total = await this.deps.repo.countSubmissionsSince(form.id, null, since);
             if (total >= site.formHourlyQuota) {
-                this.deps.logger.warn(
-                    { formId: form.id, siteId: site.id, hourly: total },
+                this.deps.logger.info(
+                    { cause: 'user', formId: form.id, siteId: site.id, hourly: total },
                     'Audience: afflux de retours sur un formulaire'
                 );
             }
@@ -512,7 +512,10 @@ export class AudienceIngest {
         const fromIp = await this.deps.repo.countSiteSubmissionsSince(site.id, ip, now - 3600);
         if (fromIp < site.submissionBanQuota) return;
         await this.deps.repo.ban(site.id, ip, now + AUDIENCE_SUBMISSION_BAN_SECONDS);
-        this.deps.logger.warn({ siteId: site.id, hourly: fromIp }, 'Audience: provenance écartée après une rafale');
+        this.deps.logger.info(
+            { cause: 'user', siteId: site.id, hourly: fromIp },
+            'Audience: provenance écartée après une rafale'
+        );
     }
 
     /** Ferme un formulaire de son propre chef, en base et dans le cache. */
@@ -520,7 +523,7 @@ export class AudienceIngest {
         if (!form.open) return;
         form.open = false;
         await this.deps.repo.closeForm(form.id, Math.floor(Date.now() / 1000), reason);
-        this.deps.logger.warn({ formId: form.id, reason }, 'Audience form closed automatically');
+        this.deps.logger.info({ cause: 'user', formId: form.id, reason }, 'Audience form closed automatically');
     }
 
     /**
@@ -630,7 +633,10 @@ export class AudienceIngest {
         if (!usage.warned) {
             usage.warned = true;
             this.limitReached.add(workspaceId);
-            this.deps.logger.warn({ workspaceId }, 'Audience: quota mensuel atteint, ingestion suspendue');
+            this.deps.logger.info(
+                { cause: 'user', workspaceId },
+                'Audience: quota mensuel atteint, ingestion suspendue'
+            );
         }
         return true;
     }

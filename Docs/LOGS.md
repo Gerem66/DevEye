@@ -14,6 +14,9 @@ Documents voisins : [NOTIFICATIONS.md](./NOTIFICATIONS.md) (les canaux),
 | **Sortie standard** du conteneur   | tout le technique, en JSON pino sur une ligne : requêtes, erreurs avec leur pile, plantages       | rien au-delà de la rotation Docker |
 | Alertes **Système** (canaux)       | les défauts du serveur, poussés vers e-mail, Discord ou webhook (§ 3)                             | les erreurs d'utilisateurs         |
 
+Sur la page Logs, le niveau « Sensible » marque une action à surveiller (2FA
+coupée, rôle changé, terminal ouvert, maintenance), jamais une panne.
+
 La sortie standard se lit dans Dokploy, ou depuis DevEye par l'agent de la
 machine hôte (Appareils, action « Logs de l'appareil », source du conteneur) :
 l'agent lit le niveau des lignes JSON, son filtre de niveau minimum vaut donc
@@ -25,10 +28,26 @@ Les refus ordinaires (introuvable, quota atteint, droit manquant, saisie
 invalide) sont écrits en `info` sous `Command rejected` ou `Request rejected`,
 sans le mot « error ». Ce qui reste en `error` est un défaut à corriger.
 
+`warn` et `error` sont réservés à ce que l'instance doit corriger : un bug, sa
+configuration, une de ses dépendances (MySQL, S3, SMTP, Stripe). Une panne que
+le côté de l'utilisateur explique (son domaine mal relié, son jeton révoqué,
+son hôte injoignable, son agent périmé, son quota atteint) part en `info` avec
+le champ `cause: 'user'`, par `logFailure` du SDK. Une panne que personne
+n'explique reste à l'instance : le filtre « ≥ Avertissement » du lecteur ne
+montre donc que les problèmes de DevEye lui-même.
+
+Une vague de `"cause":"user"` sur des comptes différents dans la même minute
+n'est plus le fait d'un utilisateur : c'est en général la sortie réseau de
+l'instance.
+
+Le niveau « Notice » du lecteur vient de journald ou d'une ligne de texte qui
+contient le mot : pino n'en écrit pas, DevEye non plus.
+
 | Chercher              | Pour trouver                                               |
 | --------------------- | ---------------------------------------------------------- |
 | `"level":50`          | les erreurs : 5xx, commande qui lève, tâche de fond cassée |
 | `"level":60`          | les fatales : plantage, démarrage impossible               |
+| `"cause":"user"`      | les pannes du côté des utilisateurs, hors avertissements   |
 | `Uncaught exception`  | une exception que rien n'a rattrapée                       |
 | `Unhandled rejection` | une promesse rejetée sans `catch`                          |
 | `Fatal startup error` | un démarrage qui échoue, souvent une boucle de relance     |

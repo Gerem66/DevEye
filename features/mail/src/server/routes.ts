@@ -9,6 +9,7 @@ import {
 } from '../contracts/domain';
 import {
     contentDisposition,
+    logFailure,
     type FeatureServiceDeps,
     type SdkCipher,
     type SdkPublicApp,
@@ -20,7 +21,13 @@ import type { MailOAuthCredentials } from './client';
 import * as mailOAuth from './oauth';
 import { findAttachmentBytes } from './parse';
 import type { MailRepo } from './repo';
-import { decryptCredentials, encryptCredentials, persistRefreshedToken, tryDecryptCredentials } from './_shared';
+import {
+    decryptCredentials,
+    encryptCredentials,
+    isOwnerSideMailError,
+    persistRefreshedToken,
+    tryDecryptCredentials
+} from './_shared';
 
 /**
  * Les deux portes HTTP de Mail, sur la surface publique du SDK (capacité
@@ -197,7 +204,13 @@ export function mailRoutes(app: SdkPublicApp, deps: MailRouteDeps, seam: MailRou
             reply.header('Content-Disposition', contentDisposition(attachment.filename));
             return reply.send(attachment.content);
         } catch (e) {
-            deps.logger.error({ err: e instanceof Error ? e.message : String(e) }, 'Mail attachment download failed');
+            logFailure(
+                deps.logger,
+                isOwnerSideMailError(e),
+                { err: e instanceof Error ? e.message : String(e) },
+                'Mail attachment download failed',
+                'error'
+            );
             return reply.code(502).send({ error: 'fetch_failed' });
         }
     });
@@ -320,7 +333,7 @@ export function mailRoutes(app: SdkPublicApp, deps: MailRouteDeps, seam: MailRou
             return page(true);
         } catch (e) {
             const message = e instanceof Error ? e.message : String(e);
-            deps.logger.error({ err: message }, 'Mail OAuth callback failed');
+            logFailure(deps.logger, isOwnerSideMailError(e), { err: message }, 'Mail OAuth callback failed', 'error');
             return page(false, message);
         }
     });

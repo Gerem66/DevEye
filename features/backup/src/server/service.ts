@@ -15,6 +15,8 @@ import {
 } from '@deveye/types/sdk';
 import { AGENT_FOLDER_ARCHIVE_PROBE } from '@deveye/types';
 import {
+    isRemoteFailure,
+    logFailure,
     sealStream,
     type FeatureService,
     type FeatureServiceDeps,
@@ -573,7 +575,12 @@ export class BackupEngine {
         try {
             sink = await this.sinkFor(destination);
         } catch (e) {
-            this.deps.logger.warn({ jobId: job.id, err: (e as Error).message }, 'Backup: effacement reporté');
+            logFailure(
+                this.deps.logger,
+                isRemoteFailure(e),
+                { jobId: job.id, err: (e as Error).message },
+                'Backup: effacement reporté'
+            );
             return runs.length;
         }
 
@@ -596,7 +603,9 @@ export class BackupEngine {
                 await this.deps.repo.markPruned(run.id);
             } catch (e) {
                 failed++;
-                this.deps.logger.warn(
+                logFailure(
+                    this.deps.logger,
+                    isRemoteFailure(e),
                     { jobId: job.id, runId: run.id, err: (e as Error).message },
                     'Backup: archive non effacée, réessai au prochain passage'
                 );

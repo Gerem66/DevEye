@@ -20,8 +20,8 @@ export async function handleHello(s: AgentSession, payload: PayloadOf<typeof AGE
     // included. Say so once per connection.
     const server = appVersion();
     if (isNewerVersion(server, payload.agentVersion)) {
-        s.logger.warn(
-            { agentVersion: payload.agentVersion, serverVersion: server },
+        s.logger.info(
+            { cause: 'user', agentVersion: payload.agentVersion, serverVersion: server },
             'Agent older than the server — pushed config may be ignored; update this agent'
         );
     }

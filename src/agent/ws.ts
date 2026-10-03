@@ -321,7 +321,8 @@ export async function registerAgentWS(
         const deviceId = device.id;
         const reqLogger = logger.child({ deviceId, ownerId: claims.oid });
         if (presentedToken.fromQuery) {
-            reqLogger.warn(
+            reqLogger.info(
+                { cause: 'user' },
                 'Agent authenticated with its token in the URL: it predates the header transport, update it'
             );
         }

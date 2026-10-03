@@ -10,7 +10,7 @@ import {
     mailSend
 } from '../contracts/commands';
 import type { MailAddress, MailMessageSummary } from '../contracts/domain';
-import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
+import { defineSdkFeature, FeatureError, logFailure } from '@deveye/types/sdk/server';
 
 import * as mailClient from './client';
 import { parseAndSanitize } from './parse';
@@ -20,6 +20,7 @@ import {
     accountCipher,
     assertMailUnlocked,
     imapFor,
+    isOwnerSideMailError,
     loadAccount,
     loadFolderWithAccount,
     loadMessageChain,
@@ -141,7 +142,12 @@ export const mailMessageSearchFeature = defineSdkFeature<
             remote = true;
         } catch (e) {
             remoteError = e instanceof Error ? e.message : String(e);
-            ctx.logger.warn({ folderId: folder.id, err: remoteError }, 'mail.messageSearch: IMAP leg failed');
+            logFailure(
+                ctx.logger,
+                isOwnerSideMailError(e),
+                { folderId: folder.id, err: remoteError },
+                'mail.messageSearch: IMAP leg failed'
+            );
         }
 
         // Newest first, matching the folder listing's own order.

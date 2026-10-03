@@ -6,7 +6,7 @@ import {
     mailFolderSync
 } from '../contracts/commands';
 import type { MailAccountRow, MailFolderRow } from '../contracts/domain';
-import { defineSdkFeature, type SdkCipher } from '@deveye/types/sdk/server';
+import { defineSdkFeature, logFailure, type SdkCipher } from '@deveye/types/sdk/server';
 
 import type { MailRepo } from './repo';
 import { backfillFolder, resetFolder, syncAccountFolders, syncOneFolder } from './sync';
@@ -14,6 +14,7 @@ import {
     accountCipher,
     assertMailUnlocked,
     classifyMailError,
+    isOwnerSideMailError,
     sessionFor,
     loadAccount,
     loadFolderWithAccount,
@@ -85,7 +86,9 @@ export const mailFolderListFeature = defineSdkFeature<
                 if (account.security_tier === 'guarded') throw e;
                 // Open account, first-ever load, sync unreachable: serve whatever
                 // is cached rather than failing the whole switch.
-                ctx.logger.warn(
+                logFailure(
+                    ctx.logger,
+                    isOwnerSideMailError(e),
                     { accountId: account.id, err: e instanceof Error ? e.message : String(e) },
                     'mail.folderList: initial sync failed'
                 );

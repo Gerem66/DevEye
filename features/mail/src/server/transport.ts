@@ -1,10 +1,10 @@
 import type { MailSender, MailTransportProvider } from '@deveye/types/sdk';
-import type { FeatureServiceDeps } from '@deveye/types/sdk/server';
+import { logFailure, type FeatureServiceDeps } from '@deveye/types/sdk/server';
 
 import type { MailAccountRow } from '../contracts/domain';
 import * as mailClient from './client';
 import type { MailRepo } from './repo';
-import { decryptCredentials, persistRefreshedToken } from './_shared';
+import { decryptCredentials, isOwnerSideMailError, persistRefreshedToken } from './_shared';
 
 /**
  * Le transport des alertes e-mail des autres features
@@ -87,9 +87,12 @@ export function createMailTransport(
                 );
                 return true;
             } catch (e) {
-                deps.logger.error(
+                logFailure(
+                    deps.logger,
+                    isOwnerSideMailError(e),
                     { err: e instanceof Error ? e.message : String(e), accountId, workspaceId },
-                    'Alert mail failed'
+                    'Alert mail failed',
+                    'error'
                 );
                 return false;
             }

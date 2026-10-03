@@ -1,6 +1,6 @@
 import type { GitSyncStatus } from '../contracts/domain';
 import { PROJECTS_USAGE_PROVIDER, type ProjectsUsageProvider } from '@deveye/types/sdk';
-import type { FeatureService, FeatureServiceDeps, SdkCipher } from '@deveye/types/sdk/server';
+import { logFailure, type FeatureService, type FeatureServiceDeps, type SdkCipher } from '@deveye/types/sdk/server';
 
 import {
     authorRef,
@@ -515,7 +515,14 @@ export class GitSync {
                 .catch(() => {
                     /* la base est en cause : le tour suivant réessaiera */
                 });
-            this.deps.logger.warn({ err: e, repoId }, 'Git sync: échec de synchronisation git');
+            // Un refus de GitHub (jeton révoqué, dépôt disparu, quota du jeton) regarde le propriétaire du
+            // dépôt ; GitHub en panne ou injoignable, non.
+            logFailure(
+                this.deps.logger,
+                e instanceof GitHubError && e.status >= 400 && e.status < 500,
+                { err: e, repoId },
+                'Git sync: échec de synchronisation git'
+            );
         }
     }
 

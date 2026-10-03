@@ -10,6 +10,7 @@ import type {
     DatabaseStructure,
     DatabaseTable
 } from '../contracts/domain';
+import { isRemoteFailure } from '@deveye/types/sdk/server';
 import { openTunnel, type TunnelConfig } from './tunnel';
 
 /**
@@ -762,33 +763,34 @@ async function openPostgres(target: EngineTarget, tunnel: { host: string; port: 
     return session;
 }
 
+const DRIVER_FAILURES: Record<string, string> = {
+    ECONNREFUSED: 'Connexion refusée : rien n’écoute sur cet hôte et ce port.',
+    ETIMEDOUT: 'Le serveur n’a pas répondu dans le délai imparti.',
+    ESOCKETTIMEDOUT: 'Le serveur n’a pas répondu dans le délai imparti.',
+    ENOTFOUND: 'Hôte introuvable : le nom ne se résout pas.',
+    EAI_AGAIN: 'Hôte introuvable : le nom ne se résout pas.',
+    ER_ACCESS_DENIED_ERROR: 'Identifiants refusés par le serveur.',
+    '28P01': 'Identifiants refusés par le serveur.',
+    '28000': 'Identifiants refusés par le serveur.',
+    ER_BAD_DB_ERROR: 'Cette base n’existe pas sur le serveur.',
+    '3D000': 'Cette base n’existe pas sur le serveur.',
+    ER_DBACCESS_DENIED_ERROR: 'Ce compte n’a pas le droit de lire cette base.',
+    '42501': 'Ce compte n’a pas le droit de lire cette base.',
+    PROTOCOL_CONNECTION_LOST: 'La connexion a été coupée par le serveur.'
+};
+
+function driverCode(e: unknown): string {
+    return typeof e === 'object' && e !== null && 'code' in e ? String((e as { code: unknown }).code) : '';
+}
+
 /** Traduit l'échec d'un pilote en une phrase corrigeable ; le message brut reste aux journaux. */
 export function explainError(e: unknown): string {
-    const code = typeof e === 'object' && e !== null && 'code' in e ? String((e as { code: unknown }).code) : '';
-    const message = e instanceof Error ? e.message : String(e);
+    const code = driverCode(e);
+    if (Object.hasOwn(DRIVER_FAILURES, code)) return DRIVER_FAILURES[code];
+    return (e instanceof Error ? e.message : String(e)) || 'Connexion impossible.';
+}
 
-    switch (code) {
-        case 'ECONNREFUSED':
-            return 'Connexion refusée : rien n’écoute sur cet hôte et ce port.';
-        case 'ETIMEDOUT':
-        case 'ESOCKETTIMEDOUT':
-            return 'Le serveur n’a pas répondu dans le délai imparti.';
-        case 'ENOTFOUND':
-        case 'EAI_AGAIN':
-            return 'Hôte introuvable : le nom ne se résout pas.';
-        case 'ER_ACCESS_DENIED_ERROR':
-        case '28P01':
-        case '28000':
-            return 'Identifiants refusés par le serveur.';
-        case 'ER_BAD_DB_ERROR':
-        case '3D000':
-            return 'Cette base n’existe pas sur le serveur.';
-        case 'ER_DBACCESS_DENIED_ERROR':
-        case '42501':
-            return 'Ce compte n’a pas le droit de lire cette base.';
-        case 'PROTOCOL_CONNECTION_LOST':
-            return 'La connexion a été coupée par le serveur.';
-        default:
-            return message || 'Connexion impossible.';
-    }
+/** L'échec tient au serveur visé (hôte, identifiants, droits), pas à l'instance. */
+export function isTargetFailure(e: unknown): boolean {
+    return Object.hasOwn(DRIVER_FAILURES, driverCode(e)) || isRemoteFailure(e);
 }

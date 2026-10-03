@@ -1,7 +1,13 @@
 import { createReadStream, createWriteStream, promises as fs } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
 
-import { contentDisposition, type FeatureServiceDeps, type SdkPublicApp } from '@deveye/types/sdk/server';
+import {
+    contentDisposition,
+    isRemoteFailure,
+    logFailure,
+    type FeatureServiceDeps,
+    type SdkPublicApp
+} from '@deveye/types/sdk/server';
 import { z } from 'zod';
 
 import { outputName, sourceOf, targetOf } from '../contracts/catalogue';
@@ -101,7 +107,13 @@ export function convertRoutes(app: SdkPublicApp, deps: ConvertRouteDeps): void {
                 return reply.send({ ok: true });
             } catch (e) {
                 if (e instanceof ConvertFailure) return refuse(e, e.code === 'too_large' ? 413 : 422);
-                deps.logger.warn({ err: e, jobId }, 'convert: réception du fichier interrompue');
+                // Un navigateur qui coupe en plein envoi n'est pas une panne de l'instance.
+                logFailure(
+                    deps.logger,
+                    isRemoteFailure(e),
+                    { err: e, jobId },
+                    'convert: réception du fichier interrompue'
+                );
                 return refuse(new ConvertFailure('upload_interrupted', 'L’envoi du fichier a été interrompu.'), 400);
             }
         }

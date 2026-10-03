@@ -11,7 +11,7 @@
 import { lookup as dnsLookup, type LookupAddress, type LookupOptions } from 'node:dns';
 import { isIP } from 'node:net';
 
-import { isPublicIp, isSafePublicUrl } from '@deveye/types/sdk/server';
+import { isPublicIp, isSafePublicUrl, NetRefused } from '@deveye/types/sdk/server';
 import { Agent, fetch as undiciFetch, Headers, type RequestInit, type Response } from 'undici';
 
 import { env } from '@/Utils/Env';
@@ -98,8 +98,17 @@ export function setSafeFetchTransportForTest(fake: Transport | null): void {
     transport = fake ?? networkTransport;
 }
 
-/** Une cible refusée par le garde, à distinguer d'une panne réseau. */
-export class UnsafeTargetError extends Error {
+/**
+ * Un refus du contenu (400, 413, 422) dit un défaut du message que l'instance a
+ * composé ; tout autre refus (webhook révoqué, adresse disparue, quota, panne
+ * en face) regarde la destination.
+ */
+export function isDestinationRefusal(status: number): boolean {
+    return status !== 400 && status !== 413 && status !== 422;
+}
+
+/** Une cible refusée par le garde, à distinguer d'une panne réseau. Un refus du SDK, pour `isRemoteFailure`. */
+export class UnsafeTargetError extends NetRefused {
     constructor(message: string = OUTBOUND_REFUSED_MESSAGE) {
         super(message);
         this.name = 'UnsafeTargetError';

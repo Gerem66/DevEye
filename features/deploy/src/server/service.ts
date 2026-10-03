@@ -6,6 +6,8 @@ import type {
     DeployTargetSyncRow
 } from '../contracts/domain';
 import {
+    isRemoteFailure,
+    logFailure,
     relayForAuthor,
     type DeviceRelay,
     type DevEyeFacade,
@@ -435,7 +437,10 @@ export class DeploySync {
                 // Un fournisseur qui dit quand revenir (limite de débit) est écouté.
                 const retryAt = e instanceof ProviderError ? (e.retryAt ?? 0) : 0;
                 this.credentialBackoff.set(credentialId, { until: Math.max(now + delay, retryAt), delay, failures });
-                this.deps.logger.warn(
+                // La réponse du fournisseur parle de l'instance du client, sauf un refus de notre requête (400, 422).
+                logFailure(
+                    this.deps.logger,
+                    (e instanceof ProviderError && e.status !== 400 && e.status !== 422) || isRemoteFailure(e),
                     { err: e instanceof Error ? e.message : String(e), targetId: target.id, retryInSeconds: delay },
                     'Deploy sync: cible non rapprochée'
                 );

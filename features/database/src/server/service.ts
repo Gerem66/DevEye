@@ -1,7 +1,13 @@
 import type { DatabaseProbe, DatabaseRow } from '../contracts/domain';
-import { mapLimit, relayForAuthor, type FeatureService, type FeatureServiceDeps } from '@deveye/types/sdk/server';
+import {
+    logFailure,
+    mapLimit,
+    relayForAuthor,
+    type FeatureService,
+    type FeatureServiceDeps
+} from '@deveye/types/sdk/server';
 
-import { explainError, openSession, type EngineTarget, type Session } from './engine';
+import { explainError, isTargetFailure, openSession, type EngineTarget, type Session } from './engine';
 import { buildNotice } from './notice';
 import type { DatabaseRepo } from './repo';
 import { isFiring, renderMessage, runConditions } from './rules';
@@ -132,7 +138,9 @@ export class DatabaseMonitor {
         } catch (e) {
             const message = explainError(e);
             // Le message brut aux journaux, la phrase claire à l'écran.
-            this.deps.logger.warn(
+            logFailure(
+                this.deps.logger,
+                isTargetFailure(e),
                 { databaseId, err: e instanceof Error ? e.message : String(e) },
                 'Database check failed'
             );

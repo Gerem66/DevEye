@@ -64,7 +64,7 @@ const SOURCE_LABELS: Record<LogSource, string> = {
 const LEVEL_LABELS: Record<LogLevelName, string> = {
     debug: 'Debug',
     info: 'Info',
-    warning: 'Avertissement',
+    warning: 'Sensible',
     error: 'Erreur',
     critical: 'Critique'
 };

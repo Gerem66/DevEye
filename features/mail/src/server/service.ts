@@ -1,4 +1,4 @@
-import { mapLimit, type FeatureService, type FeatureServiceDeps } from '@deveye/types/sdk/server';
+import { logFailure, mapLimit, type FeatureService, type FeatureServiceDeps } from '@deveye/types/sdk/server';
 
 import * as mailClient from './client';
 import { MAIL_SYNC_PROGRESS_EVENT, type MailSyncProgress } from '../contracts/domain';
@@ -12,7 +12,7 @@ import {
     markFolderSynced,
     reportFolderProgress
 } from './syncStatus';
-import { classifyMailError, decryptCredentials, persistRefreshedToken } from './_shared';
+import { classifyMailError, decryptCredentials, isOwnerSideMailError, persistRefreshedToken } from './_shared';
 
 /**
  * Background sync loop (process singleton). Runs with no session and no
@@ -190,7 +190,12 @@ export class MailSync {
             } catch (e) {
                 const message = e instanceof Error ? e.message : String(e);
                 const status = classifyMailError(e);
-                this.deps.logger.warn({ accountId, status, err: e }, 'Mail account sync failed');
+                logFailure(
+                    this.deps.logger,
+                    isOwnerSideMailError(e),
+                    { accountId, status, err: e },
+                    'Mail account sync failed'
+                );
                 await this.deps.repo.accounts.recordSync(
                     row.id,
                     Math.floor(Date.now() / 1000),

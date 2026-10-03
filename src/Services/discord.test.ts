@@ -7,7 +7,7 @@ import { editMessage, postMessage } from './discord';
 import { setSafeFetchTransportForTest } from './netFetch';
 
 const HOOK = 'https://discord.com/api/webhooks/1/token';
-const logger = { warn: () => undefined } as unknown as Logger;
+const logger = { info: () => undefined, warn: () => undefined } as unknown as Logger;
 
 afterEach(() => setSafeFetchTransportForTest(null));
 

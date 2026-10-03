@@ -7,12 +7,13 @@ import type {
 } from '@deveye/types';
 
 import { MAIL_TRANSPORT_PROVIDER, type MailTransportProvider } from '@deveye/types/sdk';
+import { isRemoteFailure, logFailure } from '@deveye/types/sdk/server';
 
 import { alertMail, formatMoment, webhookBody, type Alert } from '@/Services/alertCore';
 import type { Cipher } from '@/Services/SecureStore';
 import type { Database } from '@/db';
 import { moduleProvider } from '@/features/_sdk/register';
-import { safeFetch } from './netFetch';
+import { isDestinationRefusal, safeFetch } from './netFetch';
 
 /**
  * L'acheminement des alertes : résoudre les canaux d'une cible (une liste tirée
@@ -248,10 +249,21 @@ async function deliverOne(channel: ResolvedChannel, alert: Alert, logger: Logger
             body: JSON.stringify(webhookBody(channel.kind, alert))
         });
         if (response.ok) return true;
-        logger.warn({ reason: await webhookRejection(response), channel: channel.id }, 'Alert webhook rejected');
+        logFailure(
+            logger,
+            isDestinationRefusal(response.status),
+            { status: response.status, reason: await webhookRejection(response), channel: channel.id },
+            'Alert webhook rejected'
+        );
         return false;
     } catch (e) {
-        logger.error({ err: e instanceof Error ? e.message : String(e), channel: channel.id }, 'Alert webhook failed');
+        logFailure(
+            logger,
+            isRemoteFailure(e),
+            { err: e instanceof Error ? e.message : String(e), channel: channel.id },
+            'Alert webhook failed',
+            'error'
+        );
         return false;
     }
 }

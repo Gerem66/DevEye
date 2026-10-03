@@ -59,7 +59,10 @@ export function createDomainVerifier(host: DomainsHost & { live: LiveHub }): Fea
             if (!outcome?.changed) continue;
             host.live.changed(row.workspace_id, ['domain'], null);
             if (!outcome.row.verified_at) {
-                host.logger.warn({ feature: row.feature, host: row.host }, 'Domaine non vérifié');
+                host.logger.info(
+                    { cause: 'user', feature: row.feature, host: row.host, workspaceId: row.workspace_id },
+                    'Domaine non vérifié'
+                );
             }
         }
     };

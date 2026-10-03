@@ -1,5 +1,6 @@
 import type { Logger } from 'pino';
-import { safeFetch } from './netFetch';
+import { isRemoteFailure, logFailure } from '@deveye/types/sdk/server';
+import { isDestinationRefusal, safeFetch } from './netFetch';
 
 /**
  * Le transport Discord : le seul canal qui sache modifier ce qu'il a déjà
@@ -88,7 +89,7 @@ async function send(url: string, init: { method: string; body: string }): Promis
  */
 export async function postMessage(url: string, message: DiscordMessage, logger: Logger): Promise<string | null> {
     if (!isDiscordWebhook(url)) {
-        logger.warn('Discord: adresse refusée, ce n’est pas un webhook Discord');
+        logger.info({ cause: 'user' }, 'Discord: adresse refusée, ce n’est pas un webhook Discord');
         return null;
     }
     try {
@@ -96,13 +97,23 @@ export async function postMessage(url: string, message: DiscordMessage, logger: 
             send(withWait(url), { method: 'POST', body: JSON.stringify(message) })
         );
         if (!response.ok) {
-            logger.warn({ status: response.status, detail: await detailOf(response) }, 'Discord: message refusé');
+            logFailure(
+                logger,
+                isDestinationRefusal(response.status),
+                { status: response.status, detail: await detailOf(response) },
+                'Discord: message refusé'
+            );
             return null;
         }
         const body = (await response.json()) as { id?: unknown };
         return typeof body.id === 'string' ? body.id : null;
     } catch (e) {
-        logger.warn({ err: e instanceof Error ? e.message : String(e) }, 'Discord: publication impossible');
+        logFailure(
+            logger,
+            isRemoteFailure(e),
+            { err: e instanceof Error ? e.message : String(e) },
+            'Discord: publication impossible'
+        );
         return null;
     }
 }
@@ -119,7 +130,7 @@ export async function editMessage(
     logger: Logger
 ): Promise<boolean> {
     if (!isDiscordWebhook(url)) {
-        logger.warn('Discord: adresse refusée, ce n’est pas un webhook Discord');
+        logger.info({ cause: 'user' }, 'Discord: adresse refusée, ce n’est pas un webhook Discord');
         return false;
     }
     try {
@@ -127,10 +138,20 @@ export async function editMessage(
             send(messageUrl(url, messageId), { method: 'PATCH', body: JSON.stringify(message) })
         );
         if (response.ok) return true;
-        logger.warn({ status: response.status, detail: await detailOf(response) }, 'Discord: modification refusée');
+        logFailure(
+            logger,
+            isDestinationRefusal(response.status),
+            { status: response.status, detail: await detailOf(response) },
+            'Discord: modification refusée'
+        );
         return false;
     } catch (e) {
-        logger.warn({ err: e instanceof Error ? e.message : String(e) }, 'Discord: modification impossible');
+        logFailure(
+            logger,
+            isRemoteFailure(e),
+            { err: e instanceof Error ? e.message : String(e) },
+            'Discord: modification impossible'
+        );
         return false;
     }
 }
