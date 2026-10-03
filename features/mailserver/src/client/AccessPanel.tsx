@@ -88,8 +88,8 @@ export default function AccessPanel({ scope, canWrite }: SettingsPanelProps) {
     return (
         <div className={shell.section}>
             <p className={`${shell.sectionHint} ${shell.panelLead}`}>
-                Un mot de passe par client, révocable seul. Celui de la boîte sert à la première connexion ; ceux-ci
-                évitent de le confier partout.
+                Le mot de passe de la boîte donne un accès normal, depuis n’importe quel client. Ceux-ci s’y ajoutent,
+                un par client : chacun se révoque seul, sans changer les autres.
             </p>
             {!canManage && (
                 <ReadOnlyNotice>Gérer les mots de passe est une permission à part de l’écriture.</ReadOnlyNotice>
