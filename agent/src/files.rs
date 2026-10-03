@@ -122,30 +122,7 @@ fn display_path(p: &Path) -> String {
     // `cfg!` (not `#[cfg]`) so the Windows branch is still compiled — and unit
     // tested — on the Linux/macOS builds.
     if cfg!(windows) {
-        strip_verbatim(s)
-    } else {
-        s
-    }
-}
-
-/// `\\?\C:\dir` → `C:\dir`, `\\?\UNC\srv\share` → `\\srv\share`.
-///
-/// Windows' `canonicalize` always answers with a verbatim path. The prefix is an
-/// API detail that leaks to the UI: the client splits paths on the separator for
-/// its breadcrumbs, so `\\?\` becomes a phantom `?` directory. std re-adds the
-/// prefix when it needs it, so the plain form still opens long paths. Device
-/// paths (`\\?\Volume{…}`) have no plain form and are left untouched.
-fn strip_verbatim(s: String) -> String {
-    let Some(rest) = s.strip_prefix(r"\\?\") else {
-        return s;
-    };
-    if let Some(unc) = rest.strip_prefix(r"UNC\") {
-        return format!(r"\\{unc}");
-    }
-    let mut c = rest.chars();
-    let is_drive = matches!((c.next(), c.next()), (Some(l), Some(':')) if l.is_ascii_alphabetic());
-    if is_drive {
-        rest.to_owned()
+        crate::sync::paths::strip_verbatim(s)
     } else {
         s
     }
@@ -770,19 +747,6 @@ mod tests {
         v.sort_by(dir_first);
         let order: Vec<&str> = v.iter().map(|e| e.name.as_str()).collect();
         assert_eq!(order, vec!["Apps", "zed", "a.txt", "b.txt"]);
-    }
-
-    /// Runs on every platform (the Windows branch is `cfg!`, not `#[cfg]`).
-    #[test]
-    fn verbatim_prefixes_are_stripped_when_they_have_a_plain_form() {
-        let strip = |s: &str| strip_verbatim(s.to_string());
-        assert_eq!(strip(r"\\?\C:\Users\gerem"), r"C:\Users\gerem");
-        assert_eq!(strip(r"\\?\c:\"), r"c:\");
-        assert_eq!(strip(r"\\?\UNC\srv\partage\x"), r"\\srv\partage\x");
-        // No plain equivalent, or nothing to strip: left alone.
-        assert_eq!(strip(r"\\?\Volume{0c2e}\x"), r"\\?\Volume{0c2e}\x");
-        assert_eq!(strip(r"C:\Users\gerem"), r"C:\Users\gerem");
-        assert_eq!(strip("/home/gerem"), "/home/gerem");
     }
 
     #[test]

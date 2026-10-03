@@ -14,7 +14,7 @@ mod transfer;
 mod watcher;
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -24,6 +24,7 @@ use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, info, warn};
 
+use crate::exclusions::CompiledExclusions;
 use crate::protocol::{SyncIndexEntry, SyncShareAssignment};
 pub use transfer::ApplyFrame;
 use transfer::{PushCredits, PushWindow, SharedCaches, PUSH_ACK_TIMEOUT};
@@ -71,6 +72,14 @@ pub enum SyncEvent {
     },
     /// Still working on `op_id` locally (a scan uses its session id).
     Busy { op_id: String },
+    /// A watcher's start finished on its own thread; never sent on the wire.
+    /// `SyncManager::install_watcher` keeps it only if `generation` is still
+    /// the share's.
+    WatcherReady {
+        share_id: i64,
+        generation: u64,
+        watcher: Result<ShareWatcher, String>,
+    },
 }
 
 /// The whole cause chain of an error, outermost first, for a message the server
@@ -142,13 +151,36 @@ pub struct CleanMark {
     pub fingerprint: String,
 }
 
+/// Le watcher d'un partage actif, dans l'ordre de sa vie : démarré sur son
+/// propre thread (le parcours récursif d'inotify prend des secondes sur un gros
+/// dossier, trop pour la boucle de la connexion), puis prêt ou en échec. Sans
+/// watcher prêt, chaque scan est complet.
+enum WatcherSlot {
+    /// Partage en pause.
+    Off,
+    Starting,
+    Ready(ShareWatcher),
+    /// Racine absente ou surveillance refusée : retenté à la prochaine config.
+    Failed,
+}
+
 struct ShareState {
     assignment: SyncShareAssignment,
-    /// Présent seulement quand le partage est actif.
-    _watcher: Option<ShareWatcher>,
-    /// Compteur d'événements du watcher, `None` quand il n'a pas pu démarrer.
-    events: Option<Arc<AtomicU64>>,
+    /// Le démarrage de watcher que ce partage attend : le rapport d'une
+    /// configuration plus ancienne est jeté.
+    generation: u64,
+    watcher: WatcherSlot,
     clean: Arc<Mutex<CleanMark>>,
+}
+
+impl ShareState {
+    /// Compteur d'événements du watcher, `None` tant qu'il n'est pas prêt.
+    fn events(&self) -> Option<Arc<AtomicU64>> {
+        match &self.watcher {
+            WatcherSlot::Ready(w) => Some(w.events()),
+            _ => None,
+        }
+    }
 }
 
 /// Possède les assignations, les watchers et les installs en cours. Vit dans
@@ -169,6 +201,8 @@ pub struct SyncManager {
     /// l'apprend par la réponse à sa première opération.
     refused: HashMap<i64, String>,
     push_credits: PushCredits,
+    /// Dernière génération de watcher attribuée (0 : aucune).
+    generations: u64,
 }
 
 impl SyncManager {
@@ -181,6 +215,7 @@ impl SyncManager {
             sync_roots,
             refused: HashMap::new(),
             push_credits: PushCredits::default(),
+            generations: 0,
         }
     }
 
@@ -194,24 +229,39 @@ impl SyncManager {
     }
 
     /// Applique une config complète : la liste REMPLACE l'existante.
-    pub fn apply_config(&mut self, assignments: Vec<SyncShareAssignment>) {
+    pub fn apply_config(&mut self, mut assignments: Vec<SyncShareAssignment>) {
         let mut next: HashMap<i64, ShareState> = HashMap::new();
         self.refused.clear();
         let own_dir = crate::config::Config::path()
             .parent()
-            .map(|p| p.canonicalize().unwrap_or_else(|_| p.to_path_buf()));
+            .map(paths::plain_canonical);
+        // Triées : de deux racines qui se chevauchent, le partage le plus ancien
+        // garde son dossier, quel que soit l'ordre d'envoi du serveur.
+        assignments.sort_by_key(|a| a.share_id);
+        let mut roots: Vec<(PathBuf, String)> = Vec::new();
         for assignment in assignments {
             let share_id = assignment.share_id;
             // La racine vient du serveur, qui n'en vérifie que la forme : c'est
-            // ici qu'un dossier système, ou un dossier hors de `sync_roots`, se refuse.
-            if let Some(reason) =
+            // ici qu'un dossier système, un dossier hors de `sync_roots` ou le
+            // dossier d'un autre partage se refuse.
+            let root = paths::plain_canonical(Path::new(assignment.local_path.trim()));
+            let problem =
                 paths::root_problem(&assignment.local_path, &self.sync_roots, own_dir.as_deref())
-            {
+                    .or_else(|| {
+                        // Deux partages emboîtés synchroniseraient chacun la corbeille et
+                        // les copies de conflit de l'autre.
+                        roots
+                            .iter()
+                            .find(|(other, _)| paths::overlaps(other, &root))
+                            .map(|(_, other)| format!("chevauche le partage « {other} »"))
+                    });
+            if let Some(reason) = problem {
                 tracing::error!(share_id, path = %assignment.local_path, %reason, "sync: share root refused");
                 self.shares.remove(&share_id);
                 self.refused.insert(share_id, reason);
                 continue;
             }
+            roots.push((root, assignment.local_path.clone()));
             let active = assignment.status == "active";
             let previous = self.shares.remove(&share_id);
             // Le cache de scan est indexé par partage, pas par dossier : le
@@ -225,13 +275,15 @@ impl SyncManager {
                 index_cache::IndexCache::remove(share_id);
                 transfer::invalidate_cache(&self.caches, share_id);
             }
-            // La marque de propreté ne survit qu'à une assignation identique,
-            // exclusions comprises : le cache de l'agent a été produit sous les
-            // anciennes, donc son empreinte décrit un jeu d'entrées que le serveur
-            // ne calcule plus pareil. C'est ici, et pas dans le hachage, que se
-            // fait cette invalidation (voir `fingerprint.rs`). Le cas identique
-            // compte : `notifyConfigChanged` re-pousse la config à chaque attache.
-            let same_shape = previous.as_ref().is_some_and(|s| {
+            // Le watcher et la marque de propreté ne survivent qu'à une
+            // assignation identique, exclusions comprises : le watcher filtre
+            // selon elles, et le cache de l'agent a été produit sous les
+            // anciennes, donc son empreinte décrit un jeu d'entrées que le
+            // serveur ne calcule plus pareil. C'est ici, et pas dans le hachage,
+            // que se fait cette invalidation (voir `fingerprint.rs`). Le cas
+            // identique compte : `notifyConfigChanged` re-pousse la config à
+            // chaque attache. Un watcher en échec se retente.
+            let unchanged = previous.filter(|s| {
                 s.assignment.local_path == assignment.local_path
                     && s.assignment.exclusions.len() == assignment.exclusions.len()
                     && s.assignment
@@ -239,57 +291,34 @@ impl SyncManager {
                         .iter()
                         .zip(assignment.exclusions.iter())
                         .all(|(a, b)| a.kind == b.kind && a.pattern == b.pattern)
+                    && matches!(s.watcher, WatcherSlot::Starting | WatcherSlot::Ready(_)) == active
             });
-            let unchanged = previous.filter(|s| {
-                s.assignment.local_path == assignment.local_path && (s._watcher.is_some()) == active
-            });
-            let (watcher, events, clean) = match unchanged {
-                Some(prev) => {
-                    // Watcher conservé tel quel : son compteur continue de courir,
-                    // donc la marque garde son sens.
-                    let events = prev.events;
-                    let clean = if same_shape {
-                        prev.clean
+            let state = match unchanged {
+                Some(prev) => ShareState { assignment, ..prev },
+                None => {
+                    let clean = Arc::new(Mutex::new(CleanMark::default()));
+                    let (generation, watcher) = if active {
+                        self.generations += 1;
+                        watcher::spawn_start(
+                            share_id,
+                            self.generations,
+                            PathBuf::from(&assignment.local_path),
+                            Arc::new(CompiledExclusions::compile(&assignment.exclusions)),
+                            self.tx.clone(),
+                        );
+                        (self.generations, WatcherSlot::Starting)
                     } else {
-                        Arc::new(Mutex::new(CleanMark::default()))
+                        (0, WatcherSlot::Off)
                     };
-                    (prev._watcher, events, clean)
-                }
-                None if active => {
-                    let root = PathBuf::from(&assignment.local_path);
-                    // A root gone missing under a share already scanned is never
-                    // recreated empty: no watcher, and the scan will say why.
-                    let started =
-                        scanner::ensure_root(&root, &index_cache::IndexCache::load(share_id))
-                            .and_then(|()| watcher::start(share_id, root, self.tx.clone()));
-                    match started {
-                        Ok(w) => {
-                            let events = w.events();
-                            // Watcher tout neuf : son compteur repart de zéro, et
-                            // rien ne dit ce qui a bougé avant lui. `epoch: None`.
-                            (
-                                Some(w),
-                                Some(events),
-                                Arc::new(Mutex::new(CleanMark::default())),
-                            )
-                        }
-                        Err(e) => {
-                            warn!(share_id, error = %e, "sync: watcher start failed (periodic scans still cover)");
-                            (None, None, Arc::new(Mutex::new(CleanMark::default())))
-                        }
+                    ShareState {
+                        assignment,
+                        generation,
+                        watcher,
+                        clean,
                     }
                 }
-                None => (None, None, Arc::new(Mutex::new(CleanMark::default()))),
             };
-            next.insert(
-                share_id,
-                ShareState {
-                    assignment,
-                    _watcher: watcher,
-                    events,
-                    clean,
-                },
-            );
+            next.insert(share_id, state);
         }
         // Ce qui reste dans self.shares a été détaché : watchers droppés ici,
         // et leur cache de scan n'a plus de raison d'être.
@@ -299,6 +328,37 @@ impl SyncManager {
         }
         info!(count = next.len(), "sync: config applied");
         self.shares = next;
+    }
+
+    /// The watcher thread's report. Only the configuration that started it
+    /// takes the watcher: an older generation's is dropped (and stops).
+    pub fn install_watcher(
+        &mut self,
+        share_id: i64,
+        generation: u64,
+        watcher: Result<ShareWatcher, String>,
+    ) {
+        let Some(state) = self
+            .shares
+            .get_mut(&share_id)
+            .filter(|s| s.generation == generation)
+        else {
+            debug!(
+                share_id,
+                generation, "sync: watcher of a stale configuration dropped"
+            );
+            return;
+        };
+        state.watcher = match watcher {
+            Ok(w) => {
+                debug!(share_id, "sync: watcher ready");
+                WatcherSlot::Ready(w)
+            }
+            Err(e) => {
+                warn!(share_id, error = %e, "sync: watcher start failed (periodic scans still cover)");
+                WatcherSlot::Failed
+            }
+        };
     }
 
     fn assignment(&self, share_id: i64) -> Option<&SyncShareAssignment> {
@@ -341,7 +401,7 @@ impl SyncManager {
                     session_id,
                     s.assignment.clone(),
                     self.tx.clone(),
-                    s.events.clone(),
+                    s.events(),
                     Arc::clone(&s.clean),
                 );
             }
@@ -372,7 +432,7 @@ impl SyncManager {
         if state.assignment.status != "active" {
             return None;
         }
-        let now = state.events.as_ref()?.load(Ordering::Relaxed);
+        let now = state.events()?.load(Ordering::Relaxed);
         let mark = state.clean.lock().expect("clean lock");
         (mark.epoch == Some(now)).then(|| mark.fingerprint.clone())
     }
@@ -737,5 +797,43 @@ mod tests {
         let (mut mgr, _rx) = manager();
         assert!(refusal(mgr.apply_chunk(frame(0), 1)).contains("inconnu"));
         assert!(mgr.applies.is_empty());
+    }
+
+    fn paused(share_id: i64, local_path: &std::path::Path) -> SyncShareAssignment {
+        SyncShareAssignment {
+            share_id,
+            local_path: local_path.to_string_lossy().into_owned(),
+            status: "paused".into(),
+            exclusions: Vec::new(),
+            rate_up_bps: None,
+            trash_keep_days: 30,
+        }
+    }
+
+    #[test]
+    fn overlapping_roots_are_refused_oldest_share_first() {
+        let tmp = tempfile::tempdir().unwrap();
+        let outer = tmp.path().join("docs");
+        let inner = outer.join("sub");
+        let apart = tmp.path().join("photos");
+        for d in [&inner, &apart] {
+            std::fs::create_dir_all(d).unwrap();
+        }
+        let (mut mgr, _rx) = manager();
+        // Sent youngest first: the sort decides, not the server's order.
+        mgr.apply_config(vec![
+            paused(7, &inner),
+            paused(3, &outer),
+            paused(9, &apart),
+        ]);
+        assert!(mgr.shares.contains_key(&3));
+        assert!(mgr.shares.contains_key(&9));
+        assert!(!mgr.shares.contains_key(&7));
+        let reason = mgr.unknown_reason(7);
+        assert!(reason.contains("chevauche"), "{reason}");
+        assert!(
+            reason.contains(&outer.to_string_lossy().into_owned()),
+            "{reason}"
+        );
     }
 }

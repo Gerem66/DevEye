@@ -4,6 +4,9 @@
 //!  - `path`: exact relative path, a file or a folder prefix;
 //!  - `name`: exact name of any path component;
 //!  - `regex`: linear-time regular expression on the whole relative path.
+//!
+//! Case never counts: macOS and Windows do not tell `Thumbs.db` from
+//! `thumbs.db`, and the server matches the same way.
 
 use anyhow::{bail, Result};
 use regex::Regex;
@@ -16,7 +19,9 @@ const REGEX_SIZE_LIMIT: usize = 1 << 20;
 
 #[derive(Default)]
 pub struct CompiledExclusions {
+    /// Lower-cased.
     paths: Vec<String>,
+    /// Lower-cased.
     names: Vec<String>,
     regexes: Vec<Regex>,
 }
@@ -46,9 +51,10 @@ impl CompiledExclusions {
 
     fn add(&mut self, row: &PathExclusion) -> Result<()> {
         match row.kind.as_str() {
-            "path" => self.paths.push(row.pattern.clone()),
-            "name" => self.names.push(row.pattern.clone()),
+            "path" => self.paths.push(row.pattern.to_lowercase()),
+            "name" => self.names.push(row.pattern.to_lowercase()),
             "regex" => match regex::RegexBuilder::new(&row.pattern)
+                .case_insensitive(true)
                 .size_limit(REGEX_SIZE_LIMIT)
                 .build()
             {
@@ -61,13 +67,14 @@ impl CompiledExclusions {
     }
 
     pub fn matches(&self, rel_path: &str) -> bool {
+        let lower = rel_path.to_lowercase();
         for p in &self.paths {
-            if rel_path == p || rel_path.starts_with(&format!("{p}/")) {
+            if &lower == p || lower.starts_with(&format!("{p}/")) {
                 return true;
             }
         }
         if !self.names.is_empty()
-            && rel_path
+            && lower
                 .split('/')
                 .any(|seg| self.names.iter().any(|n| n == seg))
         {
@@ -102,6 +109,22 @@ mod tests {
         assert!(ex.matches("app/node_modules/x/index.js"));
         assert!(ex.matches("var/app.log"));
         assert!(!ex.matches("src/main.rs"));
+    }
+
+    #[test]
+    fn matching_ignores_case() {
+        let ex = CompiledExclusions::compile_strict(&[
+            rule("path", "Build/Cache"),
+            rule("name", "Thumbs.db"),
+            rule("regex", r"(^|/)~\$[^/]*(/|$)"),
+        ])
+        .unwrap();
+        assert!(ex.matches("build/cache/a.bin"));
+        assert!(ex.matches("BUILD/CACHE"));
+        assert!(ex.matches("photos/thumbs.db"));
+        assert!(ex.matches("photos/THUMBS.DB"));
+        assert!(ex.matches("docs/~$rapport.docx"));
+        assert!(!ex.matches("docs/rapport.docx"));
     }
 
     #[test]

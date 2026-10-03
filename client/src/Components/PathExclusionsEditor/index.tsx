@@ -42,7 +42,8 @@ const PLACEHOLDERS: Record<PathExclusionKind, string> = {
  * Les exclusions d'un dossier parcouru : chemin exact, nom de composant, ou
  * expression régulière, toujours relatifs à sa racine. Le même éditeur pour
  * un partage CloudSync et un dossier sauvegardé : une règle s'écrit de la même
- * façon partout, et se valide comme l'agent l'exécutera.
+ * façon partout, et se valide comme l'agent l'exécutera. Les exclusions ne
+ * tiennent pas compte de la casse.
  */
 export function PathExclusionsEditor({ items, onAdd, onRemove, canWrite, scope, disabled }: PathExclusionsEditorProps) {
     const [kind, setKind] = useState<PathExclusionKind>('name');

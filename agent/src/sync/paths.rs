@@ -64,9 +64,9 @@ pub fn rel_path_lossy(root: &Path, abs: &Path) -> Option<String> {
 const WINDOWS_FORBIDDEN_CHARS: [char; 7] = ['"', '*', ':', '<', '>', '?', '|'];
 
 /// Noms de périphériques DOS, réservés avec ou sans extension.
-const WINDOWS_RESERVED_STEMS: [&str; 4] = ["con", "prn", "aux", "nul"];
+const WINDOWS_RESERVED_STEMS: [&str; 6] = ["con", "prn", "aux", "nul", "conin$", "conout$"];
 
-/// Limite d'un composant de chemin sur la quasi-totalité des systèmes de fichiers.
+/// Limite d'un composant de chemin sur la quasi-totalité des systèmes de fichiers (octets UTF-8).
 const SEGMENT_MAX_BYTES: usize = 255;
 
 fn is_windows_reserved(segment: &str) -> bool {
@@ -78,14 +78,18 @@ fn is_windows_reserved(segment: &str) -> bool {
     if WINDOWS_RESERVED_STEMS.contains(&stem.as_str()) {
         return true;
     }
-    // COM0..COM9 et LPT0..LPT9.
+    // COM0..COM9 et LPT0..LPT9, exposants compris : Windows les lit comme des chiffres.
     let Some(digit) = stem
         .strip_prefix("com")
         .or_else(|| stem.strip_prefix("lpt"))
     else {
         return false;
     };
-    digit.len() == 1 && digit.chars().all(|c| c.is_ascii_digit())
+    let mut chars = digit.chars();
+    matches!(
+        (chars.next(), chars.next()),
+        (Some('0'..='9' | '\u{B9}' | '\u{B2}' | '\u{B3}'), None)
+    )
 }
 
 fn segment_problem(segment: &str) -> Option<String> {
@@ -93,7 +97,7 @@ fn segment_problem(segment: &str) -> Option<String> {
         return Some("segment de chemin vide ou relatif".into());
     }
     if segment.len() > SEGMENT_MAX_BYTES {
-        return Some(format!("nom de plus de {SEGMENT_MAX_BYTES} octets"));
+        return Some("nom trop long".into());
     }
     if let Some(bad) = segment
         .chars()
@@ -121,9 +125,6 @@ pub fn rel_path_problem(rel_path: &str) -> Option<String> {
     if rel_path.is_empty() {
         return Some("chemin vide".into());
     }
-    if rel_path.len() > REL_PATH_MAX_BYTES {
-        return Some(format!("chemin de plus de {REL_PATH_MAX_BYTES} caractères"));
-    }
     if rel_path.contains('\\') {
         return Some("antislash interdit dans un chemin".into());
     }
@@ -131,6 +132,10 @@ pub fn rel_path_problem(rel_path: &str) -> Option<String> {
         return Some("caractère de contrôle interdit".into());
     }
     let normalized = nfc(rel_path);
+    // En octets de la forme NFC : c'est ce que les systèmes de fichiers comptent.
+    if normalized.len() > REL_PATH_MAX_BYTES {
+        return Some("chemin trop long".into());
+    }
     let mut segments = normalized.split('/');
     let Some(first) = segments.next() else {
         return Some("chemin vide".into());
@@ -158,6 +163,51 @@ pub fn safe_join(root: &Path, rel_path: &str) -> Result<PathBuf> {
         out.push(seg);
     }
     Ok(out)
+}
+
+/// `\\?\C:\dir` → `C:\dir`, `\\?\UNC\srv\share` → `\\srv\share`.
+///
+/// Windows' `canonicalize` always answers with a verbatim path. The prefix is an
+/// API detail that leaks: the client splits paths on the separator for its
+/// breadcrumbs, so `\\?\` becomes a phantom `?` directory, and a verbatim path
+/// never compares equal to the plain `C:\Windows` of a denied-roots list. std
+/// re-adds the prefix when it needs it, so the plain form still opens long
+/// paths. Device paths (`\\?\Volume{…}`) have no plain form and are left untouched.
+pub fn strip_verbatim(s: String) -> String {
+    let Some(rest) = s.strip_prefix(r"\\?\") else {
+        return s;
+    };
+    if let Some(unc) = rest.strip_prefix(r"UNC\") {
+        return format!(r"\\{unc}");
+    }
+    let mut c = rest.chars();
+    let is_drive = matches!((c.next(), c.next()), (Some(l), Some(':')) if l.is_ascii_alphabetic());
+    if is_drive {
+        rest.to_owned()
+    } else {
+        s
+    }
+}
+
+/// The real path (links resolved) in its plain form, comparable component by
+/// component with a path typed by hand; the path itself when it does not exist.
+pub fn plain_canonical(path: &Path) -> PathBuf {
+    let Ok(real) = path.canonicalize() else {
+        return path.to_path_buf();
+    };
+    // `cfg!` (not `#[cfg]`) so the Windows branch is still compiled and unit
+    // tested on the Linux/macOS builds.
+    if cfg!(windows) {
+        PathBuf::from(strip_verbatim(real.to_string_lossy().into_owned()))
+    } else {
+        real
+    }
+}
+
+/// Is one path the other, or inside it? Two share roots that overlap would
+/// each sync the other's trash and conflict copies.
+pub fn overlaps(a: &Path, b: &Path) -> bool {
+    is_under(a, b) || is_under(b, a)
 }
 
 /// Les racines qu'aucun partage ne peut prendre, ni rien de ce qu'elles
@@ -254,18 +304,16 @@ pub fn root_problem(
         return Some("le dossier du partage ne peut pas contenir « .. »".into());
     }
     // Un lien vers `/etc` ne doit pas passer pour un dossier ordinaire.
-    let real = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let real = plain_canonical(path);
     if real.parent().is_none() {
         return Some("la racine du système de fichiers ne peut pas être un partage".into());
     }
     if own_dir.is_some_and(|own| is_under(&real, own) || is_under(own, &real)) {
         return Some("le dossier de l'agent ne peut pas faire partie d'un partage".into());
     }
-    let listed = allowlist.iter().any(|entry| {
-        let entry = Path::new(entry.trim());
-        let entry = entry.canonicalize().unwrap_or_else(|_| entry.to_path_buf());
-        is_under(&real, &entry)
-    });
+    let listed = allowlist
+        .iter()
+        .any(|entry| is_under(&real, &plain_canonical(Path::new(entry.trim()))));
     if !allowlist.is_empty() {
         return (!listed).then(|| {
             "ce dossier n'est pas dans `sync_roots` (agent.toml) de cette machine".into()
@@ -430,9 +478,36 @@ mod tests {
             "fin.",
             "fin ",
             "docs/sous-dossier./x",
+            "CONIN$",
+            "conout$.txt",
+            "COM\u{B9}",
+            "lpt\u{B2}.log",
+            "a\u{7F}b",
+            "a\u{85}b",
         ] {
             assert!(safe_join(root, bad).is_err(), "should reject {bad:?}");
         }
+    }
+
+    /// The same cases as `pathValidation.test.ts`: lengths are UTF-8 bytes of
+    /// the NFC form, so 600 two-byte characters (1200 bytes) are over the limit.
+    #[test]
+    fn lengths_are_counted_in_bytes() {
+        let root = Path::new("/data/share");
+        assert!(safe_join(root, &"a".repeat(255)).is_ok());
+        assert!(safe_join(root, &format!("{}.txt", "a".repeat(255))).is_err());
+        assert!(safe_join(root, &"é".repeat(200)).is_err());
+        let long_ascii = (0..4)
+            .map(|_| "a".repeat(200))
+            .collect::<Vec<_>>()
+            .join("/");
+        assert!(safe_join(root, &long_ascii).is_ok());
+        let long_utf8 = (0..5)
+            .map(|_| "é".repeat(120))
+            .collect::<Vec<_>>()
+            .join("/");
+        assert_eq!(long_utf8.chars().count(), 604);
+        assert!(safe_join(root, &long_utf8).is_err());
     }
 
     #[test]
@@ -445,6 +520,9 @@ mod tests {
             "communication.txt",
             "auxiliaire/notes.md",
             "com10",
+            "com",
+            "lpt\u{B9}\u{B9}",
+            "conin",
             "nullable.rs",
             "point.dans.le.nom.txt",
         ] {
@@ -458,6 +536,39 @@ mod tests {
         let abs = root.join("docs").join("rapport.pdf");
         assert_eq!(rel_path_of(root, &abs).unwrap(), "docs/rapport.pdf");
         assert!(rel_path_of(root, Path::new("/elsewhere/x")).is_none());
+    }
+
+    /// Runs on every platform (the Windows branch is `cfg!`, not `#[cfg]`).
+    #[test]
+    fn verbatim_prefixes_are_stripped_when_they_have_a_plain_form() {
+        let strip = |s: &str| strip_verbatim(s.to_string());
+        assert_eq!(strip(r"\\?\C:\Users\gerem"), r"C:\Users\gerem");
+        assert_eq!(strip(r"\\?\c:\"), r"c:\");
+        assert_eq!(strip(r"\\?\UNC\srv\partage\x"), r"\\srv\partage\x");
+        // No plain equivalent, or nothing to strip: left alone.
+        assert_eq!(strip(r"\\?\Volume{0c2e}\x"), r"\\?\Volume{0c2e}\x");
+        assert_eq!(strip(r"C:\Users\gerem"), r"C:\Users\gerem");
+        assert_eq!(strip("/home/gerem"), "/home/gerem");
+    }
+
+    #[test]
+    fn plain_canonical_is_comparable_with_typed_paths() {
+        let tmp = tempfile::tempdir().unwrap();
+        let real = plain_canonical(tmp.path());
+        assert!(!real.to_string_lossy().starts_with(r"\\?\"));
+        assert!(is_under(&plain_canonical(&tmp.path().join("x")), &real));
+        let missing = tmp.path().join("nope").join("deeper");
+        assert_eq!(plain_canonical(&missing), missing);
+    }
+
+    #[test]
+    fn overlapping_roots() {
+        let a = Path::new("/data/a");
+        assert!(overlaps(a, Path::new("/data/a")));
+        assert!(overlaps(a, Path::new("/data/a/b")));
+        assert!(overlaps(Path::new("/data"), a));
+        assert!(!overlaps(a, Path::new("/data/ab")));
+        assert!(!overlaps(a, Path::new("/data/b")));
     }
 
     #[test]

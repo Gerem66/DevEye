@@ -748,6 +748,8 @@ where
             device_id: device_id.to_string(),
             op_id,
         },
+        // Internal to the agent, intercepted by the runner before this point.
+        SyncEvent::WatcherReady { .. } => return,
     };
     if let Ok(text) = serde_json::to_string(&msg) {
         let _ = sink.send(Message::Text(text)).await;

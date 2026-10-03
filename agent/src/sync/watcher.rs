@@ -14,8 +14,11 @@ use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use tokio::sync::mpsc::Sender;
 use tracing::debug;
 
-use crate::sync::paths::is_reserved_top;
-use crate::sync::SyncEvent;
+use crate::exclusions::CompiledExclusions;
+use crate::sync::index_cache::IndexCache;
+use crate::sync::paths::{is_reserved_top, rel_path_of};
+use crate::sync::scanner::ensure_root;
+use crate::sync::{error_text, SyncEvent};
 
 /// Fenêtre de silence avant d'émettre (une rafale de writes = un seul event).
 ///
@@ -69,21 +72,55 @@ impl Drop for ShareWatcher {
     }
 }
 
-/// Un chemin touché par un événement concerne-t-il la synchro ? (Les dossiers
-/// réservés `.deveye-*` bougent en permanence pendant nos propres transferts.)
-fn relevant(root: &Path, path: &Path) -> bool {
+/// Un chemin touché par un événement concerne-t-il la synchro ? Les dossiers
+/// réservés `.deveye-*` bougent en permanence pendant nos propres transferts,
+/// et un chemin exclu (`node_modules`, un fichier de verrou) ne donnera rien au
+/// scan. Hors racine ou non UTF-8 : mieux vaut re-scanner.
+fn relevant(root: &Path, path: &Path, excluded: &CompiledExclusions) -> bool {
     let Ok(stripped) = path.strip_prefix(root) else {
-        return true; // Hors racine (rename du root ?) : mieux vaut re-scanner.
+        return true;
     };
     match stripped.components().next() {
         Some(std::path::Component::Normal(first)) => {
-            !first.to_str().map(is_reserved_top).unwrap_or(false)
+            if first.to_str().map(is_reserved_top).unwrap_or(false) {
+                return false;
+            }
+            rel_path_of(root, path).is_none_or(|rel| !excluded.matches(&rel))
         }
         _ => true,
     }
 }
 
-pub fn start(share_id: i64, root: PathBuf, tx: Sender<SyncEvent>) -> Result<ShareWatcher> {
+/// Starts a watcher on its own thread and reports it through `tx` as
+/// `SyncEvent::WatcherReady`: on inotify, a recursive watch walks the whole
+/// tree and takes seconds on a large folder, too long for the connection's loop.
+pub fn spawn_start(
+    share_id: i64,
+    generation: u64,
+    root: PathBuf,
+    excluded: Arc<CompiledExclusions>,
+    tx: Sender<SyncEvent>,
+) {
+    std::thread::spawn(move || {
+        // A root gone missing under a share already scanned is never recreated
+        // empty: no watcher, and the scan will say why.
+        let started = ensure_root(&root, &IndexCache::load(share_id))
+            .and_then(|()| start(share_id, root, excluded, tx.clone()));
+        let watcher = started.map_err(|e| error_text(&e));
+        let _ = tx.blocking_send(SyncEvent::WatcherReady {
+            share_id,
+            generation,
+            watcher,
+        });
+    });
+}
+
+fn start(
+    share_id: i64,
+    root: PathBuf,
+    excluded: Arc<CompiledExclusions>,
+    tx: Sender<SyncEvent>,
+) -> Result<ShareWatcher> {
     // The root is created by the scan's `ensure_root`, never here: a vanished
     // volume must not come back as an empty folder.
     if !root.is_dir() {
@@ -100,7 +137,12 @@ pub fn start(share_id: i64, root: PathBuf, tx: Sender<SyncEvent>) -> Result<Shar
         // veut dire des événements PERDUS : on re-scanne, sans filtrer sur les
         // chemins.
         if let Ok(event) = &res {
-            if !event.paths.is_empty() && !event.paths.iter().any(|p| relevant(&handler_root, p)) {
+            if !event.paths.is_empty()
+                && !event
+                    .paths
+                    .iter()
+                    .any(|p| relevant(&handler_root, p, &excluded))
+            {
                 return;
             }
         }
@@ -151,4 +193,35 @@ pub fn start(share_id: i64, root: PathBuf, tx: Sender<SyncEvent>) -> Result<Shar
         thread: Some(thread),
         events,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::protocol::PathExclusion;
+
+    #[test]
+    fn relevant_skips_reserved_and_excluded_paths() {
+        let root = Path::new("/data/share");
+        let excluded = CompiledExclusions::compile(&[PathExclusion {
+            kind: "name".into(),
+            pattern: "node_modules".into(),
+        }]);
+        assert!(relevant(root, &root.join("docs/x.txt"), &excluded));
+        assert!(!relevant(
+            root,
+            &root.join(".deveye-trash/2026/x"),
+            &excluded
+        ));
+        assert!(!relevant(root, &root.join(".DEVEYE-TMP/x.part"), &excluded));
+        assert!(!relevant(
+            root,
+            &root.join("app/node_modules/pkg/index.js"),
+            &excluded
+        ));
+        assert!(!relevant(root, &root.join("app/NODE_MODULES"), &excluded));
+        // Hors racine ou la racine elle-même : on re-scanne plutôt que de rater.
+        assert!(relevant(root, Path::new("/elsewhere/x"), &excluded));
+        assert!(relevant(root, root, &excluded));
+    }
 }

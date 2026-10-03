@@ -609,7 +609,13 @@ async fn stream_session(
                 commands::send_files_event(&mut sink, device_id, ev).await;
             }
             Some(ev) = sync_rx.recv() => {
-                commands::send_sync_event(&mut sink, device_id, ev).await;
+                match ev {
+                    // Internal: a watcher started on its own thread comes home here.
+                    crate::sync::SyncEvent::WatcherReady { share_id, generation, watcher } => {
+                        sync_mgr.install_watcher(share_id, generation, watcher);
+                    }
+                    ev => commands::send_sync_event(&mut sink, device_id, ev).await,
+                }
             }
             Some(ev) = term_rx.recv() => {
                 // A session that ended is also dropped from the manager (the reader
