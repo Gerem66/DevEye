@@ -2,11 +2,19 @@
 
 ## Vue d'ensemble
 
-DevEye est une stack moderne pour le monitorage décentralisé :
+DevEye rassemble au même endroit ce que votre activité fait tourner : vos
+projets et vos clients, vos devis et vos factures, la surveillance de vos sites,
+vos accès et vos sauvegardes. Il s'utilise en ligne sur
+[deveye.fr](https://deveye.fr) ou s'héberge sur votre propre serveur, et un
+agent installé sur vos machines peut lui remonter leur état.
 
-- Serveur Node.js (Fastify) + MySQL orchestrent les données
-- Interface web React (dossier [`client/`](./client)) les visualise
-- Contrats partagés typés dans le paquet `@deveye/types` (séparé)
+- Serveur [Node.js](https://nodejs.org) ([Fastify](https://fastify.dev)) et
+  [MySQL](https://www.mysql.com)
+- Interface web [React](https://react.dev) (dossier [`client/`](./client))
+- Agent [Rust](https://www.rust-lang.org) (dossier [`agent/`](./agent)) pour
+  les machines suivies
+- Fonctionnalités en modules (dossier [`features/`](./features)), sur le SDK
+  [`@deveye/types`](https://github.com/Gerem66/DevEye-Types)
 
 **Chiffré au repos, avec une clé par utilisateur.** Activez le chiffrement par
 mot de passe et le serveur lui-même ne peut plus lire vos données : voir
