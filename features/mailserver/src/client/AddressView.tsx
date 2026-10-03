@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
     Button,
-    copyText,
+    CopyButton,
     FeatureSettingsButton,
     SegmentedControl,
     StatusBadge,
@@ -24,26 +24,11 @@ import styles from './style.module.css';
 type Days = '7' | '30' | '90';
 
 function CopyValue({ label, value }: { label: string; value: string }) {
-    const [copied, setCopied] = useState(false);
     return (
         <div className={styles.factRow}>
             <span className={styles.factLabel}>{label}</span>
             <code className={styles.factValue}>{value}</code>
-            <button
-                type='button'
-                className={styles.copyBtn}
-                title={copied ? 'Copié' : `Copier ${label.toLowerCase()}`}
-                aria-label={`Copier ${label.toLowerCase()}`}
-                onClick={() => {
-                    void copyText(value).then((ok) => {
-                        if (!ok) return;
-                        setCopied(true);
-                        window.setTimeout(() => setCopied(false), 2000);
-                    });
-                }}
-            >
-                <span className={`icon icon-${copied ? 'check' : 'copy'}`} />
-            </button>
+            <CopyButton value={value} label={`Copier ${label.toLowerCase()}`} />
         </div>
     );
 }

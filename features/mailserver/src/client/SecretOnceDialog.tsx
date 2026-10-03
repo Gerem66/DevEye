@@ -36,7 +36,7 @@ export default function SecretOnceDialog({
         >
             <div className={styles.secretRow}>
                 <code className={styles.secret}>{secret}</code>
-                <Button variant='secondary' icon={copied ? 'check' : 'copy'} onClick={() => void copy()}>
+                <Button variant='secondary' icon={copied ? 'square-check' : 'copy'} onClick={() => void copy()}>
                     {copied ? 'Copié' : 'Copier'}
                 </Button>
             </div>

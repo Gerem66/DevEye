@@ -317,28 +317,6 @@
     overflow-wrap: anywhere;
 }
 
-.copyBtn {
-    flex: none;
-    width: 26px;
-    height: 26px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: none;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--text-muted);
-    cursor: pointer;
-    transition:
-        background var(--transition-fast),
-        color var(--transition-fast);
-}
-
-.copyBtn:hover {
-    background: var(--surface-subtle);
-    color: var(--text-primary);
-}
-
 /* ---------------------------------------------------------------- activité */
 
 .totals {

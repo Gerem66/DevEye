@@ -71,7 +71,7 @@ function CopyButton({ text, label, onFailure }: { text: string; label: string; o
             aria-label={label}
             onClick={() => void copy()}
         >
-            <span className={`icon icon-${done ? 'check' : 'copy'}`} />
+            <span className={`icon icon-${done ? 'square-check' : 'copy'}`} />
         </button>
     );
 }
