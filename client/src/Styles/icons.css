@@ -313,6 +313,10 @@
     -webkit-mask-image: url(/icons/info.svg);
     mask-image: url(/icons/info.svg);
 }
+.icon.icon-warning {
+    -webkit-mask-image: url(/icons/warning.svg);
+    mask-image: url(/icons/warning.svg);
+}
 /* Sans masque, `.icon` ne montre pas « rien » mais un carré plein de la
    couleur du texte : toute icône employée doit avoir sa règle ici. */
 .icon.icon-search {
