@@ -2462,23 +2462,69 @@
     display: flex;
     flex-wrap: wrap;
     align-items: center;
+    justify-content: space-between;
     gap: var(--space-sm);
 }
-.logSourceSelect {
-    flex: 1 1 260px;
+/* La source et son réinventaire à gauche, la recherche et le niveau à droite. */
+.logToolbarStart,
+.logToolbarEnd {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
     min-width: 0;
+}
+.logToolbarStart {
+    flex: 0 1 360px;
+}
+.logToolbarEnd {
+    flex: 1 1 420px;
+    justify-content: flex-end;
+}
+.logSourceSelect {
+    flex: 1 1 auto;
+    min-width: 200px;
 }
 .logSearch {
-    flex: 2 1 200px;
+    flex: 1 1 200px;
     min-width: 0;
+    max-width: 360px;
 }
 .logLevelSelect {
-    flex: 0 1 180px;
-    min-width: 0;
+    flex: 0 0 180px;
 }
 .logUnitInput {
-    flex: 1 1 160px;
+    flex: 0 1 200px;
     min-width: 0;
+}
+/* Un bouton d'icône à la hauteur des champs qu'il accompagne. */
+.logIconBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: calc(2.25rem + 2px);
+    height: calc(2.25rem + 2px);
+    padding: 0;
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast),
+        border-color var(--transition-fast);
+}
+.logIconBtn:hover {
+    background: var(--glass-bg);
+}
+.logIconBtn:disabled {
+    cursor: default;
+}
+.logIconBtn .icon {
+    width: 16px;
 }
 .logToggle {
     display: inline-flex;
@@ -2531,10 +2577,41 @@
     color: var(--accent);
     background: var(--accent-bg);
 }
-.logCount {
+.logTimeEnd {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
     margin-left: auto;
+}
+.logCount {
+    margin-right: var(--space-xs);
     color: var(--text-muted);
     font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+}
+/* Live et Actualiser : la silhouette des boutons de la rangée, l'icône en plus. */
+.logRowAction {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+.logRowAction .icon {
+    width: 13px;
+}
+.logRowAction:disabled {
+    cursor: default;
+    filter: opacity(0.6);
+}
+.logEmpty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-md);
+}
+.logEmpty .logHint {
+    padding: 0;
+    max-width: 560px;
 }
 /* Le voile se pose ici, en frère de la liste : dans la liste, il défilerait avec elle. */
 .logViewWrap {

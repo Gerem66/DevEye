@@ -100,13 +100,22 @@ const NO_CONTAINERS_HINT =
     'Aucun conteneur listé. L’agent les énumère avec « docker ps » / « podman ps » : il lui faut ' +
     'donc accès au démon : service installé en root, ou son utilisateur dans le groupe « docker ».';
 
-const TIME_PRESETS: { label: string; seconds: number | null }[] = [
-    { label: 'Tout', seconds: null },
-    { label: '15 min', seconds: 15 * 60 },
-    { label: '1 h', seconds: 60 * 60 },
-    { label: '6 h', seconds: 6 * 60 * 60 },
-    { label: '24 h', seconds: 24 * 60 * 60 }
+/** `span` complète la phrase d'un journal vide : « aucune ligne sur la dernière heure ». */
+const TIME_PRESETS: { label: string; seconds: number | null; span: string }[] = [
+    { label: 'Tout', seconds: null, span: '' },
+    { label: '15 min', seconds: 15 * 60, span: 'les 15 dernières minutes' },
+    { label: '1 h', seconds: 60 * 60, span: 'la dernière heure' },
+    { label: '6 h', seconds: 6 * 60 * 60, span: 'les 6 dernières heures' },
+    { label: '24 h', seconds: 24 * 60 * 60, span: 'les 24 dernières heures' }
 ];
+
+/**
+ * Un conteneur vide alors qu'il a tourné : Docker efface le journal avec le
+ * conteneur, et un redéploiement en crée un neuf.
+ */
+const EMPTY_CONTAINER_HINT =
+    'Docker efface le journal d’un conteneur avec lui : recréé par un redéploiement, il repart d’un journal vide. ' +
+    'Les conteneurs arrêtés gardent le leur tant qu’ils existent.';
 
 const LIVE_INTERVAL_MS = 3000;
 
@@ -525,74 +534,79 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
     ) : null;
     const showVeil = loading && !pendingRef.current.silent;
 
+    // Ce qui restreint la lecture, dit en clair quand elle revient vide.
+    const sinceSpan = TIME_PRESETS.find((p) => p.seconds === sinceSec)?.span ?? '';
+    const restrictions = [
+        levelMin && `de niveau ${LEVEL_LABELS[levelMin].toLowerCase()} ou plus`,
+        search.trim() && `contenant « ${search.trim()} »`,
+        selectedSource?.kind === 'journald' && unit.trim() && `de l’unité « ${unit.trim()} »`,
+        sinceSpan && `sur ${sinceSpan}`
+    ].filter(Boolean);
+    const clearRestrictions = () => {
+        setLevelMin('');
+        setSearch('');
+        setUnit('');
+        setSinceSec(null);
+    };
+
     return (
         <div className={styles.logsPanel}>
             <div className={styles.logToolbar}>
-                <SearchSelect
-                    value={sourceId}
-                    options={sourceOptions}
-                    filters={sourceFilters}
-                    onChange={setSourceId}
-                    aria-label='Source de logs'
-                    placeholder='Choisir une source…'
-                    searchPlaceholder='Chercher une source…'
-                    className={styles.logSourceSelect}
-                />
-                <button
-                    type='button'
-                    className={styles.logToggle}
-                    onClick={requestSources}
-                    disabled={sourcesLoading}
-                    title='Réinventorier les sources (conteneurs démarrés depuis, nouveaux fichiers…)'
-                    aria-label='Réinventorier les sources'
-                >
-                    <span className={`icon icon-refresh ${sourcesLoading ? styles.spinning : ''}`} />
-                </button>
-
-                <TextInput
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder={regex ? 'Regex…' : 'Rechercher…'}
-                    className={styles.logSearch}
-                />
-                <button
-                    type='button'
-                    className={`${styles.logToggle} ${regex ? styles.logToggleOn : ''}`}
-                    onClick={() => setRegex((v) => !v)}
-                    title='Interpréter la recherche comme une expression régulière'
-                >
-                    .*
-                </button>
-
-                <SearchSelect
-                    value={levelMin}
-                    options={LEVEL_OPTIONS}
-                    onChange={setLevelMin}
-                    aria-label='Niveau minimum'
-                    className={styles.logLevelSelect}
-                />
-
-                {selectedSource?.kind === 'journald' && (
-                    <TextInput
-                        value={unit}
-                        onChange={(e) => setUnit(e.target.value)}
-                        placeholder='unité (ex. nginx.service)'
-                        className={styles.logUnitInput}
+                <div className={styles.logToolbarStart}>
+                    <SearchSelect
+                        value={sourceId}
+                        options={sourceOptions}
+                        filters={sourceFilters}
+                        onChange={setSourceId}
+                        aria-label='Source de logs'
+                        placeholder='Choisir une source…'
+                        searchPlaceholder='Chercher une source…'
+                        className={styles.logSourceSelect}
                     />
-                )}
+                    <button
+                        type='button'
+                        className={styles.logIconBtn}
+                        onClick={requestSources}
+                        disabled={sourcesLoading}
+                        title='Réinventorier les sources (conteneurs démarrés depuis, nouveaux fichiers…)'
+                        aria-label='Réinventorier les sources'
+                    >
+                        <span className={`icon icon-refresh ${sourcesLoading ? styles.spinning : ''}`} />
+                    </button>
+                </div>
 
-                <button
-                    type='button'
-                    className={`${styles.logToggle} ${live ? styles.logToggleOn : ''}`}
-                    onClick={() => setLive((v) => !v)}
-                    title='Rafraîchissement automatique'
-                >
-                    <span className={`icon ${live ? 'icon-refresh ' + styles.spinning : 'icon-refresh'}`} />
-                    Live
-                </button>
-                <Button variant='secondary' onClick={() => runQuery('replace')} disabled={loading}>
-                    Actualiser
-                </Button>
+                <div className={styles.logToolbarEnd}>
+                    <TextInput
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        placeholder={regex ? 'Regex…' : 'Rechercher…'}
+                        className={styles.logSearch}
+                    />
+                    <button
+                        type='button'
+                        className={`${styles.logIconBtn} ${regex ? styles.logToggleOn : ''}`}
+                        onClick={() => setRegex((v) => !v)}
+                        aria-pressed={regex}
+                        title='Interpréter la recherche comme une expression régulière'
+                    >
+                        .*
+                    </button>
+                    {selectedSource?.kind === 'journald' && (
+                        <TextInput
+                            value={unit}
+                            onChange={(e) => setUnit(e.target.value)}
+                            placeholder='unité (ex. nginx.service)'
+                            className={styles.logUnitInput}
+                        />
+                    )}
+                    <SearchSelect
+                        value={levelMin}
+                        options={LEVEL_OPTIONS}
+                        onChange={setLevelMin}
+                        aria-label='Niveau minimum'
+                        className={styles.logLevelSelect}
+                    />
+                </div>
             </div>
 
             <div className={styles.logTimeRow}>
@@ -627,8 +641,29 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
                         Plus récent
                     </button>
                 </div>
-                <span className={styles.logCount}>{`${lines.length} ligne${lines.length > 1 ? 's' : ''}`}</span>
-                <CopyButton value={copyValue} label='Copier les lignes affichées' />
+                <div className={styles.logTimeEnd}>
+                    <span className={styles.logCount}>{`${lines.length} ligne${lines.length > 1 ? 's' : ''}`}</span>
+                    <CopyButton value={copyValue} label='Copier les lignes affichées' />
+                    <button
+                        type='button'
+                        className={`${styles.logTimeBtn} ${styles.logRowAction} ${live ? styles.logTimeBtnOn : ''}`}
+                        onClick={() => setLive((v) => !v)}
+                        aria-pressed={live}
+                        title='Relire le journal toutes les 3 secondes'
+                    >
+                        <span className={`icon ${live ? 'icon-pause' : 'icon-play'}`} aria-hidden='true' />
+                        Live
+                    </button>
+                    <button
+                        type='button'
+                        className={`${styles.logTimeBtn} ${styles.logRowAction}`}
+                        onClick={() => runQuery('replace')}
+                        disabled={loading}
+                    >
+                        <span className={`icon icon-refresh ${loading ? styles.spinning : ''}`} aria-hidden='true' />
+                        Actualiser
+                    </button>
+                </div>
             </div>
 
             {!sources.some((s) => s.kind === 'docker') && <p className={styles.logHint}>{NO_CONTAINERS_HINT}</p>}
@@ -638,7 +673,22 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
                     {error ? (
                         <p className={styles.logErr}>{error}</p>
                     ) : lines.length === 0 && !loading ? (
-                        <p className={styles.logHint}>Aucune ligne pour ces critères.</p>
+                        <div className={styles.logEmpty}>
+                            <p className={styles.logHint}>
+                                {restrictions.length > 0
+                                    ? `Aucune ligne ${restrictions.join(', ')}.`
+                                    : 'Ce journal est vide.'}
+                            </p>
+                            {restrictions.length > 0 ? (
+                                <Button variant='secondary' onClick={clearRestrictions}>
+                                    Retirer les filtres
+                                </Button>
+                            ) : (
+                                selectedSource?.kind === 'docker' && (
+                                    <p className={styles.logHint}>{EMPTY_CONTAINER_HINT}</p>
+                                )
+                            )}
+                        </div>
                     ) : (
                         <>
                             {anchor === 'newest' && sentinel}

@@ -561,10 +561,11 @@ fn post_filter(
     let matcher = build_matcher(filter)?;
 
     lines.retain(|l| {
+        // A line whose level can't be told (most container output) counts as
+        // info: a floor of info or below must not empty a container's log.
         if let Some(min) = min_rank {
-            match l.level {
-                Some(lv) if level_rank(lv) >= min => {}
-                _ => return false,
+            if level_rank(l.level.unwrap_or("info")) < min {
+                return false;
             }
         }
         if let (Some(s), Some(ts)) = (since_ms, l.ts) {
@@ -1166,6 +1167,28 @@ mod tests {
         let out = post_filter(lines, &filter, newest(100, 0)).unwrap();
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].message, "hello world");
+    }
+
+    #[test]
+    fn a_line_without_level_counts_as_info_for_the_floor() {
+        let unknown = LogLine {
+            ts: Some(1000),
+            level: None,
+            message: "GET /health 200".into(),
+            unit: None,
+        };
+        let at = |floor: &str| {
+            let filter = LogFilter {
+                level_min: Some(floor.into()),
+                ..Default::default()
+            };
+            post_filter(vec![unknown.clone()], &filter, newest(10, 0))
+                .unwrap()
+                .len()
+        };
+        assert_eq!(at("debug"), 1);
+        assert_eq!(at("info"), 1);
+        assert_eq!(at("warning"), 0);
     }
 
     /// Le contrat de la pagination : les deux ancres découpent la même liste par

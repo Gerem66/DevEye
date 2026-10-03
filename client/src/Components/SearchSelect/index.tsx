@@ -62,6 +62,8 @@ export interface SearchSelectProps<T extends string> {
 
 const LIST_MAX_HEIGHT = 300;
 const GAP = 4;
+/** Le panneau d'un déclencheur étroit garde des choix lisibles, sans sortir de l'écran. */
+const PANEL_MIN_WIDTH = 240;
 /** En deçà, la liste se parcourt des yeux : le champ de recherche gênerait plus qu'il n'aiderait. */
 const AUTO_SEARCH_MIN = 8;
 
@@ -195,9 +197,10 @@ export function SearchSelect<T extends string>({
             const below = window.innerHeight - rect.bottom - GAP * 2;
             const above = rect.top - GAP * 2;
             const up = below < 200 && above > below;
+            const width = Math.min(Math.max(rect.width, PANEL_MIN_WIDTH), window.innerWidth - GAP * 4);
             setAnchor({
-                left: rect.left,
-                width: rect.width,
+                left: Math.max(GAP * 2, Math.min(rect.left, window.innerWidth - width - GAP * 2)),
+                width,
                 ...(up ? { bottom: window.innerHeight - rect.top + GAP } : { top: rect.bottom + GAP }),
                 maxHeight: Math.min(LIST_MAX_HEIGHT, up ? above : below)
             });
