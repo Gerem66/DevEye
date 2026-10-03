@@ -12,6 +12,74 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: readonly ChangelogEntry[] = [
     {
+        version: '0.22.1',
+        date: '2026-10-03',
+        changes: [
+            {
+                kind: 'added',
+                text: 'Recherche des fonctionnalités : tapez une lettre sur l’accueil ou ouvrez la loupe de la barre du haut, et installez-en une d’un geste'
+            }
+        ]
+    },
+    {
+        version: '0.22.0',
+        date: '2026-10-03',
+        changes: [
+            {
+                kind: 'added',
+                text: 'CloudSync : partages chiffrés de bout en bout, dont le serveur ne peut pas lire le contenu'
+            },
+            {
+                kind: 'added',
+                text: 'CloudSync : le Journal distingue les erreurs à gérer des avis, et les règle quand le fichier passe'
+            },
+            {
+                kind: 'fixed',
+                text: 'CloudSync : reprise des gros fichiers sans relecture, et l’appareil ne passe plus hors ligne pendant'
+            },
+            {
+                kind: 'improved',
+                text: 'CloudSync : le scan dit ce qu’il écarte, la corbeille refuse un fichier modifié depuis, et chaque erreur dit sa cause'
+            },
+            {
+                kind: 'fixed',
+                text: 'CloudSync : l’état affiché suit la phase réelle, sans faux « synchronisé », et deux partages qui s’emboîtent sont refusés'
+            },
+            {
+                kind: 'fixed',
+                text: 'Appareils : les logs d’un conteneur ne se vident plus sous un filtre de niveau, et un journal vide dit quels filtres le restreignent'
+            },
+            {
+                kind: 'fixed',
+                text: 'Appareils : les mises à jour Flatpak s’appliquent aussi quand l’agent tourne en service'
+            }
+        ]
+    },
+    {
+        version: '0.21.7',
+        date: '2026-10-02',
+        changes: [
+            {
+                kind: 'improved',
+                text: 'Appareils : chaque outil de mise à jour est coché d’office, et les outils non pilotés se replient sous « Autres »'
+            },
+            {
+                kind: 'fixed',
+                text: 'Appareils : un échec de mise à jour système dit sa raison et son code en clair'
+            }
+        ]
+    },
+    {
+        version: '0.21.6',
+        date: '2026-10-02',
+        changes: [
+            {
+                kind: 'improved',
+                text: 'Appareils : le tableau des mises à jour s’affiche aussitôt, chaque outil complète son compte à son rythme, et une case par outil remplace les boutons'
+            }
+        ]
+    },
+    {
         version: '0.21.5',
         date: '2026-10-01',
         changes: [
