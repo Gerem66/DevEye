@@ -836,7 +836,11 @@ export interface Tables {
         device_id: string | null;
         rel_path: string | null;
         message: string;
+        level: 'error' | 'notice';
+        count: number;
+        first_seen: number;
         created: number;
+        resolved: number | null;
     };
     sync_exclusions: {
         id: number;

@@ -1305,10 +1305,15 @@ CREATE TABLE `sync_events` (
   `device_id` char(36) COLLATE utf8mb4_general_ci DEFAULT NULL,
   `rel_path` varchar(1024) COLLATE utf8mb4_general_ci DEFAULT NULL,
   `message` varchar(500) COLLATE utf8mb4_general_ci NOT NULL,
+  `level` enum('error','notice') COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'error',
+  `count` int unsigned NOT NULL DEFAULT '1',
+  `first_seen` bigint NOT NULL DEFAULT '0',
   `created` bigint NOT NULL DEFAULT (unix_timestamp()),
+  `resolved` bigint DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_sync_events_share` (`share_id`,`created`),
   KEY `fk_sync_event_device` (`device_id`),
+  KEY `idx_sync_events_open` (`share_id`,`resolved`,`created`),
   CONSTRAINT `fk_sync_event_device` FOREIGN KEY (`device_id`) REFERENCES `devices` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_sync_event_share` FOREIGN KEY (`share_id`) REFERENCES `sync_shares` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
