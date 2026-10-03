@@ -38,6 +38,11 @@ export function pushDismissLayer(onEscape: (() => void) | null): () => void {
     };
 }
 
+/** Une surcouche est-elle ouverte ? Une frappe destinée à l'accueil ne la traverse pas. */
+export function hasDismissLayer(): boolean {
+    return stack.length > 0;
+}
+
 /**
  * Register `onEscape` as the topmost dismissible layer while `open` is true, so
  * Escape closes overlays in tree order (innermost first). Pass `null` to absorb

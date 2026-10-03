@@ -7,6 +7,7 @@ import { cardModules, moduleClient } from '@/sdk/registry';
 import { SecrecyTimer } from './SecrecyTimer';
 import { LivePresence } from './LivePresence';
 import { PublicIp } from './PublicIp';
+import { SearchButton } from './SearchButton';
 import styles from './TopNavbar.module.css';
 
 /**
@@ -32,7 +33,8 @@ const NATIVE_TOPBAR_WIDGETS: TopbarWidgetMeta[] = [
         title: 'Mon IP',
         icon: 'globe',
         description: 'L’adresse publique par laquelle ce navigateur sort'
-    }
+    },
+    { id: 'search', title: 'Recherche', icon: 'search', description: 'Retrouver une fonctionnalité par son nom' }
 ];
 
 /**
@@ -107,6 +109,8 @@ export function renderTopbarWidget(
             return <LivePresence />;
         case 'publicIp':
             return <PublicIp editing={opts.editing} />;
+        case 'search':
+            return <SearchButton editing={opts.editing} />;
         default: {
             // Widget d'un module : l'hôte fournit le cadre et le titre, le
             // module le contenu, sans props.

@@ -30,6 +30,7 @@ import { syncThemeFromServer } from '@/stores/theme';
 import { syncHomeLayoutFromServer } from '@/stores/homeLayout';
 import { useHomeLayout, findFolder, getHomeLayout, placedFeatureIds, pruneMissingDevices } from '@/stores/homeLayout';
 import { onOpenViewRequest, onSelectWorkspaceRequest, requestOpenView } from '@/stores/viewRequest';
+import { closeSpotlight, isSpotlightOpen, openSpotlight } from '@/stores/spotlight';
 import {
     ensureRemoteReady,
     getRemoteInstances,
@@ -69,11 +70,13 @@ import { WidgetPopup, FeatureKeepAlive } from '@/Components/WidgetPopup';
 import { Wallpaper } from '@/Components/Wallpaper';
 import { SettingsPanel } from '@/Components/SettingsPanel';
 import { InfoPopup, openInfo } from '@/Components/InfoPopup';
+import { hasDismissLayer } from '@/Components/Dialog';
 import StatusPageLink from '@/Components/StatusPageLink';
 import { ConfirmDialog, type ConfirmRequest } from '@/Components/ConfirmDialog';
 import { RemoteLogin } from '@/Components/RemoteLogin';
 import { useHint } from '@/Components/Hint';
 import CreateWorkspacePopup, { CREATE_WORKSPACE_POPUP, type CreateWorkspaceChoice } from './popup-create-workspace';
+import { Spotlight } from './spotlight/Spotlight';
 
 // Structural feature views (no grid card)
 import Security from '@/Features/Security';
@@ -843,6 +846,26 @@ export default function HomePage() {
     // profile's link to the security page).
     useEffect(() => onOpenViewRequest((viewId) => handleExpand(viewId)), [handleExpand]);
 
+    // Taper une lettre sur l'accueil au repos ouvre la recherche, la lettre déjà
+    // saisie. Une vue, un dossier ou un dialogue ouvert garde ses frappes.
+    const homeIdle = !expandedWidget && !openFolder && !editing && !settingsOpen && !switching;
+    useEffect(() => {
+        if (!homeIdle) return;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.ctrlKey || e.metaKey || e.altKey || e.repeat || e.isComposing) return;
+            if (!/^\p{L}$/u.test(e.key)) return;
+            const target = e.target as HTMLElement | null;
+            const tag = target?.tagName;
+            if (target?.isContentEditable || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+            if (hasDismissLayer() || isSpotlightOpen()) return;
+            e.preventDefault();
+            openSpotlight(e.key);
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [homeIdle]);
+    useEffect(() => closeSpotlight, []);
+
     // Trois arrivées ouvrent d'elles-mêmes une vue : le retour d'un paiement
     // (`?account=<module>`, dont le module lit le reste de l'URL), le lien d'un
     // mail aux administrateurs vers la page système d'un module
@@ -1503,6 +1526,12 @@ export default function HomePage() {
                     />
                 )}
                 <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
+                <Spotlight
+                    layout={layout}
+                    canLayout={canLayout}
+                    canFeature={canFeature}
+                    onOpen={(featureId) => expandRef.current(featureId)}
+                />
 
                 {/* Shared info dialog, registered once here so any feature's "i" button
                 opens it via openInfo(). */}

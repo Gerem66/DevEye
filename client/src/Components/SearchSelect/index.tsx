@@ -12,6 +12,7 @@ import {
 import { createPortal } from 'react-dom';
 
 import { useDismissLayer } from '@/Components/Dialog';
+import { foldText } from '@/foldText';
 
 import styles from './style.module.css';
 
@@ -66,9 +67,6 @@ const GAP = 4;
 const PANEL_MIN_WIDTH = 240;
 /** En deçà, la liste se parcourt des yeux : le champ de recherche gênerait plus qu'il n'aiderait. */
 const AUTO_SEARCH_MIN = 8;
-
-/** Minuscules et sans accents : « etats » trouve « États-Unis ». */
-const fold = (text: string): string => text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
 
 /** Chaque groupe d'un seul tenant, dans l'ordre où il apparaît la première fois. */
 function byGroup<T extends string>(options: readonly SearchSelectOption<T>[]): SearchSelectOption<T>[] {
@@ -139,11 +137,11 @@ export function SearchSelect<T extends string>({
     const placed = anchor !== null;
     const ordered = useMemo(() => byGroup(options), [options]);
     const haystacks = useMemo(
-        () => ordered.map((o) => fold([o.label, o.detail ?? '', o.group ?? '', ...(o.keywords ?? [])].join(' '))),
+        () => ordered.map((o) => foldText([o.label, o.detail ?? '', o.group ?? '', ...(o.keywords ?? [])].join(' '))),
         [ordered]
     );
     const matches = useMemo(() => {
-        const terms = fold(query).split(/\s+/).filter(Boolean);
+        const terms = foldText(query).split(/\s+/).filter(Boolean);
         const kept = chips.filter((chip) => activeFilters.has(chip.value));
         return ordered.filter(
             (option, index) =>

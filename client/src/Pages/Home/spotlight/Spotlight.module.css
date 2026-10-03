@@ -1,0 +1,225 @@
+.root {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-modal);
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 18vh var(--space-md) var(--space-md);
+}
+
+.overlay {
+    position: absolute;
+    inset: 0;
+    background: color-mix(in srgb, var(--surface-popup-solid) 45%, transparent);
+    backdrop-filter: var(--glass-backdrop-scrim);
+    -webkit-backdrop-filter: var(--glass-backdrop-scrim);
+}
+
+.panel {
+    position: relative;
+    width: min(600px, 100%);
+    max-height: calc(82vh - var(--space-md));
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--surface-popup);
+    backdrop-filter: var(--glass-backdrop);
+    -webkit-backdrop-filter: var(--glass-backdrop);
+    border: 1px solid var(--glass-border-strong);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+}
+
+.field {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: 0 var(--space-md);
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.fieldIcon {
+    width: 20px;
+    color: var(--text-muted);
+}
+
+.input {
+    flex: 1;
+    min-width: 0;
+    height: 56px;
+    padding: 0;
+    background: none;
+    border: none;
+    outline: none;
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 18px;
+}
+
+.input::placeholder {
+    color: var(--text-muted);
+}
+
+.list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    margin: 0;
+    padding: var(--space-xs);
+    list-style: none;
+}
+
+.groupTitle {
+    margin: var(--space-xs) var(--space-sm) 0;
+    padding: var(--space-sm) 0 var(--space-xs);
+    border-top: 1px solid var(--glass-border);
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+li:first-child > .groupTitle {
+    margin-top: 0;
+    border-top: none;
+}
+
+.row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: background var(--transition-fast);
+}
+
+.row[data-active] {
+    background: var(--accent-bg);
+}
+
+.badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    flex-shrink: 0;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: var(--glass-bg-light);
+    color: var(--accent);
+}
+
+.text {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+}
+
+.title {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.description {
+    overflow: hidden;
+    color: var(--text-muted);
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.hit {
+    background: none;
+    color: var(--accent);
+}
+
+/* Pas encore posée : même ligne, en retrait, l'icône en simple contour. */
+.rowOther .badge {
+    border-style: dashed;
+    border-color: var(--glass-border-strong);
+    background: none;
+    color: var(--text-muted);
+}
+
+.rowOther .title {
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.install {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    flex-shrink: 0;
+    padding: 3px 10px 3px 7px;
+    border-radius: var(--radius-pill);
+    background: var(--accent-bg);
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 600;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.install > :global(.icon) {
+    width: 14px;
+}
+
+.row[data-active] .install {
+    background: var(--accent);
+    color: var(--on-accent);
+}
+
+.notInstalled {
+    flex-shrink: 0;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.empty {
+    margin: 0;
+    padding: var(--space-lg) var(--space-md);
+    color: var(--text-muted);
+    text-align: center;
+}
+
+.footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    border-top: 1px solid var(--glass-border);
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.kbd {
+    display: inline-block;
+    min-width: 20px;
+    margin-right: 2px;
+    padding: 0 5px;
+    border: 1px solid var(--glass-border-strong);
+    border-radius: 5px;
+    background: var(--surface-subtle);
+    color: var(--text-secondary);
+    font-family: var(--font-sans);
+    font-size: 11px;
+    line-height: 18px;
+    text-align: center;
+}
+
+@media (max-width: 600px) {
+    .root {
+        padding-top: 10vh;
+    }
+
+    .footer {
+        display: none;
+    }
+}

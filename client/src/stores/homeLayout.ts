@@ -316,9 +316,21 @@ export function removeTile(sectionId: string, tileId: string): void {
 }
 
 /** Refusée si la fonctionnalité est déjà quelque part sur l'accueil, dossiers compris. */
-export function addFeature(sectionId: string, featureId: HomeFeatureId): void {
-    if (placedFeatureIds(state).includes(featureId)) return;
-    appendTile(sectionId, featureId);
+export function addFeature(sectionId: string, featureId: HomeFeatureId): boolean {
+    if (placedFeatureIds(state).includes(featureId)) return false;
+    return appendTile(sectionId, featureId);
+}
+
+/**
+ * Pose la fonctionnalité sans demander où : dans la dernière section qui a de
+ * la place, sinon dans une section neuve en bas de l'accueil.
+ */
+export function installFeature(featureId: HomeFeatureId): boolean {
+    if (placedFeatureIds(state).includes(featureId)) return false;
+    const room = [...state.sections].reverse().find((s) => s.items.length < HOME_SECTION_MAX_TILES);
+    if (room) return appendTile(room.id, featureId);
+    addSectionWith('', [featureId]);
+    return true;
 }
 
 /** Même garde pour un appareil : une machine n'a qu'une carte sur l'accueil. */

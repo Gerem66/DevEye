@@ -1,0 +1,27 @@
+/* Nue au repos comme « Mon IP », marquée au survol puisqu'elle se clique. */
+.button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    height: var(--topbar-pill-height);
+    aspect-ratio: 1;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: var(--radius-pill);
+    background: none;
+    color: var(--accent);
+    cursor: pointer;
+    transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast);
+}
+
+.button:hover {
+    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+    background: var(--glass-bg-light);
+}
+
+.button :global(.icon) {
+    width: 15px;
+}
