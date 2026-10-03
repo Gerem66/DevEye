@@ -17,7 +17,9 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Result};
 
-use crate::config::{Config, CONFIG_FILE, SIBLING_FILES, SYNC_INDEX_PREFIX, SYNC_INDEX_SUFFIX};
+use crate::config::{
+    Config, CONFIG_FILE, SIBLING_FILES, SYNC_DEVICE_KEY_FILE, SYNC_INDEX_PREFIX, SYNC_INDEX_SUFFIX,
+};
 use crate::service::{self, ServiceScope};
 use crate::sync::index_cache::IndexCache;
 
@@ -282,6 +284,7 @@ fn stop_agent(dir: &Path, report: &mut Report) {
 fn wipe_config_dir(dir: &Path, report: &mut Report) {
     let mut names: Vec<String> = vec![CONFIG_FILE.to_string()];
     names.extend(SIBLING_FILES.iter().map(|n| n.to_string()));
+    names.push(SYNC_DEVICE_KEY_FILE.to_string());
     names.extend(crate::tray::USER_FILES.iter().map(|n| n.to_string()));
     names.push(crate::live_status::USER_FILE.to_string());
     // Le fichier de config peut porter un autre nom (`DEVEYE_CONFIG`).
@@ -473,6 +476,7 @@ mod tests {
         std::fs::write(dir.join(CONFIG_FILE), "server = \"x\"").unwrap();
         std::fs::write(dir.join(SIBLING_FILES[1]), "log").unwrap();
         std::fs::write(dir.join("sync-7.index.json"), "{}").unwrap();
+        std::fs::write(dir.join(SYNC_DEVICE_KEY_FILE), [0u8; 32]).unwrap();
 
         let mut report = Report::default();
         wipe_config_dir(&dir, &mut report);

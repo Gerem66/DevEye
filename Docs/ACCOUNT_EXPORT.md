@@ -54,7 +54,10 @@ JSON en UTF-8, dates ISO 8601, une longue table en tableau écrit ligne à ligne
 Le courrier hébergé est en `.eml`, les fichiers (CloudSync, sauvegardes
 « sur le serveur », images) tels quels, relus du magasin d'objets de l'hôte, son
 disque ou son bucket S3 (`deps.objects`). **Tout est en clair**, étage gardé compris : le
-titulaire a donné son mot de passe pour ça, et la popup le prévient.
+titulaire a donné son mot de passe pour ça, et la popup le prévient. Seule
+exception : un partage CloudSync chiffré de bout en bout, dont le serveur n'a
+pas la clé, ne laisse dans l'archive qu'un `LISEZMOI.txt` à la place de ses
+fichiers.
 
 Portée : l'espace personnel et les espaces partagés que le compte **possède**.
 Ceux dont il n'est que membre sont nommés dans `compte.json`, pas exportés :

@@ -561,6 +561,29 @@ pub struct SyncShareAssignment {
     /// Rétention de `.deveye-trash/`, en jours.
     #[serde(rename = "trashKeepDays", default = "default_trash_days")]
     pub trash_keep_days: u64,
+    /// Set on an end-to-end encrypted share (see `sync::e2e`).
+    #[serde(default)]
+    pub encryption: Option<SyncEncryption>,
+}
+
+/// The encryption of a share as the server pushes it to this device.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct SyncEncryption {
+    /// The share secret sealed for this device's public key (base64), `None`
+    /// while nobody has given it to this device.
+    #[serde(rename = "wrappedKey")]
+    pub wrapped_key: Option<String>,
+}
+
+/// What the server kept of an earlier encrypted push (see `sync.push`).
+#[derive(Debug, Clone, Deserialize)]
+pub struct SyncPushResume {
+    /// The blob's 17-byte header, base64.
+    pub header: String,
+    /// The 12-byte nonce of each kept block, in order, base64.
+    pub nonces: String,
+    /// Hex SHA-256 of the kept blocks' tags laid end to end.
+    pub tags: String,
 }
 
 fn default_trash_days() -> u64 {
@@ -888,6 +911,9 @@ pub enum ClientMessage {
         /// serveur récent en a besoin pour distinguer « rien à signaler » d'un
         /// scan complet qui n'a rien trouvé.
         scanned: bool,
+        /// Keyed hashes (encrypted share). Always serialized: the server
+        /// refuses an encrypted share's index without it.
+        encrypted: bool,
         #[serde(skip_serializing_if = "Option::is_none")]
         fingerprint: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -917,6 +943,10 @@ pub enum ClientMessage {
         /// Rank of the frame within a windowed push, `None` on a free stream.
         #[serde(skip_serializing_if = "Option::is_none")]
         seq: Option<u64>,
+        /// The server's partial of an encrypted push does not encrypt the file
+        /// as it is now: it must drop it.
+        #[serde(rename = "stalePartial", skip_serializing_if = "Option::is_none")]
+        stale_partial: Option<bool>,
     },
     /// CloudSync: flow-control credit — chunk `seq` of a `sync.applyChunk` landed.
     #[serde(rename = "sync.ack")]
@@ -942,6 +972,14 @@ pub enum ClientMessage {
         resume_from: Option<u64>,
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>,
+    },
+    /// CloudSync: this machine's X25519 public key, after every `sync.config`.
+    #[serde(rename = "sync.deviceKey")]
+    SyncDeviceKey {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        #[serde(rename = "publicKey")]
+        public_key: String,
     },
     /// CloudSync: the op is still being worked on locally (long re-read or
     /// hash). Sent about every 15 s; the server only re-arms its silence
@@ -1258,6 +1296,12 @@ pub enum ServerMessage {
         /// server): stream freely.
         #[serde(default)]
         window: Option<u32>,
+        /// The hash the scan announced; an encrypted push binds its blocks to it.
+        #[serde(default)]
+        hash: Option<String>,
+        /// Encrypted share resumed past 0: what the server kept.
+        #[serde(default)]
+        resume: Option<SyncPushResume>,
     },
     /// CloudSync: data frame `seq` of a windowed push was written, one credit back.
     #[serde(rename = "sync.pushAck")]
@@ -1533,6 +1577,37 @@ mod tests {
     }
 
     #[test]
+    fn an_encrypted_assignment_and_push_parse() {
+        let config = r#"{"command":"sync.config","payload":{"shares":[
+            {"shareId":1,"localPath":"/a","status":"active","exclusions":[]},
+            {"shareId":2,"localPath":"/b","status":"active","exclusions":[],"encryption":{"wrappedKey":null}},
+            {"shareId":3,"localPath":"/c","status":"active","exclusions":[],"encryption":{"wrappedKey":"k"}}
+        ]}}"#;
+        let Ok(ServerMessage::SyncConfig { shares }) = serde_json::from_str(config) else {
+            panic!("sync.config");
+        };
+        let encryption: Vec<_> = shares.iter().map(|s| s.encryption.clone()).collect();
+        assert_eq!(
+            encryption,
+            vec![
+                None,
+                Some(SyncEncryption { wrapped_key: None }),
+                Some(SyncEncryption {
+                    wrapped_key: Some("k".into())
+                })
+            ]
+        );
+
+        let push = r#"{"command":"sync.push","payload":{"opId":"o","shareId":1,"relPath":"a",
+            "startOffset":1048576,"hash":"ab","resume":{"header":"h","nonces":"n","tags":"t"}}}"#;
+        let Ok(ServerMessage::SyncPush { hash, resume, .. }) = serde_json::from_str(push) else {
+            panic!("sync.push");
+        };
+        assert_eq!(hash.as_deref(), Some("ab"));
+        assert_eq!(resume.map(|r| r.nonces), Some("n".to_string()));
+    }
+
+    #[test]
     fn chunk_seq_is_left_out_of_a_free_stream() {
         let chunk = |seq| ClientMessage::SyncChunk {
             device_id: "d".into(),
@@ -1544,6 +1619,7 @@ mod tests {
             mtime: None,
             error: None,
             seq,
+            stale_partial: None,
         };
         let free = serde_json::to_value(chunk(None)).unwrap();
         assert!(free["payload"].get("seq").is_none());

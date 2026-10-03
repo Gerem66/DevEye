@@ -17,6 +17,7 @@ export {
     handleSyncBusy,
     handleSyncChanged,
     handleSyncChunk,
+    handleSyncDeviceKey,
     handleSyncIndex,
     handleSyncOpResult
 } from './sync';

@@ -6,6 +6,7 @@
 //! locale (`.deveye-trash/`) uniquement quand le serveur — qui a déjà archivé
 //! une version vérifiée — le demande.
 
+pub mod e2e;
 pub mod fingerprint;
 pub mod index_cache;
 pub mod paths;
@@ -25,9 +26,10 @@ use tokio::sync::mpsc::Sender;
 use tracing::{debug, info, warn};
 
 use crate::exclusions::CompiledExclusions;
-use crate::protocol::{SyncIndexEntry, SyncShareAssignment};
+use crate::protocol::{SyncIndexEntry, SyncPushResume, SyncShareAssignment};
+use e2e::{DeviceKey, ShareKeys, SECRET_LEN};
 pub use transfer::ApplyFrame;
-use transfer::{PushCredits, PushWindow, SharedCaches, PUSH_ACK_TIMEOUT};
+use transfer::{PushCredits, PushWindow, SealedPush, SharedCaches, PUSH_ACK_TIMEOUT};
 use watcher::ShareWatcher;
 
 /// Événements que les tâches sync renvoient à la boucle (qui les met sur le fil).
@@ -44,6 +46,8 @@ pub enum SyncEvent {
         scanned: bool,
         /// Empreinte de l'index détenu, portée par le lot final uniquement.
         fingerprint: Option<String>,
+        /// Keyed hashes: the share is end-to-end encrypted.
+        encrypted: bool,
         error: Option<String>,
     },
     /// Un chunk d'upload (`data` brut, encodé base64 à l'envoi).
@@ -57,7 +61,11 @@ pub enum SyncEvent {
         error: Option<String>,
         /// Rank of the frame within a windowed push, `None` on a free stream.
         seq: Option<u64>,
+        /// With `error`: the server's encrypted partial must go.
+        stale_partial: bool,
     },
+    /// This machine's public key, after every `sync.config`.
+    DeviceKey { public_key: String },
     /// Crédit de flux d'un download.
     Ack { op_id: String, seq: u64 },
     /// Issue d'une op locale (`apply` | `applyDir` | `applyLocal` | `applyReady`
@@ -164,8 +172,31 @@ enum WatcherSlot {
     Failed,
 }
 
+/// What this machine can do with a share's content.
+#[derive(Clone)]
+enum ShareCrypto {
+    Plain,
+    Keyed(Arc<ShareKeys>),
+    /// An encrypted share this machine cannot open: every operation is
+    /// refused with this reason.
+    Locked(String),
+}
+
+impl ShareCrypto {
+    fn keys(&self) -> Result<Option<Arc<ShareKeys>>, String> {
+        match self {
+            Self::Plain => Ok(None),
+            Self::Keyed(keys) => Ok(Some(Arc::clone(keys))),
+            Self::Locked(reason) => Err(reason.clone()),
+        }
+    }
+}
+
+const KEY_MISSING: &str = "Ce partage est chiffré de bout en bout et cet appareil n'a pas encore sa clé : déposez-la depuis DevEye avec le code de secours du partage";
+
 struct ShareState {
     assignment: SyncShareAssignment,
+    crypto: ShareCrypto,
     /// Le démarrage de watcher que ce partage attend : le rapport d'une
     /// configuration plus ancienne est jeté.
     generation: u64,
@@ -203,10 +234,18 @@ pub struct SyncManager {
     push_credits: PushCredits,
     /// Dernière génération de watcher attribuée (0 : aucune).
     generations: u64,
+    /// Where this machine's key pair lives; `None` in tests.
+    device_key_path: Option<PathBuf>,
+    /// Loaded at the first `sync.config`, kept for the session.
+    device_key: Option<Arc<DeviceKey>>,
 }
 
 impl SyncManager {
-    pub fn new(tx: Sender<SyncEvent>, sync_roots: Vec<String>) -> Self {
+    pub fn new(
+        tx: Sender<SyncEvent>,
+        sync_roots: Vec<String>,
+        device_key_path: Option<PathBuf>,
+    ) -> Self {
         Self {
             tx,
             shares: HashMap::new(),
@@ -216,6 +255,52 @@ impl SyncManager {
             refused: HashMap::new(),
             push_credits: PushCredits::default(),
             generations: 0,
+            device_key_path,
+            device_key: None,
+        }
+    }
+
+    fn device_key(&mut self) -> Result<Arc<DeviceKey>, String> {
+        if let Some(key) = &self.device_key {
+            return Ok(Arc::clone(key));
+        }
+        let Some(path) = &self.device_key_path else {
+            return Err("clé de l'appareil indisponible".to_string());
+        };
+        let key = Arc::new(DeviceKey::load_or_create(path).map_err(|e| error_text(&e))?);
+        self.device_key = Some(Arc::clone(&key));
+        Ok(key)
+    }
+
+    /// What the assignment's encryption lets this machine do.
+    fn crypto_for(&mut self, assignment: &SyncShareAssignment) -> ShareCrypto {
+        let Some(encryption) = &assignment.encryption else {
+            return ShareCrypto::Plain;
+        };
+        let Some(wrapped) = &encryption.wrapped_key else {
+            return ShareCrypto::Locked(KEY_MISSING.to_string());
+        };
+        let opened = self
+            .device_key()
+            .and_then(|key| {
+                key.open_share_secret(assignment.share_id, wrapped)
+                    .map_err(|e| error_text(&e))
+            })
+            .and_then(|secret| {
+                if secret.len() == SECRET_LEN {
+                    Ok(secret)
+                } else {
+                    Err("clé du partage illisible".to_string())
+                }
+            });
+        match opened {
+            Ok(secret) => ShareCrypto::Keyed(Arc::new(ShareKeys::from_secret(&secret))),
+            Err(reason) => {
+                warn!(share_id = assignment.share_id, %reason, "sync: share key unusable");
+                ShareCrypto::Locked(format!(
+                    "Clé de chiffrement du partage inutilisable : {reason}"
+                ))
+            }
         }
     }
 
@@ -262,7 +347,10 @@ impl SyncManager {
                 continue;
             }
             roots.push((root, assignment.local_path.clone()));
-            let active = assignment.status == "active";
+            let crypto = self.crypto_for(&assignment);
+            // A share this machine cannot open is not watched: each change would
+            // only trigger a session bound to fail.
+            let active = assignment.status == "active" && !matches!(crypto, ShareCrypto::Locked(_));
             let previous = self.shares.remove(&share_id);
             // Le cache de scan est indexé par partage, pas par dossier : le
             // garder après un changement de `local_path` reviendrait à faire
@@ -285,6 +373,7 @@ impl SyncManager {
             // chaque attache. Un watcher en échec se retente.
             let unchanged = previous.filter(|s| {
                 s.assignment.local_path == assignment.local_path
+                    && s.assignment.encryption == assignment.encryption
                     && s.assignment.exclusions.len() == assignment.exclusions.len()
                     && s.assignment
                         .exclusions
@@ -294,7 +383,11 @@ impl SyncManager {
                     && matches!(s.watcher, WatcherSlot::Starting | WatcherSlot::Ready(_)) == active
             });
             let state = match unchanged {
-                Some(prev) => ShareState { assignment, ..prev },
+                Some(prev) => ShareState {
+                    assignment,
+                    crypto,
+                    ..prev
+                },
                 None => {
                     let clean = Arc::new(Mutex::new(CleanMark::default()));
                     let (generation, watcher) = if active {
@@ -312,6 +405,7 @@ impl SyncManager {
                     };
                     ShareState {
                         assignment,
+                        crypto,
                         generation,
                         watcher,
                         clean,
@@ -328,6 +422,17 @@ impl SyncManager {
         }
         info!(count = next.len(), "sync: config applied");
         self.shares = next;
+        match self.device_key() {
+            Ok(key) => {
+                let _ = self.tx.try_send(SyncEvent::DeviceKey {
+                    public_key: key.public_b64(),
+                });
+            }
+            Err(e) if self.device_key_path.is_some() => {
+                warn!(error = %e, "sync: device key unavailable, encrypted shares cannot open");
+            }
+            Err(_) => {}
+        }
     }
 
     /// The watcher thread's report. Only the configuration that started it
@@ -365,6 +470,18 @@ impl SyncManager {
         self.shares.get(&share_id).map(|s| &s.assignment)
     }
 
+    /// The share's root and keys, or why this machine cannot serve it.
+    fn served(&self, share_id: i64) -> Result<(PathBuf, Option<Arc<ShareKeys>>), String> {
+        let state = self
+            .shares
+            .get(&share_id)
+            .ok_or_else(|| self.unknown_reason(share_id))?;
+        Ok((
+            PathBuf::from(&state.assignment.local_path),
+            state.crypto.keys()?,
+        ))
+    }
+
     /// Scan d'un partage ; partage inconnu/en pause → lot d'erreur.
     ///
     /// `mode` vient du serveur. En `auto`, un partage que le watcher sait intact
@@ -378,6 +495,8 @@ impl SyncManager {
     /// mémorisée pour les installations doit être oubliée.
     pub fn start_scan(&mut self, session_id: String, share_id: i64, mode: Option<String>) {
         let full = mode.as_deref() != Some("auto");
+        let keys = self.shares.get(&share_id).map(|s| s.crypto.keys());
+        let encrypted = matches!(keys, Some(Ok(Some(_))));
         // La réponse rapide ne touche pas au cache d'index : les installations
         // peuvent garder le leur, puisque rien ne sera réécrit.
         if !full {
@@ -389,37 +508,41 @@ impl SyncManager {
                     done: true,
                     scanned: false,
                     fingerprint: Some(fp),
+                    encrypted,
                     error: None,
                 });
                 return;
             }
         }
         transfer::invalidate_cache(&self.caches, share_id);
-        match self.shares.get(&share_id) {
-            Some(s) if s.assignment.status == "active" => {
+        let refusal = match (self.shares.get(&share_id), keys) {
+            (Some(s), Some(Ok(keys))) if s.assignment.status == "active" => {
                 scanner::spawn_scan(
                     session_id,
                     s.assignment.clone(),
+                    keys,
                     self.tx.clone(),
                     s.events(),
                     Arc::clone(&s.clean),
                 );
+                return;
             }
-            _ => {
-                let _ = self.tx.try_send(SyncEvent::Index {
-                    session_id,
-                    share_id,
-                    entries: Vec::new(),
-                    done: true,
-                    scanned: true,
-                    fingerprint: None,
-                    error: Some(match self.refused.get(&share_id) {
-                        Some(reason) => format!("Partage refusé par cette machine : {reason}"),
-                        None => "Partage inconnu ou en pause sur cet appareil".to_string(),
-                    }),
-                });
-            }
-        }
+            (Some(s), Some(Err(reason))) if s.assignment.status == "active" => reason,
+            _ => match self.refused.get(&share_id) {
+                Some(reason) => format!("Partage refusé par cette machine : {reason}"),
+                None => "Partage inconnu ou en pause sur cet appareil".to_string(),
+            },
+        };
+        let _ = self.tx.try_send(SyncEvent::Index {
+            session_id,
+            share_id,
+            entries: Vec::new(),
+            done: true,
+            scanned: true,
+            fingerprint: None,
+            encrypted,
+            error: Some(refusal),
+        });
     }
 
     /// L'empreinte d'un partage encore propre, ou `None` s'il faut re-scanner.
@@ -452,6 +575,7 @@ impl SyncManager {
     /// transfert coupé : le serveur a gardé un partiel et ne redemande que la
     /// suite. Le plafond de débit vient de la config du partage.
     /// `window` caps the unacknowledged data frames (`None`: stream freely).
+    #[allow(clippy::too_many_arguments)]
     pub fn start_push(
         &self,
         op_id: String,
@@ -459,22 +583,27 @@ impl SyncManager {
         rel_path: String,
         start_offset: u64,
         window: Option<u32>,
+        hash: Option<String>,
+        resume: Option<SyncPushResume>,
     ) {
-        match self.assignment(share_id) {
-            Some(a) => {
+        match self.served(share_id) {
+            Ok((root, keys)) => {
+                let rate_up_bps = self.assignment(share_id).and_then(|a| a.rate_up_bps);
                 let window = window
                     .map(|w| PushWindow::register(&self.push_credits, &op_id, w, PUSH_ACK_TIMEOUT));
+                let sealed = keys.map(|keys| SealedPush { keys, hash, resume });
                 transfer::spawn_push(
                     op_id,
-                    PathBuf::from(&a.local_path),
+                    root,
                     rel_path,
                     start_offset,
-                    a.rate_up_bps,
+                    rate_up_bps,
                     window,
+                    sealed,
                     self.tx.clone(),
                 )
             }
-            None => {
+            Err(reason) => {
                 let _ = self.tx.try_send(SyncEvent::Chunk {
                     op_id,
                     data: Vec::new(),
@@ -482,8 +611,9 @@ impl SyncManager {
                     hash: None,
                     size: None,
                     mtime: None,
-                    error: Some(self.unknown_reason(share_id)),
+                    error: Some(reason),
                     seq: window.map(|_| 0),
+                    stale_partial: false,
                 });
             }
         }
@@ -514,8 +644,9 @@ impl SyncManager {
                     format!("premier chunk inattendu (seq {})", frame.seq),
                 ));
             }
-            let Some(root) = self.root_of(share_id) else {
-                return Some(apply_refused(&frame.op_id, self.unknown_reason(share_id)));
+            let (root, keys) = match self.served(share_id) {
+                Ok(served) => served,
+                Err(reason) => return Some(apply_refused(&frame.op_id, reason)),
             };
             self.applies.retain(|_, worker| !worker.is_closed());
             if self.applies.len() >= transfer::MAX_APPLY_OPS {
@@ -530,6 +661,7 @@ impl SyncManager {
                 share_id,
                 root,
                 Arc::clone(&self.caches),
+                keys,
                 frames,
                 self.tx.clone(),
             );
@@ -563,35 +695,32 @@ impl SyncManager {
         }
     }
 
-    fn root_of(&self, share_id: i64) -> Option<PathBuf> {
-        self.assignment(share_id)
-            .map(|a| PathBuf::from(&a.local_path))
-    }
-
     /// The outcome of an op refused for a share this machine does not serve.
-    fn refuse(&self, op_id: &str, op: &'static str, share_id: i64) {
+    fn refuse(&self, op_id: &str, op: &'static str, reason: String) {
         let _ = self.tx.try_send(SyncEvent::OpResult {
             op_id: op_id.to_string(),
             op,
             ok: false,
             resume_from: None,
-            error: Some(self.unknown_reason(share_id)),
+            error: Some(reason),
         });
     }
 
     /// Amorce d'un download : dit au serveur combien d'octets de clair on
     /// détient déjà pour ce hash, pour qu'il ne renvoie que la suite.
     pub fn apply_start(&self, op_id: &str, share_id: i64, hash: &str) -> SyncEvent {
-        let held = match self.assignment(share_id) {
-            Some(a) => transfer::held_bytes_for(&PathBuf::from(&a.local_path), hash),
-            None => 0,
+        let (ok, resume_from, error) = match self.served(share_id) {
+            Ok((root, _)) => (true, Some(transfer::held_bytes_for(&root, hash)), None),
+            // Unknown share: 0, its frames are refused anyway. Locked: refused now.
+            Err(_) if !self.shares.contains_key(&share_id) => (true, Some(0), None),
+            Err(reason) => (false, None, Some(reason)),
         };
         SyncEvent::OpResult {
             op_id: op_id.to_string(),
             op: "applyReady",
-            ok: true,
-            resume_from: Some(held),
-            error: None,
+            ok,
+            resume_from,
+            error,
         }
     }
 
@@ -604,11 +733,9 @@ impl SyncManager {
         kind: &str,
         mode: Option<u32>,
     ) -> SyncEvent {
-        let outcome = match self.assignment(share_id) {
-            Some(a) => transfer::apply_dir(&PathBuf::from(&a.local_path), rel_path, kind, mode)
-                .map_err(|e| error_text(&e)),
-            None => Err(self.unknown_reason(share_id)),
-        };
+        let outcome = self.served(share_id).and_then(|(root, _)| {
+            transfer::apply_dir(&root, rel_path, kind, mode).map_err(|e| error_text(&e))
+        });
         SyncEvent::OpResult {
             op_id: op_id.to_string(),
             op: "applyDir",
@@ -634,9 +761,9 @@ impl SyncManager {
         mtime: i64,
         mode: Option<u32>,
     ) {
-        let Some(root) = self.root_of(share_id) else {
-            self.refuse(op_id, "applyLocal", share_id);
-            return;
+        let (root, keys) = match self.served(share_id) {
+            Ok(served) => served,
+            Err(reason) => return self.refuse(op_id, "applyLocal", reason),
         };
         let caches = Arc::clone(&self.caches);
         let (rel_path, source_rel_path, hash) = (
@@ -655,8 +782,7 @@ impl SyncManager {
                     &caches,
                     &rel_path,
                     &source_rel_path,
-                    &hash,
-                    size,
+                    (&hash, size, keys.as_deref()),
                     mtime,
                     mode,
                     keepalive,
@@ -679,9 +805,9 @@ impl SyncManager {
         mtime: i64,
         mode: Option<u32>,
     ) {
-        let Some(root) = self.root_of(share_id) else {
-            self.refuse(op_id, "move", share_id);
-            return;
+        let (root, keys) = match self.served(share_id) {
+            Ok(served) => served,
+            Err(reason) => return self.refuse(op_id, "move", reason),
         };
         let (from_rel_path, rel_path, hash) = (
             from_rel_path.to_string(),
@@ -697,8 +823,7 @@ impl SyncManager {
                     &root,
                     &from_rel_path,
                     &rel_path,
-                    &hash,
-                    size,
+                    (&hash, size, keys.as_deref()),
                     mtime,
                     mode,
                     keepalive,
@@ -709,9 +834,9 @@ impl SyncManager {
 
     /// Suppression propagée : corbeille locale, puis `sync.opResult`.
     pub fn delete(&self, op_id: &str, share_id: i64, rel_path: &str) {
-        let Some(root) = self.root_of(share_id) else {
-            self.refuse(op_id, "delete", share_id);
-            return;
+        let root = match self.served(share_id) {
+            Ok((root, _)) => root,
+            Err(reason) => return self.refuse(op_id, "delete", reason),
         };
         let (caches, rel_path) = (Arc::clone(&self.caches), rel_path.to_string());
         // Its own thread: the rename may wait on a locked target.
@@ -756,7 +881,7 @@ mod tests {
 
     fn manager() -> (SyncManager, tokio::sync::mpsc::Receiver<SyncEvent>) {
         let (tx, rx) = tokio::sync::mpsc::channel(8);
-        (SyncManager::new(tx, Vec::new()), rx)
+        (SyncManager::new(tx, Vec::new(), None), rx)
     }
 
     fn frame(seq: u64) -> ApplyFrame {
@@ -807,6 +932,7 @@ mod tests {
             exclusions: Vec::new(),
             rate_up_bps: None,
             trash_keep_days: 30,
+            encryption: None,
         }
     }
 

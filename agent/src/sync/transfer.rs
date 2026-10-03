@@ -6,7 +6,8 @@
 //!    announces the observed hash, and the server drops the transfer if the
 //!    file moved mid-read. A resumed push (`startOffset > 0`) seeks past what
 //!    it already sent and announces no hash: the server verifies the whole
-//!    blob at finalize and is the only judge;
+//!    blob at finalize and is the only judge. On an encrypted share the agent
+//!    is the only judge instead (see `push_sealed`);
 //!  - **apply** (download): one thread per op; chunks written to
 //!    `.deveye-tmp/<hash>.part`, hash + size verified on `done`, mtime set,
 //!    then an atomic rename (same volume). The partial survives the session
@@ -32,6 +33,8 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use tracing::debug;
 
 use crate::ownership::adopt_owner;
+use crate::protocol::SyncPushResume;
+use crate::sync::e2e::{self, ContentHasher, ShareKeys, TagDigest, Unsealer, BLOCK, NONCE_LEN};
 use crate::sync::index_cache::IndexCache;
 use crate::sync::paths::confined_join;
 use crate::sync::scanner::hash_file;
@@ -100,10 +103,10 @@ fn partial_path(root: &Path, hash: &str) -> Result<PathBuf> {
 }
 
 /// Ce qu'un partiel existant apporte à une reprise : les octets réutilisables
-/// et le SHA-256 courant qui va avec.
+/// et le hachage courant qui va avec.
 pub struct HeldPrefix {
     pub bytes: u64,
-    pub hasher: Sha256,
+    pub hasher: ContentHasher,
 }
 
 /// Re-reads the first `want` bytes of a partial to rebuild the running SHA-256.
@@ -115,11 +118,12 @@ pub struct HeldPrefix {
 pub fn resumable_prefix(
     tmp_path: &Path,
     want: u64,
+    keys: Option<&ShareKeys>,
     keepalive: &mut Keepalive,
 ) -> Result<HeldPrefix> {
     let empty = HeldPrefix {
         bytes: 0,
-        hasher: Sha256::new(),
+        hasher: ContentHasher::new(keys),
     };
     if want == 0 {
         return Ok(empty);
@@ -130,7 +134,7 @@ pub fn resumable_prefix(
     if file.metadata().map(|m| m.len()).unwrap_or(0) < want {
         return Ok(empty); // Fewer bytes than the server believes: start over.
     }
-    let mut hasher = Sha256::new();
+    let mut hasher = ContentHasher::new(keys);
     let mut bytes = 0u64;
     let mut buf = vec![0u8; PUSH_CHUNK];
     while bytes < want {
@@ -299,7 +303,29 @@ impl Drop for PushWindow {
     }
 }
 
+/// What an encrypted push needs on top of a plain one.
+pub struct SealedPush {
+    pub keys: Arc<ShareKeys>,
+    /// The hash the scan announced, which every block is bound to.
+    pub hash: Option<String>,
+    pub resume: Option<SyncPushResume>,
+}
+
+/// The server's partial of an encrypted push does not encrypt the file as it
+/// is now: building on it would store a blob that opens to another content.
+#[derive(Debug)]
+pub struct StalePartial;
+
+impl std::fmt::Display for StalePartial {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("fichier modifié depuis le début du transfert : il repartira de zéro")
+    }
+}
+
+impl std::error::Error for StalePartial {}
+
 /// Lit un fichier local en chunks sur un thread dédié et les streame.
+#[allow(clippy::too_many_arguments)]
 pub fn spawn_push(
     op_id: String,
     root: PathBuf,
@@ -307,22 +333,37 @@ pub fn spawn_push(
     start_offset: u64,
     rate_up_bps: Option<u64>,
     window: Option<PushWindow>,
+    sealed: Option<SealedPush>,
     tx: Sender<SyncEvent>,
 ) {
     std::thread::spawn(move || {
         let _busy = crate::live_status::begin(crate::live_status::Task::SyncTransfer);
         let mut next_seq = 0u64;
-        let outcome = push(
-            &op_id,
-            &root,
-            &rel_path,
-            start_offset,
-            rate_up_bps,
-            window.as_ref(),
-            &mut next_seq,
-            &tx,
-        );
+        let outcome = match &sealed {
+            Some(sealed) => push_sealed(
+                &op_id,
+                &root,
+                &rel_path,
+                start_offset,
+                sealed,
+                rate_up_bps,
+                window.as_ref(),
+                &mut next_seq,
+                &tx,
+            ),
+            None => push(
+                &op_id,
+                &root,
+                &rel_path,
+                start_offset,
+                rate_up_bps,
+                window.as_ref(),
+                &mut next_seq,
+                &tx,
+            ),
+        };
         if let Err(e) = outcome {
+            let stale = e.downcast_ref::<StalePartial>().is_some();
             let _ = tx.blocking_send(SyncEvent::Chunk {
                 op_id,
                 data: Vec::new(),
@@ -332,9 +373,186 @@ pub fn spawn_push(
                 mtime: None,
                 error: Some(error_text(&e)),
                 seq: window.as_ref().map(|_| next_seq),
+                stale_partial: stale,
             });
         }
     });
+}
+
+/// Reads until `buf` is full, short only at the end of the file.
+fn read_full(file: &mut std::fs::File, buf: &mut [u8]) -> std::io::Result<usize> {
+    let mut filled = 0;
+    while filled < buf.len() {
+        match file.read(&mut buf[filled..]) {
+            Ok(0) => break,
+            Ok(n) => filled += n,
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(filled)
+}
+
+/// One data frame of a push, within the window and the rate cap.
+fn send_push_frame(
+    op_id: &str,
+    data: Vec<u8>,
+    window: Option<&PushWindow>,
+    throttle: &mut Option<UploadThrottle>,
+    next_seq: &mut u64,
+    tx: &Sender<SyncEvent>,
+) -> Result<()> {
+    if let Some(w) = window {
+        w.credit.wait_for(*next_seq, w.size, w.timeout)?;
+    }
+    if let Some(t) = throttle.as_mut() {
+        t.take(data.len() as u64);
+    }
+    tx.blocking_send(SyncEvent::Chunk {
+        op_id: op_id.to_string(),
+        data,
+        done: false,
+        hash: None,
+        size: None,
+        mtime: None,
+        error: None,
+        seq: window.map(|_| *next_seq),
+        stale_partial: false,
+    })
+    .map_err(|_| anyhow::anyhow!("session terminée"))?;
+    *next_seq += 1;
+    Ok(())
+}
+
+/// An encrypted push. The whole file is read even on a resume: its keyed name
+/// covers all of it, and the server cannot check it. The blocks the server
+/// kept are re-sealed under their own nonces and their tags compared, so a
+/// file changed since the first attempt never ends up spliced; the rest goes
+/// out under fresh random nonces, which a retry therefore never reuses.
+#[allow(clippy::too_many_arguments)]
+fn push_sealed(
+    op_id: &str,
+    root: &Path,
+    rel_path: &str,
+    start_offset: u64,
+    sealed: &SealedPush,
+    rate_up_bps: Option<u64>,
+    window: Option<&PushWindow>,
+    next_seq: &mut u64,
+    tx: &Sender<SyncEvent>,
+) -> Result<()> {
+    let Some(expected) = sealed.hash.as_deref() else {
+        bail!("hash attendu absent : serveur trop ancien pour un partage chiffré");
+    };
+    let keys = &sealed.keys;
+    let name = e2e::name_bytes(expected)?;
+    let path = confined_join(root, rel_path)?;
+    let mut file =
+        std::fs::File::open(&path).with_context(|| format!("ouverture de {rel_path}"))?;
+    let mtime = mtime_millis(&file.metadata().context("métadonnées illisibles")?);
+
+    if !start_offset.is_multiple_of(BLOCK as u64) {
+        bail!("reprise hors d'une frontière de bloc ({start_offset})");
+    }
+    let kept = (start_offset / BLOCK as u64) as usize;
+    let b64 = &base64::engine::general_purpose::STANDARD;
+    let (header, blob_id, nonces, tags) = if kept == 0 {
+        let header = e2e::new_header();
+        (
+            Some(header),
+            e2e::parse_header(&header)?,
+            Vec::new(),
+            String::new(),
+        )
+    } else {
+        let Some(resume) = &sealed.resume else {
+            bail!("reprise demandée sans l'état du partiel");
+        };
+        let header = b64
+            .decode(resume.header.as_bytes())
+            .map_err(|_| anyhow::anyhow!("en-tête de reprise illisible"))?;
+        let nonces = b64
+            .decode(resume.nonces.as_bytes())
+            .map_err(|_| anyhow::anyhow!("nonces de reprise illisibles"))?;
+        if nonces.len() != kept * NONCE_LEN {
+            bail!(
+                "reprise incohérente ({kept} blocs, {} octets de nonces)",
+                nonces.len()
+            );
+        }
+        (
+            None,
+            e2e::parse_header(&header)?,
+            nonces,
+            resume.tags.clone(),
+        )
+    };
+
+    let mut hasher = ContentHasher::new(Some(keys));
+    let mut keepalive = Keepalive::new(tx.clone(), op_id);
+    let mut buf = vec![0u8; BLOCK];
+    if kept > 0 {
+        let mut digest = TagDigest::new();
+        for (index, nonce) in nonces.chunks(NONCE_LEN).enumerate() {
+            if read_full(&mut file, &mut buf).with_context(|| format!("lecture de {rel_path}"))?
+                < BLOCK
+            {
+                return Err(StalePartial.into());
+            }
+            hasher.update(&buf);
+            let nonce: [u8; NONCE_LEN] = nonce.try_into().expect("chunks of NONCE_LEN");
+            digest.add(&keys.seal_block(&blob_id, &name, index as u64, false, nonce, &buf));
+            keepalive.tick()?;
+        }
+        if digest.finish() != tags {
+            return Err(StalePartial.into());
+        }
+    }
+
+    let mut throttle = rate_up_bps.filter(|b| *b > 0).map(UploadThrottle::new);
+    let mut out: Vec<u8> = header.map(|h| h.to_vec()).unwrap_or_default();
+    let mut index = kept as u64;
+    let mut size = start_offset;
+    loop {
+        let n = read_full(&mut file, &mut buf).with_context(|| format!("lecture de {rel_path}"))?;
+        // Every block but the last carries a full BLOCK: a file that ends on a
+        // boundary still gets an empty last block.
+        let last = n < BLOCK;
+        hasher.update(&buf[..n]);
+        size += n as u64;
+        out.extend(keys.seal_block(&blob_id, &name, index, last, e2e::random_nonce(), &buf[..n]));
+        index += 1;
+        while out.len() >= PUSH_CHUNK {
+            let rest = out.split_off(PUSH_CHUNK);
+            send_push_frame(
+                op_id,
+                std::mem::replace(&mut out, rest),
+                window,
+                &mut throttle,
+                next_seq,
+                tx,
+            )?;
+        }
+        if last {
+            break;
+        }
+    }
+    if !out.is_empty() {
+        send_push_frame(op_id, out, window, &mut throttle, next_seq, tx)?;
+    }
+    tx.blocking_send(SyncEvent::Chunk {
+        op_id: op_id.to_string(),
+        data: Vec::new(),
+        done: true,
+        hash: Some(hasher.finish()),
+        size: Some(size),
+        mtime: Some(mtime),
+        error: None,
+        seq: window.map(|_| *next_seq),
+        stale_partial: false,
+    })
+    .map_err(|_| anyhow::anyhow!("session terminée"))?;
+    Ok(())
 }
 
 /// `next_seq` is the rank of the next frame, left at the failed one on error.
@@ -396,6 +614,7 @@ fn push(
             mtime: None,
             error: None,
             seq: window.map(|_| *next_seq),
+            stale_partial: false,
         })
         .map_err(|_| anyhow::anyhow!("session terminée"))?;
         *next_seq += 1;
@@ -410,6 +629,7 @@ fn push(
         mtime: Some(mtime),
         error: None,
         seq: window.map(|_| *next_seq),
+        stale_partial: false,
     })
     .map_err(|_| anyhow::anyhow!("session terminée"))?;
     Ok(())
@@ -469,9 +689,11 @@ struct ApplyState {
     /// open file.
     file: Option<std::fs::File>,
     tmp_path: PathBuf,
-    hasher: Sha256,
+    hasher: ContentHasher,
     written: u64,
     next_seq: u64,
+    /// Encrypted share: the frames carry the sealed blob, opened here.
+    unsealer: Option<Unsealer>,
 }
 
 /// Why a download failed, and what it means for the partial.
@@ -493,6 +715,10 @@ impl ApplyFailure {
     fn retry(e: anyhow::Error) -> Self {
         Self::Retryable(error_text(&e))
     }
+
+    fn corrupt(e: anyhow::Error) -> Self {
+        Self::Corrupt(error_text(&e))
+    }
 }
 
 /// Installs one download on its own thread: frames arrive through `frames` in
@@ -504,6 +730,7 @@ pub fn spawn_apply(
     share_id: i64,
     root: PathBuf,
     caches: SharedCaches,
+    keys: Option<Arc<ShareKeys>>,
     mut frames: Receiver<ApplyFrame>,
     tx: Sender<SyncEvent>,
 ) {
@@ -513,7 +740,13 @@ pub fn spawn_apply(
         let mut state: Option<ApplyState> = None;
         while let Some(frame) = frames.blocking_recv() {
             let seq = frame.seq;
-            match apply_frame(&mut state, share_id, &root, &caches, frame, &mut keepalive) {
+            let target = ApplyTarget {
+                share_id,
+                root: &root,
+                caches: &caches,
+                keys: keys.as_ref(),
+            };
+            match apply_frame(&mut state, &target, frame, &mut keepalive) {
                 Ok(false) => {
                     let ack = SyncEvent::Ack {
                         op_id: op_id.clone(),
@@ -551,17 +784,23 @@ fn apply_result(op_id: &str, error: Option<String>) -> SyncEvent {
     }
 }
 
+/// Where a download lands, and how its share names and seals content.
+struct ApplyTarget<'a> {
+    share_id: i64,
+    root: &'a Path,
+    caches: &'a SharedCaches,
+    keys: Option<&'a Arc<ShareKeys>>,
+}
+
 /// One frame; on a failure the partial is settled here, so the caller only
 /// reports. `Ok(true)` = final frame installed, `Ok(false)` = chunk written.
 fn apply_frame(
     state: &mut Option<ApplyState>,
-    share_id: i64,
-    root: &Path,
-    caches: &SharedCaches,
+    target: &ApplyTarget,
     frame: ApplyFrame,
     keepalive: &mut Keepalive,
 ) -> Result<bool, ApplyFailure> {
-    let outcome = apply_inner(state, share_id, root, caches, &frame, keepalive);
+    let outcome = apply_inner(state, target, &frame, keepalive);
     if let Err(failure) = &outcome {
         if let Some(st) = state.take() {
             drop(st.file);
@@ -573,9 +812,7 @@ fn apply_frame(
 
 fn apply_inner(
     state: &mut Option<ApplyState>,
-    share_id: i64,
-    root: &Path,
-    caches: &SharedCaches,
+    target: &ApplyTarget,
     frame: &ApplyFrame,
     keepalive: &mut Keepalive,
 ) -> Result<bool, ApplyFailure> {
@@ -586,7 +823,7 @@ fn apply_inner(
                 frame.seq
             )));
         }
-        *state = Some(open_partial(root, frame, keepalive)?);
+        *state = Some(open_partial(target.root, frame, target.keys, keepalive)?);
     }
     let st = state.as_mut().expect("opened above");
     if frame.seq != st.next_seq {
@@ -604,12 +841,21 @@ fn apply_inner(
     let data = base64::engine::general_purpose::STANDARD
         .decode(frame.data.as_bytes())
         .map_err(|_| ApplyFailure::Retryable("chunk illisible (base64)".to_string()))?;
-    if !data.is_empty() {
-        file.write_all(&data)
+    let mut plain = match st.unsealer.as_mut() {
+        Some(unsealer) => unsealer.push(&data).map_err(ApplyFailure::corrupt)?,
+        None => data,
+    };
+    if frame.done {
+        if let Some(unsealer) = st.unsealer.take() {
+            plain.extend(unsealer.finish().map_err(ApplyFailure::corrupt)?);
+        }
+    }
+    if !plain.is_empty() {
+        file.write_all(&plain)
             .context("écriture du chunk")
             .map_err(ApplyFailure::retry)?;
-        st.hasher.update(&data);
-        st.written += data.len() as u64;
+        st.hasher.update(&plain);
+        st.written += plain.len() as u64;
     }
     if !frame.done {
         return Ok(false);
@@ -619,7 +865,7 @@ fn apply_inner(
     file.sync_all()
         .context("fsync du temporaire")
         .map_err(ApplyFailure::retry)?;
-    let actual = format!("{:x}", st.hasher.clone().finalize());
+    let actual = st.hasher.clone().finish();
     if actual != frame.expected_hash || st.written != frame.expected_size {
         return Err(ApplyFailure::Corrupt(
             "contenu reçu invalide (hash ou taille inattendus)".to_string(),
@@ -627,7 +873,13 @@ fn apply_inner(
     }
     // Closed before the rename: Windows refuses to rename an open file.
     st.file = None;
-    install(root, share_id, caches, &st.tmp_path, frame)?;
+    install(
+        target.root,
+        target.share_id,
+        target.caches,
+        &st.tmp_path,
+        frame,
+    )?;
     *state = None;
     Ok(true)
 }
@@ -638,12 +890,31 @@ fn apply_inner(
 fn open_partial(
     root: &Path,
     frame: &ApplyFrame,
+    keys: Option<&Arc<ShareKeys>>,
     keepalive: &mut Keepalive,
 ) -> Result<ApplyState, ApplyFailure> {
     // Named by HASH, not by `opId`: that is what lets the next cycle find it.
     let tmp_path = partial_path(root, &frame.expected_hash).map_err(ApplyFailure::retry)?;
-    let held =
-        resumable_prefix(&tmp_path, frame.resume_from, keepalive).map_err(ApplyFailure::retry)?;
+    let held = resumable_prefix(&tmp_path, frame.resume_from, keys.map(|k| &**k), keepalive)
+        .map_err(ApplyFailure::retry)?;
+    // A sealed stream starts at the block of `resume_from`, which the server
+    // aligned on a block: a prefix held short of it cannot be completed.
+    let unsealer = match keys {
+        Some(keys) => {
+            if !frame.resume_from.is_multiple_of(BLOCK as u64) || held.bytes != frame.resume_from {
+                return Err(ApplyFailure::Corrupt(
+                    "partiel local inutilisable : le téléchargement repart de zéro".to_string(),
+                ));
+            }
+            let name = e2e::name_bytes(&frame.expected_hash).map_err(ApplyFailure::retry)?;
+            Some(Unsealer::new(
+                Arc::clone(keys),
+                name,
+                frame.resume_from / BLOCK as u64,
+            ))
+        }
+        None => None,
+    };
     let mut file = std::fs::OpenOptions::new()
         .create(true)
         .write(true)
@@ -665,6 +936,7 @@ fn open_partial(
         hasher: held.hasher,
         written: held.bytes,
         next_seq: 0,
+        unsealer,
     })
 }
 
@@ -832,6 +1104,7 @@ fn verified_source(
     rel_path: &str,
     hash: &str,
     size: u64,
+    keys: Option<&ShareKeys>,
     keepalive: &mut Keepalive,
 ) -> Result<PathBuf> {
     let src = confined_join(root, rel_path)?;
@@ -842,7 +1115,7 @@ fn verified_source(
     if meta.len() != size {
         bail!("taille de la source inattendue");
     }
-    if hash_file(&src, Some(keepalive))? != hash {
+    if hash_file(&src, keys, Some(keepalive))? != hash {
         bail!("contenu de la source inattendu");
     }
     Ok(src)
@@ -859,13 +1132,13 @@ pub fn apply_local(
     caches: &SharedCaches,
     rel_path: &str,
     source_rel_path: &str,
-    hash: &str,
-    size: u64,
+    content: (&str, u64, Option<&ShareKeys>),
     mtime: i64,
     mode: Option<u32>,
     keepalive: &mut Keepalive,
 ) -> Result<()> {
-    let src = verified_source(root, source_rel_path, hash, size, keepalive)?;
+    let (hash, size, keys) = content;
+    let src = verified_source(root, source_rel_path, hash, size, keys, keepalive)?;
 
     let dest = confined_join(root, rel_path)?;
     // Same overwrite guard as a download: a local edit since the scan is not ours to erase.
@@ -913,13 +1186,13 @@ pub fn move_file(
     root: &Path,
     from_rel_path: &str,
     rel_path: &str,
-    hash: &str,
-    size: u64,
+    content: (&str, u64, Option<&ShareKeys>),
     mtime: i64,
     mode: Option<u32>,
     keepalive: &mut Keepalive,
 ) -> Result<()> {
-    let src = verified_source(root, from_rel_path, hash, size, keepalive)?;
+    let (hash, size, keys) = content;
+    let src = verified_source(root, from_rel_path, hash, size, keys, keepalive)?;
 
     let dest = confined_join(root, rel_path)?;
     if std::fs::symlink_metadata(&dest).is_ok() {
@@ -1090,7 +1363,7 @@ mod tests {
     fn resumable_prefix_is_empty_when_there_is_no_partial() {
         let (mut keepalive, _rx) = keepalive(Duration::MAX);
         assert_eq!(
-            resumable_prefix(Path::new("/tmp/deveye-nope.part"), 10, &mut keepalive)
+            resumable_prefix(Path::new("/tmp/deveye-nope.part"), 10, None, &mut keepalive)
                 .unwrap()
                 .bytes,
             0
@@ -1107,18 +1380,25 @@ mod tests {
         // Le serveur décide de reprendre à 7 : on ne relit QUE ces 7 octets,
         // même si le temporaire en contient davantage.
         let (mut keepalive, _rx) = keepalive(Duration::MAX);
-        let held = resumable_prefix(&path, 7, &mut keepalive).unwrap();
+        let held = resumable_prefix(&path, 7, None, &mut keepalive).unwrap();
         assert_eq!(held.bytes, 7);
         let expected = format!("{:x}", Sha256::digest(b"bonjour"));
-        assert_eq!(format!("{:x}", held.hasher.finalize()), expected);
+        assert_eq!(held.hasher.finish(), expected);
 
         // Serveur qui croit l'agent plus avancé qu'il ne l'est : on repart de
         // zéro plutôt que de bâtir sur des octets absents.
         assert_eq!(
-            resumable_prefix(&path, 999, &mut keepalive).unwrap().bytes,
+            resumable_prefix(&path, 999, None, &mut keepalive)
+                .unwrap()
+                .bytes,
             0
         );
-        assert_eq!(resumable_prefix(&path, 0, &mut keepalive).unwrap().bytes, 0);
+        assert_eq!(
+            resumable_prefix(&path, 0, None, &mut keepalive)
+                .unwrap()
+                .bytes,
+            0
+        );
 
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -1235,6 +1515,7 @@ mod tests {
             0,
             None,
             Some(window),
+            None,
             tx,
         );
 
@@ -1283,6 +1564,7 @@ mod tests {
             0,
             None,
             None,
+            None,
             tx,
         );
         let mut data = 0;
@@ -1317,6 +1599,7 @@ mod tests {
             start,
             None,
             None,
+            None,
             tx,
         );
         let mut sent = 0u64;
@@ -1349,6 +1632,7 @@ mod tests {
             len,
             None,
             None,
+            None,
             tx,
         );
         let frame = next_frame(&mut rx);
@@ -1366,6 +1650,7 @@ mod tests {
             dir.path().to_path_buf(),
             "f.bin".into(),
             len + 1,
+            None,
             None,
             None,
             tx,
@@ -1391,9 +1676,9 @@ mod tests {
         let bytes = vec![7u8; 4 * PUSH_CHUNK];
         std::fs::write(&path, &bytes).unwrap();
         let (mut keepalive, mut rx) = keepalive(Duration::ZERO);
-        let held = resumable_prefix(&path, bytes.len() as u64, &mut keepalive).unwrap();
+        let held = resumable_prefix(&path, bytes.len() as u64, None, &mut keepalive).unwrap();
         assert_eq!(held.bytes, bytes.len() as u64);
-        assert_eq!(format!("{:x}", held.hasher.finalize()), sha(&bytes));
+        assert_eq!(held.hasher.finish(), sha(&bytes));
         match rx.try_recv() {
             Ok(SyncEvent::Busy { op_id }) => assert_eq!(op_id, "op"),
             _ => panic!("expected a busy frame"),
@@ -1408,7 +1693,7 @@ mod tests {
         std::fs::write(&path, &bytes).unwrap();
         let (mut keepalive, rx) = keepalive(Duration::ZERO);
         drop(rx);
-        assert!(resumable_prefix(&path, bytes.len() as u64, &mut keepalive).is_err());
+        assert!(resumable_prefix(&path, bytes.len() as u64, None, &mut keepalive).is_err());
         assert_eq!(
             std::fs::metadata(&path).unwrap().len(),
             bytes.len() as u64,
@@ -1431,6 +1716,7 @@ mod tests {
             1,
             root.to_path_buf(),
             SharedCaches::default(),
+            None,
             frames_rx,
             tx,
         );
@@ -1591,6 +1877,7 @@ mod tests {
             0,
             None,
             Some(window),
+            None,
             tx,
         );
         let first = next_frame(&mut rx);
@@ -1700,6 +1987,234 @@ mod tests {
     fn error_text_joins_the_cause_chain() {
         let err = anyhow::anyhow!("Permission denied").context("installation");
         assert_eq!(error_text(&err), "installation : Permission denied");
+    }
+
+    /// Every frame of a push until the terminal one: data bytes, then the end.
+    fn collect_push(rx: &mut tokio::sync::mpsc::Receiver<SyncEvent>) -> (Vec<u8>, SyncEvent) {
+        let mut data = Vec::new();
+        loop {
+            match rx.blocking_recv().expect("frame") {
+                SyncEvent::Chunk {
+                    data: bytes,
+                    done: false,
+                    ..
+                } => data.extend(bytes),
+                SyncEvent::Busy { .. } => {}
+                end => return (data, end),
+            }
+        }
+    }
+
+    fn sealed_keys() -> Arc<ShareKeys> {
+        Arc::new(ShareKeys::from_secret(&[4u8; e2e::SECRET_LEN]))
+    }
+
+    fn keyed_name(keys: &ShareKeys, content: &[u8]) -> String {
+        let mut h = ContentHasher::new(Some(keys));
+        h.update(content);
+        h.finish()
+    }
+
+    fn push_sealed_file(
+        dir: &Path,
+        keys: &Arc<ShareKeys>,
+        hash: &str,
+        start: u64,
+        resume: Option<SyncPushResume>,
+    ) -> (Vec<u8>, SyncEvent) {
+        let (tx, mut rx) = tokio::sync::mpsc::channel(256);
+        spawn_push(
+            "op".into(),
+            dir.to_path_buf(),
+            "f.bin".into(),
+            start,
+            None,
+            None,
+            Some(SealedPush {
+                keys: Arc::clone(keys),
+                hash: Some(hash.to_string()),
+                resume,
+            }),
+            tx,
+        );
+        collect_push(&mut rx)
+    }
+
+    /// Nonces and tag digest of the first `blocks` blocks of a sealed blob.
+    fn resume_of(sealed: &[u8], blocks: usize) -> SyncPushResume {
+        let b64 = &base64::engine::general_purpose::STANDARD;
+        let mut nonces = Vec::new();
+        let mut digest = TagDigest::new();
+        for i in 0..blocks {
+            let at = e2e::HEADER_LEN + i * e2e::SEALED_FULL;
+            let block = &sealed[at..at + e2e::SEALED_FULL];
+            nonces.extend_from_slice(&block[..NONCE_LEN]);
+            digest.add(block);
+        }
+        SyncPushResume {
+            header: b64.encode(&sealed[..e2e::HEADER_LEN]),
+            nonces: b64.encode(nonces),
+            tags: digest.finish(),
+        }
+    }
+
+    #[test]
+    fn a_sealed_push_installs_through_a_sealed_apply() {
+        let src = tempfile::tempdir().unwrap();
+        let content: Vec<u8> = (0..2 * BLOCK + 77).map(|i| (i % 253) as u8).collect();
+        std::fs::write(src.path().join("f.bin"), &content).unwrap();
+        let keys = sealed_keys();
+        let hash = keyed_name(&keys, &content);
+
+        let (sealed, end) = push_sealed_file(src.path(), &keys, &hash, 0, None);
+        let SyncEvent::Chunk {
+            hash: announced,
+            size,
+            error: None,
+            ..
+        } = end
+        else {
+            panic!("push failed");
+        };
+        assert_eq!(announced.as_deref(), Some(hash.as_str()));
+        assert_eq!(size, Some(content.len() as u64));
+        assert!(
+            !sealed.windows(64).any(|w| w == &content[..64]),
+            "no plaintext on the wire"
+        );
+
+        let dest = tempfile::tempdir().unwrap();
+        let (frames_tx, frames_rx) = tokio::sync::mpsc::channel(APPLY_QUEUE);
+        let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+        spawn_apply(
+            "op".into(),
+            1,
+            dest.path().to_path_buf(),
+            SharedCaches::default(),
+            Some(Arc::clone(&keys)),
+            frames_rx,
+            tx,
+        );
+        let parts: Vec<&[u8]> = sealed.chunks(PUSH_CHUNK).collect();
+        for (seq, part) in parts.iter().enumerate() {
+            let frame = ApplyFrame {
+                expected_size: content.len() as u64,
+                ..apply_frame_for("op", seq as u64, part, false, &hash, 0)
+            };
+            frames_tx.blocking_send(frame).unwrap();
+            expect_ack(&mut rx, seq as u64);
+        }
+        let last = ApplyFrame {
+            expected_size: content.len() as u64,
+            ..apply_frame_for("op", parts.len() as u64, &[], true, &hash, 0)
+        };
+        frames_tx.blocking_send(last).unwrap();
+        expect_ack(&mut rx, parts.len() as u64);
+        let (ok, error) = expect_result(&mut rx);
+        assert!(ok, "{error:?}");
+        assert_eq!(std::fs::read(dest.path().join("a.bin")).unwrap(), content);
+    }
+
+    #[test]
+    fn a_sealed_resume_builds_on_kept_blocks_and_refuses_a_changed_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let content: Vec<u8> = (0..3 * BLOCK + 5).map(|i| (i % 249) as u8).collect();
+        std::fs::write(dir.path().join("f.bin"), &content).unwrap();
+        let keys = sealed_keys();
+        let hash = keyed_name(&keys, &content);
+        let (first, _) = push_sealed_file(dir.path(), &keys, &hash, 0, None);
+
+        // The server kept two blocks: only the rest crosses the wire, and the
+        // spliced blob opens to the file.
+        let kept = 2 * BLOCK as u64;
+        let (tail, end) =
+            push_sealed_file(dir.path(), &keys, &hash, kept, Some(resume_of(&first, 2)));
+        let SyncEvent::Chunk {
+            hash: announced,
+            error: None,
+            ..
+        } = end
+        else {
+            panic!("resumed push failed");
+        };
+        assert_eq!(announced.as_deref(), Some(hash.as_str()));
+        let mut spliced = first[..e2e::HEADER_LEN + 2 * e2e::SEALED_FULL].to_vec();
+        spliced.extend(tail);
+        let mut unsealer = Unsealer::new(Arc::clone(&keys), e2e::name_bytes(&hash).unwrap(), 0);
+        let mut opened = unsealer.push(&spliced).unwrap();
+        opened.extend(unsealer.finish().unwrap());
+        assert_eq!(opened, content);
+
+        // The file changed in its kept part since: the partial must go.
+        let mut changed = content.clone();
+        changed[10] ^= 1;
+        std::fs::write(dir.path().join("f.bin"), &changed).unwrap();
+        let (sent, end) =
+            push_sealed_file(dir.path(), &keys, &hash, kept, Some(resume_of(&first, 2)));
+        assert!(sent.is_empty(), "nothing sent over a stale partial");
+        let SyncEvent::Chunk {
+            error: Some(_),
+            stale_partial: true,
+            ..
+        } = end
+        else {
+            panic!("expected a stale partial");
+        };
+    }
+
+    #[test]
+    fn a_sealed_resume_of_an_aligned_file_sends_only_its_empty_last_block() {
+        let dir = tempfile::tempdir().unwrap();
+        let content: Vec<u8> = (0..2 * BLOCK).map(|i| (i % 241) as u8).collect();
+        std::fs::write(dir.path().join("f.bin"), &content).unwrap();
+        let keys = sealed_keys();
+        let hash = keyed_name(&keys, &content);
+        let (first, _) = push_sealed_file(dir.path(), &keys, &hash, 0, None);
+        let (tail, end) = push_sealed_file(
+            dir.path(),
+            &keys,
+            &hash,
+            2 * BLOCK as u64,
+            Some(resume_of(&first, 2)),
+        );
+        assert!(matches!(end, SyncEvent::Chunk { error: None, .. }));
+        assert_eq!(tail.len(), NONCE_LEN + e2e::TAG_LEN, "one empty last block");
+    }
+
+    #[test]
+    fn a_sealed_apply_refuses_a_blob_under_another_name() {
+        let src = tempfile::tempdir().unwrap();
+        let content = vec![9u8; 1000];
+        std::fs::write(src.path().join("f.bin"), &content).unwrap();
+        let keys = sealed_keys();
+        let hash = keyed_name(&keys, &content);
+        let (sealed, _) = push_sealed_file(src.path(), &keys, &hash, 0, None);
+
+        let dest = tempfile::tempdir().unwrap();
+        let (frames_tx, frames_rx) = tokio::sync::mpsc::channel(APPLY_QUEUE);
+        let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+        spawn_apply(
+            "op".into(),
+            1,
+            dest.path().to_path_buf(),
+            SharedCaches::default(),
+            Some(keys),
+            frames_rx,
+            tx,
+        );
+        let other = "ab".repeat(32);
+        let frame = ApplyFrame {
+            expected_size: 1000,
+            ..apply_frame_for("op", 0, &sealed, true, &other, 0)
+        };
+        frames_tx.blocking_send(frame).unwrap();
+        let (ok, _) = expect_result(&mut rx);
+        assert!(!ok);
+        assert!(!dest.path().join("a.bin").exists());
+        assert!(
+            !partial_of(dest.path(), &other).exists(),
+            "a forged blob leaves nothing"
+        );
     }
 
     #[cfg(windows)]

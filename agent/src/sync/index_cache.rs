@@ -39,6 +39,10 @@ pub struct IndexCache {
     /// `.deveye-tmp` / `.deveye-trash`.
     #[serde(default)]
     pub root: String,
+    /// The naming key the hashes were computed under (`ShareKeys::scheme`),
+    /// empty for plain SHA-256. Another one makes every hash worthless.
+    #[serde(default)]
+    pub scheme: String,
     pub entries: HashMap<String, CacheEntry>,
 }
 

@@ -795,7 +795,8 @@ export function moduleAgentHooks(): Required<FeatureAgentHooks> {
         onSyncChunk: (deviceId, payload) => each('onSyncChunk', (h) => h.onSyncChunk?.(deviceId, payload)),
         onSyncAck: (deviceId, payload) => each('onSyncAck', (h) => h.onSyncAck?.(deviceId, payload)),
         onSyncBusy: (deviceId, payload) => each('onSyncBusy', (h) => h.onSyncBusy?.(deviceId, payload)),
-        onSyncOpResult: (deviceId, payload) => each('onSyncOpResult', (h) => h.onSyncOpResult?.(deviceId, payload))
+        onSyncOpResult: (deviceId, payload) => each('onSyncOpResult', (h) => h.onSyncOpResult?.(deviceId, payload)),
+        onSyncDeviceKey: (deviceId, payload) => each('onSyncDeviceKey', (h) => h.onSyncDeviceKey?.(deviceId, payload))
     };
 }
 

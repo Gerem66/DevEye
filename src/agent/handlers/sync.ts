@@ -3,6 +3,7 @@ import {
     AGENT_SYNC_BUSY,
     AGENT_SYNC_CHANGED,
     AGENT_SYNC_CHUNK,
+    AGENT_SYNC_DEVICE_KEY,
     AGENT_SYNC_INDEX,
     AGENT_SYNC_OP_RESULT
 } from '@deveye/types';
@@ -46,5 +47,13 @@ export async function handleSyncOpResult(
     payload: PayloadOf<typeof AGENT_SYNC_OP_RESULT>
 ): Promise<void> {
     s.hooks.onSyncOpResult(s.device.id, payload);
+    ack(s, 1);
+}
+
+export async function handleSyncDeviceKey(
+    s: AgentSession,
+    payload: PayloadOf<typeof AGENT_SYNC_DEVICE_KEY>
+): Promise<void> {
+    s.hooks.onSyncDeviceKey(s.device.id, payload);
     ack(s, 1);
 }

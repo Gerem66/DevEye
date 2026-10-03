@@ -559,7 +559,11 @@ async fn stream_session(
     // CloudSync: scans, uploads and the debounced watchers stream through here;
     // the manager owns assignments + watchers and is dropped with the session.
     let (sync_tx, mut sync_rx) = tokio::sync::mpsc::channel::<crate::sync::SyncEvent>(256);
-    let mut sync_mgr = crate::sync::SyncManager::new(sync_tx, config.sync_roots.clone());
+    let mut sync_mgr = crate::sync::SyncManager::new(
+        sync_tx,
+        config.sync_roots.clone(),
+        Some(crate::config::Config::sync_device_key_path()),
+    );
     // Tunnels: each relays one TCP connection under the server's credits; the
     // manager drops them all when the session ends.
     let (tunnel_tx, mut tunnel_rx) = tokio::sync::mpsc::channel::<crate::tunnel::TunnelEvent>(256);
@@ -995,8 +999,8 @@ async fn stream_session(
                                 sync_mgr.start_scan(session_id, share_id, mode);
                             }
                             // CloudSync: upload one file (off-loop; streams via sync_rx).
-                            Ok(ServerMessage::SyncPush { op_id, share_id, rel_path, start_offset, window }) => {
-                                sync_mgr.start_push(op_id, share_id, rel_path, start_offset, window);
+                            Ok(ServerMessage::SyncPush { op_id, share_id, rel_path, start_offset, window, hash, resume }) => {
+                                sync_mgr.start_push(op_id, share_id, rel_path, start_offset, window, hash, resume);
                             }
                             // CloudSync: one credit back for a windowed push (never blocks).
                             Ok(ServerMessage::SyncPushAck { op_id, seq }) => {

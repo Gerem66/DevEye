@@ -30,6 +30,9 @@ pub const SIBLING_FILES: [&str; 3] = ["agent.pid", "agent.log", "agent.state"];
 /// Un partage par fichier, donc un balayage par motif et non par nom.
 pub const SYNC_INDEX_PREFIX: &str = "sync-";
 pub const SYNC_INDEX_SUFFIX: &str = ".index.json";
+/// CloudSync : la clé privée X25519 de cette machine, qui ouvre la clé des
+/// partages chiffrés de bout en bout. Ne quitte jamais la machine.
+pub const SYNC_DEVICE_KEY_FILE: &str = "sync-device.key";
 
 /// The server an agent links to when nothing names one. A self-hosted build
 /// sets `DEVEYE_DEFAULT_SERVER` at compile time.
@@ -383,6 +386,11 @@ impl Config {
     /// files aren't rehashed on every scan. Alongside config.
     pub fn sync_index_path(share_id: i64) -> PathBuf {
         Self::sibling(&format!("{SYNC_INDEX_PREFIX}{share_id}{SYNC_INDEX_SUFFIX}"))
+    }
+
+    /// CloudSync : la paire de clés de l'appareil (partages chiffrés). Alongside config.
+    pub fn sync_device_key_path() -> PathBuf {
+        Self::sibling(SYNC_DEVICE_KEY_FILE)
     }
 
     fn sibling(name: &str) -> PathBuf {

@@ -12,12 +12,12 @@ use std::sync::{Arc, Mutex};
 use std::time::UNIX_EPOCH;
 
 use anyhow::{bail, Context, Result};
-use sha2::{Digest, Sha256};
 use tokio::sync::mpsc::Sender;
 use tracing::debug;
 
 use crate::exclusions::CompiledExclusions;
 use crate::protocol::{SyncIndexEntry, SyncShareAssignment, SyncSkipReason};
+use crate::sync::e2e::{ContentHasher, ShareKeys};
 use crate::sync::fingerprint::{Fingerprint, FingerprintEntry};
 use crate::sync::index_cache::{CacheEntry, IndexCache};
 use crate::sync::paths::{
@@ -68,12 +68,17 @@ fn unix_mode(_meta: &std::fs::Metadata) -> Option<u32> {
 /// Bytes per read while hashing.
 const HASH_CHUNK: usize = 256 * 1024;
 
-/// Streamed SHA-256 (hex) of a file, never loaded whole in memory. `keepalive`
+/// Streamed content name (hex) of a file, never loaded whole in memory: its
+/// SHA-256, or its HMAC under the keys of an encrypted share. `keepalive`
 /// ticks once per block, so a large file does not look like silence.
-pub fn hash_file(path: &std::path::Path, mut keepalive: Option<&mut Keepalive>) -> Result<String> {
+pub fn hash_file(
+    path: &std::path::Path,
+    keys: Option<&ShareKeys>,
+    mut keepalive: Option<&mut Keepalive>,
+) -> Result<String> {
     let mut file =
         std::fs::File::open(path).with_context(|| format!("ouverture de {}", path.display()))?;
-    let mut hasher = Sha256::new();
+    let mut hasher = ContentHasher::new(keys);
     let mut buf = vec![0u8; HASH_CHUNK];
     loop {
         let n = file
@@ -87,7 +92,7 @@ pub fn hash_file(path: &std::path::Path, mut keepalive: Option<&mut Keepalive>) 
             k.tick()?;
         }
     }
-    Ok(format!("{:x}", hasher.finalize()))
+    Ok(hasher.finish())
 }
 
 /// Lance le scan sur un thread dédié (I/O + hashing intensifs, hors runtime).
@@ -100,6 +105,7 @@ pub fn hash_file(path: &std::path::Path, mut keepalive: Option<&mut Keepalive>) 
 pub fn spawn_scan(
     session_id: String,
     assignment: SyncShareAssignment,
+    keys: Option<Arc<ShareKeys>>,
     tx: Sender<SyncEvent>,
     events: Option<Arc<AtomicU64>>,
     clean: Arc<Mutex<CleanMark>>,
@@ -108,7 +114,7 @@ pub fn spawn_scan(
         let _busy = crate::live_status::begin(crate::live_status::Task::SyncScan);
         let share_id = assignment.share_id;
         let epoch = events.as_ref().map(|e| e.load(Ordering::Relaxed));
-        match scan(&session_id, &assignment, &tx) {
+        match scan(&session_id, &assignment, keys.as_deref(), &tx) {
             Ok(fingerprint) => {
                 // Propre seulement si RIEN n'a bougé pendant le parcours, et
                 // jamais sans watcher (`events` à `None`) : rien ne pourrait
@@ -130,6 +136,7 @@ pub fn spawn_scan(
                     done: true,
                     scanned: true,
                     fingerprint: None,
+                    encrypted: keys.is_some(),
                     error: Some(crate::sync::error_text(&e)),
                 });
             }
@@ -137,38 +144,60 @@ pub fn spawn_scan(
     });
 }
 
+/// Where a scan's batches go.
+struct Out<'a> {
+    tx: &'a Sender<SyncEvent>,
+    session_id: &'a str,
+    share_id: i64,
+    encrypted: bool,
+}
+
+impl Out<'_> {
+    fn send(
+        &self,
+        entries: Vec<SyncIndexEntry>,
+        done: bool,
+        fingerprint: Option<String>,
+    ) -> Result<()> {
+        self.tx
+            .blocking_send(SyncEvent::Index {
+                session_id: self.session_id.to_string(),
+                share_id: self.share_id,
+                entries,
+                done,
+                scanned: true,
+                fingerprint,
+                encrypted: self.encrypted,
+                error: None,
+            })
+            .map_err(|_| anyhow::anyhow!("session terminée"))
+    }
+}
+
 /// Envoie le lot dès qu'il atteint `BATCH` : au-delà, la trame dépasserait
 /// `SYNC_INDEX_BATCH_MAX` et le serveur la refuserait.
-fn flush_if_full(
-    batch: &mut Vec<SyncIndexEntry>,
-    tx: &Sender<SyncEvent>,
-    session_id: &str,
-    share_id: i64,
-) -> anyhow::Result<()> {
+fn flush_if_full(batch: &mut Vec<SyncIndexEntry>, out: &Out) -> Result<()> {
     if batch.len() < BATCH {
         return Ok(());
     }
     let full = std::mem::replace(batch, Vec::with_capacity(BATCH));
-    tx.blocking_send(SyncEvent::Index {
-        session_id: session_id.to_string(),
-        share_id,
-        entries: full,
-        done: false,
-        scanned: true,
-        fingerprint: None,
-        error: None,
-    })
-    .map_err(|_| anyhow::anyhow!("session terminée"))
+    out.send(full, false, None)
 }
 
 fn scan(
     session_id: &str,
     assignment: &SyncShareAssignment,
+    keys: Option<&ShareKeys>,
     tx: &Sender<SyncEvent>,
 ) -> Result<String> {
     let root = PathBuf::from(&assignment.local_path);
-    let cache = IndexCache::load(assignment.share_id);
+    let mut cache = IndexCache::load(assignment.share_id);
     ensure_root(&root, &cache)?;
+    // Hashes computed under another naming key name nothing this share holds.
+    let scheme = keys.map(ShareKeys::scheme).unwrap_or_default();
+    if cache.scheme != scheme {
+        cache.entries.clear();
+    }
 
     // Entretien opportuniste : la corbeille locale est balayée ici, selon la
     // rétention réglée sur le partage (30 jours par défaut), et avec elle les
@@ -176,7 +205,7 @@ fn scan(
     sweep_trash(&root, assignment.trash_keep_days);
     sweep_partials(&root, PARTIAL_KEEP_DAYS);
 
-    let (fingerprint, fresh) = walk(session_id, assignment, &root, &cache, tx)?;
+    let (fingerprint, fresh) = walk(session_id, assignment, keys, &root, &cache, tx)?;
     fresh.save(assignment.share_id);
     Ok(fingerprint)
 }
@@ -211,15 +240,13 @@ fn truncate_rel_path(mut rel: String) -> String {
 /// anything under it, as unknown, never as deleted.
 fn skip(
     batch: &mut Vec<SyncIndexEntry>,
-    tx: &Sender<SyncEvent>,
-    session_id: &str,
-    share_id: i64,
+    out: &Out,
     rel: String,
     reason: SyncSkipReason,
 ) -> Result<()> {
     debug!(rel_path = %rel, ?reason, "sync scan: path skipped");
     batch.push(SyncIndexEntry::skipped(truncate_rel_path(rel), reason));
-    flush_if_full(batch, tx, session_id, share_id)
+    flush_if_full(batch, out)
 }
 
 /// The walk itself. Everything the share holds goes out, indexed or skipped,
@@ -227,16 +254,23 @@ fn skip(
 fn walk(
     session_id: &str,
     assignment: &SyncShareAssignment,
+    keys: Option<&ShareKeys>,
     root: &Path,
     cache: &IndexCache,
     tx: &Sender<SyncEvent>,
 ) -> Result<(String, IndexCache)> {
-    let share_id = assignment.share_id;
+    let out = Out {
+        tx,
+        session_id,
+        share_id: assignment.share_id,
+        encrypted: keys.is_some(),
+    };
     // A large new file hashes for minutes: the server must hear from the scan meanwhile.
     let mut keepalive = Keepalive::new(tx.clone(), session_id);
     let excluded = CompiledExclusions::compile(&assignment.exclusions);
     let mut fresh = IndexCache {
         root: root.to_string_lossy().into_owned(),
+        scheme: keys.map(ShareKeys::scheme).unwrap_or_default(),
         ..IndexCache::default()
     };
     // Written within RECENT_MS: emitted and fingerprinted, but kept out of the
@@ -260,14 +294,7 @@ fn walk(
                 }
                 // Its whole subtree is unknown: declared, never read as deleted.
                 if let Some(rel) = rel_path_lossy(root, &dir) {
-                    skip(
-                        &mut batch,
-                        tx,
-                        session_id,
-                        share_id,
-                        rel,
-                        SyncSkipReason::Unreadable,
-                    )?;
+                    skip(&mut batch, &out, rel, SyncSkipReason::Unreadable)?;
                 }
                 continue;
             }
@@ -294,14 +321,7 @@ fn walk(
             let Some(rel) = rel_path_of(root, &path) else {
                 // Not valid UTF-8: named lossily, never indexed.
                 if let Some(lossy) = rel_path_lossy(root, &path) {
-                    skip(
-                        &mut batch,
-                        tx,
-                        session_id,
-                        share_id,
-                        lossy,
-                        SyncSkipReason::NonUtf8,
-                    )?;
+                    skip(&mut batch, &out, lossy, SyncSkipReason::NonUtf8)?;
                     kept += 1;
                 }
                 continue;
@@ -310,27 +330,13 @@ fn walk(
             let meta = match entry.metadata() {
                 Ok(m) => m,
                 Err(_) => {
-                    skip(
-                        &mut batch,
-                        tx,
-                        session_id,
-                        share_id,
-                        rel,
-                        SyncSkipReason::Unreadable,
-                    )?;
+                    skip(&mut batch, &out, rel, SyncSkipReason::Unreadable)?;
                     kept += 1;
                     continue;
                 }
             };
             if meta.is_symlink() {
-                skip(
-                    &mut batch,
-                    tx,
-                    session_id,
-                    share_id,
-                    rel,
-                    SyncSkipReason::Symlink,
-                )?;
+                skip(&mut batch, &out, rel, SyncSkipReason::Symlink)?;
                 kept += 1;
                 continue;
             }
@@ -341,14 +347,7 @@ fn walk(
                 }
                 if rel_path_problem(&rel).is_some() {
                     // Nothing under it is walked: the whole subtree stays unknown.
-                    skip(
-                        &mut batch,
-                        tx,
-                        session_id,
-                        share_id,
-                        rel,
-                        SyncSkipReason::Unportable,
-                    )?;
+                    skip(&mut batch, &out, rel, SyncSkipReason::Unportable)?;
                     kept += 1;
                     continue;
                 }
@@ -360,14 +359,7 @@ fn walk(
                 continue;
             }
             if !meta.is_file() {
-                skip(
-                    &mut batch,
-                    tx,
-                    session_id,
-                    share_id,
-                    rel,
-                    SyncSkipReason::Special,
-                )?;
+                skip(&mut batch, &out, rel, SyncSkipReason::Special)?;
                 kept += 1;
                 continue;
             }
@@ -375,14 +367,7 @@ fn walk(
             // n'entre jamais dans le partage ; le serveur revalide (défense en
             // profondeur) et journalise ce qu'on lui déclare.
             if rel_path_problem(&rel).is_some() {
-                skip(
-                    &mut batch,
-                    tx,
-                    session_id,
-                    share_id,
-                    rel,
-                    SyncSkipReason::Unportable,
-                )?;
+                skip(&mut batch, &out, rel, SyncSkipReason::Unportable)?;
                 kept += 1;
                 continue;
             }
@@ -394,18 +379,11 @@ fn walk(
             let recent = now_ms - mtime <= RECENT_MS;
             let hash = match cache.entries.get(&rel) {
                 Some(c) if c.size == size && c.mtime == mtime && !recent => c.hash.clone(),
-                _ => match hash_file(&path, Some(&mut keepalive)) {
+                _ => match hash_file(&path, keys, Some(&mut keepalive)) {
                     Ok(h) => h,
                     Err(e) => {
                         debug!(path = %path.display(), error = %e, "sync scan: unreadable file");
-                        skip(
-                            &mut batch,
-                            tx,
-                            session_id,
-                            share_id,
-                            rel,
-                            SyncSkipReason::Unreadable,
-                        )?;
+                        skip(&mut batch, &out, rel, SyncSkipReason::Unreadable)?;
                         kept += 1;
                         continue;
                     }
@@ -435,7 +413,7 @@ fn walk(
                 mode,
                 reason: None,
             });
-            flush_if_full(&mut batch, tx, session_id, share_id)?;
+            flush_if_full(&mut batch, &out)?;
         }
         if unlisted {
             // Entries we could not even list: the directory as a whole is unknown.
@@ -443,14 +421,7 @@ fn walk(
                 bail!("dossier du partage partiellement illisible");
             }
             if let Some(rel) = rel_path_lossy(root, &dir) {
-                skip(
-                    &mut batch,
-                    tx,
-                    session_id,
-                    share_id,
-                    rel,
-                    SyncSkipReason::Unreadable,
-                )?;
+                skip(&mut batch, &out, rel, SyncSkipReason::Unreadable)?;
             }
             continue;
         }
@@ -488,7 +459,7 @@ fn walk(
                     });
                     // Vidange comme pour un fichier : une arborescence de nombreux
                     // dossiers vides dépasserait sinon `SYNC_INDEX_BATCH_MAX`.
-                    flush_if_full(&mut batch, tx, session_id, share_id)?;
+                    flush_if_full(&mut batch, &out)?;
                 }
             }
         }
@@ -501,16 +472,7 @@ fn walk(
     for rel in &recent_paths {
         fresh.entries.remove(rel);
     }
-    tx.blocking_send(SyncEvent::Index {
-        session_id: session_id.to_string(),
-        share_id,
-        entries: batch,
-        done: true,
-        scanned: true,
-        fingerprint: Some(fingerprint.clone()),
-        error: None,
-    })
-    .map_err(|_| anyhow::anyhow!("session terminée"))?;
+    out.send(batch, true, Some(fingerprint.clone()))?;
     Ok((fingerprint, fresh))
 }
 
@@ -532,6 +494,7 @@ pub fn fingerprint_of(cache: &IndexCache) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sha2::{Digest, Sha256};
     use std::time::Duration;
 
     const SHARE: i64 = 987_654;
@@ -544,6 +507,7 @@ mod tests {
             exclusions: Vec::new(),
             rate_up_bps: None,
             trash_keep_days: 30,
+            encryption: None,
         }
     }
 
@@ -551,7 +515,7 @@ mod tests {
     fn run_walk(root: &Path, cache: &IndexCache) -> (Vec<SyncIndexEntry>, String, IndexCache) {
         let (tx, mut rx) = tokio::sync::mpsc::channel(64);
         let (fingerprint, fresh) =
-            walk("scan-1", &assignment(root), root, cache, &tx).expect("walk");
+            walk("scan-1", &assignment(root), None, root, cache, &tx).expect("walk");
         drop(tx);
         let mut entries = Vec::new();
         while let Ok(ev) = rx.try_recv() {
@@ -715,11 +679,14 @@ mod tests {
 
         let (tx, mut rx) = tokio::sync::mpsc::channel(64);
         let mut keepalive = Keepalive::with_period(tx, "scan-1", Duration::ZERO);
-        assert_eq!(hash_file(&path, Some(&mut keepalive)).unwrap(), expected);
+        assert_eq!(
+            hash_file(&path, None, Some(&mut keepalive)).unwrap(),
+            expected
+        );
         match rx.try_recv() {
             Ok(SyncEvent::Busy { op_id }) => assert_eq!(op_id, "scan-1"),
             _ => panic!("expected a busy frame"),
         }
-        assert_eq!(hash_file(&path, None).unwrap(), expected);
+        assert_eq!(hash_file(&path, None, None).unwrap(), expected);
     }
 }

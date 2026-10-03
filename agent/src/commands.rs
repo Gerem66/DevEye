@@ -694,6 +694,7 @@ where
             done,
             scanned,
             fingerprint,
+            encrypted,
             error,
         } => ClientMessage::SyncIndex {
             device_id: device_id.to_string(),
@@ -702,6 +703,7 @@ where
             entries,
             done,
             scanned,
+            encrypted,
             fingerprint,
             error,
         },
@@ -714,6 +716,7 @@ where
             mtime,
             error,
             seq,
+            stale_partial,
         } => ClientMessage::SyncChunk {
             device_id: device_id.to_string(),
             op_id,
@@ -724,6 +727,11 @@ where
             mtime,
             error,
             seq,
+            stale_partial: stale_partial.then_some(true),
+        },
+        SyncEvent::DeviceKey { public_key } => ClientMessage::SyncDeviceKey {
+            device_id: device_id.to_string(),
+            public_key,
         },
         SyncEvent::Ack { op_id, seq } => ClientMessage::SyncAck {
             device_id: device_id.to_string(),
@@ -867,6 +875,7 @@ pub(crate) async fn refuse_order<S>(
                     done: true,
                     scanned: false,
                     fingerprint: None,
+                    encrypted: false,
                     error,
                 },
             )
@@ -885,6 +894,7 @@ pub(crate) async fn refuse_order<S>(
                     mtime: None,
                     error,
                     seq: None,
+                    stale_partial: false,
                 },
             )
             .await;

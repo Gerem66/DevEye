@@ -48,7 +48,8 @@ Et une dérivation, sans stockage :
 | le sel des visiteurs d'Audience          | `HKDF(serverKey, 'audience', 'visitor-salt')`, `features/audience/src/server/service.ts` : entre dans chaque condensé de visiteur (`visitor_ref`). Changer la clé serveur change donc les condensés une fois : un visiteur persistant est compté « nouveau » une fois, les condensés anonymes tournaient déjà chaque jour. Rien à re-sceller, rien n'est stocké |
 
 **Ce qui n'en dépend pas** : tout le contenu des features (sous DEK ou WDK),
-les blobs CloudSync (sous BMK), les DEK emballées par mot de passe
+les blobs CloudSync (sous BMK, ou scellés par les appareils pour un partage
+chiffré de bout en bout), les DEK emballées par mot de passe
 (`wrap_mode = 'password'`, ces lignes-là ne bougent pas), les secrets JWT, le
 `DEVICE_TOKEN_SECRET`, les jetons OAuth : autant de variables à part, sans lien.
 

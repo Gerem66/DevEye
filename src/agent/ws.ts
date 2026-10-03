@@ -37,6 +37,7 @@ import {
     AGENT_SYNC_BUSY,
     AGENT_SYNC_CHANGED,
     AGENT_SYNC_CHUNK,
+    AGENT_SYNC_DEVICE_KEY,
     AGENT_SYNC_INDEX,
     AGENT_SYNC_OP_RESULT,
     AGENT_TERM_EXIT,
@@ -85,6 +86,7 @@ import {
     handleSyncBusy,
     handleSyncChanged,
     handleSyncChunk,
+    handleSyncDeviceKey,
     handleSyncIndex,
     handleSyncOpResult,
     handleTermExit,
@@ -205,6 +207,8 @@ function dispatch(session: AgentSession, msg: AgentClientMessage): void | Promis
             return handleSyncBusy(session, msg.payload);
         case AGENT_SYNC_OP_RESULT:
             return handleSyncOpResult(session, msg.payload);
+        case AGENT_SYNC_DEVICE_KEY:
+            return handleSyncDeviceKey(session, msg.payload);
         case AGENT_PKG_LIST_RESULT:
             return handlePkgListResult(session, msg.payload);
         case AGENT_PKG_COUNT:

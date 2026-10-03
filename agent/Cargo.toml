@@ -44,6 +44,11 @@ ed25519-dalek = { version = "2", features = ["rand_core"] }
 rand = "0.8"
 base64 = "0.22"
 sha2 = "0.10"
+# CloudSync end-to-end encrypted shares: AES-256-GCM, HKDF and HMAC from ring,
+# X25519 from curve25519-dalek. Both are already built for rustls and
+# ed25519-dalek: no new code in the binary, only direct access to it.
+ring = "0.17"
+curve25519-dalek = "4"
 # Advanced log/file search (reuses regex-automata/regex-syntax already pulled in by
 # tracing-subscriber's env-filter, so the marginal binary cost stays small).
 regex = "1"

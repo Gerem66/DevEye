@@ -10,7 +10,9 @@ détient de quoi déballer cette clé : il lit. Quand l'utilisateur active le
 **chiffrement par mot de passe**, l'étage gardé ne s'ouvre plus qu'avec son mot
 de passe vivant : le serveur ne lit plus. L'étage ouvert (ce qu'une tâche de
 fond doit servir sans personne devant l'écran : Uptime, intégrations, CloudSync)
-reste lisible par un serveur vivant, quoi qu'il arrive. « Zero-knowledge » est
+reste lisible par un serveur vivant, quoi qu'il arrive. Seule exception : un
+partage CloudSync **chiffré de bout en bout**, dont seuls les appareils ont la
+clé (voir la section CloudSync). « Zero-knowledge » est
 donc une propriété que l'utilisateur obtient sur l'étage gardé, pas l'état par
 défaut de l'installation ; toute phrase de vitrine qui le promet sans cette
 condition est fausse.
@@ -321,22 +323,25 @@ serveur contrôle les machines**, à ceci près.
   tout ce que systemd confinerait de plus s'appliquerait au shell de l'opérateur
   et aux mises à jour de paquets, qui sont les enfants de l'agent.
 
-## CloudSync, pas encore zero-knowledge
+## CloudSync : clé du serveur, ou chiffrement de bout en bout
 
 Les contenus synchronisés (feature CloudSync) ne passent **pas** par le
 chiffrement par enveloppe utilisateur : la synchro tourne en tâche de fond,
 que la session soit verrouillée ou non, et des fichiers de plusieurs Go ne
-peuvent pas vivre en base. À la place :
+peuvent pas vivre en base. Un partage se crée dans l'un de deux modes, pour
+toujours.
+
+### Standard : la clé du serveur
 
 - les contenus vivent dans un **blob store** par partage, sur le disque du
   serveur ou dans le bucket S3 de l'hôte (`<storage_key>/blobs/…`), adressés
   par le SHA-256 de leur clair ; le bucket ne reçoit que des blobs déjà
   chiffrés, jamais la clé ;
-- chaque blob est chiffré **AES-256-GCM en flux** par une **BMK** (Blob Master
-  Key, 32 octets) générée au premier boot, wrappée par la clé serveur
-  (`deps.keys.sealBytes`, soit `crypt.seal`, même schéma que le
-  wrap des DEK) et rangée dans `sync_meta` : la rotation de `CRYPT_KEY_A/B` ne
-  demande que de re-wrapper 32 octets, jamais de re-chiffrer les blobs ;
+- chaque blob est chiffré **AES-256-GCM** par une **BMK** (Blob Master Key,
+  32 octets) générée au premier boot, wrappée par la clé serveur
+  (`deps.keys.sealBytes`, soit `crypt.seal`, même schéma que le wrap des DEK)
+  et rangée dans `sync_meta` : la rotation de `CRYPT_KEY_A/B` ne demande que de
+  re-wrapper 32 octets, jamais de re-chiffrer les blobs ;
 - l'index (chemins relatifs, hashes, tailles, mtimes, appareil source) est en
   clair dans MySQL, nécessaire au merge, à la navigation et à la volumétrie.
 
@@ -345,26 +350,60 @@ pour toujours, `0x02` scelle par blocs de 1 Mio (nonce dérivé d'un compteur,
 AAD = compteur + marqueur de fin contre la troncature) : c'est ce qui rend un
 transfert interrompu reprenable sans jamais retransmettre les octets déjà reçus.
 
-État actuel : le serveur détient la BMK, donc lit les blobs. Cible : une clé
-que le serveur ne détient pas, mécanisme à définir (elle ne peut pas être la
-DEK personnelle, voir ci-dessous). Tant que ce n'est pas fait, CloudSync est
-l'exception documentée au zero-knowledge de l'étage gardé.
+Ce que ça protège : le disque au repos (vol, snapshot hors-ligne), et le
+bucket seul. Ce que ça ne protège pas : une compromission du serveur vivant,
+ou la base et l'env ensemble (qui donnent la BMK). C'est le même niveau que
+les secrets liés à l'auth (2FA). Le chiffrement côté fournisseur S3 (SSE)
+n'y ajoute rien : les blobs arrivent déjà chiffrés, et le fournisseur
+déchiffre pour quiconque présente les identifiants S3, que le serveur détient.
 
-**Pourquoi pas la DEK personnelle** : la DEK gardée
-est liée à une session WebSocket vivante (fenêtre glissante de 60 s, effacée à
-la fermeture de la socket, jamais persistée) et le code la déclare
-structurellement inatteignable sans session. Or une session CloudSync est
-pilotée par l'agent, sans aucune session utilisateur. Un partage ainsi chiffré
-ne se synchroniserait que pendant qu'un onglet est ouvert et déverrouillé, et un
-transfert de plusieurs Go survivrait de toute façon à la fenêtre. C'est
-contradictoire avec la promesse du produit, pas seulement coûteux.
+### De bout en bout : la clé des appareils
 
-Ce que ça protège : le disque au repos (vol, snapshot hors-ligne). Ce que ça
-ne protège pas : une compromission du serveur vivant (qui détient la clé).
-C'est le même niveau de garantie que les secrets liés à l'auth (2FA), et un
-cran en dessous des données « mot de passe »/notes, documenté ici pour que le
-choix reste explicite. Détails d'implémentation du format de conteneur :
-`devb.ts` de `@deveye/types` (`sdk/server`).
+Le clair existe déjà sur les appareils : ce sont eux qui tiennent la clé.
+
+- Le navigateur tire un secret de 20 octets à la création et l'affiche en
+  **code de secours**. Le serveur n'en garde qu'un témoin (HKDF), qui dit si un
+  code saisi est le bon et n'ouvre rien.
+- Chaque agent tient une paire **X25519** (sa clé privée dans
+  `sync-device.key`, à côté de sa config, lisible de son seul compte) et
+  publie sa clé publique. Le navigateur y **scelle** le secret (X25519
+  éphémère, HKDF, AES-GCM lié à l'id du partage) quand on attache l'appareil ;
+  le serveur range et relaie cet exemplaire sans pouvoir l'ouvrir. Rien n'est
+  saisi au démarrage de l'agent.
+- L'agent **nomme** chaque contenu par HMAC-SHA256 sous une clé dérivée du
+  secret (plus de SHA-256 du clair, ni en base ni dans le bucket) et **scelle**
+  lui-même chaque blob (DEVB v3 : nonce aléatoire par bloc, AAD liant le bloc
+  à son rang, à son blob et au nom du contenu). Le serveur stocke et relaie
+  sans déchiffrer. La spécification complète est dans `docs/ARCHITECTURE.md`
+  du module CloudSync.
+- Pourquoi pas le **mot de passe du compte** : le serveur le reçoit à chaque
+  connexion (c'est lui qui déverrouille la DEK). Une clé qui en dériverait lui
+  serait accessible.
+
+Ce que ça protège : les contenus contre la base, l'env, le bucket et le
+disque réunis, et contre un opérateur qui lit. Ce que ça ne protège pas :
+
+- les **métadonnées** : chemins, tailles, dates et rythme des changements
+  restent en clair, nécessaires au merge et à la navigation ;
+- un **serveur actif** qui modifie le code servi au navigateur : il pourrait
+  lire le code de secours au moment où on le tape. C'est la limite de tout
+  chiffrement de bout en bout sur le web. L'agent, lui, n'exécute pas de code
+  venu du serveur pour ce chiffrement, et aucune clé ne lui parvient sans
+  avoir été scellée par un navigateur.
+
+Ce que l'utilisateur perd : les sauvegardes (le module Sauvegardes ne
+propose pas ces partages), l'export de compte (une note à la place des
+fichiers), le contrôle d'intégrité complet côté serveur (la forme seulement),
+et un téléchargement depuis le navigateur sans le code. Code perdu : les
+appareils gardent la clé et les fichiers ; seuls le navigateur et l'ajout
+d'un nouvel appareil deviennent impossibles.
+
+**Pourquoi pas la DEK personnelle** : la DEK gardée est liée à une session
+WebSocket vivante (fenêtre glissante de 60 s, effacée à la fermeture de la
+socket, jamais persistée) et le code la déclare structurellement inatteignable
+sans session. Or une session CloudSync est pilotée par l'agent, sans aucune
+session utilisateur. Un partage ainsi chiffré ne se synchroniserait que
+pendant qu'un onglet est ouvert et déverrouillé.
 
 ## Hébergement, lisible par le serveur par construction
 
