@@ -526,6 +526,7 @@ mod tests {
         (entries, fingerprint, fresh)
     }
 
+    #[cfg(unix)]
     fn skipped<'a>(entries: &'a [SyncIndexEntry], rel: &str) -> &'a SyncIndexEntry {
         entries
             .iter()
