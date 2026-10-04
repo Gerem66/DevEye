@@ -1,7 +1,9 @@
 import { useState } from 'react';
 
 import Button from '@/Components/Button';
-import { addSectionWith } from '@/stores/homeLayout';
+import { availableTopbarWidgets } from '@/Components/TopNavbar/topbarWidgets';
+import { addSectionWith, addTopbarWidgets } from '@/stores/homeLayout';
+import { useActiveWorkspace, useWorkspacePermissions } from '@/stores/workspace';
 import { HOME_STARTERS, starterFeatures } from './starters';
 import styles from './Dashboard.module.css';
 
@@ -19,6 +21,8 @@ export interface EmptyHomeProps {
  */
 export function EmptyHome({ canLayout, onCompose }: EmptyHomeProps) {
     const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set());
+    const workspace = useActiveWorkspace();
+    const { canFeature } = useWorkspacePermissions();
 
     if (!canLayout) {
         return (
@@ -43,13 +47,16 @@ export function EmptyHome({ canLayout, onCompose }: EmptyHomeProps) {
         });
 
     const place = () => {
-        for (const { starter, entries } of starters) {
-            if (picked.has(starter.id))
-                addSectionWith(
-                    starter.label,
-                    entries.map((entry) => entry.id)
-                );
+        const chosen = starters.filter(({ starter }) => picked.has(starter.id));
+        for (const { starter, entries } of chosen) {
+            addSectionWith(
+                starter.label,
+                entries.map((entry) => entry.id)
+            );
         }
+        // Un widget dont le module manque ou que le rôle n'accorde pas ne serait jamais rendu.
+        const usable = new Set(availableTopbarWidgets(workspace?.kind, canFeature).map((widget) => widget.id));
+        addTopbarWidgets(chosen.flatMap(({ starter }) => starter.topbar).filter((id) => usable.has(id)));
     };
 
     return (

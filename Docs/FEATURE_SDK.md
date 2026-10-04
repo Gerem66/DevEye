@@ -105,7 +105,8 @@ Le rapatriement d'une native d'infrastructure en module PRIVÉ a élargi le cont
   lui tend rien, tout ce qu'il affiche passe par les commandes de SA feature
   (autorisées côté serveur), et il n'est proposé et monté que pour les membres
   dont le rôle accorde la feature (`canFeature`). Liberté dans la boîte, rien
-  dehors.
+  dehors. L'hôte l'enveloppe dans la pastille commune de la barre, un bouton
+  qui ouvre la feature : rien d'interactif dedans.
 - **Installation privée** : `features.local.json` (gitignorée, entrées par
   chemin) + trois fichiers locaux toujours présents, réparés par
   `gen:features` (`--ensure-local` en prestart et en tête de ci ; `--check`

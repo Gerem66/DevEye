@@ -103,9 +103,9 @@
  * Mini-widget de topbar
  * ------------------------------------------------------------------ */
 
-/* L'hôte teinte l'icône en accent par défaut (`.statusItem .icon`, deux
-   classes) : la teinte « en ligne » pèse trois classes pour l'emporter quel que
-   soit l'ordre des feuilles. */
+/* L'hôte teinte l'icône en accent par défaut (`.module .icon` de la pastille,
+   deux classes) : la teinte « en ligne » pèse trois classes pour l'emporter
+   quel que soit l'ordre des feuilles. */
 :global(.icon).statusIcon.statusOk {
     color: var(--success);
 }

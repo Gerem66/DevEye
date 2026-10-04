@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
 import { copyText } from '@/copyText';
 import styles from './PublicIp.module.css';
+import pill from './TopbarPill.module.css';
 
 /**
  * Mini-widget « Mon IP » : l'adresse publique par laquelle CE navigateur sort,
@@ -256,7 +257,7 @@ export function PublicIp({ editing = false }: { editing?: boolean }) {
             ? failed
                 ? `Aucune adresse ${FAMILY_LABEL[shown]} obtenue`
                 : `Adresse ${FAMILY_LABEL[shown]} publique`
-            : `Adresse ${FAMILY_LABEL[shown]} publique${where ? ` · ${where}` : ''} — cliquer pour copier`;
+            : `Adresse ${FAMILY_LABEL[shown]} publique${where ? ` · ${where}` : ''}, cliquer pour copier`;
 
     const flag = reading?.flag ?? null;
     const showFlag = !editing && !copied && flag !== null && !flagBroken;
@@ -264,7 +265,7 @@ export function PublicIp({ editing = false }: { editing?: boolean }) {
     return (
         <button
             type='button'
-            className={`${styles.pill} ${editing ? styles.editing : ''}`}
+            className={`${pill.pill} ${styles.ip} ${editing ? styles.editing : ''}`}
             title={title}
             aria-label={
                 editing

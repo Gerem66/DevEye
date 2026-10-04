@@ -8,6 +8,7 @@ import {
     isShortcutTile,
     HOME_FOLDER_MAX_ITEMS,
     HOME_SECTION_MAX_TILES,
+    HOME_TOPBAR_MAX_WIDGETS,
     type HomeFeatureId,
     type HomeFolder,
     type HomeLayout,
@@ -502,6 +503,12 @@ export function setTopbarOrder(topbar: HomeTopbarWidgetId[]): void {
 export function addTopbarWidget(id: HomeTopbarWidgetId): void {
     if (state.topbar.includes(id)) return;
     commit({ ...state, topbar: [...state.topbar, id] });
+}
+/** Plusieurs d'un coup, en une écriture : ceux déjà épinglés sont ignorés, et la barre garde son plafond. */
+export function addTopbarWidgets(ids: readonly HomeTopbarWidgetId[]): void {
+    const topbar = [...new Set([...state.topbar, ...ids])].slice(0, HOME_TOPBAR_MAX_WIDGETS);
+    if (topbar.length === state.topbar.length) return;
+    commit({ ...state, topbar });
 }
 export function removeTopbarWidget(id: HomeTopbarWidgetId): void {
     commit({ ...state, topbar: state.topbar.filter((w) => w !== id) });

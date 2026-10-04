@@ -1,4 +1,4 @@
-import type { HomeFeatureId, HomeLayout } from '@deveye/types';
+import type { HomeFeatureId, HomeLayout, HomeTopbarWidgetId } from '@deveye/types';
 
 import { placedFeatureIds } from '@/stores/homeLayout';
 import { catalogEntries, type FeatureCatalogEntry } from './catalog';
@@ -21,13 +21,15 @@ export const RECOMMENDED_FEATURE_IDS: readonly HomeFeatureId[] = [
     'password'
 ];
 
-/** Un modèle d'accueil : une section toute posée, nommée d'un usage. */
+/** Un modèle d'accueil : une section toute posée, nommée d'un usage, et ses widgets de barre. */
 export interface HomeStarter {
     id: string;
     /** Sert aussi de titre à la section posée (plafond du schéma : 40). */
     label: string;
     icon: string;
     features: readonly HomeFeatureId[];
+    /** Peu de widgets : ceux des fonctionnalités posées qui en ont un, et l'IP là où on administre des machines. */
+    topbar: readonly HomeTopbarWidgetId[];
 }
 
 /**
@@ -39,25 +41,29 @@ export const HOME_STARTERS: readonly HomeStarter[] = [
         id: 'work',
         label: 'Travailler',
         icon: 'projects',
-        features: ['projects', 'invoicing', 'finance', 'x-rdv', 'mail', 'notes', 'password']
+        features: ['projects', 'invoicing', 'finance', 'x-rdv', 'mail', 'notes', 'password'],
+        topbar: ['search', 'x-rdv']
     },
     {
         id: 'supervise',
         label: 'Superviser',
         icon: 'activity',
-        features: ['devices', 'uptime', 'audience']
+        features: ['devices', 'uptime', 'audience'],
+        topbar: ['publicIp', 'uptime', 'devices']
     },
     {
         id: 'ship',
         label: 'Livrer',
         icon: 'rocket',
-        features: ['git', 'deploy', 'database', 'backup']
+        features: ['git', 'deploy', 'database', 'backup'],
+        topbar: ['publicIp']
     },
     {
         id: 'secure',
         label: 'Sécuriser',
         icon: 'shield',
-        features: ['sentinel', 'cve', 'x-audit', 'osint']
+        features: ['sentinel', 'cve', 'x-audit', 'osint'],
+        topbar: ['publicIp']
     }
 ];
 

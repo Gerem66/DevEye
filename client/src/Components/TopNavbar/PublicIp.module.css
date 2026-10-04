@@ -1,55 +1,14 @@
-/* Pastille « Mon IP ». Nue au repos, comme les widgets des modules voisins
-   (`.statusItem` de TopNavbar) : un cadre et un fond la feraient ressortir au
-   milieu d'une barre qui n'en porte pas. Seul le survol la marque, puisqu'elle
-   se clique. */
-.pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    box-sizing: border-box;
-    /* Hauteur partagée, et rembourrage horizontal seulement : la déduire du texte
-       la faisait dépendre des métriques de police, donc du navigateur. */
-    height: var(--topbar-pill-height);
-    padding: 0 6px;
-    /* Transparente plutôt qu'absente : le survol la colore sans décaler la
-       pastille ni ses voisines de deux pixels. */
-    border: 1px solid transparent;
-    border-radius: var(--radius-pill);
-    background: none;
-    color: var(--text-secondary);
-    font: inherit;
-    font-size: 0.82rem;
-    font-weight: 500;
-    line-height: 1.2;
-    white-space: nowrap;
-    cursor: pointer;
-    transition:
-        background var(--transition-fast),
-        border-color var(--transition-fast),
-        color var(--transition-fast);
-}
-
-.pill:hover:not(:disabled) {
-    color: var(--accent);
-    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
-    background: var(--glass-bg-light);
-}
-
-.pill:disabled {
-    color: var(--text-muted);
-    cursor: default;
-}
-
+/* Pastille « Mon IP » : la forme vient de `TopbarPill`, ici seulement ce qui lui est propre. */
 /* L'icône porte l'accent, le texte reste secondaire : le partage de couleurs
    des autres widgets de la barre. */
-.pill .icon {
+.ip .icon {
     width: 15px;
     height: 15px;
     flex-shrink: 0;
     background-color: var(--accent);
 }
 
-.pill:hover:not(:disabled) .icon {
+.ip:hover:not(:disabled) .icon {
     background-color: currentColor;
 }
 

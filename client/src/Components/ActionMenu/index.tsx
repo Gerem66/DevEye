@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
 import { useDismissLayer } from '@/Components/Dialog';
@@ -21,13 +21,15 @@ export interface ActionMenuProps {
     /** Le nom du bouton pour les lecteurs d'écran et l'infobulle. */
     label?: string;
     className?: string;
+    /** Le contenu du bouton à la place de « ⋯ » : il perd alors son habillage rond, `className` le dessine. */
+    trigger?: ReactNode;
 }
 
 const GAP = 4;
 const PANEL_WIDTH = 260;
 
 /** Un bouton « ⋯ » qui déplie des actions secondaires, posé au-dessus de tout (le panneau n'est jamais rogné par un parent défilant). */
-export default function ActionMenu({ items, label = 'Plus d’actions', className }: ActionMenuProps) {
+export default function ActionMenu({ items, label = 'Plus d’actions', className, trigger: content }: ActionMenuProps) {
     const [open, setOpen] = useState(false);
     const [anchor, setAnchor] = useState<{ left: number; top?: number; bottom?: number } | null>(null);
     const trigger = useRef<HTMLButtonElement>(null);
@@ -92,7 +94,11 @@ export default function ActionMenu({ items, label = 'Plus d’actions', classNam
             <button
                 ref={trigger}
                 type='button'
-                className={`${styles.trigger} ${open ? styles.triggerOpen : ''} ${className ?? ''}`}
+                className={
+                    content === undefined
+                        ? `${styles.trigger} ${open ? styles.triggerOpen : ''} ${className ?? ''}`
+                        : className
+                }
                 title={label}
                 aria-label={label}
                 aria-haspopup='menu'
@@ -100,7 +106,7 @@ export default function ActionMenu({ items, label = 'Plus d’actions', classNam
                 aria-controls={open ? id : undefined}
                 onClick={() => (open ? close(false) : setOpen(true))}
             >
-                <span className='icon icon-dots' aria-hidden='true' />
+                {content ?? <span className='icon icon-dots' aria-hidden='true' />}
             </button>
             {open &&
                 anchor &&

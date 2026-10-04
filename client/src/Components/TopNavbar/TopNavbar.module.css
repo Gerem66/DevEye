@@ -224,25 +224,6 @@
     gap: var(--space-md);
 }
 
-.statusItem {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 0.82rem;
-    font-weight: 500;
-    color: var(--text-secondary);
-    white-space: nowrap;
-}
-
-.statusItem .icon {
-    width: 15px;
-    color: var(--accent);
-}
-
-.statusTemp {
-    font-variant-numeric: tabular-nums;
-}
-
 .profileBtn {
     display: flex;
     align-items: center;

@@ -3,12 +3,14 @@ import type { FeatureId, HomeTopbarWidgetId, WorkspaceKind } from '@deveye/types
 
 import { useHomeLayout } from '@/stores/homeLayout';
 import { useActiveWorkspace, useWorkspacePermissions } from '@/stores/workspace';
+import { openFeature } from '@/sdk';
 import { cardModules, moduleClient } from '@/sdk/registry';
 import { SecrecyTimer } from './SecrecyTimer';
 import { LivePresence } from './LivePresence';
 import { PublicIp } from './PublicIp';
 import { SearchButton } from './SearchButton';
 import styles from './TopNavbar.module.css';
+import pill from './TopbarPill.module.css';
 
 /**
  * Catalog of the compact widgets that can be pinned to the top-right of the
@@ -112,15 +114,28 @@ export function renderTopbarWidget(
         case 'search':
             return <SearchButton editing={opts.editing} />;
         default: {
-            // Widget d'un module : l'hôte fournit le cadre et le titre, le
-            // module le contenu, sans props.
+            // Widget d'un module : l'hôte fournit la pastille, le titre et le
+            // geste (ouvrir la feature), le module le contenu, sans props.
             const meta = topbarCatalog().find((w) => w.id === id);
             const Widget = moduleClient(id)?.TopbarWidget;
-            if (!meta || !Widget) return null;
+            if (!meta?.feature || !Widget) return null;
+            const feature = meta.feature;
+            if (opts.editing) {
+                return (
+                    <span className={`${pill.pill} ${pill.module}`} title={meta.title}>
+                        <Widget />
+                    </span>
+                );
+            }
             return (
-                <span className={styles.statusItem} title={meta.title}>
+                <button
+                    type='button'
+                    className={`${pill.pill} ${pill.module}`}
+                    title={`Ouvrir ${meta.title}`}
+                    onClick={() => openFeature(feature)}
+                >
                     <Widget />
-                </span>
+                </button>
             );
         }
     }
