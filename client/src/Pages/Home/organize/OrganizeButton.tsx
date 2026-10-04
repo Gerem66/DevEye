@@ -3,7 +3,9 @@ import { Hint } from '@/Components/Hint';
 import styles from './OrganizeButton.module.css';
 
 export interface OrganizeButtonProps {
-    onOrganize: () => void;
+    /** L'accueil est en organisation : le bouton la valide au lieu de l'ouvrir. */
+    organizing: boolean;
+    onToggle: () => void;
     /** La bulle de présentation, tant que le compte ne l'a pas écartée. */
     hinted: boolean;
     onDismissHint: () => void;
@@ -13,7 +15,8 @@ export interface OrganizeButtonProps {
  * Le raccourci vers l'organisation de l'accueil, en bas à droite : le pendant
  * du bouton de signalement, pour qui peut modifier la disposition de l'espace.
  */
-export function OrganizeButton({ onOrganize, hinted, onDismissHint }: OrganizeButtonProps) {
+export function OrganizeButton({ organizing, onToggle, hinted, onDismissHint }: OrganizeButtonProps) {
+    const label = organizing ? 'Valider l’organisation' : 'Organiser l’accueil';
     return (
         <>
             {hinted && (
@@ -24,12 +27,12 @@ export function OrganizeButton({ onOrganize, hinted, onDismissHint }: OrganizeBu
             )}
             <button
                 type='button'
-                className={`${styles.trigger} ${hinted ? styles.triggerHinted : ''}`}
-                onClick={onOrganize}
-                title='Organiser l’accueil'
-                aria-label='Organiser l’accueil'
+                className={`${styles.trigger} ${hinted ? styles.triggerHinted : ''} ${organizing ? styles.triggerDone : ''}`}
+                onClick={onToggle}
+                title={label}
+                aria-label={label}
             >
-                <span className='icon icon-edit' />
+                <span className={`icon ${organizing ? 'icon-v' : 'icon-edit'}`} />
             </button>
         </>
     );

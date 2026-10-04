@@ -23,8 +23,10 @@ export interface WorkspaceSwitcherProps {
     onCreate: () => void;
     /** Ouvre l'apparence de l'espace courant. Absent = pas le droit. */
     onAppearance?: () => void;
-    /** Passe l'accueil de l'espace courant en organisation. Absent = pas le droit. */
+    /** Passe l'accueil de l'espace courant en organisation, ou l'en sort. Absent = pas le droit. */
     onOrganize?: () => void;
+    /** L'accueil est en organisation : l'entrée la valide au lieu de l'ouvrir. */
+    organizing?: boolean;
     /** Ouvre la page de gestion de l'espace courant. */
     onManage: (e: React.MouseEvent) => void;
 }
@@ -54,6 +56,7 @@ export function WorkspaceSwitcher({
     onCreate,
     onAppearance,
     onOrganize,
+    organizing,
     onManage
 }: WorkspaceSwitcherProps) {
     const { workspaces, remoteWorkspaces, activeId, activeInstanceId } = useWorkspaceState();
@@ -84,7 +87,15 @@ export function WorkspaceSwitcher({
             )}
             {onOrganize && (
                 <button className={`${styles.menuItem} ${styles.workspaceAction}`} onClick={onOrganize}>
-                    <span className='icon icon-edit' /> Organiser l’accueil
+                    {organizing ? (
+                        <>
+                            <span className='icon icon-v' /> Valider l’organisation
+                        </>
+                    ) : (
+                        <>
+                            <span className='icon icon-edit' /> Organiser l’accueil
+                        </>
+                    )}
                 </button>
             )}
             {manageable && (

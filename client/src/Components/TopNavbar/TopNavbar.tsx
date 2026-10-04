@@ -154,7 +154,7 @@ export default function TopNavbar({
     // inconnu n'est pas refusé : lues telles quelles, ces deux entrées
     // disparaîtraient sous les yeux de qui vient de cliquer. Le menu garde donc
     // celles qu'il montrait au clic jusqu'à sa fermeture.
-    const live = { onOpenSettings, onOrganize };
+    const live = { onOpenSettings, onOrganize: organizing ? onDoneOrganizing : onOrganize };
     const shownRef = useRef(live);
     if (!lingering) shownRef.current = live;
     const shown = shownRef.current;
@@ -409,6 +409,7 @@ export default function TopNavbar({
                                             setMenuOpen(false);
                                         })
                                     }
+                                    organizing={organizing}
                                     onOrganize={
                                         shown.onOrganize &&
                                         (() => {

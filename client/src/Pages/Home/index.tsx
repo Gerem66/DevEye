@@ -1304,6 +1304,11 @@ export default function HomePage() {
         layoutHint.dismiss();
     };
 
+    const finishOrganizing = () => {
+        captureMorph(contentEl, false);
+        setEditing(false);
+    };
+
     /**
      * Rendu d'une section hors organisation. Une seule boucle pour tous les
      * genres de tuiles ; `null` pour une section vide, qui ne laisse donc pas de
@@ -1389,10 +1394,7 @@ export default function HomePage() {
                     onOpenSettings={canAppearance ? () => setSettingsOpen(true) : undefined}
                     onOrganize={canLayout ? () => startOrganizing() : undefined}
                     organizing={editing}
-                    onDoneOrganizing={() => {
-                        captureMorph(contentEl, false);
-                        setEditing(false);
-                    }}
+                    onDoneOrganizing={finishOrganizing}
                     onManageWorkspace={(e) => handleExpand('workspace', isForceReload(e))}
                     onSelectWorkspace={handleSelectWorkspace}
                     onConnectRemote={(instanceId, workspaceId) => setRemoteLogin({ instanceId, workspaceId })}
@@ -1528,10 +1530,11 @@ export default function HomePage() {
                         enterRemote(instanceId, wanted);
                     }}
                 />
-                {canLayout && !editing && !expandedWidget && !openFolder && (
+                {canLayout && !expandedWidget && !openFolder && (
                     <OrganizeButton
-                        onOrganize={() => startOrganizing()}
-                        hinted={layoutHint.show}
+                        organizing={editing}
+                        onToggle={() => (editing ? finishOrganizing() : startOrganizing())}
+                        hinted={layoutHint.show && !editing}
                         onDismissHint={layoutHint.dismiss}
                     />
                 )}
