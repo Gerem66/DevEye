@@ -71,6 +71,8 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
     const [deviceId, setDeviceId] = useState('');
     const [candidates, setCandidates] = useState<DeployCandidate[]>([]);
     const [externalId, setExternalId] = useState('');
+    /** L'identifiant se saisit à la main, à la place de la liste. */
+    const [manual, setManual] = useState(false);
     const [name, setName] = useState('');
     const [kind, setKind] = useState<DeployTargetKind>('application');
     const [ref, setRef] = useState('');
@@ -102,6 +104,7 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
     useEffect(() => {
         if (!open) return;
         setExternalId('');
+        setManual(false);
         setName('');
         setRef('');
         setSource('access');
@@ -167,6 +170,7 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
         setLoadingCandidates(true);
         setCandidates([]);
         setExternalId('');
+        setManual(false);
         setRef('');
         // Le type suit la source : un service sur une machine, un workflow chez
         // GitHub, une application par défaut chez Dokploy.
@@ -354,64 +358,100 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
 
                         {/* Toujours présent, y compris vide : l'afficher seulement
                             une fois rempli déplacerait le formulaire sous les
-                            yeux. Sa première ligne porte son état. */}
-                        <label className={styles.field}>
-                            <span className={styles.label}>Cible</span>
-                            <SearchSelect
-                                value={externalId}
-                                aria-label='Cible'
-                                onChange={pick}
-                                disabled={loadingCandidates || candidates.length === 0}
-                                placeholder={
-                                    loadingCandidates
-                                        ? machine
-                                            ? 'Interrogation de la machine…'
-                                            : 'Interrogation du fournisseur…'
-                                        : candidates.length === 0
-                                          ? machine
-                                              ? 'Aucun service compose sur cette machine'
-                                              : github
-                                                ? 'Ce jeton ne donne accès à aucun workflow'
-                                                : 'Cette instance ne déclare aucune application'
-                                          : 'Choisir…'
-                                }
-                                options={[
-                                    // Un identifiant saisi à la main, absent de la
-                                    // liste : sans cette entrée, le sélecteur
-                                    // afficherait « Choisir… ».
-                                    ...(externalId !== '' && !candidates.some((c) => c.externalId === externalId)
-                                        ? [{ value: externalId, label: externalId, detail: 'hors liste' }]
-                                        : []),
-                                    ...candidates.map((c) => ({
-                                        value: c.externalId,
-                                        label: `${c.path ? `${c.path} | ` : ''}${c.name}`,
-                                        prefix:
-                                            c.kind === 'compose' || c.kind === 'service'
-                                                ? '🧩'
-                                                : c.kind === 'workflow'
-                                                  ? '⚙️'
-                                                  : '📦'
-                                    }))
-                                ]}
-                            />
-                        </label>
-
-                        {/* Repli manuel, pour une réponse que le décodeur ne
+                            yeux. Sa première ligne porte son état. La saisie à la
+                            main le remplace, pour une cible que le décodeur ne
                             reconnaît pas. */}
-                        <label className={styles.field}>
-                            <span className={styles.label}>…ou identifiant de cible</span>
-                            <TextInput
-                                value={externalId}
-                                placeholder={
-                                    machine
-                                        ? 'docker/projet/service'
-                                        : github
-                                          ? 'propriétaire/dépôt#identifiant'
-                                          : 'applicationId ou composeId'
-                                }
-                                onChange={(e) => setExternalId(e.target.value)}
-                            />
-                        </label>
+                        <div className={styles.field}>
+                            <span className={styles.label}>Cible</span>
+                            {manual ? (
+                                <TextInput
+                                    autoFocus
+                                    aria-label='Identifiant de la cible'
+                                    value={externalId}
+                                    placeholder={
+                                        machine
+                                            ? 'docker/projet/service'
+                                            : github
+                                              ? 'propriétaire/dépôt#identifiant'
+                                              : 'applicationId ou composeId'
+                                    }
+                                    onChange={(e) => setExternalId(e.target.value)}
+                                />
+                            ) : (
+                                <SearchSelect
+                                    value={externalId}
+                                    aria-label='Cible'
+                                    onChange={pick}
+                                    disabled={loadingCandidates || candidates.length === 0}
+                                    placeholder={
+                                        loadingCandidates
+                                            ? machine
+                                                ? 'Interrogation de la machine…'
+                                                : 'Interrogation du fournisseur…'
+                                            : candidates.length === 0
+                                              ? machine
+                                                  ? 'Aucun service compose sur cette machine'
+                                                  : github
+                                                    ? 'Ce jeton ne donne accès à aucun workflow'
+                                                    : 'Cette instance ne déclare aucune application'
+                                              : 'Choisir…'
+                                    }
+                                    options={[
+                                        // Un identifiant saisi à la main, absent de la
+                                        // liste : sans cette entrée, le sélecteur
+                                        // afficherait « Choisir… ».
+                                        ...(externalId !== '' && !candidates.some((c) => c.externalId === externalId)
+                                            ? [{ value: externalId, label: externalId, detail: 'hors liste' }]
+                                            : []),
+                                        ...candidates.map((c) => ({
+                                            value: c.externalId,
+                                            label: `${c.path ? `${c.path} | ` : ''}${c.name}`,
+                                            prefix:
+                                                c.kind === 'compose' || c.kind === 'service'
+                                                    ? '🧩'
+                                                    : c.kind === 'workflow'
+                                                      ? '⚙️'
+                                                      : '📦'
+                                        }))
+                                    ]}
+                                />
+                            )}
+                            <span className={styles.hint}>
+                                {manual ? (
+                                    candidates.length > 0 && (
+                                        <button
+                                            type='button'
+                                            className={styles.linkButton}
+                                            onClick={() => setManual(false)}
+                                        >
+                                            Choisir dans la liste
+                                        </button>
+                                    )
+                                ) : externalId.trim() === '' ? (
+                                    <>
+                                        Absente de la liste ?{' '}
+                                        <button
+                                            type='button'
+                                            className={styles.linkButton}
+                                            onClick={() => setManual(true)}
+                                        >
+                                            Saisir son identifiant à la main
+                                        </button>
+                                    </>
+                                ) : (
+                                    <>
+                                        Identifiant de la cible : <span className={styles.mono}>{externalId}</span>{' '}
+                                        <button
+                                            type='button'
+                                            className={styles.linkButton}
+                                            onClick={() => setManual(true)}
+                                        >
+                                            Modifier
+                                        </button>
+                                    </>
+                                )}
+                            </span>
+                        </div>
 
                         {machine ? null : github ? (
                             <label className={styles.field}>

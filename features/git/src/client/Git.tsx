@@ -307,12 +307,13 @@ export function FeatureGit(_props: FeatureViewProps) {
             <RepoDialog
                 open={addOpen}
                 onClose={() => setAddOpen(false)}
-                onSaved={(repoId) => {
+                onSaved={(repoIds) => {
                     setAddOpen(false);
                     invalidate('git.list', 'git.count');
-                    // Un dépôt qu'on vient d'ajouter s'ouvre : c'est ce qu'on
+                    // Un dépôt qu'on vient d'ajouter seul s'ouvre : c'est ce qu'on
                     // voulait faire, et sa synchronisation démarre sous les yeux.
-                    setOpenedId(repoId);
+                    // À plusieurs, c'est la liste qui les montre.
+                    if (repoIds.length === 1) setOpenedId(repoIds[0]);
                 }}
             />
         </div>

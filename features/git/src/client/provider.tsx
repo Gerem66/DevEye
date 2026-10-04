@@ -139,7 +139,7 @@ function LinkedRepo({ repoId, canWrite, onUnlink }: LinkedRepoProps) {
 interface LinkedRepoDialogProps {
     open: boolean;
     onClose: () => void;
-    onSaved: (repoId: number) => void;
+    onSaved: (repoIds: readonly number[]) => void;
 }
 
 /**

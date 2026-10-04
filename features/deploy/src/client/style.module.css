@@ -59,6 +59,27 @@
     color: var(--text-muted);
 }
 
+/* Un repli qui se lit comme un lien : saisir l'identifiant à la main n'est pas
+   une décision, c'est un recours. */
+.linkButton {
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--accent);
+    font: inherit;
+    cursor: pointer;
+}
+
+.linkButton:hover {
+    text-decoration: underline;
+}
+
+.mono {
+    font-family: var(--font-mono);
+    color: var(--text-secondary);
+    overflow-wrap: anywhere;
+}
+
 /* Un accès retiré : la cible est là, mais plus rien n'en partira. */
 .overdue {
     color: var(--warning);

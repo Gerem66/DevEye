@@ -35,9 +35,11 @@ declare const styles: {
     readonly itemRowClickable: string;
     readonly label: string;
     readonly lastDeployName: string;
+    readonly linkButton: string;
     readonly logLive: string;
     readonly logLiveDot: string;
     readonly logOutput: string;
+    readonly mono: string;
     readonly overdue: string;
     readonly sectionTitle: string;
     readonly statusDot: string;

@@ -49,11 +49,11 @@ export function LinkRepoDialog({ open, projectId, linkedRepoIds, onClose, onSave
     /** Ce qui reste à relier : un dépôt déjà là n'a rien à faire dans la liste. */
     const free = repos.filter((r) => !linkedRepoIds.includes(r.id));
 
-    const link = async (repoId: number) => {
+    const link = async (repoIds: readonly number[]) => {
         setBusy(true);
         setError(null);
         try {
-            await api.send('projects.repoLink', { projectId, repoId });
+            for (const repoId of repoIds) await api.send('projects.repoLink', { projectId, repoId });
             onSaved();
         } catch (e) {
             setError(humanizeError(e, 'La liaison a échoué.'));
@@ -69,13 +69,13 @@ export function LinkRepoDialog({ open, projectId, linkedRepoIds, onClose, onSave
                 onClose={onClose}
                 title='Ajouter un dépôt au projet'
                 width={560}
-                onSubmit={() => picked !== '' && void link(Number(picked))}
+                onSubmit={() => picked !== '' && void link([Number(picked)])}
                 footer={
                     <>
                         <Button variant='secondary' onClick={onClose} disabled={busy}>
                             Annuler
                         </Button>
-                        <Button onClick={() => void link(Number(picked))} disabled={busy || picked === ''}>
+                        <Button onClick={() => void link([Number(picked)])} disabled={busy || picked === ''}>
                             {busy ? 'Enregistrement…' : 'Relier'}
                         </Button>
                     </>
@@ -134,9 +134,9 @@ export function LinkRepoDialog({ open, projectId, linkedRepoIds, onClose, onSave
                 <provider.RepoDialog
                     open={createOpen}
                     onClose={() => setCreateOpen(false)}
-                    onSaved={(repoId) => {
+                    onSaved={(repoIds) => {
                         setCreateOpen(false);
-                        void link(repoId);
+                        void link(repoIds);
                     }}
                 />
             )}

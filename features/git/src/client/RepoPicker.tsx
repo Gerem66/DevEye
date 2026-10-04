@@ -13,7 +13,8 @@ import styles from './style.module.css';
 /** Ce que le formulaire décrit à un instant donné. */
 export interface RepoTarget {
     owner: string;
-    repo: string;
+    /** Plusieurs cochés dans la liste, un seul en saisie à la main. */
+    repos: string[];
     credentialId: number | null;
 }
 
@@ -43,7 +44,7 @@ function candidateDetail(c: GitRepoCandidate): string | undefined {
 }
 
 /**
- * Désigner un dépôt chez le fournisseur : jeton, propriétaire, puis dépôt.
+ * Désigner des dépôts chez le fournisseur : jeton, propriétaire, puis dépôts.
  *
  * L'ordre des trois champs compte : le jeton vient en premier parce qu'il change
  * le résultat des deux autres, sans lui GitHub ne rend que le public. La liste se
@@ -98,10 +99,16 @@ export function RepoPicker({ credentials, value, onChange, onSettingsOpenChange,
         return () => clearTimeout(timer);
     }, [owner, credentialId]);
 
-    // Un nom saisi qui ne figure pas dans la liste ne doit pas disparaître du
-    // sélecteur : on bascule alors en saisie libre plutôt que de l'effacer.
-    const inList = candidates?.some((c) => c.name === value.repo) ?? false;
     const useManual = manual || lookupError !== null || (candidates !== null && candidates.length === 0);
+    /** Un autre jeton ou un autre propriétaire relit la liste : les cases cochées dans l'ancienne tombent. */
+    const kept = useManual ? value.repos : [];
+
+    // Un nom tapé pendant que la liste manquait ne doit pas partir caché quand elle revient.
+    useEffect(() => {
+        if (useManual || candidates === null) return;
+        const visible = value.repos.filter((name) => candidates.some((c) => c.name === name));
+        if (visible.length !== value.repos.length) onChange({ ...value, repos: visible });
+    }, [candidates, useManual]);
 
     return (
         <>
@@ -115,7 +122,7 @@ export function RepoPicker({ credentials, value, onChange, onSettingsOpenChange,
                             { value: '', label: 'Aucun : dépôts publics uniquement' },
                             ...credentials.map((c) => ({ value: String(c.id), label: c.label }))
                         ]}
-                        onChange={(v) => onChange({ ...value, credentialId: v ? Number(v) : null })}
+                        onChange={(v) => onChange({ ...value, repos: kept, credentialId: v ? Number(v) : null })}
                     />
                     {/* Le bouton commun, ouvert sur l'onglet Sources : la seule
                         porte vers les jetons, ici comme ailleurs. */}
@@ -141,17 +148,18 @@ export function RepoPicker({ credentials, value, onChange, onSettingsOpenChange,
                     value={value.owner}
                     placeholder='gerem66'
                     maxLength={GIT_REPO_OWNER_MAX_LENGTH}
-                    onChange={(e) => onChange({ ...value, owner: e.target.value })}
+                    onChange={(e) => onChange({ ...value, repos: kept, owner: e.target.value })}
                 />
             </label>
 
             <label className={styles.field}>
-                <span className={styles.label}>Dépôt</span>
+                <span className={styles.label}>Dépôts</span>
 
                 {!useManual && (
                     <SearchSelect
-                        value={inList ? value.repo : ''}
-                        aria-label='Dépôt'
+                        multiple
+                        value={value.repos.filter((name) => candidates?.some((c) => c.name === name))}
+                        aria-label='Dépôts'
                         disabled={owner.length === 0 || looking || candidates === null}
                         placeholder={
                             owner.length === 0
@@ -165,16 +173,16 @@ export function RepoPicker({ credentials, value, onChange, onSettingsOpenChange,
                             label: c.name,
                             detail: candidateDetail(c)
                         }))}
-                        onChange={(repo) => onChange({ ...value, repo })}
+                        onChange={(repos) => onChange({ ...value, repos })}
                     />
                 )}
 
                 {useManual && (
                     <TextInput
-                        value={value.repo}
+                        value={value.repos[0] ?? ''}
                         placeholder='DevEye'
                         maxLength={GIT_REPO_NAME_MAX_LENGTH}
-                        onChange={(e) => onChange({ ...value, repo: e.target.value })}
+                        onChange={(e) => onChange({ ...value, repos: [e.target.value] })}
                     />
                 )}
 
@@ -190,7 +198,15 @@ export function RepoPicker({ credentials, value, onChange, onSettingsOpenChange,
                 {/* Le retour à la liste n'est proposé que si elle a quelque chose
                     à montrer, sinon le bouton mènerait à un cul-de-sac. */}
                 {(!useManual || manual) && (
-                    <button type='button' className={styles.linkButton} onClick={() => setManual((v) => !v)}>
+                    <button
+                        type='button'
+                        className={styles.linkButton}
+                        onClick={() => {
+                            // Ce qui est coché d'un côté n'a pas de sens de l'autre : on repart de rien.
+                            setManual((v) => !v);
+                            onChange({ ...value, repos: [] });
+                        }}
+                    >
                         {manual && candidates !== null && candidates.length > 0
                             ? 'Choisir dans la liste'
                             : 'Saisir le nom à la main'}

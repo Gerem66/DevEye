@@ -40,10 +40,8 @@ export interface SearchSelectFilter<T extends string = string> {
     exclusive?: string;
 }
 
-export interface SearchSelectProps<T extends string> {
-    value: T;
+interface SearchSelectCommonProps<T extends string> {
     options: readonly SearchSelectOption<T>[];
-    onChange: (value: T) => void;
     'aria-label': string;
     /** Ce que le déclencheur affiche quand aucune option ne porte la valeur courante. */
     placeholder?: string;
@@ -60,6 +58,21 @@ export interface SearchSelectProps<T extends string> {
     disabled?: boolean;
     className?: string;
 }
+
+interface SearchSelectSingleProps<T extends string> extends SearchSelectCommonProps<T> {
+    multiple?: false;
+    value: T;
+    onChange: (value: T) => void;
+}
+
+/** Des cases à cocher : un choix bascule l'option et laisse le panneau ouvert. */
+interface SearchSelectMultipleProps<T extends string> extends SearchSelectCommonProps<T> {
+    multiple: true;
+    value: readonly T[];
+    onChange: (value: T[]) => void;
+}
+
+export type SearchSelectProps<T extends string> = SearchSelectSingleProps<T> | SearchSelectMultipleProps<T>;
 
 const LIST_MAX_HEIGHT = 300;
 const GAP = 4;
@@ -104,22 +117,24 @@ interface Anchor {
  *
  * Le panneau passe par un portail vers `<body>`, comme `Dialog` : dans le corps
  * défilant d'un dialogue il serait rogné.
+ *
+ * `multiple` en fait une liste à cocher : la valeur est un tableau, et le
+ * déclencheur montre les libellés choisis.
  */
-export function SearchSelect<T extends string>({
-    value,
-    options,
-    onChange,
-    placeholder = '…',
-    searchPlaceholder = 'Rechercher…',
-    emptyText = 'Aucun résultat',
-    searchable = 'auto',
-    filters,
-    id: triggerId,
-    autoFocus,
-    disabled,
-    className,
-    ...aria
-}: SearchSelectProps<T>) {
+export function SearchSelect<T extends string>(props: SearchSelectProps<T>) {
+    const {
+        options,
+        placeholder = '…',
+        searchPlaceholder = 'Rechercher…',
+        emptyText = 'Aucun résultat',
+        searchable = 'auto',
+        filters,
+        id: triggerId,
+        autoFocus,
+        disabled,
+        className,
+        'aria-label': ariaLabel
+    } = props;
     const id = useId();
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
@@ -133,7 +148,12 @@ export function SearchSelect<T extends string>({
 
     const hasSearch = searchable === 'auto' ? options.length >= AUTO_SEARCH_MIN : searchable;
     const chips = filters ?? [];
-    const selected = options.find((o) => o.value === value);
+    const chosen: readonly T[] = props.multiple ? props.value : [props.value];
+    const isChosen = (value: T): boolean => chosen.includes(value);
+    const selection = options.filter((o) => isChosen(o.value));
+    // Le repère et la précision d'une option ne parlent que d'elle : à plusieurs, le déclencheur n'en montre aucun.
+    const selected = props.multiple ? undefined : selection[0];
+    const triggerLabel = selection.length > 0 ? selection.map((o) => o.label).join(', ') : null;
     const placed = anchor !== null;
     const ordered = useMemo(() => byGroup(options), [options]);
     const haystacks = useMemo(
@@ -180,7 +200,11 @@ export function SearchSelect<T extends string>({
         });
     };
     const pick = (next: T): void => {
-        onChange(next);
+        if (props.multiple) {
+            props.onChange(isChosen(next) ? props.value.filter((v) => v !== next) : [...props.value, next]);
+            return;
+        }
+        props.onChange(next);
         close(true);
     };
     useDismissLayer(open, () => close(true));
@@ -232,7 +256,7 @@ export function SearchSelect<T extends string>({
     // À l'ouverture, le choix courant ; à chaque frappe ou filtre, le premier résultat choisissable.
     useEffect(() => {
         if (!open) return;
-        const current = query === '' ? matches.findIndex((o) => o.value === value && !o.disabled) : -1;
+        const current = query === '' ? matches.findIndex((o) => isChosen(o.value) && !o.disabled) : -1;
         setActive(current >= 0 ? current : nextEnabled(matches, -1, 1));
     }, [open, query, activeFilters]);
 
@@ -269,7 +293,11 @@ export function SearchSelect<T extends string>({
                 disabled={disabled}
                 aria-haspopup='listbox'
                 aria-expanded={open}
-                aria-label={`${aria['aria-label']} : ${selected?.label ?? 'aucun choix'}`}
+                aria-label={`${ariaLabel} : ${
+                    props.multiple && selection.length > 1
+                        ? `${selection.length} choix`
+                        : (triggerLabel ?? 'aucun choix')
+                }`}
                 onClick={() => setOpen((current) => !current)}
                 onKeyDown={(event) => {
                     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
@@ -283,8 +311,8 @@ export function SearchSelect<T extends string>({
                         {selected.prefix}
                     </span>
                 )}
-                <span className={selected ? styles.label : `${styles.label} ${styles.placeholder}`}>
-                    {selected?.label ?? placeholder}
+                <span className={triggerLabel !== null ? styles.label : `${styles.label} ${styles.placeholder}`}>
+                    {triggerLabel ?? placeholder}
                 </span>
                 {selected?.detail && <span className={styles.detail}>{selected.detail}</span>}
                 <span className={`icon icon-chevron-down ${styles.chevron}`} aria-hidden='true' />
@@ -304,7 +332,7 @@ export function SearchSelect<T extends string>({
                                 className={styles.search}
                                 type='text'
                                 role='combobox'
-                                aria-label={`${aria['aria-label']} : rechercher`}
+                                aria-label={`${ariaLabel} : rechercher`}
                                 aria-expanded='true'
                                 aria-controls={`${id}-list`}
                                 aria-activedescendant={matches[active] ? `${id}-option-${active}` : undefined}
@@ -350,7 +378,8 @@ export function SearchSelect<T extends string>({
                             ref={list}
                             id={`${id}-list`}
                             role='listbox'
-                            aria-label={aria['aria-label']}
+                            aria-label={ariaLabel}
+                            aria-multiselectable={props.multiple || undefined}
                             aria-activedescendant={!hasSearch && matches[active] ? `${id}-option-${active}` : undefined}
                             tabIndex={hasSearch ? undefined : -1}
                             onKeyDown={hasSearch ? undefined : onKeyDown}
@@ -363,10 +392,10 @@ export function SearchSelect<T extends string>({
                                         key={index}
                                         id={`${id}-option-${index}`}
                                         role='option'
-                                        aria-selected={option.value === value}
+                                        aria-selected={isChosen(option.value)}
                                         aria-disabled={option.disabled || undefined}
                                         className={`${styles.option} ${index === active ? styles.optionActive : ''} ${
-                                            option.value === value ? styles.optionSelected : ''
+                                            isChosen(option.value) ? styles.optionSelected : ''
                                         } ${option.disabled ? styles.optionDisabled : ''}`}
                                         // `mousedown` et non `click` : le champ de recherche ne perd pas le focus.
                                         onMouseDown={(event) => {
@@ -377,6 +406,14 @@ export function SearchSelect<T extends string>({
                                             if (!option.disabled) setActive(index);
                                         }}
                                     >
+                                        {props.multiple && (
+                                            <span
+                                                className={`${styles.check} ${isChosen(option.value) ? styles.checkOn : ''}`}
+                                                aria-hidden='true'
+                                            >
+                                                <span className={`icon icon-v ${styles.checkMark}`} />
+                                            </span>
+                                        )}
                                         {option.prefix && (
                                             <span className={styles.prefix} aria-hidden='true'>
                                                 {option.prefix}

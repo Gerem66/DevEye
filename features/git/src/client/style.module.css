@@ -47,6 +47,8 @@
     background: var(--danger-bg);
     color: var(--danger);
     font-size: 0.85rem;
+    /* Un refus par ligne quand plusieurs dépôts sont ajoutés d'un coup. */
+    white-space: pre-line;
 }
 
 .overdue {
