@@ -195,6 +195,21 @@
     color: var(--text-secondary);
 }
 
+/* Le chevron d'un scénario pivote plutôt que de changer d'icône : la transition
+   est portée par l'état déplié, sinon le repli se ferait sans animation. */
+.chevron {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    color: var(--text-muted);
+    transition: transform var(--transition-fast);
+}
+
+.chevronFolded {
+    composes: chevron;
+    transform: rotate(-90deg);
+}
+
 .rowText {
     display: flex;
     flex-direction: column;

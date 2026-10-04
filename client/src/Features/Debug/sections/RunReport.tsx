@@ -40,7 +40,10 @@ function Scenario({
                 onClick={() => setOpen((o) => !o)}
                 aria-expanded={expanded}
             >
-                <span className={`icon icon-chevron ${styles.rowIcon}`} />
+                <span
+                    className={`icon icon-chevron-down ${expanded ? styles.chevron : styles.chevronFolded}`}
+                    aria-hidden='true'
+                />
                 <div className={styles.rowText}>
                     <span className={styles.rowTitle}>
                         <Mark status={scenario.status} /> {scenario.label}
