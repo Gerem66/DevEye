@@ -245,6 +245,10 @@
     -webkit-mask-image: url(/icons/arrow-left.svg);
     mask-image: url(/icons/arrow-left.svg);
 }
+.icon.icon-dots {
+    -webkit-mask-image: url(/icons/dots.svg);
+    mask-image: url(/icons/dots.svg);
+}
 .icon.icon-chevron-down {
     -webkit-mask-image: url(/icons/chevron-down.svg);
     mask-image: url(/icons/chevron-down.svg);

@@ -1,0 +1,89 @@
+.trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.trigger:hover,
+.trigger:focus-visible,
+.triggerOpen {
+    background: var(--surface-subtle);
+    color: var(--text-primary);
+}
+
+.panel {
+    position: fixed;
+    z-index: var(--z-toast);
+    display: flex;
+    flex-direction: column;
+    width: min(260px, calc(100vw - 16px));
+    padding: var(--space-xs);
+    border: 1px solid var(--glass-border-strong);
+    border-radius: var(--radius-md);
+    background: var(--surface-popup-solid);
+    box-shadow: var(--shadow-lg);
+}
+
+.item {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    width: 100%;
+    padding: var(--space-sm);
+    border: none;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--text-primary);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.item:hover:not(:disabled),
+.item:focus-visible {
+    outline: none;
+    background: var(--surface-subtle);
+}
+
+.item:disabled {
+    cursor: not-allowed;
+    filter: opacity(0.5);
+}
+
+.itemDanger {
+    color: var(--danger);
+}
+
+.itemIcon {
+    width: 16px;
+    margin-top: 2px;
+}
+
+.itemText {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.itemLabel {
+    font-size: 0.9rem;
+}
+
+.itemDetail {
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    line-height: 1.35;
+}

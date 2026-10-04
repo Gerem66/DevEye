@@ -833,7 +833,7 @@ impl SyncManager {
     }
 
     /// Suppression propagée : corbeille locale, puis `sync.opResult`.
-    pub fn delete(&self, op_id: &str, share_id: i64, rel_path: &str) {
+    pub fn delete(&self, op_id: &str, share_id: i64, rel_path: &str, force: bool) {
         let root = match self.served(share_id) {
             Ok((root, _)) => root,
             Err(reason) => return self.refuse(op_id, "delete", reason),
@@ -841,7 +841,7 @@ impl SyncManager {
         let (caches, rel_path) = (Arc::clone(&self.caches), rel_path.to_string());
         // Its own thread: the rename may wait on a locked target.
         transfer::spawn_local_op(op_id.to_string(), "delete", self.tx.clone(), move |_| {
-            transfer::delete_to_trash(&root, share_id, &caches, &rel_path)
+            transfer::delete_to_trash(&root, share_id, &caches, &rel_path, force)
         });
     }
 }

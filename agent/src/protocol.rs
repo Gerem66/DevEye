@@ -1418,6 +1418,9 @@ pub enum ServerMessage {
         share_id: i64,
         #[serde(rename = "relPath")]
         rel_path: String,
+        /// Asked for by the user: trashed even if changed since the scan or never indexed.
+        #[serde(default)]
+        force: bool,
     },
     /// List the update tools present (replies `pkg.listResult`), then count
     /// each managed one's pending updates (one `pkg.count` each).

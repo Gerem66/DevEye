@@ -1213,13 +1213,15 @@ pub fn move_file(
 
 /// Moves a file to `.deveye-trash/<timestamp>/<relPath>` (never an unlink),
 /// cautiously: a file changed since the scan is not ours to trash (the next
-/// scan sees the edit), and a directory only goes if it is really empty (the
-/// server only asks for one it saw empty; anything inside appeared since).
+/// scan sees the edit), unless `force` says the user asked for this very file;
+/// a directory only goes if it is really empty (the server only asks for one
+/// it saw empty; anything inside appeared since).
 pub fn delete_to_trash(
     root: &Path,
     share_id: i64,
     caches: &SharedCaches,
     rel_path: &str,
+    force: bool,
 ) -> Result<()> {
     let src = confined_join(root, rel_path)?;
     let Ok(meta) = std::fs::symlink_metadata(&src) else {
@@ -1234,7 +1236,7 @@ pub fn delete_to_trash(
     if !meta.is_file() {
         bail!("la cible n'est pas un fichier régulier : suppression refusée");
     }
-    if !unchanged_since_scan(caches, share_id, rel_path, &meta) {
+    if !force && !unchanged_since_scan(caches, share_id, rel_path, &meta) {
         bail!("le fichier a changé depuis le scan : suppression reportée");
     }
     let stamp = SystemTime::now()
@@ -1942,12 +1944,12 @@ mod tests {
         let meta = std::fs::metadata(&file).unwrap();
 
         let stale = caches_with(Some(("x.txt", meta.len() + 1, mtime_millis(&meta))));
-        let err = delete_to_trash(dir.path(), CACHE_SHARE, &stale, "x.txt").unwrap_err();
+        let err = delete_to_trash(dir.path(), CACHE_SHARE, &stale, "x.txt", false).unwrap_err();
         assert!(error_text(&err).contains("a changé"), "{err}");
         assert!(file.exists());
 
         let fresh = caches_with(Some(("x.txt", meta.len(), mtime_millis(&meta))));
-        delete_to_trash(dir.path(), CACHE_SHARE, &fresh, "x.txt").unwrap();
+        delete_to_trash(dir.path(), CACHE_SHARE, &fresh, "x.txt", false).unwrap();
         assert!(!file.exists());
         let stamp = std::fs::read_dir(dir.path().join(".deveye-trash"))
             .unwrap()
@@ -1961,10 +1963,18 @@ mod tests {
     fn delete_to_trash_refuses_a_path_absent_from_the_cache() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("x.txt"), b"hello").unwrap();
-        let err =
-            delete_to_trash(dir.path(), CACHE_SHARE, &caches_with(None), "x.txt").unwrap_err();
+        let err = delete_to_trash(dir.path(), CACHE_SHARE, &caches_with(None), "x.txt", false)
+            .unwrap_err();
         assert!(error_text(&err).contains("a changé"), "{err}");
         assert!(dir.path().join("x.txt").exists());
+    }
+
+    #[test]
+    fn delete_to_trash_forced_takes_a_path_absent_from_the_cache() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("x.txt"), b"hello").unwrap();
+        delete_to_trash(dir.path(), CACHE_SHARE, &caches_with(None), "x.txt", true).unwrap();
+        assert!(!dir.path().join("x.txt").exists());
     }
 
     #[test]
@@ -1974,12 +1984,12 @@ mod tests {
         std::fs::create_dir(&full).unwrap();
         std::fs::write(full.join("f.txt"), b"f").unwrap();
         let caches = caches_with(None);
-        let err = delete_to_trash(dir.path(), CACHE_SHARE, &caches, "full").unwrap_err();
+        let err = delete_to_trash(dir.path(), CACHE_SHARE, &caches, "full", false).unwrap_err();
         assert!(error_text(&err).contains("non vide"), "{err}");
         assert!(full.join("f.txt").exists());
 
         std::fs::create_dir(dir.path().join("empty")).unwrap();
-        delete_to_trash(dir.path(), CACHE_SHARE, &caches, "empty").unwrap();
+        delete_to_trash(dir.path(), CACHE_SHARE, &caches, "empty", false).unwrap();
         assert!(!dir.path().join("empty").exists());
     }
 

@@ -39,6 +39,8 @@ export type { LoadingVeilProps } from '@/Components/LoadingVeil';
 export { default as LogOutput } from '@/Components/LogOutput';
 export type { LogOutputProps } from '@/Components/LogOutput';
 /** Copier une valeur, confirmé deux secondes par l'icône. */
+export { default as ActionMenu } from '@/Components/ActionMenu';
+export type { ActionMenuItem, ActionMenuProps } from '@/Components/ActionMenu';
 export { default as CopyButton } from '@/Components/CopyButton';
 export type { CopyButtonProps } from '@/Components/CopyButton';
 export { default as Slider } from '@/Components/Slider';

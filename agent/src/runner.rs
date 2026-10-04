@@ -1051,8 +1051,8 @@ async fn stream_session(
                             }
                             // CloudSync: propagate a deletion (local trash, never unlink).
                             // Off-loop: the rename may wait on a lock; the outcome comes back through sync_rx.
-                            Ok(ServerMessage::SyncDelete { op_id, share_id, rel_path }) => {
-                                sync_mgr.delete(&op_id, share_id, &rel_path);
+                            Ok(ServerMessage::SyncDelete { op_id, share_id, rel_path, force }) => {
+                                sync_mgr.delete(&op_id, share_id, &rel_path, force);
                             }
                             // Update tools, then their counts (off-loop; replies via pkg_rx).
                             Ok(ServerMessage::PkgList {}) => {
