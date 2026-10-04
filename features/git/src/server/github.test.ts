@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 
-import { authorRef, fetchPullRequests, fetchRepoInfo, GitHubError, nameRef } from './github';
+import { authorRef, fetchPullRequests, fetchRepoInfo, GitHubError, listTokenOwners, nameRef } from './github';
 
 /** Les fonctions pures de l'adaptateur GitHub, et ses décodeurs. */
 
@@ -72,5 +72,44 @@ describe('les ETags', () => {
             fetchRepoInfo('o', 'r', 'tok'),
             (e: unknown) => e instanceof GitHubError && !e.rateLimited
         );
+    });
+});
+
+describe('listTokenOwners', () => {
+    /** Un `fetch` qui répond selon le chemin ; un chemin absent répond 403. */
+    function route(answers: Record<string, unknown>) {
+        globalThis.fetch = (async (input: string | URL | Request) => {
+            const path = new URL(String(input)).pathname;
+            return path in answers
+                ? new Response(JSON.stringify(answers[path]), { status: 200 })
+                : new Response('{}', { status: 403 });
+        }) as typeof fetch;
+    }
+
+    it('met le compte du jeton en tête, puis les organisations des deux sources, sans doublon', async () => {
+        route({
+            '/user': { login: 'gerem66' },
+            '/user/orgs': [{ login: 'Oxyfoo' }],
+            '/user/repos': [
+                { owner: { login: 'gerem66', type: 'User' } },
+                { owner: { login: 'oxyfoo', type: 'Organization' } },
+                { owner: { login: 'AphroMad', type: 'Organization' } }
+            ]
+        });
+        assert.deepEqual(await listTokenOwners('tok'), [
+            { login: 'gerem66', kind: 'self' },
+            { login: 'AphroMad', kind: 'organization' },
+            { login: 'oxyfoo', kind: 'organization' }
+        ]);
+    });
+
+    it('se contente de ce qu’un jeton à portée réduite laisse lire', async () => {
+        route({ '/user/repos': [{ owner: { login: 'Oxyfoo', type: 'Organization' } }] });
+        assert.deepEqual(await listTokenOwners('tok'), [{ login: 'Oxyfoo', kind: 'organization' }]);
+    });
+
+    it('remonte l’erreur quand rien ne répond', async () => {
+        route({});
+        await assert.rejects(listTokenOwners('tok'), GitHubError);
     });
 });

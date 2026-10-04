@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { FeatureSettingsButton, humanizeError, SearchSelect, TextInput } from 'deveye-sdk-client';
 import {
-    GIT_REPO_NAME_MAX_LENGTH,
     GIT_REPO_OWNER_MAX_LENGTH,
     type GitCredential,
+    type GitOwnerCandidate,
     type GitRepoCandidate
 } from '../contracts/domain';
 
@@ -43,6 +43,14 @@ function candidateDetail(c: GitRepoCandidate): string | undefined {
     return marks.length > 0 ? marks.join(' · ') : undefined;
 }
 
+/** Les noms d'une saisie libre : séparés par des virgules, espaces libres autour. */
+function splitNames(text: string): string[] {
+    return text
+        .split(',')
+        .map((name) => name.trim())
+        .filter((name) => name !== '');
+}
+
 /**
  * Désigner des dépôts chez le fournisseur : jeton, propriétaire, puis dépôts.
  *
@@ -53,15 +61,46 @@ function candidateDetail(c: GitRepoCandidate): string | undefined {
  * La saisie manuelle reste possible : la découverte dépend d'une API tierce qui
  * peut refuser (quota épuisé, propriétaire introuvable, jeton à portée réduite),
  * et un échec de liste ne doit pas empêcher d'ajouter un dépôt qu'on sait nommer.
+ * Il en va de même du propriétaire, proposé parmi les comptes du jeton.
  */
 export function RepoPicker({ credentials, value, onChange, onSettingsOpenChange, autoFocus }: RepoPickerProps) {
     const [candidates, setCandidates] = useState<GitRepoCandidate[] | null>(null);
     const [looking, setLooking] = useState(false);
     const [lookupError, setLookupError] = useState<string | null>(null);
     const [manual, setManual] = useState(false);
+    /** Le texte de la saisie libre, gardé tel quel : le reformater à chaque frappe déplacerait le curseur. */
+    const [manualText, setManualText] = useState('');
+    const [owners, setOwners] = useState<GitOwnerCandidate[] | null>(null);
+    const [ownersError, setOwnersError] = useState<string | null>(null);
+    const [ownerManual, setOwnerManual] = useState(false);
 
     const owner = value.owner.trim();
     const credentialId = value.credentialId;
+
+    useEffect(() => {
+        setOwners(null);
+        setOwnersError(null);
+        if (credentialId === null) return;
+        let alive = true;
+        api.send('git.ownerCandidates', { credentialId })
+            .then((res) => {
+                if (alive) setOwners(res.owners);
+            })
+            .catch((e) => {
+                if (alive) setOwnersError(humanizeError(e, 'Les comptes de ce jeton n’ont pas pu être listés.'));
+            });
+        return () => {
+            alive = false;
+        };
+    }, [credentialId]);
+
+    const ownerList = credentialId !== null && !ownerManual && ownersError === null && owners?.length !== 0;
+
+    // Un propriétaire que le nouveau jeton n'atteint pas laisse place au compte du jeton.
+    useEffect(() => {
+        if (!ownerList || owners === null || owners.some((o) => o.login === value.owner)) return;
+        onChange({ ...value, owner: owners[0].login, repos: [] });
+    }, [owners, ownerList]);
 
     /**
      * Le jeton d'une réponse en vol : sans lui, une recherche lente sur « ger »
@@ -103,6 +142,13 @@ export function RepoPicker({ credentials, value, onChange, onSettingsOpenChange,
     /** Un autre jeton ou un autre propriétaire relit la liste : les cases cochées dans l'ancienne tombent. */
     const kept = useManual ? value.repos : [];
 
+    // Le texte suit la sélection venue d'ailleurs (la liste quittée, les seuls refusés d'un ajout).
+    useEffect(() => {
+        if (useManual && splitNames(manualText).join(',') !== value.repos.join(',')) {
+            setManualText(value.repos.join(','));
+        }
+    }, [useManual, value.repos]);
+
     // Un nom tapé pendant que la liste manquait ne doit pas partir caché quand elle revient.
     useEffect(() => {
         if (useManual || candidates === null) return;
@@ -137,19 +183,44 @@ export function RepoPicker({ credentials, value, onChange, onSettingsOpenChange,
                 <span className={styles.hint}>
                     {credentials.length === 0
                         ? 'Aucun jeton GitHub enregistré : seuls les dépôts publics apparaîtront, et la synchronisation restera inactive. « Jetons GitHub » ouvre les réglages pour en déclarer un.'
-                        : 'Change la liste ci-dessous — un jeton donne accès aux dépôts privés, et il est indispensable à la synchronisation.'}
+                        : 'Change la liste ci-dessous : un jeton donne accès aux dépôts privés, et il est indispensable à la synchronisation.'}
                 </span>
             </label>
 
             <label className={styles.field}>
                 <span className={styles.label}>Propriétaire ou organisation</span>
-                <TextInput
-                    data-autofocus={autoFocus ? '' : undefined}
-                    value={value.owner}
-                    placeholder='gerem66'
-                    maxLength={GIT_REPO_OWNER_MAX_LENGTH}
-                    onChange={(e) => onChange({ ...value, repos: kept, owner: e.target.value })}
-                />
+                {ownerList ? (
+                    <SearchSelect
+                        autoFocus={autoFocus}
+                        value={value.owner}
+                        aria-label='Propriétaire ou organisation'
+                        disabled={owners === null}
+                        placeholder={owners === null ? 'Lecture des comptes du jeton…' : 'Choisir…'}
+                        options={(owners ?? []).map((o) => ({
+                            value: o.login,
+                            label: o.login,
+                            detail: o.kind === 'self' ? 'compte du jeton' : 'organisation'
+                        }))}
+                        onChange={(login) => onChange({ ...value, repos: kept, owner: login })}
+                    />
+                ) : (
+                    <TextInput
+                        data-autofocus={autoFocus ? '' : undefined}
+                        value={value.owner}
+                        placeholder='gerem66'
+                        maxLength={GIT_REPO_OWNER_MAX_LENGTH}
+                        onChange={(e) => onChange({ ...value, repos: kept, owner: e.target.value })}
+                    />
+                )}
+
+                {ownersError && <span className={styles.lookupError}>{ownersError}</span>}
+
+                {/* Sans jeton, aucun compte à proposer : la saisie libre est le seul chemin. */}
+                {credentialId !== null && ownersError === null && owners?.length !== 0 && (
+                    <button type='button' className={styles.linkButton} onClick={() => setOwnerManual((v) => !v)}>
+                        {ownerManual ? 'Choisir dans la liste' : 'Saisir le nom à la main'}
+                    </button>
+                )}
             </label>
 
             <label className={styles.field}>
@@ -178,12 +249,17 @@ export function RepoPicker({ credentials, value, onChange, onSettingsOpenChange,
                 )}
 
                 {useManual && (
-                    <TextInput
-                        value={value.repos[0] ?? ''}
-                        placeholder='DevEye'
-                        maxLength={GIT_REPO_NAME_MAX_LENGTH}
-                        onChange={(e) => onChange({ ...value, repos: [e.target.value] })}
-                    />
+                    <>
+                        <TextInput
+                            value={manualText}
+                            placeholder='DevEye,DevEye-Types'
+                            onChange={(e) => {
+                                setManualText(e.target.value);
+                                onChange({ ...value, repos: splitNames(e.target.value) });
+                            }}
+                        />
+                        <span className={styles.hint}>Plusieurs dépôts : séparez leurs noms par des virgules.</span>
+                    </>
                 )}
 
                 {lookupError && <span className={styles.lookupError}>{lookupError}</span>}
@@ -191,25 +267,17 @@ export function RepoPicker({ credentials, value, onChange, onSettingsOpenChange,
                 {candidates !== null && candidates.length === 0 && !lookupError && (
                     <span className={styles.hint}>
                         Aucun dépôt visible pour « {owner} »
-                        {credentialId === null && ' — un jeton révélerait peut-être des dépôts privés'}.
+                        {credentialId === null && ' : un jeton révélerait peut-être des dépôts privés'}.
                     </span>
                 )}
 
                 {/* Le retour à la liste n'est proposé que si elle a quelque chose
                     à montrer, sinon le bouton mènerait à un cul-de-sac. */}
                 {(!useManual || manual) && (
-                    <button
-                        type='button'
-                        className={styles.linkButton}
-                        onClick={() => {
-                            // Ce qui est coché d'un côté n'a pas de sens de l'autre : on repart de rien.
-                            setManual((v) => !v);
-                            onChange({ ...value, repos: [] });
-                        }}
-                    >
+                    <button type='button' className={styles.linkButton} onClick={() => setManual((v) => !v)}>
                         {manual && candidates !== null && candidates.length > 0
                             ? 'Choisir dans la liste'
-                            : 'Saisir le nom à la main'}
+                            : 'Saisir les noms à la main'}
                     </button>
                 )}
             </label>

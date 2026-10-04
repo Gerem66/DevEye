@@ -8,6 +8,7 @@ import {
     gitCommitCursorSchema,
     gitCommitPointsSchema,
     gitCommitSchema,
+    gitOwnerCandidateSchema,
     gitRepoCandidateSchema,
     gitProviderSchema,
     gitPullRequestSchema,
@@ -122,6 +123,13 @@ export const gitRepoCandidates = {
         credentialId: credentialId.nullable()
     }),
     output: z.object({ repos: z.array(gitRepoCandidateSchema) })
+};
+
+/** Les comptes qu'un jeton atteint, lus chez GitHub à la demande. Sans jeton, rien à lister. */
+export const gitOwnerCandidates = {
+    command: 'git.ownerCandidates' as const,
+    input: z.object({ credentialId }),
+    output: z.object({ owners: z.array(gitOwnerCandidateSchema) })
 };
 
 /** `ids` est la liste complète dans son ordre final. Ne touche ni au cache ni à la synchronisation. */
@@ -248,6 +256,7 @@ export const gitCommands = [
     gitRepoGet,
     gitRepoAdd,
     gitRepoCandidates,
+    gitOwnerCandidates,
     gitRepoReorder,
     gitRepoUpdate,
     gitRepoRemove,

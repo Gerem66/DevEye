@@ -1,5 +1,6 @@
 import {
     gitCount,
+    gitOwnerCandidates,
     gitRepoAdd,
     gitRepoCandidates,
     gitRepoGet,
@@ -14,7 +15,7 @@ import {
 } from '../contracts/commands';
 import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 
-import { listOwnerRepos } from './github';
+import { listOwnerRepos, listTokenOwners } from './github';
 import {
     loadHomeRepo,
     loadRepo,
@@ -35,7 +36,8 @@ import {
  *
  * Rien ici n'appelle GitHub directement, même `repoSyncNow` ne fait que réveiller
  * le service de fond : aucune commande ne dépend de la latence d'une API tierce.
- * Seule exception, `repoCandidates`, une liste qu'on regarde au moment d'ajouter.
+ * Seules exceptions, `ownerCandidates` et `repoCandidates`, des listes qu'on
+ * regarde au moment d'ajouter.
  *
  * Le filet de démarrage ne reconnaît aucune de ces commandes : il cherche un verbe
  * juste après le point, et les noms sont en camelCase. `mutates` se relit donc à
@@ -203,6 +205,16 @@ export const gitCrudFeatures = [
                     // avant `api-10`.
                     .sort((a, b) => a.name.localeCompare(b.name, 'fr', { sensitivity: 'base', numeric: true }))
             };
+        }
+    }),
+    /** Les comptes qu'atteint un jeton de l'espace, pour ne pas taper le propriétaire. Même droit que `repoCandidates`. */
+    defineSdkFeature({
+        ...gitOwnerCandidates,
+        access: { level: 'write' },
+        handler: async (ctx: Ctx, input) => {
+            const credential = await ctx.repo.findCredential(input.credentialId, ctx.workspaceId);
+            if (!credential) throw new FeatureError('not_found', 'Jeton introuvable');
+            return { owners: await listTokenOwners(await ctx.cipher().decrypt(credential.secret_enc)) };
         }
     }),
     defineSdkFeature({

@@ -262,7 +262,7 @@ export async function fetchReleases(
     };
 }
 
-/** Secondes unix, ou `null` — jamais `0`, qui se lirait comme 1970. */
+/** Secondes unix, ou `null`, jamais `0`, qui se lirait comme 1970. */
 function seconds(value: string | null | undefined): number | null {
     if (!value) return null;
     const ms = new Date(value).getTime();
@@ -521,7 +521,7 @@ async function callPublic<T>(path: string, token: string | null): Promise<T> {
                   : rateLimited
                     ? token
                         ? 'Quota GitHub épuisé pour ce jeton.'
-                        : 'Quota GitHub anonyme épuisé — choisissez un jeton.'
+                        : 'Quota GitHub anonyme épuisé : choisissez un jeton.'
                     : `GitHub a répondu ${res.status}.`;
         throw new GitHubError(message, res.status, rateLimited);
     }
@@ -582,4 +582,51 @@ export async function listOwnerRepos(owner: string, token: string | null): Promi
 
     const rows = await callPublic<RawOwnerRepo[]>(`/users/${owner}/repos?${query}`, token);
     return rows.map(toOwnerRepo);
+}
+
+/** Un compte que le jeton atteint : le sien, ou une organisation. */
+export interface GitHubOwner {
+    login: string;
+    kind: 'self' | 'organization';
+}
+
+interface RawRepoOwner {
+    owner?: { login?: string; type?: string };
+}
+
+/**
+ * Les comptes dont un jeton peut lister les dépôts : le sien, puis ses
+ * organisations. Deux sources pour les organisations, parce qu'un jeton à grain
+ * fin ne voit souvent pas `/user/orgs` mais lit bien les dépôts qu'on lui a
+ * ouverts : leurs propriétaires complètent la liste.
+ *
+ * Chaque appel peut échouer seul (portée réduite) ; seul l'échec de tous remonte.
+ */
+export async function listTokenOwners(token: string): Promise<GitHubOwner[]> {
+    const [self, orgs, repos] = await Promise.allSettled([
+        callPublic<{ login?: string }>('/user', token),
+        callPublic<{ login?: string }[]>(`/user/orgs?per_page=${PER_PAGE}`, token),
+        callPublic<RawRepoOwner[]>(
+            `/user/repos?affiliation=owner,organization_member&sort=pushed&per_page=${PER_PAGE}`,
+            token
+        )
+    ]);
+    if (self.status === 'rejected' && orgs.status === 'rejected' && repos.status === 'rejected') throw self.reason;
+
+    const login = self.status === 'fulfilled' ? (self.value.login ?? null) : null;
+    const organizations = new Map<string, string>();
+    const add = (name: string | undefined): void => {
+        if (name && name.toLowerCase() !== login?.toLowerCase()) organizations.set(name.toLowerCase(), name);
+    };
+    if (orgs.status === 'fulfilled') for (const org of orgs.value) add(org.login);
+    if (repos.status === 'fulfilled') {
+        for (const repo of repos.value) if (repo.owner?.type === 'Organization') add(repo.owner.login);
+    }
+
+    return [
+        ...(login ? [{ login, kind: 'self' as const }] : []),
+        ...[...organizations.values()]
+            .sort((a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base', numeric: true }))
+            .map((name) => ({ login: name, kind: 'organization' as const }))
+    ];
 }

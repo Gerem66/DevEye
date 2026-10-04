@@ -50,6 +50,13 @@ export const gitRepoCandidateSchema = z.object({
 });
 export type GitRepoCandidate = z.infer<typeof gitRepoCandidateSchema>;
 
+/** Un compte dont le jeton peut lister les dépôts : le sien, ou une organisation. */
+export const gitOwnerCandidateSchema = z.object({
+    login: z.string(),
+    kind: z.enum(['self', 'organization'])
+});
+export type GitOwnerCandidate = z.infer<typeof gitOwnerCandidateSchema>;
+
 /** Un projet qui utilise ce dépôt ; à l'étage ouvert, donc lisible sans session. */
 export const gitRepoUsageSchema = z.object({
     projectId: z.number().int().positive(),

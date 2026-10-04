@@ -301,6 +301,12 @@ Le placer sous la liste revenait à demander de choisir avant d'avoir dit ce que
 la liste devait contenir. La liste se recharge donc à chaque changement de l'un
 ou de l'autre, et d'eux seuls.
 
+Avec un jeton, le propriétaire se choisit parmi les comptes qu'il atteint
+(`listTokenOwners`) : le sien, ses organisations (`/user/orgs`) et les
+propriétaires des dépôts qu'il lit, car un jeton à grain fin voit rarement
+`/user/orgs`. Les dépôts se cochent à plusieurs ; à la main, leurs noms se
+séparent par des virgules.
+
 `listOwnerRepos` (`github.ts`) essaie trois chemins, parce que GitHub n'expose
 pas la même chose selon qui demande :
 
@@ -420,12 +426,13 @@ mot ici. Un point propre à cette liste : la relecture déclenchée par
 `git.list` est **retenue** pendant un glissé et rejouée au relâchement — une
 liste qui se réordonne sous le pointeur n'est pas un ordre.
 
-### Deux lectures seulement sortent du cache
+### Trois lectures seulement sortent du cache
 
-`git.commitDetail` (le diff) et `git.repoCandidates` (la liste des dépôts d'un
-propriétaire) interrogent GitHub **au moment de la demande** ; tout le reste
-vient du cache local. Ce sont donc les deux seules dont la latence dépende d'une
-API tierce, et les écrans le disent. Un diff pèse des
+`git.commitDetail` (le diff), `git.ownerCandidates` (les comptes qu'atteint un
+jeton) et `git.repoCandidates` (la liste des dépôts d'un propriétaire)
+interrogent GitHub **au moment de la demande** ; tout le reste vient du cache
+local. Ce sont donc les trois seules dont la latence dépende d'une API tierce,
+et les écrans le disent. Un diff pèse des
 ordres de grandeur de plus que la ligne qui le résume, on ne le regarde qu'une
 fois, et le stocker chiffré ferait grossir la base sans contrepartie. Le jeton
 d'un dépôt projeté se lit **chez lui** (`ft_git_credentials` de son domicile,
