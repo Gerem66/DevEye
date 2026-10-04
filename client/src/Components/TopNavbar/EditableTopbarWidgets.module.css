@@ -173,3 +173,10 @@
     color: var(--text-secondary);
     flex-shrink: 0;
 }
+
+/* Les widgets vivants sont masqués sur téléphone : leur éditeur n'y a pas lieu. */
+@media (max-width: 640px) {
+    .editor {
+        display: none;
+    }
+}

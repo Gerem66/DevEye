@@ -176,7 +176,7 @@ export default function TopNavbar({
     const aboutHint = useHint('aboutHintDismissed', versionShown && !organizing);
 
     return (
-        <nav className={`${styles.navbar} ${inFeature ? styles.blurred : ''}`}>
+        <nav className={`${styles.navbar} ${inFeature ? styles.blurred : ''} ${organizing ? styles.organizing : ''}`}>
             {/* Left section — the back button collapses its own width so the brand
                 slides smoothly in/out of feature mode (no nested layout jank). */}
             <div className={styles.left}>

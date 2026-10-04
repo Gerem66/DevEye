@@ -555,9 +555,11 @@
         display: none;
     }
 
-    /* Too tight to centre the wording once the brand/status collapse — keep just
-       the icon + "Terminer" button as the edit-mode affordance. */
-    .organizeBannerText {
+    /* Trop étroit pour le texte du bandeau. En organisation, « Terminer » y
+       reste seul : le profil le chevaucherait. */
+    .organizeBannerText,
+    .organizing .organizeBannerIcon,
+    .organizing .profileBtn {
         display: none;
     }
 }
