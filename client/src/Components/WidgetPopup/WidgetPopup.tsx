@@ -5,6 +5,12 @@ import { usePopupMaxWidth } from '@/stores/popupWidth';
 import { useSecrecyHold } from '@/stores/secrecy';
 import styles from './WidgetPopup.module.css';
 
+/** Un point de l'écran, en pixels. */
+export interface PopupOrigin {
+    x: number;
+    y: number;
+}
+
 export interface WidgetPopupProps {
     /**
      * Grid card `widgetId` to morph from via framer-motion's shared-element
@@ -12,6 +18,11 @@ export interface WidgetPopupProps {
      * then fades + scales in instead.
      */
     layoutId?: string;
+    /**
+     * Sans `layoutId` : le panneau grandit depuis ce point et s'y rétracte, ce
+     * qui part d'un élément qui, lui, ne bouge pas (un widget de la barre).
+     */
+    origin?: PopupOrigin;
     /** Whether the popup is currently shown. */
     open: boolean;
     /** Called when the user requests to close (Escape, overlay click). */
@@ -42,6 +53,7 @@ export interface WidgetPopupProps {
  */
 export default function WidgetPopup({
     layoutId,
+    origin,
     open,
     onClose,
     bodyRef,
@@ -76,10 +88,17 @@ export default function WidgetPopup({
                         onClick={onClose}
                     />
 
-                    {/* Panel — morphs from the grid card when a `layoutId` is
-                        given, otherwise fades + scales in (structural pages). */}
+                    {/* Panel: morphs from the grid card when a `layoutId` is
+                        given, grows from `origin` when given, otherwise fades +
+                        scales in (structural pages). */}
                     <motion.div
                         layoutId={layoutId}
+                        // Le panneau est fixe : ses décalages sont sa place dans la
+                        // fenêtre, et l'origine de l'échelle s'y rapporte.
+                        ref={(el: HTMLDivElement | null) => {
+                            if (el && origin)
+                                el.style.transformOrigin = `${origin.x - el.offsetLeft}px ${origin.y - el.offsetTop}px`;
+                        }}
                         className={styles.popup}
                         /*
                          * Une prise pour le contenu qui doit se mesurer contre le
@@ -89,9 +108,9 @@ export default function WidgetPopup({
                          */
                         data-popup-frame=''
                         style={{ maxWidth }}
-                        initial={layoutId ? false : { opacity: 0, scale: 0.95 }}
+                        initial={layoutId ? false : { opacity: 0, scale: origin ? 0.05 : 0.95 }}
                         animate={layoutId ? undefined : { opacity: 1, scale: 1 }}
-                        exit={layoutId ? undefined : { opacity: 0, scale: 0.95 }}
+                        exit={layoutId ? undefined : { opacity: 0, scale: origin ? 0.05 : 0.95 }}
                         transition={{ type: 'spring', stiffness: 280, damping: 32, mass: 0.9 }}
                     >
                         <div className={styles.body}>

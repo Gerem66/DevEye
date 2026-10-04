@@ -3,9 +3,16 @@
  * the home page to open another one. The home page registers the single handler,
  * and requests made while none is registered are dropped.
  */
+import type { PopupOrigin } from '@/Components/WidgetPopup/WidgetPopup';
 import { getActiveInstanceId } from './workspace';
 
-type OpenViewHandler = (viewId: string) => void;
+export interface OpenViewOptions {
+    forceReset?: boolean;
+    /** Le point de l'écran d'où la popup grandit, à la place du morphe depuis la tuile. */
+    origin?: PopupOrigin;
+}
+
+type OpenViewHandler = (viewId: string, opts: OpenViewOptions) => void;
 
 let handler: OpenViewHandler | null = null;
 
@@ -18,8 +25,8 @@ export function onOpenViewRequest(fn: OpenViewHandler): () => void {
 }
 
 /** Ask the home page to open a view by its id (e.g. `security`, `profile`). */
-export function requestOpenView(viewId: string): void {
-    handler?.(viewId);
+export function requestOpenView(viewId: string, opts: OpenViewOptions = {}): void {
+    handler?.(viewId, opts);
 }
 
 /**

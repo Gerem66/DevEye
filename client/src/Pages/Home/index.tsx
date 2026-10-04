@@ -67,7 +67,7 @@ import { startTeleport } from '@/stores/live';
 import { TopNavbar, type SiteBanner } from '@/Components/TopNavbar';
 import { QuotaPrompt } from '@/Components/QuotaPrompt';
 import { WidgetGrid } from '@/Components/WidgetGrid';
-import { WidgetPopup, FeatureKeepAlive } from '@/Components/WidgetPopup';
+import { WidgetPopup, FeatureKeepAlive, type PopupOrigin } from '@/Components/WidgetPopup';
 import { Wallpaper } from '@/Components/Wallpaper';
 import { SettingsPanel } from '@/Components/SettingsPanel';
 import { InfoPopup, openInfo } from '@/Components/InfoPopup';
@@ -433,6 +433,9 @@ function homeWorkspaceId(): number {
 /** L'instance distante tout juste ajoutée, dont la connexion s'ouvre au retour du rechargement. */
 const PENDING_REMOTE_KEY = 'deveye.pendingRemote';
 
+/** D'où sort la popup : l'identité de morphe d'une tuile, ou un point de l'écran. */
+type MorphFrom = string | PopupOrigin;
+
 export default function HomePage() {
     const { user, refresh } = useAuth();
     /** Le retrait de l'accueil derrière un dossier déployé est un mouvement : il
@@ -501,7 +504,7 @@ export default function HomePage() {
     // asked to close itself with nothing to show — see requestCloseFeature).
     const forceUnmountRef = useRef<Set<string>>(new Set());
     // Expand requested while another popup is still open / animating out.
-    const pendingExpandRef = useRef<{ widgetId: string; forceReset: boolean; morphFrom?: string } | null>(null);
+    const pendingExpandRef = useRef<{ widgetId: string; forceReset: boolean; morphFrom?: MorphFrom } | null>(null);
     /**
      * L'époque d'espace à l'ouverture de la popup, qui identifie sa paire de
      * morphe. Sans elle, une bascule remonte les tuiles avec le même `layoutId`
@@ -515,6 +518,8 @@ export default function HomePage() {
      * Appareils, et chacune doit rendre la sienne au retour.
      */
     const morphSourceRef = useRef<string | null>(null);
+    /** Le point d'où la popup grandit quand elle ne sort pas d'une tuile. */
+    const popupOriginRef = useRef<PopupOrigin | null>(null);
 
     const unmountFeature = useCallback((featureId: string) => {
         clearTimeout(ttlTimers.current.get(featureId));
@@ -542,14 +547,16 @@ export default function HomePage() {
         setMountedFeatures((prev) => new Set(prev).add(featureId));
     }, []);
 
-    const doExpand = useCallback((widgetId: string, forceReset: boolean, morphFrom?: string) => {
+    const doExpand = useCallback((widgetId: string, forceReset: boolean, morphFrom?: MorphFrom) => {
         clearTimeout(ttlTimers.current.get(widgetId));
         ttlTimers.current.delete(widgetId);
         if (closingFeatureRef.current === widgetId) closingFeatureRef.current = null;
         // Une ouverture, et elle seule, fixe l'identité de morphe : la relecture
         // d'une vue déjà ouverte passe par `remountFeature`, qui n'y touche pas.
         morphEpochRef.current = getWorkspaceState().epoch;
-        morphSourceRef.current = morphFrom ?? widgetId;
+        // Un point (un widget de la barre) : la popup grandit de là, et aucune tuile ne s'efface.
+        popupOriginRef.current = typeof morphFrom === 'object' ? morphFrom : null;
+        morphSourceRef.current = typeof morphFrom === 'object' ? null : (morphFrom ?? widgetId);
 
         if (forceReset) {
             setFeatureGen((prev) => {
@@ -644,7 +651,7 @@ export default function HomePage() {
 
     /** Ouvre la vue et dit si elle s'ouvre : une bascule ou un droit manquant refuse. */
     const handleExpand = useCallback(
-        (widgetId: string, forceReset = false, morphFrom?: string): boolean => {
+        (widgetId: string, forceReset = false, morphFrom?: MorphFrom): boolean => {
             // Pendant une bascule, les droits affichés sont vides : ni ouvrir ni
             // refuser, le clic ne fait rien.
             if (switching) return false;
@@ -850,7 +857,22 @@ export default function HomePage() {
 
     // Cross-view navigation: a view can ask to open another one (e.g. the
     // profile's link to the security page).
-    useEffect(() => onOpenViewRequest((viewId) => handleExpand(viewId)), [handleExpand]);
+    // Un point d'origine ne sert qu'à une vue sans tuile visible sur l'accueil :
+    // une tuile posée garde son morphe, d'où qu'on ouvre la vue.
+    const layoutRef = useRef(layout);
+    layoutRef.current = layout;
+    useEffect(
+        () =>
+            onOpenViewRequest((viewId, opts) => {
+                const onHome = layoutRef.current.sections.some(
+                    (section) =>
+                        !(section.collapsible === true && section.collapsed === true) &&
+                        section.items.some((tile) => isFeatureTile(tile) && featureCatalogEntry(tile)?.id === viewId)
+                );
+                handleExpand(viewId, opts.forceReset ?? false, onHome ? undefined : opts.origin);
+            }),
+        [handleExpand]
+    );
 
     // Taper une lettre sur l'accueil au repos ouvre la recherche, la lettre déjà
     // saisie. Une vue, un dossier ou un dialogue ouvert garde ses frappes.
@@ -1473,10 +1495,13 @@ export default function HomePage() {
                         // été ouverte ; après une bascule, la popup se referme par
                         // un simple fondu.
                         layoutId={
-                            popupConfig.hasCard && morphEpochRef.current === workspaceEpoch
+                            popupConfig.hasCard &&
+                            popupOriginRef.current === null &&
+                            morphEpochRef.current === workspaceEpoch
                                 ? `${morphEpochRef.current}:${morphSourceRef.current}`
                                 : undefined
                         }
+                        origin={popupOriginRef.current ?? undefined}
                         open={!!expandedWidget}
                         onClose={handleClose}
                         bodyRef={setPopupBodyEl}

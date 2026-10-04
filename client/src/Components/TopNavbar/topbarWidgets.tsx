@@ -1,9 +1,10 @@
-import { type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { type ComponentType, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import type { FeatureId, HomeTopbarWidgetId, WorkspaceKind } from '@deveye/types';
 
+import { isForceReload } from '@/Pages/Home/forceReload';
 import { useHomeLayout } from '@/stores/homeLayout';
+import { requestOpenView } from '@/stores/viewRequest';
 import { useActiveWorkspace, useWorkspacePermissions } from '@/stores/workspace';
-import { openFeature } from '@/sdk';
 import { cardModules, moduleClient } from '@/sdk/registry';
 import { SecrecyTimer } from './SecrecyTimer';
 import { LivePresence } from './LivePresence';
@@ -119,7 +120,6 @@ export function renderTopbarWidget(
             const meta = topbarCatalog().find((w) => w.id === id);
             const Widget = moduleClient(id)?.TopbarWidget;
             if (!meta?.feature || !Widget) return null;
-            const feature = meta.feature;
             if (opts.editing) {
                 return (
                     <span className={`${pill.pill} ${pill.module}`} title={meta.title}>
@@ -127,18 +127,29 @@ export function renderTopbarWidget(
                     </span>
                 );
             }
-            return (
-                <button
-                    type='button'
-                    className={`${pill.pill} ${pill.module}`}
-                    title={`Ouvrir ${meta.title}`}
-                    onClick={() => openFeature(feature)}
-                >
-                    <Widget />
-                </button>
-            );
+            return <ModuleTopbarButton feature={meta.feature} title={meta.title} Widget={Widget} />;
         }
     }
+}
+
+/** La pastille d'un module ouvre sa feature, qui grandit depuis elle ; la pastille, elle, ne bouge pas. */
+function ModuleTopbarButton({ feature, title, Widget }: { feature: FeatureId; title: string; Widget: ComponentType }) {
+    return (
+        <button
+            type='button'
+            className={`${pill.pill} ${pill.module}`}
+            title={`Ouvrir ${title}`}
+            onClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                requestOpenView(feature, {
+                    forceReset: isForceReload(e),
+                    origin: { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+                });
+            }}
+        >
+            <Widget />
+        </button>
+    );
 }
 
 /**

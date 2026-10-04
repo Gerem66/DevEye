@@ -28,7 +28,10 @@ export interface HomeStarter {
     label: string;
     icon: string;
     features: readonly HomeFeatureId[];
-    /** Peu de widgets : ceux des fonctionnalités posées qui en ont un, et l'IP là où on administre des machines. */
+    /**
+     * Peu de widgets : la recherche partout, ceux des fonctionnalités posées qui
+     * en ont un, et l'IP là où on administre des machines.
+     */
     topbar: readonly HomeTopbarWidgetId[];
 }
 
@@ -49,21 +52,21 @@ export const HOME_STARTERS: readonly HomeStarter[] = [
         label: 'Superviser',
         icon: 'activity',
         features: ['devices', 'uptime', 'audience'],
-        topbar: ['publicIp', 'uptime', 'devices']
+        topbar: ['search', 'publicIp', 'uptime', 'devices']
     },
     {
         id: 'ship',
         label: 'Livrer',
         icon: 'rocket',
         features: ['git', 'deploy', 'database', 'backup'],
-        topbar: ['publicIp']
+        topbar: ['search', 'publicIp']
     },
     {
         id: 'secure',
         label: 'Sécuriser',
         icon: 'shield',
         features: ['sentinel', 'cve', 'x-audit', 'osint'],
-        topbar: ['publicIp']
+        topbar: ['search', 'publicIp']
     }
 ];
 
