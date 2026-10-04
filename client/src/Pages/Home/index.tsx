@@ -3,6 +3,7 @@ import {
     useCallback,
     useMemo,
     useEffect,
+    useLayoutEffect,
     useRef,
     type ComponentType,
     type MouseEvent,
@@ -97,6 +98,7 @@ import { DeviceTileCard, FeatureTileCard, FolderTileCard, ShortcutTileCard } fro
 import type { AdminBadge, TileLock } from './tiles/tileLock';
 import { AboutContent } from './about';
 import { EditableHome } from './organize/EditableHome';
+import { captureMorph, playMorph } from './sectionMorph';
 import { FolderOverlay, folderTitle } from './folders';
 
 import type {
@@ -345,7 +347,7 @@ function CollapsibleSection({ section, children }: { section: HomeSection; child
 
     if (!foldable) {
         return (
-            <div className={styles.sectionGroup}>
+            <div className={styles.sectionGroup} data-morph={`section:${section.id}`}>
                 {section.title && <h2 className={styles.sectionHeading}>{section.title}</h2>}
                 {children}
             </div>
@@ -353,7 +355,7 @@ function CollapsibleSection({ section, children }: { section: HomeSection; child
     }
 
     return (
-        <div className={styles.sectionGroup}>
+        <div className={styles.sectionGroup} data-morph={`section:${section.id}`}>
             {/* Le bouton est l'intitulé : une cible séparée serait minuscule.
                 Sans titre, le chevron seul reste cliquable. */}
             <button type='button' className={styles.sectionToggle} aria-expanded={!folded} onClick={toggle}>
@@ -838,6 +840,10 @@ export default function HomePage() {
     useEffect(() => {
         if (!canLayout) setEditing(false);
     }, [canLayout]);
+
+    useLayoutEffect(() => {
+        playMorph(contentEl, editing, reducedMotion);
+    }, [editing, contentEl, reducedMotion]);
     useEffect(() => {
         if (!canAppearance) setSettingsOpen(false);
     }, [canAppearance]);
@@ -1293,6 +1299,7 @@ export default function HomePage() {
         // qu'on va manipuler est justement celle qu'il recouvre.
         setOpenFolder(null);
         setAutoAddSection(autoAdd);
+        captureMorph(contentEl, true);
         setEditing(true);
         layoutHint.dismiss();
     };
@@ -1382,7 +1389,10 @@ export default function HomePage() {
                     onOpenSettings={canAppearance ? () => setSettingsOpen(true) : undefined}
                     onOrganize={canLayout ? () => startOrganizing() : undefined}
                     organizing={editing}
-                    onDoneOrganizing={() => setEditing(false)}
+                    onDoneOrganizing={() => {
+                        captureMorph(contentEl, false);
+                        setEditing(false);
+                    }}
                     onManageWorkspace={(e) => handleExpand('workspace', isForceReload(e))}
                     onSelectWorkspace={handleSelectWorkspace}
                     onConnectRemote={(instanceId, workspaceId) => setRemoteLogin({ instanceId, workspaceId })}

@@ -462,6 +462,7 @@ function SortableSection({
             ref={setNodeRef}
             style={style}
             className={`${styles.sectionBlock} ${isDragging ? styles.sectionDragging : ''}`}
+            data-morph={`section:${section.id}`}
         >
             <div className={styles.sectionHeader}>
                 <button
@@ -536,6 +537,7 @@ function AddSectionButton({ compact, onClick }: { compact?: boolean; onClick: ()
         <button
             type='button'
             className={`${styles.addSection} ${compact ? styles.addSectionTop : ''}`}
+            data-morph={compact ? 'add-start' : 'add-end'}
             onClick={onClick}
         >
             <span className={`icon icon-plus ${styles.addTileIcon}`} />
