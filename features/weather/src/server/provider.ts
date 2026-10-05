@@ -652,3 +652,9 @@ export function geocodeLocation(input: GeocodeInput): Promise<GeocodeResult> {
         call: () => adapterFor(input.provider).geocode(input.query, input.apiKey)
     });
 }
+
+/** Un appel minimal à Open-Meteo avec la clé de l'instance, pour la page Services externes. */
+export async function probeOpenMeteo(): Promise<void> {
+    const params = new URLSearchParams({ latitude: '48.85', longitude: '2.35', current: 'temperature_2m' });
+    await openMeteoJson<OpenMeteoForecast>(openMeteoUrl('api', '/v1/forecast', params));
+}

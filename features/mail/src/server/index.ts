@@ -10,6 +10,7 @@ import { mailRoutes } from './routes';
 import { MailSync } from './service';
 import { createMailTransport } from './transport';
 import { MAIL_ENV } from './env';
+import { mailExternalServices } from './externalServices';
 
 /**
  * L'entrée serveur du module : la relève de fond des boîtes ouvertes
@@ -29,6 +30,7 @@ export const serverEntry: FeatureServer<MailRepo> = {
     env: MAIL_ENV,
     createRepo,
     features: mailHandlers,
+    externalServices: mailExternalServices,
     createService(deps) {
         const sync = new MailSync(deps);
         return {

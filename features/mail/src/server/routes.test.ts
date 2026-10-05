@@ -83,6 +83,7 @@ function account(over: Partial<MailAccountRow> & { id: number }): MailAccountRow
         security_tier: 'open',
         auth_method: 'password',
         enabled: 1,
+        allow_remote_images: 0,
         sync_interval_seconds: 600,
         last_sync_at: null,
         last_sync_error_enc: null,
@@ -175,6 +176,8 @@ function fakeRepo(accountRows: MailAccountRow[], projections: Record<number, num
                 return row;
             },
             setEnabled: unused,
+            countOAuth: unused,
+            setAllowRemoteImages: unused,
             delete: unused,
             reorder: unused,
             recordSync: unused,

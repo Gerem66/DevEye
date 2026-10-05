@@ -115,6 +115,13 @@ export function createProxyConfig(
     };
 }
 
+let lastReadAt: number | null = null;
+
+/** Millisecondes : la dernière lecture de la liste par le proxy, depuis le démarrage de ce processus. */
+export function proxyLastReadAt(): number | null {
+    return lastReadAt;
+}
+
 /** Sur l'écouteur principal seulement, et muette sans le bon jeton : un 404 ne dit pas qu'elle existe. */
 export function registerProxyRoute(app: FastifyInstance, repo: FeatureDomainsRepo): void {
     const token = env.DOMAIN_PROXY_TOKEN;
@@ -139,6 +146,7 @@ export function registerProxyRoute(app: FastifyInstance, repo: FeatureDomainsRep
         if (given.length !== expected.length || !timingSafeEqual(given, expected)) {
             return reply.code(404).send();
         }
+        lastReadAt = Date.now();
         return reply.header('cache-control', 'no-store').send(await build());
     });
 }

@@ -88,6 +88,7 @@ import FeatureWorkspace from '@/Features/Workspace';
 import FeatureUsers from '@/Features/Users';
 import FeatureMaintenance from '@/Features/Maintenance';
 import FeatureDebug from '@/Features/Debug';
+import FeatureExternalServices from '@/Features/ExternalServices';
 
 import { catalogEntries, featureCatalog, featureCatalogEntry } from './catalog';
 import { EmptyHome } from './EmptyHome';
@@ -154,7 +155,7 @@ function adminViewHost(View: ComponentType<AdminViewProps>): ComponentType<Featu
 }
 
 /** Les pages système du menu du compte, dans cet ordre ; leur titre et leur icône sont ceux de leur vue. */
-const ADMIN_VIEW_IDS = ['logs', 'feedback', 'users', 'maintenance', 'debug'] as const;
+const ADMIN_VIEW_IDS = ['logs', 'feedback', 'users', 'maintenance', 'services', 'debug'] as const;
 
 function adminMenu(): { id: string; label: string; icon: string }[] {
     const ids = [...ADMIN_VIEW_IDS, ...adminEntries().map(({ manifest }) => adminViewId(manifest.id))];
@@ -254,6 +255,14 @@ const buildStaticViews = (): ViewConfig[] => [
         cacheDurationMinutes: 0,
         hasCard: false,
         FullComponent: FeatureMaintenance
+    },
+    {
+        id: 'services',
+        title: 'Services externes',
+        icon: 'cloud',
+        cacheDurationMinutes: 0,
+        hasCard: false,
+        FullComponent: FeatureExternalServices
     },
     {
         id: 'debug',

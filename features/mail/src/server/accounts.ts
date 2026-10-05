@@ -5,6 +5,7 @@ import {
     mailAccountList,
     mailAccountReorder,
     mailAccountSetEnabled,
+    mailAccountSetRemoteImages,
     mailAccountSetProfile,
     mailAccountTestConnection,
     mailAccountUpdate,
@@ -325,6 +326,30 @@ export const mailAccountSetEnabledFeature = defineSdkFeature<
         // une fenêtre peut suspendre la relève de ce qu'elle voit.
         const existing = await loadAccount(ctx, input.id, 'write');
         const row = await ctx.repo.accounts.setEnabled(input.id, existing.workspace_id, input.enabled);
+        if (!row) throw new FeatureError('not_found', 'Compte mail introuvable');
+        return {
+            account: await toAccountDTO(
+                await accountCipher(ctx, row),
+                row,
+                isForeign(ctx, row),
+                ctx.quota.isPaused('accounts', String(row.id))
+            )
+        };
+    }
+});
+
+export const mailAccountSetRemoteImagesFeature = defineSdkFeature<
+    MailRepo,
+    typeof mailAccountSetRemoteImages.command,
+    typeof mailAccountSetRemoteImages.input,
+    typeof mailAccountSetRemoteImages.output
+>({
+    ...mailAccountSetRemoteImages,
+    access: WRITE,
+    mutates: true,
+    handler: async (ctx, input) => {
+        const existing = await loadAccount(ctx, input.id, 'write');
+        const row = await ctx.repo.accounts.setAllowRemoteImages(input.id, existing.workspace_id, input.allowed);
         if (!row) throw new FeatureError('not_found', 'Compte mail introuvable');
         return {
             account: await toAccountDTO(

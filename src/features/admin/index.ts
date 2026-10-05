@@ -5,6 +5,7 @@ import { schedulePlanReconcile } from '@/Services/planPauses';
 import { forgetSessionsOf } from '@/Services/SecureStore';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import { deleteUserEverywhere } from '../_users';
+import { adminExternalServicesFeature } from './externalServices';
 import { adminMaintenanceFeatures } from './maintenance';
 import { notifyAdmins } from './notify';
 
@@ -138,5 +139,6 @@ export const adminFeatures: FeatureDefinition<string, any, any>[] = [
     adminSetUserRoleFeature,
     adminSetUserStatusFeature,
     adminDeleteUserFeature,
+    adminExternalServicesFeature,
     ...adminMaintenanceFeatures
 ];

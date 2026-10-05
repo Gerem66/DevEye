@@ -373,6 +373,8 @@ export interface FinanceRepo {
     countConnectionsInWorkspaces(workspaceIds: readonly number[]): Promise<number>;
     /** Ce que compte `countConnectionsInWorkspaces`, du plus ancien au plus récent : le stock du quota `bankConnections`. */
     listStockConnections(workspaceIds: readonly number[]): Promise<SdkStockItem[]>;
+    /** Toute l'instance : les connexions d'un fournisseur, et celles dont la dernière relève a échoué ou expiré. */
+    countProviderConnections(provider: BankProvider): Promise<{ total: number; failing: number }>;
     /**
      * Les connexions à relever, tous espaces : relevées avant `before` ou jamais,
      * hors celles expirées et hors `pausedIds`, écartées dans le SQL pour ne pas
@@ -1288,6 +1290,14 @@ export function createRepo(q: SdkQueryable): FinanceRepo {
                 [[...workspaceIds]]
             );
             return Number(rows[0]?.n ?? 0);
+        },
+        async countProviderConnections(provider) {
+            const rows = await q.query<{ total: number; failing: number | null }>(
+                `SELECT COUNT(*) AS total, SUM(status <> 'ok') AS failing
+                   FROM ft_finance_connections WHERE provider = ?`,
+                [provider]
+            );
+            return { total: Number(rows[0]?.total ?? 0), failing: Number(rows[0]?.failing ?? 0) };
         },
         async listStockConnections(workspaceIds) {
             if (workspaceIds.length === 0) return [];

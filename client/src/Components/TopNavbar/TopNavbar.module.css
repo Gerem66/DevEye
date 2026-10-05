@@ -305,7 +305,14 @@
     min-width: 190px;
     /* Sans plafond, un nom d'espace à rallonge étire le menu sous toute la
        barre ; il s'ellipse à la place. */
-    max-width: 300px;
+    max-width: min(300px, calc(100vw - 2 * var(--space-md)));
+    /* La barre est fixe : la page ne défile jamais jusqu'au bas d'un menu
+       plus haut que l'écran, c'est le menu qui défile. Les 8px sont le
+       décalage de son animation d'ouverture. */
+    max-height: calc(100vh - var(--navbar-height) - var(--space-sm) - 8px - var(--space-md));
+    max-height: calc(100dvh - var(--navbar-height) - var(--space-sm) - 8px - var(--space-md));
+    overflow-y: auto;
+    overscroll-behavior: contain;
     background: var(--surface-popup);
     backdrop-filter: var(--glass-backdrop);
     -webkit-backdrop-filter: var(--glass-backdrop);
@@ -313,7 +320,6 @@
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-lg);
     padding: var(--space-xs);
-    overflow: hidden;
     z-index: var(--z-modal);
 }
 

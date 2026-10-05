@@ -342,6 +342,22 @@ démarrage (`moduleEnvProblem`). Uptime, Sauvegardes, Mail, Appareils,
 Sentinelle, Convertisseur, Météo, Finances, Serveur mail et les modules privés
 en déclarent.
 
+### Les services externes
+
+`FeatureServer.externalServices({ repo, refresh })` rend les dépendances
+externes du module au niveau de l'instance (un fournisseur joint avec la clé de
+l'instance, jamais un service qu'un espace règle lui-même) : une carte chacune
+(`SdkExternalService` : `state` parmi `ok`, `degraded`, `down`, `inactive`, une
+phrase, des faits « clé : valeur », des jauges). La page admin Services
+externes les lit par `moduleExternalServices` (`Services/externalServices`),
+après les sondes de l'hôte (stockage objet, SMTP, versions de l'agent, proxy
+des domaines, page d'état). Appels réseau permis, bornés à 8 s par module ; un
+module qui lève, tarde ou rend une forme invalide devient une carte en panne.
+La page garde sa mesure 5 minutes, `refresh` la demande à nouveau : un module
+garde en cache ce qui coûte (un quota d'API, une liste longue). Météo
+(Open-Meteo), Mail (Google, Microsoft), Finances (Enable Banking) et la
+facturation des comptes (Stripe) en déclarent.
+
 ### Tests et débogage
 
 Pour la page Tests et débogage ([DEBUG.md](./DEBUG.md)) : `mailSamples`, chaque
@@ -607,8 +623,8 @@ tick })` (boucle avec garde de réentrance, `stop()` attend le tick en cours),
 
 Par entrée serveur (`FeatureServer`) : `createRepo`, `features`,
 `migrationsDir`, `createService`, `items` (`homeOf`, `labelOf`, `shareable?`,
-`move?`, `copy?`), `domains`, `accountExport`, `quotas`, `env`, `mailSamples`,
-`e2e`.
+`move?`, `copy?`), `domains`, `accountExport`, `quotas`, `env`,
+`externalServices`, `mailSamples`, `e2e`.
 
 Par service créé (`FeatureService`) : `start`, `stop`, `agentHooks`,
 `providers`, `publicRoutes`, `domainRoot`, `onPlanPause`, `onAccountDeleted`,

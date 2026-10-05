@@ -9,6 +9,7 @@ import type {
     SdkDnsRecord,
     SdkDomain,
     SdkDomainProbe,
+    SdkExternalService,
     SdkMailSample,
     SdkMovePlan,
     SdkPlanPauseChange,
@@ -602,6 +603,19 @@ export function moduleMailSamples(): { featureId: string; label: string; samples
         featureId: mod.manifest.id,
         label: mod.manifest.label,
         samples: mod.server.mailSamples!
+    }));
+}
+
+/** Les services externes que déclarent les modules installés, à lire par la page Services externes. */
+export function moduleExternalServices(db: Database): {
+    featureId: string;
+    label: string;
+    read(refresh: boolean): Promise<readonly SdkExternalService[]>;
+}[] {
+    return MODULES.filter((mod) => mod.server.externalServices).map((mod) => ({
+        featureId: mod.manifest.id,
+        label: mod.manifest.label,
+        read: (refresh) => mod.server.externalServices!({ repo: mod.repoFor(db), refresh })
     }));
 }
 

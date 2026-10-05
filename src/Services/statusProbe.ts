@@ -111,6 +111,13 @@ async function systemChannels(db: Database, crypt: Encryption): Promise<StatusCh
     return { webhooks: [...webhooks.values()], emails: [...emails] };
 }
 
+let lastProbedAt: number | null = null;
+
+/** Millisecondes : la dernière sonde de la page d'état, depuis le démarrage de ce processus. */
+export function statusProbeLastReadAt(): number | null {
+    return lastProbedAt;
+}
+
 export function registerStatusProbeRoutes(
     app: FastifyInstance,
     deps: { db: Database; crypt: Encryption; tracking(): StatusTracking }
@@ -151,6 +158,7 @@ export function registerStatusProbeRoutes(
 
     app.get(STATUS_PROBE_PATH, { logLevel: 'silent' }, async (req, reply) => {
         if (!authorized(req.headers.authorization)) return reply.code(404).send();
+        lastProbedAt = Date.now();
         return reply.header('cache-control', 'no-store').send(await probe());
     });
     app.get(STATUS_CHANNELS_PATH, { logLevel: 'silent' }, async (req, reply) => {

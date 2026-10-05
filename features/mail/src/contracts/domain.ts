@@ -161,6 +161,8 @@ export const mailAccountSchema = z.object({
     smtpPort: z.number().int(),
     proxyConfigured: z.boolean(),
     enabled: z.boolean(),
+    /** Toutes les images distantes de ses messages s'affichent, sans bannière. */
+    allowRemoteImages: z.boolean(),
     lastSyncAt: z.number().int().nonnegative().nullable(),
     lastSyncError: z.string().nullable(),
     /**
@@ -332,6 +334,7 @@ export interface MailAccountRow {
     security_tier: MailSecurityTier;
     auth_method: MailAuthMethod;
     enabled: number;
+    allow_remote_images: number;
     /** Background-sync cadence for this mailbox alone. */
     sync_interval_seconds: number;
     last_sync_at: number | null;

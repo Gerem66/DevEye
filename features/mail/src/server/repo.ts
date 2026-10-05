@@ -43,6 +43,8 @@ export interface MailAccountConfig {
 export interface MailAccountsRepo {
     listByWorkspace(workspaceId: number): Promise<MailAccountRow[]>;
     countInWorkspaces(workspaceIds: readonly number[]): Promise<number>;
+    /** Toute l'instance : les boîtes reliées par OAuth, et les comptes qui les ont reliées, par fournisseur. */
+    countOAuth(): Promise<{ authMethod: MailAuthMethod; boxes: number; users: number }[]>;
     /** Ce que compte `countInWorkspaces`, du plus ancien au plus récent : le stock du quota `accounts`. */
     listStock(workspaceIds: readonly number[]): Promise<SdkStockItem[]>;
     /**
@@ -62,6 +64,7 @@ export interface MailAccountsRepo {
     create(input: { userId: number; workspaceId: number } & MailAccountConfig): Promise<MailAccountRow>;
     update(id: number, workspaceId: number, input: MailAccountConfig): Promise<MailAccountRow | null>;
     setEnabled(id: number, workspaceId: number, enabled: boolean): Promise<MailAccountRow | null>;
+    setAllowRemoteImages(id: number, workspaceId: number, allowed: boolean): Promise<MailAccountRow | null>;
     delete(id: number, workspaceId: number): Promise<boolean>;
     reorder(workspaceId: number, ids: number[]): Promise<void>;
     /** Write back a sync outcome, `last_sync_at` compris : c'est ce qui remet le compte dans la rotation. */
@@ -236,6 +239,17 @@ function accountsRepo(q: SdkQueryable): MailAccountsRepo {
             );
             return Number(rows[0]?.total ?? 0);
         },
+        async countOAuth() {
+            const rows = await q.query<{ auth_method: MailAuthMethod; boxes: number; users: number }>(
+                `SELECT auth_method, COUNT(*) AS boxes, COUNT(DISTINCT user_id) AS users
+                 FROM mail_accounts WHERE auth_method <> 'password' GROUP BY auth_method`
+            );
+            return rows.map((row) => ({
+                authMethod: row.auth_method,
+                boxes: Number(row.boxes),
+                users: Number(row.users)
+            }));
+        },
         async listStock(workspaceIds) {
             if (workspaceIds.length === 0) return [];
             const rows = await q.query<{ id: number; workspace_id: number }>(
@@ -318,6 +332,14 @@ function accountsRepo(q: SdkQueryable): MailAccountsRepo {
                 id,
                 workspaceId
             ]);
+            if (res.affectedRows === 0) return null;
+            return reload(id, workspaceId);
+        },
+        async setAllowRemoteImages(id, workspaceId, allowed) {
+            const res = await q.execute(
+                'UPDATE mail_accounts SET allow_remote_images = ? WHERE id = ? AND workspace_id = ?',
+                [allowed ? 1 : 0, id, workspaceId]
+            );
             if (res.affectedRows === 0) return null;
             return reload(id, workspaceId);
         },

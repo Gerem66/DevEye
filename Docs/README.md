@@ -14,25 +14,26 @@ lancement sont dans le [README de la racine](../README.md#quick-start).
 
 ## Systèmes transverses
 
-| Doc                                      | Quoi                                                                                                       |
-| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| [WORKSPACES.md](./WORKSPACES.md)         | les espaces : isolation, rôles, clés                                                                       |
-| [SECURITY_MODEL.md](./SECURITY_MODEL.md) | le chiffrement : étages ouvert et gardé, DEK, mot de passe ; l'agent, CloudSync, Hébergement               |
-| [KEY_ROTATION.md](./KEY_ROTATION.md)     | changer la clé serveur (`CRYPT_KEY_A/B`) : ce qu'elle emballe, ce qu'elle dérive, la procédure             |
-| [AUTH_PROMPTS.md](./AUTH_PROMPTS.md)     | l'invite de déverrouillage unique, et qui la réutilise                                                     |
-| [PERMISSIONS.md](./PERMISSIONS.md)       | les permissions : qui a le droit de quoi                                                                   |
-| [SHARING.md](./SHARING.md)               | le partage entre espaces : un élément visible depuis plusieurs espaces                                     |
-| [FEDERATION.md](./FEDERATION.md)         | les instances distantes : les espaces d'un autre serveur DevEye dans la même interface                     |
-| [LIVE.md](./LIVE.md)                     | la présence en direct : qui est là, où, et ce qui vient de changer                                         |
-| [SETTINGS.md](./SETTINGS.md)             | la coquille de réglages unique et son bouton commun                                                        |
-| [QUOTAS.md](./QUOTAS.md)                 | offres et quotas : ce que le cœur sait d'une offre, illimité sans module de facturation                    |
-| [ACCOUNT_EXPORT.md](./ACCOUNT_EXPORT.md) | l'export des données d'un compte : l'archive, le sort de chaque table                                      |
-| [SOURCES.md](./SOURCES.md)               | les sources d'une feature : des réglages d'espace réutilisables, désignés par les éléments                 |
-| [NOTIFICATIONS.md](./NOTIFICATIONS.md)   | les canaux d'alerte : où partent les notifications                                                         |
-| [MAINTENANCE.md](./MAINTENANCE.md)       | l'accès et la maintenance : inscriptions, priorité aux abonnés, places, fermeture du site ou d'une feature |
-| [LOGS.md](./LOGS.md)                     | où regarder en production : audit, sortie standard, alertes Système                                        |
-| [STATUS_PAGE.md](./STATUS_PAGE.md)       | la page d'état publique, hors de l'app                                                                     |
-| [DEBUG.md](./DEBUG.md)                   | la page Tests et débogage : essais sans résidu, mesures, mails, suivi d'usage, galerie                     |
+| Doc                                            | Quoi                                                                                                       |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| [WORKSPACES.md](./WORKSPACES.md)               | les espaces : isolation, rôles, clés                                                                       |
+| [SECURITY_MODEL.md](./SECURITY_MODEL.md)       | le chiffrement : étages ouvert et gardé, DEK, mot de passe ; l'agent, CloudSync, Hébergement               |
+| [KEY_ROTATION.md](./KEY_ROTATION.md)           | changer la clé serveur (`CRYPT_KEY_A/B`) : ce qu'elle emballe, ce qu'elle dérive, la procédure             |
+| [AUTH_PROMPTS.md](./AUTH_PROMPTS.md)           | l'invite de déverrouillage unique, et qui la réutilise                                                     |
+| [PERMISSIONS.md](./PERMISSIONS.md)             | les permissions : qui a le droit de quoi                                                                   |
+| [SHARING.md](./SHARING.md)                     | le partage entre espaces : un élément visible depuis plusieurs espaces                                     |
+| [FEDERATION.md](./FEDERATION.md)               | les instances distantes : les espaces d'un autre serveur DevEye dans la même interface                     |
+| [LIVE.md](./LIVE.md)                           | la présence en direct : qui est là, où, et ce qui vient de changer                                         |
+| [SETTINGS.md](./SETTINGS.md)                   | la coquille de réglages unique et son bouton commun                                                        |
+| [QUOTAS.md](./QUOTAS.md)                       | offres et quotas : ce que le cœur sait d'une offre, illimité sans module de facturation                    |
+| [ACCOUNT_EXPORT.md](./ACCOUNT_EXPORT.md)       | l'export des données d'un compte : l'archive, le sort de chaque table                                      |
+| [SOURCES.md](./SOURCES.md)                     | les sources d'une feature : des réglages d'espace réutilisables, désignés par les éléments                 |
+| [NOTIFICATIONS.md](./NOTIFICATIONS.md)         | les canaux d'alerte : où partent les notifications                                                         |
+| [MAINTENANCE.md](./MAINTENANCE.md)             | l'accès et la maintenance : inscriptions, priorité aux abonnés, places, fermeture du site ou d'une feature |
+| [LOGS.md](./LOGS.md)                           | où regarder en production : audit, sortie standard, alertes Système                                        |
+| [STATUS_PAGE.md](./STATUS_PAGE.md)             | la page d'état publique, hors de l'app                                                                     |
+| [DEBUG.md](./DEBUG.md)                         | la page Tests et débogage : essais sans résidu, mesures, mails, suivi d'usage, galerie                     |
+| [EXTERNAL_SERVICES.md](./EXTERNAL_SERVICES.md) | la page Services externes : l'état et le coût de chaque dépendance de l'instance                           |
 
 ## Features
 

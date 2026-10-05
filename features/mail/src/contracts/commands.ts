@@ -99,6 +99,16 @@ export const mailAccountSetEnabled = {
 };
 
 /**
+ * Show every remote image of this mailbox's messages without asking, tracking
+ * pixels included. Off by default.
+ */
+export const mailAccountSetRemoteImages = {
+    command: 'mail.accountSetRemoteImages' as const,
+    input: z.object({ id: accountId, allowed: z.boolean() }),
+    output: z.object({ account: mailAccountSchema })
+};
+
+/**
  * Test IMAP/SMTP reachability either for an already-saved account (`id`) or a
  * not-yet-submitted draft (`draft`) — exactly one must be given, so the "Test
  * connection" button in the add form works before the account exists.
@@ -256,7 +266,7 @@ export const mailMessageSearch = {
  * Fetches the body live from IMAP, never from cache, and runs the
  * sanitize/remote-image-block/suspicious-link pipeline server-side.
  * `allowRemoteImages` unblocks images for this single response only; nothing is
- * persisted about the choice.
+ * persisted about the choice. A mailbox with `allowRemoteImages` set never blocks them.
  */
 export const mailMessageGet = {
     command: 'mail.messageGet' as const,
@@ -362,6 +372,7 @@ export const mailCommands = [
     mailAccountDelete,
     mailAccountReorder,
     mailAccountSetEnabled,
+    mailAccountSetRemoteImages,
     mailAccountTestConnection,
     mailOAuthStart,
     mailOAuthProviders,

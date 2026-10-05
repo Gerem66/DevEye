@@ -1,0 +1,268 @@
+.container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    gap: var(--space-lg);
+}
+
+.header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--space-md);
+}
+
+.headerText {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    min-width: 0;
+}
+
+.title {
+    margin: 0;
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.subtitle {
+    margin: 0;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.errorBanner {
+    padding: var(--space-sm) var(--space-md);
+    background: var(--danger-bg);
+    border: 1px solid var(--danger);
+    border-radius: var(--radius-sm);
+    color: var(--danger);
+    font-size: 0.875rem;
+}
+
+.body {
+    position: relative;
+    min-height: 120px;
+}
+
+.sections {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+}
+
+/* `filter`, jamais `opacity` : framer-motion possède celle de la popup. */
+.dimmed {
+    filter: opacity(0.6);
+}
+
+.tally {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+}
+
+.section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.sectionLabel {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.sectionHint {
+    margin: 0;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: var(--text-muted);
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+    gap: var(--space-md);
+}
+
+.card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    min-width: 0;
+    padding: var(--space-md);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+}
+
+.inactive .name,
+.inactive .summary {
+    color: var(--text-muted);
+}
+
+.cardHead {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-sm);
+}
+
+.cardTitle {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.name {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+}
+
+.provider {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.summary {
+    margin: 0;
+    font-size: 0.82rem;
+    line-height: 1.45;
+    color: var(--text-secondary);
+}
+
+.facts {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+}
+
+.fact {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-md);
+    padding: 6px 0;
+    font-size: 0.8rem;
+}
+
+.fact + .fact {
+    border-top: 1px solid var(--glass-border);
+}
+
+.fact dt {
+    color: var(--text-muted);
+}
+
+.fact dd {
+    margin: 0;
+    text-align: right;
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+}
+
+.fact .success {
+    color: var(--success);
+}
+
+.fact .warning {
+    color: var(--warning);
+}
+
+.fact .danger {
+    color: var(--danger);
+}
+
+.meter {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-top: var(--space-xs);
+}
+
+.meterHead {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--space-xs) var(--space-md);
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.meterValue {
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.meterTrack {
+    height: 8px;
+    overflow: hidden;
+    border-radius: var(--radius-pill);
+    background: var(--surface-subtle);
+}
+
+.meterFill {
+    height: 100%;
+    min-width: 2px;
+    border-radius: inherit;
+    background: var(--accent);
+}
+
+.meterWarning {
+    background: var(--warning);
+}
+
+.meterDanger {
+    background: var(--danger);
+}
+
+.note {
+    font-size: 0.75rem;
+    line-height: 1.4;
+    color: var(--text-muted);
+}
+
+.seats {
+    display: flex;
+    flex-direction: column;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+}
+
+.seatRow {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--space-xs) var(--space-md);
+    padding: var(--space-sm) 0;
+    font-size: 0.9rem;
+}
+
+.seatRow + .seatRow {
+    border-top: 1px solid var(--glass-border);
+}
+
+.seatTitle {
+    color: var(--text-primary);
+}
+
+.seatMeta {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.seatLink {
+    align-self: flex-start;
+    margin: var(--space-xs) 0;
+}

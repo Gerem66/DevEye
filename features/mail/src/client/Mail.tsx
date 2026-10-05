@@ -840,6 +840,13 @@ export default function Mail(_props: FeatureViewProps) {
         if (sent && selectedFolderId !== null) void loadMessages(selectedFolderId, null);
     }
 
+    // Une boîte qui vient d'autoriser toutes ses images les montre aussitôt sur le message ouvert.
+    const openAllowsImages = accounts.some((a) => a.id === selectedMessage?.accountId && a.allowRemoteImages);
+    const openBlockedId = selectedMessage?.remoteImagesBlocked ? selectedMessage.id : null;
+    useEffect(() => {
+        if (openAllowsImages && openBlockedId !== null) void openMessage(openBlockedId);
+    }, [openAllowsImages, openBlockedId, openMessage]);
+
     /** Adds hostnames to the trusted-images list, then reloads the open message so it applies. */
     async function trustImageSources(domains: string[]): Promise<void> {
         try {

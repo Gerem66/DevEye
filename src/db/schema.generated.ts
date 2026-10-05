@@ -530,6 +530,7 @@ export interface Tables {
         security_tier: string;
         auth_method: string;
         enabled: number;
+        allow_remote_images: number;
         sync_interval_seconds: number;
         last_sync_at: number | null;
         last_sync_status: string;

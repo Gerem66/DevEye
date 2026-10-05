@@ -1,19 +1,22 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
     Button,
+    ConfirmDialog,
     invalidate,
     ReadOnlyNotice,
     SegmentedControl,
     settingsStyles as shell,
+    Switch,
     TextInput,
-    useResourceVersion
+    useResourceVersion,
+    type ConfirmRequest
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 
 import { api, humanizeError, withSettingsDefaults } from './api';
 import styles from './style.module.css';
 
-import type { MailBodyRenderMode, MailSettings } from '../contracts/domain';
+import type { MailAccount, MailBodyRenderMode, MailSettings } from '../contracts/domain';
 
 const RENDER_MODE_OPTIONS: readonly { value: MailBodyRenderMode; label: string }[] = [
     { value: 'embedded', label: 'Intégré à DevEye' },
@@ -31,10 +34,10 @@ const RENDER_MODE_HINT: Record<MailBodyRenderMode, string> = {
  * images sont approuvées. L'onglet Contenu, aux deux échelles.
  *
  * Ce sont les réglages de l'ESPACE, que la coquille soit ouverte sur la
- * fonctionnalité ou sur une de ses boîtes : `scope` n'y change rien, l'onglet
- * étant offert depuis les réglages d'un compte pour que le bouton en haut à
- * droite porte tout d'un coup. D'où son nom : « Général » sur une boîte se
- * lisait comme « les réglages de cette boîte », qui sont ailleurs.
+ * fonctionnalité ou sur une de ses boîtes, l'onglet étant offert depuis les
+ * réglages d'un compte pour que le bouton en haut à droite porte tout d'un
+ * coup. Seule exception, ouverte sur une boîte : l'autorisation de toutes ses
+ * images, réglage de la boîte elle-même.
  *
  * Chaque changement s'applique immédiatement, comme les autres panneaux de la
  * coquille. L'invalidation de `mail.getSettings` prévient l'écran Mail (le mode
@@ -43,7 +46,7 @@ const RENDER_MODE_HINT: Record<MailBodyRenderMode, string> = {
  * Sans le droit d'écriture, tout reste lisible mais rien ne se change : un
  * réglage que le serveur refuserait est un écran qui ment.
  */
-export default function MailContentPanel({ canWrite }: SettingsPanelProps) {
+export default function MailContentPanel({ scope, canWrite }: SettingsPanelProps) {
     const version = useResourceVersion('mail.getSettings');
     const [settings, setSettings] = useState<MailSettings | null>(null);
     const [domainDraft, setDomainDraft] = useState('');
@@ -100,6 +103,8 @@ export default function MailContentPanel({ canWrite }: SettingsPanelProps) {
                 />
                 <span className={shell.fieldHint}>{RENDER_MODE_HINT[settings.bodyRenderMode]}</span>
             </div>
+
+            {scope.kind === 'item' && <MailboxImagesField accountId={Number(scope.itemId)} canWrite={canWrite} />}
 
             <div className={shell.field}>
                 <span className={shell.sectionLabel}>Images distantes approuvées</span>
@@ -171,6 +176,87 @@ export default function MailContentPanel({ canWrite }: SettingsPanelProps) {
             )}
 
             {status && <p className={shell.notice}>{status}</p>}
+        </div>
+    );
+}
+
+/**
+ * Autoriser toutes les images distantes d'une boîte. L'activer passe par une
+ * confirmation qui dit ce que l'expéditeur apprend ; le couper est immédiat.
+ */
+function MailboxImagesField({ accountId, canWrite }: { accountId: number; canWrite: boolean }) {
+    const version = useResourceVersion('mail.accountList');
+    const [account, setAccount] = useState<MailAccount | null>(null);
+    const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
+    const [busy, setBusy] = useState(false);
+    const [status, setStatus] = useState<string | null>(null);
+
+    useEffect(() => {
+        void api
+            .send('mail.accountList', {})
+            .then((res) => setAccount(res.accounts.find((a) => a.id === accountId) ?? null))
+            .catch((e) => setStatus(humanizeError(e, 'Chargement impossible.')));
+    }, [accountId, version]);
+
+    const save = useCallback(
+        async (allowed: boolean) => {
+            if (!account) return;
+            setBusy(true);
+            setStatus(null);
+            try {
+                const res = await api.send('mail.accountSetRemoteImages', { id: account.id, allowed });
+                setAccount(res.account);
+                invalidate('mail.accountList');
+            } catch (e) {
+                setStatus(humanizeError(e, 'Changement impossible.'));
+            } finally {
+                setBusy(false);
+            }
+        },
+        [account]
+    );
+
+    if (!account) return status ? <p className={shell.notice}>{status}</p> : null;
+
+    const onChange = (on: boolean) => {
+        if (!on) {
+            void save(false);
+            return;
+        }
+        setConfirm({
+            title: 'Autoriser toutes les images distantes ?',
+            description: (
+                <>
+                    Certaines images servent à suivre les lecteurs : en les chargeant, l’expéditeur apprend que vous
+                    avez ouvert son message, quand, et depuis quelle adresse IP. Les autoriser pour «{' '}
+                    {account.displayName} » affiche chaque message en entier, sans clic, au prix de ces informations.
+                </>
+            ),
+            confirmLabel: 'Autoriser',
+            tone: 'primary',
+            onConfirm: () => {
+                setConfirm(null);
+                void save(true);
+            }
+        });
+    };
+
+    return (
+        <div className={shell.field}>
+            <span className={shell.sectionLabel}>Images de cette boîte</span>
+            <Switch
+                checked={account.allowRemoteImages}
+                disabled={busy || !canWrite}
+                onChange={onChange}
+                label='Autoriser toutes les images distantes'
+            />
+            <span className={shell.fieldHint}>
+                {account.allowRemoteImages
+                    ? 'Toutes les images de ses messages s’affichent, y compris celles qui servent au suivi.'
+                    : 'Bloquées par défaut, sauf les domaines approuvés ci-dessous.'}
+            </span>
+            {status && <p className={shell.notice}>{status}</p>}
+            <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} busy={busy} />
         </div>
     );
 }

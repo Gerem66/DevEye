@@ -99,24 +99,55 @@ export function objectStoreFor(featureId: string, localDir: string): SdkObjectSt
 }
 
 /**
+ * Un aller-retour sur un objet témoin, qui lève si le bucket ne répond pas.
+ * `false` : aucun bucket n'est configuré, les fichiers vont sur le disque.
+ */
+export async function probeObjectStorage(): Promise<boolean> {
+    const s3 = s3Client();
+    if (!s3) return false;
+    const key = `${instancePrefix()}.probe/${crypto.randomBytes(8).toString('hex')}`;
+    const witness = Buffer.from('deveye');
+    await s3.putStream(key, [witness]);
+    let read = 0;
+    for await (const chunk of s3.getObject(key)) read += chunk.length;
+    await s3.deleteObject(key);
+    if (read !== witness.length) throw new Error('objet témoin relu tronqué');
+    return true;
+}
+
+export interface ObjectStorageUsage {
+    /** Tout le bucket : c'est ce que le fournisseur facture. */
+    bytes: number;
+    objects: number;
+    /** Sous le préfixe de cette instance (tout le bucket sans préfixe). */
+    instanceBytes: number;
+}
+
+/** L'espace occupé, en listant tout le bucket : coûteux, à garder en cache. `null` sans bucket. */
+export async function objectStorageUsage(): Promise<ObjectStorageUsage | null> {
+    const s3 = s3Client();
+    if (!s3) return null;
+    const prefix = instancePrefix();
+    const usage: ObjectStorageUsage = { bytes: 0, objects: 0, instanceBytes: 0 };
+    for await (const object of s3.listObjects('')) {
+        usage.bytes += object.size;
+        usage.objects++;
+        if (object.key.startsWith(prefix)) usage.instanceBytes += object.size;
+    }
+    return usage;
+}
+
+/**
  * Au démarrage : dit où vont les fichiers, et vérifie qu'un bucket configuré
- * répond, par un aller-retour sur un objet témoin. Un échec n'arrête pas le
- * serveur (le bucket peut revenir), il se lit dans le journal.
+ * répond. Un échec n'arrête pas le serveur (le bucket peut revenir), il se lit
+ * dans le journal.
  */
 export async function announceObjectStorage(logger: SdkLogger): Promise<void> {
-    const s3 = s3Client();
-    if (!s3) {
-        logger.info('Stockage des fichiers : disque du serveur (STORAGE_S3_ENDPOINT vide)');
-        return;
-    }
-    const key = `${instancePrefix()}.probe/${crypto.randomBytes(8).toString('hex')}`;
     try {
-        const witness = Buffer.from('deveye');
-        await s3.putStream(key, [witness]);
-        let read = 0;
-        for await (const chunk of s3.getObject(key)) read += chunk.length;
-        await s3.deleteObject(key);
-        if (read !== witness.length) throw new Error('objet témoin relu tronqué');
+        if (!(await probeObjectStorage())) {
+            logger.info('Stockage des fichiers : disque du serveur (STORAGE_S3_ENDPOINT vide)');
+            return;
+        }
         logger.info({ bucket: env.STORAGE_S3_BUCKET, prefix: instancePrefix() }, 'Stockage des fichiers : S3');
     } catch (e) {
         logger.error(

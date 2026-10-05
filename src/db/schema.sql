@@ -788,6 +788,7 @@ CREATE TABLE `mail_accounts` (
   `security_tier` varchar(8) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'open',
   `auth_method` varchar(20) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'password',
   `enabled` tinyint NOT NULL DEFAULT '1',
+  `allow_remote_images` tinyint NOT NULL DEFAULT '0',
   `sync_interval_seconds` int NOT NULL DEFAULT '600',
   `last_sync_at` bigint DEFAULT NULL,
   `last_sync_status` varchar(16) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'ok',

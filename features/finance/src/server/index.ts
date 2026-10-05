@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import type { FeatureServer } from '@deveye/types/sdk/server';
 
 import { FINANCE_ENV } from './env';
+import { financeExternalServices } from './externalServices';
 import { financeHandlers } from './handlers';
 import { createRepo, type FinanceRepo } from './repo';
 import { createService } from './service';
@@ -19,6 +20,7 @@ export const serverEntry: FeatureServer<FinanceRepo> = {
     createRepo,
     features: financeHandlers,
     accountExport: financeAccountExport,
+    externalServices: financeExternalServices,
     migrationsDir: path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations'),
     createService,
     quotas: { bankConnections: { list: (repo, owned) => repo.listStockConnections(owned) } }

@@ -311,6 +311,7 @@ export async function toAccountDTO(
         smtpPort,
         proxyConfigured,
         enabled: row.enabled === 1,
+        allowRemoteImages: row.allow_remote_images === 1,
         lastSyncAt: row.last_sync_at,
         lastSyncError,
         status: row.last_sync_status,

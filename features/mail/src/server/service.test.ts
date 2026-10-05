@@ -54,6 +54,7 @@ function account(over: Partial<MailAccountRow> & { id: number }): MailAccountRow
         security_tier: 'open',
         auth_method: 'password',
         enabled: 1,
+        allow_remote_images: 0,
         sync_interval_seconds: 600,
         last_sync_at: null,
         last_sync_error_enc: null,
@@ -104,6 +105,8 @@ function fakeRepo(accountRows: MailAccountRow[], projections: Record<number, num
             create: unused,
             update: unused,
             setEnabled: unused,
+            countOAuth: unused,
+            setAllowRemoteImages: unused,
             delete: unused,
             reorder: unused,
             // Comme la vraie requête : ouverts, actifs, à échéance, hors pause d'offre.

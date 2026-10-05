@@ -184,7 +184,7 @@ export const mailMessageGetFeature = defineSdkFeature<
         });
         const settings = await ctx.repo.settings.get(ctx.workspaceId);
         const body = await parseAndSanitize(raw, {
-            allowRemoteImages: input.allowRemoteImages,
+            allowRemoteImages: input.allowRemoteImages || account.allow_remote_images === 1,
             trustedDomains: parseTrustedImageDomains(settings?.trusted_image_domains ?? null),
             preserveStyling: (settings?.body_render_mode ?? 'embedded') === 'raw'
         });

@@ -215,6 +215,33 @@ async function postToken(provider: MailOAuthProvider, tokenUrl: string, body: UR
     return json;
 }
 
+/**
+ * Le fournisseur accepte-t-il les identifiants de l'application ? Un jeton de
+ * rafraîchissement inventé : un client reconnu se voit refuser le jeton
+ * (`invalid_grant`), un client inconnu ou mal authentifié est refusé lui-même.
+ * Lève quand le fournisseur ne répond pas.
+ */
+export async function probeOAuthClient(provider: MailOAuthProvider): Promise<'accepted' | 'refused'> {
+    const c = providerConfig(provider);
+    if (!c.clientId || !c.clientSecret) return 'refused';
+    try {
+        await postToken(
+            provider,
+            c.tokenUrl,
+            new URLSearchParams({
+                client_id: c.clientId,
+                client_secret: c.clientSecret,
+                refresh_token: 'deveye-probe',
+                grant_type: 'refresh_token'
+            })
+        );
+        return 'accepted';
+    } catch (e) {
+        if (!(e instanceof OAuthTokenError) || e.status === null || e.status >= 500) throw e;
+        return e.code === 'invalid_client' || e.code === 'unauthorized_client' ? 'refused' : 'accepted';
+    }
+}
+
 /** Exchange an authorization code for the first access/refresh token pair. */
 export async function exchangeCodeForTokens(
     provider: MailOAuthProvider,

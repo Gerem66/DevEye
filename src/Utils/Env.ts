@@ -116,6 +116,9 @@ export const env = {
     STORAGE_S3_PATH_STYLE: getEnvVar('STORAGE_S3_PATH_STYLE', 'boolean', false) ?? false,
     // Pour loger plusieurs instances dans un même bucket : `prod`, `demo`.
     STORAGE_S3_PREFIX: getEnvVar('STORAGE_S3_PREFIX', 'string', false),
+    // Le tarif du bucket en € HT par Go et par mois, pour l'estimation de la
+    // page Services externes. Vide, elle ne chiffre rien.
+    STORAGE_S3_PRICE_PER_GB: getEnvVar('STORAGE_S3_PRICE_PER_GB', 'number', false),
 
     // Les variables propres à un module (SENTINEL_*, MAIL_SYNC_*, OAUTH_*,
     // MONITORING_RETENTION_DAYS, LINK_CODE_TTL_SECONDS) sont lues par le module.
@@ -235,6 +238,9 @@ if (env.STORAGE_S3_ENDPOINT) {
     if (missing.length > 0) {
         throw new Error(`${missing.join(', ')} requis dès que STORAGE_S3_ENDPOINT est renseigné.`);
     }
+}
+if (env.STORAGE_S3_PRICE_PER_GB !== undefined && !(env.STORAGE_S3_PRICE_PER_GB > 0)) {
+    throw new Error('STORAGE_S3_PRICE_PER_GB doit être un tarif positif, en € HT par Go et par mois (0.014).');
 }
 if (env.CRYPT_KEY_A === env.CRYPT_KEY_B) {
     throw new Error('CRYPT_KEY_A et CRYPT_KEY_B doivent différer.');

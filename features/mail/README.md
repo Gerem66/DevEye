@@ -58,7 +58,8 @@ qui resterait sous l'ancien codec se lirait « (verrouillé) » pour toujours.
   (objet, expéditeur, destinataires, date, drapeaux) sont en cache ; le corps
   est relu d'IMAP à l'ouverture, assaini côté serveur (`sanitize.ts` : ni
   script, ni gestionnaire, ni style hors mode `raw`, images distantes
-  neutralisées sauf permission ou domaine approuvé), et les liens douteux
+  neutralisées sauf permission, domaine approuvé ou boîte qui les autorise
+  toutes), et les liens douteux
   signalés (`linkHeuristics.ts`), sans rien bloquer.
 - **L'état d'une boîte s'écrit sur tous les chemins** (`runWithAccountStatus`)
   : qu'on l'ouvre, qu'on la relève à la main ou qu'on la laisse tourner, un
@@ -203,7 +204,8 @@ Côté client (`src/client/`) :
 - les panneaux : `MailAccountSettingsPanel` (Général d'un compte : son nom,
   ses serveurs, son proxy, sa suppression), `MailContentPanel` (Contenu, aux
   deux échelles : le mode de rendu des messages et les domaines dont les
-  images sont approuvées), `MailSyncPanel` (la cadence de relève, de 5 à
+  images sont approuvées ; ouvert sur une boîte, l'autorisation de toutes ses
+  images, après une confirmation qui nomme le pistage), `MailSyncPanel` (la cadence de relève, de 5 à
   180 minutes, 10 par défaut, et la pause), `MailAdvancedPanel` (reconstruire
   le cache d'une boîte, écriture requise), `MailEncryptionPanel` (le palier
   d'une boîte) ;

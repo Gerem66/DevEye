@@ -110,6 +110,14 @@ async function call<T>(
     throw new BankError('unavailable', `Enable Banking a répondu ${res.status}.`);
 }
 
+/** Ce qu'Enable Banking dit de l'application de l'instance ; lève comme tout appel. */
+export async function describeApplication(
+    app: EnableBankingApp
+): Promise<{ name: string | null; environment: string | null; active: boolean | null }> {
+    const body = await call<{ name?: string; environment?: string; active?: boolean }>(app, 'GET', '/application');
+    return { name: body.name ?? null, environment: body.environment ?? null, active: body.active ?? null };
+}
+
 interface Aspsp {
     name: string;
     country: string;

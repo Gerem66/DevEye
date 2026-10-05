@@ -86,6 +86,7 @@ function row(over: Partial<MailAccountRow> & { id: number; workspace_id: number 
         security_tier: 'open',
         auth_method: 'password',
         enabled: 1,
+        allow_remote_images: 0,
         sync_interval_seconds: 600,
         last_sync_at: null,
         last_sync_error_enc: null,
@@ -175,6 +176,13 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
                 const target = accountRows.find((a) => a.id === id && a.workspace_id === ws);
                 if (!target) return null;
                 target.enabled = enabled ? 1 : 0;
+                return { ...target };
+            },
+            countOAuth: unused,
+            async setAllowRemoteImages(id, ws, allowed) {
+                const target = accountRows.find((a) => a.id === id && a.workspace_id === ws);
+                if (!target) return null;
+                target.allow_remote_images = allowed ? 1 : 0;
                 return { ...target };
             },
             async delete(id, ws) {

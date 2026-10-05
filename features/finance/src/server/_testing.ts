@@ -746,6 +746,10 @@ export function fakeRepo(): FakeRepo {
         async countConnectionsInWorkspaces(ids) {
             return this.connections.filter((c) => ids.includes(c.workspace_id)).length;
         },
+        async countProviderConnections(provider) {
+            const of = this.connections.filter((c) => c.provider === provider);
+            return { total: of.length, failing: of.filter((c) => c.status !== 'ok').length };
+        },
         async listStockConnections(ids) {
             return this.connections
                 .filter((c) => ids.includes(c.workspace_id))
