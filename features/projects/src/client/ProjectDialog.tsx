@@ -210,6 +210,7 @@ export function ProjectDialog({ open, allowGuarded, busy, error, onClose, onSubm
                             type='date'
                             value={dateInputValue(draft.startDate)}
                             onChange={(e) => setDraft({ ...draft, startDate: dateInputToSeconds(e.target.value) })}
+                            onClear={() => setDraft({ ...draft, startDate: null })}
                         />
                     </label>
                     <label className={styles.field}>
@@ -218,6 +219,7 @@ export function ProjectDialog({ open, allowGuarded, busy, error, onClose, onSubm
                             type='date'
                             value={dateInputValue(draft.dueDate)}
                             onChange={(e) => setDraft({ ...draft, dueDate: dateInputToSeconds(e.target.value) })}
+                            onClear={() => setDraft({ ...draft, dueDate: null })}
                         />
                     </label>
                 </div>

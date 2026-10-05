@@ -12,6 +12,7 @@ import {
 import {
     assertClient,
     docOr404,
+    draftDeadlines,
     now,
     openJson,
     publicOriginOf,
@@ -164,19 +165,20 @@ export const docDerive = defineSdkFeature({
             }
         }
 
+        const kind = input.mode === 'credit' ? 'credit' : 'invoice';
+        const deadlines = await draftDeadlines(ctx, settings, kind, source.client_id);
         const id = await ctx.repo.insertDoc(
             ctx.workspaceId,
             {
                 client_id: source.client_id,
-                kind: input.mode === 'credit' ? 'credit' : 'invoice',
+                kind,
                 parent_doc_id: source.id,
                 is_deposit: input.mode === 'deposit' ? 1 : 0,
                 // La devise et le régime sont ceux de la pièce d'origine : une
                 // facture ne peut pas corriger un devis dans une autre monnaie.
                 currency: source.currency,
                 vat_regime: source.vat_regime,
-                due_on: null,
-                valid_until: null,
+                ...deadlines,
                 deposit_bp: null,
                 performed_on: source.performed_on,
                 content: await seal(ctx, {

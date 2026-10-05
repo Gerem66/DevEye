@@ -386,6 +386,7 @@ export function CardDialog({
                         disabled={!canDate}
                         title={canDate ? undefined : missingPermission('plan')}
                         onChange={(e) => patch({ startDate: dateInputToSeconds(e.target.value) })}
+                        onClear={() => patch({ startDate: null })}
                     />
                 </label>
                 <label className={styles.field}>
@@ -396,6 +397,7 @@ export function CardDialog({
                         disabled={!canDate}
                         title={canDate ? undefined : missingPermission('plan')}
                         onChange={(e) => patch({ dueDate: dateInputToSeconds(e.target.value) })}
+                        onClear={() => patch({ dueDate: null })}
                     />
                 </label>
                 {/* Un `div` et non un `label` : englobé par un label, le champ

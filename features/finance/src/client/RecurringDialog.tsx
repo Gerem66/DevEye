@@ -282,7 +282,12 @@ export function RecurringDialog({ base, open, recurring, onClose, onSaved }: Rec
                     </label>
                     <label className={styles.field}>
                         <span className={styles.fieldLabel}>Jusqu’au (facultatif)</span>
-                        <TextInput type='date' value={draft.endDate} onChange={(e) => set('endDate', e.target.value)} />
+                        <TextInput
+                            type='date'
+                            value={draft.endDate}
+                            onChange={(e) => set('endDate', e.target.value)}
+                            onClear={() => set('endDate', '')}
+                        />
                     </label>
                 </div>
 

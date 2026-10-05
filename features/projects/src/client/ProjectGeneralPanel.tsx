@@ -264,6 +264,7 @@ export default function ProjectGeneralPanel({ scope, canWrite, gone }: SettingsP
                         value={dateInputValue(draft.startDate)}
                         disabled={!editable}
                         onChange={(e) => set({ startDate: dateInputToSeconds(e.target.value) })}
+                        onClear={() => set({ startDate: null })}
                     />
                 </label>
                 <label className={styles.field}>
@@ -273,6 +274,7 @@ export default function ProjectGeneralPanel({ scope, canWrite, gone }: SettingsP
                         value={dateInputValue(draft.dueDate)}
                         disabled={!editable}
                         onChange={(e) => set({ dueDate: dateInputToSeconds(e.target.value) })}
+                        onClear={() => set({ dueDate: null })}
                     />
                 </label>
             </div>

@@ -2,12 +2,17 @@
 
 /* C'est la popup qui défile : un conteneur défilant ici poserait sa barre dans le
    contenu, sur les boutons de l'en-tête. `min-height` remplit la boîte quand le
-   contenu est court et le laisse grandir quand il déborde. */
+   contenu est court et le laisse grandir quand il déborde.
+
+   Le conteneur `invoicing` décide de ce qui se replie à l'étroit : la popup
+   change de largeur sans que la fenêtre bouge, une media query mentirait. Les
+   dialogues et les menus passent par des portails, il ne les contient pas. */
 .feature {
     display: flex;
     flex-direction: column;
     gap: var(--space-md);
     min-height: 100%;
+    container: invoicing / inline-size;
 }
 
 .panel {
@@ -413,7 +418,7 @@
     position: relative;
     display: flex;
     flex-direction: column;
-    gap: var(--space-xs);
+    gap: var(--space-sm);
     margin: 0;
     padding: 0;
     list-style: none;
@@ -438,17 +443,19 @@
     cursor: grabbing;
 }
 
-/* À l'étroit, la ligne se replie en étages : la désignation, les deux mesures,
-   les deux prix, le total. Les zones changent, le DOM ne bouge pas : pas de
-   double rendu, pas de focus perdu au redimensionnement. Chaque cellule a sa
-   propre zone, sans quoi elles se superposeraient toutes dans la même case. */
+/* À l'étroit, la ligne se replie en carte : la désignation, les deux mesures,
+   les deux prix, le total, chaque case avec sa légende. Les zones changent, le
+   DOM ne bouge pas : pas de double rendu, pas de focus perdu au
+   redimensionnement. Chaque case a sa propre zone, sans quoi elles se
+   superposeraient toutes dans la même. */
 .lineRow {
     display: grid;
-    align-items: center;
-    gap: var(--space-xs);
-    padding: var(--space-xs);
-    border: 1px solid transparent;
-    border-radius: var(--radius-sm);
+    align-items: end;
+    gap: var(--space-sm) var(--space-xs);
+    padding: var(--space-sm) var(--space-xs);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
     grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr) auto;
     grid-template-areas:
         'grip  label label drop'
@@ -463,23 +470,37 @@
         '.     note  note  .';
 }
 
-.lineRow:hover {
-    background: var(--surface-subtle);
-}
-
 .lineBroken {
     border-color: var(--warning);
 }
 
 .lineGrip {
     grid-area: grip;
+    align-self: center;
     color: var(--text-muted);
     cursor: grab;
     touch-action: none;
 }
 
+.cellLabel,
+.cellQty,
+.cellUnit,
+.cellPrice,
+.cellVat,
+.cellTotal {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
 .cellLabel {
     grid-area: label;
+}
+
+.cellCaption {
+    color: var(--text-muted);
+    font-size: 0.75rem;
 }
 
 /* Les colonnes de nombres se rangent à droite, comme sur le papier : c'est ce
@@ -487,6 +508,11 @@
    si les champs, eux, ne s'alignent pas. */
 .cellQty {
     grid-area: qty;
+    text-align: right;
+}
+
+.cellQty input,
+.cellPrice input {
     text-align: right;
 }
 
@@ -518,14 +544,21 @@
     white-space: nowrap;
 }
 
-/* Le même retrait que le padding d'un champ : sans lui, le total se collerait au
-   bord de la colonne, un cran à droite des prix qu'il totalise. */
+/* Replié, le total est une phrase : sa légende à gauche, le montant à droite.
+   Le retrait vaut le padding d'un champ, pour tomber sous les prix. */
 .cellTotal {
     grid-area: total;
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: space-between;
     padding: 0 0.75rem;
     color: var(--text-primary);
     font-variant-numeric: tabular-nums;
     text-align: right;
+}
+
+.cellTotal output {
+    font-weight: 600;
 }
 
 .cellNote {
@@ -539,6 +572,7 @@
 
 .lineDrop {
     grid-area: drop;
+    align-self: start;
     display: grid;
     place-items: center;
     width: 32px;
@@ -555,7 +589,23 @@
     color: var(--danger);
 }
 
+@media (pointer: coarse) {
+    .lineDrop {
+        width: 40px;
+        height: 40px;
+    }
+
+    /* Des raccourcis de clavier, sans clavier pour les taper. */
+    .editorHint {
+        display: none;
+    }
+}
+
 @container (min-width: 620px) {
+    .lines {
+        gap: var(--space-xs);
+    }
+
     .lineHead {
         display: grid;
         gap: var(--space-xs);
@@ -583,12 +633,35 @@
     }
 
     .lineRow {
+        align-items: center;
+        gap: var(--space-xs);
+        padding: var(--space-xs);
+        background: none;
+        border-color: transparent;
+        border-radius: var(--radius-sm);
         grid-template-columns: 18px minmax(0, 1fr) 5.5rem 7.5rem 7rem 6.75rem 6.5rem 32px;
         grid-template-areas: none;
     }
 
+    .lineRow:hover {
+        background: var(--surface-subtle);
+    }
+
+    .lineBroken {
+        border-color: var(--warning);
+    }
+
     .lineRow > * {
         grid-area: auto;
+        align-self: center;
+    }
+
+    .cellCaption {
+        display: none;
+    }
+
+    .cellTotal output {
+        font-weight: 400;
     }
 
     .cellNote {
@@ -641,12 +714,38 @@
     flex: 2 1 18rem;
 }
 
-.fieldDate {
-    flex: 0 1 12rem;
+.fieldRef {
+    flex: 1 1 14rem;
 }
 
-.fieldRef {
-    flex: 0 1 14rem;
+/* Les trois dates ensemble, sur leur propre rangée, chacune à la largeur d'une
+   date : étirées sur la popup, elles flotteraient. */
+.dates {
+    display: grid;
+    flex: 1 1 100%;
+    gap: var(--space-md);
+    grid-template-columns: repeat(3, minmax(0, 12rem));
+}
+
+@container invoicing (max-width: 560px) {
+    .dates {
+        gap: var(--space-sm) var(--space-md);
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .datePerformed {
+        grid-column: 1 / -1;
+    }
+}
+
+.optional {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+.fieldError {
+    color: var(--danger);
+    font-size: 0.8rem;
 }
 
 .fieldPercent {
@@ -727,6 +826,53 @@
     font-style: italic;
 }
 
+/* À l'étroit, chaque prestation devient un bloc : la désignation, puis ses
+   nombres légendés, le total à droite. Plus de défilement de côté. */
+@container invoicing (max-width: 560px) {
+    .table,
+    .table tbody {
+        display: block;
+    }
+
+    .table thead {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+    }
+
+    .table tr {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-xs) var(--space-md);
+        padding: var(--space-sm) 0;
+        border-bottom: 1px solid var(--glass-border);
+    }
+
+    .table th,
+    .table td {
+        padding: 0;
+        border-bottom: none;
+    }
+
+    .table tbody th {
+        flex: 1 1 100%;
+    }
+
+    .table td[data-label]::before {
+        content: attr(data-label) ' ';
+        color: var(--text-muted);
+        font-size: 0.75rem;
+    }
+
+    .tableTotal {
+        margin-left: auto;
+        font-weight: 600;
+    }
+}
+
 /* Masqué à l'oeil, lu par les lecteurs d'écran. */
 .visuallyHidden {
     position: absolute;
@@ -787,6 +933,10 @@
     flex-wrap: wrap;
 }
 
+.filterKind {
+    flex: 0 0 auto;
+}
+
 .filterState {
     flex: 0 1 12rem;
     min-width: 9rem;
@@ -801,6 +951,19 @@
 .filterSearch {
     flex: 1 1 10rem;
     min-width: 8rem;
+}
+
+/* À l'étroit : le type seul sur sa ligne, l'état et l'année côte à côte, la
+   recherche dessous. */
+@container invoicing (max-width: 560px) {
+    .filterKind,
+    .filterSearch {
+        flex: 1 1 100%;
+    }
+
+    .filterState {
+        flex: 1 1 9rem;
+    }
 }
 
 .countLate {
@@ -1001,6 +1164,16 @@
     margin: 0;
 }
 
+@container invoicing (max-width: 560px) {
+    .deliveryActions {
+        flex: 1 1 100%;
+    }
+
+    .deliveryActions > * {
+        flex: 1 1 auto;
+    }
+}
+
 .deliveryDone {
     color: var(--text-primary);
 }
@@ -1053,6 +1226,33 @@
     align-items: center;
     gap: var(--space-md);
     min-width: 0;
+}
+
+/* À l'étroit, le retour garde sa flèche, son nom passe à l'infobulle ; le titre
+   descend d'un cran, l'objet sous le numéro. */
+@container invoicing (max-width: 560px) {
+    .backLabel {
+        display: none;
+    }
+
+    .detailHead {
+        gap: var(--space-sm);
+    }
+
+    .heading,
+    .pageTitle {
+        font-size: 1.1rem;
+    }
+
+    .headingSoft {
+        display: block;
+        font-size: 0.95rem;
+    }
+
+    .sectionHint {
+        order: 3;
+        flex-basis: 100%;
+    }
 }
 
 .ident {
@@ -1109,8 +1309,17 @@
     color: var(--accent);
 }
 
-@media (max-width: 720px) {
-    .tabLabel {
+/* À l'étroit, les onglets se partagent la ligne et gardent leurs mots : une
+   icône seule ne dit pas où elle mène. */
+@container invoicing (max-width: 560px) {
+    .tab,
+    .tabActive {
+        flex: 1;
+        justify-content: center;
+        padding: var(--space-sm);
+    }
+
+    .tabIcon {
         display: none;
     }
 }
@@ -1189,6 +1398,32 @@
     gap: var(--space-md);
     flex-wrap: wrap;
     margin-left: auto;
+}
+
+/* À l'étroit, le bandeau tient sur une rangée : le total dû et le geste. Le
+   détail des taxes reste dans la fiche, l'impression garde son icône, et la
+   note d'offre passe dessous, en petit. */
+@container invoicing (max-width: 560px) {
+    .sheetFoot {
+        gap: var(--space-sm);
+    }
+
+    .footDetail,
+    .printLabel {
+        display: none;
+    }
+
+    .footActions {
+        gap: var(--space-sm);
+    }
+
+    .footActions .quotaNote,
+    .footActions .quotaFull {
+        flex: 1 1 100%;
+        order: 1;
+        font-size: 0.8rem;
+        text-align: right;
+    }
 }
 
 .sheetContact {

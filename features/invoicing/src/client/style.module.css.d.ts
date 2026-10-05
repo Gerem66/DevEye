@@ -1,8 +1,10 @@
 declare const styles: {
     readonly actions: string;
     readonly archiveRow: string;
+    readonly backLabel: string;
     readonly banner: string;
     readonly bannerText: string;
+    readonly cellCaption: string;
     readonly cellLabel: string;
     readonly cellNote: string;
     readonly cellPrice: string;
@@ -21,6 +23,8 @@ declare const styles: {
     readonly chartLegend: string;
     readonly chartSvg: string;
     readonly countLate: string;
+    readonly datePerformed: string;
+    readonly dates: string;
     readonly delivery: string;
     readonly deliveryActions: string;
     readonly deliveryAnswer: string;
@@ -47,7 +51,7 @@ declare const styles: {
     readonly feature: string;
     readonly field: string;
     readonly fieldClient: string;
-    readonly fieldDate: string;
+    readonly fieldError: string;
     readonly fieldGrid: string;
     readonly fieldPercent: string;
     readonly fieldRef: string;
@@ -57,11 +61,13 @@ declare const styles: {
     readonly figureBad: string;
     readonly figureNote: string;
     readonly figures: string;
+    readonly filterKind: string;
     readonly filterSearch: string;
     readonly filterState: string;
     readonly filterYear: string;
     readonly filters: string;
     readonly footActions: string;
+    readonly footDetail: string;
     readonly footGrand: string;
     readonly footLabel: string;
     readonly footTotals: string;
@@ -90,6 +96,7 @@ declare const styles: {
     readonly logoPick: string;
     readonly logoRow: string;
     readonly moreRow: string;
+    readonly optional: string;
     readonly page: string;
     readonly pageHead: string;
     readonly pageTitle: string;
@@ -103,6 +110,7 @@ declare const styles: {
     readonly placeholder: string;
     readonly preview: string;
     readonly previewFrame: string;
+    readonly printLabel: string;
     readonly quotaFull: string;
     readonly quotaNote: string;
     readonly readHeader: string;
@@ -128,10 +136,11 @@ declare const styles: {
     readonly subheading: string;
     readonly tab: string;
     readonly tabActive: string;
-    readonly tabLabel: string;
+    readonly tabIcon: string;
     readonly table: string;
     readonly tableDetail: string;
     readonly tableNote: string;
+    readonly tableTotal: string;
     readonly tableWrap: string;
     readonly tabs: string;
     readonly textarea: string;

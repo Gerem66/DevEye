@@ -45,8 +45,8 @@ export default function ClientsPage({ currency, onBack, onOpen, onNew }: Clients
     return (
         <div className={styles.page}>
             <header className={styles.pageHead}>
-                <Button variant='ghost' icon='arrow-left' onClick={onBack}>
-                    Accueil
+                <Button variant='ghost' icon='arrow-left' aria-label='Accueil' title='Accueil' onClick={onBack}>
+                    <span className={styles.backLabel}>Accueil</span>
                 </Button>
                 <h2 className={styles.pageTitle}>Clients</h2>
                 {canWrite && (
@@ -57,15 +57,18 @@ export default function ClientsPage({ currency, onBack, onOpen, onNew }: Clients
             </header>
 
             <div className={styles.filters}>
-                <SegmentedControl
-                    value={scope}
-                    options={[
-                        { value: 'active' as const, label: 'Actifs' },
-                        { value: 'all' as const, label: `Tous${asideCount > 0 ? ` (${asideCount} de côté)` : ''}` }
-                    ]}
-                    onChange={setScope}
-                    aria-label='Quels clients'
-                />
+                <div className={styles.filterKind}>
+                    <SegmentedControl
+                        value={scope}
+                        options={[
+                            { value: 'active' as const, label: 'Actifs' },
+                            { value: 'all' as const, label: `Tous${asideCount > 0 ? ` (${asideCount} de côté)` : ''}` }
+                        ]}
+                        onChange={setScope}
+                        aria-label='Quels clients'
+                        fullWidth
+                    />
+                </div>
                 <div className={styles.filterSearch}>
                     <TextInput
                         type='search'

@@ -46,7 +46,7 @@ function lossesOf(doc: InvoicingDoc, target: InvoicingSettings, here: InvoicingS
         );
     }
     if (doc.dueOn !== null || doc.validUntil !== null) {
-        lost.push('Ses échéances : elles repartiront des réglages de l’autre espace.');
+        lost.push('Ses dates limites : elles repartiront d’aujourd’hui, avec les délais de l’autre espace.');
     }
     if (target.currency !== here.currency) {
         lost.push(

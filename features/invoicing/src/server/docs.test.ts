@@ -87,6 +87,45 @@ describe('invoicing.docSave', () => {
         assert.deepEqual(res.doc.totals, { netCents: 0, vatCents: 0, grossCents: 0, vat: [] });
     });
 
+    it('date un brouillon neuf : validité d’un devis, échéance d’une facture selon son client', async () => {
+        const store = emptyStore();
+        liableToVat(store, { quote_validity_days: 45, payment_terms_days: 30 });
+        store.clients.set(7, {
+            id: 7,
+            workspace_id: 1,
+            kind: 'company',
+            payment_terms_days: 15,
+            default_vat_bp: null,
+            archived: 0,
+            content: JSON.stringify({ name: 'Mairie' })
+        });
+        const ctx = ctxOf(store);
+
+        const quote = await docSave.handler(ctx, { id: null, kind: 'quote', doc: header() });
+        assert.equal(quote.doc.validUntil, addDays(DAY, 45));
+        assert.equal(quote.doc.dueOn, null);
+
+        const invoice = await docSave.handler(ctx, { id: null, kind: 'invoice', doc: header() });
+        assert.equal(invoice.doc.dueOn, addDays(DAY, 30));
+
+        const owed = await docSave.handler(ctx, { id: null, kind: 'invoice', doc: header({ clientId: 7 }) });
+        assert.equal(owed.doc.dueOn, addDays(DAY, 15));
+    });
+
+    it('refuse un brouillon privé de sa date limite', async () => {
+        const store = emptyStore();
+        const ctx = ctxOf(store);
+        const quote = await docSave.handler(ctx, { id: null, kind: 'quote', doc: header() });
+        const invoice = await docSave.handler(ctx, { id: null, kind: 'invoice', doc: header() });
+
+        for (const doc of [quote.doc, invoice.doc]) {
+            await assert.rejects(
+                () => docSave.handler(ctx, { id: doc.id, kind: doc.kind, doc: header({ subject: 'Sans date' }) }),
+                (error: unknown) => error instanceof FeatureError && error.code === 'validation'
+            );
+        }
+    });
+
     it('garde l’objet hors des colonnes en clair', async () => {
         const store = emptyStore();
         const ctx = ctxOf(store);

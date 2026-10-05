@@ -795,16 +795,26 @@ function SearchView({
             </div>
             <div className={styles.filesSearchRow}>
                 <label className={styles.filesField}>
-                    Modifié après
-                    <input type='date' value={form.since} onChange={(e) => set('since', e.target.value)} />
+                    <span className={styles.filesCaption}>Modifié après</span>
+                    <TextInput
+                        type='date'
+                        value={form.since}
+                        onChange={(e) => set('since', e.target.value)}
+                        onClear={() => set('since', '')}
+                    />
                 </label>
                 <label className={styles.filesField}>
-                    avant
-                    <input type='date' value={form.until} onChange={(e) => set('until', e.target.value)} />
+                    <span className={styles.filesCaption}>avant</span>
+                    <TextInput
+                        type='date'
+                        value={form.until}
+                        onChange={(e) => set('until', e.target.value)}
+                        onClear={() => set('until', '')}
+                    />
                 </label>
                 <label className={styles.filesField}>
-                    Taille ≥ (Mo)
-                    <input
+                    <span className={styles.filesCaption}>Taille ≥ (Mo)</span>
+                    <TextInput
                         type='number'
                         min='0'
                         value={form.minMb}
@@ -813,8 +823,8 @@ function SearchView({
                     />
                 </label>
                 <label className={styles.filesField}>
-                    ≤ (Mo)
-                    <input
+                    <span className={styles.filesCaption}>≤ (Mo)</span>
+                    <TextInput
                         type='number'
                         min='0'
                         value={form.maxMb}

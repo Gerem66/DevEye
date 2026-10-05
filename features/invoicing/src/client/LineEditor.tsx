@@ -316,59 +316,74 @@ export default function LineEditor(props: LineEditorProps) {
                                 onPointerDown={(e) => canWrite && onGripPointerDown(e, draft.key)}
                             />
 
-                            <TextInput
-                                ref={bind(`${draft.key}:label`)}
-                                className={styles.cellLabel}
-                                value={draft.label}
-                                disabled={!canWrite}
-                                aria-label={`Désignation, ligne ${index + 1}`}
-                                placeholder='Ce que vous facturez'
-                                onChange={(e) => patch(index, { label: e.target.value })}
-                                onKeyDown={(e) => onKeyDown(e, index, 'label')}
-                            />
+                            <div className={styles.cellLabel}>
+                                <TextInput
+                                    ref={bind(`${draft.key}:label`)}
+                                    value={draft.label}
+                                    disabled={!canWrite}
+                                    aria-label={`Désignation, ligne ${index + 1}`}
+                                    placeholder='Ce que vous facturez'
+                                    onChange={(e) => patch(index, { label: e.target.value })}
+                                    onKeyDown={(e) => onKeyDown(e, index, 'label')}
+                                />
+                            </div>
 
                             {draft.kind === 'text' ? (
                                 <span className={styles.cellNote}>Commentaire, sans montant</span>
                             ) : (
                                 <>
-                                    <TextInput
-                                        ref={bind(`${draft.key}:quantity`)}
-                                        className={styles.cellQty}
-                                        inputMode='decimal'
-                                        value={draft.quantity}
-                                        disabled={!canWrite}
-                                        aria-label={`Quantité, ligne ${index + 1}`}
-                                        onChange={(e) => patch(index, { quantity: e.target.value })}
-                                        onBlur={() => {
-                                            const milli = parseQuantity(draft.quantity);
-                                            if (milli !== null) patch(index, { quantity: quantityToInput(milli) });
-                                        }}
-                                        onKeyDown={(e) => onKeyDown(e, index, 'quantity')}
-                                    />
+                                    {/* Chaque case porte sa légende, que seule la ligne repliée
+                                        montre : en large, le bandeau de titres la remplace. */}
+                                    <div className={styles.cellQty}>
+                                        <span className={styles.cellCaption} aria-hidden='true'>
+                                            Quantité
+                                        </span>
+                                        <TextInput
+                                            ref={bind(`${draft.key}:quantity`)}
+                                            inputMode='decimal'
+                                            value={draft.quantity}
+                                            disabled={!canWrite}
+                                            aria-label={`Quantité, ligne ${index + 1}`}
+                                            onChange={(e) => patch(index, { quantity: e.target.value })}
+                                            onBlur={() => {
+                                                const milli = parseQuantity(draft.quantity);
+                                                if (milli !== null) patch(index, { quantity: quantityToInput(milli) });
+                                            }}
+                                            onKeyDown={(e) => onKeyDown(e, index, 'quantity')}
+                                        />
+                                    </div>
 
-                                    <SearchSelect
-                                        className={styles.cellUnit}
-                                        value={draft.unit}
-                                        disabled={!canWrite}
-                                        aria-label={`Unité, ligne ${index + 1}`}
-                                        onChange={(unit) => patch(index, { unit })}
-                                        options={UNIT_OPTIONS}
-                                    />
+                                    <div className={styles.cellUnit}>
+                                        <span className={styles.cellCaption} aria-hidden='true'>
+                                            Unité
+                                        </span>
+                                        <SearchSelect
+                                            value={draft.unit}
+                                            disabled={!canWrite}
+                                            aria-label={`Unité, ligne ${index + 1}`}
+                                            onChange={(unit) => patch(index, { unit })}
+                                            options={UNIT_OPTIONS}
+                                        />
+                                    </div>
 
-                                    <TextInput
-                                        ref={bind(`${draft.key}:unitPrice`)}
-                                        className={styles.cellPrice}
-                                        inputMode='decimal'
-                                        value={draft.unitPrice}
-                                        disabled={!canWrite}
-                                        aria-label={`Prix unitaire hors taxes, ligne ${index + 1}`}
-                                        onChange={(e) => patch(index, { unitPrice: e.target.value })}
-                                        onBlur={() => {
-                                            const cents = parseAmount(draft.unitPrice);
-                                            if (cents !== null) patch(index, { unitPrice: amountToInput(cents) });
-                                        }}
-                                        onKeyDown={(e) => onKeyDown(e, index, 'unitPrice')}
-                                    />
+                                    <div className={styles.cellPrice}>
+                                        <span className={styles.cellCaption} aria-hidden='true'>
+                                            Prix unitaire HT
+                                        </span>
+                                        <TextInput
+                                            ref={bind(`${draft.key}:unitPrice`)}
+                                            inputMode='decimal'
+                                            value={draft.unitPrice}
+                                            disabled={!canWrite}
+                                            aria-label={`Prix unitaire hors taxes, ligne ${index + 1}`}
+                                            onChange={(e) => patch(index, { unitPrice: e.target.value })}
+                                            onBlur={() => {
+                                                const cents = parseAmount(draft.unitPrice);
+                                                if (cents !== null) patch(index, { unitPrice: amountToInput(cents) });
+                                            }}
+                                            onKeyDown={(e) => onKeyDown(e, index, 'unitPrice')}
+                                        />
+                                    </div>
 
                                     {props.vatRegime === 'exempt' ? (
                                         // Un déroulant désactivé sur « 0 % » aurait l'air d'une
@@ -387,21 +402,28 @@ export default function LineEditor(props: LineEditorProps) {
                                             )}
                                         </span>
                                     ) : (
-                                        <SearchSelect
-                                            className={styles.cellVat}
-                                            value={String(draft.vatRateBp)}
-                                            disabled={!canWrite}
-                                            aria-label={`Taux de TVA, ligne ${index + 1}`}
-                                            onChange={(value) => patch(index, { vatRateBp: Number(value) })}
-                                            options={VAT_OPTIONS}
-                                        />
+                                        <div className={styles.cellVat}>
+                                            <span className={styles.cellCaption} aria-hidden='true'>
+                                                TVA
+                                            </span>
+                                            <SearchSelect
+                                                value={String(draft.vatRateBp)}
+                                                disabled={!canWrite}
+                                                aria-label={`Taux de TVA, ligne ${index + 1}`}
+                                                onChange={(value) => patch(index, { vatRateBp: Number(value) })}
+                                                options={VAT_OPTIONS}
+                                            />
+                                        </div>
                                     )}
 
-                                    {/* Calculé, donc `output` ; muet, parce qu'un total
-                                        qui parle à chaque frappe est insupportable. */}
-                                    <output className={styles.cellTotal} aria-live='off'>
-                                        {formatMoney(net, currency)}
-                                    </output>
+                                    <div className={styles.cellTotal}>
+                                        <span className={styles.cellCaption} aria-hidden='true'>
+                                            Total HT
+                                        </span>
+                                        {/* Calculé, donc `output` ; muet, parce qu'un total
+                                            qui parle à chaque frappe est insupportable. */}
+                                        <output aria-live='off'>{formatMoney(net, currency)}</output>
+                                    </div>
                                 </>
                             )}
 

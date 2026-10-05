@@ -71,3 +71,54 @@
 .input-error {
     border-color: var(--danger);
 }
+
+/* La croix d'effacement. Sur une date, le navigateur de bureau a la sienne et
+   le mobile n'en a aucune : elle ne paraît alors qu'au doigt, sans quoi deux
+   croix se suivraient. */
+.input-with-clear {
+    padding-right: 2.25rem;
+}
+
+.input-clear-btn {
+    position: absolute;
+    top: 50%;
+    right: 0.375rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    padding: 0;
+    transform: translateY(-50%);
+    border: none;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: color var(--transition-fast);
+}
+
+.input-clear-btn:hover,
+.input-clear-btn:focus-visible {
+    color: var(--accent);
+}
+
+.input-clear-btn .icon {
+    width: 13px;
+    height: 13px;
+    background-color: currentColor;
+}
+
+.input-clear-touch {
+    display: none;
+}
+
+@media (pointer: coarse) {
+    .input-with-clear-touch {
+        padding-right: 2.25rem;
+    }
+
+    .input-clear-touch {
+        display: flex;
+    }
+}

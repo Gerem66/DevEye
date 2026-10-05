@@ -56,7 +56,8 @@ export default function WordingPanel({ canWrite }: SettingsPanelProps) {
                     onChange={(value) => patch({ paymentTermsDays: value ?? 0 })}
                 />
                 <span className={shell.fieldHint}>
-                    Zéro pour un paiement comptant. L’échéance d’une facture est sa date d’émission plus ce délai.
+                    Zéro pour un paiement comptant. Une facture neuve propose d’être payée avant aujourd’hui plus ce
+                    délai, ou celui de son client.
                 </span>
             </label>
 
@@ -70,6 +71,9 @@ export default function WordingPanel({ canWrite }: SettingsPanelProps) {
                     disabled={!canWrite}
                     onChange={(value) => patch({ quoteValidityDays: value ?? 30 })}
                 />
+                <span className={shell.fieldHint}>
+                    Un devis neuf propose d’être valable jusqu’à aujourd’hui plus ce délai.
+                </span>
             </label>
 
             <label className={shell.field} htmlFor='invoicing-deposit-percent'>

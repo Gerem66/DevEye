@@ -155,6 +155,7 @@ export default function Invoicing() {
                             usage={data.usage}
                             defaultVatBp={data.settings.defaultVatBp}
                             defaultDepositBp={data.settings.defaultDepositBp}
+                            paymentTermsDays={data.settings.paymentTermsDays}
                             vatRegime={data.settings.vatRegime}
                             backLabel={LABELS[view.from]}
                             onBack={back(view.from)}

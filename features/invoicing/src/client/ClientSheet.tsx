@@ -68,8 +68,8 @@ export default function ClientSheet({ id, currency, backLabel, onBack, onGone }:
         <div className={styles.page}>
             <header className={styles.header}>
                 <div className={styles.detailHead}>
-                    <Button variant='ghost' icon='arrow-left' onClick={onBack}>
-                        {backLabel}
+                    <Button variant='ghost' icon='arrow-left' aria-label={backLabel} title={backLabel} onClick={onBack}>
+                        <span className={styles.backLabel}>{backLabel}</span>
                     </Button>
                     <div className={styles.ident}>
                         <h2 className={styles.heading}>{client.name}</h2>

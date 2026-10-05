@@ -19,7 +19,7 @@ import {
     type ConfirmRequest
 } from 'deveye-sdk-client';
 
-import { addDays, leavesAnswerTime } from '../contracts/calendar';
+import { addDays, dueDateOf, leavesAnswerTime } from '../contracts/calendar';
 import { formatPercent } from '../contracts/display';
 import { depositTotals, quoteDepositBp } from '../contracts/money';
 import type {
@@ -74,6 +74,8 @@ export interface DocumentSheetProps {
     defaultVatBp: number;
     /** La part d'acompte qu'un devis annonce sans en dire une autre. */
     defaultDepositBp: number;
+    /** Le délai de règlement de l'espace, quand le client n'a pas le sien. */
+    paymentTermsDays: number;
     /** Le régime vivant de l'espace : un brouillon le suit, un document émis garde le sien. */
     vatRegime: VatRegime;
     /** Ce que le bouton de retour annonce : d'où l'on vient. */
@@ -121,6 +123,7 @@ export default function DocumentSheet({
     usage,
     defaultVatBp,
     defaultDepositBp,
+    paymentTermsDays,
     vatRegime: liveVatRegime,
     backLabel,
     onBack,
@@ -346,6 +349,29 @@ export default function DocumentSheet({
     const wording = issueWording(doc);
     const depositBp = quoteDepositBp(doc, defaultDepositBp);
 
+    const deadline = doc.kind === 'quote' ? doc.validUntil : doc.dueOn;
+    const earliest = doc.kind === 'quote' ? addDays(todayIso(), 1) : todayIso();
+    const deadlineError =
+        deadline === null || deadline >= earliest
+            ? null
+            : doc.kind === 'quote'
+              ? 'Choisissez une date après aujourd’hui.'
+              : 'Choisissez aujourd’hui ou une date à venir.';
+
+    const termsOf = (clientId: number | null) =>
+        clients?.find((client) => client.id === clientId)?.paymentTermsDays ?? paymentTermsDays;
+
+    /** L'échéance suit le délai du client tant qu'on n'y a pas touché. */
+    const changeClient = (clientId: number | null) => {
+        const followsClient =
+            opened.kind !== 'quote' && opened.dueOn === dueDateOf(todayIso(), termsOf(opened.clientId));
+        saveHeader({
+            ...opened,
+            clientId,
+            dueOn: followsClient ? dueDateOf(todayIso(), termsOf(clientId)) : opened.dueOn
+        });
+    };
+
     const derive = (mode: 'invoice' | 'deposit' | 'credit', percentBp: number, fallback: string) =>
         act(async () => {
             const res = await api.send('invoicing.docDerive', { id: opened.id, mode, percentBp });
@@ -367,8 +393,7 @@ export default function DocumentSheet({
         const lenientToday = addDays(todayIso(), -1);
         if (
             opened.kind === 'quote' &&
-            opened.validUntil !== null &&
-            !leavesAnswerTime(opened.validUntil, lenientToday)
+            (opened.validUntil === null || !leavesAnswerTime(opened.validUntil, lenientToday))
         ) {
             setError({
                 message:
@@ -600,8 +625,8 @@ export default function DocumentSheet({
         <div className={styles.sheet}>
             <header className={styles.header}>
                 <div className={styles.detailHead}>
-                    <Button variant='ghost' icon='arrow-left' onClick={onBack}>
-                        {backLabel}
+                    <Button variant='ghost' icon='arrow-left' aria-label={backLabel} title={backLabel} onClick={onBack}>
+                        <span className={styles.backLabel}>{backLabel}</span>
                     </Button>
                     <div className={styles.ident}>
                         <h2 className={styles.heading}>
@@ -687,8 +712,8 @@ export default function DocumentSheet({
                         className={entry.id === tab ? styles.tabActive : styles.tab}
                         onClick={() => setTab(entry.id)}
                     >
-                        <span className={`icon icon-${entry.icon}`} />
-                        <span className={styles.tabLabel}>{entry.label}</span>
+                        <span className={`icon ${styles.tabIcon} icon-${entry.icon}`} aria-hidden='true' />
+                        <span>{entry.label}</span>
                     </button>
                 ))}
             </nav>
@@ -727,7 +752,7 @@ export default function DocumentSheet({
                                 clients={clients ?? null}
                                 value={doc.clientId}
                                 disabled={!canWrite}
-                                onChange={(clientId) => saveHeader({ ...opened, clientId })}
+                                onChange={changeClient}
                             />
                         </div>
 
@@ -741,35 +766,54 @@ export default function DocumentSheet({
                             />
                         </label>
 
-                        <label className={`${styles.field} ${styles.fieldDate}`}>
-                            <span className={styles.dialogLabel}>Prestation réalisée le</span>
-                            <TextInput
-                                type='date'
-                                value={doc.performedOn ?? ''}
-                                disabled={!canWrite}
-                                onChange={(e) => saveHeader({ ...opened, performedOn: e.target.value || null })}
-                            />
-                        </label>
+                        <div className={styles.dates} role='group' aria-label='Dates du document'>
+                            <label
+                                className={styles.field}
+                                title='Un document prend la date du jour où vous l’émettez.'
+                            >
+                                <span className={styles.dialogLabel}>Émis le</span>
+                                <TextInput type='date' value={todayIso()} disabled />
+                            </label>
 
-                        <label className={`${styles.field} ${styles.fieldDate}`}>
-                            <span className={styles.dialogLabel}>
-                                {doc.kind === 'quote' ? 'Valable jusqu’au' : 'À payer avant le'}
-                            </span>
-                            <TextInput
-                                type='date'
-                                value={(doc.kind === 'quote' ? doc.validUntil : doc.dueOn) ?? ''}
-                                min={doc.kind === 'quote' ? addDays(todayIso(), 1) : undefined}
-                                disabled={!canWrite}
-                                placeholder='Selon vos réglages'
-                                onChange={(e) =>
-                                    saveHeader(
-                                        doc.kind === 'quote'
-                                            ? { ...opened, validUntil: e.target.value || null }
-                                            : { ...opened, dueOn: e.target.value || null }
-                                    )
-                                }
-                            />
-                        </label>
+                            <label className={styles.field}>
+                                <span className={styles.dialogLabel}>
+                                    {doc.kind === 'quote' ? 'Valable jusqu’au' : 'À payer avant le'}
+                                </span>
+                                <TextInput
+                                    type='date'
+                                    required
+                                    value={deadline ?? ''}
+                                    min={earliest}
+                                    disabled={!canWrite}
+                                    error={deadlineError ?? undefined}
+                                    aria-invalid={deadlineError !== null}
+                                    onChange={(e) => {
+                                        // Obligatoire : un champ vidé reprend sa date.
+                                        const day = e.target.value;
+                                        if (day.length === 0) return;
+                                        saveHeader(
+                                            doc.kind === 'quote'
+                                                ? { ...opened, validUntil: day }
+                                                : { ...opened, dueOn: day }
+                                        );
+                                    }}
+                                />
+                                {deadlineError !== null && <span className={styles.fieldError}>{deadlineError}</span>}
+                            </label>
+
+                            <label className={`${styles.field} ${styles.datePerformed}`}>
+                                <span className={styles.dialogLabel}>
+                                    Prestation réalisée le <span className={styles.optional}>facultatif</span>
+                                </span>
+                                <TextInput
+                                    type='date'
+                                    value={doc.performedOn ?? ''}
+                                    disabled={!canWrite}
+                                    onChange={(e) => saveHeader({ ...opened, performedOn: e.target.value || null })}
+                                    onClear={() => saveHeader({ ...opened, performedOn: null })}
+                                />
+                            </label>
+                        </div>
 
                         {doc.kind === 'quote' && (
                             <label className={`${styles.field} ${styles.fieldPercent}`}>
@@ -811,22 +855,28 @@ export default function DocumentSheet({
                             <dt>Client</dt>
                             <dd>{doc.clientName}</dd>
                         </div>
-                        {doc.performedOn !== null && (
+                        {doc.issuedOn !== null && (
                             <div>
-                                <dt>Prestation</dt>
-                                <dd>{formatDate(doc.performedOn)}</dd>
-                            </div>
-                        )}
-                        {doc.dueOn !== null && (
-                            <div>
-                                <dt>Échéance</dt>
-                                <dd>{formatDate(doc.dueOn)}</dd>
+                                <dt>Émis le</dt>
+                                <dd>{formatDate(doc.issuedOn)}</dd>
                             </div>
                         )}
                         {doc.validUntil !== null && (
                             <div>
                                 <dt>Valable jusqu’au</dt>
                                 <dd>{formatDate(doc.validUntil)}</dd>
+                            </div>
+                        )}
+                        {doc.dueOn !== null && (
+                            <div>
+                                <dt>À payer avant le</dt>
+                                <dd>{formatDate(doc.dueOn)}</dd>
+                            </div>
+                        )}
+                        {doc.performedOn !== null && (
+                            <div>
+                                <dt>Prestation réalisée le</dt>
+                                <dd>{formatDate(doc.performedOn)}</dd>
                             </div>
                         )}
                         {depositBp > 0 && (
@@ -891,24 +941,24 @@ export default function DocumentSheet({
                 la note de TVA, et le seul geste qui fasse avancer le document. */}
             <footer className={styles.sheetFoot}>
                 <div className={styles.footTotals}>
-                    <span>
+                    <span className={styles.footDetail}>
                         <span className={styles.footLabel}>Total HT</span>{' '}
                         <strong>{formatMoney(totals.netCents, doc.currency)}</strong>
                     </span>
                     {withVat ? (
-                        <span>
+                        <span className={styles.footDetail}>
                             <span className={styles.footLabel}>TVA</span>{' '}
                             <strong>{formatMoney(totals.vatCents, doc.currency)}</strong>
                         </span>
                     ) : (
-                        <span className={styles.footLabel}>Franchise de TVA</span>
+                        <span className={`${styles.footLabel} ${styles.footDetail}`}>Franchise de TVA</span>
                     )}
                     <span>
                         <span className={styles.footLabel}>{withVat ? 'Total TTC' : 'Total'}</span>{' '}
                         <strong className={styles.footGrand}>{formatMoney(totals.grossCents, doc.currency)}</strong>
                     </span>
                     {depositBp > 0 && (
-                        <span>
+                        <span className={styles.footDetail}>
                             <span className={styles.footLabel}>Acompte {formatPercent(depositBp)}</span>{' '}
                             <strong>{formatMoney(depositTotals(totals, depositBp).grossCents, doc.currency)}</strong>
                         </span>
@@ -924,8 +974,15 @@ export default function DocumentSheet({
                 </div>
                 <div className={styles.footActions}>
                     {draft && <QuotaNote usage={usage} only={doc.kind} />}
-                    <Button variant='secondary' icon='download' disabled={busy} onClick={() => void print()}>
-                        Imprimer ou enregistrer en PDF
+                    <Button
+                        variant='secondary'
+                        icon='download'
+                        aria-label='Imprimer ou enregistrer en PDF'
+                        title='Imprimer ou enregistrer en PDF'
+                        disabled={busy}
+                        onClick={() => void print()}
+                    >
+                        <span className={styles.printLabel}>Imprimer ou enregistrer en PDF</span>
                     </Button>
                     {primary}
                 </div>

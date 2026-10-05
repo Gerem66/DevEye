@@ -59,9 +59,9 @@ export function todayIn(timeZone: string, now: Date = new Date()): string {
     return dayIn(timeZone, now);
 }
 
-/** L'échéance d'une facture : sa date d'émission plus le délai convenu. */
-export function dueDateOf(issuedOn: string, termsDays: number): string {
-    return addDays(issuedOn, termsDays);
+/** L'échéance proposée à une facture : le jour de sa rédaction plus le délai convenu. */
+export function dueDateOf(day: string, termsDays: number): string {
+    return addDays(day, termsDays);
 }
 
 export type PeriodRange = 'month' | 'quarter' | 'year';

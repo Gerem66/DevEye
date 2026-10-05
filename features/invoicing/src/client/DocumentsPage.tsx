@@ -99,8 +99,8 @@ export default function DocumentsPage({ currency, onBack, onOpen, onNew }: Docum
     return (
         <div className={styles.page}>
             <header className={styles.pageHead}>
-                <Button variant='ghost' icon='arrow-left' onClick={onBack}>
-                    Accueil
+                <Button variant='ghost' icon='arrow-left' aria-label='Accueil' title='Accueil' onClick={onBack}>
+                    <span className={styles.backLabel}>Accueil</span>
                 </Button>
                 <h2 className={styles.pageTitle}>Documents</h2>
                 {canWrite && (
@@ -111,17 +111,20 @@ export default function DocumentsPage({ currency, onBack, onOpen, onNew }: Docum
             </header>
 
             <div className={styles.filters}>
-                <SegmentedControl
-                    value={kind}
-                    options={[
-                        { value: 'all' as const, label: 'Tous' },
-                        { value: 'quote' as const, label: 'Devis' },
-                        { value: 'invoice' as const, label: 'Factures' },
-                        { value: 'credit' as const, label: 'Avoirs' }
-                    ]}
-                    onChange={setKind}
-                    aria-label='Type de document'
-                />
+                <div className={styles.filterKind}>
+                    <SegmentedControl
+                        value={kind}
+                        options={[
+                            { value: 'all' as const, label: 'Tous' },
+                            { value: 'quote' as const, label: 'Devis' },
+                            { value: 'invoice' as const, label: 'Factures' },
+                            { value: 'credit' as const, label: 'Avoirs' }
+                        ]}
+                        onChange={setKind}
+                        aria-label='Type de document'
+                        fullWidth
+                    />
+                </div>
 
                 <div className={styles.filterState}>
                     <SearchSelect value={state} aria-label='État' onChange={setState} options={STATE_OPTIONS} />

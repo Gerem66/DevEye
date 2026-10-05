@@ -11,10 +11,11 @@ import {
     invoicingDocContentSchema,
     invoicingLineInputSchema,
     type ClientKind,
+    type DocumentKind,
     type InvoicingClientInput,
     type InvoicingDocCopy
 } from '../../contracts/domain';
-import { assertClient, docOr404, now, openJson, seal, settingsOf, WRITE, type Ctx } from '../_shared';
+import { assertClient, docOr404, draftDeadlines, now, openJson, seal, settingsOf, WRITE, type Ctx } from '../_shared';
 import { toDoc } from '../views';
 import type { InvoicingDocRow, LineWrite } from '../repo';
 import { clientRowOf } from './clients';
@@ -63,8 +64,9 @@ export const docDuplicate = defineSdkFeature({
         const at = now();
         const content = await openJson(ctx, source.content, invoicingDocContentSchema, EMPTY_CONTENT);
 
-        // Les échéances repartent des réglages à l'émission : celles de la pièce
-        // d'origine sont celles d'une autre date. La réponse du client ne suit pas.
+        // Les échéances repartent d'aujourd'hui : celles de la pièce d'origine
+        // sont celles d'une autre date. La réponse du client ne suit pas.
+        const deadlines = await draftDeadlines(ctx, settings, source.kind as DocumentKind, source.client_id);
         const id = await ctx.repo.insertDoc(
             ctx.workspaceId,
             {
@@ -74,8 +76,7 @@ export const docDuplicate = defineSdkFeature({
                 is_deposit: source.is_deposit,
                 currency: settings.currency,
                 vat_regime: settings.vatRegime,
-                due_on: null,
-                valid_until: null,
+                ...deadlines,
                 deposit_bp: source.deposit_bp,
                 performed_on: source.performed_on,
                 content: await seal(ctx, { ...content, acceptance: null }),
@@ -195,6 +196,7 @@ export const docImport = defineSdkFeature({
         }
 
         const { performedOn, depositBp, ...text } = copy.doc;
+        const deadlines = await draftDeadlines(ctx, settings, copy.kind, clientId);
         const id = await ctx.repo.insertDoc(
             ctx.workspaceId,
             {
@@ -204,8 +206,7 @@ export const docImport = defineSdkFeature({
                 is_deposit: 0,
                 currency: settings.currency,
                 vat_regime: settings.vatRegime,
-                due_on: null,
-                valid_until: null,
+                ...deadlines,
                 deposit_bp: copy.kind === 'quote' ? depositBp : null,
                 performed_on: performedOn,
                 content: await seal(ctx, invoicingDocContentSchema.parse(text)),

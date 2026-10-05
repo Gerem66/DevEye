@@ -3003,16 +3003,10 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
+}
+.filesCaption {
     color: var(--text-muted);
     font-size: 0.75rem;
-}
-.filesField input {
-    padding: var(--space-xs) var(--space-sm);
-    background: var(--glass-bg-light);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-sm);
-    color: var(--text-primary);
-    font-size: 0.82rem;
 }
 .filesNum {
     width: 80px;

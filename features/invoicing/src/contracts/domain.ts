@@ -333,7 +333,10 @@ export const invoicingDocInputSchema = z.object({
     terms: z.string().max(1000).default(''),
     purchaseOrder: z.string().max(80).default(''),
     performedOn: daySchema.nullable().default(null),
-    /** Vides, ils se calculent à l'émission depuis les délais de l'espace. */
+    /**
+     * La date limite d'un brouillon : `validUntil` pour un devis, `dueOn` sinon.
+     * Vide à la création, le serveur la tire des délais ; un brouillon la garde.
+     */
     dueOn: daySchema.nullable().default(null),
     validUntil: daySchema.nullable().default(null),
     /**

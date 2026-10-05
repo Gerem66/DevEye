@@ -129,6 +129,14 @@ d'émission peut remonter d'un mois au plus (`BACKDATE_DAYS`), et l'émission
 refuse tant que la dénomination et le SIRET de l'émetteur manquent
 (`src/contracts/issuer.ts`, la même règle que l'écran lit pour prévenir avant).
 
+Un brouillon porte toujours sa **date limite** : « Valable jusqu'au » pour un
+devis, « À payer avant le » pour une facture ou un avoir. Elle naît avec lui
+(`draftDeadlines`, `src/server/_shared.ts`) : aujourd'hui plus la validité des
+réglages, ou plus le délai du client, sinon celui des réglages. Elle reste
+modifiable, jamais vide, et l'émission refuse un devis qui ne laisse pas au
+moins un jour pour répondre. La date de prestation est facultative : vide, le
+document ne l'imprime pas.
+
 La **numérotation** (`src/server/numbering.ts`) est chronologique et continue,
 sans transaction : le numéro n'existe que là où il est écrit. Le rang se lit du
 plus grand déjà posé et s'écrit sur le document sous garde `number IS NULL` ;
@@ -146,7 +154,7 @@ dérive l'avoir total, puis on retire ou on réduit ses lignes.
 Un devis peut **annoncer son acompte** (`deposit_bp`) : le client l'accepte
 alors avec le devis, au lieu de le découvrir à la facture. Sans part à lui, un
 brouillon suit celle des réglages (Mentions, zéro par défaut), et l'émission la
-fige comme la validité ; zéro dit « pas d'acompte ». Le papier l'imprime sous le
+fige ; zéro dit « pas d'acompte ». Le papier l'imprime sous le
 total, avec son montant, et la boîte « Facture d'acompte » s'ouvre sur cette
 part, qu'on peut encore changer (deux acomptes, par exemple). Le montant annoncé
 et celui de la facture d'acompte sortent du même calcul (`depositTotals`) : ils

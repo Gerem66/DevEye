@@ -1,9 +1,14 @@
 import { FeatureError, type SdkCipher, type SdkFeatureContext, type SdkQuota } from '@deveye/types/sdk/server';
 import type { ZodType } from 'zod';
 
-import { todayIn } from '../contracts/calendar';
+import { addDays, dueDateOf, todayIn } from '../contracts/calendar';
 import { DEFAULT_SETTINGS } from '../contracts/defaults';
-import { invoicingSettingsSchema, type InvoicingSettings, type InvoicingSettingsSection } from '../contracts/domain';
+import {
+    invoicingSettingsSchema,
+    type DocumentKind,
+    type InvoicingSettings,
+    type InvoicingSettingsSection
+} from '../contracts/domain';
 import type { InvoicingDocRow, InvoicingRepo, InvoicingSettingsRow } from './repo';
 
 export type Ctx = SdkFeatureContext<InvoicingRepo>;
@@ -124,6 +129,23 @@ export async function publicOriginOf(ctx: Ctx, settings: InvoicingSettings): Pro
 /** Le jour courant dans le fuseau de l'espace, jamais celui du processus. */
 export function today(settings: InvoicingSettings): string {
     return todayIn(settings.timeZone);
+}
+
+/**
+ * Les dates d'un brouillon neuf : un devis dit jusqu'à quand il vaut, une
+ * facture ou un avoir quand il se règle. Le délai du client prime sur celui de
+ * l'espace.
+ */
+export async function draftDeadlines(
+    io: RepoIo,
+    settings: InvoicingSettings,
+    kind: DocumentKind,
+    clientId: number | null
+): Promise<{ due_on: string | null; valid_until: string | null }> {
+    const day = today(settings);
+    if (kind === 'quote') return { due_on: null, valid_until: addDays(day, settings.quoteValidityDays) };
+    const client = clientId === null ? null : await io.repo.findClient(clientId, io.workspaceId);
+    return { due_on: dueDateOf(day, client?.payment_terms_days ?? settings.paymentTermsDays), valid_until: null };
 }
 
 export function now(): number {

@@ -233,6 +233,7 @@ export default function FinanceGeneralPanel({ canWrite }: SettingsPanelProps) {
                         value={draft.trackingSince ?? ''}
                         disabled={!canWrite}
                         onChange={(e) => set({ trackingSince: e.target.value === '' ? null : e.target.value })}
+                        onClear={() => set({ trackingSince: null })}
                     />
                     <span className={shell.fieldHint}>
                         {draft.legalStatus === 'company'

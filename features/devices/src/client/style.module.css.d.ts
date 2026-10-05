@@ -110,6 +110,7 @@ declare const styles: {
     readonly filesBarIndet: string;
     readonly filesBarTrack: string;
     readonly filesBreadcrumb: string;
+    readonly filesCaption: string;
     readonly filesCrumb: string;
     readonly filesDeleteBtn: string;
     readonly filesError: string;

@@ -148,7 +148,7 @@ describe('invoicing.docArchive', () => {
 });
 
 describe('invoicing.docDuplicate', () => {
-    it('tire un brouillon neuf d’une facture émise, sans son numéro ni sa remise', async () => {
+    it('tire un brouillon neuf d’une facture émise, sans son numéro ni sa remise, échéance repartie d’aujourd’hui', async () => {
         const store = emptyStore();
         issuedInvoice(store);
 
@@ -162,7 +162,7 @@ describe('invoicing.docDuplicate', () => {
         assert.equal(res.doc.publicUrl, null);
         assert.equal(res.doc.answer, null);
         assert.equal(res.doc.sentAt, null);
-        assert.equal(res.doc.dueOn, null);
+        assert.equal(res.doc.dueOn, addDays(DAY, 30));
         assert.equal(res.doc.totals.netCents, 100_000);
         assert.equal(store.lines.filter((line) => line.doc_id === res.doc.id).length, 2);
     });

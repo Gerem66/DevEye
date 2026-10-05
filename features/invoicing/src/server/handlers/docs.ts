@@ -9,7 +9,18 @@ import {
 } from '../../contracts/commands';
 import { documentTotals } from '../../contracts/money';
 import { invoicingDocContentSchema, invoicingLineInputSchema, type InvoicingDoc } from '../../contracts/domain';
-import { now, publicOriginOf, seal, settingsOf, today, WRITE, type Ctx, docOr404, assertClient } from '../_shared';
+import {
+    assertClient,
+    docOr404,
+    draftDeadlines,
+    now,
+    publicOriginOf,
+    seal,
+    settingsOf,
+    today,
+    WRITE,
+    type Ctx
+} from '../_shared';
 import { clientNamesOf, linesByDoc, regimeOf, toDoc, toPayments, type DocViewContext } from '../views';
 import type { InvoicingDocRow, LineWrite } from '../repo';
 
@@ -97,6 +108,7 @@ export const docSave = defineSdkFeature({
 
         let id = input.id;
         if (id === null) {
+            const deadlines = await draftDeadlines(ctx, settings, input.kind, input.doc.clientId);
             id = await ctx.repo.insertDoc(
                 ctx.workspaceId,
                 {
@@ -108,8 +120,8 @@ export const docSave = defineSdkFeature({
                     // ni de régime, même si l'espace en change après.
                     currency: settings.currency,
                     vat_regime: settings.vatRegime,
-                    due_on: input.doc.dueOn,
-                    valid_until: input.doc.validUntil,
+                    due_on: input.doc.dueOn ?? deadlines.due_on,
+                    valid_until: input.doc.validUntil ?? deadlines.valid_until,
                     deposit_bp: input.kind === 'quote' ? input.doc.depositBp : null,
                     performed_on: input.doc.performedOn,
                     content,
@@ -120,6 +132,15 @@ export const docSave = defineSdkFeature({
         } else {
             const current = await docOr404(ctx, id);
             await assertClient(ctx, current.client_id, 'write');
+            const deadline = current.kind === 'quote' ? input.doc.validUntil : input.doc.dueOn;
+            if (current.status === 'draft' && deadline === null) {
+                throw new FeatureError(
+                    'validation',
+                    current.kind === 'quote'
+                        ? 'Un devis dit jusqu’à quand il est valable : choisissez sa date « Valable jusqu’au ».'
+                        : 'Un document dit quand il se règle : choisissez sa date « À payer avant le ».'
+                );
+            }
             const touched = await ctx.repo.updateDocDraft(
                 id,
                 ctx.workspaceId,

@@ -220,18 +220,20 @@ describe('invoicing.docIssue', () => {
         assert.equal(res.doc.validUntil, addDays(DAY, 1));
     });
 
-    it('refuse une validité calculée déjà dépassée, et désigne les réglages', async () => {
-        const store = emptyStore();
-        const { ctx, id } = await readyDraft(store, 'quote');
-        store.settings.get(1)!.quote_validity_days = 5;
+    it('refuse un brouillon sans date limite, sans consommer de rang', async () => {
+        for (const kind of ['quote', 'invoice'] as const) {
+            const store = emptyStore();
+            const { ctx, id } = await readyDraft(store, kind);
+            const row = store.docs.find((d) => d.id === id)!;
+            row.valid_until = null;
+            row.due_on = null;
 
-        await assert.rejects(
-            () => docIssue.handler(ctx, { id, issuedOn: addDays(DAY, -10) }),
-            (error: unknown) =>
-                error instanceof FeatureError &&
-                invoicingErrorDetailsSchema.parse(error.details).settingsSection === 'wording'
-        );
-        assert.equal(store.docs.find((d) => d.id === id)?.number, null);
+            await assert.rejects(
+                () => docIssue.handler(ctx, { id, issuedOn: DAY }),
+                (error: unknown) => error instanceof FeatureError && error.code === 'validation'
+            );
+            assert.equal(store.docs.find((d) => d.id === id)?.number, null);
+        }
     });
 
     it('refuse une échéance antérieure à l’émission, sans consommer de rang', async () => {
