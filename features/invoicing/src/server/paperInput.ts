@@ -1,6 +1,6 @@
 import { dayIn } from '../contracts/calendar';
 import { formatDate } from '../contracts/display';
-import { documentTotals } from '../contracts/money';
+import { depositTotals, documentTotals, quoteDepositBp } from '../contracts/money';
 import {
     invoicingClientContentSchema,
     invoicingDocContentSchema,
@@ -102,6 +102,10 @@ export async function paperInputOf(io: RepoIo, row: InvoicingDocRow): Promise<Pa
     );
 
     const { acceptance, ...editable } = content;
+    const depositBp = quoteDepositBp(
+        { kind: row.kind, status: row.status, depositBp: row.deposit_bp },
+        settings.defaultDepositBp
+    );
 
     return {
         ...editable,
@@ -120,6 +124,10 @@ export async function paperInputOf(io: RepoIo, row: InvoicingDocRow): Promise<Pa
         totals,
         settledCents,
         remainingCents: Math.max(0, totals.grossCents - settledCents),
+        deposit:
+            depositBp === 0
+                ? null
+                : { percentBp: depositBp, grossCents: depositTotals(computed, depositBp).grossCents },
         deductions: deductionRows.map((entry) => ({
             label: `Acompte déjà facturé${numbers.has(entry.deducted_doc_id) ? ` (${numbers.get(entry.deducted_doc_id)})` : ''}`,
             amountCents: entry.amount

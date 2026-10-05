@@ -24,6 +24,7 @@ function settingsOf(store: MemoryStore, workspaceId: number, vatRegime: 'standar
         default_vat_bp: vatRegime === 'standard' ? 2000 : 0,
         payment_terms_days: 30,
         quote_validity_days: 30,
+        default_deposit_bp: 0,
         quote_prefix: 'D',
         invoice_prefix: 'F',
         credit_prefix: 'A',

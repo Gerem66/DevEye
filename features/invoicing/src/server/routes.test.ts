@@ -62,6 +62,7 @@ function readySettings(store: MemoryStore): void {
         default_vat_bp: 2000,
         payment_terms_days: 30,
         quote_validity_days: 30,
+        default_deposit_bp: 0,
         quote_prefix: 'D',
         invoice_prefix: 'F',
         credit_prefix: 'A',

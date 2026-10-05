@@ -1,8 +1,8 @@
 import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 
 import { invoicingDocDerive } from '../../contracts/commands';
-import { formatVatRate, kindLabel } from '../../contracts/display';
-import { documentTotals } from '../../contracts/money';
+import { formatPercent, formatVatRate, kindLabel } from '../../contracts/display';
+import { depositTotals, documentTotals } from '../../contracts/money';
 import {
     invoicingDocContentSchema,
     invoicingLineInputSchema,
@@ -84,23 +84,22 @@ async function depositLines(
         throw new FeatureError('validation', 'Ce devis est à zéro : il n’y a pas d’acompte à en tirer.');
     }
 
-    const share = `${(percentBp / 100).toString().replace('.', ',')} %`;
+    const share = formatPercent(percentBp);
     const reference = quote.number_label === null ? 'ce devis' : `le devis ${quote.number_label}`;
+    const deposit = depositTotals(totals, percentBp);
     const writes: LineWrite[] = [];
-    for (const [index, vat] of totals.vat.entries()) {
-        const amount = Math.floor((vat.netCents * percentBp + 5000) / 10_000);
-        if (amount <= 0) continue;
+    for (const [index, vat] of deposit.vat.entries()) {
         writes.push({
             id: null,
             sort_order: index,
             kind: 'service',
             quantity_milli: 1000,
             unit: 'fixed',
-            unit_price: amount,
+            unit_price: vat.netCents,
             vat_bp: vat.rateBp,
             content: await seal(ctx, {
                 label: `Acompte de ${share} sur ${reference}`,
-                description: totals.vat.length > 1 ? `Part soumise au taux de ${formatVatRate(vat.rateBp)}` : ''
+                description: deposit.vat.length > 1 ? `Part soumise au taux de ${formatVatRate(vat.rateBp)}` : ''
             })
         });
     }
@@ -178,6 +177,7 @@ export const docDerive = defineSdkFeature({
                 vat_regime: source.vat_regime,
                 due_on: null,
                 valid_until: null,
+                deposit_bp: null,
                 performed_on: source.performed_on,
                 content: await seal(ctx, {
                     ...content,

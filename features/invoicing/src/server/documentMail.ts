@@ -103,6 +103,7 @@ function samplePaper(now: number): PaperInput {
         totals: { ...totals, vat: [...totals.vat] },
         settledCents: 0,
         remainingCents: totals.grossCents,
+        deposit: null,
         deductions: [],
         parentNumber: null,
         awaitingAnswer: false,

@@ -21,6 +21,7 @@ export interface InvoicingSettingsRow {
     default_vat_bp: number;
     payment_terms_days: number;
     quote_validity_days: number;
+    default_deposit_bp: number;
     quote_prefix: string;
     invoice_prefix: string;
     credit_prefix: string;
@@ -64,6 +65,7 @@ export interface InvoicingDocRow {
     issued_on: string | null;
     due_on: string | null;
     valid_until: string | null;
+    deposit_bp: number | null;
     performed_on: string | null;
     currency: string;
     vat_regime: string;
@@ -319,6 +321,7 @@ export interface IssueWrite {
     issued_on: string;
     due_on: string | null;
     valid_until: string | null;
+    deposit_bp: number | null;
     total_net: number;
     total_vat: number;
     total_gross: number;
@@ -337,6 +340,7 @@ export interface NewDoc {
     vat_regime: string;
     due_on: string | null;
     valid_until: string | null;
+    deposit_bp: number | null;
     performed_on: string | null;
     content: string;
     created_by: number;
@@ -346,6 +350,7 @@ export interface DocDraftPatch {
     client_id: number | null;
     due_on: string | null;
     valid_until: string | null;
+    deposit_bp: number | null;
     performed_on: string | null;
     content: string;
 }
@@ -362,7 +367,7 @@ export interface LineWrite {
 }
 
 const SETTINGS_COLUMNS = `currency, time_zone, vat_regime, default_vat_bp, payment_terms_days,
-    quote_validity_days, quote_prefix, invoice_prefix, credit_prefix, number_reset,
+    quote_validity_days, default_deposit_bp, quote_prefix, invoice_prefix, credit_prefix, number_reset,
     number_start, number_pad, mail_sender_id, domain_id, content`;
 
 /**
@@ -383,13 +388,14 @@ const DOC_COLUMNS = `d.id, d.client_id, d.kind, d.parent_doc_id, d.is_deposit, d
     DATE_FORMAT(d.issued_on, '%Y-%m-%d') AS issued_on,
     DATE_FORMAT(d.due_on, '%Y-%m-%d') AS due_on,
     DATE_FORMAT(d.valid_until, '%Y-%m-%d') AS valid_until,
+    d.deposit_bp,
     DATE_FORMAT(d.performed_on, '%Y-%m-%d') AS performed_on,
     d.currency, d.vat_regime, d.total_net, d.total_vat, d.total_gross,
     d.public_token, d.accepted_at, d.sent_at, d.reminded_at, d.issuer_snapshot, d.client_snapshot, d.content, d.updated`;
 
 /** Les mêmes, relues depuis la table dérivée qui porte le reste dû. */
 const DOC_OUTER = `t.id, t.client_id, t.kind, t.parent_doc_id, t.is_deposit, t.status, t.archived, t.seq_year, t.number,
-    t.number_label, t.issued_on, t.due_on, t.valid_until, t.performed_on, t.currency, t.vat_regime,
+    t.number_label, t.issued_on, t.due_on, t.valid_until, t.deposit_bp, t.performed_on, t.currency, t.vat_regime,
     t.total_net, t.total_vat, t.total_gross, t.public_token, t.accepted_at, t.sent_at, t.reminded_at, t.issuer_snapshot, t.client_snapshot,
     t.content, t.updated`;
 
@@ -423,9 +429,9 @@ export function createRepo(q: SdkQueryable): InvoicingRepo {
             await q.execute(
                 `INSERT INTO ft_invoicing_settings
                     (workspace_id, currency, time_zone, vat_regime, default_vat_bp, payment_terms_days,
-                     quote_validity_days, quote_prefix, invoice_prefix, credit_prefix, number_reset,
-                     number_start, number_pad, mail_sender_id, domain_id, content, updated)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     quote_validity_days, default_deposit_bp, quote_prefix, invoice_prefix, credit_prefix,
+                     number_reset, number_start, number_pad, mail_sender_id, domain_id, content, updated)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                  ON DUPLICATE KEY UPDATE
                     currency = VALUES(currency),
                     time_zone = VALUES(time_zone),
@@ -433,6 +439,7 @@ export function createRepo(q: SdkQueryable): InvoicingRepo {
                     default_vat_bp = VALUES(default_vat_bp),
                     payment_terms_days = VALUES(payment_terms_days),
                     quote_validity_days = VALUES(quote_validity_days),
+                    default_deposit_bp = VALUES(default_deposit_bp),
                     quote_prefix = VALUES(quote_prefix),
                     invoice_prefix = VALUES(invoice_prefix),
                     credit_prefix = VALUES(credit_prefix),
@@ -451,6 +458,7 @@ export function createRepo(q: SdkQueryable): InvoicingRepo {
                     row.default_vat_bp,
                     row.payment_terms_days,
                     row.quote_validity_days,
+                    row.default_deposit_bp,
                     row.quote_prefix,
                     row.invoice_prefix,
                     row.credit_prefix,
@@ -722,8 +730,8 @@ export function createRepo(q: SdkQueryable): InvoicingRepo {
             const res = await q.execute(
                 `INSERT INTO ft_invoicing_docs
                     (workspace_id, client_id, kind, parent_doc_id, is_deposit, status, currency, vat_regime,
-                     due_on, valid_until, performed_on, content, created_by, created, updated)
-                 VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                     due_on, valid_until, deposit_bp, performed_on, content, created_by, created, updated)
+                 VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
                     workspaceId,
                     row.client_id,
@@ -734,6 +742,7 @@ export function createRepo(q: SdkQueryable): InvoicingRepo {
                     row.vat_regime,
                     row.due_on,
                     row.valid_until,
+                    row.deposit_bp,
                     row.performed_on,
                     row.content,
                     row.created_by,
@@ -747,12 +756,14 @@ export function createRepo(q: SdkQueryable): InvoicingRepo {
         async updateDocDraft(id, workspaceId, patch, at) {
             const res = await q.execute(
                 `UPDATE ft_invoicing_docs
-                    SET client_id = ?, due_on = ?, valid_until = ?, performed_on = ?, content = ?, updated = ?
+                    SET client_id = ?, due_on = ?, valid_until = ?, deposit_bp = ?, performed_on = ?, content = ?,
+                        updated = ?
                   WHERE id = ? AND workspace_id = ? AND status = 'draft'`,
                 [
                     patch.client_id,
                     patch.due_on,
                     patch.valid_until,
+                    patch.deposit_bp,
                     patch.performed_on,
                     patch.content,
                     at,
@@ -930,7 +941,7 @@ export function createRepo(q: SdkQueryable): InvoicingRepo {
         async issueDoc(id, workspaceId, input) {
             const res = await q.execute(
                 `UPDATE ft_invoicing_docs
-                    SET status = ?, vat_regime = ?, issued_on = ?, due_on = ?, valid_until = ?,
+                    SET status = ?, vat_regime = ?, issued_on = ?, due_on = ?, valid_until = ?, deposit_bp = ?,
                         total_net = ?, total_vat = ?, total_gross = ?,
                         issuer_snapshot = ?, client_snapshot = ?, issued_by = ?, updated = ?
                   WHERE id = ? AND workspace_id = ? AND status = 'draft'`,
@@ -940,6 +951,7 @@ export function createRepo(q: SdkQueryable): InvoicingRepo {
                     input.issued_on,
                     input.due_on,
                     input.valid_until,
+                    input.deposit_bp,
                     input.total_net,
                     input.total_vat,
                     input.total_gross,

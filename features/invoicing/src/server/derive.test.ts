@@ -11,6 +11,7 @@ import { clientSave } from './handlers/clients';
 import { docDerive } from './handlers/derive';
 import { docGet, docSave, linesSet } from './handlers/docs';
 import { docIssue, docStatus } from './handlers/issue';
+import { paperInputOf } from './paperInput';
 
 const DAY = todayIn('Europe/Paris');
 
@@ -39,6 +40,7 @@ function readyWorkspace(store: MemoryStore): void {
         default_vat_bp: 2000,
         payment_terms_days: 30,
         quote_validity_days: 30,
+        default_deposit_bp: 0,
         quote_prefix: 'D',
         invoice_prefix: 'F',
         credit_prefix: 'A',
@@ -80,7 +82,8 @@ const EMPTY_HEADER = {
     purchaseOrder: '',
     performedOn: null,
     dueOn: null,
-    validUntil: null
+    validUntil: null,
+    depositBp: null
 };
 
 /** Un devis envoyé, à deux taux de TVA. */
@@ -181,6 +184,17 @@ describe('invoicing.docDerive, l’acompte', () => {
         assert.equal(lines.lines[0].unitPrice, 30_000, '30 % de la base à 20 %');
         assert.equal(lines.lines[1].unitPrice, 6000, '30 % de la base à 5,5 %');
         assert.ok(lines.lines[0].label.includes('Acompte de 30 %'));
+    });
+
+    it('facture au centime l’acompte que le devis annonce', async () => {
+        const store = emptyStore();
+        const { ctx, id } = await sentQuote(store);
+        store.docs.find((d) => d.id === id)!.deposit_bp = 3333;
+
+        const announced = (await paperInputOf(ctx, (await ctx.repo.findDoc(id, 1))!)).deposit;
+        const res = await docDerive.handler(ctx, { id, mode: 'deposit', percentBp: 3333 });
+
+        assert.deepEqual(announced, { percentBp: 3333, grossCents: res.doc.totals.grossCents });
     });
 
     it('la facture de solde déduit l’acompte émis', async () => {

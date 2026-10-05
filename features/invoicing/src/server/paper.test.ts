@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { DEFAULT_SETTINGS } from '../contracts/defaults';
+import { formatMoney } from '../contracts/display';
 import type { InvoicingLine } from '../contracts/domain';
 import { documentTotals } from '../contracts/money';
 import { escapeHtml, renderPaper, type PaperInput } from './paper';
@@ -85,6 +86,7 @@ function paper(over: Partial<PaperInput> = {}): string {
         totals: { ...totals, vat: [...totals.vat] },
         settledCents: 0,
         remainingCents: totals.grossCents,
+        deposit: null,
         deductions: [],
         parentNumber: null,
         awaitingAnswer: false,
@@ -230,6 +232,18 @@ describe('un devis', () => {
         // déjà accepté, et à côté de la ligne qui le dit.
         assert.ok(!accepted.includes(escapeHtml(DEFAULT_SETTINGS.wording.signatureText)));
         assert.ok(!accepted.includes('class="sign"'));
+    });
+
+    it('annonce l’acompte demandé à la commande, et rien sans acompte', () => {
+        const announced = paper({
+            kind: 'quote',
+            dueOn: null,
+            validUntil: '2026-10-22',
+            deposit: { percentBp: 3000, grossCents: 36_000 }
+        });
+        assert.ok(announced.includes('Acompte de 30 % à verser à la commande'));
+        assert.ok(announced.includes(escapeHtml(formatMoney(36_000, 'EUR'))));
+        assert.ok(!html.includes('à verser à la commande'));
     });
 });
 

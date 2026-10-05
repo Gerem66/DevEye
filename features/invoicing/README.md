@@ -143,6 +143,15 @@ avoir. Aucune ne fige quoi que ce soit : elles rendent un brouillon, qui se
 corrige avant d'être émis. L'avoir partiel n'a donc pas de commande à lui : on
 dérive l'avoir total, puis on retire ou on réduit ses lignes.
 
+Un devis peut **annoncer son acompte** (`deposit_bp`) : le client l'accepte
+alors avec le devis, au lieu de le découvrir à la facture. Sans part à lui, un
+brouillon suit celle des réglages (Mentions, zéro par défaut), et l'émission la
+fige comme la validité ; zéro dit « pas d'acompte ». Le papier l'imprime sous le
+total, avec son montant, et la boîte « Facture d'acompte » s'ouvre sur cette
+part, qu'on peut encore changer (deux acomptes, par exemple). Le montant annoncé
+et celui de la facture d'acompte sortent du même calcul (`depositTotals`) : ils
+sont égaux au centime.
+
 Le **statut affiché** (`src/contracts/status.ts`) n'est pas celui qui est
 stocké : « en retard », « payée », « expiré », « envoyé » sont des fonctions des
 dates, des sommes, du jour courant et de l'envoi (`sentAt`). Les stocker
@@ -294,6 +303,7 @@ session de la personne, avec ses droits et son audit.
   `migrations/001_invoicing.sql` (les six tables `ft_invoicing_*`),
   `002_invoicing_deposit.sql` (le drapeau d'acompte), `003_invoicing_domain.sql`
   (le domaine des liens), `004_invoicing_archive.sql` (l'archive),
+  `005_invoicing_quote_deposit.sql` (l'acompte annoncé par un devis),
   `uninstall.sql`, `_memoryRepo.ts` (le dépôt en
   mémoire des tests) et les tests `settings`, `clients`, `docs`, `issue`,
   `payments`, `derive`, `copy`, `ledger`, `paper`, `remind`, `routes`,

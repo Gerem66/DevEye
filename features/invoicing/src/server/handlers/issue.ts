@@ -113,6 +113,7 @@ export const docIssue = defineSdkFeature({
         const dueOn = kind === 'quote' ? null : (row.due_on ?? dueDateOf(issuedOn, termsDays));
         const validUntil =
             kind === 'quote' ? (row.valid_until ?? dueDateOf(issuedOn, settings.quoteValidityDays)) : null;
+        const depositBp = kind === 'quote' ? (row.deposit_bp ?? settings.defaultDepositBp) : null;
 
         // Avant la réservation du rang : un brouillon numéroté ne se supprime plus.
         // La règle porte sur la date résolue, donc couvre aussi celle qui vient
@@ -170,6 +171,7 @@ export const docIssue = defineSdkFeature({
             issued_on: issuedOn,
             due_on: dueOn,
             valid_until: validUntil,
+            deposit_bp: depositBp,
             total_net: totals.netCents,
             total_vat: totals.vatCents,
             total_gross: totals.grossCents,

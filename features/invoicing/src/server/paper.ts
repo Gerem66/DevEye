@@ -1,4 +1,12 @@
-import { formatDate, formatMoney, formatVatRate, kindLabel, quantityToInput, unitLabel } from '../contracts/display';
+import {
+    formatDate,
+    formatMoney,
+    formatPercent,
+    formatVatRate,
+    kindLabel,
+    quantityToInput,
+    unitLabel
+} from '../contracts/display';
 import type {
     DocumentKind,
     InvoicingClientContent,
@@ -67,6 +75,8 @@ export interface PaperInput {
     totals: InvoicingTotals;
     settledCents: number;
     remainingCents: number;
+    /** L'acompte qu'un devis annonce, au montant que sa facture d'acompte portera. */
+    deposit: { percentBp: number; grossCents: number } | null;
     /** Les acomptes déjà facturés que ce document déduit. */
     deductions: readonly { label: string; amountCents: number }[];
     /** Le numéro de la facture qu'un avoir corrige. */
@@ -220,6 +230,11 @@ function totalsOf(input: PaperInput): string {
         `<div class="row grand"><span class="label">Total ${input.vatRegime === 'standard' ? 'toutes taxes comprises' : 'à payer'}</span><span>${money(input.totals.grossCents)}</span></div>`
     );
 
+    if (input.deposit !== null) {
+        rows.push(
+            `<div class="row"><span class="label">Acompte de ${escapeHtml(formatPercent(input.deposit.percentBp))} à verser à la commande</span><span>${money(input.deposit.grossCents)}</span></div>`
+        );
+    }
     for (const deduction of input.deductions) {
         rows.push(
             `<div class="row"><span class="label">${escapeHtml(deduction.label)}</span><span>&minus;&nbsp;${money(deduction.amountCents)}</span></div>`

@@ -176,6 +176,7 @@ export async function toDoc(
         issuedOn: row.issued_on,
         dueOn: row.due_on,
         validUntil: row.valid_until,
+        depositBp: row.deposit_bp,
         performedOn: row.performed_on,
         currency: row.currency,
         vatRegime: regimeOf(row, view.vatRegime),

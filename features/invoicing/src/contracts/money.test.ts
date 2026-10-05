@@ -2,7 +2,15 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { INVOICING_QUANTITY_MILLI_MAX, INVOICING_UNIT_PRICE_MAX } from './domain';
-import { documentTotals, lineNet, paymentVatCents, remainingCents, type MoneyLine } from './money';
+import {
+    depositTotals,
+    documentTotals,
+    lineNet,
+    paymentVatCents,
+    quoteDepositBp,
+    remainingCents,
+    type MoneyLine
+} from './money';
 
 /**
  * Le cœur calculatoire, et celui dont une erreur ne se verrait pas : le chiffre
@@ -116,6 +124,46 @@ describe('documentTotals', () => {
         const totals = documentTotals([line({ unitPrice: 120_000, vatRateBp: 0 })]);
         assert.equal(totals.vatCents, 0);
         assert.equal(totals.grossCents, 120_000);
+    });
+});
+
+describe('depositTotals', () => {
+    it('prend la part de chaque taux, puis calcule la taxe sur ces bases', () => {
+        const quote = documentTotals([
+            line({ unitPrice: 100_000, vatRateBp: 2000 }),
+            line({ unitPrice: 33_333, vatRateBp: 550 })
+        ]);
+        const deposit = depositTotals(quote, 3000);
+        assert.deepEqual(
+            deposit.vat.map((share) => [share.rateBp, share.netCents]),
+            [
+                [2000, 30_000],
+                [550, 10_000]
+            ]
+        );
+        assert.equal(deposit.grossCents, 30_000 + 6_000 + 10_000 + 550);
+    });
+
+    it('écarte un taux dont la part arrondit à zéro', () => {
+        const quote = documentTotals([line({ unitPrice: 100_000 }), line({ unitPrice: 1, vatRateBp: 550 })]);
+        assert.equal(depositTotals(quote, 1000).vat.length, 1);
+    });
+});
+
+describe('quoteDepositBp', () => {
+    it('suit le réglage tant que le devis est un brouillon sans part à lui', () => {
+        assert.equal(quoteDepositBp({ kind: 'quote', status: 'draft', depositBp: null }, 3000), 3000);
+        assert.equal(quoteDepositBp({ kind: 'quote', status: 'draft', depositBp: 0 }, 3000), 0);
+        assert.equal(quoteDepositBp({ kind: 'quote', status: 'draft', depositBp: 4000 }, 3000), 4000);
+    });
+
+    it('ne lit plus le réglage une fois le devis émis', () => {
+        assert.equal(quoteDepositBp({ kind: 'quote', status: 'sent', depositBp: null }, 3000), 0);
+        assert.equal(quoteDepositBp({ kind: 'quote', status: 'accepted', depositBp: 2000 }, 3000), 2000);
+    });
+
+    it('vaut zéro hors devis', () => {
+        assert.equal(quoteDepositBp({ kind: 'invoice', status: 'draft', depositBp: null }, 3000), 0);
     });
 });
 

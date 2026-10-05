@@ -49,6 +49,7 @@ declare const styles: {
     readonly fieldClient: string;
     readonly fieldDate: string;
     readonly fieldGrid: string;
+    readonly fieldPercent: string;
     readonly fieldRef: string;
     readonly fieldSubject: string;
     readonly fieldWide: string;

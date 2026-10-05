@@ -110,6 +110,7 @@ export const docSave = defineSdkFeature({
                     vat_regime: settings.vatRegime,
                     due_on: input.doc.dueOn,
                     valid_until: input.doc.validUntil,
+                    deposit_bp: input.kind === 'quote' ? input.doc.depositBp : null,
                     performed_on: input.doc.performedOn,
                     content,
                     created_by: ctx.userId
@@ -126,6 +127,7 @@ export const docSave = defineSdkFeature({
                     client_id: input.doc.clientId,
                     due_on: input.doc.dueOn,
                     valid_until: input.doc.validUntil,
+                    deposit_bp: current.kind === 'quote' ? input.doc.depositBp : null,
                     performed_on: input.doc.performedOn,
                     content
                 },

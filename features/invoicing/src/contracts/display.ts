@@ -66,6 +66,11 @@ export function formatVatRate(bp: number): string {
     return `${(bp / 100).toFixed(1).replace(/\.0$/, '').replace('.', ',')} %`;
 }
 
+/** Une part en points de base, au centième près : `3333` devient « 33,33 % ». */
+export function formatPercent(bp: number): string {
+    return `${(bp / 100).toString().replace('.', ',')} %`;
+}
+
 const UNITS: Record<LineUnit, { one: string; many: string }> = {
     hour: { one: 'heure', many: 'heures' },
     day: { one: 'jour', many: 'jours' },

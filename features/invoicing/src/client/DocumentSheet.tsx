@@ -5,6 +5,7 @@ import {
     Dialog,
     DialogCancelButton,
     copyText,
+    NumberInput,
     FeatureSettingsButton,
     humanizeError,
     invalidate,
@@ -19,6 +20,8 @@ import {
 } from 'deveye-sdk-client';
 
 import { addDays, leavesAnswerTime } from '../contracts/calendar';
+import { formatPercent } from '../contracts/display';
+import { depositTotals, quoteDepositBp } from '../contracts/money';
 import type {
     InvoicingDoc,
     InvoicingLine,
@@ -69,6 +72,8 @@ export interface DocumentSheetProps {
     usage: InvoicingQuotaUsage | null;
     /** Le taux que porte une ligne neuve, tel qu'il est réglé (zéro en franchise). */
     defaultVatBp: number;
+    /** La part d'acompte qu'un devis annonce sans en dire une autre. */
+    defaultDepositBp: number;
     /** Le régime vivant de l'espace : un brouillon le suit, un document émis garde le sien. */
     vatRegime: VatRegime;
     /** Ce que le bouton de retour annonce : d'où l'on vient. */
@@ -115,6 +120,7 @@ export default function DocumentSheet({
     id,
     usage,
     defaultVatBp,
+    defaultDepositBp,
     vatRegime: liveVatRegime,
     backLabel,
     onBack,
@@ -219,7 +225,8 @@ export default function DocumentSheet({
                         purchaseOrder: next.purchaseOrder,
                         performedOn: next.performedOn,
                         dueOn: next.dueOn,
-                        validUntil: next.validUntil
+                        validUntil: next.validUntil,
+                        depositBp: next.depositBp
                     }
                 })
                 .then(() => {
@@ -337,6 +344,7 @@ export default function DocumentSheet({
     const vatRegime = draft ? liveVatRegime : doc.vatRegime;
     const withVat = vatRegime === 'standard';
     const wording = issueWording(doc);
+    const depositBp = quoteDepositBp(doc, defaultDepositBp);
 
     const derive = (mode: 'invoice' | 'deposit' | 'credit', percentBp: number, fallback: string) =>
         act(async () => {
@@ -619,7 +627,11 @@ export default function DocumentSheet({
 
                 <div className={styles.actions}>
                     {canWrite && !draft && doc.kind === 'quote' && doc.status !== 'declined' && (
-                        <Button variant='ghost' disabled={busy} onClick={() => setDeposit('30')}>
+                        <Button
+                            variant='ghost'
+                            disabled={busy}
+                            onClick={() => setDeposit(String((depositBp || 3000) / 100).replace('.', ','))}
+                        >
                             Facture d’acompte
                         </Button>
                     )}
@@ -759,6 +771,29 @@ export default function DocumentSheet({
                             />
                         </label>
 
+                        {doc.kind === 'quote' && (
+                            <label className={`${styles.field} ${styles.fieldPercent}`}>
+                                <span className={styles.dialogLabel}>Acompte à la commande, en %</span>
+                                <NumberInput
+                                    value={doc.depositBp === null ? null : doc.depositBp / 100}
+                                    min={0}
+                                    max={100}
+                                    disabled={!canWrite}
+                                    placeholder={
+                                        defaultDepositBp > 0
+                                            ? `${formatPercent(defaultDepositBp)} selon vos réglages`
+                                            : 'Aucun'
+                                    }
+                                    onChange={(value) =>
+                                        saveHeader({
+                                            ...opened,
+                                            depositBp: value === null ? null : Math.round(value * 100)
+                                        })
+                                    }
+                                />
+                            </label>
+                        )}
+
                         <label className={`${styles.field} ${styles.fieldRef}`}>
                             <span className={styles.dialogLabel}>Référence de commande</span>
                             <TextInput
@@ -792,6 +827,12 @@ export default function DocumentSheet({
                             <div>
                                 <dt>Valable jusqu’au</dt>
                                 <dd>{formatDate(doc.validUntil)}</dd>
+                            </div>
+                        )}
+                        {depositBp > 0 && (
+                            <div>
+                                <dt>Acompte à la commande</dt>
+                                <dd>{formatPercent(depositBp)}</dd>
                             </div>
                         )}
                         {doc.parentNumber !== null && (
@@ -866,6 +907,12 @@ export default function DocumentSheet({
                         <span className={styles.footLabel}>{withVat ? 'Total TTC' : 'Total'}</span>{' '}
                         <strong className={styles.footGrand}>{formatMoney(totals.grossCents, doc.currency)}</strong>
                     </span>
+                    {depositBp > 0 && (
+                        <span>
+                            <span className={styles.footLabel}>Acompte {formatPercent(depositBp)}</span>{' '}
+                            <strong>{formatMoney(depositTotals(totals, depositBp).grossCents, doc.currency)}</strong>
+                        </span>
+                    )}
                     {!draft && doc.settledCents > 0 && (
                         <span>
                             <span className={styles.footLabel}>Reste à payer</span>{' '}

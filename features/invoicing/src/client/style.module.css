@@ -649,6 +649,10 @@
     flex: 0 1 14rem;
 }
 
+.fieldPercent {
+    flex: 0 1 11rem;
+}
+
 .readHeader {
     display: grid;
     gap: var(--space-md);

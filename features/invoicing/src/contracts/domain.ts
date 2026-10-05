@@ -35,6 +35,9 @@ export const quantityMilliSchema = z.number().int().nonnegative().max(INVOICING_
 /** Un taux de TVA en points de base : `2000` vaut 20 %, `550` vaut 5,5 %. */
 export const vatRateBpSchema = z.number().int().min(0).max(10_000);
 
+/** Une part d'acompte en points de base : `3000` vaut 30 %. */
+export const depositBpSchema = z.number().int().min(0).max(10_000);
+
 export const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date attendue au format AAAA-MM-JJ');
 
 /** ISO 4217. Une seule devise par espace : le multidevise exigerait un taux daté par pièce. */
@@ -172,6 +175,8 @@ export const invoicingSettingsSchema = z.object({
     defaultVatBp: vatRateBpSchema,
     paymentTermsDays: z.number().int().min(0).max(365),
     quoteValidityDays: z.number().int().min(1).max(365),
+    /** La part d'acompte qu'un devis annonce sans en dire une autre, en points de base. Zéro : aucune. */
+    defaultDepositBp: depositBpSchema,
     quotePrefix: z.string().max(8),
     invoicePrefix: z.string().max(8),
     creditPrefix: z.string().max(8),
@@ -330,7 +335,12 @@ export const invoicingDocInputSchema = z.object({
     performedOn: daySchema.nullable().default(null),
     /** Vides, ils se calculent à l'émission depuis les délais de l'espace. */
     dueOn: daySchema.nullable().default(null),
-    validUntil: daySchema.nullable().default(null)
+    validUntil: daySchema.nullable().default(null),
+    /**
+     * Devis seul : la part d'acompte annoncée. Vide, celle des réglages, figée à
+     * l'émission ; zéro, aucune.
+     */
+    depositBp: depositBpSchema.nullable().default(null)
 });
 
 export type InvoicingDocInput = z.infer<typeof invoicingDocInputSchema>;
@@ -348,7 +358,7 @@ export const invoicingAcceptanceSchema = z.object({
 
 /** La part scellée d'un document, hors instantanés. */
 export const invoicingDocContentSchema = invoicingDocInputSchema
-    .omit({ clientId: true, performedOn: true, dueOn: true, validUntil: true })
+    .omit({ clientId: true, performedOn: true, dueOn: true, validUntil: true, depositBp: true })
     .extend({ acceptance: invoicingAcceptanceSchema.nullable().default(null) });
 
 export const invoicingDocSchema = invoicingDocInputSchema.extend({
@@ -401,7 +411,8 @@ export const invoicingDocCopySchema = z.object({
         notes: true,
         terms: true,
         purchaseOrder: true,
-        performedOn: true
+        performedOn: true,
+        depositBp: true
     }),
     lines: z.array(invoicingLineInputSchema).max(200),
     /** `null` : le document n'avait pas de client, ou plus aucun de lisible. */

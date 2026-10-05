@@ -201,7 +201,8 @@ describe('invoicing.dashboard', () => {
             purchaseOrder: '',
             performedOn: null,
             dueOn: null,
-            validUntil: null
+            validUntil: null,
+            depositBp: null
         };
         const created = await docSave.handler(ctx, { id: null, kind: 'quote', doc: header });
         await linesSet.handler(ctx, {

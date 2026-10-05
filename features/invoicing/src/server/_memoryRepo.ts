@@ -76,6 +76,7 @@ export function docRow(over: Partial<MemoryDoc> = {}): MemoryDoc {
         issued_on: day,
         due_on: addDays(day, 30),
         valid_until: null,
+        deposit_bp: null,
         performed_on: null,
         currency: 'EUR',
         vat_regime: 'standard',

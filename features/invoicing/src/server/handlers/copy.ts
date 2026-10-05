@@ -76,6 +76,7 @@ export const docDuplicate = defineSdkFeature({
                 vat_regime: settings.vatRegime,
                 due_on: null,
                 valid_until: null,
+                deposit_bp: source.deposit_bp,
                 performed_on: source.performed_on,
                 content: await seal(ctx, { ...content, acceptance: null }),
                 created_by: ctx.userId
@@ -140,7 +141,8 @@ export const docExport = defineSdkFeature({
                 notes: content.notes,
                 terms: content.terms,
                 purchaseOrder: content.purchaseOrder,
-                performedOn: row.performed_on
+                performedOn: row.performed_on,
+                depositBp: row.deposit_bp
             },
             lines: lines.map(({ netCents: _net, ...line }) => ({ ...line, id: null })),
             client
@@ -192,7 +194,7 @@ export const docImport = defineSdkFeature({
             }
         }
 
-        const { performedOn, ...text } = copy.doc;
+        const { performedOn, depositBp, ...text } = copy.doc;
         const id = await ctx.repo.insertDoc(
             ctx.workspaceId,
             {
@@ -204,6 +206,7 @@ export const docImport = defineSdkFeature({
                 vat_regime: settings.vatRegime,
                 due_on: null,
                 valid_until: null,
+                deposit_bp: copy.kind === 'quote' ? depositBp : null,
                 performed_on: performedOn,
                 content: await seal(ctx, invoicingDocContentSchema.parse(text)),
                 created_by: ctx.userId

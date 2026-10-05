@@ -46,6 +46,7 @@ function readyWorkspace(store: MemoryStore, over: Record<string, unknown> = {}):
         default_vat_bp: 2000,
         payment_terms_days: 30,
         quote_validity_days: 30,
+        default_deposit_bp: 0,
         quote_prefix: 'D',
         invoice_prefix: 'F',
         credit_prefix: 'A',
@@ -114,7 +115,8 @@ async function readyDraft(store: MemoryStore, kind: 'quote' | 'invoice' = 'invoi
             purchaseOrder: '',
             performedOn: null,
             dueOn: null,
-            validUntil: null
+            validUntil: null,
+            depositBp: null
         }
     });
     await linesSet.handler(ctx, { docId: doc.doc.id, lines: [line()] });
@@ -167,6 +169,32 @@ describe('invoicing.docIssue', () => {
         assert.equal(res.doc.numberLabel, `D${YEAR}-0001`);
         assert.equal(res.doc.validUntil, addDays(DAY, 30));
         assert.equal(res.doc.dueOn, null);
+    });
+
+    it('fige la part d’acompte du devis : celle des réglages s’il n’en dit pas, et zéro si on l’a voulu', async () => {
+        const store = emptyStore();
+        const following = await readyDraft(store, 'quote');
+        store.settings.get(1)!.default_deposit_bp = 3000;
+        const res = await docIssue.handler(following.ctx, { id: following.id, issuedOn: DAY });
+        assert.equal(res.doc.depositBp, 3000);
+
+        // Le réglage qui change après ne réécrit pas le devis émis.
+        store.settings.get(1)!.default_deposit_bp = 5000;
+        assert.equal(store.docs.find((d) => d.id === following.id)?.deposit_bp, 3000);
+
+        const none = await readyDraft(store, 'quote');
+        store.settings.get(1)!.default_deposit_bp = 3000;
+        store.docs.find((d) => d.id === none.id)!.deposit_bp = 0;
+        const declined = await docIssue.handler(none.ctx, { id: none.id, issuedOn: DAY });
+        assert.equal(declined.doc.depositBp, 0);
+    });
+
+    it('ne pose aucune part d’acompte sur une facture', async () => {
+        const store = emptyStore();
+        const { ctx, id } = await readyDraft(store);
+        store.settings.get(1)!.default_deposit_bp = 3000;
+        const res = await docIssue.handler(ctx, { id, issuedOn: DAY });
+        assert.equal(res.doc.depositBp, null);
     });
 
     it('refuse un devis qui ne laisse plus le temps de répondre, sans consommer de rang', async () => {
@@ -277,7 +305,8 @@ describe('invoicing.docIssue', () => {
                 purchaseOrder: '',
                 performedOn: null,
                 dueOn: null,
-                validUntil: null
+                validUntil: null,
+                depositBp: null
             }
         });
         await linesSet.handler(first.ctx, { docId: second.doc.id, lines: [line()] });

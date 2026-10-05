@@ -27,6 +27,7 @@ function liableToVat(store: MemoryStore, over: Record<string, unknown> = {}): vo
         default_vat_bp: 2000,
         payment_terms_days: 30,
         quote_validity_days: 30,
+        default_deposit_bp: 0,
         quote_prefix: 'D',
         invoice_prefix: 'F',
         credit_prefix: 'A',
@@ -51,6 +52,7 @@ function header(over: Partial<InvoicingDocInput> = {}): InvoicingDocInput {
         performedOn: null,
         dueOn: null,
         validUntil: null,
+        depositBp: null,
         ...over
     };
 }

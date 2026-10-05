@@ -72,6 +72,22 @@ export default function WordingPanel({ canWrite }: SettingsPanelProps) {
                 />
             </label>
 
+            <label className={shell.field} htmlFor='invoicing-deposit-percent'>
+                <span className={shell.fieldLabel}>Acompte demandé sur un devis, en pourcentage</span>
+                <NumberInput
+                    id='invoicing-deposit-percent'
+                    value={draft.defaultDepositBp / 100}
+                    min={0}
+                    max={100}
+                    disabled={!canWrite}
+                    onChange={(value) => patch({ defaultDepositBp: Math.round((value ?? 0) * 100) })}
+                />
+                <span className={shell.fieldHint}>
+                    Le devis l’annonce sous son total, avec son montant. Zéro pour ne rien annoncer ; chaque devis peut
+                    en demander un autre.
+                </span>
+            </label>
+
             {TEXTS.map((field) => (
                 <label key={field.key} className={shell.field}>
                     <span className={shell.fieldLabel}>{field.label}</span>

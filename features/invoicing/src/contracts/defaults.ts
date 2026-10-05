@@ -63,6 +63,7 @@ export const DEFAULT_SETTINGS: InvoicingSettings = {
     defaultVatBp: 0,
     paymentTermsDays: 30,
     quoteValidityDays: 30,
+    defaultDepositBp: 0,
     quotePrefix: 'D',
     invoicePrefix: 'F',
     creditPrefix: 'A',

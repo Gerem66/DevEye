@@ -72,6 +72,36 @@ export function documentTotals(lines: readonly MoneyLine[]): DocumentTotals {
 }
 
 /**
+ * La part d'acompte qu'un devis annonce, zéro pour aucune. Un brouillon sans
+ * part à lui suit le réglage de l'espace ; l'émission fige la valeur.
+ */
+export function quoteDepositBp(
+    doc: { kind: string; status: string; depositBp: number | null },
+    defaultDepositBp: number
+): number {
+    if (doc.kind !== 'quote') return 0;
+    return doc.depositBp ?? (doc.status === 'draft' ? defaultDepositBp : 0);
+}
+
+/**
+ * L'acompte d'une part d'un devis : la base de chaque taux à cette part, le demi
+ * vers le haut, puis les totaux qui en découlent. Le devis qui l'annonce et la
+ * facture d'acompte passent par ici, donc le montant annoncé est celui facturé.
+ */
+export function depositTotals(quote: DocumentTotals, percentBp: number): DocumentTotals {
+    return documentTotals(
+        quote.vat
+            .map((share) => ({
+                kind: 'service' as const,
+                quantityMilli: 1000,
+                unitPrice: Math.floor((share.netCents * percentBp + 5000) / 10_000),
+                vatRateBp: share.rateBp
+            }))
+            .filter((line) => line.unitPrice > 0)
+    );
+}
+
+/**
  * Ce qu'une facture attend encore. Les avoirs émis qui la corrigent comptent
  * comme des règlements : ils éteignent la créance sans qu'un euro circule.
  * Jamais négatif : un trop-perçu est un avoir à faire, pas un reste dû à l'envers.
