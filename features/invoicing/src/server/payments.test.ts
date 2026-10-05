@@ -6,6 +6,7 @@ import { createTestContext } from '@deveye/types/sdk/testing';
 
 import { addDays, startOfMonth, todayIn } from '../contracts/calendar';
 import { docRow, emptyStore, memoryRepo, type MemoryStore } from './_memoryRepo';
+import { docSave, linesSet } from './handlers/docs';
 import { dashboard, paymentRemove, paymentSave } from './handlers/payments';
 import { serverEntry } from './index';
 
@@ -186,6 +187,42 @@ describe('invoicing.dashboard', () => {
             res.actionable.map((doc) => doc.id),
             [11]
         );
+    });
+
+    it('montre un brouillon au total de ses lignes, pas à zéro', async () => {
+        const store = emptyStore();
+        const ctx = ctxOf(store);
+        const header = {
+            clientId: null,
+            subject: '',
+            intro: '',
+            notes: '',
+            terms: '',
+            purchaseOrder: '',
+            performedOn: null,
+            dueOn: null,
+            validUntil: null
+        };
+        const created = await docSave.handler(ctx, { id: null, kind: 'quote', doc: header });
+        await linesSet.handler(ctx, {
+            docId: created.doc.id,
+            lines: [
+                {
+                    id: null,
+                    kind: 'service',
+                    label: 'Développement',
+                    description: '',
+                    quantityMilli: 3000,
+                    unit: 'day',
+                    unitPrice: 50_000,
+                    vatRateBp: 0
+                }
+            ]
+        });
+
+        const res = await dashboard.handler(ctx, { range: 'month', recent: 5 });
+        const draft = res.recentDocs.find((doc) => doc.id === created.doc.id);
+        assert.equal(draft?.totals.grossCents, 150_000);
     });
 
     it('dit ce que l’offre permet ce mois-ci', async () => {

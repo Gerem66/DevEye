@@ -8,15 +8,9 @@ import {
     invoicingLinesSet
 } from '../../contracts/commands';
 import { documentTotals } from '../../contracts/money';
-import {
-    invoicingDocContentSchema,
-    invoicingLineInputSchema,
-    type InvoicingDoc,
-    type InvoicingLine,
-    type VatRegime
-} from '../../contracts/domain';
+import { invoicingDocContentSchema, invoicingLineInputSchema, type InvoicingDoc } from '../../contracts/domain';
 import { now, publicOriginOf, seal, settingsOf, today, WRITE, type Ctx, docOr404, assertClient } from '../_shared';
-import { clientNamesOf, regimeOf, toDoc, toLine, toPayments, type DocViewContext } from '../views';
+import { clientNamesOf, linesByDoc, regimeOf, toDoc, toPayments, type DocViewContext } from '../views';
 import type { InvoicingDocRow, LineWrite } from '../repo';
 
 const lineContentSchema = invoicingLineInputSchema.pick({ label: true, description: true });
@@ -41,22 +35,6 @@ async function viewContextOf(ctx: Ctx, rows: readonly InvoicingDocRow[]): Promis
         settled,
         parentNumbers
     };
-}
-
-async function linesByDoc(
-    ctx: Ctx,
-    docIds: readonly number[],
-    vatRegime: VatRegime
-): Promise<Map<number, InvoicingLine[]>> {
-    const rows = await ctx.repo.listLines(docIds, ctx.workspaceId);
-    const byDoc = new Map<number, InvoicingLine[]>();
-    for (const row of rows) {
-        const line = await toLine(ctx, row, vatRegime);
-        const bucket = byDoc.get(row.doc_id);
-        if (bucket) bucket.push(line);
-        else byDoc.set(row.doc_id, [line]);
-    }
-    return byDoc;
 }
 
 export const docList = defineSdkFeature({

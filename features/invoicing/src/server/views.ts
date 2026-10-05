@@ -75,6 +75,23 @@ export async function toLine(
     };
 }
 
+/** Les lignes de plusieurs documents, rangées par document, sous un même régime. */
+export async function linesByDoc(
+    ctx: Ctx,
+    docIds: readonly number[],
+    vatRegime: VatRegime
+): Promise<Map<number, InvoicingLine[]>> {
+    const rows = await ctx.repo.listLines(docIds, ctx.workspaceId);
+    const byDoc = new Map<number, InvoicingLine[]>();
+    for (const row of rows) {
+        const line = await toLine(ctx, row, vatRegime);
+        const bucket = byDoc.get(row.doc_id);
+        if (bucket) bucket.push(line);
+        else byDoc.set(row.doc_id, [line]);
+    }
+    return byDoc;
+}
+
 function totalsOf(row: InvoicingDocRow, lines: readonly InvoicingLine[]): InvoicingTotals {
     const computed = documentTotals(
         lines.map((line) => ({

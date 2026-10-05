@@ -7,7 +7,7 @@ import { invoicingPaymentInputSchema, type InvoicingDoc, type InvoicingPayment }
 import { now, publicOriginOf, seal, settingsOf, today, WRITE, type Ctx, docOr404, assertClient } from '../_shared';
 import { monthUsage } from '../planUsage';
 import { EMPTY_CLIENT_USAGE, toClient } from './clients';
-import { clientNamesOf, regimeOf, toDoc, toLine, toPayments } from '../views';
+import { clientNamesOf, linesByDoc, regimeOf, toDoc, toLine, toPayments } from '../views';
 
 /** Ce qu'une période met en face du mois précédent, et jusqu'où « bientôt » va. */
 const SOON_DAYS = 8;
@@ -183,11 +183,15 @@ export const dashboard = defineSdkFeature({
             parentNumbers
         };
 
+        // Un brouillon n'a pas encore de total figé : il se calcule sur ses lignes.
+        const draftIds = [...rows, ...recentRows].filter((row) => row.total_gross === null).map((row) => row.id);
+        const byDoc = await linesByDoc(ctx, draftIds, settings.vatRegime);
+
         const actionable: InvoicingDoc[] = [];
-        for (const row of rows) actionable.push(await toDoc(ctx, row, [], view));
+        for (const row of rows) actionable.push(await toDoc(ctx, row, byDoc.get(row.id) ?? [], view));
 
         const recentDocs: InvoicingDoc[] = [];
-        for (const row of recentRows) recentDocs.push(await toDoc(ctx, row, [], view));
+        for (const row of recentRows) recentDocs.push(await toDoc(ctx, row, byDoc.get(row.id) ?? [], view));
 
         const recentClients = await Promise.all(
             clients.map((row) => toClient(ctx, row, clientUsage.get(row.id) ?? EMPTY_CLIENT_USAGE))
