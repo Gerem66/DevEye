@@ -99,7 +99,7 @@ function issueWording(doc: InvoicingDoc): { title: string; description: string }
         return {
             title: 'Émettre ce devis ?',
             description:
-                'Un numéro de devis lui sera attribué et son contenu ne changera plus. Vous pourrez ensuite le marquer accepté ou refusé, puis en tirer la facture.'
+                'Un numéro de devis lui sera attribué et son contenu ne changera plus. Vous pourrez ensuite l’envoyer à votre client, qui l’acceptera ou le refusera en ligne, puis en tirer la facture.'
         };
     }
     if (doc.kind === 'credit') {
