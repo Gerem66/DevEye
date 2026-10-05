@@ -12,6 +12,55 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: readonly ChangelogEntry[] = [
     {
+        version: '0.23.0',
+        date: '2026-10-05',
+        changes: [
+            {
+                kind: 'added',
+                text: 'Git : plusieurs dépôts ajoutés d’un coup, et le propriétaire choisi parmi les comptes du jeton'
+            },
+            {
+                kind: 'added',
+                text: 'CloudSync : une ligne par fichier en erreur dans le Journal, à réessayer, exclure, ignorer ou supprimer partout'
+            },
+            {
+                kind: 'improved',
+                text: 'Accueil : transition animée vers l’organisation, le bouton d’organisation valide l’édition, et Maj+clic rouvre une vue à neuf'
+            },
+            {
+                kind: 'improved',
+                text: 'Barre du haut : les widgets des modules ouvrent leur fonctionnalité, leur popup s’anime depuis le widget, et les modèles d’accueil posent aussi leurs widgets'
+            },
+            {
+                kind: 'improved',
+                text: 'CloudSync : pourcentage de synchronisation sur les widgets et les cartes de partage'
+            },
+            {
+                kind: 'improved',
+                text: 'Logs : une panne due à un réglage de l’utilisateur (domaine, webhook, boîte mail, dépôt) sort des avertissements de l’instance'
+            },
+            {
+                kind: 'improved',
+                text: 'Offres : plus de rendez-vous, de devis et de factures par mois, plus de bases pour Pro ; stockage hébergé et taille des conversions revus à la baisse'
+            },
+            { kind: 'improved', text: 'Hébergement : une offre sans stockage dit que l’hébergement est réservé à Pro' },
+            { kind: 'fixed', text: 'Le bouton Annuler au pied d’une fenêtre la ferme bien' },
+            {
+                kind: 'fixed',
+                text: 'Mail : compteurs de non-lus à jour à la lecture, et le Serveur mail ne mêle plus les compteurs de deux dossiers en IMAP'
+            },
+            {
+                kind: 'fixed',
+                text: 'Rendez-vous : une heure entamée par un rendez-vous se lit prise, sur une grille unique par type'
+            },
+            { kind: 'fixed', text: 'Icônes d’avertissement et de copie qui s’affichaient en carré plein' },
+            {
+                kind: 'fixed',
+                text: 'Responsive : Sur téléphone, « Terminer » reste seul dans la barre pendant l’organisation de l’accueil'
+            }
+        ]
+    },
+    {
         version: '0.22.1',
         date: '2026-10-03',
         changes: [
