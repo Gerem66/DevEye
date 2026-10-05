@@ -1027,8 +1027,10 @@ fn decode_task_xml(bytes: &[u8]) -> String {
         && bytes.iter().skip(1).step_by(2).filter(|&&b| b == 0).count() > bytes.len() / 4;
     if utf16 {
         let units: Vec<u16> = bytes
-            .chunks_exact(2)
-            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|&pair| u16::from_le_bytes(pair))
             .collect();
         String::from_utf16_lossy(&units)
     } else {
