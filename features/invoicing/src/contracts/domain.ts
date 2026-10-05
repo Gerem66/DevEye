@@ -381,10 +381,34 @@ export const invoicingDocSchema = invoicingDocInputSchema.extend({
     remainingCents: amountSchema,
     parentId: z.number().int().positive().nullable(),
     parentNumber: z.string().nullable(),
+    /** Sorti des listes et de l'accueil ; toujours compté dans les chiffres. */
+    archived: z.boolean(),
     updated: z.number().int().nonnegative()
 });
 
 export type InvoicingDoc = z.infer<typeof invoicingDocSchema>;
+
+/**
+ * Un document en clair, de quoi en faire naître un brouillon dans un autre
+ * espace : son en-tête, ses lignes et l'identité de son client. Ni numéro, ni
+ * dates d'émission, ni lien, ni règlements : ce qui arrive est un brouillon neuf.
+ */
+export const invoicingDocCopySchema = z.object({
+    kind: documentKindSchema,
+    doc: invoicingDocInputSchema.pick({
+        subject: true,
+        intro: true,
+        notes: true,
+        terms: true,
+        purchaseOrder: true,
+        performedOn: true
+    }),
+    lines: z.array(invoicingLineInputSchema).max(200),
+    /** `null` : le document n'avait pas de client, ou plus aucun de lisible. */
+    client: invoicingClientInputSchema.nullable()
+});
+
+export type InvoicingDocCopy = z.infer<typeof invoicingDocCopySchema>;
 
 /** Ce que la liste totalise, sur tout le filtre et non sur la page. */
 export const invoicingListTotalsSchema = z.object({

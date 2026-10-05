@@ -480,7 +480,7 @@ export class DevEyeWs {
     send<N extends FeatureCommandName>(
         command: N,
         input: CommandInput<N>,
-        opts: SendOpts = {}
+        opts: SendOptions = {}
     ): Promise<CommandOutput<N>> {
         const descriptor = featureCommandRegistry[command];
         if (!descriptor) return Promise.reject(new WsError('protocol', `Unknown command: ${command}`));
@@ -554,9 +554,6 @@ export class DevEyeWs {
 export type SendOptions = {
     timeoutMs?: number;
     onProgress?: (update: ProgressUpdate) => void;
-};
-
-type SendOpts = SendOptions & {
     /** Viser un espace précis de cette instance plutôt que l'actif (une copie vers ailleurs). */
     workspaceId?: number;
 };
@@ -701,7 +698,7 @@ class WsRouter {
     send<N extends FeatureCommandName>(
         command: N,
         input: CommandInput<N>,
-        opts: SendOpts = {}
+        opts: SendOptions = {}
     ): Promise<CommandOutput<N>> {
         const conn = this.active();
         if (!conn) return Promise.reject(new WsError('closed', 'Instance distante déconnectée'));

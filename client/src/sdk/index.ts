@@ -9,8 +9,8 @@ import { useEffect, useRef, type ChangeEvent } from 'react';
 import { ws, type SendOptions } from '@/api/ws';
 import { useLiveSegment } from '@/live/useLiveSegment';
 import { startTeleport, type LiveSegmentKind } from '@/stores/live';
-import { getActiveWorkspaceId, useActiveWorkspace } from '@/stores/workspace';
-import type { MinimalUser } from '@deveye/types';
+import { getActiveWorkspaceId, useActiveWorkspace, useWorkspacesHere } from '@/stores/workspace';
+import type { MinimalUser, Workspace } from '@deveye/types';
 
 export type { LiveSegmentKind };
 /** The change event of a text input, for handlers typed by hand. */
@@ -189,6 +189,14 @@ const NO_MEMBERS: readonly MinimalUser[] = [];
  */
 export function useWorkspaceMembers(): readonly MinimalUser[] {
     return useActiveWorkspace()?.users ?? NO_MEMBERS;
+}
+
+/**
+ * Les espaces de l'appelant sur l'instance active, l'actif compris : la cible
+ * d'un envoi `{ workspaceId }`, dont le serveur juge les droits là-bas.
+ */
+export function useWorkspaces(): readonly Workspace[] {
+    return useWorkspacesHere();
 }
 
 /**

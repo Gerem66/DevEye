@@ -11,6 +11,7 @@ import DocumentSheet from './DocumentSheet';
 import DocumentsPage from './DocumentsPage';
 import Home from './Home';
 import { api } from './api';
+import { useDocumentOpener } from './navigation';
 import styles from './style.module.css';
 
 /**
@@ -72,6 +73,19 @@ export default function Invoicing() {
         if (!liveTarget || liveTarget.value === null) return;
         setView(viewOf(liveTarget.value));
     }, [liveTarget]);
+
+    // Le retour mène là d'où venait la fiche quittée, sinon à l'accueil.
+    useDocumentOpener(
+        useCallback(
+            (id: number) =>
+                setView((current) => ({
+                    kind: 'document',
+                    id,
+                    from: current.kind === 'document' || current.kind === 'client' ? current.from : current.kind
+                })),
+            []
+        )
+    );
 
     /**
      * Le socle : la devise et le régime de TVA décident de ce que chaque écran

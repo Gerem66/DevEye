@@ -15,6 +15,15 @@ Un dialogue artisanal derrière un engrenage à part n'existe pas : tout réglag
 passe par la coquille, qu'il vienne d'un panneau du module ou d'une section que
 la coquille rend elle-même.
 
+Une troisième échelle sert la fiche d'une ligne qui n'est pas un élément : une
+facture, dont le client est l'élément de Facturation, a pourtant ses gestes
+(dupliquer, archiver, partir dans un autre espace). C'est la portée `record`
+(`settings.record` au manifest, `{ kind: 'record', recordId, recordLabel,
+description }` sur le bouton) : le même bouton, la même coquille, avec
+seulement les onglets du module (`general` et onglets personnalisés). Partage,
+Permissions et Notifications portent sur les éléments et n'y paraissent pas ;
+le fil d'Ariane mène aux réglages généraux comme pour un élément.
+
 ## Les sections
 
 `useSettingsSections` (`index.tsx`, le seul juge) compose les onglets d'une

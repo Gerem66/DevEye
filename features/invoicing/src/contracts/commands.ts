@@ -6,6 +6,7 @@ import {
     documentStatusSchema,
     invoicingClientInputSchema,
     invoicingClientSchema,
+    invoicingDocCopySchema,
     invoicingDocInputSchema,
     invoicingDocSchema,
     invoicingLineInputSchema,
@@ -88,6 +89,8 @@ export const invoicingClientRemove = {
 export const invoicingDocList = {
     command: 'invoicing.docList' as const,
     input: z.object({
+        /** Les archives ont leur page : la liste ordinaire ne les montre pas. */
+        archived: z.boolean().default(false),
         kind: documentKindSchema.nullable().default(null),
         /** Le statut **stocké**, celui qu'un humain pose. */
         status: documentStatusSchema.nullable().default(null),
@@ -288,6 +291,51 @@ export const invoicingDocRemove = {
     output: z.object({ ok: z.literal(true) })
 };
 
+/**
+ * Archiver un document émis, ou le ressortir. Il quitte les listes et l'accueil,
+ * et ses relances s'arrêtent ; il reste dans les chiffres, qui disent ce qui a
+ * été facturé. Un brouillon ne s'archive pas : il se supprime.
+ */
+export const invoicingDocArchive = {
+    command: 'invoicing.docArchive' as const,
+    input: z.object({ id: z.number().int().positive(), archived: z.boolean() }),
+    output: z.object({ doc: invoicingDocSchema })
+};
+
+/**
+ * Un brouillon neuf, tiré d'un document de cet espace, émis ou non : son client,
+ * son en-tête, ses lignes, et ce qui le rattache (le devis d'origine, la facture
+ * qu'un avoir corrige, les acomptes à déduire). C'est ainsi qu'on reprend une
+ * pièce émise : elle ne se dé-émet pas.
+ */
+export const invoicingDocDuplicate = {
+    command: 'invoicing.docDuplicate' as const,
+    input: z.object({ id: z.number().int().positive() }),
+    output: z.object({ doc: invoicingDocSchema })
+};
+
+/**
+ * Le document en clair, pour en faire naître un brouillon dans un autre espace
+ * (`invoicing.docImport`, envoyée là-bas). Le navigateur porte l'un à l'autre :
+ * chaque moitié s'exécute sous les droits de l'appelant dans son espace.
+ */
+export const invoicingDocExport = {
+    command: 'invoicing.docExport' as const,
+    input: z.object({ id: z.number().int().positive() }),
+    output: z.object({ copy: invoicingDocCopySchema })
+};
+
+/**
+ * Un brouillon neuf dans cet espace, depuis un document d'ailleurs. Son client
+ * est repris s'il existe ici sous le même nom (et le même SIRET quand les deux en
+ * ont un), créé sinon.
+ */
+export const invoicingDocImport = {
+    command: 'invoicing.docImport' as const,
+    input: z.object({ copy: invoicingDocCopySchema }),
+    output: z.object({ doc: invoicingDocSchema, clientCreated: z.boolean() })
+};
+
 export const invoicingCommands = [
     invoicingCount,
     invoicingConfigGet,
@@ -309,5 +357,9 @@ export const invoicingCommands = [
     invoicingPaymentSave,
     invoicingPaymentRemove,
     invoicingDashboard,
-    invoicingDocRemove
+    invoicingDocRemove,
+    invoicingDocArchive,
+    invoicingDocDuplicate,
+    invoicingDocExport,
+    invoicingDocImport
 ] as const;

@@ -1,6 +1,8 @@
 import { INVOICING_CLIENT_PROVIDER } from '@deveye/types/sdk';
 import type { FeatureClient } from '@deveye/types/sdk/client';
 
+import ArchivesPanel from './ArchivesPanel';
+import DocumentElsewherePanel from './DocumentElsewherePanel';
 import Invoicing from './Invoicing';
 import { InvoicingWidget } from './InvoicingWidget';
 import GeneralPanel from './GeneralPanel';
@@ -22,7 +24,9 @@ export const clientEntry: FeatureClient = {
         general: GeneralPanel,
         taxes: TaxesPanel,
         numbering: NumberingPanel,
-        wording: WordingPanel
+        wording: WordingPanel,
+        archives: ArchivesPanel,
+        elsewhere: DocumentElsewherePanel
     },
     // Les filtres du journal n'ont pas à survivre, et un brouillon gardé en
     // cache vieillirait sous les doigts d'un autre membre.

@@ -5,6 +5,7 @@ import {
     Dialog,
     DialogCancelButton,
     copyText,
+    FeatureSettingsButton,
     humanizeError,
     invalidate,
     StatusBadge,
@@ -603,6 +604,11 @@ export default function DocumentSheet({
                             <StatusBadge tone={STATUS_TONE[doc.displayStatus]}>
                                 {statusLabel(doc.kind, doc.displayStatus)}
                             </StatusBadge>{' '}
+                            {doc.archived && (
+                                <>
+                                    <StatusBadge tone='neutral'>Archivé</StatusBadge>{' '}
+                                </>
+                            )}
                             {doc.clientName.length > 0 ? doc.clientName : 'aucun client choisi'}
                             {doc.issuedOn !== null && ` · émis le ${formatDate(doc.issuedOn)}`}
                             {note !== null && ` · ${note}`}
@@ -611,34 +617,52 @@ export default function DocumentSheet({
                     </div>
                 </div>
 
-                {canWrite && !draft && (
-                    <div className={styles.actions}>
-                        {doc.kind === 'quote' && doc.status !== 'declined' && (
-                            <Button variant='ghost' disabled={busy} onClick={() => setDeposit('30')}>
-                                Facture d’acompte
-                            </Button>
-                        )}
+                <div className={styles.actions}>
+                    {canWrite && !draft && doc.kind === 'quote' && doc.status !== 'declined' && (
+                        <Button variant='ghost' disabled={busy} onClick={() => setDeposit('30')}>
+                            Facture d’acompte
+                        </Button>
+                    )}
 
-                        {doc.kind === 'invoice' && doc.displayStatus !== 'cancelled' && (
-                            <Button
-                                variant='ghost'
-                                disabled={busy}
-                                onClick={() =>
-                                    setConfirm({
-                                        title: 'Créer un avoir ?',
-                                        description:
-                                            'Une facture émise ne se modifie pas : l’avoir est la façon de la corriger. Il reprend ses lignes, que vous pourrez réduire avant de l’émettre.',
-                                        confirmLabel: 'Créer l’avoir',
-                                        tone: 'primary',
-                                        onConfirm: () => void derive('credit', 3000, 'L’avoir n’a pas pu être préparé.')
-                                    })
-                                }
-                            >
-                                Créer un avoir
-                            </Button>
-                        )}
-                    </div>
-                )}
+                    {canWrite && !draft && doc.kind === 'invoice' && doc.displayStatus !== 'cancelled' && (
+                        <Button
+                            variant='ghost'
+                            disabled={busy}
+                            onClick={() =>
+                                setConfirm({
+                                    title: 'Créer un avoir ?',
+                                    description:
+                                        'Une facture émise ne se modifie pas : l’avoir est la façon de la corriger. Il reprend ses lignes, que vous pourrez réduire avant de l’émettre.',
+                                    confirmLabel: 'Créer l’avoir',
+                                    tone: 'primary',
+                                    onConfirm: () => void derive('credit', 3000, 'L’avoir n’a pas pu être préparé.')
+                                })
+                            }
+                        >
+                            Créer un avoir
+                        </Button>
+                    )}
+
+                    {/* Dupliquer, archiver ou supprimer, partir dans un autre
+                        espace : un document n'est pas un élément, mais ses
+                        réglages s'ouvrent par la même porte. */}
+                    <FeatureSettingsButton
+                        scope={{
+                            kind: 'record',
+                            feature: 'invoicing',
+                            recordId: String(doc.id),
+                            recordLabel: doc.numberLabel ?? `${kindLabel(doc.kind)} en préparation`,
+                            description: draft
+                                ? 'Dupliquer ce brouillon, l’envoyer dans un autre espace ou le supprimer.'
+                                : 'Repartir de ce document vers un brouillon neuf, le copier dans un autre espace ou l’archiver.'
+                        }}
+                        onGone={onBack}
+                        onOpenChange={(open) => {
+                            // Un brouillon ne se relit pas : sa vérité est à l'écran.
+                            if (!open && !draft) void load();
+                        }}
+                    />
+                </div>
             </header>
 
             <nav className={styles.tabs} role='tablist'>

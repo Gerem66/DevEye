@@ -105,6 +105,16 @@ describe('escapeHtml', () => {
     });
 });
 
+describe('le capital de l’émetteur', () => {
+    it('ne paraît pas pour une entreprise individuelle', () => {
+        const html = paper({
+            issuer: { ...DEFAULT_SETTINGS.issuer, legalName: 'Jeanne Martin', legalForm: 'EI', capital: '0' }
+        });
+        assert.ok(html.includes('<p>EI</p>'));
+        assert.ok(!html.includes('au capital de'));
+    });
+});
+
 describe('les mentions obligatoires d’une facture', () => {
     const html = paper();
 

@@ -134,6 +134,17 @@ function useFeatureSections(scope: SettingsScope | null): SectionDef[] {
         // les siens : Notifications suit `notifies`, Partage et Permissions
         // suivent le branchement au partage.
         const manifest = moduleManifest(scope.feature);
+        // Une fiche qui n'est pas un élément n'a que ses propres onglets : le
+        // partage, les permissions et les notifications portent sur les éléments.
+        if (scope.kind === 'record') {
+            for (const tab of manifest?.settings?.record ?? []) {
+                if (tab === 'general') sections.push({ id: 'general', label: 'Général', icon: 'settings' });
+                else if (!(tab.requiresWrite && !canWrite)) {
+                    sections.push({ id: tab.id, label: tab.label, icon: tab.icon ?? 'settings' });
+                }
+            }
+            return sections;
+        }
         if (manifest) {
             for (const tab of manifest.settings?.[scope.kind] ?? []) {
                 // Général : les réglages ni sources ni notifications ; en tête
@@ -227,10 +238,9 @@ export function FeatureSettingsDialog({ open, onClose, scope, initialSection, on
      * d'une fonctionnalité ne propose pas ce saut, elle est déjà tout en haut.
      */
     const [general, setGeneral] = useState<{ section?: SettingsSectionId } | null>(null);
-    const generalSections = useSettingsSections(
-        scope.kind === 'item' ? { kind: 'feature', feature: scope.feature } : scope
-    );
-    const canOpenGeneral = scope.kind === 'item' && generalSections.length > 0;
+    const nested = scope.kind === 'item' || scope.kind === 'record';
+    const generalSections = useSettingsSections(nested ? { kind: 'feature', feature: scope.feature } : scope);
+    const canOpenGeneral = nested && generalSections.length > 0;
     const current = active && sections.some((s) => s.id === active) ? active : sections[0]?.id;
     /**
      * Le pied du dialogue, offert aux panneaux par contexte : le bouton qui
@@ -262,7 +272,7 @@ export function FeatureSettingsDialog({ open, onClose, scope, initialSection, on
     }, [shown, settingsValue]);
     useOverlayView(
         shown && current
-            ? `settings/${viewSegment(scope.feature)}${scope.kind === 'item' ? '/item' : ''}/${viewSegment(current)}`
+            ? `settings/${viewSegment(scope.feature)}${nested ? `/${scope.kind}` : ''}/${viewSegment(current)}`
             : null
     );
 
@@ -282,7 +292,7 @@ export function FeatureSettingsDialog({ open, onClose, scope, initialSection, on
                 kicker={
                     <nav className={styles.trail} aria-label='Emplacement'>
                         <span>Réglages</span>
-                        {scope.kind === 'item' && (
+                        {nested && (
                             <>
                                 <span aria-hidden='true'>·</span>
                                 {canOpenGeneral ? (
@@ -348,7 +358,7 @@ export function FeatureSettingsDialog({ open, onClose, scope, initialSection, on
             </Dialog>
             {/* Les réglages généraux empilés par-dessus ceux de l'élément ; la
                 pile de couches route Échap vers le plus haut. */}
-            {scope.kind === 'item' && (
+            {nested && (
                 <FeatureSettingsDialog
                     open={general !== null}
                     onClose={() => setGeneral(null)}
@@ -437,13 +447,14 @@ export function FeatureSettingsButton({
        ce qui vient de changer. Le bouton canonique seul, celui qui ouvre sur la
        première section : les raccourcis vers un onglet précis partagent la
        même portée, et s'éclaireraient tous ensemble. */
-    const myFlashKey = isSystemScope(scope)
-        ? null
-        : flashKey(
-              scope.kind === 'item'
-                  ? { kind: 'item', feature: scope.feature, itemId: scope.itemId }
-                  : { kind: 'feature', feature: scope.feature }
-          );
+    const myFlashKey =
+        isSystemScope(scope) || scope.kind === 'record'
+            ? null
+            : flashKey(
+                  scope.kind === 'item'
+                      ? { kind: 'item', feature: scope.feature, itemId: scope.itemId }
+                      : { kind: 'feature', feature: scope.feature }
+              );
     const [flashing, setFlashing] = useState(false);
     const canonical = initialSection === undefined;
     useEffect(() => {
@@ -533,7 +544,9 @@ function ModulePanel({
                 scope={
                     scope.kind === 'feature'
                         ? { kind: 'feature' }
-                        : { kind: 'item', itemId: scope.itemId, itemLabel: scope.itemLabel }
+                        : scope.kind === 'record'
+                          ? { kind: 'record', recordId: scope.recordId, recordLabel: scope.recordLabel }
+                          : { kind: 'item', itemId: scope.itemId, itemLabel: scope.itemLabel }
                 }
                 // Sur l'élément quand il y en a un : ses droits peuvent différer
                 // de ceux de la fonctionnalité, dans les deux sens.

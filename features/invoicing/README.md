@@ -150,6 +150,22 @@ demanderait une tâche de fond pour faire passer minuit. La fonction est partag�
 par le client et le serveur, et le dépôt écrit le même prédicat en SQL pour
 filtrer « en retard ».
 
+Une pièce émise ne se dé-émet pas : pour la reprendre, on **duplique**
+(`invoicing.docDuplicate`). Le brouillon neuf garde le client, le texte, les
+lignes et ce qui le rattache (le devis d'origine, la facture qu'un avoir
+corrige, les acomptes déduits), et perd tout ce que l'émission avait posé :
+numéro, dates, lien, réponse du client. Un **brouillon** se supprime
+(`invoicing.docRemove`), puisqu'il n'a pas de numéro ; une pièce émise
+s'**archive** (`invoicing.docArchive`), la loi demandant de la conserver.
+L'archive est un rangement, pas un effacement : elle sort la pièce de l'accueil,
+de la liste et des relances, et la laisse dans tous les chiffres (tableau de
+bord, reste dû, fiche client, ce que Finances lit). Les archives ont leur onglet
+dans les réglages de la feature, d'où chaque pièce s'ouvre et se ressort.
+
+Ces gestes vivent dans les réglages du document, ouverts par le bouton commun
+sur la portée `record` de la coquille : le document n'est pas un élément, mais
+ses réglages s'ouvrent par la même porte que tous les autres.
+
 Les **règlements** (`invoicing.paymentSave`, `invoicing.paymentRemove`) se
 notent sur une facture émise ; la part de TVA d'un règlement vient de
 `paymentVatCents` (`src/contracts/money.ts`), la même que celle du tableau de
@@ -257,8 +273,8 @@ session de la personne, avec ses droits et son audit.
   de ressources, le sujet secondaire `invoicingDrafts`, le sujet `domain` qui
   ravive les adresses des liens, le bloc `domains` (`web`), les deux quotas,
   les capacités `notify`, `routes.public` et `mail.accounts`, les deux droits
-  propres (`issue`, `issuer`), les onglets de réglages et les vingt et une
-  commandes sous le préfixe `invoicing.`.
+  propres (`issue`, `issuer`), les onglets de réglages (dont ceux d'un document,
+  `settings.record`) et les vingt-cinq commandes sous le préfixe `invoicing.`.
 - `src/contracts/` : `domain.ts` (schémas et lignes SQL), `commands.ts`,
   `money.ts` (le seul endroit qui arrondit), `calendar.ts` (les jours civils),
   `status.ts` (le statut affiché), `display.ts` (la mise en forme partagée),
@@ -273,13 +289,15 @@ session de la personne, avec ses droits et son audit.
   `documentMail.ts`, `ledger.ts`, `planUsage.ts` (ce qu'un compte a émis ce
   mois-ci), `domains.ts`, `service.ts`, `accountExport.ts`, `handlers/`
   (`settings`, `clients`, `docs`, `issue`, `paper`, `payments`, `derive`,
-  `share`, `send`, et `index.ts` qui porte `invoicing.count`),
+  `share`, `send`, `copy` pour l'archive, la duplication et le passage d'un
+  espace à l'autre, et `index.ts` qui porte `invoicing.count`),
   `migrations/001_invoicing.sql` (les six tables `ft_invoicing_*`),
   `002_invoicing_deposit.sql` (le drapeau d'acompte), `003_invoicing_domain.sql`
-  (le domaine des liens), `uninstall.sql`, `_memoryRepo.ts` (le dépôt en
+  (le domaine des liens), `004_invoicing_archive.sql` (l'archive),
+  `uninstall.sql`, `_memoryRepo.ts` (le dépôt en
   mémoire des tests) et les tests `settings`, `clients`, `docs`, `issue`,
-  `payments`, `derive`, `ledger`, `paper`, `remind`, `routes`, `domains`,
-  `accountExport` (`*.test.ts`).
+  `payments`, `derive`, `copy`, `ledger`, `paper`, `remind`, `routes`,
+  `domains`, `accountExport` (`*.test.ts`).
 - `src/client/` : `index.tsx` (l'entrée : widget, vue, quatre panneaux,
   `cacheDurationMinutes: 0`, le contrat client), `Invoicing.tsx`, `Home.tsx`
   (le tableau de bord, `Charts/MonthBars.tsx`), `DocumentsPage.tsx`,
@@ -287,8 +305,10 @@ session de la personne, avec ses droits et son audit.
   `Totals`, `PaymentsBlock`, `DocumentPreview`), `DocumentDialog.tsx`,
   `DocumentRow.tsx`, `ClientsPage.tsx`, `ClientSheet.tsx`, `ClientDialog.tsx`,
   `ClientPicker.tsx`, `ClientRow.tsx`, les panneaux `GeneralPanel.tsx`
-  (`IssuerPanel` ou `ClientPanel` selon la portée), `TaxesPanel.tsx`,
-  `NumberingPanel.tsx`, `WordingPanel.tsx`, `settingsDraft.ts`,
+  (`IssuerPanel`, `ClientPanel` ou `DocumentGeneralPanel` selon la portée),
+  `TaxesPanel.tsx`, `NumberingPanel.tsx`, `WordingPanel.tsx`,
+  `ArchivesPanel.tsx`, `DocumentElsewherePanel.tsx`, `navigation.ts` (un
+  panneau de réglages qui ouvre un document), `settingsDraft.ts`,
   `printDocument.ts`, `provider.ts`, `QuotaNote.tsx`, `ErrorNote.tsx` et
   `errors.ts` (un refus, et l'onglet de réglages qui le lève), `format.ts`,
   `api.ts`, `InvoicingWidget.tsx`, `style.module.css`.
@@ -311,7 +331,17 @@ Aucune variable d'environnement n'est propre au module.
   sans être soldée, et quand un client accepte ou refuse un devis depuis le
   lien qu'il a reçu ; par les canaux de l'espace.
 - **Partage** : `shareTier: 'never'`. Les documents d'un espace ne se projettent
-  pas et ne se déplacent pas.
+  pas. Ils passent dans un autre espace de l'appelant par l'onglet « Autre
+  espace » de leurs réglages, et y arrivent **toujours en brouillon** : un
+  numéro appartient à la suite de l'espace qui l'a émis, et une pièce émise
+  posée ailleurs y ferait un numéro étranger. Copier vaut donc pour tout
+  document, déplacer pour un brouillon seulement. Le navigateur porte l'un à
+  l'autre (`invoicing.docExport` ici, `invoicing.docImport` là-bas, envoyée avec
+  `{ workspaceId }`), chaque moitié sous les droits de l'appelant dans son
+  espace. Le client est repris là-bas s'il y existe sous le même nom (et le
+  même SIRET quand les deux en ont un), créé sinon. La confirmation nomme ce
+  qui ne suit pas : numéro, lien et domaine, réponse, règlements, relances,
+  liens avec d'autres pièces, échéances, et l'écart de devise ou de régime.
 
 ## Tests
 

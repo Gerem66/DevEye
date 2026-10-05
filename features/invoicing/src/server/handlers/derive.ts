@@ -34,14 +34,14 @@ import type { InvoicingDocRow, LineWrite } from '../repo';
 const lineContentSchema = invoicingLineInputSchema.pick({ label: true, description: true });
 const EMPTY_CONTENT = invoicingDocContentSchema.parse({});
 
-async function linesOf(ctx: Ctx, doc: InvoicingDocRow, live: VatRegime) {
+export async function linesOf(ctx: Ctx, doc: InvoicingDocRow, live: VatRegime) {
     const vatRegime = regimeOf(doc, live);
     return Promise.all(
         (await ctx.repo.listLines([doc.id], ctx.workspaceId)).map((line) => toLine(ctx, line, vatRegime))
     );
 }
 
-async function copyLines(ctx: Ctx, from: InvoicingDocRow, to: number, live: VatRegime): Promise<void> {
+export async function copyLines(ctx: Ctx, from: InvoicingDocRow, to: number, live: VatRegime): Promise<void> {
     const lines = await linesOf(ctx, from, live);
     const writes: LineWrite[] = [];
     for (const [index, line] of lines.entries()) {
@@ -144,6 +144,7 @@ export const docDerive = defineSdkFeature({
             const born = await ctx.repo.listDocs(
                 ctx.workspaceId,
                 {
+                    archived: null,
                     kind: 'invoice',
                     status: null,
                     derived: null,

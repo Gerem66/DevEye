@@ -487,8 +487,11 @@ thème.
 
 ### Le client
 
-`featureApi(manifest)` rend `send(name, input, { timeoutMs })` et `useResource`
-typés sur les commandes du module ; `commandsApi(commands)` fait de même pour
+`featureApi(manifest)` rend `send(name, input, { timeoutMs, workspaceId })` et
+`useResource` typés sur les commandes du module ; `workspaceId` fait exécuter la
+commande dans un autre des espaces de l'appelant (`useWorkspaces()`), sous ses
+droits là-bas : c'est le navigateur qui porte une donnée d'un espace à l'autre,
+comme pour la copie d'un élément ; `commandsApi(commands)` fait de même pour
 les commandes de transport `agent.*`. Le chiffrement par mot de passe se lit
 par `useSecrecy()`, `ensureSecrecyUnlocked()` et `withSecrecy(run)` (réessaie
 une fois après l'invite) ; `humanizeError` traduit les codes, `locked` et

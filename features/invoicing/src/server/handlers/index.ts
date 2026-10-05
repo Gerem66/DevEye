@@ -3,6 +3,7 @@ import { defineSdkFeature } from '@deveye/types/sdk/server';
 import { invoicingCount } from '../../contracts/commands';
 import { settingsOf, today, type Ctx } from '../_shared';
 import { clientHandlers } from './clients';
+import { copyHandlers } from './copy';
 import { deriveHandlers } from './derive';
 import { docHandlers } from './docs';
 import { issueHandlers } from './issue';
@@ -49,5 +50,6 @@ export const invoicingHandlers = [
     ...paymentHandlers,
     ...deriveHandlers,
     ...shareHandlers,
-    ...sendHandlers
+    ...sendHandlers,
+    ...copyHandlers
 ];

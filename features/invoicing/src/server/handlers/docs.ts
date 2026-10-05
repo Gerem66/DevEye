@@ -16,7 +16,7 @@ import type { InvoicingDocRow, LineWrite } from '../repo';
 const lineContentSchema = invoicingLineInputSchema.pick({ label: true, description: true });
 
 /** Le contexte commun d'une projection : ce qu'il faut lire une fois pour toute une page. */
-async function viewContextOf(ctx: Ctx, rows: readonly InvoicingDocRow[]): Promise<DocViewContext> {
+export async function viewContextOf(ctx: Ctx, rows: readonly InvoicingDocRow[]): Promise<DocViewContext> {
     const settings = await settingsOf(ctx);
     const parentIds = rows.map((row) => row.parent_doc_id).filter((id): id is number => id !== null);
     const [clientNames, settled, parentNumbers] = await Promise.all([

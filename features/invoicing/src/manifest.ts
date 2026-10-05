@@ -84,10 +84,16 @@ export const manifest = {
             { id: 'taxes', label: 'TVA', icon: 'finance' },
             { id: 'numbering', label: 'Numérotation', icon: 'list-numbered' },
             { id: 'wording', label: 'Mentions', icon: 'format' },
+            { id: 'archives', label: 'Archives', icon: 'archive' },
             'domains'
         ],
         /** L'élément est le client : son onglet Général porte son identité et son retrait. */
-        item: ['general']
+        item: ['general'],
+        /**
+         * Un document n'est pas un élément, mais il a ses gestes : dupliquer,
+         * archiver ou supprimer (Général), et partir dans un autre espace.
+         */
+        record: ['general', { id: 'elsewhere', label: 'Autre espace', icon: 'move-to-right', requiresWrite: true }]
     },
     commands: invoicingCommands
 } satisfies FeatureManifest;

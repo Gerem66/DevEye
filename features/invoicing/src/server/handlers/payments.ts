@@ -140,6 +140,7 @@ export const dashboard = defineSdkFeature({
             ctx.repo.listDocs(
                 ctx.workspaceId,
                 {
+                    archived: false,
                     kind: null,
                     status: null,
                     derived: null,

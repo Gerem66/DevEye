@@ -1228,6 +1228,24 @@
     justify-content: center;
 }
 
+/* Une pièce des archives : la rangée ordinaire, et le geste qui la ressort à sa
+   droite. Le filet passe sur toute la ligne, pas seulement sous la rangée. */
+.archiveRow {
+    display: flex;
+    align-items: center;
+    padding-right: var(--space-sm);
+}
+
+.rows > li.archiveRow + li.archiveRow {
+    border-top: 1px solid var(--glass-border);
+}
+
+.rows > li.archiveRow .row {
+    flex: 1;
+    min-width: 0;
+    border-top: none;
+}
+
 /* Le sélecteur de client et son « + » : le champ prend la place, le geste qui
    ajoute au carnet reste collé à lui. */
 .pickerRow {

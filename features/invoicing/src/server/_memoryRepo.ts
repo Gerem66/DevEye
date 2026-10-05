@@ -69,6 +69,7 @@ export function docRow(over: Partial<MemoryDoc> = {}): MemoryDoc {
         parent_doc_id: null,
         is_deposit: 0,
         status: 'issued',
+        archived: 0,
         seq_year: year,
         number: 1,
         number_label: `F${year}-0001`,
@@ -239,6 +240,7 @@ export function memoryRepo(store: MemoryStore = emptyStore()): InvoicingRepo & {
 
         listDocs: async (workspaceId, filter, today) => {
             let docs = store.docs.filter((d) => d.workspace_id === workspaceId);
+            if (filter.archived !== null) docs = docs.filter((d) => d.archived === (filter.archived ? 1 : 0));
             if (filter.kind !== null) docs = docs.filter((d) => d.kind === filter.kind);
             if (filter.status !== null) docs = docs.filter((d) => d.status === filter.status);
             if (filter.clientId !== null) docs = docs.filter((d) => d.client_id === filter.clientId);
@@ -328,6 +330,14 @@ export function memoryRepo(store: MemoryStore = emptyStore()): InvoicingRepo & {
             if (index === -1) return 0;
             store.docs.splice(index, 1);
             store.lines = store.lines.filter((l) => l.doc_id !== id);
+            return 1;
+        },
+
+        setArchived: async (id, workspaceId, archived, at) => {
+            const doc = store.docs.find((d) => d.id === id && d.workspace_id === workspaceId && d.status !== 'draft');
+            if (!doc) return 0;
+            doc.archived = archived ? 1 : 0;
+            doc.updated = at;
             return 1;
         },
 
@@ -464,6 +474,7 @@ export function memoryRepo(store: MemoryStore = emptyStore()): InvoicingRepo & {
                     (d) =>
                         d.kind === 'invoice' &&
                         d.status === 'issued' &&
+                        d.archived === 0 &&
                         d.due_on !== null &&
                         d.due_on < today &&
                         (d.reminded_at === null || d.reminded_at < staleBefore) &&
@@ -646,7 +657,7 @@ export function memoryRepo(store: MemoryStore = emptyStore()): InvoicingRepo & {
         actionable: async (workspaceId, today, soon, limit) =>
             store.docs
                 .filter((doc) => {
-                    if (doc.workspace_id !== workspaceId) return false;
+                    if (doc.workspace_id !== workspaceId || doc.archived === 1) return false;
                     if (doc.kind === 'invoice' && doc.status === 'issued') {
                         return doc.due_on !== null && doc.due_on < today && restOf(store, doc) > 0;
                     }

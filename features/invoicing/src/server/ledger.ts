@@ -57,6 +57,7 @@ export function createLedgerProvider(ioFor: (workspaceId: number) => RepoIo): In
             const page = await io.repo.listDocs(
                 workspaceId,
                 {
+                    archived: null,
                     kind: 'invoice',
                     status: 'issued',
                     derived: 'unpaid',

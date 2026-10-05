@@ -1,5 +1,6 @@
 declare const styles: {
     readonly actions: string;
+    readonly archiveRow: string;
     readonly banner: string;
     readonly bannerText: string;
     readonly cellLabel: string;

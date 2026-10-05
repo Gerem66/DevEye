@@ -271,6 +271,7 @@ describe('invoicing.docList', () => {
         store.docs.push(docRow({ id: 3, status: 'draft', issued_on: null, number_label: null, total_gross: null }));
 
         const res = await docList.handler(ctxOf(store), {
+            archived: false,
             kind: null,
             status: null,
             derived: null,
@@ -294,6 +295,7 @@ describe('invoicing.docList', () => {
         store.payments.push({ doc_id: 1, workspace_id: 1, amount: 20_000, paid_on: DAY });
 
         const res = await docList.handler(ctxOf(store), {
+            archived: false,
             kind: null,
             status: null,
             derived: null,
@@ -315,6 +317,7 @@ describe('invoicing.docList', () => {
         store.docs.push(docRow({ id: 2, client_id: 8 }));
 
         const res = await docList.handler(ctxOf(store, { itemRestrictions: { '7': 'none' } }), {
+            archived: false,
             kind: null,
             status: null,
             derived: null,

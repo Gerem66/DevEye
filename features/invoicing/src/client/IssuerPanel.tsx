@@ -18,6 +18,7 @@ import { MAIL_CLIENT_PROVIDER } from '@deveye/types/sdk';
 import type { MailClientProvider, SettingsPanelProps } from '@deveye/types/sdk/client';
 
 import type { InvoicingIssuer } from '../contracts/domain';
+import { isIndividualForm } from '../contracts/issuer';
 import { api } from './api';
 import { useSettingsDraft } from './settingsDraft';
 import styles from './style.module.css';
@@ -46,7 +47,11 @@ const FIELDS: { key: keyof InvoicingIssuer; label: string; hint?: string; wide?:
     { key: 'legalName', label: 'Dénomination ou nom', wide: true },
     { key: 'tradeName', label: 'Nom commercial', hint: 'Si vous en utilisez un, différent du nom légal.' },
     { key: 'legalForm', label: 'Forme juridique', hint: 'SASU, EURL, entrepreneur individuel…' },
-    { key: 'capital', label: 'Capital social', hint: 'Obligatoire pour une société.' },
+    {
+        key: 'capital',
+        label: 'Capital social',
+        hint: 'Obligatoire pour une société. Une entreprise individuelle n’en a pas : il ne paraît pas sur ses documents.'
+    },
     { key: 'address', label: 'Adresse', wide: true },
     { key: 'postalCode', label: 'Code postal' },
     { key: 'city', label: 'Ville' },
@@ -170,17 +175,21 @@ export default function IssuerPanel({ canWrite }: SettingsPanelProps) {
             {logoError && <p className={shell.errorText}>{logoError}</p>}
 
             <div className={styles.fieldGrid}>
-                {FIELDS.map((field) => (
-                    <label key={field.key} className={`${shell.field} ${field.wide ? styles.fieldWide : ''}`}>
-                        <span className={shell.fieldLabel}>{field.label}</span>
-                        <TextInput
-                            value={issuer[field.key]}
-                            disabled={!canWrite}
-                            onChange={(e) => setIssuer({ [field.key]: e.target.value })}
-                        />
-                        {field.hint && <span className={shell.fieldHint}>{field.hint}</span>}
-                    </label>
-                ))}
+                {/* Une entreprise individuelle n'a pas de capital : le champ s'efface
+                    dès que la forme le dit, et le papier l'ignore de toute façon. */}
+                {FIELDS.filter((field) => field.key !== 'capital' || !isIndividualForm(issuer.legalForm)).map(
+                    (field) => (
+                        <label key={field.key} className={`${shell.field} ${field.wide ? styles.fieldWide : ''}`}>
+                            <span className={shell.fieldLabel}>{field.label}</span>
+                            <TextInput
+                                value={issuer[field.key]}
+                                disabled={!canWrite}
+                                onChange={(e) => setIssuer({ [field.key]: e.target.value })}
+                            />
+                            {field.hint && <span className={shell.fieldHint}>{field.hint}</span>}
+                        </label>
+                    )
+                )}
             </div>
 
             <label className={shell.field}>

@@ -28,6 +28,19 @@ export type SettingsScope =
            * permissions par élément restent réglables.
            */
           shareable?: boolean;
+      }
+    | {
+          /**
+           * Une fiche de la feature qui n'est pas un élément (une facture, dont
+           * le client est l'élément) : ses onglets sont ceux du manifest
+           * (`settings.record`), sans partage, permissions ni notifications,
+           * qui appartiennent aux éléments.
+           */
+          kind: 'record';
+          feature: FeatureId;
+          recordId: string;
+          recordLabel: string;
+          description: string;
       };
 
 /**
@@ -94,9 +107,11 @@ export function targetInfo(feature: FeatureId | SystemNotificationTarget): {
     };
 }
 
-/** Le titre du dialogue : le nom de l'élément, ou celui de la fonctionnalité. */
+/** Le titre du dialogue : le nom de l'élément ou de la fiche, ou celui de la fonctionnalité. */
 export function scopeTitle(scope: ShellScope): string {
-    return scope.kind === 'item' ? scope.itemLabel : targetInfo(scope.feature).label;
+    if (scope.kind === 'item') return scope.itemLabel;
+    if (scope.kind === 'record') return scope.recordLabel;
+    return targetInfo(scope.feature).label;
 }
 
 /**
@@ -105,6 +120,7 @@ export function scopeTitle(scope: ShellScope): string {
  */
 export function scopeDescription(scope: ShellScope): string {
     if (isSystemScope(scope)) return 'Où partent les alertes de cette instance DevEye.';
+    if (scope.kind === 'record') return scope.description;
     const feature = targetInfo(scope.feature);
     if (scope.kind === 'feature') {
         // Le libellé tel quel : « Uptime », « OSINT » sont des noms propres, en

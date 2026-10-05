@@ -184,6 +184,7 @@ export async function toDoc(
         remainingCents: Math.max(0, totals.grossCents - settledCents),
         parentId: row.parent_doc_id,
         parentNumber: row.parent_doc_id === null ? null : (view.parentNumbers.get(row.parent_doc_id) ?? null),
+        archived: row.archived === 1,
         updated: row.updated
     };
 }

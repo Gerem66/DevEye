@@ -29,7 +29,7 @@ import { useMailsLink } from './useMailsLink';
 
 /** L'onglet Général : l'état du serveur à l'échelle de la fonctionnalité, la boîte elle-même à celle d'une adresse. */
 export default function GeneralPanel(props: SettingsPanelProps) {
-    if (props.scope.kind === 'feature') return <ServerPanel />;
+    if (props.scope.kind !== 'item') return <ServerPanel />;
     return <MailboxPanel {...props} mailboxId={Number(props.scope.itemId)} />;
 }
 

@@ -8,6 +8,7 @@ import type {
     InvoicingWording,
     VatRegime
 } from '../contracts/domain';
+import { legalFormLine } from '../contracts/issuer';
 
 /**
  * Le document imprimable, en une chaîne HTML autonome. Elle sert trois fois :
@@ -155,6 +156,21 @@ const STYLE = `
     .mentions { margin-top: 10mm; padding-top: 3mm; border-top: 0.5pt solid var(--rule);
                 color: var(--faint); font-size: 8.5pt; }
     .accepted { margin-top: 6mm; padding: 3mm; background: var(--band); font-size: 9.5pt; }
+    /* À l'écran, la feuille n'a plus les marges de la page imprimée : sans cette
+       gouttière, le texte touche les bords d'un téléphone. */
+    @media screen { .sheet { padding: 10mm 5mm; } }
+    @media screen and (max-width: 640px) {
+        body { font-size: 10pt; }
+        .sheet { padding: 6mm 4mm; }
+        .head { flex-direction: column; gap: 6mm; }
+        .issuer { max-width: none; }
+        .doc { text-align: left; }
+        .doc .row { justify-content: flex-start; }
+        .party, .sign { width: auto; margin-left: 0; }
+        .totals { width: 100%; }
+        th, td { padding: 1.5mm 1mm; }
+        thead th.num { white-space: normal; }
+    }
 `;
 
 /** Le titre en tête du document : c'est une mention obligatoire à lui tout seul. */
@@ -260,7 +276,7 @@ export function renderPaper(input: PaperInput): string {
             <p class="name">${escapeHtml(issuer.legalName)}</p>
             ${block([
                 issuer.tradeName === issuer.legalName ? null : issuer.tradeName,
-                [issuer.legalForm, issuer.capital].filter((part) => part.trim().length > 0).join(' au capital de '),
+                legalFormLine(issuer),
                 ...addressLines(issuer),
                 issuer.siret.trim().length > 0 ? `SIRET ${issuer.siret}` : null,
                 issuer.rcs.trim().length > 0 ? `RCS ${issuer.rcs}` : null,

@@ -45,7 +45,8 @@ export async function toClient(
     };
 }
 
-async function rowOf(
+/** La ligne à écrire d'un client saisi, son identité scellée. */
+export async function clientRowOf(
     ctx: Ctx,
     input: InvoicingClientInput,
     archived: boolean
@@ -88,7 +89,7 @@ export const clientSave = defineSdkFeature({
     mutates: true,
     handler: async (ctx: Ctx, input) => {
         const at = now();
-        const row = await rowOf(ctx, input.client, input.archived);
+        const row = await clientRowOf(ctx, input.client, input.archived);
 
         let id = input.id;
         if (id === null) {

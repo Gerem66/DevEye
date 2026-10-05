@@ -56,6 +56,8 @@ export interface InvoicingDocRow {
     parent_doc_id: number | null;
     is_deposit: number;
     status: string;
+    /** Sorti des listes et de l'accueil, toujours compté dans les chiffres. */
+    archived: number;
     seq_year: number | null;
     number: number | null;
     number_label: string | null;
@@ -99,6 +101,8 @@ export interface InvoicingSettled {
 }
 
 export interface InvoicingDocFilter {
+    /** `null` : archivés ou non. */
+    archived: boolean | null;
     kind: string | null;
     status: string | null;
     derived: 'overdue' | 'unpaid' | 'expired' | null;
@@ -156,6 +160,8 @@ export interface InvoicingRepo {
     updateDocDraft(id: number, workspaceId: number, patch: DocDraftPatch, at: number): Promise<number>;
     /** Un brouillon jamais numéroté. Un document émis ne se supprime pas. */
     deleteDoc(id: number, workspaceId: number): Promise<number>;
+    /** Archive ou ressort un document émis. La garde EST la requête : jamais un brouillon. */
+    setArchived(id: number, workspaceId: number, archived: boolean, at: number): Promise<number>;
 
     listLines(docIds: readonly number[], workspaceId: number): Promise<InvoicingLineRow[]>;
     /** La différence par identifiant, jamais un vidage suivi d'un remplissage. */
@@ -198,7 +204,8 @@ export interface InvoicingRepo {
     markSent(id: number, workspaceId: number, at: number): Promise<number>;
     /**
      * Les factures échues et non soldées qu'on n'a pas encore relayées, ou plus
-     * depuis un moment. Tous espaces confondus : le service n'en vise aucun.
+     * depuis un moment, hors archives : archiver, c'est classer l'affaire. Tous
+     * espaces confondus : le service n'en vise aucun.
      */
     overdueToRemind(
         today: string,
@@ -254,7 +261,7 @@ export interface InvoicingRepo {
     monthlySeries(workspaceId: number, from: string, to: string): Promise<InvoicingMonth[]>;
     /** Les devis envoyés qui tiennent encore. */
     quotesPending(workspaceId: number, today: string): Promise<{ cents: number; count: number; expiring: number }>;
-    /** Ce qui demande un geste aujourd'hui : les retards, puis les devis qui vont expirer. */
+    /** Ce qui demande un geste aujourd'hui, hors archives : les retards, puis les devis qui vont expirer. */
     actionable(workspaceId: number, today: string, soon: string, limit: number): Promise<InvoicingDocRow[]>;
 }
 
@@ -371,7 +378,7 @@ const CLIENT_COLUMNS = 'id, kind, payment_terms_days, default_vat_bp, archived, 
  * rendrait un objet `Date` recalé sur le fuseau du processus, et un jour civil
  * changerait de jour.
  */
-const DOC_COLUMNS = `d.id, d.client_id, d.kind, d.parent_doc_id, d.is_deposit, d.status, d.seq_year, d.number,
+const DOC_COLUMNS = `d.id, d.client_id, d.kind, d.parent_doc_id, d.is_deposit, d.status, d.archived, d.seq_year, d.number,
     d.number_label,
     DATE_FORMAT(d.issued_on, '%Y-%m-%d') AS issued_on,
     DATE_FORMAT(d.due_on, '%Y-%m-%d') AS due_on,
@@ -381,7 +388,7 @@ const DOC_COLUMNS = `d.id, d.client_id, d.kind, d.parent_doc_id, d.is_deposit, d
     d.public_token, d.accepted_at, d.sent_at, d.reminded_at, d.issuer_snapshot, d.client_snapshot, d.content, d.updated`;
 
 /** Les mêmes, relues depuis la table dérivée qui porte le reste dû. */
-const DOC_OUTER = `t.id, t.client_id, t.kind, t.parent_doc_id, t.is_deposit, t.status, t.seq_year, t.number,
+const DOC_OUTER = `t.id, t.client_id, t.kind, t.parent_doc_id, t.is_deposit, t.status, t.archived, t.seq_year, t.number,
     t.number_label, t.issued_on, t.due_on, t.valid_until, t.performed_on, t.currency, t.vat_regime,
     t.total_net, t.total_vat, t.total_gross, t.public_token, t.accepted_at, t.sent_at, t.reminded_at, t.issuer_snapshot, t.client_snapshot,
     t.content, t.updated`;
@@ -629,6 +636,10 @@ export function createRepo(q: SdkQueryable): InvoicingRepo {
         async listDocs(workspaceId, filter, today) {
             const where: string[] = ['d.workspace_id = ?'];
             const params: unknown[] = [workspaceId, workspaceId, workspaceId, workspaceId];
+            if (filter.archived !== null) {
+                where.push('d.archived = ?');
+                params.push(filter.archived ? 1 : 0);
+            }
             if (filter.kind !== null) {
                 where.push('d.kind = ?');
                 params.push(filter.kind);
@@ -759,6 +770,15 @@ export function createRepo(q: SdkQueryable): InvoicingRepo {
                 `DELETE FROM ft_invoicing_docs
                   WHERE id = ? AND workspace_id = ? AND status = 'draft' AND number IS NULL`,
                 [id, workspaceId]
+            );
+            return res.affectedRows;
+        },
+
+        async setArchived(id, workspaceId, archived, at) {
+            const res = await q.execute(
+                `UPDATE ft_invoicing_docs SET archived = ?, updated = ?
+                  WHERE id = ? AND workspace_id = ? AND status <> 'draft'`,
+                [archived ? 1 : 0, at, id, workspaceId]
             );
             return res.affectedRows;
         },
@@ -990,7 +1010,7 @@ export function createRepo(q: SdkQueryable): InvoicingRepo {
                                       GROUP BY parent_doc_id) c ON c.parent_doc_id = d.id
                           LEFT JOIN (SELECT doc_id, SUM(amount) AS deducted FROM ft_invoicing_deductions
                                       GROUP BY doc_id) x ON x.doc_id = d.id
-                         WHERE d.kind = 'invoice' AND d.status = 'issued' AND d.due_on < ?
+                         WHERE d.kind = 'invoice' AND d.status = 'issued' AND d.archived = 0 AND d.due_on < ?
                            AND (d.reminded_at IS NULL OR d.reminded_at < ?)
                     ) t
                   WHERE t.rest > 0
@@ -1217,7 +1237,7 @@ export function createRepo(q: SdkQueryable): InvoicingRepo {
                 `SELECT ${DOC_OUTER} FROM (
                         SELECT ${DOC_COLUMNS}, ${REST_EXPRESSION} AS rest
                           FROM ft_invoicing_docs d ${REST_JOINS}
-                         WHERE d.workspace_id = ?
+                         WHERE d.workspace_id = ? AND d.archived = 0
                     ) t
                   WHERE (t.kind = 'invoice' AND t.status = 'issued' AND t.due_on < ? AND t.rest > 0)
                      OR (t.kind = 'quote' AND t.status = 'sent'
