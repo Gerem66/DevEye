@@ -43,15 +43,15 @@ function bytesToBase64(bytes: Uint8Array): string {
     return btoa(bin);
 }
 
-/** Pull a few theme colours so the terminal matches the current DA. */
+/** Les couleurs du terminal, prises au thème (`--terminal-*`, sombres dans les deux). */
 function themeColors() {
     const cs = getComputedStyle(document.documentElement);
-    const v = (name: string, fallback: string) => cs.getPropertyValue(name).trim() || fallback;
+    const v = (name: string) => cs.getPropertyValue(name).trim();
     return {
-        background: v('--surface', '#0d1117'),
-        foreground: v('--text-primary', '#e6edf3'),
-        cursor: v('--accent', '#3ecf8e'),
-        selectionBackground: v('--accent-bg', 'rgba(62, 207, 142, 0.3)')
+        background: v('--terminal-bg'),
+        foreground: v('--terminal-fg'),
+        cursor: v('--terminal-cursor'),
+        selectionBackground: v('--terminal-selection')
     };
 }
 

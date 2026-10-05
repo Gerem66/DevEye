@@ -83,7 +83,7 @@
 .scrim {
     position: fixed;
     inset: 0;
-    background: rgba(4, 7, 12, 0.45);
+    background: var(--scrim-soft);
 }
 
 /* La même boîte que la colonne de l'accueil (`Dashboard.module.css`), donc les

@@ -1,5 +1,10 @@
 /* Glassmorphism design tokens */
 :root {
+    /* La teinte des rouages natifs (calendrier d'un champ date, barres de
+       défilement) : elle suit le thème, posé par `stores/colorScheme.ts`. */
+    --color-scheme: dark;
+    --page-bg: #06080f;
+
     --glass-bg: rgba(18, 26, 38, 0.62);
     --glass-bg-light: rgba(38, 52, 68, 0.5);
     --glass-border: rgba(255, 255, 255, 0.09);
@@ -25,6 +30,11 @@
     --surface-popup-solid: rgb(14, 21, 32);
     --surface-navbar: rgba(9, 14, 22, 0.78);
     --surface-subtle: rgba(255, 255, 255, 0.04);
+    /* Le voile sous une fenêtre modale, et sa version légère sous un tiroir. */
+    --scrim: rgba(4, 7, 12, 0.6);
+    --scrim-soft: rgba(4, 7, 12, 0.45);
+    /* Le bandeau qui porte un texte posé sur une image (vignette, aperçu). */
+    --veil: rgba(4, 7, 12, 0.6);
     /* Le papier d'un document ou d'un mail montré en aperçu : blanc quel que
      soit le thème, comme à l'impression ou dans une messagerie. */
     --paper: #fff;
@@ -40,6 +50,7 @@
     --accent-glow: rgba(34, 211, 238, 0.35);
     --accent-bg: rgba(34, 211, 238, 0.14);
     --on-accent: #05222a;
+    --on-danger: #fff;
 
     --success: #2ed8b6;
     --success-bg: rgba(46, 216, 182, 0.14);
@@ -85,6 +96,25 @@
     --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.28);
     --shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.42);
     --shadow-glow: 0 0 0 1px var(--accent-bg), 0 8px 32px var(--accent-glow);
+
+    /* Le fond par défaut, et la teinte (en composantes, pour varier l'alpha) du
+       voile qui garde lisible ce qui se pose sur une photo. */
+    --wallpaper-default:
+        radial-gradient(ellipse 60% 35% at 8% 0%, rgba(34, 211, 238, 0.07) 0%, transparent 100%),
+        radial-gradient(ellipse 40% 28% at 95% 100%, rgba(34, 211, 238, 0.05) 0%, transparent 100%),
+        radial-gradient(ellipse 30% 40% at 55% 60%, rgba(34, 211, 238, 0.03) 0%, transparent 100%),
+        linear-gradient(160deg, #06080f 0%, #090f1c 50%, #06080f 100%);
+    --wallpaper-tint: 6, 9, 15;
+    /* Le terminal reste sombre dans les deux thèmes : les couleurs ANSI des
+       programmes qu'il affiche sont pensées pour un fond noir. */
+    --terminal-bg: #0d1117;
+    --terminal-fg: #e6edf3;
+    --terminal-cursor: var(--accent);
+    --terminal-selection: var(--accent-bg);
+    --login-bg:
+        radial-gradient(900px circle at 15% -10%, rgba(34, 211, 238, 0.18), transparent 55%),
+        radial-gradient(1000px circle at 110% 115%, rgba(11, 188, 214, 0.14), transparent 55%),
+        linear-gradient(160deg, #06080f 0%, #0a1622 55%, #070f18 100%);
 
     --radius-sm: 8px;
     --radius-md: 12px;
@@ -185,7 +215,7 @@ body {
 }
 
 html {
-    color: #fff;
+    color: var(--text-primary);
     -webkit-text-size-adjust: 100%;
     -webkit-tap-highlight-color: transparent;
 }
@@ -194,7 +224,7 @@ body {
     margin: 0;
     padding: 0;
     overflow-x: hidden;
-    background: #06080f;
+    background: var(--page-bg);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -220,7 +250,7 @@ body {
     border-radius: var(--radius-pill);
 }
 ::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.28);
+    background: color-mix(in srgb, var(--text-primary) 30%, transparent);
 }
 
 /* Honour the OS "reduce motion" preference for CSS-driven animations/transitions
@@ -270,4 +300,84 @@ html[data-render='lite'] {
     --shadow-lg: 0 6px 20px rgba(0, 0, 0, 0.5);
     /* L'anneau porte l'information, le halo de 32px n'était que du décor. */
     --shadow-glow: 0 0 0 1px var(--accent-bg);
+}
+
+/*
+ * Thème clair. Les statuts et l'accent y sont foncés, parce qu'ils servent aussi
+ * de couleur de texte : chacun tient 4,5:1 sur le verre. Les teintes des comptes
+ * (`--user-*`) ne changent pas, ce sont des identités. L'accent choisi dans
+ * Apparence est dérivé par `stores/theme.ts`, en style inline sur la racine.
+ */
+html[data-theme='light'] {
+    --color-scheme: light;
+    --page-bg: #e4eaf1;
+
+    --glass-bg: rgba(255, 255, 255, 0.62);
+    --glass-bg-light: rgba(214, 223, 234, 0.6);
+    --glass-border: rgba(15, 23, 42, 0.1);
+    --glass-border-strong: rgba(15, 23, 42, 0.2);
+
+    --surface-popup: rgba(250, 251, 253, 0.94);
+    --surface-popup-solid: rgb(250, 251, 253);
+    --surface-navbar: rgba(255, 255, 255, 0.8);
+    --surface-subtle: rgba(15, 23, 42, 0.04);
+    --scrim: rgba(15, 23, 42, 0.32);
+    --scrim-soft: rgba(15, 23, 42, 0.2);
+    --veil: rgba(255, 255, 255, 0.75);
+
+    --text-primary: rgba(15, 23, 42, 0.92);
+    --text-secondary: rgba(15, 23, 42, 0.72);
+    --text-muted: rgba(15, 23, 42, 0.6);
+
+    --accent: #0e7490;
+    --accent-hover: #155e75;
+    --accent-strong: #164e63;
+    --accent-glow: rgba(8, 145, 178, 0.25);
+    --accent-bg: rgba(14, 116, 144, 0.12);
+    --on-accent: #fff;
+
+    --success: #047857;
+    --success-bg: rgba(4, 120, 87, 0.12);
+    --warning: #b45309;
+    --warning-bg: rgba(180, 83, 9, 0.12);
+    --danger: #be123c;
+    --danger-bg: rgba(190, 18, 60, 0.1);
+
+    --palette-red: #e11d48;
+    --palette-orange: #ea580c;
+    --palette-yellow: #ca8a04;
+    --palette-green: #059669;
+    --palette-blue: #2563eb;
+    --palette-indigo: #4f46e5;
+    --palette-purple: #9333ea;
+    --palette-pink: #db2777;
+
+    --input-bg: rgba(255, 255, 255, 0.55);
+
+    --shadow-sm: 0 1px 4px rgba(15, 23, 42, 0.08);
+    --shadow-md: 0 4px 18px rgba(15, 23, 42, 0.1);
+    --shadow-lg: 0 12px 40px rgba(15, 23, 42, 0.16);
+
+    --wallpaper-default:
+        radial-gradient(ellipse 60% 35% at 8% 0%, rgba(14, 116, 144, 0.1) 0%, transparent 100%),
+        radial-gradient(ellipse 40% 28% at 95% 100%, rgba(14, 116, 144, 0.08) 0%, transparent 100%),
+        radial-gradient(ellipse 30% 40% at 55% 60%, rgba(14, 116, 144, 0.04) 0%, transparent 100%),
+        linear-gradient(160deg, #e4eaf1 0%, #d9e2ec 50%, #e4eaf1 100%);
+    --wallpaper-tint: 236, 241, 246;
+    --terminal-cursor: #22d3ee;
+    --terminal-selection: rgba(34, 211, 238, 0.3);
+    --login-bg:
+        radial-gradient(900px circle at 15% -10%, rgba(8, 145, 178, 0.16), transparent 55%),
+        radial-gradient(1000px circle at 110% 115%, rgba(14, 116, 144, 0.12), transparent 55%),
+        linear-gradient(160deg, #eef2f7 0%, #e1e9f1 55%, #e8eef4 100%);
+}
+
+/* Le mode léger en clair : mêmes surfaces opaques, sur les teintes claires. */
+html[data-theme='light'][data-render='lite'] {
+    --glass-bg: rgb(246, 248, 250);
+    --glass-bg-light: rgb(226, 232, 240);
+    --surface-navbar: rgb(255, 255, 255);
+
+    --shadow-md: 0 2px 8px rgba(15, 23, 42, 0.12);
+    --shadow-lg: 0 6px 20px rgba(15, 23, 42, 0.18);
 }

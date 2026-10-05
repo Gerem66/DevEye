@@ -167,6 +167,11 @@ export { useRequestPopupWidth } from '@/stores/popupWidth';
 export { Avatar } from '@/Components/Avatar/Avatar';
 /** La variable CSS d'une couleur de compte, celle dont la présence en direct peint chacun. */
 export { userColorVar } from '@/Features/Profile/userColors';
+/**
+ * Le thème affiché, `'dark'` ou `'light'`. Ce qui lit les jetons du thème en JS
+ * (un canevas, une lib tierce) s'en sert pour les relire quand il change.
+ */
+export { useColorScheme } from '@/stores/colorScheme';
 /** Deux bandeaux collants l'un sous l'autre : la mesure du haut, décalage du bas. */
 export { useStickyOffset, type StickyOffset } from '@/stickyOffset';
 /**

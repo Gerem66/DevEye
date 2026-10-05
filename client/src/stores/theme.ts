@@ -2,6 +2,8 @@ import { useSyncExternalStore } from 'react';
 import type { ThemeStateDTO } from '@deveye/types';
 import { THEME_SLOT_COUNT, THEME_SLOT_IMAGE_MAX_LENGTH } from '@deveye/types';
 import { ws } from '@/api/ws';
+import { ACCENT_VARS, accentVars } from '@/accent';
+import { getColorScheme, subscribeColorScheme, type ColorScheme } from './colorScheme';
 import { getActiveWorkspaceKey } from './workspace';
 
 export { THEME_SLOT_COUNT };
@@ -90,18 +92,36 @@ export const ACCENT_PRESETS: { key: string; label: string; hex: string }[] = [
     { key: 'rose', label: 'Rose', hex: '#fb7185' }
 ];
 
-export const BG_PRESETS: { key: string; label: string; css: string | null }[] = [
-    { key: 'auto', label: 'Accent', css: null },
-    { key: 'midnight', label: 'Nuit', css: 'linear-gradient(160deg, #05070d 0%, #0a0e16 100%)' },
+/** Un dégradé par thème : celui du sombre posé sur un fond clair n'aurait rien d'un fond clair. */
+export const BG_PRESETS: {
+    key: string;
+    label: Record<ColorScheme, string>;
+    css: Record<ColorScheme, string> | null;
+}[] = [
+    { key: 'auto', label: { dark: 'Accent', light: 'Accent' }, css: null },
+    {
+        key: 'midnight',
+        label: { dark: 'Nuit', light: 'Brume' },
+        css: {
+            dark: 'linear-gradient(160deg, #05070d 0%, #0a0e16 100%)',
+            light: 'linear-gradient(160deg, #eceef2 0%, #dde1e8 100%)'
+        }
+    },
     {
         key: 'ocean',
-        label: 'Océan',
-        css: 'radial-gradient(1000px circle at 18% -10%, rgba(20, 130, 170, 0.26), transparent 55%), linear-gradient(160deg, #04070e 0%, #07131f 60%, #050b14 100%)'
+        label: { dark: 'Océan', light: 'Océan' },
+        css: {
+            dark: 'radial-gradient(1000px circle at 18% -10%, rgba(20, 130, 170, 0.26), transparent 55%), linear-gradient(160deg, #04070e 0%, #07131f 60%, #050b14 100%)',
+            light: 'radial-gradient(1000px circle at 18% -10%, rgba(20, 130, 170, 0.2), transparent 55%), linear-gradient(160deg, #e2eef4 0%, #d2e3ed 60%, #dce8f0 100%)'
+        }
     },
     {
         key: 'plum',
-        label: 'Prune',
-        css: 'radial-gradient(900px circle at 85% -10%, rgba(150, 100, 240, 0.2), transparent 55%), linear-gradient(160deg, #07060f 0%, #0d0a1a 60%, #08060f 100%)'
+        label: { dark: 'Prune', light: 'Prune' },
+        css: {
+            dark: 'radial-gradient(900px circle at 85% -10%, rgba(150, 100, 240, 0.2), transparent 55%), linear-gradient(160deg, #07060f 0%, #0d0a1a 60%, #08060f 100%)',
+            light: 'radial-gradient(900px circle at 85% -10%, rgba(150, 100, 240, 0.16), transparent 55%), linear-gradient(160deg, #ece8f5 0%, #ddd6ee 60%, #e7e3f2 100%)'
+        }
     }
 ];
 
@@ -128,56 +148,19 @@ function read(): ThemeState {
 let state: ThemeState = read();
 const listeners = new Set<() => void>();
 
-function hexToRgb(hex: string): { r: number; g: number; b: number } {
-    const h = hex.replace('#', '');
-    const full =
-        h.length === 3
-            ? h
-                  .split('')
-                  .map((c) => c + c)
-                  .join('')
-            : h;
-    const n = parseInt(full, 16);
-    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
-}
-
-/** Mix toward white (amount > 0) or black (amount < 0). */
-function shade(hex: string, amount: number): string {
-    const { r, g, b } = hexToRgb(hex);
-    const target = amount >= 0 ? 255 : 0;
-    const a = Math.abs(amount);
-    const f = (c: number) => Math.round(c + (target - c) * a);
-    return `rgb(${f(r)}, ${f(g)}, ${f(b)})`;
-}
-
 function applyTheme(s: ThemeState): void {
     if (typeof document === 'undefined') return;
     const root = document.documentElement.style;
+    const scheme = getColorScheme();
 
-    if (s.accent) {
-        const { r, g, b } = hexToRgb(s.accent);
-        root.setProperty('--accent', s.accent);
-        root.setProperty('--accent-hover', shade(s.accent, 0.16));
-        root.setProperty('--accent-strong', shade(s.accent, -0.14));
-        root.setProperty('--accent-glow', `rgba(${r}, ${g}, ${b}, 0.35)`);
-        root.setProperty('--accent-bg', `rgba(${r}, ${g}, ${b}, 0.14)`);
-        const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-        root.setProperty('--on-accent', lum > 0.6 ? '#05222a' : '#ffffff');
-    } else {
-        for (const v of [
-            '--accent',
-            '--accent-hover',
-            '--accent-strong',
-            '--accent-glow',
-            '--accent-bg',
-            '--on-accent'
-        ]) {
-            root.removeProperty(v);
-        }
+    const vars = s.accent ? accentVars(s.accent, scheme) : null;
+    for (const name of ACCENT_VARS) {
+        if (vars) root.setProperty(name, vars[name]);
+        else root.removeProperty(name);
     }
 
     const preset = BG_PRESETS.find((p) => p.key === s.bgPreset);
-    if (preset?.css) root.setProperty('--wallpaper-bg', preset.css);
+    if (preset?.css) root.setProperty('--wallpaper-bg', preset.css[scheme]);
     else root.removeProperty('--wallpaper-bg');
 
     // Scrim alpha climbs with the slider (0 → fully visible, 100 → ~0.88 dark).
@@ -189,6 +172,7 @@ function applyTheme(s: ThemeState): void {
 }
 
 applyTheme(state);
+subscribeColorScheme(() => applyTheme(state));
 
 function persist(): void {
     try {

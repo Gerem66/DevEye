@@ -1963,7 +1963,7 @@
     background: var(--surface, var(--glass-bg));
     border: 1px solid var(--glass-border-strong);
     border-radius: var(--radius-md);
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    box-shadow: var(--shadow-lg);
     backdrop-filter: var(--glass-backdrop-soft);
 }
 
@@ -2749,7 +2749,7 @@
 .terminalHost {
     height: 58vh;
     width: 100%;
-    background: var(--surface-subtle);
+    background: var(--terminal-bg);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-sm);
     padding: var(--space-sm);

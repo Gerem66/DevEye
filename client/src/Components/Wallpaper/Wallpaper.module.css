@@ -3,13 +3,7 @@
     inset: 0;
     z-index: var(--z-wallpaper);
     overflow: hidden;
-    background: var(
-        --wallpaper-bg,
-        radial-gradient(ellipse 60% 35% at 8% 0%, rgba(34, 211, 238, 0.07) 0%, transparent 100%),
-        radial-gradient(ellipse 40% 28% at 95% 100%, rgba(34, 211, 238, 0.05) 0%, transparent 100%),
-        radial-gradient(ellipse 30% 40% at 55% 60%, rgba(34, 211, 238, 0.03) 0%, transparent 100%),
-        linear-gradient(160deg, #06080f 0%, #090f1c 50%, #06080f 100%)
-    );
+    background: var(--wallpaper-bg, var(--wallpaper-default));
 }
 
 .image {
@@ -46,7 +40,8 @@ html[data-render='lite'] .image {
     position: absolute;
     inset: 0;
     background:
-        linear-gradient(rgba(6, 9, 15, 0.18), rgba(6, 9, 15, 0.32)), rgba(6, 9, 15, var(--wallpaper-scrim, 0.4));
+        linear-gradient(rgba(var(--wallpaper-tint), 0.18), rgba(var(--wallpaper-tint), 0.32)),
+        rgba(var(--wallpaper-tint), var(--wallpaper-scrim, 0.4));
     transition: background var(--transition-normal) ease;
 }
 

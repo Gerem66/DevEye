@@ -1,7 +1,7 @@
 .overlay {
     position: fixed;
     inset: 0;
-    background: rgba(4, 7, 12, 0.6);
+    background: var(--scrim);
     backdrop-filter: var(--glass-backdrop-scrim);
     -webkit-backdrop-filter: var(--glass-backdrop-scrim);
     z-index: var(--z-modal);
@@ -157,7 +157,7 @@
     font-size: 0.68rem;
     font-weight: 600;
     color: var(--text-secondary);
-    background: rgba(4, 7, 12, 0.55);
+    background: var(--veil);
     text-align: center;
 }
 
@@ -218,7 +218,7 @@
     padding: 0;
     border: none;
     border-radius: var(--radius-sm);
-    background: rgba(4, 7, 12, 0.65);
+    background: var(--veil);
     color: var(--text-secondary);
     cursor: pointer;
     opacity: 0;

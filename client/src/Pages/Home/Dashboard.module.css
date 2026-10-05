@@ -50,6 +50,11 @@ html[data-render='lite'] .recessed {
     filter: brightness(0.55);
 }
 
+/* En clair, le plan qui recule pâlit au lieu de s'assombrir. */
+html[data-theme='light'][data-render='lite'] .recessed {
+    filter: contrast(0.5) brightness(1.1);
+}
+
 /* Mouvement réduit : le plan recule quand même (c'est une information), mais
    sans le glissement. Le retrait est déjà désarmé côté `index.tsx`. */
 @media (prefers-reduced-motion: reduce) {

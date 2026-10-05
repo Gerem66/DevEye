@@ -26,6 +26,16 @@
     --note-print-rule-soft: #ededf1;
 }
 
+/* En clair, les mêmes teintes foncées : elles colorent du texte. */
+html[data-theme='light'] {
+    --note-red: #e11d48;
+    --note-orange: #c2410c;
+    --note-yellow: #a16207;
+    --note-green: #047857;
+    --note-blue: #1d4ed8;
+    --note-purple: #7e22ce;
+}
+
 .container {
     display: flex;
     flex-direction: column;

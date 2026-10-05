@@ -119,7 +119,7 @@
     border: 1px solid var(--input-border);
     border-radius: var(--radius-sm);
     transition: border-color var(--transition-fast);
-    color-scheme: dark;
+    color-scheme: var(--color-scheme);
 }
 
 .dateInput:focus {
@@ -239,9 +239,9 @@
 }
 
 .level_warning {
-    color: #d98a00;
-    background: rgba(217, 138, 0, 0.12);
-    border-color: rgba(217, 138, 0, 0.4);
+    color: var(--warning);
+    background: var(--warning-bg);
+    border-color: color-mix(in srgb, var(--warning) 40%, transparent);
 }
 
 .level_error {
@@ -251,7 +251,7 @@
 }
 
 .level_critical {
-    color: #fff;
+    color: var(--on-danger);
     background: var(--danger);
     border-color: var(--danger);
 }

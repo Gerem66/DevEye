@@ -15,7 +15,7 @@
     border-radius: var(--radius-sm);
     outline: none;
     resize: vertical;
-    color-scheme: dark;
+    color-scheme: var(--color-scheme);
     transition:
         border-color var(--transition-fast),
         background-color var(--transition-fast);

@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useDismissLayer } from '@/Components/Dialog';
 import Slider from '@/Components/Slider';
+import { accentFor } from '@/accent';
+import { useColorScheme } from '@/stores/colorScheme';
 import {
     useTheme,
     setTheme,
@@ -26,6 +28,7 @@ const DEFAULT_ACCENT = '#22d3ee';
 /** App settings dialog: accent color + dashboard background gallery. */
 export default function SettingsPanel({ open, onClose }: SettingsPanelProps) {
     const theme = useTheme();
+    const scheme = useColorScheme();
     const [draftUrl, setDraftUrl] = useState('');
     const [error, setError] = useState<string | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
@@ -163,7 +166,7 @@ export default function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                                             key={p.key}
                                             type='button'
                                             className={`${styles.swatch} ${activeAccent === p.hex.toLowerCase() ? styles.active : ''}`}
-                                            style={{ background: p.hex }}
+                                            style={{ background: accentFor(p.hex, scheme) }}
                                             onClick={() => setTheme({ accent: p.hex })}
                                             title={p.label}
                                             aria-label={p.label}
@@ -178,8 +181,8 @@ export default function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                                     {BG_PRESETS.map((p) => {
                                         const active = !theme.bgImage && (theme.bgPreset ?? 'auto') === p.key;
                                         const preview =
-                                            p.css ??
-                                            `radial-gradient(120px circle at 28% -10%, var(--accent-glow), transparent 60%), linear-gradient(160deg, #06080f, #0a1622)`;
+                                            p.css?.[scheme] ??
+                                            'radial-gradient(120px circle at 28% -10%, var(--accent-glow), transparent 60%), var(--wallpaper-default)';
                                         return (
                                             <button
                                                 key={p.key}
@@ -193,7 +196,7 @@ export default function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                                                     })
                                                 }
                                             >
-                                                <span className={styles.bgLabel}>{p.label}</span>
+                                                <span className={styles.bgLabel}>{p.label[scheme]}</span>
                                             </button>
                                         );
                                     })}
@@ -285,7 +288,7 @@ export default function SettingsPanel({ open, onClose }: SettingsPanelProps) {
                                 {theme.bgImage && (
                                     <div className={styles.bgTune}>
                                         <Slider
-                                            label='Assombrir le fond'
+                                            label={scheme === 'light' ? 'Éclaircir le fond' : 'Assombrir le fond'}
                                             min={0}
                                             max={100}
                                             value={theme.bgDim}

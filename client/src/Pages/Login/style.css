@@ -5,10 +5,7 @@
     align-items: center;
     justify-content: center;
     font-family: var(--font-sans);
-    background:
-        radial-gradient(900px circle at 15% -10%, rgba(34, 211, 238, 0.18), transparent 55%),
-        radial-gradient(1000px circle at 110% 115%, rgba(11, 188, 214, 0.14), transparent 55%),
-        linear-gradient(160deg, #06080f 0%, #0a1622 55%, #070f18 100%);
+    background: var(--login-bg);
 
     transition: opacity 0.5s cubic-bezier(0.77, 0, 0.18, 1);
     pointer-events: all;
@@ -24,7 +21,7 @@
 
 .login svg {
     width: 256px;
-    fill: #fff;
+    fill: var(--text-primary);
 }
 
 .login .form {

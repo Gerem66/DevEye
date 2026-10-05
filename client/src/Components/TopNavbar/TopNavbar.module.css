@@ -11,7 +11,7 @@
     padding: 0 var(--space-lg);
     z-index: var(--z-navbar);
     /* Subtle scrim so brand/profile stay legible over the wallpaper on home. */
-    background: linear-gradient(to bottom, rgba(6, 9, 15, 0.55), rgba(6, 9, 15, 0));
+    background: linear-gradient(to bottom, rgba(var(--wallpaper-tint), 0.55), rgba(var(--wallpaper-tint), 0));
     transition: background var(--transition-normal);
 }
 

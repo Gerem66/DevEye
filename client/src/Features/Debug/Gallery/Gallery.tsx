@@ -4,6 +4,7 @@ import SegmentedControl from '@/Components/SegmentedControl';
 import Switch from '@/Components/Switch';
 import Tabs, { type TabDef } from '@/Features/Workspace/Tabs';
 import { setRenderMode, useRenderState, type RenderMode } from '@/stores/render';
+import { setColorSchemeMode, useColorScheme, type ColorScheme } from '@/stores/colorScheme';
 import Buttons from './sections/Buttons';
 import Feedback from './sections/Feedback';
 import Icons from './sections/Icons';
@@ -42,13 +43,14 @@ const CONTENT: Record<FamilyId, () => ReactNode> = {
 
 /**
  * Tous les composants de l'interface, en vrai et manipulables : pour juger
- * de leur cohérence d'un coup d'œil, dans chaque mode de rendu.
+ * de leur cohérence d'un coup d'œil, dans chaque mode de rendu et chaque thème.
  */
 export default function Gallery() {
     const [family, setFamily] = useState<FamilyId>('buttons');
     const [disabled, setDisabled] = useState(false);
     const [opaque, setOpaque] = useState(false);
     const render = useRenderState();
+    const scheme = useColorScheme();
 
     return (
         <section className={debugStyles.section}>
@@ -65,6 +67,15 @@ export default function Gallery() {
                             { value: 'lite', label: 'Léger' }
                         ]}
                     />
+                    <SegmentedControl
+                        value={scheme}
+                        onChange={(next: ColorScheme) => setColorSchemeMode(next)}
+                        aria-label='Thème'
+                        options={[
+                            { value: 'dark', label: 'Sombre' },
+                            { value: 'light', label: 'Clair' }
+                        ]}
+                    />
                     <Switch
                         checked={disabled}
                         onChange={setDisabled}
@@ -76,7 +87,10 @@ export default function Gallery() {
             </div>
             <Tabs tabs={FAMILIES} active={family} onSelect={setFamily} />
             <GalleryDisabled.Provider value={disabled}>
-                <div className={`${styles.content} ${opaque ? styles.opaque : ''}`}>{CONTENT[family]()}</div>
+                {/* Remonté à chaque bascule : les jetons s'y relisent au rendu. */}
+                <div key={scheme} className={`${styles.content} ${opaque ? styles.opaque : ''}`}>
+                    {CONTENT[family]()}
+                </div>
             </GalleryDisabled.Provider>
         </section>
     );

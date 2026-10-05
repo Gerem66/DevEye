@@ -19,6 +19,8 @@ import { HIDE_LIVE_CURSORS } from '@/live/hideCursors';
 import { requestOpenView } from '@/stores/viewRequest';
 import { useWorkspacesHere } from '@/stores/workspace';
 import { useLiteRender, useRenderState, setRenderMode, type RenderMode } from '@/stores/render';
+import { setColorSchemeMode, useColorSchemeState, type ColorSchemeMode } from '@/stores/colorScheme';
+import { SchemeHint } from './SchemeHint';
 
 import type { CSSProperties } from 'react';
 import type { UserColor } from '@deveye/types';
@@ -29,6 +31,13 @@ const RENDER_MODES: readonly { value: RenderMode; label: string; title: string }
     { value: 'auto', label: 'Auto', title: "Mesure la fluidité réelle et allège si l'appareil ne suit pas" },
     { value: 'full', label: 'Complet', title: "Verre et flous, quoi qu'il en coûte" },
     { value: 'lite', label: 'Léger', title: 'Surfaces opaques, sans verre ni flou. Les animations restent' }
+];
+
+const SCHEME_MODES: readonly { value: ColorSchemeMode; label: string; title: string }[] = [
+    { value: 'system', label: 'Système', title: 'Comme le réglage de cet appareil' },
+    { value: 'auto', label: 'Auto', title: 'Clair le jour, sombre la nuit' },
+    { value: 'dark', label: 'Sombre', title: 'Toujours sombre' },
+    { value: 'light', label: 'Clair', title: 'Toujours clair' }
 ];
 
 function formatDate(time: number): string {
@@ -67,6 +76,7 @@ export default function FeatureProfile({ user }: FeatureProps) {
     // raisons d'être en complet sur son poste et en léger sur son téléphone.
     const { mode: renderMode } = useRenderState();
     const lite = useLiteRender();
+    const { mode: schemeMode } = useColorSchemeState();
 
     // La couleur est appliquée localement d'abord : c'est un réglage cosmétique
     // dont l'effet doit se voir à l'instant du clic. En cas d'échec on la remet
@@ -266,6 +276,22 @@ export default function FeatureProfile({ user }: FeatureProps) {
                     <section className={styles.section}>
                         <span className={styles.sectionLabel}>Affichage</span>
                         <div className={`${styles.card} ${styles.rowList}`}>
+                            <div className={styles.row}>
+                                <span className={styles.rowLabel}>
+                                    Thème
+                                    <span className={styles.rowHint}>
+                                        <SchemeHint />
+                                    </span>
+                                </span>
+                                <span className={styles.rowValue}>
+                                    <SegmentedControl
+                                        options={SCHEME_MODES}
+                                        value={schemeMode}
+                                        onChange={setColorSchemeMode}
+                                        aria-label='Thème clair ou sombre'
+                                    />
+                                </span>
+                            </div>
                             <div className={styles.row}>
                                 <span className={styles.rowLabel}>
                                     Rendu

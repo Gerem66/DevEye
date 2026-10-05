@@ -544,13 +544,12 @@
 
 /* -------------------------- Historique (tiroir droit) ---------------------- */
 
-/* Voile : même opacité et même durée que celui de SettingsPanel, pour que les
-   deux tiroirs de l'application s'ouvrent exactement de la même façon. */
+/* Voile léger, le même que sous un dossier ouvert de l'accueil. */
 .panelScrim {
     position: absolute;
     inset: 0;
     z-index: var(--z-popup-overlay);
-    background: rgb(0 0 0 / 28%);
+    background: var(--scrim-soft);
     backdrop-filter: var(--glass-backdrop-scrim);
 }
 

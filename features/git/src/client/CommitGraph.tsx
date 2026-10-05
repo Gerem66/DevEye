@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import type { MinimalUser, UserColor } from '@deveye/types';
-import { userColorVar } from 'deveye-sdk-client';
+import { useColorScheme, userColorVar } from 'deveye-sdk-client';
 import { GIT_GRAPH_SHA_LEN, type GitCommitAuthor, type GitCommitPoints } from '../contracts/domain';
 
 import { DAY_MS, labelWidth, startOfDay, timelineTicks } from './scale';
@@ -180,11 +180,12 @@ export function CommitGraph({
 
     /** La couleur de chaque entrée de légende, résolue une fois pour le dessin. */
     const authorColors = useMemo(() => display.authors.map((a) => userColorVar(a.color)), [display]);
+    const scheme = useColorScheme();
 
     /**
-     * Le dessin, refait seulement quand quelque chose de visible a changé. Les
-     * variables CSS ne veulent rien dire pour un canvas : on les résout une fois
-     * contre l'élément, sinon chaque point serait peint en noir.
+     * Le dessin, refait seulement quand quelque chose de visible a changé, le
+     * thème compris. Les variables CSS ne veulent rien dire pour un canvas : on
+     * les résout contre l'élément, sinon chaque point serait peint en noir.
      */
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -224,7 +225,7 @@ export function CommitGraph({
             ctx.fill();
         }
         ctx.globalAlpha = 1;
-    }, [placed, points, display, authorColors, highlight, width]);
+    }, [placed, points, display, authorColors, highlight, width, scheme]);
 
     const ticks = useMemo(() => {
         if (!range || width <= 0) return [];

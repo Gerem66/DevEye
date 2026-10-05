@@ -206,6 +206,21 @@
     margin-top: 2px;
 }
 
+.hintLink {
+    padding: 0;
+    border: none;
+    background: none;
+    font: inherit;
+    color: var(--accent);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+}
+
+.hintLink:hover {
+    color: var(--accent-hover);
+}
+
 /*
  * Le score est un bouton : il ouvre la feature Sécurité. Rien ne doit le faire
  * ressembler à un bouton au repos, c'est une valeur dans une liste de valeurs,
