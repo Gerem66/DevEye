@@ -1,5 +1,5 @@
 //! Watcher temps réel d'un partage (crate `notify` : inotify / FSEvents /
-//! ReadDirectoryChangesW), débouncé — il ne PORTE aucune vérité : il se
+//! ReadDirectoryChangesW), débouncé. Il ne PORTE aucune vérité : il se
 //! contente d'émettre `SyncEvent::Changed`, et le serveur déclenche alors une
 //! session basée sur un scan complet. Rater un événement n'est donc jamais
 //! grave (le scan périodique rattrape) ; en émettre trop non plus (coalescé).
@@ -10,7 +10,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
-use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+use notify::event::{AccessKind, AccessMode};
+use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use tokio::sync::mpsc::Sender;
 use tracing::debug;
 
@@ -91,6 +92,13 @@ fn relevant(root: &Path, path: &Path, excluded: &CompiledExclusions) -> bool {
     }
 }
 
+/// Une simple lecture ne change rien au dossier. inotify signale chaque
+/// ouverture, celles du scan et des montées comprises : les compter relancerait
+/// une session à la fin de chacune, sans fin.
+fn read_only(kind: &EventKind) -> bool {
+    matches!(kind, EventKind::Access(access) if !matches!(access, AccessKind::Close(AccessMode::Write)))
+}
+
 /// Starts a watcher on its own thread and reports it through `tx` as
 /// `SyncEvent::WatcherReady`: on inotify, a recursive watch walks the whole
 /// tree and takes seconds on a large folder, too long for the connection's loop.
@@ -137,6 +145,9 @@ fn start(
         // veut dire des événements PERDUS : on re-scanne, sans filtrer sur les
         // chemins.
         if let Ok(event) = &res {
+            if read_only(&event.kind) {
+                return;
+            }
             if !event.paths.is_empty()
                 && !event
                     .paths
@@ -223,5 +234,18 @@ mod tests {
         // Hors racine ou la racine elle-même : on re-scanne plutôt que de rater.
         assert!(relevant(root, Path::new("/elsewhere/x"), &excluded));
         assert!(relevant(root, root, &excluded));
+    }
+
+    #[test]
+    fn read_only_skips_reads_but_not_writes() {
+        use notify::event::{CreateKind, ModifyKind};
+        let open = EventKind::Access(AccessKind::Open(AccessMode::Any));
+        let read = EventKind::Access(AccessKind::Close(AccessMode::Read));
+        let written = EventKind::Access(AccessKind::Close(AccessMode::Write));
+        assert!(read_only(&open));
+        assert!(read_only(&read));
+        assert!(!read_only(&written));
+        assert!(!read_only(&EventKind::Modify(ModifyKind::Any)));
+        assert!(!read_only(&EventKind::Create(CreateKind::File)));
     }
 }
