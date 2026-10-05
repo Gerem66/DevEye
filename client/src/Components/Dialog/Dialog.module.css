@@ -34,7 +34,8 @@
 }
 
 /* Pendant une animation de hauteur, la boîte est plus courte que son contenu. */
-.dialog[data-resizing] {
+.dialog[data-resizing],
+.dialog[data-resizing] .bodyFill {
     overflow-y: hidden;
 }
 

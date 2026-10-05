@@ -6,7 +6,7 @@
  */
 import { useEffect, useRef, type ChangeEvent } from 'react';
 
-import { ws } from '@/api/ws';
+import { ws, type SendOptions } from '@/api/ws';
 import { useLiveSegment } from '@/live/useLiveSegment';
 import { startTeleport, type LiveSegmentKind } from '@/stores/live';
 import { getActiveWorkspaceId, useActiveWorkspace } from '@/stores/workspace';
@@ -36,6 +36,8 @@ export type { SearchSelectFilter, SearchSelectOption } from '@/Components/Search
 /** Le voile d'une relecture, et le journal brut lisible (couleurs, filtre, copie). */
 export { default as LoadingVeil } from '@/Components/LoadingVeil';
 export type { LoadingVeilProps } from '@/Components/LoadingVeil';
+export { ProgressBar, ProgressDialog } from '@/Components/ProgressDialog';
+export type { ProgressBarProps, ProgressDialogProps } from '@/Components/ProgressDialog';
 export { default as LogOutput } from '@/Components/LogOutput';
 export type { LogOutputProps } from '@/Components/LogOutput';
 /** Copier une valeur, confirmé deux secondes par l'icône. */
@@ -139,6 +141,7 @@ export { PageLookFields } from '@/Components/PageLook';
 export { openAccountView } from '@/stores/accountView';
 /** L'erreur d'une commande refusée : son code, son message, ses détails de validation. */
 export { WsError } from '@/api/ws';
+export type { SendOptions } from '@/api/ws';
 export { isSocketOpen, onServerEvent, onSocketOpen } from './events';
 export { formatBytesFr } from '@/format';
 export { invalidate, onResourceChange, useResourceVersion, type ExternalResourceKey } from '@/stores/invalidation';
@@ -217,7 +220,8 @@ export type { SecrecyState } from '@/stores/secrecy';
  * registre fermé de @deveye/types, que les modules n'étendent pas ; cet enrobage
  * retrouve les types depuis les `commands` du manifest, la validation d'exécution
  * restant celle du serveur. `timeoutMs` allonge l'attente d'une commande qui
- * interroge un tiers lent ; par défaut c'est le délai du socket.
+ * interroge un tiers lent ; par défaut c'est le délai du socket. `onProgress`
+ * reçoit l'avancement que le handler rapporte, et chaque trame relance le délai.
  */
 export function featureApi<const M extends FeatureManifest>(manifest: M) {
     // Le corps de `commandsApi`, répété plutôt que délégué : passer par
@@ -229,7 +233,7 @@ export function featureApi<const M extends FeatureManifest>(manifest: M) {
         send<N extends Commands['command']>(
             name: N,
             input: z.input<Extract<Commands, { command: N }>['input'] & ZodType>,
-            opts?: { timeoutMs?: number }
+            opts?: SendOptions
         ): Promise<z.output<Extract<Commands, { command: N }>['output'] & ZodType>> {
             return ws.send(name as never, input as never, opts) as never;
         }
@@ -249,7 +253,7 @@ export function commandsApi<const C extends readonly ManifestCommand[]>(commands
         send<N extends Commands['command']>(
             name: N,
             input: z.input<Extract<Commands, { command: N }>['input'] & ZodType>,
-            opts?: { timeoutMs?: number }
+            opts?: SendOptions
         ): Promise<z.output<Extract<Commands, { command: N }>['output'] & ZodType>> {
             return ws.send(name as never, input as never, opts) as never;
         }

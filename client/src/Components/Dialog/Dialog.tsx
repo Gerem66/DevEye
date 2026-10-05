@@ -1,6 +1,6 @@
 import { type KeyboardEvent, type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, animate, type AnimationPlaybackControls } from 'framer-motion';
 import { useDismissLayer } from './dismissLayer';
 import { DialogPrimaryContext, type RegisterPrimary } from './dialogPrimary';
 import { DialogCloseContext } from './dialogClose';
@@ -75,7 +75,8 @@ export interface DialogProps {
     tall?: boolean;
     /**
      * Let the dialog's height follow its content up to the viewport cap, the
-     * body becoming the single scroll area once reached. Unlike `tall`, which
+     * body becoming the single scroll area once reached. A change of content
+     * glides, as in the default layout. Unlike `tall`, which
      * pins the full viewport height whatever the content. The content claims
      * the leftover space itself (`flex: 1` down to the scrollable region).
      */
@@ -96,6 +97,9 @@ export interface DialogProps {
 /** Fields the open-focus should land on (skips checkboxes/radios and selects). */
 const FOCUSABLE_FIELD =
     'input:not([type=checkbox]):not([type=radio]):not([type=hidden]), textarea, [contenteditable="true"]';
+
+/** Le ressort de toutes les hauteurs du dialogue, mesurées ou suivies. */
+const RESIZE_SPRING = { type: 'spring', stiffness: 320, damping: 30, mass: 0.9 } as const;
 
 /** Pixel height of the "tall" layout: the viewport minus the dialog's margins. */
 function viewportTall(): number {
@@ -179,6 +183,44 @@ export default function Dialog({
         };
     }, [open, fits]);
     const height = tall ? tallHeight : fits && fitHeight !== null ? fitHeight : 'auto';
+
+    // En fill, la boîte reste en `auto` (son contenu dicte sa colonne flex) : on
+    // la rattrape après coup. L'observateur passe après la mise en page et avant
+    // la peinture, donc le saut n'est jamais peint : la hauteur repart de
+    // l'ancienne, glisse vers la nouvelle, puis rend la main à `auto`.
+    useLayoutEffect(() => {
+        const dialog = dialogRef.current;
+        if (!open || !fill || !dialog) return;
+        let last: number | null = null;
+        let running: AnimationPlaybackControls | null = null;
+        const ro = new ResizeObserver(() => {
+            // Pendant le glissement, la hauteur est posée : seul le glissement la bouge.
+            if (running) return;
+            const next = dialog.offsetHeight;
+            const from = last;
+            last = next;
+            if (from === null || Math.abs(next - from) < 1) return;
+            dialog.style.height = `${from}px`;
+            dialog.setAttribute('data-resizing', '');
+            const run = animate(dialog, { height: next }, RESIZE_SPRING);
+            running = run;
+            void run.then(() => {
+                if (running !== run) return;
+                running = null;
+                // Un contenu changé pendant le glissement relance l'observateur ici.
+                dialog.style.height = '';
+                dialog.removeAttribute('data-resizing');
+            });
+        });
+        ro.observe(dialog);
+        return () => {
+            ro.disconnect();
+            running?.stop();
+            running = null;
+            dialog.style.height = '';
+            dialog.removeAttribute('data-resizing');
+        };
+    }, [open, fill]);
 
     // A close attempt either pops the confirmation (when dirty) or closes outright.
     const attemptClose = useCallback(() => {
@@ -264,7 +306,7 @@ export default function Dialog({
                         initial={{ opacity: 0, scale: 0.94, maxWidth: width, height }}
                         animate={{ opacity: 1, scale: 1, maxWidth: width, height }}
                         exit={{ opacity: 0, scale: 0.94 }}
-                        transition={{ type: 'spring', stiffness: 320, damping: 30, mass: 0.9 }}
+                        transition={RESIZE_SPRING}
                         // Pendant qu'elle grandit, la boîte est plus courte que son
                         // contenu : sans ce drapeau, une barre de défilement clignoterait.
                         onAnimationStart={() => dialogRef.current?.setAttribute('data-resizing', '')}

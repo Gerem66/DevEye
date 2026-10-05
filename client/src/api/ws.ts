@@ -7,6 +7,8 @@ import {
     maintenanceStateSchema,
     QUEUE_CLOSE_CODE,
     queueRefusalSchema,
+    REQUEST_PROGRESS_EVENT,
+    requestProgressSchema,
     serverMessageSchema,
     sessionFrameSchema,
     type ClientMessage,
@@ -16,6 +18,7 @@ import {
     type ErrorCode,
     type FeatureCommandName,
     type MaintenanceState,
+    type RequestProgress,
     type ServerMessage
 } from '@deveye/types';
 import { getActiveInstanceId, getActiveWorkspaceId, onWorkspaceChange } from '../stores/workspace';
@@ -70,7 +73,12 @@ type Pending = {
     resolve: (value: unknown) => void;
     reject: (err: Error) => void;
     timer: ReturnType<typeof setTimeout>;
+    /** Une trame d'avancement relance le délai : il borne le silence, pas la durée. */
+    rearm: () => void;
+    onProgress?: (update: ProgressUpdate) => void;
 };
+
+export type ProgressUpdate = Omit<RequestProgress, 'requestId'>;
 
 type EventListener = (msg: ServerMessage) => void;
 
@@ -380,6 +388,17 @@ export class DevEyeWs {
             return;
         }
 
+        if (msg.command === REQUEST_PROGRESS_EVENT && msg.payload.ok) {
+            const update = requestProgressSchema.safeParse(msg.payload.data);
+            const pending = update.success ? this.pending.get(update.data.requestId) : undefined;
+            if (update.success && pending) {
+                pending.rearm();
+                const { done, total, step } = update.data;
+                pending.onProgress?.({ done, total, step });
+            }
+            return;
+        }
+
         if (msg.requestId) {
             const pending = this.pending.get(msg.requestId);
             if (pending) {
@@ -461,8 +480,7 @@ export class DevEyeWs {
     send<N extends FeatureCommandName>(
         command: N,
         input: CommandInput<N>,
-        /** `workspaceId` : viser un espace précis de cette instance plutôt que l'actif (une copie vers ailleurs). */
-        opts: { timeoutMs?: number; workspaceId?: number } = {}
+        opts: SendOpts = {}
     ): Promise<CommandOutput<N>> {
         const descriptor = featureCommandRegistry[command];
         if (!descriptor) return Promise.reject(new WsError('protocol', `Unknown command: ${command}`));
@@ -473,15 +491,22 @@ export class DevEyeWs {
         const requestId = this.nextRequestId();
         const startedAt = Date.now();
         const call = new Promise<CommandOutput<N>>((resolve, reject) => {
-            const timer = setTimeout(() => {
+            const wait = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+            const expire = (): void => {
                 this.pending.delete(requestId);
                 reject(new WsError('timeout', `Request ${command} timed out`));
-            }, opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
-            this.pending.set(requestId, {
+            };
+            const entry: Pending = {
                 resolve: (value) => resolve(value as CommandOutput<N>),
                 reject,
-                timer
-            });
+                timer: setTimeout(expire, wait),
+                rearm: () => {
+                    clearTimeout(entry.timer);
+                    entry.timer = setTimeout(expire, wait);
+                },
+                onProgress: opts.onProgress
+            };
+            this.pending.set(requestId, entry);
 
             const post = (): void => {
                 // Le délai a pu expirer, ou une fermeture purger les requêtes en
@@ -489,7 +514,7 @@ export class DevEyeWs {
                 if (!this.pending.has(requestId)) return;
                 if (!this.socket || this._state !== 'open') {
                     this.pending.delete(requestId);
-                    clearTimeout(timer);
+                    clearTimeout(entry.timer);
                     reject(new WsError('closed', 'WS not open'));
                     return;
                 }
@@ -507,7 +532,7 @@ export class DevEyeWs {
                 const clientParsed = clientMessageSchema.safeParse(envelope);
                 if (!clientParsed.success) {
                     this.pending.delete(requestId);
-                    clearTimeout(timer);
+                    clearTimeout(entry.timer);
                     reject(new WsError('protocol', 'Failed to encode envelope'));
                     return;
                 }
@@ -525,7 +550,16 @@ export class DevEyeWs {
     }
 }
 
-type SendOpts = { timeoutMs?: number; workspaceId?: number };
+/** Ce qu'un module peut régler d'un envoi : `timeoutMs` borne le silence de la commande. */
+export type SendOptions = {
+    timeoutMs?: number;
+    onProgress?: (update: ProgressUpdate) => void;
+};
+
+type SendOpts = SendOptions & {
+    /** Viser un espace précis de cette instance plutôt que l'actif (une copie vers ailleurs). */
+    workspaceId?: number;
+};
 
 /**
  * Ce que tout le client appelle `ws` : une socket par instance, et l'aiguillage

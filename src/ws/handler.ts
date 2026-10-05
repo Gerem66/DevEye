@@ -45,6 +45,7 @@ import { describeError, systemAlerts } from '@/Services/systemAlerts';
 import { env, isDev } from '@/Utils/Env';
 import { logger } from '@/logger';
 import { appVersion } from '@/version';
+import { progressLane, type ProgressLane } from './progress';
 
 import type { Database } from '@/db';
 import type Encryption from '@/Services/Encryption';
@@ -257,6 +258,7 @@ export async function registerWS(
             // action"): the unlocked DEK is wiped as soon as this command — and
             // any concurrent siblings unlocked alongside it — finish.
             const dekTicket = enterSessionCommand(session!.sessionId);
+            let progress: ProgressLane | null = null;
             try {
                 // Une commande de compte ignore l'espace annoncé par l'enveloppe
                 // et vise toujours l'espace personnel de l'appelant.
@@ -430,6 +432,7 @@ export async function registerWS(
                 const gated = def.access?.feature;
                 if (gated) for (const key of def.access?.extras ?? []) await assertDeclaredExtra(gated, key);
 
+                progress = progressLane(replyId, (msg) => send(socket, msg));
                 const result = await def.handler(
                     {
                         db,
@@ -458,12 +461,14 @@ export async function registerWS(
                         ip,
                         logger: reqLogger.child({ command, requestId: replyId }),
                         requestId: replyId,
+                        progress: progress.report,
                         audit: recordAudit,
                         monitor,
                         live
                     },
                     inputParse.data
                 );
+                progress.close();
                 const outputParse = def.output.safeParse(result);
                 if (!outputParse.success) {
                     reqLogger.error({ command, err: outputParse.error.flatten() }, 'Handler returned invalid output');
@@ -548,6 +553,7 @@ export async function registerWS(
                     payload: err('internal', 'Internal server error')
                 });
             } finally {
+                progress?.close();
                 exitSessionCommand(session!.sessionId, dekTicket);
             }
         });

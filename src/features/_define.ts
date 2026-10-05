@@ -6,6 +6,7 @@ import type { MonitorTransport } from '@/agent/hub';
 import type { LiveTransport } from '@/live/hub';
 import type { LiveTopic, LogLevelName } from '@deveye/types';
 import type { Logger } from 'pino';
+import type { CommandProgress } from '@deveye/types/sdk/server';
 import type { FeatureAccess, FeatureId, ItemAccess, ItemExtraOverrides, WorkspaceCapability } from '@deveye/types';
 import type { WorkspaceContext } from './_access';
 import type { z } from 'zod';
@@ -128,6 +129,8 @@ export interface FeatureContext {
     ip: string;
     logger: Logger;
     requestId: string;
+    /** Avancement poussé au seul appelant ; absent hors socket (tests). */
+    progress?: (update: CommandProgress) => void;
     /**
      * Emit an audit log for this action. Fire-and-forget — never awaits the DB
      * write and never throws into the handler. The actor, channel and a default

@@ -200,6 +200,7 @@ export function createSdkContext(
             }),
         logger: ctx.logger,
         requestId: ctx.requestId,
+        progress: (update) => ctx.progress?.(update),
         origins: ORIGINS
     };
 }

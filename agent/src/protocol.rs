@@ -587,7 +587,7 @@ pub struct SyncPushResume {
 }
 
 fn default_trash_days() -> u64 {
-    30
+    7
 }
 
 fn default_dir_kind() -> String {
