@@ -48,7 +48,7 @@
   "author": "Gerem",
   "license": "AGPL-3.0-only",
   "dependencies": {
-    "@deveye/types": "^0.23.0",
+    "@deveye/types": "^0.23.1",
     "@fastify/cookie": "^11.0.2",
     "@fastify/cors": "^11.2.0",
     "@fastify/helmet": "^13.0.2",
