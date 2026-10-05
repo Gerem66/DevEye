@@ -12,6 +12,20 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: readonly ChangelogEntry[] = [
     {
+        version: '0.23.1',
+        date: '2026-10-05',
+        changes: [
+            {
+                kind: 'fixed',
+                text: 'CloudSync : un dossier simplement lu sur l’appareil ne relance plus la synchronisation en boucle'
+            },
+            {
+                kind: 'improved',
+                text: 'CloudSync : le serveur tient mieux la charge quand de nombreux partages s’analysent en même temps'
+            }
+        ]
+    },
+    {
         version: '0.23.0',
         date: '2026-10-05',
         changes: [
