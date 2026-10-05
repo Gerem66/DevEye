@@ -36,8 +36,12 @@
     cursor: not-allowed;
 }
 
-/* Sa hauteur est calculée : ni poignée ni barre de défilement. */
+/* Sa hauteur est calculée : ni poignée ni barre de défilement. Une ligne y tient
+   pile dans la hauteur d'un `TextInput`, qui centre son texte dans une boîte
+   fixe : le padding vertical prend ce que la ligne laisse. */
 .autoGrow {
+    padding-top: calc((2.25rem - 1lh) / 2);
+    padding-bottom: calc((2.25rem - 1lh) / 2);
     overflow: hidden;
     resize: none;
 }
