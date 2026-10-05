@@ -41,8 +41,9 @@ export default function ClientPicker({ clients, value, disabled, onChange }: Cli
                     onChange={(next) => onChange(next === '' ? null : Number(next))}
                 />
                 <Button
-                    variant='ghost'
+                    variant='secondary'
                     icon='add'
+                    className={styles.pickerAdd}
                     aria-label='Ajouter un client'
                     title='Ajouter un client : il sera choisi ici une fois créé'
                     disabled={disabled}

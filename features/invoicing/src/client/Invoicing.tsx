@@ -30,10 +30,13 @@ import styles from './style.module.css';
  */
 type Origin = 'home' | 'documents' | 'clients';
 
+/** Un document ouvert depuis une fiche client y ramène, et celle-ci à son origine. */
+type ClientOrigin = { id: number; from: Origin };
+
 type View =
     | { kind: 'home' }
     | { kind: 'documents' }
-    | { kind: 'document'; id: number; from: Origin }
+    | { kind: 'document'; id: number; from: Origin; client?: ClientOrigin }
     | { kind: 'clients' }
     | { kind: 'client'; id: number; from: Origin };
 
@@ -81,7 +84,13 @@ export default function Invoicing() {
                 setView((current) => ({
                     kind: 'document',
                     id,
-                    from: current.kind === 'document' || current.kind === 'client' ? current.from : current.kind
+                    from: current.kind === 'document' || current.kind === 'client' ? current.from : current.kind,
+                    client:
+                        current.kind === 'client'
+                            ? { id: current.id, from: current.from }
+                            : current.kind === 'document'
+                              ? current.client
+                              : undefined
                 })),
             []
         )
@@ -157,9 +166,15 @@ export default function Invoicing() {
                             defaultDepositBp={data.settings.defaultDepositBp}
                             paymentTermsDays={data.settings.paymentTermsDays}
                             vatRegime={data.settings.vatRegime}
-                            backLabel={LABELS[view.from]}
-                            onBack={back(view.from)}
-                            onOpen={(id) => setView({ kind: 'document', id, from: view.from })}
+                            backLabel={view.client === undefined ? LABELS[view.from] : 'Client'}
+                            onBack={() =>
+                                setView(
+                                    view.client === undefined
+                                        ? { kind: view.from }
+                                        : { kind: 'client', id: view.client.id, from: view.client.from }
+                                )
+                            }
+                            onOpen={(id) => setView({ kind: 'document', id, from: view.from, client: view.client })}
                         />
                     )}
 
@@ -179,6 +194,14 @@ export default function Invoicing() {
                             backLabel={LABELS[view.from]}
                             onBack={back(view.from)}
                             onGone={back(view.from)}
+                            onOpenDocument={(id) =>
+                                setView({
+                                    kind: 'document',
+                                    id,
+                                    from: view.from,
+                                    client: { id: view.id, from: view.from }
+                                })
+                            }
                         />
                     )}
                 </motion.div>

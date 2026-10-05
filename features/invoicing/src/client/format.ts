@@ -66,9 +66,10 @@ export function deadlineNote(
 
     if (status === 'late') return `en retard de ${days === -1 ? 'un jour' : `${-days} jours`}`;
     if (status === 'expired') return `expiré depuis ${days === -1 ? 'un jour' : `${-days} jours`}`;
-    if (days < 0) return null;
-    if (days === 0) return "c'est aujourd'hui";
-    if (days === 1) return 'demain';
-    if (days <= 14) return `dans ${days} jours`;
-    return null;
+    if (days < 0 || days > 14 || !['draft', 'sent', 'issued', 'partial'].includes(status)) return null;
+    // La date seule ne dit pas ce qui arrive ce jour-là : le devis expire, la facture se règle.
+    const verb = kind === 'quote' ? 'expire' : 'à régler';
+    if (days === 0) return `${verb} aujourd’hui`;
+    if (days === 1) return `${verb} demain`;
+    return `${verb} dans ${days} jours`;
 }

@@ -349,6 +349,11 @@ export default function DocumentSheet({
     const wording = issueWording(doc);
     const depositBp = quoteDepositBp(doc, defaultDepositBp);
 
+    // Le nom vient du carnet : celui du document date de sa dernière lecture, et un
+    // brouillon ne se relit pas après un changement de client.
+    const clientName =
+        doc.clientId === null ? '' : (clients?.find((client) => client.id === doc.clientId)?.name ?? doc.clientName);
+
     const deadline = doc.kind === 'quote' ? doc.validUntil : doc.dueOn;
     const earliest = doc.kind === 'quote' ? addDays(todayIso(), 1) : todayIso();
     const deadlineError =
@@ -623,15 +628,27 @@ export default function DocumentSheet({
 
     return (
         <div className={styles.sheet}>
-            <header className={styles.header}>
+            <header className={`${styles.header} ${styles.sheetHeader}`}>
                 <div className={styles.detailHead}>
-                    <Button variant='ghost' icon='arrow-left' aria-label={backLabel} title={backLabel} onClick={onBack}>
+                    <Button
+                        variant='ghost'
+                        icon='arrow-left'
+                        className={styles.back}
+                        aria-label={backLabel}
+                        title={backLabel}
+                        onClick={onBack}
+                    >
                         <span className={styles.backLabel}>{backLabel}</span>
                     </Button>
                     <div className={styles.ident}>
                         <h2 className={styles.heading}>
                             {doc.numberLabel ?? `${kindLabel(doc.kind)} en préparation`}
-                            {doc.subject.length > 0 && <span className={styles.headingSoft}> · {doc.subject}</span>}
+                            {doc.subject.length > 0 && (
+                                <span className={styles.headingSoft}>
+                                    <span className={styles.headingSep}> · </span>
+                                    {doc.subject}
+                                </span>
+                            )}
                         </h2>
                         <p className={styles.subheading}>
                             <StatusBadge tone={STATUS_TONE[doc.displayStatus]}>
@@ -642,7 +659,7 @@ export default function DocumentSheet({
                                     <StatusBadge tone='neutral'>Archivé</StatusBadge>{' '}
                                 </>
                             )}
-                            {doc.clientName.length > 0 ? doc.clientName : 'aucun client choisi'}
+                            {clientName.length > 0 ? clientName : 'aucun client choisi'}
                             {doc.issuedOn !== null && ` · émis le ${formatDate(doc.issuedOn)}`}
                             {note !== null && ` · ${note}`}
                             {draft && ` · ${STATE_WORDS[state]}`}
@@ -721,10 +738,8 @@ export default function DocumentSheet({
             <div className={styles.sheetBody}>
                 <ErrorNote
                     note={error}
-                    client={doc.clientId === null ? null : { id: doc.clientId, name: doc.clientName }}
+                    client={doc.clientId === null ? null : { id: doc.clientId, name: clientName }}
                 />
-
-                {tab === 'doc' && !draft && delivery}
 
                 {tab === 'preview' && <DocumentPreview html={paper} error={paperError} />}
 
@@ -803,7 +818,7 @@ export default function DocumentSheet({
 
                             <label className={`${styles.field} ${styles.datePerformed}`}>
                                 <span className={styles.dialogLabel}>
-                                    Prestation réalisée le <span className={styles.optional}>facultatif</span>
+                                    Prestation réalisée le <span className={styles.optional}>(facultatif)</span>
                                 </span>
                                 <TextInput
                                     type='date'
@@ -817,7 +832,9 @@ export default function DocumentSheet({
 
                         {doc.kind === 'quote' && (
                             <label className={`${styles.field} ${styles.fieldPercent}`}>
-                                <span className={styles.dialogLabel}>Acompte à la commande, en %</span>
+                                <span className={styles.dialogLabel} title='Acompte demandé à la commande'>
+                                    Acompte<span className={styles.wideOnly}> à la commande</span> (%)
+                                </span>
                                 <NumberInput
                                     value={doc.depositBp === null ? null : doc.depositBp / 100}
                                     min={0}
@@ -838,7 +855,9 @@ export default function DocumentSheet({
                             </label>
                         )}
 
-                        <label className={`${styles.field} ${styles.fieldRef}`}>
+                        <label
+                            className={`${styles.field} ${doc.kind === 'quote' ? styles.fieldRef : styles.fieldRefAlone}`}
+                        >
                             <span className={styles.dialogLabel}>Référence de commande</span>
                             <TextInput
                                 value={doc.purchaseOrder}
@@ -894,6 +913,8 @@ export default function DocumentSheet({
                     </dl>
                 )}
 
+                {tab === 'doc' && !draft && delivery}
+
                 {tab === 'doc' && draft && (
                     <LineEditor
                         key={doc.id}
@@ -921,7 +942,12 @@ export default function DocumentSheet({
 
                 {tab === 'doc' && !draft && (
                     <>
-                        <LineTable lines={lines} currency={doc.currency} withVat={withVat} />
+                        <section className={styles.section}>
+                            <header className={styles.sectionHead}>
+                                <h3 className={styles.sectionTitle}>Prestations</h3>
+                            </header>
+                            <LineTable lines={lines} currency={doc.currency} withVat={withVat} />
+                        </section>
                         <p className={styles.frozen}>
                             {doc.kind === 'quote'
                                 ? 'Ce devis est parti chez votre client : ses lignes ne changent plus.'
@@ -930,6 +956,7 @@ export default function DocumentSheet({
                         <Totals
                             totals={totals}
                             currency={doc.currency}
+                            withVat={withVat}
                             settledCents={doc.settledCents}
                             remainingCents={doc.remainingCents}
                         />
@@ -951,7 +978,20 @@ export default function DocumentSheet({
                             <strong>{formatMoney(totals.vatCents, doc.currency)}</strong>
                         </span>
                     ) : (
-                        <span className={`${styles.footLabel} ${styles.footDetail}`}>Franchise de TVA</span>
+                        // Les lignes d'un brouillon en franchise ne portent pas de taux : c'est
+                        // ici qu'on change le régime, au bout de la phrase qui l'annonce.
+                        <span className={`${styles.footLabel} ${styles.footDetail}`}>
+                            {draft && canWrite ? (
+                                <FeatureSettingsButton
+                                    scope={{ kind: 'feature', feature: 'invoicing' }}
+                                    initialSection='taxes'
+                                    variant='link'
+                                    label='Franchise de TVA'
+                                />
+                            ) : (
+                                'Franchise de TVA'
+                            )}
+                        </span>
                     )}
                     <span>
                         <span className={styles.footLabel}>{withVat ? 'Total TTC' : 'Total'}</span>{' '}

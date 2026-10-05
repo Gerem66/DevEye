@@ -99,7 +99,14 @@ export default function DocumentsPage({ currency, onBack, onOpen, onNew }: Docum
     return (
         <div className={styles.page}>
             <header className={styles.pageHead}>
-                <Button variant='ghost' icon='arrow-left' aria-label='Accueil' title='Accueil' onClick={onBack}>
+                <Button
+                    variant='ghost'
+                    icon='arrow-left'
+                    className={styles.back}
+                    aria-label='Accueil'
+                    title='Accueil'
+                    onClick={onBack}
+                >
                     <span className={styles.backLabel}>Accueil</span>
                 </Button>
                 <h2 className={styles.pageTitle}>Documents</h2>

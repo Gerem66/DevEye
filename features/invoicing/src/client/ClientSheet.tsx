@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Button, FeatureSettingsButton, humanizeError, StatusBadge } from 'deveye-sdk-client';
+import { Button, FeatureSettingsButton, humanizeError, StatusBadge, useResource } from 'deveye-sdk-client';
 
 import type { InvoicingClient } from '../contracts/domain';
+import DocumentRow from './DocumentRow';
 import { api } from './api';
 import { formatMoney } from './format';
 import styles from './style.module.css';
@@ -22,9 +23,10 @@ export interface ClientSheetProps {
     onBack(): void;
     /** L'élément n'est plus là : la fiche s'en va. */
     onGone(): void;
+    onOpenDocument(id: number): void;
 }
 
-export default function ClientSheet({ id, currency, backLabel, onBack, onGone }: ClientSheetProps) {
+export default function ClientSheet({ id, currency, backLabel, onBack, onGone, onOpenDocument }: ClientSheetProps) {
     const [client, setClient] = useState<InvoicingClient | null>(null);
     const [error, setError] = useState<string | null>(null);
 
@@ -42,6 +44,22 @@ export default function ClientSheet({ id, currency, backLabel, onBack, onGone }:
     useEffect(() => {
         void load();
     }, [load]);
+
+    const loadDocs = useCallback(
+        async () =>
+            api.send('invoicing.docList', {
+                kind: null,
+                status: null,
+                derived: null,
+                clientId: id,
+                year: null,
+                search: '',
+                limit: 50,
+                offset: 0
+            }),
+        [id]
+    );
+    const { data: docs } = useResource('invoicing.docList', loadDocs, 'Documents illisibles.', [id]);
 
     if (client === null) {
         return (
@@ -64,11 +82,27 @@ export default function ClientSheet({ id, currency, backLabel, onBack, onGone }:
         .filter((part) => part.length > 0)
         .join(', ');
 
+    const contact = [
+        { label: 'Contact', value: client.contactName },
+        { label: 'E-mail', value: client.email },
+        { label: 'Téléphone', value: client.phone },
+        // Le pays seul, rempli d'office, ne fait pas une adresse.
+        { label: 'Adresse', value: client.address.length > 0 || client.city.length > 0 ? place : '' },
+        { label: 'SIRET', value: client.siret }
+    ].filter((entry) => entry.value.length > 0);
+
     return (
         <div className={styles.page}>
-            <header className={styles.header}>
+            <header className={`${styles.header} ${styles.sheetHeader}`}>
                 <div className={styles.detailHead}>
-                    <Button variant='ghost' icon='arrow-left' aria-label={backLabel} title={backLabel} onClick={onBack}>
+                    <Button
+                        variant='ghost'
+                        icon='arrow-left'
+                        className={styles.back}
+                        aria-label={backLabel}
+                        title={backLabel}
+                        onClick={onBack}
+                    >
                         <span className={styles.backLabel}>{backLabel}</span>
                     </Button>
                     <div className={styles.ident}>
@@ -76,7 +110,7 @@ export default function ClientSheet({ id, currency, backLabel, onBack, onGone }:
                         <p className={styles.subheading}>
                             {client.archived && <StatusBadge tone='neutral'>De côté</StatusBadge>}
                             {client.kind === 'company' ? 'Entreprise' : 'Particulier'}
-                            {place.length > 0 && ` · ${place}`}
+                            {client.city.length > 0 && ` · ${client.city}`}
                         </p>
                     </div>
                 </div>
@@ -115,11 +149,40 @@ export default function ClientSheet({ id, currency, backLabel, onBack, onGone }:
                 </div>
             </dl>
 
-            {(client.email.length > 0 || client.phone.length > 0 || client.contactName.length > 0) && (
-                <p className={styles.sheetContact}>
-                    {[client.contactName, client.email, client.phone].filter((part) => part.length > 0).join(' · ')}
-                </p>
+            {contact.length > 0 && (
+                <dl className={styles.readHeader}>
+                    {contact.map((entry) => (
+                        <div key={entry.label}>
+                            <dt>{entry.label}</dt>
+                            <dd>{entry.value}</dd>
+                        </div>
+                    ))}
+                </dl>
             )}
+
+            <section className={styles.section}>
+                <header className={styles.sectionHead}>
+                    <h3 className={styles.sectionTitle}>Documents</h3>
+                </header>
+                {docs === null ? (
+                    <p className={styles.placeholder}>Chargement…</p>
+                ) : docs.docs.length === 0 ? (
+                    <p className={styles.editorEmpty}>Aucun document pour ce client.</p>
+                ) : (
+                    <ul className={styles.rows}>
+                        {docs.docs.map((doc) => (
+                            <li key={doc.id}>
+                                <DocumentRow
+                                    doc={doc}
+                                    currency={currency}
+                                    showClient={false}
+                                    onOpen={() => onOpenDocument(doc.id)}
+                                />
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </section>
         </div>
     );
 }

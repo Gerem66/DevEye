@@ -182,16 +182,9 @@ export default function Home(props: HomeProps) {
             <Section
                 title='Documents'
                 actions={
-                    <>
-                        {canWrite && (
-                            <Button variant='secondary' icon='add' onClick={props.onNewDocument}>
-                                Document
-                            </Button>
-                        )}
-                        <Button variant='ghost' onClick={props.onOpenDocuments}>
-                            Voir tout
-                        </Button>
-                    </>
+                    <button type='button' className={styles.seeAll} onClick={props.onOpenDocuments}>
+                        Voir tout
+                    </button>
                 }
             >
                 {data.recentDocs.length === 0 ? (
@@ -221,13 +214,13 @@ export default function Home(props: HomeProps) {
                 actions={
                     <>
                         {canWrite && (
-                            <Button variant='secondary' icon='add' onClick={props.onNewClient}>
-                                Client
-                            </Button>
+                            <button type='button' className={styles.seeAll} onClick={props.onNewClient}>
+                                Nouveau client
+                            </button>
                         )}
-                        <Button variant='ghost' onClick={props.onOpenClients}>
+                        <button type='button' className={styles.seeAll} onClick={props.onOpenClients}>
                             Voir tout
-                        </Button>
+                        </button>
                     </>
                 }
             >

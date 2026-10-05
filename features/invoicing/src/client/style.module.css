@@ -49,8 +49,7 @@
     flex-direction: column;
     align-items: center;
     gap: var(--space-sm);
-    max-width: 30rem;
-    margin: var(--space-xl) auto;
+    margin: 0;
     padding: var(--space-lg);
     border: 1px dashed var(--glass-border);
     border-radius: var(--radius-md);
@@ -120,24 +119,17 @@
 
 /* ── Les panneaux de réglages ──────────────────────────────────────────── */
 
-/* Deux colonnes quand la place le permet, une seule sinon : le panneau de la
-   coquille change de largeur sans que la fenêtre bouge, d'où la requête de
-   conteneur plutôt qu'une media query, qui mentirait. */
+/* Deux colonnes quand la place le permet, une seule sinon : la grille se règle
+   sur sa propre largeur, celle du panneau de la coquille et non de la fenêtre. */
 .fieldGrid {
     display: grid;
     gap: var(--space-md);
-    grid-template-columns: 1fr;
-    container-type: inline-size;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+    align-items: start;
 }
 
-@container (min-width: 440px) {
-    .fieldGrid {
-        grid-template-columns: 1fr 1fr;
-    }
-
-    .fieldWide {
-        grid-column: 1 / -1;
-    }
+.fieldWide {
+    grid-column: 1 / -1;
 }
 
 .textarea {
@@ -281,25 +273,6 @@
     background: var(--surface-subtle);
 }
 
-/* À l'étroit, l'état et le montant passent sous le titre plutôt que de l'écraser.
-   Une requête de conteneur et non de fenêtre : le panneau change de largeur sans
-   que la fenêtre bouge. */
-@container (max-width: 460px) {
-    .row {
-        flex-wrap: wrap;
-    }
-
-    .rowText {
-        flex: 1 1 100%;
-    }
-
-    .rowRight {
-        flex: 1 1 100%;
-        justify-content: flex-start;
-        padding-left: calc(18px + var(--space-sm));
-    }
-}
-
 .rowIcon {
     flex: none;
     color: var(--text-muted);
@@ -338,6 +311,21 @@
     color: var(--text-secondary);
     font-size: 0.9rem;
     font-variant-numeric: tabular-nums;
+}
+
+/* À l'étroit, l'état et le montant passent sous le titre plutôt que de l'écraser.
+   Une requête de conteneur et non de fenêtre : le panneau change de largeur sans
+   que la fenêtre bouge. Après les règles de base, qui l'emporteraient sinon. */
+@container (max-width: 460px) {
+    .row {
+        flex-wrap: wrap;
+    }
+
+    .rowRight {
+        flex: 1 1 100%;
+        justify-content: flex-start;
+        padding-left: calc(18px + var(--space-sm));
+    }
 }
 
 /* Les chiffres d'une fiche : une grille qui se replie, jamais un tableau. */
@@ -470,6 +458,30 @@
         '.     note  note  .';
 }
 
+.editorExempt .lineRow {
+    grid-template-areas:
+        'grip  label label drop'
+        '.     qty   unit  .'
+        '.     price price .'
+        '.     total total .';
+}
+
+.editorExempt .lineRowNote {
+    grid-template-areas:
+        'grip  label label drop'
+        '.     note  note  .';
+}
+
+.editorEmpty {
+    margin: 0;
+    padding: var(--space-md);
+    border: 1px dashed var(--glass-border);
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    text-align: center;
+}
+
 .lineBroken {
     border-color: var(--warning);
 }
@@ -501,6 +513,7 @@
 .cellCaption {
     color: var(--text-muted);
     font-size: 0.75rem;
+    text-align: left;
 }
 
 /* Les colonnes de nombres se rangent à droite, comme sur le papier : c'est ce
@@ -527,21 +540,6 @@
 
 .cellVat {
     grid-area: vat;
-}
-
-/* Le même retrait qu'une liste déroulante : la phrase prend la place du contrôle
-   qu'elle remplace, et tombe donc sous le même titre. */
-.cellVatOff {
-    display: flex;
-    align-items: baseline;
-    gap: var(--space-xs);
-    flex-wrap: wrap;
-    grid-area: vat;
-    align-self: center;
-    padding-left: 0.75rem;
-    color: var(--text-muted);
-    font-size: 0.85rem;
-    white-space: nowrap;
 }
 
 /* Replié, le total est une phrase : sa légende à gauche, le montant à droite.
@@ -660,12 +658,22 @@
         display: none;
     }
 
+    .editorExempt .lineHead,
+    .editorExempt .lineRow {
+        grid-template-columns: 18px minmax(0, 1fr) 5.5rem 7.5rem 7rem 6.5rem 32px;
+        grid-template-areas: none;
+    }
+
+    .cellTotal {
+        justify-content: flex-end;
+    }
+
     .cellTotal output {
         font-weight: 400;
     }
 
     .cellNote {
-        grid-column: 3 / 8;
+        grid-column: 3 / -2;
     }
 }
 
@@ -690,13 +698,14 @@
 
 /* ── La fiche d'un document ────────────────────────────────────────────── */
 
-/* L'en-tête d'un brouillon : des champs, pas un engrenage. Chacun dit la place
-   qu'il prend, sinon une date de dix caractères s'étire sur la moitié de la
-   popup. */
+/* L'en-tête d'un brouillon : une grille de six colonnes, pour que chaque champ
+   tombe sur la même verticale d'une rangée à l'autre. Le client et l'objet se
+   partagent la ligne, les trois dates aussi, puis l'acompte et la référence. */
 .headerForm {
-    display: flex;
+    display: grid;
     gap: var(--space-md);
-    flex-wrap: wrap;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    align-items: start;
 }
 
 .field {
@@ -706,41 +715,67 @@
     min-width: 0;
 }
 
-.fieldClient {
-    flex: 1 1 16rem;
+/* Un libellé tient sur une ligne : replié, il décalerait son champ sous ceux
+   de la rangée. */
+.headerForm .dialogLabel {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.fieldSubject {
-    flex: 2 1 18rem;
+.fieldClient,
+.fieldSubject,
+.fieldRefAlone {
+    grid-column: span 3;
+}
+
+.fieldPercent {
+    grid-column: span 2;
 }
 
 .fieldRef {
-    flex: 1 1 14rem;
+    grid-column: span 4;
 }
 
-/* Les trois dates ensemble, sur leur propre rangée, chacune à la largeur d'une
-   date : étirées sur la popup, elles flotteraient. */
+/* Les dates forment un groupe pour les lecteurs d'écran, sans quitter la
+   grille : `subgrid` les pose sur les colonnes de l'en-tête. */
 .dates {
     display: grid;
-    flex: 1 1 100%;
-    gap: var(--space-md);
-    grid-template-columns: repeat(3, minmax(0, 12rem));
+    grid-column: 1 / -1;
+    grid-template-columns: subgrid;
+    align-items: start;
+}
+
+.dates > * {
+    grid-column: span 2;
 }
 
 @container invoicing (max-width: 560px) {
-    .dates {
-        gap: var(--space-sm) var(--space-md);
+    .headerForm {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+        row-gap: var(--space-sm);
     }
 
-    .datePerformed {
+    .fieldClient,
+    .fieldSubject,
+    .fieldRefAlone,
+    .dates > .datePerformed {
         grid-column: 1 / -1;
+    }
+
+    .dates {
+        row-gap: var(--space-sm);
+    }
+
+    .dates > *,
+    .fieldPercent,
+    .fieldRef {
+        grid-column: span 1;
     }
 }
 
 .optional {
     color: var(--text-muted);
-    font-size: 0.8rem;
 }
 
 .fieldError {
@@ -748,8 +783,12 @@
     font-size: 0.8rem;
 }
 
-.fieldPercent {
-    flex: 0 1 11rem;
+/* Le « + » du carnet, de la hauteur et du cadre du sélecteur qu'il complète. */
+.pickerAdd {
+    flex: none;
+    width: calc(2.25rem + 2px);
+    height: calc(2.25rem + 2px);
+    padding: 0;
 }
 
 .readHeader {
@@ -812,6 +851,21 @@
 .table td:not(:first-child) {
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
+}
+
+.table .num {
+    text-align: right;
+}
+
+/* Les bords du tableau tombent sur ceux du reste de la fiche. */
+.table th:first-child,
+.table td:first-child {
+    padding-left: 0;
+}
+
+.table th:last-child,
+.table td:last-child {
+    padding-right: 0;
 }
 
 .tableDetail {
@@ -1228,11 +1282,44 @@
     min-width: 0;
 }
 
+.back {
+    flex: none;
+}
+
 /* À l'étroit, le retour garde sa flèche, son nom passe à l'infobulle ; le titre
-   descend d'un cran, l'objet sous le numéro. */
+   descend d'un cran, l'objet sous le numéro. Une fiche se range alors en deux
+   rangées : le retour et les gestes en haut, l'identité dessous sur toute la
+   largeur. */
 @container invoicing (max-width: 560px) {
     .backLabel {
         display: none;
+    }
+
+    .sheetHeader {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        grid-template-areas:
+            'back  actions'
+            'ident ident';
+        align-items: center;
+        gap: var(--space-sm);
+    }
+
+    .sheetHeader .detailHead {
+        display: contents;
+    }
+
+    .sheetHeader .back {
+        grid-area: back;
+    }
+
+    .sheetHeader .ident {
+        grid-area: ident;
+    }
+
+    .sheetHeader .actions {
+        grid-area: actions;
+        justify-content: flex-end;
     }
 
     .detailHead {
@@ -1247,6 +1334,19 @@
     .headingSoft {
         display: block;
         font-size: 0.95rem;
+    }
+
+    .headingSep,
+    .wideOnly {
+        display: none;
+    }
+
+    .sectionHint.editorHint {
+        display: none;
+    }
+
+    .editorActions > * {
+        flex: 1 1 auto;
     }
 
     .sectionHint {
@@ -1426,12 +1526,6 @@
     }
 }
 
-.sheetContact {
-    margin: 0;
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-}
-
 .section {
     display: flex;
     flex-direction: column;
@@ -1459,7 +1553,29 @@
 .sectionActions {
     display: flex;
     align-items: center;
-    gap: var(--space-sm);
+    gap: var(--space-md);
+}
+
+.seeAll {
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--accent);
+    font: inherit;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.seeAll:hover {
+    text-decoration: underline;
+}
+
+/* L'astuce de l'éditeur se range au bout de la ligne de titre. */
+.sectionHint.editorHint {
+    flex: none;
+    margin-left: auto;
 }
 
 .moreRow {

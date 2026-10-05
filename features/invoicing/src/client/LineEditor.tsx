@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Button,
-    FeatureSettingsButton,
     SearchSelect,
     TextInput,
     randomUuid,
@@ -285,18 +284,34 @@ export default function LineEditor(props: LineEditorProps) {
     };
 
     const broken = drafts.filter(isBroken).length;
+    const exempt = props.vatRegime === 'exempt';
 
     return (
-        <div className={styles.editor}>
-            <div className={styles.lineHead} aria-hidden='true'>
-                <span className={styles.headLabel}>Désignation</span>
-                <span className={styles.headNum}>Qté</span>
-                <span className={styles.headText}>Unité</span>
-                <span className={styles.headNum}>Prix unitaire</span>
-                <span className={styles.headText}>TVA</span>
-                <span className={styles.headNum}>Total HT</span>
-                <span />
-            </div>
+        <section className={`${styles.editor} ${exempt ? styles.editorExempt : ''}`}>
+            <header className={styles.sectionHead}>
+                <h3 className={styles.sectionTitle}>Prestations</h3>
+                {canWrite && (
+                    <span className={`${styles.sectionHint} ${styles.editorHint}`}>
+                        Entrée passe à la ligne suivante, Alt et les flèches déplacent une ligne.
+                    </span>
+                )}
+            </header>
+
+            {drafts.length === 0 ? (
+                <p className={styles.editorEmpty}>
+                    Aucune ligne pour l’instant : ajoutez ce que vous facturez, une prestation par ligne.
+                </p>
+            ) : (
+                <div className={styles.lineHead} aria-hidden='true'>
+                    <span className={styles.headLabel}>Désignation</span>
+                    <span className={styles.headNum}>Qté</span>
+                    <span className={styles.headText}>Unité</span>
+                    <span className={styles.headNum}>Prix unitaire HT</span>
+                    {!exempt && <span className={styles.headText}>TVA</span>}
+                    <span className={styles.headNum}>Total HT</span>
+                    <span />
+                </div>
+            )}
 
             <ol className={styles.lines} ref={listRef}>
                 {drafts.map((draft, index) => {
@@ -385,23 +400,9 @@ export default function LineEditor(props: LineEditorProps) {
                                         />
                                     </div>
 
-                                    {props.vatRegime === 'exempt' ? (
-                                        // Un déroulant désactivé sur « 0 % » aurait l'air d'une
-                                        // panne : en franchise, c'est un fait, pas un choix.
-                                        // Le lien mène là où ce fait se change, puisque c'est
-                                        // ici qu'on s'aperçoit qu'il ne convient pas.
-                                        <span className={styles.cellVatOff}>
-                                            Sans TVA
-                                            {canWrite && (
-                                                <FeatureSettingsButton
-                                                    scope={{ kind: 'feature', feature: 'invoicing' }}
-                                                    initialSection='taxes'
-                                                    variant='link'
-                                                    label='Définir'
-                                                />
-                                            )}
-                                        </span>
-                                    ) : (
+                                    {/* En franchise, aucune ligne ne porte de taux : la colonne
+                                        disparaît, et le bandeau du bas dit le régime. */}
+                                    {!exempt && (
                                         <div className={styles.cellVat}>
                                             <span className={styles.cellCaption} aria-hidden='true'>
                                                 TVA
@@ -462,10 +463,6 @@ export default function LineEditor(props: LineEditorProps) {
                     >
                         Ajouter un commentaire
                     </Button>
-                    <p className={styles.editorHint}>
-                        Entrée passe à la ligne suivante, et en crée une à la fin. Alt et les flèches déplacent une
-                        ligne.
-                    </p>
                 </div>
             )}
 
@@ -475,6 +472,6 @@ export default function LineEditor(props: LineEditorProps) {
                     désignation ni montant lisible, le document ne peut pas être émis.
                 </p>
             )}
-        </div>
+        </section>
     );
 }

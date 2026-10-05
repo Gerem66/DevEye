@@ -13,13 +13,15 @@ export interface DocumentRowProps {
     currency: string;
     /** Le montant à droite : le total, ou ce qui reste dû quand c'est ça qui presse. */
     amount?: 'gross' | 'remaining';
+    /** Faux sur la fiche du client : son nom y serait répété sur chaque rangée. */
+    showClient?: boolean;
     onOpen(): void;
 }
 
-export default function DocumentRow({ doc, currency, amount = 'gross', onOpen }: DocumentRowProps) {
+export default function DocumentRow({ doc, currency, amount = 'gross', showClient = true, onOpen }: DocumentRowProps) {
     const note = deadlineNote(doc.kind, doc.displayStatus, doc.dueOn, doc.validUntil);
     const meta = [
-        doc.clientName.length > 0 ? doc.clientName : 'Sans client',
+        showClient ? (doc.clientName.length > 0 ? doc.clientName : 'Sans client') : null,
         doc.issuedOn !== null ? formatDateShort(doc.issuedOn) : 'à rédiger',
         note
     ]

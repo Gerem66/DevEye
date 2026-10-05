@@ -24,10 +24,20 @@ export default function LineTable({ lines, currency, withVat }: LineTableProps) 
                 <thead>
                     <tr>
                         <th scope='col'>Désignation</th>
-                        <th scope='col'>Qté</th>
-                        <th scope='col'>Prix unitaire</th>
-                        {withVat && <th scope='col'>TVA</th>}
-                        <th scope='col'>Total HT</th>
+                        <th scope='col' className={styles.num}>
+                            Qté
+                        </th>
+                        <th scope='col' className={styles.num}>
+                            Prix unitaire
+                        </th>
+                        {withVat && (
+                            <th scope='col' className={styles.num}>
+                                TVA
+                            </th>
+                        )}
+                        <th scope='col' className={styles.num}>
+                            Total HT
+                        </th>
                     </tr>
                 </thead>
                 <tbody>
@@ -44,12 +54,18 @@ export default function LineTable({ lines, currency, withVat }: LineTableProps) 
                                         <span className={styles.tableDetail}>{line.description}</span>
                                     )}
                                 </th>
-                                <td data-label='Qté'>
+                                <td data-label='Qté' className={styles.num}>
                                     {quantityToInput(line.quantityMilli)} {unitLabel(line.unit, line.quantityMilli)}
                                 </td>
-                                <td data-label='Prix unitaire'>{formatMoney(line.unitPrice, currency)}</td>
-                                {withVat && <td data-label='TVA'>{formatVatRate(line.vatRateBp)}</td>}
-                                <td data-label='Total HT' className={styles.tableTotal}>
+                                <td data-label='Prix unitaire' className={styles.num}>
+                                    {formatMoney(line.unitPrice, currency)}
+                                </td>
+                                {withVat && (
+                                    <td data-label='TVA' className={styles.num}>
+                                        {formatVatRate(line.vatRateBp)}
+                                    </td>
+                                )}
+                                <td data-label='Total HT' className={`${styles.num} ${styles.tableTotal}`}>
                                     {formatMoney(line.netCents, currency)}
                                 </td>
                             </tr>
