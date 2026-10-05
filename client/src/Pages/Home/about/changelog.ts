@@ -12,6 +12,35 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: readonly ChangelogEntry[] = [
     {
+        version: '0.24.0',
+        date: '2026-10-06',
+        changes: [
+            {
+                kind: 'added',
+                text: 'Thème clair, choisi par appareil dans le Profil, ou qui suit le lever et le coucher du soleil'
+            },
+            {
+                kind: 'added',
+                text: 'Facturation : acompte annoncé sur un devis, et documents à dupliquer, archiver ou copier vers un autre espace'
+            },
+            {
+                kind: 'improved',
+                text: 'Facturation : pages repensées, mobile compris, désignations sur plusieurs lignes et total juste des brouillons'
+            },
+            { kind: 'added', text: 'Mail : images distantes autorisées pour toute une boîte' },
+            { kind: 'added', text: 'Appareils : démarrage automatique de l’agent réglable depuis sa popup' },
+            { kind: 'added', text: 'Administration : page Services externes, avec l’état de chaque dépendance' },
+            {
+                kind: 'improved',
+                text: 'CloudSync : progression des points de restauration, un point par jour gardé 30 jours par défaut'
+            },
+            {
+                kind: 'improved',
+                text: 'Rendez-vous : ligne de l’heure présente, et survol qui relie les heures à leurs rendez-vous'
+            }
+        ]
+    },
+    {
         version: '0.23.1',
         date: '2026-10-05',
         changes: [
@@ -35,7 +64,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
             },
             {
                 kind: 'added',
-                text: 'CloudSync : une ligne par fichier en erreur dans le Journal, à réessayer, exclure, ignorer ou supprimer partout'
+                text: 'CloudSync : une ligne par fichier en erreur dans le Journal, à réessayer, exclure ou ignorer, et pourcentage de synchronisation sur les widgets'
             },
             {
                 kind: 'improved',
@@ -44,10 +73,6 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
             {
                 kind: 'improved',
                 text: 'Barre du haut : les widgets des modules ouvrent leur fonctionnalité, leur popup s’anime depuis le widget, et les modèles d’accueil posent aussi leurs widgets'
-            },
-            {
-                kind: 'improved',
-                text: 'CloudSync : pourcentage de synchronisation sur les widgets et les cartes de partage'
             },
             {
                 kind: 'improved',
@@ -88,33 +113,14 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
         version: '0.22.0',
         date: '2026-10-03',
         changes: [
-            {
-                kind: 'added',
-                text: 'CloudSync : partages chiffrés de bout en bout, dont le serveur ne peut pas lire le contenu'
-            },
-            {
-                kind: 'added',
-                text: 'CloudSync : le Journal distingue les erreurs à gérer des avis, et les règle quand le fichier passe'
-            },
-            {
-                kind: 'fixed',
-                text: 'CloudSync : reprise des gros fichiers sans relecture, et l’appareil ne passe plus hors ligne pendant'
-            },
+            { kind: 'added', text: 'CloudSync : partages chiffrés de bout en bout, illisibles par le serveur' },
             {
                 kind: 'improved',
-                text: 'CloudSync : le scan dit ce qu’il écarte, la corbeille refuse un fichier modifié depuis, et chaque erreur dit sa cause'
+                text: 'CloudSync : Journal à deux niveaux, erreurs qui disent leur cause, reprise des gros fichiers sans que l’appareil passe hors ligne, état affiché juste'
             },
             {
                 kind: 'fixed',
-                text: 'CloudSync : l’état affiché suit la phase réelle, sans faux « synchronisé », et deux partages qui s’emboîtent sont refusés'
-            },
-            {
-                kind: 'fixed',
-                text: 'Appareils : les logs d’un conteneur ne se vident plus sous un filtre de niveau, et un journal vide dit quels filtres le restreignent'
-            },
-            {
-                kind: 'fixed',
-                text: 'Appareils : les mises à jour Flatpak s’appliquent aussi quand l’agent tourne en service'
+                text: 'Appareils : logs de conteneur qui ne se vident plus sous un filtre, et mises à jour Flatpak avec l’agent en service'
             }
         ]
     },
