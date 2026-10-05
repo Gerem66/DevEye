@@ -413,8 +413,9 @@ Statuts (`devices.status`) : `pending`, `active`, `pending_deletion`,
   `remote-ls --updates` compare des identifiants de commit qu'un dépôt OCI ne
   fait pas correspondre.
 - **« Agent »** (`AgentPanel.tsx`) : l'état (version, compte, privilèges,
-  démarrage, transport, politique locale), le démarrage automatique, l'élévation
-  en service système ou la rétrogradation, la mise à jour, le redémarrage,
+  service, démarrage automatique, transport, politique locale), le démarrage
+  automatique, armé ou désarmé quels que soient les privilèges, l'élévation en
+  service système ou la rétrogradation, la mise à jour, le redémarrage,
   l'interruption, l'approbation d'un réappairage et la révocation. Démarrage
   auto, élévation, rétrogradation et mise à jour relèvent de l'administrateur
   global (`access.admin` des commandes `agent.*`) ; l'entrée le dit. Approuver,

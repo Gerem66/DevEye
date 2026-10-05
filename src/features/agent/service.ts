@@ -1,23 +1,31 @@
 import { agentDropPrivileges, agentElevate, agentSetAutostart } from '@deveye/types';
 
+import type { DeviceRow } from '@deveye/types';
+
 import { authorizeReachableDevice, toDevice } from '@/agent/authorize';
+import { parseDeviceReport } from '@/agent/mappers';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
 
 /**
- * The exact command to run on the device when the agent can't pop an OS auth
- * prompt itself (no interactive session). Deterministic per platform; shown by the
- * UI as the manual fallback for `elevate`/`drop`.
+ * La commande à lancer sur la machine quand l'agent ne peut pas agir seul : pas
+ * de session pour la fenêtre d'autorisation, ou un service système sans root.
+ * Le service recréé garde le démarrage automatique du rapport le plus récent.
  */
-function manualCommand(platform: string, action: 'elevate' | 'drop'): string {
-    const windows = platform === 'windows';
-    if (action === 'elevate') {
-        return windows
-            ? 'deveye-agent service install --system   (à lancer en tant qu’administrateur)'
-            : 'sudo deveye-agent service install --system';
+function manualCommand(row: DeviceRow, action: 'elevate' | 'drop' | 'enable' | 'disable'): string {
+    const windows = row.platform === 'windows';
+    const admin = (cmd: string) => (windows ? `${cmd}   (à lancer en tant qu’administrateur)` : `sudo ${cmd}`);
+    const keep = parseDeviceReport(row.report_json)?.agent?.autostart === false ? ' --no-autostart' : '';
+    switch (action) {
+        case 'enable':
+        case 'disable':
+            return admin(`deveye-agent service ${action}`);
+        case 'elevate':
+            return admin(`deveye-agent service install --system${keep}`);
+        case 'drop':
+            return windows
+                ? `deveye-agent service uninstall puis deveye-agent service install --user${keep}   (administrateur)`
+                : `sudo deveye-agent service uninstall && deveye-agent service install --user${keep}`;
     }
-    return windows
-        ? 'deveye-agent service uninstall puis deveye-agent service install --user   (administrateur)'
-        : 'sudo deveye-agent service uninstall && deveye-agent service install --user';
 }
 
 export const agentSetAutostartFeature: FeatureDefinition<
@@ -31,7 +39,7 @@ export const agentSetAutostartFeature: FeatureDefinition<
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
         const pushed = ctx.monitor?.requestService(row.id, {
-            action: input.enabled ? 'install-user' : 'uninstall-user'
+            action: input.enabled ? 'autostart-on' : 'autostart-off'
         });
         if (!pushed) throw new FeatureError('conflict', 'Agent hors ligne');
         ctx.audit({
@@ -39,7 +47,10 @@ export const agentSetAutostartFeature: FeatureDefinition<
             description: `Démarrage automatique ${input.enabled ? 'activé' : 'désactivé'} : « ${row.name} »`,
             metadata: { deviceId: row.id, ownerId: row.owner_id, enabled: input.enabled }
         });
-        return { device: await toDevice(ctx, row) };
+        return {
+            device: await toDevice(ctx, row),
+            manualCommand: manualCommand(row, input.enabled ? 'enable' : 'disable')
+        };
     }
 });
 
@@ -61,7 +72,7 @@ export const agentElevateFeature: FeatureDefinition<
             description: `Élévation root demandée : « ${row.name} »`,
             metadata: { deviceId: row.id, ownerId: row.owner_id }
         });
-        return { device: await toDevice(ctx, row), manualCommand: manualCommand(row.platform, 'elevate') };
+        return { device: await toDevice(ctx, row), manualCommand: manualCommand(row, 'elevate') };
     }
 });
 
@@ -83,6 +94,6 @@ export const agentDropPrivilegesFeature: FeatureDefinition<
             description: `Rétrogradation des privilèges demandée : « ${row.name} »`,
             metadata: { deviceId: row.id, ownerId: row.owner_id }
         });
-        return { device: await toDevice(ctx, row), manualCommand: manualCommand(row.platform, 'drop') };
+        return { device: await toDevice(ctx, row), manualCommand: manualCommand(row, 'drop') };
     }
 });

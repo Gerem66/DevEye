@@ -148,6 +148,9 @@ pub struct AgentInfo {
     /// Installed persistence scope: `none` | `user` | `system`.
     #[serde(rename = "serviceScope")]
     pub service_scope: &'static str,
+    /// The installed service is armed for the next boot (or login). `false`
+    /// without a service.
+    pub autostart: bool,
     /// `true` when launched under a service manager (so a self-update just exits).
     pub managed: bool,
     /// Ce que cet agent sait relever, déclaré par lui-même : distingue « la
@@ -1098,8 +1101,8 @@ pub enum ServerMessage {
         sha256: String,
         signature: String,
     },
-    /// Persistence/privilege change: `action` is one of `install-user` |
-    /// `uninstall-user` | `elevate` | `drop`.
+    /// Persistence/privilege change: `action` is one of `autostart-on` |
+    /// `autostart-off` | `elevate` | `drop`.
     #[serde(rename = "agent.service")]
     Service { action: String },
     /// System power action: `action` is one of `shutdown` | `reboot` | `suspend` |

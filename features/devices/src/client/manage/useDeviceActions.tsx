@@ -163,56 +163,20 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
             onConfirm: () => void purge(target.id)
         });
 
-    const setAutostart = async (id: string, enabled: boolean) => {
-        setActionError(null);
-        showNote(null);
-        setServiceBusy({ id, kind: 'autostart' });
-        // Abonné avant d'envoyer (voir `awaitServiceResult`).
-        const verdict = awaitServiceResult(id);
-        try {
-            await agent.send('agent.setAutostart', { deviceId: id, enabled });
-        } catch (e) {
-            verdict.cancel();
-            setServiceBusy(null);
-            const message = e instanceof Error ? e.message : 'Action impossible.';
-            setActionError(message);
-            showNote({ id, tone: 'error', message });
-            return;
-        }
-        const result = await verdict.result;
-        if (result === null) {
-            showNote({
-                id,
-                tone: 'error',
-                message: 'L’agent n’a pas répondu ; la modification n’est pas confirmée.'
-            });
-        } else if (!result.ok) {
-            showNote({ id, tone: 'error', message: result.error ?? 'L’appareil a refusé la modification.' });
-        } else {
-            showNote({
-                id,
-                tone: 'ok',
-                message: enabled
-                    ? 'Démarrage auto activé : l’agent est relancé sous le service.'
-                    : 'Démarrage auto désactivé.'
-            });
-        }
-        // Après une activation l'agent redémarre sous le service : on lui laisse
-        // le temps de se reconnecter avant de relire sa portée.
-        await settle(3000);
-        setServiceBusy(null);
-    };
-
-    // The guided fallback command: if no OS prompt appears on the device, the
-    // user runs this.
-    const showManualCommand = (title: string, command: string) =>
+    /**
+     * La commande de repli, à lancer sur l'appareil. `prompted` : l'agent a pu
+     * tenter une fenêtre d'autorisation, qui a pu s'ouvrir sans réponse.
+     */
+    const showManualCommand = (title: string, command: string, prompted: boolean) =>
         void openInfo({
             title,
             width: 520,
             body: (
                 <div className={styles.manualCommandBox}>
                     <p>
-                        Une fenêtre d’autorisation devrait apparaître sur l’appareil. Si rien ne s’affiche, exécutez-y :
+                        {prompted
+                            ? 'Une fenêtre d’autorisation devrait apparaître sur l’appareil. Si rien ne s’affiche, exécutez-y :'
+                            : 'L’agent n’a pas les droits pour régler son service système. Exécutez sur l’appareil :'}
                     </p>
                     <code className={styles.manualCommand}>{command}</code>
                 </div>
@@ -220,65 +184,71 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
         });
 
     /**
-     * Elevate / drop privileges, like the autostart toggle: a loader runs until
-     * the agent has said what happened. C'est l'agent qui tranche : il annonce
-     * `needsManualCommand` quand aucune session interactive ne lui permet
-     * d'ouvrir la fenêtre d'autorisation.
+     * Un changement du service de l'agent (démarrage automatique, privilèges) :
+     * le chargement court jusqu'à ce que l'agent dise ce qui s'est passé. C'est
+     * lui qui tranche : il annonce `needsManualCommand` quand il ne peut pas
+     * agir seul, et la commande à lancer sur l'appareil s'affiche.
      */
-    const changePrivilege = async (
+    const changeService = async (
         id: string,
-        command: 'agent.elevate' | 'agent.dropPrivileges',
-        title: string,
-        successLabel: string,
-        errorLabel: string
+        kind: 'autostart' | 'privilege',
+        send: () => Promise<{ manualCommand: string }>,
+        labels: { title: string; success: string; error: string }
     ) => {
         setActionError(null);
         showNote(null);
-        setServiceBusy({ id, kind: 'privilege' });
+        setServiceBusy({ id, kind });
         const verdict = awaitServiceResult(id);
         let manual: string;
         try {
-            manual = (await agent.send(command, { deviceId: id })).manualCommand;
+            manual = (await send()).manualCommand;
         } catch (e) {
             verdict.cancel();
             setServiceBusy(null);
-            const message = e instanceof Error ? e.message : errorLabel;
+            const message = e instanceof Error ? e.message : labels.error;
             setActionError(message);
             showNote({ id, tone: 'error', message });
             return;
         }
         const result = await verdict.result;
         if (result === null) {
-            showNote({ id, tone: 'error', message: "L’agent n’a pas répondu ; rien n'est confirmé." });
+            showNote({ id, tone: 'error', message: 'L’agent n’a pas répondu ; rien n’est confirmé.' });
         } else if (result.needsManualCommand) {
-            showNote({ id, tone: 'error', message: 'À autoriser sur l’appareil — commande affichée.' });
-            showManualCommand(title, manual);
+            showNote({ id, tone: 'error', message: 'À faire sur l’appareil : commande affichée.' });
+            showManualCommand(labels.title, manual, kind === 'privilege');
         } else if (!result.ok) {
-            showNote({ id, tone: 'error', message: result.error ?? errorLabel });
+            showNote({ id, tone: 'error', message: result.error ?? labels.error });
         } else {
-            showNote({ id, tone: 'ok', message: successLabel });
+            showNote({ id, tone: 'ok', message: labels.success });
         }
+        // L'agent peut passer la main à son service : on lui laisse le temps de
+        // se reconnecter avant de relire son état.
         await settle(4000);
         setServiceBusy(null);
     };
 
+    const setAutostart = (id: string, enabled: boolean) =>
+        changeService(id, 'autostart', () => agent.send('agent.setAutostart', { deviceId: id, enabled }), {
+            title: enabled ? 'Activer le démarrage automatique' : 'Désactiver le démarrage automatique',
+            success: enabled
+                ? 'Démarrage automatique activé.'
+                : 'Démarrage automatique désactivé : l’agent tourne jusqu’au prochain redémarrage.',
+            error: 'Modification impossible.'
+        });
+
     const elevateDevice = (id: string) =>
-        changePrivilege(
-            id,
-            'agent.elevate',
-            'Élever l’agent en root',
-            'Agent élevé en service système (root).',
-            'Élévation impossible.'
-        );
+        changeService(id, 'privilege', () => agent.send('agent.elevate', { deviceId: id }), {
+            title: 'Élever l’agent en root',
+            success: 'Agent élevé en service système (root).',
+            error: 'Élévation impossible.'
+        });
 
     const dropPrivilegesDevice = (id: string) =>
-        changePrivilege(
-            id,
-            'agent.dropPrivileges',
-            'Rétrograder l’agent',
-            'Agent rétrogradé en service utilisateur.',
-            'Rétrogradation impossible.'
-        );
+        changeService(id, 'privilege', () => agent.send('agent.dropPrivileges', { deviceId: id }), {
+            title: 'Rétrograder l’agent',
+            success: 'Agent rétrogradé en service utilisateur.',
+            error: 'Rétrogradation impossible.'
+        });
 
     /** Stop the agent process (confirmed via the explanatory dialog). */
     const confirmStopAgent = async () => {

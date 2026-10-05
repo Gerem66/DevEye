@@ -355,10 +355,12 @@ fn macos_hardware_ports() -> HashMap<String, &'static str> {
 /// The agent's runtime identity: privilege level + the account it runs as. Used
 /// by the UI to explain why some best-effort probes are limited without root.
 fn agent_info() -> AgentInfo {
+    let scope = crate::service::installed_scope();
     AgentInfo {
         privileged: is_privileged(),
         user: current_user(),
-        service_scope: crate::service::installed_scope().as_wire(),
+        service_scope: scope.as_wire(),
+        autostart: crate::service::autostart_enabled(scope),
         managed: crate::managed(),
         probes: PROBES.to_vec(),
         policy: crate::policy().wire(),

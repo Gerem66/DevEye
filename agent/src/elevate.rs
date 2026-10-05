@@ -104,9 +104,15 @@ fn applescript_escape(s: &str) -> String {
     s.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
+/// Le service système reprend le démarrage automatique du service actuel :
+/// les privilèges et le démarrage se règlent séparément.
 fn run_elevated_install() -> Result<()> {
     let config = enrolled_config();
-    run_elevated(&["service", "install", "--system", "--config", &config])
+    let mut args = vec!["service", "install", "--system", "--config", &config];
+    if !service::autostart_enabled(service::installed_scope()) {
+        args.push("--no-autostart");
+    }
+    run_elevated(&args)
 }
 
 /// Run this executable with `args` as root/administrator, behind the OS

@@ -153,11 +153,11 @@ fn is_root() -> bool {
 ///
 /// `config` grave un fichier d'enrôlement précis : l'appelant qui élève l'agent
 /// le connaît, le processus élevé ne peut que le deviner ([`invoking_config_path`]).
-pub fn install(system: bool, config: Option<&str>) -> Result<()> {
+pub fn install(system: bool, config: Option<&str>, autostart: bool) -> Result<()> {
     if system {
         require_privilege()?;
     }
-    install_impl(system, config)?;
+    install_impl(system, config, autostart)?;
     let scope = if system {
         crate::tray::autostart::Scope::System
     } else {
@@ -223,6 +223,25 @@ pub fn uninstall_user() -> Result<()> {
 /// process was started).
 pub fn installed_scope() -> ServiceScope {
     installed_scope_impl()
+}
+
+/// Le service installé repartira-t-il au prochain démarrage (ou à la prochaine
+/// ouverture de session) ? Toujours `false` sans service.
+pub fn autostart_enabled(scope: ServiceScope) -> bool {
+    match scope {
+        ServiceScope::None => false,
+        ServiceScope::User => autostart_enabled_impl(false),
+        ServiceScope::System => autostart_enabled_impl(true),
+    }
+}
+
+/// Arme ou désarme le service installé pour les démarrages suivants, sans le
+/// démarrer ni l'arrêter : l'agent en marche continue de tourner.
+pub fn set_autostart(system: bool, on: bool) -> Result<()> {
+    if system {
+        require_privilege()?;
+    }
+    set_autostart_impl(system, on)
 }
 
 #[cfg(unix)]
@@ -335,7 +354,7 @@ mod imp {
             .output();
     }
 
-    pub fn install_impl(system: bool, config: Option<&str>) -> Result<()> {
+    pub fn install_impl(system: bool, config: Option<&str>, autostart: bool) -> Result<()> {
         // Avant le ménage : `invoking_config_path` lit l'environnement, que la
         // désinstallation peut faire changer en nous arrêtant.
         let cfg = unit_config_path(config);
@@ -347,28 +366,48 @@ mod imp {
         }
         std::fs::write(&path, plist_xml(&cfg)?)
             .with_context(|| format!("writing {}", path.display()))?;
-        // Lève un éventuel « désactivé » hérité d'un `unload -w` : sans ça le
-        // travail est enregistré mais jamais lancé.
-        let _ = Command::new("launchctl")
-            .args(["enable", &service_target(system)])
-            .output();
-        Ok(())
+        // Pose l'état voulu, et lève au passage un « désactivé » hérité d'un
+        // `unload -w`.
+        set_autostart_impl(system, autostart)
+    }
+
+    /// Désactivé, un travail reste chargé s'il l'est déjà, mais ne se charge
+    /// plus : ni à l'amorçage, ni par `bootstrap`.
+    pub fn set_autostart_impl(system: bool, on: bool) -> Result<()> {
+        let verb = if on { "enable" } else { "disable" };
+        run_checked(
+            Command::new("launchctl").args([verb, &service_target(system)]),
+            &format!("launchctl {verb}"),
+        )
+    }
+
+    pub fn autostart_enabled_impl(system: bool) -> bool {
+        crate::report::run("launchctl", &["print-disabled", &domain(system)])
+            .is_some_and(|listing| !launchd_disabled(&listing, LABEL))
     }
 
     /// `bootstrap` enregistre le travail dans le domaine ; `RunAtLoad` le lance
-    /// dans la foulée. Repli sur `load -w` pour les macOS d'avant `bootstrap`.
+    /// dans la foulée. Repli sur `load` pour les macOS d'avant `bootstrap`. Un
+    /// travail désarmé est réarmé le temps du chargement, puis désarmé à nouveau.
     pub fn start_impl(system: bool) -> Result<()> {
         let path = if system { system_plist() } else { user_plist() };
+        let armed = autostart_enabled_impl(system);
+        if !armed {
+            set_autostart_impl(system, true)?;
+        }
         bootout(system);
         let mut cmd = Command::new("launchctl");
         cmd.arg("bootstrap").arg(domain(system)).arg(&path);
-        if run_checked(&mut cmd, "launchctl bootstrap").is_ok() {
-            return Ok(());
+        let started = run_checked(&mut cmd, "launchctl bootstrap").or_else(|_| {
+            run_checked(
+                Command::new("launchctl").arg("load").arg(&path),
+                "launchctl load",
+            )
+        });
+        if !armed {
+            set_autostart_impl(system, false)?;
         }
-        run_checked(
-            Command::new("launchctl").arg("load").arg("-w").arg(&path),
-            "launchctl load",
-        )
+        started
     }
 
     /// A per-user agent lives in a login session: over SSH, without one,
@@ -606,7 +645,7 @@ mod imp {
         Ok(true)
     }
 
-    pub fn install_impl(system: bool, config: Option<&str>) -> Result<()> {
+    pub fn install_impl(system: bool, config: Option<&str>, autostart: bool) -> Result<()> {
         // Le chemin de config avant la désinstallation : elle peut arrêter
         // l'unité qui nous supervise, et `invoking_config_path` lit l'environnement.
         let cfg = unit_config_path(config);
@@ -620,30 +659,35 @@ mod imp {
         }
         std::fs::write(&path, unit_text(system, &target_exe, &cfg))
             .with_context(|| format!("writing {}", path.display()))?;
+        systemctl_bare(system, "daemon-reload")?;
         // `enable` sans `--now` : l'unité est armée pour les amorçages suivants,
         // et c'est le passage de relais qui la démarre, une fois le verrou
         // d'instance unique libéré (voir `install`).
-        if system {
-            run_checked(
-                Command::new("systemctl").arg("daemon-reload"),
-                "systemctl daemon-reload",
-            )?;
-            run_checked(
-                Command::new("systemctl").args(["enable", UNIT]),
-                "systemctl enable",
-            )?;
-        } else {
-            run_checked(
-                Command::new("systemctl").args(["--user", "daemon-reload"]),
-                "systemctl --user daemon-reload",
-            )?;
-            run_checked(
-                Command::new("systemctl").args(["--user", "enable", UNIT]),
-                "systemctl --user enable",
-            )?;
+        if autostart {
+            set_autostart_impl(system, true)?;
+        }
+        Ok(())
+    }
+
+    /// Une unité utilisateur ne démarre avec la machine que sous « linger ».
+    /// Le désarmement le laisse en place : l'éteindre arrêterait le gestionnaire
+    /// de l'utilisateur, et l'agent avec lui, hors de toute session ouverte.
+    pub fn set_autostart_impl(system: bool, on: bool) -> Result<()> {
+        systemctl(system, if on { "enable" } else { "disable" })?;
+        if on && !system {
             ensure_linger()?;
         }
         Ok(())
+    }
+
+    pub fn autostart_enabled_impl(system: bool) -> bool {
+        let mut cmd = Command::new("systemctl");
+        if !system {
+            cmd.arg("--user");
+        }
+        cmd.args(["is-enabled", "--quiet", UNIT])
+            .output()
+            .is_ok_and(|o| o.status.success())
     }
 
     pub fn start_impl(system: bool) -> Result<()> {
@@ -666,6 +710,15 @@ mod imp {
             cmd.arg("--user");
         }
         cmd.args([verb, UNIT]);
+        run_checked(&mut cmd, &format!("systemctl {verb}"))
+    }
+
+    fn systemctl_bare(system: bool, verb: &str) -> Result<()> {
+        let mut cmd = Command::new("systemctl");
+        if !system {
+            cmd.arg("--user");
+        }
+        cmd.arg(verb);
         run_checked(&mut cmd, &format!("systemctl {verb}"))
     }
 
@@ -820,7 +873,7 @@ mod imp {
         Ok(format!("\"{}\" run --managed --config \"{}\"", exe()?, cfg))
     }
 
-    pub fn install_impl(system: bool, config: Option<&str>) -> Result<()> {
+    pub fn install_impl(system: bool, config: Option<&str>, autostart: bool) -> Result<()> {
         let cfg = unit_config_path(config);
         let _ = uninstall_impl();
         let tr = task_run(&cfg)?;
@@ -833,16 +886,48 @@ mod imp {
             cmd.args(["/SC", "ONLOGON", "/RL", "LIMITED"]);
         }
         run_checked(&mut cmd, "schtasks /Create")?;
+        if !autostart {
+            set_autostart_impl(system, false)?;
+        }
         Ok(())
     }
 
-    /// `/Create` n'exécute rien : la tâche attend son déclencheur. Le passage de
-    /// relais la lance explicitement.
-    pub fn start_impl(_system: bool) -> Result<()> {
+    /// Désactivée, la tâche ne part plus sur son déclencheur ; l'instance en
+    /// cours n'est pas arrêtée.
+    pub fn set_autostart_impl(_system: bool, on: bool) -> Result<()> {
+        let flag = if on { "/ENABLE" } else { "/DISABLE" };
         run_checked(
+            Command::new("schtasks").args(["/Change", "/TN", TASK, flag]),
+            &format!("schtasks /Change {flag}"),
+        )
+    }
+
+    pub fn autostart_enabled_impl(_system: bool) -> bool {
+        match Command::new("schtasks")
+            .args(["/Query", "/TN", TASK, "/XML"])
+            .output()
+        {
+            Ok(o) if o.status.success() => task_xml_enabled(&decode_task_xml(&o.stdout)),
+            _ => false,
+        }
+    }
+
+    /// `/Create` n'exécute rien : la tâche attend son déclencheur. Le passage de
+    /// relais la lance explicitement. `/Run` refuse une tâche désactivée : elle
+    /// est réactivée le temps du lancement.
+    pub fn start_impl(system: bool) -> Result<()> {
+        let armed = autostart_enabled_impl(system);
+        if !armed {
+            set_autostart_impl(system, true)?;
+        }
+        let started = run_checked(
             Command::new("schtasks").args(["/Run", "/TN", TASK]),
             "schtasks /Run",
-        )
+        );
+        if !armed {
+            set_autostart_impl(system, false)?;
+        }
+        started
     }
 
     pub fn uninstall_impl() -> Result<()> {
@@ -902,9 +987,54 @@ mod imp {
 }
 
 use imp::{
-    disable_linger_impl, install_impl, installed_scope_impl, preflight_impl, restart_impl,
-    start_impl, stop_impl, uninstall_impl, uninstall_user_impl,
+    autostart_enabled_impl, disable_linger_impl, install_impl, installed_scope_impl,
+    preflight_impl, restart_impl, set_autostart_impl, start_impl, stop_impl, uninstall_impl,
+    uninstall_user_impl,
 };
+
+/// `launchctl print-disabled` liste `"<label>" => disabled` (ou `=> true` avant
+/// macOS 13) pour chaque travail désactivé du domaine.
+#[cfg(any(target_os = "macos", test))]
+fn launchd_disabled(listing: &str, label: &str) -> bool {
+    let quoted = format!("\"{label}\"");
+    listing.lines().any(|line| {
+        let line = line.trim();
+        line.starts_with(&quoted)
+            && line
+                .rsplit("=>")
+                .next()
+                .is_some_and(|v| matches!(v.trim(), "disabled" | "true"))
+    })
+}
+
+/// L'état d'une tâche d'après son XML (`schtasks /Query /XML`), qui ne dépend
+/// pas de la langue du système, contrairement à `/FO LIST`. Seul `<Settings>`
+/// compte : un déclencheur porte aussi un `<Enabled>`. Absent, il vaut `true`.
+#[cfg(any(target_os = "windows", test))]
+fn task_xml_enabled(xml: &str) -> bool {
+    let settings = xml
+        .split_once("<Settings>")
+        .and_then(|(_, rest)| rest.split_once("</Settings>"))
+        .map_or("", |(inner, _)| inner);
+    !settings.contains("<Enabled>false</Enabled>")
+}
+
+/// La sortie de `schtasks /XML` arrive en UTF-16 ou dans la page de code de la
+/// console selon les versions : un octet nul sur deux trahit la première.
+#[cfg(any(target_os = "windows", test))]
+fn decode_task_xml(bytes: &[u8]) -> String {
+    let utf16 = bytes.len() >= 2
+        && bytes.iter().skip(1).step_by(2).filter(|&&b| b == 0).count() > bytes.len() / 4;
+    if utf16 {
+        let units: Vec<u16> = bytes
+            .chunks_exact(2)
+            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .collect();
+        String::from_utf16_lossy(&units)
+    } else {
+        String::from_utf8_lossy(bytes).into_owned()
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -922,5 +1052,34 @@ mod tests {
         for guessed in [unit_config_path(None), unit_config_path(Some(""))] {
             assert!(guessed.ends_with("agent.toml"), "deviné : {guessed}");
         }
+    }
+
+    #[test]
+    fn launchd_listing_names_disabled_jobs() {
+        let listing = "disabled services = {\n\t\"com.apple.ftpd\" => disabled\n\t\"com.deveye.agent\" => enabled\n}";
+        assert!(!launchd_disabled(listing, "com.deveye.agent"));
+        assert!(launchd_disabled(listing, "com.apple.ftpd"));
+        // Avant macOS 13, `true` voulait dire désactivé.
+        assert!(launchd_disabled(
+            "\t\"com.deveye.agent\" => true",
+            "com.deveye.agent"
+        ));
+        assert!(!launchd_disabled("", "com.deveye.agent"));
+    }
+
+    #[test]
+    fn task_state_reads_settings_only() {
+        let disabled =
+            "<Task><Triggers><BootTrigger><Enabled>true</Enabled></BootTrigger></Triggers>\
+                        <Settings><Enabled>false</Enabled></Settings></Task>";
+        assert!(!task_xml_enabled(disabled));
+        let trigger_off =
+            "<Task><Triggers><LogonTrigger><Enabled>false</Enabled></LogonTrigger></Triggers>\
+                           <Settings><Hidden>false</Hidden></Settings></Task>";
+        assert!(task_xml_enabled(trigger_off));
+
+        let wide: Vec<u8> = disabled.encode_utf16().flat_map(u16::to_le_bytes).collect();
+        assert!(!task_xml_enabled(&decode_task_xml(&wide)));
+        assert_eq!(decode_task_xml(disabled.as_bytes()), disabled);
     }
 }

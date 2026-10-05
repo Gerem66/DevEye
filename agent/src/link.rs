@@ -169,7 +169,7 @@ pub fn describe(policy: &config::Policy) -> String {
 /// replaces whatever agent still runs on the old token.
 fn start_service(system: bool) -> Result<()> {
     let path = Config::path().to_string_lossy().into_owned();
-    if let Err(e) = service::install(system, Some(&path)) {
+    if let Err(e) = service::install(system, Some(&path), true) {
         // Linux per-user: the unit is in place, only the start at boot, before
         // any login, is missing (linger).
         if service::installed_scope() == ServiceScope::None {

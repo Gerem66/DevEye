@@ -328,7 +328,7 @@ mod tests {
             admit(&elevate, &mut guard, &no_elevate, NOW),
             Admission::Refused { .. }
         ));
-        let install = frame("agent.service", r#"{"action":"install-user"}"#, "n4", NOW);
+        let install = frame("agent.service", r#"{"action":"autostart-on"}"#, "n4", NOW);
         assert!(matches!(
             admit(&install, &mut guard, &no_elevate, NOW),
             Admission::Allowed

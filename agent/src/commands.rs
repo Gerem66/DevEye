@@ -141,15 +141,9 @@ where
     S::Error: std::error::Error + Send + Sync + 'static,
 {
     use crate::elevate::Outcome;
-    // Disabling autostart removes the very service that supervises us, which
-    // would terminate this process with nothing to relaunch it (see
-    // `handle_disable_autostart`).
-    if action == "uninstall-user" {
-        return handle_disable_autostart(sink, device_id).await;
-    }
-
     let result: Result<Outcome> = match action {
-        "install-user" => crate::service::install(false, None).map(|()| Outcome::Done),
+        "autostart-on" => set_autostart(true),
+        "autostart-off" => set_autostart(false),
         "elevate" => crate::elevate::elevate(),
         "drop" => crate::elevate::drop_privileges(),
         other => Err(anyhow::anyhow!("action de service inconnue : {other}")),
@@ -173,14 +167,15 @@ where
                 let _ = std::fs::remove_file(crate::config::Config::pid_path());
                 std::process::exit(0);
             }
-            if action == "install-user" {
-                // Le service est armé mais pas lancé : on lui passe la main.
+            if action == "autostart-on" && !crate::managed() {
+                // Lancés à la main, le service armé ne nous supervise pas : on
+                // lui passe la main.
                 let _ = sink.flush().await;
                 return handoff_to_service(sink, device_id).await;
             }
-            // `drop` ne nous relance pas : on pousse un rapport frais tout de
-            // suite, sans quoi la portée confirmée par l'interface n'arriverait
-            // qu'au rapport horaire suivant.
+            // Ni le désarmement ni `drop` ne nous relancent : on pousse un
+            // rapport frais tout de suite, sans quoi l'état confirmé par
+            // l'interface n'arriverait qu'au rapport horaire suivant.
             send_fresh_report(sink, device_id).await;
             let _ = sink.flush().await;
         }
@@ -198,12 +193,29 @@ where
     }
 }
 
-/// Céder la place au service qu'on vient d'installer.
+/// Arme ou désarme le service installé, sans toucher aux privilèges. Sans
+/// service, l'armement en installe un à notre mesure : système si l'agent est
+/// root, utilisateur sinon. Un service système demande root : sans lui, la
+/// commande à lancer sur la machine.
+fn set_autostart(on: bool) -> Result<crate::elevate::Outcome> {
+    use crate::elevate::Outcome;
+    use crate::service::{self, ServiceScope};
+    let privileged = crate::report::is_privileged();
+    match service::installed_scope() {
+        ServiceScope::None if on => service::install(privileged, None, true)?,
+        ServiceScope::None => {}
+        ServiceScope::System if !privileged => return Ok(Outcome::NeedsManual),
+        scope => service::set_autostart(scope == ServiceScope::System, on)?,
+    }
+    Ok(Outcome::Done)
+}
+
+/// Céder la place au service qu'on vient d'armer.
 ///
 /// L'agent en marche tient le verrou d'instance unique : démarrer le service
 /// pendant ce temps ne produirait qu'un second agent aussitôt refusé. On libère
 /// le verrou, on lance le service, on lui laisse le temps d'ouvrir sa session,
-/// puis on s'efface (l'inverse de [`handle_disable_autostart`]).
+/// puis on s'efface.
 ///
 /// Si le démarrage échoue, on reste en vie : l'autostart prendra au prochain
 /// amorçage, et la machine ne doit pas disparaître entre-temps. Un second
@@ -213,11 +225,12 @@ where
     S: SinkExt<Message> + Unpin,
     S::Error: std::error::Error + Send + Sync + 'static,
 {
+    use crate::service::{self, ServiceScope};
     crate::state::clear();
     let _ = std::fs::remove_file(crate::config::Config::pid_path());
-    match crate::service::start(false) {
+    match service::start(service::installed_scope() == ServiceScope::System) {
         Ok(()) => {
-            info!("autostart installed; handing over to the supervised agent");
+            info!("autostart armed; handing over to the supervised agent");
             let _ = sink.flush().await;
             tokio::time::sleep(Duration::from_millis(500)).await;
             std::process::exit(0);
@@ -229,68 +242,13 @@ where
             let _ = send_service_result(
                 sink,
                 device_id,
-                "install-user",
+                "autostart-on",
                 false,
                 None,
-                Some(format!("service installé mais non démarré : {e}")),
+                Some(format!("service armé mais non démarré : {e}")),
             )
             .await;
             send_fresh_report(sink, device_id).await;
-            let _ = sink.flush().await;
-        }
-    }
-}
-
-/// Disable autostart (`uninstall-user`) while keeping the agent running.
-///
-/// The running agent is often the very service being removed, so a plain
-/// uninstall would SIGTERM us with nothing to relaunch. When supervised, we hand
-/// monitoring off to a standalone (unmanaged) background copy that reconnects
-/// (the hub swaps to it), then exit; its fresh report carries `serviceScope =
-/// none`. When not supervised, removing the service can't kill us.
-async fn handle_disable_autostart<S>(sink: &mut S, device_id: &str)
-where
-    S: SinkExt<Message> + Unpin,
-    S::Error: std::error::Error + Send + Sync + 'static,
-{
-    let supervised = crate::managed();
-    match crate::service::uninstall() {
-        Ok(()) => {
-            info!(supervised, "autostart disabled");
-            if supervised {
-                // The unload that just happened will SIGTERM us shortly: spawn the
-                // successor now. It inherits our config via DEVEYE_CONFIG.
-                match std::env::current_exe() {
-                    Ok(exe) => {
-                        if let Err(e) = crate::update::relaunch_detached(&exe) {
-                            warn!(error = %e, "failed to hand off to a standalone agent");
-                        }
-                    }
-                    Err(e) => warn!(error = %e, "cannot locate executable to hand off"),
-                }
-                let _ =
-                    send_service_result(sink, device_id, "uninstall-user", true, None, None).await;
-                let _ = sink.flush().await;
-                // Give the successor time to connect (the hub keeps the device
-                // online across the swap) before we step aside.
-                tokio::time::sleep(Duration::from_millis(500)).await;
-                std::process::exit(0);
-            }
-            let _ = send_service_result(sink, device_id, "uninstall-user", true, None, None).await;
-            send_fresh_report(sink, device_id).await;
-            let _ = sink.flush().await;
-        }
-        Err(e) => {
-            warn!(error = %e, "disabling autostart failed");
-            let _ = send_service_result(
-                sink,
-                device_id,
-                "uninstall-user",
-                false,
-                None,
-                Some(e.to_string()),
-            )
-            .await;
             let _ = sink.flush().await;
         }
     }

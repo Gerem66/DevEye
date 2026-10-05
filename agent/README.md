@@ -10,8 +10,8 @@ Supported platforms: **Linux**, **macOS** and **Windows** (same codebase;
 OS-specific probes are `#[cfg(target_os)]`-gated).
 
 > Scope, on purpose: the agent handles **pairing, run, stop**, optional
-> **start-on-boot** (`service install`, also driven from the UI's « Démarrage
-> auto » toggle), **self-update** and its own **removal**. It never installs
+> **start-on-boot** (`service install`, armed or disarmed from the UI's
+> « Démarrage automatique » entry), **self-update** and its own **removal**. It never installs
 > anything without being asked: by default, run it in the foreground or detached
 > and stop it yourself.
 
@@ -139,7 +139,7 @@ release CI (see [update.rs](src/update.rs)).
 | `policy [--allow <list>] [--deny <list>] [--monitor-only] [--config <path>]`                                                        | Show what this machine lets the server order, or change it, then restart the agent so it applies.                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `stop`                                                                                                                              | Stop the running agent: the installed service until the next boot or login (`systemctl stop`, `launchctl bootout`, `schtasks /End`), else a backgrounded one (PID file, SIGTERM).                                                                                                                                                                                                                                                                                                                                                 |
 | `status`                                                                                                                            | Print platform, server, enrollment and running state.                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `service install [--system \| --user] [--config <path>] \| uninstall \| status`                                                     | Manage the autostart service (launchd / systemd / Task Scheduler). Per-user by default (`--user` says so explicitly), `--system` needs root. `--config` bakes a config path into the service definition (see [System scope](#system-scope)). Also driven from the UI (« Démarrage auto »).                                                                                                                                                                                                                                        |
+| `service install [--system \| --user] [--no-autostart] [--config <path>] \| enable \| disable \| uninstall \| status`               | Manage the autostart service (launchd / systemd / Task Scheduler). Per-user by default (`--user` says so explicitly), `--system` needs root. `--no-autostart` installs and starts it without arming it for the next boot. `enable` / `disable` arm or disarm the installed service (see [Start at boot](#start-at-boot)). `--config` bakes a config path into the service definition (see [System scope](#system-scope)). Also driven from the UI.                                                                                |
 | `tray show \| hide`                                                                                                                 | Show or hide the DevEye icon in the notification area, for this user. See [Notification-area icon](#notification-area-icon-tray).                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `packages`                                                                                                                          | List the package managers found on this machine and their pending updates (diagnostic).                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `unlink`                                                                                                                            | Forget the local enrollment (deletes the config + token).                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
@@ -270,6 +270,33 @@ with administrator privileges` (macOS) and `sudo` on the distributions that
    there. `service uninstall` removes the copy, unless it is the binary
    currently running.
 
+### Start at boot
+
+Which service carries the agent (per-user or system, that is root or not) and
+whether it starts with the machine are two separate settings. The report
+carries both: `serviceScope` and `autostart`.
+
+Disarming leaves the service installed and the agent running under it; it only
+stops it from coming back after a reboot:
+
+| Platform | Disarm                               | Read back                              |
+| -------- | ------------------------------------ | -------------------------------------- |
+| Linux    | `systemctl [--user] disable`         | `systemctl [--user] is-enabled`        |
+| macOS    | `launchctl disable <domain>/<label>` | `launchctl print-disabled <domain>`    |
+| Windows  | `schtasks /Change /DISABLE`          | `<Settings><Enabled>` of `/Query /XML` |
+
+A disarmed launchd job or scheduled task refuses to be started, so `start` and
+`restart` arm it for the launch and disarm it again. On Linux a per-user unit
+starts with the machine only under « linger », which arming turns on;
+disarming leaves it on, since turning it off would stop the user's service
+manager, and the agent with it, outside any open session.
+
+From the UI, arming an agent that has no service installs one matching its
+privileges (system when root, per-user otherwise) and hands over to it. A
+system service needs root to be armed or disarmed: an agent without it
+replies with the command to run on the machine (`sudo deveye-agent service
+enable`). Elevating keeps the current choice (`--no-autostart` when disarmed).
+
 ## Full removal (`uninstall`)
 
 ```sh
@@ -333,7 +360,7 @@ startup (`MANAGED` `OnceLock` in `src/main.rs`) and it exists as an explicit
 flag because a process cannot reliably detect cross-platform that it is
 supervised.
 
-It has exactly four effects:
+It has exactly three effects:
 
 1. **Restart after self-update** (`update::restart_and_exit`). After swapping
    its binary, a _managed_ agent simply `exit(0)`s: systemd (`Restart=always`)
@@ -343,18 +370,10 @@ It has exactly four effects:
    never re-execs in place: macOS kills a freshly replaced binary
    (code-signing/AMFI).
 
-2. **Hand-off when autostart is disabled** (`commands::handle_disable_autostart`).
-   If the agent _is_ the process supervised by the service being uninstalled,
-   the uninstall will SIGTERM it. So it first spawns a standalone (unmanaged)
-   copy, in its own process group to survive the group SIGTERM, then exits.
-   This is why toggling « Démarrage auto » off restarts the agent when it runs
-   supervised. Without `--managed`, it just removes the service and keeps
-   running.
-
-3. **Reported to the server** (`managed` field of the agent report), so the
+2. **Reported to the server** (`managed` field of the agent report), so the
    server/UI know whether the agent runs under supervision.
 
-4. **The tray icon is registered at login** on every start, so the login entry
+3. **The tray icon is registered at login** on every start, so the login entry
    exists even when the service was installed by an older agent (see
    [Notification-area icon](#notification-area-icon-tray)).
 

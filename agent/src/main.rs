@@ -180,6 +180,9 @@ enum ServiceCmd {
         /// Explicit per-user install (the default; accepted for clarity).
         #[arg(long, conflicts_with = "system")]
         user: bool,
+        /// Install and start the service without arming it for the next boot.
+        #[arg(long)]
+        no_autostart: bool,
         /// Config file to bake into the service definition. Le chemin de la
         /// machine **enrôlée** : `sudo` et `pkexec` remplacent `$HOME` par celui
         /// de root, si bien qu'une installation système qui le devine grave un
@@ -188,9 +191,13 @@ enum ServiceCmd {
         #[arg(long)]
         config: Option<String>,
     },
+    /// Arm the installed service: it starts again at the next boot (or login).
+    Enable,
+    /// Disarm the installed service: it keeps running, but not after a reboot.
+    Disable,
     /// Remove the autostart service (user and/or system).
     Uninstall,
-    /// Print the installed service scope.
+    /// Print the installed service scope and whether it starts at boot.
     Status,
 }
 
@@ -296,9 +303,10 @@ fn service_cmd(action: ServiceCmd) -> Result<()> {
         ServiceCmd::Install {
             system,
             user: _,
+            no_autostart,
             config,
         } => {
-            service::install(system, config.as_deref())?;
+            service::install(system, config.as_deref(), !no_autostart)?;
             // En ligne de commande, « installer » veut dire « et démarre-le » :
             // c'est le point d'entrée autonome. Le démarrage reste une étape
             // distincte pour le passage de relais interne (voir `service::install`).
@@ -318,11 +326,35 @@ fn service_cmd(action: ServiceCmd) -> Result<()> {
             println!("✓ Service désinstallé.");
             Ok(())
         }
+        ServiceCmd::Enable => service_autostart(true),
+        ServiceCmd::Disable => service_autostart(false),
         ServiceCmd::Status => {
-            println!("Service: {}", service::installed_scope().as_wire());
+            let scope = service::installed_scope();
+            println!("Service: {}", scope.as_wire());
+            println!(
+                "Autostart: {}",
+                if service::autostart_enabled(scope) {
+                    "on"
+                } else {
+                    "off"
+                }
+            );
             Ok(())
         }
     }
+}
+
+fn service_autostart(on: bool) -> Result<()> {
+    let scope = service::installed_scope();
+    if scope == service::ServiceScope::None {
+        anyhow::bail!("aucun service installé : « deveye-agent service install » d'abord");
+    }
+    service::set_autostart(scope == service::ServiceScope::System, on)?;
+    println!(
+        "✓ Démarrage automatique {}.",
+        if on { "activé" } else { "désactivé" }
+    );
+    Ok(())
 }
 
 async fn run(

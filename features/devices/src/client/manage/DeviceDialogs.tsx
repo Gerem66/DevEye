@@ -11,8 +11,9 @@ import styles from './style.module.css';
  * menu d'actions et de sa popup « Agent » qui les ouvrent.
  */
 export function DeviceDialogs({ actions, device }: { actions: DeviceActions; device: Device }) {
-    // Les conséquences d'un arrêt dépendent du démarrage auto de la machine.
-    const stopSupervised = (device.report?.agent?.serviceScope ?? 'none') !== 'none';
+    // Les conséquences d'un arrêt : un service le relance, et seul un service
+    // armé le ramène après un redémarrage.
+    const stopAgent = device.report?.agent;
 
     return (
         <>
@@ -140,8 +141,10 @@ export function DeviceDialogs({ actions, device }: { actions: DeviceActions; dev
                 }
             >
                 <p className={styles.deleteExplainNote}>
-                    {stopSupervised
-                        ? 'Démarrage auto actif : l’agent sera relancé automatiquement dans quelques secondes, et à chaque démarrage de l’appareil.'
+                    {stopAgent?.managed
+                        ? stopAgent.autostart === false
+                            ? 'Son service relancera l’agent dans quelques secondes, mais plus après un redémarrage de l’appareil : le démarrage automatique est désactivé.'
+                            : 'Démarrage auto actif : l’agent sera relancé automatiquement dans quelques secondes, et à chaque démarrage de l’appareil.'
                         : 'Démarrage auto inactif : l’appareil restera hors ligne et ne pourra plus être administré à distance (configuration, mises à jour, terminal, fichiers…) jusqu’à un relancement manuel de l’agent sur la machine.'}
                 </p>
             </Dialog>

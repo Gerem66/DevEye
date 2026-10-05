@@ -703,7 +703,7 @@ mod tests {
             assert!(closed.refusal(command, None).is_none(), "{command}");
         }
         assert!(closed
-            .refusal("agent.service", Some("install-user"))
+            .refusal("agent.service", Some("autostart-on"))
             .is_none());
     }
 

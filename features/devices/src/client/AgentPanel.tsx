@@ -1,4 +1,4 @@
-import { Switch, useCurrentUser } from 'deveye-sdk-client';
+import { useCurrentUser } from 'deveye-sdk-client';
 import type { AgentServiceScope, DeviceReport } from '@deveye/types';
 
 import type { FleetDevice } from '../contracts/commands';
@@ -11,6 +11,7 @@ import {
     FOREIGN,
     LOCAL_POLICY,
     NO_WRITE,
+    OLD_AGENT,
     type Unavailable
 } from './availability';
 import type { DeviceActions } from './manage/useDeviceActions';
@@ -19,10 +20,19 @@ import type { useAgentUpdate } from './useAgentUpdate';
 import styles from './style.module.css';
 
 const SCOPE_LABEL: Record<AgentServiceScope, string> = {
-    none: 'Aucun : l’agent ne survit pas à un redémarrage',
-    user: 'À l’ouverture de session',
-    system: 'Au démarrage de la machine (service système)'
+    none: 'aucun, lancé à la main',
+    user: 'service de session',
+    system: 'service système'
 };
+
+/**
+ * Quand un service armé relance l'agent. Sous Linux le service de session part
+ * lui aussi avec la machine (« linger ») ; ailleurs il attend l'ouverture de
+ * session.
+ */
+function restartsAt(system: boolean, platform: FleetDevice['platform']): string {
+    return system || platform === 'linux' ? 'au démarrage de la machine' : 'à l’ouverture de session';
+}
 
 interface AgentAction {
     key: string;
@@ -108,6 +118,23 @@ export function AgentPanel({ device, report, actions, canWrite, updater, onShowP
     const adminOnly = firstReason(!isAdmin && ADMIN_ONLY, fleet, reach);
     const refused = agent ? POLICY_KEYS.filter((k) => !agent.policy[k]) : [];
 
+    const autostart = agent?.autostart;
+    // Sans service, l'activation en crée un à la mesure des privilèges de l'agent.
+    const bootSystem = scope === 'system' || (scope === 'none' && agent?.privileged === true);
+    const boot: AgentAction = {
+        key: autostart ? 'autostart-off' : 'autostart-on',
+        icon: autostart ? 'icon-pause' : 'icon-play',
+        label: autostart ? 'Désactiver le démarrage automatique' : 'Activer le démarrage automatique',
+        desc: autostart
+            ? 'L’agent continue de tourner, mais ne repart pas après un redémarrage : l’appareil reste hors ligne jusqu’à un relancement à la main.'
+            : `L’agent repart ${restartsAt(bootSystem, device.platform)}${
+                  scope === 'none' ? `, sous un ${SCOPE_LABEL[bootSystem ? 'system' : 'user']}` : ''
+              }.`,
+        onClick: () => void actions.setAutostart(device.id, !autostart),
+        unavailable: firstReason(adminOnly, agent !== null && autostart === undefined && OLD_AGENT),
+        busy: busy === 'autostart'
+    };
+
     const elevated = agent?.privileged === true && scope === 'system';
     const privilege: AgentAction = {
         key: elevated ? 'drop' : 'elevate',
@@ -115,7 +142,7 @@ export function AgentPanel({ device, report, actions, canWrite, updater, onShowP
         label: elevated ? 'Rétrograder en service utilisateur' : 'Élever en service système (root)',
         desc: elevated
             ? 'L’agent redevient un service de session, sans privilèges : certaines sondes, les mises à jour système et Docker peuvent ne plus répondre.'
-            : 'Sondes complètes, mises à jour système et Docker, relance au démarrage de la machine. Une fenêtre d’autorisation s’ouvre sur l’appareil, sinon la commande à y lancer s’affiche.',
+            : 'Sondes complètes, mises à jour système et Docker. Le démarrage automatique reste tel quel. Une fenêtre d’autorisation s’ouvre sur l’appareil, sinon la commande à y lancer s’affiche.',
         onClick: () => void (elevated ? actions.dropPrivilegesDevice(device.id) : actions.elevateDevice(device.id)),
         unavailable: firstReason(adminOnly, agent?.policy.serviceElevate === false && LOCAL_POLICY),
         busy: busy === 'privilege'
@@ -162,10 +189,9 @@ export function AgentPanel({ device, report, actions, canWrite, updater, onShowP
             key: 'stop',
             icon: 'icon-power',
             label: 'Interrompre l’agent',
-            desc:
-                scope === 'none'
-                    ? 'Il se ferme, et l’appareil reste hors ligne jusqu’à un relancement sur la machine.'
-                    : 'Il se ferme, puis son service le relance.',
+            desc: agent?.managed
+                ? 'Il se ferme, puis son service le relance.'
+                : 'Il se ferme, et l’appareil reste hors ligne jusqu’à un relancement sur la machine.',
             onClick: () => actions.setStopTarget(target),
             unavailable: firstReason(fleet, reach)
         },
@@ -212,7 +238,17 @@ export function AgentPanel({ device, report, actions, canWrite, updater, onShowP
                                     : 'limité'
                             }
                         />
-                        <Row label='Démarrage' value={SCOPE_LABEL[scope]} />
+                        <Row label='Service' value={SCOPE_LABEL[scope]} />
+                        <Row
+                            label='Démarrage auto'
+                            value={
+                                agent.autostart === undefined
+                                    ? 'inconnu (agent à mettre à jour)'
+                                    : agent.autostart
+                                      ? `oui, ${restartsAt(scope === 'system', device.platform)}`
+                                      : 'non'
+                            }
+                        />
                         <Row label='Transport' value={agent.insecureTransport ? 'en clair (http)' : 'chiffré (TLS)'} />
                         <Row
                             label='Politique locale'
@@ -233,32 +269,9 @@ export function AgentPanel({ device, report, actions, canWrite, updater, onShowP
 
             <section className={styles.hwGroup}>
                 <h4 className={styles.hwGroupTitle}>Démarrage automatique</h4>
-                {scope === 'system' ? (
-                    <p className={styles.powerDesc}>
-                        Service système : l’agent est relancé à chaque démarrage de la machine. Pour revenir à un
-                        démarrage de session, rétrogradez-le ci-dessous.
-                    </p>
-                ) : (
-                    <>
-                        <Switch
-                            checked={scope === 'user'}
-                            onChange={(enabled) => void actions.setAutostart(device.id, enabled)}
-                            disabled={adminOnly !== undefined || busy !== null}
-                            label='Relancer l’agent à l’ouverture de session'
-                            hint={
-                                busy === 'autostart'
-                                    ? 'Application sur l’appareil…'
-                                    : 'Sans cela, l’agent s’arrête avec la session et l’appareil reste hors ligne jusqu’à un relancement à la main.'
-                            }
-                        />
-                        {adminOnly && (
-                            <span className={styles.agentReason}>
-                                <span className={`icon ${adminOnly.icon}`} />
-                                {adminOnly.reason}
-                            </span>
-                        )}
-                    </>
-                )}
+                <div className={styles.powerList}>
+                    <ActionRow action={boot} />
+                </div>
             </section>
 
             <section className={styles.hwGroup}>
