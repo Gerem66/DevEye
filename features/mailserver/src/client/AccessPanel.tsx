@@ -21,7 +21,7 @@ import SecretOnceDialog from './SecretOnceDialog';
 
 /**
  * Les mots de passe d'application d'une adresse : un par client (téléphone,
- * Thunderbird, Mails), pour pouvoir en révoquer un sans déconnecter les autres
+ * Thunderbird, Mail), pour pouvoir en révoquer un sans déconnecter les autres
  * ni toucher au mot de passe de la boîte.
  */
 export default function AccessPanel({ scope, canWrite }: SettingsPanelProps) {
@@ -74,7 +74,7 @@ export default function AccessPanel({ scope, canWrite }: SettingsPanelProps) {
             title: `Révoquer « ${credential.label} » ?`,
             description:
                 credential.origin === 'mails'
-                    ? 'Mails ne pourra plus relever cette adresse tant que son compte n’aura pas reçu un nouveau mot de passe.'
+                    ? 'Mail ne pourra plus relever cette adresse tant que son compte n’aura pas reçu un nouveau mot de passe.'
                     : 'Le client qui s’en sert est déconnecté, et devra en recevoir un nouveau.',
             confirmLabel: 'Révoquer',
             tone: 'danger',

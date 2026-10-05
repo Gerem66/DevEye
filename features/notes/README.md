@@ -1,42 +1,63 @@
 # Notes, les pense-bêtes de l'espace
 
-> Écrit le 28 août 2026, le jour où les Notes sont devenues le premier module
-> à **palier par élément** branché sur le partage inter-espaces
-> (`features/notes`, [Docs/FEATURE_SDK.md](../../Docs/FEATURE_SDK.md)). Il dit _pourquoi_ ;
-> le code dit comment.
->
-> Documents voisins : [Docs/SECURITY_MODEL.md](../../Docs/SECURITY_MODEL.md) (les deux
-> étages, section « Notes privées »), [Docs/SHARING.md](../../Docs/SHARING.md) (le
-> mécanisme de projection), [Docs/PERMISSIONS.md](../../Docs/PERMISSIONS.md) (les
-> restrictions par élément), [Docs/SETTINGS.md](../../Docs/SETTINGS.md) (la coquille de
-> réglages), [Docs/LIVE.md](../../Docs/LIVE.md).
-
 Des notes à blocs (paragraphes, cases à cocher, listes, titres, filets)
 rangées dans des dossiers, par espace ; une archive à deux temps ; et, pour
 l'espace personnel, des notes **privées** chiffrées par le mot de passe de
-leur auteur.
+leur auteur. Ce document dit _pourquoi_ ; le code dit comment.
+
+Documents voisins : [Docs/SECURITY_MODEL.md](../../Docs/SECURITY_MODEL.md) (les deux
+étages, section « Notes privées »), [Docs/SHARING.md](../../Docs/SHARING.md) (le
+mécanisme de projection), [Docs/PERMISSIONS.md](../../Docs/PERMISSIONS.md) (les
+restrictions par élément), [Docs/SETTINGS.md](../../Docs/SETTINGS.md) (la coquille de
+réglages), [Docs/LIVE.md](../../Docs/LIVE.md).
 
 ---
 
 ## 1. Le module
 
-Notes est un module in-repo depuis son rapatriement sur le SDK (la cinquième
-native migrée) :
+Notes est un module in-repo sur le SDK des features
+([Docs/FEATURE_SDK.md](../../Docs/FEATURE_SDK.md)), dans `features/notes/` :
 
+- `src/manifest.ts` : le descripteur du registre (`featureDescriptor('notes')`,
+  dont `shareTier: 'perItem'`), la catégorie `daily`, les deux clés de
+  ressources (`notes.count`, `notes.list`) que le sujet `notes` ravive, et les
+  commandes. Pas de capacité native, pas d'onglet de réglages propre ;
 - `src/contracts/{domain,commands}.ts` : les schémas zod (blocs, note,
   résumé, dossier) et les quatorze commandes sous le seul préfixe `notes.` ;
-- `src/server/repo.ts` (les deux tables, `notes` et `note_folders`, derrière
-  un seul dépôt), `handlers.ts`, `_shared.ts` (le choix du codec, les gardes,
-  les DTO), `index.ts` (l'entrée : le dépôt, les handlers, l'entrée `items`
-  du partage) ;
-- `src/client/` : la vue (`Notes.tsx`), la grille et les cartes, l'éditeur à
-  blocs, l'archive, la carte d'accueil (`NotesWidget.tsx`) ;
-- `deveye-feature.json` : l'allowlist des deux tables historiques (socle 014
-  et 015, rattachées à l'espace par la 048), jamais déplacées.
+- `src/server/` :
+    - `repo.ts` : les deux tables, `notes` et `note_folders`, derrière un seul
+      dépôt sur `SdkQueryable` ;
+    - `_shared.ts` : le choix du codec (`bodyCipher`), les gardes, les DTO ;
+    - `handlers.ts` : les quatorze commandes ;
+    - `index.ts` : l'entrée serveur (le dépôt, les handlers, l'entrée `items`
+      du partage, le déplacement, la copie, l'export du compte, le scénario de
+      bout en bout) ;
+    - `copy.ts` : l'arbre d'une note (`notesTree`, la ligne et son corps pour
+      seul blob), que le déplacement rescelle et que la copie emporte ;
+      `move.ts` : le changement d'espace (le corps est rescellé, le classement
+      ne suit pas, un dossier appartenant à l'espace quitté) ;
+    - `accountExport.ts` : ce que l'export du compte écrit des notes et des
+      dossiers ([Docs/ACCOUNT_EXPORT.md](../../Docs/ACCOUNT_EXPORT.md)) ;
+    - `e2e.ts` : le scénario que la page Tests et débogage rejoue (créer,
+      modifier, archiver puis supprimer une note d'essai, sans résidu) ;
+    - `handlers.test.ts`, `accountExport.test.ts` : les tests ;
+- `src/client/` : la vue (`Notes.tsx`), la grille et les cartes (`NoteGrid.tsx`,
+  `NoteCard.tsx`), l'éditeur à blocs (`NoteEditor.tsx`, `BlockEditor.tsx`,
+  `BlockText.tsx`, et ses primitives pures `blockOps.ts`, `selection.ts`,
+  `markdown.ts`), les couleurs (`noteColors.ts`, par jetons du thème),
+  l'export PDF dans le navigateur (`exportPdf.ts` : le contenu déchiffré ne
+  quitte pas la page), l'archive (`ArchivePopup.tsx`), les dialogues
+  (`FolderNamePopup.tsx`, `ConfirmPopup.tsx`), la carte d'accueil
+  (`NotesWidget.tsx`), les appels typés (`api.ts`) et l'entrée (`index.tsx` :
+  `cacheDurationMinutes: 0`, la vue tenant des titres déchiffrés, et
+  `holdSecrecy`, pour qu'une note privée ne redemande pas le mot de passe au
+  milieu d'une saisie) ;
+- `deveye-feature.json` : l'allowlist des deux tables, nées dans le socle et
+  jamais déplacées, dispensées du préfixe `ft_notes_`.
 
-Pas de service de fond, pas d'onglet de réglages propre : ce qu'une note
-règle (où elle est visible, ce qu'en voit chaque rôle) vient de la coquille
-commune, montée dans son éditeur.
+Pas de service de fond, pas de migration propre, pas d'onglet de réglages :
+ce qu'une note règle (où elle est visible, ce qu'en voit chaque rôle) vient de
+la coquille commune, montée dans son éditeur.
 
 ## 2. Les deux étages, choisis par note
 
@@ -117,7 +138,7 @@ L'invariant est tenu aux deux portes :
 
 - **à l'entrée**, `items.shareable` répond `false` pour `is_private = 1` et
   `share.set` refuse en le disant. Côté client, l'éditeur monte le bouton
-  commun avec `shareable: !note.private` : l'onglet Partage n'est pas proposé
+  commun avec `shareable: !stored.private` : l'onglet Partage n'est pas proposé
   sur une note privée, plutôt qu'ouvert sur un refus. Les permissions par
   élément, elles, restent réglables ;
 - **à la bascule**, quand une note ordinaire déjà projetée **devient privée**
@@ -134,13 +155,13 @@ vise jamais une note privée.
 
 ### Les restrictions par élément
 
-Depuis que les Notes sont branchées, la coquille propose l'onglet Permissions
-sur une note d'un espace partagé, et les listages font respecter ce qu'il
-règle : une note masquée pour ce rôle (`none`) **disparaît** de `notes.list`
-et de `notes.count` plutôt que d'y figurer grisée ; en lecture seule
-(`read`), elle se lit mais `notes.edit`, `notes.archive`, `notes.restore` et
-`notes.delete` répondent `forbidden` (`ctx.items.assert(id, 'write')`), et le
-classement l'ignore comme un identifiant étranger.
+La coquille propose l'onglet Permissions sur une note d'un espace partagé, et
+les listages font respecter ce qu'il règle : une note masquée pour ce rôle
+(`none`) **disparaît** de `notes.list` et de `notes.count` plutôt que d'y
+figurer grisée ; en lecture seule (`read`), elle se lit mais `notes.edit`,
+`notes.archive`, `notes.restore` et `notes.delete` répondent `forbidden`
+(`ctx.items.assert(id, 'write')`), et le classement l'ignore comme un
+identifiant étranger.
 
 ### Les compteurs et la diffusion
 
@@ -153,7 +174,29 @@ Le sujet `notes`, battu après chaque écriture, est rejoué par le hub dans les
 espaces reliés par une projection ([Docs/SHARING.md](../../Docs/SHARING.md) §8) : une note
 éditée depuis sa fenêtre rafraîchit son domicile, et inversement.
 
-## 4. Les tests
+## 4. Déplacer et copier
+
+Les deux gestes de la coquille ([Docs/SHARING.md](../../Docs/SHARING.md) §9 et §10)
+s'appuient sur le même arbre, `notesTree` dans `copy.ts` : une note est une
+ligne dont `content` est le seul blob scellé. Le déplacement rescelle ce blob
+sous l'étage ouvert du nouvel espace et pose `folder_id` à `NULL`, un dossier
+n'ayant de sens que dans l'espace qu'il quitte ; la copie emporte la ligne
+sous la clé de la destination. Toute nouvelle colonne chiffrée doit entrer
+dans `sealed` de cet arbre : rien ne peut détecter un blob oublié, qui
+deviendrait illisible au premier déplacement.
+
+## 5. Quotas et notifications
+
+Notes ne déclare aucun quota (`manifest.quotas` absent) : le nombre de notes,
+de dossiers et d'archives n'est borné par aucune offre, avec ou sans module de
+facturation. La feature ne notifie pas (`notifies: false` au registre) : pas
+d'onglet Notifications.
+
+## 6. Les tests
+
+```bash
+npm run test:features
+```
 
 `src/server/handlers.test.ts`, sur le harnais du SDK (`@deveye/types/sdk/testing`)
 et un dépôt en mémoire qui reproduit `item_shares` (`projections`) : le masque
@@ -161,3 +204,5 @@ et le verrou, la règle des espaces, l'archive à deux temps, le rangement des
 dossiers, les restrictions par élément, le partage (listage d'une projection,
 écriture chez elle, refus depuis la fenêtre, oubli des projections d'une note
 qui devient privée) et l'entrée `items` (`homeOf`, `labelOf`, `shareable`).
+`src/server/accountExport.test.ts` vérifie que chaque table du module a un sort
+dans l'export du compte.

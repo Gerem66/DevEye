@@ -1,5 +1,5 @@
 {
   "id": "mailserver",
   "tables": [],
-  "minTypesVersion": "0.18.2"
+  "minTypesVersion": "0.22.1"
 }

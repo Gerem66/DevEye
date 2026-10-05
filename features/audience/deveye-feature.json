@@ -9,6 +9,6 @@
     "audience_funnels",
     "audience_funnel_steps"
   ],
-  "minTypesVersion": "0.15.2",
+  "minTypesVersion": "0.22.1",
   "$comment": "Tables historiques (migrations 076 à 078 du socle, jamais déplacées) : l'allowlist les dispense du préfixe ft_audience_. `project_audience_links` appartient à Projets. Toute NOUVELLE table du module prendra le préfixe, via src/server/migrations/."
 }

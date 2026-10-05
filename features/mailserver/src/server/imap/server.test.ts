@@ -8,8 +8,8 @@ import { createTestEngine, sampleMessage, selfSigned, testTlsStore } from '../te
 import { createImapServer, type ImapServer } from './server';
 
 /**
- * Le serveur piloté par le vrai client de Mails, dans la forme d'options de
- * `features/mail/src/server/client.ts` : ce que ce test prouve, c'est que Mails
+ * Le serveur piloté par le vrai client de Mail, dans la forme d'options de
+ * `features/mail/src/server/client.ts` : ce que ce test prouve, c'est que Mail
  * sait relever une boîte hébergée ici.
  */
 
@@ -91,7 +91,7 @@ describe('imapflow contre le serveur', () => {
         await c.logout();
     });
 
-    it('relève comme Mails : par numéro de séquence d’abord, puis par UID depuis le dernier vu', async () => {
+    it('relève comme Mail : par numéro de séquence d’abord, puis par UID depuis le dernier vu', async () => {
         const first = await deliver('Premier');
         const second = await deliver('Deuxième =?UTF-8?Q?accentu=C3=A9?=');
         const c = client();
@@ -156,7 +156,7 @@ describe('imapflow contre le serveur', () => {
         await c.logout();
     });
 
-    it('cherche comme Mails, accents et mots encodés compris', async () => {
+    it('cherche comme Mail, accents et mots encodés compris', async () => {
         await deliver('Facture =?UTF-8?B?w6l0w6k=?=');
         const c = client();
         await c.connect();

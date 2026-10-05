@@ -2,7 +2,7 @@
 --
 -- Partager n'est pas déplacer : l'élément garde un seul domicile, reste chiffré
 -- sous la clé de son espace d'origine, et se lit ailleurs avec le codec ouvert
--- de cet espace-là (voir `WORKSPACES.md` §10). C'est une projection, et cette
+-- de cet espace-là (voir `WORKSPACES.md` §8). C'est une projection, et cette
 -- migration ne touche à aucun contenu.
 -- Seule la clé de l'étage ouvert est résoluble par le serveur seul : un élément
 -- de l'étage gardé ne peut pas être projeté. Le registre le porte dans

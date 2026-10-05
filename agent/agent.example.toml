@@ -4,6 +4,7 @@
 # Location: $DEVEYE_CONFIG, or <config-dir>/deveye/agent.toml
 #   - Linux: ~/.config/deveye/agent.toml
 #   - macOS: ~/Library/Application Support/deveye/agent.toml
+#   - Windows: %APPDATA%\deveye\agent.toml
 #
 # It is read once, at start: edit it, then restart the agent (for [policy],
 # `deveye-agent policy` does both). A token the server rotates is written into
@@ -35,6 +36,12 @@ fingerprint = "0123456789abcdef0123456789abcdef"
 # share's folder; this list is what it cannot pick outside of.
 sync_roots = []
 
+# Hosts beyond this machine that a tunnel may reach (a database on the LAN), as
+# names or IP addresses. Empty: this machine's loopback only, so a linked machine
+# is not a door into its network. A name is resolved once; every address it
+# resolves to must be loopback or listed here, or the tunnel is refused whole.
+tunnel_targets = []
+
 # What the server may order on this machine. The server cannot change this
 # section. Set a key to false for monitoring without that kind of remote control;
 # the matching buttons are greyed out in DevEye. `link --deny` and
@@ -50,3 +57,5 @@ allow_destroy = true           # wiping the agent when the device is deleted in 
 allow_docker = true            # every container action (the inventory stays readable)
 allow_docker_deploy = true     # deployments: pull a compose service's image and recreate it
 allow_sync = true              # CloudSync shares: the server reading and writing a synced folder
+allow_tunnel = true            # tunnels: a module reaching a service of this machine (a database on
+                               # its loopback, or a host of `tunnel_targets`)

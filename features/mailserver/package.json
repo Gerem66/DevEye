@@ -25,7 +25,7 @@
     "imapflow": "^1.6.5"
   },
   "peerDependencies": {
-    "@deveye/types": ">=0.18.2",
+    "@deveye/types": ">=0.22.1",
     "react": "^19.0.0",
     "zod": "^4.0.0"
   }

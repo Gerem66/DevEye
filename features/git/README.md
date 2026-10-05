@@ -1,45 +1,22 @@
-# Git — les dépôts d'un espace
+# Git : les dépôts d'un espace
 
-> Écrit le 7 août 2026, à la fin du chantier qui a sorti le git du module
-> Projets ; relu le 21 août 2026 (sources, coquille de réglages), et le 28 août
-> 2026, au rapatriement de la feature en module (`features/git`, §8).
-> Compagnon de [Projets](../projects/README.md) : celui-ci suit le travail,
-> celui-là suit le code. Il dit **pourquoi** ; le code dit comment.
+Git suit les dépôts GitHub d'un espace : branches, commits, releases et pull
+requests sont lus par un service de fond et servis depuis un cache local, si
+bien qu'ouvrir un dépôt est instantané et ne consomme aucun quota GitHub. Un
+projet relie un dépôt ; la fiche du dépôt dans Git et l'onglet Git du projet
+montrent la même chose. Compagnon de [Projets](../projects/README.md).
 
 ---
 
-## 1. Le renversement
+## 1. Le modèle
 
-Le git existait avant cette feature, mais comme une **propriété d'un projet** :
-`project_repos` était clé sur `project_id`, et tout le cache — commits,
-branches, releases, pull requests, auteurs — l'était aussi.
+### Un dépôt est une entité de l'espace
 
-Trois symptômes, que les retours d'usage ont pointés séparément sans qu'on voie
-d'abord qu'ils avaient la même cause :
-
-1. Les **jetons d'accès** se créaient depuis l'intérieur d'un projet alors
-   qu'ils appartiennent à l'espace — et ne pouvaient nulle part être supprimés
-   ni modifiés. Pire : un jeton **Dokploy** n'était pas créable du tout, alors
-   que l'onglet Déploiement en réclamait un et renvoyait vers un écran incapable
-   de le fournir.
-
-    > Ce chantier les a donc tous accueillis ici, y compris les clés Dokploy, qui
-    > n'avaient rien à y faire : c'était le seul écran capable de gérer un secret.
-    > Elles sont parties dans la feature Déploiement ([Déploiements](../deploy/README.md)),
-    > qui n'existait pas encore à l'époque, puis dans la table de son module
-    > (`ft_deploy_credentials`, migration 099). Les jetons GitHub ont suivi le
-    > même chemin à leur tour (`ft_git_credentials`, migration 100), et la table
-    > commune `workspace_credentials` a disparu avec le comportement partagé
-    > (`_credentials.ts`) : chaque module possède ses accès, et poser la clé qui
-    > met en production ne relève pas du droit de lire des dépôts.
-
-2. Un dépôt partagé par deux projets aurait été **synchronisé deux fois**, dans
-   deux caches distincts, sous deux quotas de fournisseur.
-3. Un dépôt qu'on veut seulement **regarder**, sans projet autour, n'avait pas
-   de place.
-
-Le dépôt est donc devenu une **entité de l'espace**. Un projet n'en garde qu'une
-**liaison** — une ligne dans `project_repo_links`, et rien d'autre.
+Un dépôt appartient à l'espace (`git_repos`), avec son cache, son jeton et sa
+synchronisation. Un projet n'en garde qu'une **liaison** : une ligne dans
+`project_repo_links`, une table de Projets, et rien d'autre. Un dépôt peut donc
+servir plusieurs projets, être synchronisé une seule fois sous un seul quota de
+fournisseur, ou n'appartenir à aucun projet et être seulement regardé.
 
 > **Supprimer l'un ne supprime jamais l'autre.** Délier un dépôt d'un projet
 > laisse le dépôt, son historique et les autres projets qui s'en servent.
@@ -47,533 +24,543 @@ Le dépôt est donc devenu une **entité de l'espace**. Un projet n'en garde qu'
 > Les deux clés étrangères de la table de liaison sont en `CASCADE` : c'est la
 > **liaison** qui tombe, jamais ce qu'elle relie.
 
----
+### Tout le cache est à l'étage ouvert
 
-## 2. Les trois invariants
-
-### 2.1 Le cache git est **toujours** à l'étage ouvert
-
-Un dépôt appartient à l'espace, pas à un projet : il ne peut donc suivre le
+Un dépôt appartient à l'espace, pas à un projet : il ne peut suivre le
 `security_tier` d'aucun d'eux. Tout ce qui pend à `git_repos` est chiffré sous
-la clé de l'espace, à l'étage ouvert, une fois pour toutes (`ctx.cipher()` dans
-les handlers, `deps.cipherFor(ws)` dans le service).
+la clé de l'espace, à l'étage ouvert (`ctx.cipher()` dans les handlers,
+`deps.cipherFor(ws)` dans le service). La feature ne demande donc **jamais** de
+mot de passe, et le service de fond, qui tourne sans session, lit tout ce dont
+il a besoin.
 
-Trois conséquences, toutes bonnes :
+Corollaire : **un projet confidentiel n'a pas de dépôt.** `projects.repoLink`
+le refuse, et passer un projet en confidentiel retire ses liaisons
+(`projects.setSecurityTier`, qui l'inscrit dans la frise). La liaison est une
+ligne en clair : rattacher un projet confidentiel à un dépôt nommé montrerait ce
+que le palier est censé cacher.
 
-- la feature Git ne demande **jamais** de mot de passe ;
-- le service de fond, qui tourne sans session, lit tout ce dont il a besoin ;
-- la course qui obligeait l'ancien `markSynced` à porter une garde atomique sur
-  `projects.security_tier` — le projet basculant en confidentiel entre la
-  sélection d'un dépôt et l'écriture de son résultat — **a disparu avec sa
-  cause**, pas avec sa garde.
+### Ce qui doit être unique ne peut pas être chiffré
 
-Corollaire assumé : **un projet confidentiel n'a pas de dépôt.**
-`projects.repoLink` le refuse, et passer un projet en confidentiel retire sa
-liaison (`projects.setSecurityTier`). Ce n'est pas seulement que la
-synchronisation ne pourrait pas le lire : la liaison est une ligne en clair, et
-rattacher un projet confidentiel à un dépôt nommé montrerait précisément ce que
-le palier est censé cacher.
-
-### 2.2 Ce qui doit être unique ne peut pas être chiffré
-
-Le chiffrement est non déterministe : deux chiffrés de `gerem66/DevEye`
+Le chiffrement est non déterministe : deux chiffrés du même `owner/repo`
 diffèrent, et aucune contrainte d'unicité ne tiendrait dessus. D'où
-`git_repos.slug_ref` — les 16 premiers caractères du sha256 de `owner/repo` en
-minuscules — sous `UNIQUE (workspace_id, slug_ref)`. Même motif que `name_ref`
-pour une branche, `tag_ref` pour une release, `author_ref` pour un auteur.
+`git_repos.slug_ref`, les 16 premiers caractères hexadécimaux du sha256 de
+`owner/repo` en minuscules, sous `UNIQUE (workspace_id, slug_ref)`. Même motif
+pour `name_ref` (branche), `tag_ref` (release) et `author_ref` (auteur, condensé
+de l'adresse : l'adresse lisible vit dans le corps chiffré).
 
-C'est ce condensé qui rend **`git.repoAdd` idempotente** : le même dépôt déjà
-présent rend sa ligne (jeton mis à jour) au lieu d'un doublon. Un projet peut
-donc « créer » un dépôt sans savoir s'il existe déjà ailleurs dans l'espace, et
-un dépôt n'est jamais synchronisé deux fois.
+Ce condensé rend **`git.repoAdd` idempotente** : un dépôt déjà présent rend sa
+ligne, jeton mis à jour, au lieu d'un doublon. Un projet peut « créer » un dépôt
+sans savoir s'il existe ailleurs dans l'espace. Il rend aussi un dépôt
+**non renommable** : `owner/repo` est son identité ; viser un autre dépôt, c'est
+en ajouter un.
 
-### 2.3 n dépôts par projet, n projets par dépôt
+### Un dépôt, plusieurs projets ; un projet, plusieurs dépôts
 
-La clé primaire de `project_repo_links` est le couple `(project_id, repo_id)`
-depuis la migration 069. L'invariant « un projet, un dépôt » qui la précédait
-était une supposition, pas une contrainte du domaine : un projet réel se compose
-souvent d'un client, d'un serveur et de contrats partagés, chacun dans son
-dépôt — et une clé sur `project_id` seul faisait _remplacer_ là où l'on voulait
-_ajouter_.
+La clé primaire de `project_repo_links` est le couple `(project_id, repo_id)` :
+un projet réel se compose souvent d'un client, d'un serveur et de contrats
+partagés, chacun dans son dépôt. `KEY idx_project_repo_links_repo` rend
+« combien de projets utilisent ce dépôt » assez bon marché pour figurer dans la
+liste, avant qu'on clique sur « Supprimer ».
 
-Les liaisons d'un projet ont désormais la même forme — dépôts (069), services
-surveillés (067), bases de données (068), cibles de déploiement (080) — et
-c'est la forme juste : ce sont des objets d'espace, pas des propriétés d'un
-projet. Les quatre tables sont celles de **Projets**
-(`features/projects/src/server/repo/links.ts`),
-et le module Git ne lit aucune d'elles : le nombre de projets qui utilisent un
-dépôt, et lesquels, lui viennent du contrat que Projets offre
-(`PROJECTS_USAGE_PROVIDER`, `usageOf` et `countByItem`), et c'est par ce même
-contrat qu'il lui dit la version d'un projet (`applyVersion`, voir §5).
+Le module Git **ne lit aucune table de Projets**. Le nombre de projets qui
+utilisent un dépôt, et lesquels, lui viennent du contrat que Projets publie
+(`PROJECTS_USAGE_PROVIDER` : `countByItem`, `usageOf`), et c'est par ce même
+contrat qu'il dit à Projets la version d'un projet (`applyVersion`, §3.6). Dans
+l'autre sens, Projets demande au module si un dépôt existe et comment il
+s'appelle (`GIT_ITEMS_PROVIDER` : `exists`, `labelOf`) avant de le relier.
 
-`KEY idx_project_repo_links_repo` rend « combien de projets utilisent ce dépôt »
-assez bon marché pour figurer dans la liste, avant qu'on clique sur
-« Supprimer » — pas après.
+### L'ordre des dépôts appartient à l'utilisateur
 
-Côté écran, l'onglet Git d'un projet affiche chaque dépôt à la suite, **chacun
-dans son cadre, y compris quand il n'y en a qu'un**.
+`git_repos.sort_order` est posé par `git.repoReorder` et par rien d'autre ; un
+nouveau dépôt prend le rang suivant, donc la fin de la liste. Le geste est le
+glisser-déposer commun du SDK (`useDragReorder`). Pendant un glissé, la
+relecture déclenchée par `git.list` est **retenue** et rejouée au relâchement :
+une liste qui se réordonne sous le pointeur n'est pas un ordre.
 
-Ce ne fut pas toujours le cas : le cadre n'apparaissait qu'à partir de deux
-blocs, au motif qu'il n'aurait rien à séparer sur un dépôt unique. Le
-raisonnement ne tenait qu'à moitié. Un cadre sépare, mais il dit aussi **où
-finit ce que l'onglet montre** : sans lui, un dépôt seul se confondait avec le
-fond de la popup, et l'onglet ne ressemblait plus à ses voisins du même projet.
-Les onglets Bases de données, Audience et Déploiement suivent la même règle, pour
-que deux onglets d'un même projet ne se distinguent pas par ce genre de détail.
+### Le droit `git` est distinct de `projects`
 
-L'onglet lui-même **n'apparaît qu'à partir du premier dépôt relié** : sans
-liaison, il repart dans le menu « + » de la barre, qui rouvre le même dialogue
-d'ajout. Voir [Projets](../projects/README.md) §2.
+Lire le dépôt d'un projet relève de `git: read`, pas de `projects`. L'onglet Git
+d'un projet le dit quand le rôle ne l'accorde pas, plutôt que d'afficher un
+écran vide. Relier ou délier un dépôt relève de `projects: write` : c'est le
+projet qu'on modifie. Voir [`Docs/PERMISSIONS.md`](../../Docs/PERMISSIONS.md).
 
 ---
 
-## 3. Ce que ça donne à l'usage
+## 2. À l'usage
 
-| Vue                        | Contenu                                                                                                                                                                                                                                                                      |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Dépôts**                 | tous les dépôts de l'espace, dernière synchro, nombre de projets, cause d'un blocage                                                                                                                                                                                         |
-| **Un dépôt**               | graphe des commits, branches, releases, pull requests, derniers commits, projets liés                                                                                                                                                                                        |
-| **Réglages → Sources**     | les jetons GitHub de l'espace, ajout / modification / suppression, avec ce que chacun sert : l'ancien bouton « Jetons GitHub », absorbé par la coquille commune. Le « + » du sélecteur de jeton (RepoPicker / RepoDialog) y mène, et le dépôt adopte le jeton créé au retour |
-| **Réglages d'un dépôt**    | partage entre espaces et permissions par rôle (`Docs/SETTINGS.md`, `Docs/SHARING.md`)                                                                                                                                                                                        |
-| **Onglet Git d'un projet** | le même dépôt, vu depuis le projet                                                                                                                                                                                                                                           |
+| Vue                        | Contenu                                                                                                                                                                                                     |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Dépôts**                 | tous les dépôts de l'espace, rangeables au glisser-déposer, dernière synchronisation, nombre de projets, cause d'un blocage, bande de progression pendant une synchronisation                               |
+| **Un dépôt**               | graphe des commits, branches (avec leur avance et leur retard sur la branche par défaut), releases, pull requests, derniers commits, projets liés ouvrables d'un clic                                       |
+| **Réglages → Sources**     | les jetons GitHub de l'espace : ajout, modification, suppression, et le nombre de dépôts que chacun sert. Le « + » du sélecteur de jeton y mène, et le dépôt adopte le jeton créé au retour                 |
+| **Réglages d'un dépôt**    | Général (jeton, synchronisation, relecture complète, suppression), Partage entre espaces et Permissions par rôle ([`Docs/SETTINGS.md`](../../Docs/SETTINGS.md), [`Docs/SHARING.md`](../../Docs/SHARING.md)) |
+| **Onglet Git d'un projet** | le même dépôt, vu depuis le projet                                                                                                                                                                          |
 
-Les deux derniers écrans sont **le même composant** (`RepoView`, composé par
-l'onglet d'un projet à travers `GIT_CLIENT_PROVIDER`). Un dépôt n'a pas à se
-présenter autrement selon la porte par laquelle on entre, et une seconde
-implémentation aurait divergé au premier ajustement.
+La fiche d'un dépôt et l'onglet Git d'un projet sont **le même composant**
+(`RepoView`, composé par l'onglet à travers `GIT_CLIENT_PROVIDER`). Un dépôt
+n'a pas à se présenter autrement selon la porte par laquelle on entre, et une
+seconde implémentation divergerait au premier ajustement. Dans l'onglet d'un
+projet, chaque dépôt est dans son cadre, y compris quand il n'y en a qu'un : le
+cadre dit où finit ce que l'onglet montre.
 
-L'interconnexion va dans les deux sens : depuis un projet on atteint son dépôt,
-et depuis un dépôt on ouvre en un clic chacun des projets qui l'utilisent.
+La tuile d'accueil compte les dépôts de l'espace (`git.count`). Sans le droit
+`git`, la tuile reste à sa place, à demi-opacité, et affiche « Accès
+restreint » à la place de son contenu.
+
+Désigner un dépôt (`RepoPicker`) se fait dans l'ordre **jeton → propriétaire →
+dépôt**, parce que le jeton change le résultat des deux autres : sans lui GitHub
+ne rend que le public, avec lui il rend aussi les dépôts privés du compte ou de
+l'organisation. Avec un jeton, le propriétaire se choisit parmi les comptes qu'il
+atteint ; les dépôts se cochent à plusieurs, et la saisie manuelle (noms séparés
+par des virgules) reste offerte : la découverte dépend d'une API tierce qui peut
+refuser (quota anonyme épuisé, propriétaire introuvable, jeton à portée réduite),
+et un échec de liste ne doit pas empêcher d'ajouter un dépôt dont on connaît le
+nom. Les dépôts déjà suivis sont marqués « déjà dans l'espace » plutôt
+qu'écartés : les rechoisir est sans danger.
+
+---
+
+## 3. Comment ça marche
+
+### 3.1 Les commandes
+
+Vingt-quatre commandes sous le préfixe `git.`, en camelCase
+(`src/contracts/commands.ts`) :
+
+- **jetons** : `credentialList`, `credentialAdd`, `credentialUpdate`,
+  `credentialRemove` ;
+- **dépôts** : `count`, `repoList`, `repoGet`, `repoAdd`, `repoCandidates`,
+  `ownerCandidates`, `repoReorder`, `repoUpdate`, `repoRemove`, `repoResync`,
+  `repoSyncNow`, `repoSyncStatus`, `syncStatuses` ;
+- **cache** : `branchList`, `commitList`, `commitGraph`, `authorMap`,
+  `releaseList`, `pullRequestList`, `commitDetail`.
+
+Toute commande qui prend un `repoId` commence par `loadRepo` : le dépôt doit
+être visible de l'espace actif (chez lui, ou projeté ici), et `ctx.items.assert`
+refuse en plus ce qu'une restriction de rôle masque ou passe en lecture seule.
+`loadHomeRepo` exige en outre que le dépôt soit chez l'appelant : ses réglages
+(le jeton se choisit parmi les clés de **son** espace) et sa suppression se font
+au domicile ; une fenêtre lit et resynchronise.
+
+**Trois lectures seulement sortent du cache** : `git.commitDetail` (le diff),
+`git.ownerCandidates` (les comptes qu'atteint un jeton) et `git.repoCandidates`
+(les dépôts d'un propriétaire) interrogent GitHub au moment de la demande. Ce
+sont les seules dont la latence dépende d'une API tierce, et les écrans le
+disent. Un diff pèse des ordres de grandeur de plus que la ligne qui le résume et
+ne se regarde qu'une fois : le stocker chiffré ferait grossir la base sans
+contrepartie. Le jeton d'un dépôt projeté se lit **chez lui**
+(`ft_git_credentials` de son domicile, sous le codec de son espace).
+
+Le filet de démarrage (`MUTATION_VERB` dans `src/features/_topics.ts`) cherche un
+verbe juste après le point et ne reconnaît aucune commande en camelCase : un
+`mutates` oublié ne produit aucun avertissement, et se relit à la main sur
+chaque écriture.
+
+### 3.2 L'ordonnanceur de fond (`GitSync`)
+
+`src/server/service.ts`, sur un ticker du SDK :
+
+| Constante                    | Valeur  | Rôle                                                                               |
+| ---------------------------- | ------- | ---------------------------------------------------------------------------------- |
+| `TICK_SECONDS`               | 30 s    | cadence de l'ordonnanceur                                                          |
+| `BATCH`                      | 10      | dépôts traités par tour, en parallèle : borne ce que le serveur fait en même temps |
+| `MIN_INTERVAL_SECONDS`       | 600 s   | délai minimal entre deux synchronisations d'un même dépôt                          |
+| `RATE_LIMIT_BACKOFF_SECONDS` | 3 600 s | recul d'un dépôt dont le jeton a épuisé son quota GitHub                           |
+| `HEAD_PAGES`                 | 5       | pages de 100 commits lues par tour pour la tête                                    |
+| `BACKFILL_PAGES`             | 30      | pages lues par tranche de remontée de l'historique ancien                          |
+| `BACKFILL_GAP_MS`            | 3 s     | répit entre deux tranches d'un historique inachevé                                 |
+| `BRANCHES_PER_RUN`           | 10      | branches dont les commits propres sont lus par tour                                |
+| `BRANCH_PAGES`               | 2       | profondeur de cette lecture par branche                                            |
+| `MAX_COMPARISONS_PER_RUN`    | 12      | branches comparées à la branche par défaut par tour                                |
+
+`listDue` rend les dépôts activés qui ont un jeton, jamais synchronisés d'abord,
+puis les plus anciens ; les dépôts que l'offre tient en pause sont écartés dans
+la requête. Un tour ne prend que ceux dont la dernière synchronisation remonte à
+plus de `MIN_INTERVAL_SECONDS`, sauf ceux demandés à la main (`git.repoSyncNow`,
+`git.repoResync`, l'ajout d'un dépôt et l'arrivée d'un jeton réveillent
+l'ordonnanceur par `requestSync`). Deux gardes de ré-entrance : celle du ticker
+et une carte des promesses en vol, pour ne jamais traiter deux fois le même
+dépôt.
+
+Un tour sur un dépôt enchaîne six étapes, dans l'ordre : Dépôt (branche par
+défaut), Branches (upsert, puis élagage des branches disparues du distant),
+Commits (tête, tranche d'historique, puis commits propres aux autres branches),
+Comparaison des branches, Releases (puis `applyVersion`, §3.6) et Pull requests.
+Chaque lecture renvoie son ETag en `If-None-Match` : un 304 ne coûte rien au
+quota et ne change rien. L'espace n'est réveillé (`live.changed`) que si quelque
+chose a changé ; un tour de 304 ne fait re-solliciter personne.
+
+Sur échec, le dépôt garde son `last_sync_error` (chiffré) et, si GitHub a
+répondu quota épuisé, un `last_sync_at` **futur** : c'est le seul moyen, avec un
+tri par ancienneté, de le faire patienter sans bloquer les autres.
+
+**La progression se sonde, elle ne se diffuse pas.** Les six étapes d'un tour
+feraient re-solliciter tout l'écran six fois chez tous les membres, pour une
+information qui n'intéresse que celui qui regarde. L'étape en cours vit dans une
+table **en mémoire** du service : `git.repoSyncStatus` (sondée toutes les 700 ms
+par la fiche ouverte) et `git.syncStatuses` (toutes les 1,5 s par la liste, en
+un seul appel pour l'espace) la lisent sans requête ni déchiffrement. Hors
+service (tests, démarrage), la réponse est « rien en cours », jamais une erreur.
+Derrière deux instances, seule celle qui synchronise connaît l'avancement.
+
+Le sondage n'a aucune limite de durée : relire un dépôt de plusieurs milliers de
+commits prend des minutes, et le serveur est la seule autorité sur « c'est
+fini ». Il retire l'entrée d'avancement dans un `finally`, échec compris, donc la
+boucle s'arrête toujours. Deux corollaires dans `syncOne` :
+
+- entre deux tranches d'historique, l'entrée d'avancement **survit** aux trois
+  secondes de répit (étape Commits, chronomètre conservé), sans quoi l'interface
+  conclurait « terminé » au milieu d'un travail qui va durer ;
+- la tranche suivante est enchaînée par un **appel direct** à `syncOne`, armé
+  par un `setTimeout(...).unref()` et non par `requestSync` : le dépôt vient
+  d'être synchronisé, donc trie en dernier dans `listDue`, un tour en cours
+  avalerait la relance, et c'est une reprise unique, pas une boucle. Un dépôt mis
+  en pause par l'offre entre deux tranches s'arrête là. Un tour qui échoue ne
+  relance pas de tranche : sur un quota épuisé, ce serait la rafale que le recul
+  cherche à éviter.
+
+### 3.3 L'historique complet
+
+Un dépôt lit **tout** son historique, pas ses mille derniers commits. Trois
+passes par tour, sur un seul `fetchCommits` :
+
+- la **tête** (`since` = le plus récent connu) : courte, souvent vide ; sautée
+  au tout premier tour, où la queue part elle aussi de HEAD ;
+- la **queue** (`until` = `backfillUntil`) : la remontée de l'historique, par
+  tranches de `BACKFILL_PAGES` jusqu'à toucher le premier commit, puis
+  lève `backfillDone` et ne recommence jamais. Trois façons d'avoir fini : le
+  distant n'a plus rien, la tranche est vide, ou la borne n'a pas reculé (ce qui
+  protège d'une boucle quand plus de `BACKFILL_PAGES` pages partagent la même
+  seconde) ;
+- une passe **par branche** (`ref`), parce que `/commits` sans référence ne rend
+  que la branche par défaut : tout ce qui ne vit que sur une branche de travail
+  resterait invisible. Une branche dont la tête est déjà connue est sautée sans
+  appel, ce qui rend cette passe gratuite en régime établi.
+
+Tant que l'historique n'est pas complet, le dépôt enchaîne ses tranches sans
+attendre les dix minutes du régime ordinaire : un historique à moitié remonté
+fait mentir le graphe sur l'âge du dépôt.
+
+> La borne de la remontée est mémorisée dans `sync_state` (`backfillUntil`), et
+> **pas** déduite d'un `MIN(committed_at)` sur le cache : celui-ci mêle les
+> commits de toutes les branches, et un seul commit ancien venu d'une branche
+> latérale abaisserait le minimum, ferait repartir la tranche suivante de bien
+> plus bas et sauterait tout l'historique intermédiaire de la branche principale
+> sans que rien ne le signale.
+
+> **La date d'un commit est celle du _committer_, pas de l'auteur.** C'est ce qui
+> fait converger la remontée : `since` et `until` filtrent chez GitHub sur
+> la date du committer, et borner les tranches sur la date d'auteur comparerait
+> deux grandeurs différentes (un rebase, un cherry-pick ou une pull request
+> fusionnée plus tard les séparent), avec une borne qui ne recule pas ou des
+> commits sautés en silence. La borne `until` reçoit **une seconde de
+> battement** : les horodatages du cache sont arrondis à la seconde, GitHub
+> compare à la milliseconde, et sans ce +1 tout commit partageant la seconde de
+> la borne serait sauté définitivement. Le prix est un commit relu par tranche,
+> qu'`INSERT IGNORE` absorbe. L'auteur, lui, reste l'auteur : c'est `author` qui
+> nomme et colore.
+
+Les comparaisons de branches mémorisent le couple `base..tête` qui les a
+produites (`compared_sha`) et ne recomparent que lorsqu'il diffère ; l'écran rend
+`null` plutôt qu'un chiffre périmé dès qu'un côté a bougé. Une branche sans
+ancêtre commun fait répondre 404 : elle est ignorée, les autres continuent. Un
+quota épuisé, lui, remonte et interrompt le tour.
+
+### 3.4 L'adaptateur GitHub
+
+`src/server/github.ts`, lecture seule, sur le `fetch` global, derrière la
+couture `GitHubClient` du service (remplaçable par un GitHub factice dans les
+tests). Un quota se reconnaît à un 403 ou 429 avec `x-ratelimit-remaining` à
+zéro, jamais au seul code : un 403 peut aussi être un dépôt privé sans droit. Un
+appel authentifié a 20 s ; une découverte, 15 s.
+
+`listOwnerRepos` essaie trois chemins, dans cet ordre, parce que GitHub n'expose
+pas la même chose selon qui demande :
+
+1. `/user/repos` quand le jeton appartient au propriétaire demandé : le **seul**
+   endpoint qui rende ses dépôts privés (`/users/{login}/repos` ne rend que le
+   public, même avec le jeton de l'intéressé, d'où l'aller-retour sur `/user`) ;
+2. `/orgs/{owner}/repos` : une organisation, dont un jeton membre voit aussi les
+   dépôts privés ;
+3. `/users/{owner}/repos` : le repli public, qui marche **sans jeton**, sous le
+   quota anonyme de GitHub, que l'écran annonce.
+
+`listTokenOwners` rend les comptes qu'un jeton atteint : le sien, ses
+organisations (`/user/orgs`) et les propriétaires des dépôts qu'il lit, parce
+qu'un jeton à grain fin voit rarement `/user/orgs`. Chaque appel peut échouer
+seul ; seul l'échec de tous remonte.
+
+### 3.5 Les jetons
+
+Les jetons GitHub appartiennent à l'espace (`ft_git_credentials`), chiffrés à
+l'étage ouvert : un même jeton ouvre en général plusieurs dépôts, et le service
+de fond doit les lire sans session. Le secret ne sort jamais : le client reçoit
+`hasSecret`, et un champ laissé vide à la modification veut dire « garder celui
+en place ». Ils se gèrent dans Réglages → Sources (`CredentialsPanel`), seul
+endroit où une source se crée, se corrige ou se retire
+([`Docs/SOURCES.md`](../../Docs/SOURCES.md)).
+
+Il n'y a pas de clé étrangère de `git_repos` vers `ft_git_credentials` :
+`removeCredential` met à NULL le `credential_id` des dépôts du jeton, puis
+retire la ligne. Un dépôt sans jeton reste, cesse d'être lu (`listDue` l'écarte)
+et le dit : « jeton retiré, synchronisation arrêtée ». Un jeton qui arrive sur
+un dépôt qui n'en avait pas déclenche une synchronisation tout de suite.
+
+### 3.6 Le contrat avec Projets
+
+- `features/projects/src/server/repoLink.ts` porte `projects.repoList`,
+  `projects.repoLink` et `projects.repoUnlink`, sous `projects: write`. Avant de
+  relier, Projets demande au module si le dépôt est visible de l'espace du projet
+  (`GIT_ITEMS_PROVIDER.exists`), et nomme les dépôts liés par `labelOf`. Sans
+  module Git installé, relier est refusé en le disant.
+- `features/projects/src/server/usageProvider.ts` publie
+  `PROJECTS_USAGE_PROVIDER`, que le module lit pour le compte et la liste des
+  projets qui utilisent un dépôt (ceux de l'espace appelant : un dépôt projeté
+  montre les projets de la fenêtre, pas ceux de son domicile). Absent, la
+  feature dégrade : zéro projet partout, aucune commande ne casse.
+- **La version d'un projet suit la release.** Un projet dont `versionSource` est
+  `github_release` prend pour version le tag de la dernière release **stable**
+  (jamais une pré-version) du dépôt qu'il relie. Après avoir rangé les releases
+  d'un tour, le service dit le tag au contrat (`applyVersion('git', repoId, ws,
+tag)`), et c'est Projets qui décide quels projets liés la suivent (les siens,
+  à l'étage ouvert, sur cette source) et réécrit leur corps. Un appel par tour
+  qui a reçu des releases (un 304 ne le déclenche pas) ; si l'écriture échoue,
+  le tour échoue, l'ETag des releases n'est pas retenu et le tour suivant
+  réessaie. Le service ne ravive que le sujet `git` ; c'est Projets qui ravive
+  `projects` quand une version a changé.
+- Côté client, l'onglet Git d'un projet (`features/projects/src/client/Git/` :
+  `Git.tsx`, `LinkRepoDialog.tsx`) compose `GIT_CLIENT_PROVIDER` sans importer
+  le module : la liste des dépôts de l'espace, un dépôt relié en entier
+  (`LinkedRepo`, avec « Synchroniser », le bouton de réglages commun, « Ouvrir
+  Git » et « Délier »), et le dialogue d'ajout. Le menu « + » de la barre
+  d'onglets du projet ouvre le même dialogue (`AddFeatureDialog`).
+
+### 3.7 Le client
+
+`src/client/index.tsx` déclare la tuile (`GitWidget`), la vue complète (`Git`),
+les panneaux de réglages (`general` : `RepoGeneralPanel` ; `sources` :
+`CredentialsPanel`), `cacheDurationMinutes: 0` (la vue d'un dépôt sonde
+l'avancement, une instance en cache continuerait de sonder sans être vue) et le
+provider client.
+
+- `RepoDialog` **ajoute** des dépôts, et rien d'autre ; une fois ajouté, un dépôt
+  se règle dans l'onglet Général de sa fiche (`RepoGeneralPanel` : jeton,
+  synchronisation activée ou suspendue, relecture complète, suppression), là où
+  le bouton de réglages commun mène. Les deux chargent les jetons de l'espace
+  et, quand le « + » du sélecteur a ouvert Réglages → Sources, adoptent au retour
+  le jeton qui vient d'être créé.
+- `Git.tsx` possède le niveau de présence `l1` (l'identifiant nu du dépôt
+  ouvert) : « qui regarde quel dépôt », et la cible d'une téléportation
+  ([`Docs/LIVE.md`](../../Docs/LIVE.md)). La liste suit `git.list`, la fiche
+  `git.repo`.
+- `RepoView` charge graphe, branches, releases, derniers commits et pull
+  requests depuis le cache, sonde l'avancement pendant une synchronisation
+  (700 ms, avec 12 s de grâce au démarrage : la commande rend la main avant que
+  l'ordonnanceur ait inscrit une étape), et remonte l'état à l'en-tête, dont les
+  boutons se désactivent sous le voile. Le voile couvre toute la boîte et son
+  panneau est en `position: sticky`, calé sur le corps défilant de la popup : un
+  contenu plus haut que la fenêtre centrerait sinon le texte hors écran.
+- Les panneaux montrent 15 lignes (10 pour les commits et les pull requests,
+  plus hautes) puis renvoient vers un dialogue « voir tout » ; les commits y sont
+  paginés par curseur `(committedAt, id)`, cinquante par page.
+- `CommitDialog` lit le diff chez GitHub à l'ouverture, et l'annonce ; les
+  fichiers sont repliés par défaut, un commit de fusion en touchant parfois cent.
+
+**Le graphe dessine sur un canvas** (`CommitGraph`). Un point par commit, la
+date en abscisse et l'heure de la journée en ordonnée : la dispersion veut dire
+quelque chose. Trois choix :
+
+1. **un canvas** pour le nuage, redessiné seulement quand les données, la largeur
+   ou l'auteur mis en avant changent ; un élément SVG par commit donnait autant
+   de nœuds à mettre en page, et toute l'interface ralentissait dès quelques
+   milliers de commits. Les axes restent en SVG : une vingtaine d'éléments de
+   texte, qui suivent le thème ;
+2. **une charge utile colonnaire** (`gitCommitPointsSchema` : `count`, `shas`
+   concaténés, `committedAt`, `authorIndex`) : trois tableaux parallèles au lieu
+   d'un tableau d'objets, et aucune allocation d'objet côté client
+   (`Float32Array` pour les coordonnées) ;
+3. **un index spatial** pour le survol : les points sont rangés en seaux par
+   colonne de 14 px, une recherche n'en examine que trois.
+
+Le graphe porte tout l'historique, avec une borne de sécurité à **100 000
+points** (`GRAPH_MAX_POINTS`) pour qu'un dépôt monstrueux ne fasse pas exploser
+une trame WebSocket ; au-delà, ce sont les commits **anciens** qui sont écrêtés,
+et l'interface dit combien de points sont affichés.
+
+**La légende peut réunir les auteurs sous un membre.** Une même personne commite
+sous plusieurs adresses. `git.authorMap` rattache un auteur à un membre de
+l'espace (l'appartenance est vérifiée par la façade `members.list()`), et le
+réglage « N'afficher que les membres rattachés » du même dialogue
+(`AuthorMapDialog`, activé par défaut) fait disparaître les auteurs git au
+profit de la personne, qui réunit leurs points et leurs commits. Le regroupement
+se fait **côté client**, dans un `useMemo` : la réponse du serveur reste la même
+pour tout le monde. Il est **local au navigateur** (`prefs.ts`, `localStorage`),
+pas une propriété de l'espace : deux personnes peuvent lire le même graphe
+différemment. La liste du dialogue reste complète, regroupement ou non : c'est
+là qu'on rattache. Le dialogue s'ouvre sans le droit d'écriture (il porte un
+réglage personnel) ; ce sont les sélecteurs de rattachement qui s'y désactivent.
+Un auteur rattaché prend la **couleur de son compte**, la même que sa présence
+en direct : la façade `members.list()` (capacité `members.read`, la seule du
+manifest) rend la couleur avec chaque membre, `null` sur un compte jamais
+colorié (repli `defaultUserColor`). Un auteur non rattaché a une teinte
+déterministe dérivée de son empreinte.
+
+### 3.8 Le partage entre espaces
+
+`shareTier: 'open'` : un dépôt se projette dans un autre espace, s'y déplace ou
+s'y copie ([`Docs/SHARING.md`](../../Docs/SHARING.md)). L'entrée `items` du
+serveur donne le domicile et le nom d'un dépôt visible (`homeOf`, `labelOf`), et
+porte `move` et `copy` :
+
+- `copy.ts` décrit l'arbre d'un dépôt (`gitTree`) : la ligne de `git_repos`
+  (cellules scellées `content`, `last_sync_error`, `sync_state` ; unicité sur
+  `slug_ref`) et les cinq tables du cache, marquées `cache`. Le jeton, le
+  dernier état et l'état de synchronisation ne suivent pas (`omit`) : le jeton
+  est une source de l'espace quitté, et une copie va relire son historique.
+  `admit` contrôle le quota `repos` dans l'espace d'arrivée.
+- `move.ts` rescelle les cellules de l'arbre sous la clé de l'espace d'arrivée,
+  fait suivre le `workspace_id` des tables du cache, met `credential_id` à NULL
+  (le dépôt arrive sans jeton, donc sans synchronisation, état que la feature
+  sait dire), range le dépôt en fin de liste, et refuse si `slug_ref` est déjà
+  pris là-bas.
+- Les listes déduisent `ctx.items.restrictions()` : un dépôt qu'une restriction
+  masque pour ce rôle disparaît plutôt que de figurer grisé, et la tuile compte
+  ce que la liste montre. `git.repoRemove` appelle `ctx.items.forget` : sans ce
+  ménage, projections et restrictions s'appliqueraient au prochain dépôt à
+  hériter de l'identifiant.
+
+### 3.9 L'export du compte
+
+`src/server/accountExport.ts` ([`Docs/ACCOUNT_EXPORT.md`](../../Docs/ACCOUNT_EXPORT.md)) :
+`git_repos` dans `depots.json` (corps déchiffré, sans `sync_state`),
+`ft_git_credentials` dans `jetons.json` (sans le secret). Le cache (commits,
+branches, auteurs, pull requests, releases) n'est pas exporté : il reste chez le
+fournisseur, d'où la synchronisation le relit.
 
 ---
 
 ## 4. Carte du code
 
-### Le module — `DevEye/features/git/`
-
 ```
 deveye-feature.json                 l'allowlist des six tables historiques (git_repos, git_branches, git_commits,
                                     git_commit_authors, git_pull_requests, git_releases)
 package.json                        deveye-feature-git
-src/index.ts, src/manifest.ts       l'entrée isomorphe ; le descripteur étalé, `shareTier: 'open'`,
-                                    ressources git.count / list / repo, capacité `members.read`, onglet Sources
-src/contracts/domain.ts             dépôt, jeton, branches, commits, releases, PR, diff, sync (l'ex domain/git.ts)
-src/contracts/commands.ts           les vingt-trois commandes (préfixe unique `git.`)
+src/index.ts, src/manifest.ts       l'entrée isomorphe ; le descripteur étalé, ressources git.count / git.list / git.repo,
+                                    capacité members.read, quota repos, réglages { feature: ['sources'], item: ['general'] }
+src/contracts/domain.ts             dépôt, jeton, branches, commits (dont la forme colonnaire du graphe), releases, PR,
+                                    diff, état de synchronisation
+src/contracts/commands.ts           les vingt-quatre commandes (préfixe `git.`)
 
-src/server/index.ts                 serverEntry : dépôt, handlers, service, `items` (domicile et `owner/repo` d'un dépôt),
-                                    provider GIT_ITEMS_PROVIDER offert à Projets
-src/server/repo.ts                  dépôts, jetons (ft_git_credentials), synchronisation, cache ; sur SdkQueryable
-src/server/_shared.ts               StoredRepo, slugRef, loadRepo / loadHomeRepo, toRepo, toCredential,
+src/server/index.ts                 serverEntry : dépôt, handlers, service, `items` (domicile, nom, move, copy),
+                                    quota `repos`, export du compte, provider GIT_ITEMS_PROVIDER offert à Projets
+src/server/repo.ts                  dépôts, jetons (ft_git_credentials), cache, listDue et stock du quota ; sur SdkQueryable
+src/server/_shared.ts               StoredRepo, slugRef, readJson, loadRepo / loadHomeRepo, repoCipher, toRepo, toCredential,
                                     le singleton du service (setSync / syncOf / requestSync), le contrat de Projets
-src/server/handlers.ts              l'agrégat : credentials.ts (les quatre gestes de jetons), crud.ts (les dépôts,
-                                    leur ordre, les gestes qui réveillent ou interrogent le service), read.ts (le cache)
-src/server/service.ts               GitSync : l'ordonnanceur de fond (ticker à deux minutes, tranches de backfill)
-src/server/github.ts                l'adaptateur GitHub, lecture seule (ETags, since / until, trois chemins de découverte)
+src/server/handlers.ts              l'agrégat de credentials.ts (les jetons), crud.ts (les dépôts, leur ordre, les gestes
+                                    qui réveillent ou interrogent le service) et read.ts (le cache, le graphe, le diff)
+src/server/service.ts               GitSync : l'ordonnanceur de fond
+src/server/github.ts                l'adaptateur GitHub, lecture seule (ETags, since / until / ref, découverte)
+src/server/copy.ts, move.ts         l'arbre d'un dépôt ; sa copie et son déplacement entre espaces
+src/server/accountExport.ts         l'export du compte
 src/server/uninstall.sql            DROP de ft_git_credentials (les tables historiques restent)
-src/server/*.test.ts                handlers (harnais SDK), service (GitHub factice), github (les décodeurs)
+src/server/*.test.ts                handlers (harnais SDK), service (GitHub factice), github (décodeurs, fetch simulé),
+                                    repo (le SQL des pauses et du stock), accountExport
 
-src/client/index.tsx                clientEntry : widget, vue complète, panneau Sources, provider client
-src/client/Git.tsx                  liste des dépôts + fiche ; possède le niveau live `l1` (l'identifiant nu du dépôt)
-src/client/RepoList.tsx             les cartes + le glisser-déposer d'ordonnancement
+src/client/index.tsx                clientEntry : tuile, vue complète, panneaux Général et Sources, provider client
+src/client/Git.tsx                  liste + fiche ; possède le niveau live `l1`
+src/client/RepoList.tsx             les cartes et leur glisser-déposer (useDragReorder du SDK)
 src/client/RepoDetail.tsx           en-tête d'un dépôt + RepoView + projets liés
-src/client/RepoView.tsx             ⟵ le cœur partagé avec l'onglet Git d'un projet
-src/client/Rows.tsx                 lignes de branche / release / PR / commit, partagées
-src/client/ListDialog.tsx           le « voir tout » d'un panneau
+src/client/RepoView.tsx             le cœur partagé avec l'onglet Git d'un projet
+src/client/Rows.tsx                 lignes de branche / release / PR / commit, partagées avec les dialogues « voir tout »
+src/client/ListDialog.tsx           le « voir tout » d'un panneau ; les commits paginés
 src/client/AuthorMapDialog.tsx      rattachement des auteurs aux membres + regroupement
-src/client/RepoDialog.tsx           ajouter / modifier / supprimer un dépôt (le « + » du jeton ouvre Réglages → Sources)
-src/client/RepoPicker.tsx           jeton → propriétaire → dépôt, partagé avec les Projets
-src/client/CredentialsPanel.tsx     les jetons GitHub (panneau Sources du manifest)
+src/client/RepoDialog.tsx           ajouter des dépôts (le « + » du jeton ouvre Réglages → Sources)
+src/client/RepoGeneralPanel.tsx     l'onglet Général d'un dépôt : jeton, synchronisation, relecture complète, suppression
+src/client/RepoPicker.tsx           jeton → propriétaire → dépôt, partagé avec RepoDialog
+src/client/CredentialsPanel.tsx     les jetons GitHub (panneau Sources de la feature)
 src/client/CommitGraph.tsx          le graphe sur canvas (scale.ts, useElementWidth.ts)
-src/client/CommitDialog.tsx, PullRequestDialog.tsx, GitWidget.tsx
+src/client/CommitDialog.tsx         le détail d'un commit et son diff
+src/client/PullRequestDialog.tsx    le détail d'une pull request
+src/client/GitWidget.tsx            la tuile d'accueil (git.count)
 src/client/provider.tsx             ce que l'onglet d'un projet compose (GIT_CLIENT_PROVIDER)
 src/client/prefs.ts                 préférences d'affichage, locales au navigateur
-src/client/api.ts, format.ts        featureApi(manifest) ; les libellés
+src/client/api.ts                   featureApi(manifest)
 src/client/style.module.css         la feuille du module
 ```
 
-### Ce qui reste dans l'app — `DevEye/src/`
-
-```
-db/migrations/064_git_repos.sql      table rase de l'ancien schéma, 7 tables
-db/migrations/100_git_credentials.sql  les jetons GitHub dans la table du module, la clé étrangère retirée,
-                                       workspace_credentials supprimée
-features/projects/src/server/repo/links.ts       project_repo_links : la table de Projets, ses lectures et ses comptes
-features/projects/src/server/repoLink.ts         les trois commandes de liaison ; l'existence d'un dépôt par GIT_ITEMS_PROVIDER
-features/projects/src/server/usageProvider.ts    PROJECTS_USAGE_PROVIDER : ce que le module demande à Projets, et la version
-                                                 d'un projet qui suit une release (applyVersion)
-```
-
-Le contrat de Projets (`features/projects/src/contracts/commands.ts`) n'en
-porte que trois : `projects.repoList` / `repoLink` / `repoUnlink`. Elles ne
-manipulent qu'un `repoId`. `features/projects/src/client/Git/` se réduit à `Git.tsx` (enveloppe
-mince) et `LinkRepoDialog.tsx` (choisir un dépôt existant, ou en créer un),
-composés sur `GIT_CLIENT_PROVIDER`.
+Côté Projets : `features/projects/src/server/repo/links.ts` (la table
+`project_repo_links`, ses lectures et ses comptes),
+`features/projects/src/server/repoLink.ts` (les trois commandes de liaison),
+`features/projects/src/server/usageProvider.ts` (`PROJECTS_USAGE_PROVIDER`) et
+`features/projects/src/client/Git/` (l'onglet d'un projet).
 
 ---
 
-## 5. Pièges, et pourquoi ils existent
+## 5. Les tables
 
-### Le filet de démarrage ne couvre pas ce module
+| Table                                                                                    | À qui   | Contenu                                                                                                                                                                                                                     |
+| ---------------------------------------------------------------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `git_repos`                                                                              | socle   | un dépôt : `slug_ref` (unique par espace), `credential_id` (sans clé étrangère), `enabled`, `sort_order`, `default_branch`, `last_sync_at`, `last_sync_error` et `sync_state` chiffrés, `content` chiffré (`owner`, `repo`) |
+| `git_branches`, `git_commits`, `git_commit_authors`, `git_pull_requests`, `git_releases` | socle   | le cache, en cascade sur le dépôt ; les condensés (`name_ref`, `tag_ref`, `author_ref`, `sha`) et les dates en clair, le reste chiffré ; `git_commit_authors.user_id` porte le rattachement à un membre                     |
+| `ft_git_credentials`                                                                     | module  | les jetons GitHub de l'espace, `secret_enc` chiffré à l'étage ouvert ; `uninstall.sql` la détruit                                                                                                                           |
+| `project_repo_links`                                                                     | Projets | la liaison `(project_id, repo_id)`, en cascade des deux côtés                                                                                                                                                               |
 
-`MUTATION_VERB` (`src/features/_topics.ts`) cherche un verbe **juste après le
-point** (`notes.add`). Les commandes d'ici sont en camelCase sous un préfixe
-unique (`git.repoAdd`) : **il n'en verra aucune**, exactement comme pour les
-projets. Un `mutates` oublié ne produira donc aucun avertissement. (Une seule
-exception, `git.syncStatuses`, dont le verbe suit le point : elle figure dans
-`NON_MUTATING`, le filet passant aussi sur les commandes des modules.)
-
-→ **Relire `mutates` à la main** sur chaque écriture ajoutée. En revanche, un
-préfixe absent de `COMMAND_PREFIX_TOPIC` **fait échouer le démarrage** — c'est
-un contrat, pas une heuristique.
-
-### Le cache git ne suit aucun tier
-
-Le cache git ne figure pas dans la liste de rekey de Projets
-(`features/projects/src/server/repo/rekey.ts`) : un dépôt appartient à
-l'espace et non à un projet, il est chiffré sous la clé de l'espace à l'étage
-ouvert, une fois pour toutes.
-
-### Le droit `git` est distinct de `projects`
-
-Lire le dépôt d'un projet relève de `git: read`, pas de `projects`. L'onglet Git
-d'un projet le dit explicitement quand le rôle ne l'accorde pas, plutôt que
-d'afficher un écran vide qui se lirait comme un bug.
-
-⚠️ **Les rôles existants n'accordent pas `git`** — _fail-closed_, voir
-Docs/WORKSPACES.md §3. Le propriétaire a tout d'office ; les autres membres doivent
-recevoir le droit dans « Gérer l'espace › Rôles ».
-
-### La progression se sonde, elle ne se diffuse pas
-
-Les six étapes d'un tour feraient re-solliciter tout l'écran six fois d'affilée
-chez **tous** les membres de l'espace, pour une information qui n'intéresse que
-celui qui a pressé le bouton. D'où `git.repoSyncStatus`, sondée toutes les
-700 ms par la seule vue concernée, et une unique invalidation à la fin.
-`git.syncStatuses` fait la même chose pour la liste, en un seul appel — les deux
-ne lisent qu'une table **en mémoire** du service (`syncOf()`, le singleton posé
-par `createService`), sans requête ni déchiffrement, et c'est ce qui rend le
-sondage défendable. Sans service monté (tests, boot en cours), la réponse est
-« rien en cours », jamais une erreur.
-
-Corollaire assumé, vrai de tout le direct : derrière deux instances, seule celle
-qui synchronise connaît l'avancement.
-
-**Le sondage n'a aucune limite de durée, et c'est délibéré.** Il en avait une —
-trois minutes — et elle était fausse : relire un dépôt de plusieurs milliers de
-commits prend plus longtemps, et la barre disparaissait en plein travail. Le
-serveur est la seule autorité sur « c'est fini » ; il retire l'entrée
-d'avancement dans un `finally`, échec compris, donc la boucle s'arrête toujours.
-
-Deux corollaires côté serveur, dans `GitSync.syncOne` (`service.ts`) :
-
-- entre deux tranches de rapatriement d'historique, l'entrée d'avancement
-  **survit** aux trois secondes de répit — sans quoi l'interface concluait
-  « terminé » au milieu d'un travail qui allait durer des minutes ;
-- la tranche suivante est enchaînée par un **appel direct** à `syncOne`, posé
-  par un `setTimeout(...).unref()` et non par `forced` + `tick()` ni par un
-  ticker du SDK : le dépôt vient d'être synchronisé, il trie donc en dernier
-  dans `listDue`, un tour déjà en cours aurait avalé la relance, et ce n'est
-  pas une boucle mais une reprise unique. Une tranche perdue laisserait
-  l'historique incomplet **et** une barre figée.
-
-### La version d'un projet suit la release, par le contrat de Projets
-
-Un projet dont `versionSource` est `github_release` prend pour version le tag
-de la dernière release **stable** (jamais une pré-version) du dépôt qu'il
-relie. Le service ne lit ni n'écrit aucune table de Projets : après avoir
-rangé les releases d'un tour, il dit le tag au contrat (`applyVersion('git',
-repoId, ws, tag)`), et c'est Projets qui décide quels projets liés la suivent
-(les siens, à l'étage ouvert, sur cette source) et réécrit leur corps. Un
-appel par tour qui a reçu des releases (un 304 ne le déclenche pas), et le
-tour échoue si l'écriture échoue : l'ETag des releases n'est alors pas
-retenu, et le tour suivant réessaie.
-
-Le service ne ravive que `git` ; c'est Projets qui ravive `projects` depuis
-son module, quand `applyVersion` a changé la version d'un projet
-(`deps.live.changed`, jamais sans changement).
-
-### Désigner un dépôt : l'ordre des champs est le sujet
-
-`RepoPicker` pose **jeton → propriétaire → dépôt**, dans cet ordre, parce que le
-jeton _change le résultat_ des deux autres : sans lui GitHub ne rend que le
-public, avec lui il rend aussi les dépôts privés du compte ou de l'organisation.
-Le placer sous la liste revenait à demander de choisir avant d'avoir dit ce que
-la liste devait contenir. La liste se recharge donc à chaque changement de l'un
-ou de l'autre, et d'eux seuls.
-
-Avec un jeton, le propriétaire se choisit parmi les comptes qu'il atteint
-(`listTokenOwners`) : le sien, ses organisations (`/user/orgs`) et les
-propriétaires des dépôts qu'il lit, car un jeton à grain fin voit rarement
-`/user/orgs`. Les dépôts se cochent à plusieurs ; à la main, leurs noms se
-séparent par des virgules.
-
-`listOwnerRepos` (`github.ts`) essaie trois chemins, parce que GitHub n'expose
-pas la même chose selon qui demande :
-
-1. **`/user/repos`** quand le jeton appartient au propriétaire demandé — le
-   **seul** endpoint qui rende ses dépôts privés. `/users/{login}/repos` ne rend
-   que le public _même avec le jeton de l'intéressé_ : c'est le piège de cette
-   API, et la raison de l'aller-retour sur `/user` ;
-2. **`/orgs/{owner}/repos`** — une organisation, dont un jeton membre voit aussi
-   les dépôts privés ;
-3. **`/users/{owner}/repos`** — le repli public, qui marche **sans jeton**.
-
-La saisie manuelle reste offerte, et ce n'est pas un détail : la découverte
-dépend d'une API tierce qui peut refuser (quota anonyme épuisé, propriétaire
-introuvable, jeton à portée réduite). Sans repli, un échec de liste empêcherait
-d'ajouter un dépôt dont on connaît parfaitement le nom.
-
-### L'historique complet, et la date qui le rend possible
-
-Un dépôt lit **tout** son historique, pas ses mille derniers commits. Deux
-passes par tour de synchronisation :
-
-- la **tête** (`since = le plus récent connu`) — courte, souvent vide ;
-- la **queue** (`until = backfillUntil`) — le backfill, qui remonte le temps par
-  tranches de `BACKFILL_PAGES` jusqu'à toucher le premier commit, puis lève
-  `backfillDone` et ne recommence jamais ;
-- une passe **par branche**, parce que `/commits` sans référence ne rend que la
-  branche par défaut : tout ce qui ne vit que sur une branche de travail
-  resterait invisible. Une branche dont la tête est déjà connue est sautée sans
-  le moindre appel, ce qui rend cette passe gratuite en régime établi.
-
-> ⚠️ La borne du backfill est mémorisée dans `sync_state` (`backfillUntil`), et
-> surtout **pas** déduite d'un `MIN(committed_at)` sur le cache. Celui-ci mêle
-> les commits de toutes les branches : un seul commit ancien venu d'une branche
-> latérale abaisserait le minimum global, la tranche suivante repartirait de bien
-> plus bas, et tout l'historique intermédiaire de la branche principale serait
-> sauté sans que rien ne le signale.
-
-Tant qu'elle n'est pas finie, le dépôt est réinscrit au tour suivant sans
-attendre les dix minutes du régime ordinaire : un historique à moitié rapatrié
-fait mentir le graphe sur l'âge du dépôt.
-
-> ⚠️ **La date d'un commit est celle du _committer_, pas de l'auteur.**
->
-> Ce n'est pas un détail de présentation, c'est ce qui fait converger le
-> backfill. Les paramètres `since` et `until` de GitHub filtrent sur la date du
-> committer ; borner les tranches sur la date d'auteur revenait à comparer deux
-> grandeurs différentes, avec deux issues possibles — une borne qui ne recule
-> pas, ou des commits sautés en silence. Mesuré sur un dépôt ordinaire :
-> **66 commits sur 100 portent deux dates différentes** (rebase, cherry-pick, PR
-> fusionnée plus tard).
->
-> Corollaire : la borne `until` reçoit **une seconde de battement**. Nos
-> horodatages sont arrondis à la seconde, GitHub compare à la milliseconde ;
-> sans ce +1, tout commit partageant la seconde de la borne serait sauté
-> définitivement, puisque le backfill ne repasse jamais. Le prix est un commit
-> relu par tranche, qu'`INSERT IGNORE` absorbe.
->
-> L'auteur, lui, reste l'auteur : c'est toujours `author` qui nomme et colore.
-
-### Le graphe dessine sur un canvas
-
-Les points étaient un `<circle>` SVG chacun. À quelques milliers de commits, le
-navigateur portait autant de nœuds à mettre en page et à peindre — et **tout le
-reste de l'interface ralentissait**, jusqu'au défilement de la page. Trois
-changements, du plus structurant au plus fin :
-
-1. **Un canvas** pour le nuage : un seul élément, redessiné seulement quand les
-   données, la largeur ou l'auteur mis en avant changent. Les axes restent en
-   SVG — une vingtaine d'éléments, du texte qui suit le thème.
-2. **Une charge utile colonnaire** (`gitCommitPointsSchema`) : trois tableaux
-   parallèles au lieu d'un tableau d'objets. À vingt mille commits, ~450 Ko au
-   lieu de ~2 Mo, et aucune allocation d'objet côté client.
-3. **Un index spatial** pour le survol : les points sont rangés en seaux par
-   colonne de pixels, une recherche n'en examine que trois. Un balayage complet à
-   chaque `mousemove` coûtait plus cher que le dessin.
-
-### La légende peut réunir les auteurs sous un membre
-
-Une même personne commite sous trois adresses selon la machine. `git.authorMap`
-les rattache à un membre ; le réglage **« N'afficher que les membres rattachés »**
-(dans ce même dialogue, activé par défaut) fait alors disparaître les auteurs
-git au profit de la personne, qui réunit tous leurs points et tous leurs
-commits.
-
-Trois choix à connaître :
-
-- le regroupement se fait **côté client**, dans un `useMemo` de `CommitGraph` :
-  c'est une préférence de lecture, la réponse du serveur reste la même pour tout
-  le monde, et la basculer ne coûte pas un aller-retour ;
-- il est **local au navigateur** (`prefs.ts`, `localStorage`), pas une
-  propriété de l'espace : deux personnes peuvent vouloir lire le même graphe
-  différemment, et cela ne mérite ni colonne, ni migration, ni diffusion `live` ;
-- **la liste du dialogue reste complète**, regroupement ou non — c'est là qu'on
-  fait le rattachement, il faut donc y voir chaque auteur git séparément.
-
-Le dialogue est atteignable **sans le droit d'écriture** : il porte un réglage
-personnel. Ce sont les sélecteurs de rattachement qui s'y désactivent.
-
-Un auteur rattaché prend la **couleur de son compte**, la même que sa présence
-en direct : c'est la seule donnée d'utilisateur que la feature lit, et elle lui
-vient de la façade `members.list()` (capacité `members.read`), qui rend la
-couleur avec chaque membre, `null` sur un compte jamais colorié (le repli est
-alors `defaultUserColor`, comme partout). Le rattachement lui-même vérifie par
-la même façade que la personne est membre de l'espace du dépôt.
-
-### L'ordre des dépôts appartient à l'utilisateur
-
-`git_repos.sort_order` (migration 065), posé par `git.repoReorder` et par rien
-d'autre ; un nouveau dépôt prend le rang suivant, donc la fin de la liste. Le
-tri précédent — par date d'ajout — n'était pas un ordre mais une conséquence.
-
-Le geste est celui d'Uptime, repris tel quel (`RepoList.tsx`) : Pointer Events
-et non l'API `draggable` du HTML5, poignée dédiée en `touch-action: none`, barre
-d'insertion qui se tient dans l'interstice sans déplacer aucune ligne. Les
-raisons sont détaillées dans `features/uptime/src/client/ServiceList.tsx` et valent mot pour
-mot ici. Un point propre à cette liste : la relecture déclenchée par
-`git.list` est **retenue** pendant un glissé et rejouée au relâchement — une
-liste qui se réordonne sous le pointeur n'est pas un ordre.
-
-### Trois lectures seulement sortent du cache
-
-`git.commitDetail` (le diff), `git.ownerCandidates` (les comptes qu'atteint un
-jeton) et `git.repoCandidates` (la liste des dépôts d'un propriétaire)
-interrogent GitHub **au moment de la demande** ; tout le reste vient du cache
-local. Ce sont donc les trois seules dont la latence dépende d'une API tierce,
-et les écrans le disent. Un diff pèse des
-ordres de grandeur de plus que la ligne qui le résume, on ne le regarde qu'une
-fois, et le stocker chiffré ferait grossir la base sans contrepartie. Le jeton
-d'un dépôt projeté se lit **chez lui** (`ft_git_credentials` de son domicile,
-sous le codec de son espace) : le chercher dans la fenêtre répondrait
-« introuvable » sur un dépôt parfaitement configuré.
-
-### Le voile de synchronisation est collant
-
-`.gitContent` est plus haut que la fenêtre dès qu'un dépôt a quelques branches.
-Un voile en `position: absolute; inset: 0` centrait donc son texte au milieu du
-_contenu_ — c'est-à-dire hors écran — et débordait sous la barre de défilement.
-Le voile couvre toujours toute la boîte, mais son panneau est en
-`position: sticky`, calé sur le corps défilant de la popup.
+Les six tables historiques sont créées par les migrations du socle et listées
+dans l'allowlist de `deveye-feature.json`, qui les dispense du préfixe
+`ft_git_`. Le module n'a pas de `migrationsDir` : une nouvelle table
+inaugurerait `src/server/migrations/` avec ce préfixe.
 
 ---
 
-## 6. Vérification
+## 6. Configuration
+
+Aucune variable d'environnement. Les appels sortants vont vers
+`https://api.github.com`, par le `fetch` global.
+
+---
+
+## 7. Les quotas de l'offre
+
+Un dépôt suivi interroge GitHub à chaque tour, à vie : c'est ce que l'offre
+borne. Le manifest déclare le quota `repos` (un **stock**, libellé « dépôts
+suivis »), ce qui donne la limite `git.repos`
+([`Docs/QUOTAS.md`](../../Docs/QUOTAS.md)). Les valeurs sont celles du module
+de facturation des comptes (`src/server/plans.ts` de Billing) : **3** dépôts en
+offre gratuite, **20** en Pro, tous espaces du propriétaire confondus. Une
+installation sans module de facturation n'a aucune limite.
+
+Le contrôle est dans `git.repoAdd` (`ctx.quota.assert('repos', …)`), **après**
+la recherche qui rend l'ajout idempotent : remettre à jour un dépôt déjà suivi
+n'en ajoute aucun et ne doit jamais buter sur la limite ; et dans `admit` de
+`copy.ts` pour une copie. Un déplacement ne change rien au compte. Le stock est
+listé par `listStockRepos`, du plus ancien au plus récent : après un retour à
+une offre plus basse, l'excédent passe en pause, le plus récent d'abord. Un
+dépôt en pause est écarté de `listDue`, refuse `git.repoSyncNow`,
+`git.repoResync` et `git.commitDetail` (`ctx.quota.assertActive`), et se
+présente avec `planPaused` à l'écran.
+
+---
+
+## 8. Notifications
+
+Git n'émet aucun avis (`notifies: false` dans le registre).
+
+---
+
+## 9. Tests
 
 ```bash
-./ci.sh
-rsync -a --delete DevEye-Types/src/ DevEye/node_modules/@deveye/types/src/
-diff -rq DevEye-Types/src DevEye/node_modules/@deveye/types/src   # doit être vide
+npm run test:features
 ```
 
-Les tests du module (`npm run test:features`, ou
-`npx tsx --test "features/git/src/**/*.test.ts"`) tournent sans base ni
-réseau : les handlers sur le harnais du SDK (restrictions, projections,
-contrat de Projets, idempotence, jetons), le service sur un GitHub factice
-(branches, tranches de backfill, releases et `applyVersion`, 304, quota
-épuisé, avancement), les décodeurs de l'adaptateur sur un `fetch` simulé.
-
-La migration `064` a été rejouée deux fois sur une copie du dump du 5 août
-(`DevEye_migtest`), avec vérification d'invariants de **données** et non
-seulement de succès du DDL :
-
-| Invariant                                                                                 | Attendu                                             |
-| ----------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| anciennes tables `project_{repos,commits,branches,releases,pull_requests,commit_authors}` | 0                                                   |
-| nouvelles tables `git_*`                                                                  | 6                                                   |
-| `project_repo_links` créée, `project_credentials` **conservée**                           | oui                                                 |
-| mots de passe préservés                                                                   | 308                                                 |
-| second démarrage                                                                          | « Migrations up to date », zéro migration rejouée   |
-| démarrage                                                                                 | zéro avertissement `mutates`, aucun préfixe inconnu |
-
-La `100` se rejoue de la même façon (`DevEye_migdry`) : `ft_git_credentials`
-créée et remplie avec les identifiants d'origine, `git_repos.credential_id`
-intact, `fk_git_repo_credential` absente, `workspace_credentials` disparue,
-second passage sans effet.
-
-Les cascades ont été vérifiées à la main sur cette copie : deux projets liés au
-même dépôt, suppression d'un projet (dépôt et cache intacts, seconde liaison
-intacte), puis suppression du dépôt (projet restant intact, liaisons et cache
-partis).
-
-### Points d'attention à l'essai manuel
-
-1. **Idempotence** — ajouter deux fois `owner/repo` ne crée qu'un dépôt.
-2. **Partage** — lier un dépôt à deux projets ; l'en-tête de chaque onglet Git
-   annonce le partage, la feature Git compte les deux et les ouvre d'un clic.
-3. **Jetons** — créer, modifier, supprimer ; un dépôt dont le jeton vient
-   d'être retiré affiche « jeton retiré, synchronisation arrêtée » et cesse
-   d'être lu (le dépôt met `credential_id` à NULL lui-même : la clé étrangère
-   n'existe plus).
-4. **Droits** — un rôle sans `git` : tuile désaturée, onglet Git d'un projet en
-   « accès restreint », le reste du projet intact.
-5. **Confidentialité** — passer un projet en confidentiel retire sa liaison ; le
-   dépôt et son cache survivent dans la feature Git.
-6. **Version suivie** — un projet en `github_release` prend le tag de la
-   dernière release stable au tour suivant, et son champ passe en lecture seule.
+depuis `DevEye/`. Les tests du module tournent sans base ni réseau.
 
 ---
 
-## 7. Ce qui n'est pas fait
+## 10. Les limites
 
-- **Aucun webhook** : tout est du sondage, borné par les ETags et un budget
-  d'appels par tour.
-- **GitLab, Gitea** : l'adaptateur GitHub est isolé dans
-  `features/git/src/server/github.ts`, derrière la couture `GitHubClient` du
-  service ; la surface à réimplémenter est étroite.
-- **Un dépôt ne se renomme pas** : `owner/repo` **est** son identité (voir
-  `slug_ref`). Viser un autre dépôt, c'est en ajouter un.
-- **Le graphe porte tout l'historique**, avec une borne de sécurité à 100 000
-  points pour qu'un dépôt monstrueux ne fasse pas exploser une trame WebSocket.
-  Au-delà, ce sont les commits **anciens** qui sont écrêtés, et l'interface
-  annonce combien de points sont affichés.
-
----
-
-## 8. Le module (28 août 2026)
-
-Git est la onzième native rapatriée sur le SDK des features
-(`Docs/FEATURE_SDK.md`, « La migration des natives »). Ce que le rapatriement a
-changé, en plus des chemins du §4 :
-
-- **Les jetons GitHub ont leur table** (`ft_git_credentials`, migration `100`
-  du socle : c'est le socle qui crée et copie, une migration de module ne
-  pouvant pas lire ni détruire `workspace_credentials`), et leurs quatre
-  gestes sont ceux du module. La table commune n'avait plus qu'un
-  propriétaire : la `100` la supprime, et `_credentials.ts`,
-  `db/repos/credentials.ts` et l'entrée `credentials` de `db/index.ts` sont
-  partis avec elle. La clé étrangère `fk_git_repo_credential` est retirée et
-  non recréée (même piège InnoDB qu'en 099) : `removeCredential` met à NULL
-  les dépôts du jeton avant de retirer la ligne, ce que la contrainte faisait
-  sans le dire. Le module possède la table : son `uninstall.sql` la détruit,
-  les six tables historiques restent.
-- **Le module ne lit aucune table de Projets.** `project_repo_links` et ses
-  lectures (`listRepoIds`, `linkRepo`, `unlinkRepo`, `unlinkAllRepos`,
-  `listRepoUsage`, `countRepoLinks`) sont chez Projets
-  (`features/projects/src/server/repo/links.ts`, la jointure sur `git_repos`
-  pour l'ordre d'affichage est admise) ; `project_count` a quitté le dépôt du
-  module, `toRepo` reçoit le compte. Dans un sens, Projets demande au module
-  si un dépôt existe avant de le relier (`GIT_ITEMS_PROVIDER`, publié par le
-  service du module, lu par `ctx.providers` dans
-  `features/projects/src/server/repoLink.ts`) ; dans l'autre, le module lit
-  le contrat de Projets (`PROJECTS_USAGE_PROVIDER`, offert par l'app tant que
-  Projets était native, publié par le service du module Projets depuis) pour
-  le compte, la liste des projets liés, et pour
-  **dire** la version d'un projet (`applyVersion`, l'ex `applyReleaseVersion`
-  du service natif, désormais chez Projets : c'est lui qui connaît sa règle,
-  `github_release` étant la seule source suivie aujourd'hui).
-- **`IntegrationSyncService` n'existe plus.** Sa moitié déploiement était
-  partie le matin même dans `DeploySync` ; sa moitié git est `GitSync`
-  (`service.ts`), sur `FeatureServiceDeps` : un ticker du SDK à deux minutes,
-  `cipherFor` mémoïsé par le SDK, `live.changed(ws)` à chaque tour qui a
-  changé quelque chose, et une couture de test (`{ github }`, les six lectures
-  de l'adaptateur). Les handlers atteignent le service par le singleton du
-  module (`setSync` / `syncOf`, patron `setEngine` de CloudSync), tolérant à
-  son absence comme l'était `ctx.integrations?.` ; `ctx.integrations` a quitté
-  `FeatureContext`, `WSDeps` et `app.ts`.
-- **La façade `members` rend la couleur d'un compte.** Le graphe colorait un
-  auteur rattaché de la couleur de son compte en lisant la table `users` ; un
-  module n'y a pas accès, et la couleur d'une personne est une donnée que tout
-  écran qui la montre doit pouvoir lire. `members.list()` porte donc `color`
-  (`null` sur un compte jamais colorié), et Git déclare `members.read`, seule
-  capacité du manifest (le rattachement d'un auteur vérifie l'appartenance par
-  la même liste).
-- **Ce que le SDK n'offrait pas alors**, comme pour Bases de données et
-  Déploiement : un `mutates` multi-sujets (`git.repoRemove` déclarait
-  `['git', 'projects']`) et un `live.changed` sur le sujet `projects` (le
-  service natif le nommait après un tour qui a pu changer la version d'un
-  projet). Depuis le rapatriement de Projets, le SDK admet les deux, et c'est
-  Projets qui ravive `projects` quand `applyVersion` a changé une version ;
-  l'onglet d'un projet suit `git.repo` et voit le cache changer, ses compteurs
-  d'onglets se relisent à leur prochaine lecture.
+- **Tout est du sondage** : aucun webhook n'est reçu. Le coût est borné par les
+  ETags et par le budget d'appels de chaque tour.
+- **GitHub seulement.** L'adaptateur est isolé dans `src/server/github.ts`,
+  derrière la couture `GitHubClient` du service.
+- **Un dépôt ne se renomme pas** : `owner/repo` est son identité (§1).

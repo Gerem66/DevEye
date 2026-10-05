@@ -3,7 +3,7 @@
 Fermer le site entier, ou une seule fonctionnalité, pour tout le monde et à
 l'instant : une faille, un bug, un emballement. Ou réserver une fonctionnalité
 aux administrateurs, le temps de l'essayer en production avant de l'ouvrir.
-Depuis l'interface (menu du profil, « Accès et maintenance », réservé aux
+Depuis l'interface (menu du compte, « Accès et maintenance », réservé aux
 administrateurs), depuis la base quand l'interface ne répond plus, ou dès le
 démarrage par une variable d'environnement.
 
@@ -47,13 +47,13 @@ nombre de comptes présents en même temps.
 
 ## Les niveaux
 
-| Niveau                   | Qui entre           | Ce qui est refusé                                                             | Ce qui continue                                        |
-| ------------------------ | ------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------ |
-| Site en maintenance      | les administrateurs | la connexion, la socket et toute commande des autres comptes, l'inscription   | le travail de fond, les agents                         |
-| Feature en préversion    | les administrateurs | ses commandes, aux autres comptes                                             | son service de fond, ses routes publiques              |
-| Feature en maintenance   | les administrateurs | ses commandes et ses routes publiques (pages Rdv, traceur Audience, webhooks) | son service de fond                                    |
-| Feature en arrêt complet | personne            | idem, et même les administrateurs                                             | rien : son service est arrêté, ses hooks agent ignorés |
-| Priorité aux abonnés     | tout le monde       | aux comptes sans priorité : toute création, tout ce qui tourne pour eux       | les abonnés, entiers                                   |
+| Niveau                   | Qui entre           | Ce qui est refusé                                                                        | Ce qui continue                                        |
+| ------------------------ | ------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| Site en maintenance      | les administrateurs | la connexion, la socket et toute commande des autres comptes, l'inscription              | le travail de fond, les agents                         |
+| Feature en préversion    | les administrateurs | ses commandes, aux autres comptes                                                        | son service de fond, ses routes publiques              |
+| Feature en maintenance   | les administrateurs | ses commandes et ses routes publiques (pages de réservation, traceur Audience, webhooks) | son service de fond                                    |
+| Feature en arrêt complet | personne            | idem, et même les administrateurs                                                        | rien : son service est arrêté, ses hooks agent ignorés |
+| Priorité aux abonnés     | tout le monde       | aux comptes sans priorité : toute création, tout ce qui tourne pour eux                  | les abonnés, entiers                                   |
 
 La préversion laisse ses routes publiques ouvertes : seuls les administrateurs y
 créent quelque chose, et ce qu'elles servent est à eux (le défi ACME du serveur
@@ -107,22 +107,23 @@ Le serveur la relit toutes les 15 s : un changement s'applique sans redémarrage
 ```sql
 UPDATE site_maintenance SET active = 1;
 UPDATE site_maintenance SET active = 0;
-INSERT INTO feature_maintenance (feature, level) VALUES ('rdv', 'requests');
-UPDATE feature_maintenance SET level = 'full' WHERE feature = 'rdv';
+INSERT INTO feature_maintenance (feature, level) VALUES ('uptime', 'requests');
+UPDATE feature_maintenance SET level = 'full' WHERE feature = 'uptime';
 INSERT INTO feature_maintenance (feature, level) VALUES ('mailserver', 'preview');
-DELETE FROM feature_maintenance WHERE feature = 'rdv';
+DELETE FROM feature_maintenance WHERE feature = 'uptime';
 UPDATE site_maintenance SET priority = 1;
-INSERT INTO instance_settings (name, origin, value) VALUES ('signups', 'https://app.deveye.fr', 'open')
+INSERT INTO instance_settings (name, origin, value) VALUES ('signups', 'https://deveye.example', 'open')
     ON DUPLICATE KEY UPDATE value = VALUES(value);
-INSERT INTO instance_settings (name, origin, value) VALUES ('seats', 'https://app.deveye.fr', '{"free": 50, "paid": null}')
+INSERT INTO instance_settings (name, origin, value) VALUES ('seats', 'https://deveye.example', '{"free": 50, "paid": null}')
     ON DUPLICATE KEY UPDATE value = VALUES(value);
 ```
 
-Les places sont relues toutes les minutes.
+L'origine d'un réglage d'`instance_settings` est la valeur de `PUBLIC_ORIGIN`
+du serveur visé. Les places sont relues toutes les minutes.
 
 `site_maintenance.message` à `NULL` vaut le texte par défaut.
 
-### `MAINTENANCE=1`
+### `MAINTENANCE=true`
 
 Pour un site qu'on ne peut plus atteindre, même en administrateur : poser la
 variable et redémarrer. Le site est fermé avant la première connexion. Ce n'est

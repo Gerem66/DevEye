@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "license": "AGPL-3.0-only",
-  "description": "Projets, au format module : le portefeuille de l'espace, le tableau, la frise, la discussion et l'historique de chaque projet, ses liaisons vers les dépôts, les cibles, les bases, les sites et les services surveillés, et le contrat d'usage que les autres features lisent, quatorzième native rapatriée sur le SDK des features.",
+  "description": "Projets : le portefeuille de l'espace, le tableau, la frise, la discussion et l'historique de chaque projet, ses liaisons vers les dépôts, les cibles, les bases, les sites et les services surveillés, sa page publique, et le contrat d'usage que les autres features lisent.",
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
@@ -19,7 +19,7 @@
     "@dnd-kit/utilities": "^3.2.2"
   },
   "peerDependencies": {
-    "@deveye/types": ">=0.15.2",
+    "@deveye/types": ">=0.22.1",
     "react": "^19.0.0",
     "zod": "^4.0.0"
   }

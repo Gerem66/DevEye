@@ -85,7 +85,7 @@ export const mailserverAppPasswordCreate = {
     input: z.object({
         id,
         label: z.string().min(1).max(MAILSERVER_NAME_MAX),
-        /** Pour le compte que Mails va tenir : le serveur range alors lui-même une copie des envois. */
+        /** Pour le compte que Mail va tenir : le serveur range alors lui-même une copie des envois. */
         forMails: z.boolean().default(false)
     }),
     output: z.object({ credential: credentialSchema, secret: z.string() })

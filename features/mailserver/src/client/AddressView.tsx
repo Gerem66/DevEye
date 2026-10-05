@@ -92,7 +92,7 @@ export default function AddressView({
                 <div className={styles.actions}>
                     {typeof link.linkedId === 'number' && (
                         <Button variant='secondary' icon='mail' onClick={link.open}>
-                            Ouvrir dans Mails
+                            Ouvrir dans Mail
                         </Button>
                     )}
                     <FeatureSettingsButton

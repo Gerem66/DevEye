@@ -15,6 +15,6 @@
     "project_audience_links",
     "project_uptime_links"
   ],
-  "minTypesVersion": "0.15.2",
+  "minTypesVersion": "0.22.1",
   "$comment": "Tables historiques du socle, jamais déplacées : l'allowlist les dispense du préfixe ft_projects_. Toute NOUVELLE table du module prendra le préfixe, via src/server/migrations/."
 }

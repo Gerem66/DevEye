@@ -693,7 +693,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     const cores = report?.os.cores ?? 0;
     const valuesMuted = !online && focus.kind === 'live';
 
-    // The focus is the single driver here too (see features/devices/README.md §10).
+    // The focus is the single driver here too (see features/devices/README.md, « Invariants »).
     const procSample = focus.kind === 'live' ? liveProc : histProc;
 
     // Processus KPI, always rendered; `procStale` marks a value that isn't the

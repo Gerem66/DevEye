@@ -9,7 +9,7 @@ const descriptor = featureDescriptor('mailserver');
 export const manifest = {
     ...descriptor,
     category: 'work',
-    links: [{ to: 'mail', what: 'Une adresse hébergée ici se lit dans Mails, ajoutée d’un clic.' }],
+    links: [{ to: 'mail', what: 'Une adresse hébergée ici se lit dans Mail, ajoutée d’un clic.' }],
     /** Le défi ACME du certificat se sert sur une route publique. */
     nativeCapabilities: ['routes.public'],
     quotas: [{ key: 'addresses', label: 'adresses hébergées', stock: true }],

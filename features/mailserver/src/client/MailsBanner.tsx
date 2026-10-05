@@ -4,8 +4,8 @@ import type { MailsLink } from './useMailsLink';
 import styles from './style.module.css';
 
 /**
- * La proposition « lire cette adresse dans Mails ». Elle ne s'affiche que si
- * elle mène quelque part (Mails installé, adresse pas encore chez lui), et se
+ * La proposition « lire cette adresse dans Mail ». Elle ne s'affiche que si
+ * elle mène quelque part (Mail installé, adresse pas encore chez lui), et se
  * ferme pour de bon : le réglage reste dans l'onglet Général de l'adresse.
  */
 export default function MailsBanner({
@@ -21,16 +21,16 @@ export default function MailsBanner({
         <div className={styles.banner} role='status'>
             <span className={`icon icon-mail ${styles.bannerIcon}`} aria-hidden='true' />
             <div className={styles.bannerText}>
-                <span className={styles.bannerTitle}>Lire cette adresse dans Mails</span>
+                <span className={styles.bannerTitle}>Lire cette adresse dans Mail</span>
                 <span className={styles.bannerHint}>
-                    DevEye l’ajoute comme un compte de Mails, avec un mot de passe qui lui est réservé.
+                    DevEye l’ajoute comme un compte de Mail, avec un mot de passe qui lui est réservé.
                 </span>
                 {link.error && <span className={styles.error}>{link.error}</span>}
             </div>
             <div className={styles.bannerActions}>
                 {canAdd && (
                     <Button icon='add' disabled={link.busy} onClick={link.add}>
-                        Ajouter à Mails
+                        Ajouter à Mail
                     </Button>
                 )}
                 {onDismiss && (

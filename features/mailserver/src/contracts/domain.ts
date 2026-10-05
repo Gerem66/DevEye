@@ -32,7 +32,7 @@ export const mailboxSchema = z.object({
     messageCount: z.number().int().nonnegative(),
     /** Messages sortants par jour glissant. Borne ce que ferait un mot de passe volé. */
     outboundDailyLimit: z.number().int(),
-    /** La proposition « lire dans Mails » a été fermée pour de bon. */
+    /** La proposition « lire dans Mail » a été fermée pour de bon. */
     bannerDismissed: z.boolean(),
     lastDeliveryAt: z.number().int().nullable(),
     lastLoginAt: z.number().int().nullable(),
@@ -45,7 +45,7 @@ export type Mailbox = z.infer<typeof mailboxSchema>;
 export const credentialSchema = z.object({
     id: z.number().int(),
     label: z.string(),
-    /** `mails` : créé par le bouton « Ajouter à Mails », pour le compte que Mails tient. */
+    /** `mails` : créé par le bouton « Ajouter à Mail », pour le compte que Mail tient. */
     origin: z.enum(['user', 'mails']),
     created: z.number().int(),
     lastUsedAt: z.number().int().nullable()

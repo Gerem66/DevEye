@@ -45,11 +45,12 @@ Trois décisions à connaître :
   remis. La boîte des essais (`e2e/mailbox.ts`) enveloppe l'expéditeur du
   serveur et retient tout mail vers ce domaine, attendu ou non. C'est aussi ce
   qui le ferme à un inconnu : le lien d'inscription ne lui arrive jamais.
-- **La base est partagée entre le serveur de dev et la prod.** Chaque compte
-  d'essai porte l'étiquette de son serveur (`sha256(PUBLIC_ORIGIN)`, 6
-  caractères) : un serveur ne balaie que les siens, sous le verrou des essais,
-  plus ceux de n'importe quel serveur créés il y a plus d'une heure (un essai ne
-  dure jamais autant).
+- **Plusieurs serveurs peuvent partager une base** (un serveur de développement
+  sur la base d'une instance, par exemple). Chaque compte d'essai porte
+  l'étiquette de son serveur (`sha256(PUBLIC_ORIGIN)`, 6 caractères) : un
+  serveur ne balaie que les siens, sous le verrou des essais, plus ceux de
+  n'importe quel serveur créés il y a plus d'une heure (un essai ne dure jamais
+  autant).
 
 Les plafonds de débit : un essai relancé atteindrait vite ceux de
 l'inscription. Le jeton de l'essai (`e2e/gate.ts`), tiré à chaque essai et
@@ -66,7 +67,8 @@ juste après avoir créé quelque chose, avant ce qui peut échouer. Ce qui vit
 dans les tables du module part avec le compte ; seul ce qui vit ailleurs
 (un planificateur en mémoire, un objet chez un tiers) demande un `defer`, et un
 `sweep` s'il peut survivre à un plantage. Exemples : `features/notes`,
-`features/uptime`, `features/audience`, et `DevEye-Billing` pour un tiers.
+`features/uptime`, `features/audience` ; pour un objet chez un tiers (un client
+Stripe), le module de facturation des comptes déclare un `sweep`.
 
 Dans le socle : `src/Services/debug/e2e/scenarios/`, même forme, avec
 `accounts: 0 | 1 | 2` pour les comptes ouverts avant la première étape.

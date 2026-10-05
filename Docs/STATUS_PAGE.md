@@ -67,7 +67,7 @@ Du plus fort au plus faible :
 
 Le coût pour DevEye est d'une requête par minute, faite de lectures en mémoire et
 d'un `SELECT 1`. Un vrai parcours par module (les essais E2E de la page Tests et
-débogage) a été écarté : il crée des comptes et envoie des mails.
+débogage) n'en fait pas partie : il crée des comptes et envoie des mails.
 
 ## 3. Les états
 
@@ -162,5 +162,7 @@ Côté page d'état (`statuspage/.env.template`) :
 | `SMTP_*`                   | l'expéditeur des e-mails d'alerte, comme celui du serveur |
 
 En dev : `npm run dev:status` (lit `statuspage/.env`), avec `STATUS_DEVEYE_URL`
-sur le client Vite : sans build du client, le port 3000 ne sert pas l'accueil. Le
-déploiement est dans `deploy/README.md`.
+sur le client Vite : sans build du client, le serveur (`LISTEN_PORT`) ne sert
+pas l'accueil. L'image de la page se construit depuis `statuspage/Dockerfile` ;
+l'installation de DevEye lui-même est décrite dans le
+[Quick Start](../README.md#quick-start) du README.

@@ -8,6 +8,6 @@
     "finance_transactions",
     "finance_budgets"
   ],
-  "minTypesVersion": "0.15.2",
+  "minTypesVersion": "0.22.1",
   "$comment": "Tables nées dans le socle (084_finance.sql) : l'allowlist les dispense du préfixe ft_finance_ et laisse src/server/migrations/ les faire évoluer. Toute table nouvelle prend le préfixe."
 }

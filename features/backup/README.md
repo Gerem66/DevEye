@@ -3,13 +3,11 @@
 Copies programmées de ce que DevEye détient, vers un endroit qui n'est pas le
 serveur qui les produit.
 
-Module in-repo (`features/backup`, huitième native rapatriée sur le SDK des
-features, 28 août 2026) : contrats dans `src/contracts/`, moteur et handlers
-dans `src/server/`, écrans dans `src/client/`. L'app ne garde que l'identité
-(`backup` dans le registre publié) ; le contrat des bases lui vient du module
-Bases de données (`features/database/src/server/index.ts`, publié par son
-service), sans qu'une ligne de Sauvegardes ait changé à la migration de
-celui-ci.
+Module in-repo (`features/backup`) : contrats dans `src/contracts/`, moteur et
+handlers dans `src/server/`, écrans dans `src/client/`. L'app ne garde que
+l'identité (`backup` dans le registre publié) ; le contrat des bases lui vient du
+module Bases de données (`DATABASE_BACKUP_PROVIDER`, publié par son service),
+celui des partages du module CloudSync (`CLOUDSYNC_BACKUP_PROVIDER`).
 
 Trois notions, et la séparation est la feature elle-même :
 
@@ -22,6 +20,12 @@ Trois notions, et la séparation est la feature elle-même :
 Les croiser est tout l'intérêt : la même base part vers le Raspberry **et** vers
 un S3 distant en déclarant deux travaux, sans dupliquer la configuration
 d'accès.
+
+Les destinations se gèrent à l'échelle de la fonctionnalité, dans Réglages →
+**Sources** (voir [Docs/SOURCES.md](../../Docs/SOURCES.md)) ; un travail se crée
+par le dialogue de la vue puis se règle dans sa fiche : onglet **Général** (ce qui
+part, où, à quelle cadence, combien de copies, actif ou non, suppression) et
+onglet **Chiffrement** (la forme des archives à venir).
 
 ---
 
@@ -47,8 +51,13 @@ En conteneur, la paire hôte/conteneur suit exactement celle de CloudSync :
 écrire dans la couche d'écriture du conteneur, donc à perdre les archives au
 redéploiement suivant : c'est refusé. Sur une racine qu'aucun volume ne porte
 (`objects.ephemeralRoot()`), le contrôle de la destination échoue, chaque
-exécution aussi, avec la phrase qui nomme `BACKUP_STORAGE_DIR`, et le démarrage
-l'écrit au journal.
+exécution aussi, avec la phrase qui nomme `BACKUP_STORAGE_DIR`
+(`hostedStorageProblem`), et le démarrage l'écrit au journal.
+
+Sur une instance avec le module de facturation, l'espace occupé « sur le
+serveur » est compté par l'offre du propriétaire (quota `storage`, voir
+[Offre et droits](#offre-et-droits)) ; les destinations vers un stockage qui
+n'est pas le serveur ne sont pas comptées.
 
 ### `device` : un dossier d'une machine enrôlée
 
@@ -56,15 +65,13 @@ L'agent écrit le fichier. C'est ce qui fait d'un Raspberry Pi, d'un NAS ou d'un
 vieux portable une cible de sauvegarde **sans rien y installer** : l'agent y
 tourne déjà.
 
-**Aucune modification de l'agent n'a été nécessaire**, et c'est délibéré : le
-protocole porte déjà `files.upload` (écriture d'un fichier par morceaux à un
-offset) et `files.mutate` (`mkdir`, `rename`, `delete`) depuis l'explorateur de
-fichiers. Un ordre de plus aurait voulu dire recompiler huit cibles et attendre
-que toute la flotte se mette à jour avant que la feature ne serve à quelque
-chose.
+La destination n'use que des ordres de l'explorateur de fichiers :
+`files.upload` (écriture d'un fichier par morceaux à un offset) et
+`files.mutate` (`mkdir`, `rename`, `delete`). Tout agent qui sert l'explorateur
+sait donc recevoir une archive.
 
 Le serveur pousse par trames de 512 Kio et surveille le tampon d'envoi de la
-socket (`MonitorHub.agentBuffered`) : sans cette contre-pression, la mémoire du
+socket (`deps.agents.buffered`) : sans cette contre-pression, la mémoire du
 serveur suivrait la taille de l'archive au lieu de celle d'un morceau.
 
 L'archive est écrite sous `<nom>.part` puis renommée. Un transfert coupé ne
@@ -74,12 +81,12 @@ qu'une archive absente, parce qu'on croit être couvert.
 
 ### `s3` : un service compatible S3
 
-Garage, MinIO, Scaleway, Backblaze, AWS. Le seul des trois qui sorte les octets
-du réseau local.
+Garage, MinIO, Scaleway, Backblaze, AWS. Avec SFTP et WebDAV, l'une des trois
+destinations qui sortent les octets de la machine.
 
 Le client S3 est celui de l'hôte, `src/Services/objectStorage/s3.ts`, partagé
-avec son magasin d'objets : signature SigV4, `PUT` simple
-en dessous de 16 Mio, envoi multiple au-delà, avec abandon explicite en cas
+avec son magasin d'objets : signature SigV4, `PUT` simple en dessous de 16 Mio
+(`S3_PART_BYTES`), envoi multiple au-delà, avec abandon explicite en cas
 d'échec (S3 facture les parties d'un envoi jamais terminé, et elles sont
 invisibles au listage).
 
@@ -90,9 +97,8 @@ qu'une devinette sur le nom d'hôte.
 
 #### Faire d'un Raspberry Pi un serveur S3
 
-**Garage** est le meilleur choix sur un Pi : écrit en Rust, ~50 Mo de RAM, conçu
-pour le self-hosting multi-sites. MinIO fonctionne aussi mais tient plutôt
-300 Mo.
+**Garage** est le meilleur choix sur un Pi : écrit en Rust, conçu pour le
+self-hosting multi-sites, bien plus léger que MinIO.
 
 ```bash
 # Sur le Pi, avec une partition ou un dossier dédié :
@@ -112,9 +118,10 @@ Puis un service systemd, `garage layout assign` pour le nœud, et
 `garage key create deveye` qui rend la paire (clé d'accès, clé secrète) à coller
 dans DevEye. Adressage **par chemin**, région `garage`.
 
-Le bouton « Tester » de DevEye écrit, relit et efface un objet témoin : lister un
-bucket ne prouve pas qu'on peut y écrire, et découvrir le contraire à 3 h du
-matin est exactement ce que ce bouton existe pour éviter.
+Le bouton **Contrôler** d'une destination (`backup.destinationTest`) écrit,
+relit et efface un objet témoin : lister un bucket ne prouve pas qu'on peut y
+écrire, et découvrir le contraire à 3 h du matin est exactement ce que ce bouton
+existe pour éviter.
 
 ### `sftp` : un serveur SSH
 
@@ -127,8 +134,8 @@ effaçant d'abord l'ancienne.
 **L'empreinte du serveur est retenue au premier contrôle réussi**, et rien ne
 part vers un serveur qu'aucun contrôle n'a validé : sans elle, quiconque
 détourne le nom d'hôte reçoit les archives. Une empreinte qui change arrête
-tout, en la nommant ; « Oublier l'empreinte » dans la destination sert au
-serveur réinstallé. Changer d'hôte ou de port l'oublie aussi.
+tout, en la nommant ; le bouton **Oublier** de la destination sert au serveur
+réinstallé. Changer d'hôte ou de port l'oublie aussi.
 
 La connexion passe par le garde des appels sortants (`assertAllowedOutboundHost`
 puis `publicLookup` sur le socket remis à ssh2) : une adresse privée n'est
@@ -141,10 +148,10 @@ puis `MOVE` vers le nom final. Tout passe par `safeFetch`, sans suivre de
 redirection : un corps en flux ne se rejoue pas, et une adresse qui redirige
 est une adresse à corriger.
 
-Le bouton « Tester » envoie son témoin **par le même envoi en flux** qu'une
-archive : un serveur qui refuse l'envoi par morceaux (certains proxys exigent
-la longueur) échoue au test, pas à 3 h du matin. Les quotas viennent de la
-RFC 4331 quand le serveur la connaît.
+Le contrôle envoie son témoin **par le même envoi en flux** qu'une archive : un
+serveur qui refuse l'envoi par morceaux (certains proxys exigent la longueur)
+échoue au contrôle, pas à 3 h du matin. Les quotas viennent de la RFC 4331
+quand le serveur la connaît.
 
 Le mot de passe voyage en en-tête `Basic` : l'adresse doit être en `https`,
 sauf vers une adresse privée qu'une installation personnelle a ouverte.
@@ -162,34 +169,38 @@ supervision, index CloudSync, comptes mail, finances, constats Sentinelle.
 Elle porte **tous les comptes de l'instance** : seul un administrateur global la
 voit et la choisit, et seulement depuis son espace personnel, où personne
 d'autre ne peut modifier la destination de ses archives. Le serveur le vérifie
-à la création comme à la modification d'un travail.
+à la création comme à la modification d'un travail. Pour la même raison, une
+archive de cette source ne sort jamais dans l'export d'un seul compte.
 
-C'est aussi la raison pour laquelle il n'existe **pas** de source « Monitoring » :
+C'est aussi la raison pour laquelle il n'existe **pas** de source « Appareils » :
 les relevés d'appareils sont des lignes de `device_metrics`, elles sont déjà
 là-dedans. Les sauvegarder séparément reviendrait à les copier deux fois.
 
 ### `database` : une base supervisée de l'espace
 
-Passe par le **même accès** que la supervision, tunnel SSH ou proxy SOCKS
-compris : le module ne déchiffre aucune connexion, il demande à Bases de
-données un accès ouvert (`DATABASE_BACKUP_PROVIDER`, `openAccess`, lu par
+Passe par le **même accès** que la supervision, tunnel SSH, proxy SOCKS ou
+appareil compris : le module ne déchiffre aucune connexion, il demande à Bases
+de données un accès ouvert (`DATABASE_BACKUP_PROVIDER`, `openAccess`, lu par
 `deps.providers.get`), que le module Bases de données construit avec
 `DatabaseMonitor.targetOf` (`features/database/src/server/service.ts`) et son
 tunnel, et referme quand le flux s'achève. Une base joignable par Bases de
-données est donc sauvegardable sans configuration supplémentaire. L'app
-offrait ce contrat tant que la feature était native ; c'est désormais le
-service du module qui publie la même clé, et Sauvegardes n'a pas changé
-d'une ligne.
+données est donc sauvegardable sans configuration supplémentaire.
 
 ### `cloudsync` : les blobs d'un partage
 
 La seule partie de DevEye à ne pas vivre en base. Rendus **en clair** dans une
-archive `tar`, arborescence d'origine reconstituée depuis l'index.
+archive `tar`, arborescence d'origine reconstituée depuis l'index
+(`CLOUDSYNC_BACKUP_PROVIDER`).
 
 L'archive doit pouvoir s'extraire par `tar -xzf` sur une machine où DevEye n'a
 jamais tourné : copier le blob store tel quel (des contenus chiffrés adressés
 par condensé) aurait produit un répertoire technique inutilisable sans le reste
 du système.
+
+Un partage chiffré de bout en bout n'est pas proposé : le serveur n'a pas de quoi
+le lire, le contrat de CloudSync ne le liste pas et ne le retrouve pas. Sa
+sauvegarde se fait depuis une machine qui le synchronise (source
+`deviceFolder`).
 
 ### `deviceFolder` : les fichiers d'une machine
 
@@ -199,21 +210,21 @@ l'archive sur la machine, avec les exclusions du travail (les mêmes règles
 que CloudSync), et le serveur la tire morceau par morceau
 (`deps.agents.archiveFolder`). Elle ne se recompresse pas en route.
 
-**L'agent n'envoie que ce que le serveur a pris.** Chaque morceau de 512 Kio
-dépense un crédit ; le serveur en accorde huit d'avance et les rend par
-quatre, au rythme où la destination absorbe. Une destination lente freine la
-machine au lieu de remplir la mémoire du serveur, et un travail abandonné
-(délai dépassé, destination en panne) annule l'archive sur la machine. Un
-agent qui ne connaît pas l'ordre ne déclare pas `folderArchive` dans son
-rapport : la machine apparaît grisée « agent à mettre à jour ».
+**L'agent n'envoie que ce que le serveur a pris.** Chaque morceau dépense un
+crédit ; le serveur en accorde huit d'avance et les rend par quatre, au rythme
+où la destination absorbe. Une destination lente freine la machine au lieu de
+remplir la mémoire du serveur, et un travail abandonné (délai dépassé,
+destination en panne) annule l'archive sur la machine. Un agent qui ne connaît
+pas l'ordre ne déclare pas `folderArchive` dans son rapport : la machine
+apparaît grisée « agent à mettre à jour ».
 
 **Deux droits, revérifiés à chaque passage.** Créer ou modifier un tel travail
 demande la permission « Sauvegarder les fichiers d'une machine » de
-Sauvegardes, et le droit « Fichiers » d'Appareils sur cette machine (surcharges
-de l'élément comprises : qui peut tout télécharger à la main peut le
-sauvegarder). L'enregistrer en fait l'auteur ; le moteur relit ses droits sans
-session avant chaque passage (`deps.access`), et le travail échoue, en le
-disant, le jour où il ne les a plus, ne serait-ce que parce qu'il a quitté
+Sauvegardes, et la permission « Explorateur de fichiers » d'Appareils sur cette
+machine (surcharges de l'élément comprises : qui peut tout télécharger à la main
+peut le sauvegarder). L'enregistrer en fait l'auteur ; le moteur relit ses
+droits sans session avant chaque passage (`deps.access`), et le travail échoue,
+en le disant, le jour où il ne les a plus, ne serait-ce que parce qu'il a quitté
 l'espace. Sans cela, un ancien membre qui avait choisi son propre S3 comme
 destination continuerait de recevoir les fichiers de la machine.
 
@@ -256,8 +267,8 @@ Le mot de passe passe par l'environnement (`MYSQL_PWD`, `PGPASSWORD`), jamais pa
 
 Les archives sont scellées au **même format que les blobs CloudSync** (`DEVB`
 v2 : AES-256-GCM par blocs de 1 Mio, nonce dérivé du rang, AAD portant le rang et
-un marqueur de fin). Le format vit dans le SDK (`@deveye/types/sdk/server`,
-`devb.ts`), seul endroit que deux modules partagent.
+un marqueur de fin). Le format vit dans le SDK (`@deveye/types/sdk`, `devb.ts` :
+`sealStream`, `openSealedStream`), seul endroit que deux modules partagent.
 
 La **clé**, en revanche, n'est pas celle de CloudSync, et la différence est
 vitale :
@@ -268,29 +279,28 @@ serverKey = SHA-256("CRYPT_KEY_A:CRYPT_KEY_B")
 ```
 
 Elle est **dérivée, jamais stockée** (`deps.keys.derive`, la dérivation du
-SDK). La BMK de CloudSync est rangée wrappée dans
-la table `sync_meta` : l'utiliser ici aurait mis la clé qui déchiffre l'archive
-_à l'intérieur_ de l'archive. Le jour où on restaure, c'est-à-dire le jour où la
-base a disparu, on n'aurait eu aucun moyen de l'ouvrir.
+SDK). La BMK de CloudSync est rangée wrappée dans la table `sync_meta` :
+l'utiliser ici aurait mis la clé qui déchiffre l'archive _à l'intérieur_ de
+l'archive. Le jour où on restaure, c'est-à-dire le jour où la base a disparu, on
+n'aurait aucun moyen de l'ouvrir.
 
 > ⚠️ **`CRYPT_KEY_A` et `CRYPT_KEY_B` sont la sauvegarde.**
 > Sans elles, une archive chiffrée est un fichier de bruit. Elles se rangent là
 > où l'on range une clé, et surtout pas à côté des archives ni sur la machine
 > qu'elles protègent. Les changer rend illisibles toutes les archives d'avant.
 
-Le chiffrement est un réglage **du travail** (migration 094 ; il a vécu sur la
-destination) : `backup_jobs.encryption`, 'none' ou 'server', réglé dans
-l'onglet Chiffrement des réglages du travail. Une destination dit où écrire,
-le travail dit sous quelle forme. La forme reste recopiée sur chaque exécution
-au moment où elle part : changer le réglage ne change donc jamais
-rétroactivement ce qu'on croit des archives déjà écrites. Un travail naît
-scellé ('server'), le défaut sûr.
+Le chiffrement est un réglage **du travail** : `backup_jobs.encryption`, `none`
+ou `server`, réglé dans l'onglet Chiffrement des réglages du travail. Une
+destination dit où écrire, le travail dit sous quelle forme. La forme reste
+recopiée sur chaque exécution au moment où elle part (`backup_runs.encrypted`) :
+changer le réglage ne change donc jamais rétroactivement ce qu'on croit des
+archives déjà écrites. Un travail naît scellé (`server`), le défaut sûr.
 
 Il n'y a pas de mode « mot de passe », et ce n'est pas un oubli :
 l'ordonnanceur tourne sans session, or la clé dérivée du mot de passe ne vit
 que dans une session déverrouillée, en mémoire, à fenêtre glissante (voir
-`Docs/SECURITY_MODEL.md`). Un tel mode ne pourrait ni tourner planifié, ni survivre
-à un vidage de plusieurs heures.
+[Docs/SECURITY_MODEL.md](../../Docs/SECURITY_MODEL.md)). Un tel mode ne pourrait
+ni tourner planifié, ni survivre à un vidage de plusieurs heures.
 
 ### Rouvrir une archive sans DevEye
 
@@ -313,7 +323,7 @@ Ensuite :
 ```bash
 gunzip -c archive.sql.gz | mysql -u … -p … base     # source deveye / database (MySQL)
 gunzip -c archive.sql.gz | psql  -U … base          # source database (PostgreSQL)
-tar -xzf archive.tar.gz                             # source cloudsync
+tar -xzf archive.tar.gz                             # source cloudsync / deviceFolder
 ```
 
 ---
@@ -321,8 +331,11 @@ tar -xzf archive.tar.gz                             # source cloudsync
 ## L'ordonnanceur
 
 Même forme que les autres services de fond : un ticker du SDK
-(`deps.createTicker`), démarré par le service du module. Trois différences
-structurelles, qui tiennent toutes au fait qu'une sauvegarde **dure** :
+(`deps.createTicker`), démarré par le service du module (`BackupEngine`), qui
+cherche les travaux dus toutes les `BACKUP_TICK_SECONDS` (60 s). Un travail est
+`manual`, `hourly`, `daily`, `weekly` ou `monthly` ; son échéance se calcule en
+heure locale du serveur (`schedule.ts`). Trois différences structurelles avec
+les autres services, qui tiennent toutes au fait qu'une sauvegarde **dure** :
 
 1. **Un travail à la fois** : la réservation est prise _avant_ le premier `await`
    (deux clics rapprochés passeraient un contrôle placé après, et lanceraient deux
@@ -333,10 +346,13 @@ structurelles, qui tiennent toutes au fait qu'une sauvegarde **dure** :
 3. **Séquentiel entre travaux** : cinq vidages en parallèle satureraient le lien
    montant. La sauvegarde est le travail de fond qui doit le moins déranger.
 
-Les exécutions restées `running` après un arrêt brutal sont soldées au démarrage
-(`failStaleRuns`), et s'affichent « Interrompue : le serveur a redémarré ». Sans
-ça, un travail resterait « en cours » pour toujours et tous ses passages suivants
-seraient sautés en silence.
+Une exécution a un budget, `BACKUP_RUN_TIMEOUT_SECONDS` (6 h) : sans lui, un
+agent qui cesse de répondre au milieu d'un dépôt laisserait le travail « en
+cours » pour toujours. Les exécutions restées `running` au-delà de ce budget
+après un arrêt brutal sont soldées au démarrage (`failStaleRuns`), et
+s'affichent « Interrompue : le serveur a redémarré pendant la sauvegarde. ».
+Sans ça, un travail resterait « en cours » pour toujours et tous ses passages
+suivants seraient sautés en silence.
 
 ### Rétention
 
@@ -350,31 +366,37 @@ la panne qu'on découvre quand le disque est plein.
 
 ### Notifications
 
-Ses propres canaux, comme les autres émetteurs, par la façade du SDK
+Ses propres canaux, comme les autres émetteurs, gérés dans Réglages →
+Notifications de la coquille commune ; l'envoi passe par la façade du SDK
 (`deps.deveyeFor(ws).notify.send(alert, { itemId })` : la route du travail
 l'emporte sur celle de la fonctionnalité). **Seuls les échecs sont notifiés** :
-sinon le canal se remplirait de succès et l'échec s'y perdrait.
+sinon le canal se remplirait de succès et l'échec s'y perdrait. La mise en page
+Discord est `src/server/notice.ts`, sur les helpers partagés de
+`Services/notices/shared.ts` (le seul import de l'app par le module, commenté).
+Voir [Docs/NOTIFICATIONS.md](../../Docs/NOTIFICATIONS.md).
 
 ### Une machine comme destination
 
-L'agent écrit par la façade agents du SDK (`deps.agents.requestFilesMutate`,
+L'agent écrit par la façade `agents` du SDK (`deps.agents.requestFilesMutate`,
 `requestFilesUpload`, `awaitFilesOp`, `buffered` pour la contre-pression) :
-les ordres de l'explorateur de fichiers. Écrire sur une machine relève du
-droit « Fichiers » d'Appareils, vérifié à l'ajout, à la modification et au
-contrôle de la destination.
+les ordres de l'explorateur de fichiers. Écrire sur une machine relève de la
+permission « Explorateur de fichiers » d'Appareils, vérifiée à l'ajout, à la
+modification et au contrôle de la destination.
 
 ---
 
 ## Sécurité
 
-Tout vit à l'étage **ouvert** du chiffrement (voir `Docs/SECURITY_MODEL.md`), sans
-exception : l'ordonnanceur passe à 3 h du matin, sans session ni mot de passe. Un
-secret S3 qu'il ne pourrait pas lire serait un travail qui ne part jamais.
+Tout vit à l'étage **ouvert** du chiffrement (voir
+[Docs/SECURITY_MODEL.md](../../Docs/SECURITY_MODEL.md)), sans exception :
+l'ordonnanceur passe à 3 h du matin, sans session ni mot de passe. Un secret S3
+qu'il ne pourrait pas lire serait un travail qui ne part jamais.
 
-La clé étrangère des travaux vers leur destination cascade depuis la migration
-`backup/001` du module : le refus de retirer une destination encore visée vit
-dans le handler (qui dit combien de travaux bloquent), et la suppression d'un
-espace ne bute plus dessus.
+La clé étrangère des travaux vers leur destination cascade
+(`src/server/migrations/001_job_destination_cascade.sql`) : le refus de retirer
+une destination encore visée vit dans le handler (`backup.destinationRemove`,
+qui dit combien de travaux bloquent), et la suppression d'un espace ne bute pas
+dessus.
 
 Le droit d'espace est `backup`, distinct de `database` exprès. Sa **lecture** est
 déjà lourde : la liste des destinations dit _où sont les copies de tout_. Qui la
@@ -391,6 +413,114 @@ La clé secrète S3 ne sort **jamais** : le DTO ne porte qu'un `hasSecret`.
 
 ---
 
+## Offre et droits
+
+- **Quota** `storage` (clé `backup.storage` pour le module de facturation) : les
+  octets des archives « sur le serveur » des espaces du propriétaire
+  (`repo.storedBytesInWorkspaces`), 0 sur l'offre gratuite et 10 Go sur Pro.
+  Les sauvegardes vers un stockage qui n'est pas le serveur (machine, S3, SFTP,
+  WebDAV) restent libres. Une installation sans module de facturation n'a
+  aucune limite.
+- **Permissions** : le droit `backup` en lecture et en écriture, plus la
+  permission supplémentaire « Sauvegarder les fichiers d'une machine »
+  (`deviceFolders`) pour la source `deviceFolder`, qui exige aussi la permission
+  « Explorateur de fichiers » d'Appareils sur la machine (voir
+  [Docs/PERMISSIONS.md](../../Docs/PERMISSIONS.md)).
+- **Partage** : `shareTier: 'open'` dans le registre publié ; l'entrée `items`
+  du serveur donne le domicile et le nom d'un travail à la coquille (partage et
+  routes de notification). Pas d'entrée `move`, et ce n'est pas un oubli : un
+  travail ne peut pas exister sans destination (`destination_id NOT NULL`), et
+  sa destination comme sa source sont des objets de l'espace qu'il quitterait.
+- **Export de compte** (`src/server/accountExport.ts`) : destinations, travaux
+  et exécutions de l'espace, et les archives « sur le serveur » des sources
+  autres que `deveye`, descellées à la volée (voir
+  [Docs/ACCOUNT_EXPORT.md](../../Docs/ACCOUNT_EXPORT.md)).
+
+---
+
+## Configuration
+
+Lue dans `src/server/env.ts` (`defineModuleEnv`) :
+
+| Variable                     | Défaut          | Rôle                                                                                   |
+| ---------------------------- | --------------- | -------------------------------------------------------------------------------------- |
+| `BACKUP_STORAGE_DIR`         | `/data/backups` | la racine des destinations `local`, vue par le serveur ; avec un bucket, le spool seul |
+| `BACKUP_TICK_SECONDS`        | `60`            | la cadence à laquelle l'ordonnanceur cherche les travaux dus                           |
+| `BACKUP_RUN_TIMEOUT_SECONDS` | `21600`         | le budget d'une exécution (6 h)                                                        |
+
+Et, hors de la spec du module : `BACKUP_STORAGE_ROOT` (le dossier de l'hôte
+monté sur `BACKUP_STORAGE_DIR`, dans `docker-compose`), `STORAGE_S3_*` (le
+bucket du magasin d'objets de l'hôte), `OUTBOUND_ALLOW_PRIVATE` (les adresses
+privées pour SFTP et WebDAV), `CRYPT_KEY_A` / `CRYPT_KEY_B` (la clé des
+archives) et `DB_*` (la base de DevEye, pour la source `deveye`). Les défauts
+et les commentaires sont dans `.env.template`.
+
+---
+
+## Carte du code
+
+```
+deveye-feature.json              id, les trois tables allowlistées (backup_destinations, backup_jobs,
+                                 backup_runs), minTypesVersion
+src/contracts/domain.ts          destinations, travaux, exécutions, sources, calendriers, lignes SQL
+src/contracts/commands.ts        les commandes backup.* : destinations (list, add, update, remove,
+                                 test), travaux (list, count, get, add, update, remove, run),
+                                 sources, exécutions (runs, runRemove)
+src/manifest.ts                  resources, settings (feature: sources ; item: general, encryption),
+                                 nativeCapabilities (agents, devices.read, members.read, objects),
+                                 extraPermissions (deviceFolders), quotas (storage), links
+src/server/index.ts              serverEntry : createRepo, features, migrationsDir, quotas.storage,
+                                 accountExport, createService (BackupEngine, le magasin hébergé), items
+src/server/env.ts                BACKUP_STORAGE_DIR, BACKUP_TICK_SECONDS, BACKUP_RUN_TIMEOUT_SECONDS
+src/server/_shared.ts            Stored*, DTO, le singleton du moteur (setEngine)
+src/server/handlers.ts           les handlers des commandes, les droits d'une source et d'une destination
+src/server/repo.ts               les trois tables, sur SdkQueryable
+src/server/service.ts            BackupEngine : l'ordonnanceur, une exécution, la rétention, l'avis d'échec
+src/server/schedule.ts           nextRunAt : la prochaine échéance d'un travail
+src/server/sources.ts            ce qu'un travail produit : mysqldump, pg_dump, tar d'un partage, archive
+                                 d'une machine
+src/server/sinks.ts              écrire une archive : local (magasin d'objets), device, s3, sftp, webdav
+src/server/sftp.ts               le client SFTP (ssh2) et l'empreinte du serveur
+src/server/webdav.ts             le client WebDAV, sur safeFetch
+src/server/tar.ts                un écrivain tar USTAR minimal
+src/server/crypto.ts             la clé des archives (BAK), dérivée de la clé du serveur
+src/server/notice.ts             la mise en page Discord d'un échec
+src/server/accountExport.ts      l'export de compte
+src/server/migrations/           001_job_destination_cascade.sql
+src/server/*.test.ts             accountExport, handlers, schedule, service, sftp, sinks, tar, webdav
+```
+
+Le client, `src/client/` :
+
+```
+index.tsx                clientEntry : Widget, Full, settingsPanels (sources, general, encryption)
+api.ts                   featureApi(manifest)
+Backup.tsx               la vue : les travaux et l'état de leur dernier passage
+BackupWidget.tsx         la carte de comptage de l'accueil (travaux, dont en échec)
+JobDialog.tsx            créer un travail ; une fois créé, il se règle dans sa fiche
+JobView.tsx              la fiche d'un travail : ses réglages en tête, son historique dessous
+JobGeneralPanel.tsx      Réglages → Général d'un travail
+JobEncryptionPanel.tsx   Réglages → Chiffrement d'un travail
+JobSourceFields.tsx      le dossier d'une machine : chemin, exclusions, un seul système de fichiers
+SourcePicker.tsx         « quoi sauvegarder », les sources rangées par genre
+DestinationsPanel.tsx    Réglages → Sources : les destinations de l'espace, leur contrôle
+DestinationDialog.tsx    ajouter ou modifier une destination, par genre ; l'empreinte SFTP
+format.ts, style.module.css
+```
+
+---
+
+## Vérification
+
+```bash
+npm run test:features        # les tests du module, sur le harnais du SDK (aucune base, aucun serveur distant)
+npm run typecheck:features
+npm run lint:features
+npm run format:check:features
+```
+
+---
+
 ## Ce qui n'est pas fait, et pourquoi
 
 - **La restauration depuis l'interface.** DevEye montre où sont les archives et
@@ -402,5 +532,5 @@ La clé secrète S3 ne sort **jamais** : le DTO ne porte qu'un `hasSecret`.
   destination. Pour deux copies, on déclare deux travaux, ou l'on confie la
   redondance à Garage, dont c'est le métier (`replication_factor = 2` sur deux
   nœuds, une seule adresse pour DevEye).
-- **Une source « Monitoring ».** Ces données sont dans la base de DevEye ; les
+- **Une source « Appareils ».** Ces données sont dans la base de DevEye ; les
   sauvegarder à part serait les copier deux fois.

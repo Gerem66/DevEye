@@ -6,9 +6,10 @@ freelance, une petite agence), pas à la gestion d'un budget personnel.
 
 Ce document dit **pourquoi** la feature est faite ainsi. Le « quoi » est dans les
 schémas (`src/contracts/domain.ts`) et le « comment » dans le code, qui est
-commenté. C'est un **module in-repo** sur le SDK des features
-(`Docs/FEATURE_SDK.md`) : ses contrats, son dépôt, ses handlers et son client
-vivent tous ici, et `@deveye/types` n'en garde que l'identité.
+commenté. C'est un module in-repo sur le SDK des features
+([Docs/FEATURE_SDK.md](../../Docs/FEATURE_SDK.md)) : ses contrats, son dépôt, ses
+handlers et son client vivent tous dans `features/finance/`, et `@deveye/types`
+n'en garde que l'identité.
 
 ---
 
@@ -51,7 +52,9 @@ Tout passe par `ctx.cipher()` (l'étage ouvert du SDK), comme l'audience et les
 bases de données : le livre appartient à l'**espace**,
 et tout membre d'un espace partagé doit pouvoir le lire sans dépendre de la
 session de son propriétaire. La feature ne demande donc **jamais** de mot de
-passe, et son manifest ne déclare aucune capacité native.
+passe, et son manifest ne déclare aucune capacité de secret : ses seules
+capacités natives sont `notify` (les rappels) et `routes.public` (le retour de
+la banque après le consentement).
 
 Ce qui est chiffré (`content`) : intitulé, tiers, note, nom de compte, nom de
 catégorie. Ce qui reste en clair : montants, dates, natures, rattachements,
@@ -86,17 +89,21 @@ verrou applicatif qui ne survivrait pas à deux instances du serveur.
 Le **jour d'ancrage** (`anchor_day`) est ce qui empêche une échéance au 31 de
 dériver : sans lui, février la ramène au 28 et elle y reste pour toujours, parce
 que le calcul suivant repartirait de cette date-là. Les cas sont couverts par
-`features/finance/src/server/calendar.test.ts`, et le rattrapage lui-même par
-`handlers.test.ts` sur un faux dépôt (`npm run test:features`).
+`src/server/calendar.test.ts`, et le rattrapage lui-même par
+`handlers.test.ts` sur un faux dépôt.
 
 Les deux contreparties sont assumées et documentées à côté du code : une lecture
-peut écrire (y compris pour un membre en lecture seule), et rien n'est diffusé
-aux autres connexions (le contexte d'une commande n'expose pas `live.changed`,
-par construction ; seul un service de fond du module l'aurait).
+peut écrire (y compris pour un membre en lecture seule), et une commande ne
+diffuse rien aux autres connexions (le contexte d'une commande n'expose pas
+`live.changed`, par construction). Le service de fond, lui, appelle aussi
+`catchUp` avant de calculer un rappel.
 
 **En ajoutant une lecture qui montre un solde ou un journal, il faut appeler
-`catchUp`.** Cinq lectures le font ; `finance.config` et `finance.categoryList`
-s'en passent, aucune des deux ne portant de montant.
+`catchUp`.** Six lectures le font (`finance.summary`, `finance.accountList`,
+`finance.transactionList`, `finance.recurringList`, `finance.statementList`,
+`finance.overview`), et l'import d'un relevé (`finance.statementImport`) avant
+de rapprocher ; `finance.config` et `finance.categoryList` s'en passent, aucune
+des deux ne portant de montant.
 
 ---
 
@@ -167,16 +174,19 @@ opération déjà au livre, ou en devient une.
 ressemble à un autre : séparateur, encodage (UTF-8 ou Windows-1252), lignes
 avant l'en-tête, montant signé ou débit et crédit séparés, jour avant le mois.
 La lecture devine les colonnes, les montre avec un aperçu, et la correspondance
-validée est retenue pour le compte (`ctx.store`, `import:<compte>`) : le même
-export se relit ensuite sans rien demander. Le serveur ne reçoit que des lignes
-normalisées, 2 000 au plus par envoi.
+validée est retenue pour le compte (`finance.importMapping`, dans `ctx.store`
+sous `import:<compte>`) : le même export se relit ensuite sans rien demander. Le
+serveur ne reçoit que des lignes normalisées, 2 000 au plus par envoi
+(`STATEMENT_LINES_MAX`).
 
 **Une ligne n'entre qu'une fois.** Son identité chez la banque (`external_id`,
-unique par compte) est le `FITID` d'un OFX ; pour un CSV, une empreinte HMAC du
-compte, du jour, du sens, du montant, du libellé normalisé et du rang parmi les
-lignes identiques du même fichier (deux cafés le même jour restent deux). La
-clé vient de `ctx.keys` : l'empreinte ne rend pas le libellé. Réimporter un
-relevé qui chevauche le précédent n'ajoute que ce qui manque.
+unique par compte) est celle que la source donne : le `FITID` d'un OFX,
+l'identifiant de l'opération chez Qonto, l'`entry_reference` chez Enable
+Banking. Pour un CSV, c'est une empreinte HMAC du compte, du jour, du sens, du
+montant, du libellé normalisé et du rang parmi les lignes identiques du même
+fichier (deux cafés le même jour restent deux), sous une clé dérivée par le SDK
+(`keys.derive`) : l'empreinte ne rend pas le libellé. Réimporter un relevé qui
+chevauche le précédent n'ajoute que ce qui manque.
 
 **Le rapprochement** (`src/server/reconcile.ts`) ne choisit jamais à la place de
 la personne :
@@ -188,9 +198,9 @@ la personne :
 2. Sinon, une **règle** (« le libellé contient ovh » → Hébergement) crée
    l'opération, pointée, avec sa TVA quand le régime la récupère.
 3. Sinon la ligne attend dans Relevés, avec ce qu'elle pourrait être : les
-   opérations candidates quand il y en a plusieurs, une échéance manuelle due au
-   même montant, une facture qui attend exactement ce montant (sur le compte qui
-   reçoit les règlements seulement).
+   opérations candidates quand il y en a plusieurs (trois au plus), une échéance
+   manuelle due au même montant, une facture qui attend exactement ce montant
+   (sur le compte qui reçoit les règlements seulement).
 
 Le moteur tourne à l'import, à chaque saisie, et quand des règlements de
 Facturation arrivent : l'ordre (relevé d'abord, règlement ensuite, ou l'inverse)
@@ -218,36 +228,47 @@ Une connexion relève les comptes d'une banque toutes les six heures
 (`BANK_SYNC_HOURS`), sans fichier à exporter. Ce n'est **qu'une source de lignes
 de relevé de plus** : les lignes relevées prennent le même chemin qu'un import
 (identité unique par compte, puis `reconcile.ts`), et rien d'autre n'en sait
-plus. Deux fournisseurs, derrière la même interface (`src/server/banks/`,
+plus. Deux connecteurs, derrière la même interface (`src/server/banks/`,
 `BankConnector` : comptes, lignes comptabilisées depuis un jour, solde) :
 
-- **Qonto**, par la clé d'API de l'organisation (identifiant et clé secrète,
-  en-tête `identifiant:clé` qui n'est pas du Basic). Lecture seule, sans
-  contrat, sur l'hébergé comme en auto-hébergé. Une clé que Qonto refuse ne
-  s'enregistre pas.
-- **Les autres banques par Enable Banking**, un agrégateur agréé (DSP2). Chaque
-  instance enregistre sa propre application (voir plus bas) ; sans elle, « Autre
+- **Qonto** (`banks/qonto.ts`), par la clé d'API de l'organisation (identifiant
+  et clé secrète, en-tête `identifiant:clé` qui n'est pas du Basic). Lecture
+  seule : la clé ne permet ni virement ni modification. Une clé que Qonto refuse
+  ne s'enregistre pas (`finance.connectionAddQonto`).
+- **Les autres banques par Enable Banking** (`banks/enableBanking.ts`), un
+  agrégateur agréé (DSP2). Chaque appel est signé d'un jeton RS256 fait avec la
+  clé de l'application de l'instance (voir plus bas) ; sans elle, « Autre
   banque » ne se propose pas. La personne consent chez sa banque dans une
-  fenêtre à part, qui revient sur la route publique
+  fenêtre à part (`src/client/bankWindow.ts`), qui revient sur la route publique
   `/api/finance/bank/callback` : le `state` est un ticket de session scellé par
-  `finance.connectionStart`, la route ne fait que le reprendre. Le consentement
-  a une fin (jusqu'à 90 jours selon la banque, 180 au plus demandés) : un avis
-  part une semaine avant, puis à la fin, et « Reconnecter » renouvelle sans
-  délier les comptes (retrouvés par l'`identification_hash` de la banque).
+  `finance.connectionStart` (trente minutes), la route ne fait que le reprendre.
+  Le consentement a une fin, que la banque fixe (180 jours au plus sont
+  demandés, `CONSENT_MAX_SECONDS`) : un avis part une semaine avant, puis à la
+  fin, et « Reconnecter » renouvelle sans délier les comptes (retrouvés par
+  l'`identification_hash` de la banque).
 
-**Le patron des sources** (`Docs/SOURCES.md`) : les connexions se créent, se
-corrigent et se retirent dans Réglages, Sources de la feature ; un compte du
-livre en choisit une dans son onglet Banque, le « + » ouvre les Sources
-par-dessus et adopte la connexion qui y naît. Le lien vit dans
+Les deux connecteurs sont exercés par `src/server/banking.test.ts` contre des
+réponses HTTP simulées (`bankHttp.fetch` remplacé) : refus d'une clé, relève
+sans doublon, rapprochement, offre, consentement et reconnexion, pagination,
+avis de fin de consentement.
+
+**Le patron des sources** ([Docs/SOURCES.md](../../Docs/SOURCES.md)) : les
+connexions se créent, se corrigent et se retirent dans Réglages, Sources de la
+feature ; un compte du livre en choisit une dans son onglet Banque, le « + »
+ouvre les Sources par-dessus et adopte la connexion qui y naît. Le lien vit dans
 `ft_finance_bank_links`, pas sur `finance_accounts`.
 
 **Rien n'arrive deux fois.** Relier un compte fixe son premier jour relevé au
 lendemain de la dernière ligne déjà importée (au solde de départ sinon) ; chaque
-relève relit une semaine en arrière de la dernière ligne, et l'identité d'une
-ligne (`qonto:<id>`, `enablebanking:<entry_reference>`, sinon l'empreinte d'un
-CSV) écarte ce qui est déjà là. Seules les lignes comptabilisées entrent : une
-opération en attente change encore. Chez Enable Banking, la relève ne remonte
-pas au-delà de 89 jours, ce qu'une banque rend sans redemander le consentement.
+relève relit une semaine en arrière de la dernière ligne (`OVERLAP_DAYS`), et
+l'identité d'une ligne écarte ce qui est déjà là. Seules les lignes
+comptabilisées entrent : une opération en attente change encore. Chez Enable
+Banking, la relève ne remonte pas au-delà de 89 jours (`PSD2_HISTORY_DAYS`), ce
+qu'une banque rend sans redemander le consentement.
+
+**Le service de fond** (`src/server/service.ts`) regarde toutes les quinze
+minutes les connexions qui ont plus de six heures et en relève six de front au
+plus par tour, pour borner la rafale d'appels sortants.
 
 **Le solde de la banque** s'écrit comme celui d'un import (`format = 'bank'`),
 seulement quand il apporte quelque chose : l'écart avec le livre pointé se lit
@@ -258,33 +279,16 @@ service de fond les lit sans session. Ils ne ressortent jamais, un secret laiss�
 vide à la correction est gardé. Retirer une connexion délie ses comptes, rend le
 consentement chez Enable Banking, et laisse au livre ce qu'elle a apporté.
 
-**L'offre** : chaque connexion pèse sur celle du propriétaire de l'espace
-(`finance.bankConnections`, Gratuite 1, Pro 5), un stock dont l'excédent se met
-en pause (`Docs/QUOTAS.md`). Une connexion en pause ne se relève plus, ni à
-l'heure ni à la main. L'import de relevé reste sans limite. Le panneau Sources
-dit la limite avant tout refus.
-
 ### Activer Enable Banking
 
-**En auto-hébergé** : créer un compte sur enablebanking.com, puis une
-application de production en mode **restreint** (gratuit : seuls les comptes que
-le propriétaire de l'application relie lui-même s'ouvrent, ce qui convient à une
-instance pour soi). Déclarer l'URI de redirection
+Créer un compte sur enablebanking.com, puis une application de production en
+mode **restreint** (gratuit : seuls les comptes que le propriétaire de
+l'application relie lui-même s'ouvrent, ce qui convient à une instance pour
+soi). Déclarer l'URI de redirection
 `<origine de l'app>/api/finance/bank/callback`, garder la clé privée générée, et
 poser `ENABLE_BANKING_APP_ID` et `ENABLE_BANKING_PRIVATE_KEY` (le PEM, retours à
 la ligne écrits `\n`, ou son base64). Une seule des deux posée, ou une clé qui
 ne se lit pas, s'annonce au démarrage.
-
-**Pour app.deveye.fr** (tous les comptes de tous les clients), le code est le
-même : c'est le contrat qui lève la restriction de l'application.
-
-1. Contrat et vérification de l'entreprise (KYB) auprès d'Enable Banking
-   (info@enablebanking.com), tarif au volume à négocier.
-2. Application de production non restreinte ; ses deux variables dans
-   l'environnement de prod, l'URI de redirection
-   `https://app.deveye.fr/api/finance/bank/callback` déclarée.
-3. Si le tarif se compte par compte relié plutôt que par connexion, revoir la
-   clé de quota : une connexion peut ouvrir plusieurs comptes.
 
 ---
 
@@ -326,12 +330,13 @@ l'année face au plafond de la micro-entreprise et à la franchise de TVA. La
 prévision fait sortir les versements URSSAF au mois de leur échéance, et la carte
 de l'accueil de l'app montre le disponible réel.
 
-**Les rappels** sont le seul travail de fond du module (`src/server/service.ts`) :
-une semaine avant l'échéance d'une déclaration, puis la veille, par les canaux
-de l'espace, avec le chiffre d'affaires à déclarer. Une lecture ne sait pas
-quand minuit passe, d'où une boucle ; `ft_finance_reminders` retient ce qui est
-parti. Aucun rappel ne vise un compte : leur onglet Notifications n'existe pas
-(`notifications.perItem: false`).
+**Les rappels** et la relève des connexions bancaires sont le travail de fond du
+module (`src/server/service.ts`). Un rappel part une semaine avant l'échéance
+d'une déclaration, puis la veille, par les canaux de l'espace, avec le chiffre
+d'affaires à déclarer. Une lecture ne sait pas quand minuit passe, d'où une
+boucle ; `ft_finance_reminders` retient ce qui est parti, et un avis ne part
+jamais deux fois, même à plusieurs instances. Aucun rappel ne vise un compte :
+leur onglet Notifications n'existe pas (`notifications.perItem: false`).
 
 ## Les soldes
 
@@ -411,14 +416,18 @@ sa fiche : ses soldes, puis son journal.
 Le **compte est l'élément** de la feature (`hasItems: true`, `itemNoun:
 'compte'`). Le dialogue de création ne fait que créer ; le renommer, changer son
 solde de départ, l'archiver ou le retirer se fait dans l'onglet Général de ses
-réglages, au bout de la rangée d'en-tête de sa fiche (`Docs/SETTINGS.md`). Une
-opération, elle, n'est pas un élément : elle se corrige dans son dialogue.
+réglages, au bout de la rangée d'en-tête de sa fiche
+([Docs/SETTINGS.md](../../Docs/SETTINGS.md)). Une opération, elle, n'est pas un
+élément : elle se corrige dans son dialogue.
+
+L'écran est démonté dès sa fermeture (`cacheDurationMinutes: 0`) : les filtres
+du journal n'ont pas à survivre, et des soldes en cache vieilliraient.
 
 ## Les réglages
 
-Six panneaux dans la coquille commune (`Docs/SETTINGS.md`), déclarés par le
-manifest (`settings.feature` et `settings.item`) et fournis par l'entrée client
-(`settingsPanels`) :
+Six panneaux dans la coquille commune ([Docs/SETTINGS.md](../../Docs/SETTINGS.md)),
+déclarés par le manifest (`settings.feature` et `settings.item`) et fournis par
+l'entrée client (`settingsPanels`) :
 
 - **Général**, à l'échelle de la feature (`FinanceGeneralPanel`) : le statut de
   l'activité (`finance.statusSet`), puis la devise et la TVA, lues de
@@ -431,7 +440,7 @@ manifest (`settings.feature` et `settings.item`) et fournis par l'entrée client
   seul endroit où une catégorie se crée, se corrige, se retire (popup empilée,
   rangée canonique) ; le dialogue d'opération ne fait que choisir dedans, et
   mène à cet onglet quand il n'y a rien à choisir. Patron des sources
-  (`Docs/SOURCES.md`).
+  ([Docs/SOURCES.md](../../Docs/SOURCES.md)).
 - **Sources** (`FinanceSourcesPanel`, `ConnectionDialog`) : les connexions
   bancaires, seul endroit où elles se créent et se retirent, avec la limite de
   l'offre.
@@ -441,25 +450,62 @@ manifest (`settings.feature` et `settings.item`) et fournis par l'entrée client
   Elles naissent surtout en rapprochant une ligne (« Ranger ainsi, à
   l'avenir ») ; ici elles se relisent, se corrigent et se retirent.
 
+## Configuration
+
+Lues par `src/server/env.ts` ; toutes deux facultatives.
+
+| Variable                     | Défaut | Rôle                                                                                  |
+| ---------------------------- | ------ | ------------------------------------------------------------------------------------- |
+| `ENABLE_BANKING_APP_ID`      | vide   | l'application Enable Banking de l'instance ; vide, « Autre banque » ne se propose pas |
+| `ENABLE_BANKING_PRIVATE_KEY` | vide   | sa clé privée, en PEM (retours à la ligne écrits `\n`) ou en base64 du PEM            |
+
+Qonto et l'import de relevé marchent sans aucune des deux.
+
+## Quotas, notifications, partage
+
+- **L'offre** : `finance.bankConnections` est un stock qui compte les connexions
+  bancaires des espaces du propriétaire (Gratuite 1, Pro 5, valeurs de
+  `DevEye-Billing/src/server/plans.ts`) ; l'excédent se met en pause
+  ([Docs/QUOTAS.md](../../Docs/QUOTAS.md)). Une connexion en pause ne se relève
+  plus, ni à l'heure ni à la main. Le livre lui-même, ses comptes, ses opérations
+  et l'import de relevé n'ont aucune limite. Le panneau Sources dit la limite
+  avant tout refus. Une installation sans module de facturation n'a aucune
+  limite.
+- **Notifications** (`notifies: true`, `perItem: false`) : les rappels de
+  déclaration URSSAF et l'avis de fin d'un consentement bancaire, par les canaux
+  de l'espace.
+- **Partage** : `shareTier: 'never'`. Un compte ne se projette pas vers un autre
+  espace.
+
 ## Points d'entrée
 
-| Rôle                                                    | Fichier                                                               |
-| ------------------------------------------------------- | --------------------------------------------------------------------- |
-| Manifest                                                | `src/manifest.ts`                                                     |
-| Schémas et types                                        | `src/contracts/domain.ts`                                             |
-| Contrats des 40 commandes, relevés, connexions          | `src/contracts/commands.ts`, `statement.ts`, `banking.ts`             |
-| Schéma SQL d'origine, dans le socle                     | `DevEye/src/db/migrations/084_finance.sql`                            |
-| Évolutions du schéma                                    | `src/server/migrations/`                                              |
-| Requêtes                                                | `src/server/repo.ts`                                                  |
-| Socle serveur (chiffre, calendrier, gardes, rattrapage) | `src/server/_shared.ts`                                               |
-| Recopie des règlements de Facturation                   | `src/server/sources.ts`                                               |
-| Rapprochement des relevés et règles                     | `src/server/reconcile.ts`                                             |
-| Connexions bancaires, relève, retour de la banque       | `src/server/banking.ts`, `banks/`, `routes.ts`, `env.ts`              |
-| Lecture des CSV et OFX, dans le navigateur              | `src/client/statement/`                                               |
-| Statut, provisions, seuils ; taux et calendrier légaux  | `src/server/status.ts`, `src/contracts/legal.ts`                      |
-| Rappels de déclaration, relève et avis des connexions   | `src/server/service.ts`                                               |
-| Handlers (un fichier par nature)                        | `src/server/handlers/`                                                |
-| Tests (livre, recopie, relevés, banques), faux dépôt    | `src/server/*.test.ts`, `src/server/_testing.ts`                      |
-| Entrée client, panneaux de réglages                     | `src/client/index.tsx`, `src/client/*Panel.tsx`                       |
-| Coquille, accueil, pages et fiche                       | `src/client/Finance.tsx`, `Home.tsx`, `*Page.tsx`, `AccountSheet.tsx` |
-| Mise en forme et vocabulaire                            | `src/client/format.ts`                                                |
+| Rôle                                                    | Fichier                                                                                                                                                                                                              |
+| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Manifest                                                | `src/manifest.ts`                                                                                                                                                                                                    |
+| Schémas et types                                        | `src/contracts/domain.ts`                                                                                                                                                                                            |
+| Contrats des 40 commandes, relevés, connexions          | `src/contracts/commands.ts`, `statement.ts`, `banking.ts`                                                                                                                                                            |
+| Taux et calendrier légaux                               | `src/contracts/legal.ts` (et `legal.test.ts`)                                                                                                                                                                        |
+| Schéma SQL d'origine, dans le socle                     | `src/db/migrations/084_finance.sql` de l'app (six tables `finance_*`, en allowlist dans `deveye-feature.json`)                                                                                                       |
+| Évolutions du schéma                                    | `src/server/migrations/` : `001_pro.sql`, `002_invoicing_link.sql`, `003_status.sql`, `004_statements.sql`, `005_connections.sql` ; `uninstall.sql` ne retire que les tables `ft_finance_*`                          |
+| Requêtes                                                | `src/server/repo.ts`                                                                                                                                                                                                 |
+| Socle serveur (chiffre, calendrier, gardes, rattrapage) | `src/server/_shared.ts`                                                                                                                                                                                              |
+| Recopie des règlements de Facturation                   | `src/server/sources.ts`                                                                                                                                                                                              |
+| Rapprochement des relevés et règles                     | `src/server/reconcile.ts`                                                                                                                                                                                            |
+| Connexions bancaires, relève, retour de la banque       | `src/server/banking.ts`, `banks/{types,qonto,enableBanking}.ts`, `routes.ts`, `env.ts`                                                                                                                               |
+| Statut, provisions, seuils                              | `src/server/status.ts`                                                                                                                                                                                               |
+| Rappels de déclaration, relève et avis des connexions   | `src/server/service.ts`                                                                                                                                                                                              |
+| Handlers (un fichier par nature)                        | `src/server/handlers/` (`config`, `accounts`, `categories`, `transactions`, `recurring`, `statements`, `connections`, `overview`)                                                                                    |
+| Export du compte                                        | `src/server/accountExport.ts`                                                                                                                                                                                        |
+| Tests serveur, faux dépôt                               | `src/server/*.test.ts` (`handlers`, `calendar`, `sources`, `reconcile`, `banking`, `status`, `accountExport`), `src/server/_testing.ts`                                                                              |
+| Lecture des CSV et OFX, dans le navigateur              | `src/client/statement/` (`csv.ts`, `ofx.ts`, `keyword.ts`, `statement.test.ts`)                                                                                                                                      |
+| Entrée client, panneaux de réglages                     | `src/client/index.tsx`, `src/client/*Panel.tsx`, `ConnectionDialog.tsx`                                                                                                                                              |
+| Coquille, accueil, pages et fiche                       | `src/client/Finance.tsx`, `Home.tsx`, `TransactionsPage.tsx`, `RecurringPage.tsx`, `ReviewPage.tsx`, `AccountSheet.tsx`, `shared.ts`                                                                                 |
+| Journal et dialogues                                    | `src/client/Journal.tsx`, `TransactionRow.tsx`, `TransactionDialog.tsx`, `RecurringDialog.tsx`, `PostDialog.tsx`, `ImportDialog.tsx`, `ResolveDialog.tsx`, `AccountDialog.tsx`, `AccountGrid.tsx`, `ColorPicker.tsx` |
+| Graphiques, fenêtre de la banque, carte d'accueil       | `src/client/Charts/`, `bankWindow.ts`, `FinanceWidget.tsx`                                                                                                                                                           |
+| Mise en forme et vocabulaire                            | `src/client/format.ts`                                                                                                                                                                                               |
+
+## Tests
+
+```bash
+npm run test:features
+```

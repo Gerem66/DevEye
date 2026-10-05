@@ -228,27 +228,27 @@ function MailboxForm({
 
             {link.available && (
                 <div className={shell.section}>
-                    <span className={shell.sectionLabel}>Mails</span>
+                    <span className={shell.sectionLabel}>Mail</span>
                     <Switch
                         checked={!mailbox.bannerDismissed && !linked}
                         disabled={!editable || linked || busy}
                         onChange={(shown) => setBanner(!shown)}
-                        label='Proposer de lire cette adresse dans Mails'
+                        label='Proposer de lire cette adresse dans Mail'
                         hint={
                             linked
-                                ? 'Déjà dans Mails : il n’y a plus rien à proposer.'
+                                ? 'Déjà dans Mail : il n’y a plus rien à proposer.'
                                 : 'La proposition s’affiche en haut de la fiche de l’adresse.'
                         }
                     />
                     <div className={shell.sectionActions}>
                         {linked ? (
                             <Button variant='secondary' icon='mail' onClick={link.open}>
-                                Ouvrir dans Mails
+                                Ouvrir dans Mail
                             </Button>
                         ) : (
                             canPasswords && (
                                 <Button variant='secondary' icon='add' disabled={link.busy} onClick={link.add}>
-                                    Ajouter à Mails
+                                    Ajouter à Mail
                                 </Button>
                             )
                         )}

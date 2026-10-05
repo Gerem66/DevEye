@@ -1,7 +1,7 @@
 # Modèle de sécurité de DevEye
 
-Référence des mécanismes de chiffrement et d'authentification de l'app. À garder
-à jour quand ces flux changent.
+Référence des mécanismes de chiffrement et d'authentification de l'app : ce que
+chaque étage garantit, et ce qu'il ne garantit pas.
 
 ## Ce que le serveur peut lire, en une phrase
 
@@ -12,16 +12,15 @@ de passe vivant : le serveur ne lit plus. L'étage ouvert (ce qu'une tâche de
 fond doit servir sans personne devant l'écran : Uptime, intégrations, CloudSync)
 reste lisible par un serveur vivant, quoi qu'il arrive. Seule exception : un
 partage CloudSync **chiffré de bout en bout**, dont seuls les appareils ont la
-clé (voir la section CloudSync). « Zero-knowledge » est
-donc une propriété que l'utilisateur obtient sur l'étage gardé, pas l'état par
-défaut de l'installation ; toute phrase de vitrine qui le promet sans cette
-condition est fausse.
+clé (voir la section CloudSync). « Zero-knowledge » est donc une propriété que
+l'utilisateur obtient sur l'étage gardé en activant le chiffrement par mot de
+passe, pas l'état par défaut d'une installation.
 
 ## Chiffrement par enveloppe ("envelope encryption")
 
 Système central de chiffrement des données de features (notes, mots de passe…).
 Implémenté par `src/Services/SecretKeyService.ts` + `src/Services/SecureStore.ts`,
-décrit côté types dans `DevEye-Types/src/domain/secrecy.ts`.
+décrit côté types dans `src/domain/secrecy.ts` de `@deveye/types`.
 
 - Chaque utilisateur possède une **DEK** (Data Encryption Key) aléatoire de 32
   octets, unique par user, créée à la première écriture chiffrée (`ensureRow`).
@@ -65,13 +64,17 @@ Détail et procédure de passage dans [KEY_ROTATION.md](./KEY_ROTATION.md).
 
 ### Les deux étages : DEK « gardée » et DEK « ouverte »
 
-`ctx.secure` expose **deux** codecs (`Cipher`), chacun adossé à une clé
+Chaque contexte expose **deux** codecs (`Cipher`), chacun adossé à une clé
 différente : c'est le choix du codec qui fait le contrôle d'accès :
 
-| Étage                | Clé                | Emballage                  | Lisible sans mot de passe ? |
-| -------------------- | ------------------ | -------------------------- | --------------------------- |
-| `ctx.secure` (gardé) | `dek_wrapped`      | `server` **ou** `password` | non quand la feature est ON |
-| `ctx.secure.open`    | `open_dek_wrapped` | **toujours** `server`      | oui, toujours               |
+| Étage  | Côté module (SDK)       | Contexte natif    | Clé                | Emballage                  | Lisible sans mot de passe ? |
+| ------ | ----------------------- | ----------------- | ------------------ | -------------------------- | --------------------------- |
+| gardé  | `ctx.cipher('private')` | `ctx.secure`      | `dek_wrapped`      | `server` **ou** `password` | non quand la feature est ON |
+| ouvert | `ctx.cipher()` (défaut) | `ctx.secure.open` | `open_dek_wrapped` | **toujours** `server`      | oui, toujours               |
+
+Un module écrit par le SDK : `ctx.cipher()` et `ctx.cipher('private')` pour les
+codecs, `ctx.secrecy.isUnlocked()` pour l'état de verrou. `ctx.secure` est le
+contexte natif du cœur, que `src/features/_sdk/context.ts` projette sur le SDK.
 
 La DEK ouverte est une seconde clé aléatoire par utilisateur, créée
 paresseusement à la première écriture ouverte et **jamais** ré-emballée par les
@@ -89,7 +92,7 @@ Handlers dans `src/features/secrecy/index.ts`. Quand elle est **ON** :
 
 - Le déverrouillage de session (saisie du mot de passe → DEK déballée en mémoire)
   passe par le **`SecureStore`** : `ctx.secure.isUnlocked()` /
-  `isUnlockedPassive()`.
+  `isUnlockedPassive()` en natif, `ctx.secrecy.isUnlocked()` dans un module.
 - La DEK déverrouillée est cachée par `sessionId` dans une Map en mémoire
   (`sessionDeks`), jamais persistée, effacée à la déconnexion.
 - **Fenêtre de grâce glissante** (`reAuthInterval`, en secondes ; défaut
@@ -100,18 +103,19 @@ Handlers dans `src/features/secrecy/index.ts`. Quand elle est **ON** :
   jamais plus de 24 h, quel que soit le glissement. Un balayeur efface les
   entrées expirées que plus aucune socket ne lit (une DEK pré-cachée au login
   sans WebSocket derrière, par exemple).
-- **`reAuthInterval = 0` = validation à chaque action**, au sens « au plus 30 s
-  » : la DEK n'est pas mise en cache d'une action à l'autre, mais l'unlock et
-  l'action déclenchée sont deux commandes WS distinctes : la DEK déballée est
-  donc gardée en **usage unique**
-  (`singleUse`, non glissante) le temps de servir cette/ces commande(s), puis
-  effacée dès que la rafale se vide. Le dispatcher compte les commandes en vol
+- **`reAuthInterval = 0` = validation à chaque action**, au sens « au plus
+  30 s » : la DEK n'est pas mise en cache d'une action à l'autre, mais l'unlock
+  et l'action déclenchée sont deux commandes WS distinctes : la DEK déballée est
+  donc gardée en **usage unique** (`singleUse`, non glissante) le temps de
+  servir cette ou ces commandes, puis effacée dès que la rafale se vide. Le
+  dispatcher compte les commandes en vol
   (`enterSessionCommand`/`exitSessionCommand`) : la DEK part quand le dernier
-  consommateur termine, ce qui couvre les rafales concurrentes (ex. `notes.list`
-    - `notes.folderList`). Un court pont (`SINGLE_USE_BRIDGE_MS` = 30 s) borne un unlock
-      jamais consommé. **Côté client**, le store secrecy passe en mode `singleUse` :
-      la session n'est jamais tenue pour « déverrouillée », chaque action chiffrée
-      redemande le mot de passe.
+  consommateur termine, ce qui couvre les rafales concurrentes (deux commandes
+  lancées ensemble à l'ouverture d'une feature, par exemple). Un court pont
+  (`SINGLE_USE_BRIDGE_MS` = 30 s) borne un unlock jamais consommé. **Côté
+  client**, le store secrecy passe en mode `singleUse` : la session n'est jamais
+  tenue pour « déverrouillée », chaque action chiffrée redemande le mot de
+  passe.
 - Un handler verrouillé renvoie `FeatureError('locked')` → le client affiche le
   prompt de mot de passe habituel, même s'il se croyait encore déverrouillé.
 - **Le client suit le serveur.** Chaque mise en cache et chaque effacement de la
@@ -190,13 +194,10 @@ Application directe des deux étages ci-dessus (`features/notes/src/server/handl
   escamoter ou détruire ce qu'elle ne voit pas. `notes.reorder` (positionnement
   pur, n'expose ni ne réécrit le corps) reste libre, même sur une note masquée.
 
-Remplace l'ancien système de verrou par note (mot de passe dédié par note,
-`notes.lock_hash`), supprimé : un mot de passe par note n'était pas retenable.
-
 ## Authentification
 
-- Mots de passe hachés en **Argon2id** (`src/auth/argon.ts`), upgrade
-  transparent des anciens hash bcrypt au login.
+- Mots de passe hachés en **Argon2id** (`src/auth/argon.ts`) ; un hachage bcrypt
+  encore en base est remplacé par Argon2id à la connexion suivante.
 - Sessions par JWT (access + refresh en cookies), `sessionId` partagée entre le
   monde HTTP (login) et le monde WS (features). C'est cette `sessionId` qui relie
   le pré-cache de la DEK au login à la session WS qui l'utilisera.
@@ -248,8 +249,8 @@ système). Le modèle de confiance se dit donc sans détour : **qui contrôle le
 serveur contrôle les machines**, à ceci près.
 
 - **La politique locale.** La section `[policy]` de l'`agent.toml` dit ce que la
-  machine accepte (terminal, écriture de fichiers, extinction, mises à jour,
-  élévation, effacement). Aucune trame ne la modifie, l'explorateur n'écrit
+  machine accepte (onze interrupteurs, listés plus bas). Aucune trame ne la
+  modifie, l'explorateur n'écrit
   jamais dans le dossier de l'agent, et le rapport de l'appareil la publie pour
   que l'interface grise ce qui serait refusé. C'est le seul réglage de la machine
   que le serveur ne décide pas : une installation « supervision seule » se fait
@@ -267,8 +268,9 @@ serveur contrôle les machines**, à ceci près.
   Le `http://` en clair est refusé hors de la machine elle-même, sauf choix
   explicite à l'enrôlement (`--insecure-plaintext`), que l'interface signale. Le
   jeton voyage dans l'en-tête `Authorization`, jamais dans l'URL ; il expire à 30
-  jours et le serveur le remplace à la connexion avant (`token_hash_prev` garde
-  l'ancien valable tant que le nouveau n'a pas servi). Tout refus ferme la socket
+  jours et le serveur le remplace à une connexion dans ses sept derniers jours
+  (`token_hash_prev` garde l'ancien valable tant que le nouveau n'a pas servi).
+  Tout refus ferme la socket
   du même `1008` : une sonde n'apprend rien. Seul un agent qui présente un jeton
   valide pour un appareil en attente d'approbation reçoit `4001`, qui lui dit de
   réessayer : il connaissait déjà son statut par la réponse d'enrôlement.
@@ -285,9 +287,10 @@ serveur contrôle les machines**, à ceci près.
   l'appelant. Un code à plusieurs usages la refuse, pour que deux clones ne se
   prennent pas leur fiche. Révoquer archive l'appareil et détruit son jeton :
   seul un nouvel appairage le fait revenir.
-- **Les droits décidés sur la machine.** `[policy]` (dix interrupteurs :
-  terminal, lecture et écriture de fichiers, alimentation, mises à jour,
-  élévation, auto-destruction, Docker, déploiements, CloudSync) se fixe à la
+- **Les droits décidés sur la machine.** `[policy]` (onze interrupteurs :
+  terminal, lecture de fichiers, écriture de fichiers, alimentation, mises à
+  jour de paquets, élévation du service, auto-destruction, Docker, déploiements
+  Docker, CloudSync, tunnels) se fixe à la
   liaison (`--deny`, `--monitor-only`) et ne change que sur la machine
   (`deveye-agent policy`) ; aucun ordre du serveur n'y touche, et la rotation
   du jeton réécrit le fichier tel qu'il est sur disque. La surveillance
@@ -305,9 +308,11 @@ serveur contrôle les machines**, à ceci près.
 - **Ce qui remonte.** Tout seul : métriques, programmes (nom, chemin, compte,
   jamais la ligne de commande ni l'environnement), ports et connexions, posture,
   matériel, et pour Sentinelle des empreintes et des issues d'authentification
-  (voir son README, dont ce qu'un compte local peut ou non lui faire croire). À
-  la demande : journaux (les quatre fichiers proposés, pas un chemin libre),
-  fichiers, terminal. La sortie d'un terminal n'est relayée qu'à la connexion qui
+  (voir [son README](../features/sentinel/README.md), dont ce qu'un compte local
+  peut ou non lui faire croire). À la demande : journaux (des sources que l'agent
+  découvre lui-même : journal système, quatre fichiers de `/var/log`,
+  conteneurs ; jamais un chemin libre), fichiers, terminal. La sortie d'un
+  terminal n'est relayée qu'à la connexion qui
   l'a ouvert, et n'est jamais persistée.
 - **CloudSync** : la racine d'un partage est choisie côté serveur, sous un droit
   qui n'est pas celui du terminal. L'agent refuse un dossier système, la racine,
@@ -374,8 +379,7 @@ Le clair existe déjà sur les appareils : ce sont eux qui tiennent la clé.
   secret (plus de SHA-256 du clair, ni en base ni dans le bucket) et **scelle**
   lui-même chaque blob (DEVB v3 : nonce aléatoire par bloc, AAD liant le bloc
   à son rang, à son blob et au nom du contenu). Le serveur stocke et relaie
-  sans déchiffrer. La spécification complète est dans `docs/ARCHITECTURE.md`
-  du module CloudSync.
+  sans déchiffrer.
 - Pourquoi pas le **mot de passe du compte** : le serveur le reçoit à chaque
   connexion (c'est lui qui déverrouille la DEK). Une clé qui en dériverait lui
   serait accessible.
@@ -416,7 +420,8 @@ doit donc pouvoir les lire, et ils ne passent pas par l'étage gardé.
   bucket ne reçoit que du chiffré, et un envoi est scellé dans le dossier local
   des envois avant d'y partir. La clé ne dépend d'aucun espace : partager ou
   déplacer un dossier ne relit pas un octet de fichier. Perdre `CRYPT_KEY_A/B`
-  rend tous les fichiers hébergés illisibles.
+  rend tous les fichiers hébergés illisibles, et une rotation de la clé serveur
+  ne les re-chiffre pas ([KEY_ROTATION.md](./KEY_ROTATION.md)).
 - Les noms des dossiers, sous-dossiers, fichiers et adresses sont chiffrés à l'étage
   ouvert de l'espace. L'unicité d'un nom dans son dossier tient à un condensat
   à clé (HMAC, clé dérivée), jamais au nom en clair.
@@ -427,12 +432,17 @@ doit donc pouvoir les lire, et ils ne passent pas par l'étage gardé.
 - Les pages publiques n'ont aucun script (`default-src 'none'`, formulaires sur
   la même origine, `frame-ancestors 'none'`). Un fichier ne s'affiche dans le
   navigateur que pour les types qui ne peuvent pas exécuter de code (images,
-  son, vidéo, texte brut), toujours avec `nosniff` et `CSP: sandbox` ; tout le
-  reste part en pièce jointe. Le téléchargement du propriétaire passe par un
-  ticket, sur l'origine de l'app, toujours en pièce jointe.
+  son, vidéo, texte brut, sous `CSP: sandbox`) et pour le PDF, que le lecteur du
+  navigateur isole lui-même (il perd `sandbox`, mais ne s'intègre que dans une
+  page de la même origine : `frame-ancestors 'self'` et
+  `X-Frame-Options: SAMEORIGIN`), toujours avec `nosniff` ; tout le reste part
+  en pièce jointe. Le téléchargement du propriétaire passe par un ticket, sur
+  l'origine de l'app, toujours en pièce jointe.
 - Les signalements sont scellés par la clé serveur (`keys.sealBytes`, liés à
   leur référence) : ils se lisent sans aucun espace, survivent au dossier, et ne
-  sont jamais montrés à qui a publié le contenu signalé.
+  sont jamais montrés à qui a publié le contenu signalé. Leur colonne ne figure
+  pas dans `SEAL_TARGETS` : une rotation de la clé serveur les rend illisibles
+  ([KEY_ROTATION.md](./KEY_ROTATION.md)).
 
 ## Uptime : l'étage ouvert appliqué à une tâche de fond
 
@@ -461,7 +471,7 @@ Le client bâti publie aussi `/.well-known/deveye-build.json`, l'empreinte
 SHA-256 de chacun de ses fichiers. Ce n'est pas une preuve (le serveur qui le
 sert pourrait le réécrire) mais la liste de ce qu'un contrôle d'intégrité tenu
 par une **autre** instance doit relire ; la référence, elle, est apprise et
-gardée là-bas. Voir le README d'Uptime.
+gardée là-bas. Voir [le README d'Uptime](../features/uptime/README.md).
 
 ## Projets : l'étage choisi par l'utilisateur
 
@@ -480,7 +490,7 @@ modules (`PROJECTS_USAGE_PROVIDER`) ne touche jamais un projet gardé.
 Ce qui en découle :
 
 - **Tout l'arbre d'un projet suit l'étage de son projet** : cartes, messages,
-  jalons, événements d'historique (la liste, à tenir à jour, est
+  jalons, événements d'historique (la liste est dans
   `features/projects/src/server/repo/rekey.ts`). Pas de tier par ligne : c'est
   ce qui rend la bascule atomique (`reencryptProjectTree`), qui lit et
   re-chiffre tout **avant** la moindre écriture et abandonne sans rien toucher
@@ -493,9 +503,10 @@ Ce qui en découle :
   espace partagé reste chiffré, sous la clé de l'espace, à l'étage ouvert.
 - **Un projet gardé perd ses intégrations.** La synchronisation git et le suivi
   de déploiement tournent sans session : ils n'atteindront jamais l'étage gardé.
-  La règle est portée par la liaison elle-même : `projects.repoLink` et ses
-  trois sœurs refusent un projet gardé, et passer un projet en gardé retire ses
-  liaisons. Les services des modules Git et Déploiement n'ont donc jamais un
+  La règle est portée par la liaison elle-même : `projects.repoLink` et les
+  autres commandes de liaison refusent un projet gardé, et passer un projet en
+  gardé retire ses liaisons. Les services des modules Git et Déploiements n'ont
+  donc jamais un
   projet gardé à lire, et les lectures d'usage que Projets leur offre filtrent
   de toute façon sur l'étage ouvert.
 - **Seul un projet ouvert se publie.** La page publique d'un projet
@@ -533,8 +544,7 @@ de commit passent tous par le chiffre.
 
 Les secrets d'accès (`ft_git_credentials.secret_enc` pour un jeton GitHub,
 `ft_deploy_credentials.secret_enc` pour une clé Dokploy : chaque module possède
-les siens depuis les migrations 099 et 100, qui ont vidé puis supprimé la table
-commune `workspace_credentials`) sont **toujours** sous l'étage ouvert, quel que
+les siens) sont **toujours** sous l'étage ouvert, quel que
 soit le tier des projets qui s'en servent : le service de fond doit les lire
 sans session. Ils ne sont jamais renvoyés au client, qui n'en reçoit qu'un
 booléen `hasSecret`.

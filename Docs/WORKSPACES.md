@@ -1,10 +1,11 @@
 # Les espaces de travail dans DevEye
 
-> Écrit le 6 août 2026, à la fin du chantier qui les a introduits ; relu et mis
-> à jour le 21 août 2026 (rôles, partage, canaux par feature) et le 25 août 2026
-> (retrait du chemin hérité « espace partagé sans clé propre »). Destiné à une
-> session future : lis ce document avant de toucher aux espaces, aux rôles ou au
-> chiffrement. Il dit **pourquoi** les choses sont ainsi ; le code dit comment.
+> Ce document dit **pourquoi** les espaces, les rôles et leurs clés sont ainsi ;
+> le code dit comment. Documents voisins : [LIVE.md](./LIVE.md) (qui est là, et
+> où), [SHARING.md](./SHARING.md) (un élément visible depuis plusieurs espaces),
+> [PERMISSIONS.md](./PERMISSIONS.md) (les quatre étages de droits),
+> [SECURITY_MODEL.md](./SECURITY_MODEL.md) (les clés) et
+> [FEDERATION.md](./FEDERATION.md) (les espaces d'un autre serveur).
 
 ---
 
@@ -33,49 +34,45 @@ Deux natures, portées par `workspaces.kind` :
 **Terme d'interface : « espace ».** Court, tient dans un menu, se décline
 (Espace personnel, Nouvel espace, Quitter l'espace). Le code garde `workspace`.
 
-### L'ancien `id = 0`
-
-Avant ce chantier, l'espace personnel était **virtuel** : l'id `0`, synthétisé
-dans `loadUserBundle`, jamais une ligne en base. Et surtout : les tables avaient
-bien une colonne `workspace_id`, mais **aucune requête SQL ne filtrait dessus** —
-chaque handler faisait `listByUser(userId)` puis un `.filter()` en JS. Deux
-membres d'un même espace ne voyaient donc pas les données l'un de l'autre. Le
-système était une façade.
-
-Aujourd'hui l'espace personnel est une vraie ligne, pointée par
-`users.personal_workspace_id` (NOT NULL + FK). Ce pointeur, plutôt qu'un index
-unique sur `(kind, owner_user_id)` : ce dernier aurait limité chaque compte à un
-seul espace _partagé_, ce qui est faux.
+L'espace personnel est une vraie ligne de `workspaces`, pointée par
+`users.personal_workspace_id` (NOT NULL, index unique `uniq_personal_workspace`).
+Ce pointeur plutôt qu'un index unique sur `(kind, owner_user_id)` : ce dernier
+limiterait chaque compte à un seul espace _partagé_ possédé, ce qui est faux.
+Toute requête de donnée filtre sur `workspace_id` : c'est la colonne qui
+cloisonne, `user_id` ne sert qu'à l'attribution.
 
 ---
 
 ## 2. Les trois leviers d'architecture
 
 Tout tient sur ces trois choix. Ils sont ce qui rend le système maintenable
-plutôt qu'un semis de `if (workspaceId === 0)`.
+plutôt qu'un semis de cas particuliers.
 
-### L1 — L'espace actif voyage sur l'enveloppe WS
+### L1 : l'espace actif voyage sur l'enveloppe WS
 
-`clientMessageSchema` porte un `workspaceId` optionnel. `ws.send` l'estampille
-depuis `stores/workspace`. Conséquence : **zéro champ `workspaceId` dans les ~45
-schémas d'input**, zéro passage manuel dans les ~60 sites d'appel, **un seul
-point de résolution** dans le dispatcheur.
+`clientMessageSchema` (`src/protocol/envelope.ts` de `@deveye/types`) porte un
+`workspaceId` optionnel. `ws.send` l'estampille depuis `stores/workspace` au
+moment de l'envoi. Conséquence : aucun schéma d'entrée ne porte `workspaceId`,
+aucun site d'appel ne le passe à la main, et le dispatcheur est **le seul point
+de résolution**.
 
-L'alternative — « espace actif mémorisé dans la session serveur » — a été
-écartée : la socket se reconnecte seule (backoff, focus), et une commande émise
-avant que la ré-activation n'arrive viserait le mauvais espace.
+L'alternative, un espace actif mémorisé dans la session serveur, ne tient pas :
+la socket se reconnecte seule (backoff, focus), et une commande émise avant que
+la ré-activation n'arrive viserait le mauvais espace.
 
-### L2 — L'autorisation est déclarative
+### L2 : l'autorisation est déclarative
 
-`FeatureDefinition` porte un `access?: FeatureAccessSpec`, appliqué **par le
-dispatcheur avant le handler**, exactement comme la validation zod l'est déjà :
+`FeatureDefinition` porte un `access?: FeatureAccessSpec`
+(`src/features/_define.ts`), appliqué **par le dispatcheur avant le handler**,
+exactement comme la validation zod :
 
 ```ts
 export interface FeatureAccessSpec {
-    feature?: WorkspaceFeatureId;
-    level?: FeatureAccess; // défaut 'read'
-    capabilities?: WorkspaceCapability[];
-    admin?: true; // flotte / pages système
+    feature?: FeatureId; // la fonctionnalité touchée
+    level?: FeatureAccess; // 'read' par défaut, 'write'
+    extras?: readonly string[]; // permissions propres de la fonctionnalité, toutes exigées
+    capabilities?: WorkspaceCapability[]; // capacités de gouvernance, toutes exigées
+    admin?: true; // administrateur global : pages système
     scope?: 'account'; // force l'espace personnel de l'appelant
 }
 ```
@@ -85,26 +82,34 @@ mot de passe, le dispatcheur **force** `ctx.workspace` à l'espace personnel de
 l'appelant quelle que soit l'enveloppe. Sans lui, une enveloppe pointant un
 espace partagé pourrait détourner `secrecy.enable`.
 
-### L3 — Chaque espace a sa clé, et un blob n'en change presque jamais
+Un contrôle au démarrage (`assertAccessDeclared`,
+`src/features/_permissions.ts`) **refuse le boot** si une commande n'a ni
+`access` ni entrée dans `ACCESS_EXEMPT` (la liste des commandes ouvertes à tout
+compte connecté : `workspace.activate`, `workspace.add`, `feedback.submit`…).
+Lever plutôt qu'avertir : un avertissement se range dans le bruit des journaux,
+et la commande reste ouverte pendant ce temps.
+
+### L3 : chaque espace a sa clé, et un contenu n'en change presque jamais
 
 Un espace partagé a sa propre clé de données (WDK), posée à sa création ; un
 espace personnel utilise les DEK de son propriétaire, qui en est le seul membre
 (cf. §5). Un contenu est chiffré sous la clé de son espace et n'en change pas :
-partager le projette sans le re-chiffrer (`SHARING.md`). Deux exceptions, et
-elles se comptent : le passage d'un étage à l'autre à l'intérieur d'un espace
-personnel (projets, comptes mail, notes privées), et **déplacer** un élément
-d'un espace à un autre (`SHARING.md` §9), qui n'existe que pour les
-fonctionnalités ayant écrit leur conversion. C'est le principal réducteur de
-risque du chantier : toute nouvelle exception se paie d'un arbre qu'on peut
-rendre illisible sans s'en apercevoir. Ne pas le brader.
+partager le projette sans le re-chiffrer ([SHARING.md](./SHARING.md)). Deux
+exceptions, et elles se comptent : le passage d'un étage à l'autre à l'intérieur
+d'un espace personnel (projets, comptes mail, notes privées), et **déplacer** un
+élément d'un espace à un autre (§8), qui n'existe que pour les fonctionnalités
+ayant écrit leur conversion. Toute nouvelle exception se paie d'un arbre qu'on
+peut rendre illisible sans s'en apercevoir : c'est le principal réducteur de
+risque du modèle.
 
 ---
 
 ## 3. Rôles et permissions
 
-Deux dimensions **orthogonales**, volontairement.
+Deux dimensions **orthogonales**, volontairement
+(`src/domain/workspaceRole.ts` de `@deveye/types`).
 
-**Capacités** — enum fermé et court, sur la _gouvernance_ :
+**Capacités** : enum fermé et court, sur la _gouvernance_ de l'espace :
 
 ```
 workspace.manage      renommer, logo, supprimer
@@ -114,110 +119,113 @@ workspace.appearance  thème de l'espace
 workspace.layout      disposition de l'accueil
 ```
 
-Il y a eu une sixième capacité, `workspace.notifications` (chantier 087) :
-depuis que chaque émetteur possède ses canaux (091), elle confiait d'un bloc
-l'astreinte d'Uptime et le salon des sauvegardes, et elle est devenue le champ
-`channels` du **grant de feature** (migration 093) : gérer les canaux d'une
-fonctionnalité se confie fonctionnalité par fonctionnalité. La liste des canaux
-reste lisible avec la fonctionnalité (on ne route pas vers ce qu'on ne voit
-pas), leur **contenu** ne l'est qu'avec ce champ. Voir
-`NOTIFICATIONS.md`.
+Gérer les canaux d'alerte d'une fonctionnalité n'est pas une capacité : c'est le
+champ `channels` du grant de feature, confié fonctionnalité par fonctionnalité
+(voir [NOTIFICATIONS.md](./NOTIFICATIONS.md) §5).
 
-**Droits par feature** — map uniforme `feature → read | write` (plus le champ
-`channels` ci-dessus), absent = aucun accès. Dix-huit entrées
-(`workspaceFeatureIdSchema`), de `devices` à `mailserver` ; `monitoring` n'en est
-pas une : la carte d'agrégat du même nom est réservée à l'administrateur
-global dans son espace personnel.
+**Droits par feature** : une carte uniforme `feature → read | write`, absent =
+aucun accès. Vingt entrées pour les fonctionnalités du dépôt
+(`workspaceFeatureIdSchema`, de `devices` à `invoicing`), plus les identifiants
+`x-…` des modules externes (`featureIdSchema`). Le droit `devices` couvre la
+tuile de supervision des appareils.
 
 > Une nouvelle feature coûte **une entrée dans un tableau const** et hérite du
 > gating lecture/écriture sans toucher ni l'enum ni un handler.
 
-Tableau de paires plutôt que `z.record` : en **zod 4.4.3**, `z.record(enum, v)`
-est exhaustif et exigerait toutes les clés.
+Chaque grant porte, à côté de `access` :
+
+- `channels` : gérer les canaux d'alerte de cette fonctionnalité ;
+- `itemPermissions` : régler ce que chaque rôle peut faire d'un élément pris
+  séparément (l'onglet Permissions d'un élément), distinct de la capacité
+  `workspace.roles` qui gouverne les rôles eux-mêmes ;
+- `extras` : les permissions propres déclarées par la feature
+  (`extraPermissions` du manifest, voir [PERMISSIONS.md](./PERMISSIONS.md) §2).
+
+Tableau de paires plutôt que `z.record` : en zod, `z.record(enum, v)` est
+exhaustif et exigerait toutes les clés.
 
 `devices.view` / `devices.manage` sont exprimés comme `devices: read|write`
-plutôt que comme capacités — un seul mécanisme, et ça évite le double-gate où
-Monitoring exigerait à la fois un droit feature et une capacité.
+plutôt que comme capacités : un seul mécanisme, et pas de double garde où la
+supervision exigerait à la fois un droit feature et une capacité.
 
 ### Résolution, dans l'ordre
 
 1. **non-membre** → `forbidden`. L'appartenance est la frontière, sans exception :
-   même un admin global n'entre pas dans l'espace d'autrui.
+   même un administrateur global n'entre pas dans l'espace d'autrui.
 2. **propriétaire** → tout, non révocable, **sans ligne de rôle**. Lui en donner
    une laisserait croire qu'on peut le lui retirer.
 3. **membre avec rôle** → exactement ce que son rôle accorde.
 4. **membre sans rôle** → rien. _Fail-closed_ : un oubli d'attribution retire
    l'accès, il ne le donne jamais.
 
+Un membre dont l'adhésion est en pause par l'offre du compte (`memberPausedIn`)
+est traité comme non-membre.
+
 ### Le quatrième étage : les restrictions par élément
 
-Un étage de **droits fins par geste** a existé (chantier 088 :
-`deploy.trigger`, le terminal SQL…) puis a été **retiré** sur retour d'usage :
-la granularité utile est celle des espaces et celle des éléments, pas celle des
-verbes, d'où le trou dans la numérotation des migrations. Le quatrième étage
-réel est `item_role_grants` : ce qu'un rôle voit d'une ligne précise (masquée,
-ou en lecture seule), réglé dans les réglages de l'élément. Un grant de feature
-peut en revanche porter un **réglage** de la fonctionnalité (le champ
-`channels`, 093) : les verbes restent bannis, pas les réglages. Voir
-`PERMISSIONS.md`, qui acte la frontière.
+Il n'y a pas de droits par verbe (« déclencher un déploiement », « ouvrir le
+terminal SQL ») : la granularité utile est celle des espaces et celle des
+éléments ([PERMISSIONS.md](./PERMISSIONS.md) acte la frontière). Le quatrième
+étage est `item_role_grants` : ce qu'un rôle obtient d'une ligne précise
+(masquée, en lecture seule, ou en écriture là où la feature ne lui donne que la
+lecture), réglé dans les réglages de l'élément ([SHARING.md](./SHARING.md) §6).
+Un grant de feature peut porter un **réglage** de la fonctionnalité (`channels`,
+`itemPermissions`, `extras`) : les verbes sont bannis, pas les réglages.
 
-Deux contrôles au démarrage, qui **refusent le boot** : aucune commande sans
-`access` déclaré (77 en manquaient — `uptime`, `mail`, `weather`, `cloudSync` —
-et l'interface qui masquait la donnée faisait croire à une garde), et un
-catalogue dont la migration de reprise dit la même chose.
-
-> ### Piège évité, à ne pas réintroduire
+> ### Les droits ne dépendent jamais de `workspaces.features`
 >
-> Les droits d'un rôle ne sont **jamais intersectés avec `workspaces.features`**.
-> Cette colonne dit quels widgets figurent sur l'accueil, pas qui a le droit
-> d'ouvrir quoi. L'intersecter reviendrait à supprimer l'accès à des données en
-> décochant un widget — et sur les espaces existants, dont la liste contient des
-> identifiants hérités (`servicemonitor`, `projects`, `airfrance2`), elle
-> **verrouillerait le propriétaire hors de ses propres données**.
+> Cette colonne est héritée et rien ne la lit : la disposition de l'accueil vit
+> dans `workspaces.home_layout`. L'intersecter avec les droits d'un rôle
+> reviendrait à supprimer l'accès à des données en décochant un widget.
 
-### L'admin global
+### L'administrateur global
 
-Il ne bypass que les pages système (Logs, Utilisateurs). Les appareils n'en
-relèvent plus : un appareil habite l'espace où il a été appairé, tout ce qui le
-concerne tient au droit `devices` de cet espace, et `authorizeDevice` ne connaît
-aucune dérogation. Un administrateur ne voit d'un espace où il n'entre pas ni
-ses appareils ni le reste.
-Il n'accède **pas** aux mots de passe ni aux notes d'autrui — ce serait
-contredire `SECURITY_MODEL.md`, et c'est de toute façon
+Il ne contourne que les pages système (Logs, Utilisateurs), par `admin: true`.
+Les appareils n'en relèvent pas : un appareil habite l'espace où il a été
+appairé, tout ce qui le concerne tient au droit `devices` de cet espace, et
+`authorizeDevice` (`src/agent/authorize.ts`) ne connaît aucune dérogation. Un
+administrateur ne voit d'un espace où il n'entre pas ni ses appareils ni le
+reste. Il n'accède **pas** aux mots de passe ni aux notes d'autrui : ce serait
+contredire [SECURITY_MODEL.md](./SECURITY_MODEL.md), et c'est de toute façon
 mécaniquement impossible sur un espace personnel chiffré par mot de passe.
 
 ### Révocation immédiate
 
-`_access.ts` mémoïse les scopes par connexion, invalidés par un compteur
-`accessEpoch` global bumpé à chaque mutation de membre/rôle/statut. Pas de timer,
-pas d'attente. **Appelle `invalidateAccess()` après toute mutation d'accès.**
+`src/features/_access.ts` mémoïse les scopes par connexion, invalidés par un
+compteur `accessEpoch` global incrémenté à chaque mutation de membre, de rôle ou
+de statut. Pas de minuteur, pas d'attente. **Toute mutation d'accès appelle
+`invalidateAccess()`**, puis expulse ou resynchronise la salle concernée
+([LIVE.md](./LIVE.md) §3).
 
 ---
 
 ## 4. Membres
 
 On rejoint un espace **parce qu'un membre vous y met**, en désignant votre
-adresse — `workspace.addMember`. Immédiat, sans acceptation, avec le rôle par
-défaut de l'espace — et immédiat aussi **chez l'intéressé** s'il est connecté :
-le hub le vise par compte (`userChanged`, voir `LIVE.md`), puisqu'assis dans un
-autre espace il ne recevrait pas la diffusion de celui-ci. Même voie au retrait
-et à la suppression d'un espace, et pour les membres en place quand un
-administrateur supprime l'un d'eux.
+adresse (`workspace.addMember`, capacité `workspace.members`). Immédiat, sans
+acceptation, avec le rôle par défaut de l'espace, et immédiat aussi **chez
+l'intéressé** s'il est connecté : le hub le vise par compte (`userChanged`, voir
+[LIVE.md](./LIVE.md)), puisqu'assis dans un autre espace il ne recevrait pas la
+diffusion de celui-ci. Même voie au retrait (`workspace.removeMember`), à la
+suppression d'un espace, et pour les membres en place quand un administrateur
+supprime l'un d'eux.
 
-Il y a eu un système de liens d'invitation (`workspace_invites`, cinq commandes,
-un écran `/invite/<token>`). **Il a été entièrement supprimé** (migration 058).
-Raison : tout compte candidat existe déjà et une adresse suffit à le désigner.
-Le jeton n'ajoutait qu'un secret transmissible, à expirer et à révoquer, pour
-le même résultat. Les invitations de compte (`user_invites`) ont disparu à leur
-tour (migration 119).
+Il n'y a ni lien d'invitation ni invitation de compte : une adresse suffit à
+désigner un compte existant, et un jeton n'ajouterait qu'un secret transmissible
+à expirer et à révoquer, pour le même résultat.
 
-Une adresse sans compte est refusée explicitement (« Aucun compte DevEye avec
-cette adresse ») plutôt que de créer le compte : l'inscription reste la
-prérogative d'un administrateur.
+Une adresse sans compte est refusée (« Aucun compte DevEye avec cette adresse »)
+plutôt que de créer le compte : on n'invite pas, l'intéressé s'inscrit d'abord.
+L'inscription publique existe (`src/auth/signupRoutes.ts`) et s'ouvre ou se ferme
+par le réglage d'instance `signups` ([MAINTENANCE.md](./MAINTENANCE.md)) ; elle
+est toujours ouverte tant que la base n'a aucun compte.
+
+Le propriétaire ne quitte pas son espace et seul lui le supprime
+(`workspace.leave`, `workspace.delete`) ; l'espace personnel ne se supprime pas.
 
 ---
 
-## 5. Chiffrement — la partie à comprendre avant de toucher
+## 5. Chiffrement : la partie à comprendre avant de toucher
 
 ### Le modèle
 
@@ -228,10 +236,11 @@ prérogative d'un administrateur.
   mot de passe, le rôle étant la seule frontière. Les tâches de fond y travaillent
   sans session.
 
-**Tout espace partagé naît avec sa clé** : `add.ts` appelle
-`createWorkspaceDek()` à la création, et c'est le seul endroit qui en pose une.
-Un espace partagé sans clé n'est pas un état : `resolveWorkspaceDek()` le
-traite comme un invariant rompu.
+**Tout espace partagé naît avec sa clé** : `workspace.add`
+(`src/features/workspace/add.ts`) appelle `createWorkspaceDek()` à la création,
+et c'est le seul endroit qui en pose une. Un espace partagé sans clé n'est pas un
+état : `resolveWorkspaceDek()` (`src/Services/SecretKeyService.ts`) le traite
+comme un invariant rompu et lève.
 
 Le prix, à assumer et à dire : **le serveur peut lire le contenu d'un espace
 partagé.** C'est inévitable dès lors que tous les membres doivent y accéder sans
@@ -239,78 +248,79 @@ secret partagé entre eux.
 
 ### Deux étages de chiffrement
 
-`ctx.secure` (gardé) et `ctx.secure.open` (ouvert) — les notes et Uptime écrivent
-dans l'étage ouvert, le coffre dans l'étage gardé. Dans un espace partagé la
-distinction disparaît : la WDK sert les deux.
+L'app distingue l'étage gardé (`ctx.secure`) de l'étage ouvert
+(`ctx.secure.open`) ; un module choisit par `ctx.cipher('private')` ou
+`ctx.cipher('server')`. Les notes et Uptime écrivent dans l'étage ouvert, Mots
+de passe dans l'étage gardé. Dans un espace partagé la distinction disparaît :
+la WDK sert les deux.
 
-### Notes privées
+### Un seul palier en espace partagé
 
-`notes.is_private` perd son fondement cryptographique dans un espace partagé :
-les deux étages y utilisent la même clé, donc une note « privée » serait lisible
-par tout membre ayant `notes: read`. **Le bouton est donc refusé côté serveur**
-(`assertPrivateAllowed`) : une note privée n'existe que dans l'espace personnel.
-Garder le drapeau comme simple ACL aurait contredit le modèle documenté.
+Dans un espace partagé, un palier « gardé » annoncerait une protection qu'il ne
+donne pas : les deux étages y lisent la même clé, et une note privée, un compte
+mail protégé ou un projet confidentiel seraient lisibles par tout membre ayant la
+lecture de la fonctionnalité. **Le serveur le refuse**, avec le même message
+dans les trois cas (« … n'existe que dans votre espace personnel ») :
 
-### Mail — un seul palier en espace partagé
+- Notes : `assertPrivateAllowed` (`features/notes/src/server/_shared.ts`) ;
+- Mail : `assertTierAllowed` (`features/mail/src/server/_shared.ts`), et le
+  client ne propose que « ouvert » hors espace personnel ;
+- Projets : `assertGuardedAllowed` (`features/projects/src/server/_shared.ts`).
 
-`mail_accounts.security_tier = 'guarded'` n'a pas de sens dans un espace
-partagé : les deux étages y utilisent la WDK, le palier annoncerait une
-protection qu'il ne donne pas. Depuis le 26 août 2026 le serveur le refuse
-(`assertTierAllowed`, même règle que les notes privées et les projets
-confidentiels), le client ne propose que « ouvert » hors espace personnel, et
-la migration `097` a ramené à `'open'` les comptes qui l'auraient porté (sans
-rien re-chiffrer : sous la WDK, les deux paliers lisent le même octet).
+Garder le drapeau comme simple ACL contredirait le modèle documenté.
 
 ---
 
 ## 6. Côté client
 
-- **`stores/workspace.ts`** — singleton + `useSyncExternalStore`.
-  `getActiveWorkspaceId()` (lu par `ws.send`), `useActiveWorkspace()`,
-  `setActiveWorkspace()`, `resetWorkspace()`, `useWorkspacePermissions()`.
-- **Thème et disposition par espace** — clés `deveye:theme:<id>` /
-  `deveye:homeLayout:<id>`, plus `deveye:activeWorkspace` écrite
-  **synchroniquement** pour qu'il n'y ait aucun flash au premier paint. Corrige
-  au passage un bug antérieur : ni le thème ni la disposition n'étaient remis à
-  zéro à la déconnexion, si bien qu'un second compte sur la même machine héritait
-  de l'apparence du précédent.
-- **Re-fetch au changement d'espace** — l'epoch d'espace entre dans la clé de la
+- **`stores/workspace.ts`** : singleton + `useSyncExternalStore`. L'espace actif
+  est `{ instanceId, id }` ; `getActiveWorkspaceId()` (lu par `ws.send`),
+  `useActiveWorkspace()`, `setActiveWorkspace()`, `resetWorkspace()`,
+  `useWorkspacePermissions()`. Tout ce qui se sert d'un espace comme **clé**
+  passe par `workspaceKey(ref)` : `<id>` pour un espace d'ici, `r<instance>-<id>`
+  pour un espace distant.
+- **Thème et disposition par espace** : clés `deveye:theme:<clé>` et
+  `deveye:homeLayout:<clé>` du `localStorage`, plus `deveye:activeWorkspace` et
+  `deveye:activeRemote`, écrites **synchroniquement** pour qu'il n'y ait aucun
+  flash au premier paint. La déconnexion remet thème et disposition à zéro : un
+  second compte sur la même machine n'hérite pas de l'apparence du précédent.
+- **Re-fetch au changement d'espace** : l'epoch d'espace entre dans la clé de la
   couche keep-alive de l'accueil, donc **tout remonte**. Zéro code par feature ;
   l'alternative (un `useEffect` par feature) est une souscription à maintenir à
-  la main qu'une nouvelle feature oubliera.
+  la main qu'une nouvelle feature oublierait.
 - **La vue ouverte survit à la bascule** quand l'accueil de la cible propose la
-  même tuile et que le rôle l'ouvre — son contenu, lui, repart de zéro par
+  même tuile et que le rôle l'ouvre ; son contenu, lui, repart de zéro par
   l'epoch ci-dessus. Sinon elle se referme.
     > **L'identité de morphe (`layoutId`) est préfixée par l'epoch d'espace**, et
-    > celle de la popup est figée à son ouverture. Sans ça la bascule cassait
-    > l'affichage : la disposition remplacée démonte puis remonte toutes les tuiles
-    > (les sections sont clés par `section.id`, qui diffère d'un espace à l'autre),
-    > la nouvelle tuile reparaît avec le `layoutId` de la popup ouverte, et
-    > framer-motion — qui n'admet qu'un élément par identité — projette la popup
-    > **dans** la tuile. Mesuré : 1143×743 → 290×206, sans jamais se refermer côté
-    > React, d'où un fond assombri qui restait. Après une bascule la popup n'a donc
-    > plus de partenaire et se referme par un fondu, ce qui est de toute façon plus
+    > celle de la popup est figée à son ouverture. La disposition remplacée
+    > démonte puis remonte toutes les tuiles (les sections sont clés par
+    > `section.id`, qui diffère d'un espace à l'autre) ; sans ce préfixe, la
+    > nouvelle tuile reparaîtrait avec le `layoutId` de la popup ouverte, et
+    > framer-motion, qui n'admet qu'un élément par identité, projetterait la
+    > popup **dans** la tuile. Après une bascule la popup n'a donc plus de
+    > partenaire et se referme par un fondu, ce qui est de toute façon plus
     > juste : sa carte d'origine n'existe plus. La composition de l'accueil d'un
-    > autre espace n'étant **pas** embarquée dans la session, la décision ne peut
-    > tomber qu'après `workspace.activate` : le contenu est donc démonté le temps de
-    > la bascule, faute de quoi il interrogerait le nouvel espace avec les droits de
-    > l'ancien. Les vues sans tuile (profil, sécurité, journaux, gestion de l'espace)
-    > échappent à la règle : elles ne sont pas composées dans l'accueil.
-- **Menu de la topbar** — section « Espaces » **en tête** (elle dit où l'on est,
-  et tout ce qui suit en dépend), création via un « + » sur l'intitulé. Ce qui
-  agit sur un espace se range **en retrait sous celui où l'on se trouve**, dans
-  l'ordre Apparence, Organiser l'accueil, Gérer cet espace ; chacune n'apparaît
-  qu'avec son droit, et la gestion seulement sur un espace partagé. La liste est
-  donc rendue même quand elle n'a qu'une ligne : c'est elle qui porte ces
-  actions.
-- **Bouton de profil** — `pseudo · Nom de l'espace`, uniquement pour les espaces
-  partagés : répéter « Espace personnel » à qui y est déjà n'apprend rien.
-- **En-tête de l'accueil** :
+    > autre espace n'est **pas** embarquée dans la session : la décision ne peut
+    > tomber qu'après `workspace.activate` (qui rend disposition et droits), et
+    > le contenu est démonté le temps de la bascule, faute de quoi il
+    > interrogerait le nouvel espace avec les droits de l'ancien. Les vues sans
+    > tuile (profil, sécurité, Logs, gestion de l'espace) échappent à la règle :
+    > elles ne sont pas composées dans l'accueil.
+- **Menu de la topbar** (`Components/TopNavbar/WorkspaceSwitcher.tsx`) :
+  section « Espaces » **en tête** (elle dit où l'on est, et tout ce qui suit en
+  dépend), création par un « + » sur l'intitulé (« Nouvel espace »). Ce qui agit
+  sur un espace se range **en retrait sous celui où l'on se trouve**, dans l'ordre
+  Apparence, Organiser l'accueil, Gérer cet espace ; chacune n'apparaît qu'avec
+  son droit, et la gestion seulement sur un espace partagé. La liste est donc
+  rendue même quand elle n'a qu'une ligne : c'est elle qui porte ces actions.
+- **Bouton de profil** : le nom de l'espace y figure pour un espace partagé
+  seulement : répéter « Espace personnel » à qui y est déjà n'apprend rien.
+- **En-tête de l'accueil** (`homeHeading`, `Pages/Home/index.tsx`) :
 
-    |           | Titre            | Sous-titre                                    |
-    | --------- | ---------------- | --------------------------------------------- |
-    | Personnel | `Bonsoir, Gerem` | `Mercredi 5 août`                             |
-    | Partagé   | `Studio Design`  | `Bonsoir Gerem · 3 membres · mercredi 5 août` |
+    |           | Titre               | Sous-titre                                       |
+    | --------- | ------------------- | ------------------------------------------------ |
+    | Personnel | `Bonsoir, <pseudo>` | `Mercredi 5 août`                                |
+    | Partagé   | le nom de l'espace  | `Bonsoir <pseudo> · 3 membres · mercredi 5 août` |
 
 ### Gating des features non accordées
 
@@ -320,187 +330,86 @@ tous. La poser dans le rendu des tuiles ne fermerait qu'une porte sur trois.
 
 Refus → popup « Accès refusé » nommant la feature. Sur l'accueil, la tuile reste
 posée mais désaturée (`.lockedTile`) et son contenu vivant cède la place à
-« Accès restreint » — sinon elle interroge un serveur qui refuse et affiche des
-zéros qui se lisent comme des données. La retirer déplacerait ses voisines et
-donnerait à lire une disposition abîmée. Pendant une **bascule d'espace**, ce
-grisage est suspendu le temps de l'aller-retour (et le clic avec) : les droits
-remis à zéro ne sont ceux de personne, et la grille reste affichée telle quelle
-pour que les tuiles communes aux deux espaces glissent vers leur nouvelle place.
+« Accès restreint » (`Pages/Home/tiles/tileLock.tsx`) : sinon elle interroge un
+serveur qui refuse et affiche des zéros qui se lisent comme des données. La
+retirer déplacerait ses voisines et donnerait à lire une disposition abîmée.
+Pendant une **bascule d'espace**, ce grisage est suspendu le temps de
+l'aller-retour (et le clic avec) : les droits remis à zéro ne sont ceux de
+personne, et la grille reste affichée telle quelle pour que les tuiles communes
+aux deux espaces glissent vers leur nouvelle place.
 
-`featureBehind(viewId)` fait la correspondance vue → feature. Les vues de compte
-et d'administration (profil, sécurité, logs, utilisateurs, gestion de l'espace)
+`featureBehind(viewId)` fait la correspondance vue → feature : une
+fonctionnalité du dépôt ou l'identifiant d'un module externe. Les vues de compte et
+d'administration (profil, sécurité, Logs, Utilisateurs, gestion de l'espace)
 n'en dépendent d'aucune : elles ont leurs propres gardes.
 
 ---
 
 ## 7. Base de données
 
-| #       | Fichier                                                                      | Contenu                                                                                          |
-| ------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| 046     | `workspace_kind`                                                             | `kind`, `owner_user_id`, `theme`, `home_layout` ; un espace personnel par compte                 |
-| 047     | `users_workspace_pointer`                                                    | `personal_workspace_id`, favori, `status` ; drop de `features`/`theme`/`home_layout` sur `users` |
-| 048     | `scope_notes_passwords`                                                      |                                                                                                  |
-| 049–053 | `scope_uptime`, `scope_mail`, `scope_weather`, `scope_sync`, `scope_devices` |                                                                                                  |
-| 054     | `workspace_invites`                                                          | _(table supprimée depuis par 058 ; pose `uniq_workspace_member`, qui reste)_                     |
-| 055     | `workspace_secret_keys`                                                      | la WDK                                                                                           |
-| 056     | `workspace_roles`                                                            | rôles + `members.role_id`                                                                        |
-| 057     | `user_invites`                                                               | _(table supprimée depuis par 119)_                                                               |
-| 058     | `drop_workspace_invites`                                                     | fin des invitations d'espace                                                                     |
-| 119     | `drop_user_invites`                                                          | fin des invitations de compte                                                                    |
-| 087     | `notification_channels`                                                      | les canaux d'alerte deviennent des objets d'espace ; `notification_settings` supprimée           |
+Les tables du modèle : `workspaces` (`kind`, `owner_user_id`, `theme`,
+`home_layout`), `workspace_members` (`role_id` nullable, index unique
+`uniq_workspace_member`), `workspace_roles` (`capabilities` et `features` en
+JSON, `is_default`), `workspace_secret_keys` (la WDK, `dek_wrapped`),
+`users.personal_workspace_id`, et pour le quatrième étage `item_role_grants`
+([SHARING.md](./SHARING.md) §6).
 
-La suite du chantier est documentée ailleurs : 089 partage d'éléments entre
-espaces (`SHARING.md`), 090–092 routes de notification par élément
-(`NOTIFICATIONS.md`), 093 canaux par feature dans les rôles (`PERMISSIONS.md`),
-094 chiffrement des sauvegardes par travail (`features/backup/README.md`). Le trou 088 est le
-chantier des droits fins, retiré (§3).
+Les migrations qui le portent (`src/db/migrations/`) :
 
-### Contrainte impérative sur les migrations
+| #       | Fichier                                                                      | Contenu                                                                                |
+| ------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| 046     | `workspace_kind`                                                             | `kind`, `owner_user_id`, `theme`, `home_layout` ; l'espace personnel devient une ligne |
+| 047     | `users_workspace_pointer`                                                    | `personal_workspace_id`, favori ; `features`, `theme`, `home_layout` quittent `users`  |
+| 048     | `scope_notes_passwords`                                                      | `workspace_id` devient la clé de cloisonnement                                         |
+| 049-053 | `scope_uptime`, `scope_mail`, `scope_weather`, `scope_sync`, `scope_devices` | idem, feature par feature                                                              |
+| 054     | `workspace_invites`                                                          | pose `uniq_workspace_member` (la table, elle, est supprimée en 058)                    |
+| 055     | `workspace_secret_keys`                                                      | la WDK                                                                                 |
+| 056     | `workspace_roles`                                                            | rôles + `members.role_id`                                                              |
+| 058     | `drop_workspace_invites`                                                     | pas d'invitation par lien                                                              |
+| 089     | `item_sharing`                                                               | `item_shares`, `item_role_grants` ([SHARING.md](./SHARING.md))                         |
+| 093     | `role_channels_per_feature`                                                  | le champ `channels` des grants                                                         |
+| 119     | `drop_user_invites`                                                          | pas d'invitation de compte                                                             |
 
-`migrate.ts` exécute chaque fichier en **une** requête multi-statements, **sans
-transaction**. Si le 3ᵉ statement sur 6 échoue, les deux premiers sont committés
-et la migration n'est pas enregistrée : au boot suivant elle rejoue depuis le
-début, échoue en doublon, et **bloque définitivement le démarrage**.
+Le `workspace_id` de `workspace_members` et de `workspace_roles` est une clé
+étrangère en `ON DELETE CASCADE` ; `members.role_id` est en `ON DELETE SET
+NULL` et surtout pas `RESTRICT`, qui pourrait bloquer un `DELETE FROM
+workspaces` selon l'ordre, non garanti, de la cascade. Le refus de supprimer un
+rôle encore porté est appliqué par le handler.
 
-`038_uptime_order.sql` documente que `ADD COLUMN IF NOT EXISTS` (syntaxe
-MariaDB) **a fait tomber la production**. Donc, sans exception :
-
-- tout `ADD COLUMN` passe par le motif `INFORMATION_SCHEMA` + `PREPARE`/`EXECUTE` ;
-- `CREATE TABLE IF NOT EXISTS` partout ;
-- tout backfill porte un `WHERE <pas encore fait>`, tout `INSERT … SELECT` un
-  `WHERE NOT EXISTS` ;
-- fichiers courts et mono-objet.
-
-### Rejeu obligatoire avant livraison
-
-Toute migration se rejoue **sur une copie du dump de production** avant d'être
-livrée, deux fois, en vérifiant des **invariants de données** — pas seulement le
-succès du DDL. Cette méthode a attrapé de vrais bugs, dont une migration qui
-aurait planté en production (`workspace_members.roles`, JSON NOT NULL, devait
-être supprimée _avant_ l'insertion des adhésions).
-
-```bash
-mysql … -e "DROP DATABASE IF EXISTS DevEye_migtest; CREATE DATABASE DevEye_migtest …"
-mysql … DevEye_migtest < ../Backups/<dump>.sql
-DB_DATABASE=DevEye_migtest LISTEN_PORT=3099 npx tsx index.ts   # ×2
-# puis : COUNT des mots de passe (308), adhésions, index conservés, orphelins à 0
-```
+`src/db/migrate.ts` envoie chaque fichier en **une** requête, sur une connexion
+multi-instructions, **sans transaction** : le DDL de MySQL committe
+implicitement. Si une instruction échoue au milieu, les précédentes sont
+acquises et la migration n'est pas enregistrée ; au boot suivant elle rejoue
+depuis le début et échoue en doublon. D'où, sans exception : tout `ADD COLUMN`
+passe par `INFORMATION_SCHEMA` + `PREPARE`/`EXECUTE`, `CREATE TABLE IF NOT
+EXISTS` partout, tout backfill porte un `WHERE <pas encore fait>`, et chaque
+fichier reste court et mono-objet.
 
 ---
 
-## 8. Pièges rencontrés, et ce qu'ils ont coûté
+## 8. Déplacer un élément
 
-- **Renommage TS ≠ renommage SQL.** Un renommage en masse a changé les
-  identifiants TypeScript sans toucher les chaînes SQL : `weather_provider_keys`
-  a planté franchement, **`weather_locations` a silencieusement renvoyé les
-  mauvaises lignes**. Le test était trop faible ; il a été remplacé par un
-  aller-retour écriture/lecture **entre deux espaces**.
-- **Le déclencheur de `SearchSelect` et `TextInput` posent `width: 100%`.** Dans une ligne flex sans
-  contrainte, ils réclament toute la largeur et écrasent le texte voisin jusqu'à
-  zéro. **Le motif est apparu trois fois** (dialogue de rôle, page Utilisateurs,
-  liste des membres). À traiter à la source si l'occasion se présente.
-- **`ws.send` rejetait avant l'ouverture de la socket.** Un composant monté au
-  premier rendu encaissait un `closed` que l'appelant présentait comme un échec
-  métier — un lien d'invitation parfaitement valide s'affichait « invalide ».
-  Corrigé par une file vidée à l'ouverture.
-- **Suspendre ne coupait pas les sessions vivantes.** La socket ne s'authentifie
-  qu'à la poignée de main. Trois verrous désormais : `_access.ts`, `revokeUser()`
-  sur les jetons, `loadUserBundle` qui ne rend plus de bundle.
-- **`pruneMissingDevices`** se déclenche dès `devicesLoading === false` : après un
-  changement d'espace, le store détient brièvement les appareils du **précédent**
-  alors que la nouvelle disposition est active → suppression définitive de tuiles.
-  Le prune est gardé sur l'estampille d'espace du store.
-- **`resolveChannels` (UptimeMonitor)** joint uptime → compte mail. Aucune FK ne
-  peut exprimer « même espace » : double garde, à l'écriture _et_ à la lecture.
-- **Un serveur de test orphelin sur le port 3099** a servi du code périmé et
-  invalidé des résultats en silence. Toujours tuer le port avant de relancer.
-- **Le serveur indexe les assets statiques au boot** : un `npm run build` pendant
-  qu'il tourne fait tomber les nouveaux hashs dans le fallback SPA → page
-  blanche. Redémarrer.
-- **`pkill -f 'remote-debugging-port=9222'` tue la session de l'agent** (le motif
-  matche sa propre ligne de commande). Utiliser `lsof -ti:9222 | xargs kill`.
-- **Le serveur de test rate-limit `/`** au bout de quelques rechargements
-  rapides, et renvoie une page blanche trompeuse. Boucler sur la présence réelle
-  du contenu.
+`share.move` change le domicile d'un élément : c'est la seule opération qui
+déchiffre sous une clé pour rechiffrer sous une autre, **fonctionnalité par
+fonctionnalité** : sans entrée `move` dans ses `items`, une feature ne déplace
+rien, et l'écran ne le propose pas. La conversion lit et rescelle tout avant la
+première écriture, dans une transaction.
 
----
+Se déplacent : Uptime, Notes, Bases de données, Déploiements, Git, Audience,
+Appareils, Mail, Projets, Hébergement. Pas Sauvegardes (un travail ne peut pas
+exister sans destination, et sa destination appartient à l'espace qu'il
+quitterait) ni Serveur mail (il se partage sans se déplacer). Le tableau de
+[SHARING.md](./SHARING.md) §9 dit pour chacune ce que le déplacement emporte et
+ce qu'il laisse.
 
-## 9. Conventions du dépôt
-
-- **Trois dépôts** : `DevEye/` (serveur + client), `DevEye-Types/`, et un miroir
-  dans `DevEye/node_modules/@deveye/types/`. Après **toute** modification des
-  contrats :
-    ```bash
-    rsync -a --delete DevEye-Types/src/ DevEye/node_modules/@deveye/types/src/
-    diff -rq DevEye-Types/src DevEye/node_modules/@deveye/types/src   # doit être vide
-    ```
-- **`./ci.sh`** à la racine : lint + typecheck des trois, tests du serveur,
-  build du client.
-- **`npm run gen:css-types`** dans `client/` après toute nouvelle classe CSS —
-  les `.css.d.ts` sont gitignorés mais le typecheck en dépend.
-- **Pas de rétrocompatibilité.** Jamais de shim pour d'anciennes données : une
-  migration SQL, ou une remise à zéro manuelle.
-- **Commits directement sur la branche de travail courante**, jamais de
-  branche par tâche (le tronc a longtemps été `main` ; le chantier
-  d'unification vit sur `feat/unification-reglages` en attendant sa poussée).
-- **Vérifier à l'écran.** Sur toute question d'interface, piloter un vrai
-  navigateur (protocole DevTools ; Playwright et `chromium-cli` ne sont pas
-  installés) et **regarder la capture**. Cette méthode a démenti au moins une de
-  mes hypothèses : les pastilles de statut de la page Utilisateurs étaient
-  centrées au pixel près, le vrai coupable était la colonne de texte à zéro.
-
----
-
-## 10. Reste à faire
-
-- [ ] Rejouer les migrations en attente sur une copie du dump de production
-      avant livraison ; au 21 août 2026 : **086 à 094** (091–093 réécrivent
-      des données, routes de notification et JSON des rôles).
-- [x] ~~Trois migrations mail sans fichier~~ Réglé le 26 août 2026 : une base
-      neuve migrée depuis le dépôt a été comparée colonne à colonne à la base
-      historique. Quatre noms fantômes (`041_mail_settings_extra`,
-      `042_mail_sync_interval`, `043_mail_folder_backfill`,
-      `044_mail_account_sync_interval`), trois écarts réels
-      (`mail_folders.first_seen_uid` INT contre BIGINT,
-      `mail_settings.default_send_account_id` et `workspace_roles.permissions`
-      jamais lus) : la migration `097` fait converger l'historique.
-- [x] ~~Interdire `guarded` sur un compte mail d'espace partagé~~ Fait le
-      26 août 2026 (cf. §5).
-- [ ] Sept comptes de test (`sectest_*`, `rep_*`) traînent en base, chacun avec
-      son espace personnel. Sans gravité, candidats au ménage.
-- [ ] Tables mortes, `DROP` sur décision (destructif, sauvegarde d'abord) :
-      dix tables de l'ère PHP importées le 30 mars 2026, qu'aucun code ne lit
-      (`Users`, `Workspaces`, `WorkspaceMembers`, `Logs`, `Services`,
-      `ServiceHistory`, `_Mails`, `_Notes`, `_Passwords`, `_Projects`), et
-      `uptime_settings` (037, 040, 049), remplacée par les réglages par
-      service. La colonne héritée `workspaces.features` contient encore de
-      vieux identifiants : la laisser, rien ne la lit (§6).
+Une liaison de projet vise ce que l'espace du projet voit, chez lui ou projeté,
+et se pose depuis le domicile du projet ; un élément qui part emporte ses
+liaisons dans la corbeille, pas ailleurs ([SHARING.md](./SHARING.md) §9).
 
 ### Hors périmètre, décidé
 
-**Verrouiller un espace partagé derrière une phrase de passe partagée.** Évoqué,
-non implémenté. Ce n'est pas un réglage à retourner : il faudrait décider qui
-détient le secret, comment on l'ajoute à un nouveau membre, ce qu'il advient
-quand on l'exclut.
-
-**La liaison inter-espaces.** Une liaison ne pointe qu'un élément domicilié dans
-le même espace, jamais un élément seulement projeté. La lever demanderait de
-changer le `exists()` des cinq contrats d'éléments, les compteurs d'usage qui
-filtrent par espace, un signal « projection retirée, délie » qui n'existe pas, et
-surtout des services de fond qui jongleraient avec deux codecs sans session. Un
-élément qui part emporte donc ses liaisons dans la corbeille, pas ailleurs.
-
-### Déplacer un élément : fait, sous condition
-
-Longtemps hors périmètre, et pour la bonne raison : c'est la seule opération qui
-déchiffre sous une clé pour rechiffrer sous une autre. Elle existe désormais
-(`share.move`), mais **fonctionnalité par fonctionnalité** : sans entrée `move`
-dans ses `items`, une feature ne déplace rien, et l'écran ne le propose pas. La
-conversion lit et rescelle tout avant la première écriture, dans une
-transaction, sur le modèle de `reencryptProjectTree`. Uptime est branché.
-
-Neuf features sur dix le savent : Uptime, Notes, Bases de données, Déploiement,
-Git, Audience, Appareils, Mail, Projets. La dixième, Sauvegardes, ne le peut pas :
-un travail ne peut pas exister sans destination, et sa destination appartient à
-l'espace qu'il quitterait. Voir le tableau de `SHARING.md` §9, qui dit pour
-chacune ce que le déplacement emporte et ce qu'il laisse.
+**Verrouiller un espace partagé derrière une phrase de passe partagée.** Ce
+n'est pas un réglage à retourner : il faudrait décider qui détient le secret,
+comment on l'ajoute à un nouveau membre, ce qu'il advient quand on l'exclut. Le
+modèle reste : un espace partagé est lisible par le serveur, et le rôle est sa
+seule frontière.

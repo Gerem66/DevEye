@@ -1,6 +1,6 @@
 {
   "id": "devices",
   "tables": ["devices", "device_link_codes", "device_metrics", "device_process_samples", "device_presence"],
-  "minTypesVersion": "0.15.2",
+  "minTypesVersion": "0.22.1",
   "$comment": "Tables historiques du socle, jamais déplacées, et PARTAGÉES avec l'infrastructure : l'ingestion de la télémétrie, la présence et l'enrôlement les écrivent hors session (src/agent/**, src/db/repos/{devices,metrics,processSamples,presence}.ts). Le module y lit et écrit ce qui relève de la flotte et de la rétention, par son propre repo. Toute NOUVELLE table du module prendra le préfixe ft_devices_."
 }

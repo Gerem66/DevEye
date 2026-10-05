@@ -6,6 +6,11 @@ facture, le suivi de ce qui reste dû.
 
 Ce document dit **pourquoi** la feature est faite ainsi. Le « quoi » est dans les
 contrats (`src/contracts/`) et le « comment » dans le code, qui est commenté.
+C'est un module in-repo sur le SDK des features
+([Docs/FEATURE_SDK.md](../../Docs/FEATURE_SDK.md)) : ses contrats, son dépôt, ses
+handlers et son client vivent dans `features/invoicing/`, et `@deveye/types`
+n'en garde que l'identité et les deux contrats de couplage
+(`INVOICING_LEDGER_PROVIDER`, `INVOICING_CLIENT_PROVIDER`).
 
 ---
 
@@ -48,8 +53,8 @@ changement, sans qu'aucun geste de l'écran ne puisse le débloquer.
 Colonnes `DATE`, chaînes `AAAA-MM-JJ`, comparables et triables telles quelles.
 Une pièce appartient à un jour civil : un horodatage la ferait changer de mois
 comptable selon le fuseau de qui la regarde. Le calcul passe par `Date.UTC` de
-bout en bout, sans quoi additionner des jours sauterait une heure au changement
-d'heure d'été.
+bout en bout (`src/contracts/calendar.ts`), sans quoi additionner des jours
+sauterait une heure au changement d'heure d'été.
 
 « Aujourd'hui » n'est jamais `CURDATE()` : il est calculé dans le **fuseau de
 l'espace** et passé en paramètre. Sans cela, une pièce émise depuis La Réunion
@@ -85,7 +90,8 @@ sur quoi on agrège ne peut le traverser.
 
 Le lien public **naît avec l'émission**, et non d'un clic séparé : c'est par lui
 que le document est remis, et le faire naître à la demande revenait à cacher le
-canal principal derrière un geste. Il reste révocable.
+canal principal derrière un geste. Il reste révocable (`invoicing.share`), et
+peut renaître après révocation.
 
 La page qu'il ouvre porte les **deux** réponses, l'accord et le refus. N'offrir
 que l'accord obligeait un client qui refuse à écrire un courriel, et l'émetteur
@@ -102,9 +108,113 @@ coexister, chacun a son médium : le formulaire à l'écran, où l'on clique, le
 Une réponse en ligne bat le sujet live de la feature (`deps.live.changed`) : la
 fiche ouverte chez l'émetteur se relit d'elle-même. **Jamais un brouillon**,
 lui : sa vérité est à l'écran, et le relire écraserait ce qui est en train
-d'être tapé.
+d'être tapé. C'est pourquoi les brouillons ont leur sujet secondaire,
+`invoicingDrafts` (`invoicing.docList`, `invoicing.doc`) : un brouillon se
+retouche vingt fois, et chaque enregistrement ne doit pas faire recalculer le
+tableau de bord et la carte d'accueil de tout l'espace.
 
 ---
+
+## Comment ça marche
+
+### Les pièces
+
+Trois types (`documentKindSchema`) : devis, facture, avoir. Une pièce naît
+**brouillon** (`invoicing.docSave`, `invoicing.linesSet`), se relit avec ses
+totaux recalculés et le nom vivant de son client (`src/server/views.ts`), puis
+s'**émet** (`invoicing.docIssue`, droit `issue`) : elle prend un numéro et fige
+tout, l'émetteur et le client en instantanés, le régime et les taux. Un
+document émis ne se reprend pas : il se corrige par un avoir. La date
+d'émission peut remonter d'un mois au plus (`BACKDATE_DAYS`), et l'émission
+refuse tant que la dénomination et le SIRET de l'émetteur manquent
+(`src/contracts/issuer.ts`, la même règle que l'écran lit pour prévenir avant).
+
+La **numérotation** (`src/server/numbering.ts`) est chronologique et continue,
+sans transaction : le numéro n'existe que là où il est écrit. Le rang se lit du
+plus grand déjà posé et s'écrit sur le document sous garde `number IS NULL` ;
+l'index unique (espace, type, année, rang) refuse un doublon, et la commande
+réessaie. Un compteur à part consommerait un rang à chaque échec entre les deux
+écritures, donc un trou.
+
+Les **dérivations** (`invoicing.docDerive`) sont trois : un devis vers sa
+facture, un devis vers une facture d'acompte (`is_deposit`, dont le montant est
+déduit de la facture de solde, `ft_invoicing_deductions`), une facture vers son
+avoir. Aucune ne fige quoi que ce soit : elles rendent un brouillon, qui se
+corrige avant d'être émis. L'avoir partiel n'a donc pas de commande à lui : on
+dérive l'avoir total, puis on retire ou on réduit ses lignes.
+
+Le **statut affiché** (`src/contracts/status.ts`) n'est pas celui qui est
+stocké : « en retard », « payée », « expiré », « envoyé » sont des fonctions des
+dates, des sommes, du jour courant et de l'envoi (`sentAt`). Les stocker
+demanderait une tâche de fond pour faire passer minuit. La fonction est partagée
+par le client et le serveur, et le dépôt écrit le même prédicat en SQL pour
+filtrer « en retard ».
+
+Les **règlements** (`invoicing.paymentSave`, `invoicing.paymentRemove`) se
+notent sur une facture émise ; la part de TVA d'un règlement vient de
+`paymentVatCents` (`src/contracts/money.ts`), la même que celle du tableau de
+bord. L'onglet Général des réglages signale que DevEye n'est pas une plateforme
+agréée de facturation électronique (voir « Limites connues »).
+
+### Le papier
+
+Un document imprimable est **une chaîne HTML autonome** (`src/server/paper.ts`,
+nourrie par `paperInput.ts`), construite côté serveur et servie trois fois :
+l'aperçu et l'impression dans l'application (`invoicing.paper`, puis le
+dialogue d'impression du navigateur, `src/client/printDocument.ts`), la page
+publique que le client ouvre, et le corps du courriel. Une seule mise en page,
+donc aucune divergence entre ce que l'utilisateur voit, ce que son client
+reçoit et ce qui s'imprime. La mise en forme des montants et des dates est
+partagée par l'écran et le papier (`src/contracts/display.ts`).
+
+### La page publique et la réponse
+
+Le service du module (`src/server/service.ts`) sert deux routes publiques,
+sans session : la page d'un document, `GET /f/<jeton>` (120 visites par minute
+et par adresse), et la réponse à un devis, `POST /api/invoicing/answer` (10 par
+minute). Le jeton porté par l'URL est la seule autorisation, et il ne dit rien
+d'autre que « ce document-là ». La page ne contient pas un octet de
+JavaScript : le formulaire de réponse est un `<form method="post">` ordinaire
+(`src/server/publicPage.ts`).
+
+### L'envoi au client
+
+`invoicing.send` expédie le document **en HTML dans le corps du message**
+(`src/server/documentMail.ts`), avec le lien vers sa page, par un compte Mail
+de l'espace choisi dans la liste que rend `invoicing.mailAccounts` (la façade
+`ctx.deveye.mail.listAccounts`, capacité `mail.accounts`) et le transport
+`MAIL_TRANSPORT_PROVIDER`. Le texte brut reste complet : un destinataire dont
+le client n'affiche pas le HTML ne perd rien. Les gabarits de ces mails sont
+offerts à la page Tests et débogage (`mailSamples`).
+
+### Les relances
+
+Le même service relance les factures en retard par les canaux de notification
+de l'espace (capacité `notify`) : un tour toutes les six heures, cinquante
+factures par tour, et la même facture n'est redite qu'après sept jours
+(`REMIND_AGAIN_DAYS`). Le balayage prend le jour du serveur : une relance
+décalée d'un jour pour qui facture depuis l'autre bout du monde est sans
+conséquence.
+
+### Les clients
+
+Le client est l'élément (`hasItems`, `itemNoun: 'client'`) : son onglet Général
+porte son identité et son retrait (`invoicing.clientSave`,
+`invoicing.clientRemove`), et sa fiche résume ce qu'il a été facturé, ce qui
+reste dû et ce qui est en retard. Les coordonnées d'un client se ferment en
+fermant le client, par les restrictions d'élément : il n'y a pas de droit « voir
+les coordonnées », une facture **étant** l'identité d'un tiers plus un montant.
+
+### Les réglages
+
+Une ligne par espace (`ft_invoicing_settings`), lue avec ses défauts
+(`src/contracts/defaults.ts`) tant qu'elle n'existe pas : une lecture n'écrit
+jamais. Quatre panneaux de réglages à l'échelle de la feature écrivent le même
+objet (`src/client/settingsDraft.ts`) : Général (l'émetteur, `IssuerPanel`,
+sous le droit `issuer` : dénomination, adresse, SIRET, numéro de TVA,
+coordonnées bancaires, logo), TVA (`TaxesPanel`), Numérotation
+(`NumberingPanel`), Mentions (`WordingPanel`), plus l'onglet Domaines du socle.
+À l'échelle d'un client, Général est `ClientPanel`.
 
 ## Les liens sous le domaine de l'émetteur
 
@@ -113,7 +223,9 @@ seul domaine sert tout l'espace, choisi dans l'onglet Général
 (`ft_invoicing_settings.domain_id`) : le client est l'élément, mais c'est
 l'émetteur qui a un nom, pas chacun de ses clients. Tant que le domaine n'est
 pas vérifié, les liens repartent sur l'adresse de DevEye, et un lien déjà remis
-sur l'une reste bon sur l'autre, puisque le jeton seul désigne le document.
+sur l'une reste bon sur l'autre, puisque le jeton seul désigne le document. Le
+module vérifie qu'un domaine est bien le sien par le jeton que sa route
+publique rend sous `/.well-known/deveye-invoicing` (`src/server/domains.ts`).
 
 La page d'un document ne se montre que sous l'adresse de DevEye ou sous un
 domaine de **son** espace. Sans cette règle, n'importe quel émetteur ferait
@@ -123,14 +235,89 @@ seulement le nom d'hôte du lien : c'est le scénario d'une fraude au virement.
 ## Ce que Finances en lit
 
 Le module offre `INVOICING_LEDGER_PROVIDER` (`src/server/ledger.ts`) : les
-règlements, les factures qui attendent encore, la devise et le régime de TVA.
-Finances recopie les règlements dans son livre et montre ce qui reste à
-encaisser ; rien n'y écrit, et Facturation ne sait rien de Finances. La
-version qu'il expose (le nombre de règlements et le plus grand identifiant, que
-MySQL ne réattribue jamais) permet à Finances de ne rien relire tant que rien
-n'a bougé. La part de TVA d'un règlement vient de `paymentVatCents`
-(`src/contracts/money.ts`), la même que celle du tableau de bord : les deux
-features disent la même chose au centime.
+règlements, les factures qui attendent encore (500 au plus : au-delà, une
+créance de plus ne change rien à ce qu'un tableau de bord en montre), la devise
+et le régime de TVA. Finances recopie les règlements dans son livre et montre ce
+qui reste à encaisser ; rien n'y écrit, et Facturation ne sait rien de
+Finances. La version qu'il expose (le nombre de règlements et le plus grand
+identifiant, que MySQL ne réattribue jamais) permet à Finances de ne rien
+relire tant que rien n'a bougé. La part de TVA d'un règlement vient de
+`paymentVatCents`, la même que celle du tableau de bord : les deux features
+disent la même chose au centime.
+
+Dans l'autre sens, le contrat client `INVOICING_CLIENT_PROVIDER`
+(`src/client/provider.ts`) laisse Finances enregistrer le règlement d'une ligne
+de relevé reconnue : c'est `invoicing.paymentSave` qui s'exécute, sous la
+session de la personne, avec ses droits et son audit.
+
+## Carte du code
+
+- `src/manifest.ts` : le descripteur du registre (`featureDescriptor('invoicing')`,
+  `shareTier: 'never'`, l'élément est le client), la catégorie `work`, six clés
+  de ressources, le sujet secondaire `invoicingDrafts`, le sujet `domain` qui
+  ravive les adresses des liens, le bloc `domains` (`web`), les deux quotas,
+  les capacités `notify`, `routes.public` et `mail.accounts`, les deux droits
+  propres (`issue`, `issuer`), les onglets de réglages et les vingt et une
+  commandes sous le préfixe `invoicing.`.
+- `src/contracts/` : `domain.ts` (schémas et lignes SQL), `commands.ts`,
+  `money.ts` (le seul endroit qui arrondit), `calendar.ts` (les jours civils),
+  `status.ts` (le statut affiché), `display.ts` (la mise en forme partagée),
+  `issuer.ts` (ce que la loi exige de l'émetteur), `defaults.ts` (les réglages
+  par défaut), et leurs tests `money.test.ts`, `calendar.test.ts`,
+  `status.test.ts`.
+- `src/server/` : `index.ts` (l'entrée : dépôt, handlers, migrations, service,
+  crochets de domaines, quotas, gabarits de mail, export du compte, et une
+  entrée `items` qui ne sert qu'à nommer un client dans l'écran des canaux),
+  `repo.ts`, `_shared.ts` (le contexte, `CipherIo`, les gardes), `views.ts`,
+  `numbering.ts`, `paper.ts`, `paperInput.ts`, `publicPage.ts`,
+  `documentMail.ts`, `ledger.ts`, `planUsage.ts` (ce qu'un compte a émis ce
+  mois-ci), `domains.ts`, `service.ts`, `accountExport.ts`, `handlers/`
+  (`settings`, `clients`, `docs`, `issue`, `paper`, `payments`, `derive`,
+  `share`, `send`, et `index.ts` qui porte `invoicing.count`),
+  `migrations/001_invoicing.sql` (les six tables `ft_invoicing_*`),
+  `002_invoicing_deposit.sql` (le drapeau d'acompte), `003_invoicing_domain.sql`
+  (le domaine des liens), `uninstall.sql`, `_memoryRepo.ts` (le dépôt en
+  mémoire des tests) et les tests `settings`, `clients`, `docs`, `issue`,
+  `payments`, `derive`, `ledger`, `paper`, `remind`, `routes`, `domains`,
+  `accountExport` (`*.test.ts`).
+- `src/client/` : `index.tsx` (l'entrée : widget, vue, quatre panneaux,
+  `cacheDurationMinutes: 0`, le contrat client), `Invoicing.tsx`, `Home.tsx`
+  (le tableau de bord, `Charts/MonthBars.tsx`), `DocumentsPage.tsx`,
+  `DocumentSheet.tsx` (la fiche d'une pièce : `LineEditor`, `LineTable`,
+  `Totals`, `PaymentsBlock`, `DocumentPreview`), `DocumentDialog.tsx`,
+  `DocumentRow.tsx`, `ClientsPage.tsx`, `ClientSheet.tsx`, `ClientDialog.tsx`,
+  `ClientPicker.tsx`, `ClientRow.tsx`, les panneaux `GeneralPanel.tsx`
+  (`IssuerPanel` ou `ClientPanel` selon la portée), `TaxesPanel.tsx`,
+  `NumberingPanel.tsx`, `WordingPanel.tsx`, `settingsDraft.ts`,
+  `printDocument.ts`, `provider.ts`, `QuotaNote.tsx`, `ErrorNote.tsx` et
+  `errors.ts` (un refus, et l'onglet de réglages qui le lève), `format.ts`,
+  `api.ts`, `InvoicingWidget.tsx`, `style.module.css`.
+- `deveye-feature.json` : aucune table en allowlist, toutes portent le préfixe
+  du module.
+
+Aucune variable d'environnement n'est propre au module.
+
+## Quotas, notifications, partage
+
+- **L'offre** : deux limites par mois, `invoicing.quotesPerMonth` et
+  `invoicing.invoicesPerMonth` (Gratuite 5, Pro 100, valeurs de
+  `DevEye-Billing/src/server/plans.ts`), comptées à l'émission sur tous les
+  espaces du propriétaire ; proposer et facturer ne sont pas le même geste, et
+  une seule enveloppe aurait fait payer au devis la place de sa facture. Les
+  brouillons ne comptent pas. Le panneau de réglages montre ce qui a été émis
+  dans le mois (`QuotaNote`). Une installation sans module de facturation n'a
+  aucune limite.
+- **Notifications** (`notifies: true`) : quand une facture dépasse son échéance
+  sans être soldée, et quand un client accepte ou refuse un devis depuis le
+  lien qu'il a reçu ; par les canaux de l'espace.
+- **Partage** : `shareTier: 'never'`. Les documents d'un espace ne se projettent
+  pas et ne se déplacent pas.
+
+## Tests
+
+```bash
+npm run test:features
+```
 
 ## Limites connues, et assumées
 
@@ -141,14 +328,14 @@ features disent la même chose au centime.
 - **Pas de Factur-X, et DevEye n'est pas une plateforme agréée.** La réforme
   française fait passer les factures entre entreprises par une plateforme
   agréée : la réception est obligatoire pour toutes depuis le 1er septembre 2026,
-  l'émission le devient pour les TPE et PME le 1er septembre 2027. Les CGU et
-  l'onglet Général des réglages le disent à l'utilisateur. Le modèle de données
-  est taillé pour l'export structuré (SIREN et numéro de TVA des deux parties
-  en champs propres, ventilation par taux reconstituable, identité de pièce
-  immuable), mais rien ne le produit encore.
+  l'émission le devient pour les TPE et PME le 1er septembre 2027. L'onglet
+  Général des réglages le dit à l'utilisateur. Le modèle de données est taillé
+  pour l'export structuré (SIREN et numéro de TVA des deux parties en champs
+  propres, ventilation par taux reconstituable, identité de pièce immuable),
+  mais rien ne le produit.
 - **La réponse en ligne d'un devis** (accord ou refus) vaut un « bon pour accord »
   horodaté, pas une signature électronique qualifiée.
 - **Le carnet de clients se trie en mémoire** : le nom est chiffré, et le
   chiffrement non déterministe interdit de trier en SQL. Le listage garde donc
-  une borne dure. Au-delà de quelques milliers de clients, il faudrait une
-  empreinte dérivée comme colonne de tri.
+  une borne dure de 500 clients (`listClients`, `ORDER BY id DESC LIMIT 500`).
+  Au-delà, il faudrait une empreinte dérivée comme colonne de tri.

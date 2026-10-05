@@ -1,6 +1,6 @@
 {
   "id": "notes",
   "tables": ["notes", "note_folders"],
-  "minTypesVersion": "0.15.2",
+  "minTypesVersion": "0.22.1",
   "$comment": "Tables historiques (migrations 014 et 015 du socle, complétées jusqu'à la 036, jamais déplacées) : l'allowlist les dispense du préfixe ft_notes_. Toute NOUVELLE table du module prendra le préfixe, via src/server/migrations/."
 }

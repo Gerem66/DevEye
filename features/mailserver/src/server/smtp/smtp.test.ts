@@ -303,13 +303,13 @@ describe('la soumission', () => {
         assert.equal(engine.repo.queue.length, 0);
     });
 
-    it('met en file une ligne par destinataire sur un seul corps, et range la copie pour Mails', async () => {
+    it('met en file une ligne par destinataire sur un seul corps, et range la copie pour Mail', async () => {
         const mailbox = await engine.repo.findByAddress('bob@exemple.test');
         assert.ok(mailbox);
         const { hashSecret } = await import('../passwords');
         await engine.repo.createCredential({
             mailboxId: mailbox.id,
-            label: 'Mails DevEye',
+            label: 'Mail DevEye',
             secretHash: await hashSecret('mot-de-passe-application'),
             origin: 'mails',
             saveSent: true,

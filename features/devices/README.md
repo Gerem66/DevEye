@@ -1,27 +1,41 @@
-# Monitoring — architecture & invariants à préserver
+# Appareils : architecture et invariants
 
-Surveillance des appareils (agent Rust → serveur Fastify → client React). Ce
-document décrit le **modèle de collecte**, la **carte** du code depuis le
-rapatriement d'Appareils en module (29 août 2026, la seizième et dernière
-native) et liste les **décisions de conception à ne pas casser** lors des
-évolutions.
+Supervision des appareils (agent Rust → serveur Fastify → client React). Ce
+document décrit le **modèle de collecte**, la **carte** du code et les
+**décisions de conception à ne pas casser** lors des évolutions.
 
 ## La coupure : infrastructure de l'app, feature en module
 
 Deux préfixes de commandes, et c'est la frontière :
 
-- **`agent.*`, le transport, natif.** Vingt-trois relais du `MonitorHub` vers
-  l'agent d'un appareil (fichiers, terminal, journaux, paquets, alimentation,
-  cycle de vie du processus, privilèges, mise à jour, abonnement aux
-  métriques, collecte à la demande) : contrats `features/agent.ts` de
-  `@deveye/types`, handlers dans `src/features/agent/`, accessibles à tout
-  membre sous le droit `devices`. Avec eux, tout ce qui écrit les tables
-  **hors session** : le hub (`src/agent/hub.ts`, état de processus), la socket
-  agent et son authentification (`src/agent/ws.ts`), l'ingestion de la
-  télémétrie et la présence, l'enrôlement (`POST /api/agent/enroll`, route
-  publique) et la distribution des binaires (`src/agent/routes.ts`), la
-  composition de `agent.config` (`src/agent/config.ts`), et **la garde
-  unique** `authorizeDevice` (`src/agent/authorize.ts`).
+- **`agent.*`, le transport, dans l'app.** Vingt-six relais du `MonitorHub` vers
+  l'agent d'un appareil : contrats `features/agent.ts` de `@deveye/types`,
+  handlers dans `src/features/agent/`, accessibles à tout membre sous le droit
+  `devices` et la permission supplémentaire de leur famille :
+
+    | Famille                                                                                         | Accès                                            |
+    | ----------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+    | `agent.subscribe`, `unsubscribe`, `collect`                                                     | `devices` en lecture                             |
+    | `agent.termOpen`, `termInput`, `termResize`, `termClose`                                        | permission « Terminal distant »                  |
+    | `agent.filesList`, `filesAnalyze`, `filesSearch`, `filesMutate`, `filesDownload`, `filesUpload` | permission « Explorateur de fichiers »           |
+    | `agent.logSources`, `logQuery`                                                                  | permission « Logs de l’appareil »                |
+    | `agent.dockerInventory`, `dockerStats`, `dockerAction`                                          | permission « Conteneurs Docker »                 |
+    | `agent.power`, `listPackages`, `upgradePackages`                                                | permission « Commandes et mises à jour système » |
+    | `agent.lifecycle`                                                                               | `devices` en écriture                            |
+    | `agent.setAutostart`, `elevate`, `dropPrivileges`, `update`                                     | administrateur global                            |
+
+    Avec eux, tout ce qui écrit les tables **hors session** : le hub
+    (`src/agent/hub.ts`, état de processus, vivacité des agents), la socket
+    agent et son authentification (`src/agent/ws.ts`, `src/agent/deviceAuth.ts`),
+    les trames reçues de l'agent (`src/agent/handlers/`), l'ingestion de la
+    télémétrie et la présence (`src/agent/presence.ts`), l'enrôlement
+    (`POST /api/agent/enroll`, route publique), la distribution des binaires et
+    des scripts d'installation (`src/agent/routes.ts`, `src/agent/installers.ts`,
+    `src/agent/source.ts`, `src/agent/sync.ts`), la composition de
+    `agent.config` (`src/agent/config.ts`, `src/agent/cadence.ts`), la signature
+    des ordres (`src/agent/orders.ts`), les tunnels (`src/agent/tunnels.ts`) et
+    **la garde unique** `authorizeDevice` (`src/agent/authorize.ts`).
+
 - **`devices.*`, la feature, module `features/devices`.** Vingt et une
   commandes : la flotte de l'espace (liste, approbation d'un réappairage,
   révocation, renommage, rangement, configuration de collecte, suppression),
@@ -33,69 +47,80 @@ Deux préfixes de commandes, et c'est la frontière :
   service du module.
 
 Le module parle au hub par la façade `agents` du SDK : `disconnectAgent`
-(révocation, suppression forcée), `requestDestroy` (suppression gérée),
-`pushConfig` (cadence ou
-capture changée ; l'app recompose la config entière, part des modules
-comprise) et `servedManifest` (le manifest des binaires servis, pour signaler
-un agent à mettre à jour). Il atteint un appareil par
-`ctx.deveye.devices.authorize` (la garde de `src/agent/authorize.ts` : le
-domicile de l'appareil, ou une projection vers l'espace actif) et la liste de
-l'espace par `ctx.deveye.devices.list`. Tout ce qui appaire, range, règle ou
-efface déclare `access: { level: 'write' }`, doublé de `ctx.items.assert` sur
-la ligne visée et, pour ce qui gère la fiche, de son domicile
-(`loadHomeDevice` : un espace où l'appareil n'est que projeté le lit sans le
-gérer) ; le reste se lit sous le droit `devices`. Plus rien n'exige
-l'administrateur global.
+(révocation, suppression forcée, mise en pause par l'offre), `requestDestroy`
+(suppression gérée), `pushConfig` (cadence ou capture changée ; l'app recompose
+la config entière, part des modules comprise) et `servedManifest` (le manifest
+des binaires servis, pour signaler un agent à mettre à jour). Il atteint un
+appareil par `ctx.deveye.devices.authorize` (la garde de
+`src/agent/authorize.ts` : le domicile de l'appareil, ou une projection vers
+l'espace actif) et la liste de l'espace par `ctx.deveye.devices.list`. Tout ce
+qui appaire, range, règle ou efface déclare `access: { level: 'write' }`, doublé
+de `ctx.items.assert` sur la ligne visée et, pour ce qui gère la fiche, de son
+domicile (`loadHomeDevice` : un espace où l'appareil n'est que projeté le lit
+sans le gérer) ; le reste se lit sous le droit `devices`. Aucune commande
+`devices.*` n'exige l'administrateur global ; quatre commandes `agent.*` le font
+(démarrage automatique, élévation, rétrogradation, mise à jour).
 
 **Tables partagées, assumé.** Les cinq tables (`devices`, `device_link_codes`,
-`device_metrics`, `device_process_samples`, `device_presence`) datent du socle et le restent (allowlist de
-`deveye-feature.json`) : l'infrastructure les écrit par ses dépôts
-(`src/db/repos/{devices,metrics,presence,processSamples}.ts`, réduits à ce
-qu'elle écrit et à ce que la façade lit), le module lit et écrit ce qui relève
-de la flotte et de l'historique par **son** dépôt (`src/server/repo/`, un
-fichier par table). Une colonne, un index se changent par une migration du
-socle.
+`device_metrics`, `device_process_samples`, `device_presence`) datent du socle
+(allowlist de `deveye-feature.json`) : l'infrastructure les écrit par ses dépôts
+(`src/db/repos/{devices,metrics,presence,processSamples}.ts`), le module lit et
+écrit ce qui relève de la flotte et de l'historique par **son** dépôt
+(`src/server/repo/`, un fichier par table). Rien n'y est chiffré : le moteur de
+sécurité et l'ingestion doivent lire sans session. Une colonne, un index se
+changent par une migration du socle ; le module n'a pas de `migrationsDir`, une
+table qui lui serait propre inaugurerait `src/server/migrations/` avec le
+préfixe `ft_devices_`.
 
 ### Carte du module `features/devices`
 
 ```
+deveye-feature.json         id, les cinq tables allowlistées, minTypesVersion
 src/contracts/commands.ts   les 21 commandes devices.* : la flotte, l'historique, les
                             codes de liaison
-src/manifest.ts             nativeCapabilities: agents, devices.read, workspaces.read ;
-                            resources: devices.list ; settings feature/item « general » ;
-                            topbarWidget (appareils en ligne)
-src/server/index.ts         serverEntry : createRepo, features, createService (rétention)
+src/manifest.ts             nativeCapabilities: agents, devices.read ; resources: devices.list ;
+                            quotas: agents (stock) ; settings.item: collect, terminal ;
+                            topbarWidget (appareils en ligne) ; six extraPermissions
+                            (terminal, files, logs, docker, network, system)
+src/server/index.ts         serverEntry : createRepo, features, createService (rétention,
+                            onPlanPause), quotas.agents, items (homeOf, labelOf, move),
+                            accountExport
 src/server/env.ts           MONITORING_RETENTION_DAYS, LINK_CODE_TTL_SECONDS
 src/server/_shared.ts       loadDevice (garde + restriction + ligne entière),
                             loadHomeDevice (en plus, le domicile), toDevice /
-                            rowToDevice, computeAgentUpdate, l'accès WRITE
+                            rowToDevice, computeAgentUpdate, parseDeviceReport, l'accès WRITE
+src/server/handlers.ts      l'agrégat des trois fichiers suivants, dans l'ordre des contrats
 src/server/fleet.ts         les 10 commandes de flotte
 src/server/history.ts       les 8 commandes d'historique
 src/server/linkCodes.ts     les 3 commandes de codes de liaison
 src/server/service.ts       RetentionSweep : le balayage horaire, sur un ticker du SDK
-src/server/repo/            devices, linkCodes, metrics, presence, processSamples
-src/server/*.test.ts        handlers (39) et service (4), sur le harnais du SDK
+src/server/move.ts          le changement d'espace d'un appareil (rien à resceller)
+src/server/accountExport.ts l'export de compte : les listes de processus décompressées
+src/server/repo/            index, devices, linkCodes, metrics, presence, processSamples
+src/server/*.test.ts        handlers, service, accountExport, repo/processSamples, sur le
+                            harnais du SDK
 ```
 
 Le client, `src/client/` :
 
 ```
-index.tsx                   clientEntry : Widget, Full, settingsPanels.general, TopbarWidget,
-                            providers (DEVICES_CLIENT_PROVIDER)
+index.tsx                   clientEntry : Widget, Full, settingsPanels (collect, terminal),
+                            TopbarWidget, providers (DEVICES_CLIENT_PROVIDER)
 api.ts                      featureApi(manifest) pour devices.*, commandsApi(agentCommands)
                             pour agent.*
 store.ts                    la liste des appareils de l'espace, ravivée par le sujet devices
 Devices.tsx                 la vue : la barre (aide, appairage) au-dessus de la liste
 Monitoring.tsx              la tuile, la liste des appareils et la sélection
 MonitoringPanel.tsx         le panneau de l'appareil consulté, à droite de la liste
-ConfigPanel.tsx             l'onglet collect d'un appareil : cadence, capture, rétention
-TerminalSettings.tsx        l'onglet terminal d'un appareil : compte d'ouverture, fin de session
+ConfigPanel.tsx             l'onglet Collecte d'un appareil : cadence, capture, rétention
+TerminalSettings.tsx        l'onglet Terminal d'un appareil : compte d'ouverture, fin de session
 SettingsPanel.tsx           les deux panneaux SettingsPanelProps de l'appareil
 TopbarWidget.tsx            le compteur d'appareils en ligne
 TerminalPanel.tsx, FilesPanel.tsx, LogsPanel.tsx, PackagesPanel.tsx, PowerMenu.tsx,
 DockerPanel.tsx             le transport agent.* et onServerEvent
 DeviceWidget.tsx            la tuile d'un appareil (DeviceWidget du provider), avec
                             DeviceWidget.module.css
+policy.ts                   les interrupteurs de [policy] de l'agent : libellés, options --deny
 deviceUsage.ts, agentUpdates.ts, agentVersion.ts, useAgentUpdate.tsx,
 utils.ts                    les stores et utilitaires du client
 availability.ts             pourquoi une entrée du menu est inerte, et dans quel ordre
@@ -105,10 +130,12 @@ AgentPanel.tsx              la popup « Agent » : état de l'agent, démarrage 
 Connections.tsx, DeviceActionsMenu.tsx, GraphDetail.tsx, HardwareInfo.tsx, MiniGraph.tsx,
 MonitoringInfo.tsx, MonthPicker.tsx, OpenPorts.tsx, PrivilegeInfo.tsx, Timeline.tsx, ports.ts
                             les composants du panneau
-style.module.css, terminalFont.css
+style.module.css
 manage/useLinkCodes.tsx     les trois devices.linkCode*
 manage/LinkCodesDialog.tsx, manage/LinkInfo.tsx
                             l'appairage : émettre un code, et comment s'en servir
+manage/installCommand.ts    les commandes à copier (install.sh, install.ps1, link), avec
+                            les droits choisis en options de link ; installCommand.test.ts
 manage/useDeviceActions.tsx, manage/lifecycleActions.ts, manage/DeviceDialogs.tsx
                             le cycle de vie d'un appareil, les entrées de fiche du
                             menu « Fonctions » (renommer, supprimer, effacer) et
@@ -118,9 +145,9 @@ manage/format.ts, manage/style.module.css
 ```
 
 Le client offre à l'app `DEVICES_CLIENT_PROVIDER` (`useDevices`,
-`DeviceWidget`), que l'accueil compose pour ses tuiles ; une tuile d'appareil
-ouvre cette vue posée sur lui (segment de présence `l1`), et l'app ne connaît
-aucun écran d'appareil en propre. Tout se
+`refreshDevices`, `resetDevices`, `DeviceWidget`), que l'accueil compose pour
+ses tuiles ; une tuile d'appareil ouvre cette vue posée sur lui (segment de
+présence `l1`), et l'app ne connaît aucun écran d'appareil en propre. Tout se
 règle à l'échelle d'un appareil, dans la coquille commune : `collect` (cadence,
 capture, rétention) et `terminal` (compte d'ouverture, sort de la session). La
 fonctionnalité elle-même n'a aucun réglage, donc aucun bouton.
@@ -134,22 +161,25 @@ Un tick = **un instant** : métriques _et_ processus, sous un seul `ts`, dans un
 seul message (`metrics.batch`). Un point de graphe ne peut donc jamais exister
 sans les processus qui l'expliquent.
 
-| Flux         | Cadence (défaut)  | Contenu                                                                                                                                                                                | Stockage                                    |
-| ------------ | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| **Collecte** | 60 s              | CPU/RAM/disque/réseau/charge/temp/GPU/batterie/users/connexions + `process_count` + E/S disque + **liste des processus** (`all`/`top`/`off`). Chaque point est cliquable sur la frise. | `device_metrics` + `device_process_samples` |
-| **Report**   | 1 h (+ connexion) | OS + posture sécurité + par-disque (`disks[]`) + ports en écoute + connexions. Dernier état seulement.                                                                                 | `devices.report_json`                       |
-| **Presence** | sur transition    | online/offline de l'agent (frise de disponibilité).                                                                                                                                    | `device_presence`                           |
+| Flux         | Cadence (défaut)                        | Contenu                                                                                                                                                                                | Stockage                                    |
+| ------------ | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| **Collecte** | 60 s (offre payante) / 300 s (gratuite) | CPU/RAM/disque/réseau/charge/temp/GPU/batterie/users/connexions + `process_count` + E/S disque + **liste des processus** (`all`/`top`/`off`). Chaque point est cliquable sur la frise. | `device_metrics` + `device_process_samples` |
+| **Report**   | 1 h (+ connexion)                       | OS + posture sécurité + par-disque (`disks[]`) + ports en écoute + connexions. Dernier état seulement.                                                                                 | `devices.report_json`                       |
+| **Presence** | sur transition                          | online/offline de l'agent (frise de disponibilité).                                                                                                                                    | `device_presence`                           |
 
-Défauts serveur dans [`DevEye-Types/src/domain/device.ts`](../../DevEye-Types/src/domain/device.ts)
-(`DEFAULT_METRIC_INTERVAL_SECONDS` = 60, `DEFAULT_PROCESS_CAPTURE` = `all`,
-`DEFAULT_RETENTION_DAYS` = 30) — source unique, lue par le serveur _et_ par le
-panneau de configuration.
+Défauts serveur dans `@deveye/types` (`domain/device.ts`) :
+`DEFAULT_METRIC_INTERVAL_SECONDS = { paid: 60, free: 300 }`,
+`DEFAULT_PROCESS_CAPTURE = 'all'`, `DEFAULT_RETENTION_DAYS = 30`. Source unique,
+lue par le serveur _et_ par le panneau de configuration. Une cadence laissée au
+défaut suit l'offre du propriétaire de l'espace d'origine de l'appareil
+(`src/agent/cadence.ts`) ; sans module de facturation, aucune offre n'est payante
+et le défaut est 300 s.
 
 Rétention : **une seule durée**, `devices.retention_days` (défaut serveur
 `MONITORING_RETENTION_DAYS`, 30 j, lue par le module dans son `env.ts`), qui
 régit les métriques, la présence **et** les processus. Un relevé est un
-_instant_ : les faire expirer séparément ne produisait que des instants à
-moitié lisibles. Balayée chaque heure par le service du module
+_instant_ : les faire expirer séparément produirait des instants à moitié
+lisibles. Balayée chaque heure par le service du module
 (`features/devices/src/server/service.ts`, un passage au démarrage puis un
 ticker du SDK) ; les instants épinglés y échappent, les appareils archivés
 sont figés.
@@ -158,31 +188,30 @@ sont figés.
 
 Le coût du tick vient de deux sondes, partagées par tous les signaux :
 
-- **`ps` étendu** (`report::scan_processes`) → liste des processus, `process_count`,
-  et sur Linux les E/S par process via `/proc/<pid>/io`. Élargir le format de `ps`
-  ne coûte rien de mesurable, d'où pid/threads/user/uptime « gratuits ».
+- **le balayage des processus** (`report::scan_processes`) → liste des
+  processus, `process_count`, et sur Linux les E/S par process via
+  `/proc/<pid>/io`. Linux lit `/proc` directement (`ps` en repli), macOS passe
+  par `ps`, Windows par `sysinfo` ; pid, threads, compte et ancienneté viennent
+  de la même lecture.
 - **`ss -tuanpH`** (`sockets::read_sockets`) → ports en écoute, connexions
-  établies, `activeConnections` **et** connexions entrantes/sortantes par process.
-  Cette sonde unique remplace les trois d'avant (`ss -tulnH` + `ss -tn state
-established` ×2) et coûte moins cher au total.
+  établies, `activeConnections` **et** connexions entrantes/sortantes par
+  process, en un seul appel (`netstat` et `lsof` sur macOS, `netstat -ano` sur
+  Windows).
 
-Mesuré sur une machine à 700 processus : **~40 ms par tick**, soit moins que
-l'ancien cycle lourd, pour 10× plus d'instants historisés.
+Mesuré sur une machine à 700 processus : **~40 ms par tick**.
 
 ### Stockage des processus
 
 Une ligne par instant, la liste étant un **blob JSON gzip** (`payload`), et non
-une ligne par processus. À 60 s, le modèle ligne-par-process coûterait
-~120 Mo/jour/appareil ; le blob coûte ~7 Mo. C'est sûr parce qu'**aucune requête
-n'agrège les processus par nom à travers le temps** : `nearest`, `snapshotTimes`,
-`storage`, `deleteRange`, `setInstantsPinned`, `pruneByRetention` travaillent
-toutes sur `ts`.
+une ligne par processus. C'est sûr parce qu'**aucune requête n'agrège les
+processus par nom à travers le temps** : `nearest`, `snapshotTimes`, `storage`,
+`deleteRange`, `setInstantsPinned`, `pruneByRetention` travaillent toutes sur
+`ts`.
 
 Au-delà de deux jours, le balayage horaire réduit une liste complète à ses 20
 premières lignes (`thinBefore`, `kind` passe à `top`), les instants épinglés
 exceptés : l'agent classe sa liste par CPU + part de mémoire, donc ce sont les 20
-qu'il aurait envoyés en capture « top ». Un instant passe d'environ 4,8 Ko à
-0,9 Ko : 30 jours à 60 s pèsent ~50 Mo par appareil au lieu de ~210.
+qu'il aurait envoyés en capture « top ».
 
 ## Invariants / points forts à préserver
 
@@ -193,22 +222,22 @@ maintenable**.
    vit en base (colonnes `devices.*`), est exposée via `devices.setConfig`
    (bornée par zod), et **rejouée à la reconnexion** : un agent hors ligne au
    moment du changement applique quand même les bons réglages dès son retour
-   (boucle « config-wait » de 2 s avant le 1er snapshot dans `runner.rs`).
-   → Ne pas dupliquer la config côté agent ; ne pas l'appliquer uniquement « à
-   chaud ».
+   (l'agent attend la config jusqu'à 2 s avant son premier instant, dans
+   `runner.rs`). → Ne pas dupliquer la config côté agent ; ne pas l'appliquer
+   uniquement « à chaud ».
 
 2. **`null` = inconnu, jamais « pas encore mesuré ».** Toutes les lignes
-   métriques ont désormais la même forme : un champ `null` signifie que la sonde
-   est indisponible (pas de capteur, pas les droits, plateforme sans l'API), pas
+   métriques ont la même forme : un champ `null` signifie que la sonde est
+   indisponible (pas de capteur, pas les droits, plateforme sans l'API), pas
    qu'on est entre deux cycles. `SPARSE_FIELDS` (dans `MonitoringPanel.tsx` du
-   module) ne garde donc plus que les sondes réellement optionnelles (GPU,
+   module) ne garde donc que les sondes réellement optionnelles (GPU,
    température, charge, batterie, E/S disque). → Un nouveau champ best-effort
    doit être `nullable` ; ne l'ajouter à `SPARSE_FIELDS` que s'il est
    _intermittent_.
 
     Corollaire côté types : `metricSnapshotSchema` (ce que l'agent envoie) porte
     `processes`, `metricSeriesPointSchema` (ce que `devices.metrics` relit) ne les
-    porte pas — une fenêtre de graphe contient des centaines de points et
+    porte pas : une fenêtre de graphe contient des centaines de points et
     trimballer chaque liste coûterait des mégaoctets pour rien.
 
 3. **Downsample : moyenne pour les jauges, max pour les compteurs.** Le `SELECT`
@@ -227,13 +256,12 @@ maintenable**.
 
     Corollaire : le résumé se lit en **deux requêtes** (tous les instants, puis
     les seuls épinglés) fusionnées en mémoire, et non en un `SUM(pinned)`. Chacune
-    est alors couverte par un index — `uq_metrics_device_ts` et
-    `idx_metrics_device_pinned_ts` — donc `Using index` sans lecture de ligne ;
-    l'agrégat, lui, force un accès par instant. Mesuré sur 500 k instants : 2,5 ms
-    contre 15 ms pour les épingles, et le compte ne coûte rien de plus que
-    l'ancien `DISTINCT`. Et **aucune borne temporelle** : un plancher à la
-    rétention effacerait du calendrier les journées ne contenant plus que des
-    épingles, précisément celles qu'on cherche sur la durée.
+    est alors couverte par un index (`uq_metrics_device_ts` et
+    `idx_metrics_device_pinned_ts`), donc `Using index` sans lecture de ligne ;
+    l'agrégat, lui, forcerait un accès par instant. Et **aucune borne
+    temporelle** : un plancher à la rétention effacerait du calendrier les
+    journées ne contenant plus que des épingles, précisément celles qu'on cherche
+    sur la durée.
 
 5. **Dédup multi-disque par `(total, available)`.** APFS/LVM exposent plusieurs
    volumes d'un même conteneur (mêmes tailles) ; on les compte une fois, en
@@ -271,10 +299,10 @@ maintenable**.
     processus** de façon unifiée. → Garder le `focus` comme pilote unique (pas
     d'états parallèles).
 
-    Chaque point étant un instant complet, les repères sont ~1440/jour : au-delà
-    de `MAX_INDIVIDUAL_MARKS` la frise dessine des **bandes continues** au lieu de
-    traits (les instants épinglés restent visibles individuellement). → Ne pas
-    revenir à un rendu un-div-par-repère.
+    Chaque point étant un instant complet, les repères vont jusqu'à 1 440 par
+    jour à 60 s : au-delà de `MAX_INDIVIDUAL_MARKS` la frise dessine des
+    **bandes continues** au lieu de traits (les instants épinglés restent
+    visibles individuellement). → Ne pas revenir à un rendu un-div-par-repère.
 
 11. **Ports : une bulle = un port joignable de la même façon.** L'agent renvoie
     une entrée **par adresse de bind** (correct : un service dual-stack écoute
@@ -319,9 +347,9 @@ Statuts (`devices.status`) : `pending`, `active`, `pending_deletion`,
       `devices` est diffusé à l'espace.
 - **En attente** : la socket refuse l'agent avec le code `4001`
   (`AGENT_CLOSE_PENDING_APPROVAL`), qui lui dit de réessayer toutes les 30 s.
-  Ni config, ni hooks de modules, ni ordres, ni binaire d'auto-mise à jour ;
-  `authorizeReachableDevice` le dit en clair. Un appareil en attente ne compte
-  pas dans l'offre.
+  Ni config, ni hooks de modules, ni ordres, ni binaire d'auto-mise à jour. Un
+  appareil en attente ne compte pas dans l'offre (seuls les `active` font le
+  stock du quota).
 - **Approbation** (`devices.confirm`, bouton du bandeau d'attente ou popup
   « Agent ») : un appareil `pending` seulement, dans la limite de l'offre. Il
   passe `active`, son agent est admis à la tentative suivante.
@@ -335,8 +363,10 @@ Statuts (`devices.status`) : `pending`, `active`, `pending_deletion`,
     - Agent **en ligne** → ordre `agent.destroy` immédiat (`agents.requestDestroy`).
     - Agent **hors ligne** → l'ordre part à sa prochaine connexion (`agent/ws.ts`).
     - L'agent **s'auto-détruit** (`config.rs::self_destruct` : config + token + pid +
-      log + binaire) puis répond `agent.destroyed{ok}`. Le serveur **archive** alors
-      l'appareil (dépôt du socle, `archive` : statut `archived`, `token_hash=''`).
+      log + état + binaire ; jamais le service de démarrage automatique, voir le
+      README de l'agent) puis répond `agent.destroyed{ok}`. Le serveur
+      **archive** alors l'appareil (`archive` du dépôt : statut `archived`,
+      `token_hash=''`).
     - En cas d'échec (`ok:false`) : `failDeletion` restaure le statut précédent et
       stocke `delete_error` (affiché sur la fiche). La suppression est **interrompue**.
     - Annulable (`devices.cancelDelete`) tant que l'agent ne s'est pas reconnecté.
@@ -353,6 +383,12 @@ Statuts (`devices.status`) : `pending`, `active`, `pending_deletion`,
   régler, supprimer, effacer l'historique) passe par `loadHomeDevice`. Un
   espace où l'appareil est projeté le lit et pilote son agent selon ses
   permissions, sans le gérer.
+- **Changement d'espace** (`src/server/move.ts`, par l'entrée `items.move` du
+  SDK) : la ligne change de domicile, relevés, présence et constats la suivent
+  par son identifiant ; rien à resceller, rien à réappairer (l'agent
+  s'authentifie par son jeton, l'espace ne se lit qu'à l'affichage). Deux
+  appareils de même empreinte dans un espace seraient le même vu deux fois : la
+  collision est refusée avant d'écrire.
 
 ### La fiche, côté client
 
@@ -372,17 +408,16 @@ Statuts (`devices.status`) : `pending`, `active`, `pending_deletion`,
   mesure que sa sonde finit (`pkg.count`), et une ligne tourne tant que le
   sien n'est pas arrivé. Tout est coché d'office, on décoche ce qu'on veut
   garder ; le bouton sous le tableau enchaîne les cochés un à un dans l'ordre
-  du tableau, tant que la fenêtre reste ouverte. Le compte Flatpak est
-  le plan de `flatpak update`
-  lui-même, installation par installation : `remote-ls --updates` compare des
-  identifiants de commit qu'un dépôt OCI (celui de Fedora) ne fait jamais
-  correspondre, et affichait des mises à jour éternelles.
+  du tableau, tant que la fenêtre reste ouverte. Le compte Flatpak vient du
+  plan de `flatpak update` lui-même, installation par installation :
+  `remote-ls --updates` compare des identifiants de commit qu'un dépôt OCI ne
+  fait pas correspondre.
 - **« Agent »** (`AgentPanel.tsx`) : l'état (version, compte, privilèges,
   démarrage, transport, politique locale), le démarrage automatique, l'élévation
   en service système ou la rétrogradation, la mise à jour, le redémarrage,
   l'interruption, l'approbation d'un réappairage et la révocation. Démarrage
-  auto, élévation et mise à jour relèvent de l'administrateur global
-  (`access.admin` des commandes `agent.*`) ; l'entrée le dit. Approuver,
+  auto, élévation, rétrogradation et mise à jour relèvent de l'administrateur
+  global (`access.admin` des commandes `agent.*`) ; l'entrée le dit. Approuver,
   révoquer et effacer passent par le dialogue de confirmation commun, qui dit
   en deux phrases ce que fait le geste.
 
@@ -401,14 +436,17 @@ Statuts (`devices.status`) : `pending`, `active`, `pending_deletion`,
   en doublant, pas en boucle serrée ; `4001` = `PendingApproval`, toutes les
   30 s. Une session établie qui se ferme reconnecte vite.
 - **Les codes de liaison sont des secrets d'enrôlement.** Émis, relus et
-  révoqués par l'espace qu'ils visent, sous `devices: write` ; sept jours et
-  mille usages au plus, `used_at` date le dernier ; 8 caractères pour un code
-  court à usage unique, 12 au-delà d'une heure ou d'un usage ; un code se
-  compare en majuscules sans ses espaces ; le journal dit qu'un code a été émis
-  (espace, durée, usages) ou invalidé, jamais sa valeur. L'enrôlement et le
-  téléchargement du script (`/api/agent/install/:target`, code dans l'en-tête
+  révoqués par l'espace qu'ils visent, sous `devices: write` ; sept jours
+  (`LINK_CODE_TTL_MAX_SECONDS`) et mille usages (`LINK_CODE_MAX_USES`) au plus,
+  cinq minutes et un usage par défaut (`LINK_CODE_TTL_SECONDS`), `used_at` date
+  le dernier ; 8 caractères pour un code à usage unique valable moins d'une
+  heure, 12 au-delà d'une heure ou d'un usage ; un code se compare en majuscules
+  sans ses espaces ; le journal dit qu'un code a été émis (espace, durée,
+  usages) ou invalidé, jamais sa valeur. L'enrôlement et le téléchargement du
+  script (`/api/agent/install/:target`, code dans l'en-tête
   `X-DevEye-Link-Code`) partagent le verrouillage par adresse
-  (`attempts.ts`, portée `linkcode`), jamais remis à zéro par un succès.
+  (`src/Services/attempts.ts`, portée `linkcode`), jamais remis à zéro par un
+  succès.
 - **La commande d'installation** (`manage/installCommand.ts`) nomme le
   serveur que renvoie `devices.linkCodeList` (`ctx.origins.app`, jamais
   l'adresse du navigateur) et porte les droits choisis en options de `link`
@@ -416,26 +454,48 @@ Statuts (`devices.status`) : `pending`, `active`, `pending_deletion`,
   `/install.sh` et `/install.ps1` sont servis par l'app (`src/agent/routes.ts`),
   rendus une fois depuis `agent/install/`.
 
+## Offre, partage, notifications, export
+
+- **Quota** `agents` (clé `devices.agents` pour le module de facturation) : le
+  nombre d'appareils `active` des espaces du propriétaire, 1 sur l'offre
+  gratuite et 10 sur Pro. Au-delà, l'hôte met les plus récents en pause et le
+  module coupe leur session (`onPlanPause` → `agents.disconnectAgent`) : la
+  ligne reste, et quand la place revient la reprise n'a rien à faire, l'agent se
+  reconnecte de lui-même. Une installation sans module de facturation n'a
+  aucune limite.
+- **Partage** : `shareTier: 'open'` dans le registre publié ; un appareil se
+  projette vers un autre espace par la coquille commune (`item_shares`), qui le
+  lit et pilote son agent selon ses permissions sans le gérer (voir
+  [Docs/SHARING.md](../../Docs/SHARING.md)).
+- **Notifications** : aucune (`notifies: false`).
+- **Export de compte** (`src/server/accountExport.ts`) : les tables de l'espace,
+  les listes de processus décompressées appareil par appareil dans l'ordre du
+  temps (voir [Docs/ACCOUNT_EXPORT.md](../../Docs/ACCOUNT_EXPORT.md)).
+
+## Vérification
+
+```bash
+npm run test:features        # les tests du module, sur le harnais du SDK (aucune base, aucun serveur distant)
+npm run typecheck:features
+npm run lint:features
+npm run format:check:features
+```
+
+Après ajout ou retrait d'une classe dans un `*.module.css` du module, depuis
+`DevEye/` : `npx tcm features/devices/src --include '**/*.module.css'` (les
+`.module.css.d.ts` sont committés).
+
 ## Pièges connus
 
 - **Le passage `DeviceRow` → `Device` existe en deux exemplaires** :
-  `src/agent/mappers.ts` côté app (l'enrôlement et les commandes `agent.*` en
-  rendent un) et `src/server/_shared.ts` côté module (pour ses propres
-  lignes). Le publier dans `@deveye/types` réunirait les deux ; vivre avec est
-  tenable tant que `Device` ne bouge pas.
-
-- **`@deveye/types` est miroité, pas symlinké.** Après édition de
-  `DevEye-Types/src`, refaire le miroir depuis la racine du workspace
-  (`rsync -a --delete DevEye-Types/src/ DevEye/node_modules/@deveye/types/src/`,
-  et de même vers `DevEye-Feature-Template` et `DevEye-CloudSync`) ;
-  `diff -rq` doit être vide. Committer les **deux** repos ensemble (le serveur/
-  client stagés peuvent dépendre de types non encore committés).
-- **Cache Vite** après changement de types : `rm -rf client/node_modules/.vite`.
-- **`.sql` lus au runtime** : ajouter une migration ne redéclenche pas
-  `tsx watch` ; elles s'appliquent au boot.
-- **Types CSS générés** : après ajout d'une classe dans un `*.module.css`,
-  lancer `npm run gen:css-types` dans `client/` (sinon `styles.maClasse` ne
-  compile pas), puis `npx prettier --write "src/**/*.css.d.ts"`.
+  `src/agent/mappers.ts` côté app (`deviceRowToDevice`, pour l'enrôlement et
+  les commandes `agent.*`) et `src/server/_shared.ts` côté module
+  (`rowToDevice`, pour ses propres lignes). Le publier dans `@deveye/types`
+  réunirait les deux ; vivre avec est tenable tant que `Device` ne bouge pas.
+- **Le module consomme `@deveye/types` publié** (`minTypesVersion` dans
+  `deveye-feature.json`) : un contrat nouveau se publie avant de servir ici.
+- **`.sql` lus au runtime** : une migration du socle s'applique au boot, pas au
+  rechargement du serveur de développement.
 - **Deux dépôts sur les mêmes tables.** Une requête de flotte ou d'historique
   se change dans `features/devices/src/server/repo/`, une requête d'ingestion
   dans `src/db/repos/` ; une colonne dans une migration du socle. Le test du

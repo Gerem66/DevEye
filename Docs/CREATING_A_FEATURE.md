@@ -1,279 +1,273 @@
-# Créer une nouvelle fonctionnalité — checklist complète
+# Créer une nouvelle fonctionnalité
 
-> **Une nouvelle feature se fait en module, sans exception.** Passe par le
-> **SDK des modules** : repo
-> [DevEye-Feature-Template](https://github.com/Gerem66/DevEye-Feature-Template)
-> (doc anglaise complète) côté développeur, [FEATURE_SDK.md](./FEATURE_SDK.md)
-> côté mainteneur. Les seize features (Météo, OSINT, Finances, le Coffre, les
-> Notes, Uptime, Sentinelle, les Sauvegardes, les Bases de données, les
-> Déploiements, Git, Audience, Mail, Projets et, en dernier, Appareils) sont
-> au format module dans `features/*`, CloudSync en module privé. **Plus
-> aucune feature n'est native.**
->
-> La checklist ci-dessous décrit le chemin **natif** (`src/features/`,
-> `defineFeature`, `FeatureContext`). Il n'a plus d'occupant parmi les
-> features : il ne sert qu'aux **commandes transversales de l'app**, celles
-> qui ne relèvent d'aucune feature d'espace et gardent un accès à tout le
-> contexte (`workspace.*`, `user.*`, `admin.*`, `secrecy.*`, `twofa.*`,
-> `notify.*`, `share.*`, `logs.*`, `home.*`, `live.here`) et au **transport
-> des agents** (`agent.*`, des relais du hub, voir
-> [Appareils](../features/devices/README.md)). Suis-la pour ajouter une commande à
-> l'app elle-même ; pour tout ce qui a un widget, une page ou des données
-> d'espace, c'est un module.
+**Une nouvelle feature se fait en module, sans exception.** Le développeur
+tiers part du
+[template](https://github.com/Gerem66/DevEye-Feature-Template) et de sa doc
+anglaise ; le mainteneur lit [FEATURE_SDK.md](./FEATURE_SDK.md) pour ce que
+l'app tient du contrat. Toutes les features de l'app sont des modules dans
+`features/*` ; CloudSync et les autres modules privés s'installent par
+`features.local.json`. Tout ce qui a un widget, une page de feature ou des
+données d'espace est un module, et ce document ne le concerne pas.
 
-Ce document liste **tout** ce qu'implique l'ajout d'une fonctionnalité dans DevEye,
-dans l'ordre, à travers les trois bases de code. Suis-le de haut en bas pour ne
-rien oublier.
+Le chemin **natif** (`src/features/`, `defineFeature`, `FeatureContext`) ne
+sert qu'à deux choses : les **commandes transversales de l'app**, celles qui ne
+relèvent d'aucune feature d'espace et gardent un accès à tout le contexte, et
+le **transport des agents** (`agent.*`, des relais du hub, voir
+[Appareils](../features/devices/README.md)). Les familles natives sont celles
+de `src/features/registry.ts` : `admin.*`, `agent.*`, `debug.*`, `domain.*`,
+`feedback.*`, `home.*`, `links.*`, `live.here`, `logs.*`, `notify.*`,
+`remote.*`, `secrecy.*`, `share.*`, `twofa.*`, `user.*`, `workspace.*`.
 
-> **Deux types de « feature » à ne pas confondre :**
->
-> - **Feature-commande** (la plupart) : une ou plusieurs commandes WebSocket
->   (`uptime.add`, `devices.list`, `logs.list`…) dispatchées par le serveur, avec
->   éventuellement une UI (widget de la grille d'accueil ou page de la topbar).
->   Les deux premières sont des commandes de module, la troisième une commande
->   transversale de l'app.
-> - **Page structurelle** : un écran qui fait partie de DevEye lui-même (Profil,
->   Sécurité, Logs), atteint depuis le menu de la topbar, **sans** carte sur la
->   grille. Peut quand même s'appuyer sur des commandes WS.
->
-> Une feature peut n'avoir **que** du back (commande sans UI) ou **que** du front
-> (page qui réutilise des commandes existantes). Ne fais que les étapes utiles.
+Ce document est la checklist d'une commande de plus dans l'une de ces familles,
+et d'une **page structurelle** : un écran de DevEye lui-même, atteint depuis le
+menu du compte, sans carte sur la grille (Profil, Sécurité, Logs, Retours,
+Utilisateurs, Maintenance, Tests et débogage). `client/src/Features/` ne
+contient que ces pages-là ; une page peut n'être qu'un écran qui réutilise des
+commandes existantes, et une commande peut n'avoir aucun écran. Ne faites que
+les étapes utiles.
 
 ---
 
-## A. Contrats partagés — `DevEye-Types/` (à faire en premier)
+## A. Contrats partagés (`@deveye/types`, à faire en premier)
 
-Tout passe par des schémas zod partagés. Le serveur **et** le client importent
-`@deveye/types`. ⚠️ **Lis [DEVELOPMENT.md](#g-workflow-@deveye/types--node_modules)
-(section G) : un changement de types doit être mirroré dans `node_modules`.**
+Tout passe par des schémas zod partagés : le serveur **et** le client importent
+`@deveye/types`. Un changement de types doit être miroité dans `node_modules`
+pour être vu sans publication (section G).
 
-1. **Domaine** — `src/domain/<feature>.ts` : schémas zod + types des entités
+1. **Domaine** : `src/domain/<feature>.ts`, schémas zod et types des entités
    (`xSchema`, `type X`, et l'interface `XRow` de la ligne SQL si table dédiée).
-2. **Commandes** — `src/features/<feature>.ts` : un objet par commande
+2. **Commandes** : `src/features/<feature>.ts`, un objet par commande
    `{ command: 'x.action' as const, input: zod, output: zod }`, puis
    `export const <feature>Commands = [...] as const;`.
-3. **Registre** — `src/features/registry.ts` : importer et **spread** dans
+3. **Registre** : `src/features/registry.ts`, importer et **spread** dans
    `featureCommands` (`...<feature>Commands`).
-4. **Barrel** — `src/index.ts` : exporter le domaine et les commandes.
-5. **Version** — bump `package.json` (`x.y.z` → `x.y.(z+1)`).
-6. **CI** — `cd DevEye-Types && npm run ci`.
+4. **Barrel** : `src/index.ts`, exporter le domaine et les commandes.
+5. **CI** : `npm run ci` dans le dépôt des types. Aucun bump de version sans
+   demande explicite.
 
 ---
 
-## B. Base de données — `DevEye/src/db/` (si la feature stocke des données)
+## B. Base de données (si la commande stocke des données)
 
-1. **Migration** — `src/db/migrations/0NN_<nom>.sql` (numéro suivant, jamais
-   réutilisé). DDL pure. **Politique projet : migration de schéma franche, pas de
-   shim de rétro-compat** — on peut renommer/supprimer des colonnes. Les
-   migrations tournent automatiquement au démarrage (`db/migrate.ts`), une seule
-   fois (table `_migrations`, clé = nom de fichier). MySQL : un fichier = exécuté
-   en une requête (multi-statements, sur une connexion réservée aux migrations).
-   Tout `CREATE TABLE` écrit `COLLATE utf8mb4_general_ci` : sans le dire, la
-   table hérite de la base, qui n'a pas la même collation partout.
-   Après toute migration du socle, `npm run gen:db-schema` sur une base migrée
-   régénère `src/db/schema.sql` (la référence lisible) et
-   `src/db/schema.generated.ts` (le type `Tables`), tous deux committés : la CI
-   les compare à la base que son smoke vient de migrer, et
-   `src/db/schema.assertions.ts` y confronte les types de lignes des dépôts.
+1. **Migration** : `src/db/migrations/NNN_<nom>.sql` (numéro suivant, jamais
+   réutilisé). DDL pure, migration de schéma franche, pas de shim de
+   rétro-compatibilité : on peut renommer et supprimer des colonnes. Les
+   migrations tournent au démarrage (`src/db/migrate.ts`), une seule fois
+   (table `_migrations`, clé = nom de fichier), un fichier = une requête
+   multi-instructions sur une connexion réservée. Tout `CREATE TABLE` écrit
+   `COLLATE utf8mb4_general_ci` : sans le dire, la table hérite de la base,
+   qui n'a pas la même collation partout. Jamais de point-virgule dans un
+   commentaire SQL : le moteur découpe dessus. Après toute migration du socle,
+   `npm run gen:db-schema` sur une base migrée régénère `src/db/schema.sql`
+   (la référence lisible) et `src/db/schema.generated.ts` (le type `Tables`),
+   tous deux committés : la CI les compare à la base que son smoke vient de
+   migrer, et `src/db/schema.assertions.ts` y confronte les types de lignes des
+   dépôts.
 
-    ⚠️ **Ne jamais modifier un fichier de migration déjà commité** dès l'instant où
-    il a pu tourner quelque part (prod, une autre machine de dev) : `_migrations`
-    ne rejoue jamais un nom déjà vu, donc l'édition est un no-op silencieux là où
-    le fichier est déjà passé — la base et le fichier divergent sans erreur ni
-    avertissement. Un besoin de schéma supplémentaire sur une table existante
-    est **toujours** une nouvelle migration numérotée, jamais une retouche de
-    l'ancienne (même si ça semble anodin en dev, où `tsx watch` peut avoir déjà
-    appliqué une version intermédiaire du fichier avant qu'elle ne soit stabilisée
-    — ce qui masque le problème en local tout en le laissant intact en prod).
+    **Ne jamais modifier un fichier de migration déjà commité** dès l'instant
+    où il a pu tourner quelque part : `_migrations` ne rejoue jamais un nom
+    déjà vu, donc l'édition est un no-op silencieux là où le fichier est déjà
+    passé, et la base et le fichier divergent sans erreur. Un besoin de schéma
+    supplémentaire sur une table existante est **toujours** une nouvelle
+    migration numérotée, même quand `tsx watch` a déjà appliqué en local une
+    version intermédiaire du fichier : ce qui masque le problème en local le
+    laisse intact ailleurs.
 
     Toute table neuve a un sort dans l'export des données d'un compte, dans la
-    même livraison : `CORE_EXPORT_TABLES` pour une table de l'app, la
-    déclaration `accountExport` pour celle d'un module
-    ([ACCOUNT_EXPORT.md](./ACCOUNT_EXPORT.md)). Sans lui, le smoke de la CI
-    refuse la migration.
+    même livraison : `CORE_EXPORT_TABLES` (`src/Services/accountExport/coverage.ts`)
+    pour une table de l'app, la déclaration `accountExport` pour celle d'un
+    module ([ACCOUNT_EXPORT.md](./ACCOUNT_EXPORT.md)). Sans lui, le boot et le
+    smoke de la CI refusent la migration.
 
-2. **Repo** — `src/db/repos/<feature>.ts` : `export interface XRepo { … }` +
+2. **Repo** : `src/db/repos/<feature>.ts`, `export interface XRepo { … }` +
    `export function xRepo(pool: Queryable): XRepo`. Requêtes paramétrées
-   uniquement (`?`). Le `content` sensible est **chiffré** (voir section E).
-3. **Branchement** — `src/db/index.ts` : ajouter au type `Database` **et** à
+   uniquement (`?`). Le contenu sensible est **chiffré** (section E).
+3. **Branchement** : `src/db/index.ts`, ajouter au type `Database` **et** à
    `createDatabase()`.
 
 ---
 
-## C. Handlers serveur — `DevEye/src/features/`
+## C. Handlers serveur (`src/features/`)
 
-> Chemin natif : seules les commandes transversales de l'app et le transport
-> des agents y vivent encore. Une feature d'espace écrit ses handlers dans
-> son module (`features/<id>/src/server/`, `defineSdkFeature`,
-> `SdkFeatureContext`), voir [FEATURE_SDK.md](./FEATURE_SDK.md).
-
-1. **Handlers** — `src/features/<feature>/index.ts` : un `defineFeature({ ...cmd,
-handler })` par commande. Le handler reçoit un `FeatureContext` (`ctx.db`,
-   `ctx.userId`, `ctx.secure`, `ctx.audit`, `ctx.ip`, `ctx.logger`…) et renvoie
-   l'`output`. Lever `FeatureError(code, message)` pour une erreur typée. - **Autorisation** : vérifie l'appartenance au workspace
-   (`assertWorkspaceMember`) et/ou le rôle (`user.role === 'admin'`) selon le cas. - **Déverrouillage** : si données chiffrées par mot de passe, garder le
-   `assertSecureUnlocked` (lève `locked` → le client demande le mot de passe). - Exporter `export const <feature>Features: FeatureDefinition<string, any, any>[] = [...]`.
-2. **Registre** — `src/features/registry.ts` : importer et **spread** dans
-   `featureHandlers` (`...<feature>Features`).
-3. **Audit** (recommandé) — sur les actions notables, appeler
+1. **Handlers** : `src/features/<feature>/index.ts`, un
+   `defineFeature({ ...cmd, access, mutates?, handler })` par commande. Le
+   handler reçoit un `FeatureContext` (`ctx.db`, `ctx.userId`,
+   `ctx.workspaceId`, `ctx.workspace`, `ctx.secure`, `ctx.crypt`, `ctx.audit`,
+   `ctx.ip`, `ctx.logger`, `ctx.isAdmin`…) et renvoie l'`output`. Une erreur
+   typée se lève par `FeatureError(code, message)`.
+    - **Autorisation** : déclarer `access` (`feature` et `level`, `extras`,
+      `capabilities`, `admin: true`, `scope: 'account'`) ; le dispatcheur
+      l'applique avant le handler, comme la validation zod. Une commande dont
+      la cible est un argument (`notify.route*`, `share.*`, `domain.*`) vérifie
+      en tête de handler et figure dans `ACCESS_EXEMPT`
+      (`src/features/_permissions.ts`) : `assertAccessDeclared` refuse sinon le
+      démarrage. Voir [PERMISSIONS.md](./PERMISSIONS.md).
+    - **Sujet en direct** : une commande qui modifie des données déclare
+      `mutates`, et son préfixe doit figurer dans `COMMAND_PREFIX_TOPIC`
+      (`src/features/_topics.ts`) ; `buildTopicIndex` refuse au boot un préfixe
+      inconnu ou un sujet qui n'existe pas. Voir [LIVE.md](./LIVE.md).
+    - Exporter `export const <feature>Features: FeatureDefinition<string, any, any>[] = [...]`.
+2. **Registre** : `src/features/registry.ts`, importer et **spread** dans
+   `featureHandlers` (`...<feature>Features`). Une commande déclarée deux fois
+   (module et native) fait échouer le chargement.
+3. **Audit** (recommandé) : sur les actions notables, appeler
    `ctx.audit({ action: 'x.create', description: '…', level?, metadata? })`.
-   Fire-and-forget ; l'acteur, l'IP, la source `web` et la catégorie (préfixe de
-   commande) sont pré-remplis par le dispatcher. Voir
-   [logs-feature](./CREATING_A_FEATURE.md) / `Services/AuditLog.ts`.
+   Fire-and-forget ; l'acteur, l'IP, la source `web` et la catégorie (préfixe
+   de commande) sont pré-remplis par le dispatcheur. Voir
+   `src/Services/AuditLog.ts` et [LOGS.md](./LOGS.md).
 
-> Le dispatcher WS (`src/ws/handler.ts`) valide input **et** output contre les
-> schémas zod automatiquement — pas de validation manuelle à écrire.
+Le dispatcheur WS (`src/ws/handler.ts`) valide input **et** output contre les
+schémas zod : pas de validation manuelle à écrire.
 
 ---
 
-## D. UI client — `DevEye/client/src/`
+## D. UI client (`client/src/`)
 
-1. **Composant** — `src/Features/<Name>/index.tsx` (+ `style.module.css`).
-   Props `FeatureProps` (`user`, `workspace`, …). Appels via
-   `ws.send('x.action', input)` (typé, validé). Réutiliser les primitives :
-   `Button`, `TextInput`, `SearchSelect`, `LoadingVeil`, `LogOutput`, `OpenPopup`, et les **CSS vars du thème**
-   (`var(--accent)`, `var(--space-md)`, `var(--text-primary)`… — jamais de
-   couleurs en dur). UI en **français**.
-    - Pattern déverrouillage : envelopper les appels chiffrés dans un helper qui
-      intercepte l'erreur `locked` et relance après `ensureSecrecyUnlocked()`
-      (`withSecrecy` du barrel `deveye-sdk-client`, porté par `stores/secrecy.ts`).
-2. **Popups & dialogues** — toujours `Dialog` (statique) ou `Popup` +
-   `OpenPopup`/`ClosePopup` (impératif, request→response). Jamais de modale
-   maison. Comportements **unifiés, fournis par `Dialog`** — ne pas les
-   réimplémenter par popup :
-    - **Entrée → action principale** : passer `onSubmit={submit}` (le même handler
-      que le bouton principal du footer). Ne **pas** remettre de `onKeyDown`
-      « Enter » sur les champs. `textarea`, `select` et contenteditable gardent leur
-      Entrée. Pour les confirmations destructives, `onSubmit` câble la confirmation.
-    - **Autofocus** : à l'ouverture, `Dialog` focus le `[data-autofocus]`, sinon le
-      1er champ texte. Ne **pas** remettre de `inputRef` + `focus()` manuel à
-      l'ouverture (garder un ref seulement pour un re-focus _après erreur_).
+1. **Page structurelle** : `src/Features/<Name>/index.tsx` (+
+   `style.module.css`), puis une entrée dans `buildStaticViews()`
+   (`src/Pages/Home/index.tsx`, `hasCard: false`). Une page réservée aux
+   administrateurs s'ajoute à `ADMIN_VIEW_IDS` dans le même fichier : c'est la
+   liste des pages système du menu du compte, que `TopNavbar` reçoit en
+   `adminPages` et ne rend qu'à un administrateur. Appels via
+   `ws.send('x.action', input)` (typé, validé). Réutiliser les primitives
+   (`Button`, `TextInput`, `SearchSelect`, `LoadingVeil`, `LogOutput`,
+   `OpenPopup`) et les **jetons CSS du thème** (`var(--accent)`,
+   `var(--space-md)`, `var(--text-primary)`…, jamais de couleur en dur).
+   Interface en **français**, qui vouvoie.
+    - Chiffrement par mot de passe : envelopper les appels qui peuvent répondre
+      `locked` dans `withSecrecy` (`client/src/stores/secrecy.ts`, exporté par
+      le barrel `deveye-sdk-client`), qui relance une fois après l'invite.
+2. **Popups et dialogues** : toujours `Dialog` (statique) ou `Popup` +
+   `OpenPopup`/`ClosePopup` (impératif, requête puis réponse). Jamais de modale
+   maison. Les comportements communs sont **fournis par `Dialog`**
+   (`client/src/Components/Dialog`), à ne pas réimplémenter :
+    - **Entrée vaut action principale** : passer `onSubmit={submit}` (le même
+      handler que le bouton principal du pied). Pas de `onKeyDown` « Enter »
+      sur les champs ; `textarea`, `select` et contenteditable gardent leur
+      Entrée. Pour une confirmation destructive, `onSubmit` câble la
+      confirmation.
+    - **Autofocus** : à l'ouverture, `Dialog` focalise le `[data-autofocus]`,
+      sinon le premier champ texte. Pas de `inputRef` + `focus()` manuel à
+      l'ouverture (un ref ne sert qu'à un re-focus après erreur).
       `autoFocus={false}` pour désactiver.
-    - **Échap** : géré par la pile `useDismissLayer` (`Components/Dialog`). `Dialog`,
-      `WidgetPopup` (panneau feature) et `SettingsPanel` y sont déjà inscrits → Échap
-      ferme **la couche la plus haute d'abord** (popup avant feature). N'ajoute
-      **jamais** de listener `window` `keydown`/Escape dans une feature.
-    - **Bouton principal dans un enfant** : si le formulaire est rendu _dans_ un
-      `Dialog` qu'il ne possède pas (ex. `ShortcutForm` dans `AddTileMarket`),
-      enregistrer son action via `useDialogSubmit(submit)` au lieu de `onSubmit`.
-    - **Cohérence d'ajout** : une popup/sous-formulaire d'ajout se ferme après un
-      ajout réussi (appareils, raccourcis, features, formulaires — tous pareils).
-3. **Enregistrement** — - widget de grille → ajouter à `FEATURE_CATALOG` dans
-   **`src/Pages/Home/catalog.tsx`** (`{ id, title, icon, description, category,
-links?, WidgetContent, FullComponent, cacheDurationMinutes, preload?,
-holdSecrecy? }`). Cela suffit à le faire apparaître dans la grille, dans le
-   **marché d'ajout** (`organize/AddTileMarket.tsx` : `category` décide du rayon,
-   `description` du sous-titre de la carte) **et** dans la fiche « À propos »
-   (`Pages/Home/about/` : `links` y dessine les liaisons vers les autres
-   fonctionnalités, lues dans les deux sens) ; - page structurelle → ajouter à `STATIC_VIEWS` dans `src/Pages/Home/index.tsx`
-   (avec `hasCard: false`) et passer un `onOpenX` au `TopNavbar`
-   (gater par rôle si besoin : `user.role === 'admin' ? () => handleExpand('x') : undefined`).
-4. **Navbar** (page structurelle) — `src/Components/TopNavbar/TopNavbar.tsx` :
-   ajouter la prop `onOpenX?` et l'entrée de menu (rendue seulement si la prop est
-   fournie → gating naturel).
-5. **Icône** — réutiliser une classe de `src/Styles/icons.css` (`icon-…`).
-6. **Fraîcheur des widgets résumé** — un widget de grille qui affiche une donnée
-   dérivée (ex. un compteur via `CountWidget` / `useWorkspaceCount`) se rafraîchit
-   seul à l'(ré)ouverture de la socket, mais **pas** après une mutation. Quand une
-   action de la feature change cette donnée (ajout/suppression), appeler
-   `invalidate('<clé>')` (`@/stores/invalidation`) **juste après l'appel WS
-   réussi** ; tout widget lisant cette clé via `useResourceVersion` re-fetch
-   aussitôt. La clé est par convention la commande de comptage (`audience.count`,
-   `git.count`) et doit figurer dans `ResourceKey`. Invalider **à la source
-   de la mutation**, pas au cycle de vie du popup. Exemple : `features/audience/src/client/SiteDialog.tsx`.
-7. **Vocabulaire technique** : l'interface s'adresse à quelqu'un qui débute en
-   informatique. Un terme de métier indispensable dans une phrase (« zero
-   knowledge », « webhook ») s'écrit `<Term id='…'>` (barrel SDK) : il ouvre sa
-   définition du glossaire, et la phrase reste courte. Un terme nouveau s'ajoute
-   à `client/src/Components/Term/glossary.ts` (deux ou trois phrases justes,
-   sans autre jargon) et à `GlossaryTermId` du portrait typé.
+    - **Échap** : géré par la pile `useDismissLayer`. `Dialog`, `WidgetPopup`
+      (panneau de feature) et `SettingsPanel` y sont inscrits : Échap ferme la
+      couche la plus haute d'abord. Jamais de listener `window`
+      `keydown`/Escape dans une page.
+    - **Bouton principal dans un enfant** : un formulaire rendu dans un
+      `Dialog` qu'il ne possède pas enregistre son action par
+      `useDialogSubmit(submit)` au lieu de `onSubmit`.
+    - **Cohérence d'ajout** : une popup ou un sous-formulaire d'ajout se ferme
+      après un ajout réussi, partout pareil.
+3. **Icône** : réutiliser une classe de `src/Styles/icons.css` (`icon-…`).
+4. **Fraîcheur des widgets résumé** : un widget qui affiche une donnée dérivée
+   (un compteur via `CountWidget` / `useWorkspaceCount`) se rafraîchit seul à
+   l'ouverture de la socket, mais **pas** après une mutation. Quand une action
+   change cette donnée, appeler `invalidate('<clé>')` (`client/src/stores/invalidation.ts`
+   côté app, `invalidate` du barrel `deveye-sdk-client` côté module) **juste
+   après l'appel WS réussi** ; tout widget lisant cette clé via
+   `useResourceVersion` relit aussitôt. La clé est par convention la commande
+   de comptage et figure dans `ResourceKey` (un module la déclare dans
+   `manifest.resources`). Invalider **à la source de la mutation**, pas au
+   cycle de vie du popup.
+5. **Vocabulaire** : l'interface s'adresse à quelqu'un qui débute en
+   informatique. Un terme de métier indispensable dans une phrase
+   (« webhook ») s'écrit `<Term id='…'>` (`client/src/Components/Term`,
+   exporté par le barrel) : il ouvre sa définition du glossaire, et la phrase
+   reste courte. Un terme nouveau s'ajoute à
+   `client/src/Components/Term/glossary.ts` (deux ou trois phrases justes, sans
+   autre jargon) et à `GlossaryTermId` du portrait typé du barrel.
+6. **Mesure** : un écran interne se nomme par `useSubView('<segment>')`
+   (`client/src/telemetry/useView.ts`) pour la page Tests et débogage
+   ([DEBUG.md](./DEBUG.md)).
 
 ---
 
-## E. Sécurité / chiffrement (enveloppe, deux étages)
+## E. Chiffrement (enveloppe, deux étages)
 
-Voir [SECURITY_MODEL.md](./SECURITY_MODEL.md). Règles clés :
+Voir [SECURITY_MODEL.md](./SECURITY_MODEL.md). Dans un handler natif :
 
-- Les données de feature au repos passent **toujours** par `ctx.secure`
-  (`encrypt`/`tryDecrypt`), **jamais** par `ctx.crypt` (`seal`/`open`, réservés
-  aux secrets liés à l'auth, ex. 2FA).
-- Stocker en clair seulement les métadonnées non sensibles nécessaires au
-  serveur pour lister/trier/gater sans déchiffrer (`sort_order`, `folder_id`, `level`,
-  `workspace_id`…).
-- Le contenu sensible passe par l'étage gardé (`ctx.secure`) ; l'étage ouvert
-  (`ctx.secure.open`) est un choix explicite, assumé comme lisible par un
-  serveur vivant. Le serveur ne lit l'étage gardé que tant que l'utilisateur n'a
-  pas activé le chiffrement par mot de passe.
+- la donnée au repos passe par `ctx.secure` (`src/Services/SecureStore.ts`, un
+  `Cipher` : `encrypt`, `decrypt`, `tryDecrypt`), l'étage gardé, illisible par
+  le serveur quand l'utilisateur a activé le chiffrement par mot de passe et que
+  sa session est scellée ; `ctx.secure.open` est l'étage ouvert, un choix
+  explicite, assumé comme lisible par un serveur vivant ;
+- `ctx.crypt` (`src/Services/Encryption.ts` : `sealFor`, `openFor`,
+  `openTextFor`) scelle sous la clé serveur et ne sert qu'aux secrets de
+  l'authentification (2FA), jamais à la donnée d'une feature ;
+- en clair, seulement les métadonnées dont le serveur a besoin pour lister,
+  trier ou garder sans déchiffrer (`sort_order`, `folder_id`, `workspace_id`…).
+
+Côté module, la même règle s'écrit `ctx.cipher()` (étage ouvert) et
+`ctx.cipher('private')` (étage gardé) : voir le guide
+`04-storage-and-encryption` du template.
 
 ---
 
-## F. Validation finale
+## F. Validation
 
 ```bash
-./ci.sh                       # lint + typecheck des 3 repos (racine)
-# ou ciblé :
-cd DevEye-Types && npm run ci
-cd DevEye        && npm run ci          # lint + typecheck serveur
-cd DevEye/client && npm run ci          # lint + typecheck + build
+cd DevEye-Types && npm run ci          # types
+cd DevEye        && npm run ci          # lint, format, typecheck, tests, glue
+cd DevEye        && npm run ci:features # modules in-repo
+cd DevEye        && npm run ci:smoke    # smoke E2E de chaque module (il lui faut la base)
+cd DevEye/client && npm run ci          # lint, typecheck, check:sdk, tests, build
 ```
 
-Test manuel : `cd DevEye && npm run dev` (serveur + Vite). Se connecter,
-ouvrir la feature.
+Jamais `npx eslint .` à la racine de `DevEye/` : `npm run lint`,
+`npm run lint:features`, et dans `client/` `npm run lint`. Prettier couvre
+aussi `.md`, `.yml`, `.css`, `.html` et `.json` (`format:check`).
 
-Pour la page Tests et débogage (`Docs/DEBUG.md`) : les écrans internes de la
-feature se nomment par `useSubView('<segment statique>')`, ses mails se
-déclarent dans `mailSamples`, et un parcours critique mérite un scénario
-`e2e` qui ne laisse rien derrière lui.
+Test manuel : `npm run dev` (serveur + Vite), se connecter, ouvrir l'écran.
 
 ---
 
 ## G. Workflow `@deveye/types` ↔ `node_modules`
 
-`@deveye/types` est consommé comme **paquet npm installé** (`@deveye/types`,
-npmjs public), **pas** un symlink. Le serveur (tsx) et le client (vite) lisent
-le `src` du paquet installé, hoisté dans `DevEye/node_modules/@deveye/types/`.
+`@deveye/types` est consommé comme **paquet npm installé** (npmjs public),
+**pas** un lien symbolique. Le serveur (tsx) et le client (vite) lisent le
+`src` du paquet installé, hoisté dans `node_modules/@deveye/types/`.
 
-Après avoir édité `DevEye-Types/src/` en dev local, pour que serveur/client le
-voient **sans publier**, mirrorer les fichiers modifiés dans
-`DevEye/node_modules/@deveye/types/src/` et bumper la version de ce `package.json`
-aussi. Vérifier :
+Après avoir édité le `src/` du dépôt des types, pour que le serveur et le
+client le voient **sans publier**, miroiter la source dans chaque dépôt qui
+installe le paquet depuis npm. Depuis le dossier qui tient les dépôts côte à
+côte :
 
 ```bash
+for t in DevEye DevEye-Feature-Template DevEye-CloudSync; do
+    rsync -a --delete DevEye-Types/src/ $t/node_modules/@deveye/types/src/
+done
 diff -rq DevEye-Types/src DevEye/node_modules/@deveye/types/src   # doit être vide
 ```
 
-⚠️ **Vite met en cache le pré-bundling** : après un changement de types, si le
-client plante sur un export manquant, vider le cache :
-`rm -rf DevEye/client/node_modules/.vite` puis relancer le dev server.
+Les modules privés qui installent le paquet en `file:../DevEye-Types` ont un
+lien symbolique vers la source : rien à miroiter chez eux.
 
-Release réelle : publier `@deveye/types@x.y.z` sur npmjs (release GitHub du repo
-de types → workflow publish), puis réinstaller côté serveur/client.
+Vite met en cache le pré-bundling : après un changement de types, si le client
+plante sur un export manquant, vider le cache
+(`rm -rf client/node_modules/.vite`) puis relancer le serveur de dev.
+
+Publication réelle : `@deveye/types@x.y.z` sur npmjs (release GitHub du dépôt
+des types, workflow publish), puis réinstaller côté serveur et client.
 
 ---
 
-## Récapitulatif des points d'enregistrement (à ne pas oublier)
+## Récapitulatif des points d'enregistrement
 
-| #   | Fichier                                                | Action                                                              |
-| --- | ------------------------------------------------------ | ------------------------------------------------------------------- |
-| 1   | `DevEye-Types/src/domain/<f>.ts`                       | schémas + types entité                                              |
-| 2   | `DevEye-Types/src/features/<f>.ts`                     | commandes + `<f>Commands`                                           |
-| 3   | `DevEye-Types/src/features/registry.ts`                | spread `...<f>Commands`                                             |
-| 4   | `DevEye-Types/src/index.ts`                            | exports                                                             |
-| 5   | `DevEye-Types/package.json`                            | bump version + mirror node_modules                                  |
-| 6   | `DevEye/src/db/migrations/0NN_*.sql`                   | migration (si table)                                                |
-| 7   | `DevEye/src/db/repos/<f>.ts`                           | repo (si table)                                                     |
-| 8   | `DevEye/src/db/index.ts`                               | `Database` + `createDatabase`                                       |
-| 9   | `DevEye/src/features/<f>/index.ts`                     | handlers + `<f>Features`                                            |
-| 10  | `DevEye/src/features/registry.ts`                      | spread `...<f>Features`                                             |
-| 11  | `DevEye/client/src/Features/<F>/`                      | composant + styles                                                  |
-| 12  | `DevEye/client/src/Pages/Home/index.tsx`               | `FEATURES` ou `PAGES`                                               |
-| 13  | `DevEye/client/src/Components/TopNavbar/TopNavbar.tsx` | entrée menu (page structurelle)                                     |
-| 14  | `DevEye/client/src/stores/invalidation.ts`             | clé `ResourceKey` + `invalidate()` aux mutations (si widget résumé) |
+| #   | Fichier                                                       | Action                                          |
+| --- | ------------------------------------------------------------- | ----------------------------------------------- |
+| 1   | types : `src/domain/<f>.ts`                                   | schémas + types d'entité                        |
+| 2   | types : `src/features/<f>.ts`                                 | commandes + `<f>Commands`                       |
+| 3   | types : `src/features/registry.ts`, `src/index.ts`            | spread `...<f>Commands`, exports                |
+| 4   | `src/db/migrations/NNN_*.sql`                                 | migration, sort dans l'export (si table)        |
+| 5   | `src/db/repos/<f>.ts`, `src/db/index.ts`                      | repo, `Database` + `createDatabase` (si table)  |
+| 6   | `src/features/<f>/index.ts`, `src/features/registry.ts`       | handlers avec `access`, spread `...<f>Features` |
+| 7   | `client/src/Features/<F>/`, `client/src/Pages/Home/index.tsx` | page, `buildStaticViews`, `ADMIN_VIEW_IDS`      |
 
-Selon ce que la feature fait, cinq chantiers transverses ont chacun leur doc
-et leur checklist propre : toute configuration → `Docs/SETTINGS.md` (la
-coquille unique et son bouton commun, obligatoires) ; des réglages d'espace
-réutilisables que les éléments désignent → `Docs/SOURCES.md` ; des alertes →
-`Docs/NOTIFICATIONS.md` §8 ; des éléments partageables entre espaces →
-`Docs/SHARING.md` ; des tables ou des fichiers → `Docs/ACCOUNT_EXPORT.md`
-(leur sort dans l'export des données d'un compte).
+Selon ce que la commande touche, les systèmes transverses ont chacun leur doc :
+toute configuration → [SETTINGS.md](./SETTINGS.md) (la coquille unique et son
+bouton commun) ; des réglages d'espace réutilisables que les éléments
+désignent → [SOURCES.md](./SOURCES.md) ; des alertes →
+[NOTIFICATIONS.md](./NOTIFICATIONS.md) ; des éléments partageables entre
+espaces → [SHARING.md](./SHARING.md) ; des tables ou des fichiers →
+[ACCOUNT_EXPORT.md](./ACCOUNT_EXPORT.md).

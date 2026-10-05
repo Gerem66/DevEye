@@ -83,8 +83,10 @@ porte sa raison, lue par le titulaire dans `LISEZMOI.txt`.
 - Les tables du cœur : `CORE_EXPORT_TABLES` (`src/Services/accountExport/coverage.ts`),
   écrites par l'hôte (`run.ts`) ou tues avec leur raison.
 - Celles d'un module : `server.accountExport.tables`, la déclaration du module
-  (le contrat est dans `@deveye/types`, `sdk/accountExport.ts` ; le guide du
-  développeur tiers dans `DevEye-Feature-Template/docs/13-account-export.md`).
+  (le contrat est dans `src/sdk/accountExport.ts` de `@deveye/types` ; le guide
+  du développeur tiers est
+  [`docs/13-account-export.md`](https://github.com/Gerem66/DevEye-Feature-Template/blob/main/docs/13-account-export.md)
+  du template).
   Écrite par l'hôte (`where`, clé de pagination, colonnes `sealed`, `json`,
   `dates`, `omit`), par les crochets du module (`'custom'`), ou tue
   (`{ skip: raison }`).

@@ -241,7 +241,7 @@ describe('les mots de passe', () => {
     it('un mot de passe d’application se crée, se liste sans son secret, se révoque', async () => {
         const { repo, ctx } = setup();
         await run(ctx, 'mailserver.create', { ...base, localPart: 'a', domainId: 1 });
-        const made = await run(ctx, 'mailserver.appPasswordCreate', { id: 1, label: 'Mails DevEye', forMails: true });
+        const made = await run(ctx, 'mailserver.appPasswordCreate', { id: 1, label: 'Mail DevEye', forMails: true });
         assert.equal(made.credential.origin, 'mails');
         assert.equal(repo.credentials[0].save_sent, 1);
         assert.equal(await verifySecret(made.secret, repo.credentials[0].secret_hash), true);

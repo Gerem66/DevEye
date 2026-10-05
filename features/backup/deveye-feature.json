@@ -1,6 +1,6 @@
 {
   "id": "backup",
   "tables": ["backup_destinations", "backup_jobs", "backup_runs"],
-  "minTypesVersion": "0.15.2",
+  "minTypesVersion": "0.22.1",
   "$comment": "Tables historiques (migration 086 du socle, complétée par la 094, jamais déplacées) : l'allowlist les dispense du préfixe ft_backup_. Le module porte sa propre séquence (src/server/migrations/) pour ce qui ne touche que ces tables ; toute NOUVELLE table prendra le préfixe."
 }

@@ -7,13 +7,13 @@ comportement d'une installation auto-hébergée, et il ne demande aucun réglage
 
 ## Les trois rôles
 
-| Qui                      | Quoi                                                                                                                            | Où                                       |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
-| Un module qui crée       | déclare `manifest.quotas` (`{ key, label, stock?, perOperation? }`) et appelle `ctx.quota.assert(key, compteur)` avant de créer | son manifest, son handler de création    |
-| Un module qui compte     | donne à chaque quota de quoi le compter : `server.quotas.<clé>.list` pour un stock, `.count` pour un flux                       | son entrée serveur                       |
-| Un module qui a un stock | exclut les éléments en pause de ce qu'il fait tourner                                                                           | ses listes d'échéance                    |
-| Le cœur                  | résout le compte visé, lit son offre, compare, lève `quota_exceeded`, et tient les pauses                                       | `src/Services/quota.ts`, `planPauses.ts` |
-| Le fournisseur d'offre   | offre `ACCOUNT_PLAN_PROVIDER` : `planFor(userId, { fresh? })` rend `{ id, label, limits, priority, trialEndsAt?, changesAt? }`  | `FeatureService.providers` du module     |
+| Qui                      | Quoi                                                                                                                                                                        | Où                                       |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| Un module qui crée       | déclare `manifest.quotas` (`{ key, label, unit?, stock?, perOperation? }`, huit au plus : `MAX_FEATURE_QUOTAS`) et appelle `ctx.quota.assert(key, compteur)` avant de créer | son manifest, son handler de création    |
+| Un module qui compte     | donne à chaque quota de quoi le compter : `server.quotas.<clé>.list` pour un stock, `.count` pour un flux                                                                   | son entrée serveur                       |
+| Un module qui a un stock | exclut les éléments en pause de ce qu'il fait tourner                                                                                                                       | ses listes d'échéance                    |
+| Le cœur                  | résout le compte visé, lit son offre, compare, lève `quota_exceeded`, et tient les pauses                                                                                   | `src/Services/quota.ts`, `planPauses.ts` |
+| Le fournisseur d'offre   | offre `ACCOUNT_PLAN_PROVIDER` : `planFor(userId, { fresh? })` rend `{ id, label, limits, priority, trialEndsAt?, changesAt? }`                                              | `FeatureService.providers` du module     |
 
 Les limites sont nommées `<featureId>.<quotaKey>` (`uptime.monitors`). Une clé
 absente de `limits` est illimitée.
@@ -107,8 +107,8 @@ rien à faire :
 - Sans fournisseur, personne n'est tenu, et la page ne propose pas le réglage.
 
 Ce qui ne passe pas par les pauses continue : les sauvegardes vers le stockage
-de l'utilisateur, les minuteurs de Rdv, les relances de Facturation et de
-Finances, la passe lente de Sentinel. Les requêtes d'échéance excluent chaque
+de l'utilisateur, les minuteurs de Rendez-vous, les relances de Facturation et
+de Finances, la passe lente de Sentinelle. Les requêtes d'échéance excluent chaque
 élément en pause par `NOT IN (...)` : la liste compte alors tous les éléments
 des comptes gratuits, sans souci pour quelques milliers.
 
@@ -145,18 +145,18 @@ Deux lectures, pour dire où l'on en est avant le refus :
 
 Ce que `used` veut dire :
 
-| Sorte               | `used`                                                                                   |
-| ------------------- | ---------------------------------------------------------------------------------------- |
-| stock               | ce qui existe, en pause compris (`paused` en dit combien)                                |
-| flux                | le mois en cours (UTC ; Facturation, le fuseau par défaut), ou les octets tenus          |
-| par opération       | `null`                                                                                   |
-| `workspace.members` | l'espace partagé le plus peuplé, propriétaire compris ; `paused` est celui de cet espace |
-| `domains.hosts`     | les noms distincts ; `paused` compte des noms, pas des lignes                            |
+| Sorte               | `used`                                                                                                                                                                |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| stock               | ce qui existe, en pause compris (`paused` en dit combien)                                                                                                             |
+| flux                | le mois en cours (le mois UTC, sauf pour une fonctionnalité qui tient son propre calendrier : Facturation compte dans le fuseau de ses réglages), ou les octets tenus |
+| par opération       | `null`                                                                                                                                                                |
+| `workspace.members` | l'espace partagé le plus peuplé, propriétaire compris ; `paused` est celui de cet espace                                                                              |
+| `domains.hosts`     | les noms distincts ; `paused` compte des noms, pas des lignes                                                                                                         |
 
 Le compte porte sur les espaces que le compte **possède**, jamais sur ceux où il
 n'est que membre. `src/Services/quotaUsage.ts` mesure les sources une à une, et
-quatre comptes à la fois au plus pour `ofMany` (environ 28 petites requêtes par
-compte) : un relevé de tous les comptes laisse le reste du pool aux membres. Une
+quatre comptes à la fois au plus pour `ofMany` (`USAGE_PARALLEL`) : un relevé de
+tous les comptes laisse le reste du pool aux membres. Une
 source qui tombe fait échouer la lecture entière, en nommant sa clé.
 
 ## Ce que le cœur borne lui-même
@@ -242,9 +242,10 @@ repoussée (`tierChanged`, `_planPauses.ts`).
   appelle `live.accountChanged(userId)`, le sujet `account` relit `user.plan`.
   `null` veut dire « en chargement » **ou** « aucun fournisseur », jamais
   « offre gratuite ».
-- `usePriorityHold()` : la priorité aux abonnés tient ce compte. L'accueil
-  montre alors un bandeau avec « Voir les offres », et les textes de pause
-  disent la vraie raison.
+- `usePriorityHold()` (`client/src/stores/accountPlan.ts`, réservé à l'app :
+  il n'est pas dans le barrel) : la priorité aux abonnés tient ce compte.
+  L'accueil montre alors un bandeau avec « Voir les offres », et les textes de
+  pause disent la vraie raison.
 
 ## L'entrée de compte
 

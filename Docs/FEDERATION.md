@@ -68,8 +68,8 @@ de main accepte `PUBLIC_ORIGIN` sur son cookie, une origine fédérée sur son
 ticket, et ferme en `4403` toute autre origine.
 
 **CORS.** Une origine fédérée n'atteint qu'une liste fermée de chemins
-(`FEDERATED_PATHS` dans `src/app.ts`) : l'état du serveur, l'auth, les routes
-HTTP que le client appelle hors socket. Sans identifiants
+(`FEDERATED_PATHS` et `FEDERATED_PREFIXES` dans `src/app.ts`) : l'état du
+serveur, l'auth, les routes HTTP que le client appelle hors socket. Sans identifiants
 (`credentials: false`). CORS est ici surtout **fonctionnel** : sans l'en-tête, le
 navigateur refuse à la page de lire les réponses. La liste d'origines, elle, est
 une défense en profondeur ; la digue est l'absence d'identifiants ambiants.
@@ -109,8 +109,10 @@ l'octet près.
   trame de l'autre passerait pour une trame d'ici. Pas de repli sur la socket
   d'ici quand celle de là-bas manque : une commande estampillée d'un espace
   distant y viserait l'espace d'ici qui porte le même numéro.
-- **`api/http.ts`** : `get`/`post`/`httpFetch` suivent l'instance de l'espace
-  actif ; `login`, `me`, `refresh`, `logout` et `getLocal` restent ici.
+- **`api/http.ts`** : `get`/`post`/`httpFetch` et `changePassword` suivent
+  l'instance de l'espace actif (le changement de mot de passe adopte les jetons
+  que la réponse rend) ; `login`, `me`, `refresh`, `logout` et `getLocal`
+  restent ici.
 - **`stores/workspace.ts`** : l'espace actif est `{ instanceId, id }`. L'id reste
   celui que SON serveur lui donne, c'est lui que l'enveloppe porte. Tout ce qui
   se sert d'un espace comme **clé** (caches du thème et de l'accueil) passe par
@@ -151,7 +153,7 @@ pas proposée comme cible.
 **Surveiller le JavaScript de la plateforme depuis son instance.** Le risque
 ci-dessous est celui d'un frontend modifié. Un contrôle d'intégrité d'Uptime
 (`features/uptime/README.md`, « Le contrôle d'intégrité ») posé sur l'instance
-privée relit toutes les cinq minutes chaque fichier que `app.deveye.fr` sert,
+privée relit à chaque passage chaque fichier que l'instance hébergée sert,
 manifeste de build compris (`/.well-known/deveye-build.json`), et alerte au
 moindre écart. Il ne vaut que parce qu'il tourne ailleurs que sur ce qu'il
 surveille.

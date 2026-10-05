@@ -8,19 +8,25 @@ devises et unités.
 
 ## La carte
 
-| Où                           | Quoi                                                                          |
-| ---------------------------- | ----------------------------------------------------------------------------- |
-| `src/contracts/catalogue.ts` | **Le** fichier des formats : familles, sources, cibles, réglages, recettes    |
-| `src/contracts/options.ts`   | La forme d'un réglage (`slider`, `segments`, `toggle`, `size`, `crop`…)       |
-| `src/contracts/estimate.ts`  | La taille avant export, et l'arithmétique de la taille cible                  |
-| `src/contracts/units.ts`     | Les unités physiques et la parité de deux devises, calcul pur                 |
-| `src/server/routes.ts`       | La montée du fichier en flux et la descente du résultat, à ticket             |
-| `src/server/service.ts`      | La file (un travail à la fois), l'avancement, l'entretien, les taux de change |
-| `src/server/spawn.ts`        | Le lanceur d'outils : budget, veille d'arrêt, plafond de sortie               |
-| `src/server/engines/`        | Un moteur par outil : ffmpeg, ImageMagick, LibreOffice et les outils PDF      |
-| `src/server/storage.ts`      | Le disque : chemins, place libre, balayage                                    |
-| `policy/policy.xml`          | La politique ImageMagick, copiée dans l'image par le Dockerfile               |
-| `src/client/`                | L'assistant, la file des travaux, devises, unités, réglages                   |
+| Où                            | Quoi                                                                                                       |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `src/contracts/catalogue.ts`  | **Le** fichier des formats : familles, sources, cibles, réglages, recettes                                 |
+| `src/contracts/options.ts`    | La forme d'un réglage (`slider`, `segments`, `toggle`, `size`, `crop`…)                                    |
+| `src/contracts/estimate.ts`   | La taille avant export, et l'arithmétique de la taille cible                                               |
+| `src/contracts/units.ts`      | Les unités physiques et la parité de deux devises, calcul pur                                              |
+| `src/server/handlers.ts`      | Les neuf commandes `convert.*` : capacités, liste, création, annulation, retrait, descente, taux, réglages |
+| `src/server/routes.ts`        | La montée du fichier en flux et la descente du résultat, à ticket                                          |
+| `src/server/service.ts`       | La file (un travail à la fois), l'avancement, l'avis de fin, l'entretien, les taux de change               |
+| `src/server/repo.ts`          | Les travaux et leurs transitions d'état, les taux                                                          |
+| `src/server/spawn.ts`         | Le lanceur d'outils : budget, veille d'arrêt, plafond de sortie                                            |
+| `src/server/engines/`         | Un moteur par outil : ffmpeg, ImageMagick, LibreOffice et les outils PDF                                   |
+| `src/server/storage.ts`       | Le disque : chemins, place libre, balayage                                                                 |
+| `src/server/env.ts`           | Les variables `CONVERT_*` et leurs défauts                                                                 |
+| `src/server/migrations/`      | `001` : les travaux, les taux de change et leur état de relecture                                          |
+| `src/server/accountExport.ts` | L'export du compte                                                                                         |
+| `src/server/testing.ts`       | Le dépôt en mémoire des tests, qui tient les mêmes gardes que le SQL                                       |
+| `policy/policy.xml`           | La politique ImageMagick, copiée dans l'image par le Dockerfile                                            |
+| `src/client/`                 | L'assistant, la file des travaux, devises, unités, réglages                                                |
 
 ## Ajouter un format
 
@@ -35,15 +41,33 @@ qui existe, aucune source sans cible.
 ## Le parcours d'un travail
 
 ```
-awaiting_upload → uploading → queued → running → done → expired
-                      ↓          ↓         ↓
-                    error      canceled   error
+awaiting_upload → uploading → queued ⇄ running → done → expired
+       ↓              ↓          ↓         ↓
+    expired         error      error     error
+
+canceled : depuis tout état avant done
 ```
 
 `convert.create` ouvre le travail et rend une adresse de montée à ticket. Le
 fichier monte en `POST` brut (`postStream` du SDK), est relu par l'outil de sa
 famille, puis part en file. Le résultat se télécharge par une seconde adresse à
 ticket, et quitte le disque à l'échéance. L'original part dès la conversion finie.
+
+Un envoi jamais venu expire aussi (`CONVERT_UPLOAD_TTL_SECONDS`) : un onglet
+fermé au mauvais moment ne tient pas pendant des heures la seule place d'une
+offre gratuite. Un travail interrompu par un arrêt du serveur repasse en file,
+`CONVERT_MAX_ATTEMPTS` fois au plus, puis passe en échec (`interrupted`) ; un
+envoi coupé en pleine réception passe en échec (`upload_interrupted`), un fichier
+tronqué n'ayant rien à reprendre. L'annulation (`convert.cancel`) vaut à toute
+étape avant `done`. Un travail au repos (`done`, `error`, `canceled`,
+`expired`) se retire de la liste (`convert.remove`).
+
+Un avis part à la fin d'un travail assez long pour qu'on ait quitté l'écran
+(`announce()` dans `service.ts`) : le nom du fichier converti, les formats, les
+tailles et le temps qui reste pour le récupérer. Le seuil se règle dans Réglages
+→ Général (Toujours, après 1, 5 ou 15 minutes ; une minute par défaut), les
+canaux dans Réglages → Notifications. Une conversion plus courte que le seuil
+reste silencieuse : on est encore devant l'écran.
 
 ## Les invariants
 
@@ -86,12 +110,17 @@ ticket, et quitte le disque à l'échéance. L'original part dès la conversion 
   dans un espace partagé.
 - **Ce qu'un fichier peut peser** : le mur du serveur (`CONVERT_MAX_FILE_BYTES`),
   l'offre du propriétaire de l'espace (`convert.fileBytes`), et la place libre.
-- **Ce qu'une offre borne en plus** (`Docs/QUOTAS.md`), tous espaces du
-  propriétaire confondus : les conversions ouvertes à la fois
+- **Ce qu'une offre borne en plus** ([`Docs/QUOTAS.md`](../../Docs/QUOTAS.md)),
+  tous espaces du propriétaire confondus : les conversions ouvertes à la fois
   (`convert.activeJobs`, la file étant commune à tout le serveur) et le poids des
   résultats en attente de téléchargement (`convert.resultBytes`). Ce dernier ne
   se connaît qu'à la fin : la création refuse quand la réserve est déjà pleine,
-  et la conversion s'arrête d'elle-même si son résultat la dépasse.
+  et la conversion s'arrête d'elle-même si son résultat la dépasse. Les clés du
+  manifest sont `fileBytes` (par opération), `activeJobs` et `resultBytes` ; les
+  valeurs sont celles du module de facturation des comptes (`src/server/plans.ts`
+  de Billing) : 100 Mo par fichier, 1 conversion à la fois et 500 Mo de
+  résultats en offre gratuite ; 2 Go, 5 et 2 Go en Pro. Une installation sans
+  module de facturation n'a aucune limite.
 - **`policy.xml` : ni apostrophe ni guillemet dans un commentaire.** Le lecteur
   XML d'ImageMagick les prend pour un début de chaîne et avale en silence les
   règles qui suivent. `policy.test.ts` le garde ; après une retouche, relire le
@@ -99,7 +128,16 @@ ticket, et quitte le disque à l'échéance. L'original part dès la conversion 
 
 ## L'exploitation
 
-Les variables `CONVERT_*` sont décrites dans `.env.template`. Au démarrage le
-service sonde ses outils : une absence ne l'empêche pas de démarrer, elle retire
-des formats de l'écran en nommant ce qui manque (`convert.capabilities`). L'image
-se construit sans LibreOffice par `--build-arg WITH_DOCUMENTS=0`.
+Les variables `CONVERT_*` sont décrites dans `.env.template`, leurs défauts dans
+`src/server/env.ts`. Au démarrage le service sonde ses outils : une absence ne
+l'empêche pas de démarrer, elle retire des formats de l'écran en nommant ce qui
+manque (`convert.capabilities`). L'image se construit sans LibreOffice par
+`--build-arg WITH_DOCUMENTS=0`.
+
+## Tests
+
+```bash
+npm run test:features
+```
+
+depuis `DevEye/`.

@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "license": "AGPL-3.0-only",
-  "description": "Déploiements, au format module : cibles Dokploy et GitHub Actions, déclenchement et suivi, avis Discord vivant.",
+  "description": "Déploiements : les cibles Dokploy, GitHub Actions et services compose d'une machine, leur déclenchement et leur suivi, avec un message Discord qui suit le déploiement.",
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
@@ -17,7 +17,7 @@
     "ws": "^8.18.0"
   },
   "peerDependencies": {
-    "@deveye/types": ">=0.15.2",
+    "@deveye/types": ">=0.22.1",
     "react": "^19.0.0",
     "zod": "^4.0.0"
   }

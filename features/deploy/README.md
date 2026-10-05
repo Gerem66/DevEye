@@ -1,858 +1,665 @@
-# Déploiement — les mises en production d'un espace
+# Déploiements : les mises en production d'un espace
 
-> Écrit le 13 août 2026, à la fin du chantier qui a sorti le déploiement du
-> module Projets ; relu et mis à jour le 21 août 2026 (sources, notifications
-> par cible, coquille de réglages), puis le 28 août 2026 (rapatriement au
-> format module, `features/deploy`, voir §9). Compagnon de
-> [Projets](../projects/README.md) et jumeau de [Git](../git/README.md) : c'est le
-> même renversement, appliqué au dernier module qui ne l'avait pas eu. Il dit
-> **pourquoi** ; le code dit comment.
+Déploiements déclare des cibles (une application ou une pile compose d'une
+instance Dokploy, un workflow GitHub Actions, un service compose d'une machine
+enrôlée), les déclenche et suit leur état, celui des déploiements partis
+d'ailleurs compris. DevEye déclenche et observe, rien de plus : domaine,
+variables d'environnement et build vivent chez le fournisseur. Compagnon de
+[Projets](../projects/README.md) et jumeau de [Git](../git/README.md).
 
 ---
 
-## 1. Le renversement
+## 1. Le modèle
 
-Le déploiement existait avant cette feature, mais comme une **propriété d'un
-projet** : `project_deploy_targets` était clé sur `project_id`, un projet avait
-donc au plus une cible, et personne d'autre ne pouvait la voir.
+### Une cible est une entité de l'espace
 
-Trois symptômes, une seule cause :
-
-1. **Une pile compose sert souvent deux projets.** Un client et un serveur qui
-   partent ensemble, c'est le cas normal ; le second projet ne pouvait ni la
-   voir ni la déclencher, il fallait la redéclarer avec sa clé.
-2. **Une application qu'on veut seulement suivre**, sans projet autour, n'avait
-   pas de place.
-3. **La clé d'API Dokploy vivait dans la feature Git.** Elle n'y avait jamais eu
-   de raison d'être : c'est l'anomalie qui a déclenché ce chantier, et elle
-   n'était pas un oubli mais une conséquence — la feature Git fut la première à
-   savoir gérer un secret, et le déploiement n'avait pas d'écran où loger le
-   sien (voir [Git](../git/README.md) §1, qui le reconnaissait déjà).
-
-La cible est donc devenue une **entité de l'espace**. Un projet n'en garde
-qu'une **liaison** — une ligne dans `project_deploy_links`, et rien d'autre.
+Une cible appartient à l'espace (`deploy_targets`), avec son accès, son
+historique et son suivi. Un projet n'en garde qu'une **liaison** : une ligne
+dans `project_deploy_links`, une table de Projets, et rien d'autre. Une pile
+compose sert souvent deux projets (un client et un serveur qui partent
+ensemble), et une application qu'on veut seulement suivre n'a pas besoin de
+projet.
 
 > **Supprimer l'un ne supprime jamais l'autre.** Délier une cible d'un projet
 > laisse la cible, son historique et les autres projets qui la déploient.
 > Supprimer une cible laisse les projets, qui perdent seulement leur pointeur.
-> Ce que vise la cible chez son fournisseur, lui, n'est évidemment jamais
-> touché : DevEye ne fait que le pointer.
+> Ce que vise la cible chez son fournisseur n'est jamais touché : DevEye ne fait
+> que le pointer.
 
----
+### Tout est à l'étage ouvert
 
-## 2. Les trois invariants
-
-### 2.1 Tout est **toujours** à l'étage ouvert
-
-Une cible appartient à l'espace, pas à un projet : elle ne peut donc suivre le
+Une cible appartient à l'espace, pas à un projet : elle ne peut suivre le
 `security_tier` d'aucun d'eux. Cible et historique sont chiffrés sous la clé de
-l'espace, à l'étage ouvert, une fois pour toutes.
+l'espace, à l'étage ouvert. La feature ne demande **jamais** de mot de passe, et
+le suivi de fond, qui tourne sans session, lit tout ce dont il a besoin.
 
-Trois conséquences, toutes bonnes :
-
-- la feature ne demande **jamais** de mot de passe ;
-- le suivi d'état, qui tourne sans session, lit tout ce dont il a besoin ;
-- la garde atomique que portait l'ancien `updateDeployment` (`JOIN projects p ON
-p.security_tier = 'open'`, contre la course « le projet passe en confidentiel
-  pendant que le service de fond écrit ») **a disparu avec sa cause**, pas avec
-  sa garde. Exactement ce qui était arrivé à `markSynced` en 064.
-
-Corollaire assumé : **un projet confidentiel n'a pas de déploiement.**
+Corollaire : **un projet confidentiel n'a pas de déploiement.**
 `projects.deployLink` le refuse, et passer un projet en confidentiel retire ses
 liaisons, avec un événement de frise.
 
-### 2.2 Le droit de déployer est un droit à part
+### Le droit de déployer est un droit à part
 
-`deploy` est un identifiant de feature distinct de `projects` et de `git`, avec
-son `read` et son `write`. Ce n'est pas de la symétrie décorative : **c'est le
-seul droit de DevEye qui produise un effet hors de DevEye.** `deploy: write`
-autorise à poser la clé d'API d'une instance et à pousser en production ; lire
-des dépôts ou piloter un tableau de tâches n'a jamais impliqué cela.
+`deploy` est une feature distincte de `projects` et de `git`, avec son `read` et
+son `write`. **C'est le seul droit de DevEye qui produise un effet hors de
+DevEye** : `deploy: write` autorise à poser la clé d'une instance et à pousser
+en production, ce que lire des dépôts ou tenir un tableau de tâches n'implique
+pas. `deploy.trigger` est auditée au niveau `warning` pour cette raison.
 
-D'où le découpage des jetons : `git.credential*` pour GitHub, `deploy.credential*`
-pour Dokploy. Ils ont partagé **une seule table** (`workspace_credentials`,
-un `provider` exigé sur chaque lecture) et un comportement
-(`src/features/_credentials.ts`) jusqu'au rapatriement en module : depuis la
-migration `099`, les clés Dokploy vivent dans la table du module,
-`ft_deploy_credentials` (identifiants conservés), et leurs quatre gestes sont
-les siens (`features/deploy/src/server/handlers.ts`, audités
-`deploy.credential*`). La `100` a fait de même pour les jetons GitHub
-(`ft_git_credentials`, module Git) et supprimé la table commune avec le
-comportement partagé. Aucune des deux portes ne peut servir le jeton de
-l'autre, même par erreur : elles ne lisent plus la même table.
+D'où deux tables de jetons, `ft_deploy_credentials` et `ft_git_credentials`
+(module Git) : aucune des deux portes ne peut servir le jeton de l'autre. **Le
+jeton GitHub de Déploiements n'est pas celui de Git** : Git lit des dépôts
+(Contents en lecture), Déploiements lance des workflows (Actions en écriture).
+Partager le jeton donnerait à `git: write` le pouvoir de déployer.
 
-La `099` a aussi retiré, sans la recréer, la clé étrangère
-`fk_deploy_target_credential` (`ON DELETE SET NULL`) : InnoDB revalidait la
-ligne mise à NULL contre un parent que la même cascade supprimait, et la
-suppression d'un espace échouait dessus. Le ménage est désormais **explicite**
-dans le dépôt du module (`removeCredential` met à NULL les cibles de la clé,
-puis retire la ligne), ce que la contrainte faisait sans le dire.
+Il n'y a pas de clé étrangère de `deploy_targets` vers `ft_deploy_credentials` :
+`removeCredential` met à NULL le `credential_id` des cibles de l'accès, puis
+retire la ligne. Une cible sans accès reste, se peint en danger, annonce « accès
+retiré » et refuse de se déclencher.
 
-### 2.3 DevEye déclenche et observe, rien de plus
+### Une cible se déclare, elle ne se crée pas
 
-Ni domaine, ni variable d'environnement, ni build : tout cela vit chez le
-fournisseur, qui le fait mieux et dont ce n'est pas à nous de dupliquer
-l'interface. Le module répond à deux questions : « est-ce que je peux lancer ça
-d'ici ? » et « où en est le dernier ? ».
+Elle existe déjà chez son fournisseur. Le dialogue interroge l'accès **dès qu'on
+en désigne un** et propose ce qu'il publie (`deploy.candidates`), avec un repli
+manuel pour une forme de réponse que le décodeur ne reconnaîtrait pas.
 
-Aucun webhook n'arrive : Dokploy n'émet pas de forme générique, ses
-« notifications » étant mises en page pour Discord, Slack ou Telegram. GitHub
-en émet, mais il faudrait une route publique et un secret par dépôt ; sondé avec
-son ETag, un workflow qui ne bouge pas ne coûte rien à son quota. L'état est donc **sondé**, par le service de fond du module
-(`DeploySync`, `features/deploy/src/server/service.ts`, l'ex moitié
-déploiement d'`IntegrationSyncService`), qui diffuse sur le sujet `deploy` : la
-fiche de la cible et l'onglet du projet qui la déploie suivent tous deux
-`deploy.detail`, donc montrent le même état. (Le sujet `projects`, que le
-service natif nommait aussi, ne l'est plus par ce service : les compteurs
-d'onglets d'un projet se relisent à leur prochaine lecture, et c'est Projets
-qui ravive `projects` quand un déclenchement entre dans une frise, par son
-contrat `recordEvent`.)
-
-Ce sondage a changé de sujet en cours de route, et la nuance décide de ce qui est
-visible. Il portait sur les **lignes encore en vol** ; il porte désormais sur les
-**cibles**. Voir §6.
-
----
-
-## 3. Ce que ça donne à l'usage
-
-| Vue                          | Contenu                                                                                                                                                                     |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Cibles**                   | toutes les cibles de l'espace, état du dernier déploiement, nombre de projets, rangeables au glisser-déposer                                                                |
-| **Fiche**                    | l'en-tête de la cible (retour, titre, actions, dont le bouton de réglages commun), « Déployer », et l'historique de ce qui est parti                                        |
-| **Réglages → Sources**       | les accès de l'espace, Dokploy (adresse + clé d'API, par le serveur ou par un appareil) ou GitHub (jeton), avec ce que chacun dessert (voir `Docs/SOURCES.md`)              |
-| **Réglages → Notifications** | les canaux de la feature (ses sources d'avis) ; chaque **cible** coche les siens dans ses propres réglages (092). Sur Discord, un message qui suit le déploiement en direct |
-| **Réglages d'une cible**     | général (accès, cible visée, type ou branche, intitulé, suppression), notifications, partage entre espaces et permissions par rôle (`Docs/SETTINGS.md`, `Docs/SHARING.md`)  |
-| **Onglet d'un projet**       | les cibles reliées — une vue sur cette feature, voir [Projets](../projects/README.md)                                                                                       |
-
-Une cible se **déclare** (elle existe déjà chez son fournisseur), elle ne se
-crée pas : le dialogue interroge l'accès **dès qu'on en désigne un** et propose
-ce qu'il publie, avec un repli manuel pour le jour où le décodeur ne reconnaîtra
-pas une forme de réponse. L'interrogation vivait sur un bouton « Lister les
-applications » : un geste que personne n'avait de raison de ne pas faire, donc
-un clic imposé avant le vrai choix.
-
-`deploy.add` est **idempotente** sur (jeton, identifiant externe) : déclarer deux
-fois la même application la retrouve au lieu de la dupliquer, ce qui permet à un
-projet de la déclarer sans savoir si un autre l'a déjà fait.
+`deploy.add` est **idempotente** sur (accès, identifiant externe), ou (machine,
+identifiant externe) pour une cible portée par une machine : déclarer deux fois
+la même application la retrouve et met son intitulé à jour, ce qui permet à un
+projet de la déclarer sans savoir si un autre l'a déjà fait. Un accès ne change
+jamais de fournisseur, et une cible ne désigne qu'un accès du sien
+(`deploy.update` le vérifie).
 
 `deploy.trigger` accepte un `projectId` **facultatif** : déclenché depuis
 l'onglet d'un projet, le fait entre dans sa frise ; déclenché depuis la feature,
-il n'appartient à aucun projet en particulier, et l'attribuer à l'un d'eux au
-hasard serait faux.
+il n'appartient à aucun projet, et l'attribuer à l'un d'eux au hasard serait
+faux.
+
+### Quatre états, trois fournisseurs
+
+Un déploiement est `queued`, `running`, `success` ou `failed` : chaque
+adaptateur y projette le vocabulaire de son fournisseur. Les fournisseurs
+(§3.4) :
+
+|                   | Dokploy                                                              | GitHub Actions                                                                | Une machine                                                                |
+| ----------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Accès             | adresse de l'instance + clé d'API, par le serveur ou par un appareil | jeton à grain fin, sans adresse                                               | aucun : une machine de l'espace, et la permission Docker de qui la déclare |
+| Cible             | application ou pile compose (`target_kind`)                          | workflow d'un dépôt sur une branche (`propriétaire/dépôt#id`)                 | service compose (`moteur/projet/service`)                                  |
+| Déclencher        | `application.deploy` / `compose.deploy`                              | `workflow_dispatch` ; un workflow sans ce déclencheur est refusé, raison dite | `docker.action` `composeDeploy`, signé : `pull` puis `up --no-deps`        |
+| Historique        | `deployment.all` / `deployment.allByCompose`                         | les exécutions du workflow sur la branche, un 304 ne coûte rien               | le nôtre : rien n'est sondé                                                |
+| Rattachement      | par identifiant, sinon par date                                      | par date : l'API ne rend pas l'exécution qu'elle crée                         | direct : la ligne attend son verdict                                       |
+| Journal de l'avis | la queue du journal (WebSocket)                                      | les étapes des jobs : faites, en cours, à venir                               | les lignes de l'agent, au fil de l'action                                  |
+| Journal complet   | le même flux, lu jusqu'au silence                                    | le texte de chaque job, par une redirection que le jeton ne suit pas          | les 64 derniers Kio, gardés avec le déploiement                            |
+| Limite de débit   | aucune                                                               | compteur épuisé : l'accès recule jusqu'à `x-ratelimit-reset`                  | une action longue à la fois par machine, verrou partagé avec Appareils     |
+| Offre             | compte dans `deploy.targets`                                         | compte dans `deploy.targets`                                                  | hors `deploy.targets` : rien n'est sondé, les machines ont leur limite     |
+
+---
+
+## 2. À l'usage
+
+| Vue                                 | Contenu                                                                                                                                                                                                                                                              |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Cibles**                          | toutes les cibles de l'espace, état du dernier déploiement, nombre de projets, lien perdu avec l'instance, rangeables au glisser-déposer                                                                                                                             |
+| **Fiche**                           | l'en-tête de la cible (retour, titre, actions, dont le bouton de réglages commun), « Déployer », l'historique tel que le fournisseur le rend et le journal de chacun                                                                                                 |
+| **Réglages → Sources**              | les accès de l'espace : une instance Dokploy (adresse + clé d'API, jointe en « Direct » ou « Par un appareil ») ou un jeton GitHub, avec ce que chacun dessert ([`Docs/SOURCES.md`](../../Docs/SOURCES.md))                                                          |
+| **Réglages → Notifications**        | les canaux de la feature ([`Docs/NOTIFICATIONS.md`](../../Docs/NOTIFICATIONS.md))                                                                                                                                                                                    |
+| **Réglages d'une cible**            | Général (accès, cible visée, type ou branche, intitulé, suppression), Notifications (les canaux que **cette** cible coche), Partage entre espaces et Permissions par rôle ([`Docs/SETTINGS.md`](../../Docs/SETTINGS.md), [`Docs/SHARING.md`](../../Docs/SHARING.md)) |
+| **Onglet Déploiements d'un projet** | les cibles reliées : une vue sur cette feature, composée par Projets                                                                                                                                                                                                 |
+
+La fiche d'une cible et l'onglet d'un projet sont le même composant
+(`TargetView`, composé par l'onglet à travers `DEPLOY_CLIENT_PROVIDER`), et
+suivent tous deux `deploy.detail` : ils montrent le même état, sans recharger.
+
+La tuile d'accueil compte les cibles de l'espace (`deploy.count`), pas l'état du
+dernier déploiement : ce serait la seule tuile à changer sans qu'on ait rien
+fait. Sans le droit `deploy`, la tuile reste à sa place, à demi-opacité, et
+affiche « Accès restreint » à la place de son contenu ; l'onglet d'un projet dit
+que le rôle n'ouvre pas les cibles qu'il déploie.
+
+---
+
+## 3. Comment ça marche
+
+### 3.1 Les commandes
+
+Dix-sept commandes sous le préfixe `deploy.`, en camelCase
+(`src/contracts/commands.ts`) :
+
+- **cibles** : `list`, `count`, `get`, `add`, `update`, `remove`, `reorder`,
+  `candidates`, `machines` ;
+- **déploiements** : `trigger`, `history`, `log` ;
+- **accès** : `credentialList`, `credentialAdd`, `credentialUpdate`,
+  `credentialRemove`, `credentialDevices`.
+
+Toute commande qui prend un `targetId` commence par `loadTarget` : la cible doit
+être visible de l'espace actif (chez elle, ou projetée ici), et
+`ctx.items.assert` refuse ce qu'une restriction de rôle masque ou passe en
+lecture seule. `loadHomeTarget` exige en outre que la cible soit chez
+l'appelant : la modifier et la supprimer se font au domicile ; une fenêtre lit,
+déclenche et suit, et tout ce qui s'écrit alors (la ligne, sa clé, son suivi)
+appartient au domicile.
+
+`deploy.trigger` écrit sa ligne **avant** d'appeler le fournisseur : si celui-ci
+accepte puis que la réponse se perd, il reste une trace de ce qui a été
+déclenché. Un refus passe la ligne en `failed` avec le message du fournisseur,
+puis remonte. Le suivi de fond est ensuite réveillé (`wakeSync`) plutôt
+qu'attendu à sa cadence.
+
+`deploy.history` interroge le fournisseur à chaque appel : réservée à la fiche,
+jamais à une liste. `deploy.log` retrouve la référence du journal dans
+l'historique que le client vient de lister (`historyCache.ts`, cinq minutes par
+cible, deux cents cibles au plus) : chez Dokploy, c'est un emplacement sur le
+disque du fournisseur, rien à exposer au client ; le fournisseur n'est
+réinterrogé qu'au raté.
+
+Le filet de démarrage (`MUTATION_VERB` dans `src/features/_topics.ts`) cherche un
+verbe juste après le point et ne reconnaît aucune commande en camelCase : un
+`mutates` oublié ne produit aucun avertissement, et se relit à la main sur
+chaque écriture.
+
+### 3.2 Le rapprochement de fond (`DeploySync`)
+
+Aucun fournisseur ne prévient DevEye de lui-même : Dokploy n'émet pas de webhook
+de forme générique (ses notifications sont mises en page pour Discord, Slack ou
+Telegram) et un webhook GitHub demanderait une route publique et un secret par
+dépôt, là qu'un sondage avec ETag ne coûte rien à un workflow qui ne bouge pas.
+L'état est donc **sondé**, cible par cible, par `src/server/service.ts` : ce que
+le fournisseur connaît entre en base, y compris un déploiement parti de
+l'interface de Dokploy, d'une CI ou d'un push git. La liste dit la vérité du
+dernier état connu même sans réseau vers l'instance, et une cible déployée par
+une CI a une frise complète sans que personne n'ait ouvert sa fiche. Chaque
+changement diffuse sur le sujet `deploy`.
+
+| Constante                     | Valeur                          | Ce qu'elle empêche                                                                 |
+| ----------------------------- | ------------------------------- | ---------------------------------------------------------------------------------- |
+| `DEPLOY_TICK_SECONDS`         | 10 s                            | la cadence du tour, donc celle du message de suivi (§3.3)                          |
+| `DEPLOY_CONCURRENCY`          | 16 cibles en vol, une par accès | quarante cibles en quarante requêtes d'un coup, une instance lente en tête de file |
+| `DEPLOY_SYNC_TIMEOUT_MS`      | 10 s par lecture de fond        | une instance muette qui garde sa place en vol                                      |
+| `DEPLOY_MIN_INTERVAL_SECONDS` | 60 s au repos                   | réinterroger une cible qui n'a rien à dire                                         |
+| `DEPLOY_BACKOFF_MAX_SECONDS`  | 15 min                          | marteler une instance en panne                                                     |
+| `DEPLOY_LINK_LOST_FAILURES`   | 3 échecs consécutifs            | crier au lien perdu sur un seul raté                                               |
+| `DEPLOY_LOG_TIMEOUT_MS`       | 3 s                             | une lecture de journal qui dépasserait le tour (§3.3)                              |
+| `DEPLOY_IMPORT_LIMIT`         | 20 lignes par appel             | recopier des centaines d'entrées anciennes                                         |
+| `DEPLOY_MATCH_WINDOW_SECONDS` | 120 s                           | rattacher par la date deux déploiements distincts                                  |
+| `DEPLOY_STALE_SECONDS`        | 6 h                             | entretenir sans fin un déploiement que le fournisseur a oublié                     |
+
+Une cible qui a un déploiement **en vol** échappe à l'intervalle au repos et
+passe à chaque tour : c'est là que l'état bouge à la dizaine de secondes.
+
+`listTargetsDue` trie en SQL et sert les espaces **à tour de rôle**
+(`ROW_NUMBER() OVER (PARTITION BY workspace_id …)`) : la première cible due de
+chaque espace passe avant la deuxième de quiconque. Un tour lance les cibles
+choisies sans les attendre ; le tour suivant reprend ce qui s'est libéré. Une
+cible en vol n'est pas relancée, et un accès n'a jamais qu'une cible en vol : une
+instance lente n'occupe qu'une place et ne retarde jamais les cibles d'une autre.
+Les cibles sans accès, celles d'un accès Dokploy sans adresse et celles que
+l'offre tient en pause sont écartées dans la requête. `DeploySync.wake()`,
+appelé par `deploy.trigger`, déclenche un tour hors cadence ; une garde de
+ré-entrance rend l'appel inoffensif s'il en tourne déjà un. `idle()` attend tout
+ce qui est en vol (l'arrêt du service s'en sert, les tests aussi).
+
+**Le recul se compte par accès, en mémoire**, jamais dans `synced_at` : 60 s au
+premier échec, doublé ensuite jusqu'à 15 min, remis à zéro au premier succès ;
+un fournisseur qui dit quand revenir (limite de débit, `retryAt`) est écouté.
+Exception : le relais d'un appareil qui ne s'ouvre pas (hors ligne, droit perdu)
+se constate sans rien envoyer, donc sans doublement, toutes les minutes ; l'agent
+qui revient est vu à la minute. Les cibles d'un accès en recul sont écartées dès
+la requête : une instance en panne ne tient plus la tête de file avec ses
+déploiements « en cours ». Ceux-ci passent quand même en suivi perdu à la borne
+des six heures.
+
+**Le lien perdu se dit.** Au troisième échec consécutif d'un accès, la ligne de
+l'accès garde la date et la cause (`unreachable_since`, `unreachable_error`),
+l'écran le montre (Sources, carte et fiche des cibles), et **un seul** avis
+« Lien perdu avec l'instance de « accès » » part : dix cibles sur la même
+instance tombent ensemble, et dix messages diraient une seule chose. Il va aux
+canaux cochés par les cibles de l'accès, chacun une fois (`notify.send(alert, {
+itemIds })`, l'union de leurs routes) : qui suit une cible apprend que son
+instance est tombée, sans rien régler de plus. L'avis nomme les cibles qui en
+dépendent (les cinq premières, le reste compté). Ne comptent que les échecs qui
+visent l'instance : le garde, le réseau ou le relais d'un appareil (statut 0),
+une clé refusée (401, 403). Une limite de débit dit quand revenir, un 404 ou un
+500 parle d'une cible : ni l'un ni l'autre ne sont un lien perdu. Au premier
+succès suivant, la ligne s'efface et le retour se dit, mais seulement si un canal
+avait accepté la perte (`unreachable_notified`) : jamais un « rétabli » sans
+« perdu ». L'état étant en base, un redémarrage ne répète pas la perte et
+n'oublie pas le retour.
+
+**`synced_at` porte deux rôles.** Il ordonne les cibles à réinterroger, **et**
+son `NULL` distingue le premier rapprochement des suivants. C'est ce qui empêche
+l'import initial de notifier : la première fois, tout l'historique d'une cible
+est « nouveau » sans que rien ne vienne de se produire. D'où le corollaire : un
+rapprochement qui échoue ne l'horodate pas, sinon le suivant prendrait tout
+l'historique pour du neuf. Le premier import tait le **passé**, pas le présent :
+une pile en cours de déploiement à cet instant-là entre en base non annoncée, et
+son avis part quand elle atterrit. `deployments.notified` complète le
+dispositif : un avis appartient au **déploiement**, pas au tour qui l'a vu, si
+bien qu'un déploiement terminé pendant que le serveur était arrêté a son avis au
+redémarrage, et ne l'a qu'une fois.
+
+**Le rattachement.** Une entrée du fournisseur retrouve sa ligne locale par
+`external_id`, sinon par proximité de date (deux minutes) : Dokploy ne rend pas
+toujours d'identifiant au déclenchement, GitHub jamais, et `deploy.trigger`
+écrit sa ligne avant d'appeler. La date est réservée aux lignes qui n'ont pas
+encore d'identifiant, sans quoi deux déploiements partis à quelques secondes
+d'intervalle se colleraient sur la même ligne ; un `Set` de lignes déjà
+appariées interdit qu'une même serve deux fois dans le tour. Une ligne locale que
+le fournisseur ne reconnaît jamais passe, au bout de six heures, en **suivi
+perdu** : `failed` avec une description qui le dit, et **sans avis**, parce
+qu'annoncer un échec qu'on n'a pas constaté serait pire que de se taire. La
+borne vaut aussi quand l'instance ne répond plus du tout, et la description le
+dit alors.
+
+**Les déploiements par une machine** ne sont pas sondés : `startAgentDeploy`
+suit l'action par `agents.dockerRun`, recueille les lignes de l'agent (les
+64 derniers Kio sont gardés), tient le message vivant au même rythme qu'une
+cible sondée et enregistre le verdict. Au démarrage, `recover()` passe en échec,
+sans avis, ceux restés en vol : leur attente vivait dans le processus précédent,
+plus personne n'en recevra le verdict.
+
+### 3.3 Les avis et le message qui suit le déploiement
+
+Un avis part à l'**atterrissage**, échec comme succès, y compris pour un
+déploiement lancé ailleurs. Il n'y a pas de « retour à la normale » :
+contrairement à Uptime, un déploiement est un fait ponctuel, pas un état
+continu ; la mise en production suivante le dira. Les canaux appartiennent à la
+feature (Réglages → Notifications), et chaque cible coche les siens dans ses
+propres réglages : une cible sans canal coché ne prévient personne, il n'y a pas
+d'héritage. Le module appelle la façade `notify` du SDK (`send(alert, { itemId,
+except })`) et ne voit ni les canaux ni leur résolution. L'avis en texte (mail,
+Slack, point d'entrée maison) dit la cible, l'état, les dates et la durée, puis
+la description du fournisseur, seule ligne qui dise pourquoi ; ses horodatages
+sont ceux de l'app (`formatMoment`, `formatDuration` de `Services/alertCore`),
+pour qu'un avis de déploiement ne semble pas venir d'un autre produit qu'une
+alerte de disponibilité.
+
+**Sur Discord, un seul message suit le déploiement du début à la fin.** Discord
+est le seul canal qui sache modifier un message envoyé : `POST
+/api/webhooks/{id}/{token}?wait=true` rend le message créé, donc son
+identifiant, et `PATCH /api/webhooks/{id}/{token}/messages/{id}` le modifie,
+sans limite de durée. Aucun bot, aucun jeton d'application : l'URL de webhook
+suffit. Le module passe par trois appels de la façade : `liveChannels({ itemId
+})` rend les canaux de la route de la cible capables de porter un message vivant
+(Discord) ; `postLive(channelId, message, messageId?)` publie sans identifiant,
+modifie avec, et rend l'identifiant à garder, ou `null` quand le canal refuse
+(message supprimé à la main, webhook révoqué : on s'arrête là sans republier) ;
+`send(alert, { itemId, except })` livre l'avis en texte en sautant les canaux
+dont le message vivant a conclu, sans quoi Discord recevrait le message modifié
+**et** un second message en clair juste en dessous. Le mail, lui, est toujours
+servi : il ne sait pas se modifier. Un canal d'un autre type garde son message
+unique à l'atterrissage.
+
+Un déploiement découvert **en vol** ouvre le message ; les tours suivants le
+**modifient** (barre, temps écoulé, queue du journal) jusqu'à la conclusion, qui
+remplace le tout par l'issue, la durée et l'erreur s'il y en a une. Un
+déploiement **trop court pour être vu en vol** reçoit exactement le même message,
+publié une seule fois : une fiche complète pour un déploiement d'une minute et
+trois lignes de texte pour celui d'à côté, sans que rien n'explique la
+différence, ne serait pas lisible. Les identifiants des messages vivent dans le
+blob chiffré de la ligne (`StoredDeployment.noticeIds`, un par canal) et sont
+**persistés** : un serveur redémarré au milieu d'un déploiement reprend les
+messages qu'il avait ouverts au lieu d'en poser de seconds. Passé
+`DEPLOY_STALE_SECONDS`, le message cesse d'être entretenu.
+
+La forme (`src/server/notice.ts`) suit celle des avis que Dokploy envoie
+lui-même, pour qu'on n'ait pas à réapprendre à lire un message reçu dans le même
+salon : trois colonnes (**projet, service, environnement**), puis type, date,
+durée, puis le lien vers la fiche et celui vers le dépôt, côte à côte quand ils
+sont deux. Le temps occupe **la même case** dans les deux états (« Écoulé »
+pendant, « Durée » après) : c'est le même message qui se transforme. La durée
+affichée est celle du fournisseur (`finishedAt - startedAt`), jamais une mesure
+de DevEye. L'intitulé est réduit à la **première ligne** du message de commit
+(cent caractères) : Dokploy y range le message entier. Les séquences ANSI de la
+sortie de build sont retirées, un bloc de code Discord les rendant telles
+quelles.
+
+**Le journal est un champ, pas un morceau de la description** : Discord rend
+toujours les `fields` après la `description`, et tant que le journal vivait dans
+la seconde, projet, service et durée se retrouvaient sous dix lignes de build.
+Le prix est un plafond de 1 024 caractères par champ, contre 4 096 pour une
+description : les lignes sont retirées **par le haut**, les plus anciennes,
+jusqu'à tenir, plutôt que de laisser Discord rejeter le message entier. Huit
+lignes au plus, coupées à 110 caractères.
+
+**La barre est une estimation, et le dit.** Aucun fournisseur ne publie de
+progression (Dokploy rend statut, dates, message d'erreur et chemin du journal ;
+GitHub, des étapes). La barre est calculée sur la **durée moyenne des dix
+derniers déploiements réussis de cette cible**, possible parce que le
+rapprochement garde l'historique en base. Les échecs sont écartés de la moyenne
+(un échec s'arrête en quelques secondes et ferait sauter la barre d'un
+déploiement sain à 100 % tout de suite) ; sans historique, pas de barre du tout,
+seulement le temps écoulé ; passé la moyenne, la barre reste pleine et le texte
+dit « plus long que d'habitude », un « 100 % » nu faisant croire à une fin.
+`progressBar` commence par `Number.isFinite` : `Math.min` et `Math.max`
+laissent passer `NaN`, et `repeat(NaN)` rend une chaîne vide sans lever.
+
+Ce que la cible dessert vient de son fournisseur (`place`, `repoUrl` de
+l'adaptateur) : chez Dokploy, le projet et l'environnement de `project.all`, un
+seul appel pour toute l'instance mémoïsé cinq minutes (ce sont des noms
+d'organisation, qui bougent rarement), et le dépôt de `application.one` ou
+`compose.one`, mémoïsé une heure. Instance injoignable, et l'avis retombe sur le
+nom DevEye : il perd ses colonnes, jamais son identité. `application.one` rend
+le fournisseur Git au complet, `githubPrivateKey` et `githubClientSecret`
+compris : seule l'adresse du dépôt sort de cette lecture, rien n'est mis en
+cache, journalisé ni rangé dans le blob de la cible. Le dépôt se lit de deux
+façons, guidées par `sourceType` parce que les colonnes d'une source abandonnée
+restent en base : `owner` + `repository` sur l'intégration GitHub, `customGitUrl`
+sur un git maison. GitLab et Gitea ne sont pas résolus : leurs colonnes ne
+portent que des noms, et l'hôte vit sur l'enregistrement du fournisseur. Une URL
+de clone qui porte un identifiant en est débarrassée avant d'écrire le lien.
+
+Le lien vers la fiche a la forme
+`/dashboard/project/{id}/environment/{id}/services/{kind}/{id}`.
+
+### 3.4 Les fournisseurs
+
+Le module ne parle à aucun fournisseur en direct : handlers et service passent
+par `DeployProviderAdapter` (`src/server/providers/types.ts`), un par famille
+d'accès (`PROVIDERS`, `providers/index.ts`) : `candidates`, `trigger`,
+`history`, `noticeLog`, `fullLog`, `place`, `repoUrl`, `location`, et les
+`kinds` de cible qu'il sait déployer. Chacun garde ses propres caches. Une cible
+portée par une machine n'a pas d'adaptateur : c'est l'agent qui répond
+(`src/server/agent.ts`).
+
+**Dokploy parle tRPC** (`src/server/providers/dokploy.ts`). L'adaptateur passe
+par `/api/trpc/<procédure>`, avec des charges utiles enveloppées par superjson
+(`{ json: … }` en entrée, en query pour une requête et en corps pour une
+mutation ; `{ result: { data: { json } } }` en réponse). Les cibles se découvrent
+par `project.all`, imbriquées dans les environnements de chaque projet ; les
+piles **compose** sont des cibles au même titre que les applications, d'où
+`target_kind`, qui décide de la procédure (`application.deploy` ou
+`compose.deploy`, `deployment.all` ou `deployment.allByCompose`). Le décodage est
+défensif : champs cherchés sous plusieurs noms, valeur neutre s'ils manquent, si
+bien qu'une instance d'une autre version dégrade l'affichage sans planter.
+
+Le journal d'un déploiement Dokploy vient du WebSocket `/listen-deployment`,
+hors de tRPC, qui **ne referme jamais la connexion** : c'est un `tail -f`, pas
+un téléchargement. C'est le **silence après le dernier octet** qui conclut
+(`LOG_IDLE_MS`, 300 ms : le rejeu arrive en une rafale de trames à quelques
+millisecondes d'écart), et non l'attente d'une fermeture qui ne vient pas. Un
+déploiement **en cours** rend ce qu'il a au premier silence, et la popup le relit
+toutes les cinq secondes tant qu'il tourne ; le plafond ne tranche que pour un
+flux qui ne s'interrompt jamais : 30 s à la demande, 3 s depuis le suivi de fond
+(`DEPLOY_LOG_TIMEOUT_MS`), les lectures d'une même cible étant faites en
+parallèle pour ne pas dépasser l'intervalle du tour.
+
+**GitHub Actions** (`src/server/providers/github.ts`) : une cible est un
+workflow d'un dépôt, lancé par `workflow_dispatch` sur une branche. Le
+catalogue parcourt les trente dépôts les plus récemment poussés du jeton
+(`/user/repos?sort=pushed`), quatre à la fois, et est mémoïsé cinq minutes. Un
+workflow sans `workflow_dispatch` est refusé, raison dite. L'API ne rend pas
+l'exécution qu'elle crée : le suivi la rattache par la date. L'avis montre les
+étapes des jobs (faites, en cours, à venir) ; le journal complet concatène le
+texte de dix jobs au plus, lus quatre à la fois dans l'ordre des jobs, par une
+redirection vers un stockage tiers que le garde revérifie et vers lequel le jeton
+ne suit pas ; au-delà d'un million de caractères, seule la fin est gardée. Un
+compteur de débit épuisé fait reculer l'accès jusqu'à `x-ratelimit-reset`.
+
+**Une machine** (`provider: 'agent'`) : la cible est un service docker compose
+d'une machine enrôlée (`moteur/projet/service`), que son agent déploie en
+récupérant son image puis en le recréant seul (`composeDeploy` : `pull` puis
+`up --no-deps`). Rien ne se construit sur la machine. `deploy.machines` liste
+les machines de l'espace avec ce qui les empêche de porter une cible (agent trop
+ancien pour la sonde `composeDeploy`, déploiements refusés par la politique
+locale) ; `deploy.candidates({ deviceId })` lit l'inventaire Docker par
+`agents.dockerInventory`. **Une machine ne se prête pas sans droit** : déclarer
+une cible sur une machine exige la permission Docker d'Appareils sur elle
+(`devices.authorize(deviceId, { extras: ['docker'] })`), parce que la cible donne
+ensuite à `deploy: write` le pouvoir de relancer ce service. La machine garde le
+dernier mot : sa politique locale (`allow_docker` et `allow_docker_deploy` dans
+`agent.toml`) peut refuser, et le refus revient comme un échec qui le dit. Une
+machine hors ligne refuse le déclenchement. Le verdict attend dans le
+processus : `agents.dockerRun` suit l'action, et le journal est le nôtre (en
+mémoire tant que l'agent parle, puis dans la ligne du déploiement).
+
+**Une instance Dokploy hors d'Internet se joint par un appareil.** Le garde des
+appels sortants de l'app (`Services/netFetch`) refuse une adresse privée
+(`OUTBOUND_ALLOW_PRIVATE`, à garder à `false` sur une instance partagée :
+l'ouvrir donnerait à tout compte le réseau de l'hôte, par toutes les
+fonctionnalités). Un accès Dokploy peut donc désigner un appareil : l'agent
+ouvre la connexion de son côté et la relaie (`agents.openTcp`), et `base_url` est
+alors l'adresse que voit la machine, `http://127.0.0.1:3000` pour un Dokploy qui
+n'écoute que sur elle. Les helpers `deviceRelay` du SDK portent le mécanisme,
+partagé avec Bases de données : `relayDeviceOptions` liste les appareils de
+l'espace avec ce qui empêche de les choisir (`deploy.credentialDevices`) ;
+`authorizeRelayDevice` vérifie, à l'enregistrement de l'accès, que l'appelant a
+le droit « Accès au réseau de l'appareil », et l'accès garde l'appareil **et** le
+membre qui l'a choisi (`author_user_id`) ; `relayForAuthor` rouvre le relais
+pour le travail sans session en revérifiant ce droit sur ce membre à chaque
+usage, le suivi de fond compris ; `openDeviceTunnel` pose un écouteur local qui
+tient lieu de l'hôte distant. Les appels tRPC passent par un connecteur undici
+branché sur cet écouteur, le nom de l'instance gardé pour TLS ; la WebSocket du
+journal reçoit sa propre `createConnection`. Hors du garde, une redirection n'est
+pas suivie : elle mènerait où l'instance veut. Les trois verrous sont ceux de
+Bases de données : le droit du membre, la version de l'agent (sonde `tunnel`),
+et la machine, qui ne joint que sa boucle locale sauf hôtes listés dans
+`tunnel_targets` (`allow_tunnel` dans `agent.toml`). Un appareil hors ligne fait
+reculer l'accès comme une instance injoignable, sans doublement.
+
+### 3.5 Le contrat avec Projets
+
+- `features/projects/src/server/deployLink.ts` porte `projects.deployList`,
+  `projects.deployLink` et `projects.deployUnlink`, sous `projects: write` :
+  c'est le projet qu'on modifie, lire l'historique et surtout déclencher
+  relèvent de `deploy`. Avant de relier, Projets demande au module si la cible
+  est visible de l'espace du projet (`DEPLOY_ITEMS_PROVIDER.exists`) et nomme
+  les cibles liées par `labelOf`. Sans module installé, relier est refusé en le
+  disant.
+- Le module lit `PROJECTS_USAGE_PROVIDER` (`features/projects/src/server/usageProvider.ts`)
+  pour le compte et la liste des projets qui déploient une cible (ceux de
+  l'espace appelant : une cible projetée montre les projets de la fenêtre), et
+  pour inscrire un déclenchement dans la **frise** du projet d'où il part
+  (`recordEvent`, dans l'espace de la cible, qui ne lève jamais : perdre une
+  ligne de frise ne transforme pas un déploiement en échec). Absent, la feature
+  dégrade : zéro projet partout.
+- Un seul sujet de diffusion, `deploy` : l'onglet d'un projet suit
+  `deploy.detail`, ses compteurs d'onglets se relisent à leur prochaine
+  ouverture, et c'est Projets qui ravive `projects` quand un déclenchement entre
+  dans une frise.
+- Côté client, l'onglet Déploiements d'un projet
+  (`features/projects/src/client/Deploy/` : `Deploy.tsx`,
+  `LinkTargetDialog.tsx`) compose `DEPLOY_CLIENT_PROVIDER` sans importer le
+  module : la liste des cibles de l'espace, une cible reliée en entier
+  (`LinkedTarget`, qui passe le `projectId` pour la frise, sans l'historique
+  complet qui reste un panneau de la feature), et le dialogue de déclaration. Le
+  menu « + » de la barre d'onglets du projet ouvre le même dialogue
+  (`AddFeatureDialog`).
+
+### 3.6 Le client
+
+`src/client/index.tsx` déclare la tuile (`DeployWidget`), la vue complète
+(`Deploy`), les panneaux de réglages (`general` : `TargetGeneralPanel` ;
+`sources` : `CredentialsPanel`), `cacheDurationMinutes: 0` (la fiche suit un
+déploiement en vol, une instance en cache continuerait de le suivre sans être
+vue) et le provider client.
+
+- `TargetDialog` **déclare** seulement, par un accès (« Dokploy ou GitHub
+  Actions ») ou « Sur une machine via un agent » ; une machine qu'on ne peut pas
+  choisir reste listée avec sa raison. Une fois déclarée, une cible se règle dans
+  l'onglet Général de sa fiche (`TargetGeneralPanel` : accès du même
+  fournisseur, cible visée, type ou branche, intitulé, suppression), là où le
+  bouton de réglages commun mène. Ce panneau est lu une fois à l'ouverture,
+  jamais resuivi : `deploy.detail` bouge à chaque état vu par le rapprochement,
+  et relire le formulaire à ce rythme effacerait la saisie en cours.
+- `CredentialsPanel` tient les accès : Dokploy (adresse et clé d'API, joint en
+  « Direct » ou « Par un appareil ») ou GitHub (jeton). Un secret n'est jamais
+  relu ; le champ laissé vide veut dire « garder celui en place ». Le « + » du
+  sélecteur d'accès d'un dialogue ouvre ce panneau par-dessus, et la cible adopte
+  l'accès créé au retour.
+- `Deploy.tsx` possède le niveau de présence `l1` (l'identifiant nu de la cible
+  ouverte). `TargetList` range les cartes au glisser-déposer (`useDragReorder` du
+  SDK) ; `TargetView` porte « Déployer », l'historique et l'ouverture d'un
+  journal ; `LogsDialog` relit un journal qui s'écrit encore toutes les cinq
+  secondes et s'arrête quand la ligne passe en succès ou en échec.
+- `format.ts` fixe le vocabulaire d'état (En attente, En cours, Réussi, Échoué)
+  et les budgets client : 35 s pour un aller-retour chez le fournisseur (le
+  serveur borne chaque appel à 30 s), 65 s pour un journal.
+
+### 3.7 Le partage entre espaces
+
+`shareTier: 'open'` : une cible se projette dans un autre espace, s'y déplace ou
+s'y copie ([`Docs/SHARING.md`](../../Docs/SHARING.md)). L'entrée `items` du
+serveur donne le domicile et le nom d'une cible visible (`homeOf`, `labelOf`), et
+porte `move` et `copy` :
+
+- `copy.ts` décrit l'arbre d'une cible (`deployTree`) : la ligne de
+  `deploy_targets` (cellule scellée `content`) et l'historique `deployments`,
+  marqué `cache`. L'accès ne suit pas (`omit`) : c'est une source de l'espace
+  quitté, et la copie arrive indéployable, ce que le plan annonce. `admit`
+  contrôle le quota `targets` dans l'espace d'arrivée.
+- `move.ts` rescelle les cellules sous la clé de l'espace d'arrivée, fait suivre
+  le `workspace_id` de l'historique, met `credential_id` à NULL et range la cible
+  en fin de liste.
+- Les listes déduisent `ctx.items.restrictions()`, et la tuile compte ce que la
+  liste montre. `deploy.remove` appelle `ctx.items.forget` : projections,
+  restrictions et route de notification ne tiennent à aucune clé étrangère.
+
+### 3.8 L'export du compte
+
+`src/server/accountExport.ts` ([`Docs/ACCOUNT_EXPORT.md`](../../Docs/ACCOUNT_EXPORT.md)) :
+`deploy_targets` dans `cibles.json`, `deployments` dans `deploiements.json`
+(corps déchiffrés), `ft_deploy_credentials` dans `acces.json` (sans le secret).
 
 ---
 
 ## 4. Carte du code
 
-Déploiements est un **module** (`DevEye/features/deploy`, dixième native
-rapatriée, 28 août 2026) : tout ce qui lui est propre vit dans son répertoire,
-`@deveye/types` ne garde que son identité (l'id dans les enums, le descripteur
-du registre) et les couplages déclarés (les trois providers ci-dessous).
-
-### Le module — `DevEye/features/deploy/`
-
 ```
-deveye-feature.json                 l'allowlist des tables historiques (deploy_targets, deployments)
+deveye-feature.json                 l'allowlist des deux tables historiques (deploy_targets, deployments)
 package.json                        deveye-feature-deploy ; `ws` en dépendance (le journal Dokploy)
-src/index.ts, src/manifest.ts       l'entrée isomorphe ; le descripteur étalé, `shareTier: 'open'`,
-                                    ressources deploy.count / list / detail, capacité `notify`, onglet Sources
-src/contracts/domain.ts             la cible, le déploiement, le candidat, l'accès (Dokploy ou GitHub)
-src/contracts/commands.ts           les quinze commandes (préfixe unique `deploy.`)
+src/index.ts, src/manifest.ts       l'entrée isomorphe ; le descripteur étalé, ressources deploy.count / deploy.list /
+                                    deploy.detail, capacités notify / agents / devices.read, quota targets,
+                                    réglages { feature: ['sources'], item: ['general'] }, lien « À propos » vers Mail
+src/contracts/domain.ts             la cible, le déploiement, le candidat, l'accès (Dokploy ou GitHub), la machine,
+                                    les quatre états, les quatre types de cible, le lien perdu
+src/contracts/commands.ts           les dix-sept commandes (préfixe `deploy.`)
 
-src/server/index.ts                 serverEntry : dépôt, handlers, service, `items` (domicile et nom d'une cible),
-                                    provider DEPLOY_ITEMS_PROVIDER offert à Projets
-src/server/repo.ts                  cibles, déploiements, et les accès (ft_deploy_credentials) ; sur SdkQueryable
-src/server/_shared.ts               Stored*, loadTarget / loadHomeTarget, toTarget, toDeployment, loadAccess,
-                                    le singleton du suivi (setSync / wakeSync), le contrat de Projets (compte, liste, frise)
-src/server/handlers.ts              les onze commandes + les quatre gestes de clés, en defineSdkFeature
-src/server/service.ts               DeploySync : le rapprochement de fond (minuteur propre), le message vivant
-src/server/notice.ts                la mise en forme du message vivant (barre, journal) ; helpers Discord de l'app par privilège
-src/server/providers/types.ts       le contrat d'un fournisseur (§10) ; providers/index.ts, la table PROVIDERS
-src/server/providers/dokploy.ts     l'adaptateur tRPC + le WebSocket du journal, et ses caches
+src/server/index.ts                 serverEntry : dépôt, migrations, handlers, service, `items` (domicile, nom, move, copy),
+                                    quota `targets`, export du compte, provider DEPLOY_ITEMS_PROVIDER offert à Projets
+src/server/repo.ts                  cibles, déploiements, accès (ft_deploy_credentials), listTargetsDue, stock du quota
+src/server/_shared.ts               Stored*, loadTarget / loadHomeTarget, targetCipherFor, toTarget, toDeployment,
+                                    toCredential, loadAccess, le singleton du suivi (setSync / wakeSync / startAgentDeploy /
+                                    liveAgentLog), le contrat de Projets (compte, liste, frise)
+src/server/handlers.ts              les dix-sept commandes, en defineSdkFeature
+src/server/service.ts               DeploySync : le rapprochement de fond, le lien perdu, le message vivant,
+                                    les déploiements par une machine
+src/server/notice.ts                la mise en forme des messages Discord (barre, journal, lien perdu) ; helpers Discord de
+                                    l'app, importés avec leur raison
+src/server/agent.ts                 les cibles portées par une machine : identifiant de service, inventaire, capacité
+src/server/historyCache.ts          l'historique que le client vient de lister, pour retrouver un journal
+src/server/providers/types.ts       le contrat d'un fournisseur ; providers/index.ts, la table PROVIDERS
+src/server/providers/dokploy.ts     l'adaptateur tRPC + le WebSocket du journal, le relais par un appareil, et ses caches
 src/server/providers/github.ts      GitHub Actions : workflow_dispatch, exécutions, étapes, journaux
-src/server/migrations/              ce que le module change à ses tables (001 : les fournisseurs)
+src/server/migrations/              001 les fournisseurs et les cibles par machine ; 002 l'accès par un appareil ;
+                                    003 le lien perdu
+src/server/copy.ts, move.ts         l'arbre d'une cible ; sa copie et son déplacement entre espaces
+src/server/accountExport.ts         l'export du compte
 src/server/uninstall.sql            DROP de ft_deploy_credentials (les tables historiques restent)
-src/server/*.test.ts                handlers (harnais SDK), service (Dokploy simulé), notice (les calculs)
-src/server/providers/*.test.ts      le journal Dokploy sur une vraie WebSocket, l'instance jointe par un relais, GitHub simulé
-src/server/providers/*.test.ts      dokploy (vraie WebSocket), github (réseau simulé)
+src/server/*.test.ts                handlers (harnais SDK), service (Dokploy simulé), notice (les calculs), repo (le SQL
+                                    des pauses et du stock), historyCache, accountExport
+src/server/providers/*.test.ts      dokploy (le journal sur une vraie WebSocket), dokploy.relay (l'instance jointe par un
+                                    relais), github (réseau simulé)
 
-src/client/index.tsx                clientEntry : widget, vue complète, panneaux Général et Sources, provider client
-src/client/Deploy.tsx               liste + fiche ; possède le niveau live `l1` (l'identifiant nu de la cible)
-src/client/TargetList.tsx           les cartes + le glisser-déposer
-src/client/TargetView.tsx           ⟵ le cœur partagé avec l'onglet d'un projet
-src/client/TargetDialog.tsx         déclarer seulement ; le « + » du sélecteur de clé ouvre Réglages → Sources
-src/client/TargetGeneralPanel.tsx   régler et supprimer : l'onglet Général des réglages d'une cible, où le bouton commun mène
-src/client/CredentialsPanel.tsx     les accès Dokploy et GitHub (panneau Sources du manifest, le sien : Git garde le sien)
-src/client/LogsDialog.tsx           le journal complet d'un déploiement
-src/client/DeployWidget.tsx         la tuile d'accueil
+src/client/index.tsx                clientEntry : tuile, vue complète, panneaux Général et Sources, provider client
+src/client/Deploy.tsx               liste + fiche ; possède le niveau live `l1`
+src/client/TargetList.tsx           les cartes et leur glisser-déposer (useDragReorder du SDK)
+src/client/TargetView.tsx           le cœur partagé avec l'onglet d'un projet : « Déployer », historique, journaux
+src/client/TargetDialog.tsx         déclarer seulement, par un accès ou sur une machine ; le « + » de l'accès ouvre
+                                    Réglages → Sources
+src/client/TargetGeneralPanel.tsx   l'onglet Général d'une cible : accès, cible visée, type ou branche, intitulé, suppression
+src/client/CredentialsPanel.tsx     les accès Dokploy et GitHub (panneau Sources de la feature)
+src/client/LogsDialog.tsx           le journal complet d'un déploiement, relu tant qu'il tourne
+src/client/DeployWidget.tsx         la tuile d'accueil (deploy.count)
 src/client/provider.tsx             ce que l'onglet d'un projet compose (DEPLOY_CLIENT_PROVIDER)
-src/client/api.ts, format.ts        featureApi(manifest) ; les libellés d'état et de date
+src/client/api.ts, format.ts        featureApi(manifest) ; les libellés d'état, de lieu et de date, les budgets client
 src/client/style.module.css         la feuille du module
 ```
 
-### Ce qui reste dans l'app — `DevEye/src/`
+Ce que le module importe de l'app, avec sa raison à chaque import :
+`Services/netFetch` (le garde des appels sortants, dans les handlers et les deux
+adaptateurs), `Services/alertCore` (`formatMoment`, `formatDuration`, dans le
+service) et `Services/notices/shared` (les helpers Discord, dans `notice.ts`).
+La déclaration ambiante de `ws` est `src/types/ws.d.ts` de l'app, incluse par le
+projet serveur des modules.
 
-```
-db/migrations/080_deploy_feature.sql             le renversement, données reprises
-db/migrations/085_deploy_sync_notifications.sql  le rapprochement de fond + les canaux
-db/migrations/099_deploy_credentials.sql         les clés Dokploy dans la table du module, la clé étrangère retirée
-features/projects/src/server/repo/links.ts       project_deploy_links : la table de Projets, ses lectures et ses comptes
-features/projects/src/server/deployLink.ts       les trois commandes de liaison ; l'existence d'une cible par DEPLOY_ITEMS_PROVIDER
-features/projects/src/server/usageProvider.ts    PROJECTS_USAGE_PROVIDER : ce que le module demande à Projets (et la frise)
-Services/notifications.ts                        la résolution des canaux et la livraison, derrière la façade `notify` du SDK
-Services/discord.ts                              publier ET modifier, derrière `notify.postLive`
-Services/notices/shared.ts                       les helpers Discord, importés par le module (privilège de native, commenté)
-features/_sdk/facade.ts                          la façade : send / hasRoute / liveChannels / postLive
-```
-
-### Client — `DevEye/client/src/`
-
-```
-Features/Projects/Deploy/        l'onglet d'un projet : compose moduleClientProvider(DEPLOY_CLIENT_PROVIDER),
-                                 dégrade proprement quand le module est absent
-Components/FeatureSettings/sections/NotificationsSection.tsx  les canaux et la
-                                 sélection par cible, communs aux émetteurs
-```
+Côté Projets : `features/projects/src/server/repo/links.ts` (la table
+`project_deploy_links`, ses lectures et ses comptes),
+`features/projects/src/server/deployLink.ts` (les trois commandes de liaison),
+`features/projects/src/server/usageProvider.ts` (`PROJECTS_USAGE_PROVIDER`, dont
+`recordEvent`) et `features/projects/src/client/Deploy/` (l'onglet d'un
+projet).
 
 ---
 
-## 5. Pièges, et pourquoi ils existent
+## 5. Les tables
 
-### La migration reprend les données, contrairement à 064
+| Table                   | À qui   | Contenu                                                                                                                                                                                                                                                                                                                                                  |
+| ----------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `deploy_targets`        | socle   | une cible : `provider` (`dokploy`, `github`, `agent`), `target_kind`, `external_id` en clair (il porte l'unicité : `(workspace_id, credential_id, external_id)` et `(workspace_id, device_id, external_id)`), `credential_id` (sans clé étrangère), `device_id` (en cascade sur `devices`), `sort_order`, `synced_at`, `content` chiffré (`name`, `ref`) |
+| `deployments`           | socle   | un déploiement : `external_id`, `status`, `started_at`, `finished_at`, `triggered_by_user_id` (`NULL` pour une tâche de fond ou un compte supprimé), `notified`, `content` chiffré (`title`, `description`, `url`, `noticeIds`, `log` d'une machine) ; en cascade sur la cible                                                                           |
+| `ft_deploy_credentials` | module  | un accès : `provider`, `label`, `base_url`, `secret_enc` chiffré à l'étage ouvert, `device_id` et `author_user_id` (mis à `NULL` à la suppression de l'appareil ou du compte : l'accès reste, et dit ce qui lui manque), `unreachable_since`, `unreachable_error`, `unreachable_notified` ; `uninstall.sql` la détruit                                   |
+| `project_deploy_links`  | Projets | la liaison `(project_id, target_id)`, en cascade des deux côtés                                                                                                                                                                                                                                                                                          |
 
-`064` avait dû faire table rase : `owner/repo` était chiffré, donc aucune requête
-SQL ne pouvait dériver le condensé qui portait la nouvelle unicité. Ici rien de
-tel — `external_id` est en clair, et `content` ne change pas de clé (il était
-déjà à l'étage ouvert). Les cibles remontent donc telles quelles, et **deux
-projets qui visaient la même application fusionnent sur une seule ligne**, ce qui
-est précisément le but.
-
-Une conséquence à connaître : un déploiement dont le projet n'avait plus de cible
-(déliée entre-temps) n'a plus rien à quoi pendre et part avec l'ancienne table.
-Son fait reste dans la frise du projet, qui l'a enregistré au déclenchement.
-
-### Un nom de clé étrangère est unique **par schéma**, pas par table
-
-`080` a échoué à son premier passage sur `CONSTRAINT fk_pdl_project` :
-`project_database_links` (migration 068) le tenait déjà. InnoDB refuse, et rien
-n'attrape cela avant l'exécution — deux fichiers de migration écrits à deux ans
-d'écart n'ont aucune raison de se relire, et l'abréviation naturelle
-(`project_deploy_links` → `pdl`) était la même. Même piège évité de justesse sur
-`fk_deployment_workspace` / `fk_deployment_user`, que `project_deployments`
-détient encore à l'instant où la nouvelle table est créée.
-
-→ **Avant d'écrire un `CONSTRAINT fk_…`, le chercher dans les migrations
-existantes.** Ou le lire dans la base :
-
-```sql
-SELECT constraint_name, table_name FROM information_schema.table_constraints
- WHERE constraint_schema = DATABASE() AND constraint_type = 'FOREIGN KEY';
-```
-
-### Un fichier qui peut s'arrêter au milieu doit pouvoir se rejouer
-
-Les migrations tournent au démarrage, **hors transaction**, et `_migrations`
-n'est écrit qu'après un succès complet. L'échec ci-dessus a donc laissé la base
-à mi-chemin — jetons renommés, `deploy_targets` créée, le reste absent — et le
-démarrage suivant rejouait le fichier **depuis le début**, pour buter cette fois
-sur un `RENAME TABLE` dont la source n'existait plus.
-
-`080` teste donc l'état avant chaque étape (`INFORMATION_SCHEMA` + SQL
-dynamique, le motif de `062`). Le point le plus subtil est la reprise de
-l'historique : sans clé d'unicité pour l'arrêter, un rejeu l'importerait **une
-seconde fois**. Sa garde n'est pas « l'ancienne table existe » mais « la
-nouvelle est vide ».
-
-### La collation d'une table neuve vient de la base, pas du schéma
-
-Un `CREATE TABLE` sans clause hérite du défaut de la **base**. Ce dépôt est tout
-entier en `utf8mb4_general_ci`, mais une base créée sur un MySQL 8 récent vaut
-`utf8mb4_0900_ai_ci`. La reprise joint une table neuve à une ancienne sur
-`external_id` : deux collations de part et d'autre, et la jointure lève `Illegal
-mix of collations` — au démarrage, hors transaction, à mi-migration.
-
-Le rejeu sur copie l'a produit, parce que la base d'essai avait été créée sans
-préciser son jeu de caractères. Les trois tables de `080` déclarent donc leur
-collation — mais **cela ne suffisait pas**, et le rejeu suivant l'a montré : sur
-une **installation neuve**, c'est l'ancienne table qui diverge, `061` la créant
-sans clause à son tour. Les deux cas sont symétriques et se produisent tous les
-deux pour de bon. Seule une comparaison explicite les couvre :
-
-```sql
-AND t.external_id = o.external_id COLLATE utf8mb4_general_ci
-```
-
-→ **Déclarer la collation des tables neuves, et celle des comparaisons entre
-ancien et neuf.** Et rejouer sur une base au défaut différent, exprès : ce qui y
-passe passera partout.
-
-### `RENAME TABLE`, et les clés étrangères qui suivent
-
-`project_credentials` est devenue `workspace_credentials` : elle n'a jamais rien
-eu de « projet », elle s'appelait ainsi parce qu'elle est née dans ce module. Les
-clés étrangères qui la visent suivent le nom automatiquement.
-
-### Dokploy ne parle pas REST
-
-La documentation publique décrit une API REST qui **n'existe pas** sur l'instance
-de référence : tout passe par tRPC sous `/api/trpc/<procédure>`, avec des charges
-utiles enveloppées par superjson. Il n'y a pas d'`application.all` (les cibles se
-découvrent par `project.all`, imbriquées dans les environnements), et une infra
-Dokploy est surtout faite de piles **compose**, pas d'applications — d'où
-`target_kind`, sans lequel une cible est indéployable. Le détail est dans
-[Projets](../projects/README.md) §5, où il a été écrit.
+Les deux tables historiques sont créées par les migrations du socle et listées
+dans l'allowlist de `deveye-feature.json`, qui les dispense du préfixe
+`ft_deploy_` ; `src/server/migrations/` les fait évoluer, et une table neuve y
+prendrait ce préfixe. Les trois migrations du module sont rejouables : chaque
+ajout est gardé par l'état lu dans `INFORMATION_SCHEMA`, et une colonne qui
+reçoit une clé étrangère vers `devices.id` prend la collation de cette colonne,
+lue au moment de l'exécution.
 
 ---
 
-## 6. Le rapprochement de fond, et les avis
+## 6. Configuration
 
-> Ajouté le 18 août 2026, migration `085`.
+Aucune variable `DEPLOY_*` : les bornes du rapprochement sont des constantes de
+`src/server/service.ts` (§3.2). Une variable de l'app concerne le module :
+`OUTBOUND_ALLOW_PRIVATE` (défaut `false`), qui décide si un accès « Direct » peut
+viser une adresse privée ; le chemin « Par un appareil » n'en a pas besoin.
 
-### 6.1 Ce qui était invisible
+---
 
-Seules les lignes écrites par `deploy.trigger` existaient en base. Un déploiement
-parti de l'interface de Dokploy, d'une CI ou d'un push git n'avait donc **aucune
-ligne**, et n'apparaissait que dans `deploy.history` — une requête vers
-l'instance, faite à l'ouverture d'une fiche. En arrivant sur la page, la liste ne
-montrait rien de tout cela, et l'état du « dernier déploiement » d'une cible
-pouvait dater de la dernière fois qu'on avait cliqué depuis DevEye.
-
-Le sondage porte désormais sur les **cibles** : chacune est réinterrogée, et ce
-que Dokploy connaît entre en base. La liste dit donc la vérité du dernier état
-connu même sans réseau vers l'instance, et une cible déployée par une CI a une
-frise complète sans que personne n'ait ouvert sa fiche.
-
-### 6.2 Des bornes, parce que c'est du sondage
-
-| Borne                         | Valeur                          | Ce qu'elle empêche                                                         |
-| ----------------------------- | ------------------------------- | -------------------------------------------------------------------------- |
-| `DEPLOY_TICK_SECONDS`         | 10 s                            | _c'est la cadence, voir 6.6_                                               |
-| `DEPLOY_CONCURRENCY`          | 16 cibles en vol, une par accès | quarante cibles en quarante requêtes d'un coup, une instance lente en tête |
-| `DEPLOY_SYNC_TIMEOUT_MS`      | 10 s par lecture de fond        | une instance muette qui garde sa place en vol                              |
-| `DEPLOY_MIN_INTERVAL_SECONDS` | 60 s **au repos**               | réinterroger une cible qui n'a rien à dire                                 |
-| `DEPLOY_BACKOFF_MAX_SECONDS`  | 15 min                          | marteler une instance en panne                                             |
-| `DEPLOY_LINK_LOST_FAILURES`   | 3 échecs consécutifs            | crier au lien perdu sur un seul raté                                       |
-| `DEPLOY_IMPORT_LIMIT`         | 20 lignes / appel               | recopier des centaines d'entrées anciennes                                 |
-| `DEPLOY_STALE_SECONDS`        | 6 h                             | entretenir sans fin un déploiement que le fournisseur a oublié             |
-
-Une cible qui a un déploiement **en vol** échappe à l'intervalle au repos et
-passe à chaque tour : c'est là que l'état bouge à la minute.
-
-`listTargetsDue` trie en SQL et sert les espaces **à tour de rôle**
-(`ROW_NUMBER() OVER (PARTITION BY workspace_id …)`) : la première cible due de
-chaque espace passe avant la deuxième de quiconque. Un tour lance les cibles
-choisies sans les attendre. Une cible encore en vol n'est pas relancée, et un
-accès n'a jamais qu'une cible en vol : une instance lente n'occupe qu'une place,
-et ne retarde jamais les cibles d'une autre.
-
-Le recul se compte **par accès**, en mémoire, jamais dans `synced_at` (voir
-6.3) : 60 s au premier échec, doublé ensuite jusqu'à 15 min, remis à zéro au
-premier succès. Exception : le relais d'un appareil qui ne s'ouvre pas (hors
-ligne, droit perdu) se constate sans rien envoyer, donc sans recul, toutes les
-minutes ; l'agent qui revient est vu à la minute, pas un quart d'heure après. Les cibles d'un accès en recul sont écartées dès la requête :
-une instance en panne ne tient plus la tête de file avec ses déploiements « en
-cours ». Ceux-ci passent quand même en suivi perdu à la borne des six heures
-(6.4).
-
-**Le lien perdu se dit.** Au troisième échec consécutif d'un accès
-(`DEPLOY_LINK_LOST_FAILURES`, soit environ trois minutes de recul), la ligne de
-l'accès garde la date et la cause (`unreachable_since`, `unreachable_error`,
-migration `003`), l'écran le montre (Sources, carte et fiche des cibles), et
-**un seul** avis « Lien perdu avec l’instance de « accès » » part : dix cibles
-sur la même instance tombent ensemble, et dix messages diraient une seule chose.
-Il va aux canaux cochés par les cibles de l'accès, chacun une fois
-(`notify.send(alert, { itemIds })`, l'union de leurs routes) : qui suit une
-cible apprend que son instance est tombée, sans rien régler de plus, et pas de
-route à part pour ça. L'avis nomme les cibles qui en dépendent (les cinq
-premières, le reste compté).
-Ne comptent que les échecs qui visent l'instance : le garde,
-le réseau ou le relais d'un appareil (statut 0), une clé refusée (401, 403). Une
-limite de débit dit quand revenir, un 404 ou un 500 parle d'une cible : ni l'un
-ni l'autre ne sont un lien perdu. Au premier succès suivant, la ligne s'efface
-et le retour se dit, mais seulement si un canal avait accepté la perte
-(`unreachable_notified`, comme l'incident d'Uptime) : jamais un « rétabli »
-sans « perdu ». L'état étant en base, un redémarrage ne répète pas la perte et
-n'oublie pas le retour.
-
-### 6.3 `synced_at` porte deux rôles, et c'est voulu
-
-Il ordonne les cibles à réinterroger, **et** son `NULL` distingue le premier
-rapprochement des suivants.
-
-C'est cette seconde lecture qui empêche l'import initial de notifier : la
-première fois, tout l'historique d'une cible est « nouveau » sans que rien ne
-vienne de se produire, et l'annoncer serait un mensonge sur la date. D'où le
-corollaire : **un rapprochement qui échoue ne l'horodate pas.** Sinon le suivant
-prendrait tout l'historique pour du neuf et enverrait un avis par ligne.
-
-Le premier import tait le **passé**, pas le présent : une pile en cours de
-déploiement à cet instant-là entre en base non annoncée, et son avis part quand
-elle atterrit — c'est un fait réel, pas du rattrapage d'historique.
-
-`deployments.notified` complète le dispositif, sur le modèle de
-`uptime_incidents.notified` : un avis appartient au **déploiement**, pas au tour
-de sondage qui l'a vu. C'est ce qui fait qu'un déploiement terminé pendant que le
-serveur était arrêté a bien son avis au redémarrage, et qu'il ne l'a qu'une fois.
-
-### 6.4 Le rattachement, et ce qu'il ne peut pas faire
-
-Une entrée du fournisseur retrouve sa ligne locale par `external_id`, sinon par
-proximité de date (deux minutes) : Dokploy ne rend pas toujours d'identifiant au
-déclenchement, et `deploy.trigger` écrit sa ligne **avant** d'appeler. La date
-est donc réservée aux lignes qui n'ont pas encore d'identifiant, sans quoi deux
-déploiements distincts partis à quelques secondes d'intervalle se colleraient sur
-la même ligne. Un `Set` de lignes déjà appariées interdit qu'une même serve deux
-fois dans le tour.
-
-Reste le cas où rien ne se rattache : une ligne locale que Dokploy ne reconnaît
-jamais. Au bout de six heures, ce n'est plus un déploiement en cours mais un
-**suivi perdu** — elle passe à `failed` avec une description qui le dit, et
-**sans avis** : on ne sait justement pas ce qui s'est passé, et annoncer un échec
-qu'on n'a pas constaté serait pire que de se taire. Sans cette borne, la ligne
-resterait `queued` pour toujours _et_ garderait sa cible dans la voie rapide à
-chaque tour. La borne vaut aussi quand l'instance ne répond plus du tout : la
-description le dit alors (« l'instance ne répond plus »).
-
-### 6.5 Les avis ont leurs propres canaux
-
-Le mécanisme est celui commun aux émetteurs (`Services/notifications.ts`,
-derrière la façade `notify` du SDK depuis le rapatriement : le module appelle
-`send(alert, { itemId, except })` et ne voit ni les canaux ni leur résolution),
-et il a changé deux fois depuis l'écriture de ce document : les canaux
-appartiennent à **la feature** (091, plus de liste commune aux cinq émetteurs
-ni de `notification_settings`, supprimée en 087), et la sélection vit sur
-**chaque cible** (092) : une cible sans canal coché ne prévient personne, il
-n'y a plus d'héritage depuis la feature. Voir `Docs/NOTIFICATIONS.md`.
-
-Un avis part à l'**atterrissage**, échec comme succès, y compris pour un
-déploiement lancé ailleurs. Il n'y a pas de « retour à la normale » à annoncer,
-contrairement à Uptime : un déploiement est un fait ponctuel, pas un état
-continu — la mise en production suivante le dira.
-
-### 6.6 Un minuteur à lui
-
-Le rapprochement a son propre ticker du SDK (`deps.createTicker`), à 10 s : un
-message de suivi ne peut pas se rafraîchir moins souvent que la boucle qui
-l'alimente. Le coût reste linéaire et modeste : dix cibles à 60 s font un appel
-toutes les six secondes vers leur instance.
-
-`DeploySync.wake()`, appelé par `deploy.trigger` (par le singleton du module,
-`wakeSync`, tolérant à l'absence du service), déclenche un tour hors cadence : le
-message d'un déploiement lancé depuis DevEye s'ouvre dans la foulée, sans
-attendre le battement. Le choix des cibles a sa propre garde de ré-entrance, et
-`DeploySync.idle()` attend les rapprochements en vol : l'arrêt du service s'en
-sert, les tests aussi.
-
-### 6.7 La limite de l'offre
+## 7. Les quotas de l'offre
 
 Une cible sondée interroge son fournisseur chaque minute, à vie : c'est ce que
-l'offre borne (`deploy.targets`, clé `targets` du manifest, voir
-`Docs/QUOTAS.md`). Le compte porte sur tous les espaces du propriétaire. Il est
-contrôlé dans `deploy.add` **après** la recherche qui rend l'ajout idempotent
-(redéclarer une cible n'en ajoute aucune), et dans `admit` pour une copie. Un
-déplacement ne change rien au compte.
+l'offre borne. Le manifest déclare le quota `targets` (un **stock**, libellé
+« cibles de déploiement »), ce qui donne la limite `deploy.targets`
+([`Docs/QUOTAS.md`](../../Docs/QUOTAS.md)). Les valeurs sont celles du module de
+facturation des comptes (`src/server/plans.ts` de Billing) : **3** cibles en
+offre gratuite, **20** en Pro, tous espaces du propriétaire confondus. Une
+installation sans module de facturation n'a aucune limite.
+
+Le contrôle est dans `deploy.add` (`ctx.quota.assert('targets', …)`), **après**
+la recherche qui rend l'ajout idempotent : redéclarer une cible n'en ajoute
+aucune et ne doit jamais buter sur la limite ; et dans `admit` de `copy.ts`
+pour une copie. Un déplacement ne change rien au compte. Les cibles portées par
+une machine ne comptent pas (`provider <> 'agent'` dans le compteur et le
+stock) : rien n'est sondé, et les machines ont leur propre limite. Le stock est
+listé du plus ancien au plus récent : après un retour à une offre plus basse,
+l'excédent passe en pause, le plus récent d'abord. Une cible en pause est écartée
+de `listTargetsDue`, refuse `deploy.trigger` et `deploy.log`
+(`ctx.quota.assertActive`), sert son historique local à `deploy.history` plutôt
+que d'interroger le fournisseur, et se présente avec `planPaused` à l'écran.
 
 ---
 
-## 7. Le message qui suit le déploiement
+## 8. Notifications
 
-> Ajouté le 19 août 2026. Discord uniquement — et c'est une exception assumée.
-
-### 7.1 Un seul message, du début à la fin
-
-Un déploiement découvert **en vol** ouvre un message Discord ; les tours suivants
-le **modifient** — barre d'avancement, temps écoulé, queue du journal — jusqu'à
-la conclusion, qui remplace le tout par l'issue, la durée, et l'erreur s'il y en
-a une. Pas trois messages : un seul, qui évolue.
-
-Un déploiement **trop court pour être vu en vol** reçoit exactement le même
-message, publié une seule fois. Huit secondes suffisent à passer entre deux
-battements, et la première version renvoyait ces cas-là vers l'avis en texte
-brut : on obtenait une fiche complète pour un déploiement d'une minute et trois
-lignes de texte pour celui d'à côté, sans que rien n'explique la différence.
-
-### 7.1 bis La forme suit celle des avis de Dokploy
-
-Trois colonnes — **projet, service, environnement** — puis type, date, durée,
-puis le lien vers la fiche. C'est la structure des notifications que Dokploy
-envoie lui-même, et s'en écarter obligerait à réapprendre à lire un message qu'on
-reçoit dans le même salon.
-
-Deux conséquences techniques :
-
-- DevEye ne retient d'une cible que son identifiant externe et le nom qu'on lui a
-  donné. Le projet et l'environnement viennent de `project.all` — **un seul
-  appel pour toute l'instance**, mémoïsé cinq minutes : ce sont des noms
-  d'organisation, qui bougent une fois par trimestre. Instance injoignable, et
-  l'avis retombe sur le nom DevEye ; il perd ses colonnes, jamais son identité.
-- Le lien vers la fiche a été **relevé sur l'instance, pas deviné** :
-  `/dashboard/project/{id}/environment/{id}/services/{kind}/{id}` répond `307`
-  (la redirection d'authentification, donc la route existe), là où les deux
-  formes plus courtes répondent `404`. Un lien faux enverrait le lecteur sur une
-  page d'erreur au moment précis où il cherche à comprendre un échec.
-- Le lien vers le **dépôt** ne peut pas venir du catalogue : relevé sur
-  l'instance, `project.all` ne rend d'une application que `applicationId`,
-  `applicationStatus` et `name` (et l'équivalent d'une pile). La source est sur
-  la fiche, d'où un `application.one` / `compose.one` par cible, mémoïsé une
-  heure : un dépôt bouge moins souvent qu'un nom de projet, et le message se
-  redessine toutes les dix secondes.
-
-⚠️ **`application.one` rend le fournisseur Git au complet**, `githubPrivateKey`
-et `githubClientSecret` compris. Seule l'adresse du dépôt sort de cette lecture :
-rien de cette réponse n'est mis en cache, journalisé, ni rangé dans le blob de la
-cible.
-
-Le dépôt lui-même se lit de deux façons, et de deux seulement : `owner` +
-`repository` quand la cible est sur l'intégration GitHub, `customGitUrl` quand
-elle est sur un git maison, dont l'hôte est dans l'URL. La lecture est guidée par
-`sourceType`, parce que les colonnes d'une source abandonnée restent en base
-après un changement. **GitLab et Gitea sont laissés de côté** : leurs colonnes ne
-portent que des noms, et l'hôte vit sur l'enregistrement du fournisseur, imbriqué
-dans la même fiche mais sous une forme qui n'a pas été relevée. Les ajouter
-demande donc de relever cette forme sur une instance qui en a une, pas de deviner
-`gitlab.com`. Enfin, une URL de clone porte parfois un identifiant : il est
-retiré avant d'écrire le lien, un salon n'a pas à le recevoir.
-
-Les deux liens sont côte à côte quand ils sont deux, pleine ligne quand il n'y
-en a qu'un : un champ `inline` seul laisserait les deux tiers de la ligne vides.
-
-L'intitulé est réduit à la **première ligne** du message de commit : Dokploy y
-range le message entier, et un commit bavard — sujet, ligne vide, quinze lignes
-de justification — remplissait le haut de l'avis à chaque rafraîchissement. Le
-corps est abandonné, pas déplacé : **un embed Discord n'a pas d'infobulle**, le
-seul survol possible passant par un lien masqué, ce qui obligerait à transformer
-l'intitulé en lien alors que celui vers Dokploy occupe déjà son propre champ. Qui
-veut le message complet l'ouvre là-bas. Les points de suspension ne sont ajoutés
-que si la ligne elle-même a été coupée (100 caractères) : signaler l'existence
-d'un corps de commit n'apprendrait rien.
-
-Le temps occupe **la même case** dans les deux états — « Écoulé » pendant,
-« Durée » après. C'est le même message qui se transforme : l'œil ne doit pas
-avoir à le rechercher au moment de la conclusion.
-
-⚠️ **Le journal est un champ, pas un morceau de la description**, et ce n'est pas
-un détail de goût : Discord rend toujours les `fields` **après** la
-`description`, sans réglage possible. Tant que le journal vivait dans la seconde,
-projet, service et durée se retrouvaient sous dix lignes de build. Le déplacer
-est le seul moyen de les faire remonter.
-
-Le prix est un plafond : la valeur d'un champ est limitée à 1024 caractères là où
-une description en accepte 4096. `logField` retire donc des lignes **par le
-haut** — les plus anciennes, les moins utiles — jusqu'à tenir, plutôt que de
-laisser Discord rejeter le message entier.
-
-Discord est le seul canal qui le permette :
-
-- `POST /api/webhooks/{id}/{token}` **`?wait=true`** rend le message créé, donc
-  son identifiant. Sans ce paramètre, la réponse est un `204` vide — c'est ce que
-  fait la livraison ordinaire, qui n'en a pas l'usage.
-- `PATCH /api/webhooks/{id}/{token}/messages/{id}` le modifie, **sans limite de
-  durée**. Différence de fond avec les jetons d'interaction, qui expirent au bout
-  d'un quart d'heure : un déploiement d'une heure se suit dans un seul message.
-
-Aucun bot, aucun jeton d'application : l'URL de webhook déjà collée suffit.
-
-### 7.2 Ce que ça coûte à l'invariant « on ne demande jamais quel service »
-
-`Services/notifications.ts` est délibérément agnostique — une URL, une charge
-utile à trois têtes (`content` pour Discord, `text` pour Slack, les champs
-structurés pour un point d'entrée maison), et jamais la question posée à la
-configuration. Le suivi vivant la pose, forcément.
-
-Il est donc une **couche en plus**, jamais un remplacement : c'est le type
-déclaré du canal (`discord`) qui dit qu'il sait modifier ce qu'il a envoyé, et
-tout ce qui n'en est pas garde son message unique à l'atterrissage. Rien de
-nouveau n'est demandé à qui a réglé un webhook Discord, rien n'est retiré à
-qui en a réglé un autre.
-
-Depuis le rapatriement, le module ne voit **aucune URL de webhook** : la façade
-`notify` du SDK porte le suivi vivant en trois appels. `liveChannels({ itemId })`
-rend les canaux de la route de la cible capables de porter un message vivant
-(Discord aujourd'hui) ; `postLive(channelId, message, messageId?)` publie sans
-identifiant, modifie avec, et rend l'identifiant à garder (ou `null` quand le
-canal refuse : message supprimé à la main, webhook révoqué, et l'on s'arrête là
-sans republier) ; `send(alert, { itemId, except })` livre l'avis en texte en
-sautant les canaux dont le message vivant a conclu. Le corps de tout cela
-(`Services/discord.ts`, `Services/notifications.ts`) reste à l'app.
-
-⚠️ Corollaire à ne pas manquer : **quand le suivi vivant a conclu, le webhook est
-retiré de la livraison finale**. Sans cela Discord recevrait le message modifié
-_et_ un second message en clair juste en dessous. Le mail, lui, est toujours
-servi — il ne sait pas se modifier.
-
-Les identifiants des messages vivent dans le blob chiffré de la ligne
-(`StoredDeployment.noticeIds`, un par canal : `identifiant de canal →
-identifiant de message`) et non dans une colonne : rien ne les interroge, le
-blob est déjà réécrit à chaque changement d'état, et une colonne aurait coûté une
-migration. Ils sont **persistés**, ce qui est le point : un serveur redémarré au
-milieu d'un déploiement reprend les messages qu'il avait ouverts, au lieu d'en
-poser de seconds à côté.
-
-### 7.3 La barre est une estimation, et le dit
-
-**Dokploy ne publie aucune progression.** La réponse de `deployment.all` a été
-relevée sur l'instance de référence, champ par champ : `deploymentId`, `title`,
-`description`, `status`, `logPath`, `pid`, `createdAt`, `startedAt`,
-`finishedAt`, `errorMessage`, et des identifiants de rattachement. Rien qui
-ressemble à un pourcentage ou à une étape. Le vérifier valait mieux que le
-supposer : c'est ce relevé qui a décidé de la suite.
-
-La barre est donc calculée sur la **durée moyenne des dix derniers déploiements
-réussis de cette cible** — possible seulement parce que le rapprochement de fond
-garde l'historique en base (§6). Trois précautions :
-
-- **les échecs sont écartés de la moyenne.** Un échec s'arrête à la première
-  étape qui casse, souvent en quelques secondes ; les mêler ferait chuter
-  l'estimation à chaque build raté, et la barre d'un déploiement sain sauterait à
-  100 % au bout de dix secondes ;
-- **sans historique, pas de barre du tout** — seulement le temps écoulé. C'est le
-  cas honnête pour une cible neuve ;
-- **le dépassement est dit.** Passé la moyenne, la barre reste pleine et le texte
-  annonce « plus long que d'habitude ». Un « 100 % » nu sur un déploiement qui
-  continue ferait croire à une fin.
-
-Le bornage à [0, 100] % a d'ailleurs un piège que le test a trouvé :
-`Math.min`/`Math.max` **laissent passer `NaN`**, et `repeat(NaN)` rend une chaîne
-vide sans lever — la barre _disparaissait_ au lieu d'être bornée. D'où le
-`Number.isFinite` en tête de `progressBar`.
-
-### 7.4 Le journal, et pourquoi sa lecture est brève
-
-⚠️ **La durée affichée est celle de Dokploy**, jamais une mesure de DevEye :
-`finishedAt - startedAt`, tels que `deployment.all` les rend. Relevé sur
-l'instance, `createdAt` vaut toujours `startedAt` — il n'y a donc aucun temps de
-file d'attente caché qu'on pourrait ajouter, et aucun autre couple
-d'horodatages dans la charge utile.
-
-La queue du journal (8 lignes) vient du WebSocket `/listen-deployment`, déjà
-utilisé par `deploy.log`.
-
-⚠️ **`/listen-deployment` ne referme JAMAIS la connexion** — c'est un `tail -f`,
-pas un téléchargement. Le code d'origine attendait la fermeture, plafonnée à
-trente secondes ; mesuré sur l'instance de référence, les 22 ko d'un journal
-arrivent en **un seul message, 185 ms** après l'ouverture, puis la socket reste
-vivante (toujours ouverte après 40 s). La popup affichait donc « Chargement… »
-une demi-minute pour un journal déjà complet, sans que rien n'échoue ni
-n'apparaisse dans un journal d'erreurs.
-
-C'est le **silence après le dernier octet** qui conclut désormais
-(`LOG_IDLE_MS`, 300 ms : le rejeu d'un `tail -n +1 -f` arrive en une rafale de
-trames à quelques millisecondes d'écart), et non l'attente d'une fermeture qui
-ne vient pas. Un déploiement **en cours** rend ce qu'il a au premier silence,
-et la popup le relit toutes les cinq secondes tant qu'il tourne ; le plafond ne
-tranche plus que pour un flux qui ne s'interrompt jamais :
-`DEPLOY_LOG_TIMEOUT_MS` vaut 3 s au lieu des 30 s du régime à la demande. Les
-lectures d'une même cible sont faites **en parallèle** : les enchaîner ferait
-dépasser l'intervalle dès deux déploiements simultanés.
-
-`deploy.log` retrouve la référence du journal dans l'historique que le client
-vient de lister (`historyCache.ts`, cinq minutes par cible) : l'aller-retour
-`deployment.all` qui précédait chaque ouverture ne se fait plus qu'au raté. Les
-journaux de jobs GitHub se lisent quatre à la fois, dans l'ordre des jobs.
-
-Les séquences ANSI sont retirées : Dokploy colore sa sortie de build, et un bloc
-de code Discord les rendrait telles quelles.
+Voir §3.3 : un avis à l'atterrissage de chaque déploiement, échec comme succès,
+ceux lancés ailleurs compris ; un avis quand le lien avec l'instance d'un accès
+se perd, puis revient, vers les canaux de toutes les cibles qu'il dessert. Les
+canaux sont ceux de la feature, la sélection vit sur chaque cible, et Discord
+porte en plus un message vivant qui suit le déploiement. La fiche « À propos » du
+module relie Mail (`links` du manifest) : les avis par courriel partent par un
+compte Mail.
 
 ---
 
-## 8. Vérification
+## 9. Tests
 
 ```bash
-./ci.sh    # lint + typecheck des trois dépôts + build client
-diff -rq DevEye-Types/src DevEye/node_modules/@deveye/types/src   # doit être vide
-npm run ci:features                                                # les modules : lint, format, typecheck, tests
-DOTENV_CONFIG_PATH=.env.test npx tsx --test "features/deploy/src/**/*.test.ts"
+npm run test:features
 ```
 
-Les tests du module tournent sans base ni réseau (harnais
-`@deveye/types/sdk/testing` : dépôt en mémoire, Dokploy factice injecté dans
-`DeploySync`), sauf `dokploy.test.ts`, qui monte une vraie WebSocket locale
-pour reproduire le seul comportement qui compte (§7.4 : le serveur ne ferme
-jamais).
-
-**Migration** : rejeu obligatoire sur une copie d'un dump avant livraison, et
-sur une copie **au défaut de collation différent** — c'est ce qui révèle les
-jointures entre table neuve et table ancienne. Deux scénarios à couvrir, pas
-un : la base vierge de la migration (production) **et** la base laissée à
-mi-chemin par un échec (celle de développement, une fois que c'est arrivé).
-Ce que la copie au défaut différent attrape à coup sûr : une table neuve avec
-une clé étrangère vers `devices.id`, qu'elle déclare sa collation ou qu'elle
-hérite du défaut. Sur une base restaurée d'un dump, `devices` arrive avec sa
-collation d'origine épinglée, et le défaut d'accueil peut être un autre. La
-seule forme juste partout lit la collation de la colonne référencée dans
-`INFORMATION_SCHEMA` et construit le `CREATE TABLE` par `CONCAT` + `PREPARE`
-(patron de la 098).
-
-```bash
-mysqldump ... DevEye > /tmp/dump.sql
-mysql -e "CREATE DATABASE DevEye_migdry"           # défaut serveur, exprès
-mysql DevEye_migdry < /tmp/dump.sql
-mysql DevEye_migdry < src/db/migrations/0XX_….sql  # deux fois : ré-entrance
-```
-
-### Points d'attention à l'essai manuel
-
-1. **Reprise** — après migration, les cibles d'avant sont là, leur historique
-   aussi, et les projets qui les déployaient les voient toujours.
-2. **Partage** — relier la même cible à deux projets ; sa fiche annonce le
-   partage, et délier de l'un ne retire rien à l'autre.
-3. **Droits** — un rôle sans `deploy` : la tuile disparaît, l'onglet d'un projet
-   passe en « accès restreint », et le « + » de la barre d'onglets ne propose
-   plus le déploiement. ⚠️ _Fail-closed_ : les rôles existants n'ont pas ce
-   droit tant qu'on ne le leur accorde pas — le propriétaire, lui, l'a d'office.
-4. **Jeton retiré** — la cible reste, se peint en danger, annonce « accès
-   retiré » et refuse de se déclencher.
-5. **Suivi d'état** — déclencher, puis regarder « En cours » passer à « Réussi »
-   sans recharger, sur la fiche **et** dans l'onglet du projet.
-6. **Confidentialité** — passer un projet en confidentiel retire ses liaisons ;
-   les cibles et leur historique survivent.
-7. **Rapprochement** — déployer **depuis Dokploy**, sans toucher à DevEye : la
-   ligne apparaît d'elle-même dans la liste et dans la fiche, au plus tard au
-   quart d'heure, sans avoir ouvert quoi que ce soit.
-8. **Premier import** — déclarer une cible qui a déjà de l'historique : il entre
-   en base, et **aucun avis ne part**. Le déploiement _suivant_, lui, en produit
-   un.
-9. **Avis** — régler un webhook dans « Notifications », déployer, vérifier qu'un
-   seul message arrive à l'atterrissage. Puis redémarrer le serveur au milieu
-   d'un déploiement : l'avis part quand même au retour, et une seule fois.
-10. **Message vivant (Discord)** — déployer et regarder **un seul** message se
-    remplir : barre, journal, puis conclusion. Vérifier qu'aucun second message
-    en clair ne le suit. Redémarrer le serveur en cours de déploiement : c'est le
-    **même** message qui conclut, pas un nouveau.
-11. **Webhook non-Discord** — même essai sur une URL Slack ou maison : un seul
-    message, à la fin, comme avant. Aucune tentative de modification.
-12. **Barre sans référence** — première mise en production d'une cible neuve : le
-    message affiche le temps écoulé et **aucune barre**.
-
-## 9. Le module (28 août 2026)
-
-Déploiements est la dixième native rapatriée sur le SDK des features
-(`Docs/FEATURE_SDK.md`, « La migration des natives »). Ce que le rapatriement a
-changé, en plus des chemins du §4 :
-
-- **Les clés Dokploy ont leur table** (`ft_deploy_credentials`, migration
-  `099` du socle : c'est le socle qui crée et copie, une migration de module
-  ne pouvant pas écrire dans `workspace_credentials`), et leurs quatre gestes
-  sont ceux du module. `_credentials.ts` et `db/repos/credentials.ts` n'ont
-  plus connu que GitHub, jusqu'à ce que Git suive le même chemin (`100`,
-  `ft_git_credentials`) et que la table commune disparaisse avec eux. Le
-  module possède la table : son `uninstall.sql` la détruit, les deux tables
-  historiques restent.
-- **Le module ne lit aucune table de Projets.** `project_deploy_links` et ses
-  lectures (`listDeployTargetIds`, `linkDeployTarget`, `unlinkDeployTarget`,
-  `unlinkAllDeployTargets`, `listDeployUsage`, `countDeployLinks`) sont
-  chez Projets (`features/projects/src/server/repo/links.ts`), à côté des
-  services surveillés et des bases ; `project_count` a quitté le dépôt du
-  module, `toTarget` reçoit le compte. Dans un sens, Projets demande au
-  module si une cible existe avant de la relier (`DEPLOY_ITEMS_PROVIDER`,
-  publié par le service du module, lu par `ctx.providers` dans
-  `features/projects/src/server/deployLink.ts`) ; dans l'autre, le module
-  lit le contrat de Projets (`PROJECTS_USAGE_PROVIDER`, offert par l'app
-  tant que Projets était native, publié par le service du module Projets
-  depuis) : combien de projets déploient chaque
-  cible, lesquels (`deploy.get` liste les projets d'ICI, comme avant), et la
-  **frise** d'un projet pour un déploiement parti de son onglet
-  (`recordEvent`, élargissement du contrat pour ce module : l'ex
-  `recordProjectEvent` lisait `projects` et `project_events` en direct).
-- **Le suivi vivant passe par la façade** `notify` du SDK, élargie pour ce
-  module (§7.2) : `liveChannels`, `postLive`, `send` avec `except`. Le module
-  ne voit ni URL de webhook ni canal résolu ; `hasChannel` n'a plus lieu
-  d'être appelé, la façade ne fait rien sans canal routé (le même « toujours
-  tenté : la route décide » qu'Uptime).
-- **Un seul sujet de diffusion**, `deploy`. Le SDK admet depuis le
-  rapatriement de Projets une liste (`mutates: ['deploy', 'projects']`,
-  `live.changed(ws, topics)`), mais ce module n'en a pas besoin : l'onglet
-  d'un projet suit `deploy.detail`, donc voit l'état changer, ses compteurs
-  d'onglets se relisent à leur prochaine ouverture, et un déclenchement
-  inscrit dans une frise ravive `projects` par le contrat de Projets
-  lui-même. `deploy.remove` et `deploy.trigger` déclaraient
-  `['deploy', 'projects']` en natif.
-- **Le service accepte une couture de test** (`new DeploySync(deps, providers)`,
-  où `DokployProvider` prend un client simulé) : `service.test.ts` rejoue le premier import silencieux, le message
-  ouvert puis modifié puis conclu, l'avis en texte avec `except`, le suivi
-  perdu, sans réseau.
-- **Deux privilèges de native**, commentés à chaque import : les helpers
-  Discord de `Services/notices/shared.ts` dans `notice.ts`, `formatMoment` /
-  `formatDuration` de `Services/notifications` dans le service. Tout le reste
-  (`dokploy.ts`, `notice.ts`, le dépôt, les handlers, le service) a déménagé
-  tel quel, commentaires compris.
-- **`src/types/ws.d.ts` reste dans l'app** : la déclaration ambiante de `ws`
-  (dépendance du module) est incluse par le projet serveur des modules.
-
-## 10. Les fournisseurs
-
-Le module ne parle à aucun fournisseur en direct : handlers et service passent
-par `DeployProviderAdapter` (`src/server/providers/types.ts`), un par famille
-d'accès (`PROVIDERS`, `providers/index.ts`). Chacun projette son vocabulaire sur
-les quatre états et garde ses propres caches : le catalogue d'une instance
-Dokploy (5 min) et le dépôt d'une cible (1 h) ; les exécutions d'un workflow
-GitHub avec leur ETag. Une cible portée par une machine n'a pas d'accès : c'est
-l'agent qui répond (`src/server/agent.ts`).
-
-|                   | Dokploy                                                              | GitHub Actions                                                                | Une machine                                                               |
-| ----------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| Accès             | adresse de l'instance + clé d'API, par le serveur ou par un appareil | jeton à grain fin, sans adresse                                               | aucun : la machine de l'espace, et la permission Docker de qui la déclare |
-| Cible             | application ou pile compose                                          | workflow d'un dépôt sur une branche (`propriétaire/dépôt#id`)                 | service compose (`moteur/projet/service`)                                 |
-| Déclencher        | `application.deploy` / `compose.deploy`                              | `workflow_dispatch` ; un workflow sans ce déclencheur est refusé, raison dite | `docker.action` `composeDeploy`, signé : `pull` puis `up --no-deps`       |
-| Historique        | `deployment.all` / `deployment.allByCompose`                         | les exécutions du workflow sur la branche, un 304 ne coûte rien               | le nôtre : rien n'est sondé                                               |
-| Rattachement      | par identifiant, sinon par date                                      | par date : l'API ne rend pas l'exécution qu'elle crée                         | direct : la ligne attend son verdict                                      |
-| Journal de l'avis | la queue du journal (WebSocket)                                      | les étapes des jobs : faites, en cours, à venir                               | les lignes de l'agent, au fil de l'action                                 |
-| Journal complet   | le même flux, lu jusqu'au silence                                    | le texte de chaque job, par une redirection que le jeton ne suit pas          | les 64 derniers Ko, gardés avec le déploiement                            |
-| Limite de débit   | aucune                                                               | compteur épuisé : l'accès recule jusqu'à `x-ratelimit-reset`                  | une action longue à la fois par machine, verrou partagé avec Appareils    |
-| Offre             | compte dans `deploy.targets`                                         | compte dans `deploy.targets`                                                  | hors `deploy.targets` : rien n'est sondé, les machines ont leur limite    |
-
-**Le jeton GitHub de Déploiements n'est pas celui de Git.** Git lit des dépôts
-(Contents en lecture) ; ici on lance des workflows (Actions en écriture).
-Partager le jeton donnerait à `git: write` le pouvoir de déployer, ce que le
-§2.2 refuse. Un accès ne change jamais de fournisseur, et une cible ne désigne
-qu'un accès du sien.
-
-**Une machine ne se prête pas sans droit.** Déclarer une cible sur une machine
-exige la permission Docker d'Appareils sur elle (`devices.authorize` avec
-`extras`, dans le SDK), parce que la cible donne ensuite à `deploy: write` le
-pouvoir de relancer ce service. La machine garde le dernier mot : sa politique
-locale (`allow_docker_deploy`) refuse le déploiement, et le refus revient comme
-un échec qui le dit. Un agent trop ancien pour `composeDeploy` est grisé au
-choix de la machine.
-
-**Le verdict attend dans le processus.** `DeploySync.startAgentDeploy` suit
-l'action par `agents.dockerRun` (35 min au plus, l'agent en borne l'action
-entière à 30) et tient le message vivant au même rythme qu'une cible sondée. Au
-démarrage, `recover` passe en échec, sans avis, les déploiements par machine
-restés en vol : plus personne n'en recevra le verdict.
-
-**Une instance Dokploy hors d'Internet se joint par un appareil.** Le garde des
-appels sortants refuse une adresse privée (`OUTBOUND_ALLOW_PRIVATE`, à garder à
-`false` sur une instance partagée : l'ouvrir donnerait à tout compte le réseau
-de l'hôte, par toutes les fonctionnalités). Un accès Dokploy peut donc désigner
-un appareil : l'agent ouvre la connexion de son côté et la relaie
-(`agents.openTcp`, les helpers `openDeviceTunnel` et `relayForAuthor` du SDK,
-partagés avec Bases), et `base_url` est alors l'adresse que voit la machine,
-`http://127.0.0.1:3000` pour un Dokploy qui n'écoute que sur elle. Les appels
-tRPC passent par un écouteur local et un connecteur undici qui s'y branche, le
-nom de l'instance gardé pour TLS ; la WebSocket du journal reçoit sa propre
-`createConnection`. Hors du garde, une redirection n'est pas suivie. Les trois
-verrous sont ceux de Bases : le droit « Accès au réseau de l'appareil » du
-membre qui a choisi l'appareil (`author_user_id`), revérifié à chaque usage, le
-suivi de fond compris ; la version de l'agent (sonde `tunnel`) ; et la machine,
-qui ne joint que sa boucle locale sauf hôtes listés dans `tunnel_targets`. Un
-appareil hors ligne fait reculer l'accès comme une instance injoignable.
-
-La migration `migrations/001_providers.sql` a donné un `provider` aux accès,
-élargi `external_id` à 255 caractères, et ajouté `device_id` (clé étrangère
-vers `devices`, en cascade) avec son unicité par espace et par machine. La
-`002_device.sql` a donné aux accès leur `device_id` et leur `author_user_id`
-(clés étrangères mises à `NULL` à la suppression : l'accès reste, et dit ce
-qui lui manque).
-
-## Modules privés au déploiement
-
-Le serveur tourne en tsx sur les sources : un module privé doit être PRÉSENT
-dans l'arbre déployé. La recette : le dossier du module dans le contexte de
-build, `features.local.json` posé à la racine de l'app (entrée
-`{ "package": ..., "path": "../<module>" }`), puis `npm run gen:features`
-AVANT `npm run build` du client (la glue locale est importée statiquement).
-L'image publique, elle, n'exécute que `gen:features --ensure-local` : stubs
-vides, aucun module privé embarqué. Les variables d'environnement et montages
-propres à un module sont documentés dans son README.
+depuis `DevEye/`. Les tests du module tournent sans base ni réseau, sauf
+`dokploy.test.ts` et `dokploy.relay.test.ts`, qui montent une vraie WebSocket
+locale pour reproduire le comportement qui compte : le serveur ne ferme jamais.

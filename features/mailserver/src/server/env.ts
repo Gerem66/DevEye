@@ -19,7 +19,7 @@ export const MAILSERVER_ENV = defineModuleEnv({
     MAILSERVER_PORT_SUBMISSIONS: { kind: 'int', default: 4465, min: 0 },
     MAILSERVER_PORT_SUBMISSION: { kind: 'int', default: 5587, min: 0 },
     MAILSERVER_PORT_IMAPS: { kind: 'int', default: 9993, min: 0 },
-    /** Les ports que les clients voient, annoncés dans l'interface et à Mails. */
+    /** Les ports que les clients voient, annoncés dans l'interface et à Mail. */
     MAILSERVER_PUBLIC_PORT_SUBMISSIONS: { kind: 'int', default: 465, min: 0 },
     MAILSERVER_PUBLIC_PORT_SUBMISSION: { kind: 'int', default: 587, min: 0 },
     MAILSERVER_PUBLIC_PORT_IMAPS: { kind: 'int', default: 993, min: 0 },

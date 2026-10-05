@@ -26,8 +26,8 @@ Pour les détails d'implémentation, voir [Docs/README.md](./Docs/README.md).
 ## Quick Start
 
 Ce dépôt contient **le serveur (API Fastify)** et **le client web React** (dossier
-[`client/`](./client)). Les contrats partagés vivent dans le paquet séparé
-`@deveye/types` (`../DevEye-Types`, consommé en source, sans build).
+[`client/`](./client)). Les contrats partagés vivent dans le paquet
+[`@deveye/types`](https://github.com/Gerem66/DevEye-Types), installé depuis npm.
 
 ### Prérequis
 
@@ -38,7 +38,8 @@ Ce dépôt contient **le serveur (API Fastify)** et **le client web React** (dos
 
 ```bash
 cp .env.template .env
-# Renseigner DB_*, CRYPT_KEY_*, JWT_* (voir commentaires du template)
+# Renseigner DB_*, CRYPT_KEY_*, JWT_*, DEVICE_TOKEN_SECRET et ORDER_SIGNING_KEY
+# (chaque commande `openssl` figure dans les commentaires du template)
 ```
 
 ### 2. Installer les dépendances (serveur + client)

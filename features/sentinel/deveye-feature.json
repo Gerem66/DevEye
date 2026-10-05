@@ -1,6 +1,6 @@
 {
   "id": "sentinel",
   "tables": ["device_baseline", "device_findings", "sentinel_allowlist"],
-  "minTypesVersion": "0.15.2",
+  "minTypesVersion": "0.22.1",
   "$comment": "Tables historiques (migration 074 du socle, jamais déplacées) : l'allowlist les dispense du préfixe ft_sentinel_. La config par appareil vit dans ft_sentinel_device_config, au préfixe : créée par la 098 du SOCLE (ses migrations tournent avant celles des modules, et la copie des colonnes de devices devait précéder leur suppression), possédée par le module (src/server/uninstall.sql la démonte). Toute NOUVELLE table du module prendra le préfixe, via src/server/migrations/."
 }

@@ -1,27 +1,23 @@
 # Mail, les boîtes de l'espace
 
-> Écrit le 28 août 2026, le jour où Mail est devenue la **treizième native
-> rapatriée** sur le SDK des modules (`features/mail`,
-> [Docs/FEATURE_SDK.md](../../Docs/FEATURE_SDK.md)), par deux agents en parallèle (serveur +
-> app, client + écrans natifs). Il dit _pourquoi_ ; le code dit comment.
->
-> Documents voisins : [Docs/SECURITY_MODEL.md](../../Docs/SECURITY_MODEL.md) (les deux
-> étages), [Docs/AUTH_PROMPTS.md](../../Docs/AUTH_PROMPTS.md) (l'invite de déverrouillage),
-> [Docs/NOTIFICATIONS.md](../../Docs/NOTIFICATIONS.md) (le canal e-mail des alertes),
-> [Docs/SHARING.md](../../Docs/SHARING.md) (le partage inter-espaces, branché ici le 28 août
-> 2026), [Docs/SETTINGS.md](../../Docs/SETTINGS.md) (la coquille de réglages),
-> [Docs/LIVE.md](../../Docs/LIVE.md).
-
 Des boîtes IMAP/SMTP lues et écrites depuis DevEye : des comptes par espace,
 leurs dossiers et leurs enveloppes en cache, le corps d'un message lu en
-direct, l'envoi, et le transport des alertes e-mail des autres features.
+direct, l'envoi, et le transport des alertes e-mail des autres features. Ce
+document dit _pourquoi_ ; le code dit comment.
+
+Documents voisins : [Docs/SECURITY_MODEL.md](../../Docs/SECURITY_MODEL.md) (les deux
+étages), [Docs/AUTH_PROMPTS.md](../../Docs/AUTH_PROMPTS.md) (l'invite de déverrouillage),
+[Docs/NOTIFICATIONS.md](../../Docs/NOTIFICATIONS.md) (le canal e-mail des alertes),
+[Docs/SHARING.md](../../Docs/SHARING.md) (le partage inter-espaces),
+[Docs/SETTINGS.md](../../Docs/SETTINGS.md) (la coquille de réglages),
+[Docs/LIVE.md](../../Docs/LIVE.md), [Docs/QUOTAS.md](../../Docs/QUOTAS.md).
 
 ---
 
 ## 1. Le principe : deux paliers, choisis par compte
 
 C'est ce qui distingue Mail de tout le reste. Uptime est toujours à l'étage
-ouvert, le Coffre toujours à l'étage gardé ; une **boîte mail choisit son
+ouvert, Mots de passe toujours à l'étage gardé ; une **boîte mail choisit son
 palier** (`mail_accounts.security_tier`, une colonne en clair) :
 
 - **`open`** : identifiants, libellé, adresse, noms de dossiers et enveloppes
@@ -76,14 +72,15 @@ qui resterait sous l'ancien codec se lirait « (verrouillé) » pour toujours.
   suivant. C'est `OAuthTokenError.permanent` qui tranche, sur le code OAuth et
   jamais sur le statut HTTP : Google répond 400 dans les deux cas.
 
-## 3. Les deux routes à ticket
+## 3. Les routes à ticket
 
 Deux gestes ne passent pas par le socket : le navigateur **télécharge** une
 pièce jointe (un GET nu, pour que `Content-Disposition` fasse son travail), et
 la fenêtre de consentement OAuth **revient** de chez Google ou Microsoft. Ce
-sont les deux routes publiques du module (`routes.ts`, capacité
+sont les deux routes à ticket du module (`routes.ts`, capacité
 `routes.public`, `exposure: 'app'` : l'origine de l'app seulement, jamais
-l'écouteur public).
+l'écouteur public) ; une troisième route `GET`, sans ticket, sert le script
+qui referme la fenêtre de retour (`/api/mail/oauth/close.js`).
 
 Ce qui les autorise est un **ticket de session** du SDK : la commande le
 signe (`ctx.secrecy.ticket(payload, { ttlSeconds })`, deux minutes pour une
@@ -93,28 +90,28 @@ contre **les codecs de l'appelant** : l'étage ouvert toujours, l'étage gardé
 tant que sa session est déverrouillée, `null` sinon. Le module ne voit ni
 identifiant de session ni clé ; c'est l'hôte qui relit la session, et
 l'audience du jeton porte l'identifiant du module, de sorte qu'un ticket ne se
-rend qu'à celui qui l'a émis. C'était l'ex `signMailAttachmentToken` /
-`signMailOAuthState` de `auth/jwt.ts`, partis avec la native.
+rend qu'à celui qui l'a émis.
 
 Une pièce jointe d'une boîte gardée dont la session s'est verrouillée entre
 l'émission et le clic est **refusée** (`401 locked`), pas tentée ; un retour
 OAuth dans la même situation rend la page d'échec sans créer de compte. La
 page de retour se referme d'elle-même et poste vers l'origine de l'app
-(`deps.origins.app`, l'ex `PUBLIC_ORIGIN` que le module ne lit pas), la même
-origine qui figure dans le `redirect_uri` enregistré chez le fournisseur.
+(`deps.origins.app`), la même origine qui figure dans le `redirect_uri`
+enregistré chez le fournisseur.
 
 ## 4. Le transport des alertes
 
 Les autres features préviennent par e-mail **depuis une boîte ouverte et active
-de l'espace** (Docs/NOTIFICATIONS.md §3). Tant que Mail était native,
-`Services/notifications.ts` lisait `mail_accounts` et parlait SMTP lui-même.
-Depuis le rapatriement, il lit le contrat que le service du module publie,
+de l'espace** ([Docs/NOTIFICATIONS.md](../../Docs/NOTIFICATIONS.md) §3).
+`Services/notifications.ts` lit le contrat que le service du module publie,
 `MAIL_TRANSPORT_PROVIDER` (`transport.ts`) : `listSenders(ws)` (les
 expéditeurs prêts, libellé et adresse déchiffrés sous le codec ouvert),
 `isReady(accountId, ws)` (ce que l'écran des canaux affiche), `send(accountId,
-ws, { to, subject, text })` (identifiants déchiffrés sous le codec ouvert,
-envoi par le client SMTP, jeton OAuth rafraîchi persisté ; `false` et une ligne
-de journal sur échec, jamais de levée : l'appelant est une boucle de fond).
+ws, { to, subject, text, html? })` (identifiants déchiffrés sous le codec
+ouvert, envoi par le client SMTP, jeton OAuth rafraîchi persisté ; `false` et
+une ligne de journal sur échec, jamais de levée : l'appelant est une boucle de
+fond). Un compte mis en pause par l'offre n'est pas un expéditeur
+(`deps.pauses`), pas plus qu'un compte désactivé.
 
 Sans module Mail installé, **aucun canal e-mail n'est prêt**, et l'écran le
 dit ; la façade `deveye.mail.listAccounts` des autres modules lit le même
@@ -122,10 +119,34 @@ contrat et rend `[]`.
 
 ## 5. La carte du code
 
-Côté serveur (`features/mail/src/server/`) :
+Tout vit dans `features/mail/` (package `deveye-feature-mail`, installé par
+`features.config.json`).
 
-- `repo.ts` : les quatre dépôts natifs (comptes, dossiers, messages,
-  réglages) en un seul `MailRepo` sur `SdkQueryable`, sections gardées ;
+`src/manifest.ts` : le descripteur du registre (`featureDescriptor('mail')`,
+dont `shareTier: 'perItem'`, l'élément est le compte), la catégorie `work`,
+cinq clés de ressources (`mail.accountCount`, `mail.accountList`,
+`mail.folderList`, `mail.messageList`, `mail.getSettings`) que le sujet `mail`
+ravive, le sujet secondaire `mailUnread` (ouvrir un message le marque lu :
+seuls les compteurs de dossiers sont à relire, `mail.messageGet` le bat),
+les capacités `routes.public` et `live.publish` (l'avancement d'une relève,
+poussé à la barre de progression), le stock `accounts`, les onglets de
+réglages (Contenu à l'échelle de la feature ; Général, Contenu,
+Synchronisation, Avancé et Chiffrement à celle d'un compte, Partage et
+Permissions venant de la coquille), et les commandes.
+
+`src/contracts/{domain,commands}.ts` : les schémas, et les vingt-sept
+commandes sous le préfixe `mail.`. `@deveye/types` ne garde que l'identité de
+la feature et les deux contrats de couplage (`MAIL_TRANSPORT_PROVIDER`,
+`MAIL_CLIENT_PROVIDER`).
+
+Côté serveur (`src/server/`) :
+
+- `index.ts` : l'entrée (`env`, dépôt, handlers, `createService` avec la
+  relève, le provider et les routes, l'entrée `items`, le déplacement, la
+  copie, le stock de l'offre, l'export du compte) ;
+- `env.ts` : `MAIL_SYNC_*`, `OAUTH_*` (§7) ;
+- `repo.ts` : les quatre sections du dépôt (comptes, dossiers, messages,
+  réglages) en un seul `MailRepo` sur `SdkQueryable` ;
 - `_shared.ts` : `cipherFor`, `accountCipher` (le codec du domicile d'un
   compte, projeté ou non), `assertAtHome`, `assertMailUnlocked`,
   `assertTierAllowed`, `runWithAccountStatus`, les identifiants chiffrés,
@@ -133,45 +154,64 @@ Côté serveur (`features/mail/src/server/`) :
   → dossier → compte (`loadAccount` sur `findVisible`, avec
   `ctx.items.assert`), `imapFor` ;
 - `accounts.ts`, `folders.ts`, `messages.ts`, `settings.ts`, agrégés par
-  `handlers.ts` : les vingt-six commandes ;
+  `handlers.ts` : les vingt-sept commandes ;
 - `sync.ts` (la relève d'un dossier, la réconciliation de la fenêtre récente,
-  le rattrapage vers le passé, la remise à zéro ; le client IMAP en paramètre,
-  `SyncClient`) et `syncStatus.ts` (l'avancement en mémoire, pour la barre) ;
-- `service.ts` (`MailSync`, l'ex `Services/MailSyncService.ts` : un ticker du
-  SDK, `deps.cipherFor`, `deps.live.changed` aux transitions, l'échéance par
-  compte ; couture de test `{ mailClient, accountTimeoutMs }`) ;
-- `transport.ts` (le contrat des alertes), `routes.ts` (les deux routes à
-  ticket, couture `{ client, oauth }`), `client.ts` (IMAP/SMTP, l'ex
-  `Services/MailAccountClient.ts`), `oauth.ts` (`redirect_uri` sur
-  `origins.app`, `OAuthTokenError` qui sépare un refus définitif d'un incident
-  passager, renouvellements coalescés par jeton), `parse.ts`, `sanitize.ts`,
-  `linkHeuristics.ts` (l'ex `src/mail/*`), `env.ts` (`MAIL_SYNC_*`,
-  `OAUTH_*`, sortis de `Utils/Env`), `index.ts` (l'entrée : `createService`
-  avec le service, le provider et les routes).
+  le rattrapage vers le passé, la remise à zéro ; une première relève se borne
+  aux 200 messages les plus récents d'un dossier, `INITIAL_SYNC_LIMIT` ; le
+  client IMAP en paramètre, `SyncClient`) et `syncStatus.ts` (l'avancement en
+  mémoire, pour la barre) ;
+- `service.ts` (`MailSync` : un ticker du SDK, `deps.cipherFor`,
+  `deps.live.changed` aux transitions, `deps.live.publish` pour l'avancement,
+  l'échéance par compte ; couture de test `{ mailClient, accountTimeoutMs }`) ;
+- `transport.ts` (le contrat des alertes), `routes.ts` (les routes à ticket,
+  couture `{ client, oauth }`), `client.ts` (IMAP/SMTP), `oauth.ts`
+  (`redirect_uri` sur `origins.app`, `OAuthTokenError` qui sépare un refus
+  définitif d'un incident passager, renouvellements coalescés par jeton),
+  `parse.ts`, `sanitize.ts`, `linkHeuristics.ts` ;
+- `copy.ts` : l'arbre d'un compte (`mailTree` : le compte, ses dossiers, ses
+  enveloppes), que le déplacement rescelle et que la copie emporte ;
+  `move.ts` : le changement d'espace (un canal d'alerte de l'espace quitté qui
+  expédiait par ce compte le perd : il faut lui rendre un expéditeur d'ici) ;
+- `accountExport.ts` : l'export du compte écrit les comptes (sans
+  identifiants) et les réglages ; dossiers et messages restent sur le serveur
+  de messagerie, d'où la relève les relit ;
+- les tests : `handlers.test.ts`, `repo.test.ts`, `service.test.ts`,
+  `routes.test.ts`, `oauth.test.ts`, `client.test.ts`, `sanitize.test.ts`,
+  `linkHeuristics.test.ts`, `accountExport.test.ts`.
 
-Côté client (`features/mail/src/client/`) : `index.tsx` (l'entrée : le widget
-de la grille, la vue complète `Mail.tsx`, les trois panneaux de réglages, le
-contrat client `MAIL_CLIENT_PROVIDER` par `provider.tsx` : les expéditeurs
-prêts et le dialogue de compte que le formulaire d'un canal e-mail compose),
-`api.ts` (`featureApi(manifest)`), la liste et la fiche d'un compte
-(`AccountList`, `AccountCard`, `AccountPanel`, `AccountPopup`,
-`AccountOptions`, `SyncProgressBar`, `accountStatus.ts`), l'arbre des dossiers
-(`FolderTree`), les messages (`MessageList`, `MessagePane`, `MessagePopup`,
-`MessageInfoPopup`, `ImageSourcesPopup`, `ComposePopup`, `ConfirmPopup`), les
-panneaux `MailGeneralPanel` (l'espace : analyse externe, domaines d'images,
-mode de rendu), `MailSyncPanel` (la cadence d'une boîte, ses relèves) et
-`MailEncryptionPanel` (le palier d'une boîte, par les cartes de `SecurityTierChoice`), la feuille
-`style.module.css`.
+Côté client (`src/client/`) :
 
-Les contrats (`src/contracts/{domain,commands}.ts`) sont sortis de
-`@deveye/types`, qui ne garde que l'identité de la feature et les deux
-contrats de couplage (`MAIL_TRANSPORT_PROVIDER`, `MAIL_CLIENT_PROVIDER`). Les
-quatre tables `mail_*` datent du socle et sont en allowlist
+- `index.tsx` : l'entrée (`MailWidget`, la vue complète `Mail.tsx`, les cinq
+  panneaux de réglages, `cacheDurationMinutes: 0`, `holdSecrecy`, et le
+  contrat client `MAIL_CLIENT_PROVIDER` par `provider.tsx` : les expéditeurs
+  prêts et le dialogue de compte que le formulaire d'un canal e-mail ou le
+  Serveur mail composent) ;
+- `api.ts` (`featureApi(manifest)`), `viewState.ts` (l'état de la vue et ce
+  qu'on peut y faire, décidé à un seul endroit pour les trois colonnes) et
+  `EmptyState.tsx` (ce qu'affiche une colonne vide, et le geste qui en sort) ;
+- la liste et la fiche d'un compte : `AccountList`, `AccountCard`,
+  `AccountPanel`, `AccountPopup` (l'ajout d'une boîte, par fournisseur ou à la
+  main, en étapes : `AccountSteps`), `ProviderCard` (l'état réel d'une boîte
+  gérée par un fournisseur, à la place des champs de serveurs),
+  `SecurityTierChoice` (le palier, à la création puis dans Chiffrement),
+  `SyncProgressBar`, `accountStatus.ts` (comment se dit l'état d'une boîte,
+  pastille et bandeau), `oauthWindow.ts` (l'attente de la fenêtre de
+  consentement, partagée par l'ajout et la reconnexion) ;
+- l'arbre des dossiers (`FolderTree`), les messages (`MessageList`,
+  `MessagePane`, `MessagePopup`, `MessageInfoPopup`, `ImageSourcesPopup`,
+  `ComposePopup`, `ConfirmPopup`) ;
+- les panneaux : `MailAccountSettingsPanel` (Général d'un compte : son nom,
+  ses serveurs, son proxy, sa suppression), `MailContentPanel` (Contenu, aux
+  deux échelles : le mode de rendu des messages et les domaines dont les
+  images sont approuvées), `MailSyncPanel` (la cadence de relève, de 5 à
+  180 minutes, 10 par défaut, et la pause), `MailAdvancedPanel` (reconstruire
+  le cache d'une boîte, écriture requise), `MailEncryptionPanel` (le palier
+  d'une boîte) ;
+- `MailWidget.tsx` (la carte d'accueil), `style.module.css`, et le test
+  `viewState.test.ts`.
+
+Les quatre tables `mail_*` datent du socle et sont en allowlist
 (`deveye-feature.json`) : aucune migration du module, aucun `uninstall.sql`.
-
-Le manifest garde le `shareTier: 'perItem'` du descripteur publié, et le
-tient : l'entrée `items` de `server/index.ts`, `listVisible` / `findVisible`
-dans le dépôt, `accountCipher` dans `_shared.ts`. C'est la section suivante.
 
 ## 6. Le partage : un compte, des fenêtres
 
@@ -203,8 +243,8 @@ verrouillé. `accountCipher(ctx, row)` choisit : le palier du compte chez lui,
 `ctx.sharing.scope().cipherFor(id)` (l'étage ouvert du domicile, le seul que
 `_sharing.ts` rende) quand il est projeté. Tout ce qui lit ou écrit un compte
 existant passe par là (`credentialsFor`, `imapFor`, les DTO) ; `cipherFor(ctx,
-tier)` ne sert plus qu'à la création et au changement de palier, qui n'ont
-lieu qu'au domicile.
+tier)` ne sert qu'à la création et au changement de palier, qui n'ont lieu
+qu'au domicile.
 
 **Une fenêtre lit et agit, le domicile configure** (Docs/SHARING.md §2). Depuis
 la fenêtre : lister les dossiers, lire, marquer, déplacer, supprimer un
@@ -235,7 +275,45 @@ compte visible depuis l'espace du ticket, codec du domicile, jamais l'étage
 ouvert du ticket). Le retour OAuth, lui, crée toujours le compte dans l'espace
 du ticket : une boîte naît chez elle.
 
-## 7. Les pièges
+**Déplacer et copier** passent par l'arbre de `copy.ts` : seul un compte ouvert
+voyage, et tout son arbre suit l'étage ouvert de son nouvel espace.
+
+## 7. Configuration
+
+Lues par `src/server/env.ts` ; les défauts sont ceux du code.
+
+| Variable                            | Défaut | Rôle                                                                                       |
+| ----------------------------------- | ------ | ------------------------------------------------------------------------------------------ |
+| `MAIL_SYNC_TICK_SECONDS`            | `120`  | la cadence de la relève de fond, qui ne touche jamais une boîte gardée                     |
+| `MAIL_SYNC_CONCURRENCY`             | `8`    | combien de boîtes se relèvent à la fois (quatre fois autant prises par tour)               |
+| `MAIL_SYNC_ACCOUNT_TIMEOUT_SECONDS` | `900`  | l'échéance au-delà de laquelle la relève d'un compte est abandonnée                        |
+| `OAUTH_GOOGLE_CLIENT_ID`            | vide   | l'app OAuth Google de l'installation ; vide, « Se connecter avec Google » n'est pas offert |
+| `OAUTH_GOOGLE_CLIENT_SECRET`        | vide   | idem                                                                                       |
+| `OAUTH_MICROSOFT_CLIENT_ID`         | vide   | l'app OAuth Microsoft 365 ; même règle                                                     |
+| `OAUTH_MICROSOFT_CLIENT_SECRET`     | vide   | idem                                                                                       |
+
+L'URI de redirection à enregistrer chez le fournisseur est
+`<origine de l'app>/api/mail/oauth/callback`. L'authentification par mot de
+passe ou mot de passe d'application marche sans aucune de ces variables.
+
+## 8. Quotas et notifications
+
+**L'offre** : `mail.accounts` est un stock qui compte les comptes des espaces
+du propriétaire (Gratuite 1, Pro 10, valeurs de
+`DevEye-Billing/src/server/plans.ts`). L'excédent se met en pause : un compte
+en pause ne se relève plus et n'expédie plus d'alerte. Une installation sans
+module de facturation n'a aucune limite.
+
+**Notifications** : Mail ne notifie pas (`notifies: false`) ; il est le
+transport des alertes des autres features (§4).
+
+## 9. Les tests
+
+```bash
+npm run test:features
+```
+
+## 10. Les pièges
 
 - **Le codec vient du compte, jamais de la feature ni de l'espace actif.**
   Une commande qui prendrait `ctx.cipher()` par réflexe écrirait une boîte
@@ -255,8 +333,7 @@ account.security_tier)` sur un compte projeté le lirait sous la clé d'ici,
   messages, plus celui d'une panne qui apparaît ou disparaît.
 - **L'échéance par compte** (`MAIL_SYNC_ACCOUNT_TIMEOUT_SECONDS`) est ce qui
   rend une boîte suspendue à la rotation ; sans elle, `inFlight` la retirait
-  pour de bon, sans erreur ni trace. Son message est classé `unreachable`
-  (apostrophe droite ou typographique, les deux formes existaient).
+  pour de bon, sans erreur ni trace. Son message est classé `unreachable`.
 - **Un écran de consentement Google en « Testing » donne des jetons de
   rafraîchissement de 7 jours.** La boîte redemande alors une reconnexion
   chaque semaine sans que rien soit cassé. L'écran doit passer « In

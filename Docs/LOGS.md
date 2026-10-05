@@ -4,7 +4,7 @@ Où regarder quand la production va mal, et ce que chaque source sait ou ne sait
 pas.
 
 Documents voisins : [NOTIFICATIONS.md](./NOTIFICATIONS.md) (les canaux),
-[MAINTENANCE.md](./MAINTENANCE.md), [deploy/README.md](../../deploy/README.md).
+[MAINTENANCE.md](./MAINTENANCE.md), [STATUS_PAGE.md](./STATUS_PAGE.md).
 
 ## 1. Trois sources, trois rôles
 
@@ -17,8 +17,9 @@ Documents voisins : [NOTIFICATIONS.md](./NOTIFICATIONS.md) (les canaux),
 Sur la page Logs, le niveau « Sensible » marque une action à surveiller (2FA
 coupée, rôle changé, terminal ouvert, maintenance), jamais une panne.
 
-La sortie standard se lit dans Dokploy, ou depuis DevEye par l'agent de la
-machine hôte (Appareils, action « Logs de l'appareil », source du conteneur) :
+La sortie standard se lit par `docker compose logs app` (ou l'outil qui
+orchestre le conteneur), ou depuis DevEye par l'agent de la machine hôte
+(Appareils, action « Logs de l'appareil », source du conteneur) :
 l'agent lit le niveau des lignes JSON, son filtre de niveau minimum vaut donc
 pour DevEye lui-même.
 
@@ -89,12 +90,13 @@ Quand le processus est tombé, rien en lui ne prévient. La **page d'état**
 (`STATUS_PAGE.md`), dans son propre conteneur, le mesure de l'extérieur et
 prévient par les destinations de la cible Système, qu'elle garde pour ce
 moment-là. Sans elle, une sonde externe (UptimeRobot, Better Stack) sur
-`/api/health` des deux domaines couvre la vivacité du processus, pas la base.
+`/api/health` de chaque écouteur (le port de l'app, et le port public s'il est
+séparé) couvre la vivacité du processus, pas la base.
 
 ## 5. Conservation
 
-- **Table `logs`** : 365 jours (`LOG_RETENTION_DAYS`), purgés au démarrage puis
-  chaque jour, par lots. C'est la durée que promet la politique de
-  confidentialité pour les journaux de connexion et d'accès.
+- **Table `logs`** : 365 jours (`LOG_RETENTION_DAYS`,
+  `src/Services/logRetention.ts`), purgés au démarrage puis chaque jour, par
+  lots.
 - **Sortie standard** : la rotation Docker des fichiers compose, 5 fichiers de
   20 Mo par conteneur.
