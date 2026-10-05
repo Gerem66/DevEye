@@ -49,6 +49,7 @@ export { default as Slider } from '@/Components/Slider';
 export { StatusBadge } from '@/Components/StatusBadge';
 export { default as Switch } from '@/Components/Switch';
 export { default as TextInput } from '@/Components/TextInput';
+export { default as TextArea } from '@/Components/TextArea';
 export { Dialog, DialogCancelButton, useDialogClose, useDialogSubmit, useDismissLayer } from '@/Components/Dialog';
 // La couche impérative au-dessus de Dialog (OpenPopup, promesse résolue par
 // ClosePopup), et l'explicatif « i » commun.

@@ -486,9 +486,12 @@
     border-color: var(--warning);
 }
 
+/* La désignation grandit sur plusieurs lignes : la poignée, la corbeille et le
+   total restent face à sa première, centrés sur la hauteur d'un champ. */
 .lineGrip {
     grid-area: grip;
-    align-self: center;
+    align-self: start;
+    margin-top: calc((2.25rem + 2px - 18px) / 2);
     color: var(--text-muted);
     cursor: grab;
     touch-action: none;
@@ -561,7 +564,10 @@
 
 .cellNote {
     grid-area: note;
-    align-self: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: calc(2.25rem + 2px);
     color: var(--text-muted);
     font-size: 0.8rem;
     font-style: italic;
@@ -571,6 +577,7 @@
 .lineDrop {
     grid-area: drop;
     align-self: start;
+    margin-top: calc((2.25rem + 2px - 32px) / 2);
     display: grid;
     place-items: center;
     width: 32px;
@@ -591,6 +598,7 @@
     .lineDrop {
         width: 40px;
         height: 40px;
+        margin-top: 0;
     }
 
     /* Des raccourcis de clavier, sans clavier pour les taper. */
@@ -631,7 +639,7 @@
     }
 
     .lineRow {
-        align-items: center;
+        align-items: start;
         gap: var(--space-xs);
         padding: var(--space-xs);
         background: none;
@@ -651,7 +659,6 @@
 
     .lineRow > * {
         grid-area: auto;
-        align-self: center;
     }
 
     .cellCaption {
@@ -665,7 +672,9 @@
     }
 
     .cellTotal {
+        align-items: center;
         justify-content: flex-end;
+        min-height: calc(2.25rem + 2px);
     }
 
     .cellTotal output {
@@ -843,9 +852,11 @@
     font-weight: 500;
 }
 
+/* Les retours à la ligne d'une désignation se lisent comme ils ont été tapés. */
 .table tbody th {
     color: var(--text-primary);
     font-weight: 500;
+    white-space: pre-line;
 }
 
 .table td:not(:first-child) {
@@ -878,6 +889,7 @@
 .tableNote td {
     color: var(--text-secondary);
     font-style: italic;
+    white-space: pre-line;
 }
 
 /* À l'étroit, chaque prestation devient un bloc : la désignation, puis ses

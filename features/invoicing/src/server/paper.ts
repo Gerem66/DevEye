@@ -148,11 +148,11 @@ const STYLE = `
     th, td { padding: 2mm 2mm; text-align: left; vertical-align: top; }
     thead th { background: var(--band); color: var(--muted); font-size: 8.5pt; text-transform: uppercase;
                letter-spacing: 0.04em; font-weight: 600; }
-    tbody th { font-weight: 500; }
+    tbody th { font-weight: 500; white-space: pre-line; }
     tbody td, tbody th { border-bottom: 0.5pt solid var(--rule); }
     td.num, th.num { text-align: right; white-space: nowrap; }
     .detail { display: block; color: var(--muted); font-size: 9pt; font-weight: 400; }
-    .comment td { color: var(--muted); font-style: italic; }
+    .comment td { color: var(--muted); font-style: italic; white-space: pre-line; }
     .totals { margin-top: 6mm; margin-left: auto; width: 90mm; break-inside: avoid; }
     .totals .row { display: flex; justify-content: space-between; gap: 6mm; padding: 1.2mm 0; }
     .totals .row.grand { margin-top: 1.5mm; padding-top: 2mm; border-top: 1pt solid var(--ink); font-weight: 600;

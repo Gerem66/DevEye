@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Button,
     SearchSelect,
+    TextArea,
     TextInput,
     randomUuid,
     useDragReorder,
@@ -292,7 +293,8 @@ export default function LineEditor(props: LineEditorProps) {
                 <h3 className={styles.sectionTitle}>Prestations</h3>
                 {canWrite && (
                     <span className={`${styles.sectionHint} ${styles.editorHint}`}>
-                        Entrée passe à la ligne suivante, Alt et les flèches déplacent une ligne.
+                        Entrée passe à la ligne suivante, Maj+Entrée revient à la ligne dans le texte, Alt et les
+                        flèches déplacent une ligne.
                     </span>
                 )}
             </header>
@@ -331,9 +333,12 @@ export default function LineEditor(props: LineEditorProps) {
                                 onPointerDown={(e) => canWrite && onGripPointerDown(e, draft.key)}
                             />
 
+                            {/* Plusieurs lignes, toutes visibles : une désignation se lit en
+                                entier, sur l'écran comme sur le papier. */}
                             <div className={styles.cellLabel}>
-                                <TextInput
+                                <TextArea
                                     ref={bind(`${draft.key}:label`)}
+                                    autoGrow
                                     value={draft.label}
                                     disabled={!canWrite}
                                     aria-label={`Désignation, ligne ${index + 1}`}

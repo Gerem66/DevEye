@@ -1,0 +1,53 @@
+/* La peau de `TextInput`, sur plusieurs lignes. */
+.textarea {
+    display: block;
+    width: 100%;
+    min-height: calc(2.25rem + 2px);
+    padding: 0.5rem 0.75rem;
+    font-size: 1em;
+    font-weight: 400;
+    font-family: var(--font-sans);
+    line-height: 1.5;
+    color: var(--text-primary);
+    background-color: var(--input-bg);
+    background-clip: padding-box;
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-sm);
+    outline: none;
+    resize: vertical;
+    color-scheme: dark;
+    transition:
+        border-color var(--transition-fast),
+        background-color var(--transition-fast);
+}
+
+.textarea:focus {
+    background-color: var(--glass-bg-light);
+    border-color: var(--input-focus);
+}
+
+.textarea::placeholder {
+    color: var(--input-placeholder);
+    opacity: 1;
+}
+
+.textarea:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Sa hauteur est calculée : ni poignée ni barre de défilement. */
+.autoGrow {
+    overflow: hidden;
+    resize: none;
+}
+
+.error {
+    border-color: var(--danger);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .textarea {
+        transition: none;
+    }
+}
