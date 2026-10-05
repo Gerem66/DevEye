@@ -5,7 +5,7 @@ import type { Queryable } from '../pool';
 type Q = Queryable;
 
 /** Ce que l'agrégat par seau rend : les mesures seules, l'instant du seau en `ts`. */
-export type BucketRow = Omit<MetricRow, 'id' | 'device_id' | 'pinned'>;
+type BucketRow = Omit<MetricRow, 'id' | 'device_id' | 'pinned'>;
 
 /** Moyennes pour les jauges, maximums pour les compteurs et les totaux. */
 const BUCKET_COLUMNS = selectColumns<BucketRow>(null, {

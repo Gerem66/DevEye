@@ -2,7 +2,7 @@ import type { Queryable } from '../pool';
 
 type Q = Queryable;
 
-export interface WorkspaceSecretKeyRow {
+interface WorkspaceSecretKeyRow {
     workspace_id: number;
     dek_wrapped: string;
     created: number;

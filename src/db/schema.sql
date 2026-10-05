@@ -1,4 +1,4 @@
--- Schéma du socle, généré par `npm run gen:db-schema` depuis une base migrée. Ne pas éditer.
+-- Schéma généré par `npm run gen:db-schema` depuis une base migrée. Ne pas éditer.
 
 CREATE TABLE `_migrations` (
   `name` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
@@ -606,6 +606,674 @@ CREATE TABLE `finance_transactions` (
   CONSTRAINT `fk_fin_tx_recurring` FOREIGN KEY (`recurring_id`) REFERENCES `finance_recurring` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_fin_tx_transfer` FOREIGN KEY (`transfer_account_id`) REFERENCES `finance_accounts` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_fin_tx_workspace` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_audience_answers` (
+  `form_id` int NOT NULL,
+  `field_id` int NOT NULL,
+  `value_id` int NOT NULL,
+  `hits` int NOT NULL DEFAULT '0',
+  PRIMARY KEY (`form_id`,`field_id`,`value_id`),
+  KEY `idx_ft_audience_answers_field` (`form_id`,`field_id`,`hits`),
+  CONSTRAINT `fk_ft_audience_answer_form` FOREIGN KEY (`form_id`) REFERENCES `ft_audience_forms` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_audience_bans` (
+  `site_id` int NOT NULL,
+  `ip_ref` char(16) COLLATE utf8mb4_general_ci NOT NULL,
+  `until` bigint NOT NULL,
+  PRIMARY KEY (`site_id`,`ip_ref`),
+  KEY `idx_ft_audience_bans_until` (`until`),
+  CONSTRAINT `fk_ft_audience_bans_site` FOREIGN KEY (`site_id`) REFERENCES `audience_sites` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_audience_form_labels` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `form_id` int NOT NULL,
+  `kind` varchar(6) COLLATE utf8mb4_general_ci NOT NULL,
+  `label_ref` char(16) COLLATE utf8mb4_general_ci NOT NULL,
+  `content` text COLLATE utf8mb4_general_ci NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_ft_audience_form_label` (`form_id`,`kind`,`label_ref`),
+  CONSTRAINT `fk_ft_audience_form_label_form` FOREIGN KEY (`form_id`) REFERENCES `ft_audience_forms` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_audience_forms` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `site_id` int NOT NULL,
+  `name_ref` char(16) COLLATE utf8mb4_general_ci NOT NULL,
+  `mode` varchar(6) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'auto',
+  `form_schema` text COLLATE utf8mb4_general_ci,
+  `is_open` tinyint NOT NULL DEFAULT '1',
+  `closed_at` bigint DEFAULT NULL,
+  `closed_reason` varchar(16) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `submissions` int NOT NULL DEFAULT '0',
+  `last_at` bigint DEFAULT NULL,
+  `sort_order` int NOT NULL DEFAULT '0',
+  `content` text COLLATE utf8mb4_general_ci NOT NULL,
+  `created` bigint NOT NULL DEFAULT (unix_timestamp()),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_ft_audience_form` (`site_id`,`name_ref`),
+  KEY `idx_ft_audience_forms_site` (`site_id`,`sort_order`),
+  CONSTRAINT `fk_ft_audience_form_site` FOREIGN KEY (`site_id`) REFERENCES `audience_sites` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_audience_submissions` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `form_id` int NOT NULL,
+  `site_id` int NOT NULL,
+  `ts` bigint NOT NULL,
+  `ip_ref` char(16) COLLATE utf8mb4_general_ci NOT NULL DEFAULT '',
+  `session_id` bigint DEFAULT NULL,
+  `content` mediumtext COLLATE utf8mb4_general_ci NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_ft_audience_submissions_form` (`form_id`,`ts`,`id`),
+  KEY `idx_ft_audience_submissions_site` (`site_id`,`ts`),
+  KEY `idx_ft_audience_submissions_session` (`session_id`),
+  KEY `idx_ft_audience_submissions_ip` (`form_id`,`ip_ref`,`ts`),
+  CONSTRAINT `fk_ft_audience_submission_form` FOREIGN KEY (`form_id`) REFERENCES `ft_audience_forms` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_ft_audience_submission_session` FOREIGN KEY (`session_id`) REFERENCES `audience_sessions` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_audience_usage` (
+  `workspace_id` int NOT NULL,
+  `month` int NOT NULL,
+  `events` bigint NOT NULL DEFAULT '0',
+  PRIMARY KEY (`workspace_id`,`month`),
+  CONSTRAINT `fk_ft_audience_usage_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_convert_fx_rates` (
+  `quote` char(3) COLLATE utf8mb4_general_ci NOT NULL,
+  `rate` decimal(24,10) NOT NULL,
+  `as_of` char(10) COLLATE utf8mb4_general_ci NOT NULL,
+  `fetched_at` bigint NOT NULL,
+  PRIMARY KEY (`quote`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_convert_fx_state` (
+  `id` tinyint unsigned NOT NULL,
+  `last_attempt_at` bigint NOT NULL DEFAULT '0',
+  `last_success_at` bigint NOT NULL DEFAULT '0',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_convert_jobs` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `workspace_id` int NOT NULL,
+  `user_id` int NOT NULL,
+  `kind` enum('video','audio','image','document') COLLATE utf8mb4_general_ci NOT NULL,
+  `source_format` varchar(16) COLLATE utf8mb4_general_ci NOT NULL,
+  `target_format` varchar(16) COLLATE utf8mb4_general_ci NOT NULL,
+  `options` json NOT NULL,
+  `original_name_enc` text COLLATE utf8mb4_general_ci NOT NULL,
+  `input_bytes` bigint unsigned NOT NULL,
+  `output_bytes` bigint unsigned DEFAULT NULL,
+  `phase` enum('awaiting_upload','uploading','queued','running','done','error','canceled','expired') COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'awaiting_upload',
+  `progress_permille` smallint unsigned NOT NULL DEFAULT '0',
+  `attempts` tinyint unsigned NOT NULL DEFAULT '0',
+  `error_code` varchar(32) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `error_enc` text COLLATE utf8mb4_general_ci,
+  `created` bigint NOT NULL,
+  `started_at` bigint DEFAULT NULL,
+  `finished_at` bigint DEFAULT NULL,
+  `expires_at` bigint DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_ft_convert_jobs_ws` (`workspace_id`,`created`),
+  KEY `idx_ft_convert_jobs_phase` (`phase`,`created`),
+  KEY `idx_ft_convert_jobs_expiry` (`phase`,`expires_at`),
+  CONSTRAINT `fk_ft_convert_jobs_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_cve_entries` (
+  `cve_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL,
+  `published` bigint NOT NULL,
+  `last_modified` bigint NOT NULL,
+  `severity` enum('none','low','medium','high','critical') COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'none',
+  `score` decimal(3,1) DEFAULT NULL,
+  `vector` varchar(320) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `cwe` varchar(64) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `summary` text COLLATE utf8mb4_general_ci NOT NULL,
+  `refs` json NOT NULL,
+  `fetched_at` bigint NOT NULL,
+  PRIMARY KEY (`cve_id`),
+  KEY `idx_cve_published` (`published`),
+  KEY `idx_cve_severity_published` (`severity`,`published`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_cve_favorites` (
+  `workspace_id` int NOT NULL,
+  `cve_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL,
+  `user_id` int NOT NULL,
+  `created` bigint NOT NULL,
+  PRIMARY KEY (`workspace_id`,`cve_id`),
+  KEY `idx_cve_fav_created` (`workspace_id`,`created`),
+  CONSTRAINT `fk_cve_fav_workspace` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_cve_state` (
+  `k` varchar(32) COLLATE utf8mb4_general_ci NOT NULL,
+  `v` bigint NOT NULL,
+  PRIMARY KEY (`k`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_deploy_credentials` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `workspace_id` int NOT NULL,
+  `provider` varchar(16) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'dokploy',
+  `label` varchar(64) COLLATE utf8mb4_general_ci NOT NULL,
+  `base_url` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `device_id` char(36) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `author_user_id` int DEFAULT NULL,
+  `secret_enc` text COLLATE utf8mb4_general_ci NOT NULL,
+  `unreachable_since` bigint DEFAULT NULL,
+  `unreachable_error` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `unreachable_notified` tinyint(1) NOT NULL DEFAULT '0',
+  `created` bigint NOT NULL DEFAULT (unix_timestamp()),
+  PRIMARY KEY (`id`),
+  KEY `idx_ft_deploy_credentials_workspace` (`workspace_id`),
+  KEY `fk_ft_deploy_credentials_device` (`device_id`),
+  KEY `fk_ft_deploy_credentials_author` (`author_user_id`),
+  CONSTRAINT `fk_ft_deploy_credentials_author` FOREIGN KEY (`author_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_ft_deploy_credentials_device` FOREIGN KEY (`device_id`) REFERENCES `devices` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_ft_deploy_credentials_workspace` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_finance_bank_links` (
+  `account_id` int NOT NULL,
+  `workspace_id` int NOT NULL,
+  `connection_id` int NOT NULL,
+  `external_account_id` varchar(100) COLLATE utf8mb4_general_ci NOT NULL,
+  `since` date NOT NULL,
+  `created` bigint NOT NULL DEFAULT (unix_timestamp()),
+  PRIMARY KEY (`account_id`),
+  UNIQUE KEY `uniq_ft_finance_bank_links_remote` (`connection_id`,`external_account_id`),
+  KEY `idx_ft_finance_bank_links_ws` (`workspace_id`),
+  CONSTRAINT `fk_ft_finance_bank_links_account` FOREIGN KEY (`account_id`) REFERENCES `finance_accounts` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_ft_finance_bank_links_connection` FOREIGN KEY (`connection_id`) REFERENCES `ft_finance_connections` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_ft_finance_bank_links_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_finance_connections` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `workspace_id` int NOT NULL,
+  `provider` varchar(16) COLLATE utf8mb4_general_ci NOT NULL,
+  `status` varchar(8) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'ok',
+  `error` varchar(300) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `valid_until` bigint DEFAULT NULL,
+  `warned_until` bigint DEFAULT NULL,
+  `last_sync_at` bigint DEFAULT NULL,
+  `content` mediumtext COLLATE utf8mb4_general_ci NOT NULL,
+  `created` bigint NOT NULL DEFAULT (unix_timestamp()),
+  PRIMARY KEY (`id`),
+  KEY `idx_ft_finance_connections_ws` (`workspace_id`,`created`),
+  KEY `idx_ft_finance_connections_due` (`status`,`last_sync_at`),
+  CONSTRAINT `fk_ft_finance_connections_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_finance_imports` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `workspace_id` int NOT NULL,
+  `account_id` int NOT NULL,
+  `format` varchar(8) COLLATE utf8mb4_general_ci NOT NULL,
+  `first_date` date DEFAULT NULL,
+  `last_date` date DEFAULT NULL,
+  `line_count` int NOT NULL DEFAULT '0',
+  `new_count` int NOT NULL DEFAULT '0',
+  `closing_balance` bigint DEFAULT NULL,
+  `closing_date` date DEFAULT NULL,
+  `created` bigint NOT NULL DEFAULT (unix_timestamp()),
+  PRIMARY KEY (`id`),
+  KEY `idx_ft_finance_imports_account` (`account_id`,`created`),
+  KEY `fk_ft_finance_imports_ws` (`workspace_id`),
+  CONSTRAINT `fk_ft_finance_imports_account` FOREIGN KEY (`account_id`) REFERENCES `finance_accounts` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_ft_finance_imports_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_finance_reminders` (
+  `workspace_id` int NOT NULL,
+  `period_key` varchar(10) COLLATE utf8mb4_general_ci NOT NULL,
+  `stage` varchar(8) COLLATE utf8mb4_general_ci NOT NULL,
+  `sent` bigint NOT NULL DEFAULT (unix_timestamp()),
+  PRIMARY KEY (`workspace_id`,`period_key`,`stage`),
+  CONSTRAINT `fk_ft_finance_reminders_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_finance_rules` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `workspace_id` int NOT NULL,
+  `direction` varchar(3) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `category_id` int NOT NULL,
+  `vat_rate_bp` int DEFAULT NULL,
+  `sort_order` int NOT NULL DEFAULT '0',
+  `hits` int NOT NULL DEFAULT '0',
+  `content` text COLLATE utf8mb4_general_ci NOT NULL,
+  `created` bigint NOT NULL DEFAULT (unix_timestamp()),
+  PRIMARY KEY (`id`),
+  KEY `idx_ft_finance_rules_ws` (`workspace_id`,`sort_order`),
+  KEY `fk_ft_finance_rules_category` (`category_id`),
+  CONSTRAINT `fk_ft_finance_rules_category` FOREIGN KEY (`category_id`) REFERENCES `finance_categories` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_ft_finance_rules_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_finance_statement_lines` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `workspace_id` int NOT NULL,
+  `account_id` int NOT NULL,
+  `import_id` int DEFAULT NULL,
+  `external_id` varchar(100) COLLATE utf8mb4_general_ci NOT NULL,
+  `date` date NOT NULL,
+  `direction` varchar(3) COLLATE utf8mb4_general_ci NOT NULL,
+  `amount` bigint NOT NULL,
+  `transaction_id` int DEFAULT NULL,
+  `ignored` tinyint NOT NULL DEFAULT '0',
+  `content` text COLLATE utf8mb4_general_ci NOT NULL,
+  `created` bigint NOT NULL DEFAULT (unix_timestamp()),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_ft_finance_lines_external` (`account_id`,`external_id`),
+  UNIQUE KEY `uniq_ft_finance_lines_tx` (`transaction_id`,`account_id`),
+  KEY `idx_ft_finance_lines_pending` (`workspace_id`,`transaction_id`,`ignored`,`date`),
+  KEY `fk_ft_finance_lines_import` (`import_id`),
+  CONSTRAINT `fk_ft_finance_lines_account` FOREIGN KEY (`account_id`) REFERENCES `finance_accounts` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_ft_finance_lines_import` FOREIGN KEY (`import_id`) REFERENCES `ft_finance_imports` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_ft_finance_lines_tx` FOREIGN KEY (`transaction_id`) REFERENCES `finance_transactions` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_ft_finance_lines_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_git_credentials` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `workspace_id` int NOT NULL,
+  `label` varchar(64) COLLATE utf8mb4_general_ci NOT NULL,
+  `secret_enc` text COLLATE utf8mb4_general_ci NOT NULL,
+  `created` bigint NOT NULL DEFAULT (unix_timestamp()),
+  PRIMARY KEY (`id`),
+  KEY `idx_ft_git_credentials_workspace` (`workspace_id`),
+  CONSTRAINT `fk_ft_git_credentials_workspace` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_invoicing_clients` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `workspace_id` int NOT NULL,
+  `kind` varchar(8) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'company',
+  `payment_terms_days` int DEFAULT NULL,
+  `default_vat_bp` int DEFAULT NULL,
+  `archived` tinyint NOT NULL DEFAULT '0',
+  `created` bigint NOT NULL,
+  `updated` bigint NOT NULL,
+  `content` mediumtext COLLATE utf8mb4_general_ci NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_ft_invoicing_clients_ws` (`workspace_id`,`archived`,`id`),
+  CONSTRAINT `fk_ft_invoicing_clients_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_invoicing_deductions` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `doc_id` int NOT NULL,
+  `workspace_id` int NOT NULL,
+  `deducted_doc_id` int NOT NULL,
+  `amount` bigint NOT NULL,
+  `created` bigint NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_ft_invoicing_deductions_pair` (`doc_id`,`deducted_doc_id`),
+  KEY `idx_ft_invoicing_deductions_src` (`deducted_doc_id`),
+  KEY `idx_ft_invoicing_deductions_ws` (`workspace_id`),
+  CONSTRAINT `fk_ft_invoicing_deductions_doc` FOREIGN KEY (`doc_id`) REFERENCES `ft_invoicing_docs` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_ft_invoicing_deductions_src` FOREIGN KEY (`deducted_doc_id`) REFERENCES `ft_invoicing_docs` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_invoicing_docs` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `workspace_id` int NOT NULL,
+  `client_id` int DEFAULT NULL,
+  `kind` varchar(8) COLLATE utf8mb4_general_ci NOT NULL,
+  `parent_doc_id` int DEFAULT NULL,
+  `is_deposit` tinyint NOT NULL DEFAULT '0',
+  `status` varchar(10) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'draft',
+  `archived` tinyint NOT NULL DEFAULT '0',
+  `seq_year` smallint DEFAULT NULL,
+  `number` int DEFAULT NULL,
+  `number_label` varchar(32) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `issued_on` date DEFAULT NULL,
+  `due_on` date DEFAULT NULL,
+  `valid_until` date DEFAULT NULL,
+  `performed_on` date DEFAULT NULL,
+  `currency` char(3) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'EUR',
+  `vat_regime` varchar(10) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'standard',
+  `total_net` bigint DEFAULT NULL,
+  `total_vat` bigint DEFAULT NULL,
+  `total_gross` bigint DEFAULT NULL,
+  `public_token` varchar(64) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `accepted_at` bigint DEFAULT NULL,
+  `sent_at` bigint DEFAULT NULL,
+  `reminded_at` bigint DEFAULT NULL,
+  `issuer_snapshot` mediumtext COLLATE utf8mb4_general_ci,
+  `client_snapshot` mediumtext COLLATE utf8mb4_general_ci,
+  `content` mediumtext COLLATE utf8mb4_general_ci NOT NULL,
+  `created_by` int NOT NULL,
+  `issued_by` int DEFAULT NULL,
+  `created` bigint NOT NULL,
+  `updated` bigint NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_ft_invoicing_docs_number` (`workspace_id`,`kind`,`seq_year`,`number`),
+  UNIQUE KEY `uniq_ft_invoicing_docs_token` (`public_token`),
+  KEY `idx_ft_invoicing_docs_ws` (`workspace_id`,`kind`,`status`,`issued_on`),
+  KEY `idx_ft_invoicing_docs_due` (`workspace_id`,`kind`,`status`,`due_on`),
+  KEY `idx_ft_invoicing_docs_client` (`client_id`,`issued_on`),
+  KEY `idx_ft_invoicing_docs_parent` (`parent_doc_id`,`kind`,`status`),
+  CONSTRAINT `fk_ft_invoicing_docs_client` FOREIGN KEY (`client_id`) REFERENCES `ft_invoicing_clients` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_ft_invoicing_docs_parent` FOREIGN KEY (`parent_doc_id`) REFERENCES `ft_invoicing_docs` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_ft_invoicing_docs_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_invoicing_lines` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `doc_id` int NOT NULL,
+  `workspace_id` int NOT NULL,
+  `sort_order` int NOT NULL DEFAULT '0',
+  `kind` varchar(8) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'service',
+  `quantity_milli` bigint NOT NULL DEFAULT '1000',
+  `unit` varchar(8) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'unit',
+  `unit_price` bigint NOT NULL DEFAULT '0',
+  `vat_bp` int NOT NULL DEFAULT '0',
+  `net_amount` bigint DEFAULT NULL,
+  `content` mediumtext COLLATE utf8mb4_general_ci NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_ft_invoicing_lines_doc` (`doc_id`,`sort_order`,`id`),
+  KEY `idx_ft_invoicing_lines_ws` (`workspace_id`),
+  KEY `idx_ft_invoicing_lines_vat` (`doc_id`,`vat_bp`),
+  CONSTRAINT `fk_ft_invoicing_lines_doc` FOREIGN KEY (`doc_id`) REFERENCES `ft_invoicing_docs` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_invoicing_payments` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `doc_id` int NOT NULL,
+  `workspace_id` int NOT NULL,
+  `paid_on` date NOT NULL,
+  `amount` bigint NOT NULL,
+  `method` varchar(10) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'transfer',
+  `content` text COLLATE utf8mb4_general_ci NOT NULL,
+  `created` bigint NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_ft_invoicing_payments_doc` (`doc_id`,`paid_on`),
+  KEY `idx_ft_invoicing_payments_ws` (`workspace_id`,`paid_on`),
+  CONSTRAINT `fk_ft_invoicing_payments_doc` FOREIGN KEY (`doc_id`) REFERENCES `ft_invoicing_docs` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_invoicing_settings` (
+  `workspace_id` int NOT NULL,
+  `currency` char(3) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'EUR',
+  `time_zone` varchar(64) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'Europe/Paris',
+  `vat_regime` varchar(10) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'standard',
+  `default_vat_bp` int NOT NULL DEFAULT '2000',
+  `payment_terms_days` int NOT NULL DEFAULT '30',
+  `quote_validity_days` int NOT NULL DEFAULT '30',
+  `quote_prefix` varchar(8) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'D',
+  `invoice_prefix` varchar(8) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'F',
+  `credit_prefix` varchar(8) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'A',
+  `number_reset` varchar(8) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'yearly',
+  `number_start` int NOT NULL DEFAULT '1',
+  `number_pad` tinyint NOT NULL DEFAULT '4',
+  `mail_sender_id` int DEFAULT NULL,
+  `domain_id` int DEFAULT NULL,
+  `content` mediumtext COLLATE utf8mb4_general_ci NOT NULL,
+  `updated` bigint NOT NULL,
+  PRIMARY KEY (`workspace_id`),
+  CONSTRAINT `fk_ft_invoicing_settings_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_mailserver_blobs` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `mailbox_id` int NOT NULL,
+  `ref` char(32) COLLATE utf8mb4_general_ci NOT NULL,
+  `size` int NOT NULL,
+  `refs` int NOT NULL DEFAULT '1',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_ft_mailserver_blobs_ref` (`ref`),
+  KEY `idx_ft_mailserver_blobs_mailbox` (`mailbox_id`),
+  CONSTRAINT `fk_ft_mailserver_blobs_mailbox` FOREIGN KEY (`mailbox_id`) REFERENCES `ft_mailserver_mailboxes` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_mailserver_credentials` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `mailbox_id` int NOT NULL,
+  `label` varchar(80) COLLATE utf8mb4_general_ci NOT NULL,
+  `secret_hash` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
+  `origin` varchar(8) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'user',
+  `save_sent` tinyint(1) NOT NULL DEFAULT '0',
+  `created` bigint NOT NULL DEFAULT (unix_timestamp()),
+  `created_by` int NOT NULL DEFAULT '0',
+  `last_used_at` bigint DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_ft_mailserver_credentials_mailbox` (`mailbox_id`),
+  CONSTRAINT `fk_ft_mailserver_credentials_mailbox` FOREIGN KEY (`mailbox_id`) REFERENCES `ft_mailserver_mailboxes` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_mailserver_daily` (
+  `mailbox_id` int NOT NULL,
+  `day` char(10) COLLATE utf8mb4_general_ci NOT NULL,
+  `received` int NOT NULL DEFAULT '0',
+  `sent` int NOT NULL DEFAULT '0',
+  `rejected` int NOT NULL DEFAULT '0',
+  `bounced` int NOT NULL DEFAULT '0',
+  PRIMARY KEY (`mailbox_id`,`day`),
+  CONSTRAINT `fk_ft_mailserver_daily_mailbox` FOREIGN KEY (`mailbox_id`) REFERENCES `ft_mailserver_mailboxes` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_mailserver_domain_keys` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `workspace_id` int NOT NULL,
+  `host` varchar(253) COLLATE utf8mb4_general_ci NOT NULL,
+  `selector` varchar(32) COLLATE utf8mb4_general_ci NOT NULL,
+  `private_key` text COLLATE utf8mb4_general_ci NOT NULL,
+  `public_key` text COLLATE utf8mb4_general_ci NOT NULL,
+  `created` bigint NOT NULL DEFAULT (unix_timestamp()),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_ft_mailserver_domain_keys_host` (`host`),
+  KEY `fk_ft_mailserver_domain_keys_ws` (`workspace_id`),
+  CONSTRAINT `fk_ft_mailserver_domain_keys_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_mailserver_events` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `mailbox_id` int NOT NULL,
+  `ts` bigint NOT NULL,
+  `kind` varchar(16) COLLATE utf8mb4_general_ci NOT NULL,
+  `size` int NOT NULL DEFAULT '0',
+  `spf` tinyint NOT NULL DEFAULT '0',
+  `dkim` tinyint NOT NULL DEFAULT '0',
+  `dmarc` tinyint NOT NULL DEFAULT '0',
+  `content` text COLLATE utf8mb4_general_ci NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_ft_mailserver_events_mailbox` (`mailbox_id`,`ts`),
+  KEY `idx_ft_mailserver_events_ts` (`ts`),
+  CONSTRAINT `fk_ft_mailserver_events_mailbox` FOREIGN KEY (`mailbox_id`) REFERENCES `ft_mailserver_mailboxes` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_mailserver_folders` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `mailbox_id` int NOT NULL,
+  `path` varchar(255) COLLATE utf8mb4_bin NOT NULL,
+  `special_use` varchar(16) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `uid_validity` int unsigned NOT NULL,
+  `uid_next` int unsigned NOT NULL DEFAULT '1',
+  `subscribed` tinyint(1) NOT NULL DEFAULT '1',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_ft_mailserver_folders_path` (`mailbox_id`,`path`),
+  CONSTRAINT `fk_ft_mailserver_folders_mailbox` FOREIGN KEY (`mailbox_id`) REFERENCES `ft_mailserver_mailboxes` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_mailserver_mailboxes` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `workspace_id` int NOT NULL,
+  `domain_id` int NOT NULL,
+  `local_part` varchar(64) COLLATE utf8mb4_general_ci NOT NULL,
+  `address` varchar(320) COLLATE utf8mb4_general_ci NOT NULL,
+  `enabled` tinyint(1) NOT NULL DEFAULT '1',
+  `password_hash` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
+  `password_set_at` bigint NOT NULL,
+  `quota_bytes` bigint NOT NULL,
+  `used_bytes` bigint NOT NULL DEFAULT '0',
+  `message_count` int NOT NULL DEFAULT '0',
+  `outbound_daily_limit` int NOT NULL DEFAULT '200',
+  `blob_key` text COLLATE utf8mb4_general_ci NOT NULL,
+  `uid_validity_seq` int unsigned NOT NULL DEFAULT '1',
+  `banner_dismissed` tinyint(1) NOT NULL DEFAULT '0',
+  `last_delivery_at` bigint DEFAULT NULL,
+  `last_login_at` bigint DEFAULT NULL,
+  `content` text COLLATE utf8mb4_general_ci NOT NULL,
+  `created` bigint NOT NULL DEFAULT (unix_timestamp()),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_ft_mailserver_mailboxes_address` (`address`),
+  KEY `idx_ft_mailserver_mailboxes_ws` (`workspace_id`),
+  KEY `idx_ft_mailserver_mailboxes_domain` (`domain_id`),
+  CONSTRAINT `fk_ft_mailserver_mailboxes_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_mailserver_messages` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `mailbox_id` int NOT NULL,
+  `folder_id` int NOT NULL,
+  `uid` int unsigned NOT NULL,
+  `flags` smallint NOT NULL DEFAULT '0',
+  `keywords` varchar(255) COLLATE utf8mb4_general_ci NOT NULL DEFAULT '',
+  `internal_date` bigint NOT NULL,
+  `size` int NOT NULL,
+  `blob_id` bigint NOT NULL,
+  `meta` mediumtext COLLATE utf8mb4_general_ci NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_ft_mailserver_messages_uid` (`folder_id`,`uid`),
+  KEY `idx_ft_mailserver_messages_mailbox` (`mailbox_id`),
+  KEY `idx_ft_mailserver_messages_blob` (`blob_id`),
+  CONSTRAINT `fk_ft_mailserver_messages_folder` FOREIGN KEY (`folder_id`) REFERENCES `ft_mailserver_folders` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_mailserver_queue` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `workspace_id` int NOT NULL,
+  `mailbox_id` int NOT NULL,
+  `blob_id` bigint NOT NULL,
+  `status` varchar(10) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'queued',
+  `attempts` int NOT NULL DEFAULT '0',
+  `next_attempt_at` bigint NOT NULL,
+  `created` bigint NOT NULL DEFAULT (unix_timestamp()),
+  `content` text COLLATE utf8mb4_general_ci NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_ft_mailserver_queue_due` (`status`,`next_attempt_at`),
+  KEY `idx_ft_mailserver_queue_mailbox` (`mailbox_id`),
+  CONSTRAINT `fk_ft_mailserver_queue_mailbox` FOREIGN KEY (`mailbox_id`) REFERENCES `ft_mailserver_mailboxes` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_mailserver_tls` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `hostname` varchar(253) COLLATE utf8mb4_general_ci NOT NULL,
+  `kind` varchar(12) COLLATE utf8mb4_general_ci NOT NULL,
+  `directory` varchar(12) COLLATE utf8mb4_general_ci NOT NULL,
+  `sealed` text COLLATE utf8mb4_general_ci NOT NULL,
+  `cert_pem` mediumtext COLLATE utf8mb4_general_ci,
+  `not_after` bigint DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_ft_mailserver_tls` (`hostname`,`kind`,`directory`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_osint_usage` (
+  `workspace_id` int NOT NULL,
+  `month` int NOT NULL,
+  `lookups` int NOT NULL DEFAULT '0',
+  PRIMARY KEY (`workspace_id`,`month`),
+  CONSTRAINT `fk_ft_osint_usage_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_projects_dashboard_tiles` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `project_id` int NOT NULL,
+  `workspace_id` int NOT NULL,
+  `tile_key` varchar(64) COLLATE utf8mb4_general_ci NOT NULL,
+  `sort_order` int NOT NULL DEFAULT '0',
+  `hidden` tinyint NOT NULL DEFAULT '0',
+  `database_id` int DEFAULT NULL,
+  `content` text COLLATE utf8mb4_general_ci NOT NULL,
+  `last_number` double DEFAULT NULL,
+  `last_error` varchar(512) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `last_check_at` bigint DEFAULT NULL,
+  `created` bigint NOT NULL DEFAULT (unix_timestamp()),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_ft_projects_dashboard_tile` (`project_id`,`tile_key`),
+  KEY `idx_ft_projects_dashboard_order` (`project_id`,`sort_order`,`id`),
+  KEY `idx_ft_projects_dashboard_database` (`database_id`,`workspace_id`),
+  CONSTRAINT `fk_ft_projects_dashboard_project` FOREIGN KEY (`project_id`) REFERENCES `projects` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_projects_hosting_links` (
+  `project_id` int NOT NULL,
+  `pack_id` int NOT NULL,
+  `workspace_id` int NOT NULL,
+  `created` bigint NOT NULL DEFAULT (unix_timestamp()),
+  PRIMARY KEY (`project_id`,`pack_id`),
+  KEY `idx_ft_projects_hosting_links_pack` (`pack_id`),
+  KEY `fk_ft_projects_hosting_links_workspace` (`workspace_id`),
+  CONSTRAINT `fk_ft_projects_hosting_links_project` FOREIGN KEY (`project_id`) REFERENCES `projects` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_ft_projects_hosting_links_workspace` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_projects_public` (
+  `project_id` int NOT NULL,
+  `public_ref` char(16) COLLATE utf8mb4_general_ci NOT NULL,
+  `enabled` tinyint(1) NOT NULL DEFAULT '0',
+  `published_at` bigint DEFAULT NULL,
+  `domain_id` int DEFAULT NULL,
+  `slug` varchar(48) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `domain_at` bigint DEFAULT NULL,
+  `show_dates` tinyint(1) NOT NULL DEFAULT '0',
+  `show_assignees` tinyint(1) NOT NULL DEFAULT '0',
+  `show_subtasks` tinyint(1) NOT NULL DEFAULT '0',
+  `theme` varchar(8) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'auto',
+  `accent` varchar(32) COLLATE utf8mb4_general_ci NOT NULL DEFAULT '',
+  `created` bigint NOT NULL DEFAULT (unix_timestamp()),
+  PRIMARY KEY (`project_id`),
+  UNIQUE KEY `uniq_ft_projects_public_ref` (`public_ref`),
+  UNIQUE KEY `uniq_ft_projects_public_slug` (`domain_id`,`slug`),
+  CONSTRAINT `fk_ft_projects_public_project` FOREIGN KEY (`project_id`) REFERENCES `projects` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_sentinel_device_config` (
+  `device_id` char(36) COLLATE utf8mb4_general_ci NOT NULL,
+  `enabled` tinyint NOT NULL DEFAULT '0',
+  `learning_until` bigint DEFAULT NULL,
+  `integrity_minutes` int NOT NULL DEFAULT '360',
+  `auth_events` tinyint NOT NULL DEFAULT '1',
+  `pin_evidence` tinyint NOT NULL DEFAULT '1',
+  `last_integrity_at` bigint DEFAULT NULL,
+  PRIMARY KEY (`device_id`),
+  CONSTRAINT `fk_ft_sentinel_device_config_device` FOREIGN KEY (`device_id`) REFERENCES `devices` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_uptime_page_services` (
+  `page_id` int NOT NULL,
+  `service_id` int NOT NULL,
+  `sort_order` int NOT NULL DEFAULT '0',
+  `label` text COLLATE utf8mb4_general_ci,
+  PRIMARY KEY (`page_id`,`service_id`),
+  KEY `idx_ft_uptime_page_services_service` (`service_id`),
+  CONSTRAINT `fk_ft_uptime_page_services_page` FOREIGN KEY (`page_id`) REFERENCES `ft_uptime_pages` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_ft_uptime_page_services_service` FOREIGN KEY (`service_id`) REFERENCES `uptime_services` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_uptime_pages` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `workspace_id` int NOT NULL,
+  `public_ref` char(16) COLLATE utf8mb4_general_ci NOT NULL,
+  `content` text COLLATE utf8mb4_general_ci NOT NULL,
+  `domain_id` int DEFAULT NULL,
+  `theme` varchar(8) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'auto',
+  `show_errors` tinyint(1) NOT NULL DEFAULT '0',
+  `show_latency` tinyint(1) NOT NULL DEFAULT '0',
+  `enabled` tinyint(1) NOT NULL DEFAULT '1',
+  `created` bigint NOT NULL DEFAULT (unix_timestamp()),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_ft_uptime_pages_ref` (`public_ref`),
+  UNIQUE KEY `uniq_ft_uptime_pages_domain` (`domain_id`),
+  KEY `idx_ft_uptime_pages_ws` (`workspace_id`),
+  CONSTRAINT `fk_ft_uptime_pages_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 CREATE TABLE `git_branches` (

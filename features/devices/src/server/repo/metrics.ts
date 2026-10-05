@@ -75,7 +75,10 @@ function intNum(v: number | null): number | null {
     return v === null || v === undefined ? null : Math.round(Number(v));
 }
 
-function rowToPoint(r: MetricRow): MetricSeriesPoint {
+/** Une ligne agrégée par tranche : ni identifiant, ni appareil, ni épingle. */
+type BucketRow = Omit<MetricRow, 'id' | 'device_id' | 'pinned'>;
+
+function rowToPoint(r: BucketRow): MetricSeriesPoint {
     return {
         timestamp: Math.round(Number(r.ts)),
         cpuPercent: Number(r.cpu_percent),
@@ -118,7 +121,7 @@ export function metricRepo(q: SdkQueryable): MetricRepo {
             // Averages for gauges, max for counters. Le SELECT et le GROUP BY
             // portent la même expression (sinon `only_full_group_by`).
             const bucketMs = BUCKET_SECONDS[resolution] * 1000;
-            const rows = await q.query<MetricRow>(
+            const rows = await q.query<BucketRow>(
                 `SELECT
                      (FLOOR(ts / ?) * ?)        AS ts,
                      AVG(cpu_percent)           AS cpu_percent,

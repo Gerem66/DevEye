@@ -466,7 +466,7 @@ function messagesRepo(q: SdkQueryable): MailMessagesRepo {
     return {
         async countByFolder(folderId) {
             const rows = await q.query<{ total: number; unseen: number }>(
-                'SELECT COUNT(*) AS total, SUM(seen = 0) AS unseen FROM mail_messages WHERE folder_id = ?',
+                'SELECT COUNT(*) AS total, COALESCE(SUM(seen = 0), 0) AS unseen FROM mail_messages WHERE folder_id = ?',
                 [folderId]
             );
             const row = rows[0];

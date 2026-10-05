@@ -81,8 +81,7 @@ export interface CveEntryRow {
     published: number;
     last_modified: number;
     severity: CveSeverity;
-    /** MySQL rend un DECIMAL en chaîne. */
-    score: string | null;
+    score: number | null;
     vector: string | null;
     cwe: string | null;
     summary: string;

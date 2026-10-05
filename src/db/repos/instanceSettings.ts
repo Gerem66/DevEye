@@ -21,7 +21,7 @@ export interface InstanceSettingsRepo {
 }
 
 /** La ligne d'un réglage, jointe au compte qui l'a posé. */
-export interface InstanceSettingRaw {
+interface InstanceSettingRaw {
     origin: string;
     value: string;
     updated: number;

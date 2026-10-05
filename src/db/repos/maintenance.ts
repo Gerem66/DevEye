@@ -44,7 +44,7 @@ const author = (row: RawAuthor): Author | null =>
     row.updated_by !== null && row.username !== null ? { id: row.updated_by, username: row.username } : null;
 
 /** La ligne unique de `site_maintenance`, jointe aux deux comptes qui l'ont touchée. */
-export interface SiteMaintenanceRaw extends RawAuthor {
+interface SiteMaintenanceRaw extends RawAuthor {
     active: number;
     message: string | null;
     env_notice_dismissed: number;
@@ -56,7 +56,7 @@ export interface SiteMaintenanceRaw extends RawAuthor {
 }
 
 /** Une ligne de `feature_maintenance`, jointe au compte qui l'a posée. */
-export interface FeatureMaintenanceRaw extends RawAuthor {
+interface FeatureMaintenanceRaw extends RawAuthor {
     feature: string;
     level: FeatureMaintenanceLevel;
     updated: number;

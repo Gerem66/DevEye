@@ -5,10 +5,7 @@ import type { Queryable } from '../pool';
 type Q = Queryable;
 
 /** Ce qu'un listage rend : `WorkspaceRow` sans ses deux MEDIUMTEXT. */
-export type WorkspaceListRow = Pick<
-    WorkspaceRow,
-    'id' | 'kind' | 'name' | 'logo' | 'owner_user_id' | 'features' | 'created'
->;
+type WorkspaceListRow = Pick<WorkspaceRow, 'id' | 'kind' | 'name' | 'logo' | 'owner_user_id' | 'features' | 'created'>;
 
 export interface WorkspacesRepo {
     findById(id: number): Promise<WorkspaceRow | null>;

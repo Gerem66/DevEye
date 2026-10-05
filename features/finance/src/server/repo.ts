@@ -796,7 +796,7 @@ export function createRepo(q: SdkQueryable): FinanceRepo {
                 `SELECT t.id, t.account_id, t.source_ref, t.amount, t.vat_amount,
                         DATE_FORMAT(t.date, '%Y-%m-%d') AS date
                    FROM finance_transactions t
-                  WHERE t.workspace_id = ? AND t.source = ?`,
+                  WHERE t.workspace_id = ? AND t.source = ? AND t.source_ref IS NOT NULL`,
                 [workspaceId, source]
             );
         },

@@ -129,6 +129,11 @@ jobs:
       - name: Check the committed schema against the migrated database
         run: npm run gen:db-schema -- --check
 
+      # Every query the server sends is prepared on that same base and matched
+      # against the row type it declares.
+      - name: Check every query against the migrated database
+        run: npm run check:queries
+
   # Ici seulement Linux : les binaires par système partent d'agent-build.yml,
   # sur les poussées vers main.
   agent:

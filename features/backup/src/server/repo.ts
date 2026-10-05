@@ -342,12 +342,12 @@ export function createRepo(q: Q): BackupRepo {
         async countJobs(workspaceId) {
             const rows = await q.query<{ n: number; failing: number }>(
                 `SELECT COUNT(*) AS n,
-                        SUM(
+                        COALESCE(SUM(
                             CASE WHEN (SELECT y.status FROM backup_runs y
                                         WHERE y.job_id = j.id
                                         ORDER BY y.started_at DESC, y.id DESC LIMIT 1) = 'failed'
                                  THEN 1 ELSE 0 END
-                        ) AS failing
+                        ), 0) AS failing
                    FROM backup_jobs j
                   WHERE j.workspace_id = ? AND j.enabled = 1`,
                 [workspaceId]

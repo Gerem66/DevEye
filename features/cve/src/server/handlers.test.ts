@@ -50,7 +50,7 @@ function toRow(e: CveUpsert, favorite: boolean): CveEntryWithFavoriteRow {
         published: e.published,
         last_modified: e.lastModified,
         severity: e.severity,
-        score: e.score === null ? null : String(e.score),
+        score: e.score,
         vector: e.vector,
         cwe: e.cwe,
         summary: e.summary,

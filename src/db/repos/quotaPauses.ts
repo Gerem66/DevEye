@@ -30,7 +30,7 @@ export interface QuotaPausesRepo {
 }
 
 /** Ligne de `quota_pauses`. */
-export interface QuotaPauseRaw {
+interface QuotaPauseRaw {
     quota_key: string;
     item_id: string;
     owner_user_id: number;

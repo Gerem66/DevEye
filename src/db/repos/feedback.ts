@@ -44,7 +44,7 @@ export interface FeedbackRepo {
 }
 
 /** Ligne du listage, jointe aux comptes pour les noms affichés. */
-export interface FeedbackJoinRow {
+interface FeedbackJoinRow {
     id: number;
     created: number;
     kind: string;

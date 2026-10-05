@@ -73,7 +73,7 @@ function serializeConnectionError(err: unknown): Record<string, unknown> {
 }
 
 /** La base visée par l'environnement, commune au pool et aux connexions ponctuelles. */
-function connectionOptions(): ConnectionOptions {
+export function connectionOptions(): ConnectionOptions {
     return {
         host: env.DB_HOSTNAME,
         port: env.DB_PORT,
@@ -88,7 +88,10 @@ export function createDbPool(): DbPool {
         ...connectionOptions(),
         connectionLimit: env.DB_POOL_MAX,
         waitForConnections: true,
-        enableKeepAlive: true
+        enableKeepAlive: true,
+        // Le schéma n'a aucune colonne DECIMAL : seuls SUM et AVG en rendent,
+        // et le code les lit en nombres. `check:queries` suppose ce réglage.
+        decimalNumbers: true
     };
 
     return mysql.createPool(config);

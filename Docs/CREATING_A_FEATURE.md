@@ -211,8 +211,17 @@ cd DevEye-Types && npm run ci          # types
 cd DevEye        && npm run ci          # lint, format, typecheck, tests, glue
 cd DevEye        && npm run ci:features # modules in-repo
 cd DevEye        && npm run ci:smoke    # smoke E2E de chaque module (il lui faut la base)
+cd DevEye        && npm run check:queries # chaque requête préparée sur la base migrée
 cd DevEye/client && npm run ci          # lint, typecheck, check:sdk, tests, build
 ```
+
+`check:queries` prépare chaque `query`/`execute` du module sur la base des
+variables `DB_*` (rien ne s'exécute) : une colonne inconnue, un `?` sans
+paramètre ou un champ de `query<T>` que la requête ne rend pas, ou pas du type
+déclaré (un NULL possible, un ENUM plus large), y échouent avec `fichier:ligne`.
+Il couvre aussi les modules privés installés par `features.local.json`. Un SQL
+assemblé à l'exécution n'est pas vérifié (`--verbose` le liste) ; un appel
+qu'il ne sait pas préparer s'écarte par `// check-queries: ignore <raison>`.
 
 Jamais `npx eslint .` à la racine de `DevEye/` : `npm run lint`,
 `npm run lint:features`, et dans `client/` `npm run lint`. Prettier couvre

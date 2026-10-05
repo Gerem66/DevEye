@@ -35,6 +35,7 @@
     "test": "DOTENV_CONFIG_PATH=.env.test NODE_OPTIONS=--disable-warning=ExperimentalWarning tsx --test \"src/**/*.test.ts\" \"scripts/lib/*.test.ts\" \"statuspage/*.test.ts\"",
     "test:features": "DOTENV_CONFIG_PATH=.env.test NODE_OPTIONS=--disable-warning=ExperimentalWarning tsx --test \"features/*/src/**/*.test.ts\"",
     "gen:db-schema": "tsx scripts/gen-db-schema.ts",
+    "check:queries": "tsx scripts/check-queries.ts",
     "gen:features": "tsx scripts/gen-features.ts",
     "gen:features:local": "tsx scripts/gen-features.ts --ensure-local",
     "smoke:feature": "tsx scripts/smoke-feature.ts",

@@ -54,7 +54,7 @@ export interface DebugRepo {
 }
 
 /** La ligne d'un essai, jointe au compte qui l'a lancé. */
-export interface DebugRunRaw {
+interface DebugRunRaw {
     id: number;
     kind: DebugRunKind;
     status: DebugRunStatus;

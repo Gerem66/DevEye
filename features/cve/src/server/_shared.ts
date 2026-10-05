@@ -25,7 +25,7 @@ export function toEntry(row: CveEntryWithFavoriteRow): CveEntry {
         published: row.published,
         lastModified: row.last_modified,
         severity: row.severity,
-        score: row.score === null ? null : Number(row.score),
+        score: row.score,
         vector: row.vector,
         cwe: row.cwe,
         summary: row.summary,
