@@ -165,12 +165,13 @@ function adminMenu(): { id: string; label: string; icon: string }[] {
 }
 
 /** Lues une fois : les modules installés ne changent pas en cours de session. */
-let ACCOUNT_MENU_MEMO: { id: string; label: string; icon: string }[] | null = null;
-function accountMenu(): { id: string; label: string; icon: string }[] {
+let ACCOUNT_MENU_MEMO: { id: string; label: string; icon: string; adminTools: boolean }[] | null = null;
+function accountMenu(): { id: string; label: string; icon: string; adminTools: boolean }[] {
     ACCOUNT_MENU_MEMO ??= accountEntries().map(({ manifest }) => ({
         id: manifest.id,
         label: manifest.accountEntry!.label,
-        icon: manifest.icon
+        icon: manifest.icon,
+        adminTools: manifest.accountEntry!.adminTools === true
     }));
     return ACCOUNT_MENU_MEMO;
 }
@@ -991,8 +992,11 @@ export default function HomePage() {
     ]);
 
     const accountMenuEntries = useMemo(
-        () => accountMenu().filter((entry) => !hiddenFeatures.has(entry.id)),
-        [hiddenFeatures]
+        () =>
+            accountMenu()
+                .filter((entry) => !hiddenFeatures.has(entry.id))
+                .map((entry) => ({ ...entry, adminTools: isAdmin && entry.adminTools })),
+        [hiddenFeatures, isAdmin]
     );
     const adminPages = useMemo(
         () =>

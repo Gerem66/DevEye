@@ -282,14 +282,15 @@ export default function Dialog({
                             {kicker && <div className={styles.kicker}>{kicker}</div>}
                             {title && <h3 className={styles.title}>{title}</h3>}
                             {description && <p className={styles.description}>{description}</p>}
+                            {/* Le pied aussi : un `DialogCancelButton` y est le cas courant. */}
                             <DialogCloseContext.Provider value={attemptClose}>
                                 <DialogPrimaryContext.Provider value={registerPrimary}>
                                     <div className={`${styles.body} ${tall || fill ? styles.bodyFill : ''}`}>
                                         {children}
                                     </div>
                                 </DialogPrimaryContext.Provider>
+                                {footer && <div className={styles.footer}>{footer}</div>}
                             </DialogCloseContext.Provider>
-                            {footer && <div className={styles.footer}>{footer}</div>}
                         </div>
                     </motion.div>
                 </div>

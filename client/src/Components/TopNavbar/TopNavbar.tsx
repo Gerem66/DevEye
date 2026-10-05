@@ -58,8 +58,12 @@ export interface TopNavbarProps {
     onOpenProfile?: (e: ReactMouseEvent) => void;
     /** Open the security feature. Receives the click (Ctrl/Cmd or Shift = force reload). */
     onOpenSecurity?: (e: ReactMouseEvent) => void;
-    /** Les entrées de compte des modules (`manifest.accountEntry`), rangées sous « Sécurité ». */
-    accountEntries?: readonly { id: string; label: string; icon: string }[];
+    /**
+     * Les entrées de compte des modules (`manifest.accountEntry`), rangées sous
+     * « Sécurité ». `adminTools` : la vue porte aussi des outils d'administration
+     * pour celui qui regarde, l'entrée reçoit le bouclier des pages système.
+     */
+    accountEntries?: readonly { id: string; label: string; icon: string; adminTools?: boolean }[];
     onOpenAccountEntry?: (id: string, e: ReactMouseEvent) => void;
     /** Open the settings panel. Absent = pas le droit de changer l'apparence. */
     onOpenSettings?: () => void;
@@ -451,6 +455,13 @@ export default function TopNavbar({
                                     }}
                                 >
                                     <span className={`icon icon-${entry.icon}`} /> {entry.label}
+                                    {entry.adminTools && (
+                                        <span
+                                            className={`icon icon-shield ${styles.adminBadge}`}
+                                            title='Contient des outils d’administration'
+                                            aria-label='Contient des outils d’administration'
+                                        />
+                                    )}
                                 </button>
                             ))}
                             {/* Second separator: groups the system pages apart
