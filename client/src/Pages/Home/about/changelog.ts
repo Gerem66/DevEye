@@ -12,6 +12,28 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: readonly ChangelogEntry[] = [
     {
+        version: '0.24.1',
+        date: '2026-10-06',
+        changes: [
+            {
+                kind: 'fixed',
+                text: 'Une vue refermée ne se rouvre plus d’elle-même après un passage par une tuile d’appareil ou un lien vers une autre fonctionnalité'
+            },
+            {
+                kind: 'fixed',
+                text: 'Mail, Appareils, Git et Abonnement : un échec ne relance plus la requête (quand la fin de la vue est atteinte) en boucle et Mail propose « Réessayer »'
+            },
+            {
+                kind: 'improved',
+                text: 'Appareils : supprimer un appareil retire aussi le service et l’icône de son agent'
+            },
+            {
+                kind: 'fixed',
+                text: 'Auto-hébergement : changer la clé du serveur ne rend plus illisibles les fichiers hébergés'
+            }
+        ]
+    },
+    {
         version: '0.24.0',
         date: '2026-10-06',
         changes: [
