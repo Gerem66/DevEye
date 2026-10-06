@@ -833,10 +833,11 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-sm);
-    flex: 0 0 288px;
-    /* Sans lui, un élément flex ne descend pas sous son contenu : un nom de colonne
-       long élargirait la sienne au lieu de s'abréger. */
-    min-width: 0;
+    /* `width` et non `flex-basis` : Firefox mesure la piste sur la largeur des
+       colonnes sans retour à la ligne, et une description longue l'étirait de
+       milliers de pixels vides. */
+    flex: none;
+    width: 288px;
     min-height: 0;
     padding: var(--space-sm);
     border-radius: var(--radius-lg);
@@ -993,7 +994,8 @@
 }
 
 .addColumn {
-    flex: 0 0 160px;
+    flex: none;
+    width: 160px;
     align-self: flex-start;
     display: inline-flex;
     align-items: center;
