@@ -1,5 +1,4 @@
-import { SHARE_WIRED_FEATURES } from '@deveye/types';
-import type { FeatureId, ForeignRef, WorkspaceFeatureId } from '@deveye/types';
+import type { FeatureId, ForeignRef } from '@deveye/types';
 
 import { createOpenCipher, type Cipher } from '@/Services/SecureStore';
 
@@ -89,18 +88,7 @@ export function foreignRef(label: string): ForeignRef {
  * l'espace visé est vérifiée ensuite par le handler.
  */
 export function shareBlockerFor(ctx: FeatureContext, feature: FeatureId): 'feature' | 'forbidden' | null {
-    if (!isShareWired(feature)) return 'feature';
+    if (!isModuleShareWired(feature)) return 'feature';
     if (!ctx.canFeature(feature, 'write')) return 'forbidden';
     return null;
 }
-
-/**
- * La lecture élargie de cette fonctionnalité est-elle réellement branchée ?
- * Les natives par `SHARE_WIRED_FEATURES`, les modules par leur manifest.
- * `shareTier` dit ce que le chiffrement autorise ; ceci dit ce que le code fait.
- */
-export function isShareWired(feature: FeatureId): boolean {
-    return SHARE_WIRED.has(feature as WorkspaceFeatureId) || isModuleShareWired(feature);
-}
-
-const SHARE_WIRED = new Set<WorkspaceFeatureId>(SHARE_WIRED_FEATURES);

@@ -76,7 +76,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
             },
             {
                 kind: 'improved',
-                text: 'Logs : une panne due à un réglage de l’utilisateur (domaine, webhook, boîte mail, dépôt) sort des avertissements de l’instance'
+                text: 'Journaux : une panne due à un réglage de l’utilisateur (domaine, webhook, boîte mail, dépôt) sort des avertissements de l’instance'
             },
             {
                 kind: 'improved',

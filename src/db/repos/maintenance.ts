@@ -31,7 +31,7 @@ export interface MaintenanceRepo {
     features(): Promise<FeatureMaintenanceRow[]>;
     setSite(active: boolean, message: string | null, by: number): Promise<void>;
     setPriority(active: boolean, by: number): Promise<void>;
-    /** Le démarrage sous `MAINTENANCE=1` : le site fermé, et le rappel réarmé. */
+    /** Le démarrage sous `MAINTENANCE=true` : le site fermé, et le rappel réarmé. */
     seedFromEnv(): Promise<void>;
     dismissEnvNotice(): Promise<void>;
     /** `null` rouvre la feature. */

@@ -415,18 +415,20 @@ Le module Hébergement sert des fichiers à des visiteurs sans compte : le serve
 doit donc pouvoir les lire, et ils ne passent pas par l'étage gardé.
 
 - Les octets vivent dans le magasin d'objets de l'hôte (disque, ou bucket
-  `STORAGE_S3_*`), scellés au conteneur `DEVB` v2 par une clé **dérivée** de la
-  clé serveur (`keys.derive('deveye-hosting', 'files-v1')`), jamais stockée. Le
-  bucket ne reçoit que du chiffré, et un envoi est scellé dans le dossier local
-  des envois avant d'y partir. La clé ne dépend d'aucun espace : partager ou
-  déplacer un dossier ne relit pas un octet de fichier. Perdre `CRYPT_KEY_A/B`
-  rend tous les fichiers hébergés illisibles, et une rotation de la clé serveur
-  ne les re-chiffre pas ([KEY_ROTATION.md](./KEY_ROTATION.md)).
+  `STORAGE_S3_*`), scellés au conteneur `DEVB` v2 par une clé du module.
+  Toutes ses clés dérivent d'une racine de 32 octets tirée au sort au premier
+  démarrage, scellée par la clé serveur dans `ft_hosting_key` : une rotation de
+  la clé serveur la ré-emballe sans toucher aux fichiers
+  ([KEY_ROTATION.md](./KEY_ROTATION.md)), et perdre `CRYPT_KEY_A/B` rend tous
+  les fichiers hébergés illisibles. Le bucket ne reçoit que du chiffré, et un
+  envoi est scellé dans le dossier local des envois avant d'y partir. La clé ne
+  dépend d'aucun espace : partager ou déplacer un dossier ne relit pas un octet
+  de fichier.
 - Les noms des dossiers, sous-dossiers, fichiers et adresses sont chiffrés à l'étage
   ouvert de l'espace. L'unicité d'un nom dans son dossier tient à un condensat
-  à clé (HMAC, clé dérivée), jamais au nom en clair.
+  à clé (HMAC, clé du module), jamais au nom en clair.
 - Le mot de passe d'une adresse est haché (scrypt, sel propre). L'accès qu'il
-  ouvre est un cookie `HttpOnly`, `SameSite=Lax`, signé par une clé dérivée, qui
+  ouvre est un cookie `HttpOnly`, `SameSite=Lax`, signé par une clé du module, qui
   porte son échéance (une journée) et la version du mot de passe : le changer ou
   le retirer ferme tous les accès ouverts.
 - Les pages publiques n'ont aucun script (`default-src 'none'`, formulaires sur

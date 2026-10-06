@@ -659,8 +659,8 @@ export function isModuleMovable(featureId: string): boolean {
 
 /**
  * Un module dont les éléments se projettent : `shareTier` autre que 'never'
- * ET l'entrée `items` (garantie par `registerModules`). C'est l'équivalent,
- * pour un module, d'une entrée dans `SHARE_WIRED_FEATURES`.
+ * ET l'entrée `items` (garantie par `registerModules`). `shareTier` dit ce que
+ * le chiffrement autorise ; ceci dit ce que le code fait.
  */
 export function isModuleShareWired(featureId: string): boolean {
     const mod = BY_ID.get(featureId);

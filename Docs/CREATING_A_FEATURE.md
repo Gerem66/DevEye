@@ -20,7 +20,7 @@ de `src/features/registry.ts` : `admin.*`, `agent.*`, `debug.*`, `domain.*`,
 
 Ce document est la checklist d'une commande de plus dans l'une de ces familles,
 et d'une **page structurelle** : un écran de DevEye lui-même, atteint depuis le
-menu du compte, sans carte sur la grille (Profil, Sécurité, Logs, Retours,
+menu du compte, sans carte sur la grille (Profil, Sécurité, Journaux, Retours,
 Utilisateurs, Maintenance, Tests et débogage). `client/src/Features/` ne
 contient que ces pages-là ; une page peut n'être qu'un écran qui réutilise des
 commandes existantes, et une commande peut n'avoir aucun écran. Ne faites que

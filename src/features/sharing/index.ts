@@ -15,8 +15,8 @@ import {
 
 import { grantsFor, invalidateAccess } from '../_access';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
-import { isModuleCopyable, isModuleMovable, moduleItems, moduleManifest } from '../_sdk/register';
-import { isShareWired, shareBlockerFor } from '../_sharing';
+import { isModuleCopyable, isModuleMovable, isModuleShareWired, moduleItems, moduleManifest } from '../_sdk/register';
+import { shareBlockerFor } from '../_sharing';
 import { canWriteItemIn, detachLinks, itemHomeWorkspace, loadHome, shutOutByPlan } from './_shared';
 import { copyFeatures } from './copy';
 import { moveFeatures } from './move';
@@ -225,7 +225,7 @@ async function resolveGrantTarget(
     level: 'read' | 'write'
 ): Promise<{ workspaceId: number; workspaceName: string }> {
     ctx.assertFeature(input.feature, level);
-    if (!isShareWired(input.feature)) {
+    if (!isModuleShareWired(input.feature)) {
         throw new FeatureError(
             'validation',
             `Les restrictions par élément ne sont pas encore branchées sur ${featureDescriptor(input.feature).label}.`

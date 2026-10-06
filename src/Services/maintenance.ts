@@ -89,7 +89,7 @@ class MaintenanceStore {
         this.deps = deps;
         if (env.MAINTENANCE) {
             await deps.db.maintenance.seedFromEnv();
-            deps.logger.warn('MAINTENANCE=1 : le site démarre en maintenance');
+            deps.logger.warn('MAINTENANCE=true : le site démarre en maintenance');
         }
         this.current = await this.read();
         this.poll = setInterval(() => void this.reload(), POLL_MS);
@@ -162,7 +162,7 @@ class MaintenanceStore {
     }
 
     /**
-     * Le rappel des administrateurs : démarré sous `MAINTENANCE=1`, pas encore
+     * Le rappel des administrateurs : démarré sous `MAINTENANCE=true`, pas encore
      * fermé. Le client ne l'affiche qu'une fois la maintenance levée.
      */
     async envNotice(): Promise<boolean> {

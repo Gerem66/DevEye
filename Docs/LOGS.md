@@ -8,18 +8,18 @@ Documents voisins : [NOTIFICATIONS.md](./NOTIFICATIONS.md) (les canaux),
 
 ## 1. Trois sources, trois rôles
 
-| Source                             | Ce qu'elle contient                                                                               | Ce qu'elle ne contient pas         |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------- |
-| Page admin **Logs** (table `logs`) | le journal d'audit : connexions, 2FA, actions admin, créations et suppressions, résultats de fond | aucune erreur technique            |
-| **Sortie standard** du conteneur   | tout le technique, en JSON pino sur une ligne : requêtes, erreurs avec leur pile, plantages       | rien au-delà de la rotation Docker |
-| Alertes **Système** (canaux)       | les défauts du serveur, poussés vers e-mail, Discord ou webhook (§ 3)                             | les erreurs d'utilisateurs         |
+| Source                                 | Ce qu'elle contient                                                                               | Ce qu'elle ne contient pas         |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| Page admin **Journaux** (table `logs`) | le journal d'audit : connexions, 2FA, actions admin, créations et suppressions, résultats de fond | aucune erreur technique            |
+| **Sortie standard** du conteneur       | tout le technique, en JSON pino sur une ligne : requêtes, erreurs avec leur pile, plantages       | rien au-delà de la rotation Docker |
+| Alertes **Système** (canaux)           | les défauts du serveur, poussés vers e-mail, Discord ou webhook (§ 3)                             | les erreurs d'utilisateurs         |
 
-Sur la page Logs, le niveau « Sensible » marque une action à surveiller (2FA
+Sur la page Journaux, le niveau « Sensible » marque une action à surveiller (2FA
 coupée, rôle changé, terminal ouvert, maintenance), jamais une panne.
 
 La sortie standard se lit par `docker compose logs app` (ou l'outil qui
 orchestre le conteneur), ou depuis DevEye par l'agent de la machine hôte
-(Appareils, action « Logs de l'appareil », source du conteneur) :
+(Appareils, action « Journaux de l'appareil », source du conteneur) :
 l'agent lit le niveau des lignes JSON, son filtre de niveau minimum vaut donc
 pour DevEye lui-même.
 
@@ -57,7 +57,7 @@ contient le mot : pino n'en écrit pas, DevEye non plus.
 ## 3. La cible Système
 
 Les alertes de l'instance passent par les canaux de notification, comme celles
-des fonctionnalités. Elles se règlent depuis la page **Logs**, bouton
+des fonctionnalités. Elles se règlent depuis la page **Journaux**, bouton
 **Réglages**, onglet Notifications : réservé à un admin, dans un espace qu'il
 possède. Le serveur prévient toutes les routes système des espaces dont le
 propriétaire est un admin actif.

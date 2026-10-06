@@ -445,7 +445,9 @@ impl Config {
     }
 
     /// Wipe every local trace of this agent: the config (which holds the device
-    /// token), the PID, log and state files, and best-effort the executable.
+    /// token), the files beside it (PID, log, state, CloudSync key and scan
+    /// caches, tray markers), and best-effort the executable. The autostart
+    /// service is the caller's business (`commands::handle_destroy`).
     ///
     /// Only the config removal is mandatory: on failure the error is returned so
     /// the server aborts the deletion. On Unix a running process can unlink its
@@ -457,9 +459,14 @@ impl Config {
             std::fs::remove_file(&config)
                 .with_context(|| format!("removing config {}", config.display()))?;
         }
-        let _ = std::fs::remove_file(Self::pid_path());
-        let _ = std::fs::remove_file(Self::log_path());
-        let _ = std::fs::remove_file(Self::state_path());
+        if let Some(dir) = config.parent() {
+            for path in crate::uninstall::own_files(dir) {
+                let _ = std::fs::remove_file(path);
+            }
+            if crate::uninstall::is_own_dir(dir) {
+                let _ = std::fs::remove_dir(dir);
+            }
+        }
         if let Ok(exe) = std::env::current_exe() {
             let _ = std::fs::remove_file(&exe);
         }

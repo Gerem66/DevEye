@@ -197,7 +197,7 @@ partagé par toutes les fonctionnalités qui notifient et par leurs éléments.
 Chaque bascule est aussi journalisée dans les logs d'audit (`uptime.down`,
 `uptime.integrity`, `uptime.recovered`), comme chaque réglage (`uptime.add`,
 `uptime.update`, `uptime.remove`, `uptime.baselineAccepted`), donc consultable
-dans la page Logs.
+dans la page Journaux.
 
 ## Les deux graphiques
 

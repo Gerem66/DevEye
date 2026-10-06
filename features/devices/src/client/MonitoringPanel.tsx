@@ -1030,7 +1030,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         { icon: 'icon-cpu', label: 'Matériel', onClick: showHardwareInfo },
         remote('files', 'Explorateur de fichiers', () => setFilesOpen(true), 'icon-folder', 'filesRead'),
         remote('terminal', 'Terminal distant', () => setTerminalOpen(true), 'icon-terminal', 'terminal'),
-        remote('logs', 'Logs de l’appareil', () => setLogsOpen(true), 'icon-logs'),
+        remote('logs', 'Journaux de l’appareil', () => setLogsOpen(true), 'icon-logs'),
         {
             icon: 'icon-server',
             label: 'Conteneurs Docker',
@@ -1587,8 +1587,8 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             <Dialog
                 open={logsOpen}
                 onClose={() => setLogsOpen(false)}
-                title={`Logs · « ${selected.name} »`}
-                description='Journal système, conteneurs Docker et fichiers de logs de l’appareil, avec recherche avancée.'
+                title={`Journaux · « ${selected.name} »`}
+                description='Journal système, conteneurs Docker et fichiers journaux de l’appareil, avec recherche avancée.'
                 width={1200}
                 tall
             >

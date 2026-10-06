@@ -5,7 +5,7 @@
 --   INSERT INTO feature_maintenance (feature, level) VALUES ('rdv', 'requests')
 --   DELETE FROM feature_maintenance WHERE feature = 'rdv'
 -- `message` NULL vaut le texte par defaut. `env_notice_dismissed` retient
--- qu'un administrateur a ferme le rappel de MAINTENANCE=1, remis a zero a
+-- qu'un administrateur a ferme le rappel de MAINTENANCE=true, remis a zero a
 -- chaque demarrage que cette variable met en maintenance.
 CREATE TABLE IF NOT EXISTS site_maintenance (
     id                   TINYINT       NOT NULL PRIMARY KEY DEFAULT 1,

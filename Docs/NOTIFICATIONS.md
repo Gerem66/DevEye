@@ -303,4 +303,4 @@ la porte, et le contrôle de parité ne la voit pas.
 - **Côté client** : la coquille accepte `ShellScope` (une fonctionnalité, un
   élément ou la cible système, `Components/FeatureSettings/scope.ts`) à ses
   entrées seulement ; les sections propres aux fonctionnalités gardent
-  `SettingsScope`. La page Logs porte le bouton.
+  `SettingsScope`. La page Journaux porte le bouton.

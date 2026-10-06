@@ -397,7 +397,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         })
     ];
     // Lue avant tout démarrage : un service en arrêt complet ne démarre pas, et
-    // `MAINTENANCE=1` ferme le site avant la première connexion.
+    // `MAINTENANCE=true` ferme le site avant la première connexion.
     await maintenance.init({
         db: deps.db,
         live,

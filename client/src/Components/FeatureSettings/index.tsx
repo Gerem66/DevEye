@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { PROJECT_LINKED_FEATURES, SHARE_WIRED_FEATURES, featureDescriptor, type FeatureId } from '@deveye/types';
+import { PROJECT_LINKED_FEATURES, featureDescriptor } from '@deveye/types';
 
 import Button from '@/Components/Button';
 import { Dialog } from '@/Components/Dialog';
@@ -46,14 +46,6 @@ interface SectionDef {
 }
 
 /**
- * Le partage est-il branché ? La même question que le serveur (`isShareWired`) :
- * l'onglet suit ce que le code fait, jamais ce que `shareTier` promet.
- */
-function isShareWired(feature: FeatureId): boolean {
-    return (SHARE_WIRED_FEATURES as readonly FeatureId[]).includes(feature) || isModuleShareWired(feature);
-}
-
-/**
  * Les sections visibles pour cette cible, dans l'ordre. Exporté pour que les
  * appelants décident s'il y a un bouton à rendre.
  */
@@ -90,7 +82,7 @@ function useFeatureSections(scope: SettingsScope | null): SectionDef[] {
         const sections: SectionDef[] = [];
 
         // Partage et Permissions : à l'échelle d'un élément seulement. Le
-        // branchement (`isShareWired`) et non `shareTier` : le premier dit ce
+        // branchement (`isModuleShareWired`) et non `shareTier` : le premier dit ce
         // que le code fait, le second ce que le chiffrement autoriserait, et le
         // serveur refuse ce qui n'est pas branché. Permissions derrière le droit
         // de régler les permissions par élément de CETTE fonctionnalité (ou la
@@ -112,7 +104,7 @@ function useFeatureSections(scope: SettingsScope | null): SectionDef[] {
         };
 
         const pushSharingSections = (into: SectionDef[]): void => {
-            if (scope.kind !== 'item' || !isShareWired(scope.feature)) return;
+            if (scope.kind !== 'item' || !isModuleShareWired(scope.feature)) return;
             // Sur l'élément : un élément dont l'écriture est ouverte par
             // surcharge se projette, comme le serveur l'accepte.
             if (canWrite && scope.shareable !== false) {

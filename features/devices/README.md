@@ -18,7 +18,7 @@ Deux préfixes de commandes, et c'est la frontière :
     | `agent.subscribe`, `unsubscribe`, `collect`                                                     | `devices` en lecture                             |
     | `agent.termOpen`, `termInput`, `termResize`, `termClose`                                        | permission « Terminal distant »                  |
     | `agent.filesList`, `filesAnalyze`, `filesSearch`, `filesMutate`, `filesDownload`, `filesUpload` | permission « Explorateur de fichiers »           |
-    | `agent.logSources`, `logQuery`                                                                  | permission « Logs de l’appareil »                |
+    | `agent.logSources`, `logQuery`                                                                  | permission « Journaux de l’appareil »            |
     | `agent.dockerInventory`, `dockerStats`, `dockerAction`                                          | permission « Conteneurs Docker »                 |
     | `agent.power`, `listPackages`, `upgradePackages`                                                | permission « Commandes et mises à jour système » |
     | `agent.lifecycle`                                                                               | `devices` en écriture                            |
@@ -362,9 +362,9 @@ Statuts (`devices.status`) : `pending`, `active`, `pending_deletion`,
   (`status_before_delete`).
     - Agent **en ligne** → ordre `agent.destroy` immédiat (`agents.requestDestroy`).
     - Agent **hors ligne** → l'ordre part à sa prochaine connexion (`agent/ws.ts`).
-    - L'agent **s'auto-détruit** (`config.rs::self_destruct` : config + token + pid +
-      log + état + binaire ; jamais le service de démarrage automatique, voir le
-      README de l'agent) puis répond `agent.destroyed{ok}`. Le serveur
+    - L'agent **s'auto-détruit** (`commands::handle_destroy` : son dossier de
+      config, son binaire, son service de démarrage automatique et son icône,
+      voir le README de l'agent) puis répond `agent.destroyed{ok}`. Le serveur
       **archive** alors l'appareil (`archive` du dépôt : statut `archived`,
       `token_hash=''`).
     - En cas d'échec (`ok:false`) : `failDeletion` restaure le statut précédent et

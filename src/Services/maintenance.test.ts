@@ -129,7 +129,7 @@ describe('maintenance : le démarrage', () => {
         assert.deepEqual(t.calls, []);
     });
 
-    it('sous MAINTENANCE=1, ferme le site et réarme le rappel', async () => {
+    it('sous MAINTENANCE=true, ferme le site et réarme le rappel', async () => {
         setEnv(true);
         const t = await boot({ site: { envNoticeDismissed: true } });
         assert.equal(t.seeded(), 1);
@@ -269,7 +269,7 @@ describe('maintenance : les features', () => {
     });
 });
 
-describe('maintenance : le rappel de MAINTENANCE=1', () => {
+describe('maintenance : le rappel de MAINTENANCE=true', () => {
     it("vaut tant qu'aucun administrateur ne l'a fermé", async () => {
         setEnv(true);
         await boot();

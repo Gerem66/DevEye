@@ -127,7 +127,7 @@ l'envers.
 | Météo                                                                                        | la ville consultée                                                                   | l'id                                |
 | Veille CVE                                                                                   | l'entrée sélectionnée                                                                | son identifiant                     |
 | CloudSync, Rendez-vous, Hébergement                                                          | le partage, le type, le dossier ouvert                                               | l'id                                |
-| Convertisseur, OSINT, Audit, Jeu de la vie, Abonnement, Logs, Utilisateurs…                  | aucun                                                                                | (la vue suffit)                     |
+| Convertisseur, OSINT, Audit, Jeu de la vie, Abonnement, Journaux, Utilisateurs…              | aucun                                                                                | (la vue suffit)                     |
 
 La valeur `l1` d'un élément est son identifiant nu : le préfixe `view:<feature>`
 du chemin dit déjà de quelle sorte d'élément il s'agit, et
@@ -167,7 +167,7 @@ L'appartenance reste la frontière, et la présence ne la contourne pas.
   feature). Un rôle qui a la feature mais pas tel élément voit donc passer
   l'identifiant de cet élément dans le chemin d'un pair, jamais son contenu.
 - **Les vues de compte et d'administration sont privées pour tout le monde.**
-  Profil, Sécurité, Logs, Utilisateurs, Gestion de l'espace : `livePathGate`
+  Profil, Sécurité, Journaux, Utilisateurs, Gestion de l'espace : `livePathGate`
   (`src/domain/live.ts` de `@deveye/types`) rend `'private'`, et le hub ne
   montre ce chemin à personne, pas même à un administrateur. Attention :
   `featureBehind` côté client rend `null` pour elles parce qu'elles ont leurs

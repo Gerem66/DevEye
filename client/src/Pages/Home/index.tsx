@@ -226,7 +226,7 @@ const buildStaticViews = (): ViewConfig[] => [
     })),
     {
         id: 'logs',
-        title: 'Logs',
+        title: 'Journaux',
         icon: 'activity',
         cacheDurationMinutes: 5,
         hasCard: false,

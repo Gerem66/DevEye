@@ -65,7 +65,22 @@ export const SEAL_TARGETS: SealTarget[] = [
         label: 'module:mailserver',
         context: noContext
     },
-    { table: 'ft_mailserver_tls', column: 'sealed', id: 'id', label: 'module:mailserver', context: noContext }
+    { table: 'ft_mailserver_tls', column: 'sealed', id: 'id', label: 'module:mailserver', context: noContext },
+    // Hébergement : la racine des clés du module (fichiers, noms, accès), et les signalements.
+    {
+        table: 'ft_hosting_key',
+        column: 'sealed',
+        id: 'id',
+        label: 'module:x-hosting',
+        context: () => 'ft_hosting_key:sealed'
+    },
+    {
+        table: 'ft_hosting_reports',
+        column: 'content',
+        id: 'ref',
+        label: 'module:x-hosting',
+        context: (id) => `ft_hosting_reports:content:${id}`
+    }
 ];
 
 export interface SealedRow {

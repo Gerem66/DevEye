@@ -203,6 +203,22 @@ pub fn uninstall() -> Result<()> {
     uninstall_impl()
 }
 
+/// Remove the service definition of `scope` without stopping the instance it
+/// supervises: the self-destruct path, where that instance is this very agent.
+/// [`uninstall`] stops the service first, which would kill us halfway through
+/// the cleanup. The stop comes last, through [`end_supervision`].
+pub fn remove_definition(scope: ServiceScope) -> Result<()> {
+    remove_definition_impl(scope)
+}
+
+/// Ask the manager of `scope` to stop the instance it supervises, without
+/// waiting: when that instance is us, this ends the process. Without it,
+/// `Restart=always` (systemd) or `KeepAlive` (launchd) would relaunch an
+/// erased executable forever; a requested stop is never relaunched.
+pub fn end_supervision(scope: ServiceScope) {
+    end_supervision_impl(scope)
+}
+
 /// Éteint le « linger » qu'une installation *utilisateur* avait allumé. Rend
 /// `true` s'il y avait effectivement quelque chose à éteindre.
 ///
@@ -445,6 +461,31 @@ mod imp {
             }
         }
         Ok(())
+    }
+
+    /// The plist only: `bootout` would stop us before the cleanup is done.
+    pub fn remove_definition_impl(scope: ServiceScope) -> Result<()> {
+        let paths = match scope {
+            ServiceScope::None => return Ok(()),
+            ServiceScope::System => vec![system_plist()],
+            ServiceScope::User => user_plists(),
+        };
+        for path in paths.iter().filter(|p| p.exists()) {
+            std::fs::remove_file(path).with_context(|| format!("removing {}", path.display()))?;
+        }
+        Ok(())
+    }
+
+    /// `bootout` waits for the job to end, that is for us: spawned, never awaited.
+    pub fn end_supervision_impl(scope: ServiceScope) {
+        let system = match scope {
+            ServiceScope::None => return,
+            ServiceScope::System => true,
+            ServiceScope::User => false,
+        };
+        let _ = Command::new("launchctl")
+            .args(["bootout", &service_target(system)])
+            .spawn();
     }
 
     /// Pas de linger sous launchd : un `LaunchAgent` suit la session, un
@@ -766,6 +807,36 @@ mod imp {
         uninstall_user_impl()
     }
 
+    /// `disable` without `--now`, which would stop us before the cleanup is
+    /// done. After `daemon-reload` the running unit stays loaded, without a
+    /// file, until `end_supervision_impl` stops it.
+    pub fn remove_definition_impl(scope: ServiceScope) -> Result<()> {
+        let (system, paths) = match scope {
+            ServiceScope::None => return Ok(()),
+            ServiceScope::System => (true, vec![system_unit()]),
+            ServiceScope::User => (false, user_units()),
+        };
+        systemctl(system, "disable")?;
+        for path in paths.iter().filter(|p| p.exists()) {
+            std::fs::remove_file(path).with_context(|| format!("removing {}", path.display()))?;
+        }
+        systemctl_bare(system, "daemon-reload")
+    }
+
+    /// `--no-block` returns once the stop job is queued, before systemd applies
+    /// it to us.
+    pub fn end_supervision_impl(scope: ServiceScope) {
+        let mut cmd = Command::new("systemctl");
+        match scope {
+            ServiceScope::None => return,
+            ServiceScope::User => {
+                cmd.arg("--user");
+            }
+            ServiceScope::System => {}
+        }
+        let _ = cmd.args(["stop", "--no-block", UNIT]).output();
+    }
+
     /// Retire l'autostart utilisateur, où qu'il soit : après une élévation sous
     /// `sudo`, l'unité de l'appelant resterait sinon en place, et service système
     /// et service utilisateur se chasseraient l'un l'autre sur le même enrôlement
@@ -937,6 +1008,20 @@ mod imp {
         Ok(())
     }
 
+    /// Deleting the task does not end the running instance.
+    pub fn remove_definition_impl(scope: ServiceScope) -> Result<()> {
+        if scope == ServiceScope::None {
+            return Ok(());
+        }
+        run_checked(
+            Command::new("schtasks").args(["/Delete", "/F", "/TN", TASK]),
+            "schtasks /Delete",
+        )
+    }
+
+    /// The task has no restart policy (see `stop_impl`): nothing would relaunch us.
+    pub fn end_supervision_impl(_scope: ServiceScope) {}
+
     /// `schtasks /Create` itself says whether elevation was missing.
     pub fn preflight_impl(_system: bool) -> Result<()> {
         Ok(())
@@ -987,9 +1072,9 @@ mod imp {
 }
 
 use imp::{
-    autostart_enabled_impl, disable_linger_impl, install_impl, installed_scope_impl,
-    preflight_impl, restart_impl, set_autostart_impl, start_impl, stop_impl, uninstall_impl,
-    uninstall_user_impl,
+    autostart_enabled_impl, disable_linger_impl, end_supervision_impl, install_impl,
+    installed_scope_impl, preflight_impl, remove_definition_impl, restart_impl, set_autostart_impl,
+    start_impl, stop_impl, uninstall_impl, uninstall_user_impl,
 };
 
 /// `launchctl print-disabled` liste `"<label>" => disabled` (ou `=> true` avant

@@ -282,30 +282,10 @@ fn stop_agent(dir: &Path, report: &mut Report) {
 /// dans un dossier partagé avec autre chose. Le dossier n'est retiré que s'il
 /// s'appelle `deveye` et qu'il est vide (`remove_dir` échoue sinon).
 fn wipe_config_dir(dir: &Path, report: &mut Report) {
-    let mut names: Vec<String> = vec![CONFIG_FILE.to_string()];
-    names.extend(SIBLING_FILES.iter().map(|n| n.to_string()));
-    names.push(SYNC_DEVICE_KEY_FILE.to_string());
-    names.extend(crate::tray::USER_FILES.iter().map(|n| n.to_string()));
-    names.push(crate::live_status::USER_FILE.to_string());
-    // Le fichier de config peut porter un autre nom (`DEVEYE_CONFIG`).
-    if let Some(actual) = Config::path().file_name().and_then(|n| n.to_str()) {
-        if !names.iter().any(|n| n == actual) && Config::path().parent() == Some(dir) {
-            names.push(actual.to_string());
-        }
-    }
-
-    let mut removed = 0usize;
-    for name in &names {
-        let path = dir.join(name);
-        if path.exists() && std::fs::remove_file(&path).is_ok() {
-            removed += 1;
-        }
-    }
-    for path in sync_index_files(dir) {
-        if std::fs::remove_file(&path).is_ok() {
-            removed += 1;
-        }
-    }
+    let removed = own_files(dir)
+        .iter()
+        .filter(|path| std::fs::remove_file(path).is_ok())
+        .count();
 
     if removed == 0 {
         report.skip(format!("{} : rien à retirer", dir.display()));
@@ -316,7 +296,7 @@ fn wipe_config_dir(dir: &Path, report: &mut Report) {
         ));
     }
 
-    if dir.file_name().and_then(|n| n.to_str()) != Some("deveye") {
+    if !is_own_dir(dir) {
         return;
     }
     match std::fs::remove_dir(dir) {
@@ -333,6 +313,33 @@ fn wipe_config_dir(dir: &Path, report: &mut Report) {
         }
         Err(_) => {}
     }
+}
+
+/// Les fichiers de l'agent présents dans un dossier de config, par nom.
+pub(crate) fn own_files(dir: &Path) -> Vec<PathBuf> {
+    let mut names: Vec<String> = vec![CONFIG_FILE.to_string()];
+    names.extend(SIBLING_FILES.iter().map(|n| n.to_string()));
+    names.push(SYNC_DEVICE_KEY_FILE.to_string());
+    names.extend(crate::tray::USER_FILES.iter().map(|n| n.to_string()));
+    names.push(crate::live_status::USER_FILE.to_string());
+    // Le fichier de config peut porter un autre nom (`DEVEYE_CONFIG`).
+    if let Some(actual) = Config::path().file_name().and_then(|n| n.to_str()) {
+        if !names.iter().any(|n| n == actual) && Config::path().parent() == Some(dir) {
+            names.push(actual.to_string());
+        }
+    }
+    let mut paths: Vec<PathBuf> = names
+        .iter()
+        .map(|name| dir.join(name))
+        .filter(|path| path.exists())
+        .collect();
+    paths.extend(sync_index_files(dir));
+    paths
+}
+
+/// Seul un dossier à notre nom se retire, et seulement vide (`remove_dir`).
+pub(crate) fn is_own_dir(dir: &Path) -> bool {
+    dir.file_name().and_then(|n| n.to_str()) == Some("deveye")
 }
 
 /// Ce qu'il reste dans un dossier, au plus cinq noms.

@@ -35,7 +35,7 @@ const BANNER: Record<SiteBanner, { icon: string; title: string; hint: string }> 
     },
     env: {
         icon: 'wrench',
-        title: 'MAINTENANCE=1 est encore posée',
+        title: 'MAINTENANCE=true est encore posée',
         hint: 'Le prochain redémarrage remettra le site en maintenance.'
     },
     held: {
@@ -89,11 +89,11 @@ export interface TopNavbarProps {
     /**
      * Le bandeau de l'accueil. Pour l'administrateur : le site est en
      * maintenance, la priorité aux abonnés est active, ou la maintenance est
-     * levée alors que `MAINTENANCE=1` reste posé. Pour un compte que la priorité
+     * levée alors que `MAINTENANCE=true` reste posé. Pour un compte que la priorité
      * tient : tout ce qui tourne pour lui est en pause.
      */
     siteBanner?: SiteBanner;
-    /** Fermer le rappel de `MAINTENANCE=1`, pour tous les administrateurs. */
+    /** Fermer le rappel de `MAINTENANCE=true`, pour tous les administrateurs. */
     onDismissMaintenanceBanner?: () => void;
     /** Ouvrir la page de gestion de l'espace courant. */
     onManageWorkspace?: (e: React.MouseEvent) => void;

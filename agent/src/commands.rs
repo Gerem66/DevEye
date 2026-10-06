@@ -23,21 +23,36 @@ use crate::terminal::TermEvent;
 use crate::tunnel::TunnelEvent;
 
 /// Self-destruct on the server's request. On success the agent wipes its local
-/// state, reports it, and **exits the process** (never returns). On failure it
-/// reports the error and returns, so the session ends and the server can abort
-/// the deletion (it restores the device's previous status).
+/// state and its autostart, reports it, and **exits the process** (never
+/// returns). On failure it reports the error and returns, so the session ends
+/// and the server can abort the deletion (it restores the device's previous
+/// status).
 pub(crate) async fn handle_destroy<S>(sink: &mut S, device_id: &str)
 where
     S: SinkExt<Message> + Unpin,
     S::Error: std::error::Error + Send + Sync + 'static,
 {
+    use crate::service;
     match Config::self_destruct() {
         Ok(()) => {
-            info!("self-destruct requested: local config + binary wiped, exiting");
+            // Left in place, the service would relaunch the erased binary
+            // forever. Its definition goes now, its stop comes last: stopping
+            // it ends this process when it supervises us.
+            let scope = service::installed_scope();
+            if let Err(e) = service::remove_definition(scope) {
+                warn!(error = %e, "self-destruct: autostart service left in place");
+            }
+            crate::tray::stop_all();
+            crate::tray::autostart::remove_all();
+            crate::live_status::remove_all();
+            info!("self-destruct requested: local state, binary and autostart wiped, exiting");
             let _ = send_destroyed(sink, device_id, true, None).await;
             let _ = sink.flush().await;
             // Let the confirmation reach the server before we drop the socket.
             tokio::time::sleep(Duration::from_millis(300)).await;
+            service::end_supervision(scope);
+            // The stop request may run in the background (launchd): let it leave.
+            tokio::time::sleep(Duration::from_millis(500)).await;
             std::process::exit(0);
         }
         Err(e) => {

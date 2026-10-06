@@ -21,7 +21,7 @@ import {
 } from '@deveye/types';
 
 import { accessEpochNow, permissionsFor } from '@/features/_access';
-import { isShareWired } from '@/features/_sharing';
+import { isModuleShareWired } from '@/features/_sdk/register';
 import { logger } from '@/logger';
 import type { Database } from '@/db';
 
@@ -535,7 +535,7 @@ export class LiveHub {
         if (this.shareLinks === null) return;
         for (const topic of topics) {
             const feature = topicFeatureOf(topic);
-            if (feature === null || !isShareWired(feature)) continue;
+            if (feature === null || !isModuleShareWired(feature)) continue;
             void this.shareLinks(workspaceId, feature)
                 .then((linked) => {
                     for (const other of linked) {

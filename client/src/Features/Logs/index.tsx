@@ -212,7 +212,7 @@ function FeatureLogs() {
         <div className={styles.container}>
             <header className={styles.header}>
                 <div className={styles.headerText}>
-                    <h2 className={styles.title}>Logs</h2>
+                    <h2 className={styles.title}>Journaux</h2>
                     <p className={styles.subtitle}>
                         {total.toLocaleString('fr-FR')} entrée{total !== 1 ? 's' : ''}
                         {activeCount > 0 ? ' (filtré)' : ''}

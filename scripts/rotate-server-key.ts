@@ -1,8 +1,9 @@
 /**
  * Change la clé serveur (`CRYPT_KEY_A` / `CRYPT_KEY_B`) sans rien perdre : elle
- * n'emballe que des clés et scelle le secret TOTP (procédure dans
- * `Docs/KEY_ROTATION.md`). Chaque ligne est rouverte, rescellée sous la même
- * étiquette et le même contexte, relue, en une seule transaction.
+ * n'emballe que des clés, et scelle le secret TOTP et les signalements de
+ * l'Hébergement (procédure dans `Docs/KEY_ROTATION.md`). Chaque ligne est
+ * rouverte, rescellée sous la même étiquette et le même contexte, relue, en une
+ * seule transaction.
  *
  * Usage : NEW_CRYPT_KEY_A=… NEW_CRYPT_KEY_B=… npm run rotate:server-key [-- --yes]
  *   anciennes clés : l'environnement courant ; dry-run par défaut.

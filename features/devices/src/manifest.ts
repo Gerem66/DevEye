@@ -70,7 +70,7 @@ export const manifest = {
         },
         {
             key: 'logs',
-            label: 'Logs de l’appareil',
+            label: 'Journaux de l’appareil',
             description: 'Lire les journaux système des appareils de l’espace.',
             type: 'toggle'
         },

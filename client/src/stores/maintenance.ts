@@ -49,7 +49,7 @@ export function forgetMaintenance(instanceId: number): void {
 }
 
 /**
- * Le rappel des administrateurs : démarré sous `MAINTENANCE=1`, pas encore
+ * Le rappel des administrateurs : démarré sous `MAINTENANCE=true`, pas encore
  * fermé. Livré par le bundle de session, lu au chargement seulement ; il ne
  * s'affiche qu'une fois la maintenance levée.
  */

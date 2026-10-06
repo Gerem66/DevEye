@@ -341,12 +341,17 @@ Out of reach, and the command says so: the device **on the server side** (delete
 it in **Appareils**, which takes its history with it) and the service's lines in
 the systemd journal, which only leave at journal rotation.
 
-**Known limitation.** Deleting a device from the DevEye interface sends the agent
-an `agent.destroy` order, and the agent then wipes its config, token, PID, log
-and state files and its own binary (`Config::self_destruct` in `src/config.rs`),
-never the service definition. When a system service is installed, the unit is
-left behind and restarts on a missing binary: run `deveye-agent uninstall` on
-the machine first, then delete the device in DevEye.
+**Deleting the device from DevEye** sends the agent an `agent.destroy` order,
+and the agent removes itself the same way, from inside: the files of step 5 in
+its own config directory (`Config::self_destruct` in `src/config.rs`), its
+binary, its service definition and the tray (`commands::handle_destroy`). The
+running agent is the instance its service supervises, so the order differs
+from `uninstall`: the unit is disabled and its file erased without stopping it,
+the confirmation goes to the server, and only then does the agent ask its
+manager to stop it (`systemctl stop --no-block`, `launchctl bootout`), a stop
+that `Restart=always` and `KeepAlive` do not undo. A remote order leaves the
+share folders (`.deveye-tmp`, `.deveye-trash`) alone, and the systemd
+« linger », which other services of the account may rely on.
 
 ## Supervision (`--managed`)
 

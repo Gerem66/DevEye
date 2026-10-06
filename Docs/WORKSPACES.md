@@ -180,7 +180,7 @@ Un grant de feature peut porter un **réglage** de la fonctionnalité (`channels
 
 ### L'administrateur global
 
-Il ne contourne que les pages système (Logs, Utilisateurs), par `admin: true`.
+Il ne contourne que les pages système (Journaux, Utilisateurs), par `admin: true`.
 Les appareils n'en relèvent pas : un appareil habite l'espace où il a été
 appairé, tout ce qui le concerne tient au droit `devices` de cet espace, et
 `authorizeDevice` (`src/agent/authorize.ts`) ne connaît aucune dérogation. Un
@@ -304,7 +304,7 @@ Garder le drapeau comme simple ACL contredirait le modèle documenté.
     > tomber qu'après `workspace.activate` (qui rend disposition et droits), et
     > le contenu est démonté le temps de la bascule, faute de quoi il
     > interrogerait le nouvel espace avec les droits de l'ancien. Les vues sans
-    > tuile (profil, sécurité, Logs, gestion de l'espace) échappent à la règle :
+    > tuile (profil, sécurité, Journaux, gestion de l'espace) échappent à la règle :
     > elles ne sont pas composées dans l'accueil.
 - **Menu de la topbar** (`Components/TopNavbar/WorkspaceSwitcher.tsx`) :
   section « Espaces » **en tête** (elle dit où l'on est, et tout ce qui suit en
@@ -340,7 +340,7 @@ aux deux espaces glissent vers leur nouvelle place.
 
 `featureBehind(viewId)` fait la correspondance vue → feature : une
 fonctionnalité du dépôt ou l'identifiant d'un module externe. Les vues de compte et
-d'administration (profil, sécurité, Logs, Utilisateurs, gestion de l'espace)
+d'administration (profil, sécurité, Journaux, Utilisateurs, gestion de l'espace)
 n'en dépendent d'aucune : elles ont leurs propres gardes.
 
 ---

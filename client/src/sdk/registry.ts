@@ -107,9 +107,8 @@ export function moduleClientProvider<T>(key: string): T | undefined {
 }
 
 /**
- * Un module dont les éléments se projettent (`shareTier` autre que 'never'),
- * l'équivalent d'une entrée dans `SHARE_WIRED_FEATURES`. Le serveur exige
- * l'entrée `items` au boot, donc le manifest suffit ici.
+ * Un module dont les éléments se projettent (`shareTier` autre que 'never').
+ * Le serveur exige l'entrée `items` au boot, donc le manifest suffit ici.
  */
 export function isModuleShareWired(featureId: string): boolean {
     const manifest = BY_ID.get(featureId)?.manifest;
