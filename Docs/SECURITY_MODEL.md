@@ -442,8 +442,8 @@ doit donc pouvoir les lire, et ils ne passent pas par l'étage gardé.
   l'origine de l'app, toujours en pièce jointe.
 - Les signalements sont scellés par la clé serveur (`keys.sealBytes`, liés à
   leur référence) : ils se lisent sans aucun espace, survivent au dossier, et ne
-  sont jamais montrés à qui a publié le contenu signalé. Leur colonne ne figure
-  pas dans `SEAL_TARGETS` : une rotation de la clé serveur les rend illisibles
+  sont jamais montrés à qui a publié le contenu signalé. Le module déclare leur
+  colonne (`sealed`) : une rotation de la clé serveur les ré-emballe
   ([KEY_ROTATION.md](./KEY_ROTATION.md)).
 
 ## Uptime : l'étage ouvert appliqué à une tâche de fond

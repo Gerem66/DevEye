@@ -1,9 +1,8 @@
 /**
  * Change la clé serveur (`CRYPT_KEY_A` / `CRYPT_KEY_B`) sans rien perdre : elle
- * n'emballe que des clés, et scelle le secret TOTP et les signalements de
- * l'Hébergement (procédure dans `Docs/KEY_ROTATION.md`). Chaque ligne est
- * rouverte, rescellée sous la même étiquette et le même contexte, relue, en une
- * seule transaction.
+ * emballe des clés, et scelle le secret TOTP et ce que les modules déclarent
+ * (procédure dans `Docs/KEY_ROTATION.md`). Chaque ligne est rouverte, rescellée
+ * sous la même étiquette et le même contexte, relue, en une seule transaction.
  *
  * Usage : NEW_CRYPT_KEY_A=… NEW_CRYPT_KEY_B=… npm run rotate:server-key [-- --yes]
  *   anciennes clés : l'environnement courant ; dry-run par défaut.
@@ -15,7 +14,8 @@
 import { createDbPool, testConnection, withTransaction } from '@/db/pool';
 import Encryption from '@/Services/Encryption';
 import { env } from '@/Utils/Env';
-import { SEAL_TARGETS, sealedRows } from '@/Services/sealTargets';
+import { INSTALLED_MODULES } from '@/features/_generated/installed';
+import { sealedRows, sealTargets } from '@/Services/sealTargets';
 
 const YES = process.argv.includes('--yes');
 
@@ -41,7 +41,7 @@ async function main(): Promise<void> {
     let unreadable = 0;
     let total = 0;
     await withTransaction(pool, async (q) => {
-        for (const t of SEAL_TARGETS) {
+        for (const t of sealTargets(INSTALLED_MODULES)) {
             const rows = await sealedRows(q, t);
             if (rows === null) {
                 console.log(`  ${t.table}.${t.column}`.padEnd(44) + 'table absente, ignorée');

@@ -8,6 +8,11 @@ import crypto from 'crypto';
  */
 export type SealLabel = 'user-dek' | 'user-open-dek' | 'workspace-dek' | 'totp' | `module:${string}`;
 
+/** L'étiquette d'un module : celle de ses `keys.sealBytes`, et celle de ses colonnes déclarées. */
+export function moduleSealLabel(featureId: string): SealLabel {
+    return `module:${featureId}`;
+}
+
 /** Premier octet d'un blob scellé sous la clé serveur. */
 export const SEAL_VERSION = 0x02;
 

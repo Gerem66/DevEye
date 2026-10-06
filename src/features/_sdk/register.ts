@@ -27,6 +27,7 @@ import {
     moduleEnvProblem,
     normaliseDomainHost,
     readModuleEnv,
+    sealedColumnsProblem,
     type ItemTier,
     type ItemTreeRows,
     type ModuleEnvSpec,
@@ -58,6 +59,7 @@ import { touchPlanPauses, type StockSource } from '@/Services/planPauses';
 import type { UsageSource } from '@/Services/quotaUsage';
 import type Encryption from '@/Services/Encryption';
 import type { CoverageModule } from '@/Services/accountExport/coverage';
+import { sealTargets, type SealTarget } from '@/Services/sealTargets';
 import type { ExportModule } from '@/Services/accountExport/run';
 import { serverKeysOf } from './host';
 import { createSdkContext, ORIGINS } from './context';
@@ -171,6 +173,10 @@ export function registerModules(installed: readonly InstalledFeatureModule[]): v
                 );
             }
         }
+        // Chaque nom finit dans le SQL de la rotation, et la table d'un autre
+        // serait ré-emballée sous l'étiquette de ce module.
+        const sealedProblem = sealedColumnsProblem(mod.server);
+        if (sealedProblem) throw new Error(`Module « ${manifest.id} » : ${sealedProblem}`);
         const debugProblem = debugEntriesProblem(mod);
         if (debugProblem) throw new Error(`Module « ${manifest.id} » : ${debugProblem}`);
         if (manifest.accountEntry?.signupHint) {
@@ -483,6 +489,11 @@ export function moduleAccountExports(db: Database, crypt: Encryption): ExportMod
 }
 
 /** La déclaration d'export de chaque module, pour le contrôle du boot. */
+/** Les colonnes scellées du socle et des modules enregistrés : ce que le contrôle au boot relit. */
+export function installedSealTargets(): SealTarget[] {
+    return sealTargets(MODULES);
+}
+
 export function moduleExportDeclarations(): CoverageModule[] {
     return MODULES.map((mod) => ({ id: mod.manifest.id, entry: mod.server.accountExport }));
 }

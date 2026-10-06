@@ -1,5 +1,5 @@
 import type Encryption from '@/Services/Encryption';
-import type { SealLabel } from '@/Services/Encryption';
+import { moduleSealLabel } from '@/Services/Encryption';
 import type { SdkServerKeys } from '@deveye/types/sdk/server';
 import type { MonitorHub } from '@/agent/hub';
 import { agentConfigFor } from '@/agent/config';
@@ -58,7 +58,7 @@ export async function pushAgentConfig(deviceId: string): Promise<boolean> {
  * script ne connaît que `CRYPT_KEY_A/B`). La clé elle-même ne sort jamais.
  */
 export function serverKeysOf(crypt: Encryption, featureId: string): SdkServerKeys {
-    const label: SealLabel = `module:${featureId}`;
+    const label = moduleSealLabel(featureId);
     return {
         sealBytes: (plain, context = '') => crypt.sealFor(label, Buffer.from(plain), context),
         openBytes: (sealed, context = '') => crypt.openFor(label, sealed, context),

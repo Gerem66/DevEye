@@ -4,13 +4,31 @@ import { resolve } from 'node:path';
 import { test } from 'node:test';
 
 import Encryption from './Encryption';
-import { isCurrentSealFormat, SEAL_TARGETS, sealVersionOf } from './sealTargets';
+import { CORE_SEAL_TARGETS, isCurrentSealFormat, sealTargets, sealVersionOf } from './sealTargets';
 
-test('chaque cible du scellement figure dans le tableau de KEY_ROTATION.md', () => {
+test('chaque cible du socle figure dans le tableau de KEY_ROTATION.md', () => {
     const doc = readFileSync(resolve(process.cwd(), 'Docs/KEY_ROTATION.md'), 'utf8');
-    for (const t of SEAL_TARGETS) {
+    for (const t of CORE_SEAL_TARGETS) {
         assert.ok(doc.includes(`${t.table}.${t.column}`), `${t.table}.${t.column} absent de la doc`);
     }
+});
+
+test('une colonne déclarée par un module prend son étiquette, et un contexte vide par défaut', () => {
+    const targets = sealTargets([
+        {
+            manifest: { id: 'x-demo' },
+            server: {
+                sealed: [
+                    { table: 'ft_demo_keys', column: 'sealed', id: 'id' },
+                    { table: 'ft_demo_reports', column: 'content', id: 'ref', context: (ref) => `ft_demo:${ref}` }
+                ]
+            }
+        }
+    ]);
+    const [root, report] = targets.slice(CORE_SEAL_TARGETS.length);
+    assert.equal(root.label, 'module:x-demo');
+    assert.equal(root.context(1), '');
+    assert.equal(report.context('AB12'), 'ft_demo:AB12');
 });
 
 test('sealVersionOf lit l’octet de version, et un blob scellé est au format courant', () => {

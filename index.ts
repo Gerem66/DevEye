@@ -14,6 +14,7 @@ import { assertSealFormat } from '@/Services/sealFormat';
 import { createDbPool, getQueryable, testConnection } from '@/db/pool';
 import { seedDevAccount } from '@/db/seedDev';
 import {
+    installedSealTargets,
     moduleExportDeclarations,
     moduleMigrationDirs,
     sdkQueryable,
@@ -67,7 +68,7 @@ async function main() {
     await runMigrations(moduleMigrationDirs());
 
     try {
-        await assertSealFormat(pool);
+        await assertSealFormat(pool, installedSealTargets());
         const uncovered = await assertExportCoverage(sdkQueryable(getQueryable(pool)), moduleExportDeclarations());
         if (uncovered.length > 0) {
             logger.warn({ tables: uncovered }, 'Export des données : tables sans sort, absentes des archives');

@@ -55,9 +55,9 @@ session, l'étage gardé lui serait fermé. C'est pourquoi `shareTier` vaut
   d'application sont hachés (scrypt, `src/server/passwords.ts`) et affichés
   une seule fois.
 - Les clés DKIM, la clé de chaque boîte et celle du certificat : scellées par
-  la clé du serveur, donc inscrites dans `SEAL_TARGETS`
-  (`src/Services/sealTargets.ts` de l'app), que `scripts/rotate-server-key.ts`
-  parcourt ([Docs/KEY_ROTATION.md](../../Docs/KEY_ROTATION.md)).
+  la clé du serveur, donc déclarées dans `sealed` de l'entrée serveur
+  (`src/server/index.ts`), que `scripts/rotate-server-key.ts` parcourt
+  ([Docs/KEY_ROTATION.md](../../Docs/KEY_ROTATION.md)).
 
 ## 3. Le lien avec Mail
 

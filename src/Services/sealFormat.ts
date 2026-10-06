@@ -1,5 +1,5 @@
 import { getQueryable, type DbPool } from '@/db/pool';
-import { isCurrentSealFormat, SEAL_TARGETS, sealedRows } from './sealTargets';
+import { isCurrentSealFormat, sealedRows, type SealTarget } from './sealTargets';
 
 /**
  * Refuse de démarrer sur une base dont un blob scellé n'est pas au format
@@ -8,10 +8,10 @@ import { isCurrentSealFormat, SEAL_TARGETS, sealedRows } from './sealTargets';
  * fait par un script (`npm run reseal:server-key`) et non par une migration de
  * boot : il lui faut la clé serveur et une transaction annulable.
  */
-export async function assertSealFormat(pool: DbPool): Promise<void> {
+export async function assertSealFormat(pool: DbPool, targets: readonly SealTarget[]): Promise<void> {
     const stale: string[] = [];
     const q = getQueryable(pool);
-    for (const t of SEAL_TARGETS) {
+    for (const t of targets) {
         const rows = await sealedRows(q, t);
         if (rows === null) continue;
         const old = rows.filter((r) => !isCurrentSealFormat(r.enc)).length;

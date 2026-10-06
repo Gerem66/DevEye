@@ -1,13 +1,14 @@
+import type { FeatureSealedColumn } from '@deveye/types/sdk/server';
+
 import type { Queryable } from '@/db/pool';
-import { SEAL_VERSION, type SealLabel } from './Encryption';
+import { moduleSealLabel, SEAL_VERSION, type SealLabel } from './Encryption';
 import { totpContext, userDekContext, userOpenDekContext, workspaceDekContext } from './sealContexts';
 
 /**
- * Chaque colonne que la clé serveur scelle : avec quelle étiquette, et sous quel
+ * Une colonne que la clé serveur scelle : avec quelle étiquette, et sous quel
  * contexte. La rotation, le re-scellement et le contrôle au boot lisent tous
- * cette liste : une colonne oubliée ici deviendrait illisible à la première
- * rotation. Un module qui scelle du matériel ajoute sa ligne (son contexte est
- * celui qu'il passe à `keys.sealBytes`, vide s'il n'en passe pas).
+ * {@link sealTargets} : une colonne qui n'y figure pas deviendrait illisible à
+ * la première rotation.
  */
 export interface SealTarget {
     table: string;
@@ -15,19 +16,18 @@ export interface SealTarget {
     /** La colonne qui identifie une ligne à elle seule. */
     id: string;
     /** Restreint aux lignes emballées par la clé serveur, quand la table en mêle d'autres. */
-    where?: string;
+    match?: Readonly<Record<string, string>>;
     label: SealLabel;
     context: (id: string | number) => string;
 }
 
-const noContext = (): string => '';
-
-export const SEAL_TARGETS: SealTarget[] = [
+/** Celles du socle. Un module déclare les siennes (`FeatureServer.sealed`). */
+export const CORE_SEAL_TARGETS: readonly SealTarget[] = [
     {
         table: 'user_secret_keys',
         column: 'dek_wrapped',
         id: 'user_id',
-        where: "wrap_mode = 'server'",
+        match: { wrap_mode: 'server' },
         label: 'user-dek',
         context: (id) => userDekContext(Number(id))
     },
@@ -45,43 +45,30 @@ export const SEAL_TARGETS: SealTarget[] = [
         label: 'workspace-dek',
         context: (id) => workspaceDekContext(Number(id))
     },
-    { table: 'user_2fa', column: 'secret_enc', id: 'user_id', label: 'totp', context: (id) => totpContext(Number(id)) },
-    // CloudSync : la BMK.
-    {
-        table: 'sync_meta',
-        column: 'v',
-        id: 'k',
-        where: "k = 'blob_key_wrapped'",
-        label: 'module:cloudsync',
-        context: noContext
-    },
-    // Serveur mail : la clé des corps de chaque boîte, les clés DKIM des domaines,
-    // et la clé du certificat des écouteurs.
-    { table: 'ft_mailserver_mailboxes', column: 'blob_key', id: 'id', label: 'module:mailserver', context: noContext },
-    {
-        table: 'ft_mailserver_domain_keys',
-        column: 'private_key',
-        id: 'id',
-        label: 'module:mailserver',
-        context: noContext
-    },
-    { table: 'ft_mailserver_tls', column: 'sealed', id: 'id', label: 'module:mailserver', context: noContext },
-    // Hébergement : la racine des clés du module (fichiers, noms, accès), et les signalements.
-    {
-        table: 'ft_hosting_key',
-        column: 'sealed',
-        id: 'id',
-        label: 'module:x-hosting',
-        context: () => 'ft_hosting_key:sealed'
-    },
-    {
-        table: 'ft_hosting_reports',
-        column: 'content',
-        id: 'ref',
-        label: 'module:x-hosting',
-        context: (id) => `ft_hosting_reports:content:${id}`
-    }
+    { table: 'user_2fa', column: 'secret_enc', id: 'user_id', label: 'totp', context: (id) => totpContext(Number(id)) }
 ];
+
+interface SealingModule {
+    manifest: { id: string };
+    server: { sealed?: readonly FeatureSealedColumn[] };
+}
+
+/** Celles du socle, puis celles que déclarent les modules installés, sous leur étiquette. */
+export function sealTargets(modules: readonly SealingModule[]): SealTarget[] {
+    return [
+        ...CORE_SEAL_TARGETS,
+        ...modules.flatMap(({ manifest, server }) =>
+            (server.sealed ?? []).map((sealed) => ({
+                table: sealed.table,
+                column: sealed.column,
+                id: sealed.id,
+                match: sealed.match,
+                label: moduleSealLabel(manifest.id),
+                context: sealed.context ?? (() => '')
+            }))
+        )
+    ];
+}
 
 export interface SealedRow {
     id: string | number;
@@ -99,10 +86,11 @@ export async function tableExists(q: Queryable, table: string): Promise<boolean>
 /** Les lignes scellées d'une cible (vide si la table n'existe pas : module non installé). */
 export async function sealedRows(q: Queryable, t: SealTarget): Promise<SealedRow[] | null> {
     if (!(await tableExists(q, t.table))) return null;
+    const match = Object.entries(t.match ?? {});
     const r = await q.query<SealedRow>(
         `SELECT ${t.id} AS id, ${t.column} AS enc FROM ${t.table}
-         WHERE ${t.column} IS NOT NULL AND ${t.column} <> ''${t.where ? ` AND ${t.where}` : ''}`,
-        []
+         WHERE ${t.column} IS NOT NULL AND ${t.column} <> ''${match.map(([column]) => ` AND ${column} = ?`).join('')}`,
+        match.map(([, value]) => value)
     );
     return r.rows;
 }

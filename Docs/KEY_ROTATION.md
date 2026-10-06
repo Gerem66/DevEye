@@ -24,26 +24,25 @@ refuse de démarrer sinon.
 
 ## Ce qu'elle emballe
 
-La liste fait foi dans le code : `SEAL_TARGETS` (`src/Services/sealTargets.ts`),
-que lisent la rotation, le re-scellement et le contrôle au boot. Un test vérifie
-que chaque cible de cette liste figure dans le tableau ci-dessous.
+La liste fait foi dans le code : celle du socle, `CORE_SEAL_TARGETS`
+(`src/Services/sealTargets.ts`), puis les colonnes que chaque module installé
+déclare (voir « Un module et sa clé »). La rotation, le re-scellement et le
+contrôle au boot lisent les deux. Un test vérifie que chaque cible du socle
+figure dans le tableau ci-dessous.
 
-| Où                                                             | Étiquette           | Contexte                           | Quoi                                                                   |
-| -------------------------------------------------------------- | ------------------- | ---------------------------------- | ---------------------------------------------------------------------- |
-| `user_secret_keys.dek_wrapped` (lignes `wrap_mode = 'server'`) | `user-dek`          | `user_secret_keys:dek:<id>`        | la DEK gardée d'un compte dont le chiffrement par mot de passe est OFF |
-| `user_secret_keys.open_dek_wrapped`                            | `user-open-dek`     | `user_secret_keys:open_dek:<id>`   | la DEK ouverte de chaque compte                                        |
-| `workspace_secret_keys.dek_wrapped`                            | `workspace-dek`     | `workspace_secret_keys:dek:<id>`   | la WDK de chaque espace partagé                                        |
-| `user_2fa.secret_enc`                                          | `totp`              | `user_2fa:secret:<id>`             | le secret TOTP, scellé (pas une clé, mais lisible avant toute session) |
-| `sync_meta.v` (`k = 'blob_key_wrapped'`)                       | `module:cloudsync`  | vide                               | la BMK de CloudSync, via `deps.keys.sealBytes`                         |
-| `ft_mailserver_mailboxes.blob_key`                             | `module:mailserver` | vide                               | la clé des corps de chaque boîte du Serveur mail                       |
-| `ft_mailserver_domain_keys.private_key`                        | `module:mailserver` | vide                               | les clés DKIM des domaines                                             |
-| `ft_mailserver_tls.sealed`                                     | `module:mailserver` | vide                               | la clé du certificat des écouteurs                                     |
-| `ft_hosting_key.sealed`                                        | `module:x-hosting`  | `ft_hosting_key:sealed`            | la racine des clés de l'Hébergement : fichiers, noms, accès            |
-| `ft_hosting_reports.content`                                   | `module:x-hosting`  | `ft_hosting_reports:content:<ref>` | les signalements de l'Hébergement                                      |
-| tout module qui appelle `deps.keys.sealBytes`                  | `module:<son id>`   | celui qu'il passe, vide sinon      | son matériel de clé, là où il le range                                 |
+| Où                                                             | Étiquette         | Contexte                         | Quoi                                                                   |
+| -------------------------------------------------------------- | ----------------- | -------------------------------- | ---------------------------------------------------------------------- |
+| `user_secret_keys.dek_wrapped` (lignes `wrap_mode = 'server'`) | `user-dek`        | `user_secret_keys:dek:<id>`      | la DEK gardée d'un compte dont le chiffrement par mot de passe est OFF |
+| `user_secret_keys.open_dek_wrapped`                            | `user-open-dek`   | `user_secret_keys:open_dek:<id>` | la DEK ouverte de chaque compte                                        |
+| `workspace_secret_keys.dek_wrapped`                            | `workspace-dek`   | `workspace_secret_keys:dek:<id>` | la WDK de chaque espace partagé                                        |
+| `user_2fa.secret_enc`                                          | `totp`            | `user_2fa:secret:<id>`           | le secret TOTP, scellé (pas une clé, mais lisible avant toute session) |
+| chaque colonne qu'un module déclare                            | `module:<son id>` | celui qu'il passe, vide sinon    | son matériel de clé, là où il le range                                 |
 
-Une colonne scellée par `keys.sealBytes` mais absente de `SEAL_TARGETS` n'est
-pas ré-emballée par la rotation, et devient illisible.
+Parmi les modules : la BMK de CloudSync, les clés du Serveur mail (corps des
+boîtes, DKIM, certificat), la racine des clés et les signalements de
+l'Hébergement ; la doc de chacun les nomme. Une colonne scellée par
+`keys.sealBytes` mais que son module ne déclare pas n'est pas ré-emballée par
+la rotation, et devient illisible.
 
 ## Ce qu'elle dérive, sans stockage
 
@@ -83,8 +82,8 @@ qu'avec les anciennes valeurs. Rien n'est détruit en base, mais rien ne se lit.
 Un outil fait le travail : `npm run rotate:server-key`
 (`scripts/rotate-server-key.ts`). Il lit les anciennes clés dans
 l'environnement courant (`CRYPT_KEY_A/B`), les nouvelles dans `NEW_CRYPT_KEY_A`
-/ `NEW_CRYPT_KEY_B`, ré-emballe chaque ligne de `SEAL_TARGETS` dans **une seule
-transaction**, et relit chaque blob sous la nouvelle clé avant de valider.
+/ `NEW_CRYPT_KEY_B`, ré-emballe chaque colonne scellée, du socle et des modules
+installés, dans **une seule transaction**, et relit chaque blob sous la nouvelle clé avant de valider.
 Dry-run par défaut : il compte, vérifie que tout s'ouvre sous l'ancienne clé,
 et n'écrit rien. Il ne touche à rien de ce que la clé **dérive** : relire ce
 tableau avant de commencer.
@@ -135,8 +134,8 @@ docker run --rm --env-file .env -e NEW_CRYPT_KEY_A=… -e NEW_CRYPT_KEY_B=… \
 
 ## Le format des blobs scellés
 
-Au boot, le serveur vérifie que chaque blob de `SEAL_TARGETS` porte l'octet de
-version `0x02` (`src/Services/sealFormat.ts`) et **refuse de démarrer** sinon,
+Au boot, le serveur vérifie que chaque blob scellé, du socle et des modules,
+porte l'octet de version `0x02` (`src/Services/sealFormat.ts`) et **refuse de démarrer** sinon,
 en nommant les colonnes concernées : il ne saurait pas les ouvrir, et l'échec
 surgirait au premier déverrouillage. Une base dont des blobs sont à un autre
 format se convertit par un script, pas par une migration de boot, parce qu'il
@@ -169,12 +168,18 @@ l'enveloppe. La clé serveur est la seule couche prévue pour tourner.
 Un module qui scelle du matériel par `deps.keys.sealBytes` le range où il veut
 (CloudSync : `sync_meta`). Il est scellé sous la sous-clé du module
 (`module:<id>`) : le blob d'un module ne s'ouvre ni chez un autre ni comme une
-clé de l'app. Un nouveau module ajoute sa ligne à `SEAL_TARGETS`
-(`src/Services/sealTargets.ts`), avec le contexte qu'il passe à `sealBytes` : il
-n'y a pas de découverte automatique, et une colonne oubliée deviendrait
-illisible à la première rotation.
+clé de l'app. Le module déclare chaque colonne où il le range dans `sealed`, à
+côté de `accountExport` dans son entrée serveur : la table, la colonne, celle
+qui identifie une ligne, au besoin les lignes concernées (`match`), et le
+contexte qu'il passe à `sealBytes`. L'étiquette, l'hôte la pose. Le serveur
+refuse de démarrer sur une table que le module ne liste pas dans
+`accountExport.tables`, ou sur un nom qui n'est pas un identifiant. Il n'y a
+pas de découverte automatique : une colonne non déclarée deviendrait illisible
+à la première rotation. Seuls les modules installés au moment de la rotation
+sont ré-emballés : les tables d'un module désinstallé et laissées en place ne
+se rouvriraient plus.
 
 Un module qui dérive une clé par `keys.derive` pour chiffrer ou condenser
-lui-même n'a rien à déclarer dans `SEAL_TARGETS`, et la rotation ne re-chiffre
-rien pour lui : il ajoute sa ligne au tableau des dérivations, avec ce qu'une
+lui-même n'a rien à déclarer dans `sealed`, et la rotation ne re-chiffre rien
+pour lui : il ajoute sa ligne au tableau des dérivations, avec ce qu'une
 rotation lui fait.

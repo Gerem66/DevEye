@@ -12,7 +12,8 @@
 import { createDbPool, testConnection, withTransaction } from '@/db/pool';
 import Encryption from '@/Services/Encryption';
 import { env } from '@/Utils/Env';
-import { SEAL_TARGETS, sealedRows } from '@/Services/sealTargets';
+import { INSTALLED_MODULES } from '@/features/_generated/installed';
+import { sealedRows, sealTargets } from '@/Services/sealTargets';
 
 const YES = process.argv.includes('--yes');
 
@@ -33,7 +34,7 @@ async function main(): Promise<void> {
     let resealed = 0;
     let already = 0;
     await withTransaction(pool, async (q) => {
-        for (const t of SEAL_TARGETS) {
+        for (const t of sealTargets(INSTALLED_MODULES)) {
             const rows = await sealedRows(q, t);
             if (rows === null) {
                 console.log(`  ${t.table}.${t.column}`.padEnd(44) + 'table absente, ignorée');

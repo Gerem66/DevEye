@@ -28,6 +28,12 @@ export const serverEntry: FeatureServer<MailserverRepo> = {
         addresses: { list: (repo, owned) => repo.listInWorkspaces(owned) }
     },
     accountExport: createAccountExport(diskBlobStore(env.MAILSERVER_STORAGE_DIR)),
+    // La clé des corps de chaque boîte, les clés DKIM des domaines, la clé du certificat des écouteurs.
+    sealed: [
+        { table: 'ft_mailserver_mailboxes', column: 'blob_key', id: 'id' },
+        { table: 'ft_mailserver_domain_keys', column: 'private_key', id: 'id' },
+        { table: 'ft_mailserver_tls', column: 'sealed', id: 'id' }
+    ],
     items: {
         homeOf: async (repo, itemId, workspaceId) =>
             (await repo.findVisible(Number(itemId), workspaceId))?.workspace_id ?? null,
