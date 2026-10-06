@@ -18,7 +18,7 @@ import { FeatureError, logFailure, type SdkCipher, type SdkFeatureContext } from
 // réglage à corriger, et se classe donc sans dépendre du texte de son message.
 import { UnsafeTargetError } from '@/Services/netFetch';
 
-import { MailReauthRequiredError, withSession, type MailSession } from './client';
+import { MailAuthFailedError, MailReauthRequiredError, withSession, type MailSession } from './client';
 import type { MailCredentials, MailPasswordCredentials, TokenRefreshCallback } from './client';
 import { oauthProviderEndpoints, OAuthTokenError } from './oauth';
 import type { MailRepo } from './repo';
@@ -77,10 +77,10 @@ export function assertAtHome(ctx: Ctx, account: MailAccountRow, gesture: string)
  * propose, et `error` couvre tout ce qu'on ne reconnaît pas.
  */
 export function classifyMailError(error: unknown): Exclude<MailAccountStatus, 'ok'> {
-    // Les deux cas où la conduite à tenir est connue sans lire de texte : le
-    // fournisseur a définitivement refusé, et lui seul peut rendre l'accès, ou
-    // son point de jetons a flanché sans que rien soit révoqué.
-    if (error instanceof MailReauthRequiredError) return 'auth';
+    // Les cas où la conduite à tenir est connue sans lire de texte : le serveur
+    // a refusé l'identité (renouvellement OAuth, LOGIN, AUTH SMTP), ou son point
+    // de jetons a flanché sans que rien soit révoqué.
+    if (error instanceof MailReauthRequiredError || error instanceof MailAuthFailedError) return 'auth';
     // Ni une panne ni un refus d'identité : l'adresse saisie est hors des clous
     // de l'instance. La reprise de `syncFoldersWithRetry` n'a rien à y gagner.
     if (error instanceof UnsafeTargetError) return 'error';

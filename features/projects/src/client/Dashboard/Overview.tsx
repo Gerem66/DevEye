@@ -188,8 +188,9 @@ export function Overview({
                 setTiles(res.tiles);
                 setError(null);
             } catch (e) {
+                // Relu d'abord : son succès efface l'erreur affichée.
+                await load();
                 setError(humanizeError(e, 'L’agencement n’a pas pu être enregistré.'));
-                void load();
             } finally {
                 setBusy(false);
             }

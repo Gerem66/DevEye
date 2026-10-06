@@ -59,10 +59,13 @@ export function LogsDialog({ open, targetId, externalId, live, onClose }: LogsDi
         const seq = ++seqRef.current;
         busyRef.current = true;
         setBusy(true);
-        setError(null);
         api.send('deploy.log', { targetId, externalId }, { timeoutMs: LOG_TIMEOUT_MS })
             .then((res) => {
-                if (seqRef.current === seq) setLog(res.log);
+                if (seqRef.current !== seq) return;
+                setLog(res.log);
+                // Effacée au succès seulement : le suivi la ferait sinon clignoter
+                // à chaque relecture tant que le fournisseur refuse.
+                setError(null);
             })
             .catch((e) => {
                 if (seqRef.current === seq) setError(providerError(e, 'Impossible de charger le journal.'));

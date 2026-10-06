@@ -136,9 +136,9 @@ export function FeatureAudience(_props: FeatureViewProps) {
                 const byId = new Map(prev.map((s) => [s.id, s]));
                 return siteIds.flatMap((id) => byId.get(id) ?? []);
             });
+            // Relue d'abord : son succès efface l'erreur affichée.
             api.send('audience.reorder', { siteIds }).catch(() => {
-                setError('Réorganisation impossible.');
-                void reload();
+                void reload().then(() => setError('Réorganisation impossible.'));
             });
         },
         [reload]

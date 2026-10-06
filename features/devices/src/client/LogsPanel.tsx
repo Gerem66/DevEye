@@ -290,8 +290,11 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
             setLoading(false);
             setError(d.error ?? null);
             if (d.error) {
-                // Ne pas relancer la sentinelle en rafale sur une source en erreur.
+                // Ni la sentinelle ni le direct ne relancent en rafale une source
+                // en erreur : le direct effacerait l'erreur toutes les 3 s pour
+                // la reposer aussitôt.
                 setHasMore(false);
+                setLive(false);
                 return;
             }
 
@@ -333,6 +336,7 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
                 if (pendingRef.current.queryId !== queryId) return;
                 setLoading(false);
                 setHasMore(false);
+                setLive(false);
                 setError("L'appareil n'a pas répondu. Resserrez la fenêtre de temps ou le filtre, puis réessayez.");
             }, QUERY_TIMEOUT_MS);
             const filter: DeviceLogFilter = {};
@@ -357,6 +361,7 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
                     clearWatchdog();
                     setLoading(false);
                     setHasMore(false);
+                    setLive(false);
                     setError(e instanceof Error ? e.message : 'Échec de la requête');
                 });
         },

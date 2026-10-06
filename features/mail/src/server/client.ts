@@ -67,6 +67,19 @@ export class MailReauthRequiredError extends Error {
     }
 }
 
+/**
+ * Le serveur a refusé l'authentification, IMAP ou SMTP. Une classe pour la même
+ * raison que {@link MailReauthRequiredError} : le texte est libre, et un refus
+ * pour trop d'échecs récents (« Too many failed attempts ») ne parle pas
+ * d'identifiants, alors que ce sont eux qu'il faut revoir.
+ */
+export class MailAuthFailedError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'MailAuthFailedError';
+    }
+}
+
 interface ResolvedAuth {
     imapHost: string;
     imapPort: number;
@@ -200,7 +213,9 @@ async function withImap<T>(auth: ResolvedAuth, fn: (client: ImapFlow) => Promise
         }
         return await fn(client);
     } catch (e) {
-        throw new Error(describeError(e));
+        // imapflow marque le refus du LOGIN ou de l'AUTHENTICATE.
+        const refused = (e as { authenticationFailed?: unknown } | null)?.authenticationFailed === true;
+        throw refused ? new MailAuthFailedError(describeError(e)) : new Error(describeError(e));
     } finally {
         try {
             await client.logout();
@@ -707,7 +722,10 @@ export async function sendMail(
         });
         return { messageId: info.messageId };
     } catch (e) {
-        throw new Error(`Envoi du mail impossible : ${e instanceof Error ? e.message : String(e)}`);
+        const message = `Envoi du mail impossible : ${e instanceof Error ? e.message : String(e)}`;
+        throw (e as { code?: unknown } | null)?.code === 'EAUTH'
+            ? new MailAuthFailedError(message)
+            : new Error(message);
     } finally {
         transport.close();
     }

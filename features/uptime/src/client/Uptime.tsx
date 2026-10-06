@@ -107,9 +107,9 @@ export default function Uptime(_props: FeatureViewProps) {
                 const byId = new Map(prev.map((s) => [s.id, s]));
                 return ids.flatMap((id) => byId.get(id) ?? []);
             });
+            // Relue d'abord : son succès efface l'erreur affichée.
             api.send('uptime.reorder', { ids }).catch(() => {
-                setError('Réorganisation impossible.');
-                void reload();
+                void reload().then(() => setError('Réorganisation impossible.'));
             });
         },
         [reload]

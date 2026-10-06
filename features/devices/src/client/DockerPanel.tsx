@@ -7,7 +7,8 @@ import {
     LogOutput,
     onServerEvent,
     SegmentedControl,
-    StatusBadge
+    StatusBadge,
+    WsError
 } from 'deveye-sdk-client';
 import type { ConfirmRequest } from 'deveye-sdk-client';
 import {
@@ -207,9 +208,12 @@ export function DockerPanel({ deviceId, actionable }: { deviceId: string; action
         let stop = false;
         const poll = () => {
             if (stop) return;
-            agent.send('agent.dockerStats', { deviceId }).catch(() => {
-                // Un relevé perdu (agent parti, droit retiré) ne doit pas vider
-                // l'écran : le suivant reprendra, ou l'inventaire dira pourquoi.
+            agent.send('agent.dockerStats', { deviceId }).catch((e: unknown) => {
+                // Un relevé perdu (agent parti) ne doit pas vider l'écran : le
+                // suivant reprendra, ou l'inventaire dira pourquoi. Un refus qui
+                // dure arrête le relevé : en pause, l'invite d'offre se rouvrirait
+                // à chaque tour.
+                if (e instanceof WsError && (e.code === 'quota_exceeded' || e.code === 'forbidden')) stop = true;
             });
         };
         poll();

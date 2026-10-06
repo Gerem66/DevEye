@@ -29,6 +29,7 @@ import styles from './style.module.css';
  * seconde et demie donne une barre qui avance visiblement sans rien coûter.
  */
 const SYNC_POLL_MS = 1_500;
+const SYNC_POLL_MAX_MS = 30_000;
 
 /**
  * Les dépôts de l'espace actif.
@@ -122,7 +123,6 @@ export function FeatureGit(_props: FeatureViewProps) {
             pendingReload.current = true;
             return;
         }
-        setRepos(null);
         void reload();
         // `listVersion` rejoue l'effet quand la ressource est invalidée, par notre
         // propre écriture ou par `live.changed` venu d'ailleurs.
@@ -151,9 +151,9 @@ export function FeatureGit(_props: FeatureViewProps) {
                 const byId = new Map(prev.map((r) => [r.id, r]));
                 return ids.flatMap((id) => byId.get(id) ?? []);
             });
+            // Relue d'abord : son succès efface l'erreur affichée.
             api.send('git.repoReorder', { ids }).catch(() => {
-                setError('Réorganisation impossible.');
-                void reload();
+                void reload().then(() => setError('Réorganisation impossible.'));
             });
         },
         [reload]
@@ -163,28 +163,39 @@ export function FeatureGit(_props: FeatureViewProps) {
         let alive = true;
         /** Y avait-il quelque chose en cours au tour précédent ? */
         let had = false;
+        let delay = SYNC_POLL_MS;
+        let timer: ReturnType<typeof setTimeout> | undefined;
 
         const tick = async () => {
             try {
                 const res = await api.send('git.syncStatuses', {});
                 if (!alive) return;
-                setSyncing(new Map(res.statuses.map((st) => [st.repoId, st])));
+                // Rien en cours, avant comme maintenant : pas de rendu pour rien.
+                setSyncing((prev) =>
+                    prev.size === 0 && res.statuses.length === 0
+                        ? prev
+                        : new Map(res.statuses.map((st) => [st.repoId, st]))
+                );
                 // La dernière synchronisation vient de s'achever : c'est
                 // maintenant que la liste a du neuf à montrer (dates, compteurs).
                 if (had && res.statuses.length === 0) invalidate('git.list', 'git.count');
                 had = res.statuses.length > 0;
+                delay = SYNC_POLL_MS;
             } catch {
+                if (!alive) return;
                 // Une coupure ne doit pas figer des bandes de progression à
                 // l'écran : on repart d'une liste vide, le tour suivant corrigera.
-                if (alive) setSyncing(new Map());
+                setSyncing((prev) => (prev.size === 0 ? prev : new Map()));
+                // Un refus qui dure ne se redemande pas toutes les 1,5 s.
+                delay = Math.min(delay * 2, SYNC_POLL_MAX_MS);
             }
+            if (alive) timer = setTimeout(() => void tick(), delay);
         };
 
         void tick();
-        const timer = setInterval(() => void tick(), SYNC_POLL_MS);
         return () => {
             alive = false;
-            clearInterval(timer);
+            clearTimeout(timer);
         };
     }, [workspaceId]);
 

@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef } from 'react';
-import { useLiveOutlines, type LiveOutlineProps } from 'deveye-sdk-client';
+import { Button, useLiveOutlines, type LiveOutlineProps } from 'deveye-sdk-client';
 
 import styles from './style.module.css';
 
@@ -15,6 +15,8 @@ interface MessageListProps {
     onLoadMore: () => void;
     hasMore: boolean;
     loading: boolean;
+    /** Le dernier chargement a échoué : la sentinelle ne relance plus rien seule, un bouton le fait. */
+    loadFailed: boolean;
     /** Shown when the list settles on nothing. `null` leaves it blank, for when the caller says it better itself. */
     emptyLabel: string | null;
     /** The actual scrolling ancestor (`.messageColumn`), this list itself not scrolling. */
@@ -139,6 +141,7 @@ function MessageListImpl({
     onLoadMore,
     hasMore,
     loading,
+    loadFailed,
     emptyLabel,
     scrollRootRef
 }: MessageListProps) {
@@ -151,8 +154,10 @@ function MessageListImpl({
     // viewport, instead of requiring a manual "load more" click. `onLoadMore`
     // has to stay stable across renders or this tears the observer down and
     // rebuilds it constantly, re-firing against whatever is already on screen.
+    // Désarmé après un échec : la sentinelle est encore en vue, et l'observateur
+    // réarmé rappellerait aussitôt, en boucle.
     useEffect(() => {
-        if (!hasMore || loading) return;
+        if (!hasMore || loading || loadFailed) return;
         const sentinel = sentinelRef.current;
         if (!sentinel) return;
         const observer = new IntersectionObserver(
@@ -163,7 +168,7 @@ function MessageListImpl({
         );
         observer.observe(sentinel);
         return () => observer.disconnect();
-    }, [hasMore, loading, onLoadMore, scrollRootRef]);
+    }, [hasMore, loading, loadFailed, onLoadMore, scrollRootRef]);
 
     if (!loading && messages.length === 0) {
         return emptyLabel === null ? null : <p className={styles.empty}>{emptyLabel}</p>;
@@ -185,7 +190,13 @@ function MessageListImpl({
             ))}
             {hasMore && (
                 <div ref={sentinelRef} className={styles.messageListSentinel}>
-                    {loading && 'Chargement…'}
+                    {loading ? (
+                        'Chargement…'
+                    ) : loadFailed ? (
+                        <Button variant='ghost' icon='refresh' onClick={onLoadMore}>
+                            Réessayer
+                        </Button>
+                    ) : null}
                 </div>
             )}
         </div>

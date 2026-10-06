@@ -161,9 +161,9 @@ export function FeatureProjects(_props: FeatureViewProps) {
                 const byId = new Map(prev.map((s) => [s.project.id, s]));
                 return [...ids.flatMap((id) => byId.get(id) ?? []), ...prev.filter((s) => s.foreign)];
             });
+            // Relue d'abord : son succès efface l'erreur affichée.
             api.send('projects.reorder', { projectIds: ids }).catch(() => {
-                setError('Réorganisation impossible.');
-                void reload();
+                void reload().then(() => setError('Réorganisation impossible.'));
             });
         },
         [reload]

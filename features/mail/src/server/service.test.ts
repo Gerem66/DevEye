@@ -5,7 +5,7 @@ import { MAIL_SYNC_PROGRESS_EVENT, mailSyncProgressSchema } from '../contracts/d
 import type { MailAccountRow, MailFolderRow, MailMessageRow } from '../contracts/domain';
 import { createTestServiceDeps } from '@deveye/types/sdk/testing';
 
-import { MailReauthRequiredError } from './client';
+import { MailAuthFailedError, MailReauthRequiredError } from './client';
 import type { MailCredentials, MailSession, OutgoingMail, RemoteEnvelope } from './client';
 import { OAuthTokenError } from './oauth';
 import { classifyMailError } from './_shared';
@@ -432,6 +432,12 @@ describe('la lecture d’un échec', () => {
         // et n'a aucune forme garantie, « Bad Request » comprise.
         const refusal = new MailReauthRequiredError('google', new Error('Bad Request'));
         assert.equal(classifyMailError(refusal), 'auth');
+    });
+
+    it('un LOGIN refusé pour trop d’échecs récents reste un refus d’identité', () => {
+        // Le texte ne parle pas d'identifiants : seul le type dit quoi revoir.
+        const throttled = new MailAuthFailedError('Command failed : Too many failed attempts, try again later');
+        assert.equal(classifyMailError(throttled), 'auth');
     });
 
     it('un point de jetons qui flanche est « injoignable » : rien n’a été révoqué', () => {

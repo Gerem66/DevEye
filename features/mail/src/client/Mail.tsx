@@ -57,6 +57,7 @@ const BACKFILL_BATCH_SIZE = 100;
 const SEARCH_DEBOUNCE_MS = 700;
 /** Results are shown in one go, with no paging, so this is also the ceiling. */
 const SEARCH_RESULT_LIMIT = 200;
+const ACCOUNTS_LOAD_ERROR = 'Chargement des comptes impossible.';
 
 /** Page cursor pointing just past `message`, or null when there is no row to resume from. */
 function cursorOf(message: MailMessageSummary | undefined): MailMessageCursor | null {
@@ -127,6 +128,12 @@ export default function Mail(_props: FeatureViewProps) {
     const [reachedFolderStart, setReachedFolderStart] = useState(false);
     const [messagesLoading, setMessagesLoading] = useState(false);
     /**
+     * Le dernier chargement de la liste a échoué : le défilement n'en relance
+     * plus aucun de lui-même, sans quoi chaque échec en déclenche aussitôt un
+     * autre contre le serveur de mail. Un bouton reprend.
+     */
+    const [loadFailed, setLoadFailed] = useState(false);
+    /**
      * Une page 0 est en vol : ce qui est à l'écran appartient encore au dossier
      * qu'on vient de quitter, puisque la liste n'est pas vidée pour éviter qu'elle
      * ne saute. Distinct de `messagesLoading`, qui couvre aussi la pagination, où
@@ -182,9 +189,12 @@ export default function Mail(_props: FeatureViewProps) {
         try {
             const res = await api.send('mail.accountList', {});
             setAccounts(res.accounts);
-            setError(null);
+            // Son propre échec seulement : cette relecture suit chaque
+            // `live.changed` et chaque échec d'une commande, et effacerait le
+            // bandeau d'un geste à peine affiché.
+            setError((current) => (current === ACCOUNTS_LOAD_ERROR ? null : current));
         } catch {
-            setError('Chargement des comptes impossible.');
+            setError(ACCOUNTS_LOAD_ERROR);
         } finally {
             setAccountsLoading(false);
         }
@@ -355,20 +365,23 @@ export default function Mail(_props: FeatureViewProps) {
      * past it once, backfilling an older batch from IMAP and re-reading the page.
      * `reachedStart` is the real end of the folder, and the only thing that stops
      * the scroll for good.
+     *
+     * Rend `false` si la lecture a échoué.
      */
-    const loadMessages = useCallback(async (folderId: number, cursor: MailMessageCursor | null) => {
+    const loadMessages = useCallback(async (folderId: number, cursor: MailMessageCursor | null): Promise<boolean> => {
         // La lecture appartient au dossier ouvert au moment où elle part ; passé
         // ce point, plus rien ne s'écrit si la sélection a bougé. L'indicateur de
         // chargement appartient déjà à la nouvelle lecture, qui l'éteindra.
         const run = folderRunRef.current;
         const stale = () => folderRunRef.current !== run;
         setMessagesLoading(true);
+        setLoadFailed(false);
         if (cursor === null) setFirstPageLoading(true);
         try {
             const page = await withSecrecy(() =>
                 api.send('mail.messageList', { folderId, cursor, limit: MESSAGE_PAGE_SIZE })
             );
-            if (stale()) return;
+            if (stale()) return true;
             const messages = page.messages;
             setMessages((prev) => (cursor === null ? messages : [...prev, ...messages]));
             setNextCursor(page.nextCursor);
@@ -380,12 +393,12 @@ export default function Mail(_props: FeatureViewProps) {
 
             if (page.nextCursor !== null) {
                 setReachedFolderStart(false);
-                return;
+                return true;
             }
             // Le cache est tout ce qu'une boîte en pause a à montrer.
             if (selectedPausedRef.current) {
                 setReachedFolderStart(true);
-                return;
+                return true;
             }
 
             // Le cache est épuisé : une seule incursion vers le passé, dont les
@@ -393,9 +406,9 @@ export default function Mail(_props: FeatureViewProps) {
             const older = await withSecrecy(() =>
                 api.send('mail.folderBackfill', { folderId, limit: BACKFILL_BATCH_SIZE })
             );
-            if (stale()) return;
+            if (stale()) return true;
             setReachedFolderStart(older.reachedStart);
-            if (older.addedCount === 0) return;
+            if (older.addedCount === 0) return true;
 
             const refetched = await withSecrecy(() =>
                 api.send('mail.messageList', {
@@ -404,13 +417,16 @@ export default function Mail(_props: FeatureViewProps) {
                     limit: MESSAGE_PAGE_SIZE
                 })
             );
-            if (stale()) return;
+            if (stale()) return true;
             setMessages((prev) => [...prev, ...refetched.messages]);
             setNextCursor(refetched.nextCursor);
+            return true;
         } catch (e) {
-            if (stale()) return;
+            if (stale()) return true;
+            setLoadFailed(true);
             setError(humanizeError(e, 'Chargement des messages impossible.'));
             invalidate('mail.accountList');
+            return false;
         } finally {
             if (!stale()) {
                 setMessagesLoading(false);
@@ -570,13 +586,15 @@ export default function Mail(_props: FeatureViewProps) {
      * Ouvrir un dossier : la page la plus récente d'abord, depuis le cache local,
      * donc immédiate, puis une relève IMAP dont seule la tête de liste est
      * refusionnée. Les deux paliers suivent ce chemin : une boîte gardée n'a pas
-     * de relève de fond, et c'est ici qu'elle se met à jour.
+     * de relève de fond, et c'est ici qu'elle se met à jour. Pas de relève après
+     * un chargement en échec : elle buterait au même endroit, et chaque refus
+     * d'identifiants rapproche du blocage du serveur de mail.
      */
     const openFolder = useCallback(
         async (folderId: number) => {
             const run = folderRunRef.current;
-            await loadMessages(folderId, null);
-            if (folderRunRef.current !== run || selectedPausedRef.current) return;
+            const loaded = await loadMessages(folderId, null);
+            if (!loaded || folderRunRef.current !== run || selectedPausedRef.current) return;
             await syncNow();
         },
         [loadMessages, syncNow]
@@ -817,9 +835,14 @@ export default function Mail(_props: FeatureViewProps) {
         [openMessage]
     );
 
+    // Sans curseur, la suite reprend sous la dernière ligne affichée : une page
+    // vide, puis l'incursion vers le passé. Repartir de la page 0 effacerait
+    // tout ce qui a été déroulé.
     const handleLoadMore = useCallback(() => {
         const folderId = selectedFolderIdRef.current;
-        if (folderId !== null) void loadMessages(folderId, nextCursorRef.current);
+        if (folderId === null) return;
+        const rows = messagesRef.current;
+        void loadMessages(folderId, nextCursorRef.current ?? cursorOf(rows[rows.length - 1]));
     }, [loadMessages]);
 
     async function downloadAttachment(attachmentId: string): Promise<void> {
@@ -1105,6 +1128,7 @@ export default function Mail(_props: FeatureViewProps) {
                                     // once, so there is nothing left to page through.
                                     hasMore={!searchMode && (nextCursor !== null || !reachedFolderStart)}
                                     loading={searchMode ? searching : messagesLoading}
+                                    loadFailed={loadFailed}
                                     // The status line above already reports an empty
                                     // search, and "aucun message dans ce dossier"
                                     // would be plainly false while a query is on.

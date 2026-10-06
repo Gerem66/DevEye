@@ -159,9 +159,9 @@ export function FeatureDeploy(_props: FeatureViewProps) {
                 const byId = new Map(prev.map((t) => [t.id, t]));
                 return targetIds.flatMap((id) => byId.get(id) ?? []);
             });
+            // Relue d'abord : son succès efface l'erreur affichée.
             api.send('deploy.reorder', { targetIds }).catch(() => {
-                setError('Réorganisation impossible.');
-                void reload();
+                void reload().then(() => setError('Réorganisation impossible.'));
             });
         },
         [reload]
