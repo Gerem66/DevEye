@@ -63,7 +63,7 @@ import { LiveProvider } from '@/live/LiveProvider';
 import { LiveCursors } from '@/live/LiveCursors';
 import { CursorChatInput } from '@/live/CursorChatInput';
 import { useLiveSegment } from '@/live/useLiveSegment';
-import { startTeleport } from '@/stores/live';
+import { cancelTeleport, startTeleport } from '@/stores/live';
 import { TopNavbar, type SiteBanner } from '@/Components/TopNavbar';
 import { QuotaPrompt } from '@/Components/QuotaPrompt';
 import { WidgetGrid } from '@/Components/WidgetGrid';
@@ -542,6 +542,24 @@ export default function HomePage() {
         });
     }, []);
 
+    /** Applique la politique de cache d'une vue refermée : démontage, minuteur, ou rien. */
+    const settleClosed = useCallback(
+        (featureId: string) => {
+            const config = viewsRef.current.find((v) => v.id === featureId);
+            const duration = config?.cacheDurationMinutes;
+            const forceUnmount = forceUnmountRef.current.delete(featureId);
+
+            if (forceUnmount || duration === 0 || !config) {
+                unmountFeature(featureId);
+            } else if (duration !== undefined) {
+                clearTimeout(ttlTimers.current.get(featureId));
+                const timer = setTimeout(() => unmountFeature(featureId), duration * 60 * 1000);
+                ttlTimers.current.set(featureId, timer);
+            }
+        },
+        [unmountFeature]
+    );
+
     /**
      * Remonte une vue à neuf sans la refermer : c'est ce qui permet à une feature
      * de traverser une bascule d'espace en restant à l'écran.
@@ -557,28 +575,38 @@ export default function HomePage() {
         setMountedFeatures((prev) => new Set(prev).add(featureId));
     }, []);
 
-    const doExpand = useCallback((widgetId: string, forceReset: boolean, morphFrom?: MorphFrom) => {
-        clearTimeout(ttlTimers.current.get(widgetId));
-        ttlTimers.current.delete(widgetId);
-        if (closingFeatureRef.current === widgetId) closingFeatureRef.current = null;
-        // Une ouverture, et elle seule, fixe l'identité de morphe : la relecture
-        // d'une vue déjà ouverte passe par `remountFeature`, qui n'y touche pas.
-        morphEpochRef.current = getWorkspaceState().epoch;
-        // Un point (un widget de la barre) : la popup grandit de là, et aucune tuile ne s'efface.
-        popupOriginRef.current = typeof morphFrom === 'object' ? morphFrom : null;
-        morphSourceRef.current = typeof morphFrom === 'object' ? null : (morphFrom ?? widgetId);
+    const doExpand = useCallback(
+        (widgetId: string, forceReset: boolean, morphFrom?: MorphFrom) => {
+            // Une ouverture directe remplace celle qui attendait la fin d'une
+            // fermeture : restée en file, celle-ci rouvrirait la vue à sa prochaine
+            // fermeture. La vue qui se refermait ne finira pas sa sortie, son cache
+            // se règle ici.
+            pendingExpandRef.current = null;
+            const closing = closingFeatureRef.current;
+            closingFeatureRef.current = null;
+            if (closing !== null && closing !== widgetId) settleClosed(closing);
+            clearTimeout(ttlTimers.current.get(widgetId));
+            ttlTimers.current.delete(widgetId);
+            // Une ouverture, et elle seule, fixe l'identité de morphe : la relecture
+            // d'une vue déjà ouverte passe par `remountFeature`, qui n'y touche pas.
+            morphEpochRef.current = getWorkspaceState().epoch;
+            // Un point (un widget de la barre) : la popup grandit de là, et aucune tuile ne s'efface.
+            popupOriginRef.current = typeof morphFrom === 'object' ? morphFrom : null;
+            morphSourceRef.current = typeof morphFrom === 'object' ? null : (morphFrom ?? widgetId);
 
-        if (forceReset) {
-            setFeatureGen((prev) => {
-                const next = new Map(prev);
-                next.set(widgetId, (prev.get(widgetId) ?? 0) + 1);
-                return next;
-            });
-        }
+            if (forceReset) {
+                setFeatureGen((prev) => {
+                    const next = new Map(prev);
+                    next.set(widgetId, (prev.get(widgetId) ?? 0) + 1);
+                    return next;
+                });
+            }
 
-        setMountedFeatures((prev) => new Set(prev).add(widgetId));
-        setExpandedWidget(widgetId);
-    }, []);
+            setMountedFeatures((prev) => new Set(prev).add(widgetId));
+            setExpandedWidget(widgetId);
+        },
+        [settleClosed]
+    );
 
     /** Le rôle courant ouvre-t-il cette vue ? La lecture suffit. */
     const allowedToOpen = useCallback(
@@ -768,10 +796,16 @@ export default function HomePage() {
         });
     }, []);
 
+    // Mirror of expandedWidget for stable callbacks that must read it at call time.
+    const expandedWidgetRef = useRef(expandedWidget);
+    expandedWidgetRef.current = expandedWidget;
+
+    // Stable : les relectures de l'espace en dépendent, et se relanceraient à
+    // chaque ouverture ou fermeture de vue.
     const handleClose = useCallback(() => {
-        closingFeatureRef.current = expandedWidget;
+        closingFeatureRef.current = expandedWidgetRef.current;
         setExpandedWidget(null);
-    }, [expandedWidget]);
+    }, []);
 
     // Le fil des vues ouvertes, que joindra un signalement de bug. Posé sur
     // l'état et non sur `handleExpand`, qui peut refuser l'ouverture : on note
@@ -790,10 +824,6 @@ export default function HomePage() {
     useEffect(() => {
         if (expandedWidget !== null || openFolder !== null) armFrameProbe(1500);
     }, [expandedWidget, openFolder]);
-
-    // Mirror of expandedWidget for stable callbacks that must read it at call time.
-    const expandedWidgetRef = useRef(expandedWidget);
-    expandedWidgetRef.current = expandedWidget;
 
     /** Referme la vue ouverte si les droits relus ne la couvrent plus. */
     const reconcileOpenView = useCallback(
@@ -939,12 +969,20 @@ export default function HomePage() {
 
     // Rejoindre quelqu'un. Tout passe par `handleExpand`, la garde unique de la
     // navigation : la téléportation ne peut pas ouvrir ce qu'un rôle interdit.
-    // Une cible nulle veut dire « il est à l'accueil » — on referme.
+    // Une cible nulle veut dire « il est à l'accueil » : on referme. Pendant une
+    // bascule, la cible attend l'espace où elle mène.
     useEffect(() => {
-        if (!liveViewTarget) return;
-        if (liveViewTarget.value === null) handleClose();
-        else handleExpand(liveViewTarget.value);
-    }, [liveViewTarget, handleExpand, handleClose]);
+        if (!liveViewTarget || switching) return;
+        if (liveViewTarget.value === null) {
+            handleClose();
+            return;
+        }
+        // Déjà en file derrière la vue qui se referme : la redemander l'ouvrirait
+        // sans attendre la fin de sa sortie.
+        if (pendingExpandRef.current?.widgetId === liveViewTarget.value) return;
+        // Refusée ici : la redemander à chaque rendu rouvrirait le refus en boucle.
+        if (!handleExpand(liveViewTarget.value)) cancelTeleport();
+    }, [liveViewTarget, switching, handleExpand, handleClose]);
 
     /**
      * Close the popup on the shown feature's own request, and mark the view for a
@@ -1047,25 +1085,11 @@ export default function HomePage() {
         const featureId = closingFeatureRef.current;
         closingFeatureRef.current = null;
         if (!featureId) return;
-
-        const config = viewsRef.current.find((v) => v.id === featureId);
-        const duration = config?.cacheDurationMinutes;
-        const forceUnmount = forceUnmountRef.current.delete(featureId);
-
-        if (forceUnmount || duration === 0 || !config) {
-            unmountFeature(featureId);
-        } else if (duration !== undefined) {
-            clearTimeout(ttlTimers.current.get(featureId));
-            const timer = setTimeout(() => unmountFeature(featureId), duration * 60 * 1000);
-            ttlTimers.current.set(featureId, timer);
-        }
+        settleClosed(featureId);
 
         const pending = pendingExpandRef.current;
-        if (pending) {
-            pendingExpandRef.current = null;
-            doExpand(pending.widgetId, pending.forceReset, pending.morphFrom);
-        }
-    }, [unmountFeature, doExpand]);
+        if (pending) doExpand(pending.widgetId, pending.forceReset, pending.morphFrom);
+    }, [settleClosed, doExpand]);
 
     /**
      * Drop device tiles whose device no longer exists. Seulement une fois la

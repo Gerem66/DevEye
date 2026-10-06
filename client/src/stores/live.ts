@@ -55,10 +55,20 @@ interface LiveState {
     /** Mon propre chemin publié, pour comparer les chemins des pairs. */
     path: string[];
     /** Où une téléportation en cours veut nous emmener, ou `null`. */
-    teleportPath: string[] | null;
+    teleport: LiveTeleport | null;
 }
 
-const EMPTY: LiveState = { peers: [], cursors: [], path: [], teleportPath: null };
+export interface LiveTeleport {
+    path: readonly string[];
+    /**
+     * Les niveaux déjà rejoints. La cible ne les redonne plus : en repartir
+     * (refermer la vue, revenir à la liste) est un choix de l'utilisateur, que
+     * la téléportation encore en cours ne doit pas défaire.
+     */
+    reached: ReadonlySet<LiveSegmentKind>;
+}
+
+const EMPTY: LiveState = { peers: [], cursors: [], path: [], teleport: null };
 
 let state: LiveState = EMPTY;
 const listeners = new Set<() => void>();
@@ -98,13 +108,13 @@ export function usePeers(): LivePeer[] {
     return useSyncExternalStore(subscribe, getPeers, getPeers);
 }
 
-/** La cible d'une téléportation, seule : elle ne bouge qu'à la demande. */
-function getTeleportPath(): string[] | null {
-    return state.teleportPath;
+/** La téléportation, seule : elle ne bouge qu'à la demande et à chaque niveau rejoint. */
+function getTeleport(): LiveTeleport | null {
+    return state.teleport;
 }
 
-export function useTeleportPath(): string[] | null {
-    return useSyncExternalStore(subscribe, getTeleportPath, getTeleportPath);
+export function useTeleport(): LiveTeleport | null {
+    return useSyncExternalStore(subscribe, getTeleport, getTeleport);
 }
 
 /**
@@ -128,7 +138,13 @@ export function useLivePresence(): { peers: LivePeer[]; path: string[] } {
 
 const PUBLISH_DEBOUNCE_MS = 120;
 
-const segments = new Map<LiveSegmentKind, string>();
+/**
+ * Les niveaux déclarés, rangés par vue (`null` : l'accueil, qui déclare `view`).
+ * Une vue refermée reste montée un moment, et ses niveaux ne doivent ni entrer
+ * dans le chemin publié ni effacer ceux de la vue ouverte. `null` en valeur est
+ * un niveau déclaré vide, distinct d'un niveau que personne ne déclare.
+ */
+const segments = new Map<string | null, Map<LiveSegmentKind, string | null>>();
 let publishTimer: ReturnType<typeof setTimeout> | null = null;
 let lastSentKey = '';
 
@@ -143,15 +159,17 @@ const settingsStack: { token: number; value: string }[] = [];
 let settingsToken = 0;
 
 /**
- * Le chemin courant : les niveaux déclarés, dans l'ordre, jusqu'au premier absent
- * (on ne peut pas être dans un dossier sans être dans le compte), puis la
- * coquille de réglages ouverte s'il y en a une.
+ * Le chemin courant : la vue ouverte puis ses niveaux, dans l'ordre, jusqu'au
+ * premier absent (on ne peut pas être dans un dossier sans être dans le compte),
+ * puis la coquille de réglages ouverte s'il y en a une.
  */
 function buildPath(): string[] {
     const path: string[] = [];
+    const view = segments.get(null)?.get('view') ?? null;
+    const levels = view === null ? undefined : segments.get(view);
     for (const kind of LIVE_SEGMENT_ORDER) {
-        const value = segments.get(kind);
-        if (value === undefined) break;
+        const value = kind === 'view' ? view : (levels?.get(kind) ?? null);
+        if (value === null) break;
         path.push(`${kind}:${value}`);
     }
     const top = settingsStack[settingsStack.length - 1];
@@ -176,18 +194,24 @@ export function pushLiveSettings(value: string): () => void {
     };
 }
 
-/** Déclare un niveau, ou le retire avec `null`. */
-export function setLiveSegment(kind: LiveSegmentKind, value: string | null): void {
-    const before = segments.get(kind);
-    if (value === null) {
-        if (before === undefined) return;
-        segments.delete(kind);
-    } else {
-        if (before === value) return;
-        segments.set(kind, value);
-    }
+/** Déclare le niveau `kind` de la vue `scope`, vide avec `null`. */
+export function setLiveSegment(scope: string | null, kind: LiveSegmentKind, value: string | null): void {
+    let levels = segments.get(scope);
+    if (!levels) segments.set(scope, (levels = new Map()));
+    if (levels.has(kind) && levels.get(kind) === value) return;
+    levels.set(kind, value);
     schedulePublish();
-    maybeCompleteTeleport();
+    settleTeleport();
+}
+
+/** Retire un niveau que son déclarant quitte, s'il porte encore sa valeur : un autre a pu le reprendre. */
+export function clearLiveSegment(scope: string | null, kind: LiveSegmentKind, value: string | null): void {
+    const levels = segments.get(scope);
+    if (!levels?.has(kind) || levels.get(kind) !== value) return;
+    levels.delete(kind);
+    if (levels.size === 0) segments.delete(scope);
+    schedulePublish();
+    settleTeleport();
 }
 
 function schedulePublish(): void {
@@ -235,9 +259,10 @@ export function refreshLive(): void {
 
 /**
  * Aller là où quelqu'un se trouve. L'intention vit hors de l'arbre React, donc une
- * feature pas encore montée la trouvera en arrivant. Elle s'efface dès que le
- * chemin publié rejoint la cible, et de toute façon au bout de ce délai : une
- * cible disparue ne doit pas coincer la navigation.
+ * feature pas encore montée la trouvera en arrivant. Chaque niveau rejoint est
+ * acquis ; elle s'efface dès que le chemin publié rejoint la cible, et de toute
+ * façon au bout de ce délai : une cible disparue ne doit pas coincer la
+ * navigation.
  */
 const TELEPORT_TTL_MS = 10_000;
 
@@ -248,47 +273,79 @@ export function startTeleport(workspaceId: number, path: readonly string[]): voi
     teleportWorkspaceId = workspaceId;
     if (teleportTimer) clearTimeout(teleportTimer);
     teleportTimer = setTimeout(clearTeleport, TELEPORT_TTL_MS);
-    state = { ...state, teleportPath: [...path] };
+    state = { ...state, teleport: { path: [...path], reached: new Set() } };
     emit();
-    maybeCompleteTeleport();
+    settleTeleport();
 }
 
 function clearTeleport(): void {
-    if (state.teleportPath === null) return;
+    if (state.teleport === null) return;
     if (teleportTimer) clearTimeout(teleportTimer);
     teleportTimer = null;
     teleportWorkspaceId = null;
-    state = { ...state, teleportPath: null };
+    state = { ...state, teleport: null };
     emit();
 }
 
-/** Appelé après chaque changement de niveau : la cible est atteinte, ou
- *  l'utilisateur est parti ailleurs de lui-même. */
-function maybeCompleteTeleport(): void {
-    const target = state.teleportPath;
-    if (target === null) return;
+/** Renonce à la téléportation de l'espace actif : sa cible est refusée ici (droits, maintenance). */
+export function cancelTeleport(): void {
     if (teleportWorkspaceId !== null && teleportWorkspaceId !== getActiveWorkspaceId()) return;
-    if (buildPath().join(' ') === target.join(' ')) clearTeleport();
+    clearTeleport();
+}
+
+function wantedAt(path: readonly string[], kind: LiveSegmentKind): string | null {
+    const prefix = `${kind}:`;
+    const wanted = path.find((s) => s.startsWith(prefix));
+    return wanted === undefined ? null : wanted.slice(prefix.length);
+}
+
+/**
+ * Après chaque changement de niveau : un niveau dont le déclarant est sur la
+ * valeur visée est acquis, et la téléportation s'achève quand le chemin publié
+ * rejoint la cible. Rien ne s'acquiert dans un autre espace que le sien.
+ */
+function settleTeleport(): void {
+    const teleport = state.teleport;
+    if (teleport === null) return;
+    if (teleportWorkspaceId !== null && teleportWorkspaceId !== getActiveWorkspaceId()) return;
+    if (buildPath().join(' ') === teleport.path.join(' ')) {
+        clearTeleport();
+        return;
+    }
+    const view = wantedAt(teleport.path, 'view');
+    let reached = teleport.reached;
+    for (const kind of LIVE_SEGMENT_ORDER) {
+        if (reached.has(kind)) continue;
+        if (kind !== 'view' && view === null) break;
+        const levels = segments.get(kind === 'view' ? null : view);
+        if (!levels?.has(kind) || levels.get(kind) !== wantedAt(teleport.path, kind)) continue;
+        reached = new Set(reached).add(kind);
+    }
+    if (reached === teleport.reached) return;
+    state = { ...state, teleport: { path: teleport.path, reached } };
+    emit();
 }
 
 /**
  * Ce qu'une téléportation attend à un niveau donné. `null` = rien de demandé,
  * `{ value: 'mail' }` = il faut y aller, `{ value: null }` = ce niveau doit être
  * refermé. Fonction pure : une feature pas prête la retrouvera au rendu suivant.
+ * Sous la racine, seule la vue visée reçoit quelque chose ; un niveau acquis ne
+ * reçoit plus rien.
  */
 export interface LiveSegmentTarget {
     value: string | null;
 }
 
 export function segmentTarget(
-    teleportPath: readonly string[] | null,
+    teleport: LiveTeleport | null,
+    scope: string | null,
     kind: LiveSegmentKind,
     current: string | null
 ): LiveSegmentTarget | null {
-    if (teleportPath === null) return null;
-    const prefix = `${kind}:`;
-    const wanted = teleportPath.find((s) => s.startsWith(prefix));
-    const value = wanted === undefined ? null : wanted.slice(prefix.length);
+    if (teleport === null || teleport.reached.has(kind)) return null;
+    if (scope !== null && scope !== wantedAt(teleport.path, 'view')) return null;
+    const value = wantedAt(teleport.path, kind);
     return value === current ? null : { value };
 }
 

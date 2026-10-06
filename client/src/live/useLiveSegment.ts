@@ -1,12 +1,14 @@
-import { useEffect, useMemo } from 'react';
+import { useContext, useEffect, useMemo } from 'react';
 
 import {
+    clearLiveSegment,
     segmentTarget,
     setLiveSegment,
-    useTeleportPath,
+    useTeleport,
     type LiveSegmentKind,
     type LiveSegmentTarget
 } from '@/stores/live';
+import { ViewScopeContext } from '@/telemetry/ViewScope';
 
 /**
  * Déclare le niveau de l'arborescence où se trouve ce composant, et reçoit celui
@@ -15,25 +17,25 @@ import {
  *
  * La cible est rendue tant qu'elle n'est pas atteinte, jamais consommée à la
  * lecture : une feature dont les données n'ont pas chargé la retrouvera au rendu
- * suivant. `null` en `value` retire le niveau et referme tout ce qui est en
- * dessous.
+ * suivant. Une fois atteinte, elle ne revient plus. `null` en `value` déclare le
+ * niveau vide et referme tout ce qui est en dessous.
  *
- * À appeler une seule fois par `kind`, dans le composant qui détient la
- * sélection : le registre est une map par `kind`, donc plusieurs déclarants
- * s'écraseraient, et celui qui se démonte effacerait ce qu'un autre vient de
- * poser. Pour entourer des lignes, c'est `useLiveOutlines` qu'il faut, qui
- * n'écrit rien et se consulte autant de fois qu'on veut.
+ * À appeler une seule fois par `kind` et par vue, dans le composant qui détient
+ * la sélection : le registre d'une vue est une map par `kind`, donc plusieurs
+ * déclarants s'écraseraient. Pour entourer des lignes, c'est `useLiveOutlines`
+ * qu'il faut, qui n'écrit rien et se consulte autant de fois qu'on veut.
  */
 export function useLiveSegment(kind: LiveSegmentKind, value: string | null): LiveSegmentTarget | null {
+    const scope = useContext(ViewScopeContext);
     // Seule la téléportation intéresse ce hook : le lire sur l'état complet ferait
     // re-rendre toute feature montée à chaque trame de curseur.
-    const teleportPath = useTeleportPath();
+    const teleport = useTeleport();
 
     useEffect(() => {
-        setLiveSegment(kind, value);
+        setLiveSegment(scope, kind, value);
         // Au démontage le niveau disparaît : une feature fermée n'est plus un lieu.
-        return () => setLiveSegment(kind, null);
-    }, [kind, value]);
+        return () => clearLiveSegment(scope, kind, value);
+    }, [scope, kind, value]);
 
-    return useMemo(() => segmentTarget(teleportPath, kind, value), [teleportPath, kind, value]);
+    return useMemo(() => segmentTarget(teleport, scope, kind, value), [teleport, scope, kind, value]);
 }
