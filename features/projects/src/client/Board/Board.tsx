@@ -39,15 +39,18 @@ import {
     CountBadge,
     type LiveOutlineProps,
     SearchSelect,
+    TextInput,
     useDragReorder,
     useLiveOutlines,
-    useRequestPopupWidth
+    useRequestPopupWidth,
+    useWorkspaceMembers
 } from 'deveye-sdk-client';
 import { formatDate, PRIORITY_LABELS } from '../api';
 import type { ProjectCard, ProjectColumn, ProjectMilestone } from '../../contracts/domain';
 import { MilestoneDot, milestoneOf } from '../Milestone';
 import { MemberStack } from '../Member';
 import type { CardTab } from './CardDialog';
+import { cardSearch, orderWithHidden } from './search';
 import { boardNaturalWidth } from './width';
 import styles from '../style.module.css';
 
@@ -82,6 +85,8 @@ interface BoardProps {
      * neuf à chaque choix, même répété : c'est lui qui relance le défilement.
      */
     focus: { milestoneId: number } | null;
+    /** La recherche du champ d'en-tête ; vide, toutes les tâches paraissent. */
+    search: string;
 }
 
 /**
@@ -108,7 +113,8 @@ export function Board({
     onColumnCreate,
     onColumnPurge,
     milestones,
-    focus
+    focus,
+    search
 }: BoardProps) {
     const [activeId, setActiveId] = useState<number | null>(null);
     /** D'où la carte est partie, pour la remettre en place sur Échap. */
@@ -194,6 +200,28 @@ export function Board({
         return map;
     }, [columns, cards]);
 
+    /**
+     * Les cartes que la recherche laisse paraître. Le glisser ne voit qu'elles, et
+     * `withHidden` remet les autres dans l'ordre que le dépôt renvoie : il réécrit
+     * toute la colonne.
+     */
+    const members = useWorkspaceMembers();
+    const matches = useMemo(() => cardSearch(search, members), [search, members]);
+    const shown = useMemo(() => {
+        if (matches === null) return byColumn;
+        const map = new Map<number, ProjectCard[]>();
+        for (const [columnId, list] of byColumn) map.set(columnId, list.filter(matches));
+        return map;
+    }, [byColumn, matches]);
+    const found = matches === null ? null : [...shown.values()].reduce((n, list) => n + list.length, 0);
+
+    const withHidden = (columnId: number, ids: number[], moved: number) =>
+        orderWithHidden(
+            (byColumn.get(columnId) ?? []).map((c) => c.id),
+            ids,
+            moved
+        );
+
     const activeCard = activeId === null ? null : (cards.find((c) => c.id === activeId) ?? null);
     const activeColumnDone = columns.find((c) => c.id === activeCard?.columnId)?.countsAsDone ?? false;
 
@@ -228,7 +256,7 @@ export function Board({
 
             const columnId = Number(String(column.id).slice(4));
             let nearest: { id: number; distance: number } | null = null;
-            for (const card of byColumn.get(columnId) ?? []) {
+            for (const card of shown.get(columnId) ?? []) {
                 if (card.id === args.active.id) continue;
                 const rect = args.droppableRects.get(card.id);
                 if (!rect) continue;
@@ -239,13 +267,13 @@ export function Board({
             const container = args.droppableContainers.find((c) => c.id === nearest?.id);
             return container ? [{ id: nearest.id, data: { droppableContainer: container, value: 0 } }] : [column];
         },
-        [byColumn]
+        [shown]
     );
 
     const locate = (cardId: number) => {
         const card = cards.find((c) => c.id === cardId);
         if (!card || card.columnId === null) return null;
-        const list = byColumn.get(card.columnId) ?? [];
+        const list = shown.get(card.columnId) ?? [];
         return { columnId: card.columnId, index: list.findIndex((c) => c.id === cardId) };
     };
 
@@ -266,11 +294,11 @@ export function Board({
         const current = cards.find((c) => c.id === activeCardId);
         if (!current || current.columnId === targetColumn) return;
 
-        const target = byColumn.get(targetColumn) ?? [];
+        const target = shown.get(targetColumn) ?? [];
         const at = hasSortableData(over) ? over.data.current.sortable.index : target.length;
         const nextIds = [...target.map((c) => c.id)];
         nextIds.splice(at, 0, activeCardId);
-        onCardsPreview(applyOrder(cards, targetColumn, nextIds));
+        onCardsPreview(applyOrder(cards, targetColumn, withHidden(targetColumn, nextIds, activeCardId)));
     };
 
     const onDragEnd = (e: DragEndEvent) => {
@@ -290,7 +318,7 @@ export function Board({
         const targetColumn = columnOf(String(over.id));
         if (targetColumn === null) return;
 
-        const list = byColumn.get(targetColumn) ?? [];
+        const list = shown.get(targetColumn) ?? [];
         const ids = list.map((c) => c.id);
         // Les index sont ceux que la liste triée a peints : le dépôt ne peut pas
         // contredire l'aperçu. Une colonne pour cible veut dire qu'elle est vide,
@@ -301,15 +329,16 @@ export function Board({
 
         const unmoved = back !== null && back.columnId === targetColumn && back.index === nextIds.indexOf(cardId);
         if (unmoved) return;
-        onCardsMoved(targetColumn, nextIds, applyOrder(cards, targetColumn, nextIds));
+        const order = withHidden(targetColumn, nextIds, cardId);
+        onCardsMoved(targetColumn, order, applyOrder(cards, targetColumn, order));
     };
 
     /** Remet l'aperçu comme avant le geste, sans rien écrire. */
     const restore = (back: { columnId: number; index: number } | null, id: number) => {
         if (!back) return;
-        const list = (byColumn.get(back.columnId) ?? []).map((c) => c.id).filter((c) => c !== id);
+        const list = (shown.get(back.columnId) ?? []).map((c) => c.id).filter((c) => c !== id);
         list.splice(back.index, 0, id);
-        onCardsPreview(applyOrder(cards, back.columnId, list));
+        onCardsPreview(applyOrder(cards, back.columnId, withHidden(back.columnId, list, id)));
     };
 
     /** Échap en cours de glisser : la carte retourne d'où elle vient. */
@@ -332,13 +361,19 @@ export function Board({
             onDragEnd={onDragEnd}
             onDragCancel={onDragCancel}
         >
+            {found === 0 && (
+                <p className={styles.boardNoMatch} role='status'>
+                    Aucune tâche ne correspond à « {search.trim()} ».
+                </p>
+            )}
             <div className={styles.board}>
                 <div ref={trackRef} className={styles.boardTrack}>
                     {columns.map((column) => (
                         <Column
                             key={column.id}
                             column={column}
-                            cards={byColumn.get(column.id) ?? []}
+                            cards={shown.get(column.id) ?? []}
+                            count={byColumn.get(column.id)?.length ?? 0}
                             canWrite={canWrite}
                             canTasks={canTasks}
                             canManage={canManage}
@@ -423,6 +458,33 @@ export function MilestoneFocus({ milestones, value, onChange }: MilestoneFocusPr
     );
 }
 
+interface BoardSearchProps {
+    value: string;
+    onChange: (value: string) => void;
+}
+
+/** La recherche du tableau, posée par la fiche à côté du choix du jalon. */
+export function BoardSearch({ value, onChange }: BoardSearchProps) {
+    return (
+        <div className={styles.boardSearch}>
+            <span className={`icon icon-search ${styles.boardSearchIcon}`} aria-hidden='true' />
+            {/* `text` et non `search` : la croix est celle du SDK, et un champ de
+                recherche en dessinerait une seconde sous Chrome. */}
+            <TextInput
+                type='text'
+                role='searchbox'
+                className={styles.boardSearchInput}
+                value={value}
+                placeholder='Rechercher une tâche'
+                title='Titre, description, sous-tâches ou participants'
+                aria-label='Rechercher une tâche par son titre, sa description, ses sous-tâches ou ses participants'
+                onChange={(e) => onChange(e.target.value)}
+                onClear={() => onChange('')}
+            />
+        </div>
+    );
+}
+
 /** Réordonne `cards` pour refléter le nouvel ordre d'une colonne. */
 function applyOrder(cards: ProjectCard[], columnId: number, ids: number[]): ProjectCard[] {
     const rank = new Map(ids.map((id, i) => [id, i]));
@@ -433,7 +495,10 @@ function applyOrder(cards: ProjectCard[], columnId: number, ids: number[]): Proj
 
 interface ColumnProps {
     column: ProjectColumn;
+    /** Celles que la recherche laisse paraître. */
     cards: ProjectCard[];
+    /** Toutes celles de la colonne : la limite de travail en cours les compte. */
+    count: number;
     canWrite: boolean;
     canTasks: boolean;
     canManage: boolean;
@@ -451,6 +516,7 @@ interface ColumnProps {
 function Column({
     column,
     cards,
+    count,
     canWrite,
     canTasks,
     canManage,
@@ -468,7 +534,7 @@ function Column({
     const { setNodeRef, isOver } = useDroppable({ id: `col:${column.id}` });
     const ids = cards.map((c) => c.id);
     // La limite est indicative : on la signale, on ne refuse jamais le dépôt.
-    const overLimit = column.wipLimit !== null && cards.length > column.wipLimit;
+    const overLimit = column.wipLimit !== null && count > column.wipLimit;
 
     return (
         <section className={styles.column} data-board-column=''>
@@ -490,7 +556,7 @@ function Column({
                     {column.name || 'Sans nom'}
                 </span>
                 <span className={overLimit ? styles.columnCountOver : styles.columnCount}>
-                    {cards.length}
+                    {count}
                     {column.wipLimit !== null && `/${column.wipLimit}`}
                 </span>
                 {column.countsAsDone && (
@@ -515,7 +581,7 @@ function Column({
                         {/* Vider la colonne : le geste de la fin d'un cycle, à portée
                             de main plutôt qu'enfoui dans les réglages. Absent d'une
                             colonne vide, qui n'a rien à archiver. */}
-                        {canTasks && column.countsAsDone && cards.length > 0 && (
+                        {canTasks && column.countsAsDone && count > 0 && (
                             <button
                                 type='button'
                                 onClick={() => onPurge(column)}

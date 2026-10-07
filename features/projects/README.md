@@ -107,7 +107,7 @@ lui, n'est pas touché : il appartient à l'espace.
 | **Mes tâches**       | mes cartes assignées, tous projets visibles d'ici confondus, projetés compris                          |
 | **Archives**         | projets archivés, restaurables                                                                         |
 | **Vue d'ensemble**   | avancement par colonne, échéances, mes tâches, charge de l'équipe, jalon, mises à jour, puis les liens |
-| **Tableau**          | kanban, glisser-déposer (dnd-kit), colonnes (douze au plus), limites WIP                               |
+| **Tableau**          | kanban, glisser-déposer (dnd-kit), colonnes (douze au plus), limites WIP, recherche                    |
 | **Frise**            | cartes datées, jalons, dépendances « bloque / bloqué par »                                             |
 | **Git**              | les dépôts reliés, une vue sur la feature Git, voir [Git](../git/README.md)                            |
 | **Bases de données** | les bases reliées, une vue sur la feature Bases, voir [Bases de données](../database/README.md)        |
@@ -188,6 +188,20 @@ en clair (`project_cards.required_open_count`), écrit par `cardAdd` et
 `cardUpdate`. Seules les cartes qui entrent sont jugées : ranger la colonne reste
 libre, et le serveur, qui ne voit aucun titre, rend les identifiants retenus que
 le client nomme.
+
+### La recherche du tableau
+
+Le champ de l'en-tête, à côté du choix du jalon, garde les tâches dont chaque
+mot se retrouve dans le titre, la description, une sous-tâche, ou le nom de qui
+porte la tâche ou l'une de ses sous-tâches, sans casse ni accents
+(`Board/search.ts`). Elle se fait dans le client : ces champs sont chiffrés. Un
+membre hors de l'espace actif n'y est pas nommé, il ne se trouve donc pas.
+
+Les autres tâches **quittent la vue mais pas l'ordre** : une tâche trouvée se
+glisse comme d'habitude, et le dépôt renvoie la colonne entière, les masquées à
+leur place et la tâche posée juste après sa voisine visible du dessus. Le
+compteur d'une colonne et sa limite comptent toujours toutes ses tâches. Le
+jalon, lui, estompe sans retirer ; les deux se combinent.
 
 ### Les six onglets d'intégration ont la même forme
 
@@ -583,7 +597,8 @@ AddFeatureDialog.tsx  les formulaires d'ajout du « + », montés hors des ongle
 ForeignLinks.tsx   les liaisons d'un projet projeté, nommées et en lecture seule
 Member.tsx         un assigné ou un auteur, nommé s'il est membre de l'espace actif, masqué sinon
 Milestone.tsx      la pastille et la teinte d'un jalon, par jetons du thème
-Board/             kanban dnd-kit (Board.tsx), dialogues carte et colonne, sous-tâches, largeur naturelle (width.ts)
+Board/             kanban dnd-kit (Board.tsx), sa recherche (search.ts), dialogues carte et colonne, sous-tâches,
+                   largeur naturelle (width.ts)
 Timeline/          frise horizontale (Timeline.tsx), échelle (scale.ts), glissé de dates (dateDrag.ts), défilement (pan.ts),
                    dialogue de jalon
 Chat/              fil de discussion, rendu markdown
@@ -878,6 +893,9 @@ Le serveur du module se teste sans base ni réseau, sur le harnais du SDK
    trois options. Sur un domaine vérifié, un premier projet à la racine, un
    second sous `/projet/<chemin>`, et la racine qui passe au second quand le
    premier ferme.
+9. **Recherche du tableau** : un mot d'une sous-tâche ou le nom d'un assigné
+   trouve la tâche ; glisser une tâche trouvée, effacer la recherche : les
+   masquées n'ont pas bougé, et l'ordre tient après rechargement.
 
 ---
 

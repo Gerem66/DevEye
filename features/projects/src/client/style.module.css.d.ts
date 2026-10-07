@@ -26,6 +26,10 @@ declare const styles: {
     readonly boardFilter: string;
     readonly boardFilterLabel: string;
     readonly boardFilterSelect: string;
+    readonly boardNoMatch: string;
+    readonly boardSearch: string;
+    readonly boardSearchIcon: string;
+    readonly boardSearchInput: string;
     readonly boardTrack: string;
     readonly card: string;
     readonly card2: string;
@@ -131,6 +135,7 @@ declare const styles: {
     readonly depLayer: string;
     readonly deployLinks: string;
     readonly description: string;
+    readonly detailActions: string;
     readonly detailHead: string;
     readonly detailSticky: string;
     readonly detailTitle: string;

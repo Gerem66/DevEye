@@ -24,7 +24,7 @@ import type {
     ProjectMilestone,
     ProjectMilestoneDraft
 } from '../contracts/domain';
-import { Board, MilestoneFocus } from './Board/Board';
+import { Board, BoardSearch, MilestoneFocus } from './Board/Board';
 import { CardDialog, type CardTab } from './Board/CardDialog';
 import { ColumnDialog, type ColumnDialogResult } from './Board/ColumnDialog';
 import { Timeline } from './Timeline/Timeline';
@@ -122,6 +122,7 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
     const [focus, setFocus] = useState<{ milestoneId: number } | null>(null);
     /** Un jalon supprimé entre-temps ne laisse pas tout le tableau estompé. */
     const focused = focus && milestones.some((m) => m.id === focus.milestoneId) ? focus : null;
+    const [search, setSearch] = useState('');
     const [deps, setDeps] = useState<ProjectCardDep[]>([]);
     const [milestoneDialog, setMilestoneDialog] = useState<{
         milestone: ProjectMilestone | null;
@@ -537,7 +538,8 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
                             )}
                         </div>
                     </div>
-                    <div className={styles.actions}>
+                    <div className={`${styles.actions} ${styles.detailActions}`}>
+                        {tab === 'board' && <BoardSearch value={search} onChange={setSearch} />}
                         {tab === 'board' && milestones.length > 0 && (
                             <MilestoneFocus
                                 milestones={milestones}
@@ -614,6 +616,7 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
                     cards={cards}
                     milestones={milestones}
                     focus={focused}
+                    search={search}
                     canWrite={canWrite}
                     canTasks={rights.canTasks}
                     canManage={rights.canManage}

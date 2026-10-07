@@ -799,6 +799,68 @@
     min-width: 9rem;
 }
 
+.boardSearch {
+    position: relative;
+    flex: 0 1 15rem;
+    min-width: 9rem;
+}
+
+/* La classe du module en plus de la globale : un module CSS hache aussi
+   `.icon`, `.boardSearch .icon` ne toucherait donc jamais l'icône de l'app. */
+.boardSearchIcon {
+    position: absolute;
+    top: 50%;
+    left: 11px;
+    width: 15px;
+    height: 15px;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    /* Un décor : le clic doit atteindre le champ dessous. */
+    pointer-events: none;
+    z-index: 1;
+}
+
+.boardSearchInput {
+    padding-left: 34px;
+}
+
+.boardNoMatch {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.875rem;
+}
+
+/* La recherche, le jalon et les réglages de la fiche. */
+.detailActions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+/* À l'étroit, sur le tableau, les actions prennent toute la rangée et la
+   recherche s'élargit. Avec le choix du jalon, elle passe seule au-dessus : les
+   trois côte à côte ne tiennent pas. */
+@media (max-width: 560px) {
+    .detailActions:has(.boardSearch) {
+        flex: 1 1 100%;
+    }
+
+    .boardSearch {
+        flex: 1 1 9rem;
+    }
+
+    .detailActions:has(.boardFilter) .boardSearch {
+        flex-basis: 100%;
+    }
+
+    .boardFilter {
+        flex: 1 1 0;
+    }
+
+    .boardFilterSelect {
+        flex: 1 1 auto;
+    }
+}
+
 .board {
     display: flex;
     /* Le tableau défile horizontalement dans sa propre boîte : la page ne doit
