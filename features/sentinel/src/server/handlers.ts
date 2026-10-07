@@ -1,4 +1,4 @@
-import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
+import { defineSdkFeature, FeatureError, type SdkDevice } from '@deveye/types/sdk/server';
 
 import {
     sentinelAcknowledge,
@@ -18,7 +18,7 @@ import {
 import { SENTINEL_RULES, type BaselineEntry } from '../contracts/domain';
 
 import { env } from './env';
-import { allowSubject } from './repo';
+import { allowSubject, emptyAttrs, type FindingRow } from './repo';
 import { type Ctx, deviceNames, EMPTY_COUNTS, engine, nameOf, posturize, stateOf, toAllow, toFinding } from './_shared';
 
 /**
@@ -27,6 +27,39 @@ import { type Ctx, deviceNames, EMPTY_COUNTS, engine, nameOf, posturize, stateOf
  * boucle en cours. L'appartenance d'un appareil est vérifiée par
  * `ctx.deveye.devices.authorize`, la même règle que la feature Appareils.
  */
+
+interface AuthorizedFinding {
+    row: FindingRow;
+    device: SdkDevice;
+}
+
+/**
+ * Les constats d'un lot, chacun avec son appareil autorisé. Tout est lu et
+ * vérifié avant la première écriture : un identifiant inconnu ou hors périmètre
+ * refuse le lot entier plutôt que de le laisser à moitié traité.
+ */
+async function authorizedFindings(ctx: Ctx, ids: readonly number[]): Promise<AuthorizedFinding[]> {
+    const devices = new Map<string, SdkDevice>();
+    const out: AuthorizedFinding[] = [];
+    for (const id of new Set(ids)) {
+        const row = await ctx.repo.findings.find(id);
+        if (!row) throw new FeatureError('not_found', 'Constat introuvable');
+        let device = devices.get(row.device_id);
+        if (!device) {
+            device = await ctx.deveye.devices.authorize(row.device_id);
+            devices.set(device.id, device);
+        }
+        out.push({ row, device });
+    }
+    return out;
+}
+
+/** Les constats d'un lot tels qu'ils sont après l'écriture. */
+async function reread(ctx: Ctx, batch: readonly AuthorizedFinding[]) {
+    return Promise.all(
+        batch.map(async ({ row, device }) => toFinding((await ctx.repo.findings.find(row.id)) ?? row, device.name))
+    );
+}
 
 export const sentinelHandlers = [
     defineSdkFeature({
@@ -114,10 +147,7 @@ export const sentinelHandlers = [
                 firstSeen: row.first_seen,
                 lastSeen: row.last_seen,
                 samples: row.samples,
-                attrs:
-                    typeof row.attrs === 'string'
-                        ? { users: [], listenPorts: [], cpuP95: null, memP95: null, sha256: null, surface: null }
-                        : row.attrs,
+                attrs: typeof row.attrs === 'string' ? emptyAttrs() : row.attrs,
                 // Une entrée est autorisée pour une règle donnée : le drapeau se lève
                 // dès qu'une règle la couvre. Le sujet se lit par `allowSubject`, le
                 // séparateur de clé étant un octet invisible qu'on ne retape pas.
@@ -138,38 +168,35 @@ export const sentinelHandlers = [
         access: { level: 'write' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
-            const row = await ctx.repo.findings.find(input.findingId);
-            if (!row) throw new FeatureError('not_found', 'Constat introuvable');
-            const device = await ctx.deveye.devices.authorize(row.device_id);
-            if (device.workspaceId === null) {
+            const batch = await authorizedFindings(ctx, input.findingIds);
+            if (batch.some(({ device }) => device.workspaceId === null)) {
                 throw new FeatureError('conflict', "Cet appareil n'appartient plus à aucun espace");
             }
 
-            // L'autorisation d'abord, l'acquittement ensuite : dans l'autre ordre, un
-            // échec d'écriture laisserait un constat clos que le tour suivant rouvrirait.
-            const allow = await ctx.repo.allow.add({
-                workspaceId: device.workspaceId,
-                deviceId: input.scope === 'fleet' ? null : device.id,
-                rule: row.rule,
-                subject: row.subject,
-                reason: input.reason,
-                createdBy: ctx.userId,
-                at: Math.floor(Date.now() / 1000)
-            });
-            await ctx.repo.findings.acknowledge(row.id, ctx.userId, Date.now());
+            for (const { row, device } of batch) {
+                if (row.state === 'acknowledged') continue;
+                // L'autorisation d'abord, l'acquittement ensuite : dans l'autre ordre, un
+                // échec d'écriture laisserait un constat clos que le tour suivant rouvrirait.
+                await ctx.repo.allow.add({
+                    workspaceId: device.workspaceId!,
+                    deviceId: input.scope === 'fleet' ? null : device.id,
+                    rule: row.rule,
+                    subject: row.subject,
+                    reason: input.reason,
+                    createdBy: ctx.userId,
+                    at: Math.floor(Date.now() / 1000)
+                });
+                await ctx.repo.findings.acknowledge(row.id, ctx.userId, Date.now());
 
-            ctx.audit({
-                action: 'sentinel.acknowledge',
-                level: 'warning',
-                description: `Constat jugé légitime (${SENTINEL_RULES[row.rule].label}) sur « ${device.name} » : ${row.subject}`,
-                metadata: { deviceId: device.id, rule: row.rule, subject: row.subject, scope: input.scope }
-            });
+                ctx.audit({
+                    action: 'sentinel.acknowledge',
+                    level: 'warning',
+                    description: `Constat jugé légitime (${SENTINEL_RULES[row.rule].label}) sur « ${device.name} » : ${row.subject}`,
+                    metadata: { deviceId: device.id, rule: row.rule, subject: row.subject, scope: input.scope }
+                });
+            }
 
-            const updated = await ctx.repo.findings.find(row.id);
-            return {
-                finding: toFinding(updated ?? row, device.name),
-                allow: toAllow(allow, allow.device_id === null ? null : device.name)
-            };
+            return { findings: await reread(ctx, batch) };
         }
     }),
     defineSdkFeature({
@@ -177,25 +204,29 @@ export const sentinelHandlers = [
         access: { level: 'write' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
-            const row = await ctx.repo.findings.find(input.findingId);
-            if (!row) throw new FeatureError('not_found', 'Constat introuvable');
-            const device = await ctx.deveye.devices.authorize(row.device_id);
+            const batch = await authorizedFindings(ctx, input.findingIds);
             // Un constat acquitté est déjà clos, par une décision plus forte : le
             // « régler » par-dessus effacerait la trace de qui l'a jugé légitime.
-            if (row.state !== 'open') {
-                throw new FeatureError('conflict', "Ce constat n'est plus ouvert");
+            const open = batch.filter(({ row }) => row.state === 'open');
+            if (open.length === 0) {
+                throw new FeatureError(
+                    'conflict',
+                    input.findingIds.length > 1
+                        ? "Aucun de ces constats n'est plus ouvert"
+                        : "Ce constat n'est plus ouvert"
+                );
             }
 
-            await ctx.repo.findings.resolve(row.id, Date.now());
+            for (const { row, device } of open) {
+                await ctx.repo.findings.resolve(row.id, Date.now());
+                ctx.audit({
+                    action: 'sentinel.resolve',
+                    description: `Constat marqué réglé (${SENTINEL_RULES[row.rule].label}) sur « ${device.name} » : ${row.subject}`,
+                    metadata: { deviceId: device.id, rule: row.rule, subject: row.subject }
+                });
+            }
 
-            ctx.audit({
-                action: 'sentinel.resolve',
-                description: `Constat marqué réglé (${SENTINEL_RULES[row.rule].label}) sur « ${device.name} » : ${row.subject}`,
-                metadata: { deviceId: device.id, rule: row.rule, subject: row.subject }
-            });
-
-            const updated = await ctx.repo.findings.find(row.id);
-            return { finding: toFinding(updated ?? row, device.name) };
+            return { findings: await reread(ctx, batch) };
         }
     }),
     defineSdkFeature({

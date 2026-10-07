@@ -156,7 +156,8 @@ export const SENTINEL_RULES: Record<SentinelRuleId, SentinelRuleMeta> = {
     'process.vanished': {
         severity: 'low',
         label: 'Programme disparu',
-        description: 'Un programme présent en continu depuis des jours a cessé de tourner.',
+        description:
+            'Un programme présent sans interruption depuis des jours a cessé de tourner, alors que la machine tourne toujours.',
         remediation: "Si c'est un service, vérifiez qu'il n'a pas été arrêté par quelqu'un d'autre que vous.",
         probe: 'snapshot',
         needsBaseline: true
@@ -164,7 +165,8 @@ export const SENTINEL_RULES: Record<SentinelRuleId, SentinelRuleMeta> = {
     'port.exposed': {
         severity: 'high',
         label: 'Port exposé au monde',
-        description: 'Un port vient de se lier à toutes les interfaces, et non à la seule boucle locale.',
+        description:
+            "Un programme écoute sur toutes les interfaces, et non sur la seule boucle locale, là où on ne l'avait jamais vu. Ses ports dynamiques comptent pour un.",
         remediation: 'Restreignez le bind à 127.0.0.1 si le service est local, ou couvrez-le par le pare-feu.',
         probe: 'snapshot',
         needsBaseline: true
@@ -378,7 +380,14 @@ export const baselineAttrsSchema = z.object({
     /** Empreinte du fichier, pour les entrées `persistence`. */
     sha256: z.string().max(64).nullable().default(null),
     /** Surface de persistance d'origine (`cron`, `systemd`, `authorized_keys`…). */
-    surface: z.string().max(48).nullable().default(null)
+    surface: z.string().max(48).nullable().default(null),
+    /**
+     * Le compteur d'instants de l'appareil au dernier passage du programme. 0 :
+     * vu avant que le compteur existe.
+     */
+    lastTick: z.number().int().nonnegative().default(0),
+    /** Instants consécutifs de l'appareil où le programme était là. */
+    streak: z.number().int().nonnegative().default(0)
 });
 export type BaselineAttrs = z.infer<typeof baselineAttrsSchema>;
 

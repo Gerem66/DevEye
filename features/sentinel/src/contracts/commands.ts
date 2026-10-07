@@ -23,6 +23,9 @@ const findingId = z.number().int().positive();
 /** Plafond d'une page de constats. Au-delà, on filtre plutôt qu'on déroule. */
 export const SENTINEL_PAGE_MAX = 200;
 
+/** Un constat, ou tout un groupe de la liste (même règle, même appareil) : jamais plus qu'une page. */
+const findingIds = z.array(findingId).min(1).max(SENTINEL_PAGE_MAX);
+
 /**
  * L'état de la flotte en une réponse : de quoi peindre la carte d'accueil et
  * l'en-tête de la vue plein écran sans second aller-retour.
@@ -91,32 +94,31 @@ export const sentinelPosture = {
 };
 
 /**
- * Écrit une autorisation puis résout le constat, dans cet ordre : si
- * l'écriture échoue, le constat reste ouvert. En portée `fleet`, vaut pour
- * tout l'espace.
+ * Pour chaque constat, écrit une autorisation puis l'acquitte, dans cet ordre :
+ * si l'écriture échoue, le constat reste ouvert. En portée `fleet`, vaut pour
+ * tout l'espace. Un constat déjà acquitté est laissé tel quel. Rend les
+ * constats tels qu'ils sont après coup.
  */
 export const sentinelAcknowledge = {
     command: 'sentinel.acknowledge' as const,
     input: z.object({
-        findingId,
+        findingIds,
         scope: allowScopeSchema.default('device'),
         reason: z.string().max(255).nullable().default(null)
     }),
-    output: z.object({
-        finding: findingSchema,
-        allow: allowEntrySchema
-    })
+    output: z.object({ findings: z.array(findingSchema) })
 };
 
 /**
  * Ferme sans écrire d'autorisation : un constat réglé rouvre au premier relevé
  * qui le revoit, un acquitté jamais. Nécessaire pour les constats d'événement
- * (authentification, persistance), que rien ne cessera de déclencher.
+ * (authentification, persistance), que rien ne cessera de déclencher. Seuls
+ * les constats ouverts du lot sont fermés ; s'il n'y en a aucun, `conflict`.
  */
 export const sentinelResolve = {
     command: 'sentinel.resolve' as const,
-    input: z.object({ findingId }),
-    output: z.object({ finding: findingSchema })
+    input: z.object({ findingIds }),
+    output: z.object({ findings: z.array(findingSchema) })
 };
 
 /** Annule un acquittement ou une résolution : retire l'autorisation et rouvre le constat. */

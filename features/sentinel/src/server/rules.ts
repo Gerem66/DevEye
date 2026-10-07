@@ -1,4 +1,4 @@
-import type { AuthWindow, DeviceReport, PersistenceEntry, ReportProcess } from '@deveye/types';
+import type { AuthWindow, DeviceReport, OpenPort, PersistenceEntry, ReportProcess } from '@deveye/types';
 
 import { SENTINEL_RULES, type EvidenceItem, type FindingSeverity, type SentinelRuleId } from '../contracts/domain';
 import type { BaselineRow, FindingDraft } from './repo';
@@ -79,9 +79,15 @@ export function processKey(p: ReportProcess): string {
  * La clé d'une écoute : `proto/adresse:port`. L'adresse de bind en fait partie
  * parce qu'elle porte l'exposition : passer de `127.0.0.1:8080` à `0.0.0.0:8080`
  * est précisément l'événement qu'on veut voir.
+ *
+ * Un port dynamique (voir `EPHEMERAL_PORT_FLOOR`) change à chaque lancement : il
+ * se range sous son programme, `udp/*:dynamique|firefox`, sans quoi chaque
+ * socket UDP d'un navigateur serait une écoute inédite. ASCII exprès : la
+ * migration qui replie la ligne de base recalcule cette clé en SQL.
  */
-export function listenerKey(proto: string, address: string, port: number): string {
-    return `${proto}/${address}:${port}`;
+export function listenerKey(port: Pick<OpenPort, 'proto' | 'address' | 'port' | 'process'>): string {
+    if (port.port >= EPHEMERAL_PORT_FLOOR) return `${port.proto}/${port.address}:dynamique|${port.process ?? '?'}`;
+    return `${port.proto}/${port.address}:${port.port}`;
 }
 
 /**
@@ -142,7 +148,7 @@ function isShellLike(name: string): boolean {
 
 /**
  * Noms que le noyau se réserve, pour les fils dont le nom ne porte pas d'index.
- * Ceux qui en portent un sont reconnus par leur `/` (voir `looksLikeKernelThread`).
+ * Ceux qui en portent un sont reconnus à leur forme (voir `looksLikeKernelThread`).
  */
 const KERNEL_THREAD_NAMES = [
     'kthreadd',
@@ -167,19 +173,23 @@ const KERNEL_THREAD_NAMES = [
 ];
 
 /**
- * Un nom de fil du noyau, à l'oeil. Le discriminant qui porte tout est le `/` :
- * `comm` est le nom de base d'un exécutable, qui n'en contient jamais, alors
- * que le noyau y range l'index de ses fils (`kworker/6:0H-kblockd`,
- * `jbd2/nvme1n1p1-8`, `irq/34-nvme0q0`). C'est aussi cet index qu'il recycle,
- * donc exactement les noms dont la volatilité fait le bruit.
- *
- * Heuristique, et assumée comme telle : `kernel` du rapport est le verdict, ceci
- * n'est que le repli pour un agent qui ne le remonte pas encore.
+ * La forme d'un fil du noyau indexé : une famille en minuscules, un `/`, un
+ * index sans espace (`kworker/6:0H-kblockd`, `jbd2/nvme1n1p1-8`,
+ * `irq/34-nvme0q0`). C'est cet index que le noyau recycle, donc exactement les
+ * noms dont la volatilité fait le bruit. Un `/` seul ne suffit pas : un
+ * programme renomme ses processus comme il veut, et Firefox appelle l'un des
+ * siens `file:// Content`.
+ */
+const KERNEL_THREAD_SHAPE = /^[a-z0-9_.-]+\/\S*$/;
+
+/**
+ * Un nom de fil du noyau, à l'oeil. Heuristique, et assumée comme telle :
+ * `kernel` du rapport est le verdict, ceci n'est que le repli pour un agent qui
+ * ne le remonte pas encore, et le critère de `exec.masquerade`.
  */
 function looksLikeKernelThread(name: string): boolean {
     if (name.startsWith('[') && name.endsWith(']')) return true;
-    if (name.includes('/')) return true;
-    return KERNEL_THREAD_NAMES.some((known) => name === known || name.startsWith(`${known}/`));
+    return KERNEL_THREAD_SHAPE.test(name) || KERNEL_THREAD_NAMES.includes(name);
 }
 
 /**
@@ -206,8 +216,8 @@ function isSuspiciousPath(path: string): boolean {
  * 32768 sous Linux, 49152 sous Windows, donc le plus bas des deux. Un port
  * au-dessus change à chaque lancement du programme, et le confronter à une
  * habitude ne dit rien de personne : un navigateur en ouvre un nouveau chaque
- * matin. L'exposition réelle reste couverte par `port.exposed`, qui juge sur
- * l'adresse de bind et n'a pas ce plancher.
+ * matin. L'exposition reste couverte par `port.exposed`, qui range ces ports
+ * sous leur programme (`listenerKey`).
  */
 const EPHEMERAL_PORT_FLOOR = 32768;
 
@@ -348,6 +358,28 @@ function connectionRules(ctx: EvalContext): FindingDraft[] {
     return out;
 }
 
+/** Les ports d'un rapport, rangés par clé d'écoute : les ports dynamiques d'un programme n'en font qu'une. */
+export function groupListeners(ports: readonly OpenPort[]): Map<string, OpenPort[]> {
+    const groups = new Map<string, OpenPort[]>();
+    for (const port of ports) {
+        const key = listenerKey(port);
+        const group = groups.get(key);
+        if (group) group.push(port);
+        else groups.set(key, [port]);
+    }
+    return groups;
+}
+
+/** `udp/443`, ou `udp, 3 ports dynamiques : 41524, 45101, 60661`. */
+function describePorts(group: readonly OpenPort[]): string {
+    const first = group[0]!;
+    if (first.port < EPHEMERAL_PORT_FLOOR) return `${first.proto}/${first.port}`;
+    const ports = [...new Set(group.map((p) => p.port))].sort((a, b) => a - b);
+    const shown = ports.slice(0, 12).join(', ');
+    const more = ports.length > 12 ? ` (+${ports.length - 12})` : '';
+    return `${first.proto}, ${ports.length} port${ports.length > 1 ? 's' : ''} dynamique${ports.length > 1 ? 's' : ''} : ${shown}${more}`;
+}
+
 /**
  * Les ports en écoute, confrontés à ce qu'on connaît. `port.unattributed` ne
  * dépend pas de la ligne de base, une écoute sans propriétaire étant anormale en
@@ -361,8 +393,8 @@ function listenerRules(ctx: EvalContext): FindingDraft[] {
     const privileged = ctx.report?.agent?.privileged === true;
     const ts = ctx.snapshot?.ts ?? null;
 
-    for (const port of ports) {
-        const key = listenerKey(port.proto, port.address, port.port);
+    for (const [key, group] of groupListeners(ports)) {
+        const port = group[0]!;
 
         if (privileged && port.pid === null && port.process === null) {
             out.push(
@@ -370,7 +402,7 @@ function listenerRules(ctx: EvalContext): FindingDraft[] {
                     'port.unattributed',
                     key,
                     [
-                        ev('Port', `${port.proto}/${port.port}`),
+                        ev('Port', describePorts(group)),
                         ev('Adresse', port.address),
                         ev('Propriétaire', 'introuvable malgré les privilèges')
                     ],
@@ -388,7 +420,7 @@ function listenerRules(ctx: EvalContext): FindingDraft[] {
                 'port.exposed',
                 key,
                 [
-                    ev('Port', `${port.proto}/${port.port}`),
+                    ev('Port', describePorts(group)),
                     ev('Adresse de bind', `${port.address} (toutes interfaces)`),
                     ev('Programme', port.process),
                     ev('PID', port.pid)
@@ -617,6 +649,9 @@ function postureRules(ctx: EvalContext): FindingDraft[] {
  * les suppressions : un manifeste tronqué ne prouve pas qu'une entrée a disparu,
  * seulement qu'on a cessé de regarder, et `persistence.removed` produirait alors
  * des centaines de faux constats.
+ *
+ * Un fichier dont le contenu est celui que livre son paquet (`vendor`) n'est ni
+ * un ajout ni une modification : c'est une installation ou une mise à jour.
  */
 export function persistenceRules(ctx: EvalContext, entries: PersistenceEntry[], truncated: boolean): FindingDraft[] {
     if (ctx.learning) return [];
@@ -625,6 +660,7 @@ export function persistenceRules(ctx: EvalContext, entries: PersistenceEntry[], 
 
     for (const entry of entries) {
         seen.add(entry.path);
+        if (entry.vendor === true) continue;
         const known = ctx.baseline.persistence.get(entry.path);
         if (!known) {
             out.push(

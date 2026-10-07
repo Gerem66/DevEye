@@ -24,6 +24,7 @@ declare const styles: {
     readonly detail: string;
     readonly detailBar: string;
     readonly detailClose: string;
+    readonly detailCount: string;
     readonly detailDescription: string;
     readonly detailHead: string;
     readonly detailInner: string;
@@ -55,11 +56,15 @@ declare const styles: {
     readonly findingRow: string;
     readonly findingRowActive: string;
     readonly findingRowMuted: string;
+    readonly findingRowNested: string;
     readonly findingRows: string;
     readonly findingRule: string;
     readonly findingSubject: string;
     readonly findings: string;
+    readonly groupChevron: string;
+    readonly groupChevronOpen: string;
     readonly groupCount: string;
+    readonly groupMembers: string;
     readonly groupTitle: string;
     readonly header: string;
     readonly headerActions: string;

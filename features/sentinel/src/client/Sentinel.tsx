@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { onResourceChange, onSocketOpen, useActiveWorkspace, useLiveSegment, useSubView } from 'deveye-sdk-client';
 import type { FeatureViewProps } from '@deveye/types/sdk/client';
@@ -10,7 +10,8 @@ import { api } from './api';
 import BaselineSection from './BaselineSection';
 import DeviceHeader from './DeviceHeader';
 import FindingDetail from './FindingDetail';
-import FindingsList from './FindingsList';
+import FindingGroupDetail from './FindingGroupDetail';
+import FindingsList, { groupFindings } from './FindingsList';
 import FleetHeader from './FleetHeader';
 import PostureGrid from './PostureGrid';
 import { refreshSentinel } from './store';
@@ -30,6 +31,7 @@ export default function Sentinel(_props: FeatureViewProps) {
     const [fleetScore, setFleetScore] = useState<number | null>(null);
     const [findings, setFindings] = useState<Finding[]>([]);
     const [selected, setSelected] = useState<Finding | null>(null);
+    const [selectedGroupKey, setSelectedGroupKey] = useState<string | null>(null);
     const [deviceId, setDeviceId] = useState<string | null>(null);
     const [posture, setPosture] = useState<DevicePosture | null>(null);
     const [minSeverity, setMinSeverity] = useState<FindingSeverity | null>(null);
@@ -123,8 +125,8 @@ export default function Sentinel(_props: FeatureViewProps) {
     const acknowledge = useCallback(
         async (scope: AllowScope, reason: string | null) => {
             if (!selected) return;
-            const res = await api.send('sentinel.acknowledge', { findingId: selected.id, scope, reason });
-            setSelected(res.finding);
+            const res = await api.send('sentinel.acknowledge', { findingIds: [selected.id], scope, reason });
+            setSelected(res.findings[0] ?? null);
             await afterWrite();
         },
         [selected, afterWrite]
@@ -132,7 +134,7 @@ export default function Sentinel(_props: FeatureViewProps) {
 
     const resolve = useCallback(async () => {
         if (!selected) return;
-        await api.send('sentinel.resolve', { findingId: selected.id });
+        await api.send('sentinel.resolve', { findingIds: [selected.id] });
         // Sans `setSelected` : la relecture seule sait s'il faut refermer (le
         // constat quitte le filtre) ou mettre à jour.
         await afterWrite();
@@ -150,7 +152,46 @@ export default function Sentinel(_props: FeatureViewProps) {
         return res.requested;
     }, []);
 
-    const visible = deviceId ? findings.filter((f) => f.deviceId === deviceId) : findings;
+    const visible = useMemo(
+        () => (deviceId ? findings.filter((f) => f.deviceId === deviceId) : findings),
+        [findings, deviceId]
+    );
+    const groups = useMemo(() => groupFindings(visible), [visible]);
+    // Un groupe réglé quitte la liste, ou change d'état et donc de clé : son
+    // détail se ferme avec lui.
+    const selectedGroup = groups.find((g) => g.key === selectedGroupKey && g.findings.length > 1) ?? null;
+
+    const acknowledgeGroup = useCallback(
+        async (scope: AllowScope, reason: string | null) => {
+            if (!selectedGroup) return;
+            const findingIds = selectedGroup.findings.filter((f) => f.state !== 'acknowledged').map((f) => f.id);
+            await api.send('sentinel.acknowledge', { findingIds, scope, reason });
+            await afterWrite();
+        },
+        [selectedGroup, afterWrite]
+    );
+
+    const resolveGroup = useCallback(async () => {
+        if (!selectedGroup) return;
+        const findingIds = selectedGroup.findings.filter((f) => f.state === 'open').map((f) => f.id);
+        await api.send('sentinel.resolve', { findingIds });
+        await afterWrite();
+    }, [selectedGroup, afterWrite]);
+
+    const selectFinding = useCallback((finding: Finding) => {
+        setSelected(finding);
+        setSelectedGroupKey(null);
+    }, []);
+
+    const selectGroup = useCallback((key: string | null) => {
+        setSelectedGroupKey(key);
+        setSelected(null);
+    }, []);
+
+    const closeDetail = useCallback(() => {
+        setSelected(null);
+        setSelectedGroupKey(null);
+    }, []);
 
     return (
         <div className={styles.root}>
@@ -160,7 +201,7 @@ export default function Sentinel(_props: FeatureViewProps) {
                     className={`${styles.overviewButton} ${deviceId === null ? styles.overviewButtonActive : ''}`}
                     onClick={() => {
                         setDeviceId(null);
-                        setSelected(null);
+                        closeDetail();
                     }}
                 >
                     <span className={styles.overviewTop}>
@@ -205,7 +246,7 @@ export default function Sentinel(_props: FeatureViewProps) {
                             onClick={() => {
                                 // Toujours la lecture, jamais les réglages.
                                 setDeviceId(d.deviceId);
-                                setSelected(null);
+                                closeDetail();
                             }}
                         >
                             <span
@@ -269,9 +310,11 @@ export default function Sentinel(_props: FeatureViewProps) {
                                     <p className={styles.empty}>Chargement…</p>
                                 ) : (
                                     <FindingsList
-                                        findings={visible}
+                                        groups={groups}
                                         selectedId={selected?.id ?? null}
-                                        onSelect={setSelected}
+                                        onSelect={selectFinding}
+                                        selectedGroupKey={selectedGroup?.key ?? null}
+                                        onSelectGroup={selectGroup}
                                         showDevice={deviceId === null}
                                         learning={device?.learning ?? false}
                                     />
@@ -292,7 +335,7 @@ export default function Sentinel(_props: FeatureViewProps) {
 
                         {/* Le détail n'occupe la droite que lorsqu'on en veut un. */}
                         <AnimatePresence>
-                            {selected && (
+                            {(selected || selectedGroup) && (
                                 <motion.aside
                                     key='detail'
                                     className={styles.detailPane}
@@ -313,13 +356,24 @@ export default function Sentinel(_props: FeatureViewProps) {
                                         panneau perd la sienne : `overflow: hidden`
                                         le rogne au lieu de le remettre en page. */}
                                     <div className={styles.detailInner} style={{ width: DETAIL_WIDTH }}>
-                                        <FindingDetail
-                                            finding={selected}
-                                            onAcknowledge={acknowledge}
-                                            onResolve={resolve}
-                                            onReopen={reopen}
-                                            onClose={() => setSelected(null)}
-                                        />
+                                        {selected ? (
+                                            <FindingDetail
+                                                finding={selected}
+                                                onAcknowledge={acknowledge}
+                                                onResolve={resolve}
+                                                onReopen={reopen}
+                                                onClose={closeDetail}
+                                            />
+                                        ) : (
+                                            selectedGroup && (
+                                                <FindingGroupDetail
+                                                    group={selectedGroup}
+                                                    onAcknowledge={acknowledgeGroup}
+                                                    onResolve={resolveGroup}
+                                                    onClose={closeDetail}
+                                                />
+                                            )
+                                        )}
                                     </div>
                                 </motion.aside>
                             )}

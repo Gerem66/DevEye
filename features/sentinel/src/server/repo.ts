@@ -77,29 +77,34 @@ export interface BaselineRepo {
     observe(deviceId: string, at: number, items: BaselineObservation[]): Promise<void>;
     known(deviceId: string, kind: BaselineKind): Promise<Map<string, BaselineRow>>;
     list(deviceId: string, kind: BaselineKind | null, limit: number): Promise<{ rows: BaselineRow[]; total: number }>;
-    /** Éléments d'une nature absents depuis `since` : ce qui était là et ne l'est plus. */
-    staleSince(deviceId: string, kind: BaselineKind, since: number): Promise<BaselineRow[]>;
     /** Oublie les éléments d'une nature (diff de persistance : on réécrit tout). */
     forget(deviceId: string, kind: BaselineKind, keys: string[]): Promise<number>;
     /** Efface toute la ligne de base d'un appareil. Les autorisations survivent. */
     reset(deviceId: string): Promise<number>;
 }
 
-function parseAttrs(raw: string | BaselineAttrs): BaselineAttrs {
-    if (typeof raw !== 'string') return raw;
+export function emptyAttrs(): BaselineAttrs {
+    return {
+        users: [],
+        listenPorts: [],
+        cpuP95: null,
+        memP95: null,
+        sha256: null,
+        surface: null,
+        lastTick: 0,
+        streak: 0
+    };
+}
+
+/** Un champ absent du JSON prend son défaut, comme dans `baselineAttrsSchema`. */
+function parseAttrs(raw: string | Partial<BaselineAttrs>): BaselineAttrs {
+    if (typeof raw !== 'string') return { ...emptyAttrs(), ...raw };
     try {
-        return JSON.parse(raw) as BaselineAttrs;
+        return { ...emptyAttrs(), ...(JSON.parse(raw) as Partial<BaselineAttrs>) };
     } catch {
         // Un blob illisible est un défaut de stockage, pas une entrée absente : une
         // enveloppe vide plutôt que tout le tour qui tombe.
-        return {
-            users: [],
-            listenPorts: [],
-            cpuP95: null,
-            memP95: null,
-            sha256: null,
-            surface: null
-        };
+        return emptyAttrs();
     }
 }
 
@@ -169,15 +174,6 @@ export function baselineRepo(q: Q): BaselineRepo {
                 rows: page.map(hydrate),
                 total: Number(count[0]?.total ?? 0)
             };
-        },
-        async staleSince(deviceId, kind, since) {
-            const rows = await q.query<BaselineRow>(
-                `SELECT id, device_id, kind, item_key, first_seen, last_seen, samples, attrs
-                 FROM device_baseline
-                 WHERE device_id = ? AND kind = ? AND last_seen < ?`,
-                [deviceId, kind, since]
-            );
-            return rows.map(hydrate);
         },
         async forget(deviceId, kind, keys) {
             if (keys.length === 0) return 0;
@@ -663,6 +659,13 @@ export interface DeviceConfigRow {
     pin_evidence: number;
     /** Unix ms du dernier manifeste reçu ; `null` = jamais mesuré. */
     last_integrity_at: number | null;
+    /**
+     * Instants évalués non vides depuis toujours : l'horloge de la machine, qui
+     * ne tourne pas quand elle est éteinte. `process.vanished` compte en instants.
+     */
+    snapshot_ticks: number;
+    /** Format du dernier manifeste appris ; `null` = aucun encore. */
+    persistence_format: number | null;
 }
 
 /** Ce qu'une écriture veut changer ; ce qui n'est pas donné ne bouge pas (ou prend son défaut à la création). */
@@ -686,8 +689,9 @@ export interface DeviceConfigRepo {
      * ne se disputent pas la création.
      */
     set(deviceId: string, patch: DeviceConfigPatch): Promise<void>;
-    /** Date le dernier manifeste de persistance reçu (unix ms). */
-    touchIntegrity(deviceId: string, at: number): Promise<void>;
+    /** Date le dernier manifeste de persistance reçu (unix ms) et retient son format. */
+    touchIntegrity(deviceId: string, at: number, format: number): Promise<void>;
+    setSnapshotTicks(deviceId: string, ticks: number): Promise<void>;
     /**
      * Les appareils sur lesquels Sentinelle tourne, tous espaces confondus : le
      * moteur n'a ni session ni espace courant. Le statut (archivé, révoqué) ne se
@@ -697,7 +701,7 @@ export interface DeviceConfigRepo {
 }
 
 const CONFIG_SELECT = `SELECT device_id, enabled, learning_until, integrity_minutes, auth_events,
-                              pin_evidence, last_integrity_at
+                              pin_evidence, last_integrity_at, snapshot_ticks, persistence_format
                        FROM ft_sentinel_device_config`;
 
 function hydrateConfig(row: DeviceConfigRow): DeviceConfigRow {
@@ -708,7 +712,9 @@ function hydrateConfig(row: DeviceConfigRow): DeviceConfigRow {
         integrity_minutes: Number(row.integrity_minutes),
         auth_events: Number(row.auth_events),
         pin_evidence: Number(row.pin_evidence),
-        last_integrity_at: row.last_integrity_at === null ? null : Number(row.last_integrity_at)
+        last_integrity_at: row.last_integrity_at === null ? null : Number(row.last_integrity_at),
+        snapshot_ticks: Number(row.snapshot_ticks),
+        persistence_format: row.persistence_format === null ? null : Number(row.persistence_format)
     };
 }
 
@@ -763,8 +769,11 @@ export function deviceConfigRepo(q: Q): DeviceConfigRepo {
             if (sets.length === 0) return;
             await upsert(deviceId, sets, params);
         },
-        async touchIntegrity(deviceId, at) {
-            await upsert(deviceId, ['last_integrity_at'], [at]);
+        async touchIntegrity(deviceId, at, format) {
+            await upsert(deviceId, ['last_integrity_at', 'persistence_format'], [at, format]);
+        },
+        async setSnapshotTicks(deviceId, ticks) {
+            await upsert(deviceId, ['snapshot_ticks'], [ticks]);
         },
         async listEnabled() {
             const rows = await q.query<{ device_id: string }>(

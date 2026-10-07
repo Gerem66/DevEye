@@ -6,8 +6,15 @@ import { createTestServiceDeps, testDevice } from '@deveye/types/sdk/testing';
 
 import { SEVERITY_RANK, type FindingState } from '../contracts/domain';
 
-import { dueSince, SentinelEngine } from './engine';
-import type { BaselineRow, DeviceConfigRow, FindingRow, SentinelRepo } from './repo';
+import { dueSince, SentinelEngine, vanishedVerdict } from './engine';
+import {
+    emptyAttrs,
+    findingDedup,
+    type BaselineRow,
+    type DeviceConfigRow,
+    type FindingRow,
+    type SentinelRepo
+} from './repo';
 
 /**
  * Ce qui ne lève nulle part quand ça se dérègle : le plancher d'évaluation (une
@@ -20,6 +27,8 @@ import type { BaselineRow, DeviceConfigRow, FindingRow, SentinelRepo } from './r
 interface FakeRepo extends SentinelRepo {
     findings: SentinelRepo['findings'] & { rows: FindingRow[] };
     configs: Map<string, DeviceConfigRow>;
+    /** `deviceId|kind|clé` → ligne. */
+    baselineRows: Map<string, BaselineRow>;
 }
 
 const unused = async () => {
@@ -34,6 +43,7 @@ function fakeRepo(configs: DeviceConfigRow[]): FakeRepo {
     const key = (deviceId: string, rule: string, subject: string) => `${deviceId}|${rule}|${subject}`;
     return {
         configs: new Map(configs.map((c) => [c.device_id, c])),
+        baselineRows: baseline,
         baseline: {
             observe: async (deviceId, at, items) => {
                 for (const item of items) {
@@ -58,8 +68,10 @@ function fakeRepo(configs: DeviceConfigRow[]): FakeRepo {
                         .map((r) => [r.item_key, r])
                 ),
             list: unused,
-            staleSince: async () => [],
-            forget: async () => 0,
+            forget: async (deviceId, kind, keys) => {
+                for (const k of keys) baseline.delete(`${deviceId}|${kind}|${k}`);
+                return keys.length;
+            },
             reset: async () => 0
         },
         findings: {
@@ -93,7 +105,17 @@ function fakeRepo(configs: DeviceConfigRow[]): FakeRepo {
                 existing.occurrences += 1;
                 return { id: existing.id, isNew: reopened, severity: draft.severity };
             },
-            resolveMissing: async () => 0,
+            resolveMissing: async (deviceId, rules, keep, at) => {
+                let n = 0;
+                for (const row of rows) {
+                    if (row.device_id !== deviceId || row.state !== 'open' || !rules.includes(row.rule)) continue;
+                    if (keep.some((b) => b.equals(findingDedup(row.rule, row.subject)))) continue;
+                    row.state = 'resolved';
+                    row.last_seen = at;
+                    n++;
+                }
+                return n;
+            },
             find: unused,
             list: unused,
             openCounts: unused,
@@ -118,7 +140,14 @@ function fakeRepo(configs: DeviceConfigRow[]): FakeRepo {
             get: async (deviceId) => configs.find((c) => c.device_id === deviceId) ?? null,
             forDevices: unused,
             set: unused,
-            touchIntegrity: async () => undefined,
+            touchIntegrity: async (deviceId, at, format) => {
+                const c = configs.find((x) => x.device_id === deviceId)!;
+                c.last_integrity_at = at;
+                c.persistence_format = format;
+            },
+            setSnapshotTicks: async (deviceId, ticks) => {
+                configs.find((x) => x.device_id === deviceId)!.snapshot_ticks = ticks;
+            },
             listEnabled: async () => configs.filter((c) => c.enabled === 1).map((c) => c.device_id)
         }
     };
@@ -132,6 +161,8 @@ function config(over: Partial<DeviceConfigRow> & { device_id: string }): DeviceC
         auth_events: 1,
         pin_evidence: 1,
         last_integrity_at: null,
+        snapshot_ticks: 0,
+        persistence_format: 1,
         ...over
     };
 }
@@ -230,13 +261,15 @@ describe('un tour du moteur', () => {
         assert.equal(critical.notified, 1);
 
         // Le même instant, encore : la situation dure, le compteur monte, rien
-        // ne repart et personne n'est re-prévenu.
+        // ne repart et personne n'est re-prévenu. Le programme, appris au tour
+        // précédent, n'est plus nouveau : ce constat-là se ferme, et la vue le sait.
         await engine.onMetricsBatch('dev-1', [metric(TS)]);
         await deps.recorded.tickers[0].tick();
         assert.equal(repo.findings.rows.length, 2);
         assert.equal(critical.occurrences, 2);
+        assert.equal(repo.findings.rows.find((r) => r.rule === 'process.new')!.state, 'resolved');
         assert.equal(deps.recorded.notifications.length, 1);
-        assert.deepEqual(deps.recorded.liveChanges, [1]);
+        assert.deepEqual(deps.recorded.liveChanges, [1, 1]);
     });
 
     it('ne laisse pas les fils du noyau entrer dans la ligne de base', async () => {
@@ -318,5 +351,179 @@ describe('un tour du moteur', () => {
         await engine.onAuthEvents('dev-quiet', auth);
         await deps.recorded.tickers[0].tick();
         assert.deepEqual(repo.findings.rows.map((r) => r.rule).sort(), ['auth.bruteforce', 'auth.new_account']);
+    });
+});
+
+describe('vanishedVerdict : l’absence se compte en instants de la machine', () => {
+    const limits = { absentTicks: 60, streakTicks: 4320, forgetTicks: 43_200 };
+
+    it('un service longtemps présent, absent depuis une heure de relevés : disparu', () => {
+        assert.equal(vanishedVerdict({ lastTick: 5000, streak: 5000 }, 5060, limits), 'vanished');
+    });
+    it('absent depuis moins d’une heure : encore là', () => {
+        assert.equal(vanishedVerdict({ lastTick: 5000, streak: 5000 }, 5059, limits), 'present');
+    });
+    it('un programme qu’on ouvre et ferme n’a pas de série assez longue', () => {
+        assert.equal(vanishedVerdict({ lastTick: 5000, streak: 600 }, 6000, limits), 'present');
+    });
+    it('un mois d’activité sans lui : oublié', () => {
+        assert.equal(vanishedVerdict({ lastTick: 5000, streak: 5000 }, 48_200, limits), 'forget');
+    });
+});
+
+describe('la passe lente : Programme disparu', () => {
+    const NGINX = 'nginx|/usr/sbin/nginx';
+
+    /** Une ligne de base où nginx a été vu sans interruption pendant `streak` instants, jusqu'à `lastTick`. */
+    function seed(repo: FakeRepo, lastTick: number, streak: number): void {
+        repo.baselineRows.set(`dev-1|process|${NGINX}`, {
+            id: 1,
+            device_id: 'dev-1',
+            kind: 'process',
+            item_key: NGINX,
+            first_seen: TS - 30 * 86_400_000,
+            last_seen: TS - 86_400_000,
+            samples: streak,
+            attrs: { ...emptyAttrs(), users: ['www-data'], lastTick, streak }
+        });
+    }
+
+    async function slowPass(repo: FakeRepo, snapshots: (typeof SUSPECT)[] = []) {
+        const deps = createTestServiceDeps({
+            repo,
+            devices: [testDevice({ id: 'dev-1', name: 'Serveur', workspaceId: 1 })],
+            snapshots
+        });
+        // Un moteur neuf passe la passe lente à son premier tour.
+        const engine = new SentinelEngine(deps);
+        return { deps, engine };
+    }
+
+    it('une machine éteinte ne fait rien disparaître, quel que soit le temps passé', async () => {
+        // Horloge figée : aucun instant n'est arrivé depuis le dernier passage de nginx.
+        const repo = fakeRepo([config({ device_id: 'dev-1', snapshot_ticks: 5000 })]);
+        seed(repo, 5000, 5000);
+        const { deps } = await slowPass(repo);
+        await deps.recorded.tickers[0].tick();
+        assert.equal(repo.findings.rows.length, 0);
+    });
+
+    it('un service arrêté pendant que la machine tourne est signalé, puis fermé à son retour', async () => {
+        const repo = fakeRepo([config({ device_id: 'dev-1', snapshot_ticks: 5060 })]);
+        seed(repo, 5000, 5000);
+        const first = await slowPass(repo);
+        await first.deps.recorded.tickers[0].tick();
+        assert.deepEqual(
+            repo.findings.rows.map((r) => [r.rule, r.state]),
+            [['process.vanished', 'open']]
+        );
+        // La ligne reste : le retour du programme le trouvera connu.
+        assert.ok(repo.baselineRows.has(`dev-1|process|${NGINX}`));
+
+        // nginx revient : connu, il n'ouvre pas « Nouveau programme », et la passe
+        // lente qui suit rejoue la famille, ce qui ferme le constat.
+        const back = await slowPass(repo, [
+            {
+                ts: TS,
+                processes: [proc({ name: 'nginx', execPath: '/usr/sbin/nginx', user: 'www-data' })],
+                activeConnections: 3
+            }
+        ]);
+        await back.engine.onMetricsBatch('dev-1', [metric(TS)]);
+        await back.deps.recorded.tickers[0].tick();
+        assert.deepEqual(
+            repo.findings.rows.map((r) => [r.rule, r.state]),
+            [['process.vanished', 'resolved']]
+        );
+        assert.deepEqual(back.deps.recorded.liveChanges, [1]);
+    });
+
+    it('un mois d’activité sans lui : oublié, et son constat fermé', async () => {
+        const repo = fakeRepo([config({ device_id: 'dev-1', snapshot_ticks: 5060 })]);
+        seed(repo, 5000, 5000);
+        const first = await slowPass(repo);
+        await first.deps.recorded.tickers[0].tick();
+        repo.configs.get('dev-1')!.snapshot_ticks = 5000 + 43_200;
+        const later = await slowPass(repo);
+        await later.deps.recorded.tickers[0].tick();
+        assert.equal(repo.baselineRows.has(`dev-1|process|${NGINX}`), false);
+        assert.equal(repo.findings.rows[0].state, 'resolved');
+    });
+
+    it('un programme qu’on ouvre et ferme ne disparaît pas', async () => {
+        const repo = fakeRepo([config({ device_id: 'dev-1', snapshot_ticks: 9000 })]);
+        seed(repo, 5000, 600);
+        const { deps } = await slowPass(repo);
+        await deps.recorded.tickers[0].tick();
+        assert.equal(repo.findings.rows.length, 0);
+    });
+
+    it('chaque instant fait avancer l’horloge et prolonge la série', async () => {
+        const repo = fakeRepo([config({ device_id: 'dev-1', snapshot_ticks: 41 })]);
+        seed(repo, 41, 41);
+        const { deps, engine } = await slowPass(repo, [
+            {
+                ts: TS,
+                processes: [proc({ name: 'nginx', execPath: '/usr/sbin/nginx', user: 'www-data' })],
+                activeConnections: 3
+            }
+        ]);
+        await engine.onMetricsBatch('dev-1', [metric(TS)]);
+        await deps.recorded.tickers[0].tick();
+        assert.equal(repo.configs.get('dev-1')!.snapshot_ticks, 42);
+        const attrs = repo.baselineRows.get(`dev-1|process|${NGINX}`)!.attrs as { lastTick: number; streak: number };
+        assert.deepEqual([attrs.lastTick, attrs.streak], [42, 42]);
+    });
+});
+
+describe('le manifeste de persistance : un format à la fois', () => {
+    const CRON = '/etc/cron.d/backup';
+    const manifest = (format: number, sha256: string) => ({
+        collectedAt: TS,
+        format,
+        truncated: false,
+        entries: [
+            {
+                surface: 'cron',
+                path: CRON,
+                sha256,
+                sizeBytes: 10,
+                mtime: null,
+                mode: '0644',
+                owner: 'root',
+                vendor: null
+            }
+        ]
+    });
+
+    it('un nouveau format s’apprend sans constat, le suivant se compare', async () => {
+        const repo = fakeRepo([config({ device_id: 'dev-1', persistence_format: 1 })]);
+        repo.baselineRows.set(`dev-1|persistence|${CRON}`, {
+            id: 1,
+            device_id: 'dev-1',
+            kind: 'persistence',
+            item_key: CRON,
+            first_seen: TS,
+            last_seen: TS,
+            samples: 1,
+            attrs: { ...emptyAttrs(), sha256: 'a'.repeat(64), surface: 'cron' }
+        });
+        const deps = createTestServiceDeps({ repo, devices: [testDevice({ id: 'dev-1', workspaceId: 1 })] });
+        const engine = new SentinelEngine(deps);
+
+        // L'agent change sa façon d'empreinter : l'empreinte diffère, rien ne sonne.
+        await engine.onIntegrity('dev-1', manifest(2, 'b'.repeat(64)));
+        await deps.recorded.tickers[0].tick();
+        assert.equal(repo.findings.rows.length, 0);
+        assert.equal(repo.configs.get('dev-1')!.persistence_format, 2);
+
+        // Même format, empreinte changée : là, c'est une modification.
+        engine.invalidate('dev-1');
+        await engine.onIntegrity('dev-1', manifest(2, 'c'.repeat(64)));
+        await deps.recorded.tickers[0].tick();
+        assert.deepEqual(
+            repo.findings.rows.map((r) => r.rule),
+            ['persistence.modified']
+        );
     });
 });

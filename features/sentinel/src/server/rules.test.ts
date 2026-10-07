@@ -1,10 +1,18 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import type { AuthWindow, DeviceReport, PersistenceEntry, ReportProcess } from '@deveye/types';
+import type { AuthWindow, DeviceReport, OpenPort, PersistenceEntry, ReportProcess } from '@deveye/types';
 
 import type { BaselineRow, FindingDraft } from './repo';
-import { authRules, evaluateReport, evaluateSnapshot, persistenceRules, processKey, type EvalContext } from './rules';
+import {
+    authRules,
+    evaluateReport,
+    evaluateSnapshot,
+    listenerKey,
+    persistenceRules,
+    processKey,
+    type EvalContext
+} from './rules';
 
 /**
  * Des instants fabriqués, ce que les règles en rendent : ni base, ni agent, ni
@@ -53,6 +61,8 @@ function baseRow(key: string, over: Partial<BaselineRow> = {}): BaselineRow {
             memP95: null,
             sha256: null,
             surface: null,
+            lastTick: 0,
+            streak: 0,
             ...((over.attrs as object) ?? {})
         },
         ...over
@@ -140,6 +150,25 @@ describe('Règles d’exécution', () => {
         expectRules(
             evaluateSnapshot(ctx({ snapshot: snap([proc({ name: 'kworker/0:1', execPath: '/usr/bin/miner' })]) })),
             ['exec.masquerade', 'process.new']
+        );
+    });
+    it('nom de thread noyau entre crochets, ou réservé sans index', () => {
+        expectRules(
+            evaluateSnapshot(ctx({ snapshot: snap([proc({ name: '[kworker/0:1]', execPath: '/var/lib/x' })]) })),
+            ['exec.masquerade', 'process.new']
+        );
+        expectRules(
+            evaluateSnapshot(ctx({ snapshot: snap([proc({ name: 'kthreadd', execPath: '/usr/local/bin/x' })]) })),
+            ['exec.masquerade', 'process.new']
+        );
+    });
+    it('un « / » dans un nom choisi par le programme n’en fait pas un fil du noyau', () => {
+        // Firefox nomme ainsi son processus de contenu des pages locales.
+        expectRules(
+            evaluateSnapshot(
+                ctx({ snapshot: snap([proc({ name: 'file:// Content', execPath: '/usr/lib64/firefox/firefox' })]) })
+            ),
+            ['process.new']
         );
     });
     it('sans chemin, exec.* se tait (agent trop ancien)', () => {
@@ -272,6 +301,60 @@ describe('Règles de ports', () => {
                 })
             ),
             []
+        );
+    });
+});
+
+describe('Ports dynamiques', () => {
+    const port = (over: Partial<OpenPort> & { port: number }): OpenPort => ({
+        proto: 'udp',
+        address: '*',
+        zone: null,
+        pid: 7,
+        process: 'firefox',
+        ...over
+    });
+    const listeners = (...keys: string[]) => ({
+        process: new Map<string, BaselineRow>(),
+        listener: new Map(keys.map((k) => [k, baseRow(k, { kind: 'listener' })])),
+        persistence: new Map<string, BaselineRow>()
+    });
+
+    it('la clé range un port dynamique sous son programme, un port choisi sous son numéro', () => {
+        assert.equal(listenerKey(port({ port: 60661 })), 'udp/*:dynamique|firefox');
+        assert.equal(listenerKey(port({ port: 60661, process: null })), 'udp/*:dynamique|?');
+        assert.equal(listenerKey(port({ port: 5353 })), 'udp/*:5353');
+    });
+    it('les ports dynamiques d’un programme font un seul constat, qui les liste', () => {
+        const drafts = evaluateReport(
+            ctx({
+                report: report({ openPorts: [port({ port: 60661 }), port({ port: 41524 }), port({ port: 52401 })] })
+            })
+        );
+        expectRules(drafts, ['port.exposed']);
+        assert.equal(drafts[0].subject, 'udp/*:dynamique|firefox');
+        assert.ok(drafts[0].evidence.some((e) => e.value === 'udp, 3 ports dynamiques : 41524, 52401, 60661'));
+    });
+    it('un programme connu pour ses ports dynamiques ne sonne plus quand ils changent', () => {
+        expectRules(
+            evaluateReport(
+                ctx({
+                    report: report({ openPorts: [port({ port: 33001 })] }),
+                    baseline: listeners('udp/*:dynamique|firefox')
+                })
+            ),
+            []
+        );
+    });
+    it('un autre programme qui en ouvre sonne, lui', () => {
+        expectRules(
+            evaluateReport(
+                ctx({
+                    report: report({ openPorts: [port({ port: 33001, process: 'implant' })] }),
+                    baseline: listeners('udp/*:dynamique|firefox')
+                })
+            ),
+            ['port.exposed']
         );
     });
 });
@@ -477,7 +560,8 @@ describe('Règles de persistance', () => {
         sizeBytes: over.sizeBytes ?? 120,
         mtime: over.mtime ?? null,
         mode: over.mode ?? '0644',
-        owner: over.owner ?? 'root'
+        owner: over.owner ?? 'root',
+        vendor: over.vendor ?? null
     });
     const withPersistence = (path: string, sha256: string) => ({
         process: new Map<string, BaselineRow>(),
@@ -495,6 +579,29 @@ describe('Règles de persistance', () => {
             persistenceRules(
                 ctx({ baseline: withPersistence('/etc/cron.d/backup', 'b'.repeat(64)) }),
                 [entry({ path: '/etc/cron.d/backup', sha256: 'c'.repeat(64) })],
+                false
+            ),
+            ['persistence.modified']
+        );
+    });
+    it('contenu livré par le paquet : ni ajout ni modification', () => {
+        expectRules(
+            persistenceRules(
+                ctx({ baseline: withPersistence('/etc/profile.d/debuginfod.sh', 'b'.repeat(64)) }),
+                [
+                    entry({ path: '/etc/profile.d/debuginfod.sh', sha256: 'c'.repeat(64), vendor: true }),
+                    entry({ path: '/etc/cron.d/0hourly', sha256: 'e'.repeat(64), vendor: true })
+                ],
+                false
+            ),
+            []
+        );
+    });
+    it('contenu qui s’écarte du paquet : modification', () => {
+        expectRules(
+            persistenceRules(
+                ctx({ baseline: withPersistence('/etc/profile.d/debuginfod.sh', 'b'.repeat(64)) }),
+                [entry({ path: '/etc/profile.d/debuginfod.sh', sha256: 'c'.repeat(64), vendor: false })],
                 false
             ),
             ['persistence.modified']

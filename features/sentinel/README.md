@@ -56,8 +56,9 @@ suit dit où passe la limite.
   une machine où un compte ordinaire peut y écrire, un faux passe. C'est le cas
   rare, et il est connu.
 - **Root local peut tout.** Effacer le journal, réécrire le manifeste de
-  persistance, tuer l'agent : rien de ce qu'un agent lit sur une machine ne
-  vaut contre qui la possède déjà. Sentinelle voit l'arrivée, pas l'occupant
+  persistance, tuer l'agent, installer un paquet dont le fichier passera pour
+  « livré par le paquet » : rien de ce qu'un agent lit sur une machine ne vaut
+  contre qui la possède déjà. Sentinelle voit l'arrivée, pas l'occupant
   installé.
 
 ## Trois notions, à ne pas confondre
@@ -86,7 +87,7 @@ première et dernière occurrences, et l'instant de télémétrie qui le porte
 | -------------------- | --------------------------------- | -------------------------------------------------------------------------------------- | ----------------------------- |
 | **Instant**          | 60 s (300 s sur l'offre gratuite) | réutilise `metrics.batch` : processus (nom, **chemin**, compte, ports, connexions)     | déjà en base                  |
 | **Rapport**          | 1 h                               | réutilise `agent.report` : posture étendue (sshd, MAC, reboot, correctifs de sécurité) | `devices.report_json`         |
-| **Persistance**      | 6 h (+ connexion, + `agent.scan`) | empreintes SHA-256 des surfaces d'installation au démarrage                            | **diffé, jamais stocké brut** |
+| **Persistance**      | 6 h (+ connexion, + `agent.scan`) | empreintes SHA-256 des surfaces d'installation au démarrage, et leur verdict de paquet | **diffé, jamais stocké brut** |
 | **Authentification** | 1 h                               | compteurs + ≤50 adresses + ≤50 connexions                                              | **conclusions seules**        |
 
 La cadence de l'instant est celle de la télémétrie d'Appareils
@@ -98,12 +99,14 @@ Réglages par appareil : `ft_sentinel_device_config` (`device_id`, `enabled`,
 `last_integrity_at` ; une ligne par appareil surveillé ou l'ayant été ;
 l'absence de ligne vaut « sondes éteintes, défauts » ; `ON DELETE CASCADE` avec
 l'appareil), poussés à l'agent par `agent.config` et **rejoués à la
-reconnexion**. C'est l'app qui compose cette config (`agentConfigFor`,
+reconnexion**. Le moteur y tient aussi son horloge d'activité
+(`snapshot_ticks`) et le format du dernier manifeste appris
+(`persistence_format`). C'est l'app qui compose cette config (`agentConfigFor`,
 `src/agent/config.ts`), en demandant au module sa part par
 `SENTINEL_AGENT_CONFIG_PROVIDER` : sans module installé, ou sans ligne pour
 l'appareil, les sondes sont éteintes. La table est créée par le socle
 (`098_sentinel_device_config.sql`) et possédée par le module, qui la démonte
-(`uninstall.sql`) et la complète (`migrations/001_pin_evidence.sql`).
+(`uninstall.sql`) et la complète (`migrations/`).
 
 ### Le travail de connexion est borné des deux côtés
 
@@ -260,6 +263,21 @@ défaut voyant par un défaut muet.
     `persistence.removed` **et** l'oubli en ligne de base : il ne dit pas
     qu'une entrée a disparu, seulement qu'on a cessé de regarder.
 
+    **On ne compare que des manifestes de même format.** L'agent dit comment
+    il empreinte (`format`, `MANIFEST_FORMAT` dans `integrity.rs`) ; un
+    manifeste d'un autre format que celui de la ligne de base s'apprend sans
+    constat, sinon un agent mis à jour ferait passer chaque entrée pour
+    modifiée. → Changer la façon d'empreinter, c'est monter `MANIFEST_FORMAT`.
+
+    **Un fichier livré tel quel par son paquet n'est ni ajouté ni modifié.**
+    L'agent compare chaque fichier à la base de son gestionnaire de paquets
+    (empreinte SHA-256 de rpm, MD5 de dpkg) et le dit dans `vendor` : un
+    `/etc/profile.d` réécrit par une mise à jour n'est pas un geste. Un lien
+    n'est jamais vérifié ainsi : un lien vers `/usr` s'empreinte par sa
+    cible, et activer un service reste un ajout. Windows rend une entrée par
+    valeur de `Run`/`RunOnce` et par tâche planifiée, empreintée sur sa seule
+    définition (ni état, ni prochaine exécution).
+
 13. **Éteint par défaut, appareil par appareil.** Activer Sentinelle est un
     geste explicite : c'est lui qui autorise la lecture des journaux
     d'authentification, et cela ne doit pas arriver par effet de bord de
@@ -303,23 +321,41 @@ défaut voyant par un défaut muet.
     s'éteint sans bruit, exactement le mode de panne contre lequel
     `rules.test.ts` est le seul filet (section « Séparation des cadences »).
 
+17. **Un port dynamique se range sous son programme.** Au-dessus de
+    `EPHEMERAL_PORT_FLOOR` (32768), le système choisit le port à chaque
+    lancement, et une socket UDP cliente, celle d'un navigateur, apparaît
+    comme une écoute sur toutes les interfaces. La clé d'écoute devient
+    `udp/*:dynamique|firefox` (`listenerKey`), pour la règle comme pour la
+    ligne de base : un programme qui fait cela s'apprend une fois, un nouveau
+    programme qui le fait sonne une fois, et la preuve liste ses ports.
+
 ### La passe lente
 
 Une fois par heure (`SLOW_PASS_MS`), le moteur décide ce qui ne se décide pas
 sur un instant, pour chaque appareil surveillé, actif et sorti
-d'apprentissage :
+d'apprentissage.
 
-- **`process.vanished`** : un programme absent depuis `VANISHED_AFTER_SAMPLES`
-  (10) instants, connu depuis au moins sept jours (`VANISHED_MIN_AGE_MS`) et
-  observé au moins 500 fois, est déclaré disparu. Un programme aperçu trois
-  fois la semaine dernière n'a pas disparu : il passait. Ce qui a produit sa
-  disparition sort de la ligne de base, sans quoi la même disparition se
-  re-constaterait à chaque passe ; c'est le retour du programme qui ferme le
-  constat, pas le balayage.
-- **L'oubli** : un programme absent depuis `BASELINE_FORGET_MS` (30 jours)
-  sort de la ligne de base sans rien produire. Oublier trop tôt ferait sonner
-  `process.new` à chaque exécution d'un programme intermittent, une sauvegarde
-  nocturne ou un gestionnaire de paquets.
+Les durées s'y comptent en **temps d'activité de la machine**, pas à
+l'horloge : `snapshot_ticks` avance d'un cran par instant évalué non vide, et
+chaque programme de la ligne de base retient le cran de son dernier passage
+(`lastTick`) et sa série d'instants consécutifs (`streak`). Une machine
+éteinte, un agent coupé ou une sonde de processus en panne n'avancent pas le
+compteur : rien ne disparaît pendant qu'on ne regarde pas. Mesurée à
+l'horloge, une nuit d'arrêt ferait « disparaître » tout ce qui tournait.
+
+- **`process.vanished`** : un programme absent depuis une heure d'activité
+  (`VANISHED_AFTER_MS`, dix instants au moins) après une présence
+  ininterrompue de trois jours d'activité (`VANISHED_MIN_STREAK_MS`) est
+  déclaré disparu. La série distingue un service d'un programme qu'on ouvre
+  et ferme : fermer un navigateur ou un jeu n'est pas un événement. La ligne
+  reste dans la ligne de base, et la passe rejoue toute la famille : au
+  retour du programme, il est connu (pas de « nouveau programme ») et son
+  constat se ferme.
+- **L'oubli** : un programme absent depuis trente jours d'activité
+  (`BASELINE_FORGET_MS`) sort de la ligne de base, et son constat de
+  disparition se ferme avec lui. Oublier trop tôt ferait sonner `process.new`
+  à chaque exécution d'un programme intermittent, une sauvegarde nocturne ou
+  un gestionnaire de paquets.
 - **Le balayage** des constats résolus plus vieux que
   `SENTINEL_FINDING_RETENTION_DAYS`.
 
@@ -355,7 +391,16 @@ Trois règles en découlent :
 
 Le détail d'un constat (`FindingDetail`) dit ce qui a été vu, ce que ça veut
 dire, quoi faire, et offre les deux sorties : acquitter (cette machine, ou
-partout) et « c'est réglé ». La posture (`PostureGrid`) montre chaque contrôle
+partout) et « c'est réglé ».
+
+Les constats d'une même règle sur un même appareil, dans le même état, ne
+font qu'une ligne (`groupFindings`) : elle se déplie sur ses sujets, chacun
+ouvrant son constat, et son détail (`FindingGroupDetail`) offre les mêmes
+deux sorties pour tout le groupe d'un geste. Vingt fichiers réécrits par une
+mise à jour se jugent une fois, pas vingt. `sentinel.acknowledge` et
+`sentinel.resolve` prennent donc une liste de constats, vérifiée en entier
+avant la première écriture ; le bloc d'actions (`FindingActions`) est le même
+pour un constat et pour un groupe. La posture (`PostureGrid`) montre chaque contrôle
 dans l'un de quatre états : conforme, à corriger, non mesuré, sans objet ; les
 contrôles à corriger remontent en tête. L'en-tête d'une machine affiche les
 sondes manquantes plutôt que de les taire : une machine non regardée sur un
@@ -413,24 +458,24 @@ connaître l'état précédent, et deviendrait intestable.
 
 ### Le module : `features/sentinel/`
 
-| Où                                           | Quoi                                                                                                                                                                                                                                                                                         |
-| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `deveye-feature.json`, `package.json`        | `deveye-feature-sentinel` ; allowlist des trois tables du socle                                                                                                                                                                                                                              |
-| `src/manifest.ts`                            | `featureDescriptor('sentinel')` étalé ; resources, capacités (`devices.read`, `telemetry.read`, `agents`, `notify`), onglet Appareils                                                                                                                                                        |
-| `src/contracts/domain.ts`                    | gravités, états, `SENTINEL_RULES` et le schéma des identifiants, ligne de base, constat, autorisation, posture, config par appareil, bornes et défauts                                                                                                                                       |
-| `src/contracts/commands.ts`                  | les treize commandes `sentinel.*`                                                                                                                                                                                                                                                            |
-| `src/server/engine.ts`                       | le moteur : file d'ingestion, évaluation par tour, ligne de base en mémoire, plancher d'évaluation, passe lente, notifications groupées, `live.changed` ; ses hooks agent                                                                                                                    |
-| `src/server/rules.ts`                        | le catalogue de règles, fonctions pures ; `SNAPSHOT_RULES`, `REPORT_RULES`                                                                                                                                                                                                                   |
-| `src/server/repo.ts`                         | ligne de base, constats, autorisations, config par appareil (`deviceConfig`) ; `KEY_SEP`                                                                                                                                                                                                     |
-| `src/server/handlers.ts`                     | les treize commandes ; `_shared.ts` la posture, les DTO, les noms d'appareils, le singleton du moteur                                                                                                                                                                                        |
-| `src/server/notice.ts`                       | la mise en page Discord d'un constat                                                                                                                                                                                                                                                         |
-| `src/server/env.ts`                          | `SENTINEL_TICK_SECONDS`, `SENTINEL_LEARNING_DAYS`, `SENTINEL_FINDING_RETENTION_DAYS`                                                                                                                                                                                                         |
-| `src/server/index.ts`                        | `serverEntry` : env, createRepo, features, accountExport, migrationsDir, createService (moteur, hooks agent, `SENTINEL_AGENT_CONFIG_PROVIDER`)                                                                                                                                               |
-| `src/server/accountExport.ts`                | l'export des données du compte, table par table                                                                                                                                                                                                                                              |
-| `src/server/migrations/001_pin_evidence.sql` | la colonne `pin_evidence` de `ft_sentinel_device_config`                                                                                                                                                                                                                                     |
-| `src/server/uninstall.sql`                   | démonte `ft_sentinel_device_config`, la seule table du module au préfixe                                                                                                                                                                                                                     |
-| `src/server/*.test.ts`                       | rules, engine, handlers, notice, accountExport                                                                                                                                                                                                                                               |
-| `src/client/`                                | `Sentinel.tsx` (la vue), `FleetHeader`, `DeviceHeader`, `FindingsList` (et `persistedFor`), `FindingDetail`, `PostureGrid`, `BaselineSection`, `AllowlistSection`, `SentinelWidget` (la carte), `SentinelDevicesPanel` (l'onglet Appareils), `store.ts` (le décompte), `format.ts`, `api.ts` |
+| Où                                    | Quoi                                                                                                                                                                                                                                                                                                                                                  |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `deveye-feature.json`, `package.json` | `deveye-feature-sentinel` ; allowlist des trois tables du socle                                                                                                                                                                                                                                                                                       |
+| `src/manifest.ts`                     | `featureDescriptor('sentinel')` étalé ; resources, capacités (`devices.read`, `telemetry.read`, `agents`, `notify`), onglet Appareils                                                                                                                                                                                                                 |
+| `src/contracts/domain.ts`             | gravités, états, `SENTINEL_RULES` et le schéma des identifiants, ligne de base, constat, autorisation, posture, config par appareil, bornes et défauts                                                                                                                                                                                                |
+| `src/contracts/commands.ts`           | les treize commandes `sentinel.*`                                                                                                                                                                                                                                                                                                                     |
+| `src/server/engine.ts`                | le moteur : file d'ingestion, évaluation par tour, ligne de base en mémoire, plancher d'évaluation, passe lente, notifications groupées, `live.changed` ; ses hooks agent                                                                                                                                                                             |
+| `src/server/rules.ts`                 | le catalogue de règles, fonctions pures ; `SNAPSHOT_RULES`, `REPORT_RULES`                                                                                                                                                                                                                                                                            |
+| `src/server/repo.ts`                  | ligne de base, constats, autorisations, config par appareil (`deviceConfig`) ; `KEY_SEP`                                                                                                                                                                                                                                                              |
+| `src/server/handlers.ts`              | les treize commandes ; `_shared.ts` la posture, les DTO, les noms d'appareils, le singleton du moteur                                                                                                                                                                                                                                                 |
+| `src/server/notice.ts`                | la mise en page Discord d'un constat                                                                                                                                                                                                                                                                                                                  |
+| `src/server/env.ts`                   | `SENTINEL_TICK_SECONDS`, `SENTINEL_LEARNING_DAYS`, `SENTINEL_FINDING_RETENTION_DAYS`                                                                                                                                                                                                                                                                  |
+| `src/server/index.ts`                 | `serverEntry` : env, createRepo, features, accountExport, migrationsDir, createService (moteur, hooks agent, `SENTINEL_AGENT_CONFIG_PROVIDER`)                                                                                                                                                                                                        |
+| `src/server/accountExport.ts`         | l'export des données du compte, table par table                                                                                                                                                                                                                                                                                                       |
+| `src/server/migrations/`              | `001` la colonne `pin_evidence`, `002` l'horloge d'activité, le format du manifeste et le repli des ports dynamiques                                                                                                                                                                                                                                  |
+| `src/server/uninstall.sql`            | démonte `ft_sentinel_device_config`, la seule table du module au préfixe                                                                                                                                                                                                                                                                              |
+| `src/server/*.test.ts`                | rules, engine, handlers, notice, accountExport                                                                                                                                                                                                                                                                                                        |
+| `src/client/`                         | `Sentinel.tsx` (la vue), `FleetHeader`, `DeviceHeader`, `FindingsList` (et `persistedFor`, `groupFindings`), `FindingDetail`, `FindingGroupDetail`, `FindingActions`, `PostureGrid`, `BaselineSection`, `AllowlistSection`, `SentinelWidget` (la carte), `SentinelDevicesPanel` (l'onglet Appareils), `store.ts` (le décompte), `format.ts`, `api.ts` |
 
 ### Ce que l'app garde
 
@@ -450,8 +495,9 @@ connaître l'état précédent, et deviendrait intestable.
 ### L'agent (`agent/src/`)
 
 `runner.rs` (les cadences, `ConnectMarks`), `authlog.rs` (la fenêtre
-d'authentification), `report.rs` (le rapport, `PROBES`, `proc_exe`),
-`protocol.rs` (le drapeau `kernel`). Le protocole est dans `protocol/agent.ts`
+d'authentification), `integrity.rs` (le manifeste de persistance,
+`MANIFEST_FORMAT`, la vérification par rpm ou dpkg), `report.rs` (le rapport,
+`PROBES`, `proc_exe`), `protocol.rs` (le drapeau `kernel`). Le protocole est dans `protocol/agent.ts`
 de `@deveye/types` (`metrics.batch`, `agent.report`, `agent.config`,
 `agent.scan`, `agent.collect`).
 

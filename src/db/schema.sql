@@ -1245,6 +1245,8 @@ CREATE TABLE `ft_sentinel_device_config` (
   `auth_events` tinyint NOT NULL DEFAULT '1',
   `pin_evidence` tinyint NOT NULL DEFAULT '1',
   `last_integrity_at` bigint DEFAULT NULL,
+  `snapshot_ticks` bigint NOT NULL DEFAULT '0',
+  `persistence_format` int DEFAULT NULL,
   PRIMARY KEY (`device_id`),
   CONSTRAINT `fk_ft_sentinel_device_config_device` FOREIGN KEY (`device_id`) REFERENCES `devices` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;

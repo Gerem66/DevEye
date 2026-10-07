@@ -111,12 +111,20 @@
 /* Sous 1000 px le détail passe sous la liste : rétrécir la liste rendrait les
    sujets, souvent des chemins, illisibles. */
 @media (max-width: 1000px) {
+    /* En colonne, `flex-start` donnerait à la liste la largeur de son plus long
+       sujet : elle déborderait de l'écran au lieu de couper les chemins. */
     .split {
         flex-direction: column;
+        align-items: stretch;
     }
 
     .detailPane {
         position: static;
+    }
+
+    .detailPane,
+    .detailInner {
+        max-width: 100%;
     }
 }
 
@@ -575,6 +583,25 @@
     filter: opacity(0.55);
 }
 
+/* Les constats d'un groupe déplié, en retrait sous leur ligne, qui porte déjà la règle. */
+.groupMembers {
+    margin-top: 4px;
+    padding-left: var(--space-md);
+}
+
+.findingRowNested {
+    padding-top: 6px;
+    padding-bottom: 6px;
+}
+
+.groupChevron {
+    transition: transform var(--transition-fast);
+}
+
+.groupChevronOpen {
+    transform: rotate(180deg);
+}
+
 /* Le liseré de gravité : lisible sans lire, sans une pastille de plus dans une
    ligne déjà dense. */
 .findingBar {
@@ -703,6 +730,13 @@
     font-size: 0.73rem;
     color: var(--text-secondary);
     overflow-wrap: anywhere;
+}
+
+/* Le sous-titre d'un groupe est une phrase, pas un sujet machine. */
+.detailCount {
+    margin: 3px 0 0;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
 }
 
 .detailClose {

@@ -12,6 +12,7 @@ import {
     sentinelFindings,
     sentinelOverview,
     sentinelResetBaseline,
+    sentinelResolve,
     sentinelScanNow,
     sentinelSetConfig
 } from '../contracts/commands';
@@ -83,7 +84,6 @@ function fakeRepo(findings: FindingRow[] = [], configs: DeviceConfigRow[] = []):
             observe: unused,
             known: unused,
             list: async () => ({ rows: [], total: 0 }),
-            staleSince: unused,
             forget: unused,
             reset: async (deviceId) => {
                 resets.push(deviceId);
@@ -133,7 +133,12 @@ function fakeRepo(findings: FindingRow[] = [], configs: DeviceConfigRow[] = []):
                 row.acked_by = userId;
                 row.acked_at = at;
             },
-            resolve: unused,
+            resolve: async (id, at) => {
+                const row = findingRows.find((r) => r.id === id)!;
+                if (row.state !== 'open') return;
+                row.state = 'resolved' as FindingState;
+                row.last_seen = at;
+            },
             reopen: unused,
             markNotified: unused,
             pruneResolved: unused
@@ -175,7 +180,9 @@ function fakeRepo(findings: FindingRow[] = [], configs: DeviceConfigRow[] = []):
                     integrity_minutes: 360,
                     auth_events: 1,
                     pin_evidence: 1,
-                    last_integrity_at: null
+                    last_integrity_at: null,
+                    snapshot_ticks: 0,
+                    persistence_format: null
                 };
                 configMap.set(deviceId, {
                     ...current,
@@ -187,6 +194,7 @@ function fakeRepo(findings: FindingRow[] = [], configs: DeviceConfigRow[] = []):
                 });
             },
             touchIntegrity: unused,
+            setSnapshotTicks: unused,
             listEnabled: async () => [...configMap.values()].filter((c) => c.enabled === 1).map((c) => c.device_id)
         }
     };
@@ -199,7 +207,9 @@ const WATCHED: DeviceConfigRow = {
     integrity_minutes: 180,
     auth_events: 0,
     pin_evidence: 1,
-    last_integrity_at: 1_700_000_000_000
+    last_integrity_at: 1_700_000_000_000,
+    snapshot_ticks: 0,
+    persistence_format: 1
 };
 
 const FLEET = [
@@ -262,25 +272,79 @@ describe('sentinel.acknowledge : l’autorisation d’abord', () => {
         const repo = fakeRepo([finding({ id: 1, device_id: 'dev-a' })]);
         const ctx = createTestContext({ repo, devices: FLEET, userId: 9 });
 
-        const out = await handlerFor(sentinelAcknowledge)(ctx, { findingId: 1, scope: 'device', reason: 'à nous' });
-        assert.equal(out.finding.state, 'acknowledged');
-        assert.equal(out.finding.deviceName, 'Serveur');
-        assert.equal(out.allow.deviceId, 'dev-a');
-        assert.equal(out.allow.deviceName, 'Serveur');
+        const out = await handlerFor(sentinelAcknowledge)(ctx, { findingIds: [1], scope: 'device', reason: 'à nous' });
+        assert.equal(out.findings[0].state, 'acknowledged');
+        assert.equal(out.findings[0].deviceName, 'Serveur');
+        assert.equal(repo.allowRows[0].device_id, 'dev-a');
         assert.equal(repo.allowRows[0].workspace_id, 1);
         assert.equal(repo.allowRows[0].created_by, 9);
         assert.equal(ctx.recorded.audits[0].action, 'sentinel.acknowledge');
 
         // En portée flotte, l'autorisation n'a pas d'appareil, donc pas de nom.
         repo.findingRows.push(finding({ id: 2, device_id: 'dev-b', state: 'open' }));
-        const fleet = await handlerFor(sentinelAcknowledge)(ctx, { findingId: 2, scope: 'fleet', reason: null });
-        assert.equal(fleet.allow.deviceId, null);
-        assert.equal(fleet.allow.deviceName, null);
+        await handlerFor(sentinelAcknowledge)(ctx, { findingIds: [2], scope: 'fleet', reason: null });
+        assert.equal(repo.allowRows[1].device_id, null);
 
         const listed = await handlerFor(sentinelAllowlist)(ctx, { deviceId: 'dev-a' });
         assert.deepEqual(
             listed.entries.map((e) => e.deviceName),
             ['Serveur', null]
+        );
+    });
+});
+
+describe('sentinel.acknowledge et sentinel.resolve : un groupe d’un geste', () => {
+    it('acquitte tout le groupe, sans réécrire ce qui l’était déjà', async () => {
+        const repo = fakeRepo([
+            finding({ id: 1, device_id: 'dev-a', subject: 'udp/*:dynamique|firefox' }),
+            finding({ id: 2, device_id: 'dev-a', subject: 'udp/*:dynamique|discord' }),
+            finding({ id: 3, device_id: 'dev-a', subject: 'udp/*:dynamique|steam', state: 'acknowledged' })
+        ]);
+        const ctx = createTestContext({ repo, devices: FLEET, userId: 9 });
+
+        const out = await handlerFor(sentinelAcknowledge)(ctx, {
+            findingIds: [1, 2, 3],
+            scope: 'device',
+            reason: null
+        });
+        assert.deepEqual(
+            out.findings.map((f) => f.state),
+            ['acknowledged', 'acknowledged', 'acknowledged']
+        );
+        assert.deepEqual(
+            repo.allowRows.map((a) => a.subject),
+            ['udp/*:dynamique|firefox', 'udp/*:dynamique|discord']
+        );
+        assert.equal(ctx.recorded.audits.length, 2);
+    });
+
+    it('refuse le lot entier avant toute écriture si un constat manque', async () => {
+        const repo = fakeRepo([finding({ id: 1, device_id: 'dev-a' })]);
+        const ctx = createTestContext({ repo, devices: FLEET });
+        await assert.rejects(
+            handlerFor(sentinelAcknowledge)(ctx, { findingIds: [1, 99], scope: 'device', reason: null }),
+            (e: unknown) => e instanceof FeatureError && e.code === 'not_found'
+        );
+        assert.equal(repo.allowRows.length, 0);
+        assert.equal(repo.findingRows[0].state, 'open');
+    });
+
+    it('« c’est réglé » ferme les ouverts du lot, et refuse un lot sans aucun ouvert', async () => {
+        const repo = fakeRepo([
+            finding({ id: 1, device_id: 'dev-a' }),
+            finding({ id: 2, device_id: 'dev-a', state: 'acknowledged' })
+        ]);
+        const ctx = createTestContext({ repo, devices: FLEET });
+
+        const out = await handlerFor(sentinelResolve)(ctx, { findingIds: [1, 2] });
+        assert.deepEqual(
+            out.findings.map((f) => f.state),
+            ['resolved', 'acknowledged']
+        );
+        assert.equal(repo.allowRows.length, 0);
+        await assert.rejects(
+            handlerFor(sentinelResolve)(ctx, { findingIds: [1, 2] }),
+            (e: unknown) => e instanceof FeatureError && e.code === 'conflict'
         );
     });
 });

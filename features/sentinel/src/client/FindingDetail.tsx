@@ -1,8 +1,8 @@
-import { useState } from 'react';
-import { Button, TextInput } from 'deveye-sdk-client';
+import { Button } from 'deveye-sdk-client';
 
 import { SENTINEL_RULES, type AllowScope, type Finding } from '../contracts/domain';
 
+import FindingActions, { useAction } from './FindingActions';
 import { ago, persistedFor, severityClass } from './FindingsList';
 import styles from './style.module.css';
 
@@ -24,21 +24,7 @@ interface Props {
 export default function FindingDetail({ finding, onAcknowledge, onResolve, onReopen, onClose }: Props) {
     const meta = SENTINEL_RULES[finding.rule];
     const persisted = persistedFor(finding);
-    const [reason, setReason] = useState('');
-    const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-
-    async function run(action: () => Promise<void>): Promise<void> {
-        setBusy(true);
-        setError(null);
-        try {
-            await action();
-        } catch {
-            setError("L'action n'a pas abouti.");
-        } finally {
-            setBusy(false);
-        }
-    }
+    const { busy, error, run } = useAction();
 
     return (
         <div className={styles.detail}>
@@ -100,10 +86,9 @@ export default function FindingDetail({ finding, onAcknowledge, onResolve, onReo
                 <p>{meta.remediation}</p>
             </div>
 
-            {error && <p className={styles.error}>{error}</p>}
-
             {finding.state === 'acknowledged' ? (
                 <div className={styles.actions}>
+                    {error && <p className={styles.error}>{error}</p>}
                     <p className={styles.ackNote}>
                         Jugé légitime : ce constat ne se rouvrira plus. Le rouvrir retire aussi l’autorisation qui le
                         couvrait.
@@ -113,50 +98,14 @@ export default function FindingDetail({ finding, onAcknowledge, onResolve, onReo
                     </Button>
                 </div>
             ) : (
-                <div className={styles.actions}>
-                    {finding.state === 'open' && (
-                        <div className={styles.settled}>
-                            <p className={styles.settledNote}>
-                                Corrigé ? Fermez-le sans le déclarer normal : il rouvrira de lui-même si la situation
-                                revient.
-                            </p>
-                            <Button
-                                variant='secondary'
-                                icon='check-circle'
-                                disabled={busy}
-                                onClick={() => void run(onResolve)}
-                            >
-                                C’est réglé
-                            </Button>
-                        </div>
-                    )}
-
-                    <label className={styles.field}>
-                        <span className={styles.fieldLabel}>Raison (facultatif)</span>
-                        <TextInput
-                            value={reason}
-                            maxLength={255}
-                            placeholder='ex. installé par nos soins le 3 mars'
-                            onChange={(e) => setReason(e.target.value)}
-                        />
-                    </label>
-                    <div className={styles.actionRow}>
-                        <Button
-                            variant='secondary'
-                            disabled={busy}
-                            onClick={() => void run(() => onAcknowledge('device', reason.trim() || null))}
-                        >
-                            Légitime ici
-                        </Button>
-                        <Button
-                            variant='ghost'
-                            disabled={busy}
-                            onClick={() => void run(() => onAcknowledge('fleet', reason.trim() || null))}
-                        >
-                            Légitime partout
-                        </Button>
-                    </div>
-                </div>
+                // La clé remet la raison à vide d'un constat à l'autre.
+                <FindingActions
+                    key={finding.id}
+                    count={1}
+                    canResolve={finding.state === 'open'}
+                    onAcknowledge={onAcknowledge}
+                    onResolve={onResolve}
+                />
             )}
         </div>
     );

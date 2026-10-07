@@ -13,9 +13,11 @@ import { env } from './env';
 import { buildNotice } from './notice';
 import {
     allowKey,
+    emptyAttrs,
     findingDedup,
     type BaselineObservation,
     type BaselineRow,
+    type DeviceConfigRow,
     type FindingDraft,
     type SentinelRepo
 } from './repo';
@@ -23,9 +25,9 @@ import {
     authRules,
     evaluateReport,
     evaluateSnapshot,
+    groupListeners,
     isKernelThread,
     isWorldBound,
-    listenerKey,
     persistenceRules,
     processKey,
     REPORT_RULES,
@@ -74,22 +76,59 @@ export function dueSince(lastMs: number | undefined, nowMs: number, floorMs: num
  */
 type EvalMarks = { report?: number; auth?: number; integrity?: number };
 
+// Les durées de `process.vanished` et de l'oubli se comptent en temps
+// d'activité de la machine, converti en instants (`snapshot_ticks`) : une
+// machine éteinte ou un agent coupé n'avance pas son horloge, et rien ne
+// disparaît pendant qu'on ne regarde pas.
+
 /**
- * Combien d'instants d'absence avant de déclarer un programme disparu. Généreux
- * exprès : un programme qui redémarre entre deux relevés ne doit rien produire.
+ * Combien d'absence avant de déclarer un programme disparu. Généreux exprès :
+ * un service qui redémarre, ou une session graphique qu'on rouvre après un
+ * redémarrage, ne doit rien produire.
  */
-const VANISHED_AFTER_SAMPLES = 10;
+const VANISHED_AFTER_MS = 60 * 60 * 1000;
 
-/** Ancienneté minimale d'un programme avant qu'on juge sa disparition notable. */
-const VANISHED_MIN_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+/** Plancher en instants, pour une cadence lente où l'heure n'en compte que quelques-uns. */
+const VANISHED_MIN_ABSENT_TICKS = 10;
 
 /**
- * Au-delà de quelle absence un programme sort de la ligne de base sans rien
- * produire. Généreux exprès : oublier trop tôt ferait sonner `process.new` à
- * chaque exécution d'un programme intermittent, une sauvegarde nocturne ou un
- * gestionnaire de paquets.
+ * Présence ininterrompue exigée avant qu'une disparition compte : c'est ce qui
+ * distingue un service d'un programme qu'on ouvre et ferme, un navigateur ou
+ * un jeu, dont la fermeture n'est pas un événement.
+ */
+const VANISHED_MIN_STREAK_MS = 3 * 24 * 60 * 60 * 1000;
+
+/**
+ * Au-delà de quelle absence un programme sort de la ligne de base. Généreux
+ * exprès : oublier trop tôt ferait sonner `process.new` à chaque exécution d'un
+ * programme intermittent, une sauvegarde nocturne ou un gestionnaire de paquets.
  */
 const BASELINE_FORGET_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * La durée d'un instant évalué : le moteur n'en retient qu'un par tour et par
+ * appareil, donc jamais plus d'un par `SENTINEL_TICK_SECONDS`.
+ */
+function tickMs(device: SdkDevice): number {
+    return Math.max(device.effectiveMetricIntervalSeconds, env.SENTINEL_TICK_SECONDS) * 1000;
+}
+
+/** Combien d'instants couvrent une durée d'activité. */
+function ticksFor(ms: number, device: SdkDevice): number {
+    return Math.max(1, Math.ceil(ms / tickMs(device)));
+}
+
+/** Le verdict de la passe lente sur un programme de la ligne de base. */
+export function vanishedVerdict(
+    attrs: Pick<BaselineAttrs, 'lastTick' | 'streak'>,
+    tick: number,
+    limits: { absentTicks: number; streakTicks: number; forgetTicks: number }
+): 'present' | 'vanished' | 'forget' {
+    const missed = tick - attrs.lastTick;
+    if (missed >= limits.forgetTicks) return 'forget';
+    if (missed >= limits.absentTicks && attrs.streak >= limits.streakTicks) return 'vanished';
+    return 'present';
+}
 
 /** Lissage de l'enveloppe p95. Voir `blendP95`. */
 const P95_ALPHA = 0.05;
@@ -134,10 +173,6 @@ function mergePorts(previous: number[], ports: number[], cap: number): number[] 
     const set = new Set(previous);
     for (const port of ports) set.add(port);
     return [...set].sort((a, b) => a - b).slice(0, cap);
-}
-
-function emptyAttrs(): BaselineAttrs {
-    return { users: [], listenPorts: [], cpuP95: null, memP95: null, sha256: null, surface: null };
 }
 
 function attrsOf(row: BaselineRow | undefined): BaselineAttrs {
@@ -381,36 +416,52 @@ export class SentinelEngine {
             replayed.push(...REPORT_RULES);
         }
         if (pending.integrity && this.claimEvaluation(deviceId, 'integrity', now)) {
-            drafts.push(...persistenceRules(ctx, pending.integrity.entries, pending.integrity.truncated));
+            // Deux manifestes de formats différents ne se comparent pas : un agent
+            // qui change sa façon d'empreinter ferait sinon passer chaque entrée
+            // pour modifiée. Le nouveau format s'apprend, sans constat.
+            if (config.persistence_format === pending.integrity.format) {
+                drafts.push(...persistenceRules(ctx, pending.integrity.entries, pending.integrity.truncated));
+            } else {
+                this.deps.logger.info(
+                    { deviceId, from: config.persistence_format, to: pending.integrity.format },
+                    'Sentinel: persistence manifest learned in a new format'
+                );
+            }
         }
         if (pending.auth && this.claimEvaluation(deviceId, 'auth', now)) {
             drafts.push(...authRules(ctx, pending.auth));
         }
 
-        const opened = await this.record(device, drafts, replayed, config.pin_evidence === 1);
+        const { opened, resolved } = await this.record(device, drafts, replayed, config.pin_evidence === 1);
 
         // La ligne de base s'écrit après l'évaluation : l'inverse rendrait un
         // programme nouveau déjà connu, et `process.new` ne sonnerait jamais.
-        if (snapshot) await this.observeSnapshot(deviceId, snapshot, baseline, now);
+        if (snapshot) await this.observeSnapshot(deviceId, snapshot, baseline, now, config);
         if (report?.openPorts) await this.observeListeners(deviceId, report.openPorts, baseline, now);
         if (pending.integrity) {
             await this.observePersistence(deviceId, pending.integrity, baseline, now);
-            await this.deps.repo.deviceConfig.touchIntegrity(deviceId, pending.integrity.collectedAt);
+            await this.deps.repo.deviceConfig.touchIntegrity(
+                deviceId,
+                pending.integrity.collectedAt,
+                pending.integrity.format
+            );
         }
 
         if (opened.length > 0) await this.announce(device, opened);
+        else if (resolved > 0 && device.workspaceId !== null) this.deps.live.changed(device.workspaceId);
     }
 
     /**
      * Confronte les constats produits à ceux en base, et rend ceux qui viennent
-     * de s'ouvrir, les seuls qui méritent une notification.
+     * de s'ouvrir, les seuls qui méritent une notification, avec le nombre de
+     * ceux qui viennent de se fermer.
      */
     private async record(
         device: SdkDevice,
         drafts: FindingDraft[],
         replayed: SentinelRuleId[],
         pinEvidence: boolean
-    ): Promise<{ draft: FindingDraft; id: number }[]> {
+    ): Promise<{ opened: { draft: FindingDraft; id: number }[]; resolved: number }> {
         const now = Date.now();
         const workspaceId = device.workspaceId;
         // Les autorisations sont portées par l'espace : un appareil orphelin n'en a
@@ -433,9 +484,8 @@ export class SentinelEngine {
         // arrivé dirait qu'un réglage a changé sans que personne ne l'ait relu.
         // `resolveMissing` filtre par jeu de règles, `seen` reste donc l'union de
         // tout ce qu'on a produit.
-        if (replayed.length > 0) {
-            await this.deps.repo.findings.resolveMissing(device.id, replayed, seen, now);
-        }
+        const resolved =
+            replayed.length > 0 ? await this.deps.repo.findings.resolveMissing(device.id, replayed, seen, now) : 0;
 
         // Épingler l'instant qui porte la preuve, pour les constats sérieux : sans
         // cela la rétention effacerait la seule liste de processus qui explique le
@@ -468,16 +518,22 @@ export class SentinelEngine {
             }
         }
 
-        return opened;
+        return { opened, resolved };
     }
 
+    /**
+     * Un instant vide ne fait pas avancer l'horloge de l'appareil : une sonde
+     * de processus en panne ferait sinon « disparaître » tout ce qui tourne.
+     */
     private async observeSnapshot(
         deviceId: string,
         snapshot: { ts: number; processes: ReportProcess[] },
         baseline: BaselineCache,
-        at: number
+        at: number,
+        config: DeviceConfigRow
     ): Promise<void> {
         if (snapshot.processes.length === 0) return;
+        const tick = config.snapshot_ticks + 1;
         const items: BaselineObservation[] = [];
 
         for (const p of snapshot.processes) {
@@ -497,7 +553,9 @@ export class SentinelEngine {
                 users: mergeList(previous.users, p.user, 16),
                 listenPorts: mergePorts(previous.listenPorts, stableListenPorts(p.listenPorts), 64),
                 cpuP95: blendP95(previous.cpuP95, p.cpuPercent),
-                memP95: previous.memP95 === null ? p.memBytes : Math.max(previous.memP95, p.memBytes)
+                memP95: previous.memP95 === null ? p.memBytes : Math.max(previous.memP95, p.memBytes),
+                streak: previous.lastTick === tick - 1 ? previous.streak + 1 : 1,
+                lastTick: tick
             };
             items.push({ kind: 'process', key, attrs });
             // Le cache suit l'écriture : le prochain tour doit voir ce tour-ci.
@@ -517,6 +575,7 @@ export class SentinelEngine {
         }
 
         await this.deps.repo.baseline.observe(deviceId, at, items);
+        await this.deps.repo.deviceConfig.setSnapshotTicks(deviceId, tick);
     }
 
     private async observeListeners(
@@ -526,13 +585,17 @@ export class SentinelEngine {
         at: number
     ): Promise<void> {
         const items: BaselineObservation[] = [];
-        for (const port of ports) {
-            const key = listenerKey(port.proto, port.address, port.port);
+        for (const [key, group] of groupListeners(ports)) {
+            const port = group[0]!;
             const known = baseline.listener.get(key);
             const attrs: BaselineAttrs = {
                 ...attrsOf(known),
                 users: mergeList(attrsOf(known).users, port.process, 16),
-                listenPorts: [port.port],
+                listenPorts: mergePorts(
+                    [],
+                    group.map((p) => p.port),
+                    64
+                ),
                 surface: isWorldBound(port.address) ? 'world' : 'local'
             };
             items.push({ kind: 'listener', key, attrs });
@@ -604,57 +667,61 @@ export class SentinelEngine {
      * module, la façade des appareils disant lesquels sont encore actifs.
      */
     private async slowPass(): Promise<void> {
-        const now = Date.now();
-
         for (const deviceId of await this.deps.repo.deviceConfig.listEnabled()) {
             const device = await this.deps.devices.find(deviceId);
             if (!device || device.status !== 'active') continue;
             const config = await this.deps.repo.deviceConfig.get(deviceId);
             if (!config || config.enabled !== 1) continue;
-            if (config.learning_until !== null && now < config.learning_until) continue;
-            const interval = device.effectiveMetricIntervalSeconds * 1000;
-            const stale = await this.deps.repo.baseline.staleSince(
-                device.id,
-                'process',
-                now - VANISHED_AFTER_SAMPLES * interval
-            );
-            // Un programme aperçu trois fois la semaine dernière n'a pas disparu :
-            // il n'était pas installé, il passait.
-            const gone = stale.filter((row) => now - row.first_seen >= VANISHED_MIN_AGE_MS && row.samples >= 500);
-            const drafts: FindingDraft[] = gone.map((row) => ({
-                rule: 'process.vanished' as SentinelRuleId,
-                severity: SENTINEL_RULES['process.vanished'].severity,
-                subject: row.item_key,
-                evidence: [
-                    { label: 'Programme', value: row.item_key },
-                    { label: 'Vu pour la dernière fois', value: new Date(row.last_seen).toISOString() },
-                    { label: 'Connu depuis', value: new Date(row.first_seen).toISOString().slice(0, 10) },
-                    { label: 'Instants observés', value: String(row.samples) }
-                ],
-                snapshotTs: null
-            }));
+            if (config.learning_until !== null && Date.now() < config.learning_until) continue;
 
-            // Ce qui a produit sa disparition sort de la ligne de base, comme le
-            // manifeste de persistance : la ligne a dit tout ce qu'elle avait à
-            // dire, et la garder ferait re-constater la même disparition à chaque
-            // passe, indéfiniment. Le reste ne part qu'après une longue absence.
-            const forget = [
-                ...gone.map((row) => row.item_key),
-                ...stale.filter((row) => now - row.last_seen >= BASELINE_FORGET_MS).map((row) => row.item_key)
-            ];
-            if (forget.length > 0) {
-                await this.deps.repo.baseline.forget(device.id, 'process', forget);
-                const cached = this.baselines.get(device.id);
-                // Le cache doit suivre, sinon le retour du programme ne serait pas
-                // vu comme nouveau : la base l'aurait oublié, pas la mémoire.
-                if (cached) for (const key of forget) cached.process.delete(key);
+            const baseline = await this.baselineOf(deviceId);
+            const limits = {
+                absentTicks: Math.max(VANISHED_MIN_ABSENT_TICKS, ticksFor(VANISHED_AFTER_MS, device)),
+                streakTicks: ticksFor(VANISHED_MIN_STREAK_MS, device),
+                forgetTicks: ticksFor(BASELINE_FORGET_MS, device)
+            };
+            const drafts: FindingDraft[] = [];
+            const forget: string[] = [];
+            for (const row of baseline.process.values()) {
+                const attrs = attrsOf(row);
+                const verdict = vanishedVerdict(attrs, config.snapshot_ticks, limits);
+                if (verdict === 'forget') forget.push(row.item_key);
+                if (verdict !== 'vanished') continue;
+                drafts.push({
+                    rule: 'process.vanished',
+                    severity: SENTINEL_RULES['process.vanished'].severity,
+                    subject: row.item_key,
+                    evidence: [
+                        { label: 'Programme', value: row.item_key },
+                        { label: 'Vu pour la dernière fois', value: new Date(row.last_seen).toISOString() },
+                        { label: 'Connu depuis', value: new Date(row.first_seen).toISOString().slice(0, 10) },
+                        {
+                            label: 'Présence ininterrompue',
+                            value: `${Math.floor((attrs.streak * tickMs(device)) / 86400000)} j d'activité`
+                        }
+                    ],
+                    snapshotTs: null
+                });
             }
 
-            if (drafts.length === 0) continue;
-            // Aucune famille rejouée : `process.vanished` se constate par absence,
-            // c'est le retour du programme qui le ferme, pas ce balayage.
-            const opened = await this.record(device, drafts, [], config.pin_evidence === 1);
+            // Un programme disparu reste dans la ligne de base : à son retour, il
+            // est connu, et son constat se ferme au lieu qu'un « nouveau
+            // programme » s'ouvre. Seule une longue absence le fait oublier.
+            if (forget.length > 0) {
+                await this.deps.repo.baseline.forget(device.id, 'process', forget);
+                for (const key of forget) baseline.process.delete(key);
+            }
+
+            // La passe rejoue toute la famille : ce qui n'est plus absent (revenu,
+            // ou oublié après un mois) voit son constat se fermer.
+            const { opened, resolved } = await this.record(
+                device,
+                drafts,
+                ['process.vanished'],
+                config.pin_evidence === 1
+            );
             if (opened.length > 0) await this.announce(device, opened);
+            else if (resolved > 0 && device.workspaceId !== null) this.deps.live.changed(device.workspaceId);
         }
 
         const pruned = await this.deps.repo.findings.pruneResolved(env.SENTINEL_FINDING_RETENTION_DAYS);
