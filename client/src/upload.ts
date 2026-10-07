@@ -55,10 +55,15 @@ export function uploadFile(url: string, file: File, onProgress: (ratio: number) 
     return { done, abort: () => xhr.abort() };
 }
 
-/** Déclenche le téléchargement d'une adresse servie en pièce jointe, sans quitter la page. */
+/**
+ * Déclenche le téléchargement d'une adresse servie en pièce jointe, sans quitter la page.
+ * Sans `download`, le clic est une navigation, et Firefox coupe la socket dès
+ * qu'elle commence. L'attribut ne vaut que sur l'origine de l'app : un chemin.
+ */
 export function saveFrom(url: string): void {
     const link = document.createElement('a');
     link.href = url;
+    link.download = '';
     link.rel = 'noopener';
     document.body.appendChild(link);
     link.click();
