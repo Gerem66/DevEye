@@ -17,6 +17,8 @@ export interface RunnerEnv {
     /** Unique sur tout l'essai : deux scénarios n'ouvrent jamais le même compte. */
     nextIdentity(): TestIdentity;
     base: string;
+    /** L'hôte de l'app, que présente chaque requête. */
+    host: string;
     by: Remover;
 }
 
@@ -90,7 +92,7 @@ export async function runScenario(
         accounts: [],
         newIdentity: env.nextIdentity,
         newClient: () => {
-            const client = createTestClient({ base: env.base, runToken: env.runToken, signal });
+            const client = createTestClient({ base: env.base, host: env.host, runToken: env.runToken, signal });
             ledger.defer('Fermer une socket', async () => client.close());
             return client;
         },

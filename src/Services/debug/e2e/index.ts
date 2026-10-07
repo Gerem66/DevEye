@@ -33,6 +33,7 @@ export interface E2eServiceDeps extends E2eDeps {
 /** Les essais de bout en bout : des parcours réels, joués contre ce serveur même, qui ne laissent rien derrière eux. */
 export function createE2e(deps: E2eServiceDeps) {
     const base = `http://127.0.0.1:${env.LISTEN_PORT}`;
+    const host = new URL(deps.origins.app).host;
     const system: Remover = { userId: 0, workspaceId: 0 };
 
     const scenarios = (): E2eScenario[] => [
@@ -94,6 +95,7 @@ export function createE2e(deps: E2eServiceDeps) {
                                 runToken,
                                 nextIdentity: () => testIdentity(runId, ++identities),
                                 base,
+                                host,
                                 by
                             },
                             signal

@@ -9,6 +9,7 @@ const env: RunnerEnv = {
     runToken: 'jeton',
     nextIdentity: () => ({ username: 'e2e', email: 'e2e@e2e.deveye.invalid', password: 'x' }),
     base: 'http://127.0.0.1:1',
+    host: 'localhost',
     by: { userId: 1, workspaceId: 1 }
 };
 

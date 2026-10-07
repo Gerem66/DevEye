@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { ErrorCode } from '@deveye/types';
 import { FeatureError } from '@deveye/types/sdk/server';
-import { WebSocket } from 'undici';
+import { request, WebSocket } from 'undici';
 
 import { RUN_HEADER } from './gate';
 
@@ -28,8 +28,20 @@ type Envelope = {
 /**
  * Un navigateur sans navigateur : HTTP et socket vers ce serveur même, un pot
  * à cookies comme en a une page, et le jeton de l'essai sur chaque requête.
+ * `host` est l'hôte que montre une page de l'app : les pages publiques ne
+ * répondent qu'aux hôtes qu'elles servent, jamais à 127.0.0.1.
  */
-export function createTestClient({ base, runToken, signal }: { base: string; runToken: string; signal: AbortSignal }) {
+export function createTestClient({
+    base,
+    host,
+    runToken,
+    signal
+}: {
+    base: string;
+    host: string;
+    runToken: string;
+    signal: AbortSignal;
+}) {
     const jar = new Map<string, string>();
     const pending = new Map<string, Pending>();
     let socket: WebSocket | null = null;
@@ -65,22 +77,22 @@ export function createTestClient({ base, runToken, signal }: { base: string; run
             path: string,
             init: { method?: 'GET' | 'POST'; body?: unknown; headers?: Record<string, string> } = {}
         ): Promise<HttpReply> {
-            const headers: Record<string, string> = { [RUN_HEADER]: runToken, ...init.headers };
+            const headers: Record<string, string> = { host, [RUN_HEADER]: runToken, ...init.headers };
             if (jar.size > 0) headers.cookie = cookieHeader();
             let body: string | undefined;
             if (init.body !== undefined) {
                 body = typeof init.body === 'string' ? init.body : JSON.stringify(init.body);
                 headers['content-type'] ??= 'application/json';
             }
-            const response = await fetch(`${base}${path}`, {
+            // `request` plutôt que `fetch`, qui remplace l'en-tête Host par celui de l'adresse ; il ne suit pas les redirections.
+            const response = await request(`${base}${path}`, {
                 method: init.method ?? (body === undefined ? 'GET' : 'POST'),
                 headers,
                 body,
-                redirect: 'manual',
                 signal: AbortSignal.any([signal, AbortSignal.timeout(HTTP_TIMEOUT_MS)])
             });
-            for (const c of response.headers.getSetCookie()) absorb(c);
-            return { status: response.status, body: await response.text() };
+            for (const c of [response.headers['set-cookie'] ?? []].flat()) absorb(c);
+            return { status: response.statusCode, body: await response.body.text() };
         },
 
         /** Une route de l'API : ses données, ou le refus du serveur en `FeatureError`. */
