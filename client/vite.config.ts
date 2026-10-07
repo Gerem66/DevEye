@@ -2,7 +2,10 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import { defineConfig, type Plugin } from 'vite';
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import { promisify } from 'node:util';
+import { brotliCompress, constants as zlibConstants, gzip } from 'node:zlib';
 
 const serverPort = process.env.LISTEN_PORT ?? '3000';
 const serverOrigin = `http://localhost:${serverPort}`;
@@ -156,7 +159,8 @@ function inlineIcons(): Plugin {
  * Ce n'est pas une référence de confiance (un serveur compromis le réécrirait
  * avec le reste) mais la LISTE de ce qu'un contrôle d'intégrité tenu par une
  * autre instance doit relire, morceaux chargés à la demande compris. Les cartes
- * de source n'y sont pas : le serveur ne les sert pas.
+ * de source n'y sont pas : le serveur ne les sert pas. Les `.br` et `.gz` non
+ * plus : ils sortent sous le nom de leur original.
  */
 function buildManifest(): Plugin {
     let root = '';
@@ -178,7 +182,7 @@ function buildManifest(): Plugin {
                         continue;
                     }
                     const rel = path.relative(root, full).split(path.sep).join('/');
-                    if (rel.endsWith('.map') || rel === manifestPath) continue;
+                    if (/\.(map|br|gz)$/.test(rel) || rel === manifestPath) continue;
                     files[rel] = createHash('sha256').update(readFileSync(full)).digest('hex');
                 }
             };
@@ -193,6 +197,52 @@ function buildManifest(): Plugin {
     };
 }
 
+const COMPRESSIBLE = /\.(js|css|html|json|svg|ttf|txt)$/;
+
+/**
+ * Chaque fichier texte du build doublé d'un `.br` et d'un `.gz`, que le serveur
+ * sert selon `Accept-Encoding` (`preCompressed`, app.ts) : le premier chargement
+ * pèse le quart de son poids brut, sans compresser à chaque requête.
+ */
+function precompress(): Plugin {
+    const toBrotli = promisify(brotliCompress);
+    const toGzip = promisify(gzip);
+    let root = '';
+    return {
+        name: 'deveye:precompress',
+        apply: 'build',
+        configResolved(config) {
+            root = path.resolve(config.root, config.build.outDir);
+        },
+        async closeBundle() {
+            const files = readdirSync(root, { recursive: true, encoding: 'utf8' }).filter(
+                (rel) => COMPRESSIBLE.test(rel) && !rel.startsWith('.well-known')
+            );
+            await Promise.all(
+                files.map(async (rel) => {
+                    const full = path.join(root, rel);
+                    const source = await readFile(full);
+                    const variants: [string, Buffer][] = [
+                        [
+                            '.br',
+                            await toBrotli(source, {
+                                params: {
+                                    [zlibConstants.BROTLI_PARAM_QUALITY]: zlibConstants.BROTLI_MAX_QUALITY,
+                                    [zlibConstants.BROTLI_PARAM_SIZE_HINT]: source.length
+                                }
+                            })
+                        ],
+                        ['.gz', await toGzip(source, { level: zlibConstants.Z_BEST_COMPRESSION })]
+                    ];
+                    for (const [ext, data] of variants) {
+                        if (data.length < source.length) await writeFile(full + ext, data);
+                    }
+                })
+            );
+        }
+    };
+}
+
 // https://vitejs.dev/config/
 export default defineConfig(({ command }) => {
     const featureRoots = featureChunkRoots();
@@ -202,7 +252,7 @@ export default defineConfig(({ command }) => {
         define: {
             __APP_VERSION__: JSON.stringify(appVersion)
         },
-        plugins: [react(), inlineIcons(), buildManifest()],
+        plugins: [react(), inlineIcons(), buildManifest(), precompress()],
         optimizeDeps: {
             // `@deveye/types` ships TypeScript source and is the one dependency that
             // changes in step with the app. Vite's dep pre-bundling keys its cache on

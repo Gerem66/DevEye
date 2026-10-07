@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { resolve, sep } from 'node:path';
 
 import fastifyCookie from '@fastify/cookie';
 import fastifyCors, { type FastifyCorsOptions } from '@fastify/cors';
@@ -457,13 +457,23 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         : resolve(process.cwd(), 'client', 'build');
 
     if (existsSync(clientDir)) {
+        const assetsDir = resolve(clientDir, 'assets') + sep;
         await app.register(fastifyStatic, {
             root: clientDir,
             wildcard: false,
             // La racine est une route (`modulePublicRoutes`), qui retombe sur le
             // repli ci-dessous hors d'un domaine client.
             index: false,
-            allowedPath: (pathName) => !pathName.endsWith('.map')
+            allowedPath: (pathName) => !pathName.endsWith('.map'),
+            // Les `.br` et `.gz` du build (`precompress`, vite.config.ts) sortent
+            // sous le nom de leur original, jamais par une route à eux.
+            preCompressed: true,
+            globIgnore: ['**/*.br', '**/*.gz'],
+            // Les noms de `/assets/` changent avec leur contenu : un fichier y
+            // est le même pour toujours, et une visite suivante ne le redemande pas.
+            setHeaders: (reply, file) => {
+                if (file.startsWith(assetsDir)) reply.header('cache-control', 'public, max-age=31536000, immutable');
+            }
         });
 
         // Le manifeste de build, ce qu'un contrôle d'intégrité d'une autre
@@ -478,12 +488,13 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         }
 
         // SPA fallback: any non-API/WS GET that didn't match a static asset
-        // returns index.html so client-side routing can take over. Les cartes de
-        // source du build ne sortent jamais : elles portent le code commenté.
+        // returns index.html so client-side routing can take over. Un chemin à
+        // extension n'est pas une page : un fichier absent (robots.txt, morceau
+        // d'un ancien build, carte de source) répond 404, pas la page en 200.
         app.setNotFoundHandler((req, reply) => {
-            if (req.url.endsWith('.map')) return reply.code(404).send({ error: 'not_found' });
-            const page = req.method === 'GET' || req.method === 'HEAD';
-            if (page && !req.url.startsWith('/api') && !req.url.startsWith('/ws')) {
+            const pathname = req.url.split('?')[0];
+            const page = (req.method === 'GET' || req.method === 'HEAD') && !/\.[^/]*$/.test(pathname);
+            if (page && !pathname.startsWith('/api') && !pathname.startsWith('/ws')) {
                 return reply.sendFile('index.html');
             }
             return reply.code(404).send({ error: 'not_found' });

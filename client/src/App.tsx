@@ -28,6 +28,7 @@ import './Styles/icons.generated.css';
 import './Styles/icons.local.css';
 import './Styles/live.css';
 import './Styles/input.css';
+import './Styles/boot.css';
 
 function AppRoot() {
     const { status, refresh, logout } = useAuth();

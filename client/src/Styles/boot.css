@@ -1,0 +1,62 @@
+/*
+ * L'écran de chargement, écrit en dur dans `index.html` : il peint dès que les
+ * feuilles sont là, sans attendre le JS, et React le remplace à son premier rendu.
+ * Son attribut `hidden` le tait tant que cette feuille manque : en dev, Vite ne
+ * l'injecte qu'avec le JS, et l'écran resterait en texte brut tout le chargement.
+ */
+.boot {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    background: var(--login-bg);
+    font-family: var(--font-sans);
+    color: var(--text-secondary);
+    user-select: none;
+}
+.boot-title {
+    font-size: 2rem;
+}
+.boot-title > b {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.boot-bar {
+    position: relative;
+    width: 160px;
+    height: 2px;
+    border-radius: var(--radius-pill);
+    background: var(--glass-border);
+    overflow: hidden;
+}
+.boot-bar::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    width: 40%;
+    border-radius: inherit;
+    background: var(--accent);
+    animation: boot-slide 1.2s ease-in-out infinite;
+}
+.boot-label {
+    font-size: 0.85rem;
+}
+
+@keyframes boot-slide {
+    from {
+        transform: translateX(-100%);
+    }
+    to {
+        transform: translateX(250%);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .boot-bar::after {
+        animation: none;
+        transform: translateX(75%);
+    }
+}
