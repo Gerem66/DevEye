@@ -1326,17 +1326,7 @@
     gap: var(--space-md);
 }
 
-/*
- * Le contenu de l'onglet ouvert, dont la hauteur s'anime : les deux onglets n'ont
- * pas la même taille, et la popup passerait de l'une à l'autre d'un coup sec.
- * `overflow: hidden` permet de tenir une hauteur inférieure au contenu le temps du
- * mouvement.
- */
 .tabPanel {
-    overflow: hidden;
-}
-
-.tabPanelInner {
     display: flex;
     flex-direction: column;
     gap: var(--space-md);

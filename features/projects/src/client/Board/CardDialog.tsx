@@ -1,5 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { motion } from 'framer-motion';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Button,
     CountBadge,
@@ -270,23 +269,6 @@ export function CardDialog({
                 blockerIds.length !== savedBlockerIds.length ||
                 blockerIds.some((id) => !savedBlockerIds.includes(id))));
 
-    /**
-     * La hauteur du contenu de l'onglet, mesurée et non calculée : les onglets
-     * n'ont pas la même mise en page, et l'un contient une discussion dont la
-     * taille dépend du fil.
-     */
-    const panelRef = useRef<HTMLDivElement>(null);
-    const [panelHeight, setPanelHeight] = useState<number | null>(null);
-    useLayoutEffect(() => {
-        const el = panelRef.current;
-        if (!el) return;
-        // Arrondie au pixel supérieur : la mesure est fractionnaire, la boîte qui
-        // rogne ne l'est pas, et le manque coupait la bordure basse du fil.
-        const ro = new ResizeObserver(([entry]) => setPanelHeight(Math.ceil(entry.contentRect.height)));
-        ro.observe(el);
-        return () => ro.disconnect();
-    }, [open]);
-
     const settings = (
         <>
             <div className={styles.row}>
@@ -486,73 +468,64 @@ export function CardDialog({
                     </nav>
                 )}
 
-                {/* La hauteur suit le contenu de l'onglet en glissant, plutôt que
-                    d'un coup sec. */}
-                <motion.div
-                    className={styles.tabPanel}
-                    initial={false}
-                    animate={{ height: panelHeight ?? 'auto' }}
-                    transition={{ type: 'spring', stiffness: 340, damping: 34, mass: 0.8 }}
-                >
-                    <div ref={panelRef} className={styles.tabPanelInner}>
-                        {tab === 'settings' && (
-                            <>
-                                <label className={styles.field}>
-                                    <span className={styles.label}>Titre</span>
-                                    <TextInput
-                                        data-autofocus
-                                        value={draft.title}
-                                        maxLength={PROJECT_CARD_TITLE_MAX_LENGTH}
-                                        placeholder='Ce qu’il y a à faire'
-                                        onChange={(e) => patch({ title: e.target.value })}
-                                    />
-                                </label>
+                <div className={styles.tabPanel}>
+                    {tab === 'settings' && (
+                        <>
+                            <label className={styles.field}>
+                                <span className={styles.label}>Titre</span>
+                                <TextInput
+                                    data-autofocus
+                                    value={draft.title}
+                                    maxLength={PROJECT_CARD_TITLE_MAX_LENGTH}
+                                    placeholder='Ce qu’il y a à faire'
+                                    onChange={(e) => patch({ title: e.target.value })}
+                                />
+                            </label>
 
-                                <label className={styles.field}>
-                                    <span className={styles.label}>Description</span>
-                                    <textarea
-                                        className={styles.textarea}
-                                        value={draft.description}
-                                        rows={4}
-                                        onChange={(e) => patch({ description: e.target.value })}
-                                    />
-                                </label>
-                                {settings}
-                            </>
-                        )}
+                            <label className={styles.field}>
+                                <span className={styles.label}>Description</span>
+                                <textarea
+                                    className={styles.textarea}
+                                    value={draft.description}
+                                    rows={4}
+                                    onChange={(e) => patch({ description: e.target.value })}
+                                />
+                            </label>
+                            {settings}
+                        </>
+                    )}
 
-                        {/* Masqués et non démontés : le fil garde ses messages et son
+                    {/* Masqués et non démontés : le fil garde ses messages et son
                             abonnement, le suivi une édition en cours, là où un
                             remontage rejouerait un « Chargement… » au retour. */}
-                        {card && (
-                            <>
-                                <div
-                                    className={tab === 'work' ? styles.workTab : styles.tabHidden}
-                                    aria-hidden={tab === 'work' ? undefined : true}
-                                >
-                                    {subtasks}
-                                </div>
-                                <div
-                                    className={tab === 'chat' ? styles.chatTab : styles.tabHidden}
-                                    aria-hidden={tab === 'chat' ? undefined : true}
-                                >
-                                    <Chat
-                                        cardId={card.id}
-                                        members={members}
-                                        meUserId={meUserId}
-                                        canWrite={canChat}
-                                        active={open && tab === 'chat'}
-                                        onRead={onRead}
-                                    />
-                                </div>
-                            </>
-                        )}
+                    {card && (
+                        <>
+                            <div
+                                className={tab === 'work' ? styles.workTab : styles.tabHidden}
+                                aria-hidden={tab === 'work' ? undefined : true}
+                            >
+                                {subtasks}
+                            </div>
+                            <div
+                                className={tab === 'chat' ? styles.chatTab : styles.tabHidden}
+                                aria-hidden={tab === 'chat' ? undefined : true}
+                            >
+                                <Chat
+                                    cardId={card.id}
+                                    members={members}
+                                    meUserId={meUserId}
+                                    canWrite={canChat}
+                                    active={open && tab === 'chat'}
+                                    onRead={onRead}
+                                />
+                            </div>
+                        </>
+                    )}
 
-                        {!card && subtasks}
+                    {!card && subtasks}
 
-                        {error && <p className={styles.error}>{error}</p>}
-                    </div>
-                </motion.div>
+                    {error && <p className={styles.error}>{error}</p>}
+                </div>
             </div>
         </Dialog>
     );

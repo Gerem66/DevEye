@@ -257,7 +257,6 @@ declare const styles: {
     readonly tabMenuText: string;
     readonly tabPane: string;
     readonly tabPanel: string;
-    readonly tabPanelInner: string;
     readonly tabs: string;
     readonly tabsGhost: string;
     readonly tabsWrap: string;
