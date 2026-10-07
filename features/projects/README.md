@@ -115,7 +115,7 @@ lui, n'est pas touché : il appartient à l'espace.
 | **Déploiements**     | les cibles reliées, une vue sur la feature Déploiements, voir [Déploiements](../deploy/README.md)      |
 | **Uptime**           | les services surveillés rattachés, une vue sur la feature Uptime, voir [Uptime](../uptime/README.md)   |
 | **Dossiers**         | les dossiers d'Hébergement rattachés, parcourus et aperçus sur place ; absent sans le module privé     |
-| **Historique**       | frise verticale des faits marquants et tâches archivées en lecture seule, dans les réglages du projet  |
+| **Historique**       | faits marquants et tâches archivées en une seule liste, une ligne chacun, dans les réglages du projet  |
 
 ### La barre d'onglets suit le contenu du projet
 
@@ -129,7 +129,9 @@ pouvoir s'ouvrir sans rien réclamer. Un projet neuf a la frise et pas la vue
 d'ensemble : elle résume, elle ne fait pas travailler, et il n'y a encore rien à
 y montrer. L'**Historique** est le dernier onglet des réglages du projet
 (`ProjectHistoryPanel`) : on l'ouvre rarement, pour une question précise. Les
-six autres onglets ne montrent que des **liaisons** vers des objets d'espace :
+tâches archivées y sont des entrées comme les autres : à leur événement
+d'archivage, ou à leur date pour celles parties avec leur colonne, rangées sous
+la colonne vidée (`History/entries.ts`). Les six autres onglets ne montrent que des **liaisons** vers des objets d'espace :
 tant qu'un projet n'en a aucune, ils n'afficheraient qu'une phrase disant qu'il
 n'y a rien, six fois de suite.
 
@@ -316,7 +318,8 @@ faire changer de colonne. Le reste se confie séparément, par les
 `extraPermissions` du manifest. `history` est le seul à garder une **lecture** et
 non un geste : l'histoire d'un projet ne se donne pas avec le projet. Les tâches
 archivées, elles, restent ouvertes à qui voit le projet, parce que c'est de là
-qu'on en restaure une et que l'archivage est la seule sortie d'une tâche. Voir
+qu'on en restaure une et que l'archivage est la seule sortie d'une tâche : sans
+`history`, la liste ne montre qu'elles. Voir
 [Docs/PERMISSIONS.md](../../Docs/PERMISSIONS.md) :
 
 | Droit            | Ce qu'il ouvre                                                                     |
@@ -587,7 +590,7 @@ ProjectDetail.tsx  en-tête + onglets ; possède les niveaux live `l2` et `l3`
 ProjectDialog.tsx  créer un projet (le niveau de confidentialité s'y choisit)
 ProjectGeneralPanel.tsx  onglet Général de la fiche : le profil du projet, ses onglets déclarés, le zoom de la frise, son archivage
 ProjectPublicPanel.tsx   onglet Page publique de la fiche : l'ouvrir, son adresse, ses options, son apparence, changer le lien
-ProjectHistoryPanel.tsx  onglet Historique de la fiche : la frise des faits marquants (droit `history`) et les tâches archivées
+ProjectHistoryPanel.tsx  onglet Historique de la fiche : une seule liste, faits marquants (droit `history`) et tâches archivées
 PublicBoardPreview.tsx   la vignette du tableau public, aux couleurs que la page posera
 MyTasks.tsx        mes cartes, tous projets confondus
 tabs.ts            les onglets, leur ordre, et la règle qui les fait paraître
@@ -602,7 +605,7 @@ Board/             kanban dnd-kit (Board.tsx), sa recherche (search.ts), dialogu
 Timeline/          frise horizontale (Timeline.tsx), échelle (scale.ts), glissé de dates (dateDrag.ts), défilement (pan.ts),
                    dialogue de jalon
 Chat/              fil de discussion, rendu markdown
-History/           frise verticale, carte archivée en lecture seule
+History/           la liste (History.tsx), sa fusion avec les tâches archivées (entries.ts), tâche archivée en lecture seule
 Dashboard/         la vue d'ensemble : catalogue de tuiles, compteurs de tâches, indicateurs sur mesure
 Git/               compose le contrat client du module Git (`GIT_CLIENT_PROVIDER`), dégrade sans lui
 Database/          compose le contrat client du module Bases de données (`DATABASE_CLIENT_PROVIDER`), dégrade sans lui

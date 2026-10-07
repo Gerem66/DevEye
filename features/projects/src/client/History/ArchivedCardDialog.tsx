@@ -14,8 +14,8 @@ interface ArchivedCardDialogProps {
 }
 
 /**
- * Un bloc archivé, en lecture seule : le modifier réécrirait l'histoire que la
- * frise raconte. Seule la restauration est possible, et laisse sa propre trace.
+ * Une tâche archivée, en lecture seule : la modifier réécrirait l'histoire que
+ * la frise raconte. Seule la restauration est possible, et laisse sa propre trace.
  */
 export function ArchivedCardDialog({ open, card, canWrite, busy, onClose, onRestore }: ArchivedCardDialogProps) {
     const done = card?.checklist.filter((i) => i.done).length ?? 0;
@@ -24,8 +24,8 @@ export function ArchivedCardDialog({ open, card, canWrite, busy, onClose, onRest
         <Dialog
             open={open}
             onClose={onClose}
-            title='Bloc archivé'
-            description={card?.archivedAt ? `Archivé le ${formatDate(card.archivedAt)}` : undefined}
+            title='Tâche archivée'
+            description={card?.archivedAt ? `Archivée le ${formatDate(card.archivedAt)}` : undefined}
             width={620}
             holdSecrecy
             footer={
@@ -78,7 +78,7 @@ export function ArchivedCardDialog({ open, card, canWrite, busy, onClose, onRest
                     {card.checklist.length > 0 && (
                         <div className={styles.field}>
                             <span className={styles.label}>
-                                Sous-tâches — {done}/{card.checklist.length}
+                                Sous-tâches : {done}/{card.checklist.length}
                             </span>
                             <ul className={styles.checklist}>
                                 {card.checklist.map((item) => (

@@ -18,13 +18,13 @@ import { missingPermission } from './rights';
 import styles from './style.module.css';
 
 /**
- * L'histoire d'un projet et ses tâches archivées, dans le dernier onglet de ses
- * réglages : on l'ouvre rarement, pour une question précise, et elle prenait un
- * onglet de la barre toute la journée pour ça.
+ * L'histoire d'un projet, tâches archivées comprises, dans le dernier onglet de
+ * ses réglages : on l'ouvre rarement, pour une question précise, et elle prenait
+ * un onglet de la barre toute la journée pour ça.
  *
- * Deux droits distincts, et un seul écran : la frise demande la permission
- * « Consulter l'historique », les tâches archivées se lisent dès qu'on voit le
- * projet, parce que c'est d'ici seulement qu'on en restaure une, et que
+ * Deux droits distincts dans une seule liste : le reste de l'histoire demande la
+ * permission « Consulter l'historique », les tâches archivées se lisent dès qu'on
+ * voit le projet, parce que c'est d'ici seulement qu'on en restaure une, et que
  * l'archivage est la seule sortie d'une tâche.
  */
 export default function ProjectHistoryPanel({ scope, canWrite }: SettingsPanelProps) {
@@ -34,7 +34,7 @@ export default function ProjectHistoryPanel({ scope, canWrite }: SettingsPanelPr
     const canHistory = permissions.canExtra('projects', 'history', item);
     const canTasks = canWrite && permissions.canExtra('projects', 'tasks', item);
 
-    const [archived, setArchived] = useState<ProjectCard[]>([]);
+    const [archived, setArchived] = useState<ProjectCard[] | null>(null);
     const [viewing, setViewing] = useState<ProjectCard | null>(null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -76,32 +76,21 @@ export default function ProjectHistoryPanel({ scope, canWrite }: SettingsPanelPr
             {error && <p className={styles.error}>{error}</p>}
 
             <div className={shell.field}>
-                <span className={shell.sectionLabel}>Tâches archivées</span>
-                {archived.length === 0 ? (
-                    <p className={shell.sectionHint}>
-                        Aucune tâche archivée. L’archivage est la seule sortie d’une tâche, et il se défait ici.
-                    </p>
-                ) : (
-                    <ul className={styles.archivedList}>
-                        {archived.map((card) => (
-                            <li key={card.id}>
-                                <button type='button' className={styles.archivedRow} onClick={() => setViewing(card)}>
-                                    <span className='icon icon-archive' aria-hidden='true' />
-                                    <span className={styles.dashRowName}>{card.title || 'Sans titre'}</span>
-                                </button>
-                            </li>
-                        ))}
-                    </ul>
-                )}
-            </div>
-
-            <div className={shell.field}>
                 <span className={shell.sectionLabel}>Historique</span>
-                {canHistory ? (
-                    <History projectId={projectId} archivedCards={archived} onOpenArchived={setViewing} />
-                ) : (
-                    <ReadOnlyNotice>{missingPermission('history')}.</ReadOnlyNotice>
+                <p className={shell.sectionHint}>
+                    Une tâche archivée s’ouvre d’un clic, et c’est d’ici qu’elle se restaure.
+                </p>
+                {!canHistory && (
+                    <ReadOnlyNotice>
+                        {missingPermission('history')} : seules les tâches archivées paraissent ici.
+                    </ReadOnlyNotice>
                 )}
+                <History
+                    projectId={projectId}
+                    withEvents={canHistory}
+                    archivedCards={archived}
+                    onOpenArchived={setViewing}
+                />
             </div>
 
             <ArchivedCardDialog

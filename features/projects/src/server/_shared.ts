@@ -5,6 +5,7 @@ import type {
     ProjectChecklistItem,
     ProjectColumn,
     ProjectColumnRow,
+    ProjectEventKind,
     ProjectLinkLabel,
     ProjectMilestoneColor,
     ProjectPriority,
@@ -478,7 +479,7 @@ export async function recordEvent(
     ctx: Ctx,
     project: ProjectRow,
     event: {
-        kind: string;
+        kind: ProjectEventKind;
         refType?: 'card' | 'milestone' | null;
         refId?: number | null;
         label: string;
