@@ -13,3 +13,8 @@ export function humanizeSignupError(e: unknown): string {
             return e.message || 'Erreur inconnue';
     }
 }
+
+/** Le champ que désigne un refus du serveur : seul un nom déjà pris en désigne un. */
+export function signupErrorField(e: unknown): 'username' | null {
+    return e instanceof ApiError && e.code === 'conflict' ? 'username' : null;
+}

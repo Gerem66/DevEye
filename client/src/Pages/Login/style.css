@@ -303,6 +303,10 @@
     line-height: 1.45;
 }
 
+.login .signup-intro:last-child {
+    margin-bottom: 0;
+}
+
 .login .signup-intro b {
     color: var(--text-primary);
     font-weight: 600;
@@ -337,6 +341,11 @@
     color: var(--text-muted);
 }
 
+/* Hors du formulaire, la carte est centrée : l'attente aussi. */
+.login .signup-waiting {
+    text-align: center;
+}
+
 .login .signup-error {
     color: var(--danger);
 }
@@ -344,6 +353,7 @@
 .login .signup-status {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: var(--space-sm);
     margin: 0 0 var(--space-sm);
     color: var(--text-primary);

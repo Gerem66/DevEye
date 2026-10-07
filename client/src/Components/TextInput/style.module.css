@@ -68,7 +68,9 @@
     }
 }
 
-.input-error {
+/* Le rouge tient aussi sous le focus : on corrige le champ en le regardant. */
+.input-error,
+.input-error:focus {
     border-color: var(--danger);
 }
 

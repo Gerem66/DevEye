@@ -11,7 +11,7 @@ import { get, post } from '@/api/http';
 import Checkbox from '@/Components/Checkbox';
 import TextInput from '@/Components/TextInput';
 import { legalLinks } from '@/legal';
-import { humanizeSignupError } from './errors';
+import { humanizeSignupError, signupErrorField } from './errors';
 import { TextLink } from '@/Pages/Login/TextLink';
 import { LoginScene } from '@/Pages/Login/Scene';
 
@@ -22,6 +22,12 @@ const WATCH_KEY = 'deveye.signupWatch';
 interface Watch {
     token: string;
     email: string;
+}
+
+/** `field` : le champ qui passe en rouge, aucun quand l'erreur ne tient pas à la saisie. */
+interface FormError {
+    message: string;
+    field: 'username' | 'email' | null;
 }
 
 function readWatch(): Watch | null {
@@ -37,7 +43,7 @@ function readWatch(): Watch | null {
 export function SignupStart({ plan, onLogin }: { plan: string | null; onLogin: () => void }) {
     const [username, setUsername] = useState('');
     const [email, setEmail] = useState('');
-    const [error, setError] = useState('');
+    const [error, setError] = useState<FormError | null>(null);
     const [sending, setSending] = useState(false);
     const [watch, setWatch] = useState<Watch | null>(readWatch);
     const [state, setState] = useState<SignupStatus['state']>('pending');
@@ -78,12 +84,20 @@ export function SignupStart({ plan, onLogin }: { plan: string | null; onLogin: (
             termsAccepted: siteUrl === null || terms
         });
         if (!parsed.success) {
-            if (username.trim().length < 3) setError('Le nom d’utilisateur fait 3 caractères minimum');
-            else if (!email.includes('@')) setError('Adresse email invalide');
-            else setError('Vérifiez les informations saisies');
+            const field = parsed.error.issues[0]?.path[0];
+            if (field === 'username') {
+                setError({
+                    message:
+                        username.length < 3
+                            ? 'Le nom d’utilisateur fait 3 caractères minimum'
+                            : 'Le nom d’utilisateur ne prend que des lettres, des chiffres et _ . -',
+                    field: 'username'
+                });
+            } else if (field === 'email') setError({ message: 'Adresse email invalide', field: 'email' });
+            else setError({ message: 'Vérifiez les informations saisies', field: null });
             return;
         }
-        setError('');
+        setError(null);
         setSending(true);
         post('/api/auth/signup', parsed.data, signupStartResponseSchema)
             .then(({ watchToken }) => {
@@ -92,7 +106,7 @@ export function SignupStart({ plan, onLogin }: { plan: string | null; onLogin: (
                 setState('pending');
                 setWatch(next);
             })
-            .catch((e: unknown) => setError(humanizeSignupError(e)))
+            .catch((e: unknown) => setError({ message: humanizeSignupError(e), field: signupErrorField(e) }))
             .finally(() => setSending(false));
     };
 
@@ -108,7 +122,7 @@ export function SignupStart({ plan, onLogin }: { plan: string | null; onLogin: (
                             Ouvrez le lien reçu à <b>{watch.email}</b> pour choisir votre mot de passe. Il est valable 2
                             h.
                         </p>
-                        <p className='signup-hint'>En attente de validation…</p>
+                        <p className='signup-hint signup-waiting'>En attente de validation…</p>
                     </>
                 )}
                 {state === 'opened' && (
@@ -158,6 +172,7 @@ export function SignupStart({ plan, onLogin }: { plan: string | null; onLogin: (
                     autoComplete='username'
                     maxLength={64}
                     autoFocus
+                    error={error?.field === 'username' ? error.message : undefined}
                 />
                 <span className='icon icon-user' />
             </div>
@@ -170,7 +185,7 @@ export function SignupStart({ plan, onLogin }: { plan: string | null; onLogin: (
                     onChange={(e) => setEmail(e.target.value)}
                     autoComplete='email'
                     maxLength={320}
-                    error={error}
+                    error={error?.field === 'email' ? error.message : undefined}
                 />
                 <span className='icon icon-mail' />
             </div>
@@ -192,7 +207,7 @@ export function SignupStart({ plan, onLogin }: { plan: string | null; onLogin: (
                 </Checkbox>
             )}
 
-            <p className={error ? 'signup-error' : 'signup-hint'}>{error}</p>
+            <p className={error ? 'signup-error' : 'signup-hint'}>{error?.message}</p>
 
             <button className='submit' type='submit' disabled={sending || (siteUrl !== null && !terms)}>
                 Créer mon compte
