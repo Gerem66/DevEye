@@ -12,6 +12,37 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: readonly ChangelogEntry[] = [
     {
+        version: '0.24.2',
+        date: '2026-10-07',
+        changes: [
+            {
+                kind: 'added',
+                text: 'Projets : une recherche sur le tableau, les tâches archivées dans l’historique, et la popup d’une tâche qui s’ouvre d’un seul mouvement'
+            },
+            {
+                kind: 'fixed',
+                text: 'Sentinelle : bien moins de fausses alertes (appareil éteint, ports dynamiques, fichiers livrés par un paquet), et les constats d’une même règle se règlent d’un geste'
+            },
+            {
+                kind: 'fixed',
+                text: 'Abonnement : une résiliation faite depuis le portail de paiement s’affiche comme telle, et l’historique des paiements reste visible après'
+            },
+            {
+                kind: 'improved',
+                text: 'Hébergement : l’adresse d’un dossier sous son titre, et un bandeau pour créer la première quand il n’en a pas'
+            },
+            {
+                kind: 'fixed',
+                text: 'Inscription : l’erreur s’affiche sur le bon champ, et la coche de réussite n’est plus un disque plein'
+            },
+            { kind: 'fixed', text: 'Un téléchargement ne coupe plus les mises à jour en direct sous Firefox' },
+            {
+                kind: 'fixed',
+                text: 'Valider une confirmation par Entrée ne valide plus aussi la fenêtre qui est dessous'
+            }
+        ]
+    },
+    {
         version: '0.24.1',
         date: '2026-10-06',
         changes: [
