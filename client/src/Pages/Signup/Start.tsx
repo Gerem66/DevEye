@@ -136,7 +136,7 @@ export function SignupStart({ plan, onLogin }: { plan: string | null; onLogin: (
                 {state === 'done' && (
                     <>
                         <p className='signup-status'>
-                            <span className='icon icon-success' /> Compte créé
+                            <span className='icon icon-check-circle' /> Compte créé
                         </p>
                         <p className='signup-intro'>Vous pouvez fermer cet onglet.</p>
                     </>

@@ -350,6 +350,10 @@
     color: var(--danger);
 }
 
+.login .signup-status .icon-check-circle {
+    color: var(--success);
+}
+
 .login .signup-status {
     display: flex;
     align-items: center;

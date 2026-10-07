@@ -180,10 +180,6 @@
     -webkit-mask-image: url(/icons/square-empty.svg);
     mask-image: url(/icons/square-empty.svg);
 }
-.icon.icon-success {
-    -webkit-mask-image: url(/icons/success.svg);
-    mask-image: url(/icons/success.svg);
-}
 .icon.icon-check-circle {
     -webkit-mask-image: url(/icons/check-circle.svg);
     mask-image: url(/icons/check-circle.svg);
