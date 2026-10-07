@@ -263,6 +263,9 @@ export default function Dialog({
     const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
         if (e.key !== 'Enter' || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
         const t = e.target as HTMLElement;
+        // React remonte l'Entrée d'un portail enfant (confirmation, liste) jusqu'ici :
+        // elle appartient à ce portail, ce dialogue ne doit pas se valider avec lui.
+        if (!e.currentTarget.contains(t)) return;
         const tag = t.tagName;
         // Newlines and native controls keep their own Enter behavior.
         if (tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON' || tag === 'A' || t.isContentEditable) return;

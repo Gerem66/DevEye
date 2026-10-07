@@ -18,6 +18,8 @@ export interface ConfirmRequest {
     confirmLabel?: string;
     /** `primary` pour une action réversible ; `danger` par défaut. */
     tone?: 'danger' | 'primary';
+    /** Suivi de `onClose` : une autre demande posée d'ici serait aussitôt refermée,
+     *  une seconde confirmation passe par un second `ConfirmDialog`. */
     onConfirm: () => void;
 }
 
