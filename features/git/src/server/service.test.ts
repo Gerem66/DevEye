@@ -122,7 +122,11 @@ function fakeRepo(repos: GitRepoRow[], credentials: GitCredentialRow[]): FakeRep
         pulls,
         countReposInWorkspaces: async (ids: readonly number[]) =>
             repos.filter((r) => ids.includes(r.workspace_id)).length,
-        listStockRepos: unused,
+        listStockRepos: async (ids: readonly number[]) =>
+            repos
+                .filter((r) => ids.includes(r.workspace_id))
+                .sort((a, b) => a.created - b.created || a.id - b.id)
+                .map((r) => ({ id: String(r.id), workspaceId: r.workspace_id })),
         listRepos: unused,
         listVisibleRepos: unused,
         findRepo: async (id, workspaceId) => repos.find((r) => r.id === id && r.workspace_id === workspaceId) ?? null,
@@ -724,5 +728,30 @@ describe('GIT_ITEMS_PROVIDER : exists et labelOf', () => {
         assert.equal(await provider.exists(1, 2), true);
         assert.equal(await provider.labelOf(1, 2), 'gerem66/DevEye');
         assert.equal(await provider.exists(1, 3), false);
+    });
+});
+
+describe('GIT_ITEMS_PROVIDER : listHome, describe et openCheckout', () => {
+    it('liste les dépôts d’origine, décrit un dépôt chez lui et remet son jeton au clone', async () => {
+        const provider = itemsProviderOn(fakeRepo([repo({ default_branch: 'main' })], [credential()]));
+        assert.deepEqual(await provider.listHome([1]), [{ id: 1, workspaceId: 1 }]);
+        assert.deepEqual(await provider.listHome([2]), []);
+        assert.deepEqual(await provider.describe(1, 1), {
+            workspaceId: 1,
+            label: 'gerem66/DevEye',
+            cloneUrl: 'https://github.com/gerem66/DevEye.git',
+            webUrl: 'https://github.com/gerem66/DevEye',
+            defaultBranch: 'main'
+        });
+        // Chez lui seulement : une projection ne clone pas.
+        assert.equal(await provider.describe(1, 2), null);
+        assert.equal((await provider.openCheckout(1, 1))?.token, 'ghp-secret');
+    });
+
+    it('un dépôt public, ou dont le jeton a été retiré, se clone sans jeton', async () => {
+        const open = itemsProviderOn(fakeRepo([repo({ credential_id: null })], []));
+        assert.equal((await open.openCheckout(1, 1))?.token, null);
+        const orphan = itemsProviderOn(fakeRepo([repo()], []));
+        assert.equal((await orphan.openCheckout(1, 1))?.token, null);
     });
 });
