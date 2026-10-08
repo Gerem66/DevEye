@@ -751,10 +751,32 @@ CREATE TABLE `ft_cve_favorites` (
   CONSTRAINT `fk_cve_fav_workspace` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+CREATE TABLE `ft_cve_products` (
+  `cve_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL,
+  `vendor` varchar(100) COLLATE utf8mb4_general_ci NOT NULL,
+  `product` varchar(150) COLLATE utf8mb4_general_ci NOT NULL,
+  `version` varchar(64) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `start_incl` varchar(64) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `start_excl` varchar(64) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `end_incl` varchar(64) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `end_excl` varchar(64) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  KEY `idx_ft_cve_products_product` (`vendor`,`product`),
+  KEY `idx_ft_cve_products_cve` (`cve_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 CREATE TABLE `ft_cve_state` (
   `k` varchar(32) COLLATE utf8mb4_general_ci NOT NULL,
   `v` bigint NOT NULL,
   PRIMARY KEY (`k`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_cve_watched` (
+  `vendor` varchar(100) COLLATE utf8mb4_general_ci NOT NULL,
+  `product` varchar(150) COLLATE utf8mb4_general_ci NOT NULL,
+  `requested_at` bigint NOT NULL,
+  `backfill_index` int NOT NULL DEFAULT '0',
+  `backfilled_at` bigint DEFAULT NULL,
+  PRIMARY KEY (`vendor`,`product`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 CREATE TABLE `ft_deploy_credentials` (

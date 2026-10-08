@@ -1,5 +1,5 @@
 import { CVE_VECTOR_MAX, type CveReference, type CveSeverity } from '../contracts/domain';
-import type { CveUpsert } from './repo';
+import type { CveProductRow, CveUpsert } from './repo';
 
 /**
  * L'adaptateur du NVD (NIST), seule source du catalogue.
@@ -87,6 +87,52 @@ interface NvdCve {
     metrics?: Record<string, NvdMetric[] | undefined>;
     weaknesses?: { description?: { lang?: string; value?: string }[] }[];
     references?: { url?: string; tags?: string[] }[];
+    configurations?: { nodes?: { cpeMatch?: NvdCpeMatch[] }[] }[];
+}
+
+interface NvdCpeMatch {
+    vulnerable?: boolean;
+    criteria?: string;
+    versionStartIncluding?: string;
+    versionStartExcluding?: string;
+    versionEndIncluding?: string;
+    versionEndExcluding?: string;
+}
+
+/** Les bornes d'une colonne : au-delà, une version n'en est plus une. */
+const VERSION_MAX = 64;
+const clip = (v: string | undefined): string | null => (v && v.length <= VERSION_MAX ? v : null);
+
+/**
+ * Les produits qu'une CVE touche, lus dans ses configurations : chaque critère
+ * `cpe:2.3:a:éditeur:produit:version:…` marqué vulnérable, avec ses bornes.
+ * Les applications et les systèmes seulement ; un matériel n'a pas de version
+ * qu'un dépôt déclare.
+ */
+function productsOf(cve: NvdCve): Omit<CveProductRow, 'cve_id'>[] {
+    const out = new Map<string, Omit<CveProductRow, 'cve_id'>>();
+    for (const config of cve.configurations ?? []) {
+        for (const node of config.nodes ?? []) {
+            for (const match of node.cpeMatch ?? []) {
+                if (!match.vulnerable || !match.criteria) continue;
+                const parts = match.criteria.split(/(?<!\\):/).map((p) => p.replace(/\\(.)/g, '$1'));
+                if (parts.length < 6 || (parts[2] !== 'a' && parts[2] !== 'o')) continue;
+                const [, , , vendor, product, version] = parts;
+                if (!vendor || !product || vendor.length > 100 || product.length > 150) continue;
+                const row = {
+                    vendor: vendor.toLowerCase(),
+                    product: product.toLowerCase(),
+                    version: version === '*' || version === '-' ? null : clip(version),
+                    start_incl: clip(match.versionStartIncluding),
+                    start_excl: clip(match.versionStartExcluding),
+                    end_incl: clip(match.versionEndIncluding),
+                    end_excl: clip(match.versionEndExcluding)
+                };
+                out.set(JSON.stringify(row), row);
+            }
+        }
+    }
+    return [...out.values()];
 }
 
 interface NvdResponse {
@@ -146,7 +192,8 @@ function normalize(cve: NvdCve): CveUpsert | null {
         vector: vector !== null && vector.length <= CVE_VECTOR_MAX ? vector : null,
         cwe,
         summary,
-        references
+        references,
+        products: productsOf(cve)
     };
 }
 
@@ -178,6 +225,16 @@ function entriesOf(body: NvdResponse): CveUpsert[] {
 export interface NvdClient {
     /** Les CVE modifiées entre deux instants (secondes epoch), paginées. */
     window(from: number, to: number, apiKey: string | null, maxPages: number): Promise<CveUpsert[]>;
+    /**
+     * Une page des CVE d'un produit, toutes époques confondues. `done` dit que
+     * c'était la dernière ; sinon `next` est l'index de la suivante.
+     */
+    product(
+        vendor: string,
+        product: string,
+        startIndex: number,
+        apiKey: string | null
+    ): Promise<{ entries: CveUpsert[]; next: number; done: boolean }>;
     byId(cveId: string, apiKey: string | null): Promise<CveUpsert | null>;
     keyword(query: string, apiKey: string | null, limit: number): Promise<CveUpsert[]>;
 }
@@ -199,6 +256,20 @@ export const nvdClient: NvdClient = {
             if (batch.length < PAGE_SIZE || all.length >= (body.totalResults ?? all.length)) break;
         }
         return all;
+    },
+    async product(vendor, product, startIndex, apiKey) {
+        const body = await call(
+            new URLSearchParams({
+                virtualMatchString: `cpe:2.3:a:${vendor}:${product}`,
+                resultsPerPage: String(PAGE_SIZE),
+                startIndex: String(startIndex),
+                noRejected: ''
+            }),
+            apiKey
+        );
+        const entries = entriesOf(body);
+        const next = startIndex + (body.vulnerabilities?.length ?? 0);
+        return { entries, next, done: entries.length < PAGE_SIZE || next >= (body.totalResults ?? next) };
     },
     async byId(cveId, apiKey) {
         const body = await call(new URLSearchParams({ cveId }), apiKey);

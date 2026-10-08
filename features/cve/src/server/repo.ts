@@ -13,6 +13,36 @@ export interface CveUpsert {
     cwe: string | null;
     summary: string;
     references: CveReference[];
+    /** Les produits touchés, d'après les configurations du NVD. Vide tant qu'il ne les a pas analysés. */
+    products: Omit<CveProductRow, 'cve_id'>[];
+}
+
+/** Un produit touché par une CVE : une version exacte, ou des bornes. */
+export interface CveProductRow {
+    cve_id: string;
+    vendor: string;
+    product: string;
+    version: string | null;
+    start_incl: string | null;
+    start_excl: string | null;
+    end_incl: string | null;
+    end_excl: string | null;
+}
+
+/** Une CVE d'un produit, avec les bornes de la ligne qui l'y rattache. */
+export interface CveAffectingRow extends CveProductRow {
+    severity: CveSeverity;
+    score: number | null;
+    summary: string;
+    published: number;
+}
+
+export interface CveWatchedRow {
+    vendor: string;
+    product: string;
+    requested_at: number;
+    backfill_index: number;
+    backfilled_at: number | null;
 }
 
 export interface CveRepo {
@@ -35,8 +65,17 @@ export interface CveRepo {
     upsertMany(entries: CveUpsert[]): Promise<number>;
     addFavorite(workspaceId: number, cveId: string, userId: number, at: number): Promise<void>;
     removeFavorite(workspaceId: number, cveId: string): Promise<void>;
-    /** Oublie les CVE plus vieilles que `before` qu'aucune épingle ne désigne. */
+    /**
+     * Oublie les CVE plus vieilles que `before` qu'aucune épingle ne désigne et
+     * qui ne touchent aucun produit surveillé, puis les produits devenus orphelins.
+     */
     purge(before: number): Promise<number>;
+    /** Ajoute des produits à surveiller. Rend combien ne l'étaient pas déjà. */
+    watch(products: readonly { vendor: string; product: string }[], at: number): Promise<number>;
+    listWatched(): Promise<CveWatchedRow[]>;
+    setBackfill(vendor: string, product: string, index: number, doneAt: number | null): Promise<void>;
+    /** Toutes les lignes qui rattachent une CVE à ce produit. */
+    affecting(vendor: string, product: string): Promise<CveAffectingRow[]>;
     /** L'état global du module (curseur d'ingestion, dernier tour réussi). */
     getState(key: CveStateKey): Promise<number | null>;
     setState(key: CveStateKey, value: number): Promise<void>;
@@ -129,7 +168,25 @@ export function createRepo(q: SdkQueryable): CveRepo {
             }
             // Revoir une CVE deja connue est le cas NORMAL d'un tour d'ingestion :
             // la reecrire coute moins qu'une lecture prealable, et le NVD republie
-            // une CVE des qu'un detail change.
+            // une CVE des qu'un detail change. Ses produits sont reecrits avec elle.
+            await q.execute('DELETE FROM ft_cve_products WHERE cve_id IN (?)', [entries.map((e) => e.id)]);
+            const products = entries.flatMap((e) => e.products.map((p) => ({ ...p, cve_id: e.id })));
+            if (products.length > 0) {
+                await q.execute(
+                    `INSERT INTO ft_cve_products (cve_id, vendor, product, version, start_incl, start_excl, end_incl, end_excl)
+                     VALUES ${products.map(() => '(?, ?, ?, ?, ?, ?, ?, ?)').join(', ')}`,
+                    products.flatMap((p) => [
+                        p.cve_id,
+                        p.vendor,
+                        p.product,
+                        p.version,
+                        p.start_incl,
+                        p.start_excl,
+                        p.end_incl,
+                        p.end_excl
+                    ])
+                );
+            }
             const res = await q.execute(
                 `INSERT INTO ft_cve_entries (cve_id, published, last_modified, severity, score, vector, cwe, summary, refs, fetched_at)
                  VALUES ${values}
@@ -153,10 +210,52 @@ export function createRepo(q: SdkQueryable): CveRepo {
         },
         async purge(before) {
             const res = await q.execute(
-                'DELETE FROM ft_cve_entries WHERE published < ? AND NOT EXISTS (SELECT 1 FROM ft_cve_favorites f WHERE f.cve_id = ft_cve_entries.cve_id)',
+                `DELETE FROM ft_cve_entries
+                  WHERE published < ?
+                    AND NOT EXISTS (SELECT 1 FROM ft_cve_favorites f WHERE f.cve_id = ft_cve_entries.cve_id)
+                    AND NOT EXISTS (SELECT 1 FROM ft_cve_products p
+                                      JOIN ft_cve_watched w ON w.vendor = p.vendor AND w.product = p.product
+                                     WHERE p.cve_id = ft_cve_entries.cve_id)`,
                 [before]
             );
+            await q.execute(
+                `DELETE p FROM ft_cve_products p
+                   LEFT JOIN ft_cve_entries e ON e.cve_id = p.cve_id
+                  WHERE e.cve_id IS NULL`
+            );
             return res.affectedRows;
+        },
+        async watch(products, at) {
+            let added = 0;
+            for (const p of products) {
+                const res = await q.execute(
+                    'INSERT IGNORE INTO ft_cve_watched (vendor, product, requested_at) VALUES (?, ?, ?)',
+                    [p.vendor, p.product, at]
+                );
+                added += res.affectedRows;
+            }
+            return added;
+        },
+        async listWatched() {
+            return q.query<CveWatchedRow>(
+                'SELECT vendor, product, requested_at, backfill_index, backfilled_at FROM ft_cve_watched ORDER BY requested_at, vendor, product'
+            );
+        },
+        async setBackfill(vendor, product, index, doneAt) {
+            await q.execute(
+                'UPDATE ft_cve_watched SET backfill_index = ?, backfilled_at = ? WHERE vendor = ? AND product = ?',
+                [index, doneAt, vendor, product]
+            );
+        },
+        async affecting(vendor, product) {
+            return q.query<CveAffectingRow>(
+                `SELECT p.cve_id, p.vendor, p.product, p.version, p.start_incl, p.start_excl, p.end_incl, p.end_excl,
+                        e.severity, e.score, e.summary, e.published
+                   FROM ft_cve_products p
+                   JOIN ft_cve_entries e ON e.cve_id = p.cve_id
+                  WHERE p.vendor = ? AND p.product = ?`,
+                [vendor, product]
+            );
         },
         async getState(key) {
             const rows = await q.query<{ v: number }>('SELECT v FROM ft_cve_state WHERE k = ?', [key]);

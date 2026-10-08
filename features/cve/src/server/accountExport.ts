@@ -12,7 +12,9 @@ export const cveAccountExport: FeatureAccountExport<CveRepo> = {
             dates: { created: 's' }
         },
         ft_cve_entries: { skip: 'Le catalogue des vulnérabilités est public et commun à tous les comptes.' },
-        ft_cve_state: { skip: 'L’avancée de la lecture du catalogue appartient au serveur.' }
+        ft_cve_state: { skip: 'L’avancée de la lecture du catalogue appartient au serveur.' },
+        ft_cve_products: { skip: 'Les produits touchés par chaque vulnérabilité : une partie du catalogue public.' },
+        ft_cve_watched: { skip: 'Les produits dont le serveur garde l’historique : un réglage du catalogue commun.' }
     },
     store: { omit: [NVD_KEY_STORE_KEY] }
 };

@@ -40,6 +40,7 @@ function entry(id: string, over: Partial<CveUpsert> = {}): CveUpsert {
         cwe: 'CWE-79',
         summary: `Résumé de ${id}`,
         references: [],
+        products: [],
         ...over
     };
 }
@@ -110,6 +111,16 @@ function fakeRepo(seed: CveUpsert[] = []): FakeRepo {
         async purge() {
             return 0;
         },
+        async watch() {
+            return 0;
+        },
+        async listWatched() {
+            return [];
+        },
+        async setBackfill() {},
+        async affecting() {
+            return [];
+        },
         async getState(key) {
             return state.get(key) ?? null;
         },
@@ -126,6 +137,9 @@ function fakeNvd(catalogue: CveUpsert[] = []) {
         async window() {
             calls.window += 1;
             return catalogue;
+        },
+        async product() {
+            return { entries: [], next: 0, done: true };
         },
         async byId(cveId) {
             calls.byId += 1;
@@ -220,6 +234,7 @@ describe('cve.search', () => {
         const repo = fakeRepo();
         setNvdClient({
             window: () => Promise.reject(new Error('quota')),
+            product: () => Promise.reject(new Error('quota')),
             byId: () => Promise.reject(new Error('Quota du NVD atteint, réessayer plus tard.')),
             keyword: () => Promise.reject(new Error('quota'))
         });

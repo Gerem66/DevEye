@@ -36,7 +36,8 @@ export function toEntry(row: CveEntryWithFavoriteRow): CveEntry {
 
 /** Une CVE tout juste lue chez le fournisseur, rendue sans repasser par la base. */
 export function upsertToEntry(entry: CveUpsert, isFavorite: boolean): CveEntry {
-    return { ...entry, isFavorite };
+    const { products: _products, ...rest } = entry;
+    return { ...rest, isFavorite };
 }
 
 /**
