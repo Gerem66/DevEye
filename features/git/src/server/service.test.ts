@@ -127,6 +127,15 @@ function fakeRepo(repos: GitRepoRow[], credentials: GitCredentialRow[]): FakeRep
                 .filter((r) => ids.includes(r.workspace_id))
                 .sort((a, b) => a.created - b.created || a.id - b.id)
                 .map((r) => ({ id: String(r.id), workspaceId: r.workspace_id })),
+        listHomeRepos: async (ids: readonly number[]) =>
+            repos
+                .filter((r) => ids.includes(r.workspace_id))
+                .sort((a, b) => a.created - b.created || a.id - b.id)
+                .map((r) => ({
+                    id: r.id,
+                    workspace_id: r.workspace_id,
+                    head_sha: branches.find((b) => b.repo_id === r.id && b.is_default === 1)?.head_sha ?? null
+                })),
         listRepos: unused,
         listVisibleRepos: unused,
         findRepo: async (id, workspaceId) => repos.find((r) => r.id === id && r.workspace_id === workspaceId) ?? null,
@@ -734,7 +743,7 @@ describe('GIT_ITEMS_PROVIDER : exists et labelOf', () => {
 describe('GIT_ITEMS_PROVIDER : listHome, describe et openCheckout', () => {
     it('liste les dépôts d’origine, décrit un dépôt chez lui et remet son jeton au clone', async () => {
         const provider = itemsProviderOn(fakeRepo([repo({ default_branch: 'main' })], [credential()]));
-        assert.deepEqual(await provider.listHome([1]), [{ id: 1, workspaceId: 1 }]);
+        assert.deepEqual(await provider.listHome([1]), [{ id: 1, workspaceId: 1, headSha: null }]);
         assert.deepEqual(await provider.listHome([2]), []);
         assert.deepEqual(await provider.describe(1, 1), {
             workspaceId: 1,

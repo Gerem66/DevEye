@@ -68,9 +68,10 @@ export const serverEntry: FeatureServer<GitRepo> = {
                 return row ? labelOf(deps.repo, deps.cipherFor(row.workspace_id), repoId, row.workspace_id) : null;
             },
             listHome: async (workspaceIds) =>
-                (await deps.repo.listStockRepos(workspaceIds)).map((r) => ({
+                (await deps.repo.listHomeRepos(workspaceIds)).map((r) => ({
                     id: Number(r.id),
-                    workspaceId: r.workspaceId
+                    workspaceId: Number(r.workspace_id),
+                    headSha: r.head_sha
                 })),
             describe: async (repoId, workspaceId) =>
                 (await describeRepo(deps.repo, deps.cipherFor(workspaceId), repoId, workspaceId))?.description ?? null,

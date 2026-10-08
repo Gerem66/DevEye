@@ -39,6 +39,8 @@ export interface GitRepo {
     countReposInWorkspaces(workspaceIds: readonly number[]): Promise<number>;
     /** Ce que compte `countReposInWorkspaces`, du plus ancien au plus récent : le stock du quota `repos`. */
     listStockRepos(workspaceIds: readonly number[]): Promise<SdkStockItem[]>;
+    /** Ce que `listStockRepos` compte, avec la tête de la branche par défaut telle que la dernière synchronisation l'a vue. */
+    listHomeRepos(workspaceIds: readonly number[]): Promise<{ id: number; workspace_id: number; head_sha: string | null }[]>;
     createRepo(input: {
         workspaceId: number;
         provider: string;
@@ -250,6 +252,17 @@ export function createRepo(q: SdkQueryable): GitRepo {
                 [[...workspaceIds]]
             );
             return Number(rows[0]?.total ?? 0);
+        },
+        async listHomeRepos(workspaceIds) {
+            if (workspaceIds.length === 0) return [];
+            return q.query<{ id: number; workspace_id: number; head_sha: string | null }>(
+                `SELECT r.id, r.workspace_id, b.head_sha
+                   FROM git_repos r
+                   LEFT JOIN git_branches b ON b.repo_id = r.id AND b.is_default = 1
+                  WHERE r.workspace_id IN (?)
+                  ORDER BY r.created ASC, r.id ASC`,
+                [[...workspaceIds]]
+            );
         },
         async listStockRepos(workspaceIds) {
             if (workspaceIds.length === 0) return [];
