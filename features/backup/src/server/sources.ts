@@ -2,9 +2,10 @@ import { spawn } from 'child_process';
 import { createGzip } from 'zlib';
 
 import type { PathExclusion } from '@deveye/types';
-import type { CloudSyncBackupProvider, DatabaseBackupAccess } from '@deveye/types/sdk';
+import type { DatabaseBackupAccess, MailServerBackupProvider, TreeBackupProvider } from '@deveye/types/sdk';
 import type { AgentFolderArchiveSummary, AgentsFacade, SdkLogger } from '@deveye/types/sdk/server';
 import { env } from './env';
+import { keywordTable, maildirFileName, maildirFolder } from './maildir';
 import { tarEnd, tarHeader, tarPadding } from './tar';
 
 /**
@@ -251,60 +252,214 @@ export async function databaseSource(access: DatabaseBackupAccess, label: string
     return { name: `${slugify(label)}-${stamp()}.sql.gz`, stream: gzipStream(stream()) };
 }
 
+const plural = (n: number, one: string, many: string): string => `${n.toLocaleString('fr-FR')} ${n > 1 ? many : one}`;
+
+/** Un nom de dossier racine sûr à l'extraction : ni séparateur, ni `.` ou `..`. */
+function rootDir(name: string): string {
+    const clean = name.replace(/[\\/]/g, '_').trim();
+    return clean === '' || clean === '.' || clean === '..' ? slugify(name) : clean;
+}
+
 /**
- * Les blobs d'un partage, en clair dans un `tar` reconstitué depuis l'index :
- * l'archive doit s'extraire avec `tar -xzf` sans DevEye.
+ * Le contenu d'un fichier, à la taille annoncée par l'en-tête déjà écrit. Un
+ * contenu illisible ne doit pas emporter toute l'archive : l'entrée est
+ * complétée par des zéros pour que le `tar` reste valide, et c'est dit. Plus
+ * long qu'annoncé, il décalerait toutes les entrées suivantes : abandon.
  */
-export async function cloudSyncSource(
-    provider: CloudSyncBackupProvider,
-    share: { id: number; name: string },
+async function* sizedBody(
+    open: () => Promise<AsyncIterable<Uint8Array>>,
+    size: number,
+    label: string,
+    onUnreadable: (err: Error) => void
+): AsyncGenerator<Buffer> {
+    let written = 0;
+    try {
+        for await (const chunk of await open()) {
+            written += chunk.length;
+            if (written > size) break;
+            yield Buffer.from(chunk);
+        }
+    } catch (e) {
+        onUnreadable(e as Error);
+    }
+    if (written > size) throw new Error(`« ${label} » est plus long qu’annoncé : archive abandonnée.`);
+    if (written < size) yield Buffer.alloc(size - written);
+    yield tarPadding(size);
+}
+
+/**
+ * Les fichiers d'un partage CloudSync ou d'un dossier hébergé, en clair dans
+ * un `tar` reconstitué depuis leur index : l'archive doit s'extraire avec
+ * `tar -xzf` sans DevEye.
+ */
+export async function treeSource(
+    provider: TreeBackupProvider,
+    root: { id: number; name: string },
     logger: SdkLogger
 ): Promise<BackupArtifact> {
+    let unreadable = 0;
     async function* stream(): AsyncGenerator<Buffer> {
-        const files = [...(await provider.listPresentFiles(share.id))];
+        const base = rootDir(root.name);
+        const entries = [...(await provider.entries(root.id))];
         // Chemin croissant : l'archive se relit dans l'ordre de l'arborescence,
         // et un `tar -t` reste lisible.
-        files.sort((a, b) => a.relPath.localeCompare(b.relPath));
+        entries.sort((a, b) => a.relPath.localeCompare(b.relPath));
 
-        for (const file of files) {
-            const isDir = file.kind === 'dir';
+        for (const entry of entries) {
+            const isDir = entry.kind === 'dir';
             yield tarHeader({
-                path: `${share.name}/${file.relPath}`,
-                size: isDir ? 0 : file.size,
-                mtime: file.mtime,
-                mode: file.mode,
+                path: `${base}/${entry.relPath}`,
+                size: isDir ? 0 : entry.size,
+                mtime: entry.mtime,
+                mode: entry.mode,
                 isDir
             });
             if (isDir) continue;
-
-            let written = 0;
-            try {
-                for await (const chunk of await provider.openBlob(share.id, file.hash)) {
-                    written += chunk.length;
-                    yield Buffer.from(chunk);
+            yield* sizedBody(
+                () => provider.open(root.id, entry.ref),
+                entry.size,
+                entry.relPath,
+                (err) => {
+                    unreadable += 1;
+                    logger.error(
+                        { rootId: root.id, relPath: entry.relPath, err: err.message },
+                        'Backup : fichier illisible, entrée complétée par des zéros'
+                    );
                 }
-            } catch (e) {
-                // Un blob manquant ou corrompu ne doit pas emporter toute
-                // l'archive : on complète l'entrée par des zéros pour que le
-                // `tar` reste structurellement valide, et on le signale fort.
-                logger.error(
-                    { shareId: share.id, relPath: file.relPath, err: (e as Error).message },
-                    'Backup CloudSync: blob illisible, entrée complétée par des zéros'
-                );
-            }
-            if (written < file.size) yield Buffer.alloc(file.size - written);
-            else if (written > file.size) {
-                throw new Error(`Blob plus long que l'index pour « ${file.relPath} » : archive abandonnée.`);
-            }
-            yield tarPadding(file.size);
+            );
         }
         yield tarEnd();
     }
 
-    return { name: `${slugify(share.name)}-${stamp()}.tar.gz`, stream: gzipStream(stream()) };
+    return {
+        name: `${slugify(root.name)}-${stamp()}.tar.gz`,
+        stream: gzipStream(stream()),
+        warning: () =>
+            unreadable > 0
+                ? `${plural(unreadable, 'fichier illisible complété', 'fichiers illisibles complétés')} par des zéros.`
+                : null
+    };
 }
 
-const plural = (n: number, one: string, many: string): string => `${n.toLocaleString('fr-FR')} ${n > 1 ? many : one}`;
+/** Une page de messages : borne la mémoire, pas le débit. */
+const MESSAGE_PAGE = 200;
+
+/**
+ * Une adresse du Serveur mail, en Maildir++ : chaque message en clair sous
+ * `cur/`, ses drapeaux dans son nom, les mots-clés dans `dovecot-keywords`.
+ * Les messages effacés entre la liste et la lecture sont sautés, pas tus.
+ */
+export async function mailboxSource(
+    provider: MailServerBackupProvider,
+    mailbox: { id: number; address: string },
+    logger: SdkLogger
+): Promise<BackupArtifact> {
+    const left = { gone: 0, unreadable: 0, renamed: 0, keywords: 0 };
+
+    async function* stream(): AsyncGenerator<Buffer> {
+        const root = rootDir(mailbox.address);
+        const now = Date.now();
+        const dir = (path: string): Buffer => tarHeader({ path, size: 0, mtime: now, mode: 0o700, isDir: true });
+        function* file(path: string, content: string): Generator<Buffer> {
+            const bytes = Buffer.from(content, 'utf8');
+            yield tarHeader({ path, size: bytes.length, mtime: now, mode: 0o600, isDir: false });
+            yield bytes;
+            yield tarPadding(bytes.length);
+        }
+
+        const folders = [...(await provider.folders(mailbox.id))]
+            .map((folder) => ({ folder, place: maildirFolder(folder.path) }))
+            .sort((a, b) => a.place.dir.localeCompare(b.place.dir));
+
+        yield dir(root);
+        const subscribed = folders.filter((f) => f.folder.subscribed).map((f) => `${f.place.name}\n`);
+        yield* file(`${root}/subscriptions`, subscribed.join(''));
+
+        for (const { folder, place } of folders) {
+            if (place.renamed) left.renamed += 1;
+            const base = place.dir === '' ? root : `${root}/${place.dir}`;
+            if (place.dir !== '') {
+                yield dir(base);
+                yield* file(`${base}/maildirfolder`, '');
+            }
+            for (const sub of ['cur', 'new', 'tmp']) yield dir(`${base}/${sub}`);
+            const table = keywordTable(folder.keywords);
+            left.keywords += table.dropped;
+            if (table.file !== '') yield* file(`${base}/dovecot-keywords`, table.file);
+
+            let after = 0;
+            for (;;) {
+                const page = await provider.messages(mailbox.id, folder.id, after, MESSAGE_PAGE);
+                for (const message of page) {
+                    after = message.uid;
+                    // Ouvert AVANT l'en-tête : un message effacé entre-temps se saute proprement.
+                    const body = await provider.open(mailbox.id, message.id);
+                    if (body === null) {
+                        left.gone += 1;
+                        continue;
+                    }
+                    yield tarHeader({
+                        path: `${base}/cur/${maildirFileName(message, table.letters)}`,
+                        size: message.size,
+                        mtime: message.internalDate * 1000,
+                        mode: 0o600,
+                        isDir: false
+                    });
+                    yield* sizedBody(
+                        async () => body,
+                        message.size,
+                        `message ${message.id}`,
+                        (err) => {
+                            left.unreadable += 1;
+                            logger.error(
+                                { mailboxId: mailbox.id, messageId: message.id, err: err.message },
+                                'Backup : message illisible, entrée complétée par des zéros'
+                            );
+                        }
+                    );
+                }
+                if (page.length < MESSAGE_PAGE) break;
+            }
+        }
+        yield tarEnd();
+    }
+
+    return {
+        name: `${slugify(mailbox.address)}-${stamp()}.tar.gz`,
+        stream: gzipStream(stream()),
+        warning: () => describeMailboxLeftovers(left)
+    };
+}
+
+/** Ce qu'une archive de boîte a dû laisser de côté, en une phrase ; `null` si rien. */
+export function describeMailboxLeftovers(left: {
+    gone: number;
+    unreadable: number;
+    renamed: number;
+    keywords: number;
+}): string | null {
+    const parts: string[] = [];
+    if (left.gone > 0)
+        parts.push(plural(left.gone, 'message effacé pendant la sauvegarde', 'messages effacés pendant la sauvegarde'));
+    if (left.unreadable > 0) {
+        parts.push(
+            plural(
+                left.unreadable,
+                'message illisible complété par des zéros',
+                'messages illisibles complétés par des zéros'
+            )
+        );
+    }
+    if (left.renamed > 0) {
+        parts.push(
+            plural(left.renamed, 'dossier dont le point est devenu « _ »', 'dossiers dont le point est devenu « _ »')
+        );
+    }
+    if (left.keywords > 0) {
+        parts.push(plural(left.keywords, 'mot-clé au-delà de 26 non gardé', 'mots-clés au-delà de 26 non gardés'));
+    }
+    return parts.length > 0 ? `${parts.join(', ')}.` : null;
+}
 
 /** Ce qu'une archive réussie a dû laisser de côté, en une phrase ; `null` si rien. */
 export function describeArchiveSummary(summary: AgentFolderArchiveSummary | null): string | null {

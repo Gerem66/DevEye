@@ -4,16 +4,19 @@ import type {
     BackupDestinationProbe,
     BackupDestinationRow,
     BackupJobRow,
-    BackupRunRow
+    BackupRunRow,
+    BackupSourceKind,
+    BackupVolume
 } from '../contracts/domain';
 
 import {
-    CLOUDSYNC_BACKUP_PROVIDER,
     DATABASE_BACKUP_PROVIDER,
-    type CloudSyncBackupProvider,
-    type DatabaseBackupProvider
+    MAILSERVER_BACKUP_PROVIDER,
+    type DatabaseBackupProvider,
+    type MailServerBackupProvider,
+    type TreeBackupProvider
 } from '@deveye/types/sdk';
-import { AGENT_FOLDER_ARCHIVE_PROBE } from '@deveye/types';
+import { AGENT_FOLDER_ARCHIVE_PROBE, type PathExclusion } from '@deveye/types';
 import {
     isRemoteFailure,
     logFailure,
@@ -30,9 +33,25 @@ import type { BackupRepo } from './repo';
 import { nextRunAt } from './schedule';
 import { SftpSink } from './sftp';
 import { DeviceSink, HostedSink, S3Sink, type BackupSink } from './sinks';
-import { cloudSyncSource, databaseSource, deveyeSource, deviceFolderSource, type BackupArtifact } from './sources';
+import {
+    databaseSource,
+    deveyeSource,
+    deviceFolderSource,
+    mailboxSource,
+    slugify,
+    stamp,
+    treeSource,
+    type BackupArtifact
+} from './sources';
 import { WebDavSink } from './webdav';
-import type { StoredDestination, StoredFolder, StoredJob, StoredRun } from './_shared';
+import {
+    isTreeKind,
+    TREE_PROVIDERS,
+    type StoredDestination,
+    type StoredFolder,
+    type StoredJob,
+    type StoredRun
+} from './_shared';
 
 /**
  * L'ordonnanceur des sauvegardes : un ticker du SDK qui cherche ce qui est dû
@@ -48,6 +67,14 @@ import type { StoredDestination, StoredFolder, StoredJob, StoredRun } from './_s
 
 /** Combien de travaux dus on ramasse par tour. Borne la rafale, pas le débit. */
 const DUE_BATCH = 20;
+
+const AGAIN = 'un membre autorisé doit enregistrer ce travail de nouveau.';
+
+/** Les mots d'un échec, pour une source en arborescence. */
+const TREE_RUN_WORDS = {
+    cloudsync: { noun: 'partage', module: 'CloudSync' },
+    hostingFolder: { noun: 'dossier hébergé', module: 'Hébergement' }
+} as const;
 
 /** Pourquoi l'auteur d'un travail ne peut plus le faire tourner, en fin de phrase. */
 const DENIALS: Record<SdkAccessDenial, string> = {
@@ -474,6 +501,28 @@ export class BackupEngine {
             return this.deviceFolderFor(job, stored.folder, destination, signal);
         }
 
+        if (job.source_kind === 'dockerVolume') {
+            if (!stored.volume || !stored.authorUserId) {
+                throw new Error('Ce travail ne dit plus quel volume sauvegarder.');
+            }
+            return this.dockerVolumeFor(job, stored.volume, stored.authorUserId, destination, signal);
+        }
+
+        if (job.source_kind === 'mailbox') {
+            if (!job.source_id || !stored.authorUserId) throw new Error('Ce travail ne désigne aucune adresse.');
+            const mail = this.deps.providers.get<MailServerBackupProvider>(MAILSERVER_BACKUP_PROVIDER);
+            if (!mail) throw new Error('Source Serveur mail indisponible.');
+            const mailbox = await mail.findMailbox(job.source_id, job.workspace_id);
+            if (!mailbox) throw new Error('L’adresse de ce travail a été supprimée.');
+            const may = await mail.authorize(mailbox.id, job.workspace_id, stored.authorUserId);
+            if (!may.ok) {
+                throw new Error(
+                    `L’auteur de ce travail ne peut plus gérer les mots de passe de cette adresse (${DENIALS[may.reason]}) : ${AGAIN}`
+                );
+            }
+            return mailboxSource(mail, mailbox, this.deps.logger);
+        }
+
         if (job.source_kind === 'database') {
             if (!job.source_id) throw new Error('Ce travail ne désigne aucune base.');
             // L'accès (tunnel compris) est ouvert par Bases de données, seule à
@@ -485,72 +534,116 @@ export class BackupEngine {
             return databaseSource(access, jobName);
         }
 
-        if (job.source_kind === 'cloudsync') {
-            if (!job.source_id) throw new Error('Ce travail ne désigne aucun partage.');
+        const kind = job.source_kind as BackupSourceKind;
+        if (isTreeKind(kind)) {
+            const words = TREE_RUN_WORDS[kind];
+            if (!job.source_id) throw new Error(`Ce travail ne désigne aucun ${words.noun}.`);
             // Module absent : le run échoue proprement et reprendra quand il revient.
-            const provider = this.deps.providers.get<CloudSyncBackupProvider>(CLOUDSYNC_BACKUP_PROVIDER);
-            if (!provider) throw new Error('Source CloudSync indisponible : module non installé.');
-            const share = await provider.findShare(job.source_id);
-            if (!share || share.workspaceId !== job.workspace_id) {
-                throw new Error('Le partage de ce travail a été supprimé.');
-            }
-            return cloudSyncSource(provider, { id: share.id, name: share.name }, this.deps.logger);
+            const provider = this.deps.providers.get<TreeBackupProvider>(TREE_PROVIDERS[kind]);
+            if (!provider) throw new Error(`Source ${words.module} indisponible : module non installé.`);
+            const root = await provider.find(job.source_id, job.workspace_id);
+            if (!root) throw new Error(`Le ${words.noun} de ce travail a été supprimé.`);
+            return treeSource(provider, root, this.deps.logger);
         }
 
         throw new Error(`Source de sauvegarde inconnue : ${job.source_kind}`);
     }
 
     /**
-     * Le dossier d'une machine, au nom de l'auteur du travail : ses droits sont
-     * relus à chaque passage, et le travail s'arrête le jour où il les perd.
+     * La machine d'un dossier ou d'un volume, au nom de l'auteur du travail :
+     * ses droits sont relus à chaque passage, et le travail s'arrête le jour
+     * où il les perd.
      */
-    private async deviceFolderFor(
-        job: BackupJobRow,
-        folder: StoredFolder,
-        destination: BackupDestinationRow,
-        signal: AbortSignal
-    ): Promise<BackupArtifact> {
-        const again = 'un membre autorisé doit enregistrer ce travail de nouveau.';
-        const may = await this.deps.access.feature(job.workspace_id, folder.authorUserId, {
+    private async archivingDevice(job: BackupJobRow, authorUserId: number, deviceId: string) {
+        const may = await this.deps.access.feature(job.workspace_id, authorUserId, {
             level: 'write',
             extras: ['deviceFolders'],
             itemId: String(job.id)
         });
         if (!may.ok) {
             throw new Error(
-                `L’auteur de ce travail ne peut plus sauvegarder les fichiers d’une machine (${DENIALS[may.reason]}) : ${again}`
+                `L’auteur de ce travail ne peut plus sauvegarder les fichiers d’une machine (${DENIALS[may.reason]}) : ${AGAIN}`
             );
         }
-        const files = await this.deps.access.device(job.workspace_id, folder.authorUserId, folder.deviceId, ['files']);
+        const files = await this.deps.access.device(job.workspace_id, authorUserId, deviceId, ['files']);
         if (!files.ok) {
             throw new Error(
-                `L’auteur de ce travail n’a plus le droit Fichiers sur cette machine (${DENIALS[files.reason]}) : ${again}`
+                `L’auteur de ce travail n’a plus le droit Fichiers sur cette machine (${DENIALS[files.reason]}) : ${AGAIN}`
             );
         }
 
-        const device = await this.deps.devices.find(folder.deviceId);
+        const device = await this.deps.devices.find(deviceId);
         if (!device) throw new Error('La machine de ce travail a été supprimée.');
         if (!this.deps.devices.isOnline(device.id)) throw new Error(`La machine « ${device.name} » est hors ligne.`);
         if (!device.report?.agent?.probes.includes(AGENT_FOLDER_ARCHIVE_PROBE)) {
             throw new Error(`L’agent de « ${device.name} » est à mettre à jour pour sauvegarder un dossier.`);
         }
+        return device;
+    }
 
-        const exclusions = [...folder.exclusions];
-        if (destination.kind === 'device' && destination.device_id === folder.deviceId) {
-            const inside = destinationInside(folder.path, (await this.readDestination(destination)).path);
+    /**
+     * Les exclusions d'un dossier, plus la destination quand elle est écrite
+     * sous lui sur la même machine : sinon l'archive s'avalerait elle-même.
+     */
+    private async withoutDestination(
+        destination: BackupDestinationRow,
+        deviceId: string,
+        path: string,
+        exclusions: readonly PathExclusion[]
+    ): Promise<PathExclusion[]> {
+        const out = [...exclusions];
+        if (destination.kind === 'device' && destination.device_id === deviceId) {
+            const inside = destinationInside(path, (await this.readDestination(destination)).path);
             if (inside === '') {
                 throw new Error(
                     'Ce travail écrit ses archives dans le dossier même qu’il sauvegarde : choisissez une destination ailleurs.'
                 );
             }
-            if (inside !== null) exclusions.push({ kind: 'path', pattern: inside });
+            if (inside !== null) out.push({ kind: 'path', pattern: inside });
         }
+        return out;
+    }
+
+    private async deviceFolderFor(
+        job: BackupJobRow,
+        folder: StoredFolder,
+        destination: BackupDestinationRow,
+        signal: AbortSignal
+    ): Promise<BackupArtifact> {
+        const device = await this.archivingDevice(job, folder.authorUserId, folder.deviceId);
+        const exclusions = await this.withoutDestination(destination, device.id, folder.path, folder.exclusions);
         return deviceFolderSource(
             this.deps.agents,
             device,
             { path: folder.path, exclusions, oneFileSystem: folder.oneFileSystem },
             signal
         );
+    }
+
+    /** Un volume, dont le chemin se relit dans l'inventaire de la machine à chaque passage. */
+    private async dockerVolumeFor(
+        job: BackupJobRow,
+        volume: BackupVolume,
+        authorUserId: number,
+        destination: BackupDestinationRow,
+        signal: AbortSignal
+    ): Promise<BackupArtifact> {
+        const device = await this.archivingDevice(job, authorUserId, volume.deviceId);
+        const inventory = await this.deps.agents.dockerInventory(device.id);
+        if (!inventory)
+            throw new Error(`La machine « ${device.name} » ne répond pas : elle n’a pas listé ses volumes.`);
+        const found = inventory.volumes.find((v) => v.engine === volume.engine && v.name === volume.name);
+        if (!found || found.mountpoint === '') {
+            throw new Error(`Le volume « ${volume.name} » n’existe plus sur « ${device.name} ».`);
+        }
+        const exclusions = await this.withoutDestination(destination, device.id, found.mountpoint, []);
+        const artifact = deviceFolderSource(
+            this.deps.agents,
+            device,
+            { path: found.mountpoint, exclusions, oneFileSystem: true },
+            signal
+        );
+        return { ...artifact, name: `${slugify(device.name)}-${slugify(volume.name)}-${stamp()}.tar.gz` };
     }
 
     /**

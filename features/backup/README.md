@@ -5,9 +5,12 @@ serveur qui les produit.
 
 Module in-repo (`features/backup`) : contrats dans `src/contracts/`, moteur et
 handlers dans `src/server/`, écrans dans `src/client/`. L'app ne garde que
-l'identité (`backup` dans le registre publié) ; le contrat des bases lui vient du
-module Bases de données (`DATABASE_BACKUP_PROVIDER`, publié par son service),
-celui des partages du module CloudSync (`CLOUDSYNC_BACKUP_PROVIDER`).
+l'identité (`backup` dans le registre publié). Les sources viennent des modules
+qui les détiennent, chacun par un contrat publié par son service : Bases de
+données (`DATABASE_BACKUP_PROVIDER`), Serveur mail
+(`MAILSERVER_BACKUP_PROVIDER`), CloudSync et Hébergement
+(`CLOUDSYNC_BACKUP_PROVIDER`, `HOSTING_BACKUP_PROVIDER`, le même contrat
+d'arborescence `TreeBackupProvider`).
 
 Trois notions, et la séparation est la feature elle-même :
 
@@ -22,7 +25,8 @@ un S3 distant en déclarant deux travaux, sans dupliquer la configuration
 d'accès.
 
 Les destinations se gèrent à l'échelle de la fonctionnalité, dans Réglages →
-**Sources** (voir [Docs/SOURCES.md](../../Docs/SOURCES.md)) ; un travail se crée
+**Destinations**, l'onglet des sources de la coquille sous le nom que lui donne
+le registre (voir [Docs/SOURCES.md](../../Docs/SOURCES.md)) ; un travail se crée
 par le dialogue de la vue puis se règle dans sa fiche : onglet **Général** (ce qui
 part, où, à quelle cadence, combien de copies, actif ou non, suppression) et
 onglet **Chiffrement** (la forme des archives à venir).
@@ -160,17 +164,29 @@ sauf vers une adresse privée qu'une installation personnelle a ouverte.
 
 ## Les sources
 
+Le sélecteur « Quoi sauvegarder » range les sources par catégorie, dans l'ordre
+des sections qui suivent. **Chaque catégorie offerte s'affiche, même vide**, avec
+« Aucun » sous son titre : on voit ce qui se sauvegarde avant d'en avoir. La
+commande `backup.sources` rend ces catégories (`kinds`) à côté des candidats :
+une source dont le module manque à l'instance n'en fait pas partie, et
+« DevEye » n'existe que pour un administrateur. Pendant une recherche, les
+catégories vides s'effacent.
+
 ### `deveye` : la base MySQL de DevEye
 
 **C'est la sauvegarde à avoir si on n'en a qu'une.** Elle couvre tout ce qui vit
 en base, c'est-à-dire presque tout : notes, mots de passe, projets, historique de
-supervision, index CloudSync, comptes mail, finances, constats Sentinelle.
+supervision, index CloudSync, comptes mail, finances, constats Sentinelle. Pas
+les fichiers : ceux des partages CloudSync, les messages du Serveur mail et les
+dossiers hébergés vivent sur le disque ou dans le magasin d'objets, chacun avec
+sa propre source.
 
 Elle porte **tous les comptes de l'instance** : seul un administrateur global la
-voit et la choisit, et seulement depuis son espace personnel, où personne
-d'autre ne peut modifier la destination de ses archives. Le serveur le vérifie
-à la création comme à la modification d'un travail. Pour la même raison, une
-archive de cette source ne sort jamais dans l'export d'un seul compte.
+voit, et il ne la choisit que depuis son espace personnel, où personne d'autre
+ne peut modifier la destination de ses archives ; ailleurs, elle reste grisée
+avec sa raison. Le serveur le vérifie à la création comme à la modification
+d'un travail. Pour la même raison, une archive de cette source ne sort jamais
+dans l'export d'un seul compte.
 
 C'est aussi la raison pour laquelle il n'existe **pas** de source « Appareils » :
 les relevés d'appareils sont des lignes de `device_metrics`, elles sont déjà
@@ -186,21 +202,56 @@ de données un accès ouvert (`DATABASE_BACKUP_PROVIDER`, `openAccess`, lu par
 tunnel, et referme quand le flux s'achève. Une base joignable par Bases de
 données est donc sauvegardable sans configuration supplémentaire.
 
-### `cloudsync` : les blobs d'un partage
+### `mailbox` : une adresse du Serveur mail
 
-La seule partie de DevEye à ne pas vivre en base. Rendus **en clair** dans une
-archive `tar`, arborescence d'origine reconstituée depuis l'index
-(`CLOUDSYNC_BACKUP_PROVIDER`).
+Les messages vivent hors base, un fichier chiffré par message sous la clé de
+leur boîte : la base de DevEye n'en porte que l'index. L'archive les rend **en
+clair**, en **Maildir++**, la disposition de Dovecot et de docker-mailserver :
+
+```
+contact@exemple.fr/
+  subscriptions                 les dossiers abonnés
+  dovecot-keywords              les mots-clés IMAP d'INBOX
+  cur/  new/  tmp/              INBOX
+  .Envoy&AOk-s/                 un dossier : nom en UTF-7 modifié, `/` → `.`
+    maildirfolder  cur/  new/  tmp/
+```
+
+Chaque message est un fichier RFC 822 lisible, nommé
+`<date>.M<id>.deveye,S=<taille>:2,<drapeaux>` : ses drapeaux (`DFRST`) et les
+lettres de ses mots-clés survivent, et l'archive se dépose telle quelle dans le
+dossier mail d'un Dovecot, qui la sert sans conversion. DevEye ne réimporte pas :
+on recopie ensuite vers lui par IMAP. Ce que l'archive a dû écarter est dit sur
+l'exécution : un message effacé entre la liste et la lecture, un point dans un
+nom de dossier (le séparateur Maildir++, devenu `_`), un mot-clé au-delà des 26
+lettres d'un dossier.
+
+**Un droit de plus, revérifié à chaque passage.** Le courrier ne se lit pas dans
+l'interface : seul celui qui peut changer le mot de passe de l'adresse y entre.
+Créer ou modifier un tel travail demande donc, dans Serveur mail, l'écriture
+**et** « Gérer les mots de passe » sur cette adresse (`authorize` du contrat).
+L'enregistrer en fait l'auteur, et le moteur relit ses droits avant chaque
+passage, comme pour un dossier de machine.
+
+### `cloudsync` et `hostingFolder` : les fichiers d'un partage ou d'un dossier hébergé
+
+Rendus **en clair** dans une archive `tar`, arborescence d'origine reconstituée
+depuis l'index du module, par le même contrat d'arborescence
+(`TreeBackupProvider`) : `CLOUDSYNC_BACKUP_PROVIDER` pour un partage,
+`HOSTING_BACKUP_PROVIDER` pour un dossier hébergé. Un fichier illisible est
+complété par des zéros pour que le `tar` reste valide, et compté sur
+l'exécution ; un dossier vide reste au sélecteur, grisé.
 
 L'archive doit pouvoir s'extraire par `tar -xzf` sur une machine où DevEye n'a
-jamais tourné : copier le blob store tel quel (des contenus chiffrés adressés
-par condensé) aurait produit un répertoire technique inutilisable sans le reste
-du système.
+jamais tourné : copier le magasin tel quel (des contenus chiffrés adressés par
+condensé ou par identifiant) aurait produit un répertoire technique
+inutilisable sans le reste du système.
 
 Un partage chiffré de bout en bout n'est pas proposé : le serveur n'a pas de quoi
 le lire, le contrat de CloudSync ne le liste pas et ne le retrouve pas. Sa
 sauvegarde se fait depuis une machine qui le synchronise (source
-`deviceFolder`).
+`deviceFolder`). D'un dossier hébergé, seuls les fichiers reçus en entier
+partent ; ses adresses publiques et ses réglages sont dans la base de DevEye.
 
 ### `deviceFolder` : les fichiers d'une machine
 
@@ -244,6 +295,26 @@ Si la destination est un dossier de la même machine situé sous le dossier
 sauvegardé, il est exclu d'office ; si c'est le dossier même, le passage est
 refusé. Une machine qui héberge DevEye doit exclure le dossier de ses
 sauvegardes à la main : le lien entre les deux ne se voit pas d'ici.
+
+### `dockerVolume` : un volume Docker ou Podman d'une machine
+
+Un dossier de machine, désigné par ce qu'il est plutôt que par son chemin : le
+travail retient la machine, le moteur et le nom du volume, et relit son
+`mountpoint` dans l'inventaire de l'agent (`agents.dockerInventory`) **à chaque
+passage**. Un `data-root` déplacé ne casse donc rien, et un volume disparu fait
+échouer le passage en le nommant. L'archive est ensuite celle d'un dossier :
+même agent, mêmes deux droits revérifiés, même exclusion d'une destination
+écrite dessous, sans autre exclusion et sans quitter le système de fichiers.
+
+Le sélecteur liste les volumes de pilote `local` des machines permises **et en
+ligne** (cinq secondes pour répondre, sans quoi la machine n'en apporte aucun ;
+un travail existant garde le sien affiché, « hors ligne »). Un volume Docker vit
+sous `/var/lib/docker` : un agent qui ne tourne pas en administrateur ne le lit
+pas, et ce volume est grisé avec sa raison. Un volume Podman sans racine vit chez
+l'utilisateur de l'agent, qui le lit.
+
+Copier les fichiers d'une base en train d'écrire donne une base déchirée : pour
+une base dans un conteneur, on passe par sa source Bases de données.
 
 ---
 
@@ -423,9 +494,11 @@ La clé secrète S3 ne sort **jamais** : le DTO ne porte qu'un `hasSecret`.
   aucune limite.
 - **Permissions** : le droit `backup` en lecture et en écriture, plus la
   permission supplémentaire « Sauvegarder les fichiers d'une machine »
-  (`deviceFolders`) pour la source `deviceFolder`, qui exige aussi la permission
-  « Explorateur de fichiers » d'Appareils sur la machine (voir
-  [Docs/PERMISSIONS.md](../../Docs/PERMISSIONS.md)).
+  (`deviceFolders`) pour les sources `deviceFolder` et `dockerVolume`, qui
+  exigent aussi la permission « Explorateur de fichiers » d'Appareils sur la
+  machine (voir [Docs/PERMISSIONS.md](../../Docs/PERMISSIONS.md)). La source
+  `mailbox` exige, dans Serveur mail, « Gérer les mots de passe » sur
+  l'adresse.
 - **Partage** : `shareTier: 'open'` dans le registre publié ; l'entrée `items`
   du serveur donne le domicile et le nom d'un travail à la coquille (partage et
   routes de notification). Pas d'entrée `move`, et ce n'est pas un oubli : un
@@ -477,8 +550,9 @@ src/server/handlers.ts           les handlers des commandes, les droits d'une so
 src/server/repo.ts               les trois tables, sur SdkQueryable
 src/server/service.ts            BackupEngine : l'ordonnanceur, une exécution, la rétention, l'avis d'échec
 src/server/schedule.ts           nextRunAt : la prochaine échéance d'un travail
-src/server/sources.ts            ce qu'un travail produit : mysqldump, pg_dump, tar d'un partage, archive
-                                 d'une machine
+src/server/sources.ts            ce qu'un travail produit : mysqldump, pg_dump, tar d'une arborescence,
+                                 Maildir d'une adresse, archive d'une machine
+src/server/maildir.ts            la disposition Maildir++ : noms de dossier, drapeaux, mots-clés
 src/server/sinks.ts              écrire une archive : local (magasin d'objets), device, s3, sftp, webdav
 src/server/sftp.ts               le client SFTP (ssh2) et l'empreinte du serveur
 src/server/webdav.ts             le client WebDAV, sur safeFetch
@@ -487,7 +561,8 @@ src/server/crypto.ts             la clé des archives (BAK), dérivée de la cl�
 src/server/notice.ts             la mise en page Discord d'un échec
 src/server/accountExport.ts      l'export de compte
 src/server/migrations/           001_job_destination_cascade.sql
-src/server/*.test.ts             accountExport, handlers, schedule, service, sftp, sinks, tar, webdav
+src/server/*.test.ts             accountExport, handlers, maildir, schedule, service, sftp, sinks, tar,
+                                 webdav
 ```
 
 Le client, `src/client/` :
@@ -501,9 +576,11 @@ JobDialog.tsx            créer un travail ; une fois créé, il se règle dans 
 JobView.tsx              la fiche d'un travail : ses réglages en tête, son historique dessous
 JobGeneralPanel.tsx      Réglages → Général d'un travail
 JobEncryptionPanel.tsx   Réglages → Chiffrement d'un travail
-JobSourceFields.tsx      le dossier d'une machine : chemin, exclusions, un seul système de fichiers
-SourcePicker.tsx         « quoi sauvegarder », les sources rangées par genre
-DestinationsPanel.tsx    Réglages → Sources : les destinations de l'espace, leur contrôle
+JobSourceFields.tsx      la source, et pour une machine son dossier : chemin, exclusions, un seul
+                         système de fichiers
+SourcePicker.tsx         « quoi sauvegarder », les sources rangées par catégorie, chacune affichée
+                         même vide
+DestinationsPanel.tsx    Réglages → Destinations : les destinations de l'espace, leur contrôle
 DestinationDialog.tsx    ajouter ou modifier une destination, par genre ; l'empreinte SFTP
 format.ts, style.module.css
 ```

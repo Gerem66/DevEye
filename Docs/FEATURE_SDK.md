@@ -166,8 +166,10 @@ DevEye lui-même, `Services/debug/selfTracking`). Les modules se lisent entre
 eux : Projets lit les contrats d'éléments (`UPTIME_ITEMS_PROVIDER`,
 `DATABASE_ITEMS_PROVIDER`, `DEPLOY_ITEMS_PROVIDER`, `GIT_ITEMS_PROVIDER`,
 `AUDIENCE_ITEMS_PROVIDER`, `HOSTING_ITEMS_PROVIDER`) avant de relier un
-élément ; Sauvegardes lit `DATABASE_BACKUP_PROVIDER` et
-`CLOUDSYNC_BACKUP_PROVIDER` pour ses sources ; le module de facturation des
+élément ; Sauvegardes lit `DATABASE_BACKUP_PROVIDER`,
+`MAILSERVER_BACKUP_PROVIDER`, et le contrat d'arborescence commun à
+`CLOUDSYNC_BACKUP_PROVIDER` et `HOSTING_BACKUP_PROVIDER` pour ses sources ; le
+module de facturation des
 comptes offre `ACCOUNT_PLAN_PROVIDER`.
 
 Côté client, `FeatureClient.providers` est le jumeau : les écrans lisent par

@@ -46,3 +46,21 @@ test('le disque : écrire, relire, retirer, purger une boîte', async () => {
         await fs.rm(root, { recursive: true, force: true });
     }
 });
+
+test('le disque en flux : ouvert avant la lecture, il survit à un effacement', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'mailserver-blobs-'));
+    try {
+        const store = diskBlobStore(root);
+        const body = crypto.randomBytes(3 * 1024 * 1024 + 17);
+        const ref = await store.write(7, key, body);
+        const stream = await store.open(7, key, ref);
+        assert.ok(stream);
+        await store.remove(7, ref);
+        const parts: Buffer[] = [];
+        for await (const chunk of stream) parts.push(chunk);
+        assert.ok(Buffer.concat(parts).equals(body));
+        assert.equal(await store.open(7, key, ref), null);
+    } finally {
+        await fs.rm(root, { recursive: true, force: true });
+    }
+});

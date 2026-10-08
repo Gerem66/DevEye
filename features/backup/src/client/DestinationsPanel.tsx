@@ -25,7 +25,7 @@ import {
 import styles from './style.module.css';
 
 /**
- * Les destinations de l'espace : panneau « Sources » des réglages de la
+ * Les destinations de l'espace : panneau « Destinations » des réglages de la
  * feature. Mêmes formes que la liste des canaux des Notifications, d'où
  * l'emprunt de `settingsStyles`.
  */

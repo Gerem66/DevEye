@@ -47,6 +47,13 @@ interface SearchSelectCommonProps<T extends string> {
     placeholder?: string;
     searchPlaceholder?: string;
     emptyText?: string;
+    /**
+     * Les groupes toujours listés, dans cet ordre, même sans option : un groupe
+     * vide montre `emptyGroupText` sous son titre. Ceux qui manquent ici
+     * suivent dans l'ordre d'apparition.
+     */
+    groups?: readonly string[];
+    emptyGroupText?: string;
     /** Le champ de recherche : `'auto'` (défaut) ne l'affiche qu'à partir de huit choix. */
     searchable?: boolean | 'auto';
     /** Des pastilles sous la recherche, combinées en ET, remises à zéro à la fermeture. */
@@ -80,10 +87,14 @@ const GAP = 4;
 const PANEL_MIN_WIDTH = 240;
 /** En deçà, la liste se parcourt des yeux : le champ de recherche gênerait plus qu'il n'aiderait. */
 const AUTO_SEARCH_MIN = 8;
+const NO_GROUPS: readonly string[] = [];
 
-/** Chaque groupe d'un seul tenant, dans l'ordre où il apparaît la première fois. */
-function byGroup<T extends string>(options: readonly SearchSelectOption<T>[]): SearchSelectOption<T>[] {
-    const groups = new Map<string | undefined, SearchSelectOption<T>[]>();
+/** Chaque groupe d'un seul tenant : d'abord ceux de `fixed`, puis les autres dans l'ordre où ils apparaissent. */
+function byGroup<T extends string>(
+    options: readonly SearchSelectOption<T>[],
+    fixed: readonly string[]
+): SearchSelectOption<T>[] {
+    const groups = new Map<string | undefined, SearchSelectOption<T>[]>(fixed.map((g) => [g, []]));
     for (const option of options) {
         const members = groups.get(option.group);
         if (members) members.push(option);
@@ -127,6 +138,8 @@ export function SearchSelect<T extends string>(props: SearchSelectProps<T>) {
         placeholder = '…',
         searchPlaceholder = 'Rechercher…',
         emptyText = 'Aucun résultat',
+        groups: fixedGroups = NO_GROUPS,
+        emptyGroupText = 'Aucun',
         searchable = 'auto',
         filters,
         id: triggerId,
@@ -155,7 +168,7 @@ export function SearchSelect<T extends string>(props: SearchSelectProps<T>) {
     const selected = props.multiple ? undefined : selection[0];
     const triggerLabel = selection.length > 0 ? selection.map((o) => o.label).join(', ') : null;
     const placed = anchor !== null;
-    const ordered = useMemo(() => byGroup(options), [options]);
+    const ordered = useMemo(() => byGroup(options, fixedGroups), [options, fixedGroups]);
     const haystacks = useMemo(
         () => ordered.map((o) => foldText([o.label, o.detail ?? '', o.group ?? '', ...(o.keywords ?? [])].join(' '))),
         [ordered]
@@ -168,16 +181,31 @@ export function SearchSelect<T extends string>(props: SearchSelectProps<T>) {
                 terms.every((term) => haystacks[index].includes(term)) && kept.every((chip) => chip.test(option))
         );
     }, [ordered, haystacks, query, chips, activeFilters]);
-    // Les résultats par groupe ; `index` reste celui de la liste aplatie, que suivent le clavier et les ids.
+    const narrowed = query.trim() !== '' || activeFilters.size > 0;
+    // Les résultats par groupe ; `index` reste celui de la liste aplatie, que
+    // suivent le clavier et les ids. Un groupe fixe sans option garde sa place,
+    // sauf pendant une recherche, où un « Aucun » sous chaque titre ne dirait rien.
     const sections = useMemo(() => {
         const out: { group: string | undefined; items: { option: SearchSelectOption<T>; index: number }[] }[] = [];
+        const byName = new Map<string | undefined, (typeof out)[number]>();
+        if (!narrowed) {
+            for (const group of fixedGroups) {
+                const section: (typeof out)[number] = { group, items: [] };
+                out.push(section);
+                byName.set(group, section);
+            }
+        }
         matches.forEach((option, index) => {
-            const last = out[out.length - 1];
-            if (last && last.group === option.group) last.items.push({ option, index });
-            else out.push({ group: option.group, items: [{ option, index }] });
+            const known = byName.get(option.group);
+            if (known) known.items.push({ option, index });
+            else {
+                const section = { group: option.group, items: [{ option, index }] };
+                out.push(section);
+                byName.set(option.group, section);
+            }
         });
         return out;
-    }, [matches]);
+    }, [matches, fixedGroups, narrowed]);
 
     const close = (refocus: boolean): void => {
         setOpen(false);
@@ -434,13 +462,17 @@ export function SearchSelect<T extends string>(props: SearchSelectProps<T>) {
                                         <span className={styles.groupLabel} aria-hidden='true'>
                                             {section.group}
                                         </span>
-                                        <ul role='presentation' className={styles.groupList}>
-                                            {items}
-                                        </ul>
+                                        {items.length > 0 ? (
+                                            <ul role='presentation' className={styles.groupList}>
+                                                {items}
+                                            </ul>
+                                        ) : (
+                                            <span className={styles.groupEmpty}>{emptyGroupText}</span>
+                                        )}
                                     </li>
                                 );
                             })}
-                            {matches.length === 0 && <li className={styles.empty}>{emptyText}</li>}
+                            {sections.length === 0 && <li className={styles.empty}>{emptyText}</li>}
                         </ul>
                     </div>,
                     document.body

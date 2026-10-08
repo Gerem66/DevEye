@@ -50,7 +50,11 @@ session, l'étage gardé lui serait fermé. C'est pourquoi `shareTier` vaut
   `MAILSERVER_STORAGE_DIR/<boîte>/`, sous une clé propre à la boîte, elle-même
   scellée par la clé du serveur. Supprimer une boîte efface sa clé et son
   dossier. Une copie IMAP ou la file d'envoi partagent le fichier par comptage
-  de références.
+  de références. La base de DevEye n'en porte donc que l'index : les messages
+  se sauvegardent par la source « Adresses mail » de Sauvegardes, à laquelle le
+  service publie `MAILSERVER_BACKUP_PROVIDER` (`src/server/backupSource.ts`).
+  Elle n'en confie le courrier qu'à qui peut gérer les mots de passe de
+  l'adresse.
 - Les mots de passe : **jamais en clair**. Celui de la boîte et ceux
   d'application sont hachés (scrypt, `src/server/passwords.ts`) et affichés
   une seule fois.
@@ -177,7 +181,8 @@ installé par `features.config.json`).
     - `mime/` : `tree.ts`, `bodystructure.ts`, `envelope.ts`, `sections.ts`,
       `words.ts` ;
     - `accountExport.ts` : ce que l'export du compte écrit des adresses et de
-      leurs messages ;
+      leurs messages ; `backupSource.ts` : le contrat que Sauvegardes lit pour
+      archiver une adresse ;
     - `migrations/001_init.sql` : les dix tables ; `uninstall.sql` : leur
       suppression dans l'ordre des dépendances ;
     - `testing/` : le dépôt en mémoire et le harnais des tests.
@@ -243,7 +248,8 @@ npm run test:features
 `mime/mime.test.ts`, `smtp/smtp.test.ts` (réception, soumission, file et
 non-remise), `engine/engine.test.ts`, `engine/blobs.test.ts`,
 `engine/health.test.ts`, `passwords.test.ts`, `domains.test.ts`,
-`handlers.test.ts` et `accountExport.test.ts`, tous sur le dépôt en mémoire de
+`handlers.test.ts`, `accountExport.test.ts` et `backupSource.test.ts`, tous
+sur le dépôt en mémoire de
 `testing/`.
 
 ## 11. Ce que le module ne fait pas

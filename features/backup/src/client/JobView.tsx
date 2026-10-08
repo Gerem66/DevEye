@@ -116,9 +116,9 @@ export default function JobView({ job, canWrite, onBack, onRun, running }: JobVi
                         <span className={styles.factWarn}> (supprimée)</span>
                     )}
                 </Fact>
-                {job.folder && (
+                {job.author && (
                     <Fact label='Au nom de'>
-                        {job.folder.authorName ?? <span className={styles.factWarn}>un ancien membre</span>}
+                        {job.author.name ?? <span className={styles.factWarn}>un ancien membre</span>}
                     </Fact>
                 )}
                 <Fact label='Destination'>

@@ -58,6 +58,13 @@ export function memoryRepo(): MemoryRepo {
                     .sort((a, b) => (a.address < b.address ? -1 : 1))
                     .map((m) => ({ ...m }))
             ),
+        listOwned: (ws) =>
+            Promise.resolve(
+                mailboxes
+                    .filter((m) => m.workspace_id === ws)
+                    .sort((a, b) => (a.address < b.address ? -1 : 1))
+                    .map((m) => ({ ...m }))
+            ),
         findVisible: (id, ws) => Promise.resolve(copy(mailboxes.find((m) => m.id === id && m.workspace_id === ws))),
         find: (id, ws) => Promise.resolve(copy(mailboxes.find((m) => m.id === id && m.workspace_id === ws))),
         findById: (id) => Promise.resolve(copy(mailboxOf(id))),
@@ -299,6 +306,33 @@ export function memoryRepo(): MemoryRepo {
         deleteMessage(id) {
             messages.splice(0, messages.length, ...messages.filter((m) => m.id !== id));
             return Promise.resolve();
+        },
+        backupPage: (folderId, afterUid, limit) =>
+            Promise.resolve(
+                messages
+                    .filter((m) => m.folder_id === folderId && m.uid > afterUid)
+                    .sort((a, b) => a.uid - b.uid)
+                    .slice(0, limit)
+                    .map((m) => ({
+                        id: m.id,
+                        uid: m.uid,
+                        flags: m.flags,
+                        keywords: m.keywords,
+                        internal_date: m.internal_date,
+                        size: m.size
+                    }))
+            ),
+        folderKeywords: (mailboxId) =>
+            Promise.resolve([
+                ...new Map(
+                    messages
+                        .filter((m) => m.mailbox_id === mailboxId && m.keywords !== '')
+                        .map((m) => [`${m.folder_id} ${m.keywords}`, { folder_id: m.folder_id, keywords: m.keywords }])
+                ).values()
+            ]),
+        messageRef(mailboxId, messageId) {
+            const message = messages.find((m) => m.id === messageId && m.mailbox_id === mailboxId);
+            return Promise.resolve(blobs.find((b) => b.id === message?.blob_id)?.ref ?? null);
         },
         exportPage: (mailboxId, afterId, limit) =>
             Promise.resolve(

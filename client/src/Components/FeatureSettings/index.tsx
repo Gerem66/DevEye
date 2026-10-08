@@ -143,7 +143,11 @@ function useFeatureSections(scope: SettingsScope | null): SectionDef[] {
                 // chez qui le déclare en premier.
                 if (tab === 'general') sections.push({ id: 'general', label: 'Général', icon: 'settings' });
                 else if (tab === 'sources' && scope.kind === 'feature') {
-                    sections.push({ id: 'sources', label: 'Sources', icon: 'key' });
+                    sections.push({
+                        id: 'sources',
+                        label: manifest.sources?.label ?? 'Sources',
+                        icon: manifest.sources?.icon ?? 'key'
+                    });
                 } else if (tab === 'domains' && scope.kind === 'feature' && manifest.domains) {
                     sections.push({ id: 'domains', label: 'Domaines', icon: 'globe' });
                 } else if (tab === 'sync' && scope.kind === 'item') {

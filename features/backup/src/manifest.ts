@@ -14,7 +14,7 @@ export const manifest = {
     category: 'dev',
     resources: ['backup.count', 'backup.destinationList', 'backup.jobList', 'backup.detail', 'backup.runs'],
     /**
-     * Les destinations à l'échelle de la feature (onglet Sources) ; le travail
+     * Les destinations à l'échelle de la feature (onglet Destinations) ; le travail
      * lui-même (source, destination, cadence, copies, suppression) dans
      * l'onglet Général de sa fiche, la forme de ses archives dans Chiffrement.
      */
@@ -37,7 +37,9 @@ export const manifest = {
     quotas: [{ key: 'storage', label: 'de sauvegardes sur le serveur', unit: 'bytes' }],
     links: [
         { to: 'database', what: 'sauvegarde les bases supervisées' },
+        { to: 'mailserver', what: 'archive les messages d’une adresse' },
         { to: 'cloudsync', what: 'archive les fichiers d’un partage' },
+        { to: 'x-hosting', what: 'archive les fichiers d’un dossier hébergé' },
         { to: 'mail', what: 'envoie ses alertes par un compte Mail' }
     ],
     commands: backupCommands

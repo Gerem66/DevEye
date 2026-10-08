@@ -19,7 +19,8 @@ import {
     backupScheduleKindSchema,
     backupSftpAuthSchema,
     backupSourceCandidateSchema,
-    backupSourceKindSchema
+    backupSourceKindSchema,
+    backupVolumeSchema
 } from './domain';
 
 /**
@@ -128,6 +129,8 @@ const jobBody = {
     sourceId: z.number().int().positive().nullable(),
     /** `deviceFolder` seulement ; `null` pour les autres sources. */
     folder: backupFolderSchema.nullable(),
+    /** `dockerVolume` seulement ; `null` pour les autres sources. */
+    volume: backupVolumeSchema.nullable(),
     enabled: z.boolean(),
     schedule: backupScheduleKindSchema,
     scheduleHour: z.number().int().min(0).max(23),
@@ -169,11 +172,17 @@ export const backupJobRun = {
     output: z.object({ run: backupRunSchema })
 };
 
-/** Les sources sauvegardables de l'espace, pour remplir le sélecteur. */
+/**
+ * Les sources sauvegardables de l'espace, pour remplir le sélecteur. `kinds` :
+ * les catégories offertes ici, dans l'ordre, chacune affichée même vide.
+ */
 export const backupSources = {
     command: 'backup.sources' as const,
     input: z.object({}),
-    output: z.object({ candidates: z.array(backupSourceCandidateSchema) })
+    output: z.object({
+        kinds: z.array(backupSourceKindSchema),
+        candidates: z.array(backupSourceCandidateSchema)
+    })
 };
 
 /** Efface l'archive d'une sauvegarde réussie, à sa destination : de quoi faire de la place. */

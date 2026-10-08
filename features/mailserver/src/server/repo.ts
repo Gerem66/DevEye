@@ -72,6 +72,16 @@ export interface MessageRow {
     blob_id: number;
 }
 
+/** Un message tel que la sauvegarde le range : son nom Maildir porte ses drapeaux. */
+export interface BackupMessageRow {
+    id: number;
+    uid: number;
+    flags: number;
+    keywords: string;
+    internal_date: number;
+    size: number;
+}
+
 /** Un message tel que l'export le relit : où le ranger, et la référence de son corps. */
 export interface ExportMessageRow {
     id: number;
@@ -136,6 +146,8 @@ export interface TlsRow {
 export interface MailserverRepo {
     /** Les boîtes de l'espace, et celles que d'autres espaces y projettent. */
     listVisible(workspaceId: number): Promise<MailboxRow[]>;
+    /** Les boîtes de l'espace seulement, par adresse. */
+    listOwned(workspaceId: number): Promise<MailboxRow[]>;
     findVisible(id: number, workspaceId: number): Promise<MailboxRow | null>;
     find(id: number, workspaceId: number): Promise<MailboxRow | null>;
     findById(id: number): Promise<MailboxRow | null>;
@@ -222,6 +234,12 @@ export interface MailserverRepo {
     deleteMessage(id: number): Promise<void>;
     /** Les messages d'une boîte après `afterId`, par id croissant : une boîte ne se charge jamais d'un bloc. */
     exportPage(mailboxId: number, afterId: number, limit: number): Promise<ExportMessageRow[]>;
+    /** Les messages d'un dossier après `afterUid`, par UID croissant. */
+    backupPage(folderId: number, afterUid: number, limit: number): Promise<BackupMessageRow[]>;
+    /** Les jeux de mots-clés distincts de chaque dossier de la boîte. */
+    folderKeywords(mailboxId: number): Promise<{ folder_id: number; keywords: string }[]>;
+    /** La référence du corps d'un message de cette boîte. */
+    messageRef(mailboxId: number, messageId: number): Promise<string | null>;
 
     enqueue(input: {
         workspaceId: number;
@@ -336,6 +354,14 @@ export function createRepo(q: SdkQueryable): MailserverRepo {
                   WHERE sh.workspace_id = ?
                   ORDER BY address ASC`,
                 [workspaceId, workspaceId]
+            );
+            return rows.map(mailbox);
+        },
+
+        async listOwned(workspaceId) {
+            const rows = await q.query<MailboxRow>(
+                `SELECT ${MAILBOX_COLUMNS} FROM ft_mailserver_mailboxes m WHERE m.workspace_id = ? ORDER BY m.address ASC`,
+                [workspaceId]
             );
             return rows.map(mailbox);
         },
@@ -661,6 +687,39 @@ export function createRepo(q: SdkQueryable): MailserverRepo {
                 [mailboxId, afterId]
             );
             return rows.map((row) => ({ ...row, id: Number(row.id), internal_date: Number(row.internal_date) }));
+        },
+
+        async backupPage(folderId, afterUid, limit) {
+            const rows = await q.query<BackupMessageRow>(
+                `SELECT id, uid, flags, keywords, internal_date, size
+                   FROM ft_mailserver_messages
+                  WHERE folder_id = ? AND uid > ?
+                  ORDER BY uid LIMIT ${Math.max(1, Math.floor(limit))}`,
+                [folderId, afterUid]
+            );
+            return rows.map((row) => ({
+                ...row,
+                id: Number(row.id),
+                internal_date: Number(row.internal_date)
+            }));
+        },
+
+        folderKeywords: (mailboxId) =>
+            q.query<{ folder_id: number; keywords: string }>(
+                `SELECT DISTINCT folder_id, keywords FROM ft_mailserver_messages WHERE mailbox_id = ? AND keywords <> ''`,
+                [mailboxId]
+            ),
+
+        async messageRef(mailboxId, messageId) {
+            const row = one(
+                await q.query<{ ref: string }>(
+                    `SELECT b.ref FROM ft_mailserver_messages m
+                       JOIN ft_mailserver_blobs b ON b.id = m.blob_id
+                      WHERE m.id = ? AND m.mailbox_id = ?`,
+                    [messageId, mailboxId]
+                )
+            );
+            return row?.ref ?? null;
         },
 
         async enqueue(input) {

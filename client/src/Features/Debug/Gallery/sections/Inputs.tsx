@@ -92,6 +92,17 @@ export default function Inputs() {
                         disabled={disabled}
                     />
                 </Variant>
+                <Variant label='groupes fixes, un vide'>
+                    <SearchSelect
+                        value={currency}
+                        options={CURRENCIES}
+                        groups={['Europe', 'Afrique', 'Amériques', 'Asie']}
+                        onChange={setCurrency}
+                        aria-label='Devise par zone'
+                        searchPlaceholder='Chercher une devise'
+                        disabled={disabled}
+                    />
+                </Variant>
             </Specimen>
             <Specimen title='ChoiceCards' note='Un choix qui engage : chaque carte dit ce qu’elle implique.'>
                 <Variant label='trois cartes, une indisponible' wide>

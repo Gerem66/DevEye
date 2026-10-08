@@ -24,8 +24,12 @@ import type {
 import {
     CLOUDSYNC_BACKUP_PROVIDER,
     DATABASE_BACKUP_PROVIDER,
-    type CloudSyncBackupProvider,
-    type DatabaseBackupProvider
+    HOSTING_BACKUP_PROVIDER,
+    MAILSERVER_BACKUP_PROVIDER,
+    type DatabaseBackupProvider,
+    type MailServerBackupProvider,
+    type TreeBackupProvider,
+    type TreeBackupRoot
 } from '@deveye/types/sdk';
 import type { DeviceReport } from '@deveye/types';
 import { FeatureError, type SdkFeatureContext } from '@deveye/types/sdk/server';
@@ -299,17 +303,33 @@ const databases: DatabaseBackupProvider = {
     openAccess: async () => null
 };
 
-/** Le contrat CloudSync, réduit à ce que le sélecteur demande. */
-const cloudSync: CloudSyncBackupProvider = {
-    findShare: async (id) => (id === 3 ? { id: 3, name: 'Photos', workspaceId: 1, userId: 1 } : null),
-    listShares: async (workspaceId) =>
-        workspaceId === 1 ? [{ id: 3, name: 'Photos', workspaceId: 1, userId: 1 }] : [],
-    statsByShare: async () => ({ fileCount: 12, liveBytes: 4096 }),
-    listPresentFiles: async () => [],
-    openBlob: async () => {
-        throw new Error('non attendu ici');
-    }
-};
+/** Un contrat d'arborescence (CloudSync, Hébergement), réduit à ce que le sélecteur demande. */
+function treeOf(root: TreeBackupRoot): TreeBackupProvider {
+    return {
+        list: async (workspaceId) => (workspaceId === root.workspaceId ? [root] : []),
+        find: async (id, workspaceId) => (id === root.id && workspaceId === root.workspaceId ? root : null),
+        entries: async () => [],
+        open: async () => {
+            throw new Error('non attendu ici');
+        }
+    };
+}
+
+const cloudSync = treeOf({ id: 3, name: 'Photos', workspaceId: 1, fileCount: 12, bytes: 4096 });
+
+/** Le contrat du Serveur mail : `allowed`, les membres qui gèrent les mots de passe de l'adresse 9. */
+function mailOf(allowed: readonly number[]): MailServerBackupProvider {
+    const mailbox = { id: 9, address: 'contact@exemple.fr', workspaceId: 1, messageCount: 42, bytes: 2048 };
+    return {
+        listMailboxes: async (workspaceId) => (workspaceId === 1 ? [mailbox] : []),
+        findMailbox: async (id, workspaceId) => (id === 9 && workspaceId === 1 ? mailbox : null),
+        folders: async () => [],
+        messages: async () => [],
+        open: async () => null,
+        authorize: async (_id, _ws, userId) =>
+            allowed.includes(userId) ? { ok: true } : { ok: false, reason: 'not_granted' }
+    };
+}
 
 /**
  * Le moteur, réduit à ce que ces handlers lui demandent ; `running` dit ce qui
@@ -572,6 +592,7 @@ describe('Backup : handlers', () => {
             source: 'deveye' as const,
             sourceId: null,
             folder: null,
+            volume: null,
             enabled: true,
             schedule: 'daily' as const,
             scheduleHour: 3,
@@ -661,39 +682,50 @@ describe('Backup : handlers', () => {
         assert.equal(repo.jobs.length, 1);
     });
 
-    it('les sources viennent de leurs contrats, et une source sans contrat disparaît du sélecteur', async () => {
+    it('chaque catégorie offerte s’affiche, et une source sans contrat n’en est pas une', async () => {
         const repo = fakeRepo();
-        const both = createTestContext({
+        const all = createTestContext({
             repo,
             workspaceId: 1,
-            providers: { [DATABASE_BACKUP_PROVIDER]: databases, [CLOUDSYNC_BACKUP_PROVIDER]: cloudSync }
+            providers: {
+                [DATABASE_BACKUP_PROVIDER]: databases,
+                [MAILSERVER_BACKUP_PROVIDER]: mailOf([1]),
+                [CLOUDSYNC_BACKUP_PROVIDER]: cloudSync,
+                [HOSTING_BACKUP_PROVIDER]: treeOf({ id: 4, name: 'Site', workspaceId: 1, fileCount: 1, bytes: 10 })
+            }
         });
-        const out = await handlerFor(backupSources)(both, {});
+        const out = await handlerFor(backupSources)(all, {});
+        assert.deepEqual(out.kinds, [
+            'database',
+            'mailbox',
+            'cloudsync',
+            'hostingFolder',
+            'deviceFolder',
+            'dockerVolume'
+        ]);
         assert.deepEqual(
             out.candidates.map((c) => [c.kind, c.id, c.name, c.tag, c.available]),
             [
                 ['database', 7, 'Prod', 'MySQL', true],
-                ['cloudsync', 3, 'Photos', '12 fichiers', true]
+                ['mailbox', 9, 'contact@exemple.fr', '42 messages', true],
+                ['cloudsync', 3, 'Photos', '12 fichiers', true],
+                ['hostingFolder', 4, 'Site', '1 fichier', true]
             ]
         );
 
-        const none = createTestContext({ repo, workspaceId: 1, isAdmin: true });
-        const bare = await handlerFor(backupSources)(none, {});
-        assert.deepEqual(
-            bare.candidates.map((c) => c.kind),
-            ['deveye']
-        );
+        // Vides, les catégories des machines restent offertes : le sélecteur y lit « Aucun ».
+        const bare = await handlerFor(backupSources)(createTestContext({ repo, workspaceId: 1 }), {});
+        assert.deepEqual(bare.kinds, ['deviceFolder', 'dockerVolume']);
+        assert.deepEqual(bare.candidates, []);
     });
 
     it('un partage vide reste au sélecteur, indisponible', async () => {
-        const empty: CloudSyncBackupProvider = {
-            ...cloudSync,
-            statsByShare: async () => ({ fileCount: 0, liveBytes: 0 })
-        };
         const ctx = createTestContext({
             repo: fakeRepo(),
             workspaceId: 1,
-            providers: { [CLOUDSYNC_BACKUP_PROVIDER]: empty }
+            providers: {
+                [CLOUDSYNC_BACKUP_PROVIDER]: treeOf({ id: 3, name: 'Photos', workspaceId: 1, fileCount: 0, bytes: 0 })
+            }
         });
         const out = await handlerFor(backupSources)(ctx, {});
         assert.deepEqual(
@@ -702,15 +734,16 @@ describe('Backup : handlers', () => {
         );
     });
 
-    it('la base de DevEye ne se sauvegarde que depuis l’espace personnel d’un administrateur', async () => {
-        const offered = async (over: { isAdmin: boolean; kind: 'personal' | 'shared' }): Promise<boolean> => {
+    it('la base de DevEye n’existe que pour un administrateur, et ne se choisit que dans son espace personnel', async () => {
+        const offered = async (over: { isAdmin: boolean; kind: 'personal' | 'shared' }) => {
             const ctx = createTestContext({ repo: fakeRepo(), workspaceId: 1, ...over });
             const out = await handlerFor(backupSources)(ctx, {});
-            return out.candidates.some((c) => c.kind === 'deveye');
+            const candidate = out.candidates.find((c) => c.kind === 'deveye');
+            return [out.kinds.includes('deveye'), candidate?.available ?? null, candidate?.tag ?? null];
         };
-        assert.equal(await offered({ isAdmin: false, kind: 'personal' }), false);
-        assert.equal(await offered({ isAdmin: true, kind: 'shared' }), false);
-        assert.equal(await offered({ isAdmin: true, kind: 'personal' }), true);
+        assert.deepEqual(await offered({ isAdmin: false, kind: 'personal' }), [false, null, null]);
+        assert.deepEqual(await offered({ isAdmin: true, kind: 'shared' }), [true, false, 'espace personnel']);
+        assert.deepEqual(await offered({ isAdmin: true, kind: 'personal' }), [true, true, null]);
 
         const create = handlerFor(backupJobAdd);
         const body = {
@@ -720,6 +753,7 @@ describe('Backup : handlers', () => {
             source: 'deveye' as const,
             sourceId: null,
             folder: null,
+            volume: null,
             enabled: true,
             schedule: 'daily' as const,
             scheduleHour: 3,
@@ -755,6 +789,7 @@ describe('Backup : handlers', () => {
             encryption: 'server' as const,
             source: 'database' as const,
             folder: null,
+            volume: null,
             enabled: true,
             schedule: 'daily' as const,
             scheduleHour: 3,
@@ -803,6 +838,7 @@ describe('Backup : handlers', () => {
                 exclusions: [{ kind: 'name' as const, pattern: 'node_modules' }],
                 oneFileSystem: true
             },
+            volume: null,
             enabled: true,
             schedule: 'daily' as const,
             scheduleHour: 3,
@@ -861,7 +897,7 @@ describe('Backup : handlers', () => {
             assert.equal(repo.jobs[0].source_kind, 'deviceFolder');
             assert.equal(repo.jobs[0].source_id, null);
             // L'auteur est celui qui enregistre : ses droits portent le travail.
-            assert.equal(out.job.folder?.authorUserId, 5);
+            assert.equal(out.job.author?.userId, 5);
             assert.equal(out.job.folder?.deviceName, 'NAS');
             assert.equal(out.job.sourceName, 'NAS : /srv/www');
             const stored = JSON.parse(await ctx.cipher().decrypt(repo.jobs[0].content));
@@ -890,6 +926,148 @@ describe('Backup : handlers', () => {
             await assert.rejects(add(ctx, { ...device, deviceId: SHUT }), failsWith('forbidden'));
             const out = await add(ctx, { ...device, deviceId: NAS });
             assert.equal(out.destination.deviceId, NAS);
+        });
+    });
+    /** Le corps d'une création, à compléter de sa source. */
+    const created = {
+        name: 'Nuit',
+        destinationId: 1,
+        encryption: 'server' as const,
+        sourceId: null,
+        folder: null,
+        volume: null,
+        enabled: true,
+        schedule: 'daily' as const,
+        scheduleHour: 3,
+        scheduleWeekday: 0,
+        scheduleDay: 1,
+        keepLast: 7
+    };
+
+    describe('adresses du Serveur mail', () => {
+        it('une adresse se sauvegarde au nom de qui en gère les mots de passe', async () => {
+            const repo = fakeRepo();
+            repo.destinations.push(destination({ id: 1, workspace_id: 1 }));
+            const as = (userId: number) =>
+                createTestContext({
+                    repo,
+                    workspaceId: 1,
+                    userId,
+                    providers: { [MAILSERVER_BACKUP_PROVIDER]: mailOf([5]) }
+                });
+
+            const sources = await handlerFor(backupSources)(as(6), {});
+            assert.deepEqual(
+                sources.candidates.map((c) => [c.name, c.tag, c.available]),
+                [['contact@exemple.fr', 'sans droit', false]]
+            );
+
+            const create = handlerFor(backupJobAdd);
+            const body = { ...created, source: 'mailbox' as const, sourceId: 9 };
+            await assert.rejects(create(as(6), body), failsWith('forbidden'));
+            await assert.rejects(create(as(5), { ...body, sourceId: 10 }), failsWith('not_found'));
+            assert.equal(repo.jobs.length, 0);
+
+            const ctx = as(5);
+            const out = await create(ctx, body);
+            assert.equal(repo.jobs[0].source_id, 9);
+            assert.equal(out.job.sourceName, 'contact@exemple.fr');
+            assert.equal(out.job.author?.userId, 5);
+            const stored = JSON.parse(await ctx.cipher().decrypt(repo.jobs[0].content));
+            assert.equal(stored.authorUserId, 5);
+        });
+    });
+
+    describe('dossiers hébergés', () => {
+        it('un dossier se sauvegarde s’il est de cet espace, et pas sans le module', async () => {
+            const repo = fakeRepo();
+            repo.destinations.push(destination({ id: 1, workspace_id: 1 }));
+            const hosting = treeOf({ id: 4, name: 'Site', workspaceId: 1, fileCount: 3, bytes: 30 });
+            const ctx = createTestContext({ repo, workspaceId: 1, providers: { [HOSTING_BACKUP_PROVIDER]: hosting } });
+            const create = handlerFor(backupJobAdd);
+            const body = { ...created, source: 'hostingFolder' as const, sourceId: 4 };
+
+            await assert.rejects(create(ctx, { ...body, sourceId: 5 }), failsWith('not_found'));
+            await assert.rejects(create(createTestContext({ repo, workspaceId: 1 }), body), failsWith('not_found'));
+            const out = await create(ctx, body);
+            assert.equal(repo.jobs[0].source_kind, 'hostingFolder');
+            assert.equal(out.job.sourceName, 'Site');
+            assert.equal(out.job.author, null);
+        });
+    });
+
+    describe('volumes Docker', () => {
+        const VPS = '55555555-5555-4555-8555-555555555555';
+        const LAPTOP = '66666666-6666-4666-8666-666666666666';
+        const reportOf = (privileged: boolean) =>
+            ({ agent: { probes: ['folderArchive'], privileged } }) as unknown as DeviceReport;
+        const devices = [
+            testDevice({ id: VPS, name: 'VPS', report: reportOf(true) }),
+            testDevice({ id: LAPTOP, name: 'Portable', report: reportOf(false) })
+        ];
+        const inventory = {
+            engines: [],
+            containers: [],
+            images: [],
+            networks: [],
+            volumes: [
+                {
+                    engine: 'docker' as const,
+                    name: 'pgdata',
+                    driver: 'local',
+                    mountpoint: '/var/lib/docker/volumes/pgdata/_data'
+                },
+                { engine: 'docker' as const, name: 'partage', driver: 'nfs', mountpoint: '' },
+                {
+                    engine: 'podman' as const,
+                    name: 'cache',
+                    driver: 'local',
+                    mountpoint: '/home/moi/.local/share/containers/storage/volumes/cache/_data'
+                }
+            ]
+        };
+        const volumeCtx = (repo: FakeRepo, extras: Record<string, boolean> = { deviceFolders: true }) =>
+            createTestContext({
+                repo,
+                workspaceId: 1,
+                userId: 5,
+                isOwner: false,
+                manifest,
+                extras,
+                devices,
+                dockerInventory: async () => inventory
+            });
+
+        it('les volumes se lisent dans l’inventaire ; un volume Docker se grise sans agent administrateur', async () => {
+            const out = await handlerFor(backupSources)(volumeCtx(fakeRepo()), {});
+            assert.deepEqual(
+                out.candidates.filter((c) => c.kind === 'dockerVolume').map((c) => [c.name, c.tag, c.available]),
+                [
+                    ['pgdata', 'VPS', true],
+                    ['cache', 'VPS, Podman', true],
+                    ['pgdata', 'Portable', false],
+                    ['cache', 'Portable, Podman', true]
+                ]
+            );
+        });
+
+        it('un travail retient la machine, le moteur et le nom du volume, au nom de son auteur', async () => {
+            const repo = fakeRepo();
+            repo.destinations.push(destination({ id: 1, workspace_id: 1 }));
+            const create = handlerFor(backupJobAdd);
+            const body = {
+                ...created,
+                source: 'dockerVolume' as const,
+                volume: { deviceId: VPS, engine: 'docker' as const, name: 'pgdata' }
+            };
+
+            await assert.rejects(create(volumeCtx(repo, {}), body), failsWith('forbidden'));
+            await assert.rejects(create(volumeCtx(repo), { ...body, volume: null }), failsWith('validation'));
+            const out = await create(volumeCtx(repo), body);
+            assert.equal(repo.jobs[0].source_id, null);
+            assert.deepEqual(out.job.volume, { deviceId: VPS, engine: 'docker', name: 'pgdata', deviceName: 'VPS' });
+            assert.equal(out.job.author?.userId, 5);
+            assert.equal(out.job.sourceName, 'VPS : pgdata');
         });
     });
 });

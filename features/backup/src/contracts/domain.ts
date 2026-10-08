@@ -42,13 +42,25 @@ export const backupDestinationStatusSchema = z.enum(['unknown', 'ok', 'error']);
 export type BackupDestinationStatus = z.infer<typeof backupDestinationStatusSchema>;
 
 /**
+ * `deveye` : la base MySQL de DevEye, qui couvre tout ce qui vit en base.
  * `database` : vidage logique d'une base supervisée, par l'accès de la
- * supervision (tunnel compris). `deveye` : la base MySQL de DevEye, qui couvre
- * tout ce qui vit en base. `cloudsync` : les blobs d'un partage, en clair dans
- * un `tar` reconstitué depuis l'index, restaurable sans DevEye.
- * `deviceFolder` : un dossier d'une machine, archivé par son agent.
+ * supervision (tunnel compris). `mailbox` : les messages d'une adresse du
+ * Serveur mail, en Maildir. `cloudsync` et `hostingFolder` : les fichiers d'un
+ * partage ou d'un dossier hébergé, en clair dans un `tar` restaurable sans
+ * DevEye. `deviceFolder` : un dossier d'une machine, `dockerVolume` : un volume
+ * Docker ou Podman, archivés par son agent.
+ *
+ * L'ordre est celui des catégories du sélecteur.
  */
-export const backupSourceKindSchema = z.enum(['database', 'deveye', 'cloudsync', 'deviceFolder']);
+export const backupSourceKindSchema = z.enum([
+    'deveye',
+    'database',
+    'mailbox',
+    'cloudsync',
+    'hostingFolder',
+    'deviceFolder',
+    'dockerVolume'
+]);
 export type BackupSourceKind = z.infer<typeof backupSourceKindSchema>;
 
 /** Un chemin sur une machine : ce que l'agent accepte. */
@@ -65,6 +77,17 @@ export const backupFolderSchema = z.object({
     oneFileSystem: z.boolean()
 });
 export type BackupFolder = z.infer<typeof backupFolderSchema>;
+
+/**
+ * Le volume qu'un travail `dockerVolume` archive. Son chemin se relit dans
+ * l'inventaire de la machine à chaque passage : il suit un `data-root` déplacé.
+ */
+export const backupVolumeSchema = z.object({
+    deviceId: z.uuid(),
+    engine: z.enum(['docker', 'podman']),
+    name: z.string().min(1).max(255)
+});
+export type BackupVolume = z.infer<typeof backupVolumeSchema>;
 
 /** Pas de cron, volontairement : une expression mal écrite est un travail qui ne part jamais sans rien dire. */
 export const backupScheduleKindSchema = z.enum(['manual', 'hourly', 'daily', 'weekly', 'monthly']);
@@ -142,21 +165,20 @@ export const backupJobSchema = z.object({
     destinationName: z.string(),
     destinationKind: backupDestinationKindSchema,
     source: backupSourceKindSchema,
-    /** `database` → l'id de la connexion; `cloudsync` → l'id du partage; sinon `null`. */
+    /** L'id de la base, de l'adresse, du partage ou du dossier hébergé ; sinon `null`. */
     sourceId: z.number().int().positive().nullable(),
     /** Intitulé de la source, joint pour l'affichage; `null` si elle a disparu. */
     sourceName: z.string().nullable(),
+    /** `deviceFolder` : le dossier archivé. */
+    folder: backupFolderSchema.extend({ deviceName: z.string().nullable() }).nullable(),
+    /** `dockerVolume` : le volume archivé. */
+    volume: backupVolumeSchema.extend({ deviceName: z.string().nullable() }).nullable(),
     /**
-     * `deviceFolder` : le dossier archivé, et le membre au nom de qui le travail
-     * s'exécute. Ses droits sont revérifiés à chaque passage.
+     * Le membre au nom de qui le travail s'exécute, pour un dossier, un volume
+     * ou une adresse : ses droits sont revérifiés à chaque passage. `name` est
+     * `null` quand il n'est plus là.
      */
-    folder: backupFolderSchema
-        .extend({
-            deviceName: z.string().nullable(),
-            authorUserId: z.number().int().positive(),
-            authorName: z.string().nullable()
-        })
-        .nullable(),
+    author: z.object({ userId: z.number().int().positive(), name: z.string().nullable() }).nullable(),
     schedule: backupScheduleKindSchema,
     /** Heure locale du serveur (0-23), pour tout sauf `hourly` et `manual`. */
     scheduleHour: z.number().int().min(0).max(23),
@@ -206,14 +228,17 @@ export type BackupRun = z.infer<typeof backupRunSchema>;
 
 /**
  * Une source proposée au choix d'un travail. Construite par le serveur : les
- * bases et les partages vivent dans d'autres features, derrière leurs droits.
+ * bases, les adresses et les partages vivent dans d'autres features, derrière
+ * leurs droits.
  */
 export const backupSourceCandidateSchema = z.object({
     kind: backupSourceKindSchema,
-    /** `null` pour `deveye`, unique par nature, et pour `deviceFolder`, qui vise une machine. */
+    /** `null` pour `deveye`, unique par nature, et pour ce qui vit sur une machine. */
     id: z.number().int().positive().nullable(),
     /** `deviceFolder` : la machine dont on choisira ensuite le dossier. */
     deviceId: z.uuid().nullable(),
+    /** `dockerVolume` : le volume désigné. */
+    volume: backupVolumeSchema.nullable(),
     name: z.string(),
     /** La phrase d'aide sous le champ, une fois la source choisie (moteur, hôte, contenu). */
     detail: z.string().nullable(),

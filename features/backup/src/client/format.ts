@@ -7,7 +7,8 @@ import type {
     BackupRunStatus,
     BackupScheduleKind,
     BackupSourceCandidate,
-    BackupSourceKind
+    BackupSourceKind,
+    BackupVolume
 } from '../contracts/domain';
 
 /** Le vocabulaire de la feature, un seul jeu pour tous ses écrans. */
@@ -39,23 +40,32 @@ export const DESTINATION_ICONS: Record<BackupDestinationKind, string> = {
 export const SOURCE_LABELS: Record<BackupSourceKind, string> = {
     deveye: 'Base de DevEye',
     database: 'Base de données',
+    mailbox: 'Adresse mail',
     cloudsync: 'Partage CloudSync',
-    deviceFolder: 'Fichiers d’une machine'
+    hostingFolder: 'Dossier hébergé',
+    deviceFolder: 'Fichiers d’une machine',
+    dockerVolume: 'Volume Docker'
 };
 
-/** Les catégories du sélecteur de source, dans l'ordre de leurs clés. */
+/** Les catégories du sélecteur de source. */
 export const SOURCE_GROUPS: Record<BackupSourceKind, string> = {
     deveye: 'DevEye',
     database: 'Bases de données',
+    mailbox: 'Adresses mail',
     cloudsync: 'Partages CloudSync',
-    deviceFolder: 'Machines'
+    hostingFolder: 'Dossiers hébergés',
+    deviceFolder: 'Machines',
+    dockerVolume: 'Volumes Docker'
 };
 
 export const SOURCE_ICONS: Record<BackupSourceKind, string> = {
     deveye: 'server',
     database: 'database',
+    mailbox: 'mail',
     cloudsync: 'folder',
-    deviceFolder: 'cpu'
+    hostingFolder: 'globe',
+    deviceFolder: 'cpu',
+    dockerVolume: 'archive'
 };
 
 /** Sous le sélecteur : ce que la source contient, ou pourquoi elle ne se choisit pas. */
@@ -104,8 +114,46 @@ export const DAY_OPTIONS: readonly SearchSelectOption[] = Array.from({ length: 2
  */
 export const sourceKey = (kind: BackupSourceKind, ref: number | string | null): string => `${kind}:${ref ?? ''}`;
 
+const volumeRef = (v: BackupVolume): string => `${v.deviceId}/${v.engine}/${v.name}`;
+
 /** La clé d'un candidat du sélecteur. */
-export const candidateKey = (c: BackupSourceCandidate): string => sourceKey(c.kind, c.id ?? c.deviceId);
+export const candidateKey = (c: BackupSourceCandidate): string =>
+    sourceKey(c.kind, c.volume ? volumeRef(c.volume) : (c.id ?? c.deviceId));
+
+/** La clé de la source d'un travail, celle du candidat qui la désigne. */
+export const jobSourceKey = (job: BackupJob): string =>
+    sourceKey(job.source, job.volume ? volumeRef(job.volume) : (job.sourceId ?? job.folder?.deviceId ?? null));
+
+/** Ce que la création et la modification envoient pour la source choisie. */
+export function sourceInput(
+    candidate: BackupSourceCandidate,
+    folder: Omit<BackupFolder, 'deviceId'>
+): { source: BackupSourceKind; sourceId: number | null; folder: BackupFolder | null; volume: BackupVolume | null } {
+    return {
+        source: candidate.kind,
+        sourceId: candidate.id,
+        folder:
+            candidate.kind === 'deviceFolder' && candidate.deviceId
+                ? {
+                      deviceId: candidate.deviceId,
+                      path: folder.path.trim(),
+                      exclusions: folder.exclusions,
+                      oneFileSystem: folder.oneFileSystem
+                  }
+                : null,
+        volume: candidate.kind === 'dockerVolume' ? candidate.volume : null
+    };
+}
+
+/** La source d'un travail telle que la modification la renvoie, sans ce que le serveur y joint. */
+export function jobSourceInput(job: BackupJob): ReturnType<typeof sourceInput> {
+    return {
+        source: job.source,
+        sourceId: job.sourceId,
+        folder: folderInput(job.folder),
+        volume: job.volume ? { deviceId: job.volume.deviceId, engine: job.volume.engine, name: job.volume.name } : null
+    };
+}
 
 /** « En cours » reste neutre : peindre un travail qui vient de partir le ferait passer pour un incident. */
 export function runTone(status: BackupRunStatus | null): 'neutral' | 'online' | 'danger' {

@@ -12,7 +12,7 @@ import {
     useResource
 } from 'deveye-sdk-client';
 import { api } from './api';
-import { folderInput } from './format';
+import { jobSourceInput } from './format';
 
 /**
  * La forme des archives d'un travail, pour les archives à venir (chaque
@@ -48,9 +48,7 @@ export default function JobEncryptionPanel({ scope, canWrite }: SettingsPanelPro
                 jobId: job.id,
                 name: job.name,
                 destinationId: job.destinationId,
-                source: job.source,
-                sourceId: job.sourceId,
-                folder: folderInput(job.folder),
+                ...jobSourceInput(job),
                 enabled: job.enabled,
                 schedule: job.schedule,
                 scheduleHour: job.scheduleHour,

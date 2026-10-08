@@ -30,8 +30,9 @@ import {
     DESTINATION_LABELS,
     folderInput,
     HOUR_OPTIONS,
+    jobSourceKey,
     SCHEDULE_OPTIONS,
-    sourceKey,
+    sourceInput,
     WEEKDAY_OPTIONS
 } from './format';
 import JobSourceFields, { EMPTY_FOLDER, type FolderDraft } from './JobSourceFields';
@@ -49,7 +50,8 @@ import styles from './style.module.css';
 export default function JobGeneralPanel({ scope, canWrite, gone }: SettingsPanelProps) {
     const jobId = scope.kind === 'item' ? Number(scope.itemId) : null;
     const [job, setJob] = useState<BackupJob | null>(null);
-    const [candidates, setCandidates] = useState<BackupSourceCandidate[]>([]);
+    const [kinds, setKinds] = useState<BackupSourceKind[]>([]);
+    const [candidates, setCandidates] = useState<BackupSourceCandidate[] | null>(null);
     const [name, setName] = useState('');
     const [source, setSource] = useState('');
     const [folder, setFolder] = useState<FolderDraft>(EMPTY_FOLDER);
@@ -83,20 +85,24 @@ export default function JobGeneralPanel({ scope, canWrite, gone }: SettingsPanel
     );
 
     // Lu une fois : une relecture (le sujet live bat à chaque exécution) ne
-    // doit pas effacer une saisie en cours. Les sources vivent dans trois
-    // features, chacune derrière son droit : sans elles, la liste reste vide.
+    // doit pas effacer une saisie en cours. La plupart des sources vivent dans
+    // d'autres features, chacune derrière son droit.
     useEffect(() => {
         if (jobId === null) return;
         void (async () => {
             try {
                 const [res, sources] = await Promise.all([
                     api.send('backup.jobGet', { jobId, limit: 1 }),
-                    api.send('backup.sources', {}).catch(() => ({ candidates: [] }))
+                    api.send('backup.sources', {}).catch((e: unknown) => {
+                        setError(humanizeError(e, 'Les sources n’ont pas pu être lues.'));
+                        return { kinds: [], candidates: [] };
+                    })
                 ]);
-                setCandidates(sources.candidates);
+                setKinds(sources.kinds);
+                setCandidates(withCurrentVolume(sources.candidates, res.job));
                 setJob(res.job);
                 setName(res.job.name);
-                setSource(sourceKey(res.job.source, res.job.sourceId ?? res.job.folder?.deviceId ?? null));
+                setSource(jobSourceKey(res.job));
                 setFolder(res.job.folder ? { ...EMPTY_FOLDER, ...folderInput(res.job.folder) } : EMPTY_FOLDER);
                 setDestinationId(res.job.destinationId);
                 setEnabled(res.job.enabled);
@@ -121,7 +127,7 @@ export default function JobGeneralPanel({ scope, canWrite, gone }: SettingsPanel
         setDestinationId(fresh.id);
     }, [destinations]);
 
-    const selected = useMemo(() => candidates.find((c) => candidateKey(c) === source) ?? null, [candidates, source]);
+    const selected = useMemo(() => candidates?.find((c) => candidateKey(c) === source) ?? null, [candidates, source]);
 
     const save = async () => {
         if (!job || !selected) return;
@@ -131,9 +137,7 @@ export default function JobGeneralPanel({ scope, canWrite, gone }: SettingsPanel
                 jobId: job.id,
                 name: name.trim(),
                 destinationId,
-                source: selected.kind,
-                sourceId: selected.id,
-                folder: folderOf(selected.kind, selected.deviceId, folder),
+                ...sourceInput(selected, folder),
                 enabled,
                 schedule,
                 scheduleHour: hour,
@@ -191,7 +195,7 @@ export default function JobGeneralPanel({ scope, canWrite, gone }: SettingsPanel
         destinationId > 0;
     const unchanged =
         name.trim() === job.name &&
-        source === sourceKey(job.source, job.sourceId ?? job.folder?.deviceId ?? null) &&
+        source === jobSourceKey(job) &&
         JSON.stringify(folderOf(job.source, job.folder?.deviceId ?? null, folder)) ===
             JSON.stringify(folderInput(job.folder)) &&
         destinationId === job.destinationId &&
@@ -205,12 +209,13 @@ export default function JobGeneralPanel({ scope, canWrite, gone }: SettingsPanel
     return (
         <div className={shell.section}>
             <JobSourceFields
+                kinds={kinds}
                 candidates={candidates}
                 source={source}
                 onSourceChange={setSource}
                 folder={folder}
                 onFolderChange={setFolder}
-                author={job.folder ? job.folder.authorName : undefined}
+                author={job.author ? job.author.name : undefined}
                 disabled={!editable}
                 classes={{ field: shell.field, label: shell.sectionLabel, hint: shell.fieldHint }}
             />
@@ -256,8 +261,8 @@ export default function JobGeneralPanel({ scope, canWrite, gone }: SettingsPanel
                     )}
                 </div>
                 <span className={shell.fieldHint}>
-                    Les destinations se déclarent dans Réglages → Sources (« Destinations » y mène) et servent à tous
-                    les travaux.
+                    Les destinations se déclarent dans Réglages → Destinations, où mène le bouton, et servent à tous les
+                    travaux.
                 </span>
             </div>
 
@@ -376,6 +381,32 @@ export default function JobGeneralPanel({ scope, canWrite, gone }: SettingsPanel
             <ConfirmDialog request={confirm} busy={busy} onClose={() => setConfirm(null)} />
         </div>
     );
+}
+
+/**
+ * Le volume du travail, quand la liste ne le porte pas : sa machine est hors
+ * ligne et n'a pas listé ses volumes. Sans lui, le sélecteur n'aurait rien à
+ * montrer pour la source courante.
+ */
+function withCurrentVolume(candidates: BackupSourceCandidate[], job: BackupJob): BackupSourceCandidate[] {
+    const volume = job.volume;
+    if (!volume) return candidates;
+    const key = jobSourceKey(job);
+    if (candidates.some((c) => candidateKey(c) === key)) return candidates;
+    return [
+        ...candidates,
+        {
+            kind: 'dockerVolume',
+            id: null,
+            deviceId: volume.deviceId,
+            volume: { deviceId: volume.deviceId, engine: volume.engine, name: volume.name },
+            name: volume.name,
+            detail: 'Sa machine ne répond pas : le volume sera cherché au prochain passage.',
+            tag: `${volume.deviceName ?? 'machine'}, hors ligne`,
+            available: true,
+            reason: null
+        }
+    ];
 }
 
 /** Le dossier à envoyer : celui de la saisie pour une machine, rien pour les autres sources. */

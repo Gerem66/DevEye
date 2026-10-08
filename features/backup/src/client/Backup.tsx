@@ -29,7 +29,7 @@ import styles from './style.module.css';
 
 /**
  * Sauvegardes : les travaux et l'état de leur dernier passage, en évidence sur
- * la liste. Les destinations se gèrent dans Réglages → Sources. Aucun mot de
+ * la liste. Les destinations se gèrent dans Réglages → Destinations. Aucun mot de
  * passe demandé : tout vit à l'étage ouvert.
  */
 export default function Backup(_props: FeatureViewProps) {
@@ -94,7 +94,7 @@ export default function Backup(_props: FeatureViewProps) {
                             <h2 className={styles.title}>Sauvegardes</h2>
                             <p className={styles.subtitle}>
                                 {destinationCount === 0
-                                    ? 'Aucune destination pour l’instant : le premier travail vous proposera d’en déclarer une, ou passez par Réglages → Sources.'
+                                    ? 'Aucune destination pour l’instant : le premier travail vous proposera d’en déclarer une, ou passez par Réglages → Destinations.'
                                     : `${destinationCount} destination${destinationCount > 1 ? 's' : ''} déclarée${destinationCount > 1 ? 's' : ''}`}
                             </p>
                         </div>

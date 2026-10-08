@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import fs from 'node:fs/promises';
+import fs, { type FileHandle } from 'node:fs/promises';
 import path from 'node:path';
 
 import {
@@ -8,6 +8,7 @@ import {
     BLOB_HEADER_LEN,
     createBlobHeader,
     openChunk,
+    openSealedStream,
     parseBlobHeader,
     sealChunk
 } from '@deveye/types/sdk/server';
@@ -21,6 +22,12 @@ export interface BlobStore {
     /** Écrit un corps et rend la référence sous laquelle le relire. */
     write(mailboxId: number, key: Buffer, data: Buffer): Promise<string>;
     read(mailboxId: number, key: Buffer, ref: string): Promise<Buffer>;
+    /**
+     * Le corps en flux, pour qui l'archive sans le garder en mémoire. Le
+     * fichier est ouvert avant de rendre la main : `null` s'il n'est plus là,
+     * et un effacement ensuite n'interrompt pas la lecture.
+     */
+    open(mailboxId: number, key: Buffer, ref: string): Promise<AsyncIterable<Buffer> | null>;
     remove(mailboxId: number, ref: string): Promise<void>;
     /** Tout ce que la boîte a sur le disque. */
     purge(mailboxId: number): Promise<void>;
@@ -68,6 +75,16 @@ export function diskBlobStore(root: string): BlobStore {
             return ref;
         },
         read: async (mailboxId, key, ref) => openBlob(key, await fs.readFile(fileOf(mailboxId, ref))),
+        async open(mailboxId, key, ref) {
+            let handle: FileHandle;
+            try {
+                handle = await fs.open(fileOf(mailboxId, ref), 'r');
+            } catch (e) {
+                if ((e as NodeJS.ErrnoException).code === 'ENOENT') return null;
+                throw e;
+            }
+            return openSealedStream(key, handle.createReadStream());
+        },
         remove: (mailboxId, ref) => fs.rm(fileOf(mailboxId, ref), { force: true }),
         purge: (mailboxId) => fs.rm(path.join(root, String(mailboxId)), { recursive: true, force: true })
     };
@@ -86,6 +103,18 @@ export function memoryBlobStore(): BlobStore & { files: Map<string, Buffer> } {
         read(mailboxId, key, ref) {
             const sealed = files.get(`${mailboxId}/${ref}`);
             return sealed ? Promise.resolve(openBlob(key, sealed)) : Promise.reject(new Error('ENOENT'));
+        },
+        open(mailboxId, key, ref) {
+            const sealed = files.get(`${mailboxId}/${ref}`);
+            if (!sealed) return Promise.resolve(null);
+            return Promise.resolve(
+                openSealedStream(
+                    key,
+                    (async function* () {
+                        yield sealed;
+                    })()
+                )
+            );
         },
         remove(mailboxId, ref) {
             files.delete(`${mailboxId}/${ref}`);

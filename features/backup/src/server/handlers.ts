@@ -20,10 +20,12 @@ import type {
     BackupFolder,
     BackupSftpAuth,
     BackupSourceCandidate,
-    BackupSourceKind
+    BackupSourceKind,
+    BackupVolume
 } from '../contracts/domain';
 
 import { AGENT_FOLDER_ARCHIVE_PROBE, pathExclusionProblem } from '@deveye/types';
+import type { MailServerBackupProvider, TreeBackupProvider } from '@deveye/types/sdk';
 import {
     defineSdkFeature,
     FeatureError,
@@ -39,20 +41,23 @@ import type { BackupRepo } from './repo';
 import { nextRunAt } from './schedule';
 import { safeRelPath } from './sinks';
 import {
-    cloudSyncProvider,
     databaseProvider,
+    isTreeKind,
     loadDestination,
     loadHomeJob,
     loadJob,
+    mailProvider,
     readJson,
     readJsonWith,
     requireEngine,
     toDestination,
     toJob,
     toRun,
+    treeProvider,
     type Ctx,
     type StoredDestination,
-    type StoredJob
+    type StoredJob,
+    type TreeSourceKind
 } from './_shared';
 
 /**
@@ -417,11 +422,45 @@ interface SourceInput {
     source: BackupSourceKind;
     sourceId: number | null;
     folder: BackupFolder | null;
+    volume: BackupVolume | null;
 }
 
 /** La machine sait-elle archiver un dossier ? Déclaré par son agent, la version ne le dit pas. */
 const archivesFolders = (device: SdkDevice): boolean =>
     device.report?.agent?.probes.includes(AGENT_FOLDER_ARCHIVE_PROBE) ?? false;
+
+/** Le droit de sauvegarder ce qui vit sur une machine, surcharge du travail comprise. */
+async function assertMayArchiveMachines(ctx: Ctx, jobId: number | undefined): Promise<void> {
+    const allowed =
+        jobId === undefined ? ctx.canExtra('deviceFolders') : await ctx.items.canExtra(String(jobId), 'deviceFolders');
+    if (!allowed) {
+        throw new FeatureError('forbidden', 'Votre rôle ne permet pas de sauvegarder les fichiers d’une machine.');
+    }
+}
+
+/** La machine est de l'espace, l'appelant y a le droit Fichiers, et son agent sait archiver. */
+async function assertArchivingDevice(ctx: Ctx, deviceId: string): Promise<void> {
+    const device = await assertDeviceInWorkspace(ctx, deviceId);
+    if (!archivesFolders(device)) {
+        throw new FeatureError('conflict', 'L’agent de cette machine est à mettre à jour pour sauvegarder un dossier.');
+    }
+}
+
+const MAILBOX_REFUSAL =
+    'Sauvegarder le courrier d’une adresse demande de pouvoir gérer ses mots de passe, dans Serveur mail.';
+
+const TREE_NAMES: Record<TreeSourceKind, { module: string; missing: string; empty: string }> = {
+    cloudsync: {
+        module: 'CloudSync est indisponible : module non installé.',
+        missing: 'Ce partage CloudSync est introuvable dans cet espace.',
+        empty: 'Ce partage est vide.'
+    },
+    hostingFolder: {
+        module: 'Hébergement est indisponible : module non installé.',
+        missing: 'Ce dossier hébergé est introuvable dans cet espace.',
+        empty: 'Ce dossier est vide.'
+    }
+};
 
 /**
  * Vérifie que la source désignée existe **dans cet espace**, et que l'appelant
@@ -442,16 +481,7 @@ async function assertSource(ctx: Ctx, input: SourceInput, jobId?: number): Promi
         case 'deviceFolder': {
             const folder = input.folder;
             if (!folder) throw new FeatureError('validation', 'Choisissez le dossier de la machine à sauvegarder.');
-            const allowed =
-                jobId === undefined
-                    ? ctx.canExtra('deviceFolders')
-                    : await ctx.items.canExtra(String(jobId), 'deviceFolders');
-            if (!allowed) {
-                throw new FeatureError(
-                    'forbidden',
-                    'Votre rôle ne permet pas de sauvegarder les fichiers d’une machine.'
-                );
-            }
+            await assertMayArchiveMachines(ctx, jobId);
             const path = folder.path.trim();
             if (!path.startsWith('/') && !/^[A-Za-z]:[\\/]/.test(path)) {
                 throw new FeatureError('validation', 'Le dossier de la machine doit être un chemin absolu.');
@@ -461,12 +491,30 @@ async function assertSource(ctx: Ctx, input: SourceInput, jobId?: number): Promi
                 if (problem) throw new FeatureError('validation', `Exclusion « ${rule.pattern} » : ${problem}`);
             }
             // Le droit Fichiers de l'appelant sur CETTE machine, surcharges comprises.
-            const device = await assertDeviceInWorkspace(ctx, folder.deviceId);
-            if (!archivesFolders(device)) {
-                throw new FeatureError(
-                    'conflict',
-                    'L’agent de cette machine est à mettre à jour pour sauvegarder un dossier.'
-                );
+            await assertArchivingDevice(ctx, folder.deviceId);
+            return;
+        }
+
+        // Son existence n'est pas vérifiée : régler la cadence ne doit pas
+        // exiger la machine en ligne, et le passage dira qu'il a disparu.
+        case 'dockerVolume': {
+            if (!input.volume) throw new FeatureError('validation', 'Choisissez le volume à sauvegarder.');
+            await assertMayArchiveMachines(ctx, jobId);
+            await assertArchivingDevice(ctx, input.volume.deviceId);
+            return;
+        }
+
+        case 'mailbox': {
+            if (input.sourceId === null) {
+                throw new FeatureError('validation', 'Choisissez ce que ce travail doit sauvegarder.');
+            }
+            const mail = mailProvider(ctx);
+            if (!mail) throw new FeatureError('not_found', 'Le Serveur mail est indisponible.');
+            if (!(await mail.findMailbox(input.sourceId, ctx.workspaceId))) {
+                throw new FeatureError('not_found', 'Cette adresse est introuvable dans cet espace.');
+            }
+            if (!(await mail.authorize(input.sourceId, ctx.workspaceId, ctx.userId)).ok) {
+                throw new FeatureError('forbidden', MAILBOX_REFUSAL);
             }
             return;
         }
@@ -483,15 +531,15 @@ async function assertSource(ctx: Ctx, input: SourceInput, jobId?: number): Promi
             return;
         }
 
-        case 'cloudsync': {
+        case 'cloudsync':
+        case 'hostingFolder': {
             if (input.sourceId === null) {
                 throw new FeatureError('validation', 'Choisissez ce que ce travail doit sauvegarder.');
             }
-            const cloudSync = cloudSyncProvider(ctx);
-            if (!cloudSync) throw new FeatureError('not_found', 'CloudSync est indisponible : module non installé.');
-            const share = await cloudSync.findShare(input.sourceId);
-            if (!share || share.workspaceId !== ctx.workspaceId) {
-                throw new FeatureError('not_found', 'Ce partage CloudSync est introuvable dans cet espace.');
+            const provider = treeProvider(ctx, input.source);
+            if (!provider) throw new FeatureError('not_found', TREE_NAMES[input.source].module);
+            if (!(await provider.find(input.sourceId, ctx.workspaceId))) {
+                throw new FeatureError('not_found', TREE_NAMES[input.source].missing);
             }
             return;
         }
@@ -504,26 +552,34 @@ async function assertSource(ctx: Ctx, input: SourceInput, jobId?: number): Promi
 }
 
 /**
- * Ce que le travail garde chiffré. Pour un dossier de machine, l'appelant en
- * devient l'auteur : c'est de ses droits que le travail tiendra les siens.
+ * Ce que le travail garde chiffré. Pour un dossier, un volume ou une adresse,
+ * l'appelant en devient l'auteur : c'est de ses droits que le travail tiendra
+ * les siens.
  */
 function storedJobOf(ctx: Ctx, input: SourceInput & { name: string }): StoredJob {
-    if (input.source !== 'deviceFolder' || !input.folder) return { name: input.name };
-    return {
-        name: input.name,
-        folder: {
-            deviceId: input.folder.deviceId,
-            path: input.folder.path.trim(),
-            exclusions: input.folder.exclusions,
-            oneFileSystem: input.folder.oneFileSystem,
-            authorUserId: ctx.userId
-        }
-    };
+    if (input.source === 'deviceFolder' && input.folder) {
+        return {
+            name: input.name,
+            folder: {
+                deviceId: input.folder.deviceId,
+                path: input.folder.path.trim(),
+                exclusions: input.folder.exclusions,
+                oneFileSystem: input.folder.oneFileSystem,
+                authorUserId: ctx.userId
+            }
+        };
+    }
+    if (input.source === 'dockerVolume' && input.volume) {
+        const { deviceId, engine, name } = input.volume;
+        return { name: input.name, volume: { deviceId, engine, name }, authorUserId: ctx.userId };
+    }
+    if (input.source === 'mailbox') return { name: input.name, authorUserId: ctx.userId };
+    return { name: input.name };
 }
 
-/** Seules les bases et les partages ont un identifiant numérique. */
+/** Les sources désignées par un identifiant numérique ; les autres n'en ont pas. */
 const sourceIdOf = (input: SourceInput): number | null =>
-    input.source === 'database' || input.source === 'cloudsync' ? input.sourceId : null;
+    input.source === 'database' || input.source === 'mailbox' || isTreeKind(input.source) ? input.sourceId : null;
 
 const jobAddFeature = defineSdkFeature({
     ...backupJobAdd,
@@ -713,24 +769,29 @@ const jobRunFeature = defineSdkFeature({
 
 const ENGINE_TAGS: Record<'mysql' | 'postgres', string> = { mysql: 'MySQL', postgres: 'PostgreSQL' };
 
-/**
- * Les machines de l'espace, chacune choisissable si l'appelant peut en
- * sauvegarder un dossier. Une machine qu'il ne peut pas choisir reste
- * visible, grisée, avec sa raison : c'est ainsi qu'on apprend que le droit
- * existe.
- */
-async function machineCandidates(ctx: Ctx): Promise<BackupSourceCandidate[]> {
+/** Au-delà, une machine qui tarde à lister ses volumes n'en apporte aucun : le dialogue n'attend pas. */
+const VOLUME_LIST_TIMEOUT_MS = 5_000;
+
+const plural = (n: number, one: string, many: string): string => `${n.toLocaleString('fr-FR')} ${n > 1 ? many : one}`;
+
+/** Une machine de l'espace, et pourquoi l'appelant ne peut rien y sauvegarder ; `null` s'il le peut. */
+interface MachineRights {
+    device: SdkDevice;
+    refusal: { tag: string; reason: string } | null;
+}
+
+async function machineRights(ctx: Ctx): Promise<MachineRights[]> {
     const devices = await ctx.deveye.devices.list();
     const mayFolders = ctx.canExtra('deviceFolders');
     return Promise.all(
-        devices.map(async (device): Promise<BackupSourceCandidate> => {
+        devices.map(async (device): Promise<MachineRights> => {
             const hasFiles =
                 mayFolders &&
                 (await ctx.deveye.devices.authorize(device.id, { extras: ['files'] }).then(
                     () => true,
                     () => false
                 ));
-            const refusal: { tag: string; reason: string } | null = !mayFolders
+            const refusal = !mayFolders
                 ? { tag: 'non autorisé', reason: 'Votre rôle ne permet pas de sauvegarder les fichiers d’une machine.' }
                 : !hasFiles
                   ? { tag: 'sans droit Fichiers', reason: 'Vous n’avez pas le droit Fichiers sur cette machine.' }
@@ -740,75 +801,178 @@ async function machineCandidates(ctx: Ctx): Promise<BackupSourceCandidate[]> {
                           reason: 'L’agent de cette machine est à mettre à jour pour sauvegarder un dossier.'
                       }
                     : null;
+            return { device, refusal };
+        })
+    );
+}
+
+/**
+ * Chaque machine est choisissable si l'appelant peut en sauvegarder un
+ * dossier. Une machine qu'il ne peut pas choisir reste visible, grisée, avec
+ * sa raison : c'est ainsi qu'on apprend que le droit existe.
+ */
+const machineCandidate = ({ device, refusal }: MachineRights): BackupSourceCandidate => ({
+    kind: 'deviceFolder',
+    id: null,
+    deviceId: device.id,
+    volume: null,
+    name: device.name,
+    detail: 'Un dossier de cette machine, archivé par son agent. Une machine hors ligne fait échouer ce passage-là, pas les suivants.',
+    // Hors ligne n'empêche pas de choisir : le travail partira plus tard.
+    tag: refusal?.tag ?? (device.online ? null : 'hors ligne'),
+    available: refusal === null,
+    reason: refusal?.reason ?? null
+});
+
+/**
+ * Les volumes des machines permises et en ligne, lus dans leur inventaire. Un
+ * volume Docker vit sous `/var/lib/docker` : un agent qui ne tourne pas en
+ * administrateur ne le lit pas, il est grisé avec sa raison.
+ */
+async function volumeCandidates(ctx: Ctx, machines: readonly MachineRights[]): Promise<BackupSourceCandidate[]> {
+    const usable = machines.filter((m) => m.refusal === null && m.device.online);
+    const lists = await Promise.all(
+        usable.map(async ({ device }): Promise<BackupSourceCandidate[]> => {
+            const inventory = await ctx.deveye.agents
+                .dockerInventory(device.id, VOLUME_LIST_TIMEOUT_MS)
+                .catch(() => null);
+            const privileged = device.report?.agent?.privileged === true;
+            return (inventory?.volumes ?? [])
+                .filter((v) => v.driver === 'local' && v.mountpoint !== '')
+                .map((v): BackupSourceCandidate => {
+                    const unreadable = v.engine === 'docker' && !privileged;
+                    return {
+                        kind: 'dockerVolume',
+                        id: null,
+                        deviceId: device.id,
+                        volume: { deviceId: device.id, engine: v.engine, name: v.name },
+                        name: v.name,
+                        detail: `${v.mountpoint} sur ${device.name}, archivé par son agent. Une base en cours d’écriture se copie mieux par sa source Bases de données.`,
+                        tag: v.engine === 'podman' ? `${device.name}, Podman` : device.name,
+                        available: !unreadable,
+                        reason: unreadable
+                            ? 'L’agent de cette machine ne tourne pas en administrateur : il ne peut pas lire ses volumes Docker.'
+                            : null
+                    };
+                });
+        })
+    );
+    return lists.flat();
+}
+
+/** Les adresses de l'espace ; celles dont l'appelant ne gère pas les mots de passe restent grisées. */
+async function mailboxCandidates(ctx: Ctx, mail: MailServerBackupProvider): Promise<BackupSourceCandidate[]> {
+    const mailboxes = await mail.listMailboxes(ctx.workspaceId);
+    return Promise.all(
+        mailboxes.map(async (mailbox): Promise<BackupSourceCandidate> => {
+            const allowed = (await mail.authorize(mailbox.id, ctx.workspaceId, ctx.userId)).ok;
             return {
-                kind: 'deviceFolder',
-                id: null,
-                deviceId: device.id,
-                name: device.name,
-                detail: 'Un dossier de cette machine, archivé par son agent. Une machine hors ligne fait échouer ce passage-là, pas les suivants.',
-                // Hors ligne n'empêche pas de choisir : le travail partira plus tard.
-                tag: refusal?.tag ?? (device.online ? null : 'hors ligne'),
-                available: refusal === null,
-                reason: refusal?.reason ?? null
+                kind: 'mailbox',
+                id: mailbox.id,
+                deviceId: null,
+                volume: null,
+                name: mailbox.address,
+                detail: 'Ses messages, dossiers et drapeaux compris, au format Maildir que lit un serveur IMAP courant (Dovecot).',
+                tag: allowed
+                    ? mailbox.messageCount > 0
+                        ? plural(mailbox.messageCount, 'message', 'messages')
+                        : 'vide'
+                    : 'sans droit',
+                available: allowed,
+                reason: allowed ? null : MAILBOX_REFUSAL
             };
         })
     );
+}
+
+/** Un partage ou un dossier hébergé : vide, il reste visible mais grisé. */
+async function treeCandidates(
+    kind: TreeSourceKind,
+    provider: TreeBackupProvider,
+    workspaceId: number
+): Promise<BackupSourceCandidate[]> {
+    const roots = await provider.list(workspaceId);
+    return roots.map((root): BackupSourceCandidate => {
+        const files = plural(root.fileCount, 'fichier', 'fichiers');
+        const filled = root.fileCount > 0;
+        return {
+            kind,
+            id: root.id,
+            deviceId: null,
+            volume: null,
+            name: root.name,
+            detail:
+                kind === 'cloudsync'
+                    ? `${files} : les fichiers, pas leur index (celui-ci est dans la base de DevEye).`
+                    : `${files} : les fichiers et leurs sous-dossiers. Les adresses publiques et les réglages du dossier sont dans la base de DevEye.`,
+            tag: filled ? files : 'vide',
+            available: filled,
+            reason: filled ? null : TREE_NAMES[kind].empty
+        };
+    });
 }
 
 const sourcesFeature = defineSdkFeature({
     ...backupSources,
     access: { level: 'read' },
     handler: async (ctx: Ctx) => {
+        // Une catégorie offerte s'affiche même vide ; une source dont le
+        // module manque n'en est pas une.
+        const kinds: BackupSourceKind[] = [];
         const candidates: BackupSourceCandidate[] = [];
-        if (canBackupDevEye(ctx)) {
+
+        // Réservée à l'administrateur, et grisée hors de son espace personnel.
+        if (ctx.isAdmin) {
+            const here = canBackupDevEye(ctx);
+            kinds.push('deveye');
             candidates.push({
                 kind: 'deveye',
                 id: null,
                 deviceId: null,
+                volume: null,
                 name: 'Base de DevEye',
-                detail: 'Tout ce que DevEye garde en base, pour tous les comptes : notes, mots de passe, supervision, index CloudSync, projets.',
-                tag: null,
-                available: true,
-                reason: null
+                detail: 'Tout ce que DevEye garde en base, pour tous les comptes : notes, mots de passe, supervision, index CloudSync, projets. Les fichiers n’y sont pas : partages CloudSync, messages du Serveur mail et dossiers hébergés ont leur propre source.',
+                tag: here ? null : 'espace personnel',
+                available: here,
+                reason: here ? null : 'La base de DevEye ne se sauvegarde que depuis votre espace personnel.'
             });
         }
 
-        // Sans le contrat de Bases de données, la source disparaît du sélecteur.
         const databases = databaseProvider(ctx);
-        for (const row of databases ? await databases.listDatabases(ctx.workspaceId) : []) {
-            candidates.push({
-                kind: 'database',
-                id: row.id,
-                deviceId: null,
-                name: row.name,
-                detail: `${row.engine} : ${row.host} / ${row.database}`,
-                tag: ENGINE_TAGS[row.engine],
-                available: true,
-                reason: null
-            });
+        if (databases) {
+            kinds.push('database');
+            for (const row of await databases.listDatabases(ctx.workspaceId)) {
+                candidates.push({
+                    kind: 'database',
+                    id: row.id,
+                    deviceId: null,
+                    volume: null,
+                    name: row.name,
+                    detail: `${row.engine} : ${row.host} / ${row.database}`,
+                    tag: ENGINE_TAGS[row.engine],
+                    available: true,
+                    reason: null
+                });
+            }
         }
 
-        // Sans le module CloudSync, la source disparaît ; les travaux persistés
-        // qui la visent échoueront au run avec un message clair.
-        const cloudSync = cloudSyncProvider(ctx);
-        const shares = cloudSync ? await cloudSync.listShares(ctx.workspaceId) : [];
-        for (const share of shares) {
-            const stats = await cloudSync!.statsByShare(share.id);
-            const files = `${stats.fileCount.toLocaleString('fr-FR')} fichier${stats.fileCount > 1 ? 's' : ''}`;
-            candidates.push({
-                kind: 'cloudsync',
-                id: share.id,
-                deviceId: null,
-                name: share.name,
-                detail: `${files} : les fichiers, pas leur index (celui-ci est dans la base de DevEye).`,
-                tag: stats.fileCount > 0 ? files : 'vide',
-                available: stats.fileCount > 0,
-                reason: stats.fileCount > 0 ? null : 'Ce partage est vide.'
-            });
+        const mail = mailProvider(ctx);
+        if (mail) {
+            kinds.push('mailbox');
+            candidates.push(...(await mailboxCandidates(ctx, mail)));
         }
 
-        candidates.push(...(await machineCandidates(ctx)));
-        return { candidates };
+        for (const kind of ['cloudsync', 'hostingFolder'] as const) {
+            const provider = treeProvider(ctx, kind);
+            if (!provider) continue;
+            kinds.push(kind);
+            candidates.push(...(await treeCandidates(kind, provider, ctx.workspaceId)));
+        }
+
+        const machines = await machineRights(ctx);
+        kinds.push('deviceFolder', 'dockerVolume');
+        candidates.push(...machines.map(machineCandidate), ...(await volumeCandidates(ctx, machines)));
+        return { kinds, candidates };
     }
 });
 

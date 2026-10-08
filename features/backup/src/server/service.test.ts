@@ -2,6 +2,12 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import type { DeviceReport } from '@deveye/types';
+import {
+    HOSTING_BACKUP_PROVIDER,
+    MAILSERVER_BACKUP_PROVIDER,
+    type MailServerBackupProvider,
+    type TreeBackupProvider
+} from '@deveye/types/sdk';
 import type { FeatureServiceDeps } from '@deveye/types/sdk/server';
 import { createTestServiceDeps, testDevice, type TestFolderArchive } from '@deveye/types/sdk/testing';
 
@@ -32,6 +38,10 @@ function engineFor(options: {
     archives?: Record<string, TestFolderArchive | Error>;
     access?: Partial<FeatureServiceDeps['access']>;
     nasReport?: DeviceReport | null;
+    dockerInventory?: FeatureServiceDeps['agents']['dockerInventory'];
+    providers?: Readonly<Record<string, unknown>>;
+    /** Un autre genre de source que le dossier par défaut. */
+    job?: Pick<BackupJobRow, 'source_kind' | 'source_id' | 'content'>;
 }) {
     let finish: (value: Finished) => void = () => undefined;
     const finished = new Promise<Finished>((resolve) => (finish = resolve));
@@ -80,7 +90,9 @@ function engineFor(options: {
             testDevice({ id: PI, name: 'Pi', report: capable })
         ],
         archives: options.archives,
-        access: options.access
+        access: options.access,
+        dockerInventory: options.dockerInventory,
+        providers: options.providers
     });
     const folder: StoredFolder = {
         deviceId: NAS,
@@ -105,7 +117,8 @@ function engineFor(options: {
         encryption: 'none',
         next_run_at: null,
         content: JSON.stringify({ name: 'Site web', folder }),
-        created: 1
+        created: 1,
+        ...options.job
     };
     return { engine: new BackupEngine(deps), deps, job, finished };
 }
@@ -205,5 +218,141 @@ describe('destinationInside', () => {
         assert.equal(destinationInside('/srv/www/', '/srv/www'), '');
         assert.equal(destinationInside('/', '/mnt/backup'), 'mnt/backup');
         assert.equal(destinationInside('C:\\Users\\Moi', 'c:\\users\\moi\\Sauvegardes'), 'Sauvegardes');
+    });
+});
+
+describe('Backup : moteur, volume Docker', () => {
+    const job = {
+        source_kind: 'dockerVolume',
+        source_id: null,
+        content: JSON.stringify({
+            name: 'Base',
+            volume: { deviceId: NAS, engine: 'docker', name: 'pgdata' },
+            authorUserId: 5
+        })
+    };
+    const inventoryOf = (
+        volumes: { engine: 'docker' | 'podman'; name: string; driver: string; mountpoint: string }[]
+    ) => Promise.resolve({ engines: [], containers: [], images: [], networks: [], volumes });
+
+    it('relit le chemin du volume dans l’inventaire, puis l’archive comme un dossier', async () => {
+        const {
+            engine,
+            deps,
+            job: row,
+            finished
+        } = engineFor({
+            job,
+            archives: { [NAS]: { chunks: pieces } },
+            dockerInventory: () =>
+                inventoryOf([
+                    {
+                        engine: 'docker',
+                        name: 'pgdata',
+                        driver: 'local',
+                        mountpoint: '/data/docker/volumes/pgdata/_data'
+                    }
+                ])
+        });
+        await engine.trigger(row, 5);
+        const out = await finished;
+        assert.equal(out.status, 'success', out.run.error ?? undefined);
+        assert.match(out.run.artifact ?? '', /nas-pgdata-\d{8}-\d{6}\.tar\.gz$/);
+        assert.deepEqual(deps.recorded.archiveRequests, [
+            { deviceId: NAS, path: '/data/docker/volumes/pgdata/_data', exclusions: [], oneFileSystem: true }
+        ]);
+    });
+
+    it('un volume disparu, ou une machine muette, font échouer le passage en le disant', async () => {
+        const gone = engineFor({ job, dockerInventory: () => inventoryOf([]) });
+        await gone.engine.trigger(gone.job, 5);
+        assert.match((await gone.finished).run.error ?? '', /volume « pgdata » n’existe plus sur « NAS »/);
+
+        const mute = engineFor({ job, dockerInventory: () => Promise.resolve(null) });
+        await mute.engine.trigger(mute.job, 5);
+        assert.match((await mute.finished).run.error ?? '', /ne répond pas/);
+        assert.equal(mute.deps.recorded.archiveRequests.length, 0);
+    });
+});
+
+describe('Backup : moteur, adresse du Serveur mail', () => {
+    const job = {
+        source_kind: 'mailbox',
+        source_id: 9,
+        content: JSON.stringify({ name: 'Courrier', authorUserId: 5 })
+    };
+    const mailOf = (allowed: boolean): MailServerBackupProvider => ({
+        listMailboxes: async () => [],
+        findMailbox: async (id, workspaceId) =>
+            id === 9 && workspaceId === 1
+                ? { id: 9, address: 'contact@exemple.fr', workspaceId: 1, messageCount: 1, bytes: 10 }
+                : null,
+        folders: async () => [{ id: 1, path: 'INBOX', specialUse: null, subscribed: true, keywords: [] }],
+        messages: async (_m, _f, afterUid) =>
+            afterUid > 0
+                ? []
+                : [{ id: 3, uid: 1, size: 5, internalDate: 1_788_000_000, flags: ['seen'], keywords: [] }],
+        open: async () =>
+            (async function* () {
+                yield Buffer.from('Salut');
+            })(),
+        authorize: async () => (allowed ? { ok: true } : { ok: false, reason: 'not_granted' })
+    });
+
+    it('archive l’adresse au nom de son auteur', async () => {
+        const {
+            engine,
+            job: row,
+            finished
+        } = engineFor({
+            job,
+            providers: { [MAILSERVER_BACKUP_PROVIDER]: mailOf(true) }
+        });
+        await engine.trigger(row, 5);
+        const out = await finished;
+        assert.equal(out.status, 'success', out.run.error ?? undefined);
+        assert.match(out.run.artifact ?? '', /contact-exemple-fr-\d{8}-\d{6}\.tar\.gz$/);
+        assert.ok(out.sizeBytes > 0);
+    });
+
+    it('un auteur qui ne gère plus les mots de passe de l’adresse arrête le travail', async () => {
+        const {
+            engine,
+            job: row,
+            finished
+        } = engineFor({
+            job,
+            providers: { [MAILSERVER_BACKUP_PROVIDER]: mailOf(false) }
+        });
+        await engine.trigger(row, 5);
+        assert.match(
+            (await finished).run.error ?? '',
+            /ne peut plus gérer les mots de passe de cette adresse \(la permission lui a été retirée\)/
+        );
+    });
+});
+
+describe('Backup : moteur, dossier hébergé', () => {
+    it('archive l’arborescence par le contrat commun, et échoue sans le module', async () => {
+        const job = { source_kind: 'hostingFolder', source_id: 4, content: JSON.stringify({ name: 'Site' }) };
+        const hosting: TreeBackupProvider = {
+            list: async () => [],
+            find: async (id, workspaceId) =>
+                id === 4 && workspaceId === 1 ? { id: 4, name: 'Site', workspaceId: 1, fileCount: 1, bytes: 5 } : null,
+            entries: async () => [{ relPath: 'index.html', kind: 'file', size: 5, mtime: 1, mode: null, ref: '8' }],
+            open: async () =>
+                (async function* () {
+                    yield Buffer.from('<p/>!');
+                })()
+        };
+        const ok = engineFor({ job, providers: { [HOSTING_BACKUP_PROVIDER]: hosting } });
+        await ok.engine.trigger(ok.job, 5);
+        const out = await ok.finished;
+        assert.equal(out.status, 'success', out.run.error ?? undefined);
+        assert.match(out.run.artifact ?? '', /site-\d{8}-\d{6}\.tar\.gz$/);
+
+        const bare = engineFor({ job });
+        await bare.engine.trigger(bare.job, 5);
+        assert.match((await bare.finished).run.error ?? '', /Hébergement indisponible : module non installé/);
     });
 });

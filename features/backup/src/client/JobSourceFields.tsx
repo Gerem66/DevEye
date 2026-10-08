@@ -1,6 +1,6 @@
 import { useId } from 'react';
 import type { PathExclusion } from '@deveye/types';
-import type { BackupSourceCandidate } from '../contracts/domain';
+import type { BackupSourceCandidate, BackupSourceKind } from '../contracts/domain';
 
 import { DeviceFolderField, PathExclusionsEditor, Switch } from 'deveye-sdk-client';
 import { BACKUP_FOLDER_EXCLUSIONS_MAX } from '../contracts/domain';
@@ -17,12 +17,17 @@ export interface FolderDraft {
 export const EMPTY_FOLDER: FolderDraft = { path: '', exclusions: [], oneFileSystem: true };
 
 interface JobSourceFieldsProps {
-    candidates: readonly BackupSourceCandidate[];
+    kinds: readonly BackupSourceKind[];
+    /** `null` tant que la liste n'est pas arrivée. */
+    candidates: readonly BackupSourceCandidate[] | null;
     source: string;
     onSourceChange: (key: string) => void;
     folder: FolderDraft;
     onFolderChange: (next: FolderDraft) => void;
-    /** Pour un travail existant : le membre au nom de qui il tourne, `null` s'il n'est plus là. */
+    /**
+     * Pour un travail lié à son auteur (dossier, volume, adresse) : le membre
+     * au nom de qui il tourne, `null` s'il n'est plus là.
+     */
     author?: string | null;
     disabled?: boolean;
     /** Les classes de l'hôte : un dialogue et un panneau de réglages n'ont pas les mêmes. */
@@ -34,6 +39,7 @@ interface JobSourceFieldsProps {
  * la création et l'onglet Général d'un travail règlent de la même façon.
  */
 export default function JobSourceFields({
+    kinds,
     candidates,
     source,
     onSourceChange,
@@ -44,7 +50,7 @@ export default function JobSourceFields({
     classes
 }: JobSourceFieldsProps) {
     const pathId = useId();
-    const selected = candidates.find((c) => candidateKey(c) === source) ?? null;
+    const selected = candidates?.find((c) => candidateKey(c) === source) ?? null;
     const hint = sourceHint(selected);
     const device =
         selected?.kind === 'deviceFolder' && selected.deviceId ? { id: selected.deviceId, name: selected.name } : null;
@@ -53,8 +59,17 @@ export default function JobSourceFields({
         <>
             <div className={classes.field}>
                 <span className={classes.label}>Quoi sauvegarder</span>
-                <SourcePicker candidates={candidates} value={source} disabled={disabled} onChange={onSourceChange} />
+                <SourcePicker
+                    kinds={kinds}
+                    candidates={candidates}
+                    value={source}
+                    disabled={disabled}
+                    onChange={onSourceChange}
+                />
                 {hint && <span className={classes.hint}>{hint}</span>}
+                {(selected?.kind === 'mailbox' || selected?.kind === 'dockerVolume') && author !== undefined && (
+                    <AuthorHint author={author} className={classes.hint} />
+                )}
             </div>
 
             {device && (
@@ -105,14 +120,19 @@ export default function JobSourceFields({
                         hint='Un disque monté ou un partage réseau à l’intérieur du dossier n’est pas parcouru. Si la machine héberge DevEye, excluez aussi le dossier de ses sauvegardes.'
                     />
 
-                    {author !== undefined && (
-                        <span className={classes.hint}>
-                            S’exécute au nom de {author ?? 'un ancien membre'}, dont les droits sont revérifiés à chaque
-                            passage. L’enregistrer vous en fait l’auteur.
-                        </span>
-                    )}
+                    {author !== undefined && <AuthorHint author={author} className={classes.hint} />}
                 </>
             )}
         </>
+    );
+}
+
+/** Le membre au nom de qui tourne un travail lié à ses droits. */
+function AuthorHint({ author, className }: { author: string | null; className: string }) {
+    return (
+        <span className={className}>
+            S’exécute au nom de {author ?? 'un ancien membre'}, dont les droits sont revérifiés à chaque passage.
+            L’enregistrer vous en fait l’auteur.
+        </span>
     );
 }

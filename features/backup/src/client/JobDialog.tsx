@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { BackupDestination, BackupScheduleKind, BackupSourceCandidate } from '../contracts/domain';
+import type {
+    BackupDestination,
+    BackupScheduleKind,
+    BackupSourceCandidate,
+    BackupSourceKind
+} from '../contracts/domain';
 
 import {
     Button,
@@ -17,6 +22,7 @@ import {
     DESTINATION_LABELS,
     HOUR_OPTIONS,
     SCHEDULE_OPTIONS,
+    sourceInput,
     WEEKDAY_OPTIONS
 } from './format';
 import JobSourceFields, { EMPTY_FOLDER, type FolderDraft } from './JobSourceFields';
@@ -33,11 +39,12 @@ interface JobDialogProps {
  * Créer un travail. Rien d'autre : une fois créé, un travail se règle dans
  * l'onglet Général de sa fiche, comme tout élément.
  *
- * Les sources viennent du serveur (`backup.sources`) : elles vivent dans trois
- * features, chacune derrière son droit.
+ * Les sources viennent du serveur (`backup.sources`) : la plupart vivent dans
+ * d'autres features, chacune derrière son droit.
  */
 export default function JobDialog({ open, destinations, onClose, onSaved }: JobDialogProps) {
-    const [candidates, setCandidates] = useState<BackupSourceCandidate[]>([]);
+    const [kinds, setKinds] = useState<BackupSourceKind[]>([]);
+    const [candidates, setCandidates] = useState<BackupSourceCandidate[] | null>(null);
     const [name, setName] = useState('');
     const [source, setSource] = useState('');
     const [folder, setFolder] = useState<FolderDraft>(EMPTY_FOLDER);
@@ -63,10 +70,18 @@ export default function JobDialog({ open, destinations, onClose, onSaved }: JobD
         if (!open) return;
         setError(null);
         knownIds.current = null;
+        setCandidates(null);
         void api
             .send('backup.sources', {})
-            .then((res) => setCandidates(res.candidates))
-            .catch(() => setCandidates([]));
+            .then((res) => {
+                setKinds(res.kinds);
+                setCandidates(res.candidates);
+            })
+            .catch((e: unknown) => {
+                setKinds([]);
+                setCandidates([]);
+                setError(humanizeError(e, 'Les sources n’ont pas pu être lues.'));
+            });
         setName('');
         setSource('');
         setFolder(EMPTY_FOLDER);
@@ -95,7 +110,7 @@ export default function JobDialog({ open, destinations, onClose, onSaved }: JobD
         setDestinationId(fresh.id);
     }, [destinations]);
 
-    const selected = useMemo(() => candidates.find((c) => candidateKey(c) === source) ?? null, [candidates, source]);
+    const selected = useMemo(() => candidates?.find((c) => candidateKey(c) === source) ?? null, [candidates, source]);
 
     // Le nom suit la source tant qu'on ne l'a pas écrit soi-même : personne n'a
     // envie de retaper « Base de production » juste après l'avoir choisie.
@@ -112,17 +127,7 @@ export default function JobDialog({ open, destinations, onClose, onSaved }: JobD
             await api.send('backup.jobAdd', {
                 name: name.trim(),
                 destinationId,
-                source: selected.kind,
-                sourceId: selected.id,
-                folder:
-                    selected.kind === 'deviceFolder' && selected.deviceId
-                        ? {
-                              deviceId: selected.deviceId,
-                              path: folder.path.trim(),
-                              exclusions: folder.exclusions,
-                              oneFileSystem: folder.oneFileSystem
-                          }
-                        : null,
+                ...sourceInput(selected, folder),
                 enabled,
                 schedule,
                 scheduleHour: hour,
@@ -169,6 +174,7 @@ export default function JobDialog({ open, destinations, onClose, onSaved }: JobD
         >
             <div className={styles.form}>
                 <JobSourceFields
+                    kinds={kinds}
                     candidates={candidates}
                     source={source}
                     onSourceChange={setSource}
@@ -201,7 +207,7 @@ export default function JobDialog({ open, destinations, onClose, onSaved }: JobD
                             }))}
                             onChange={(v) => setDestinationId(Number(v))}
                         />
-                        {/* Les destinations se déclarent dans Réglages → Sources ;
+                        {/* Les destinations se déclarent dans Réglages → Destinations ;
                             celle créée pendant ce temps est adoptée
                             (`onOpenChange` fige la liste connue). */}
                         <FeatureSettingsButton

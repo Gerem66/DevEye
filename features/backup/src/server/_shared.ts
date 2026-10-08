@@ -12,14 +12,18 @@ import type {
     BackupRunStatus,
     BackupScheduleKind,
     BackupSftpAuth,
-    BackupSourceKind
+    BackupSourceKind,
+    BackupVolume
 } from '../contracts/domain';
 
 import {
     CLOUDSYNC_BACKUP_PROVIDER,
     DATABASE_BACKUP_PROVIDER,
-    type CloudSyncBackupProvider,
-    type DatabaseBackupProvider
+    HOSTING_BACKUP_PROVIDER,
+    MAILSERVER_BACKUP_PROVIDER,
+    type DatabaseBackupProvider,
+    type MailServerBackupProvider,
+    type TreeBackupProvider
 } from '@deveye/types/sdk';
 import { FeatureError, type SdkCipher, type SdkFeatureContext, type SdkShareScope } from '@deveye/types/sdk/server';
 
@@ -63,7 +67,14 @@ export interface StoredFolder extends BackupFolder {
 export interface StoredJob {
     name: string;
     folder?: StoredFolder;
+    volume?: BackupVolume;
+    /** L'auteur d'un travail `dockerVolume` ou `mailbox` ; celui d'un dossier est dans `folder`. */
+    authorUserId?: number;
 }
+
+/** Le membre au nom de qui le travail s'exécute, quand sa source en exige un. */
+export const authorOf = (job: Partial<StoredJob>): number | null =>
+    job.folder?.authorUserId ?? job.authorUserId ?? null;
 
 /** Ce que `content` porte, chiffré, sur une exécution. */
 export interface StoredRun {
@@ -101,13 +112,27 @@ export async function readJsonWith<T>(cipher: SdkCipher, blob: string): Promise<
     }
 }
 
-/** Les deux contrats consommés, relus à l'appel : chacun peut être absent. */
-export function cloudSyncProvider(ctx: Pick<Ctx, 'providers'>): CloudSyncBackupProvider | undefined {
-    return ctx.providers.get<CloudSyncBackupProvider>(CLOUDSYNC_BACKUP_PROVIDER);
-}
-
+/** Les contrats consommés, relus à l'appel : chacun peut être absent. */
 export function databaseProvider(ctx: Pick<Ctx, 'providers'>): DatabaseBackupProvider | undefined {
     return ctx.providers.get<DatabaseBackupProvider>(DATABASE_BACKUP_PROVIDER);
+}
+
+export function mailProvider(ctx: Pick<Ctx, 'providers'>): MailServerBackupProvider | undefined {
+    return ctx.providers.get<MailServerBackupProvider>(MAILSERVER_BACKUP_PROVIDER);
+}
+
+/** Les sources en arborescence, et le contrat qui sert chacune. */
+export type TreeSourceKind = 'cloudsync' | 'hostingFolder';
+
+export const TREE_PROVIDERS: Record<TreeSourceKind, string> = {
+    cloudsync: CLOUDSYNC_BACKUP_PROVIDER,
+    hostingFolder: HOSTING_BACKUP_PROVIDER
+};
+
+export const isTreeKind = (kind: BackupSourceKind): kind is TreeSourceKind => kind in TREE_PROVIDERS;
+
+export function treeProvider(ctx: Pick<Ctx, 'providers'>, kind: TreeSourceKind): TreeBackupProvider | undefined {
+    return ctx.providers.get<TreeBackupProvider>(TREE_PROVIDERS[kind]);
 }
 
 export async function loadDestination(ctx: Ctx, destinationId: number): Promise<BackupDestinationRow> {
@@ -207,6 +232,9 @@ export async function toJob(ctx: Ctx, row: BackupJobWithStateRow, shares?: SdkSh
         readJsonWith<StoredDestination>(cipher, row.destination_content)
     ]);
     const lastRun = row.last_run_content ? await readJsonWith<StoredRun>(cipher, row.last_run_content) : {};
+    const authorUserId = authorOf(job);
+    const deviceNameOf = async (deviceId: string): Promise<string | null> =>
+        (await deviceNamesOf(ctx)).get(deviceId) ?? null;
 
     return {
         foreign: row.workspace_id !== ctx.workspaceId,
@@ -219,24 +247,28 @@ export async function toJob(ctx: Ctx, row: BackupJobWithStateRow, shares?: SdkSh
         destinationKind: row.destination_kind as BackupDestinationKind,
         source: row.source_kind as BackupSourceKind,
         sourceId: row.source_id,
-        sourceName: await sourceNameOf(
-            ctx,
-            row.source_kind as BackupSourceKind,
-            row.source_id,
-            row.workspace_id,
-            job.folder
-        ),
+        sourceName: await sourceNameOf(ctx, row.source_kind as BackupSourceKind, row.source_id, row.workspace_id, job),
         folder: job.folder
             ? {
                   deviceId: job.folder.deviceId,
                   path: job.folder.path,
                   exclusions: job.folder.exclusions,
                   oneFileSystem: job.folder.oneFileSystem,
-                  deviceName: (await deviceNamesOf(ctx)).get(job.folder.deviceId) ?? null,
-                  authorUserId: job.folder.authorUserId,
-                  authorName: (await memberNamesOf(ctx)).get(job.folder.authorUserId) ?? null
+                  deviceName: await deviceNameOf(job.folder.deviceId)
               }
             : null,
+        volume: job.volume
+            ? {
+                  deviceId: job.volume.deviceId,
+                  engine: job.volume.engine,
+                  name: job.volume.name,
+                  deviceName: await deviceNameOf(job.volume.deviceId)
+              }
+            : null,
+        author:
+            authorUserId === null
+                ? null
+                : { userId: authorUserId, name: (await memberNamesOf(ctx)).get(authorUserId) ?? null },
         schedule: row.schedule_kind as BackupScheduleKind,
         scheduleHour: row.schedule_hour,
         scheduleWeekday: row.schedule_weekday,
@@ -261,27 +293,40 @@ export async function sourceNameOf(
     kind: BackupSourceKind,
     sourceId: number | null,
     /** L'espace du travail : sa source vit chez lui, pas forcément ici. */
-    homeWorkspaceId: number = ctx.workspaceId,
-    folder?: Partial<StoredFolder>
+    homeWorkspaceId: number,
+    job: Partial<StoredJob>
 ): Promise<string | null> {
     switch (kind) {
         case 'deveye':
             return 'Base de DevEye';
         case 'deviceFolder': {
+            const folder = job.folder;
             if (!folder?.deviceId || !folder.path) return null;
             // Une machine d'un autre espace ne se nomme pas d'ici : son chemin suffit.
             const device = (await deviceNamesOf(ctx)).get(folder.deviceId);
             return device ? `${device} : ${folder.path}` : folder.path;
+        }
+        case 'dockerVolume': {
+            const volume = job.volume;
+            if (!volume?.deviceId || !volume.name) return null;
+            const device = (await deviceNamesOf(ctx)).get(volume.deviceId);
+            return device ? `${device} : ${volume.name}` : volume.name;
+        }
+        case 'mailbox': {
+            if (sourceId === null) return null;
+            const mailbox = await mailProvider(ctx)?.findMailbox(sourceId, homeWorkspaceId);
+            return mailbox?.address ?? null;
         }
         case 'database': {
             if (sourceId === null) return null;
             const row = await databaseProvider(ctx)?.findDatabase(sourceId, homeWorkspaceId);
             return row?.name ?? null;
         }
-        case 'cloudsync': {
+        case 'cloudsync':
+        case 'hostingFolder': {
             if (sourceId === null) return null;
-            const share = await cloudSyncProvider(ctx)?.findShare(sourceId);
-            return share && share.workspaceId === homeWorkspaceId ? share.name : null;
+            const root = await treeProvider(ctx, kind)?.find(sourceId, homeWorkspaceId);
+            return root?.name ?? null;
         }
     }
 }

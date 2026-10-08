@@ -64,7 +64,9 @@ droit d'écriture de la feature, avec un compte d'usages (`useCount`,
   `sources: { hint }` et `settings.feature: ['sources']`. C'est la déclaration
   de vérité, jamais une liste locale de plus ; `validateManifest` refuse
   l'onglet sans la phrase, et la coquille rend cette phrase en tête du panneau
-  (`ModulePanel`).
+  (`ModulePanel`). `label` et `icon` renomment l'onglet quand « Sources » dirait
+  mal ce qu'il range : Sauvegardes l'appelle « Destinations », ses sources à
+  elle étant ce qu'elle sauvegarde. L'identifiant reste `sources`.
 - La coquille monte le panneau de la feature (`ModulePanel` dans
   `Components/FeatureSettings/index.tsx`). Un panneau est **autonome** : il se
   charge (`useResource` sur la ressource de la feature), s'invalide et se
