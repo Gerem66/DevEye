@@ -107,6 +107,13 @@ html[data-theme='light'][data-render='lite'] .recessed {
     width: 100%;
 }
 
+/* La carte d'ajout s'étire à la hauteur de sa rangée ; seule sur la sienne,
+   elle garde celle d'une carte courte. */
+.sectionAdd {
+    min-height: var(--tile-min-height-compact);
+    min-width: 0;
+}
+
 /* Bascule d'espace quand l'accueil quitté n'a rien à laisser à l'écran. Assez
    haut pour que la page ne se recroqueville pas le temps du chargement. */
 .switching {

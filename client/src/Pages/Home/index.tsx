@@ -99,6 +99,9 @@ import { DeviceTileCard, FeatureTileCard, FolderTileCard, ShortcutTileCard } fro
 import type { AdminBadge, TileLock } from './tiles/tileLock';
 import { AboutContent } from './about';
 import { EditableHome } from './organize/EditableHome';
+import { AddTileMarket } from './organize/AddTileMarket';
+import { AddTileButton } from './AddTileButton';
+import { useShowHomeAddTile } from './homeAddTile';
 import { captureMorph, playMorph } from './sectionMorph';
 import { FolderOverlay, folderTitle } from './folders';
 
@@ -110,7 +113,14 @@ import type {
     WorkspaceFeatureId,
     WorkspacePermissions
 } from '@deveye/types';
-import { isExternalFeatureId, isFeatureTile, isHomeFolder, isShortcutTile, WORKSPACE_FEATURE_IDS } from '@deveye/types';
+import {
+    HOME_SECTION_MAX_TILES,
+    isExternalFeatureId,
+    isFeatureTile,
+    isHomeFolder,
+    isShortcutTile,
+    WORKSPACE_FEATURE_IDS
+} from '@deveye/types';
 import type { FeatureProps } from '@/Features/types';
 import styles from './Dashboard.module.css';
 import type { Workspace } from '@deveye/types';
@@ -473,11 +483,14 @@ export default function HomePage() {
     // bulle de la version, qui passe après, ne vient pas s'intercaler le temps
     // d'une fonctionnalité ouverte.
     const layoutHint = useHint('homeLayoutHintDismissed', canLayout);
+    const showAddTile = useShowHomeAddTile();
 
     const [expandedWidget, setExpandedWidget] = useState<string | null>(null);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [editing, setEditing] = useState(false);
     const [autoAddSection, setAutoAddSection] = useState(false);
+    /** La section dont la carte d'ajout a ouvert le marché, hors organisation. */
+    const [addTarget, setAddTarget] = useState<string | null>(null);
     /**
      * Bascule d'espace en cours : la disposition affichée est encore celle de
      * l'espace quitté, les droits sont déjà vides. La grille reste montée sans
@@ -1317,6 +1330,14 @@ export default function HomePage() {
         })();
     }, [enterRemote]);
 
+    // Relue dans la disposition à chaque rendu : une section retirée, une
+    // bascule d'espace ou un droit perdu referment le marché, et la cible tombe
+    // avec, sans quoi il se rouvrirait au retour dans l'espace.
+    const marketSection = editing || !canLayout ? null : (layout.sections.find((s) => s.id === addTarget) ?? null);
+    useEffect(() => {
+        if (addTarget !== null && marketSection === null) setAddTarget(null);
+    }, [addTarget, marketSection]);
+
     // APRÈS le dernier hook, jamais avant : quitter ou supprimer l'espace où l'on
     // se trouve laisse un instant la page sans espace courant, et un retour
     // placé plus haut changerait le nombre de hooks d'un rendu à l'autre, ce
@@ -1371,7 +1392,7 @@ export default function HomePage() {
     /**
      * Rendu d'une section hors organisation. Une seule boucle pour tous les
      * genres de tuiles ; `null` pour une section vide, qui ne laisse donc pas de
-     * trou.
+     * trou, sauf quand sa carte d'ajout l'invite à se remplir.
      */
     const renderSection = (section: HomeSection): ReactNode => {
         const tiles: ReactNode[] = [];
@@ -1422,10 +1443,23 @@ export default function HomePage() {
                 />
             );
         }
-        if (tiles.length === 0) return null;
+        // Pendant une bascule, la section est encore celle de l'espace quitté.
+        const addable = canLayout && showAddTile && !switching && section.items.length < HOME_SECTION_MAX_TILES;
+        if (tiles.length === 0 && !addable) return null;
         return (
             <CollapsibleSection key={section.id} section={section}>
-                <WidgetGrid>{tiles}</WidgetGrid>
+                <WidgetGrid>
+                    {tiles}
+                    {addable && (
+                        <AddTileButton
+                            icon='plus'
+                            label='Ajouter une fonctionnalité'
+                            aria-label={section.title ? `Ajouter une fonctionnalité à « ${section.title} »` : undefined}
+                            className={styles.sectionAdd}
+                            onClick={() => setAddTarget(section.id)}
+                        />
+                    )}
+                </WidgetGrid>
             </CollapsibleSection>
         );
     };
@@ -1601,6 +1635,7 @@ export default function HomePage() {
                     />
                 )}
                 <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
+                <AddTileMarket section={marketSection} onClose={() => setAddTarget(null)} />
                 <Spotlight
                     layout={layout}
                     canLayout={canLayout}

@@ -57,6 +57,7 @@ import Checkbox from '@/Components/Checkbox';
 import { Dialog } from '@/Components/Dialog';
 import { Widget } from '@/Components/Widget';
 import { featureTileVisual, homeTileVisual, type TileVisual } from '../tiles/tileVisual';
+import { AddTileButton } from '../AddTileButton';
 import { AddTileMarket } from './AddTileMarket';
 import styles from './organize.module.css';
 
@@ -410,14 +411,8 @@ function SectionTiles({
                     et non au marché : il ne se remplit qu'en y tirant des cartes
                     déjà posées. */}
                 <div className={styles.addStack}>
-                    <button type='button' className={styles.addTile} onClick={onAdd}>
-                        <span className={`icon icon-plus ${styles.addTileIcon}`} />
-                        <span className={styles.addTileLabel}>Ajouter une fonctionnalité</span>
-                    </button>
-                    <button type='button' className={styles.addTile} onClick={onAddFolder}>
-                        <span className={`icon icon-folder-plus ${styles.addTileIcon}`} />
-                        <span className={styles.addTileLabel}>Ajouter un dossier</span>
-                    </button>
+                    <AddTileButton icon='plus' label='Ajouter une fonctionnalité' onClick={onAdd} />
+                    <AddTileButton icon='folder-plus' label='Ajouter un dossier' onClick={onAddFolder} />
                 </div>
             </div>
         </SortableContext>
@@ -534,15 +529,13 @@ function SortableSection({
  *  bloc sous elle. */
 function AddSectionButton({ compact, onClick }: { compact?: boolean; onClick: () => void }) {
     return (
-        <button
-            type='button'
-            className={`${styles.addSection} ${compact ? styles.addSectionTop : ''}`}
+        <AddTileButton
+            icon='plus'
+            label='Ajouter une section'
+            shape={compact ? 'barThin' : 'bar'}
             data-morph={compact ? 'add-start' : 'add-end'}
             onClick={onClick}
-        >
-            <span className={`icon icon-plus ${styles.addTileIcon}`} />
-            <span className={styles.addTileLabel}>Ajouter une section</span>
-        </button>
+        />
     );
 }
 

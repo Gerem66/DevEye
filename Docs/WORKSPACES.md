@@ -313,6 +313,13 @@ Garder le drapeau comme simple ACL contredirait le modèle documenté.
   Apparence, Organiser l'accueil, Gérer cet espace ; chacune n'apparaît qu'avec
   son droit, et la gestion seulement sur un espace partagé. La liste est donc
   rendue même quand elle n'a qu'une ligne : c'est elle qui porte ces actions.
+- **Carte d'ajout** (`Pages/Home/AddTileButton.tsx`) : hors organisation, une
+  carte en pointillés « Ajouter une fonctionnalité » ferme chaque section et
+  ouvre le marché de l'accueil, qui pose l'élément au bout de cette section.
+  Elle suit le droit `workspace.layout`, s'efface dans une section pleine et
+  pendant une bascule, et garde visible une section vide qu'elle invite à
+  remplir. Présente par défaut, chaque compte peut la retirer dans son Profil
+  (drapeau `hideHomeAddTile`). L'accueil vide, sans section, garde ses modèles.
 - **Bouton de profil** : le nom de l'espace y figure pour un espace partagé
   seulement : répéter « Espace personnel » à qui y est déjà n'apprend rien.
 - **En-tête de l'accueil** (`homeHeading`, `Pages/Home/index.tsx`) :

@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { ws } from '@/api/ws';
+import { humanizeError } from '@/api/useResource';
 import { Dialog } from '@/Components/Dialog';
 import Button from '@/Components/Button';
 import Switch from '@/Components/Switch';
@@ -16,6 +17,7 @@ import { UsernameDialog } from './UsernameDialog';
 import { USER_COLOR_OPTIONS, userColorVar } from './userColors';
 import styles from './style.module.css';
 import { HIDE_LIVE_CURSORS } from '@/live/hideCursors';
+import { HIDE_HOME_ADD_TILE } from '@/Pages/Home/homeAddTile';
 import { requestOpenView } from '@/stores/viewRequest';
 import { useWorkspacesHere } from '@/stores/workspace';
 import { useLiteRender, useRenderState, setRenderMode, type RenderMode } from '@/stores/render';
@@ -23,7 +25,7 @@ import { setColorSchemeMode, useColorSchemeState, type ColorSchemeMode } from '@
 import { SchemeHint } from './SchemeHint';
 
 import type { CSSProperties } from 'react';
-import type { UserColor } from '@deveye/types';
+import type { UserColor, UserSettingFlag } from '@deveye/types';
 
 const SECURITY_MAX = 3;
 
@@ -66,12 +68,20 @@ export default function FeatureProfile({ user }: FeatureProps) {
         (user.security.reAuthValidation ? 1 : 0);
     const securityFull = securityScore >= SECURITY_MAX;
     const [uploading, setUploading] = useState(false);
-    const [avatarError, setAvatarError] = useState<string | null>(null);
+    /** L'échec d'une modification, l'image ou un réglage. Gardé à la fermeture :
+     *  la boîte s'efface en fondu avec son texte. */
+    const [failure, setFailure] = useState<{ title: string; message: string } | null>(null);
+    const [failureOpen, setFailureOpen] = useState(false);
+    const showFailure = (title: string, message: string) => {
+        setFailure({ title, message });
+        setFailureOpen(true);
+    };
     const [savingColor, setSavingColor] = useState(false);
-    const [savingCursors, setSavingCursors] = useState(false);
+    const [savingSetting, setSavingSetting] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const showCursors = !user.settings.includes(HIDE_LIVE_CURSORS);
+    const showHomeAddTile = !user.settings.includes(HIDE_HOME_ADD_TILE);
     // Réglage de l'appareil, pas du compte : un même utilisateur a de bonnes
     // raisons d'être en complet sur son poste et en léger sur son téléphone.
     const { mode: renderMode } = useRenderState();
@@ -97,23 +107,22 @@ export default function FeatureProfile({ user }: FeatureProps) {
 
     // Comme la couleur : l'état local part devant, l'effet du clic étant
     // immédiat à l'écran, et ne revient en arrière que si le serveur refuse.
-    const onToggleCursors = async (visible: boolean) => {
-        if (savingCursors) return;
+    const onToggleFlag = async (flag: UserSettingFlag, enabled: boolean) => {
+        if (savingSetting) return;
         const previous = user.settings;
-        setSavingCursors(true);
-        updateUser({
-            settings: visible ? previous.filter((s) => s !== HIDE_LIVE_CURSORS) : [...previous, HIDE_LIVE_CURSORS]
-        });
+        setSavingSetting(true);
+        updateUser({ settings: enabled ? [...previous, flag] : previous.filter((s) => s !== flag) });
         try {
             // Le serveur renvoie le sac tel qu'il vient de l'écrire : s'aligner
             // dessus plutôt que sur notre calcul évite de diverger d'un onglet à
             // l'autre si un drapeau a bougé ailleurs entre-temps.
-            const res = await ws.send('user.setSetting', { flag: HIDE_LIVE_CURSORS, enabled: !visible });
+            const res = await ws.send('user.setSetting', { flag, enabled });
             updateUser({ settings: res.settings });
-        } catch {
+        } catch (err) {
             updateUser({ settings: previous });
+            showFailure('Réglage non enregistré', humanizeError(err, 'Le réglage n’a pas pu être enregistré.'));
         } finally {
-            setSavingCursors(false);
+            setSavingSetting(false);
         }
     };
 
@@ -134,7 +143,10 @@ export default function FeatureProfile({ user }: FeatureProps) {
             await ws.send('user.setAvatar', { avatar });
             updateUser({ avatar });
         } catch (err) {
-            setAvatarError(err instanceof Error ? err.message : "La mise à jour de l'image a échoué.");
+            showFailure(
+                "Modification de l'image",
+                err instanceof Error ? err.message : "La mise à jour de l'image a échoué."
+            );
         } finally {
             setUploading(false);
         }
@@ -264,8 +276,8 @@ export default function FeatureProfile({ user }: FeatureProps) {
                                 <span className={styles.rowValue}>
                                     <Switch
                                         checked={showCursors}
-                                        onChange={(visible) => void onToggleCursors(visible)}
-                                        disabled={savingCursors}
+                                        onChange={(visible) => void onToggleFlag(HIDE_LIVE_CURSORS, !visible)}
+                                        disabled={savingSetting}
                                         aria-label='Afficher les curseurs des autres membres'
                                     />
                                 </span>
@@ -307,6 +319,22 @@ export default function FeatureProfile({ user }: FeatureProps) {
                                         value={renderMode}
                                         onChange={setRenderMode}
                                         aria-label="Mode de rendu de l'interface"
+                                    />
+                                </span>
+                            </div>
+                            <div className={styles.row}>
+                                <span className={styles.rowLabel}>
+                                    Ajout rapide sur l’accueil
+                                    <span className={styles.rowHint}>
+                                        Une carte au bout de chaque section, sans passer par Organiser
+                                    </span>
+                                </span>
+                                <span className={styles.rowValue}>
+                                    <Switch
+                                        checked={showHomeAddTile}
+                                        onChange={(visible) => void onToggleFlag(HIDE_HOME_ADD_TILE, !visible)}
+                                        disabled={savingSetting}
+                                        aria-label='Afficher la carte d’ajout au bout des sections de l’accueil'
                                     />
                                 </span>
                             </div>
@@ -364,13 +392,13 @@ export default function FeatureProfile({ user }: FeatureProps) {
             <ExportDataDialog open={exportOpen} onClose={() => setExportOpen(false)} />
 
             <Dialog
-                open={avatarError !== null}
-                onClose={() => setAvatarError(null)}
-                title="Modification de l'image"
-                onSubmit={() => setAvatarError(null)}
-                footer={<Button onClick={() => setAvatarError(null)}>Compris</Button>}
+                open={failureOpen}
+                onClose={() => setFailureOpen(false)}
+                title={failure?.title}
+                onSubmit={() => setFailureOpen(false)}
+                footer={<Button onClick={() => setFailureOpen(false)}>Compris</Button>}
             >
-                {avatarError}
+                {failure?.message}
             </Dialog>
         </div>
     );

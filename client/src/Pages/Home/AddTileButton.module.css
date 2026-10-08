@@ -1,0 +1,50 @@
+.add {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px dashed var(--glass-border-strong, var(--glass-border));
+    border-radius: var(--radius-lg);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition:
+        border-color var(--transition-fast),
+        color var(--transition-fast),
+        background var(--transition-fast);
+}
+
+.add:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-bg);
+}
+
+.card {
+    flex-direction: column;
+    gap: var(--space-xs);
+    padding: var(--space-md);
+}
+
+.bar {
+    flex-direction: row;
+    gap: var(--space-sm);
+    width: 100%;
+    min-height: 64px;
+    padding: var(--space-md);
+}
+
+/* En tête de liste : une rangée basse, pour ne pas peser autant que le bloc qui
+   ferme la page. */
+.barThin {
+    min-height: 36px;
+    padding: var(--space-xs) var(--space-md);
+}
+
+.icon {
+    width: 22px;
+}
+
+.label {
+    font-size: 0.85rem;
+    font-weight: 600;
+}
