@@ -172,6 +172,21 @@ une source dont le module manque à l'instance n'en fait pas partie, et
 « DevEye » n'existe que pour un administrateur. Pendant une recherche, les
 catégories vides s'effacent.
 
+**Tout travail s'exécute au nom de son auteur**, le membre qui l'a enregistré
+(`authorUserId` dans son `content` chiffré), et c'est de ses droits sur la
+source que le travail tient les siens. Chaque module dit lui-même qui peut
+lire ce qu'il détient, par l'`authorize` de son contrat ou par les permissions
+d'Appareils : le droit d'explorer une base, de télécharger un fichier d'un
+partage ou d'un dossier hébergé, de gérer les mots de passe d'une adresse,
+d'archiver un dossier d'une machine. Ce droit est exigé à la création et à la
+modification d'un travail, et **relu par le moteur avant chaque passage** : le
+travail échoue, en le disant, le jour où son auteur l'a perdu, ne serait-ce que
+parce qu'il a quitté l'espace. Sans cela, un ancien membre qui avait choisi son
+propre S3 comme destination continuerait d'en recevoir des copies. Le
+sélecteur suit la même règle : une source que son module masque à l'appelant
+n'y figure pas, une source qu'il voit sans le droit voulu s'y grise avec sa
+raison.
+
 ### `deveye` : la base MySQL de DevEye
 
 **C'est la sauvegarde à avoir si on n'en a qu'une.** Elle couvre tout ce qui vit
@@ -185,8 +200,10 @@ Elle porte **tous les comptes de l'instance** : seul un administrateur global la
 voit, et il ne la choisit que depuis son espace personnel, où personne d'autre
 ne peut modifier la destination de ses archives ; ailleurs, elle reste grisée
 avec sa raison. Le serveur le vérifie à la création comme à la modification
-d'un travail. Pour la même raison, une archive de cette source ne sort jamais
-dans l'export d'un seul compte.
+d'un travail, et le moteur revérifie avant chaque passage que l'auteur est
+toujours administrateur et son compte actif (`deps.accounts`). Pour la même
+raison, une archive de cette source ne sort jamais dans l'export d'un seul
+compte.
 
 C'est aussi la raison pour laquelle il n'existe **pas** de source « Appareils » :
 les relevés d'appareils sont des lignes de `device_metrics`, elles sont déjà
@@ -201,6 +218,10 @@ de données un accès ouvert (`DATABASE_BACKUP_PROVIDER`, `openAccess`, lu par
 `DatabaseMonitor.targetOf` (`features/database/src/server/service.ts`) et son
 tunnel, et referme quand le flux s'achève. Une base joignable par Bases de
 données est donc sauvegardable sans configuration supplémentaire.
+
+Un vidage livre toutes les lignes : le droit exigé de l'auteur est celui qui
+explore la base dans Bases de données, l'**écriture** sur elle, surcharge de
+l'élément comprise (`authorize` du contrat).
 
 ### `mailbox` : une adresse du Serveur mail
 
@@ -252,6 +273,10 @@ le lire, le contrat de CloudSync ne le liste pas et ne le retrouve pas. Sa
 sauvegarde se fait depuis une machine qui le synchronise (source
 `deviceFolder`). D'un dossier hébergé, seuls les fichiers reçus en entier
 partent ; ses adresses publiques et ses réglages sont dans la base de DevEye.
+
+Le droit exigé de l'auteur est celui qui télécharge un fichier depuis les
+écrans du module : la **lecture** du partage ou du dossier, surcharge de
+l'élément comprise (`authorize` du contrat).
 
 ### `deviceFolder` : les fichiers d'une machine
 
@@ -492,13 +517,15 @@ La clé secrète S3 ne sort **jamais** : le DTO ne porte qu'un `hasSecret`.
   Les sauvegardes vers un stockage qui n'est pas le serveur (machine, S3, SFTP,
   WebDAV) restent libres. Une installation sans module de facturation n'a
   aucune limite.
-- **Permissions** : le droit `backup` en lecture et en écriture, plus la
-  permission supplémentaire « Sauvegarder les fichiers d'une machine »
-  (`deviceFolders`) pour les sources `deviceFolder` et `dockerVolume`, qui
-  exigent aussi la permission « Explorateur de fichiers » d'Appareils sur la
-  machine (voir [Docs/PERMISSIONS.md](../../Docs/PERMISSIONS.md)). La source
-  `mailbox` exige, dans Serveur mail, « Gérer les mots de passe » sur
-  l'adresse.
+- **Permissions** : le droit `backup` en lecture et en écriture, et sur la
+  source, le droit que son module exige pour en lire le contenu, relu à chaque
+  passage au nom de l'auteur : l'écriture sur une base dans Bases de données,
+  la lecture d'un partage CloudSync ou d'un dossier hébergé, « Gérer les mots
+  de passe » sur une adresse dans Serveur mail, et pour `deviceFolder` et
+  `dockerVolume` la permission supplémentaire « Sauvegarder les fichiers d'une
+  machine » (`deviceFolders`) plus « Explorateur de fichiers » d'Appareils sur
+  la machine (voir [Docs/PERMISSIONS.md](../../Docs/PERMISSIONS.md)). La base
+  de DevEye demande d'être administrateur.
 - **Partage** : `shareTier: 'open'` dans le registre publié ; l'entrée `items`
   du serveur donne le domicile et le nom d'un travail à la coquille (partage et
   routes de notification). Pas d'entrée `move`, et ce n'est pas un oubli : un

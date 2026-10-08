@@ -24,10 +24,7 @@ interface JobSourceFieldsProps {
     onSourceChange: (key: string) => void;
     folder: FolderDraft;
     onFolderChange: (next: FolderDraft) => void;
-    /**
-     * Pour un travail lié à son auteur (dossier, volume, adresse) : le membre
-     * au nom de qui il tourne, `null` s'il n'est plus là.
-     */
+    /** Pour un travail existant : le membre au nom de qui il tourne, `null` s'il n'est plus là. */
     author?: string | null;
     disabled?: boolean;
     /** Les classes de l'hôte : un dialogue et un panneau de réglages n'ont pas les mêmes. */
@@ -67,8 +64,11 @@ export default function JobSourceFields({
                     onChange={onSourceChange}
                 />
                 {hint && <span className={classes.hint}>{hint}</span>}
-                {(selected?.kind === 'mailbox' || selected?.kind === 'dockerVolume') && author !== undefined && (
-                    <AuthorHint author={author} className={classes.hint} />
+                {author !== undefined && (
+                    <span className={classes.hint}>
+                        S’exécute au nom de {author ?? 'un ancien membre'}, dont les droits sur cette source sont
+                        revérifiés à chaque passage. L’enregistrer vous en fait l’auteur.
+                    </span>
                 )}
             </div>
 
@@ -119,20 +119,8 @@ export default function JobSourceFields({
                         label='Rester sur ce système de fichiers'
                         hint='Un disque monté ou un partage réseau à l’intérieur du dossier n’est pas parcouru. Si la machine héberge DevEye, excluez aussi le dossier de ses sauvegardes.'
                     />
-
-                    {author !== undefined && <AuthorHint author={author} className={classes.hint} />}
                 </>
             )}
         </>
-    );
-}
-
-/** Le membre au nom de qui tourne un travail lié à ses droits. */
-function AuthorHint({ author, className }: { author: string | null; className: string }) {
-    return (
-        <span className={className}>
-            S’exécute au nom de {author ?? 'un ancien membre'}, dont les droits sont revérifiés à chaque passage.
-            L’enregistrer vous en fait l’auteur.
-        </span>
     );
 }

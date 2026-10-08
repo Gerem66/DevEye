@@ -68,7 +68,11 @@ function createBackupProvider(
                 password: target.password,
                 close: tunnel.close
             };
-        }
+        },
+        // Un vidage livre toutes les lignes : le droit d'explorer la base, qui
+        // est l'écriture ici, surcharge de l'élément comprise.
+        authorize: (databaseId, workspaceId, userId) =>
+            deps.access.feature(workspaceId, userId, { level: 'write', itemId: String(databaseId) })
     };
 }
 

@@ -56,25 +56,16 @@ export interface StoredDestination {
 }
 
 /**
- * Le dossier d'un travail `deviceFolder`, et le membre au nom de qui il
- * s'exécute : c'est de ses droits que le travail tient les siens.
+ * Ce que `content` porte, chiffré, sur un travail. `authorUserId` : le membre
+ * qui l'a enregistré, au nom de qui il s'exécute ; c'est de ses droits sur la
+ * source que le travail tient les siens, relus à chaque passage.
  */
-export interface StoredFolder extends BackupFolder {
-    authorUserId: number;
-}
-
-/** Ce que `content` porte, chiffré, sur un travail. */
 export interface StoredJob {
     name: string;
-    folder?: StoredFolder;
+    authorUserId: number;
+    folder?: BackupFolder;
     volume?: BackupVolume;
-    /** L'auteur d'un travail `dockerVolume` ou `mailbox` ; celui d'un dossier est dans `folder`. */
-    authorUserId?: number;
 }
-
-/** Le membre au nom de qui le travail s'exécute, quand sa source en exige un. */
-export const authorOf = (job: Partial<StoredJob>): number | null =>
-    job.folder?.authorUserId ?? job.authorUserId ?? null;
 
 /** Ce que `content` porte, chiffré, sur une exécution. */
 export interface StoredRun {
@@ -232,7 +223,7 @@ export async function toJob(ctx: Ctx, row: BackupJobWithStateRow, shares?: SdkSh
         readJsonWith<StoredDestination>(cipher, row.destination_content)
     ]);
     const lastRun = row.last_run_content ? await readJsonWith<StoredRun>(cipher, row.last_run_content) : {};
-    const authorUserId = authorOf(job);
+    const authorUserId = job.authorUserId ?? null;
     const deviceNameOf = async (deviceId: string): Promise<string | null> =>
         (await deviceNamesOf(ctx)).get(deviceId) ?? null;
 

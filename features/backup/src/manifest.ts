@@ -22,9 +22,11 @@ export const manifest = {
     /**
      * `agents` pour écrire par l'agent d'une machine (`DeviceSink`) et y lire un
      * dossier, `devices.read` pour n'accepter qu'une machine de l'espace et y
-     * éprouver le droit Fichiers, `members.read` pour nommer l'auteur d'un travail.
+     * éprouver le droit Fichiers, `members.read` pour nommer l'auteur d'un
+     * travail, `accounts.read` pour vérifier à chaque passage que celui d'une
+     * sauvegarde de la base de DevEye est toujours administrateur.
      */
-    nativeCapabilities: ['agents', 'devices.read', 'members.read', 'objects'],
+    nativeCapabilities: ['agents', 'devices.read', 'members.read', 'accounts.read', 'objects'],
     extraPermissions: [
         {
             key: 'deviceFolders',

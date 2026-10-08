@@ -32,7 +32,7 @@ import {
     type TreeBackupRoot
 } from '@deveye/types/sdk';
 import type { DeviceReport } from '@deveye/types';
-import { FeatureError, type SdkFeatureContext } from '@deveye/types/sdk/server';
+import { FeatureError, type SdkAccessVerdict, type SdkFeatureContext } from '@deveye/types/sdk/server';
 import { createTestContext, testDevice } from '@deveye/types/sdk/testing';
 
 import { manifest } from '../manifest';
@@ -292,26 +292,36 @@ function successRun(over: Partial<BackupRunRow> & { id: number; job_id: number }
     };
 }
 
-/** Le contrat de Bases de données, tel que l'app (ou son module) l'offre. */
-const databases: DatabaseBackupProvider = {
-    listDatabases: async (workspaceId) =>
-        workspaceId === 1 ? [{ id: 7, name: 'Prod', engine: 'mysql', host: 'db.exemple.fr', database: 'shop' }] : [],
-    findDatabase: async (id, workspaceId) =>
-        id === 7 && workspaceId === 1
-            ? { id: 7, name: 'Prod', engine: 'mysql', host: 'db.exemple.fr', database: 'shop' }
-            : null,
-    openAccess: async () => null
-};
+const GRANTED: SdkAccessVerdict = { ok: true };
+
+/** Le contrat de Bases de données, tel que son module l'offre ; `verdict`, ce qu'il dit du droit de l'appelant. */
+function databasesWith(verdict: SdkAccessVerdict = GRANTED): DatabaseBackupProvider {
+    return {
+        listDatabases: async (workspaceId) =>
+            workspaceId === 1
+                ? [{ id: 7, name: 'Prod', engine: 'mysql', host: 'db.exemple.fr', database: 'shop' }]
+                : [],
+        findDatabase: async (id, workspaceId) =>
+            id === 7 && workspaceId === 1
+                ? { id: 7, name: 'Prod', engine: 'mysql', host: 'db.exemple.fr', database: 'shop' }
+                : null,
+        openAccess: async () => null,
+        authorize: async () => verdict
+    };
+}
+
+const databases = databasesWith();
 
 /** Un contrat d'arborescence (CloudSync, Hébergement), réduit à ce que le sélecteur demande. */
-function treeOf(root: TreeBackupRoot): TreeBackupProvider {
+function treeOf(root: TreeBackupRoot, verdict: SdkAccessVerdict = GRANTED): TreeBackupProvider {
     return {
         list: async (workspaceId) => (workspaceId === root.workspaceId ? [root] : []),
         find: async (id, workspaceId) => (id === root.id && workspaceId === root.workspaceId ? root : null),
         entries: async () => [],
         open: async () => {
             throw new Error('non attendu ici');
-        }
+        },
+        authorize: async () => verdict
     };
 }
 
@@ -992,7 +1002,7 @@ describe('Backup : handlers', () => {
             const out = await create(ctx, body);
             assert.equal(repo.jobs[0].source_kind, 'hostingFolder');
             assert.equal(out.job.sourceName, 'Site');
-            assert.equal(out.job.author, null);
+            assert.equal(out.job.author?.userId, 1);
         });
     });
 
@@ -1068,6 +1078,96 @@ describe('Backup : handlers', () => {
             assert.deepEqual(out.job.volume, { deviceId: VPS, engine: 'docker', name: 'pgdata', deviceName: 'VPS' });
             assert.equal(out.job.author?.userId, 5);
             assert.equal(out.job.sourceName, 'VPS : pgdata');
+        });
+    });
+    describe('le droit de lire la source, demandé à son module', () => {
+        const siteOf = (verdict: SdkAccessVerdict) =>
+            treeOf({ id: 4, name: 'Site', workspaceId: 1, fileCount: 2, bytes: 20 }, verdict);
+        const ctxWith = (repo: FakeRepo, databaseVerdict: SdkAccessVerdict, siteVerdict: SdkAccessVerdict) =>
+            createTestContext({
+                repo,
+                workspaceId: 1,
+                providers: {
+                    [DATABASE_BACKUP_PROVIDER]: databasesWith(databaseVerdict),
+                    [HOSTING_BACKUP_PROVIDER]: siteOf(siteVerdict)
+                }
+            });
+
+        it('une source visible sans le droit voulu se grise avec sa raison, et ne se crée pas', async () => {
+            const repo = fakeRepo();
+            repo.destinations.push(destination({ id: 1, workspace_id: 1 }));
+            const ctx = ctxWith(repo, { ok: false, reason: 'level' }, { ok: false, reason: 'read_only' });
+
+            const out = await handlerFor(backupSources)(ctx, {});
+            assert.deepEqual(
+                out.candidates.map((c) => [c.kind, c.name, c.tag, c.available, c.reason]),
+                [
+                    [
+                        'database',
+                        'Prod',
+                        'sans droit',
+                        false,
+                        'Sauvegarder une base demande l’écriture sur elle dans Bases de données, le droit qui en explore les données.'
+                    ],
+                    [
+                        'hostingFolder',
+                        'Site',
+                        'sans droit',
+                        false,
+                        'Sauvegarder un dossier hébergé demande de pouvoir le lire dans Hébergement.'
+                    ]
+                ]
+            );
+
+            const create = handlerFor(backupJobAdd);
+            await assert.rejects(create(ctx, { ...created, source: 'database', sourceId: 7 }), failsWith('forbidden'));
+            await assert.rejects(
+                create(ctx, { ...created, source: 'hostingFolder', sourceId: 4 }),
+                failsWith('forbidden')
+            );
+            assert.equal(repo.jobs.length, 0);
+        });
+
+        it('une source masquée pour le rôle de l’appelant n’existe pas pour lui', async () => {
+            const repo = fakeRepo();
+            repo.destinations.push(destination({ id: 1, workspace_id: 1 }));
+            const ctx = ctxWith(repo, { ok: false, reason: 'hidden' }, { ok: false, reason: 'not_member' });
+
+            const out = await handlerFor(backupSources)(ctx, {});
+            assert.deepEqual(out.kinds, ['database', 'hostingFolder', 'deviceFolder', 'dockerVolume']);
+            assert.deepEqual(out.candidates, []);
+
+            const create = handlerFor(backupJobAdd);
+            await assert.rejects(create(ctx, { ...created, source: 'database', sourceId: 7 }), failsWith('not_found'));
+            await assert.rejects(
+                create(ctx, { ...created, source: 'hostingFolder', sourceId: 4 }),
+                failsWith('not_found')
+            );
+            assert.equal(repo.jobs.length, 0);
+        });
+
+        it('tout travail retient son auteur, celui dont les droits seront relus', async () => {
+            const repo = fakeRepo();
+            repo.destinations.push(destination({ id: 1, workspace_id: 1 }));
+            const ctx = createTestContext({
+                repo,
+                workspaceId: 1,
+                userId: 8,
+                isAdmin: true,
+                providers: { [DATABASE_BACKUP_PROVIDER]: databases, [CLOUDSYNC_BACKUP_PROVIDER]: cloudSync }
+            });
+            const create = handlerFor(backupJobAdd);
+            for (const body of [
+                { ...created, source: 'deveye' as const },
+                { ...created, source: 'database' as const, sourceId: 7 },
+                { ...created, source: 'cloudsync' as const, sourceId: 3 }
+            ]) {
+                const out = await create(ctx, body);
+                assert.equal(out.job.author?.userId, 8);
+            }
+            for (const row of repo.jobs) {
+                assert.equal(JSON.parse(await ctx.cipher().decrypt(row.content)).authorUserId, 8);
+            }
         });
     });
 });

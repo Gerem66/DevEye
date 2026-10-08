@@ -3,6 +3,7 @@ import type {
     BackupDestinationKind,
     BackupDestinationProbe,
     BackupDestinationRow,
+    BackupFolder,
     BackupJobRow,
     BackupRunRow,
     BackupSourceKind,
@@ -44,14 +45,7 @@ import {
     type BackupArtifact
 } from './sources';
 import { WebDavSink } from './webdav';
-import {
-    isTreeKind,
-    TREE_PROVIDERS,
-    type StoredDestination,
-    type StoredFolder,
-    type StoredJob,
-    type StoredRun
-} from './_shared';
+import { isTreeKind, TREE_PROVIDERS, type StoredDestination, type StoredJob, type StoredRun } from './_shared';
 
 /**
  * L'ordonnanceur des sauvegardes : un ticker du SDK qui cherche ce qui est dû
@@ -494,27 +488,38 @@ export class BackupEngine {
         destination: BackupDestinationRow,
         signal: AbortSignal
     ): Promise<BackupArtifact> {
-        if (job.source_kind === 'deveye') return deveyeSource();
+        // Tout travail tourne au nom de son auteur, dont les droits sur la
+        // source sont relus ici : le travail s'arrête le jour où il les perd.
+        const author = stored.authorUserId;
+        if (!author) throw new Error(`Ce travail ne dit pas au nom de qui il s’exécute : ${AGAIN}`);
+
+        if (job.source_kind === 'deveye') {
+            const account = await this.deps.accounts.find(author);
+            if (!account || account.suspended || !account.isAdmin) {
+                throw new Error(
+                    `L’auteur de ce travail n’est plus administrateur, ou son compte est suspendu : ${AGAIN}`
+                );
+            }
+            return deveyeSource();
+        }
 
         if (job.source_kind === 'deviceFolder') {
             if (!stored.folder) throw new Error('Ce travail ne dit plus quel dossier sauvegarder.');
-            return this.deviceFolderFor(job, stored.folder, destination, signal);
+            return this.deviceFolderFor(job, stored.folder, author, destination, signal);
         }
 
         if (job.source_kind === 'dockerVolume') {
-            if (!stored.volume || !stored.authorUserId) {
-                throw new Error('Ce travail ne dit plus quel volume sauvegarder.');
-            }
-            return this.dockerVolumeFor(job, stored.volume, stored.authorUserId, destination, signal);
+            if (!stored.volume) throw new Error('Ce travail ne dit plus quel volume sauvegarder.');
+            return this.dockerVolumeFor(job, stored.volume, author, destination, signal);
         }
 
         if (job.source_kind === 'mailbox') {
-            if (!job.source_id || !stored.authorUserId) throw new Error('Ce travail ne désigne aucune adresse.');
+            if (!job.source_id) throw new Error('Ce travail ne désigne aucune adresse.');
             const mail = this.deps.providers.get<MailServerBackupProvider>(MAILSERVER_BACKUP_PROVIDER);
             if (!mail) throw new Error('Source Serveur mail indisponible.');
             const mailbox = await mail.findMailbox(job.source_id, job.workspace_id);
             if (!mailbox) throw new Error('L’adresse de ce travail a été supprimée.');
-            const may = await mail.authorize(mailbox.id, job.workspace_id, stored.authorUserId);
+            const may = await mail.authorize(mailbox.id, job.workspace_id, author);
             if (!may.ok) {
                 throw new Error(
                     `L’auteur de ce travail ne peut plus gérer les mots de passe de cette adresse (${DENIALS[may.reason]}) : ${AGAIN}`
@@ -529,6 +534,15 @@ export class BackupEngine {
             // savoir déchiffrer une connexion.
             const databases = this.deps.providers.get<DatabaseBackupProvider>(DATABASE_BACKUP_PROVIDER);
             if (!databases) throw new Error('Source Bases de données indisponible.');
+            if (!(await databases.findDatabase(job.source_id, job.workspace_id))) {
+                throw new Error('La base de ce travail a été supprimée.');
+            }
+            const may = await databases.authorize(job.source_id, job.workspace_id, author);
+            if (!may.ok) {
+                throw new Error(
+                    `L’auteur de ce travail ne peut plus explorer cette base (${DENIALS[may.reason]}) : ${AGAIN}`
+                );
+            }
             const access = await databases.openAccess(job.source_id, job.workspace_id);
             if (!access) throw new Error('La base de ce travail a été supprimée.');
             return databaseSource(access, jobName);
@@ -543,6 +557,12 @@ export class BackupEngine {
             if (!provider) throw new Error(`Source ${words.module} indisponible : module non installé.`);
             const root = await provider.find(job.source_id, job.workspace_id);
             if (!root) throw new Error(`Le ${words.noun} de ce travail a été supprimé.`);
+            const may = await provider.authorize(root.id, job.workspace_id, author);
+            if (!may.ok) {
+                throw new Error(
+                    `L’auteur de ce travail ne peut plus lire ce ${words.noun} (${DENIALS[may.reason]}) : ${AGAIN}`
+                );
+            }
             return treeSource(provider, root, this.deps.logger);
         }
 
@@ -606,11 +626,12 @@ export class BackupEngine {
 
     private async deviceFolderFor(
         job: BackupJobRow,
-        folder: StoredFolder,
+        folder: BackupFolder,
+        authorUserId: number,
         destination: BackupDestinationRow,
         signal: AbortSignal
     ): Promise<BackupArtifact> {
-        const device = await this.archivingDevice(job, folder.authorUserId, folder.deviceId);
+        const device = await this.archivingDevice(job, authorUserId, folder.deviceId);
         const exclusions = await this.withoutDestination(destination, device.id, folder.path, folder.exclusions);
         return deviceFolderSource(
             this.deps.agents,

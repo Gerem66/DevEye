@@ -329,6 +329,25 @@ describe('la pause d’offre', () => {
         assert.ok(access);
         await access.close();
     });
+
+    it('Sauvegardes demande qui peut explorer la base : l’écriture, surcharge de l’élément comprise', async () => {
+        const asked: unknown[] = [];
+        const service = serverEntry.createService?.(
+            createTestServiceDeps({
+                repo: fakeRepo([row({ id: 2 })]),
+                access: {
+                    feature: (workspaceId, userId, need) => {
+                        asked.push({ workspaceId, userId, need });
+                        return Promise.resolve({ ok: false, reason: 'read_only' });
+                    }
+                }
+            })
+        );
+        const backup = service?.providers?.[DATABASE_BACKUP_PROVIDER] as DatabaseBackupProvider | undefined;
+        assert.ok(backup);
+        assert.deepEqual(await backup.authorize(2, 1, 9), { ok: false, reason: 'read_only' });
+        assert.deepEqual(asked, [{ workspaceId: 1, userId: 9, need: { level: 'write', itemId: '2' } }]);
+    });
 });
 
 describe('les alertes', () => {

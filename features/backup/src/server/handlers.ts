@@ -25,11 +25,13 @@ import type {
 } from '../contracts/domain';
 
 import { AGENT_FOLDER_ARCHIVE_PROBE, pathExclusionProblem } from '@deveye/types';
-import type { MailServerBackupProvider, TreeBackupProvider } from '@deveye/types/sdk';
+import type { DatabaseBackupProvider, MailServerBackupProvider, TreeBackupProvider } from '@deveye/types/sdk';
 import {
     defineSdkFeature,
     FeatureError,
     isSafePublicUrl,
+    type SdkAccessDenial,
+    type SdkAccessVerdict,
     type SdkDevice,
     type SdkFeatureDefinition
 } from '@deveye/types/sdk/server';
@@ -446,21 +448,54 @@ async function assertArchivingDevice(ctx: Ctx, deviceId: string): Promise<void> 
     }
 }
 
-const MAILBOX_REFUSAL =
-    'Sauvegarder le courrier d’une adresse demande de pouvoir gérer ses mots de passe, dans Serveur mail.';
+/** Les sources d'un autre module, derrière le droit que ce module exige pour en lire le contenu. */
+type GuardedSourceKind = 'database' | 'mailbox' | TreeSourceKind;
 
-const TREE_NAMES: Record<TreeSourceKind, { module: string; missing: string; empty: string }> = {
+const GUARDED_NAMES: Record<GuardedSourceKind, { module: string; missing: string; refusal: string }> = {
+    database: {
+        module: 'Les bases de données sont indisponibles.',
+        missing: 'Cette base de données est introuvable dans cet espace.',
+        refusal:
+            'Sauvegarder une base demande l’écriture sur elle dans Bases de données, le droit qui en explore les données.'
+    },
+    mailbox: {
+        module: 'Le Serveur mail est indisponible.',
+        missing: 'Cette adresse est introuvable dans cet espace.',
+        refusal: 'Sauvegarder le courrier d’une adresse demande de pouvoir gérer ses mots de passe, dans Serveur mail.'
+    },
     cloudsync: {
         module: 'CloudSync est indisponible : module non installé.',
         missing: 'Ce partage CloudSync est introuvable dans cet espace.',
-        empty: 'Ce partage est vide.'
+        refusal: 'Sauvegarder un partage demande de pouvoir le lire dans CloudSync.'
     },
     hostingFolder: {
         module: 'Hébergement est indisponible : module non installé.',
         missing: 'Ce dossier hébergé est introuvable dans cet espace.',
-        empty: 'Ce dossier est vide.'
+        refusal: 'Sauvegarder un dossier hébergé demande de pouvoir le lire dans Hébergement.'
     }
 };
+
+const TREE_EMPTY: Record<TreeSourceKind, string> = {
+    cloudsync: 'Ce partage est vide.',
+    hostingFolder: 'Ce dossier est vide.'
+};
+
+/**
+ * Une source que son module cache à l'appelant (masquée pour son rôle, ou il
+ * n'est plus là) n'existe pas pour lui : ni au sélecteur, ni « interdite » à
+ * la création. Visible sans le droit voulu, elle se grise avec sa raison :
+ * c'est ainsi qu'on apprend que le droit existe.
+ */
+const UNSEEN: ReadonlySet<SdkAccessDenial> = new Set(['hidden', 'not_member', 'suspended']);
+
+const seen = (verdict: SdkAccessVerdict): boolean => verdict.ok || !UNSEEN.has(verdict.reason);
+
+/** Refuse une source que l'appelant ne peut pas sauvegarder, sans la révéler s'il ne la voit pas. */
+function refuseSource(kind: GuardedSourceKind, verdict: SdkAccessVerdict): never {
+    throw seen(verdict)
+        ? new FeatureError('forbidden', GUARDED_NAMES[kind].refusal)
+        : new FeatureError('not_found', GUARDED_NAMES[kind].missing);
+}
 
 /**
  * Vérifie que la source désignée existe **dans cet espace**, et que l'appelant
@@ -509,13 +544,12 @@ async function assertSource(ctx: Ctx, input: SourceInput, jobId?: number): Promi
                 throw new FeatureError('validation', 'Choisissez ce que ce travail doit sauvegarder.');
             }
             const mail = mailProvider(ctx);
-            if (!mail) throw new FeatureError('not_found', 'Le Serveur mail est indisponible.');
+            if (!mail) throw new FeatureError('not_found', GUARDED_NAMES.mailbox.module);
             if (!(await mail.findMailbox(input.sourceId, ctx.workspaceId))) {
-                throw new FeatureError('not_found', 'Cette adresse est introuvable dans cet espace.');
+                throw new FeatureError('not_found', GUARDED_NAMES.mailbox.missing);
             }
-            if (!(await mail.authorize(input.sourceId, ctx.workspaceId, ctx.userId)).ok) {
-                throw new FeatureError('forbidden', MAILBOX_REFUSAL);
-            }
+            const verdict = await mail.authorize(input.sourceId, ctx.workspaceId, ctx.userId);
+            if (!verdict.ok) refuseSource('mailbox', verdict);
             return;
         }
 
@@ -524,10 +558,12 @@ async function assertSource(ctx: Ctx, input: SourceInput, jobId?: number): Promi
                 throw new FeatureError('validation', 'Choisissez ce que ce travail doit sauvegarder.');
             }
             const databases = databaseProvider(ctx);
-            if (!databases) throw new FeatureError('not_found', 'Les bases de données sont indisponibles.');
+            if (!databases) throw new FeatureError('not_found', GUARDED_NAMES.database.module);
             if (!(await databases.findDatabase(input.sourceId, ctx.workspaceId))) {
-                throw new FeatureError('not_found', 'Cette base de données est introuvable dans cet espace.');
+                throw new FeatureError('not_found', GUARDED_NAMES.database.missing);
             }
+            const verdict = await databases.authorize(input.sourceId, ctx.workspaceId, ctx.userId);
+            if (!verdict.ok) refuseSource('database', verdict);
             return;
         }
 
@@ -537,10 +573,12 @@ async function assertSource(ctx: Ctx, input: SourceInput, jobId?: number): Promi
                 throw new FeatureError('validation', 'Choisissez ce que ce travail doit sauvegarder.');
             }
             const provider = treeProvider(ctx, input.source);
-            if (!provider) throw new FeatureError('not_found', TREE_NAMES[input.source].module);
+            if (!provider) throw new FeatureError('not_found', GUARDED_NAMES[input.source].module);
             if (!(await provider.find(input.sourceId, ctx.workspaceId))) {
-                throw new FeatureError('not_found', TREE_NAMES[input.source].missing);
+                throw new FeatureError('not_found', GUARDED_NAMES[input.source].missing);
             }
+            const verdict = await provider.authorize(input.sourceId, ctx.workspaceId, ctx.userId);
+            if (!verdict.ok) refuseSource(input.source, verdict);
             return;
         }
 
@@ -552,29 +590,27 @@ async function assertSource(ctx: Ctx, input: SourceInput, jobId?: number): Promi
 }
 
 /**
- * Ce que le travail garde chiffré. Pour un dossier, un volume ou une adresse,
- * l'appelant en devient l'auteur : c'est de ses droits que le travail tiendra
- * les siens.
+ * Ce que le travail garde chiffré. L'appelant en devient l'auteur : c'est de
+ * ses droits sur la source que le travail tiendra les siens, à chaque passage.
  */
 function storedJobOf(ctx: Ctx, input: SourceInput & { name: string }): StoredJob {
+    const base = { name: input.name, authorUserId: ctx.userId };
     if (input.source === 'deviceFolder' && input.folder) {
         return {
-            name: input.name,
+            ...base,
             folder: {
                 deviceId: input.folder.deviceId,
                 path: input.folder.path.trim(),
                 exclusions: input.folder.exclusions,
-                oneFileSystem: input.folder.oneFileSystem,
-                authorUserId: ctx.userId
+                oneFileSystem: input.folder.oneFileSystem
             }
         };
     }
     if (input.source === 'dockerVolume' && input.volume) {
         const { deviceId, engine, name } = input.volume;
-        return { name: input.name, volume: { deviceId, engine, name }, authorUserId: ctx.userId };
+        return { ...base, volume: { deviceId, engine, name } };
     }
-    if (input.source === 'mailbox') return { name: input.name, authorUserId: ctx.userId };
-    return { name: input.name };
+    return base;
 }
 
 /** Les sources désignées par un identifiant numérique ; les autres n'en ont pas. */
@@ -860,56 +896,101 @@ async function volumeCandidates(ctx: Ctx, machines: readonly MachineRights[]): P
     return lists.flat();
 }
 
-/** Les adresses de l'espace ; celles dont l'appelant ne gère pas les mots de passe restent grisées. */
-async function mailboxCandidates(ctx: Ctx, mail: MailServerBackupProvider): Promise<BackupSourceCandidate[]> {
-    const mailboxes = await mail.listMailboxes(ctx.workspaceId);
-    return Promise.all(
-        mailboxes.map(async (mailbox): Promise<BackupSourceCandidate> => {
-            const allowed = (await mail.authorize(mailbox.id, ctx.workspaceId, ctx.userId)).ok;
-            return {
-                kind: 'mailbox',
-                id: mailbox.id,
-                deviceId: null,
-                volume: null,
+/**
+ * Les sources d'un module, chacune selon ce que ce module en permet à
+ * l'appelant : tue s'il ne la voit pas, grisée avec sa raison s'il la voit
+ * sans le droit de la sauvegarder, choisissable sinon.
+ */
+async function guardedCandidates<T>(
+    kind: GuardedSourceKind,
+    items: readonly T[],
+    idOf: (item: T) => number,
+    authorize: (id: number) => Promise<SdkAccessVerdict>,
+    describe: (item: T) => Pick<BackupSourceCandidate, 'name' | 'detail' | 'tag' | 'available' | 'reason'>
+): Promise<BackupSourceCandidate[]> {
+    const out: BackupSourceCandidate[] = [];
+    for (const item of items) {
+        const verdict = await authorize(idOf(item));
+        if (!seen(verdict)) continue;
+        const shown = describe(item);
+        out.push({
+            kind,
+            id: idOf(item),
+            deviceId: null,
+            volume: null,
+            ...shown,
+            tag: verdict.ok ? shown.tag : 'sans droit',
+            available: verdict.ok && shown.available,
+            reason: verdict.ok ? shown.reason : GUARDED_NAMES[kind].refusal
+        });
+    }
+    return out;
+}
+
+function databaseCandidates(ctx: Ctx, databases: DatabaseBackupProvider): Promise<BackupSourceCandidate[]> {
+    return databases.listDatabases(ctx.workspaceId).then((rows) =>
+        guardedCandidates(
+            'database',
+            rows,
+            (row) => row.id,
+            (id) => databases.authorize(id, ctx.workspaceId, ctx.userId),
+            (row) => ({
+                name: row.name,
+                detail: `${row.engine} : ${row.host} / ${row.database}`,
+                tag: ENGINE_TAGS[row.engine],
+                available: true,
+                reason: null
+            })
+        )
+    );
+}
+
+function mailboxCandidates(ctx: Ctx, mail: MailServerBackupProvider): Promise<BackupSourceCandidate[]> {
+    return mail.listMailboxes(ctx.workspaceId).then((mailboxes) =>
+        guardedCandidates(
+            'mailbox',
+            mailboxes,
+            (mailbox) => mailbox.id,
+            (id) => mail.authorize(id, ctx.workspaceId, ctx.userId),
+            (mailbox) => ({
                 name: mailbox.address,
                 detail: 'Ses messages, dossiers et drapeaux compris, au format Maildir que lit un serveur IMAP courant (Dovecot).',
-                tag: allowed
-                    ? mailbox.messageCount > 0
-                        ? plural(mailbox.messageCount, 'message', 'messages')
-                        : 'vide'
-                    : 'sans droit',
-                available: allowed,
-                reason: allowed ? null : MAILBOX_REFUSAL
-            };
-        })
+                tag: mailbox.messageCount > 0 ? plural(mailbox.messageCount, 'message', 'messages') : 'vide',
+                available: true,
+                reason: null
+            })
+        )
     );
 }
 
 /** Un partage ou un dossier hébergé : vide, il reste visible mais grisé. */
-async function treeCandidates(
+function treeCandidates(
+    ctx: Ctx,
     kind: TreeSourceKind,
-    provider: TreeBackupProvider,
-    workspaceId: number
+    provider: TreeBackupProvider
 ): Promise<BackupSourceCandidate[]> {
-    const roots = await provider.list(workspaceId);
-    return roots.map((root): BackupSourceCandidate => {
-        const files = plural(root.fileCount, 'fichier', 'fichiers');
-        const filled = root.fileCount > 0;
-        return {
+    return provider.list(ctx.workspaceId).then((roots) =>
+        guardedCandidates(
             kind,
-            id: root.id,
-            deviceId: null,
-            volume: null,
-            name: root.name,
-            detail:
-                kind === 'cloudsync'
-                    ? `${files} : les fichiers, pas leur index (celui-ci est dans la base de DevEye).`
-                    : `${files} : les fichiers et leurs sous-dossiers. Les adresses publiques et les réglages du dossier sont dans la base de DevEye.`,
-            tag: filled ? files : 'vide',
-            available: filled,
-            reason: filled ? null : TREE_NAMES[kind].empty
-        };
-    });
+            roots,
+            (root) => root.id,
+            (id) => provider.authorize(id, ctx.workspaceId, ctx.userId),
+            (root) => {
+                const files = plural(root.fileCount, 'fichier', 'fichiers');
+                const filled = root.fileCount > 0;
+                return {
+                    name: root.name,
+                    detail:
+                        kind === 'cloudsync'
+                            ? `${files} : les fichiers, pas leur index (celui-ci est dans la base de DevEye).`
+                            : `${files} : les fichiers et leurs sous-dossiers. Les adresses publiques et les réglages du dossier sont dans la base de DevEye.`,
+                    tag: filled ? files : 'vide',
+                    available: filled,
+                    reason: filled ? null : TREE_EMPTY[kind]
+                };
+            }
+        )
+    );
 }
 
 const sourcesFeature = defineSdkFeature({
@@ -941,19 +1022,7 @@ const sourcesFeature = defineSdkFeature({
         const databases = databaseProvider(ctx);
         if (databases) {
             kinds.push('database');
-            for (const row of await databases.listDatabases(ctx.workspaceId)) {
-                candidates.push({
-                    kind: 'database',
-                    id: row.id,
-                    deviceId: null,
-                    volume: null,
-                    name: row.name,
-                    detail: `${row.engine} : ${row.host} / ${row.database}`,
-                    tag: ENGINE_TAGS[row.engine],
-                    available: true,
-                    reason: null
-                });
-            }
+            candidates.push(...(await databaseCandidates(ctx, databases)));
         }
 
         const mail = mailProvider(ctx);
@@ -966,7 +1035,7 @@ const sourcesFeature = defineSdkFeature({
             const provider = treeProvider(ctx, kind);
             if (!provider) continue;
             kinds.push(kind);
-            candidates.push(...(await treeCandidates(kind, provider, ctx.workspaceId)));
+            candidates.push(...(await treeCandidates(ctx, kind, provider)));
         }
 
         const machines = await machineRights(ctx);

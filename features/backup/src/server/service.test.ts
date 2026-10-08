@@ -3,18 +3,20 @@ import { describe, it } from 'node:test';
 
 import type { DeviceReport } from '@deveye/types';
 import {
+    DATABASE_BACKUP_PROVIDER,
     HOSTING_BACKUP_PROVIDER,
     MAILSERVER_BACKUP_PROVIDER,
+    type DatabaseBackupProvider,
     type MailServerBackupProvider,
     type TreeBackupProvider
 } from '@deveye/types/sdk';
-import type { FeatureServiceDeps } from '@deveye/types/sdk/server';
+import type { FeatureServiceDeps, SdkAccount } from '@deveye/types/sdk/server';
 import { createTestServiceDeps, testDevice, type TestFolderArchive } from '@deveye/types/sdk/testing';
 
-import type { BackupDestinationRow, BackupJobRow, BackupRunRow } from '../contracts/domain';
+import type { BackupDestinationRow, BackupFolder, BackupJobRow, BackupRunRow } from '../contracts/domain';
 import type { BackupRepo } from './repo';
 import { BackupEngine, destinationInside } from './service';
-import type { StoredFolder, StoredRun } from './_shared';
+import type { StoredRun } from './_shared';
 
 /**
  * Un passage de bout en bout, une machine pour source et une autre pour
@@ -33,13 +35,14 @@ interface Finished {
 }
 
 function engineFor(options: {
-    folder?: Partial<StoredFolder>;
+    folder?: Partial<BackupFolder>;
     destination?: { deviceId: string; path: string };
     archives?: Record<string, TestFolderArchive | Error>;
     access?: Partial<FeatureServiceDeps['access']>;
     nasReport?: DeviceReport | null;
     dockerInventory?: FeatureServiceDeps['agents']['dockerInventory'];
     providers?: Readonly<Record<string, unknown>>;
+    accounts?: readonly SdkAccount[];
     /** Un autre genre de source que le dossier par défaut. */
     job?: Pick<BackupJobRow, 'source_kind' | 'source_id' | 'content'>;
 }) {
@@ -92,14 +95,14 @@ function engineFor(options: {
         archives: options.archives,
         access: options.access,
         dockerInventory: options.dockerInventory,
-        providers: options.providers
+        providers: options.providers,
+        accounts: options.accounts
     });
-    const folder: StoredFolder = {
+    const folder: BackupFolder = {
         deviceId: NAS,
         path: '/srv/www',
         exclusions: [{ kind: 'name', pattern: 'node_modules' }],
         oneFileSystem: true,
-        authorUserId: 5,
         ...options.folder
     };
     const job: BackupJobRow = {
@@ -116,7 +119,7 @@ function engineFor(options: {
         keep_last: 7,
         encryption: 'none',
         next_run_at: null,
-        content: JSON.stringify({ name: 'Site web', folder }),
+        content: JSON.stringify({ name: 'Site web', authorUserId: 5, folder }),
         created: 1,
         ...options.job
     };
@@ -334,7 +337,11 @@ describe('Backup : moteur, adresse du Serveur mail', () => {
 
 describe('Backup : moteur, dossier hébergé', () => {
     it('archive l’arborescence par le contrat commun, et échoue sans le module', async () => {
-        const job = { source_kind: 'hostingFolder', source_id: 4, content: JSON.stringify({ name: 'Site' }) };
+        const job = {
+            source_kind: 'hostingFolder',
+            source_id: 4,
+            content: JSON.stringify({ name: 'Site', authorUserId: 5 })
+        };
         const hosting: TreeBackupProvider = {
             list: async () => [],
             find: async (id, workspaceId) =>
@@ -343,7 +350,8 @@ describe('Backup : moteur, dossier hébergé', () => {
             open: async () =>
                 (async function* () {
                     yield Buffer.from('<p/>!');
-                })()
+                })(),
+            authorize: async () => ({ ok: true })
         };
         const ok = engineFor({ job, providers: { [HOSTING_BACKUP_PROVIDER]: hosting } });
         await ok.engine.trigger(ok.job, 5);
@@ -354,5 +362,89 @@ describe('Backup : moteur, dossier hébergé', () => {
         const bare = engineFor({ job });
         await bare.engine.trigger(bare.job, 5);
         assert.match((await bare.finished).run.error ?? '', /Hébergement indisponible : module non installé/);
+    });
+});
+
+describe('Backup : moteur, les droits de l’auteur, relus à chaque passage', () => {
+    const account = (over: Partial<SdkAccount>): SdkAccount => ({
+        id: 5,
+        email: 'gerem@exemple.fr',
+        username: 'gerem',
+        isAdmin: true,
+        e2e: false,
+        suspended: false,
+        created: 1,
+        ...over
+    });
+
+    it('un travail sans auteur ne tourne pas', async () => {
+        const { engine, job, finished } = engineFor({
+            job: { source_kind: 'deveye', source_id: null, content: JSON.stringify({ name: 'Tout' }) }
+        });
+        await engine.trigger(job, 5);
+        assert.match((await finished).run.error ?? '', /ne dit pas au nom de qui il s’exécute/);
+    });
+
+    it('la base de DevEye ne part plus quand son auteur n’est plus administrateur, ou est suspendu', async () => {
+        const job = {
+            source_kind: 'deveye',
+            source_id: null,
+            content: JSON.stringify({ name: 'Tout', authorUserId: 5 })
+        };
+        for (const accounts of [[account({ isAdmin: false })], [account({ suspended: true })], []]) {
+            const { engine, job: row, finished } = engineFor({ job, accounts });
+            await engine.trigger(row, 5);
+            assert.match((await finished).run.error ?? '', /n’est plus administrateur, ou son compte est suspendu/);
+        }
+    });
+
+    it('une base ne se vide plus quand son auteur ne peut plus l’explorer, sans ouvrir d’accès', async () => {
+        let opened = 0;
+        const databases: DatabaseBackupProvider = {
+            listDatabases: async () => [],
+            findDatabase: async () => ({ id: 7, name: 'Prod', engine: 'mysql', host: 'db', database: 'shop' }),
+            openAccess: async () => {
+                opened += 1;
+                return null;
+            },
+            authorize: async () => ({ ok: false, reason: 'level' })
+        };
+        const { engine, job, finished } = engineFor({
+            job: { source_kind: 'database', source_id: 7, content: JSON.stringify({ name: 'Prod', authorUserId: 5 }) },
+            providers: { [DATABASE_BACKUP_PROVIDER]: databases }
+        });
+        await engine.trigger(job, 5);
+        assert.match(
+            (await finished).run.error ?? '',
+            /ne peut plus explorer cette base \(son rôle ne le permet plus\)/
+        );
+        assert.equal(opened, 0);
+    });
+
+    it('un dossier hébergé ne s’archive plus quand son auteur ne peut plus le lire', async () => {
+        const hosting: TreeBackupProvider = {
+            list: async () => [],
+            find: async () => ({ id: 4, name: 'Site', workspaceId: 1, fileCount: 1, bytes: 5 }),
+            entries: async () => {
+                throw new Error('non attendu ici');
+            },
+            open: async () => {
+                throw new Error('non attendu ici');
+            },
+            authorize: async () => ({ ok: false, reason: 'hidden' })
+        };
+        const { engine, job, finished } = engineFor({
+            job: {
+                source_kind: 'hostingFolder',
+                source_id: 4,
+                content: JSON.stringify({ name: 'Site', authorUserId: 5 })
+            },
+            providers: { [HOSTING_BACKUP_PROVIDER]: hosting }
+        });
+        await engine.trigger(job, 5);
+        assert.match(
+            (await finished).run.error ?? '',
+            /ne peut plus lire ce dossier hébergé \(cet élément lui est fermé\)/
+        );
     });
 });
