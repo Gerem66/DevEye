@@ -140,6 +140,7 @@ export { PlanPausedBadge, PlanPausedNotice } from '@/Components/PlanPause';
 /** L'allure d'une page publique qu'un module sert : thème et accent. */
 export { PageLookFields } from '@/Components/PageLook';
 export { openAccountView } from '@/stores/accountView';
+export { openProOffer } from '@/stores/quotaPrompt';
 /** L'erreur d'une commande refusée : son code, son message, ses détails de validation. */
 export { WsError } from '@/api/ws';
 export type { SendOptions } from '@/api/ws';

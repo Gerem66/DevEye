@@ -408,11 +408,12 @@ export class DevEyeWs {
                 else {
                     if (msg.payload.error.code === 'quota_exceeded') {
                         const details = msg.payload.error.details as
-                            { paused?: unknown; priority?: unknown } | undefined;
+                            { paused?: unknown; priority?: unknown; limit?: unknown } | undefined;
                         notifyQuotaExceeded(
                             msg.payload.error.message,
                             details?.paused === true,
-                            details?.priority === true
+                            details?.priority === true,
+                            details?.limit === 0
                         );
                     }
                     pending.reject(

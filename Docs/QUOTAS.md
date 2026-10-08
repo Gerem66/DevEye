@@ -234,7 +234,12 @@ repoussée (`tierChanged`, `_planPauses.ts`).
   déclenchée par le client WS : aucun module n'a à traiter ce refus. Son bouton
   « Voir les offres » n'existe que si un module a une entrée de compte. Avec
   `details.paused`, elle dit qu'un élément est en pause plutôt qu'une création
-  refusée ; avec `details.priority`, que le service est réservé aux abonnés.
+  refusée ; avec `details.priority`, que le service est réservé aux abonnés ;
+  avec une limite à zéro, que la fonctionnalité fait partie de l'offre Pro
+  (« Disponible avec l’offre Pro »). Un écran qui le sait avant d'envoyer ouvre
+  cette même variante par `openProOffer({ body })` du SDK. Le propriétaire de
+  l'espace y voit « Voir l’offre Pro », qui ouvre l'abonnement sur la carte Pro
+  (`openAccountView(undefined, 'pro')`) ; un membre apprend à qui s'adresser.
 - `PlanPausedBadge` marque un élément en pause, `PlanPausedNotice` en tête d'une
   liste dit combien et pourquoi ; `usePlanPauses()` rend les comptes par clé,
   que l'écran de l'offre affiche.
