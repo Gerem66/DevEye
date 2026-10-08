@@ -71,7 +71,8 @@ export const serverEntry: FeatureServer<GitRepo> = {
                 (await deps.repo.listHomeRepos(workspaceIds)).map((r) => ({
                     id: Number(r.id),
                     workspaceId: Number(r.workspace_id),
-                    headSha: r.head_sha
+                    headSha: r.head_sha,
+                    headSeenAt: r.head_seen_at === null ? null : Number(r.head_seen_at)
                 })),
             describe: async (repoId, workspaceId) =>
                 (await describeRepo(deps.repo, deps.cipherFor(workspaceId), repoId, workspaceId))?.description ?? null,

@@ -157,6 +157,12 @@ export default function Dialog({
     // lieu de glisser. Plafonnée au `max-height`, au-delà duquel le dialogue défile.
     const contentRef = useRef<HTMLDivElement>(null);
     const [fitHeight, setFitHeight] = useState<number | null>(null);
+    // Un contenu qui glisse (un dépliage animé) envoie une mesure par image :
+    // la suivre au ressort la ferait traîner derrière lui, puis le rattraper
+    // d'un coup. Des mesures rapprochées se suivent telles quelles, le ressort
+    // ne joue que sur un saut isolé (un onglet, une étape).
+    const [fitFollows, setFitFollows] = useState(false);
+    const lastMeasureAt = useRef(0);
     const fits = !tall && !fill;
     useLayoutEffect(() => {
         const dialog = dialogRef.current;
@@ -170,6 +176,9 @@ export default function Dialog({
                 parseFloat(cs.borderTopWidth) +
                 parseFloat(cs.borderBottomWidth);
             setFitHeight(Math.min(content.offsetHeight + chrome, parseFloat(cs.maxHeight) || Infinity));
+            const at = performance.now();
+            setFitFollows(at - lastMeasureAt.current < 120);
+            lastMeasureAt.current = at;
         };
         sync();
         const ro = new ResizeObserver(sync);
@@ -188,37 +197,79 @@ export default function Dialog({
     // la rattrape après coup. L'observateur passe après la mise en page et avant
     // la peinture, donc le saut n'est jamais peint : la hauteur repart de
     // l'ancienne, glisse vers la nouvelle, puis rend la main à `auto`.
+    //
+    // La boîte épinglée ne bouge plus d'elle-même : ce sont aussi les enfants
+    // du corps qu'on observe, et la hauteur naturelle se lit en désépinglant un
+    // instant, avant la peinture. Un contenu qui glisse (un dépliage animé)
+    // envoie une mesure par image : la boîte le suit image par image, le
+    // ressort ne joue que sur un saut isolé (un onglet, une étape).
+    const bodyRef = useRef<HTMLDivElement>(null);
     useLayoutEffect(() => {
         const dialog = dialogRef.current;
-        if (!open || !fill || !dialog) return;
-        let last: number | null = null;
+        const body = bodyRef.current;
+        if (!open || !fill || !dialog || !body) return;
+        let lastAt = 0;
         let running: AnimationPlaybackControls | null = null;
-        const ro = new ResizeObserver(() => {
-            // Pendant le glissement, la hauteur est posée : seul le glissement la bouge.
-            if (running) return;
-            const next = dialog.offsetHeight;
-            const from = last;
-            last = next;
-            if (from === null || Math.abs(next - from) < 1) return;
-            dialog.style.height = `${from}px`;
+        let release: ReturnType<typeof setTimeout> | null = null;
+        const pin = (px: number): void => {
+            dialog.style.height = `${px}px`;
             dialog.setAttribute('data-resizing', '');
-            const run = animate(dialog, { height: next }, RESIZE_SPRING);
+        };
+        const unpin = (): void => {
+            dialog.style.height = '';
+            dialog.removeAttribute('data-resizing');
+        };
+        // Le contenu a fini de glisser : la boîte rend la main à `auto`.
+        const settle = (): void => {
+            if (release) clearTimeout(release);
+            release = setTimeout(() => {
+                release = null;
+                if (!running) unpin();
+            }, 160);
+        };
+        const ro = new ResizeObserver(() => {
+            const now = performance.now();
+            const rapid = now - lastAt < 120;
+            lastAt = now;
+            const pinned = dialog.style.height !== '';
+            const current = dialog.offsetHeight;
+            dialog.style.height = '';
+            const natural = dialog.offsetHeight;
+            if (Math.abs(natural - current) < 1) {
+                if (pinned) dialog.style.height = `${current}px`;
+                if (pinned && !running) settle();
+                return;
+            }
+            if (rapid || running) {
+                running?.stop();
+                running = null;
+                pin(natural);
+                settle();
+                return;
+            }
+            pin(current);
+            const run = animate(dialog, { height: natural }, RESIZE_SPRING);
             running = run;
             void run.then(() => {
                 if (running !== run) return;
                 running = null;
-                // Un contenu changé pendant le glissement relance l'observateur ici.
-                dialog.style.height = '';
-                dialog.removeAttribute('data-resizing');
+                unpin();
             });
         });
         ro.observe(dialog);
+        const observeChildren = (): void => {
+            for (const child of body.children) ro.observe(child);
+        };
+        observeChildren();
+        const mo = new MutationObserver(observeChildren);
+        mo.observe(body, { childList: true });
         return () => {
             ro.disconnect();
+            mo.disconnect();
             running?.stop();
             running = null;
-            dialog.style.height = '';
-            dialog.removeAttribute('data-resizing');
+            if (release) clearTimeout(release);
+            unpin();
         };
     }, [open, fill]);
 
@@ -309,7 +360,7 @@ export default function Dialog({
                         initial={{ opacity: 0, scale: 0.94, maxWidth: width, height }}
                         animate={{ opacity: 1, scale: 1, maxWidth: width, height }}
                         exit={{ opacity: 0, scale: 0.94 }}
-                        transition={RESIZE_SPRING}
+                        transition={fits && fitFollows ? { ...RESIZE_SPRING, height: { duration: 0 } } : RESIZE_SPRING}
                         // Pendant qu'elle grandit, la boîte est plus courte que son
                         // contenu : sans ce drapeau, une barre de défilement clignoterait.
                         onAnimationStart={() => dialogRef.current?.setAttribute('data-resizing', '')}
@@ -330,7 +381,10 @@ export default function Dialog({
                             {/* Le pied aussi : un `DialogCancelButton` y est le cas courant. */}
                             <DialogCloseContext.Provider value={attemptClose}>
                                 <DialogPrimaryContext.Provider value={registerPrimary}>
-                                    <div className={`${styles.body} ${tall || fill ? styles.bodyFill : ''}`}>
+                                    <div
+                                        ref={bodyRef}
+                                        className={`${styles.body} ${tall || fill ? styles.bodyFill : ''}`}
+                                    >
                                         {children}
                                     </div>
                                 </DialogPrimaryContext.Provider>
