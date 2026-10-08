@@ -51,6 +51,12 @@
     white-space: pre-line;
 }
 
+/* Dans un en-tête, le bandeau prend toute la largeur, sous le titre et ses actions. */
+.header > .error,
+.repoHead > .error {
+    flex-basis: 100%;
+}
+
 .overdue {
     color: var(--danger);
 }

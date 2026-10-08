@@ -76,7 +76,6 @@ export function RepoDetail({
                                 </>
                             )}
                         </p>
-                        {repo.lastSyncError && <p className={styles.error}>{repo.lastSyncError}</p>}
                     </div>
                 </div>
                 <div className={styles.actions}>
@@ -108,6 +107,7 @@ export function RepoDetail({
                         onGone={onBack}
                     />
                 </div>
+                {repo.lastSyncError && <p className={styles.error}>{repo.lastSyncError}</p>}
             </header>
 
             <RepoView

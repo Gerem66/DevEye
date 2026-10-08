@@ -80,7 +80,6 @@ function LinkedRepo({ repoId, canWrite, onUnlink }: LinkedRepoProps) {
                             </span>
                         )}
                     </p>
-                    {repo.lastSyncError && <p className={styles.error}>{repo.lastSyncError}</p>}
                 </div>
                 <div className={styles.actions}>
                     {canWrite && (
@@ -123,6 +122,7 @@ function LinkedRepo({ repoId, canWrite, onUnlink }: LinkedRepoProps) {
                         </Button>
                     )}
                 </div>
+                {repo.lastSyncError && <p className={styles.error}>{repo.lastSyncError}</p>}
             </header>
 
             <RepoView
