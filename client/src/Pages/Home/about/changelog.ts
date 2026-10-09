@@ -12,6 +12,24 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: readonly ChangelogEntry[] = [
     {
+        version: '0.24.4',
+        date: '2026-10-09',
+        changes: [
+            {
+                kind: 'improved',
+                text: 'L’en-tête de chaque fonctionnalité, avec ses onglets, reste visible en haut quand vous faites défiler'
+            },
+            {
+                kind: 'improved',
+                text: 'Uptime : la vérification des fichiers devient une option de chaque service, à son propre rythme, au lieu d’un type de contrôle à part'
+            },
+            {
+                kind: 'fixed',
+                text: 'Mail : changer de mode d’affichage avec un message ouvert ne dérègle plus l’apparence du reste de l’app'
+            }
+        ]
+    },
+    {
         version: '0.24.3',
         date: '2026-10-09',
         changes: [
