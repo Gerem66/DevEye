@@ -12,6 +12,37 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: readonly ChangelogEntry[] = [
     {
+        version: '0.24.3',
+        date: '2026-10-09',
+        changes: [
+            {
+                kind: 'added',
+                text: 'Audit : vos dépôts de Git s’analysent directement, sur une fiche refaite avec l’historique des rapports, les constats légitimes mis de côté et l’export en Markdown ou SARIF'
+            },
+            {
+                kind: 'improved',
+                text: 'Audit : des règles bien plus fiables et de nouvelles familles (jetons de services, workflows GitHub, cookies), vingt formats de dépendances, et les failles connues des outils (images Docker, versions de Node ou de Python)'
+            },
+            {
+                kind: 'added',
+                text: 'Audit : la recherche approfondie dans tout l’historique d’un dépôt, à la main ou automatique, et l’analyse à chaque commit, avec l’offre Pro'
+            },
+            {
+                kind: 'added',
+                text: 'Sauvegardes : toutes les catégories dans « Quoi sauvegarder », les adresses du Serveur mail, les dossiers hébergés et les volumes Docker en plus, et une sauvegarde ne lit que ce que son auteur a le droit de lire'
+            },
+            {
+                kind: 'added',
+                text: 'Accueil : une carte « Ajouter une fonctionnalité » au bout de chaque section, à masquer depuis le Profil'
+            },
+            {
+                kind: 'improved',
+                text: 'Une fonctionnalité réservée à l’offre Pro le dit et mène à l’offre, au lieu d’annoncer une limite de 0 atteinte'
+            },
+            { kind: 'fixed', text: 'Autres ajustements graphiques' }
+        ]
+    },
+    {
         version: '0.24.2',
         date: '2026-10-07',
         changes: [
