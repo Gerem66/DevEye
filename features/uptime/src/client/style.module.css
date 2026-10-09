@@ -1104,3 +1104,20 @@
 .dependentOff {
     filter: opacity(0.5);
 }
+
+/* Une case et les réglages qu'elle ouvre : rapprochés, décalés sous elle et
+   rattachés par un filet centré sous la case (18 px, celle du SDK). */
+.optionGroup {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.subOptions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+    margin-left: 8px;
+    padding-left: var(--space-md);
+    border-left: 2px solid var(--glass-border);
+}

@@ -76,6 +76,7 @@ declare const styles: {
     readonly legendItem: string;
     readonly legendSwatch: string;
     readonly list: string;
+    readonly optionGroup: string;
     readonly overview: string;
     readonly pageLink: string;
     readonly pageService: string;
@@ -106,6 +107,7 @@ declare const styles: {
     readonly statusAlert: string;
     readonly statusIcon: string;
     readonly statusOk: string;
+    readonly subOptions: string;
     readonly summary: string;
     readonly summaryItem: string;
     readonly summaryLabel: string;

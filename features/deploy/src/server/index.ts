@@ -31,10 +31,17 @@ async function labelOf(
 
 const PROVIDER_NAMES: Record<string, string> = { dokploy: 'Dokploy', github: 'GitHub Actions', agent: 'Machine' };
 
-/** Ce qu'un rapprochement à la demande peut prendre avant qu'on réponde sur ce que la base sait. */
+/**
+ * Avant de dire à Uptime si une cible vient de déployer, on la rapproche de son
+ * fournisseur ; passé ce délai, on répond avec ce que la base sait déjà, et le
+ * rapprochement se termine sans lui.
+ */
 const REFRESH_BUDGET_MS = 10_000;
 
-/** Un déploiement « en cours » parti avant reste en base sans que personne ne le fasse aboutir. */
+/**
+ * Un déploiement resté « en cours » en base plus longtemps (fournisseur
+ * redémarré, suivi perdu) ne compte plus comme en cours pour Uptime.
+ */
 const IN_FLIGHT_HORIZON_SECONDS = 6 * 3600;
 
 /**

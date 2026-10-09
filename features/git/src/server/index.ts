@@ -57,7 +57,7 @@ async function tokenOf(repo: GitRepo, cipher: SdkCipher, row: GitRepoRow, worksp
     return credential ? cipher.tryDecrypt(credential.secret_enc) : null;
 }
 
-/** Un « en cours » parti avant n'aboutira plus : GitHub l'a perdu ou oublié. */
+/** Un workflow ou un déploiement « en cours » depuis plus longtemps, que GitHub n'a pas refermé, ne compte plus pour Uptime. */
 const IN_FLIGHT_HORIZON_SECONDS = 6 * 3600;
 
 /** Ce que les workflows et déploiements lus disent de la fenêtre qui commence à `since`. */

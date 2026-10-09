@@ -183,45 +183,55 @@ export default function ServiceIntegrityPanel({ scope, canWrite }: SettingsPanel
                     </span>
                 </div>
 
-                <Checkbox checked={draft.deployAccept} disabled={!editable} onChange={(v) => set('deployAccept', v)}>
-                    <>
-                        <span className={shell.fieldLabel}>
-                            Accepter automatiquement les changements lors d’un déploiement
-                        </span>
-                        <span className={shell.fieldHint}>
-                            Quand les fichiers changent, le service demande à ses sources si une mise en ligne vient
-                            d’avoir lieu. Si oui, la nouvelle version devient la référence, sans alerte ; si elle est
-                            encore en cours, il l’attend jusqu’à trente minutes. Une modification faite entre la fin
-                            d’un déploiement et la lecture suivante serait acceptée avec lui.
-                        </span>
-                    </>
-                </Checkbox>
+                <div className={styles.optionGroup}>
+                    <Checkbox
+                        checked={draft.deployAccept}
+                        disabled={!editable}
+                        onChange={(v) => set('deployAccept', v)}
+                    >
+                        <>
+                            <span className={shell.fieldLabel}>
+                                Accepter automatiquement les changements lors d’un déploiement
+                            </span>
+                            <span className={shell.fieldHint}>
+                                Quand les fichiers changent, le service demande à ses sources si une mise en ligne vient
+                                d’avoir lieu. Si oui, la nouvelle version devient la référence, sans alerte ; si elle
+                                est encore en cours, il l’attend jusqu’à trente minutes. Une modification faite entre la
+                                fin d’un déploiement et la lecture suivante serait acceptée avec lui.
+                            </span>
+                        </>
+                    </Checkbox>
+                    {draft.deployAccept && (
+                        <div className={styles.subOptions}>
+                            <div className={shell.field}>
+                                <span className={shell.sectionLabel}>Ce qui met ce site en ligne</span>
+                                <DeploySourcePicker
+                                    serviceId={service.id}
+                                    value={draft.deployKeys}
+                                    disabled={!editable}
+                                    onChange={(keys) => set('deployKeys', keys)}
+                                />
+                                {errorSources && <span className={shell.notice}>{errorSources}</span>}
+                                <span className={shell.fieldHint}>
+                                    Un projet compte pour ses déploiements et ses dépôts. Un dépôt Git compte pour ses
+                                    workflows GitHub Actions réussis sur sa branche par défaut et ses déploiements
+                                    GitHub (Pages, Vercel, Netlify) : son jeton doit pouvoir les lire. L’adresse d’appel
+                                    sert à toute autre CI.
+                                </span>
+                            </div>
 
-                <Dependent off={draft.on && !draft.deployAccept}>
-                    <div className={shell.field}>
-                        <span className={shell.sectionLabel}>Ce qui met ce site en ligne</span>
-                        <DeploySourcePicker
-                            serviceId={service.id}
-                            value={draft.deployKeys}
-                            disabled={!editable}
-                            onChange={(keys) => set('deployKeys', keys)}
-                        />
-                        {errorSources && <span className={shell.notice}>{errorSources}</span>}
-                        <span className={shell.fieldHint}>
-                            Un projet compte pour ses déploiements et ses dépôts. Un dépôt Git compte pour ses workflows
-                            GitHub Actions réussis sur sa branche par défaut et ses déploiements GitHub (Pages, Vercel,
-                            Netlify) : son jeton doit pouvoir les lire. L’adresse d’appel sert à toute autre CI.
-                        </span>
-                    </div>
-
-                    {hookChosen &&
-                        canWrite &&
-                        (service.deployHook ? (
-                            <DeployHookField serviceId={service.id} disabled={!editable} />
-                        ) : (
-                            <p className={shell.sectionHint}>L’adresse d’appel apparaît ici une fois enregistré.</p>
-                        ))}
-                </Dependent>
+                            {hookChosen &&
+                                canWrite &&
+                                (service.deployHook ? (
+                                    <DeployHookField serviceId={service.id} disabled={!editable} />
+                                ) : (
+                                    <p className={shell.sectionHint}>
+                                        L’adresse d’appel apparaît ici une fois enregistré.
+                                    </p>
+                                ))}
+                        </div>
+                    )}
+                </div>
             </Dependent>
 
             {canWrite ? (
