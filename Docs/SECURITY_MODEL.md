@@ -456,12 +456,15 @@ utilise donc systématiquement l'**étage ouvert** :
 
 - chiffrés (`ctx.cipher()` côté handlers, `deps.cipherFor()` côté ordonnanceur,
   qui n'expose _que_ cet étage, l'étage gardé n'ayant aucun sens sans session) : le nom
-  du service, son URL, le mot-clé attendu, les messages d'erreur (ligne du
-  service, ligne de chaque ping, ligne d'incident) et les canaux de notification
+  du service, son URL, le mot-clé attendu, la référence et le verdict
+  d'intégrité, les messages d'erreur (ligne du service, ligne de chaque ping,
+  ligne d'incident) et les canaux de notification
   (libellé, adresse mail, URL de webhook) dans `notification_channels`
   (voir [NOTIFICATIONS.md](./NOTIFICATIONS.md)) ;
 - en clair : ce qui pilote la planification (`interval_seconds`,
-  `timeout_seconds`, `enabled`, `last_checked_at`) et ce qu'agrègent les
+  `timeout_seconds`, `enabled`, `last_checked_at`, et le rythme de lecture des
+  fichiers : `integrity_interval_seconds`, `integrity_checked_at`,
+  `integrity_failures`) et ce qu'agrègent les
   graphiques (`status`, `response_ms`, `http_status`, horodatages, agrégat
   journalier). Aucune de ces colonnes ne dit _quoi_ est surveillé.
 

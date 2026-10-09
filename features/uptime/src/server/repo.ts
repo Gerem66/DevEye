@@ -2,7 +2,6 @@ import type {
     UptimeCheckRow,
     UptimeCheckStats,
     UptimeIncidentRow,
-    UptimeKind,
     UptimeMethod,
     UptimePoint,
     UptimeServiceRow,
@@ -23,7 +22,8 @@ export interface UptimeCheckFilter {
 export interface UptimeServiceConfig {
     /** Encrypted `{ name, url, keyword, paths }`. */
     content: string;
-    kind: UptimeKind;
+    /** `null`: the integrity option is off. */
+    integrityIntervalSeconds: number | null;
     method: UptimeMethod;
     expectedStatus: number | null;
     intervalSeconds: number;
@@ -42,6 +42,16 @@ export interface UptimeProbeResult {
     httpStatus: number | null;
     /** Encrypted error message, or null after a success. */
     error: string | null;
+}
+
+/** A reading of the files, as written back to the service row. */
+export interface UptimeIntegrityReading {
+    checkedAt: number;
+    failures: number;
+    /** Encrypted verdict, or null while the files conform. */
+    verdict: string | null;
+    /** Encrypted reference learned at this reading; otherwise the stored one stays. */
+    baseline: string | null;
 }
 
 /** Success ratio + mean latency of one service over a window. */
@@ -88,8 +98,13 @@ export interface UptimeServicesRepo {
     listDue(now: number, limit: number, planPaused: readonly number[]): Promise<UptimeServiceRow[]>;
     /** Write back the outcome of a probe. */
     recordProbe(id: number, result: UptimeProbeResult): Promise<void>;
-    /** Integrity: the encrypted reference, or `null` to forget it (the next probe learns anew). */
-    setBaseline(id: number, baselineEnc: string | null): Promise<void>;
+    /** Integrity: write back a reading of the files; `baseline` only when it was learned at this reading. */
+    recordIntegrity(id: number, reading: UptimeIntegrityReading): Promise<void>;
+    /**
+     * Integrity: forget the reference and the verdict, so the next probe
+     * rereads the files and learns what the site serves.
+     */
+    resetIntegrity(id: number): Promise<void>;
     /**
      * Counts of the **active** services of one workspace. `up + down` can be
      * below `total`: a service awaiting its first probe is neither, and must
@@ -164,13 +179,13 @@ export interface UptimeRepo {
     status: UptimeStatusRepo;
 }
 
-const SERVICE_COLUMNS = `content = ?, kind = ?, method = ?, expected_status = ?, interval_seconds = ?,
-     timeout_seconds = ?, failure_threshold = ?, retention_days = ?, enabled = ?`;
+const SERVICE_COLUMNS = `content = ?, integrity_interval_seconds = ?, method = ?, expected_status = ?,
+     interval_seconds = ?, timeout_seconds = ?, failure_threshold = ?, retention_days = ?, enabled = ?`;
 
 function configParams(c: UptimeServiceConfig): unknown[] {
     return [
         c.content,
-        c.kind,
+        c.integrityIntervalSeconds,
         c.method,
         c.expectedStatus,
         c.intervalSeconds,
@@ -312,8 +327,8 @@ function servicesRepo(q: SdkQueryable): UptimeServicesRepo {
             );
             const res = await q.execute(
                 `INSERT INTO uptime_services
-                     (user_id, workspace_id, content, kind, method, expected_status, interval_seconds,
-                      timeout_seconds, failure_threshold, retention_days, enabled, sort_order)
+                     (user_id, workspace_id, content, integrity_interval_seconds, method, expected_status,
+                      interval_seconds, timeout_seconds, failure_threshold, retention_days, enabled, sort_order)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [userId, workspaceId, ...configParams(config), Number(posRows[0]?.next ?? 0)]
             );
@@ -369,8 +384,22 @@ function servicesRepo(q: SdkQueryable): UptimeServicesRepo {
                 skip ? [now, [...planPaused], limit] : [now, limit]
             );
         },
-        async setBaseline(id, baselineEnc) {
-            await q.execute('UPDATE uptime_services SET baseline_enc = ? WHERE id = ?', [baselineEnc, id]);
+        async recordIntegrity(id, reading) {
+            await q.execute(
+                `UPDATE uptime_services
+                 SET integrity_checked_at = ?, integrity_failures = ?, integrity_verdict = ?,
+                     baseline_enc = COALESCE(?, baseline_enc)
+                 WHERE id = ?`,
+                [reading.checkedAt, reading.failures, reading.verdict, reading.baseline, id]
+            );
+        },
+        async resetIntegrity(id) {
+            await q.execute(
+                `UPDATE uptime_services
+                 SET baseline_enc = NULL, integrity_checked_at = NULL, integrity_failures = 0, integrity_verdict = NULL
+                 WHERE id = ?`,
+                [id]
+            );
         },
         async recordProbe(id, result) {
             await q.execute(

@@ -20,12 +20,11 @@ interface ServiceCardProps {
 function statusBadge(service: UptimeService): { tone: 'online' | 'danger' | 'neutral'; label: string } {
     // Tenu en pause par l'offre, son dernier état est figé : le montrer mentirait.
     if (!service.enabled || service.planPaused) return { tone: 'neutral', label: 'en pause' };
-    const integrity = service.kind === 'integrity';
-    if (service.status === 'up') return { tone: 'online', label: integrity ? 'conforme' : 'en ligne' };
+    if (service.status === 'up') return { tone: 'online', label: 'en ligne' };
     if (service.status === 'down') {
         const since = service.downSince;
         const forHow = since === null ? '' : ` depuis ${formatDuration(Math.floor(Date.now() / 1000) - since)}`;
-        return { tone: 'danger', label: `${integrity ? 'écart' : 'hors ligne'}${forHow}` };
+        return { tone: 'danger', label: `${service.integrityDrift ? 'fichiers modifiés' : 'hors ligne'}${forHow}` };
     }
     return { tone: 'neutral', label: 'jamais testé' };
 }
@@ -76,8 +75,8 @@ export function ServiceCard({ service, onOpen, dragging, onDragPointerDown }: Se
             <div className={styles.cardMain}>
                 <div className={styles.cardHead}>
                     <h4 className={styles.cardName}>{service.name}</h4>
-                    {service.kind === 'integrity' && (
-                        <span title='Contrôle d’intégrité : les fichiers servis sont comparés à une référence'>
+                    {service.integrityIntervalSeconds !== null && (
+                        <span title='Les fichiers que sert le site sont aussi comparés à une référence'>
                             <StatusBadge tone='accent'>intégrité</StatusBadge>
                         </span>
                     )}

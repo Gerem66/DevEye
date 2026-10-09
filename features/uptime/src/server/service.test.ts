@@ -8,7 +8,7 @@ import { createTestServiceDeps } from '@deveye/types/sdk/testing';
 import { serverEntry } from './index';
 import type { UptimeRepo } from './repo';
 import type { UptimePagesRepo, UptimeStatusRepo } from './repoPages';
-import { UptimeMonitor, type ProbeOutcome } from './service';
+import { integrityDue, UptimeMonitor, type IntegrityReading, type ProbeOutcome } from './service';
 
 /**
  * Aucun réseau : la sonde est injectée. Ce qui se vérifie ne lève nulle part
@@ -35,9 +35,12 @@ function fakeRepo(over: Partial<UptimeServiceRow> = {}): FakeRepo {
             user_id: 9,
             workspace_id: 1,
             content: JSON.stringify({ name: 'API OxyFoo', url: 'https://api.oxyfoo.com/health', keyword: null }),
-            kind: 'http',
             method: 'GET',
             baseline_enc: null,
+            integrity_interval_seconds: null,
+            integrity_checked_at: null,
+            integrity_failures: 0,
+            integrity_verdict: null,
             expected_status: null,
             interval_seconds: 0,
             timeout_seconds: 10,
@@ -93,9 +96,21 @@ function fakeRepo(over: Partial<UptimeServiceRow> = {}): FakeRepo {
                     )
                     .slice(0, limit)
                     .map((r) => ({ ...r })),
-            setBaseline: async (id, baselineEnc) => {
+            recordIntegrity: async (id, reading) => {
                 const r = rows.find((x) => x.id === id);
-                if (r) r.baseline_enc = baselineEnc;
+                if (!r) return;
+                r.integrity_checked_at = reading.checkedAt;
+                r.integrity_failures = reading.failures;
+                r.integrity_verdict = reading.verdict;
+                r.baseline_enc = reading.baseline ?? r.baseline_enc;
+            },
+            resetIntegrity: async (id) => {
+                const r = rows.find((x) => x.id === id);
+                if (!r) return;
+                r.baseline_enc = null;
+                r.integrity_checked_at = null;
+                r.integrity_failures = 0;
+                r.integrity_verdict = null;
             },
             recordProbe: async (id, result) => {
                 const target = rows.find((r) => r.id === id);
@@ -261,51 +276,101 @@ describe('une panne', () => {
     });
 });
 
-describe('un contrôle d’intégrité', () => {
+describe('l’option d’intégrité', () => {
     const CAPTURE = {
         csp: "script-src 'self'",
         files: { '/': 'h-index', '/assets/app.js': 'h-app' },
         source: 'page' as const,
-        documentStatus: 200
+        slowestMs: 300
     };
-    const LEARNED: ProbeOutcome = { up: true, httpStatus: 200, responseMs: 300, error: null, capture: CAPTURE };
-    const DRIFT: ProbeOutcome = {
-        up: false,
-        httpStatus: 200,
-        responseMs: 300,
+    const BASELINE = JSON.stringify({ capturedAt: 1, csp: CAPTURE.csp, files: CAPTURE.files, source: 'page' });
+    const read = (reading: IntegrityReading): ProbeOutcome => ({ ...UP, reading });
+    const LEARNED = read({ kind: 'learned', slowestMs: 300, capture: CAPTURE });
+    const CONFORM = read({ kind: 'conform', slowestMs: 20 });
+    const DRIFT = read({
+        kind: 'drift',
+        slowestMs: 90,
         error: 'Intégrité : 1 fichier modifié',
-        driftLines: ['Modifié : /assets/app.js']
-    };
+        lines: ['Modifié : /assets/app.js']
+    });
+    const UNREADABLE = read({ kind: 'failed', error: 'Statut HTTP 404 sur /assets/app.js' });
 
-    it('apprend sa référence à la première lecture, puis la tend à la sonde', async () => {
-        const repo = fakeRepo({ kind: 'integrity', failure_threshold: 1 });
+    /** Le moniteur, et ce que chaque tour a demandé à la sonde : ne pas lire, apprendre, comparer. */
+    function integrityMonitor(repo: FakeRepo) {
         const deps = createTestServiceDeps({ repo });
-        const seen: (string | null)[] = [];
-        const monitor = new UptimeMonitor(deps, async (_target, _row, baseline) => {
-            seen.push(baseline ? Object.keys(baseline.files).join(',') : null);
-            return LEARNED;
+        const asked: string[] = [];
+        let next: ProbeOutcome = UP;
+        const monitor = new UptimeMonitor(deps, async (_target, _row, integrity) => {
+            asked.push(integrity === null ? 'sans lecture' : integrity.baseline ? 'compare' : 'apprend');
+            return next;
         });
-        await deps.recorded.tickers[0].tick();
+        return {
+            deps,
+            monitor,
+            asked,
+            async probe(outcome: ProbeOutcome) {
+                next = outcome;
+                await deps.recorded.tickers[0].tick();
+            },
+            /** Le temps passe : la dernière lecture recule de `seconds`. */
+            age(seconds: number) {
+                repo.rows[0].integrity_checked_at = (repo.rows[0].integrity_checked_at ?? 0) - seconds;
+            }
+        };
+    }
+
+    it('dit quand lire : jamais sans l’option, d’emblée la première fois, à son rythme, cinq minutes après un raté', () => {
+        const row = { integrity_interval_seconds: 900, integrity_checked_at: 1000, integrity_failures: 0 };
+        assert.equal(integrityDue({ ...row, integrity_interval_seconds: null }, 5000, true), false);
+        assert.equal(integrityDue({ ...row, integrity_checked_at: null }, 1000, false), true);
+        assert.equal(integrityDue(row, 1899, false), false);
+        assert.equal(integrityDue(row, 1900, false), true);
+        assert.equal(integrityDue(row, 1001, true), true);
+        assert.equal(integrityDue({ ...row, integrity_failures: 1 }, 1300, false), true);
+    });
+
+    it('apprend sa référence à la première lecture, puis ne relit qu’à son rythme ou sur demande', async () => {
+        const repo = fakeRepo({ integrity_interval_seconds: 900, failure_threshold: 1 });
+        const { monitor, asked, probe, age } = integrityMonitor(repo);
+
+        await probe(LEARNED);
         assert.equal(repo.rows[0].status, 'up');
-        assert.ok(repo.rows[0].baseline_enc);
         const stored = JSON.parse(repo.rows[0].baseline_enc!) as { files: Record<string, string>; csp: string };
         assert.deepEqual(stored.files, CAPTURE.files);
         assert.equal(stored.csp, CAPTURE.csp);
-        // Le tour suivant reçoit la référence apprise.
-        await monitor.runOne(repo.rows[0]);
-        assert.deepEqual(seen, [null, '/,/assets/app.js']);
-        assert.equal(deps.recorded.notifications.length, 0);
+        // Le fichier le plus lent pèse sur la latence de la mesure.
+        assert.equal(repo.rows[0].last_response_ms, 300);
+
+        await probe(UP);
+        await monitor.runOne({ ...repo.rows[0] }, { readFiles: true });
+        age(900);
+        await probe(CONFORM);
+        assert.deepEqual(asked, ['apprend', 'sans lecture', 'compare', 'compare']);
+        // Un site plus rapide que la page ne la fait pas paraître plus rapide.
+        assert.equal(repo.rows[0].last_response_ms, 80);
+        assert.equal(repo.checks.filter((c) => c.up === 0).length, 0);
     });
 
-    it('un écart ouvre un incident détaillé et une alerte d’intégrité, l’acceptation le referme', async () => {
-        const repo = fakeRepo({
-            kind: 'integrity',
-            failure_threshold: 1,
-            baseline_enc: JSON.stringify({ capturedAt: 1, csp: CAPTURE.csp, files: CAPTURE.files, source: 'page' })
-        });
-        const { deps, probe } = monitorWith(repo);
+    it('une sonde sans l’option ne lit jamais', async () => {
+        const repo = fakeRepo();
+        const { asked, probe } = integrityMonitor(repo);
+        await probe(UP);
+        assert.deepEqual(asked, ['sans lecture']);
+    });
+
+    it('un écart tient chaque mesure en échec et alerte, l’acceptation le referme', async () => {
+        const repo = fakeRepo({ integrity_interval_seconds: 900, baseline_enc: BASELINE });
+        const { deps, probe } = integrityMonitor(repo);
 
         await probe(DRIFT);
+        assert.equal(repo.rows[0].consecutive_failures, 1);
+        assert.equal(repo.rows[0].last_response_ms, 90);
+        assert.ok(repo.rows[0].integrity_verdict);
+
+        // La sonde suivante ne relit pas les fichiers et la page répond : la
+        // mesure échoue quand même, et le seuil fait la panne.
+        await probe(UP);
+        assert.equal(repo.checks[1].up, 0);
         assert.equal(repo.rows[0].status, 'down');
         assert.equal(repo.incidents.length, 1);
         // Le résumé sur la ligne du service, le détail fichier par fichier sur l'incident.
@@ -316,15 +381,66 @@ describe('un contrôle d’intégrité', () => {
         assert.ok(deps.recorded.notifications[0].body.includes('Modifié : /assets/app.js'));
         assert.equal(deps.recorded.audits[0].action, 'uptime.integrity');
 
-        // Accepter : la référence est oubliée, la lecture suivante apprend et
-        // referme l'incident par le chemin ordinaire, « rétabli » compris.
-        repo.rows[0].baseline_enc = null;
+        await probe(UP);
+        assert.equal(repo.incidents.length, 1);
+        assert.equal(repo.rows[0].status, 'down');
+
+        // Accepter : la référence et l'écart oubliés, la lecture suivante apprend
+        // et referme l'incident par le chemin ordinaire, « rétabli » compris.
+        await repo.services.resetIntegrity(1);
         await probe(LEARNED);
         assert.equal(repo.rows[0].status, 'up');
         assert.notEqual(repo.incidents[0].ended_at, null);
-        assert.ok(repo.rows[0].baseline_enc);
+        assert.equal(repo.rows[0].integrity_verdict, null);
         assert.equal(deps.recorded.notifications.length, 2);
         assert.ok(deps.recorded.notifications[1].subject.includes('de retour'));
+    });
+
+    it('une lecture qui retrouve la référence referme l’écart', async () => {
+        const repo = fakeRepo({ integrity_interval_seconds: 900, baseline_enc: BASELINE, failure_threshold: 1 });
+        const { probe, age } = integrityMonitor(repo);
+        await probe(DRIFT);
+        assert.equal(repo.rows[0].status, 'down');
+        age(900);
+        await probe(CONFORM);
+        assert.equal(repo.rows[0].status, 'up');
+        assert.equal(repo.rows[0].integrity_verdict, null);
+        assert.notEqual(repo.incidents[0].ended_at, null);
+    });
+
+    it('une lecture ratée n’échoue que sa mesure, puis tient le service en panne au seuil', async () => {
+        const repo = fakeRepo({ integrity_interval_seconds: 900, baseline_enc: BASELINE });
+        const { deps, asked, probe, age } = integrityMonitor(repo);
+
+        await probe(UNREADABLE);
+        assert.equal(repo.checks[0].up, 0);
+        assert.equal(repo.rows[0].last_error, 'Fichiers : Statut HTTP 404 sur /assets/app.js');
+        assert.equal(repo.rows[0].integrity_failures, 1);
+        assert.equal(repo.rows[0].integrity_verdict, null);
+
+        // Isolée, elle n'est qu'une barre : la sonde suivante la rattrape.
+        await probe(UP);
+        assert.equal(repo.rows[0].consecutive_failures, 0);
+        assert.equal(repo.incidents.length, 0);
+
+        // Relue cinq minutes plus tard, pas au rythme de quinze.
+        age(300);
+        await probe(UNREADABLE);
+        assert.equal(repo.rows[0].integrity_failures, 2);
+        assert.ok(repo.rows[0].integrity_verdict);
+        await probe(UP);
+        assert.equal(repo.rows[0].status, 'down');
+        assert.ok(deps.recorded.notifications[0].subject.includes('hors ligne'));
+        assert.ok(deps.recorded.notifications[0].body.includes('Fichiers : Statut HTTP 404'));
+        assert.deepEqual(asked, ['compare', 'sans lecture', 'compare', 'sans lecture']);
+    });
+
+    it('une page qui ne répond pas ne consomme pas la lecture due', async () => {
+        const repo = fakeRepo({ integrity_interval_seconds: 900, baseline_enc: BASELINE });
+        const { probe } = integrityMonitor(repo);
+        await probe(DOWN);
+        assert.equal(repo.rows[0].integrity_checked_at, null);
+        assert.equal(repo.rows[0].last_error, DOWN.error);
     });
 });
 

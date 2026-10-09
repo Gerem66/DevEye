@@ -151,12 +151,12 @@ pas proposée comme cible.
 ## 7. Ce que ça protège, et ce que ça ne protège pas
 
 **Surveiller le JavaScript de la plateforme depuis son instance.** Le risque
-ci-dessous est celui d'un frontend modifié. Un contrôle d'intégrité d'Uptime
-(`features/uptime/README.md`, « Le contrôle d'intégrité ») posé sur l'instance
-privée relit à chaque passage chaque fichier que l'instance hébergée sert,
-manifeste de build compris (`/.well-known/deveye-build.json`), et alerte au
-moindre écart. Il ne vaut que parce qu'il tourne ailleurs que sur ce qu'il
-surveille.
+ci-dessous est celui d'un frontend modifié. Un service Uptime posé sur
+l'instance privée, option d'intégrité cochée (`features/uptime/README.md`,
+« L'option d'intégrité »), relit à chaque lecture chaque fichier que l'instance
+hébergée sert, manifeste de build compris (`/.well-known/deveye-build.json`),
+et alerte au moindre écart. Il ne vaut que parce qu'il tourne ailleurs que sur
+ce qu'il surveille.
 
 **Le serveur ou la base de l'accueil compromis** : il n'y trouve que l'adresse
 de l'instance distante. Aucune donnée, aucun jeton, aucun identifiant.

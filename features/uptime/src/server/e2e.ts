@@ -24,9 +24,9 @@ export const uptimeE2e: FeatureE2eEntry<UptimeRepo> = {
                         const url = `${ctx.origins.app}/api/health`;
                         const { service } = await ctx.send<{ service: UptimeService }>('uptime.add', {
                             service: {
-                                kind: 'http',
                                 name: 'Essai de bout en bout',
                                 url,
+                                integrityIntervalSeconds: null,
                                 paths: [],
                                 method: 'GET',
                                 expectedStatus: 200,

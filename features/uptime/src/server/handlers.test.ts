@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import type { z, ZodType } from 'zod';
 
 import {
+    uptimeAcceptBaseline,
     uptimeAdd,
     uptimeCheckNow,
     uptimeCount,
@@ -49,9 +50,12 @@ function row(over: Partial<UptimeServiceRow> & { id: number; workspace_id: numbe
     return {
         user_id: 1,
         content: JSON.stringify({ name: `Service ${over.id}`, url: `https://exemple.fr/${over.id}`, keyword: null }),
-        kind: 'http',
         method: 'GET',
         baseline_enc: null,
+        integrity_interval_seconds: null,
+        integrity_checked_at: null,
+        integrity_failures: 0,
+        integrity_verdict: null,
         expected_status: null,
         interval_seconds: 60,
         timeout_seconds: 10,
@@ -99,6 +103,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
                     workspace_id: workspaceId,
                     user_id: userId,
                     content: config.content,
+                    integrity_interval_seconds: config.integrityIntervalSeconds,
                     method: config.method,
                     expected_status: config.expectedStatus,
                     interval_seconds: config.intervalSeconds,
@@ -115,6 +120,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
                 if (!target) return null;
                 Object.assign(target, {
                     content: config.content,
+                    integrity_interval_seconds: config.integrityIntervalSeconds,
                     method: config.method,
                     expected_status: config.expectedStatus,
                     interval_seconds: config.intervalSeconds,
@@ -146,9 +152,14 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
             },
             listDue: async () => [],
             recordProbe: async () => undefined,
-            setBaseline: async (id, baselineEnc) => {
+            recordIntegrity: async () => undefined,
+            resetIntegrity: async (id) => {
                 const r = rows.find((x) => x.id === id);
-                if (r) r.baseline_enc = baselineEnc;
+                if (!r) return;
+                r.baseline_enc = null;
+                r.integrity_checked_at = null;
+                r.integrity_failures = 0;
+                r.integrity_verdict = null;
             }
         },
         history: {
@@ -191,10 +202,10 @@ function seed(repo: FakeRepo, ...seeded: UptimeServiceRow[]): FakeRepo {
 
 /** Le brouillon complet qu'attend `uptime.update` (le contrat prend le service entier). */
 const DRAFT = {
-    kind: 'http' as const,
-    paths: [] as string[],
     name: 'API renommée',
     url: 'https://exemple.fr/health',
+    integrityIntervalSeconds: null as number | null,
+    paths: [] as string[],
     method: 'GET' as const,
     expectedStatus: null,
     keyword: null,
@@ -363,14 +374,13 @@ describe("l'ordonnanceur", () => {
     it('donne à un service sans cadence celle de l’offre du propriétaire', async () => {
         setMonitor(null);
         const { intervalSeconds: _omitted, ...withoutCadence } = { ...DRAFT, enabled: false };
-        for (const [paid, kind, expected] of [
-            [true, 'http', 60],
-            [false, 'http', 300],
-            [true, 'integrity', 300]
+        for (const [paid, expected] of [
+            [true, 60],
+            [false, 300]
         ] as const) {
             const ctx = createTestContext({ repo: seed(fakeRepo()), paid });
-            const added = await handlerFor(uptimeAdd)(ctx, { service: { ...withoutCadence, kind } });
-            assert.equal(added.service.intervalSeconds, expected, `${kind}, payant : ${paid}`);
+            const added = await handlerFor(uptimeAdd)(ctx, { service: withoutCadence });
+            assert.equal(added.service.intervalSeconds, expected, `payant : ${paid}`);
         }
     });
 
@@ -381,5 +391,60 @@ describe("l'ordonnanceur", () => {
         const ctx = createTestContext({ repo, quotaLimits: { monitors: owned }, ownerWorkspaceIds: [1, 2] });
         await assert.rejects(handlerFor(uptimeAdd)(ctx, { service: { ...DRAFT, enabled: false } }), /quota/);
         assert.equal(repo.rows.length, owned);
+    });
+});
+
+describe('l’option d’intégrité', () => {
+    /** Un service qui relit déjà ses fichiers, avec sa référence et un écart en cours. */
+    function watched(): UptimeServiceRow {
+        return row({
+            id: 1,
+            workspace_id: 1,
+            content: JSON.stringify({
+                name: 'Site',
+                url: 'https://exemple.fr/health',
+                keyword: null,
+                paths: ['/t.js']
+            }),
+            integrity_interval_seconds: 900,
+            integrity_checked_at: 1000,
+            baseline_enc: 'référence',
+            integrity_verdict: 'écart'
+        });
+    }
+    const KEEP = { ...DRAFT, integrityIntervalSeconds: 3600, paths: ['/t.js'] };
+
+    it('garde la référence quand seul le rythme change', async () => {
+        const repo = seed(fakeRepo(), watched());
+        await handlerFor(uptimeUpdate)(createTestContext({ repo }), { id: 1, service: KEEP });
+        assert.equal(repo.rows[0].integrity_interval_seconds, 3600);
+        assert.equal(repo.rows[0].baseline_enc, 'référence');
+    });
+
+    it('réapprend la référence quand les chemins changent, ou que l’option s’éteint en oubliant ses chemins', async () => {
+        const repo = seed(fakeRepo(), watched());
+        const ctx = createTestContext({ repo });
+        await handlerFor(uptimeUpdate)(ctx, { id: 1, service: { ...KEEP, paths: ['/t.js', '/u.js'] } });
+        assert.equal(repo.rows[0].baseline_enc, null);
+        assert.equal(repo.rows[0].integrity_verdict, null);
+
+        repo.rows[0].baseline_enc = 'référence';
+        const off = await handlerFor(uptimeUpdate)(ctx, {
+            id: 1,
+            service: { ...KEEP, integrityIntervalSeconds: null }
+        });
+        assert.equal(repo.rows[0].baseline_enc, null);
+        assert.deepEqual(off.service.paths, []);
+        assert.equal(off.service.integrityIntervalSeconds, null);
+        assert.equal(off.service.integrityDrift, false);
+    });
+
+    it('n’accepte une version que sur un service qui relit ses fichiers', async () => {
+        setMonitor(null);
+        const repo = seed(fakeRepo(), row({ id: 1, workspace_id: 1 }));
+        await assert.rejects(
+            handlerFor(uptimeAcceptBaseline)(createTestContext({ repo }), { id: 1 }),
+            (e: unknown) => e instanceof FeatureError && e.code === 'validation'
+        );
     });
 });

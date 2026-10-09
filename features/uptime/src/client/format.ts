@@ -78,3 +78,15 @@ export interface ServiceTuning {
 export function clamp(raw: string, min: number, max: number): number {
     return Math.min(max, Math.max(min, Number(raw) || min));
 }
+
+/** La zone « un chemin par ligne » en liste : vides et doublons écartés. */
+export function parsePaths(text: string): string[] {
+    return [
+        ...new Set(
+            text
+                .split(/\r?\n/)
+                .map((line) => line.trim())
+                .filter(Boolean)
+        )
+    ];
+}

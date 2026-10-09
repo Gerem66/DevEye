@@ -34,7 +34,7 @@ export interface ServicePayload {
     name: string;
     url: string;
     keyword: string | null;
-    /** Integrity only: extra site-relative files to verify. */
+    /** Integrity: extra site-relative files to verify. */
     paths: string[];
 }
 
@@ -64,7 +64,7 @@ export async function decryptService(cipher: SdkCipher, content: string): Promis
 }
 
 /**
- * What an integrity service compares against (`uptime_services.baseline_enc`,
+ * What the integrity option compares against (`uptime_services.baseline_enc`,
  * open tier): the fingerprint of every file, and the document's policy.
  */
 export interface IntegrityBaseline {
@@ -98,6 +98,35 @@ export async function decryptBaseline(cipher: SdkCipher, blob: string | null): P
             ),
             source: parsed.source === 'manifest' ? 'manifest' : 'page'
         };
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Ce qui tient chaque sonde en échec entre deux lectures des fichiers
+ * (`uptime_services.integrity_verdict`, étage ouvert) : un écart, fichier par
+ * fichier dans `lines`, ou des lectures ratées au-delà du seuil (`lines` vide).
+ */
+export interface IntegrityVerdict {
+    error: string;
+    lines: string[];
+}
+
+export async function encryptVerdict(cipher: SdkCipher, verdict: IntegrityVerdict | null): Promise<string | null> {
+    return verdict === null ? null : cipher.encrypt(JSON.stringify(verdict));
+}
+
+/** Un verdict illisible vaut « fichiers conformes » : la prochaine lecture tranche. */
+export async function decryptVerdict(cipher: SdkCipher, blob: string | null): Promise<IntegrityVerdict | null> {
+    if (blob === null) return null;
+    const plain = await cipher.tryDecrypt(blob);
+    if (plain === null) return null;
+    try {
+        const parsed = JSON.parse(plain) as Partial<IntegrityVerdict>;
+        if (typeof parsed.error !== 'string') return null;
+        const lines = Array.isArray(parsed.lines) ? parsed.lines.filter((l): l is string => typeof l === 'string') : [];
+        return { error: parsed.error, lines };
     } catch {
         return null;
     }
@@ -145,13 +174,17 @@ export async function toService(
     planPaused: boolean
 ): Promise<UptimeService> {
     const payload = await decryptService(cipher, row.content);
+    const integrity = row.integrity_interval_seconds !== null;
+    const verdict = integrity ? await decryptVerdict(cipher, row.integrity_verdict) : null;
     return {
         id: row.id,
-        kind: row.kind,
         name: payload.name,
         url: payload.url,
+        integrityIntervalSeconds: row.integrity_interval_seconds,
         paths: payload.paths,
-        baseline: row.kind === 'integrity' ? summarizeBaseline(await decryptBaseline(cipher, row.baseline_enc)) : null,
+        baseline: integrity ? summarizeBaseline(await decryptBaseline(cipher, row.baseline_enc)) : null,
+        integrityCheckedAt: integrity ? row.integrity_checked_at : null,
+        integrityDrift: (verdict?.lines.length ?? 0) > 0,
         method: row.method,
         expectedStatus: row.expected_status,
         keyword: payload.keyword,
@@ -241,8 +274,9 @@ export function forgetStatusPage(pageId: number): void {
 export function publicReason(httpStatus: number | null, error: string | null): string {
     if (error?.startsWith('Délai dépassé')) return 'Délai de réponse dépassé';
     if (error?.startsWith('Mot-clé')) return 'Contenu inattendu';
-    // Avant le statut : une dérive d'intégrité arrive avec un document en 200.
+    // Avant le statut : un écart ou un fichier illisible arrive avec une page en 200.
     if (error?.startsWith('Intégrité')) return 'Intégrité des fichiers compromise';
+    if (error?.startsWith('Fichiers')) return 'Fichiers du site indisponibles';
     if (httpStatus !== null) return `Réponse HTTP ${httpStatus}`;
     return 'Connexion impossible';
 }

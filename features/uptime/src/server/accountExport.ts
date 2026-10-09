@@ -10,9 +10,9 @@ export const uptimeAccountExport: FeatureAccountExport<UptimeRepo> = {
             file: 'services.json',
             where: 'workspace_id = ?',
             key: ['id'],
-            sealed: ['content', 'last_error', 'baseline_enc'],
-            json: ['content', 'baseline_enc'],
-            dates: { last_checked_at: 's', created: 's' }
+            sealed: ['content', 'last_error', 'baseline_enc', 'integrity_verdict'],
+            json: ['content', 'baseline_enc', 'integrity_verdict'],
+            dates: { last_checked_at: 's', integrity_checked_at: 's', created: 's' }
         },
         uptime_checks: {
             file: 'controles.json',

@@ -118,6 +118,19 @@ describe('captureSite', () => {
         assert.deepEqual(Object.keys(capture.files).sort(), ['/', '/a.js']);
     });
 
+    it('rend la lecture la plus longue, qui pèse sur la latence de la sonde', async () => {
+        const site = siteOf({
+            [`${ORIGIN}/`]: file('h-index', { text: '<script src="/a.js"></script>' }),
+            [`${ORIGIN}/a.js`]: file('h-a')
+        });
+        const slowScript: FetchFn = async (url, timeoutMs) => {
+            if (url.endsWith('/a.js')) await new Promise((resolve) => setTimeout(resolve, 60));
+            return site(url, timeoutMs);
+        };
+        const capture = await captureSite(`${ORIGIN}/`, [], 5000, slowScript);
+        assert.ok(capture.slowestMs >= 50, `${capture.slowestMs} ms`);
+    });
+
     it('un fichier refusé fait échouer la relève plutôt que de passer pour modifié', async () => {
         const fetch = siteOf({
             [`${ORIGIN}/`]: file('h-index', { text: '<script src="/a.js"></script>' }),
@@ -153,7 +166,7 @@ describe('diffCapture', () => {
             csp: "script-src 'self' 'unsafe-inline'",
             files: { '/': 'a', '/x.js': 'B', '/new.js': 'd' },
             source: 'page',
-            documentStatus: 200
+            slowestMs: 0
         });
         assert.deepEqual(diff, { changed: ['/x.js'], added: ['/new.js'], removed: ['/gone.js'], cspChanged: true });
         assert.equal(hasDrift(diff), true);
@@ -170,7 +183,7 @@ describe('diffCapture', () => {
     });
 
     it('ne voit aucun écart quand rien n’a bougé', () => {
-        const diff = diffCapture(baseline, { ...baseline, documentStatus: 200 });
+        const diff = diffCapture(baseline, { ...baseline, slowestMs: 0 });
         assert.equal(hasDrift(diff), false);
     });
 

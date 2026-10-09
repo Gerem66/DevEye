@@ -19,9 +19,12 @@ function service(id: number, over: Partial<UptimeServiceRow> = {}): UptimeServic
         user_id: 1,
         workspace_id: 1,
         content: '',
-        kind: 'http',
         method: 'GET',
         baseline_enc: null,
+        integrity_interval_seconds: null,
+        integrity_checked_at: null,
+        integrity_failures: 0,
+        integrity_verdict: null,
         expected_status: null,
         interval_seconds: 60,
         timeout_seconds: 10,
@@ -195,13 +198,29 @@ describe('les pannes', () => {
                         row: incident(1, NOW - 8000, NOW - 7000, 200),
                         error: 'Mot-clé « jeton-interne » absent de la réponse'
                     },
-                    { row: incident(1, NOW - 9000, NOW - 8500, 503), error: 'Statut HTTP 503 (attendu 2xx/3xx)' }
+                    { row: incident(1, NOW - 9000, NOW - 8500, 503), error: 'Statut HTTP 503 (attendu 2xx/3xx)' },
+                    // La page répond 200 : c'est le fichier qui dit la panne.
+                    {
+                        row: incident(1, NOW - 10_000, NOW - 9500, 200),
+                        error: 'Intégrité : 1 fichier modifié\nModifié : /assets/app.js'
+                    },
+                    {
+                        row: incident(1, NOW - 11_000, NOW - 10_500, 200),
+                        error: 'Fichiers : Statut HTTP 404 sur /assets/app.js'
+                    }
                 ]
             })
         );
         assert.deepEqual(
             view.history.map((i) => i.reason),
-            ['Connexion impossible', 'Délai de réponse dépassé', 'Contenu inattendu', 'Réponse HTTP 503']
+            [
+                'Connexion impossible',
+                'Délai de réponse dépassé',
+                'Contenu inattendu',
+                'Réponse HTTP 503',
+                'Intégrité des fichiers compromise',
+                'Fichiers du site indisponibles'
+            ]
         );
     });
 });

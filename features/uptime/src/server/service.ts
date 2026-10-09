@@ -1,4 +1,4 @@
-import type { UptimeServiceRow, UptimeStatus } from '../contracts/domain';
+import { UPTIME_INTEGRITY_INTERVAL_MIN, type UptimeServiceRow, type UptimeStatus } from '../contracts/domain';
 import { mapLimit, type FeatureService, type FeatureServiceDeps, type SdkCipher } from '@deveye/types/sdk/server';
 
 // Horodatage et durée partagés par tous les émetteurs de l'app : importés, pas recopiés.
@@ -11,9 +11,12 @@ import {
     decryptBaseline,
     decryptError,
     decryptService,
+    decryptVerdict,
     encryptBaseline,
     encryptError,
+    encryptVerdict,
     type IntegrityBaseline,
+    type IntegrityVerdict,
     type ServicePayload
 } from './_shared';
 import { env } from './env';
@@ -39,68 +42,173 @@ import type { UptimeRepo } from './repo';
 /** Élagage des pings bruts, une fois par heure. */
 const PRUNE_INTERVAL_MS = 60 * 60 * 1000;
 
-/** Outcome of a single probe. */
+/** What a reading of the files found. */
+export type IntegrityReading =
+    /** No reference yet: what the site serves becomes it. */
+    | { kind: 'learned'; slowestMs: number; capture: IntegrityCapture }
+    | { kind: 'conform'; slowestMs: number }
+    | { kind: 'drift'; slowestMs: number; error: string; lines: string[] }
+    /** A file could not be read (status, timeout, rate limit, too many files). */
+    | { kind: 'failed'; error: string };
+
+/** Outcome of a single probe: the main request, and the reading of the files when there was one. */
 export interface ProbeOutcome {
     up: boolean;
     httpStatus: number | null;
     responseMs: number | null;
     /** Plaintext failure reason, or null on success. */
     error: string | null;
-    /** Integrity: what the site serves now; becomes the reference when there is none yet. */
-    capture?: IntegrityCapture;
-    /** Integrity: the drift, file by file, for the incident and the alert. */
-    driftLines?: string[];
+    /** Integrity: only when the files were read, which needs the main request to succeed. */
+    reading?: IntegrityReading;
 }
 
 /**
  * La sonde elle-même, injectable : les tests en simulent une, sans réseau.
- * `baseline` ne concerne que l'intégrité : la référence retenue, `null` tant
- * qu'aucune n'a été apprise.
+ * `integrity` non nul demande de lire les fichiers à ce tour, contre la
+ * référence retenue (`null` tant qu'aucune n'a été apprise).
  */
 export type ProbeFn = (
     target: ServicePayload,
     row: UptimeServiceRow,
-    baseline: IntegrityBaseline | null
+    integrity: { baseline: IntegrityBaseline | null } | null
 ) => Promise<ProbeOutcome>;
 
 /** How long a probe body is read before giving up on the keyword match. */
 const KEYWORD_BODY_MAX_BYTES = 512 * 1024;
 
-/** Run one probe, of the service's kind. Never throws: a failure *is* the result. */
+/**
+ * Run one probe: the main request, then the files when asked and the site
+ * answered. Never throws: a failure *is* the result.
+ */
 export async function probeService(
     target: ServicePayload,
     row: UptimeServiceRow,
-    baseline: IntegrityBaseline | null
+    integrity: { baseline: IntegrityBaseline | null } | null
 ): Promise<ProbeOutcome> {
-    return row.kind === 'integrity' ? probeIntegrity(target, row, baseline) : probeHttp(target, row);
+    const http = await probeHttp(target, row);
+    if (!http.up || !integrity) return http;
+    return { ...http, reading: await readFiles(target, row, integrity.baseline) };
 }
 
-/**
- * Integrity: refetch every file the site serves and compare. Without a
- * reference, the capture IS the result: `record` stores it as the reference
- * and the service is up. The document unreachable is a failure like any other.
- */
-async function probeIntegrity(
+/** Refetch every file the site serves and compare them to the reference. */
+async function readFiles(
     target: ServicePayload,
     row: UptimeServiceRow,
     baseline: IntegrityBaseline | null
-): Promise<ProbeOutcome> {
-    const started = Date.now();
+): Promise<IntegrityReading> {
     try {
         const capture = await captureSite(target.url, target.paths, row.timeout_seconds * 1000);
-        const responseMs = Date.now() - started;
-        if (!baseline) return { up: true, httpStatus: capture.documentStatus, responseMs, error: null, capture };
+        const slowestMs = capture.slowestMs;
+        if (!baseline) return { kind: 'learned', slowestMs, capture };
         const diff = diffCapture(baseline, capture);
-        if (!hasDrift(diff)) return { up: true, httpStatus: capture.documentStatus, responseMs, error: null };
-        return {
-            up: false,
-            httpStatus: capture.documentStatus,
-            responseMs,
-            error: describeDrift(diff),
-            driftLines: detailDrift(diff)
-        };
+        if (!hasDrift(diff)) return { kind: 'conform', slowestMs };
+        return { kind: 'drift', slowestMs, error: describeDrift(diff), lines: detailDrift(diff) };
     } catch (e) {
-        return { up: false, httpStatus: null, responseMs: Date.now() - started, error: failureMessage(e, row) };
+        return { kind: 'failed', error: failureMessage(e, row) };
+    }
+}
+
+/**
+ * Lire les fichiers à ce tour ? Jamais sans l'option ; toujours sans lecture
+ * passée ou sur demande ; sinon à son rythme, et cinq minutes après une
+ * lecture ratée, pour qu'un fichier durablement absent atteigne le seuil.
+ */
+export function integrityDue(
+    row: Pick<UptimeServiceRow, 'integrity_interval_seconds' | 'integrity_checked_at' | 'integrity_failures'>,
+    now: number,
+    force: boolean
+): boolean {
+    if (row.integrity_interval_seconds === null) return false;
+    if (force || row.integrity_checked_at === null) return true;
+    const wait = row.integrity_failures > 0 ? UPTIME_INTEGRITY_INTERVAL_MIN : row.integrity_interval_seconds;
+    return row.integrity_checked_at + wait <= now;
+}
+
+/** Une mesure telle qu'elle s'enregistre, la lecture des fichiers appliquée. */
+export interface Measure {
+    up: boolean;
+    httpStatus: number | null;
+    responseMs: number | null;
+    error: string | null;
+    /** Un écart, fichier par fichier : pour l'incident et l'alerte. */
+    driftLines?: string[];
+}
+
+/** Ce qu'une lecture laisse sur la ligne du service. */
+export interface ReadingState {
+    failures: number;
+    verdict: IntegrityVerdict | null;
+    learned: IntegrityCapture | null;
+}
+
+/**
+ * La politique de l'option d'intégrité, pure. Une seule courbe, celle de la
+ * requête principale, que les fichiers influencent :
+ *
+ * - un écart pose un verdict qui tient **chaque** mesure en échec jusqu'à ce
+ *   qu'une lecture retrouve la référence ou que l'utilisateur l'accepte, sans
+ *   quoi la sonde suivante, verte, refermerait la panne ;
+ * - une lecture ratée ne fait échouer que sa mesure, jusqu'à `failure_threshold`
+ *   lectures ratées d'affilée, où elle devient verdict à son tour ;
+ * - le fichier le plus lent pèse sur la latence.
+ */
+export function applyIntegrity(
+    probe: ProbeOutcome,
+    row: Pick<UptimeServiceRow, 'failure_threshold' | 'integrity_failures'>,
+    stored: IntegrityVerdict | null
+): { measure: Measure; reading: ReadingState | null } {
+    const http: Measure = {
+        up: probe.up,
+        httpStatus: probe.httpStatus,
+        responseMs: probe.responseMs,
+        error: probe.error
+    };
+    const failWith = (verdict: IntegrityVerdict, error = verdict.error, responseMs = http.responseMs): Measure => ({
+        ...http,
+        up: false,
+        responseMs,
+        error,
+        ...(verdict.lines.length > 0 ? { driftLines: verdict.lines } : {})
+    });
+    const slowest = (ms: number) => Math.max(http.responseMs ?? 0, ms);
+
+    const reading = probe.reading;
+    if (!probe.up || !reading) {
+        return { measure: probe.up && stored ? failWith(stored) : http, reading: null };
+    }
+    switch (reading.kind) {
+        case 'learned':
+            return {
+                measure: { ...http, responseMs: slowest(reading.slowestMs) },
+                reading: { failures: 0, verdict: null, learned: reading.capture }
+            };
+        case 'conform':
+            return {
+                measure: { ...http, responseMs: slowest(reading.slowestMs) },
+                reading: { failures: 0, verdict: null, learned: null }
+            };
+        case 'drift': {
+            const verdict = { error: reading.error, lines: reading.lines };
+            return {
+                measure: failWith(verdict, verdict.error, slowest(reading.slowestMs)),
+                reading: { failures: 0, verdict, learned: null }
+            };
+        }
+        case 'failed': {
+            const error = `Fichiers : ${reading.error}`;
+            const failures = row.integrity_failures + 1;
+            // Un écart en cours le reste : une lecture ratée ne dit pas que les fichiers sont revenus.
+            const verdict =
+                stored && stored.lines.length > 0
+                    ? stored
+                    : failures >= row.failure_threshold
+                      ? { error, lines: [] }
+                      : null;
+            return {
+                measure: verdict ? failWith(verdict, error) : { ...http, up: false, error },
+                reading: { failures, verdict, learned: null }
+            };
+        }
     }
 }
 
@@ -261,28 +369,33 @@ export class UptimeMonitor {
     /**
      * Probe one service and persist everything that follows from it. Isolated
      * per service so one broken row can never stall the whole tick, and
-     * de-duplicated so a service is never probed twice at once.
+     * de-duplicated so a service is never probed twice at once. `readFiles`
+     * forces a reading of the files when the integrity option is on.
      */
-    async runOne(row: UptimeServiceRow): Promise<void> {
+    async runOne(row: UptimeServiceRow, { readFiles = false }: { readFiles?: boolean } = {}): Promise<void> {
         // Relu ici aussi : l'offre peut mettre le service en pause entre la
         // liste des dus et son tour dans le lot.
         if (this.deps.pauses.isPaused('monitors', String(row.id))) return;
         const running = this.inFlight.get(row.id);
         if (running) return running;
-        const probe = this.probeAndRecord(row).finally(() => this.inFlight.delete(row.id));
+        const probe = this.probeAndRecord(row, readFiles).finally(() => this.inFlight.delete(row.id));
         this.inFlight.set(row.id, probe);
         return probe;
     }
 
-    private async probeAndRecord(row: UptimeServiceRow): Promise<void> {
+    private async probeAndRecord(row: UptimeServiceRow, readFiles: boolean): Promise<void> {
         try {
             const cipher = this.deps.cipherFor(row.workspace_id);
             const target = await decryptService(cipher, row.content);
-            const baseline = row.kind === 'integrity' ? await decryptBaseline(cipher, row.baseline_enc) : null;
-            const outcome = target.url
-                ? await this.probe(target, row, baseline)
+            const read = integrityDue(row, Math.floor(Date.now() / 1000), readFiles);
+            const integrity = read ? { baseline: await decryptBaseline(cipher, row.baseline_enc) } : null;
+            const stored =
+                row.integrity_interval_seconds === null ? null : await decryptVerdict(cipher, row.integrity_verdict);
+            const outcome: ProbeOutcome = target.url
+                ? await this.probe(target, row, integrity)
                 : { up: false, httpStatus: null, responseMs: null, error: 'Cible illisible (blob corrompu)' };
-            await this.record(row, target, outcome, cipher);
+            const { measure, reading } = applyIntegrity(outcome, row, stored);
+            await this.record(row, target, measure, reading, cipher);
         } catch (e) {
             this.deps.logger.error(
                 { serviceId: row.id, err: e instanceof Error ? e.message : String(e) },
@@ -291,25 +404,35 @@ export class UptimeMonitor {
         }
     }
 
-    /** Persist a probe: raw ping, rollup, live state, incident, notification. */
+    /** Persist a probe: raw ping, rollup, live state, reading of the files, incident, notification. */
     private async record(
         row: UptimeServiceRow,
         target: ServicePayload,
-        outcome: ProbeOutcome,
+        outcome: Measure,
+        reading: ReadingState | null,
         cipher: SdkCipher
     ): Promise<void> {
         const { repo } = this.deps;
         const at = Math.floor(Date.now() / 1000);
         const encryptedError = await encryptError(cipher, outcome.error);
 
-        // Première lecture réussie d'un contrôle d'intégrité : ce que le site
-        // sert devient la référence. Rien n'est comparé à ce tour-là.
-        if (outcome.capture) {
-            const { csp, files, source } = outcome.capture;
-            await repo.services.setBaseline(
-                row.id,
-                await encryptBaseline(cipher, { capturedAt: at, csp, files, source })
-            );
+        // Une première lecture réussie apprend la référence : rien n'est
+        // comparé à ce tour-là.
+        if (reading) {
+            const learned = reading.learned;
+            await repo.services.recordIntegrity(row.id, {
+                checkedAt: at,
+                failures: reading.failures,
+                verdict: await encryptVerdict(cipher, reading.verdict),
+                baseline: learned
+                    ? await encryptBaseline(cipher, {
+                          capturedAt: at,
+                          csp: learned.csp,
+                          files: learned.files,
+                          source: learned.source
+                      })
+                    : null
+            });
         }
 
         await repo.history.addCheck({
@@ -360,7 +483,7 @@ export class UptimeMonitor {
     private async reconcileIncident(
         row: UptimeServiceRow,
         target: ServicePayload,
-        probe: ProbeOutcome & { at: number; status: UptimeStatus; encryptedError: string | null },
+        probe: Measure & { at: number; status: UptimeStatus; encryptedError: string | null },
         cipher: SdkCipher
     ): Promise<void> {
         const { repo } = this.deps;

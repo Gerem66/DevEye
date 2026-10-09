@@ -17,7 +17,6 @@ import {
     uptimeCheckSchema,
     uptimeCheckStatsSchema,
     uptimeIncidentSchema,
-    uptimeKindSchema,
     uptimeMethodSchema,
     uptimePageSchema,
     uptimePageServiceSchema,
@@ -38,11 +37,12 @@ const integrityPathSchema = z
     .regex(/^\/[^\s]*$/)
     .refine((p) => !/(^|\/)\.\.(\/|$)/.test(p), 'Chemin invalide');
 
-/** Everything the user may set on a service. `kind` is fixed at creation. */
+/** Everything the user may set on a service. */
 const uptimeDraftFields = z.object({
-    kind: uptimeKindSchema,
     name: z.string().min(1).max(UPTIME_NAME_MAX_LENGTH),
     url: z.url({ protocol: /^https?$/ }).max(UPTIME_URL_MAX_LENGTH),
+    /** `null`: the integrity option is off, and `paths` is dropped. */
+    integrityIntervalSeconds: z.number().int().min(UPTIME_INTEGRITY_INTERVAL_MIN).max(UPTIME_INTERVAL_MAX).nullable(),
     paths: z.array(integrityPathSchema).max(UPTIME_INTEGRITY_PATHS_MAX),
     method: uptimeMethodSchema,
     expectedStatus: z.number().int().min(100).max(599).nullable(),
@@ -54,26 +54,10 @@ const uptimeDraftFields = z.object({
     enabled: z.boolean()
 });
 
-const integrityCadence = {
-    message: `Un contrôle d’intégrité relit tout un site : au plus toutes les ${UPTIME_INTEGRITY_INTERVAL_MIN / 60} minutes.`,
-    path: ['intervalSeconds']
-};
-
-const uptimeDraftSchema = uptimeDraftFields.refine(
-    (d) => d.kind !== 'integrity' || d.intervalSeconds >= UPTIME_INTEGRITY_INTERVAL_MIN,
-    integrityCadence
-);
-
 /** A new service may leave its cadence out: the server then applies the owner plan's default. */
-const uptimeNewDraftSchema = uptimeDraftFields
-    .extend({ intervalSeconds: uptimeDraftFields.shape.intervalSeconds.optional() })
-    .refine(
-        (d) =>
-            d.kind !== 'integrity' ||
-            d.intervalSeconds === undefined ||
-            d.intervalSeconds >= UPTIME_INTEGRITY_INTERVAL_MIN,
-        integrityCadence
-    );
+const uptimeNewDraftSchema = uptimeDraftFields.extend({
+    intervalSeconds: uptimeDraftFields.shape.intervalSeconds.optional()
+});
 
 /**
  * List the workspace's services in the user's own order, each carrying its live
@@ -111,7 +95,7 @@ export const uptimeAdd = {
 /** Replace a service's whole configuration. History and incidents are kept. */
 export const uptimeUpdate = {
     command: 'uptime.update' as const,
-    input: z.object({ id: serviceId, service: uptimeDraftSchema }),
+    input: z.object({ id: serviceId, service: uptimeDraftFields }),
     output: z.object({ service: uptimeServiceSchema })
 };
 
@@ -143,7 +127,7 @@ export const uptimeReorder = {
     output: z.object({ ids: z.array(serviceId) })
 };
 
-/** Probe a service right now instead of waiting for its next tick. */
+/** Probe a service right now instead of waiting for its next tick, its files included when the integrity option is on. */
 export const uptimeCheckNow = {
     command: 'uptime.checkNow' as const,
     input: z.object({ id: serviceId }),
@@ -270,6 +254,7 @@ export const uptimePageRemove = {
  * Integrity: take what the site serves NOW as the reference (after a deployment
  * one made, say). Closes the incident the drift had opened. The files are
  * refetched first: what is accepted is what a visitor gets at that moment.
+ * Refused on a service whose integrity option is off.
  */
 export const uptimeAcceptBaseline = {
     command: 'uptime.acceptBaseline' as const,

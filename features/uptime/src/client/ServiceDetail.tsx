@@ -164,27 +164,28 @@ export function ServiceDetail({ service, onBack, onCheckNow, onAcceptBaseline }:
                         {/* Un écart constaté, ou pas encore de référence : ce que le site
                             sert maintenant devient la référence. Confirmé, parce que c'est
                             valider ce qu'un attaquant aurait pu y mettre. */}
-                        {service.kind === 'integrity' && (service.status === 'down' || service.baseline === null) && (
-                            <Button
-                                variant='secondary'
-                                icon='shield'
-                                onClick={() =>
-                                    setConfirm({
-                                        title: 'Accepter la version actuelle ?',
-                                        confirmLabel: 'Accepter',
-                                        tone: 'primary',
-                                        description:
-                                            'Les fichiers que le site sert à cet instant deviennent la référence, et l’écart en cours est clos. À ne faire que pour un déploiement que vous reconnaissez.',
-                                        onConfirm: () => {
-                                            setConfirm(null);
-                                            onAcceptBaseline();
-                                        }
-                                    })
-                                }
-                            >
-                                Accepter la version actuelle
-                            </Button>
-                        )}
+                        {service.integrityIntervalSeconds !== null &&
+                            (service.integrityDrift || service.baseline === null) && (
+                                <Button
+                                    variant='secondary'
+                                    icon='shield'
+                                    onClick={() =>
+                                        setConfirm({
+                                            title: 'Accepter la version actuelle ?',
+                                            confirmLabel: 'Accepter',
+                                            tone: 'primary',
+                                            description:
+                                                'Les fichiers que le site sert à cet instant deviennent la référence, et l’écart en cours est clos. À ne faire que pour un déploiement que vous reconnaissez.',
+                                            onConfirm: () => {
+                                                setConfirm(null);
+                                                onAcceptBaseline();
+                                            }
+                                        })
+                                    }
+                                >
+                                    Accepter la version actuelle
+                                </Button>
+                            )}
                         {/* Les réglages de ce service, son identité et sa suppression
                             comprises (onglet Général). Supprimé ou déplacé depuis la
                             coquille, le service n'est plus ici : la fiche revient à
@@ -204,10 +205,10 @@ export function ServiceDetail({ service, onBack, onCheckNow, onAcceptBaseline }:
 
             {staleError && <p className={styles.error}>{staleError}</p>}
 
-            {service.kind === 'integrity' && (
+            {service.integrityIntervalSeconds !== null && (
                 <p className={styles.reference}>
                     {service.baseline === null ? (
-                        <span>Aucune référence encore : la première relève réussie apprend ce que le site sert.</span>
+                        <span>Aucune référence encore : la première lecture réussie apprend ce que le site sert.</span>
                     ) : (
                         <>
                             <span>
@@ -222,6 +223,10 @@ export function ServiceDetail({ service, onBack, onCheckNow, onAcceptBaseline }:
                                 {service.baseline.csp
                                     ? 'politique de contenu surveillée'
                                     : 'aucune politique de contenu'}
+                            </span>
+                            <span>
+                                fichiers relus {formatEvery(service.integrityIntervalSeconds)}, dernière lecture{' '}
+                                {formatAgo(service.integrityCheckedAt)}
                             </span>
                         </>
                     )}

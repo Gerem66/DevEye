@@ -17,18 +17,16 @@ import {
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import {
     UPTIME_DEFAULT_RETENTION_DAYS,
-    UPTIME_INTEGRITY_INTERVAL_MIN,
+    UPTIME_INTEGRITY_DEFAULT_INTERVAL_SECONDS,
     UPTIME_THRESHOLD_MAX,
     UPTIME_TIMEOUT_MAX,
     UPTIME_TIMEOUT_MIN,
-    type UptimeKind,
     type UptimeMethod,
     type UptimeService
 } from '../contracts/domain';
 
 import { api } from './api';
-import { KIND_OPTIONS, parsePaths } from './kinds';
-import { clamp, type ServiceTuning } from './format';
+import { clamp, parsePaths, type ServiceTuning } from './format';
 import styles from './style.module.css';
 
 /** Les cadences offertes, en secondes : du quasi-direct au battement quotidien. */
@@ -40,6 +38,15 @@ const INTERVALS: { value: number; label: string }[] = [
     { value: 3600, label: '1 heure' },
     { value: 21600, label: '6 heures' },
     { value: 86400, label: '1 jour' }
+];
+
+/** Le rythme de lecture des fichiers : relire tout un site ne descend pas sous cinq minutes. */
+const INTEGRITY_INTERVALS: readonly SearchSelectOption[] = [
+    { value: '300', label: '5 minutes' },
+    { value: String(UPTIME_INTEGRITY_DEFAULT_INTERVAL_SECONDS), label: '15 minutes (par défaut)' },
+    { value: '3600', label: '1 heure' },
+    { value: '21600', label: '6 heures' },
+    { value: '86400', label: '1 jour' }
 ];
 
 /**
@@ -62,26 +69,27 @@ const RETENTION_OPTIONS: readonly SearchSelectOption[] = RETENTIONS.map((r) => (
 
 /** Tout ce qu'`uptime.update` prend : l'identité du service et ses réglages fins. */
 interface ServiceDraft extends ServiceTuning {
-    kind: UptimeKind;
     name: string;
     url: string;
-    /** Intégrité : un chemin par ligne, tel que saisi. */
-    paths: string;
     method: UptimeMethod;
     expectedStatus: number | null;
     keyword: string | null;
+    /** `null` : l'option d'intégrité est éteinte. */
+    integrityIntervalSeconds: number | null;
+    /** Intégrité : un chemin par ligne, tel que saisi. */
+    paths: string;
     enabled: boolean;
 }
 
 function draftOf(service: UptimeService): ServiceDraft {
     return {
-        kind: service.kind,
         name: service.name,
         url: service.url,
-        paths: service.paths.join('\n'),
         method: service.method,
         expectedStatus: service.expectedStatus,
         keyword: service.keyword,
+        integrityIntervalSeconds: service.integrityIntervalSeconds,
+        paths: service.paths.join('\n'),
         enabled: service.enabled,
         intervalSeconds: service.intervalSeconds,
         timeoutSeconds: service.timeoutSeconds,
@@ -92,8 +100,8 @@ function draftOf(service: UptimeService): ServiceDraft {
 
 /**
  * Le service lui-même : son identité (nom, URL, méthode, statut attendu,
- * mot-clé, surveillance), ses réglages fins (cadence, délai, seuil, rétention)
- * et sa suppression. L'onglet Général de ses réglages, là où le bouton commun
+ * mot-clé, option d'intégrité, surveillance), ses réglages fins (cadence,
+ * délai, seuil, rétention) et sa suppression. L'onglet Général de ses réglages, là où le bouton commun
  * mène.
  *
  * Autonome : il charge le service par `uptime.list`, enregistre par
@@ -147,7 +155,7 @@ export default function ServiceGeneralPanel({ scope, canWrite, gone }: SettingsP
                     ...draft,
                     name,
                     url,
-                    paths: draft.kind === 'integrity' ? parsePaths(draft.paths) : [],
+                    paths: draft.integrityIntervalSeconds === null ? [] : parsePaths(draft.paths),
                     keyword: draft.keyword?.trim() || null
                 }
             });
@@ -188,9 +196,7 @@ export default function ServiceGeneralPanel({ scope, canWrite, gone }: SettingsP
         setDraft((d) => (d ? { ...d, [key]: value } : d));
 
     const editable = canWrite && !busy;
-    const integrity = draft.kind === 'integrity';
-    // Un contrôle d'intégrité relit tout un site : les cadences rapides n'y sont pas.
-    const intervals = integrity ? INTERVALS.filter((i) => i.value >= UPTIME_INTEGRITY_INTERVAL_MIN) : INTERVALS;
+    const integrity = draft.integrityIntervalSeconds !== null;
     const base = draftOf(service);
     const unchanged = (Object.keys(draft) as (keyof ServiceDraft)[]).every((k) => draft[k] === base[k]);
 
@@ -208,18 +214,6 @@ export default function ServiceGeneralPanel({ scope, canWrite, gone }: SettingsP
             </div>
 
             <div className={shell.field}>
-                <span className={shell.sectionLabel}>Type de contrôle</span>
-                {/* Fixé à la création : une référence apprise ne vaut que pour l'intégrité. */}
-                <SegmentedControl
-                    aria-label='Type de contrôle'
-                    value={draft.kind}
-                    onChange={() => {}}
-                    disabled
-                    options={KIND_OPTIONS}
-                />
-            </div>
-
-            <div className={shell.field}>
                 <span className={shell.sectionLabel}>URL surveillée</span>
                 <TextInput
                     placeholder='https://exemple.com/health'
@@ -230,66 +224,98 @@ export default function ServiceGeneralPanel({ scope, canWrite, gone }: SettingsP
                 />
             </div>
 
-            {integrity && (
-                <div className={shell.field}>
-                    <span className={shell.sectionLabel}>Fichiers supplémentaires (un chemin par ligne)</span>
-                    <textarea
-                        className={styles.textarea}
-                        rows={3}
-                        placeholder={'/t.js'}
-                        value={draft.paths}
+            <div className={styles.formRow}>
+                <div className={styles.field}>
+                    <span className={shell.sectionLabel}>Méthode</span>
+                    <SegmentedControl
+                        aria-label='Méthode HTTP'
+                        value={draft.method}
                         disabled={!editable}
-                        onChange={(e) => set('paths', e.target.value)}
+                        onChange={(v: UptimeMethod) => set('method', v)}
+                        options={[
+                            { value: 'GET', label: 'GET' },
+                            { value: 'HEAD', label: 'HEAD' },
+                            { value: 'POST', label: 'POST' }
+                        ]}
                     />
-                    <span className={shell.fieldHint}>
-                        Les scripts et styles de la page sont trouvés seuls ; une instance DevEye annonce tous ses
-                        fichiers. Changer l’adresse ou cette liste fait ré-apprendre la référence à la prochaine relève.
-                    </span>
                 </div>
-            )}
+                <div className={styles.field}>
+                    <span className={shell.sectionLabel}>Statut attendu</span>
+                    <TextInput
+                        type='number'
+                        min={100}
+                        max={599}
+                        placeholder='2xx / 3xx'
+                        value={draft.expectedStatus ?? ''}
+                        disabled={!editable}
+                        onChange={(e) => set('expectedStatus', e.target.value ? clamp(e.target.value, 100, 599) : null)}
+                    />
+                    <span className={shell.fieldHint}>Vide, toute réponse 2xx ou 3xx convient.</span>
+                </div>
+            </div>
 
-            {!integrity && (
+            <div className={shell.field}>
+                <span className={shell.sectionLabel}>Mot-clé attendu dans la réponse (optionnel)</span>
+                <TextInput
+                    placeholder='ex. "ok"'
+                    value={draft.keyword ?? ''}
+                    disabled={!editable}
+                    onChange={(e) => set('keyword', e.target.value || null)}
+                />
+            </div>
+
+            <Checkbox
+                checked={integrity}
+                disabled={!editable}
+                onChange={(v) =>
+                    set(
+                        'integrityIntervalSeconds',
+                        v ? (service.integrityIntervalSeconds ?? UPTIME_INTEGRITY_DEFAULT_INTERVAL_SECONDS) : null
+                    )
+                }
+            >
                 <>
-                    <div className={styles.formRow}>
-                        <div className={styles.field}>
-                            <span className={shell.sectionLabel}>Méthode</span>
-                            <SegmentedControl
-                                aria-label='Méthode HTTP'
-                                value={draft.method}
-                                disabled={!editable}
-                                onChange={(v: UptimeMethod) => set('method', v)}
-                                options={[
-                                    { value: 'GET', label: 'GET' },
-                                    { value: 'HEAD', label: 'HEAD' },
-                                    { value: 'POST', label: 'POST' }
-                                ]}
-                            />
-                        </div>
-                        <div className={styles.field}>
-                            <span className={shell.sectionLabel}>Statut attendu</span>
-                            <TextInput
-                                type='number'
-                                min={100}
-                                max={599}
-                                placeholder='2xx / 3xx'
-                                value={draft.expectedStatus ?? ''}
-                                disabled={!editable}
-                                onChange={(e) =>
-                                    set('expectedStatus', e.target.value ? clamp(e.target.value, 100, 599) : null)
-                                }
-                            />
-                            <span className={shell.fieldHint}>Vide, toute réponse 2xx ou 3xx convient.</span>
-                        </div>
+                    <span className={shell.fieldLabel}>Vérifier aussi l’intégrité des fichiers</span>
+                    <span className={shell.fieldHint}>
+                        Relit les scripts, les styles et la politique de contenu que sert la page, et compare leurs
+                        empreintes à une référence apprise à la première lecture. Un écart tient le service en échec
+                        jusqu’à ce que le site serve de nouveau la référence, ou que vous acceptiez la version actuelle.
+                    </span>
+                </>
+            </Checkbox>
+
+            {integrity && (
+                <>
+                    <div className={shell.field}>
+                        <span className={shell.sectionLabel}>Relire les fichiers toutes les</span>
+                        <SearchSelect
+                            value={String(draft.integrityIntervalSeconds)}
+                            disabled={!editable}
+                            onChange={(v) => set('integrityIntervalSeconds', Number(v))}
+                            options={INTEGRITY_INTERVALS}
+                            aria-label='Relire les fichiers toutes les'
+                        />
+                        <span className={shell.fieldHint}>
+                            La lecture se fait avec une sonde du service : jamais plus souvent que la fréquence de
+                            relève ci-dessous.
+                        </span>
                     </div>
 
                     <div className={shell.field}>
-                        <span className={shell.sectionLabel}>Mot-clé attendu dans la réponse (optionnel)</span>
-                        <TextInput
-                            placeholder='ex. "ok"'
-                            value={draft.keyword ?? ''}
+                        <span className={shell.sectionLabel}>Fichiers supplémentaires (un chemin par ligne)</span>
+                        <textarea
+                            className={styles.textarea}
+                            rows={3}
+                            placeholder={'/t.js'}
+                            value={draft.paths}
                             disabled={!editable}
-                            onChange={(e) => set('keyword', e.target.value || null)}
+                            onChange={(e) => set('paths', e.target.value)}
                         />
+                        <span className={shell.fieldHint}>
+                            L’adresse surveillée doit être une page du site : ses scripts et styles y sont trouvés
+                            seuls, et une instance DevEye annonce tous ses fichiers. Allumer l’option, changer l’adresse
+                            ou cette liste fait réapprendre la référence à la prochaine sonde.
+                        </span>
                     </div>
                 </>
             )}
@@ -309,7 +335,7 @@ export default function ServiceGeneralPanel({ scope, canWrite, gone }: SettingsP
                     value={String(draft.intervalSeconds)}
                     disabled={!editable}
                     onChange={(v) => set('intervalSeconds', Number(v))}
-                    options={intervals.map((i) => ({ value: String(i.value), label: i.label }))}
+                    options={INTERVALS.map((i) => ({ value: String(i.value), label: i.label }))}
                     aria-label='Fréquence de relève'
                 />
             </div>

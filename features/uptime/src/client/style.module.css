@@ -767,8 +767,13 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-xs);
-    flex: 1 1 140px;
     min-width: 0;
+}
+
+/* Dans une rangée seulement : posée sur l'axe vertical d'un formulaire, cette
+   base donnerait 140 px de haut à chaque champ. */
+.formRow > .field {
+    flex: 1 1 140px;
 }
 
 .fieldLabel {

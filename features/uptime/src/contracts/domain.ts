@@ -31,16 +31,17 @@ export const UPTIME_TIMEOUT_MAX = 120;
 export const UPTIME_THRESHOLD_MAX = 10;
 
 /**
- * What a service checks. `http`: the target answers (status, keyword).
- * `integrity`: the files a site serves have not changed since a reference the
- * user accepted (SHA-256 of every file, and the document's Content-Security-
- * Policy). A detector that must live on ANOTHER server than the one it watches.
+ * The integrity option of a service: the files its site serves have not
+ * changed since a reference the user accepted (SHA-256 of every file, and the
+ * document's Content-Security-Policy). A detector that must live on ANOTHER
+ * server than the one it watches.
+ *
+ * Reading the files refetches a whole site: never more often than this, in
+ * seconds. Also the retry delay after a failed reading.
  */
-export const uptimeKindSchema = z.enum(['http', 'integrity']);
-export type UptimeKind = z.infer<typeof uptimeKindSchema>;
-
-/** An integrity check refetches a whole site: never more often than this, in seconds. */
 export const UPTIME_INTEGRITY_INTERVAL_MIN = 300;
+/** How often a service that turns the option on rereads its files. */
+export const UPTIME_INTEGRITY_DEFAULT_INTERVAL_SECONDS = 900;
 /** Extra files an integrity check verifies (site-relative paths). */
 export const UPTIME_INTEGRITY_PATHS_MAX = 50;
 export const UPTIME_INTEGRITY_PATH_MAX_LENGTH = 512;
@@ -79,9 +80,8 @@ export type UptimeRange = z.infer<typeof uptimeRangeSchema>;
 export const uptimeResolutionSchema = z.enum(['raw', 'hour', 'day']);
 export type UptimeResolution = z.infer<typeof uptimeResolutionSchema>;
 
-/** One monitored service: its configuration, its live state and its ratios. */
 /**
- * What an integrity service compares against, as the screen sees it: never the
+ * What the integrity option compares against, as the screen sees it: never the
  * fingerprints themselves. `null` until the first successful capture.
  */
 export const uptimeBaselineSchema = z.object({
@@ -94,14 +94,27 @@ export const uptimeBaselineSchema = z.object({
 });
 export type UptimeBaseline = z.infer<typeof uptimeBaselineSchema>;
 
+/** One monitored service: its configuration, its live state and its ratios. */
 export const uptimeServiceSchema = z.object({
     id: z.number().int().positive(),
-    kind: uptimeKindSchema,
     name: z.string(),
     url: z.string(),
-    /** Integrity only: extra site-relative files to verify (`/t.js`). */
+    /**
+     * How often the files of the site are reread, in seconds, on top of the
+     * probe; `null` when the integrity option is off.
+     */
+    integrityIntervalSeconds: z.number().int().positive().nullable(),
+    /** Integrity: extra site-relative files to verify (`/t.js`). */
     paths: z.array(z.string()),
+    /** Integrity: `null` when the option is off, or until the first successful reading. */
     baseline: uptimeBaselineSchema.nullable(),
+    /** Integrity: last reading of the files, successful or not. */
+    integrityCheckedAt: z.number().int().nonnegative().nullable(),
+    /**
+     * Integrity: the files differ from the reference. Every probe fails until a
+     * reading finds the reference again or the user accepts the current version.
+     */
+    integrityDrift: z.boolean(),
     method: uptimeMethodSchema,
     /** Exact status code required, or `null` to accept any 2xx/3xx. */
     expectedStatus: z.number().int().min(100).max(599).nullable(),
@@ -256,7 +269,6 @@ export interface UptimeServiceRow {
     workspace_id: number;
     /** Encrypted `{ name, url, keyword, paths }` (open tier). */
     content: string;
-    kind: UptimeKind;
     method: UptimeMethod;
     expected_status: number | null;
     interval_seconds: number;
@@ -272,8 +284,15 @@ export interface UptimeServiceRow {
     last_http_status: number | null;
     /** Encrypted error string (open tier), or null after a success. */
     last_error: string | null;
-    /** Integrity only: encrypted reference (open tier), null until learned. */
+    /** Integrity: encrypted reference (open tier), null until learned. */
     baseline_enc: string | null;
+    /** Integrity: `null` when the option is off. */
+    integrity_interval_seconds: number | null;
+    integrity_checked_at: number | null;
+    /** Integrity: failed readings in a row (a drift is not a failed reading). */
+    integrity_failures: number;
+    /** Integrity: encrypted `{ error, lines }` (open tier) that keeps every probe failing; null while the files conform. */
+    integrity_verdict: string | null;
     created: number;
 }
 

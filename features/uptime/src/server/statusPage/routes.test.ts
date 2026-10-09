@@ -71,9 +71,12 @@ function service(id: number, over: Partial<UptimeServiceRow> = {}): UptimeStatus
             url: `https://interne.exemple.fr/${id}`,
             keyword: 'jeton-secret'
         }),
-        kind: 'http',
         method: 'GET',
         baseline_enc: null,
+        integrity_interval_seconds: null,
+        integrity_checked_at: null,
+        integrity_failures: 0,
+        integrity_verdict: null,
         expected_status: null,
         interval_seconds: 60,
         timeout_seconds: 10,

@@ -21,7 +21,7 @@ export const uptimeTree: ItemTree = [
         workspaceColumn: 'workspace_id',
         userColumn: 'user_id',
         orderColumn: 'sort_order',
-        sealed: ['content', 'last_error', 'baseline_enc'],
+        sealed: ['content', 'last_error', 'baseline_enc', 'integrity_verdict'],
         // L'état appartient à ce que CE serveur a mesuré : la copie repart
         // de zéro et se fait sa propre idée.
         omit: [
@@ -31,6 +31,9 @@ export const uptimeTree: ItemTree = [
             'last_response_ms',
             'last_http_status',
             'last_error',
+            'integrity_checked_at',
+            'integrity_failures',
+            'integrity_verdict',
             'created'
         ]
     },

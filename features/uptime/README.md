@@ -12,9 +12,9 @@ Documents voisins : [Docs/SECURITY_MODEL.md](../../Docs/SECURITY_MODEL.md)
 
 ## Le modèle
 
-Un **service** est une URL, une cadence et un type de contrôle (`kind`) :
-`http` (le site répond) ou `integrity` (le site sert encore les mêmes
-fichiers). Il appartient à l'espace et se partage entre espaces comme les
+Un **service** est une URL et une cadence : la sonde vérifie que le site
+répond et, quand son option d'intégrité est cochée, qu'il sert encore les
+mêmes fichiers. Il appartient à l'espace et se partage entre espaces comme les
 autres éléments de premier rang (`shareTier: 'open'`) : le module tient
 l'engagement par son entrée `items` (domicile, intitulé, déplacement, copie),
 par `ctx.sharing.scope()` dans ses listages et par `ctx.items.restrictions()` /
@@ -26,17 +26,17 @@ interroge `UPTIME_ITEMS_PROVIDER` avant de relier).
 Tout ce que l'ordonnanceur lit pour **planifier** une sonde (cadence, délai,
 seuil, actif) et tout ce qu'un graphique agrège (statut, latence, horodatages)
 vit en colonnes claires ; ce qui identifie la cible (nom, URL, mot-clé, chemins
-d'intégrité), la référence d'intégrité et les messages d'erreur sont chiffrés à
-l'**étage ouvert**, puisque le vérificateur tourne en tâche de fond, sans
+d'intégrité), la référence et le verdict d'intégrité et les messages d'erreur
+sont chiffrés à l'**étage ouvert**, puisque le vérificateur tourne en tâche de fond, sans
 session ni mot de passe. Aucune commande n'est verrouillée par le chiffrement
 par mot de passe : la feature s'ouvre et se lit sans prompt.
 
 Six tables : quatre du socle (`uptime_services`, `uptime_checks`,
 `uptime_daily`, `uptime_incidents`, dispensées du préfixe par l'allowlist de
 `deveye-feature.json`) et deux du module au préfixe `ft_uptime_` (les pages de
-statut, `src/server/migrations/001_status_pages.sql`). La migration
-`002_integrity.sql` du module ajoute `kind` et `baseline_enc` à
-`uptime_services`.
+statut, `src/server/migrations/001_status_pages.sql`). Les migrations
+`002_integrity.sql` et `003_integrity_option.sql` du module ajoutent à
+`uptime_services` les colonnes de l'option d'intégrité.
 
 ## Le principe
 
@@ -49,13 +49,15 @@ place. Un tour part aussi au démarrage, pour qu'un redémarrage ne fasse pas
 attendre les services. Un service n'est jamais sondé deux fois à la fois : un
 `uptime.checkNow` qui tombe sur un tour planifié rejoint la sonde en cours.
 
-Une sonde HTTP est réussie si :
+Une sonde est réussie si :
 
 1. le statut HTTP correspond (`expected_status` exact, sinon n'importe quel
    2xx/3xx) ; **et**
 2. le corps contient le mot-clé attendu, quand il y en a un (le corps n'est lu
    que dans ce cas, 512 Kio au plus ; sinon la connexion est relâchée
-   immédiatement).
+   immédiatement) ; **et**
+3. avec l'option d'intégrité, aucun écart ni fichier illisible ne tient le
+   service en échec (section suivante).
 
 Un échec isolé ne fait pas une panne : le service ne bascule `down` qu'après
 `failure_threshold` échecs consécutifs (2 par défaut, 10 au plus). Les bornes
@@ -68,16 +70,25 @@ Les appels sortants passent par le garde `safeFetch` de l'app
 création comme à la sonde, sauf si l'installation ouvre son réseau privé avec
 `OUTBOUND_ALLOW_PRIVATE`.
 
-## Le contrôle d'intégrité
+## L'option d'intégrité
 
-Un second type de service (`kind = 'integrity'`) ne demande pas « le site
-répond-il ? » mais « **sert-il encore les mêmes fichiers ?** ». Le JavaScript
-qu'une page charge est ce qui tient les sessions de ses visiteurs : un serveur
-compromis qui le modifie touche tout le monde, et personne ne le voit. Un
-vérificateur qui vit sur ce serveur ne vaut rien, l'attaquant le remplace avec
-le reste. Celui-ci vit **ailleurs** : sur une autre instance DevEye.
+Une case des réglages d'un service, décochée par défaut, ajoute à « le site
+répond-il ? » une seconde question : « **sert-il encore les mêmes fichiers ?** ».
+Le JavaScript qu'une page charge est ce qui tient les sessions de ses
+visiteurs : un serveur compromis qui le modifie touche tout le monde, et
+personne ne le voit. Un vérificateur qui vit sur ce serveur ne vaut rien,
+l'attaquant le remplace avec le reste. Celui-ci vit **ailleurs** : sur une
+autre instance DevEye. L'adresse du service doit alors être une page du site,
+pas un point de santé, qui ne charge aucun script.
 
-À chaque relève (`src/server/integrity.ts`), la sonde :
+Relire tout un site coûte des centaines de requêtes : les fichiers ne se
+relisent pas à chaque sonde. L'option a son propre rythme
+(`integrity_interval_seconds` : 5 min, 15 min par défaut, 1 h, 6 h ou 1 jour,
+jamais sous `UPTIME_INTEGRITY_INTERVAL_MIN`), et la lecture se greffe sur la
+première sonde où elle est due (`integrityDue`), une fois la requête principale
+réussie. « Tester » et « Accepter la version actuelle » la forcent.
+
+À chaque lecture (`src/server/integrity.ts`), la sonde :
 
 1. lit le document (statut, et son en-tête `Content-Security-Policy`) ;
 2. établit la liste des fichiers : le **manifeste de build** du site s'il en
@@ -91,20 +102,38 @@ le reste. Celui-ci vit **ailleurs** : sur une autre instance DevEye.
 4. compare à la **référence** (`baseline_enc`, chiffrée à l'étage ouvert).
 
 Le manifeste n'est pas la référence : un serveur compromis le réécrirait. La
-référence est **apprise** ici, à la première relève réussie, manifeste compris ;
-tout écart ensuite (fichier modifié, ajouté, retiré, politique changée) fait
-basculer le service (`failure_threshold` s'applique), ouvre un incident qui
-nomme les fichiers, et part en alerte `integrity`. Après un déploiement voulu,
-« Accepter la version actuelle » (`uptime.acceptBaseline`) oublie la référence
-et relit : ce que le site sert à cet instant devient la référence, et
-l'incident se referme par le chemin ordinaire, « rétabli » compris. Changer
-l'adresse ou la liste des chemins fait de même.
+référence est **apprise** ici, à la première lecture réussie, manifeste compris.
 
-Ce qu'il voit et ne voit pas :
+Le service garde **une seule courbe**, celle de la requête principale, que les
+fichiers influencent (`applyIntegrity` dans `src/server/service.ts`, pure) :
 
-- **Détecter, pas empêcher** : une attaque plus courte que la cadence
-  (`UPTIME_INTEGRITY_INTERVAL_MIN`, 5 min au plus vite) passe entre deux
-  relèves.
+- **Un écart** (fichier modifié, ajouté, retiré, politique changée) pose un
+  verdict (`integrity_verdict`, chiffré à l'étage ouvert) qui tient **chaque**
+  mesure en échec, lecture ou pas, jusqu'à ce qu'une lecture retrouve la
+  référence ou que l'utilisateur accepte la version actuelle. Sans lui, la
+  sonde suivante, verte, refermerait la panne. `failure_threshold` s'applique
+  comme à toute panne : l'incident s'ouvre à la sonde qui suit l'écart, nomme
+  les fichiers et part en alerte `integrity`.
+- **Une lecture ratée** (statut d'un fichier, délai, `429`, liste trop longue)
+  fait échouer sa mesure, avec une erreur qui commence par « Fichiers : », et
+  se retente cinq minutes plus tard plutôt qu'au rythme choisi. Au bout de
+  `failure_threshold` lectures ratées d'affilée (`integrity_failures`), elle
+  devient verdict à son tour : un `429` isolé ne laisse qu'une barre jaune, un
+  script durablement absent met le service en panne.
+- **La latence** d'une mesure avec lecture est la plus longue entre la requête
+  principale et le fichier le plus lent : un site sain n'y voit rien, un script
+  qui traîne fait monter la courbe.
+
+Après un déploiement voulu, « Accepter la version actuelle »
+(`uptime.acceptBaseline`) oublie la référence et le verdict, puis relit : ce
+que le site sert à cet instant devient la référence, et l'incident se referme
+par le chemin ordinaire, « rétabli » compris. Cocher ou décocher l'option,
+changer l'adresse ou la liste des chemins fait de même (`resetIntegrity`).
+
+Ce qu'elle voit et ne voit pas :
+
+- **Détecter, pas empêcher** : une attaque plus courte que le rythme de lecture
+  (cinq minutes au plus vite) passe entre deux lectures.
 - Une page servie **différemment selon le visiteur** (adresse, session) n'est
   pas couverte : la sonde est anonyme, depuis l'adresse de l'instance qui la
   porte.
@@ -112,19 +141,19 @@ Ce qu'il voit et ne voit pas :
   mesurer un autre serveur.
 - Le repli SPA d'un serveur répond `index.html` à un chemin disparu : l'écart
   se voit à l'empreinte, jamais au statut.
-- Une relève sur une instance DevEye fait autant de requêtes qu'elle a de
+- Une lecture sur une instance DevEye fait autant de requêtes qu'elle a de
   fichiers, et le limiteur de débit de l'instance sondée (`RATE_LIMIT_MAX`,
   200 par minute et par adresse par défaut) peut en refuser : un fichier refusé
-  (`429`) fait échouer la relève, qui compte alors comme un échec ordinaire,
-  jamais comme un fichier modifié. D'où la cadence de cinq minutes au plus
-  vite, et un « Tester » juste après une relève qui peut tomber sur ce refus.
+  (`429`) fait une lecture ratée, jamais un fichier modifié. D'où le rythme de
+  cinq minutes au plus vite, et un « Tester » juste après une lecture qui peut
+  tomber sur ce refus.
 
-**Surveillance mutuelle** : chaque instance porte un contrôle d'intégrité vers
-l'autre, sans rien de spécial. Un sens ne marche pas : depuis une instance
-publique vers une instance derrière un VPN, `safeFetch` refuse l'adresse privée
-(sans `OUTBOUND_ALLOW_PRIVATE`). L'inverse (l'instance privée surveille
-l'instance hébergée) est le sens utile, et celui qui protège les sessions
-distantes ([Docs/FEDERATION.md](../../Docs/FEDERATION.md)).
+**Surveillance mutuelle** : chaque instance surveille l'autre, option
+d'intégrité cochée, sans rien de spécial. Un sens ne marche pas : depuis une
+instance publique vers une instance derrière un VPN, `safeFetch` refuse
+l'adresse privée (sans `OUTBOUND_ALLOW_PRIVATE`). L'inverse (l'instance privée
+surveille l'instance hébergée) est le sens utile, et celui qui protège les
+sessions distantes ([Docs/FEDERATION.md](../../Docs/FEDERATION.md)).
 
 ## Les trois niveaux d'historique
 
@@ -163,7 +192,9 @@ un incident, pas à une sonde.
 - **Hors ligne** (`down`) → alerte avec l'heure de bascule et l'erreur ;
   l'incident est marqué `notified` si un canal l'a acceptée.
 - **Fichiers modifiés** (`integrity`) → alerte qui nomme les fichiers, avec le
-  rappel d'« Accepter la version actuelle » si c'est un déploiement voulu.
+  rappel d'« Accepter la version actuelle » si c'est un déploiement voulu. Des
+  fichiers illisibles au seuil partent en « hors ligne », leur erreur à
+  l'appui.
 - **Retour en ligne** (`recovered`) → alerte avec la durée de la panne et sa
   cause initiale, **seulement si** la bascule avait bien été notifiée (sinon on
   enverrait un « c'est revenu » sans contexte).
@@ -242,9 +273,9 @@ rouge et vouloir l'ouvrir est le même geste.
 
 Tout ce qui se règle sur un service vit dans ses **réglages** (le bouton commun
 de sa fiche, onglet Général : `ServiceGeneralPanel`, déclaré par
-`settings.item` du manifest) : son identité (nom, type de contrôle, URL,
-méthode, statut attendu, mot-clé, surveillance active), sa fréquence de
-relève, son délai, ses échecs consécutifs avant alerte, sa conservation de
+`settings.item` du manifest) : son identité (nom, URL, méthode, statut
+attendu, mot-clé, option d'intégrité avec son rythme et ses chemins,
+surveillance active), sa fréquence de relève, son délai, ses échecs consécutifs avant alerte, sa conservation de
 l'historique détaillé et sa suppression, à côté de ses canaux, de son partage
 et de ses permissions. Le panneau envoie le service entier à `uptime.update`,
 dont le contrat prend tout. Le dialogue (`ServiceDialog`) ne sert qu'à
@@ -319,8 +350,8 @@ réglages de la feature (`StatusPagesPanel`, `StatusPageDialog`), et vit dans
   d'un service peut être remplacé par un nom public. La nature d'une panne ne
   se montre que si la page le demande (`showErrors`), et seulement en catégorie
   (`publicReason` : « Réponse HTTP n », « Délai de réponse dépassé »,
-  « Contenu inattendu », « Intégrité des fichiers compromise », « Connexion
-  impossible »), jamais le message de la sonde, qui trahirait le réseau
+  « Contenu inattendu », « Intégrité des fichiers compromise », « Fichiers du
+  site indisponibles », « Connexion impossible »), jamais le message de la sonde, qui trahirait le réseau
   interne.
 - **Les services de son espace seulement.** Un service projeté d'ailleurs
   n'est pas le sien à exposer ; déplacé dans un autre espace, un service
@@ -409,9 +440,10 @@ repo.ts           UptimeRepo : `services` et `history`, composés avec `pages` e
 repoPages.ts      les pages de statut : réglage, et lectures groupées de la page publique
 _shared.ts        Ctx, le singleton de l'ordonnanceur et des pages, le chiffrement d'un service, publicReason,
                   STATUS_PATH
-service.ts        UptimeMonitor : tick, pool, sonde HTTP, sonde d'intégrité, enregistrement, incidents,
-                  alertes, élagage horaire, fermeture des pannes d'un service mis en pause
-integrity.ts      captureSite, diffCapture, describeDrift : le contrôle d'intégrité, pur, lecture injectée
+service.ts        UptimeMonitor : tick, pool, sonde HTTP, lecture des fichiers (integrityDue, applyIntegrity),
+                  enregistrement, incidents, alertes, élagage horaire, fermeture des pannes d'un service mis
+                  en pause
+integrity.ts      captureSite, diffCapture, describeDrift : la lecture des fichiers, pure, réseau injecté
 notice.ts         la mise en page Discord d'une alerte (down, recovered, integrity)
 handlers.ts       les treize commandes des services
 pages.ts          les quatre commandes des pages de statut
@@ -423,7 +455,7 @@ move.ts           le changement d'espace d'un service
 accountExport.ts  l'export des données du compte, table par table
 e2e.ts            le scénario de bout en bout : surveiller ce serveur même, tester, lire le verdict
 uninstall.sql     démonte les deux tables ft_uptime_*
-migrations/       001_status_pages.sql, 002_integrity.sql
+migrations/       001_status_pages.sql, 002_integrity.sql, 003_integrity_option.sql
 *.test.ts         handlers, service, integrity, notice, pages, repo, move, accountExport,
                   statusPage/routes, statusPage/view
 ```
@@ -435,7 +467,7 @@ index.tsx              clientEntry : Widget, Full, TopbarWidget, settingsPanels 
 Uptime.tsx             la vue complète : liste, fiche, journal
 ServiceList.tsx        la liste et le glisser-déposer (useDragReorder)
 ServiceCard.tsx        une ligne : état, bande 24 h, taux ; toute la ligne ouvre la fiche
-ServiceDetail.tsx      la fiche : graphiques, incidents, aperçu du journal, « Tester »
+ServiceDetail.tsx      la fiche : graphiques, référence d'intégrité, incidents, aperçu du journal, « Tester »
 MeasuresBrowser.tsx    le journal complet : filtres, agrégats, défilement dans sa boîte
 StatusBars.tsx         la bande d'état (full / inline, trailing), le seuil « lent »
 UptimeChart.tsx        la courbe de latence, créneaux en échec ombrés
@@ -449,7 +481,6 @@ TopbarWidget.tsx       le widget de barre, sans prop : tout vient du magasin
 UptimeWidget.tsx       la carte d'accueil
 store.ts               le magasin « en ligne / total », partagé par la carte et le widget
 useServiceHistory.ts   l'historique d'un service, pour qui n'affiche que la bande d'état
-kinds.ts               les deux types de contrôle, et la zone « un chemin par ligne »
 provider.tsx           UPTIME_CLIENT_PROVIDER : bande d'état, taux, historique, dialogue d'ajout pour Projets
 api.ts  format.ts  style.module.css
 ```

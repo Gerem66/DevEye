@@ -35,8 +35,8 @@ export interface IntegrityCapture {
     csp: string | null;
     files: Record<string, string>;
     source: 'manifest' | 'page';
-    /** Le statut du document lui-même. */
-    documentStatus: number;
+    /** La lecture la plus longue, document compris, en ms : ce qui pèse sur la latence de la sonde. */
+    slowestMs: number;
 }
 
 export interface IntegrityDiff {
@@ -149,8 +149,17 @@ export async function captureSite(
     const page = new URL(pageUrl);
     const origin = page.origin;
     const documentKey = page.pathname + page.search;
+    let slowestMs = 0;
+    const read = async (url: string): Promise<FetchedFile | null> => {
+        const started = Date.now();
+        try {
+            return await fetch(url, timeoutMs);
+        } finally {
+            slowestMs = Math.max(slowestMs, Date.now() - started);
+        }
+    };
 
-    const document = await fetch(pageUrl, timeoutMs);
+    const document = await read(pageUrl);
     if (!document) throw new Error('Document illisible');
     if (document.status < 200 || document.status >= 400) {
         throw new Error(`Statut HTTP ${document.status} sur le document`);
@@ -158,7 +167,7 @@ export async function captureSite(
 
     let source: IntegrityCapture['source'] = 'page';
     let keys: string[];
-    const manifest = await fetch(`${origin}${BUILD_MANIFEST_PATH}`, timeoutMs).catch(() => null);
+    const manifest = await read(`${origin}${BUILD_MANIFEST_PATH}`).catch(() => null);
     const listed = manifest && manifest.status === 200 && manifest.text ? parseManifest(manifest.text) : null;
     if (listed) {
         source = 'manifest';
@@ -177,7 +186,7 @@ export async function captureSite(
     for (let at = 0; at < pending.length; at += CONCURRENCY) {
         await Promise.all(
             pending.slice(at, at + CONCURRENCY).map(async (key) => {
-                const file = await fetch(`${origin}${key}`, timeoutMs);
+                const file = await read(`${origin}${key}`);
                 if (!file) throw new Error(`Fichier illisible : ${key}`);
                 // Un refus n'est pas une empreinte : un 429 du limiteur de débit
                 // du site passerait sinon pour un fichier modifié.
@@ -192,7 +201,7 @@ export async function captureSite(
             })
         );
     }
-    return { csp: document.csp, files, source, documentStatus: document.status };
+    return { csp: document.csp, files, source, slowestMs };
 }
 
 /** Les chemins d'un manifeste de build valide, `null` pour tout autre contenu. */
