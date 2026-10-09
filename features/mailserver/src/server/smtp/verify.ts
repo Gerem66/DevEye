@@ -47,7 +47,7 @@ export function createInboundVerifier(hostname: string, resolver?: DNSResolver):
                 dkim,
                 dmarc: result.dmarc ? verdictOf(result.dmarc.status.result) : 'none'
             },
-            policy: result.dmarc ? result.dmarc.policy : 'none',
+            policy: (result.dmarc && result.dmarc.policy) || 'none',
             headers: result.headers.endsWith('\r\n') ? result.headers : `${result.headers}\r\n`
         };
     };
