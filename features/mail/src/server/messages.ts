@@ -183,10 +183,11 @@ export const mailMessageGetFeature = defineSdkFeature<
             };
         });
         const settings = await ctx.repo.settings.get(ctx.workspaceId);
+        const bodyRenderMode = settings?.body_render_mode ?? 'embedded';
         const body = await parseAndSanitize(raw, {
             allowRemoteImages: input.allowRemoteImages || account.allow_remote_images === 1,
             trustedDomains: parseTrustedImageDomains(settings?.trusted_image_domains ?? null),
-            preserveStyling: (settings?.body_render_mode ?? 'embedded') === 'raw'
+            preserveStyling: bodyRenderMode === 'raw'
         });
 
         // Opening a message marks it read, both on the server and in our cache —
@@ -208,7 +209,8 @@ export const mailMessageGetFeature = defineSdkFeature<
                 suspiciousLinks: body.suspiciousLinks,
                 headers: body.headers,
                 sizeBytes: raw.length,
-                folderPath: folder.imap_path
+                folderPath: folder.imap_path,
+                bodyRenderMode
             }
         };
     }

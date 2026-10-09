@@ -11,7 +11,6 @@ import {
     TextInput,
     useLiveItemTarget,
     useLiveSegment,
-    useResourceVersion,
     useSubView,
     withSecrecy
 } from 'deveye-sdk-client';
@@ -33,14 +32,7 @@ import styles from './style.module.css';
 
 import { MAIL_MESSAGE_PAGE_SIZE, MAIL_SYNC_PROGRESS_EVENT, mailSyncProgressSchema } from '../contracts/domain';
 
-import type {
-    MailAccount,
-    MailBodyRenderMode,
-    MailFolder,
-    MailMessage,
-    MailMessageCursor,
-    MailMessageSummary
-} from '../contracts/domain';
+import type { MailAccount, MailFolder, MailMessage, MailMessageCursor, MailMessageSummary } from '../contracts/domain';
 
 /**
  * Partagée avec le serveur, qui réconcilie exactement cette fenêtre à chaque
@@ -169,7 +161,6 @@ export default function Mail(_props: FeatureViewProps) {
     const [openMessageId, setOpenMessageId] = useState<number | null>(null);
     const [selectedMessage, setSelectedMessage] = useState<MailMessage | null>(null);
     const [messageLoading, setMessageLoading] = useState(false);
-    const [renderMode, setRenderMode] = useState<MailBodyRenderMode>('embedded');
 
     const [error, setError] = useState<string | null>(null);
     const [reconnecting, setReconnecting] = useState(false);
@@ -292,23 +283,6 @@ export default function Mail(_props: FeatureViewProps) {
         if (!folders.some((f) => f.id === id)) return;
         setSelectedFolderId(id);
     }, [folderTarget, folders]);
-
-    const reloadRenderMode = useCallback(async () => {
-        try {
-            const res = await api.send('mail.getSettings', {});
-            setRenderMode(res.settings.bodyRenderMode);
-        } catch {
-            // Keep the previous mode: a settings-load hiccup shouldn't block reading mail.
-        }
-    }, []);
-
-    // Suit la clé partagée : le panneau Général des réglages invalide
-    // `mail.getSettings` à chaque changement, et le mode d'affichage sert au
-    // prochain message ouvert, ici.
-    const settingsVersion = useResourceVersion('mail.getSettings');
-    useEffect(() => {
-        void reloadRenderMode();
-    }, [reloadRenderMode, settingsVersion]);
 
     const loadFolders = useCallback(async (accountId: number) => {
         setFoldersLoading(true);
@@ -1158,7 +1132,6 @@ export default function Mail(_props: FeatureViewProps) {
                 open={messagePopupOpen}
                 message={selectedMessage}
                 loading={messageLoading}
-                renderMode={renderMode}
                 onClose={closeMessage}
                 onLoadImages={() => selectedMessage && void openMessage(selectedMessage.id, true)}
                 onTrustImageSources={(domains) => void trustImageSources(domains)}

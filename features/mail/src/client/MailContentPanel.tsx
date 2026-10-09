@@ -40,8 +40,9 @@ const RENDER_MODE_HINT: Record<MailBodyRenderMode, string> = {
  * images, réglage de la boîte elle-même.
  *
  * Chaque changement s'applique immédiatement, comme les autres panneaux de la
- * coquille. L'invalidation de `mail.getSettings` prévient l'écran Mail (le mode
- * d'affichage sert au prochain message ouvert) et les autres onglets.
+ * coquille. L'invalidation de `mail.getSettings` prévient les autres onglets. Le
+ * mode d'affichage vaut pour le prochain message ouvert : le serveur nettoie le
+ * corps pour ce mode, et le message ouvert garde le sien.
  *
  * Sans le droit d'écriture, tout reste lisible mais rien ne se change : un
  * réglage que le serveur refuserait est un écran qui ment.

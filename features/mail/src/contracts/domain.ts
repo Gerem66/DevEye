@@ -281,6 +281,9 @@ export const mailMessageSummarySchema = z.object({
 });
 export type MailMessageSummary = z.infer<typeof mailMessageSummarySchema>;
 
+export const mailBodyRenderModeSchema = z.enum(['embedded', 'raw']);
+export type MailBodyRenderMode = z.infer<typeof mailBodyRenderModeSchema>;
+
 /**
  * Full message. Fetched live from IMAP on `mail.messageGet` — never cached —
  * with `bodyHtml` already sanitized server-side (scripts/handlers/tracking CSS
@@ -299,12 +302,14 @@ export const mailMessageSchema = mailMessageSummarySchema.extend({
     /** Size of the raw RFC822 source, in bytes. */
     sizeBytes: z.number().int().nonnegative(),
     /** IMAP path of the containing mailbox, which with `uid` identifies the message server-side. */
-    folderPath: z.string()
+    folderPath: z.string(),
+    /**
+     * Mode `bodyHtml` was sanitized for. The client renders with it, never with
+     * the current setting: a `raw` body keeps `<style>` and must stay in the iframe.
+     */
+    bodyRenderMode: mailBodyRenderModeSchema
 });
 export type MailMessage = z.infer<typeof mailMessageSchema>;
-
-export const mailBodyRenderModeSchema = z.enum(['embedded', 'raw']);
-export type MailBodyRenderMode = z.infer<typeof mailBodyRenderModeSchema>;
 
 export const mailSettingsSchema = z.object({
     /** Off by default; opt-in per workspace. */

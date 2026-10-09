@@ -6,12 +6,11 @@ import ImageSourcesPopup from './ImageSourcesPopup';
 import { formatAddress } from './api';
 import styles from './style.module.css';
 
-import type { MailBodyRenderMode, MailMessage } from '../contracts/domain';
+import type { MailMessage } from '../contracts/domain';
 
 interface MessagePaneProps {
     message: MailMessage | null;
     loading: boolean;
-    renderMode: MailBodyRenderMode;
     onLoadImages: () => void;
     onTrustImageSources: (domains: string[]) => void;
     onToggleSeen: () => void;
@@ -49,8 +48,8 @@ function rawDocument(bodyHtml: string): string {
  * `<script>`, no event handlers), and the app's Content-Security-Policy
  * (`script-src 'self'`, app.ts) is what makes a sanitizer miss survivable: an
  * injected handler or `javascript:` link cannot run. Blocked remote images show
- * as a banner instead of silently loading. In `raw` render
- * mode the body instead goes into a `sandbox=""` iframe, script-disabled and
+ * as a banner instead of silently loading. A body sanitized for `raw`
+ * (`message.bodyRenderMode`) instead goes into a `sandbox=""` iframe, script-disabled and
  * opaque-origin, so the message's own CSS (preserved by the server only in that
  * mode) can't reach or be reached by the rest of the app.
  */
@@ -66,7 +65,6 @@ function alertSummary(message: MailMessage): string {
 export function MessagePane({
     message,
     loading,
-    renderMode,
     onLoadImages,
     onTrustImageSources,
     onToggleSeen,
@@ -205,7 +203,7 @@ export function MessagePane({
             )}
 
             {message.bodyHtml ? (
-                renderMode === 'raw' ? (
+                message.bodyRenderMode === 'raw' ? (
                     <iframe
                         className={styles.messageBodyFrame}
                         sandbox=''

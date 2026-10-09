@@ -3,13 +3,12 @@ import { Dialog } from 'deveye-sdk-client';
 import MessagePane from './MessagePane';
 import styles from './style.module.css';
 
-import type { MailBodyRenderMode, MailMessage } from '../contracts/domain';
+import type { MailMessage } from '../contracts/domain';
 
 interface MessagePopupProps {
     open: boolean;
     message: MailMessage | null;
     loading: boolean;
-    renderMode: MailBodyRenderMode;
     onClose: () => void;
     onLoadImages: () => void;
     onTrustImageSources: (domains: string[]) => void;

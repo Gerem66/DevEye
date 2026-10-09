@@ -54,7 +54,7 @@ curve25519-dalek = "4"
 regex = "1"
 # Cross-platform pseudo-terminal for the remote terminal feature (openpty on Unix,
 # ConPTY on Windows).
-portable-pty = "0.8"
+portable-pty = "0.9"
 # Downloading a directory from the file explorer: it is streamed as a `.tar.gz`
 # built on the fly. `flate2`'s default backend is miniz_oxide (pure Rust), so the
 # musl cross-builds keep working without a C toolchain.
