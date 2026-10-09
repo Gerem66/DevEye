@@ -198,8 +198,9 @@ export default function RepoGeneralPanel({ scope, canWrite, close, gone }: Setti
                     )}
                 </div>
                 <span className={shell.fieldHint}>
-                    Un jeton en lecture seule suffit (contents: read). Les jetons se gèrent dans Réglages → Sources et
-                    servent à tous les dépôts.
+                    Un jeton en lecture seule suffit (Contents), plus Actions et Deployments en lecture pour qu’Uptime
+                    reconnaisse vos mises en ligne. Les jetons se gèrent dans Réglages → Sources et servent à tous les
+                    dépôts.
                 </span>
             </div>
 

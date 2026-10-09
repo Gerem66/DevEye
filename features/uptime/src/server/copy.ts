@@ -21,9 +21,10 @@ export const uptimeTree: ItemTree = [
         workspaceColumn: 'workspace_id',
         userColumn: 'user_id',
         orderColumn: 'sort_order',
-        sealed: ['content', 'last_error', 'baseline_enc', 'integrity_verdict'],
+        sealed: ['content', 'last_error', 'baseline_enc', 'integrity_verdict', 'deploy_hook_enc'],
         // L'état appartient à ce que CE serveur a mesuré : la copie repart
-        // de zéro et se fait sa propre idée.
+        // de zéro et se fait sa propre idée. L'adresse d'appel est celle de
+        // l'original : deux services ne partagent pas un jeton.
         omit: [
             'status',
             'consecutive_failures',
@@ -34,6 +35,10 @@ export const uptimeTree: ItemTree = [
             'integrity_checked_at',
             'integrity_failures',
             'integrity_verdict',
+            'integrity_pending_since',
+            'deploy_hook_hash',
+            'deploy_hook_enc',
+            'deploy_hook_at',
             'created'
         ]
     },
@@ -53,7 +58,10 @@ export const uptimeCopy: FeatureItemsCopy<UptimeRepo> = {
     async plan() {
         return {
             blockers: [],
-            drops: ['Son historique de contrôles, d’incidents et de lectures des fichiers : la copie repart de zéro']
+            drops: [
+                'Son historique de contrôles, d’incidents et de lectures des fichiers : la copie repart de zéro',
+                'Ses sources de déploiement et son adresse d’appel : elles se choisissent de nouveau sur la copie'
+            ]
         };
     },
     async admit({ repo, quota }) {

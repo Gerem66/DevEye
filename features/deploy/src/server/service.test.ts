@@ -189,9 +189,30 @@ function fakeRepo(
                 .map(({ t }) => t)
                 .slice(0, limit);
         },
+        findTargetSync: async (id) => {
+            const t = targets.find((x) => x.id === id);
+            const c = credentials.find((x) => x.id === t?.credential_id);
+            if (!t || !c) return null;
+            const inFlight = deployments.filter(
+                (d) => d.target_id === id && (d.status === 'queued' || d.status === 'running')
+            ).length;
+            return { ...t, base_url: c.base_url, in_flight: inFlight };
+        },
         markTargetSynced: async (id, at) => {
             const t = targets.find((x) => x.id === id);
             if (t) t.synced_at = at;
+        },
+        deploymentActivity: async (targetId, since, inFlightAfter) => {
+            const mine = deployments.filter((d) => d.target_id === targetId);
+            const ends = mine
+                .filter((d) => d.status === 'success' && d.finished_at !== null && d.finished_at >= since)
+                .map((d) => d.finished_at as number);
+            return {
+                succeededAt: ends.length > 0 ? Math.max(...ends) : null,
+                inFlight: mine.filter(
+                    (d) => (d.status === 'queued' || d.status === 'running') && d.started_at >= inFlightAfter
+                ).length
+            };
         },
         createDeployment: unused,
         async createRemoteDeployment(input) {
@@ -754,6 +775,66 @@ describe('DEPLOY_ITEMS_PROVIDER : labelOf', () => {
     });
 });
 
+describe('DEPLOY_ITEMS_PROVIDER : ce qu’Uptime demande', () => {
+    it('liste les cibles de l’espace, dit le droit, et rend le dernier succès de la fenêtre et ce qui est en vol', async () => {
+        const now = Math.floor(Date.now() / 1000);
+        // Une cible portée par une machine : son état s'écrit sans sondage, rien
+        // ne part vers un fournisseur pendant le test.
+        const machine = target({ id: 3, provider: 'agent', credential_id: null, device_id: 'pc', external_id: 'web' });
+        const idle = target({ id: 4, provider: 'agent', credential_id: null, device_id: 'pc', external_id: 'api' });
+        const run = (over: Partial<DeploymentRow>): DeploymentRow => ({
+            id: 0,
+            target_id: 3,
+            workspace_id: 1,
+            external_id: null,
+            status: 'success',
+            triggered_by_user_id: null,
+            started_at: now - 600,
+            finished_at: now - 500,
+            notified: 1,
+            content: '{}',
+            ...over
+        });
+        const repo = fakeRepo(
+            [target(), machine, idle],
+            [credential()],
+            [
+                run({ id: 1, started_at: now - 5100, finished_at: now - 5000 }),
+                run({ id: 2 }),
+                run({ id: 3, status: 'running', finished_at: null, started_at: now - 60 }),
+                run({ id: 4, status: 'running', finished_at: null, started_at: now - 7 * 3600, target_id: 4 })
+            ]
+        );
+        repo.listTargets = async (workspaceId) =>
+            [target(), machine, idle].filter((t) => t.workspace_id === workspaceId) as Awaited<
+                ReturnType<FakeRepo['listTargets']>
+            >;
+        const provider = itemsProviderOn(repo);
+
+        assert.deepEqual(
+            (await provider.list(1)).map((t) => [t.id, t.name, t.detail]),
+            [
+                [1, 'Serveur', 'Dokploy'],
+                [3, 'Serveur', 'Machine'],
+                [4, 'Serveur', 'Machine']
+            ]
+        );
+        assert.deepEqual(await provider.authorize(3, 1, 1), { ok: true });
+        assert.deepEqual(await provider.authorize(42, 1, 1), { ok: false, reason: 'hidden' });
+
+        assert.deepEqual(await provider.activity(3, 1, now - 1000), {
+            succeeded: { at: now - 500, what: 'le déploiement « Serveur »' },
+            inFlight: { what: 'le déploiement « Serveur »' },
+            error: null
+        });
+        // Un succès avant la fenêtre n'explique rien ; un « en cours » trop ancien non plus.
+        assert.equal((await provider.activity(3, 1, now - 100)).succeeded, null);
+        const stale = await provider.activity(4, 1, now - 100);
+        assert.equal(stale.inFlight, null);
+        assert.deepEqual(await provider.activity(42, 1, 0), { succeeded: null, inFlight: null, error: null });
+    });
+});
+
 /** Une instance par adresse : chaque test dit ce que répond chacune, ou la laisse pendre. */
 function syncByInstance(repo: FakeRepo, options: { liveChannels?: readonly number[] } = {}) {
     const deps = createTestServiceDeps({ repo, ...options });
@@ -998,5 +1079,19 @@ describe('le déploiement par une machine', () => {
         assert.match((JSON.parse(row.content) as { description: string }).description, /redémarrage du serveur/);
         assert.equal(deps.recorded.notifications.length, 0);
         assert.deepEqual(deps.recorded.liveChanges, [1]);
+    });
+});
+
+describe('le rapprochement à la demande', () => {
+    it('rapproche une cible sur-le-champ, et rejoint un rapprochement déjà en cours', async () => {
+        const repo = fakeRepo([target()], [credential()]);
+        const { sync, calls } = syncByInstance(repo);
+        await sync.refresh(1);
+        assert.deepEqual(calls, ['https://dokploy.exemple.fr#app-1']);
+        await Promise.all([sync.refresh(1), sync.refresh(1)]);
+        assert.equal(calls.length, 2);
+        // Une cible inconnue ou sans accès ne lance rien.
+        await sync.refresh(42);
+        assert.equal(calls.length, 2);
     });
 });

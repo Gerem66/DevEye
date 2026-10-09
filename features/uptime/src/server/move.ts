@@ -26,10 +26,18 @@ export const uptimeMove: FeatureItemsMove<UptimeRepo> = {
             'SELECT COUNT(*) AS n FROM ft_uptime_page_services WHERE service_id = ?',
             [Number(itemId)]
         );
-        const drops =
-            Number(pages[0]?.n ?? 0) > 0
+        const sources = await q.query<{ n: number }>(
+            'SELECT COUNT(*) AS n FROM ft_uptime_deploy_sources WHERE service_id = ?',
+            [Number(itemId)]
+        );
+        const drops = [
+            ...(Number(pages[0]?.n ?? 0) > 0
                 ? ['Sa place sur les pages de statut de cet espace : il en est retiré, elles restent ici']
-                : [];
+                : []),
+            ...(Number(sources[0]?.n ?? 0) > 0
+                ? ['Ses sources de déploiement : ce sont des éléments de cet espace, à choisir de nouveau là-bas']
+                : [])
+        ];
         return { blockers: [], drops, rows: await countMovableCells(q, CELLS, Number(itemId)) };
     },
 
@@ -49,5 +57,6 @@ export const uptimeMove: FeatureItemsMove<UptimeRepo> = {
         // Une page ne montre que les services de son espace : celui qui part
         // quitte les pages de l'espace qu'il quitte.
         await q.execute('DELETE FROM ft_uptime_page_services WHERE service_id = ?', [serviceId]);
+        await q.execute('DELETE FROM ft_uptime_deploy_sources WHERE service_id = ?', [serviceId]);
     }
 };

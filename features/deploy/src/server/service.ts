@@ -368,6 +368,27 @@ export class DeploySync {
     }
 
     /**
+     * Rapproche une cible sur-le-champ, pour qui doit savoir à l'instant si elle
+     * vient de déployer. Rejoint un rapprochement en cours, et rend la main sans
+     * rien lancer si la cible est en pause ou son accès occupé ou en recul : la
+     * base dit alors ce que le dernier tour a vu.
+     */
+    async refresh(targetId: number): Promise<void> {
+        const running = this.running.get(targetId);
+        if (running) return running;
+        if (this.deps.pauses.isPaused('targets', String(targetId))) return;
+        const target = await this.deps.repo.findTargetSync(targetId);
+        const credentialId = target?.credential_id ?? null;
+        if (!target || credentialId === null) return;
+        const now = Math.floor(Date.now() / 1000);
+        if (this.busyCredentials.has(credentialId) || (this.credentialBackoff.get(credentialId)?.until ?? 0) > now) {
+            return;
+        }
+        this.launch(target, credentialId, now);
+        await this.running.get(targetId);
+    }
+
+    /**
      * Un tour : choisir les cibles dues et les lancer, sans attendre qu'elles
      * aboutissent. Le tour suivant reprend ce qui s'est libéré entre-temps.
      */

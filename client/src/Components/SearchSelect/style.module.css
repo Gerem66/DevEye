@@ -54,9 +54,10 @@
     font-variant-numeric: tabular-nums;
 }
 
-/* Sur le déclencheur, une précision longue (une image de conteneur) cède la
-   place au libellé. */
-.trigger .detail {
+/* Une précision longue (une image de conteneur) cède la place au libellé, sur
+   le déclencheur comme dans la liste. */
+.trigger .detail,
+.option .detail {
     flex-shrink: 1;
     max-width: 45%;
     overflow: hidden;

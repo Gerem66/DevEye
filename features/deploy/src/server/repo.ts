@@ -130,8 +130,20 @@ export interface DeployRepo {
         skipCredentialIds: readonly number[],
         pausedIds: readonly number[]
     ): Promise<DeployTargetSyncRow[]>;
+    /** Une cible sondée, telle que `listTargetsDue` la rend, qu'elle soit due ou non. */
+    findTargetSync(id: number): Promise<DeployTargetSyncRow | null>;
     /** Horodate un rapprochement réussi ; c'est lui qui sort du premier import. */
     markTargetSynced(id: number, at: number): Promise<void>;
+    /**
+     * La fin du dernier succès depuis `since`, et le nombre de déploiements en
+     * vol partis depuis `inFlightAfter` : un « en cours » plus ancien est un
+     * état que plus personne ne fera aboutir.
+     */
+    deploymentActivity(
+        targetId: number,
+        since: number,
+        inFlightAfter: number
+    ): Promise<{ succeededAt: number | null; inFlight: number }>;
 
     createDeployment(input: {
         targetId: number;
@@ -480,8 +492,35 @@ export function createRepo(q: SdkQueryable): DeployRepo {
                 ]
             );
         },
+        async findTargetSync(id) {
+            const rows = await q.query<DeployTargetSyncRow>(
+                `SELECT t.*, c.base_url,
+                        (SELECT COUNT(*) FROM deployments d
+                          WHERE d.target_id = t.id AND d.status IN ('queued', 'running')) AS in_flight
+                   FROM deploy_targets t
+                   JOIN ft_deploy_credentials c ON c.id = t.credential_id
+                  WHERE t.id = ? AND (c.provider <> 'dokploy' OR (c.base_url IS NOT NULL AND c.base_url <> ''))`,
+                [id]
+            );
+            return rows[0] ?? null;
+        },
         async markTargetSynced(id, at) {
             await q.execute('UPDATE deploy_targets SET synced_at = ? WHERE id = ?', [at, id]);
+        },
+        async deploymentActivity(targetId, since, inFlightAfter) {
+            const rows = await q.query<{ succeeded_at: number | null; in_flight: number | null }>(
+                `SELECT MAX(CASE WHEN status = 'success' AND finished_at >= ? THEN finished_at END) AS succeeded_at,
+                        SUM(CASE WHEN status IN ('queued', 'running') AND started_at >= ? THEN 1 ELSE 0 END) AS in_flight
+                   FROM deployments
+                  WHERE target_id = ?`,
+                [since, inFlightAfter, targetId]
+            );
+            const row = rows[0];
+            return {
+                succeededAt:
+                    row?.succeeded_at === null || row?.succeeded_at === undefined ? null : Number(row.succeeded_at),
+                inFlight: Number(row?.in_flight ?? 0)
+            };
         },
 
         async createDeployment({ targetId, workspaceId, externalId, triggeredByUserId, content }) {

@@ -3,11 +3,18 @@ import { describe, it } from 'node:test';
 
 import type {
     UptimeCheckRow,
+    UptimeDeploySourceRow,
     UptimeIncidentRow,
     UptimeIntegrityReadingRow,
     UptimeServiceRow
 } from '../contracts/domain';
-import { UPTIME_ITEMS_PROVIDER, type UptimeItemsProvider } from '@deveye/types/sdk';
+import {
+    DEPLOY_ITEMS_PROVIDER,
+    UPTIME_ITEMS_PROVIDER,
+    type DeployActivity,
+    type DeployItemsProvider,
+    type UptimeItemsProvider
+} from '@deveye/types/sdk';
 import { createTestServiceDeps } from '@deveye/types/sdk/testing';
 
 import { serverEntry } from './index';
@@ -27,6 +34,7 @@ interface FakeRepo extends UptimeRepo {
     checks: UptimeCheckRow[];
     incidents: UptimeIncidentRow[];
     readings: UptimeIntegrityReadingRow[];
+    sources: UptimeDeploySourceRow[];
 }
 
 /**
@@ -47,6 +55,10 @@ function fakeRepo(over: Partial<UptimeServiceRow> = {}): FakeRepo {
             integrity_checked_at: null,
             integrity_failures: 0,
             integrity_verdict: null,
+            integrity_pending_since: null,
+            deploy_hook_hash: null,
+            deploy_hook_enc: null,
+            deploy_hook_at: null,
             expected_status: null,
             interval_seconds: 0,
             timeout_seconds: 10,
@@ -67,6 +79,7 @@ function fakeRepo(over: Partial<UptimeServiceRow> = {}): FakeRepo {
     const checks: UptimeCheckRow[] = [];
     const incidents: UptimeIncidentRow[] = [];
     const readings: UptimeIntegrityReadingRow[] = [];
+    const sources: UptimeDeploySourceRow[] = [];
     let incidentSeq = 0;
     const unused = async () => {
         throw new Error('non attendu ici');
@@ -76,6 +89,7 @@ function fakeRepo(over: Partial<UptimeServiceRow> = {}): FakeRepo {
         checks,
         incidents,
         readings,
+        sources,
         services: {
             listByWorkspace: unused,
             countInWorkspaces: unused,
@@ -111,6 +125,7 @@ function fakeRepo(over: Partial<UptimeServiceRow> = {}): FakeRepo {
                 r.integrity_failures = reading.failures;
                 r.integrity_verdict = reading.verdict;
                 r.baseline_enc = reading.baseline ?? r.baseline_enc;
+                r.integrity_pending_since = reading.pendingSince;
             },
             resetIntegrity: async (id) => {
                 const r = rows.find((x) => x.id === id);
@@ -119,7 +134,13 @@ function fakeRepo(over: Partial<UptimeServiceRow> = {}): FakeRepo {
                 r.integrity_checked_at = null;
                 r.integrity_failures = 0;
                 r.integrity_verdict = null;
+                r.integrity_pending_since = null;
             },
+            listDeploySources: async (ids) => sources.filter((x) => ids.includes(x.service_id)),
+            setDeploySources: unused,
+            setDeployHook: unused,
+            findByDeployHook: unused,
+            markDeployHookCalled: unused,
             recordProbe: async (id, result) => {
                 const target = rows.find((r) => r.id === id);
                 if (!target) return;
@@ -187,6 +208,12 @@ function fakeRepo(over: Partial<UptimeServiceRow> = {}): FakeRepo {
                 });
             },
             listReadings: unused,
+            lastConformAt: async (serviceId) => {
+                const ats = readings
+                    .filter((r) => r.service_id === serviceId && (r.outcome === 'learned' || r.outcome === 'conform'))
+                    .map((r) => r.checked_at);
+                return ats.length > 0 ? Math.max(...ats) : null;
+            },
             pruneByRetention: async () => ({ checks: 0, readings: 0 })
         },
         // Les pages de statut ont leurs propres tests (`pages.test.ts`).
@@ -312,7 +339,8 @@ describe('l’option d’intégrité', () => {
         slowestMs: 90,
         fileCount: 2,
         summary: '1 fichier modifié',
-        lines: ['Modifié : /assets/app.js']
+        lines: ['Modifié : /assets/app.js'],
+        capture: { ...CAPTURE, files: { ...CAPTURE.files, '/assets/app.js': 'h-app-2' } }
     });
     const UNREADABLE = read({ kind: 'failed', error: 'Statut HTTP 404 sur /assets/app.js' });
 
@@ -341,13 +369,21 @@ describe('l’option d’intégrité', () => {
     }
 
     it('dit quand lire : jamais sans l’option, d’emblée la première fois, à son rythme, cinq minutes après un raté', () => {
-        const row = { integrity_interval_seconds: 900, integrity_checked_at: 1000, integrity_failures: 0 };
+        const row = {
+            integrity_interval_seconds: 900,
+            integrity_checked_at: 1000,
+            integrity_failures: 0,
+            integrity_pending_since: null
+        };
         assert.equal(integrityDue({ ...row, integrity_interval_seconds: null }, 5000, true), false);
         assert.equal(integrityDue({ ...row, integrity_checked_at: null }, 1000, false), true);
         assert.equal(integrityDue(row, 1899, false), false);
         assert.equal(integrityDue(row, 1900, false), true);
         assert.equal(integrityDue(row, 1001, true), true);
         assert.equal(integrityDue({ ...row, integrity_failures: 1 }, 1300, false), true);
+        // Pendant l'attente d'un déploiement : une minute.
+        assert.equal(integrityDue({ ...row, integrity_pending_since: 900 }, 1059, false), false);
+        assert.equal(integrityDue({ ...row, integrity_pending_since: 900 }, 1060, false), true);
     });
 
     it('apprend sa référence à la première lecture, puis ne relit qu’à son rythme ou sur demande', async () => {
@@ -501,6 +537,170 @@ describe('l’option d’intégrité', () => {
                 detail: { error: 'Statut HTTP 404 sur /assets/app.js', lines: [] }
             }
         ]);
+    });
+});
+
+describe('l’acceptation après un déploiement', () => {
+    const CAPTURE = {
+        csp: null,
+        files: { '/': 'h-index', '/assets/app.js': 'h-app' },
+        source: 'page' as const,
+        slowestMs: 40
+    };
+    const NEW_FILES = { '/': 'h-index-2', '/assets/app-2.js': 'h-app-2' };
+    const BASELINE = JSON.stringify({ capturedAt: 1, csp: null, files: CAPTURE.files, source: 'page' });
+    const DRIFT: ProbeOutcome = {
+        ...UP,
+        reading: {
+            kind: 'drift',
+            slowestMs: 40,
+            fileCount: 2,
+            summary: '1 fichier modifié, 1 fichier ajouté, 1 fichier retiré',
+            lines: ['Modifié : /', 'Ajouté : /assets/app-2.js', 'Retiré : /assets/app.js'],
+            capture: { ...CAPTURE, files: NEW_FILES }
+        }
+    };
+    const now = () => Math.floor(Date.now() / 1000);
+
+    /** Une cible de Déploiements dont le test décide l'activité, et les débuts de fenêtre qu'on lui a demandés. */
+    function deployWith(answer: (since: number) => DeployActivity) {
+        const asked: number[] = [];
+        const provider: DeployItemsProvider = {
+            exists: async () => true,
+            labelOf: async () => 'app',
+            list: async () => [],
+            authorize: async () => ({ ok: true }),
+            activity: async (_id, _ws, since) => {
+                asked.push(since);
+                return answer(since);
+            }
+        };
+        return { asked, provider };
+    }
+
+    function setup(answer: (since: number) => DeployActivity, over: Partial<UptimeServiceRow> = {}) {
+        const repo = fakeRepo({
+            integrity_interval_seconds: 900,
+            baseline_enc: BASELINE,
+            failure_threshold: 1,
+            ...over
+        });
+        repo.sources.push({ service_id: 1, kind: 'deploy', ref_id: 5 });
+        const deploy = deployWith(answer);
+        const deps = createTestServiceDeps({ repo, providers: { [DEPLOY_ITEMS_PROVIDER]: deploy.provider } });
+        const { probe } = monitorWith(repo, deps);
+        return { repo, deps, probe, asked: deploy.asked };
+    }
+
+    it('accepte un écart qu’un déploiement explique : référence remplacée, mesure verte, aucune alerte', async () => {
+        const { repo, deps, probe } = setup(
+            () => ({ succeeded: { at: now() - 30, what: 'le déploiement « app »' }, inFlight: null, error: null }),
+            { status: 'up' }
+        );
+        await probe(DRIFT);
+
+        assert.equal(repo.rows[0].status, 'up');
+        assert.equal(repo.checks[0].up, 1);
+        assert.equal(repo.rows[0].integrity_verdict, null);
+        assert.deepEqual((JSON.parse(repo.rows[0].baseline_enc!) as { files: unknown }).files, NEW_FILES);
+        assert.equal(repo.incidents.length, 0);
+        assert.equal(deps.recorded.notifications.length, 0);
+        assert.equal(repo.readings[0].outcome, 'accepted');
+        const detail = JSON.parse(repo.readings[0].detail!) as { error: string; lines: string[] };
+        assert.ok(detail.error.startsWith('Expliquée par le déploiement « app » ('));
+        assert.deepEqual(detail.lines, ['Modifié : /', 'Ajouté : /assets/app-2.js', 'Retiré : /assets/app.js']);
+        const audit = deps.recorded.audits.find((a) => a.action === 'uptime.baselineAccepted');
+        assert.ok(audit?.description.includes('acceptée automatiquement'));
+        // L'état ne bascule pas : seule l'acceptation prévient les écrans.
+        assert.deepEqual(deps.recorded.liveChanges, [1]);
+    });
+
+    it('attend un déploiement en cours sans échouer, puis accepte quand il aboutit', async () => {
+        let done = false;
+        const { repo, deps, probe } = setup(() =>
+            done
+                ? { succeeded: { at: now(), what: 'le déploiement « app »' }, inFlight: null, error: null }
+                : { succeeded: null, inFlight: { what: 'le déploiement « app »' }, error: null }
+        );
+        await probe(DRIFT);
+        assert.equal(repo.rows[0].status, 'up');
+        assert.equal(repo.rows[0].integrity_verdict, null);
+        assert.notEqual(repo.rows[0].integrity_pending_since, null);
+        assert.equal(repo.readings[0].outcome, 'pending');
+        assert.equal(
+            (JSON.parse(repo.readings[0].detail!) as { error: string }).error,
+            'Le déploiement « app » est en cours : 1 fichier modifié, 1 fichier ajouté, 1 fichier retiré'
+        );
+
+        done = true;
+        repo.rows[0].integrity_checked_at! -= 60;
+        await probe(DRIFT);
+        assert.equal(repo.readings[1].outcome, 'accepted');
+        assert.equal(repo.rows[0].integrity_pending_since, null);
+        assert.equal(deps.recorded.notifications.length, 0);
+    });
+
+    it('une attente trop longue redevient l’alerte ordinaire, et le journal dit pourquoi', async () => {
+        const { repo, deps, probe } = setup(
+            () => ({ succeeded: null, inFlight: { what: 'le déploiement « app »' }, error: null }),
+            { integrity_pending_since: Math.floor(Date.now() / 1000) - 1801 }
+        );
+        await probe(DRIFT);
+        assert.equal(repo.rows[0].status, 'down');
+        assert.equal(repo.rows[0].integrity_pending_since, null);
+        assert.equal(deps.recorded.notifications.length, 1);
+        // La note reste au journal : l'alerte ne porte que l'écart.
+        assert.ok(!deps.recorded.notifications[0].body.includes('n’a pas abouti'));
+        const detail = JSON.parse(repo.readings[0].detail!) as { lines: string[] };
+        assert.ok(detail.lines.includes('Le déploiement « app » n’a pas abouti en 30 min'));
+    });
+
+    it('un déploiement terminé avant la dernière lecture conforme n’explique rien', async () => {
+        const conformAt = now() - 600;
+        const deployedAt = conformAt - 400;
+        const { repo, asked, probe } = setup((since) => ({
+            succeeded: deployedAt >= since ? { at: deployedAt, what: 'le déploiement « app »' } : null,
+            inFlight: null,
+            error: null
+        }));
+        repo.readings.push({
+            id: 99,
+            service_id: 1,
+            checked_at: conformAt,
+            outcome: 'conform',
+            file_count: 2,
+            slowest_ms: 10,
+            detail: null
+        });
+        await probe(DRIFT);
+        assert.equal(asked[0], conformAt - 300);
+        assert.equal(repo.rows[0].status, 'down');
+        const detail = JSON.parse(repo.readings[1].detail!) as { lines: string[] };
+        assert.ok(detail.lines.includes('Aucun déploiement de ses sources ne l’explique'));
+    });
+
+    it('l’adresse d’appel suffit à expliquer un écart', async () => {
+        const repo = fakeRepo({
+            integrity_interval_seconds: 900,
+            baseline_enc: BASELINE,
+            deploy_hook_hash: 'h',
+            deploy_hook_at: Math.floor(Date.now() / 1000) - 5
+        });
+        const { probe } = monitorWith(repo);
+        await probe(DRIFT);
+        assert.equal(repo.readings[0].outcome, 'accepted');
+        assert.ok((JSON.parse(repo.readings[0].detail!) as { error: string }).error.includes('par l’adresse d’appel'));
+    });
+
+    it('un service sans source garde l’écart tel quel, sans rien demander', async () => {
+        const repo = fakeRepo({ integrity_interval_seconds: 900, baseline_enc: BASELINE, failure_threshold: 1 });
+        const { probe } = monitorWith(repo);
+        await probe(DRIFT);
+        assert.equal(repo.rows[0].status, 'down');
+        assert.deepEqual(JSON.parse(repo.readings[0].detail!), {
+            error: '1 fichier modifié, 1 fichier ajouté, 1 fichier retiré',
+            lines: ['Modifié : /', 'Ajouté : /assets/app-2.js', 'Retiré : /assets/app.js']
+        });
     });
 });
 

@@ -342,7 +342,9 @@ function syncWith(store: FakeRepo, remote: Remote, paused: string[] = []) {
         unlink: async () => undefined,
         applyVersion: async (feature, itemId, workspaceId, version) => {
             versions.push([feature, itemId, workspaceId, version]);
-        }
+        },
+        authorize: async () => ({ ok: true }),
+        linkedItems: async () => ({ deploy: [], git: [] })
     };
     const deps = createTestServiceDeps({
         repo: store,

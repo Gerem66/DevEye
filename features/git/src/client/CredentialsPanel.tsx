@@ -235,7 +235,7 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
                         <span className={shell.fieldHint}>
                             {editing?.credential
                                 ? 'Laissez vide pour conserver le jeton en place : il n’est jamais renvoyé.'
-                                : 'Un jeton en lecture seule suffit (contents: read).'}
+                                : 'Un jeton en lecture seule suffit (Contents). Ajoutez Actions et Deployments en lecture pour qu’Uptime reconnaisse vos mises en ligne.'}
                         </span>
                     </label>
                 </div>

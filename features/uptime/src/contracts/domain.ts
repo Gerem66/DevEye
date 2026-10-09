@@ -46,6 +46,39 @@ export const UPTIME_INTEGRITY_DEFAULT_INTERVAL_SECONDS = 900;
 export const UPTIME_INTEGRITY_PATHS_MAX = 50;
 export const UPTIME_INTEGRITY_PATH_MAX_LENGTH = 512;
 
+/**
+ * Accepting a new version after a deployment: what puts a site online, designated
+ * by its service. A drift is accepted when one of them deployed since the last
+ * reading that matched the reference.
+ */
+export const UPTIME_DEPLOY_SOURCES_MAX = 20;
+/** Items of other features that deploy a site: a project stands for its targets and repositories. */
+export const uptimeDeploySourceKindSchema = z.enum(['project', 'deploy', 'git']);
+export type UptimeDeploySourceKind = z.infer<typeof uptimeDeploySourceKindSchema>;
+export const uptimeDeploySourceSchema = z.object({
+    kind: uptimeDeploySourceKindSchema,
+    id: z.number().int().positive()
+});
+export type UptimeDeploySource = z.infer<typeof uptimeDeploySourceSchema>;
+
+/** The picker's categories, in their order; `hook` is the service's own call address. */
+export const uptimeDeployCandidateKindSchema = z.enum(['project', 'deploy', 'git', 'hook']);
+export type UptimeDeployCandidateKind = z.infer<typeof uptimeDeployCandidateKindSchema>;
+
+/** One entry of the picker: greyed with its reason when the member may not choose it. */
+export const uptimeDeployCandidateSchema = z.object({
+    kind: uptimeDeployCandidateKindSchema,
+    /** `null` for the call address, which belongs to the service. */
+    id: z.number().int().positive().nullable(),
+    name: z.string(),
+    detail: z.string().nullable(),
+    /** `false`: greyed, the member may not choose it (`reason` says why). A chosen source stays available, so it can be unticked. */
+    available: z.boolean(),
+    tag: z.string().nullable(),
+    reason: z.string().nullable()
+});
+export type UptimeDeployCandidate = z.infer<typeof uptimeDeployCandidateSchema>;
+
 /** HTTP verb used for the probe. `POST` sends no body : it only pokes the route. */
 export const uptimeMethodSchema = z.enum(['GET', 'HEAD', 'POST']);
 export type UptimeMethod = z.infer<typeof uptimeMethodSchema>;
@@ -115,6 +148,10 @@ export const uptimeServiceSchema = z.object({
      * reading finds the reference again or the user accepts the current version.
      */
     integrityDrift: z.boolean(),
+    /** Integrity: what deploys the site; a drift they explain is accepted. Empty when the option is off. */
+    deploySources: z.array(uptimeDeploySourceSchema),
+    /** Integrity: the service has a call address a CI hits after putting the site online. */
+    deployHook: z.boolean(),
     method: uptimeMethodSchema,
     /** Exact status code required, or `null` to accept any 2xx/3xx. */
     expectedStatus: z.number().int().min(100).max(599).nullable(),
@@ -190,9 +227,10 @@ export type UptimeCheckStats = z.infer<typeof uptimeCheckStatsSchema>;
 /**
  * What one reading of the files found: the reference learned (first reading,
  * or after the user accepted the current version), the files as referenced, a
- * drift, or a file that could not be read.
+ * drift, a file that could not be read, a drift a deployment explained and
+ * accepted, or a drift waiting for a deployment still under way.
  */
-export const uptimeIntegrityOutcomeSchema = z.enum(['learned', 'conform', 'drift', 'failed']);
+export const uptimeIntegrityOutcomeSchema = z.enum(['learned', 'conform', 'drift', 'failed', 'accepted', 'pending']);
 export type UptimeIntegrityOutcome = z.infer<typeof uptimeIntegrityOutcomeSchema>;
 
 /**
@@ -319,7 +357,21 @@ export interface UptimeServiceRow {
     integrity_failures: number;
     /** Integrity: encrypted `{ error, lines }` (open tier) that keeps every probe failing; null while the files conform. */
     integrity_verdict: string | null;
+    /** Integrity: since when a drift waits for a deployment under way; null otherwise. */
+    integrity_pending_since: number | null;
+    /** SHA-256 of the call address's token, what a call is looked up by; null without an address. */
+    deploy_hook_hash: string | null;
+    /** The token itself, encrypted (open tier), so the screen can show the address again. */
+    deploy_hook_enc: string | null;
+    /** Last call of the address. */
+    deploy_hook_at: number | null;
     created: number;
+}
+
+export interface UptimeDeploySourceRow {
+    service_id: number;
+    kind: UptimeDeploySourceKind;
+    ref_id: number;
 }
 
 export interface UptimeCheckRow {

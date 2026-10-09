@@ -1067,3 +1067,28 @@
     font-size: 0.75rem;
     color: var(--text-muted);
 }
+
+/* Le pictogramme d'une source de déploiement dans son sélecteur. */
+.sourceIcon {
+    width: 16px;
+    color: var(--text-muted);
+}
+
+/* L'adresse d'appel d'un service : longue, elle passe à la ligne plutôt que de déborder. */
+.hookRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.hookUrl {
+    flex: 1;
+    min-width: 0;
+    padding: var(--space-xs) var(--space-sm);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-md);
+    background: var(--input-bg);
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    overflow-wrap: anywhere;
+}

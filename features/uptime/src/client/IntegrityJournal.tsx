@@ -16,7 +16,9 @@ const OUTCOMES: Record<UptimeIntegrityOutcome, { label: string; dot: string }> =
     learned: { label: 'Référence apprise', dot: styles.dotInfo },
     conform: { label: 'Conforme', dot: styles.dotUp },
     drift: { label: 'Écart', dot: styles.dotDown },
-    failed: { label: 'Lecture ratée', dot: styles.dotWarn }
+    failed: { label: 'Lecture ratée', dot: styles.dotWarn },
+    accepted: { label: 'Acceptée', dot: styles.dotInfo },
+    pending: { label: 'En attente d’un déploiement', dot: styles.dotWarn }
 };
 
 /** Ce que dit une lecture après son constat : ses fichiers, ou ce qui ne va pas. */

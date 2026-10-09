@@ -451,6 +451,15 @@ reculer l'accès comme une instance injoignable, sans doublement.
   (`recordEvent`, dans l'espace de la cible, qui ne lève jamais : perdre une
   ligne de frise ne transforme pas un déploiement en échec). Absent, la feature
   dégrade : zéro projet partout.
+- Uptime lit le même contrat pour ses sources de déploiement : `list` (les
+  cibles de l'espace, nommées, avec leur fournisseur), `authorize` (le droit
+  de lecture d'un membre, surcharge de l'élément comprise) et `activity` (le
+  dernier succès depuis un instant, ou un déploiement encore en vol). Avant de
+  répondre, `activity` rapproche la cible de son fournisseur
+  (`DeploySync.refresh`, qui rejoint un rapprochement en cours et ne lance rien
+  pour une cible en pause ou un accès occupé ou en recul), dix secondes au
+  plus : un déploiement qui vient de finir n'attend pas le tour suivant. Un
+  « en cours » parti depuis plus de six heures ne compte plus.
 - Un seul sujet de diffusion, `deploy` : l'onglet d'un projet suit
   `deploy.detail`, ses compteurs d'onglets se relisent à leur prochaine
   ouverture, et c'est Projets qui ravive `projects` quand un déclenchement entre
@@ -534,7 +543,7 @@ src/contracts/domain.ts             la cible, le déploiement, le candidat, l'ac
 src/contracts/commands.ts           les dix-sept commandes (préfixe `deploy.`)
 
 src/server/index.ts                 serverEntry : dépôt, migrations, handlers, service, `items` (domicile, nom, move, copy),
-                                    quota `targets`, export du compte, provider DEPLOY_ITEMS_PROVIDER offert à Projets
+                                    quota `targets`, export du compte, provider DEPLOY_ITEMS_PROVIDER offert à Projets et Uptime
 src/server/repo.ts                  cibles, déploiements, accès (ft_deploy_credentials), listTargetsDue, stock du quota
 src/server/_shared.ts               Stored*, loadTarget / loadHomeTarget, targetCipherFor, toTarget, toDeployment,
                                     toCredential, loadAccess, le singleton du suivi (setSync / wakeSync / startAgentDeploy /

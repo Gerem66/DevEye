@@ -26,18 +26,20 @@ interroge `UPTIME_ITEMS_PROVIDER` avant de relier).
 Tout ce que l'ordonnanceur lit pour **planifier** une sonde (cadence, délai,
 seuil, actif) et tout ce qu'un graphique agrège (statut, latence, horodatages)
 vit en colonnes claires ; ce qui identifie la cible (nom, URL, mot-clé, chemins
-d'intégrité), la référence et le verdict d'intégrité et les messages d'erreur
-sont chiffrés à l'**étage ouvert**, puisque le vérificateur tourne en tâche de fond, sans
+d'intégrité), la référence et le verdict d'intégrité, le jeton de l'adresse
+d'appel et les messages d'erreur sont chiffrés à l'**étage ouvert**, puisque le vérificateur tourne en tâche de fond, sans
 session ni mot de passe. Aucune commande n'est verrouillée par le chiffrement
 par mot de passe : la feature s'ouvre et se lit sans prompt.
 
-Sept tables : quatre du socle (`uptime_services`, `uptime_checks`,
+Huit tables : quatre du socle (`uptime_services`, `uptime_checks`,
 `uptime_daily`, `uptime_incidents`, dispensées du préfixe par l'allowlist de
-`deveye-feature.json`) et trois du module au préfixe `ft_uptime_` (les pages de
-statut, `src/server/migrations/001_status_pages.sql`, et le journal des
-intégrités, `004_integrity_readings.sql`). Les migrations `002_integrity.sql` et
-`003_integrity_option.sql` du module ajoutent à `uptime_services` les colonnes
-de l'option d'intégrité.
+`deveye-feature.json`) et quatre du module au préfixe `ft_uptime_` (les pages de
+statut, `src/server/migrations/001_status_pages.sql`, le journal des
+intégrités, `004_integrity_readings.sql`, et les sources de déploiement,
+`005_deploy_accept.sql`). Les migrations `002_integrity.sql`,
+`003_integrity_option.sql` et `005_deploy_accept.sql` du module ajoutent à
+`uptime_services` les colonnes de l'option d'intégrité, de l'attente d'un
+déploiement et de l'adresse d'appel.
 
 ## Le principe
 
@@ -125,7 +127,8 @@ fichiers influencent (`applyIntegrity` dans `src/server/service.ts`, pure) :
   principale et le fichier le plus lent : un site sain n'y voit rien, un script
   qui traîne fait monter la courbe.
 
-Après un déploiement voulu, « Accepter la version actuelle »
+Après un déploiement voulu, l'acceptation automatique (section suivante)
+reconnaît la mise en ligne ; sinon, « Accepter la version actuelle »
 (`uptime.acceptBaseline`) oublie la référence et le verdict, puis relit : ce
 que le site sert à cet instant devient la référence, et l'incident se referme
 par le chemin ordinaire, « rétabli » compris. Cocher ou décocher l'option,
@@ -133,8 +136,8 @@ changer l'adresse ou la liste des chemins fait de même (`resetIntegrity`).
 
 Chaque lecture s'inscrit au **journal des intégrités**
 (`ft_uptime_integrity_readings`) avec son constat : référence apprise,
-conforme, écart ou lecture ratée, le nombre de fichiers comparés et le plus
-lent. Le détail d'un écart (fichier par fichier) ou la raison d'une lecture
+conforme, écart, lecture ratée, acceptée après un déploiement ou en attente
+d'un déploiement, le nombre de fichiers comparés et le plus lent. Le détail d'un écart (fichier par fichier) ou la raison d'une lecture
 ratée y est chiffré à l'étage ouvert (`detail`). Une sonde qui ne relit pas les
 fichiers n'y laisse rien.
 
@@ -162,6 +165,63 @@ instance publique vers une instance derrière un VPN, `safeFetch` refuse
 l'adresse privée (sans `OUTBOUND_ALLOW_PRIVATE`). L'inverse (l'instance privée
 surveille l'instance hébergée) est le sens utile, et celui qui protège les
 sessions distantes ([Docs/FEDERATION.md](../../Docs/FEDERATION.md)).
+
+## L'acceptation après un déploiement
+
+Une mise en ligne voulue change les fichiers comme une attaque. Pour ne pas
+alerter à chaque déploiement, un service dont l'option d'intégrité est cochée
+peut désigner **ce qui met son site en ligne** : la case « Accepter
+automatiquement les changements lors d'un déploiement » de ses réglages, puis
+un sélecteur à catégories, chacune affichée même vide (`uptime.deploySources`) :
+
+- **Projets** : un projet vaut ses cibles de Déploiements et ses dépôts Git
+  (`ProjectsUsageProvider.linkedItems`) ;
+- **Déploiements** : une ligne `deployments` de la cible, réussie, compte, d'où
+  qu'elle soit partie (DevEye, l'écran de Dokploy, une CI) ; la cible est
+  rapprochée de son fournisseur juste avant la question (`DeploySync.refresh`,
+  dix secondes au plus) pour ne pas manquer un déploiement qui vient de finir ;
+- **Dépôts Git** : GitHub est interrogé sur-le-champ avec le jeton du dépôt :
+  un workflow GitHub Actions réussi sur la branche par défaut, ou un
+  déploiement GitHub réussi (ce que publient Pages, Vercel, Netlify, ou un
+  workflow à `environment`), les environnements transitoires (aperçus de PR)
+  écartés. Le jeton doit lire Actions et Deployments ; sinon le journal le dit ;
+- **Adresse d'appel** : `POST /api/uptime/deployed/<jeton>`, à appeler en fin
+  de mise en ligne par toute autre CI. L'appel note l'heure (`deploy_hook_at`)
+  et relit les fichiers aussitôt, une fois par minute au plus. Le jeton se
+  retrouve par son condensat (`deploy_hook_hash`, unique) et se réaffiche
+  depuis sa copie chiffrée (`uptime.deployHook`, en écriture : qui le détient
+  fait accepter une version, et `uptime.list` ne le porte jamais).
+
+Les sources sont des identifiants (`ft_uptime_deploy_sources`), des éléments de
+l'**espace d'origine** du service. Une source ajoutée doit être lisible par qui
+enregistre (`authorize` du module qui la tient) ; celles déjà en place restent,
+et une source disparue reste listée « introuvable » jusqu'à ce qu'on la
+décoche. Décocher l'option d'intégrité ou la case les retire, adresse comprise.
+
+À chaque écart ou lecture ratée d'un service qui a des sources
+(`src/server/deployEvidence.ts`, puis `applyDeployEvidence`, pure) :
+
+1. **La fenêtre** commence à la dernière lecture conforme ou apprise
+   (`lastConformAt`, à défaut la capture de la référence), moins cinq minutes
+   de marge, et jamais plus tôt que le rythme de lecture plus quinze minutes.
+   Une acceptation automatique ne la déplace pas : un cache qui livre la
+   nouvelle version en deux temps est accepté deux fois par le même
+   déploiement, sans que le plancher ne laisse ce report durer.
+2. **Un déploiement réussi dans la fenêtre** : la capture qui vient d'être lue
+   devient la référence, la mesure est verte, aucune alerte ne part. Le journal
+   inscrit `accepted` (« Expliquée par le déploiement « api » (date) », détail
+   fichier par fichier) et le journal d'activité `uptime.baselineAccepted`. Un
+   incident ouvert par un écart précédent se ferme par le chemin ordinaire.
+3. **Un déploiement en cours**, ou une lecture ratée juste après un succès :
+   `pending`, la mesure reste verte (un écart déjà constaté le reste), les
+   fichiers se relisent toutes les minutes (`integrity_pending_since`), trente
+   minutes au plus ; passé ce délai, l'écart redevient l'alerte ordinaire.
+4. **Sinon** l'écart suit son cours, et le journal dit pourquoi aucune source
+   n'a suffi (un jeton sans droit, un déploiement qui n'a pas abouti).
+
+La limite, dite à l'écran : une modification faite entre la fin d'un
+déploiement et la lecture suivante est acceptée avec lui. L'adresse d'appel se
+garde dans les secrets de la CI, jamais sur le serveur surveillé.
 
 ## Les trois niveaux d'historique
 
@@ -201,7 +261,8 @@ un incident, pas à une sonde.
 - **Hors ligne** (`down`) → alerte avec l'heure de bascule et l'erreur ;
   l'incident est marqué `notified` si un canal l'a acceptée.
 - **Fichiers modifiés** (`integrity`) → alerte qui nomme les fichiers, avec le
-  rappel d'« Accepter la version actuelle » si c'est un déploiement voulu. Des
+  rappel d'« Accepter la version actuelle » si c'est un déploiement voulu ;
+  aucune quand une source de déploiement explique l'écart. Des
   fichiers illisibles au seuil partent en « hors ligne », leur erreur à
   l'appui.
 - **Retour en ligne** (`recovered`) → alerte avec la durée de la panne et sa
@@ -236,7 +297,8 @@ partagé par toutes les fonctionnalités qui notifient et par leurs éléments.
 
 Chaque bascule est aussi journalisée dans les logs d'audit (`uptime.down`,
 `uptime.integrity`, `uptime.recovered`), comme chaque réglage (`uptime.add`,
-`uptime.update`, `uptime.remove`, `uptime.baselineAccepted`), donc consultable
+`uptime.update`, `uptime.remove`, `uptime.baselineAccepted`, à la main ou
+après un déploiement, `uptime.deployHookRegenerated`), donc consultable
 dans la page Journaux.
 
 ## Les deux graphiques
@@ -283,8 +345,8 @@ rouge et vouloir l'ouvrir est le même geste.
 Tout ce qui se règle sur un service vit dans ses **réglages** (le bouton commun
 de sa fiche, onglet Général : `ServiceGeneralPanel`, déclaré par
 `settings.item` du manifest) : son identité (nom, URL, méthode, statut
-attendu, mot-clé, option d'intégrité avec son rythme et ses chemins,
-surveillance active), sa fréquence de relève, son délai, ses échecs consécutifs avant alerte, sa conservation de
+attendu, mot-clé, option d'intégrité avec son rythme, ses chemins et ses
+sources de déploiement, surveillance active), sa fréquence de relève, son délai, ses échecs consécutifs avant alerte, sa conservation de
 l'historique détaillé et sa suppression, à côté de ses canaux, de son partage
 et de ses permissions. Le panneau envoie le service entier à `uptime.update`,
 dont le contrat prend tout. Le dialogue (`ServiceDialog`) ne sert qu'à
@@ -414,11 +476,12 @@ n'agrège que des nombres.
 
 `uptime.list` · `uptime.count` · `uptime.add` · `uptime.update` ·
 `uptime.setEnabled` · `uptime.remove` · `uptime.reorder` · `uptime.checkNow` ·
-`uptime.acceptBaseline` · `uptime.history` · `uptime.checks` ·
-`uptime.checkStats` · `uptime.incidents` · `uptime.pageList` ·
-`uptime.pageAdd` · `uptime.pageUpdate` · `uptime.pageRemove`
+`uptime.acceptBaseline` · `uptime.deploySources` · `uptime.deployHook` ·
+`uptime.history` · `uptime.checks` · `uptime.checkStats` · `uptime.incidents` ·
+`uptime.integrityReadings` · `uptime.pageList` · `uptime.pageAdd` ·
+`uptime.pageUpdate` · `uptime.pageRemove`
 
-Dix-sept commandes, déclarées par `src/contracts/commands.ts` et enregistrées
+Vingt commandes, déclarées par `src/contracts/commands.ts` et enregistrées
 au démarrage comme celles de tout module. `uptime.checkNow` emprunte le chemin
 de l'ordonnanceur (`monitor().runOne`), donc un test manuel compte dans
 l'historique, l'agrégat et les incidents exactement comme une sonde
@@ -434,19 +497,23 @@ src/index.ts                         manifest + contrats (l'entrée isomorphe)
 src/manifest.ts                      featureDescriptor('uptime') étalé ; resources, topics, quotas, domains,
                                      topbarWidget, settings (pages, domains ; item general)
 src/contracts/domain.ts              service, contrôle, incident, point, page de statut, lignes SQL, bornes
-src/contracts/commands.ts            les dix-sept commandes
+src/contracts/commands.ts            les vingt commandes
 src/contracts/format.ts              mise en forme partagée client / serveur
 ```
 
 `@deveye/types` ne garde que l'identité (id, descripteur, sujet live, émetteur
 de notifications) et les deux contrats de couplage que Projets consomme
 (`sdk/providers.ts` : `UPTIME_ITEMS_PROVIDER`, `UPTIME_CLIENT_PROVIDER`).
+Uptime consomme à son tour `DEPLOY_ITEMS_PROVIDER`, `GIT_ITEMS_PROVIDER` et
+`PROJECTS_USAGE_PROVIDER` pour ses sources de déploiement ; un module absent
+laisse sa catégorie vide.
 
 ### Serveur : `features/uptime/src/server/`
 
 ```
 index.ts          serverEntry : env, createRepo, features, migrationsDir, domains, quotas (monitors, pages),
-                  createService (ordonnanceur + pages de statut + provider + publicRoutes + domainRoot +
+                  createService (ordonnanceur + pages de statut + provider + publicRoutes (pages, adresse
+                  d'appel) + domainRoot +
                   onPlanPause), items (homeOf, labelOf, move, copy), accountExport, e2e
 env.ts            UPTIME_TICK_SECONDS, UPTIME_CONCURRENCY (defineModuleEnv)
 repo.ts           UptimeRepo : `services` et `history`, composés avec `pages` et `status`
@@ -457,8 +524,10 @@ service.ts        UptimeMonitor : tick, pool, sonde HTTP, lecture des fichiers (
                   enregistrement, incidents, alertes, élagage horaire, fermeture des pannes d'un service mis
                   en pause
 integrity.ts      captureSite, diffCapture, describeDrift : la lecture des fichiers, pure, réseau injecté
+deployEvidence.ts la fenêtre d'un déploiement et la question posée aux sources (findDeployEvidence)
+deploySources.ts  le sélecteur et ses droits, le jeton et la route de l'adresse d'appel
 notice.ts         la mise en page Discord d'une alerte (down, recovered, integrity)
-handlers.ts       les quatorze commandes des services
+handlers.ts       les seize commandes des services
 pages.ts          les quatre commandes des pages de statut
 domains.ts        la vérification d'un domaine (jeton sous /.well-known/deveye-uptime), onRemoved
 statusPage/       routes.ts (cache, débit, domainRoot), view.ts (le modèle de la page), render.ts, html.ts,
@@ -466,12 +535,13 @@ statusPage/       routes.ts (cache, débit, domainRoot), view.ts (le modèle de 
 copy.ts           uptimeTree : ce dont un service est fait (colonnes scellées), la copie
 move.ts           le changement d'espace d'un service
 accountExport.ts  l'export des données du compte, table par table
-e2e.ts            le scénario de bout en bout : surveiller ce serveur même, tester, lire le verdict
-uninstall.sql     démonte les trois tables ft_uptime_*
+e2e.ts            les scénarios de bout en bout : surveiller ce serveur même, tester, lire le verdict ;
+                  appeler son adresse d'appel et voir les fichiers relus
+uninstall.sql     démonte les quatre tables ft_uptime_*
 migrations/       001_status_pages.sql, 002_integrity.sql, 003_integrity_option.sql,
-                  004_integrity_readings.sql
-*.test.ts         handlers, service, integrity, notice, pages, repo, move, accountExport,
-                  statusPage/routes, statusPage/view
+                  004_integrity_readings.sql, 005_deploy_accept.sql
+*.test.ts         handlers, service, integrity, deployEvidence, deploySources, notice, pages, repo, move,
+                  accountExport, statusPage/routes, statusPage/view
 ```
 
 ### Client : `features/uptime/src/client/`
@@ -490,6 +560,8 @@ Ratios.tsx             les trois taux, toujours les trois et dans cet ordre
 Pane.tsx               le bloc qui se recharge sur place
 ServiceDialog.tsx      ajouter un service ; les réglages fins partent avec leurs défauts
 ServiceGeneralPanel.tsx  onglet Général d'un service : identité, réglages fins, suppression
+DeploySourcePicker.tsx   ce qui met le site en ligne : projets, cibles, dépôts, adresse d'appel
+DeployHookField.tsx      l'adresse d'appel : lue à la demande, copiée, régénérée
 StatusPagesPanel.tsx   onglet « Pages de statut » de la feature
 StatusPageDialog.tsx   créer ou régler une page
 TopbarWidget.tsx       le widget de barre, sans prop : tout vient du magasin
@@ -558,4 +630,6 @@ npm run test:features
 
 Le scénario `e2e.ts` (page Tests et débogage, [Docs/DEBUG.md](../../Docs/DEBUG.md))
 crée une surveillance de ce serveur même, la teste à la demande, lit le verdict
-et la supprime ; il se saute de lui-même quand l'adresse du serveur est privée.
+et la supprime ; le second en surveille les fichiers, ouvre son adresse
+d'appel, la frappe comme une CI et attend la lecture qui suit. Tous deux se
+sautent d'eux-mêmes quand l'adresse du serveur est privée.

@@ -62,6 +62,8 @@ declare const styles: {
     readonly formRow: string;
     readonly grip: string;
     readonly headline: string;
+    readonly hookRow: string;
+    readonly hookUrl: string;
     readonly incident: string;
     readonly incidentBody: string;
     readonly incidentError: string;
@@ -98,6 +100,7 @@ declare const styles: {
     readonly reference: string;
     readonly section: string;
     readonly sectionTitle: string;
+    readonly sourceIcon: string;
     readonly statusAlert: string;
     readonly statusIcon: string;
     readonly statusOk: string;

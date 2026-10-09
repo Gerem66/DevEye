@@ -5,6 +5,8 @@ import {
     uptimeCheckStats,
     uptimeChecks,
     uptimeCount,
+    uptimeDeployHook,
+    uptimeDeploySources,
     uptimeHistory,
     uptimeIncidents,
     uptimeIntegrityReadings,
@@ -16,6 +18,7 @@ import {
 } from '../contracts/commands';
 import {
     UPTIME_DEFAULT_INTERVAL_SECONDS,
+    type UptimeDeploySource,
     type UptimePoint,
     type UptimeRange,
     type UptimeResolution,
@@ -40,6 +43,13 @@ import {
     type Ctx,
     type ServiceStats
 } from './_shared';
+import {
+    assertNewDeploySources,
+    DEPLOY_CANDIDATE_KINDS,
+    deployCandidates,
+    deployHookUrl,
+    newDeployHook
+} from './deploySources';
 import type { UptimeWindowStat } from './repo';
 
 const DAY = 86400;
@@ -112,12 +122,19 @@ async function loadStats(ctx: Ctx, now: number): Promise<Map<number, ServiceStat
  */
 async function toServices(ctx: Ctx, rows: UptimeServiceRow[]): Promise<UptimeService[]> {
     const now = Math.floor(Date.now() / 1000);
-    const [stats, open, shares] = await Promise.all([
+    const [stats, open, shares, sourceRows] = await Promise.all([
         loadStats(ctx, now),
         ctx.repo.history.listOpenIncidents(ctx.workspaceId),
-        ctx.sharing.scope()
+        ctx.sharing.scope(),
+        ctx.repo.services.listDeploySources(rows.map((row) => row.id))
     ]);
     const downSince = new Map(open.map((i) => [i.service_id, i.started_at]));
+    const sources = new Map<number, UptimeDeploySource[]>();
+    for (const source of sourceRows) {
+        const list = sources.get(Number(source.service_id)) ?? [];
+        list.push({ kind: source.kind, id: Number(source.ref_id) });
+        sources.set(Number(source.service_id), list);
+    }
     return Promise.all(
         rows.map(async (row) =>
             toService(
@@ -126,7 +143,8 @@ async function toServices(ctx: Ctx, rows: UptimeServiceRow[]): Promise<UptimeSer
                 stats.get(row.id) ?? EMPTY_STATS,
                 downSince.get(row.id) ?? null,
                 row.workspace_id !== ctx.workspaceId,
-                ctx.quota.isPaused('monitors', String(row.id))
+                ctx.quota.isPaused('monitors', String(row.id)),
+                sources.get(row.id) ?? []
             )
         )
     );
@@ -243,6 +261,22 @@ export const uptimeHandlers = [
             const draft = input.service;
             if (!isAllowedOutboundUrl(draft.url)) throw new FeatureError('validation', OUTBOUND_REFUSED_MESSAGE);
             const paths = draft.integrityIntervalSeconds === null ? [] : draft.paths;
+            // Sans l'option, rien à accepter : les sources et l'adresse partent
+            // avec elle. Vérifiées avant toute écriture : un refus n'enregistre rien.
+            const integrity = draft.integrityIntervalSeconds !== null;
+            const sources = integrity ? draft.deploySources : [];
+            const previous = (await ctx.repo.services.listDeploySources([existing.id])).map((s) => ({
+                kind: s.kind,
+                id: Number(s.ref_id)
+            }));
+            await assertNewDeploySources({
+                providers: ctx.providers,
+                serviceId: existing.id,
+                workspaceId: existing.workspace_id,
+                userId: ctx.userId,
+                sources,
+                previous
+            });
             // Réécrit sous la clé de son espace d'origine : le chiffrer avec celle
             // d'ici le rendrait illisible chez lui, c'est-à-dire perdu pour tout le
             // monde y compris l'ordonnanceur qui le sonde.
@@ -274,12 +308,65 @@ export const uptimeHandlers = [
                 before.url !== draft.url ||
                 before.paths.join('\n') !== paths.join('\n');
             if (relearn) await ctx.repo.services.resetIntegrity(row.id);
+
+            await ctx.repo.services.setDeploySources(row.id, sources);
+            const hook = integrity && draft.deployHook;
+            if (hook && existing.deploy_hook_hash === null) {
+                const created = await newDeployHook(cipher);
+                await ctx.repo.services.setDeployHook(row.id, { hash: created.hash, enc: created.enc });
+            } else if (!hook && existing.deploy_hook_hash !== null) {
+                await ctx.repo.services.setDeployHook(row.id, null);
+            }
+
             ctx.audit({
                 action: 'uptime.update',
                 description: `Service surveillé modifié : « ${draft.name} »`,
                 metadata: { serviceId: row.id }
             });
-            return { service: await toOneService(ctx, relearn ? await loadService(ctx, row.id) : row) };
+            return { service: await toOneService(ctx, await loadService(ctx, row.id)) };
+        }
+    }),
+    defineSdkFeature({
+        ...uptimeDeploySources,
+        handler: async (ctx: Ctx, input) => {
+            const row = await loadService(ctx, input.id);
+            const chosen = (await ctx.repo.services.listDeploySources([row.id])).map((s) => ({
+                kind: s.kind,
+                id: Number(s.ref_id)
+            }));
+            // Les éléments du domicile du service : c'est là que ses sources se
+            // lisent, à la sonde comme ici.
+            const candidates = await deployCandidates({
+                providers: ctx.providers,
+                serviceId: row.id,
+                workspaceId: row.workspace_id,
+                userId: ctx.userId,
+                chosen
+            });
+            return { kinds: [...DEPLOY_CANDIDATE_KINDS], candidates };
+        }
+    }),
+    defineSdkFeature({
+        ...uptimeDeployHook,
+        access: { level: 'write' },
+        handler: async (ctx: Ctx, input) => {
+            // En écriture : qui détient l'adresse fait accepter une version.
+            const row = await loadService(ctx, input.id, 'write');
+            if (row.deploy_hook_hash === null || row.deploy_hook_enc === null) {
+                throw new FeatureError('conflict', 'Ce service n’a pas d’adresse d’appel.');
+            }
+            const cipher = await homeCipher(ctx, row.id);
+            const stored = input.regenerate ? null : await cipher.tryDecrypt(row.deploy_hook_enc);
+            if (stored !== null) return { url: deployHookUrl(ctx.origins.public, stored) };
+            const created = await newDeployHook(cipher);
+            await ctx.repo.services.setDeployHook(row.id, { hash: created.hash, enc: created.enc });
+            ctx.audit({
+                action: 'uptime.deployHookRegenerated',
+                level: 'warning',
+                description: 'Adresse d’appel d’un service régénérée',
+                metadata: { serviceId: row.id }
+            });
+            return { url: deployHookUrl(ctx.origins.public, created.token) };
         }
     }),
     defineSdkFeature({

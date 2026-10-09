@@ -1,5 +1,6 @@
 import type {
     UptimeBaseline,
+    UptimeDeploySource,
     UptimeIncident,
     UptimeIncidentRow,
     UptimeService,
@@ -171,7 +172,8 @@ export async function toService(
     downSince: number | null,
     /** Vrai quand le service vient d'un autre espace qui le projette ici. */
     foreign: boolean,
-    planPaused: boolean
+    planPaused: boolean,
+    deploySources: UptimeDeploySource[]
 ): Promise<UptimeService> {
     const payload = await decryptService(cipher, row.content);
     const integrity = row.integrity_interval_seconds !== null;
@@ -185,6 +187,8 @@ export async function toService(
         baseline: integrity ? summarizeBaseline(await decryptBaseline(cipher, row.baseline_enc)) : null,
         integrityCheckedAt: integrity ? row.integrity_checked_at : null,
         integrityDrift: (verdict?.lines.length ?? 0) > 0,
+        deploySources: integrity ? deploySources : [],
+        deployHook: integrity && row.deploy_hook_hash !== null,
         method: row.method,
         expectedStatus: row.expected_status,
         keyword: payload.keyword,

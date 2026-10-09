@@ -237,7 +237,9 @@ const projects: ProjectsUsageProvider = {
     linkTargets: async () => [],
     link: async () => undefined,
     unlink: async () => undefined,
-    applyVersion: async () => undefined
+    applyVersion: async () => undefined,
+    authorize: async () => ({ ok: true }),
+    linkedItems: async () => ({ deploy: [], git: [] })
 };
 
 const ACCESS = {

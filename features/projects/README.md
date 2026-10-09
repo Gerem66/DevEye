@@ -532,7 +532,8 @@ publicPage/         routes.ts (les routes publiques du tableau, la racine d'un d
                     le visiteur voit, options appliquées), render.ts (le HTML), style.ts (la feuille), script.ts (la relecture
                     chaque minute), html.ts
 domains.ts          les crochets des domaines : l'enregistrement à publier, la sonde du jeton, l'usage, le retrait
-usageProvider.ts    PROJECTS_USAGE_PROVIDER : usageOf, countByItem, detach, linkTargets, link, unlink, recordEvent, applyVersion
+usageProvider.ts    PROJECTS_USAGE_PROVIDER : usageOf, countByItem, detach, linkTargets, link, unlink, recordEvent, applyVersion,
+                    authorize, linkedItems
 copy.ts             l'arbre d'un projet (`projectsTree`) et ce qu'une copie abandonne
 move.ts             le changement d'espace : rescelle l'arbre, retire liaisons et page publique, détache les bases des indicateurs
 accountExport.ts    ce que l'export du compte écrit de chaque table (les points de lecture exceptés)
@@ -644,6 +645,9 @@ Projets **publie** un contrat et en **consomme** six, tous par `providers`
   ligne de frise (`recordEvent`, un déploiement parti de l'onglet d'un projet)
   et la version que porte un élément (`applyVersion`, la dernière release d'un
   dépôt, pour les projets ouverts dont `versionSource` vaut `github_release`).
+  Pour Uptime, qui désigne un projet comme source de déploiement : le droit de
+  lecture d'un membre sur un projet (`authorize`, un projet gardé masqué) et
+  les cibles et dépôts qu'il relie (`linkedItems`).
   Tout à l'étage ouvert (`deps.cipherFor`), sans session : un projet gardé ne
   se relie pas. Les écritures ravivent `projects` (`deps.live.changed`) quand
   elles ont changé quelque chose.

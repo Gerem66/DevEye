@@ -1,6 +1,8 @@
 import type {
     UptimeCheckRow,
     UptimeCheckStats,
+    UptimeDeploySource,
+    UptimeDeploySourceRow,
     UptimeIncidentRow,
     UptimeIntegrityOutcome,
     UptimeIntegrityReadingRow,
@@ -54,6 +56,8 @@ export interface UptimeIntegrityReading {
     verdict: string | null;
     /** Encrypted reference learned at this reading; otherwise the stored one stays. */
     baseline: string | null;
+    /** Since when a drift waits for a deployment under way; null otherwise. */
+    pendingSince: number | null;
 }
 
 /** Success ratio + mean latency of one service over a window. */
@@ -102,6 +106,14 @@ export interface UptimeServicesRepo {
     recordProbe(id: number, result: UptimeProbeResult): Promise<void>;
     /** Integrity: write back a reading of the files; `baseline` only when it was learned at this reading. */
     recordIntegrity(id: number, reading: UptimeIntegrityReading): Promise<void>;
+    /** Les sources de déploiement de ces services, dans l'ordre où elles ont été choisies. */
+    listDeploySources(serviceIds: readonly number[]): Promise<UptimeDeploySourceRow[]>;
+    /** Remplace les sources d'un service ; une liste vide les retire toutes. */
+    setDeploySources(serviceId: number, sources: readonly UptimeDeploySource[]): Promise<void>;
+    /** Pose ou retire (`null`) l'adresse d'appel : son condensat et son jeton chiffré. */
+    setDeployHook(serviceId: number, hook: { hash: string; enc: string } | null): Promise<void>;
+    findByDeployHook(hash: string): Promise<UptimeServiceRow | null>;
+    markDeployHookCalled(serviceId: number, at: number): Promise<void>;
     /**
      * Integrity: forget the reference and the verdict, so the next probe
      * rereads the files and learns what the site serves.
@@ -178,6 +190,8 @@ export interface UptimeHistoryRepo {
     }): Promise<void>;
     /** Les lectures avant `before` (exclu), la plus récente d'abord. */
     listReadings(serviceId: number, limit: number, before?: number): Promise<UptimeIntegrityReadingRow[]>;
+    /** La dernière lecture qui a retrouvé la référence ou l'a apprise, `null` sans aucune. */
+    lastConformAt(serviceId: number): Promise<number | null>;
     /**
      * Drop raw pings and readings of the files older than each service's own
      * `retention_days`. Services with no retention keep everything; the daily
@@ -403,18 +417,52 @@ function servicesRepo(q: SdkQueryable): UptimeServicesRepo {
             await q.execute(
                 `UPDATE uptime_services
                  SET integrity_checked_at = ?, integrity_failures = ?, integrity_verdict = ?,
-                     baseline_enc = COALESCE(?, baseline_enc)
+                     baseline_enc = COALESCE(?, baseline_enc), integrity_pending_since = ?
                  WHERE id = ?`,
-                [reading.checkedAt, reading.failures, reading.verdict, reading.baseline, id]
+                [reading.checkedAt, reading.failures, reading.verdict, reading.baseline, reading.pendingSince, id]
             );
         },
         async resetIntegrity(id) {
             await q.execute(
                 `UPDATE uptime_services
-                 SET baseline_enc = NULL, integrity_checked_at = NULL, integrity_failures = 0, integrity_verdict = NULL
+                 SET baseline_enc = NULL, integrity_checked_at = NULL, integrity_failures = 0, integrity_verdict = NULL,
+                     integrity_pending_since = NULL
                  WHERE id = ?`,
                 [id]
             );
+        },
+        async listDeploySources(serviceIds) {
+            if (serviceIds.length === 0) return [];
+            return q.query<UptimeDeploySourceRow>(
+                `SELECT service_id, kind, ref_id FROM ft_uptime_deploy_sources
+                 WHERE service_id IN (?) ORDER BY service_id ASC, position ASC`,
+                [[...serviceIds]]
+            );
+        },
+        async setDeploySources(serviceId, sources) {
+            await q.execute('DELETE FROM ft_uptime_deploy_sources WHERE service_id = ?', [serviceId]);
+            for (const [position, source] of sources.entries()) {
+                await q.execute(
+                    'INSERT INTO ft_uptime_deploy_sources (service_id, kind, ref_id, position) VALUES (?, ?, ?, ?)',
+                    [serviceId, source.kind, source.id, position]
+                );
+            }
+        },
+        async setDeployHook(serviceId, hook) {
+            await q.execute(
+                `UPDATE uptime_services SET deploy_hook_hash = ?, deploy_hook_enc = ?, deploy_hook_at = NULL
+                 WHERE id = ?`,
+                [hook?.hash ?? null, hook?.enc ?? null, serviceId]
+            );
+        },
+        async findByDeployHook(hash) {
+            const rows = await q.query<UptimeServiceRow>('SELECT * FROM uptime_services WHERE deploy_hook_hash = ?', [
+                hash
+            ]);
+            return rows[0] ?? null;
+        },
+        async markDeployHookCalled(serviceId, at) {
+            await q.execute('UPDATE uptime_services SET deploy_hook_at = ? WHERE id = ?', [at, serviceId]);
         },
         async recordProbe(id, result) {
             await q.execute(
@@ -632,6 +680,15 @@ function historyRepo(q: SdkQueryable): UptimeHistoryRepo {
                  LIMIT ?`,
                 before === undefined ? [serviceId, limit] : [serviceId, before, limit]
             );
+        },
+        async lastConformAt(serviceId) {
+            const rows = await q.query<{ at: number | null }>(
+                `SELECT MAX(checked_at) AS at FROM ft_uptime_integrity_readings
+                 WHERE service_id = ? AND outcome IN ('learned', 'conform')`,
+                [serviceId]
+            );
+            const at = rows[0]?.at;
+            return at === null || at === undefined ? null : Number(at);
         },
         async pruneByRetention(now) {
             const checks = await q.execute(

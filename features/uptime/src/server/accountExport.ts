@@ -12,7 +12,20 @@ export const uptimeAccountExport: FeatureAccountExport<UptimeRepo> = {
             key: ['id'],
             sealed: ['content', 'last_error', 'baseline_enc', 'integrity_verdict'],
             json: ['content', 'baseline_enc', 'integrity_verdict'],
-            dates: { last_checked_at: 's', integrity_checked_at: 's', created: 's' }
+            dates: {
+                last_checked_at: 's',
+                integrity_checked_at: 's',
+                integrity_pending_since: 's',
+                deploy_hook_at: 's',
+                created: 's'
+            },
+            // L'adresse d'appel fait accepter une version à qui la détient.
+            omit: ['deploy_hook_hash', 'deploy_hook_enc']
+        },
+        ft_uptime_deploy_sources: {
+            file: 'sources-de-deploiement.json',
+            where: OF_SERVICES,
+            key: ['service_id', 'kind', 'ref_id']
         },
         uptime_checks: {
             file: 'controles.json',

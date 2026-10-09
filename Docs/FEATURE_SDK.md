@@ -168,8 +168,10 @@ eux : Projets lit les contrats d'éléments (`UPTIME_ITEMS_PROVIDER`,
 `AUDIENCE_ITEMS_PROVIDER`, `HOSTING_ITEMS_PROVIDER`) avant de relier un
 élément ; Sauvegardes lit `DATABASE_BACKUP_PROVIDER`,
 `MAILSERVER_BACKUP_PROVIDER`, et le contrat d'arborescence commun à
-`CLOUDSYNC_BACKUP_PROVIDER` et `HOSTING_BACKUP_PROVIDER` pour ses sources ; le
-module de facturation des
+`CLOUDSYNC_BACKUP_PROVIDER` et `HOSTING_BACKUP_PROVIDER` pour ses sources ;
+Uptime lit `DEPLOY_ITEMS_PROVIDER`, `GIT_ITEMS_PROVIDER` et
+`PROJECTS_USAGE_PROVIDER` pour ses sources de déploiement (`list`,
+`authorize`, `activity`, `linkedItems`) ; le module de facturation des
 comptes offre `ACCOUNT_PLAN_PROVIDER`.
 
 Côté client, `FeatureClient.providers` est le jumeau : les écrans lisent par

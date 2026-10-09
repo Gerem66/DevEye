@@ -1,8 +1,14 @@
-import { GIT_ITEMS_PROVIDER, type GitItemsProvider, type GitRepoDescription } from '@deveye/types/sdk';
+import {
+    GIT_ITEMS_PROVIDER,
+    type DeployActivity,
+    type GitItemsProvider,
+    type GitRepoDescription
+} from '@deveye/types/sdk';
 import type { FeatureServer, SdkCipher } from '@deveye/types/sdk/server';
 
 import type { GitRepoRow } from '../contracts/domain';
 import { gitAccountExport } from './accountExport';
+import { fetchDeployments, fetchWorkflowRuns, GitHubError, type GitHubDeployEvent } from './github';
 import { gitHandlers } from './handlers';
 import { gitCopy } from './copy';
 import { gitMove } from './move';
@@ -44,6 +50,44 @@ async function labelOf(repo: GitRepo, cipher: SdkCipher, repoId: number, workspa
     return (await describeRepo(repo, cipher, repoId, workspaceId))?.description.label ?? null;
 }
 
+/** Le jeton de l'accès d'un dépôt, `null` pour un dépôt public ou un secret illisible. */
+async function tokenOf(repo: GitRepo, cipher: SdkCipher, row: GitRepoRow, workspaceId: number): Promise<string | null> {
+    if (row.credential_id === null) return null;
+    const credential = await repo.findCredential(row.credential_id, workspaceId);
+    return credential ? cipher.tryDecrypt(credential.secret_enc) : null;
+}
+
+/** Un « en cours » parti avant n'aboutira plus : GitHub l'a perdu ou oublié. */
+const IN_FLIGHT_HORIZON_SECONDS = 6 * 3600;
+
+/** Ce que les workflows et déploiements lus disent de la fenêtre qui commence à `since`. */
+export function summarizeActivity(
+    events: readonly GitHubDeployEvent[],
+    since: number,
+    label: string,
+    now: number
+): Pick<DeployActivity, 'succeeded' | 'inFlight'> {
+    let succeeded: DeployActivity['succeeded'] = null;
+    let inFlight: DeployActivity['inFlight'] = null;
+    for (const event of events) {
+        const what = `${event.what} de ${label}`;
+        if (event.state === 'success' && event.at >= since && (!succeeded || event.at > succeeded.at)) {
+            succeeded = { at: event.at, what };
+        } else if (event.state === 'running' && event.at >= now - IN_FLIGHT_HORIZON_SECONDS) {
+            inFlight ??= { what };
+        }
+    }
+    return { succeeded, inFlight };
+}
+
+/** Un refus de GitHub dit quel droit manque au jeton ; le reste se dit tel quel. */
+function readFailure(e: unknown, label: string, what: string, right: string): string {
+    if (e instanceof GitHubError && (e.status === 403 || e.status === 404) && !e.rateLimited) {
+        return `Dépôt ${label} : le jeton ne lit pas ${what} (droit ${right} en lecture)`;
+    }
+    return `Dépôt ${label} : ${e instanceof Error ? e.message : String(e)}`;
+}
+
 /**
  * L'entrée serveur du module : la synchronisation de fond des dépôts chez GitHub
  * (`GitSync`), le singleton qu'elle pose pour les handlers, et le contrat offert
@@ -80,12 +124,50 @@ export const serverEntry: FeatureServer<GitRepo> = {
                 const cipher = deps.cipherFor(workspaceId);
                 const found = await describeRepo(deps.repo, cipher, repoId, workspaceId);
                 if (!found) return null;
-                let token: string | null = null;
-                if (found.row.credential_id !== null) {
-                    const credential = await deps.repo.findCredential(found.row.credential_id, workspaceId);
-                    token = credential ? await cipher.tryDecrypt(credential.secret_enc) : null;
+                return { ...found.description, token: await tokenOf(deps.repo, cipher, found.row, workspaceId) };
+            },
+            list: async (workspaceId) => {
+                const cipher = deps.cipherFor(workspaceId);
+                const rows = await deps.repo.listRepos(workspaceId);
+                return Promise.all(
+                    rows.map(async (row) => ({
+                        id: row.id,
+                        name: (await labelOf(deps.repo, cipher, row.id, workspaceId)) ?? `Dépôt ${row.id}`,
+                        detail: null
+                    }))
+                );
+            },
+            authorize: async (repoId, workspaceId, userId) => {
+                if (!(await deps.repo.findVisibleRepo(repoId, workspaceId))) return { ok: false, reason: 'hidden' };
+                return deps.access.feature(workspaceId, userId, { level: 'read', itemId: String(repoId) });
+            },
+            activity: async (repoId, workspaceId, since) => {
+                const visible = await deps.repo.findVisibleRepo(repoId, workspaceId);
+                const home = visible?.workspace_id ?? workspaceId;
+                const cipher = deps.cipherFor(home);
+                const found = visible ? await describeRepo(deps.repo, cipher, repoId, home) : null;
+                if (!found) return { succeeded: null, inFlight: null, error: null };
+                const { label, defaultBranch } = found.description;
+                const [owner, name] = label.split('/');
+                const token = await tokenOf(deps.repo, cipher, found.row, home);
+                const [runs, deployments] = await Promise.allSettled([
+                    defaultBranch ? fetchWorkflowRuns(owner, name, token, defaultBranch) : Promise.resolve([]),
+                    fetchDeployments(owner, name, token, since)
+                ]);
+                const errors: string[] = [];
+                if (runs.status === 'rejected')
+                    errors.push(readFailure(runs.reason, label, 'les workflows', 'Actions'));
+                if (deployments.status === 'rejected') {
+                    errors.push(readFailure(deployments.reason, label, 'les déploiements', 'Deployments'));
                 }
-                return { ...found.description, token };
+                const events = [
+                    ...(runs.status === 'fulfilled' ? runs.value : []),
+                    ...(deployments.status === 'fulfilled' ? deployments.value : [])
+                ];
+                return {
+                    ...summarizeActivity(events, since, label, Math.floor(Date.now() / 1000)),
+                    error: errors.length > 0 ? errors.join(' ; ') : null
+                };
             }
         };
         return {

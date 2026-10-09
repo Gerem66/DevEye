@@ -283,7 +283,9 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
                 .sort((a, b) => b.started_at - a.started_at || b.id - a.id)
                 .slice(0, limit),
         findDeployment: async (id) => deployments.find((d) => d.id === id) ?? null,
-        listInFlightAgentDeployments: unused
+        listInFlightAgentDeployments: unused,
+        findTargetSync: unused,
+        deploymentActivity: unused
     };
 }
 
@@ -313,7 +315,9 @@ function projectsProvider(recorded: { projectId: number; kind: string; label: st
         linkTargets: async () => [],
         link: async () => undefined,
         unlink: async () => undefined,
-        applyVersion: async () => undefined
+        applyVersion: async () => undefined,
+        authorize: async () => ({ ok: true }),
+        linkedItems: async () => ({ deploy: [], git: [] })
     };
 }
 

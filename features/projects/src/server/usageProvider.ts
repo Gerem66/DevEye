@@ -23,7 +23,7 @@ import { encryptProject, tryDecryptProject, type StoredEvent } from './_shared';
  */
 
 /** Ce que le contrat lit du dépôt et de l'hôte : pas le service entier. */
-type Deps = Pick<FeatureServiceDeps<ProjectsRepo>, 'repo' | 'cipherFor' | 'live'>;
+type Deps = Pick<FeatureServiceDeps<ProjectsRepo>, 'repo' | 'cipherFor' | 'live' | 'access'>;
 
 /**
  * Une table de liaison par feature reliée, explicite plutôt que dynamique : une
@@ -240,6 +240,20 @@ export function createProjectsUsageProvider(deps: Deps): ProjectsUsageProvider {
             // son portefeuille. Jamais sans changement, une release déjà reportée ne
             // réveille personne.
             if (changed) deps.live.changed(workspaceId);
+        },
+        async authorize(projectId, workspaceId, userId) {
+            const project = await deps.repo.projects.findById(projectId, workspaceId);
+            if (!project || project.security_tier !== 'open') return { ok: false, reason: 'hidden' };
+            return deps.access.feature(workspaceId, userId, { level: 'read', itemId: String(projectId) });
+        },
+        async linkedItems(projectId, workspaceId) {
+            const project = await deps.repo.projects.findById(projectId, workspaceId);
+            if (!project || project.security_tier !== 'open') return { deploy: [], git: [] };
+            const [deploy, git] = await Promise.all([
+                deps.repo.links.listDeployTargetIds(projectId, workspaceId),
+                deps.repo.links.listRepoIds(projectId, workspaceId)
+            ]);
+            return { deploy, git };
         }
     };
 }

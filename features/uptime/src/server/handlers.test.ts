@@ -8,6 +8,8 @@ import {
     uptimeCheckNow,
     uptimeChecks,
     uptimeCount,
+    uptimeDeployHook,
+    uptimeDeploySources,
     uptimeIncidents,
     uptimeIntegrityReadings,
     uptimeList,
@@ -15,7 +17,8 @@ import {
     uptimeSetEnabled,
     uptimeUpdate
 } from '../contracts/commands';
-import type { UptimeCheckRow, UptimeIncidentRow, UptimeServiceRow } from '../contracts/domain';
+import type { UptimeCheckRow, UptimeDeploySourceRow, UptimeIncidentRow, UptimeServiceRow } from '../contracts/domain';
+import { DEPLOY_ITEMS_PROVIDER, type DeployItemsProvider } from '@deveye/types/sdk';
 import { FeatureError, type SdkCipher, type SdkFeatureContext } from '@deveye/types/sdk/server';
 import { createTestContext } from '@deveye/types/sdk/testing';
 
@@ -44,6 +47,7 @@ function handlerFor<C extends { command: string; input: ZodType; output: ZodType
 
 interface FakeRepo extends UptimeRepo {
     rows: UptimeServiceRow[];
+    sources: UptimeDeploySourceRow[];
     checks: UptimeCheckRow[];
     incidents: UptimeIncidentRow[];
 }
@@ -59,6 +63,10 @@ function row(over: Partial<UptimeServiceRow> & { id: number; workspace_id: numbe
         integrity_checked_at: null,
         integrity_failures: 0,
         integrity_verdict: null,
+        integrity_pending_since: null,
+        deploy_hook_hash: null,
+        deploy_hook_enc: null,
+        deploy_hook_at: null,
         expected_status: null,
         interval_seconds: 60,
         timeout_seconds: 10,
@@ -86,10 +94,12 @@ function row(over: Partial<UptimeServiceRow> & { id: number; workspace_id: numbe
 function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
     let seq = 100;
     const rows: UptimeServiceRow[] = [];
+    const sources: UptimeDeploySourceRow[] = [];
     const visible = (r: UptimeServiceRow, workspaceId: number) =>
         r.workspace_id === workspaceId || (projections[r.id] ?? []).includes(workspaceId);
     return {
         rows,
+        sources,
         checks: [],
         incidents: [],
         services: {
@@ -163,6 +173,25 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
                 r.integrity_checked_at = null;
                 r.integrity_failures = 0;
                 r.integrity_verdict = null;
+                r.integrity_pending_since = null;
+            },
+            listDeploySources: async (ids) => sources.filter((s) => ids.includes(s.service_id)),
+            async setDeploySources(serviceId, list) {
+                for (let i = sources.length - 1; i >= 0; i--)
+                    if (sources[i].service_id === serviceId) sources.splice(i, 1);
+                for (const s of list) sources.push({ service_id: serviceId, kind: s.kind, ref_id: s.id });
+            },
+            async setDeployHook(serviceId, hook) {
+                const r = rows.find((x) => x.id === serviceId);
+                if (!r) return;
+                r.deploy_hook_hash = hook?.hash ?? null;
+                r.deploy_hook_enc = hook?.enc ?? null;
+                r.deploy_hook_at = null;
+            },
+            findByDeployHook: async (hash) => rows.find((r) => r.deploy_hook_hash === hash) ?? null,
+            async markDeployHookCalled(serviceId, at) {
+                const r = rows.find((x) => x.id === serviceId);
+                if (r) r.deploy_hook_at = at;
             }
         },
         history: {
@@ -192,6 +221,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
             listIncidents: async () => [],
             addReading: async () => undefined,
             listReadings: async () => [],
+            lastConformAt: async () => null,
             pruneByRetention: async () => ({ checks: 0, readings: 0 })
         },
         // Les pages de statut ont leurs propres tests (`pages.test.ts`).
@@ -220,6 +250,8 @@ const DRAFT = {
     retentionDays: 30,
     enabled: true
 };
+/** Ce que `uptime.update` prend en plus : aucune source de déploiement. */
+const NO_DEPLOY = { deploySources: [] as { kind: 'project' | 'deploy' | 'git'; id: number }[], deployHook: false };
 
 describe('uptime.list et uptime.count : les restrictions par élément', () => {
     it("retire de la liste un service masqué pour ce rôle, plutôt que de l'y griser", async () => {
@@ -311,7 +343,7 @@ describe('le partage inter-espaces', () => {
                 };
             }
         };
-        const updated = await handlerFor(uptimeUpdate)(ctx, { id: 7, service: DRAFT });
+        const updated = await handlerFor(uptimeUpdate)(ctx, { id: 7, service: { ...DRAFT, ...NO_DEPLOY } });
         assert.equal(updated.service.name, 'API renommée');
         assert.equal(updated.service.foreign, true);
         assert.ok(asked.includes(7));
@@ -472,7 +504,7 @@ describe('l’option d’intégrité', () => {
             integrity_verdict: 'écart'
         });
     }
-    const KEEP = { ...DRAFT, integrityIntervalSeconds: 3600, paths: ['/t.js'] };
+    const KEEP = { ...DRAFT, ...NO_DEPLOY, integrityIntervalSeconds: 3600, paths: ['/t.js'] };
 
     it('garde la référence quand seul le rythme change', async () => {
         const repo = seed(fakeRepo(), watched());
@@ -506,5 +538,131 @@ describe('l’option d’intégrité', () => {
             handlerFor(uptimeAcceptBaseline)(createTestContext({ repo }), { id: 1 }),
             (e: unknown) => e instanceof FeatureError && e.code === 'validation'
         );
+    });
+});
+
+describe('les sources de déploiement', () => {
+    /** Un service qui relit ses fichiers. */
+    const watched = () =>
+        row({
+            id: 1,
+            workspace_id: 1,
+            content: JSON.stringify({ name: 'Site', url: 'https://exemple.fr/', keyword: null, paths: [] }),
+            integrity_interval_seconds: 900
+        });
+    const KEEP = { ...DRAFT, ...NO_DEPLOY, integrityIntervalSeconds: 900 };
+
+    /** Déploiements : `api` (5) se lit, `web` (6) se voit sans droit, la 7 n'existe pas pour le membre. */
+    const deploy: DeployItemsProvider = {
+        exists: async () => true,
+        labelOf: async () => null,
+        list: async () => [
+            { id: 5, name: 'api', detail: 'Dokploy' },
+            { id: 6, name: 'web', detail: 'GitHub Actions' },
+            { id: 7, name: 'secret', detail: null }
+        ],
+        authorize: async (id) =>
+            id === 5 ? { ok: true } : id === 6 ? { ok: false, reason: 'level' } : { ok: false, reason: 'hidden' },
+        activity: async () => ({ succeeded: null, inFlight: null, error: null })
+    };
+    const withDeploy = (repo: FakeRepo) => createTestContext({ repo, providers: { [DEPLOY_ITEMS_PROVIDER]: deploy } });
+
+    it('enregistre une source que le membre lit, refuse les autres sans trahir celles qu’il ne voit pas', async () => {
+        const repo = seed(fakeRepo(), watched());
+        const ctx = withDeploy(repo);
+        const saved = await handlerFor(uptimeUpdate)(ctx, {
+            id: 1,
+            service: { ...KEEP, deploySources: [{ kind: 'deploy', id: 5 }] }
+        });
+        assert.deepEqual(saved.service.deploySources, [{ kind: 'deploy', id: 5 }]);
+
+        await assert.rejects(
+            handlerFor(uptimeUpdate)(ctx, {
+                id: 1,
+                service: { ...KEEP, name: 'Jamais écrit', deploySources: [{ kind: 'deploy', id: 6 }] }
+            }),
+            (e: unknown) => e instanceof FeatureError && e.code === 'forbidden'
+        );
+        // Refusé avant toute écriture : le reste du réglage n'est pas passé non plus.
+        assert.equal((JSON.parse(repo.rows[0].content) as { name: string }).name, KEEP.name);
+        await assert.rejects(
+            handlerFor(uptimeUpdate)(ctx, { id: 1, service: { ...KEEP, deploySources: [{ kind: 'deploy', id: 7 }] } }),
+            (e: unknown) => e instanceof FeatureError && e.code === 'not_found'
+        );
+        await assert.rejects(
+            handlerFor(uptimeUpdate)(createTestContext({ repo }), {
+                id: 1,
+                service: { ...KEEP, deploySources: [{ kind: 'git', id: 1 }] }
+            }),
+            (e: unknown) => e instanceof FeatureError && e.code === 'validation'
+        );
+        assert.deepEqual(repo.sources, [{ service_id: 1, kind: 'deploy', ref_id: 5 }]);
+    });
+
+    it('garde une source déjà en place, même hors des droits de qui enregistre', async () => {
+        const repo = seed(fakeRepo(), watched());
+        repo.sources.push({ service_id: 1, kind: 'deploy', ref_id: 6 });
+        await handlerFor(uptimeUpdate)(withDeploy(repo), {
+            id: 1,
+            service: { ...KEEP, deploySources: [{ kind: 'deploy', id: 6 }] }
+        });
+        assert.deepEqual(repo.sources, [{ service_id: 1, kind: 'deploy', ref_id: 6 }]);
+    });
+
+    it('l’option éteinte emporte les sources et l’adresse d’appel', async () => {
+        const repo = seed(fakeRepo(), watched());
+        const ctx = withDeploy(repo);
+        await handlerFor(uptimeUpdate)(ctx, {
+            id: 1,
+            service: { ...KEEP, deploySources: [{ kind: 'deploy', id: 5 }], deployHook: true }
+        });
+        assert.notEqual(repo.rows[0].deploy_hook_hash, null);
+
+        const off = await handlerFor(uptimeUpdate)(ctx, {
+            id: 1,
+            service: {
+                ...KEEP,
+                integrityIntervalSeconds: null,
+                deploySources: [{ kind: 'deploy', id: 5 }],
+                deployHook: true
+            }
+        });
+        assert.deepEqual(repo.sources, []);
+        assert.equal(repo.rows[0].deploy_hook_hash, null);
+        assert.equal(off.service.deployHook, false);
+    });
+
+    it('l’adresse d’appel se crée à l’enregistrement, se relit telle quelle et se régénère', async () => {
+        const repo = seed(fakeRepo(), watched());
+        const ctx = createTestContext({ repo });
+        await assert.rejects(
+            handlerFor(uptimeDeployHook)(ctx, { id: 1 }),
+            (e: unknown) => e instanceof FeatureError && e.code === 'conflict'
+        );
+        await handlerFor(uptimeUpdate)(ctx, { id: 1, service: { ...KEEP, deployHook: true } });
+
+        const first = await handlerFor(uptimeDeployHook)(ctx, { id: 1 });
+        assert.ok(first.url.startsWith('https://public.deveye.test/api/uptime/deployed/'));
+        assert.equal((await handlerFor(uptimeDeployHook)(ctx, { id: 1 })).url, first.url);
+
+        const hash = repo.rows[0].deploy_hook_hash;
+        const renewed = await handlerFor(uptimeDeployHook)(ctx, { id: 1, regenerate: true });
+        assert.notEqual(renewed.url, first.url);
+        assert.notEqual(repo.rows[0].deploy_hook_hash, hash);
+    });
+
+    it('le sélecteur liste chaque catégorie même vide, grise ce qui ne se choisit pas, garde une source disparue', async () => {
+        const repo = seed(fakeRepo(), watched());
+        repo.sources.push({ service_id: 1, kind: 'git', ref_id: 9 });
+        const res = await handlerFor(uptimeDeploySources)(withDeploy(repo), { id: 1 });
+        assert.deepEqual(res.kinds, ['project', 'deploy', 'git', 'hook']);
+        const brief = res.candidates.map((c) => [c.kind, c.id, c.name, c.available, c.tag]);
+        assert.deepEqual(brief, [
+            ['deploy', 5, 'api', true, null],
+            ['deploy', 6, 'web', false, 'sans droit'],
+            ['git', 9, 'Source introuvable', true, 'introuvable'],
+            ['hook', null, 'Adresse d’appel de ce service', true, null]
+        ]);
+        assert.match(res.candidates[2].reason ?? '', /module Git/);
     });
 });

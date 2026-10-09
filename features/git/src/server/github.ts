@@ -630,3 +630,101 @@ export async function listTokenOwners(token: string): Promise<GitHubOwner[]> {
             .map((name) => ({ login: name, kind: 'organization' as const }))
     ];
 }
+
+/** Un workflow ou un déploiement GitHub, réduit à ce qui dit si le code est en ligne. */
+export interface GitHubDeployEvent {
+    state: 'success' | 'running';
+    /** La fin d'un succès, le départ d'un « en cours », en secondes. */
+    at: number;
+    /** Ce qu'un journal en dit : `le workflow « Deploy »`, `le déploiement GitHub « production »`. */
+    what: string;
+}
+
+const RUNNING_RUN = new Set(['queued', 'in_progress', 'waiting', 'requested', 'pending']);
+const RUNNING_DEPLOYMENT = new Set(['queued', 'in_progress', 'pending']);
+
+interface RawRun {
+    name?: string;
+    status?: string;
+    conclusion?: string | null;
+    run_started_at?: string;
+    created_at?: string;
+    updated_at?: string;
+}
+
+/**
+ * Les exécutions récentes des workflows d'une branche : les réussies, datées
+ * de leur fin, et celles encore en cours. Un échec n'a rien mis en ligne et
+ * n'est pas rendu. Demande au jeton le droit Actions en lecture.
+ */
+export async function fetchWorkflowRuns(
+    owner: string,
+    repo: string,
+    token: string | null,
+    branch: string
+): Promise<GitHubDeployEvent[]> {
+    const res = await callPublic<{ workflow_runs?: RawRun[] }>(
+        `/repos/${owner}/${repo}/actions/runs?branch=${encodeURIComponent(branch)}&per_page=20`,
+        token
+    );
+    const now = Math.floor(Date.now() / 1000);
+    const events: GitHubDeployEvent[] = [];
+    for (const run of res.workflow_runs ?? []) {
+        const what = `le workflow « ${run.name ?? 'sans nom'} »`;
+        const ended = seconds(run.updated_at);
+        if (run.status === 'completed' && run.conclusion === 'success' && ended !== null) {
+            events.push({ state: 'success', at: ended, what });
+        } else if (run.status && RUNNING_RUN.has(run.status)) {
+            events.push({ state: 'running', at: seconds(run.run_started_at ?? run.created_at) ?? now, what });
+        }
+    }
+    return events;
+}
+
+interface RawDeployment {
+    id: number;
+    environment?: string;
+    transient_environment?: boolean;
+    created_at?: string;
+}
+
+/** Au-delà, un déploiement créé avant le début de la fenêtre ne s'y termine plus. */
+const DEPLOYMENT_LOOKBACK_SECONDS = 2 * 3600;
+const DEPLOYMENTS_READ = 5;
+
+/**
+ * Les déploiements GitHub récents (ce que publient GitHub Pages, Vercel,
+ * Netlify ou un workflow à `environment`) : réussis, datés de leur statut
+ * `success`, ou encore en cours. Un environnement transitoire (l'aperçu d'une
+ * PR) ne met rien en production et n'est pas rendu. Demande au jeton le droit
+ * Deployments en lecture.
+ */
+export async function fetchDeployments(
+    owner: string,
+    repo: string,
+    token: string | null,
+    since: number
+): Promise<GitHubDeployEvent[]> {
+    const deployments = await callPublic<RawDeployment[]>(`/repos/${owner}/${repo}/deployments?per_page=10`, token);
+    const recent = deployments
+        .filter((d) => !d.transient_environment && (seconds(d.created_at) ?? 0) >= since - DEPLOYMENT_LOOKBACK_SECONDS)
+        .slice(0, DEPLOYMENTS_READ);
+    const events: GitHubDeployEvent[] = [];
+    await Promise.all(
+        recent.map(async (deployment) => {
+            const statuses = await callPublic<{ state?: string; created_at?: string }[]>(
+                `/repos/${owner}/${repo}/deployments/${deployment.id}/statuses?per_page=10`,
+                token
+            );
+            const what = `le déploiement GitHub « ${deployment.environment ?? 'sans nom'} »`;
+            const succeededAt = seconds(statuses.find((s) => s.state === 'success')?.created_at);
+            const latest = statuses[0];
+            if (succeededAt !== null) events.push({ state: 'success', at: succeededAt, what });
+            else if (!latest || (latest.state && RUNNING_DEPLOYMENT.has(latest.state))) {
+                const started = seconds(latest?.created_at ?? deployment.created_at);
+                events.push({ state: 'running', at: started ?? Math.floor(Date.now() / 1000), what });
+            }
+        })
+    );
+    return events;
+}

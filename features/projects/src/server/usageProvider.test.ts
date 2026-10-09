@@ -79,13 +79,13 @@ function fakeRepo(): FakeRepo {
         unlinkAllDatabases: unused,
         listDatabaseUsage: unused,
         countDatabaseLinks: unused,
-        listDeployTargetIds: unused,
+        listDeployTargetIds: async (projectId: number) => (projectId === 1 ? [5, 6] : []),
         linkDeployTarget: unused,
         unlinkDeployTarget: unused,
         unlinkAllDeployTargets: unused,
         listDeployUsage: unused,
         countDeployLinks: unused,
-        listRepoIds: unused,
+        listRepoIds: async (projectId: number) => (projectId === 1 ? [8] : []),
         async linkRepo(projectId: number, _ws: number, repoId: number) {
             const ids = repoLinks.get(repoId) ?? [];
             if (!ids.includes(projectId)) ids.push(projectId);
@@ -324,5 +324,26 @@ describe('PROJECTS_USAGE_PROVIDER : linkTargets / link / unlink', () => {
         await provider.link('git', 9, 1, 5);
         assert.equal(repo.repoLinks.get(9), undefined);
         assert.deepEqual(deps.recorded.liveChanges, []);
+    });
+});
+
+describe('PROJECTS_USAGE_PROVIDER : ce qu’Uptime demande', () => {
+    it('rend les cibles et les dépôts d’un projet ouvert, rien pour un gardé, un inconnu ou un d’ailleurs', async () => {
+        const repo = fakeRepo();
+        repo.projectRows.push(project({ id: 1 }), project({ id: 2, security_tier: 'guarded' }));
+        const { provider } = providerOn(repo);
+        assert.deepEqual(await provider.linkedItems(1, 1), { deploy: [5, 6], git: [8] });
+        assert.deepEqual(await provider.linkedItems(2, 1), { deploy: [], git: [] });
+        assert.deepEqual(await provider.linkedItems(1, 7), { deploy: [], git: [] });
+        assert.deepEqual(await provider.linkedItems(42, 1), { deploy: [], git: [] });
+    });
+
+    it('autorise la lecture d’un projet ouvert de l’espace, et masque les autres', async () => {
+        const repo = fakeRepo();
+        repo.projectRows.push(project({ id: 1 }), project({ id: 2, security_tier: 'guarded' }));
+        const { provider } = providerOn(repo);
+        assert.deepEqual(await provider.authorize(1, 1, 1), { ok: true });
+        assert.deepEqual(await provider.authorize(2, 1, 1), { ok: false, reason: 'hidden' });
+        assert.deepEqual(await provider.authorize(1, 7, 1), { ok: false, reason: 'hidden' });
     });
 });

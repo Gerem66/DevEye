@@ -26,6 +26,13 @@ import {
 } from './_shared';
 import { env } from './env';
 import { captureSite, describeDrift, detailDrift, diffCapture, hasDrift, type IntegrityCapture } from './integrity';
+import {
+    DEPLOY_PENDING_MAX_SECONDS,
+    DEPLOY_PENDING_RETRY_SECONDS,
+    deployWindowStart,
+    findDeployEvidence,
+    type DeployEvidence
+} from './deployEvidence';
 import { buildNotice, type UptimeNotice } from './notice';
 import type { UptimeRepo } from './repo';
 
@@ -52,9 +59,30 @@ export type IntegrityReading =
     /** No reference yet: what the site serves becomes it. */
     | { kind: 'learned'; slowestMs: number; capture: IntegrityCapture }
     | { kind: 'conform'; slowestMs: number; fileCount: number }
-    | { kind: 'drift'; slowestMs: number; fileCount: number; summary: string; lines: string[] }
+    | {
+          kind: 'drift';
+          slowestMs: number;
+          fileCount: number;
+          summary: string;
+          lines: string[];
+          capture: IntegrityCapture;
+          /** Pourquoi aucune source de déploiement n'a suffi, pour le journal seul. */
+          notes?: string[];
+      }
     /** A file could not be read (status, timeout, rate limit, too many files). */
-    | { kind: 'failed'; error: string };
+    | { kind: 'failed'; error: string }
+    /** A drift a deployment of the service's sources explains: the capture becomes the reference. */
+    | {
+          kind: 'accepted';
+          slowestMs: number;
+          fileCount: number;
+          lines: string[];
+          capture: IntegrityCapture;
+          what: string;
+          at: number;
+      }
+    /** A drift, or a failed reading, while a deployment is under way: nothing is decided yet. */
+    | { kind: 'pending'; since: number; cause: string; lines: string[] };
 
 /** Outcome of a single probe: the main request, and the reading of the files when there was one. */
 export interface ProbeOutcome {
@@ -108,7 +136,7 @@ async function readFiles(
         const diff = diffCapture(baseline, capture);
         const fileCount = Object.keys(capture.files).length;
         if (!hasDrift(diff)) return { kind: 'conform', slowestMs, fileCount };
-        return { kind: 'drift', slowestMs, fileCount, summary: describeDrift(diff), lines: detailDrift(diff) };
+        return { kind: 'drift', slowestMs, fileCount, summary: describeDrift(diff), lines: detailDrift(diff), capture };
     } catch (e) {
         return { kind: 'failed', error: failureMessage(e, row) };
     }
@@ -116,18 +144,76 @@ async function readFiles(
 
 /**
  * Lire les fichiers à ce tour ? Jamais sans l'option ; toujours sans lecture
- * passée ou sur demande ; sinon à son rythme, et cinq minutes après une
- * lecture ratée, pour qu'un fichier durablement absent atteigne le seuil.
+ * passée ou sur demande ; sinon à son rythme, cinq minutes après une lecture
+ * ratée, pour qu'un fichier durablement absent atteigne le seuil, et une
+ * minute pendant l'attente d'un déploiement en cours.
  */
 export function integrityDue(
-    row: Pick<UptimeServiceRow, 'integrity_interval_seconds' | 'integrity_checked_at' | 'integrity_failures'>,
+    row: Pick<
+        UptimeServiceRow,
+        'integrity_interval_seconds' | 'integrity_checked_at' | 'integrity_failures' | 'integrity_pending_since'
+    >,
     now: number,
     force: boolean
 ): boolean {
     if (row.integrity_interval_seconds === null) return false;
     if (force || row.integrity_checked_at === null) return true;
-    const wait = row.integrity_failures > 0 ? UPTIME_INTEGRITY_INTERVAL_MIN : row.integrity_interval_seconds;
+    const wait =
+        row.integrity_pending_since !== null
+            ? DEPLOY_PENDING_RETRY_SECONDS
+            : row.integrity_failures > 0
+              ? UPTIME_INTEGRITY_INTERVAL_MIN
+              : row.integrity_interval_seconds;
     return row.integrity_checked_at + wait <= now;
+}
+
+/**
+ * Ce que les sources de déploiement font d'une lecture, pur : un écart qu'un
+ * déploiement explique est accepté ; un écart ou une lecture ratée pendant un
+ * déploiement en cours attend, au plus {@link DEPLOY_PENDING_MAX_SECONDS} ;
+ * une lecture ratée juste après un déploiement attend aussi, le temps que les
+ * fichiers se posent. `evidence` nul : le service n'a pas de source.
+ */
+export function applyDeployEvidence(
+    reading: IntegrityReading,
+    evidence: DeployEvidence | null,
+    pendingSince: number | null,
+    now: number
+): IntegrityReading {
+    if (!evidence || (reading.kind !== 'drift' && reading.kind !== 'failed')) return reading;
+    const since = pendingSince ?? now;
+    const waiting = now - since < DEPLOY_PENDING_MAX_SECONDS;
+    const problem = reading.kind === 'drift' ? reading.summary : reading.error;
+    const lines = reading.kind === 'drift' ? reading.lines : [];
+    const upper = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+    if (evidence.kind === 'deployed') {
+        if (reading.kind === 'drift') {
+            return {
+                kind: 'accepted',
+                slowestMs: reading.slowestMs,
+                fileCount: reading.fileCount,
+                lines,
+                capture: reading.capture,
+                what: evidence.what,
+                at: evidence.at
+            };
+        }
+        if (!waiting) return reading;
+        const cause = `${upper(evidence.what)} vient d’aboutir, les fichiers se posent : ${problem}`;
+        return { kind: 'pending', since, cause, lines };
+    }
+    if (evidence.kind === 'inFlight') {
+        if (waiting)
+            return { kind: 'pending', since, cause: `${upper(evidence.what)} est en cours : ${problem}`, lines };
+        if (reading.kind === 'failed') return reading;
+        const minutes = DEPLOY_PENDING_MAX_SECONDS / 60;
+        return { ...reading, notes: [`${upper(evidence.what)} n’a pas abouti en ${minutes} min`] };
+    }
+    if (reading.kind === 'failed') return reading;
+    return {
+        ...reading,
+        notes: evidence.errors.length > 0 ? evidence.errors : ['Aucun déploiement de ses sources ne l’explique']
+    };
 }
 
 /** Une mesure telle qu'elle s'enregistre, la lecture des fichiers appliquée. */
@@ -154,7 +240,11 @@ export interface ReadingState {
     failures: number;
     verdict: IntegrityVerdict | null;
     learned: IntegrityCapture | null;
+    /** L'attente d'un déploiement en cours, et depuis quand. */
+    pendingSince: number | null;
     entry: IntegrityEntry;
+    /** Ce qui a fait accepter la version : pour le journal d'activité. */
+    accepted?: { what: string; at: number };
 }
 
 /**
@@ -200,6 +290,7 @@ export function applyIntegrity(
                     failures: 0,
                     verdict: null,
                     learned: reading.capture,
+                    pendingSince: null,
                     entry: {
                         outcome: 'learned',
                         fileCount: Object.keys(reading.capture.files).length,
@@ -215,6 +306,7 @@ export function applyIntegrity(
                     failures: 0,
                     verdict: null,
                     learned: null,
+                    pendingSince: null,
                     entry: {
                         outcome: 'conform',
                         fileCount: reading.fileCount,
@@ -232,15 +324,53 @@ export function applyIntegrity(
                     failures: 0,
                     verdict,
                     learned: null,
+                    pendingSince: null,
                     entry: {
                         outcome: 'drift',
                         fileCount: reading.fileCount,
                         slowestMs: reading.slowestMs,
-                        detail: { error: reading.summary, lines: reading.lines }
+                        detail: { error: reading.summary, lines: [...reading.lines, ...(reading.notes ?? [])] }
                     }
                 }
             };
         }
+        case 'accepted':
+            return {
+                measure: { ...http, responseMs: slowest(reading.slowestMs) },
+                reading: {
+                    failures: 0,
+                    verdict: null,
+                    learned: reading.capture,
+                    pendingSince: null,
+                    entry: {
+                        outcome: 'accepted',
+                        fileCount: reading.fileCount,
+                        slowestMs: reading.slowestMs,
+                        detail: {
+                            error: `Expliquée par ${reading.what} (${formatMoment(reading.at)})`,
+                            lines: reading.lines
+                        }
+                    },
+                    accepted: { what: reading.what, at: reading.at }
+                }
+            };
+        case 'pending':
+            // Un verdict déjà posé le reste : l'attente ne referme pas sa panne.
+            return {
+                measure: stored ? failWith(stored) : http,
+                reading: {
+                    failures: row.integrity_failures,
+                    verdict: stored,
+                    learned: null,
+                    pendingSince: reading.since,
+                    entry: {
+                        outcome: 'pending',
+                        fileCount: null,
+                        slowestMs: null,
+                        detail: { error: reading.cause, lines: reading.lines }
+                    }
+                }
+            };
         case 'failed': {
             const error = `Fichiers : ${reading.error}`;
             const failures = row.integrity_failures + 1;
@@ -257,6 +387,7 @@ export function applyIntegrity(
                     failures,
                     verdict,
                     learned: null,
+                    pendingSince: null,
                     entry: {
                         outcome: 'failed',
                         fileCount: null,
@@ -453,9 +584,20 @@ export class UptimeMonitor {
             const integrity = read ? { baseline: await decryptBaseline(cipher, row.baseline_enc) } : null;
             const stored =
                 row.integrity_interval_seconds === null ? null : await decryptVerdict(cipher, row.integrity_verdict);
-            const outcome: ProbeOutcome = target.url
+            const probed: ProbeOutcome = target.url
                 ? await this.probe(target, row, integrity)
                 : { up: false, httpStatus: null, responseMs: null, error: 'Cible illisible (blob corrompu)' };
+            const outcome = probed.reading
+                ? {
+                      ...probed,
+                      reading: applyDeployEvidence(
+                          probed.reading,
+                          await this.deployEvidence(row, probed.reading, integrity?.baseline ?? null),
+                          row.integrity_pending_since,
+                          Math.floor(Date.now() / 1000)
+                      )
+                  }
+                : probed;
             const { measure, reading } = applyIntegrity(outcome, row, stored);
             await this.record(row, target, measure, reading, cipher);
         } catch (e) {
@@ -463,6 +605,37 @@ export class UptimeMonitor {
                 { serviceId: row.id, err: e instanceof Error ? e.message : String(e) },
                 'Uptime probe failed'
             );
+        }
+    }
+
+    /**
+     * Ce que les sources de déploiement du service disent d'un écart ou d'une
+     * lecture ratée ; `null` sans source, ou pour une lecture qui ne pose pas
+     * la question. Une source qui ne répond pas ne fait pas échouer la sonde.
+     */
+    private async deployEvidence(
+        row: UptimeServiceRow,
+        reading: IntegrityReading,
+        baseline: IntegrityBaseline | null
+    ): Promise<DeployEvidence | null> {
+        if (reading.kind !== 'drift' && reading.kind !== 'failed') return null;
+        const sources = (await this.deps.repo.services.listDeploySources([row.id])).map((s) => ({
+            kind: s.kind,
+            id: Number(s.ref_id)
+        }));
+        if (sources.length === 0 && row.deploy_hook_hash === null) return null;
+        const now = Math.floor(Date.now() / 1000);
+        const anchor = (await this.deps.repo.history.lastConformAt(row.id)) ?? baseline?.capturedAt ?? null;
+        try {
+            return await findDeployEvidence({
+                sources,
+                hookAt: row.deploy_hook_at,
+                workspaceId: row.workspace_id,
+                since: deployWindowStart(anchor, now, row.integrity_interval_seconds ?? 0),
+                providers: this.deps.providers
+            });
+        } catch (e) {
+            return { kind: 'none', errors: [e instanceof Error ? e.message : String(e)] };
         }
     }
 
@@ -485,6 +658,7 @@ export class UptimeMonitor {
             await repo.services.recordIntegrity(row.id, {
                 checkedAt: at,
                 failures: reading.failures,
+                pendingSince: reading.pendingSince,
                 verdict: await encryptVerdict(cipher, reading.verdict),
                 baseline: learned
                     ? await encryptBaseline(cipher, {
@@ -503,6 +677,17 @@ export class UptimeMonitor {
                 slowestMs: reading.entry.slowestMs,
                 detail: await encryptVerdict(cipher, reading.entry.detail)
             });
+            if (reading.accepted) {
+                this.deps.audit({
+                    level: 'warning',
+                    action: 'uptime.baselineAccepted',
+                    userId: row.user_id,
+                    description: `Version de « ${target.name} » acceptée automatiquement après ${reading.accepted.what}`,
+                    metadata: { serviceId: row.id, auto: true, deployedAt: reading.accepted.at }
+                });
+                // L'état ne bascule pas, mais la référence affichée a changé.
+                this.deps.live.changed(row.workspace_id);
+            }
         }
 
         await repo.history.addCheck({

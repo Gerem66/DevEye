@@ -68,6 +68,8 @@ utilisent un dépôt, et lesquels, lui viennent du contrat que Projets publie
 contrat qu'il dit à Projets la version d'un projet (`applyVersion`, §3.6). Dans
 l'autre sens, Projets demande au module si un dépôt existe et comment il
 s'appelle (`GIT_ITEMS_PROVIDER` : `exists`, `labelOf`) avant de le relier.
+Uptime lit le même contrat pour ses sources de déploiement (`list`,
+`authorize`, `activity`, §3.6).
 
 ### L'ordre des dépôts appartient à l'utilisateur
 
@@ -318,6 +320,14 @@ un dépôt qui n'en avait pas déclenche une synchronisation tout de suite.
   projets qui utilisent un dépôt (ceux de l'espace appelant : un dépôt projeté
   montre les projets de la fenêtre, pas ceux de son domicile). Absent, la
   feature dégrade : zéro projet partout, aucune commande ne casse.
+- **Ce qui a mis le dépôt en ligne**, pour Uptime : `activity(repoId, ws,
+since)` interroge GitHub sur-le-champ avec le jeton du dépôt
+  (`fetchWorkflowRuns`, `fetchDeployments`) : un workflow réussi sur la branche
+  par défaut, un déploiement GitHub réussi hors environnement transitoire, ou
+  l'un d'eux encore en cours. Un jeton sans le droit Actions ou Deployments en
+  lecture répond par `error`, jamais par une exception ; l'aide du jeton le
+  demande pour cet usage. Ces appels ne partent que sur un écart constaté par
+  Uptime, jamais au sondage.
 - **La version d'un projet suit la release.** Un projet dont `versionSource` est
   `github_release` prend pour version le tag de la dernière release **stable**
   (jamais une pré-version) du dépôt qu'il relie. Après avoir rangé les releases
@@ -452,7 +462,7 @@ src/contracts/domain.ts             dépôt, jeton, branches, commits (dont la f
 src/contracts/commands.ts           les vingt-quatre commandes (préfixe `git.`)
 
 src/server/index.ts                 serverEntry : dépôt, handlers, service, `items` (domicile, nom, move, copy),
-                                    quota `repos`, export du compte, provider GIT_ITEMS_PROVIDER offert à Projets
+                                    quota `repos`, export du compte, provider GIT_ITEMS_PROVIDER offert à Projets, Audit et Uptime
 src/server/repo.ts                  dépôts, jetons (ft_git_credentials), cache, listDue et stock du quota ; sur SdkQueryable
 src/server/_shared.ts               StoredRepo, slugRef, readJson, loadRepo / loadHomeRepo, repoCipher, toRepo, toCredential,
                                     le singleton du service (setSync / syncOf / requestSync), le contrat de Projets
@@ -559,7 +569,8 @@ depuis `DevEye/`. Les tests du module tournent sans base ni réseau.
 
 ## 10. Les limites
 
-- **Tout est du sondage** : aucun webhook n'est reçu. Le coût est borné par les
+- **Tout est du sondage** : aucun webhook n'est reçu ; seule la question
+  d'Uptime sur une mise en ligne part à la demande. Le coût est borné par les
   ETags et par le budget d'appels de chaque tour.
 - **GitHub seulement.** L'adaptateur est isolé dans `src/server/github.ts`,
   derrière la couture `GitHubClient` du service.

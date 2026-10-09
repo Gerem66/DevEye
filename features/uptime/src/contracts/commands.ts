@@ -14,8 +14,12 @@ import {
     UPTIME_TIMEOUT_MAX,
     UPTIME_TIMEOUT_MIN,
     UPTIME_URL_MAX_LENGTH,
+    UPTIME_DEPLOY_SOURCES_MAX,
     uptimeCheckSchema,
     uptimeCheckStatsSchema,
+    uptimeDeployCandidateKindSchema,
+    uptimeDeployCandidateSchema,
+    uptimeDeploySourceSchema,
     uptimeIncidentSchema,
     uptimeIntegrityReadingSchema,
     uptimeMethodSchema,
@@ -93,11 +97,51 @@ export const uptimeAdd = {
     output: z.object({ service: uptimeServiceSchema })
 };
 
-/** Replace a service's whole configuration. History and incidents are kept. */
+/**
+ * Replace a service's whole configuration. History and incidents are kept.
+ * Without the integrity option, `deploySources` and `deployHook` are dropped;
+ * a source added here must be readable by the caller.
+ */
 export const uptimeUpdate = {
     command: 'uptime.update' as const,
-    input: z.object({ id: serviceId, service: uptimeDraftFields }),
+    input: z.object({
+        id: serviceId,
+        service: uptimeDraftFields.extend({
+            deploySources: z
+                .array(uptimeDeploySourceSchema)
+                .max(UPTIME_DEPLOY_SOURCES_MAX)
+                .refine((list) => new Set(list.map((s) => `${s.kind}:${s.id}`)).size === list.length, {
+                    message: 'Une source ne figure qu’une fois.'
+                }),
+            deployHook: z.boolean()
+        })
+    }),
     output: z.object({ service: uptimeServiceSchema })
+};
+
+/**
+ * What a service may designate as deploying its site, by category, every
+ * category listed even empty. Items of the service's home workspace; a chosen
+ * source since deleted comes back greyed, so it can be dropped.
+ */
+export const uptimeDeploySources = {
+    command: 'uptime.deploySources' as const,
+    input: z.object({ id: serviceId }),
+    output: z.object({
+        kinds: z.array(uptimeDeployCandidateKindSchema),
+        candidates: z.array(uptimeDeployCandidateSchema)
+    })
+};
+
+/**
+ * The service's call address, to paste in a CI: a POST to it says the site was
+ * just put online. `regenerate` revokes the previous one. Refused on a service
+ * without an address: `uptime.update` creates it.
+ */
+export const uptimeDeployHook = {
+    command: 'uptime.deployHook' as const,
+    input: z.object({ id: serviceId, regenerate: z.boolean().optional() }),
+    output: z.object({ url: z.string() })
 };
 
 /**
@@ -287,6 +331,8 @@ export const uptimeCommands = [
     uptimeReorder,
     uptimeCheckNow,
     uptimeAcceptBaseline,
+    uptimeDeploySources,
+    uptimeDeployHook,
     uptimeHistory,
     uptimeChecks,
     uptimeCheckStats,

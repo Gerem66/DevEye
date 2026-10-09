@@ -1,4 +1,4 @@
-import type { UptimePoint, UptimeRange } from '../contracts/domain';
+import type { UptimeDeployCandidateKind, UptimeDeploySource, UptimePoint, UptimeRange } from '../contracts/domain';
 import { formatDuration } from '../contracts/format';
 
 const DAY = 86400;
@@ -89,4 +89,44 @@ export function parsePaths(text: string): string[] {
                 .filter(Boolean)
         )
     ];
+}
+
+/** Les catégories du sélecteur des sources de déploiement. */
+export const DEPLOY_GROUPS: Record<UptimeDeployCandidateKind, string> = {
+    project: 'Projets',
+    deploy: 'Déploiements',
+    git: 'Dépôts Git',
+    hook: 'Adresse d’appel'
+};
+
+export const DEPLOY_ICONS: Record<UptimeDeployCandidateKind, string> = {
+    project: 'projects',
+    deploy: 'rocket',
+    git: 'branch',
+    hook: 'key'
+};
+
+/** La valeur d'une entrée du sélecteur : `deploy:5`, ou `hook` pour l'adresse du service. */
+export function deployKey(kind: UptimeDeployCandidateKind, id: number | null): string {
+    return id === null ? kind : `${kind}:${id}`;
+}
+
+/** Ce qu'un service a choisi, en valeurs du sélecteur. */
+export function deployKeysOf(sources: readonly UptimeDeploySource[], hook: boolean): string[] {
+    return [...sources.map((s) => deployKey(s.kind, s.id)), ...(hook ? ['hook'] : [])];
+}
+
+/** Les valeurs du sélecteur en ce qu'attend `uptime.update`. */
+export function deploySettingsOf(keys: readonly string[]): {
+    deploySources: UptimeDeploySource[];
+    deployHook: boolean;
+} {
+    const deploySources: UptimeDeploySource[] = [];
+    for (const key of keys) {
+        const [kind, id] = key.split(':');
+        if ((kind === 'project' || kind === 'deploy' || kind === 'git') && Number(id) > 0) {
+            deploySources.push({ kind, id: Number(id) });
+        }
+    }
+    return { deploySources, deployHook: keys.includes('hook') };
 }

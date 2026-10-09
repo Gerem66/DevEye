@@ -1273,6 +1273,15 @@ CREATE TABLE `ft_sentinel_device_config` (
   CONSTRAINT `fk_ft_sentinel_device_config_device` FOREIGN KEY (`device_id`) REFERENCES `devices` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+CREATE TABLE `ft_uptime_deploy_sources` (
+  `service_id` int NOT NULL,
+  `kind` varchar(8) COLLATE utf8mb4_general_ci NOT NULL,
+  `ref_id` int NOT NULL,
+  `position` int NOT NULL DEFAULT '0',
+  PRIMARY KEY (`service_id`,`kind`,`ref_id`),
+  CONSTRAINT `fk_ft_uptime_deploy_sources_service` FOREIGN KEY (`service_id`) REFERENCES `uptime_services` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 CREATE TABLE `ft_uptime_integrity_readings` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `service_id` int NOT NULL,
@@ -2235,8 +2244,13 @@ CREATE TABLE `uptime_services` (
   `integrity_checked_at` bigint DEFAULT NULL,
   `integrity_failures` int NOT NULL DEFAULT '0',
   `integrity_verdict` text COLLATE utf8mb4_general_ci,
+  `integrity_pending_since` bigint DEFAULT NULL,
+  `deploy_hook_hash` char(64) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `deploy_hook_enc` text COLLATE utf8mb4_general_ci,
+  `deploy_hook_at` bigint DEFAULT NULL,
   `created` bigint NOT NULL DEFAULT (unix_timestamp()),
   PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_uptime_services_deploy_hook` (`deploy_hook_hash`),
   KEY `idx_uptime_services_user` (`user_id`),
   KEY `idx_uptime_services_due` (`enabled`,`last_checked_at`),
   KEY `fk_uptime_service_workspace` (`workspace_id`),

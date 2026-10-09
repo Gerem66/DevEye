@@ -8,6 +8,7 @@ import { uptimeAccountExport } from './accountExport';
 import { uptimeHandlers } from './handlers';
 import { setMonitor, setStatusPages } from './_shared';
 import { uptimeCopy } from './copy';
+import { registerDeployHook } from './deploySources';
 import { createDomainHooks } from './domains';
 import { UPTIME_ENV } from './env';
 import { uptimeMove } from './move';
@@ -88,7 +89,10 @@ export const serverEntry: FeatureServer<UptimeRepo> = {
                 setStatusPages(null);
             },
             providers: { [UPTIME_ITEMS_PROVIDER]: items },
-            publicRoutes: (app) => pages.routes(app),
+            publicRoutes: (app) => {
+                pages.routes(app);
+                registerDeployHook(app, deps, monitor);
+            },
             domainRoot: (req, reply, domain) => pages.root(req, reply, domain),
             async onPlanPause(change) {
                 if (change.key === 'monitors') await monitor.closeOutages(change.paused.map((item) => Number(item.id)));

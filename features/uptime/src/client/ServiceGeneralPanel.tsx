@@ -26,7 +26,9 @@ import {
 } from '../contracts/domain';
 
 import { api } from './api';
-import { clamp, parsePaths, type ServiceTuning } from './format';
+import DeployHookField from './DeployHookField';
+import DeploySourcePicker from './DeploySourcePicker';
+import { clamp, deployKeysOf, deploySettingsOf, parsePaths, type ServiceTuning } from './format';
 import styles from './style.module.css';
 
 /** Les cadences offertes, en secondes : du quasi-direct au battement quotidien. */
@@ -78,6 +80,9 @@ interface ServiceDraft extends ServiceTuning {
     integrityIntervalSeconds: number | null;
     /** Intégrité : un chemin par ligne, tel que saisi. */
     paths: string;
+    /** Intégrité : accepter une version qu'un déploiement explique, et ce qui met le site en ligne. */
+    autoAccept: boolean;
+    deployKeys: string[];
     enabled: boolean;
 }
 
@@ -90,6 +95,8 @@ function draftOf(service: UptimeService): ServiceDraft {
         keyword: service.keyword,
         integrityIntervalSeconds: service.integrityIntervalSeconds,
         paths: service.paths.join('\n'),
+        autoAccept: service.deploySources.length > 0 || service.deployHook,
+        deployKeys: deployKeysOf(service.deploySources, service.deployHook),
         enabled: service.enabled,
         intervalSeconds: service.intervalSeconds,
         timeoutSeconds: service.timeoutSeconds,
@@ -118,6 +125,7 @@ export default function ServiceGeneralPanel({ scope, canWrite, gone }: SettingsP
     const [draft, setDraft] = useState<ServiceDraft | null>(null);
     const [errorName, setErrorName] = useState('');
     const [errorUrl, setErrorUrl] = useState('');
+    const [errorSources, setErrorSources] = useState('');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
@@ -142,21 +150,26 @@ export default function ServiceGeneralPanel({ scope, canWrite, gone }: SettingsP
         // Le contrat du serveur (`z.string().url()`), vérifié ici pour que le
         // message tombe sur le champ et non en erreur générique.
         const validUrl = /^https?:\/\/\S+$/i.test(url);
+        const autoAccept = draft.integrityIntervalSeconds !== null && draft.autoAccept;
+        const missingSource = autoAccept && draft.deployKeys.length === 0;
         setErrorName(name ? '' : 'Ce champ est obligatoire');
         setErrorUrl(validUrl ? '' : 'URL invalide (http:// ou https://)');
+        setErrorSources(missingSource ? 'Choisissez au moins une source' : '');
         // Rejeté : le bouton n'annonce « Enregistré » que sur un succès.
-        if (!name || !validUrl) throw new Error('invalid');
+        if (!name || !validUrl || missingSource) throw new Error('invalid');
         setBusy(true);
         setError(null);
         try {
+            const { autoAccept: _autoAccept, deployKeys, ...fields } = draft;
             const res = await api.send('uptime.update', {
                 id: service.id,
                 service: {
-                    ...draft,
+                    ...fields,
                     name,
                     url,
                     paths: draft.integrityIntervalSeconds === null ? [] : parsePaths(draft.paths),
-                    keyword: draft.keyword?.trim() || null
+                    keyword: draft.keyword?.trim() || null,
+                    ...deploySettingsOf(autoAccept ? deployKeys : [])
                 }
             });
             setService(res.service);
@@ -198,7 +211,9 @@ export default function ServiceGeneralPanel({ scope, canWrite, gone }: SettingsP
     const editable = canWrite && !busy;
     const integrity = draft.integrityIntervalSeconds !== null;
     const base = draftOf(service);
-    const unchanged = (Object.keys(draft) as (keyof ServiceDraft)[]).every((k) => draft[k] === base[k]);
+    const unchanged = (Object.keys(draft) as (keyof ServiceDraft)[]).every((k) =>
+        k === 'deployKeys' ? draft[k].join() === base[k].join() : draft[k] === base[k]
+    );
 
     return (
         <div className={shell.section}>
@@ -317,6 +332,48 @@ export default function ServiceGeneralPanel({ scope, canWrite, gone }: SettingsP
                             ou cette liste fait réapprendre la référence à la prochaine sonde.
                         </span>
                     </div>
+
+                    <Checkbox checked={draft.autoAccept} disabled={!editable} onChange={(v) => set('autoAccept', v)}>
+                        <>
+                            <span className={shell.fieldLabel}>
+                                Accepter automatiquement les changements lors d’un déploiement
+                            </span>
+                            <span className={shell.fieldHint}>
+                                Quand les fichiers changent, le service demande à ses sources si une mise en ligne vient
+                                d’avoir lieu. Si oui, la nouvelle version devient la référence, sans alerte ; si elle
+                                est encore en cours, il l’attend jusqu’à trente minutes. Une modification faite entre la
+                                fin d’un déploiement et la lecture suivante serait acceptée avec lui.
+                            </span>
+                        </>
+                    </Checkbox>
+
+                    {draft.autoAccept && (
+                        <div className={shell.field}>
+                            <span className={shell.sectionLabel}>Ce qui met ce site en ligne</span>
+                            <DeploySourcePicker
+                                serviceId={service.id}
+                                value={draft.deployKeys}
+                                disabled={!editable}
+                                onChange={(keys) => set('deployKeys', keys)}
+                            />
+                            {errorSources && <span className={shell.notice}>{errorSources}</span>}
+                            <span className={shell.fieldHint}>
+                                Un projet compte pour ses déploiements et ses dépôts. Un dépôt Git compte pour ses
+                                workflows GitHub Actions réussis sur sa branche par défaut et ses déploiements GitHub
+                                (Pages, Vercel, Netlify) : son jeton doit pouvoir les lire. L’adresse d’appel sert à
+                                toute autre CI.
+                            </span>
+                        </div>
+                    )}
+
+                    {draft.autoAccept &&
+                        draft.deployKeys.includes('hook') &&
+                        canWrite &&
+                        (service.deployHook ? (
+                            <DeployHookField serviceId={service.id} disabled={!editable} />
+                        ) : (
+                            <p className={shell.sectionHint}>L’adresse d’appel apparaît ici une fois enregistré.</p>
+                        ))}
                 </>
             )}
 

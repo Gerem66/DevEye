@@ -116,9 +116,9 @@ describe('uptime : changement d’espace', () => {
         );
     });
 
-    it('annonce le nombre de cellules à convertir, le retrait de ses pages, et aucun refus', async () => {
+    it('annonce le nombre de cellules à convertir, le retrait de ses pages et de ses sources, et aucun refus', async () => {
         // Le compte vient d'un `SELECT COUNT(*)` par cellule, et d'un pour ses
-        // pages de statut : le faux dépôt rend deux lignes à chaque fois.
+        // pages de statut et ses sources : le faux dépôt rend deux lignes à chaque fois.
         const { q } = fakeQueryable({});
         const counting: SdkQueryable = { ...q, query: async <T extends object>() => [{ n: 2 }] as T[] };
         const plan = await uptimeMove.plan({
@@ -128,11 +128,12 @@ describe('uptime : changement d’espace', () => {
             fromWorkspaceId: 1,
             toWorkspaceId: 2
         });
-        // Sept cellules : contenu, dernière erreur, référence et verdict d'intégrité, l'erreur des deux
-        // tables d'historique et le détail du journal des intégrités.
-        assert.equal(plan.rows, 14);
+        // Huit cellules : contenu, dernière erreur, référence et verdict d'intégrité, jeton de
+        // l'adresse d'appel, l'erreur des deux tables d'historique et le détail du journal des intégrités.
+        assert.equal(plan.rows, 16);
         assert.deepEqual(plan.blockers, []);
-        assert.equal(plan.drops.length, 1);
+        assert.equal(plan.drops.length, 2);
         assert.match(plan.drops[0]!, /pages de statut/);
+        assert.match(plan.drops[1]!, /sources de déploiement/);
     });
 });
