@@ -15,7 +15,8 @@ import {
     uptimeList,
     uptimeRemove,
     uptimeSetEnabled,
-    uptimeUpdate
+    uptimeUpdate,
+    uptimeUpdateIntegrity
 } from '../contracts/commands';
 import type { UptimeCheckRow, UptimeDeploySourceRow, UptimeIncidentRow, UptimeServiceRow } from '../contracts/domain';
 import { DEPLOY_ITEMS_PROVIDER, type DeployItemsProvider } from '@deveye/types/sdk';
@@ -110,13 +111,13 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
             findById: async (id, workspaceId) =>
                 rows.find((r) => r.id === id && r.workspace_id === workspaceId) ?? null,
             findVisible: async (id, workspaceId) => rows.find((r) => r.id === id && visible(r, workspaceId)) ?? null,
-            async create({ userId, workspaceId, ...config }) {
+            async create({ userId, workspaceId, integrityIntervalSeconds, ...config }) {
                 const created = row({
                     id: ++seq,
                     workspace_id: workspaceId,
                     user_id: userId,
                     content: config.content,
-                    integrity_interval_seconds: config.integrityIntervalSeconds,
+                    integrity_interval_seconds: integrityIntervalSeconds,
                     method: config.method,
                     expected_status: config.expectedStatus,
                     interval_seconds: config.intervalSeconds,
@@ -133,7 +134,6 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
                 if (!target) return null;
                 Object.assign(target, {
                     content: config.content,
-                    integrity_interval_seconds: config.integrityIntervalSeconds,
                     method: config.method,
                     expected_status: config.expectedStatus,
                     interval_seconds: config.intervalSeconds,
@@ -142,6 +142,12 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
                     retention_days: config.retentionDays,
                     enabled: config.enabled ? 1 : 0
                 });
+                return target;
+            },
+            async setIntegrity(id, workspaceId, { content, integrityIntervalSeconds }) {
+                const target = rows.find((r) => r.id === id && r.workspace_id === workspaceId);
+                if (!target) return null;
+                Object.assign(target, { content, integrity_interval_seconds: integrityIntervalSeconds });
                 return target;
             },
             async setEnabled(id, workspaceId, enabled) {
@@ -235,12 +241,10 @@ function seed(repo: FakeRepo, ...seeded: UptimeServiceRow[]): FakeRepo {
     return repo;
 }
 
-/** Le brouillon complet qu'attend `uptime.update` (le contrat prend le service entier). */
-const DRAFT = {
+/** Ce qu'attend `uptime.update` : l'identité et les réglages fins, l'onglet Général entier. */
+const GENERAL = {
     name: 'API renommée',
     url: 'https://exemple.fr/health',
-    integrityIntervalSeconds: null as number | null,
-    paths: [] as string[],
     method: 'GET' as const,
     expectedStatus: null,
     keyword: null,
@@ -250,8 +254,16 @@ const DRAFT = {
     retentionDays: 30,
     enabled: true
 };
-/** Ce que `uptime.update` prend en plus : aucune source de déploiement. */
-const NO_DEPLOY = { deploySources: [] as { kind: 'project' | 'deploy' | 'git'; id: number }[], deployHook: false };
+/** Ce qu'attend `uptime.add` : le Général, plus l'option d'intégrité, éteinte. */
+const DRAFT = { ...GENERAL, integrityIntervalSeconds: null as number | null, paths: [] as string[] };
+/** Ce qu'attend `uptime.updateIntegrity` : l'onglet Intégrité entier. */
+const INTEGRITY = {
+    intervalSeconds: 900 as number | null,
+    paths: [] as string[],
+    deployAccept: false,
+    deploySources: [] as { kind: 'project' | 'deploy' | 'git'; id: number }[],
+    deployHook: false
+};
 
 describe('uptime.list et uptime.count : les restrictions par élément', () => {
     it("retire de la liste un service masqué pour ce rôle, plutôt que de l'y griser", async () => {
@@ -343,7 +355,7 @@ describe('le partage inter-espaces', () => {
                 };
             }
         };
-        const updated = await handlerFor(uptimeUpdate)(ctx, { id: 7, service: { ...DRAFT, ...NO_DEPLOY } });
+        const updated = await handlerFor(uptimeUpdate)(ctx, { id: 7, service: GENERAL });
         assert.equal(updated.service.name, 'API renommée');
         assert.equal(updated.service.foreign, true);
         assert.ok(asked.includes(7));
@@ -504,31 +516,48 @@ describe('l’option d’intégrité', () => {
             integrity_verdict: 'écart'
         });
     }
-    const KEEP = { ...DRAFT, ...NO_DEPLOY, integrityIntervalSeconds: 3600, paths: ['/t.js'] };
+    const KEEP = { ...INTEGRITY, intervalSeconds: 3600, paths: ['/t.js'] };
 
     it('garde la référence quand seul le rythme change', async () => {
         const repo = seed(fakeRepo(), watched());
-        await handlerFor(uptimeUpdate)(createTestContext({ repo }), { id: 1, service: KEEP });
+        await handlerFor(uptimeUpdateIntegrity)(createTestContext({ repo }), { id: 1, integrity: KEEP });
         assert.equal(repo.rows[0].integrity_interval_seconds, 3600);
         assert.equal(repo.rows[0].baseline_enc, 'référence');
     });
 
-    it('réapprend la référence quand les chemins changent, ou que l’option s’éteint en oubliant ses chemins', async () => {
+    it('réapprend la référence quand les chemins changent, ou que l’option s’éteint, sans oublier ses chemins', async () => {
         const repo = seed(fakeRepo(), watched());
         const ctx = createTestContext({ repo });
-        await handlerFor(uptimeUpdate)(ctx, { id: 1, service: { ...KEEP, paths: ['/t.js', '/u.js'] } });
+        await handlerFor(uptimeUpdateIntegrity)(ctx, { id: 1, integrity: { ...KEEP, paths: ['/t.js', '/u.js'] } });
         assert.equal(repo.rows[0].baseline_enc, null);
         assert.equal(repo.rows[0].integrity_verdict, null);
 
         repo.rows[0].baseline_enc = 'référence';
-        const off = await handlerFor(uptimeUpdate)(ctx, {
+        const off = await handlerFor(uptimeUpdateIntegrity)(ctx, {
             id: 1,
-            service: { ...KEEP, integrityIntervalSeconds: null }
+            integrity: { ...KEEP, intervalSeconds: null, paths: ['/t.js', '/u.js'] }
         });
         assert.equal(repo.rows[0].baseline_enc, null);
-        assert.deepEqual(off.service.paths, []);
+        // Grisés à l'écran, les chemins restent pour quand l'option revient.
+        assert.deepEqual(off.service.paths, ['/t.js', '/u.js']);
         assert.equal(off.service.integrityIntervalSeconds, null);
         assert.equal(off.service.integrityDrift, false);
+    });
+
+    it('l’onglet Général ne touche pas à l’intégrité, sauf une adresse qui change', async () => {
+        const repo = seed(fakeRepo(), watched());
+        const ctx = createTestContext({ repo });
+        const kept = await handlerFor(uptimeUpdate)(ctx, {
+            id: 1,
+            service: { ...GENERAL, url: 'https://exemple.fr/health' }
+        });
+        assert.equal(kept.service.integrityIntervalSeconds, 900);
+        assert.deepEqual(kept.service.paths, ['/t.js']);
+        assert.equal(repo.rows[0].baseline_enc, 'référence');
+
+        await handlerFor(uptimeUpdate)(ctx, { id: 1, service: { ...GENERAL, url: 'https://exemple.fr/' } });
+        assert.equal(repo.rows[0].baseline_enc, null);
+        assert.deepEqual(JSON.parse(repo.rows[0].content).paths, ['/t.js']);
     });
 
     it('n’accepte une version que sur un service qui relit ses fichiers', async () => {
@@ -550,7 +579,7 @@ describe('les sources de déploiement', () => {
             content: JSON.stringify({ name: 'Site', url: 'https://exemple.fr/', keyword: null, paths: [] }),
             integrity_interval_seconds: 900
         });
-    const KEEP = { ...DRAFT, ...NO_DEPLOY, integrityIntervalSeconds: 900 };
+    const ON = { ...INTEGRITY, deployAccept: true };
 
     /** Déploiements : `api` (5) se lit, `web` (6) se voit sans droit, la 7 n'existe pas pour le membre. */
     const deploy: DeployItemsProvider = {
@@ -570,66 +599,79 @@ describe('les sources de déploiement', () => {
     it('enregistre une source que le membre lit, refuse les autres sans trahir celles qu’il ne voit pas', async () => {
         const repo = seed(fakeRepo(), watched());
         const ctx = withDeploy(repo);
-        const saved = await handlerFor(uptimeUpdate)(ctx, {
+        const saved = await handlerFor(uptimeUpdateIntegrity)(ctx, {
             id: 1,
-            service: { ...KEEP, deploySources: [{ kind: 'deploy', id: 5 }] }
+            integrity: { ...ON, deploySources: [{ kind: 'deploy', id: 5 }] }
         });
         assert.deepEqual(saved.service.deploySources, [{ kind: 'deploy', id: 5 }]);
+        assert.equal(saved.service.deployAccept, true);
 
         await assert.rejects(
-            handlerFor(uptimeUpdate)(ctx, {
+            handlerFor(uptimeUpdateIntegrity)(ctx, {
                 id: 1,
-                service: { ...KEEP, name: 'Jamais écrit', deploySources: [{ kind: 'deploy', id: 6 }] }
+                integrity: { ...ON, paths: ['/jamais.js'], deploySources: [{ kind: 'deploy', id: 6 }] }
             }),
             (e: unknown) => e instanceof FeatureError && e.code === 'forbidden'
         );
         // Refusé avant toute écriture : le reste du réglage n'est pas passé non plus.
-        assert.equal((JSON.parse(repo.rows[0].content) as { name: string }).name, KEEP.name);
+        assert.deepEqual(JSON.parse(repo.rows[0].content).paths, []);
         await assert.rejects(
-            handlerFor(uptimeUpdate)(ctx, { id: 1, service: { ...KEEP, deploySources: [{ kind: 'deploy', id: 7 }] } }),
+            handlerFor(uptimeUpdateIntegrity)(ctx, {
+                id: 1,
+                integrity: { ...ON, deploySources: [{ kind: 'deploy', id: 7 }] }
+            }),
             (e: unknown) => e instanceof FeatureError && e.code === 'not_found'
         );
         await assert.rejects(
-            handlerFor(uptimeUpdate)(createTestContext({ repo }), {
+            handlerFor(uptimeUpdateIntegrity)(createTestContext({ repo }), {
                 id: 1,
-                service: { ...KEEP, deploySources: [{ kind: 'git', id: 1 }] }
+                integrity: { ...ON, deploySources: [{ kind: 'git', id: 1 }] }
             }),
             (e: unknown) => e instanceof FeatureError && e.code === 'validation'
         );
         assert.deepEqual(repo.sources, [{ service_id: 1, kind: 'deploy', ref_id: 5 }]);
     });
 
+    it('refuse d’accepter sans aucune source tant que l’option est allumée', async () => {
+        const repo = seed(fakeRepo(), watched());
+        const ctx = withDeploy(repo);
+        await assert.rejects(
+            handlerFor(uptimeUpdateIntegrity)(ctx, { id: 1, integrity: ON }),
+            (e: unknown) => e instanceof FeatureError && e.code === 'validation'
+        );
+        const off = await handlerFor(uptimeUpdateIntegrity)(ctx, {
+            id: 1,
+            integrity: { ...ON, intervalSeconds: null }
+        });
+        assert.equal(off.service.deployAccept, true);
+    });
+
     it('garde une source déjà en place, même hors des droits de qui enregistre', async () => {
         const repo = seed(fakeRepo(), watched());
         repo.sources.push({ service_id: 1, kind: 'deploy', ref_id: 6 });
-        await handlerFor(uptimeUpdate)(withDeploy(repo), {
+        await handlerFor(uptimeUpdateIntegrity)(withDeploy(repo), {
             id: 1,
-            service: { ...KEEP, deploySources: [{ kind: 'deploy', id: 6 }] }
+            integrity: { ...ON, deploySources: [{ kind: 'deploy', id: 6 }] }
         });
         assert.deepEqual(repo.sources, [{ service_id: 1, kind: 'deploy', ref_id: 6 }]);
     });
 
-    it('l’option éteinte emporte les sources et l’adresse d’appel', async () => {
+    it('éteintes, l’option et l’acceptation gardent leurs sources et l’adresse d’appel', async () => {
         const repo = seed(fakeRepo(), watched());
         const ctx = withDeploy(repo);
-        await handlerFor(uptimeUpdate)(ctx, {
-            id: 1,
-            service: { ...KEEP, deploySources: [{ kind: 'deploy', id: 5 }], deployHook: true }
-        });
-        assert.notEqual(repo.rows[0].deploy_hook_hash, null);
+        const chosen = { ...ON, deploySources: [{ kind: 'deploy' as const, id: 5 }], deployHook: true };
+        await handlerFor(uptimeUpdateIntegrity)(ctx, { id: 1, integrity: chosen });
+        const hash = repo.rows[0].deploy_hook_hash;
+        assert.notEqual(hash, null);
 
-        const off = await handlerFor(uptimeUpdate)(ctx, {
+        const off = await handlerFor(uptimeUpdateIntegrity)(ctx, {
             id: 1,
-            service: {
-                ...KEEP,
-                integrityIntervalSeconds: null,
-                deploySources: [{ kind: 'deploy', id: 5 }],
-                deployHook: true
-            }
+            integrity: { ...chosen, intervalSeconds: null, deployAccept: false }
         });
-        assert.deepEqual(repo.sources, []);
-        assert.equal(repo.rows[0].deploy_hook_hash, null);
-        assert.equal(off.service.deployHook, false);
+        assert.deepEqual(repo.sources, [{ service_id: 1, kind: 'deploy', ref_id: 5 }]);
+        assert.equal(repo.rows[0].deploy_hook_hash, hash);
+        assert.equal(off.service.deployHook, true);
+        assert.equal(off.service.deployAccept, false);
     });
 
     it('l’adresse d’appel se crée à l’enregistrement, se relit telle quelle et se régénère', async () => {
@@ -639,7 +681,7 @@ describe('les sources de déploiement', () => {
             handlerFor(uptimeDeployHook)(ctx, { id: 1 }),
             (e: unknown) => e instanceof FeatureError && e.code === 'conflict'
         );
-        await handlerFor(uptimeUpdate)(ctx, { id: 1, service: { ...KEEP, deployHook: true } });
+        await handlerFor(uptimeUpdateIntegrity)(ctx, { id: 1, integrity: { ...ON, deployHook: true } });
 
         const first = await handlerFor(uptimeDeployHook)(ctx, { id: 1 });
         assert.ok(first.url.startsWith('https://public.deveye.test/api/uptime/deployed/'));

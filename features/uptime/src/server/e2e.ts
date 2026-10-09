@@ -13,7 +13,7 @@ const unreachable = (origin: string) =>
         ? null
         : 'L’adresse de ce serveur est privée : une surveillance ne peut pas la joindre';
 
-/** La surveillance des fichiers de ce serveur, telle que `uptime.update` la reprend en entier. */
+/** La surveillance des fichiers de ce serveur, telle que `uptime.add` la crée. */
 const WATCH_FILES = {
     name: 'Essai de bout en bout : adresse d’appel',
     integrityIntervalSeconds: 3600,
@@ -128,11 +128,12 @@ export const uptimeE2e: FeatureE2eEntry<UptimeRepo> = {
                     label: 'Ouvrir son adresse d’appel',
                     run: async (ctx) => {
                         const id = ctx.state.get('serviceId');
-                        await ctx.send('uptime.update', {
+                        await ctx.send('uptime.updateIntegrity', {
                             id,
-                            service: {
-                                ...WATCH_FILES,
-                                url: `${ctx.origins.app}/`,
+                            integrity: {
+                                intervalSeconds: WATCH_FILES.integrityIntervalSeconds,
+                                paths: [],
+                                deployAccept: true,
                                 deploySources: [],
                                 deployHook: true
                             }

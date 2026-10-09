@@ -44,15 +44,16 @@ export const manifest = {
     topbarWidget: { description: 'Services en ligne sur les services surveillés' },
     links: [{ to: 'mail', what: 'envoie ses alertes par un compte Mail' }],
     /**
-     * Un panneau Général à l'échelle d'un service : son identité, ses réglages
-     * fins (cadence, délai, seuil, rétention) et sa suppression. Notifications,
-     * Partage et Permissions s'ajoutent tout seuls : `notifies` et le
-     * branchement au partage suffisent. À l'échelle de la feature, les pages de
-     * statut et les domaines qui les servent.
+     * À l'échelle d'un service, un panneau Général (identité, réglages fins,
+     * suppression) et un panneau Intégrité (la relecture des fichiers et
+     * l'acceptation après un déploiement). Notifications, Partage et
+     * Permissions s'ajoutent tout seuls : `notifies` et le branchement au
+     * partage suffisent. À l'échelle de la feature, les pages de statut et les
+     * domaines qui les servent.
      */
     settings: {
         feature: [{ id: 'pages', label: 'Pages de statut', icon: 'eye-open' }, 'domains'],
-        item: ['general']
+        item: ['general', { id: 'integrity', label: 'Intégrité', icon: 'shield' }]
     },
     commands: uptimeCommands
 } satisfies FeatureManifest;

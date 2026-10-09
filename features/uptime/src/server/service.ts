@@ -592,7 +592,9 @@ export class UptimeMonitor {
                       ...probed,
                       reading: applyDeployEvidence(
                           probed.reading,
-                          await this.deployEvidence(row, probed.reading, integrity?.baseline ?? null),
+                          target.deployAccept
+                              ? await this.deployEvidence(row, probed.reading, integrity?.baseline ?? null)
+                              : null,
                           row.integrity_pending_since,
                           Math.floor(Date.now() / 1000)
                       )
@@ -610,8 +612,9 @@ export class UptimeMonitor {
 
     /**
      * Ce que les sources de déploiement du service disent d'un écart ou d'une
-     * lecture ratée ; `null` sans source, ou pour une lecture qui ne pose pas
-     * la question. Une source qui ne répond pas ne fait pas échouer la sonde.
+     * lecture ratée, l'acceptation allumée ; `null` sans source, ou pour une
+     * lecture qui ne pose pas la question. Une source qui ne répond pas ne fait
+     * pas échouer la sonde.
      */
     private async deployEvidence(
         row: UptimeServiceRow,

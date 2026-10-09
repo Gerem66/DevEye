@@ -17,7 +17,6 @@ import {
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import {
     UPTIME_DEFAULT_RETENTION_DAYS,
-    UPTIME_INTEGRITY_DEFAULT_INTERVAL_SECONDS,
     UPTIME_THRESHOLD_MAX,
     UPTIME_TIMEOUT_MAX,
     UPTIME_TIMEOUT_MIN,
@@ -26,9 +25,7 @@ import {
 } from '../contracts/domain';
 
 import { api } from './api';
-import DeployHookField from './DeployHookField';
-import DeploySourcePicker from './DeploySourcePicker';
-import { clamp, deployKeysOf, deploySettingsOf, parsePaths, type ServiceTuning } from './format';
+import { clamp, type ServiceTuning } from './format';
 import styles from './style.module.css';
 
 /** Les cadences offertes, en secondes : du quasi-direct au battement quotidien. */
@@ -40,15 +37,6 @@ const INTERVALS: { value: number; label: string }[] = [
     { value: 3600, label: '1 heure' },
     { value: 21600, label: '6 heures' },
     { value: 86400, label: '1 jour' }
-];
-
-/** Le rythme de lecture des fichiers : relire tout un site ne descend pas sous cinq minutes. */
-const INTEGRITY_INTERVALS: readonly SearchSelectOption[] = [
-    { value: '300', label: '5 minutes' },
-    { value: String(UPTIME_INTEGRITY_DEFAULT_INTERVAL_SECONDS), label: '15 minutes (par défaut)' },
-    { value: '3600', label: '1 heure' },
-    { value: '21600', label: '6 heures' },
-    { value: '86400', label: '1 jour' }
 ];
 
 /**
@@ -76,13 +64,6 @@ interface ServiceDraft extends ServiceTuning {
     method: UptimeMethod;
     expectedStatus: number | null;
     keyword: string | null;
-    /** `null` : l'option d'intégrité est éteinte. */
-    integrityIntervalSeconds: number | null;
-    /** Intégrité : un chemin par ligne, tel que saisi. */
-    paths: string;
-    /** Intégrité : accepter une version qu'un déploiement explique, et ce qui met le site en ligne. */
-    autoAccept: boolean;
-    deployKeys: string[];
     enabled: boolean;
 }
 
@@ -93,10 +74,6 @@ function draftOf(service: UptimeService): ServiceDraft {
         method: service.method,
         expectedStatus: service.expectedStatus,
         keyword: service.keyword,
-        integrityIntervalSeconds: service.integrityIntervalSeconds,
-        paths: service.paths.join('\n'),
-        autoAccept: service.deploySources.length > 0 || service.deployHook,
-        deployKeys: deployKeysOf(service.deploySources, service.deployHook),
         enabled: service.enabled,
         intervalSeconds: service.intervalSeconds,
         timeoutSeconds: service.timeoutSeconds,
@@ -107,13 +84,13 @@ function draftOf(service: UptimeService): ServiceDraft {
 
 /**
  * Le service lui-même : son identité (nom, URL, méthode, statut attendu,
- * mot-clé, option d'intégrité, surveillance), ses réglages fins (cadence,
- * délai, seuil, rétention) et sa suppression. L'onglet Général de ses réglages, là où le bouton commun
- * mène.
+ * mot-clé, surveillance), ses réglages fins (cadence, délai, seuil,
+ * rétention) et sa suppression. L'onglet Général de ses réglages, là où le
+ * bouton commun mène ; l'intégrité a son propre onglet.
  *
  * Autonome : il charge le service par `uptime.list`, enregistre par
- * `uptime.update` (qui prend le service entier) et ravive la liste et le
- * compte. Sans droit d'écriture, les champs restent lisibles mais figés.
+ * `uptime.update` et ravive la liste et le compte. Sans droit d'écriture, les
+ * champs restent lisibles mais figés.
  *
  * Un service projeté depuis un autre espace se règle d'ici (le serveur le
  * réécrit sous la clé de son espace d'origine) mais ne s'y supprime pas :
@@ -125,7 +102,6 @@ export default function ServiceGeneralPanel({ scope, canWrite, gone }: SettingsP
     const [draft, setDraft] = useState<ServiceDraft | null>(null);
     const [errorName, setErrorName] = useState('');
     const [errorUrl, setErrorUrl] = useState('');
-    const [errorSources, setErrorSources] = useState('');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
@@ -150,27 +126,16 @@ export default function ServiceGeneralPanel({ scope, canWrite, gone }: SettingsP
         // Le contrat du serveur (`z.string().url()`), vérifié ici pour que le
         // message tombe sur le champ et non en erreur générique.
         const validUrl = /^https?:\/\/\S+$/i.test(url);
-        const autoAccept = draft.integrityIntervalSeconds !== null && draft.autoAccept;
-        const missingSource = autoAccept && draft.deployKeys.length === 0;
         setErrorName(name ? '' : 'Ce champ est obligatoire');
         setErrorUrl(validUrl ? '' : 'URL invalide (http:// ou https://)');
-        setErrorSources(missingSource ? 'Choisissez au moins une source' : '');
         // Rejeté : le bouton n'annonce « Enregistré » que sur un succès.
-        if (!name || !validUrl || missingSource) throw new Error('invalid');
+        if (!name || !validUrl) throw new Error('invalid');
         setBusy(true);
         setError(null);
         try {
-            const { autoAccept: _autoAccept, deployKeys, ...fields } = draft;
             const res = await api.send('uptime.update', {
                 id: service.id,
-                service: {
-                    ...fields,
-                    name,
-                    url,
-                    paths: draft.integrityIntervalSeconds === null ? [] : parsePaths(draft.paths),
-                    keyword: draft.keyword?.trim() || null,
-                    ...deploySettingsOf(autoAccept ? deployKeys : [])
-                }
+                service: { ...draft, name, url, keyword: draft.keyword?.trim() || null }
             });
             setService(res.service);
             setDraft(draftOf(res.service));
@@ -209,11 +174,8 @@ export default function ServiceGeneralPanel({ scope, canWrite, gone }: SettingsP
         setDraft((d) => (d ? { ...d, [key]: value } : d));
 
     const editable = canWrite && !busy;
-    const integrity = draft.integrityIntervalSeconds !== null;
     const base = draftOf(service);
-    const unchanged = (Object.keys(draft) as (keyof ServiceDraft)[]).every((k) =>
-        k === 'deployKeys' ? draft[k].join() === base[k].join() : draft[k] === base[k]
-    );
+    const unchanged = (Object.keys(draft) as (keyof ServiceDraft)[]).every((k) => draft[k] === base[k]);
 
     return (
         <div className={shell.section}>
@@ -278,104 +240,6 @@ export default function ServiceGeneralPanel({ scope, canWrite, gone }: SettingsP
                     onChange={(e) => set('keyword', e.target.value || null)}
                 />
             </div>
-
-            <Checkbox
-                checked={integrity}
-                disabled={!editable}
-                onChange={(v) =>
-                    set(
-                        'integrityIntervalSeconds',
-                        v ? (service.integrityIntervalSeconds ?? UPTIME_INTEGRITY_DEFAULT_INTERVAL_SECONDS) : null
-                    )
-                }
-            >
-                <>
-                    <span className={shell.fieldLabel}>Vérifier aussi l’intégrité des fichiers</span>
-                    <span className={shell.fieldHint}>
-                        Relit les scripts, les styles et la politique de contenu que sert la page, et compare leurs
-                        empreintes à une référence apprise à la première lecture. Un écart tient le service en échec
-                        jusqu’à ce que le site serve de nouveau la référence, ou que vous acceptiez la version actuelle.
-                    </span>
-                </>
-            </Checkbox>
-
-            {integrity && (
-                <>
-                    <div className={shell.field}>
-                        <span className={shell.sectionLabel}>Relire les fichiers toutes les</span>
-                        <SearchSelect
-                            value={String(draft.integrityIntervalSeconds)}
-                            disabled={!editable}
-                            onChange={(v) => set('integrityIntervalSeconds', Number(v))}
-                            options={INTEGRITY_INTERVALS}
-                            aria-label='Relire les fichiers toutes les'
-                        />
-                        <span className={shell.fieldHint}>
-                            La lecture se fait avec une sonde du service : jamais plus souvent que la fréquence de
-                            relève ci-dessous.
-                        </span>
-                    </div>
-
-                    <div className={shell.field}>
-                        <span className={shell.sectionLabel}>Fichiers supplémentaires (un chemin par ligne)</span>
-                        <textarea
-                            className={styles.textarea}
-                            rows={3}
-                            placeholder={'/t.js'}
-                            value={draft.paths}
-                            disabled={!editable}
-                            onChange={(e) => set('paths', e.target.value)}
-                        />
-                        <span className={shell.fieldHint}>
-                            L’adresse surveillée doit être une page du site : ses scripts et styles y sont trouvés
-                            seuls, et une instance DevEye annonce tous ses fichiers. Allumer l’option, changer l’adresse
-                            ou cette liste fait réapprendre la référence à la prochaine sonde.
-                        </span>
-                    </div>
-
-                    <Checkbox checked={draft.autoAccept} disabled={!editable} onChange={(v) => set('autoAccept', v)}>
-                        <>
-                            <span className={shell.fieldLabel}>
-                                Accepter automatiquement les changements lors d’un déploiement
-                            </span>
-                            <span className={shell.fieldHint}>
-                                Quand les fichiers changent, le service demande à ses sources si une mise en ligne vient
-                                d’avoir lieu. Si oui, la nouvelle version devient la référence, sans alerte ; si elle
-                                est encore en cours, il l’attend jusqu’à trente minutes. Une modification faite entre la
-                                fin d’un déploiement et la lecture suivante serait acceptée avec lui.
-                            </span>
-                        </>
-                    </Checkbox>
-
-                    {draft.autoAccept && (
-                        <div className={shell.field}>
-                            <span className={shell.sectionLabel}>Ce qui met ce site en ligne</span>
-                            <DeploySourcePicker
-                                serviceId={service.id}
-                                value={draft.deployKeys}
-                                disabled={!editable}
-                                onChange={(keys) => set('deployKeys', keys)}
-                            />
-                            {errorSources && <span className={shell.notice}>{errorSources}</span>}
-                            <span className={shell.fieldHint}>
-                                Un projet compte pour ses déploiements et ses dépôts. Un dépôt Git compte pour ses
-                                workflows GitHub Actions réussis sur sa branche par défaut et ses déploiements GitHub
-                                (Pages, Vercel, Netlify) : son jeton doit pouvoir les lire. L’adresse d’appel sert à
-                                toute autre CI.
-                            </span>
-                        </div>
-                    )}
-
-                    {draft.autoAccept &&
-                        draft.deployKeys.includes('hook') &&
-                        canWrite &&
-                        (service.deployHook ? (
-                            <DeployHookField serviceId={service.id} disabled={!editable} />
-                        ) : (
-                            <p className={shell.sectionHint}>L’adresse d’appel apparaît ici une fois enregistré.</p>
-                        ))}
-                </>
-            )}
 
             <Checkbox checked={draft.enabled} disabled={!editable} onChange={(v) => set('enabled', v)}>
                 <>

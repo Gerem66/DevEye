@@ -30,7 +30,7 @@ export function Switch({ checked, onChange, label, hint, disabled, className, ..
             disabled={disabled}
             className={`${styles.switch} ${checked ? styles.switchOn : ''} ${
                 label !== undefined ? styles.labelled : ''
-            } ${className ?? ''}`}
+            } ${label !== undefined && hint ? styles.hinted : ''} ${className ?? ''}`}
             onClick={() => onChange(!checked)}
         >
             <span className={styles.switchTrack}>

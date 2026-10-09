@@ -42,13 +42,10 @@ const integrityPathSchema = z
     .regex(/^\/[^\s]*$/)
     .refine((p) => !/(^|\/)\.\.(\/|$)/.test(p), 'Chemin invalide');
 
-/** Everything the user may set on a service. */
+/** A service's identity and tuning: its General tab. */
 const uptimeDraftFields = z.object({
     name: z.string().min(1).max(UPTIME_NAME_MAX_LENGTH),
     url: z.url({ protocol: /^https?$/ }).max(UPTIME_URL_MAX_LENGTH),
-    /** `null`: the integrity option is off, and `paths` is dropped. */
-    integrityIntervalSeconds: z.number().int().min(UPTIME_INTEGRITY_INTERVAL_MIN).max(UPTIME_INTERVAL_MAX).nullable(),
-    paths: z.array(integrityPathSchema).max(UPTIME_INTEGRITY_PATHS_MAX),
     method: uptimeMethodSchema,
     expectedStatus: z.number().int().min(100).max(599).nullable(),
     keyword: z.string().max(UPTIME_KEYWORD_MAX_LENGTH).nullable(),
@@ -59,9 +56,18 @@ const uptimeDraftFields = z.object({
     enabled: z.boolean()
 });
 
-/** A new service may leave its cadence out: the server then applies the owner plan's default. */
+/** `null`: the integrity option is off. */
+const integrityIntervalSchema = z.number().int().min(UPTIME_INTEGRITY_INTERVAL_MIN).max(UPTIME_INTERVAL_MAX).nullable();
+const integrityPathsSchema = z.array(integrityPathSchema).max(UPTIME_INTEGRITY_PATHS_MAX);
+
+/**
+ * A new service may leave its cadence out: the server then applies the owner
+ * plan's default. It may turn the integrity option on from the start.
+ */
 const uptimeNewDraftSchema = uptimeDraftFields.extend({
-    intervalSeconds: uptimeDraftFields.shape.intervalSeconds.optional()
+    intervalSeconds: uptimeDraftFields.shape.intervalSeconds.optional(),
+    integrityIntervalSeconds: integrityIntervalSchema,
+    paths: integrityPathsSchema
 });
 
 /**
@@ -97,16 +103,27 @@ export const uptimeAdd = {
     output: z.object({ service: uptimeServiceSchema })
 };
 
-/**
- * Replace a service's whole configuration. History and incidents are kept.
- * Without the integrity option, `deploySources` and `deployHook` are dropped;
- * a source added here must be readable by the caller.
- */
+/** Replace a service's identity and tuning (its General tab). History and incidents are kept. */
 export const uptimeUpdate = {
     command: 'uptime.update' as const,
+    input: z.object({ id: serviceId, service: uptimeDraftFields }),
+    output: z.object({ service: uptimeServiceSchema })
+};
+
+/**
+ * Replace a service's integrity settings (its Integrity tab). Switched off,
+ * the option keeps its paths, sources and call address for when it comes back.
+ * A source added here must be readable by the caller; accepting after a
+ * deployment needs at least one source while the option is on.
+ */
+export const uptimeUpdateIntegrity = {
+    command: 'uptime.updateIntegrity' as const,
     input: z.object({
         id: serviceId,
-        service: uptimeDraftFields.extend({
+        integrity: z.object({
+            intervalSeconds: integrityIntervalSchema,
+            paths: integrityPathsSchema,
+            deployAccept: z.boolean(),
             deploySources: z
                 .array(uptimeDeploySourceSchema)
                 .max(UPTIME_DEPLOY_SOURCES_MAX)
@@ -136,7 +153,7 @@ export const uptimeDeploySources = {
 /**
  * The service's call address, to paste in a CI: a POST to it says the site was
  * just put online. `regenerate` revokes the previous one. Refused on a service
- * without an address: `uptime.update` creates it.
+ * without an address: `uptime.updateIntegrity` creates it.
  */
 export const uptimeDeployHook = {
     command: 'uptime.deployHook' as const,
@@ -326,6 +343,7 @@ export const uptimeCommands = [
     uptimeCount,
     uptimeAdd,
     uptimeUpdate,
+    uptimeUpdateIntegrity,
     uptimeSetEnabled,
     uptimeRemove,
     uptimeReorder,

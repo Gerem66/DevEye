@@ -37,6 +37,8 @@ export interface ServicePayload {
     keyword: string | null;
     /** Integrity: extra site-relative files to verify. */
     paths: string[];
+    /** Integrity: accept a drift a deployment of the service's sources explains. */
+    deployAccept: boolean;
 }
 
 export async function encryptService(cipher: SdkCipher, payload: ServicePayload): Promise<string> {
@@ -50,17 +52,18 @@ export async function encryptService(cipher: SdkCipher, payload: ServicePayload)
  */
 export async function decryptService(cipher: SdkCipher, content: string): Promise<ServicePayload> {
     const plain = await cipher.tryDecrypt(content);
-    if (plain === null) return { name: '', url: '', keyword: null, paths: [] };
+    if (plain === null) return { name: '', url: '', keyword: null, paths: [], deployAccept: false };
     try {
         const parsed = JSON.parse(plain) as Partial<ServicePayload>;
         return {
             name: typeof parsed.name === 'string' ? parsed.name : '',
             url: typeof parsed.url === 'string' ? parsed.url : '',
             keyword: typeof parsed.keyword === 'string' ? parsed.keyword : null,
-            paths: Array.isArray(parsed.paths) ? parsed.paths.filter((p): p is string => typeof p === 'string') : []
+            paths: Array.isArray(parsed.paths) ? parsed.paths.filter((p): p is string => typeof p === 'string') : [],
+            deployAccept: parsed.deployAccept === true
         };
     } catch {
-        return { name: '', url: '', keyword: null, paths: [] };
+        return { name: '', url: '', keyword: null, paths: [], deployAccept: false };
     }
 }
 
@@ -187,8 +190,9 @@ export async function toService(
         baseline: integrity ? summarizeBaseline(await decryptBaseline(cipher, row.baseline_enc)) : null,
         integrityCheckedAt: integrity ? row.integrity_checked_at : null,
         integrityDrift: (verdict?.lines.length ?? 0) > 0,
-        deploySources: integrity ? deploySources : [],
-        deployHook: integrity && row.deploy_hook_hash !== null,
+        deployAccept: payload.deployAccept,
+        deploySources,
+        deployHook: row.deploy_hook_hash !== null,
         method: row.method,
         expectedStatus: row.expected_status,
         keyword: payload.keyword,

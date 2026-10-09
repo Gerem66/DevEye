@@ -75,8 +75,8 @@ création comme à la sonde, sauf si l'installation ouvre son réseau privé ave
 
 ## L'option d'intégrité
 
-Une case des réglages d'un service, décochée par défaut, ajoute à « le site
-répond-il ? » une seconde question : « **sert-il encore les mêmes fichiers ?** ».
+Un interrupteur en tête de l'onglet Intégrité d'un service, éteint par défaut,
+ajoute à « le site répond-il ? » une seconde question : « **sert-il encore les mêmes fichiers ?** ».
 Le JavaScript qu'une page charge est ce qui tient les sessions de ses
 visiteurs : un serveur compromis qui le modifie touche tout le monde, et
 personne ne le voit. Un vérificateur qui vit sur ce serveur ne vaut rien,
@@ -131,8 +131,10 @@ Après un déploiement voulu, l'acceptation automatique (section suivante)
 reconnaît la mise en ligne ; sinon, « Accepter la version actuelle »
 (`uptime.acceptBaseline`) oublie la référence et le verdict, puis relit : ce
 que le site sert à cet instant devient la référence, et l'incident se referme
-par le chemin ordinaire, « rétabli » compris. Cocher ou décocher l'option,
+par le chemin ordinaire, « rétabli » compris. Allumer ou éteindre l'option,
 changer l'adresse ou la liste des chemins fait de même (`resetIntegrity`).
+Éteinte, l'option garde ses chemins, ses sources et son adresse d'appel : l'onglet
+les montre grisés, et ils reprennent quand on la rallume.
 
 Chaque lecture s'inscrit au **journal des intégrités**
 (`ft_uptime_integrity_readings`) avec son constat : référence apprise,
@@ -171,8 +173,9 @@ sessions distantes ([Docs/FEDERATION.md](../../Docs/FEDERATION.md)).
 Une mise en ligne voulue change les fichiers comme une attaque. Pour ne pas
 alerter à chaque déploiement, un service dont l'option d'intégrité est cochée
 peut désigner **ce qui met son site en ligne** : la case « Accepter
-automatiquement les changements lors d'un déploiement » de ses réglages, puis
-un sélecteur à catégories, chacune affichée même vide (`uptime.deploySources`) :
+automatiquement les changements lors d'un déploiement » de son onglet
+Intégrité (`deployAccept`, dans la partie chiffrée du service), puis un
+sélecteur à catégories, chacune affichée même vide (`uptime.deploySources`) :
 
 - **Projets** : un projet vaut ses cibles de Déploiements et ses dépôts Git
   (`ProjectsUsageProvider.linkedItems`) ;
@@ -187,7 +190,9 @@ un sélecteur à catégories, chacune affichée même vide (`uptime.deploySource
   écartés. Le jeton doit lire Actions et Deployments ; sinon le journal le dit ;
 - **Adresse d'appel** : `POST /api/uptime/deployed/<jeton>`, à appeler en fin
   de mise en ligne par toute autre CI. L'appel note l'heure (`deploy_hook_at`)
-  et relit les fichiers aussitôt, une fois par minute au plus. Le jeton se
+  et relit les fichiers aussitôt, une fois par minute au plus ; l'option ou
+  l'acceptation éteinte, il répond sans rien relire, pour qu'une CI ne casse
+  pas pendant une pause. Le jeton se
   retrouve par son condensat (`deploy_hook_hash`, unique) et se réaffiche
   depuis sa copie chiffrée (`uptime.deployHook`, en écriture : qui le détient
   fait accepter une version, et `uptime.list` ne le porte jamais).
@@ -196,7 +201,8 @@ Les sources sont des identifiants (`ft_uptime_deploy_sources`), des éléments d
 l'**espace d'origine** du service. Une source ajoutée doit être lisible par qui
 enregistre (`authorize` du module qui la tient) ; celles déjà en place restent,
 et une source disparue reste listée « introuvable » jusqu'à ce qu'on la
-décoche. Décocher l'option d'intégrité ou la case les retire, adresse comprise.
+décoche. L'acceptation allumée exige au moins une source tant que l'option
+l'est aussi ; éteinte, elle garde les siennes sans les interroger.
 
 À chaque écart ou lecture ratée d'un service qui a des sources
 (`src/server/deployEvidence.ts`, puis `applyDeployEvidence`, pure) :
@@ -343,13 +349,20 @@ pause. Toute la ligne mène à la fiche, barres comprises : repérer un creux
 rouge et vouloir l'ouvrir est le même geste.
 
 Tout ce qui se règle sur un service vit dans ses **réglages** (le bouton commun
-de sa fiche, onglet Général : `ServiceGeneralPanel`, déclaré par
-`settings.item` du manifest) : son identité (nom, URL, méthode, statut
-attendu, mot-clé, option d'intégrité avec son rythme, ses chemins et ses
-sources de déploiement, surveillance active), sa fréquence de relève, son délai, ses échecs consécutifs avant alerte, sa conservation de
-l'historique détaillé et sa suppression, à côté de ses canaux, de son partage
-et de ses permissions. Le panneau envoie le service entier à `uptime.update`,
-dont le contrat prend tout. Le dialogue (`ServiceDialog`) ne sert qu'à
+de sa fiche, onglets déclarés par `settings.item` du manifest), à côté de ses
+canaux, de son partage et de ses permissions :
+
+- **Général** (`ServiceGeneralPanel`, `uptime.update`) : son identité (nom,
+  URL, méthode, statut attendu, mot-clé, surveillance active), sa fréquence de
+  relève, son délai, ses échecs consécutifs avant alerte, sa conservation de
+  l'historique détaillé et sa suppression ;
+- **Intégrité** (`ServiceIntegrityPanel`, `uptime.updateIntegrity`) :
+  l'interrupteur de l'option en tête, puis ce qui en dépend, grisé tant qu'il
+  est éteint (rythme de lecture, chemins ajoutés, acceptation après un
+  déploiement, ses sources et son adresse d'appel).
+
+Chaque onglet n'écrit que ses champs : enregistrer l'un ne touche pas ce que
+l'autre règle. Le dialogue (`ServiceDialog`) ne sert qu'à
 **ajouter** un service : il demande l'identité et pose les réglages fins par
 défaut ; c'est aussi lui que l'onglet Uptime d'un projet ouvre, par le contrat
 client.
@@ -475,13 +488,13 @@ n'agrège que des nombres.
 ## Commandes
 
 `uptime.list` · `uptime.count` · `uptime.add` · `uptime.update` ·
-`uptime.setEnabled` · `uptime.remove` · `uptime.reorder` · `uptime.checkNow` ·
+`uptime.updateIntegrity` · `uptime.setEnabled` · `uptime.remove` · `uptime.reorder` · `uptime.checkNow` ·
 `uptime.acceptBaseline` · `uptime.deploySources` · `uptime.deployHook` ·
 `uptime.history` · `uptime.checks` · `uptime.checkStats` · `uptime.incidents` ·
 `uptime.integrityReadings` · `uptime.pageList` · `uptime.pageAdd` ·
 `uptime.pageUpdate` · `uptime.pageRemove`
 
-Vingt commandes, déclarées par `src/contracts/commands.ts` et enregistrées
+Vingt et une commandes, déclarées par `src/contracts/commands.ts` et enregistrées
 au démarrage comme celles de tout module. `uptime.checkNow` emprunte le chemin
 de l'ordonnanceur (`monitor().runOne`), donc un test manuel compte dans
 l'historique, l'agrégat et les incidents exactement comme une sonde
@@ -495,9 +508,9 @@ automatique ; la pause choisie ne l'empêche pas, celle de l'offre si.
 package.json, deveye-feature.json    deveye-feature-uptime ; allowlist des 4 tables du socle
 src/index.ts                         manifest + contrats (l'entrée isomorphe)
 src/manifest.ts                      featureDescriptor('uptime') étalé ; resources, topics, quotas, domains,
-                                     topbarWidget, settings (pages, domains ; item general)
+                                     topbarWidget, settings (pages, domains ; item general, integrity)
 src/contracts/domain.ts              service, contrôle, incident, point, page de statut, lignes SQL, bornes
-src/contracts/commands.ts            les vingt commandes
+src/contracts/commands.ts            les vingt et une commandes
 src/contracts/format.ts              mise en forme partagée client / serveur
 ```
 
@@ -527,7 +540,7 @@ integrity.ts      captureSite, diffCapture, describeDrift : la lecture des fichi
 deployEvidence.ts la fenêtre d'un déploiement et la question posée aux sources (findDeployEvidence)
 deploySources.ts  le sélecteur et ses droits, le jeton et la route de l'adresse d'appel
 notice.ts         la mise en page Discord d'une alerte (down, recovered, integrity)
-handlers.ts       les seize commandes des services
+handlers.ts       les dix-sept commandes des services
 pages.ts          les quatre commandes des pages de statut
 domains.ts        la vérification d'un domaine (jeton sous /.well-known/deveye-uptime), onRemoved
 statusPage/       routes.ts (cache, débit, domainRoot), view.ts (le modèle de la page), render.ts, html.ts,
@@ -560,6 +573,7 @@ Ratios.tsx             les trois taux, toujours les trois et dans cet ordre
 Pane.tsx               le bloc qui se recharge sur place
 ServiceDialog.tsx      ajouter un service ; les réglages fins partent avec leurs défauts
 ServiceGeneralPanel.tsx  onglet Général d'un service : identité, réglages fins, suppression
+ServiceIntegrityPanel.tsx  onglet Intégrité : l'interrupteur, le rythme, les chemins, l'acceptation et ses sources
 DeploySourcePicker.tsx   ce qui met le site en ligne : projets, cibles, dépôts, adresse d'appel
 DeployHookField.tsx      l'adresse d'appel : lue à la demande, copiée, régénérée
 StatusPagesPanel.tsx   onglet « Pages de statut » de la feature

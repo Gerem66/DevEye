@@ -38,6 +38,8 @@ declare const styles: {
     readonly checkRow: string;
     readonly checkStatus: string;
     readonly checkWhen: string;
+    readonly dependent: string;
+    readonly dependentOff: string;
     readonly detail: string;
     readonly detailActions: string;
     readonly detailFoot: string;

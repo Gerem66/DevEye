@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import type { UptimeServiceRow } from '../contracts/domain';
-import type { SdkPublicApp, SdkPublicHandler, SdkPublicReply } from '@deveye/types/sdk/server';
+import type { SdkCipher, SdkPublicApp, SdkPublicHandler, SdkPublicReply } from '@deveye/types/sdk/server';
 
 import { DEPLOY_HOOK_PATH, deployHookHash, registerDeployHook } from './deploySources';
 import type { UptimeRepo } from './repo';
@@ -26,9 +26,11 @@ function routeOf(rows: UptimeServiceRow[]) {
         }
     } as unknown as UptimeRepo;
     const probed: { id: number; hookAt: number | null; readFiles?: boolean }[] = [];
+    // Le contenu des lignes est du JSON en clair : un codec à l'identité suffit.
+    const cipher = { tryDecrypt: async (blob: string) => blob } as unknown as SdkCipher;
     registerDeployHook(
         app,
-        { repo },
+        { repo, cipherFor: () => cipher },
         {
             runOne: async (row, opts) => {
                 probed.push({ id: row.id, hookAt: row.deploy_hook_at, readFiles: opts?.readFiles });
@@ -53,14 +55,17 @@ function routeOf(rows: UptimeServiceRow[]) {
 
 const TOKEN = 'a'.repeat(32);
 
-function service(over: Partial<UptimeServiceRow> = {}): UptimeServiceRow {
+function service(over: Partial<UptimeServiceRow> & { deployAccept?: boolean } = {}): UptimeServiceRow {
+    const { deployAccept = true, ...row } = over;
     return {
         id: 1,
+        workspace_id: 1,
+        content: JSON.stringify({ name: 'Site', url: 'https://exemple.fr/', keyword: null, paths: [], deployAccept }),
         integrity_interval_seconds: 900,
         deploy_hook_hash: deployHookHash(TOKEN),
         deploy_hook_at: null,
         enabled: 1,
-        ...over
+        ...row
     } as UptimeServiceRow;
 }
 
@@ -77,13 +82,21 @@ describe('l’adresse d’appel', () => {
         assert.equal(probed.length, 1);
     });
 
-    it('ne répond à rien d’autre qu’un jeton connu, sur un service qui vérifie ses fichiers', async () => {
-        const rows = [service({ id: 2, integrity_interval_seconds: null })];
-        const { call, probed } = routeOf(rows);
+    it('ne répond qu’à un jeton connu', async () => {
+        const { call, probed } = routeOf([service()]);
         assert.equal(await call('b'.repeat(32)), 404);
         assert.equal(await call('court'), 404);
-        assert.equal(await call(TOKEN), 404);
         assert.equal(probed.length, 0);
+    });
+
+    it('l’option ou l’acceptation éteinte, répond sans rien relire : la CI ne casse pas', async () => {
+        for (const over of [{ integrity_interval_seconds: null }, { deployAccept: false }]) {
+            const rows = [service(over)];
+            const { call, probed } = routeOf(rows);
+            assert.equal(await call(TOKEN), 204);
+            assert.notEqual(rows[0].deploy_hook_at, null);
+            assert.equal(probed.length, 0);
+        }
     });
 
     it('un service en pause garde l’heure de l’appel sans être sondé', async () => {

@@ -22,12 +22,10 @@ export interface UptimeCheckFilter {
     failuresOnly: boolean;
 }
 
-/** The user-settable part of a service (everything but its live probe state). */
+/** A service's identity and tuning, as its General tab writes them. */
 export interface UptimeServiceConfig {
-    /** Encrypted `{ name, url, keyword, paths }`. */
+    /** Encrypted `{ name, url, keyword, paths, deployAccept }`. */
     content: string;
-    /** `null`: the integrity option is off. */
-    integrityIntervalSeconds: number | null;
     method: UptimeMethod;
     expectedStatus: number | null;
     intervalSeconds: number;
@@ -86,8 +84,21 @@ export interface UptimeServicesRepo {
     findById(id: number, workspaceId: number): Promise<UptimeServiceRow | null>;
     /** Comme `findById`, mais accepte aussi un service projeté vers cet espace. */
     findVisible(id: number, workspaceId: number): Promise<UptimeServiceRow | null>;
-    create(input: { userId: number; workspaceId: number } & UptimeServiceConfig): Promise<UptimeServiceRow>;
+    create(
+        input: {
+            userId: number;
+            workspaceId: number;
+            /** `null`: the integrity option is off. */
+            integrityIntervalSeconds: number | null;
+        } & UptimeServiceConfig
+    ): Promise<UptimeServiceRow>;
     update(id: number, workspaceId: number, input: UptimeServiceConfig): Promise<UptimeServiceRow | null>;
+    /** The integrity option, as its tab writes it: on or off (`null`), and the content that carries its paths. */
+    setIntegrity(
+        id: number,
+        workspaceId: number,
+        input: { content: string; integrityIntervalSeconds: number | null }
+    ): Promise<UptimeServiceRow | null>;
     setEnabled(id: number, workspaceId: number, enabled: boolean): Promise<UptimeServiceRow | null>;
     delete(id: number, workspaceId: number): Promise<boolean>;
     /**
@@ -208,13 +219,12 @@ export interface UptimeRepo {
     status: UptimeStatusRepo;
 }
 
-const SERVICE_COLUMNS = `content = ?, integrity_interval_seconds = ?, method = ?, expected_status = ?,
+const SERVICE_COLUMNS = `content = ?, method = ?, expected_status = ?,
      interval_seconds = ?, timeout_seconds = ?, failure_threshold = ?, retention_days = ?, enabled = ?`;
 
 function configParams(c: UptimeServiceConfig): unknown[] {
     return [
         c.content,
-        c.integrityIntervalSeconds,
         c.method,
         c.expectedStatus,
         c.intervalSeconds,
@@ -348,7 +358,7 @@ function servicesRepo(q: SdkQueryable): UptimeServicesRepo {
             );
         },
         findById: reload,
-        async create({ userId, workspaceId, ...config }) {
+        async create({ userId, workspaceId, integrityIntervalSeconds, ...config }) {
             // New services land at the end of the list, never in the middle.
             const posRows = await q.query<{ next: number }>(
                 'SELECT COALESCE(MAX(sort_order) + 1, 0) AS next FROM uptime_services WHERE workspace_id = ?',
@@ -356,10 +366,10 @@ function servicesRepo(q: SdkQueryable): UptimeServicesRepo {
             );
             const res = await q.execute(
                 `INSERT INTO uptime_services
-                     (user_id, workspace_id, content, integrity_interval_seconds, method, expected_status,
-                      interval_seconds, timeout_seconds, failure_threshold, retention_days, enabled, sort_order)
+                     (user_id, workspace_id, content, method, expected_status, interval_seconds,
+                      timeout_seconds, failure_threshold, retention_days, enabled, integrity_interval_seconds, sort_order)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [userId, workspaceId, ...configParams(config), Number(posRows[0]?.next ?? 0)]
+                [userId, workspaceId, ...configParams(config), integrityIntervalSeconds, Number(posRows[0]?.next ?? 0)]
             );
             const rows = await q.query<UptimeServiceRow>('SELECT * FROM uptime_services WHERE id = ?', [res.insertId]);
             return rows[0];
@@ -368,6 +378,14 @@ function servicesRepo(q: SdkQueryable): UptimeServicesRepo {
             const res = await q.execute(
                 `UPDATE uptime_services SET ${SERVICE_COLUMNS} WHERE id = ? AND workspace_id = ?`,
                 [...configParams(config), id, workspaceId]
+            );
+            if (res.affectedRows === 0) return null;
+            return reload(id, workspaceId);
+        },
+        async setIntegrity(id, workspaceId, { content, integrityIntervalSeconds }) {
+            const res = await q.execute(
+                'UPDATE uptime_services SET content = ?, integrity_interval_seconds = ? WHERE id = ? AND workspace_id = ?',
+                [content, integrityIntervalSeconds, id, workspaceId]
             );
             if (res.affectedRows === 0) return null;
             return reload(id, workspaceId);

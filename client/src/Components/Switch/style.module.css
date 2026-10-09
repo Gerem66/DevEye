@@ -23,6 +23,16 @@
     margin-bottom: var(--space-md);
 }
 
+/* Une aide sous le libellé : la piste s'aligne sur la première ligne, comme une
+   case à cocher, plutôt que de flotter au milieu du paragraphe. */
+.hinted {
+    align-items: flex-start;
+}
+
+.hinted .switchText {
+    padding-top: 2px;
+}
+
 .switchTrack {
     position: relative;
     flex-shrink: 0;

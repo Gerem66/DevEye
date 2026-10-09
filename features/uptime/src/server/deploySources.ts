@@ -26,6 +26,7 @@ import {
     type SdkPublicApp
 } from '@deveye/types/sdk/server';
 
+import { decryptService } from './_shared';
 import type { UptimeRepo } from './repo';
 import type { UptimeMonitor } from './service';
 
@@ -186,11 +187,12 @@ const hookParams = z.object({ token: z.string().min(16).max(128) });
 /**
  * L'adresse d'appel : la CI d'un site la frappe après une mise en ligne. Le
  * moment est retenu pour expliquer l'écart qui suit, et les fichiers sont
- * relus sur-le-champ, sans faire attendre la CI.
+ * relus sur-le-champ, sans faire attendre la CI. L'option ou l'acceptation
+ * éteinte, l'adresse répond sans rien relire : la CI ne casse pas pour autant.
  */
 export function registerDeployHook(
     app: SdkPublicApp,
-    deps: Pick<FeatureServiceDeps<UptimeRepo>, 'repo'>,
+    deps: Pick<FeatureServiceDeps<UptimeRepo>, 'repo' | 'cipherFor'>,
     monitor: Pick<UptimeMonitor, 'runOne'>
 ): void {
     app.post(
@@ -201,13 +203,15 @@ export function registerDeployHook(
             const row = parsed.success
                 ? await deps.repo.services.findByDeployHook(deployHookHash(parsed.data.token))
                 : null;
-            if (!row || row.integrity_interval_seconds === null) {
-                return reply.code(404).send({ error: 'Adresse d’appel inconnue.' });
-            }
+            if (!row) return reply.code(404).send({ error: 'Adresse d’appel inconnue.' });
             const now = Math.floor(Date.now() / 1000);
             const fresh = row.deploy_hook_at === null || now - row.deploy_hook_at >= DEPLOY_HOOK_COOLDOWN_SECONDS;
             await deps.repo.services.markDeployHookCalled(row.id, now);
-            if (fresh && row.enabled === 1) void monitor.runOne({ ...row, deploy_hook_at: now }, { readFiles: true });
+            const watched =
+                row.enabled === 1 &&
+                row.integrity_interval_seconds !== null &&
+                (await decryptService(deps.cipherFor(row.workspace_id), row.content)).deployAccept;
+            if (fresh && watched) void monitor.runOne({ ...row, deploy_hook_at: now }, { readFiles: true });
             return reply.code(204).send();
         }
     );

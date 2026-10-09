@@ -101,6 +101,7 @@ function fakeRepo(over: Partial<UptimeServiceRow> = {}): FakeRepo {
                 rows.find((r) => r.id === id && r.workspace_id === workspaceId) ?? null,
             create: unused,
             update: unused,
+            setIntegrity: unused,
             setEnabled: unused,
             delete: unused,
             reorder: unused,
@@ -561,6 +562,14 @@ describe('l’acceptation après un déploiement', () => {
         }
     };
     const now = () => Math.floor(Date.now() / 1000);
+    /** Un service dont l'acceptation après un déploiement est allumée. */
+    const ACCEPTING = JSON.stringify({
+        name: 'API OxyFoo',
+        url: 'https://api.oxyfoo.com/health',
+        keyword: null,
+        paths: [],
+        deployAccept: true
+    });
 
     /** Une cible de Déploiements dont le test décide l'activité, et les débuts de fenêtre qu'on lui a demandés. */
     function deployWith(answer: (since: number) => DeployActivity) {
@@ -583,6 +592,7 @@ describe('l’acceptation après un déploiement', () => {
             integrity_interval_seconds: 900,
             baseline_enc: BASELINE,
             failure_threshold: 1,
+            content: ACCEPTING,
             ...over
         });
         repo.sources.push({ service_id: 1, kind: 'deploy', ref_id: 5 });
@@ -683,6 +693,7 @@ describe('l’acceptation après un déploiement', () => {
         const repo = fakeRepo({
             integrity_interval_seconds: 900,
             baseline_enc: BASELINE,
+            content: ACCEPTING,
             deploy_hook_hash: 'h',
             deploy_hook_at: Math.floor(Date.now() / 1000) - 5
         });
@@ -690,6 +701,23 @@ describe('l’acceptation après un déploiement', () => {
         await probe(DRIFT);
         assert.equal(repo.readings[0].outcome, 'accepted');
         assert.ok((JSON.parse(repo.readings[0].detail!) as { error: string }).error.includes('par l’adresse d’appel'));
+    });
+
+    it('l’acceptation éteinte, les sources gardées ne sont pas interrogées', async () => {
+        const { repo, asked, probe } = setup(
+            () => ({ succeeded: { at: now(), what: 'le déploiement « app »' }, inFlight: null, error: null }),
+            {
+                content: JSON.stringify({
+                    name: 'API OxyFoo',
+                    url: 'https://api.oxyfoo.com/health',
+                    keyword: null,
+                    paths: []
+                })
+            }
+        );
+        await probe(DRIFT);
+        assert.deepEqual(asked, []);
+        assert.equal(repo.rows[0].status, 'down');
     });
 
     it('un service sans source garde l’écart tel quel, sans rien demander', async () => {

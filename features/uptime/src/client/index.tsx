@@ -3,6 +3,7 @@ import type { FeatureClient } from '@deveye/types/sdk/client';
 
 import { clientProvider } from './provider';
 import ServiceGeneralPanel from './ServiceGeneralPanel';
+import ServiceIntegrityPanel from './ServiceIntegrityPanel';
 import StatusPagesPanel from './StatusPagesPanel';
 import UptimeTopbarWidget from './TopbarWidget';
 import Uptime from './Uptime';
@@ -15,7 +16,7 @@ export const clientEntry: FeatureClient = {
      * Le service lui-même (Général de sa fiche) : identité, réglages fins,
      * suppression. Et, à l'échelle de la feature, ses pages de statut.
      */
-    settingsPanels: { general: ServiceGeneralPanel, pages: StatusPagesPanel },
+    settingsPanels: { general: ServiceGeneralPanel, integrity: ServiceIntegrityPanel, pages: StatusPagesPanel },
     TopbarWidget: UptimeTopbarWidget,
     // Unmounted as soon as it closes: the panel re-queries while it lives, and a
     // cached (or preloaded) instance would keep querying unseen. The home

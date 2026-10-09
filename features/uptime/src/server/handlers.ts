@@ -14,7 +14,8 @@ import {
     uptimeRemove,
     uptimeReorder,
     uptimeSetEnabled,
-    uptimeUpdate
+    uptimeUpdate,
+    uptimeUpdateIntegrity
 } from '../contracts/commands';
 import {
     UPTIME_DEFAULT_INTERVAL_SECONDS,
@@ -229,7 +230,8 @@ export const uptimeHandlers = [
                     name: draft.name,
                     url: draft.url,
                     keyword: draft.keyword,
-                    paths: draft.integrityIntervalSeconds === null ? [] : draft.paths
+                    paths: draft.integrityIntervalSeconds === null ? [] : draft.paths,
+                    deployAccept: false
                 }),
                 integrityIntervalSeconds: draft.integrityIntervalSeconds,
                 method: draft.method,
@@ -260,37 +262,18 @@ export const uptimeHandlers = [
             const existing = await loadService(ctx, input.id, 'write');
             const draft = input.service;
             if (!isAllowedOutboundUrl(draft.url)) throw new FeatureError('validation', OUTBOUND_REFUSED_MESSAGE);
-            const paths = draft.integrityIntervalSeconds === null ? [] : draft.paths;
-            // Sans l'option, rien à accepter : les sources et l'adresse partent
-            // avec elle. Vérifiées avant toute écriture : un refus n'enregistre rien.
-            const integrity = draft.integrityIntervalSeconds !== null;
-            const sources = integrity ? draft.deploySources : [];
-            const previous = (await ctx.repo.services.listDeploySources([existing.id])).map((s) => ({
-                kind: s.kind,
-                id: Number(s.ref_id)
-            }));
-            await assertNewDeploySources({
-                providers: ctx.providers,
-                serviceId: existing.id,
-                workspaceId: existing.workspace_id,
-                userId: ctx.userId,
-                sources,
-                previous
-            });
             // Réécrit sous la clé de son espace d'origine : le chiffrer avec celle
             // d'ici le rendrait illisible chez lui, c'est-à-dire perdu pour tout le
             // monde y compris l'ordonnanceur qui le sonde.
-            const shares = await ctx.sharing.scope();
-            const cipher = await shares.cipherFor(String(input.id));
+            const cipher = await homeCipher(ctx, input.id);
             const before = await decryptService(cipher, existing.content);
             const row = await ctx.repo.services.update(input.id, existing.workspace_id, {
                 content: await encryptService(cipher, {
+                    ...before,
                     name: draft.name,
                     url: draft.url,
-                    keyword: draft.keyword,
-                    paths
+                    keyword: draft.keyword
                 }),
-                integrityIntervalSeconds: draft.integrityIntervalSeconds,
                 method: draft.method,
                 expectedStatus: draft.expectedStatus,
                 intervalSeconds: draft.intervalSeconds,
@@ -300,27 +283,70 @@ export const uptimeHandlers = [
                 enabled: draft.enabled
             });
             if (!row) throw new FeatureError('not_found', 'Uptime service not found');
-            // L'option allumée ou éteinte, une autre adresse, d'autres fichiers :
-            // la référence apprise ne décrit plus ce qu'on surveille, et la
-            // prochaine sonde relit le site pour en apprendre une.
-            const relearn =
-                (existing.integrity_interval_seconds === null) !== (draft.integrityIntervalSeconds === null) ||
-                before.url !== draft.url ||
-                before.paths.join('\n') !== paths.join('\n');
-            if (relearn) await ctx.repo.services.resetIntegrity(row.id);
-
-            await ctx.repo.services.setDeploySources(row.id, sources);
-            const hook = integrity && draft.deployHook;
-            if (hook && existing.deploy_hook_hash === null) {
-                const created = await newDeployHook(cipher);
-                await ctx.repo.services.setDeployHook(row.id, { hash: created.hash, enc: created.enc });
-            } else if (!hook && existing.deploy_hook_hash !== null) {
-                await ctx.repo.services.setDeployHook(row.id, null);
-            }
-
+            // Une autre adresse : la référence apprise ne décrit plus ce qu'on
+            // surveille, et la prochaine sonde relit le site pour en apprendre une.
+            if (before.url !== draft.url) await ctx.repo.services.resetIntegrity(row.id);
             ctx.audit({
                 action: 'uptime.update',
                 description: `Service surveillé modifié : « ${draft.name} »`,
+                metadata: { serviceId: row.id }
+            });
+            return { service: await toOneService(ctx, await loadService(ctx, row.id)) };
+        }
+    }),
+    defineSdkFeature({
+        ...uptimeUpdateIntegrity,
+        access: { level: 'write' },
+        mutates: true,
+        handler: async (ctx: Ctx, input) => {
+            const existing = await loadService(ctx, input.id, 'write');
+            const next = input.integrity;
+            const on = next.intervalSeconds !== null;
+            if (on && next.deployAccept && next.deploySources.length === 0 && !next.deployHook) {
+                throw new FeatureError('validation', 'Choisissez au moins une source de déploiement.');
+            }
+            // Vérifiées avant toute écriture : un refus n'enregistre rien.
+            const previous = (await ctx.repo.services.listDeploySources([existing.id])).map((s) => ({
+                kind: s.kind,
+                id: Number(s.ref_id)
+            }));
+            await assertNewDeploySources({
+                providers: ctx.providers,
+                serviceId: existing.id,
+                workspaceId: existing.workspace_id,
+                userId: ctx.userId,
+                sources: next.deploySources,
+                previous
+            });
+            const cipher = await homeCipher(ctx, input.id);
+            const before = await decryptService(cipher, existing.content);
+            const wasOn = existing.integrity_interval_seconds !== null;
+            const row = await ctx.repo.services.setIntegrity(input.id, existing.workspace_id, {
+                content: await encryptService(cipher, {
+                    ...before,
+                    paths: next.paths,
+                    deployAccept: next.deployAccept
+                }),
+                integrityIntervalSeconds: next.intervalSeconds
+            });
+            if (!row) throw new FeatureError('not_found', 'Uptime service not found');
+            // L'option allumée ou éteinte, d'autres fichiers : la référence
+            // apprise ne décrit plus ce qu'on surveille.
+            const relearn = wasOn !== on || before.paths.join('\n') !== next.paths.join('\n');
+            if (relearn) await ctx.repo.services.resetIntegrity(row.id);
+
+            // Éteintes, l'option et l'acceptation gardent leurs sources et
+            // l'adresse d'appel : une CI qui l'appelle ne casse pas pour autant.
+            await ctx.repo.services.setDeploySources(row.id, next.deploySources);
+            if (next.deployHook && existing.deploy_hook_hash === null) {
+                const created = await newDeployHook(cipher);
+                await ctx.repo.services.setDeployHook(row.id, { hash: created.hash, enc: created.enc });
+            } else if (!next.deployHook && existing.deploy_hook_hash !== null) {
+                await ctx.repo.services.setDeployHook(row.id, null);
+            }
+            ctx.audit({
+                action: 'uptime.update',
+                description: `Intégrité d’un service surveillé modifiée : « ${before.name} »`,
                 metadata: { serviceId: row.id }
             });
             return { service: await toOneService(ctx, await loadService(ctx, row.id)) };

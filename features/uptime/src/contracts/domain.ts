@@ -148,7 +148,9 @@ export const uptimeServiceSchema = z.object({
      * reading finds the reference again or the user accepts the current version.
      */
     integrityDrift: z.boolean(),
-    /** Integrity: what deploys the site; a drift they explain is accepted. Empty when the option is off. */
+    /** Integrity: accept a drift a deployment of the sources explains. */
+    deployAccept: z.boolean(),
+    /** Integrity: what deploys the site, kept while the option or the acceptance is off. */
     deploySources: z.array(uptimeDeploySourceSchema),
     /** Integrity: the service has a call address a CI hits after putting the site online. */
     deployHook: z.boolean(),

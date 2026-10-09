@@ -1092,3 +1092,15 @@
     font-size: 0.82rem;
     overflow-wrap: anywhere;
 }
+
+/* Les réglages qui dépendent d'un interrupteur : un bloc qui garde l'espacement
+   de la section, grisé tant que l'interrupteur est éteint. */
+.dependent {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+}
+
+.dependentOff {
+    filter: opacity(0.5);
+}
