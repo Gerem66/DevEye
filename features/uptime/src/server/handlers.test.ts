@@ -6,14 +6,17 @@ import {
     uptimeAcceptBaseline,
     uptimeAdd,
     uptimeCheckNow,
+    uptimeChecks,
     uptimeCount,
+    uptimeIncidents,
+    uptimeIntegrityReadings,
     uptimeList,
     uptimeRemove,
     uptimeSetEnabled,
     uptimeUpdate
 } from '../contracts/commands';
 import type { UptimeCheckRow, UptimeIncidentRow, UptimeServiceRow } from '../contracts/domain';
-import { FeatureError, type SdkFeatureContext } from '@deveye/types/sdk/server';
+import { FeatureError, type SdkCipher, type SdkFeatureContext } from '@deveye/types/sdk/server';
 import { createTestContext } from '@deveye/types/sdk/testing';
 
 import { setMonitor } from './_shared';
@@ -187,7 +190,9 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
             markIncidentNotified: async () => undefined,
             closeIncident: async () => undefined,
             listIncidents: async () => [],
-            pruneByRetention: async () => 0
+            addReading: async () => undefined,
+            listReadings: async () => [],
+            pruneByRetention: async () => ({ checks: 0, readings: 0 })
         },
         // Les pages de statut ont leurs propres tests (`pages.test.ts`).
         pages: {} as UptimePagesRepo,
@@ -345,6 +350,61 @@ describe('le partage inter-espaces', () => {
         assert.equal(repo.rows.length, 0);
         assert.deepEqual(home.forgotten, ['7']);
         assert.equal(home.recorded.audits[0].action, 'uptime.remove');
+    });
+});
+
+describe('les journaux d’une projection', () => {
+    /** Un codec qui étiquette son espace : un blob d'ailleurs ne s'ouvre pas. */
+    function tagged(tag: string): SdkCipher {
+        return {
+            encrypt: async (plain) => `${tag}:${plain}`,
+            decrypt: async (blob) => blob.slice(tag.length + 1),
+            tryDecrypt: async (blob) => (blob.startsWith(`${tag}:`) ? blob.slice(tag.length + 1) : null)
+        };
+    }
+
+    it('s’ouvrent sous la clé de l’espace d’origine, pas sous celle d’ici', async () => {
+        const repo = seed(fakeRepo({ 7: [1] }), row({ id: 7, workspace_id: 42 }));
+        repo.history.listChecks = async () => [
+            { id: 1, service_id: 7, checked_at: 10, up: 0, http_status: 502, response_ms: 40, error: 'chez:Statut 502' }
+        ];
+        repo.history.listIncidents = async () => [
+            {
+                id: 1,
+                service_id: 7,
+                started_at: 10,
+                ended_at: null,
+                http_status: 502,
+                error: 'chez:Statut 502',
+                notified: 0
+            }
+        ];
+        repo.history.listReadings = async () => [
+            {
+                id: 1,
+                service_id: 7,
+                checked_at: 10,
+                outcome: 'failed',
+                file_count: null,
+                slowest_ms: null,
+                detail: `chez:${JSON.stringify({ error: 'Statut HTTP 404 sur /t.js', lines: [] })}`
+            }
+        ];
+        const ctx = createTestContext({ repo, workspaceId: 1, shares: { 7: 42 } });
+        ctx.cipher = () => tagged('ici');
+        const scope = ctx.sharing.scope;
+        ctx.sharing = {
+            ...ctx.sharing,
+            scope: async () => ({ ...(await scope()), cipherFor: async () => tagged('chez') })
+        };
+
+        const filter = { since: null, failuresOnly: false };
+        const { checks } = await handlerFor(uptimeChecks)(ctx, { id: 7, limit: 10, filter });
+        assert.equal(checks[0].error, 'Statut 502');
+        const { incidents } = await handlerFor(uptimeIncidents)(ctx, { id: 7, limit: 10 });
+        assert.equal(incidents[0].error, 'Statut 502');
+        const { readings } = await handlerFor(uptimeIntegrityReadings)(ctx, { id: 7, limit: 10 });
+        assert.equal(readings[0].error, 'Statut HTTP 404 sur /t.js');
     });
 });
 

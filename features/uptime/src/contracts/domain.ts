@@ -188,6 +188,32 @@ export const uptimeCheckStatsSchema = z.object({
 export type UptimeCheckStats = z.infer<typeof uptimeCheckStatsSchema>;
 
 /**
+ * What one reading of the files found: the reference learned (first reading,
+ * or after the user accepted the current version), the files as referenced, a
+ * drift, or a file that could not be read.
+ */
+export const uptimeIntegrityOutcomeSchema = z.enum(['learned', 'conform', 'drift', 'failed']);
+export type UptimeIntegrityOutcome = z.infer<typeof uptimeIntegrityOutcomeSchema>;
+
+/**
+ * One reading of the files: the "journal des intégrités". Pruned with the raw
+ * pings (`retentionDays`).
+ */
+export const uptimeIntegrityReadingSchema = z.object({
+    at: z.number().int().nonnegative(),
+    outcome: uptimeIntegrityOutcomeSchema,
+    /** Files compared; `null` when the reading failed. */
+    fileCount: z.number().int().nonnegative().nullable(),
+    /** The slowest file, in ms; `null` when the reading failed. */
+    slowestMs: z.number().int().nonnegative().nullable(),
+    /** The drift in one line, or why the reading failed; `null` otherwise. */
+    error: z.string().nullable(),
+    /** A drift, file by file. */
+    lines: z.array(z.string())
+});
+export type UptimeIntegrityReading = z.infer<typeof uptimeIntegrityReadingSchema>;
+
+/**
  * One chart point. A `raw` point is a single ping (`checks === 1`); an `hour` or
  * `day` point aggregates every ping of its bucket, which is what keeps a
  * multi-year chart cheap.
@@ -305,6 +331,17 @@ export interface UptimeCheckRow {
     response_ms: number | null;
     /** Encrypted error string (open tier). */
     error: string | null;
+}
+
+export interface UptimeIntegrityReadingRow {
+    id: number;
+    service_id: number;
+    checked_at: number;
+    outcome: UptimeIntegrityOutcome;
+    file_count: number | null;
+    slowest_ms: number | null;
+    /** Encrypted `{ error, lines }` (open tier), null for a learned or conform reading. */
+    detail: string | null;
 }
 
 export interface UptimeDayRow {

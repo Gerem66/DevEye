@@ -128,9 +128,9 @@ describe('uptime : changement d’espace', () => {
             fromWorkspaceId: 1,
             toWorkspaceId: 2
         });
-        // Six cellules : contenu, dernière erreur, référence et verdict d'intégrité, et l'erreur des deux
-        // tables d'historique.
-        assert.equal(plan.rows, 12);
+        // Sept cellules : contenu, dernière erreur, référence et verdict d'intégrité, l'erreur des deux
+        // tables d'historique et le détail du journal des intégrités.
+        assert.equal(plan.rows, 14);
         assert.deepEqual(plan.blockers, []);
         assert.equal(plan.drops.length, 1);
         assert.match(plan.drops[0]!, /pages de statut/);

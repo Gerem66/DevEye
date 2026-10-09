@@ -34,6 +34,14 @@ export const uptimeAccountExport: FeatureAccountExport<UptimeRepo> = {
             sealed: ['error'],
             dates: { started_at: 's', ended_at: 's' }
         },
+        ft_uptime_integrity_readings: {
+            file: 'lectures-integrite.json',
+            where: OF_SERVICES,
+            key: ['id'],
+            sealed: ['detail'],
+            json: ['detail'],
+            dates: { checked_at: 's' }
+        },
         // Le lien public tiré au hasard ouvre la page à qui le connaît.
         ft_uptime_pages: {
             file: 'pages-de-statut.json',

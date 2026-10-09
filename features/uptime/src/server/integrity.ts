@@ -232,7 +232,7 @@ export function hasDrift(diff: IntegrityDiff): boolean {
     return diff.changed.length + diff.added.length + diff.removed.length > 0 || diff.cspChanged;
 }
 
-/** Une ligne : ce que porte `last_error` et la carte de la liste. */
+/** L'écart en une ligne : ce que dit le journal, et que `last_error` préfixe. */
 export function describeDrift(diff: IntegrityDiff): string {
     const parts: string[] = [];
     const n = (count: number, word: string) => `${count} fichier${count > 1 ? 's' : ''} ${word}${count > 1 ? 's' : ''}`;
@@ -240,7 +240,7 @@ export function describeDrift(diff: IntegrityDiff): string {
     if (diff.added.length > 0) parts.push(n(diff.added.length, 'ajouté'));
     if (diff.removed.length > 0) parts.push(n(diff.removed.length, 'retiré'));
     if (diff.cspChanged) parts.push('politique de contenu modifiée');
-    return `Intégrité : ${parts.join(', ')}`;
+    return parts.join(', ');
 }
 
 /** Le détail, fichier par fichier, pour l'incident et l'alerte. Borné : une alerte se lit d'un coup. */

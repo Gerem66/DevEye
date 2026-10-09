@@ -310,6 +310,14 @@
     background: var(--danger);
 }
 
+.dotWarn {
+    background: var(--warning);
+}
+
+.dotInfo {
+    background: var(--accent);
+}
+
 /* ------------------------------------------------------------------ *
  * Detail view
  * ------------------------------------------------------------------ */
@@ -733,6 +741,65 @@
     width: 100%;
 }
 
+/* Les journaux de la fiche, une moitié chacun : seul, celui des mesures garde
+   sa moitié gauche plutôt que de s'étirer sur toute la largeur. */
+.journals {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-md);
+    margin-top: var(--space-sm);
+}
+
+.journalPanel {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    min-width: 0;
+    padding: var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle);
+}
+
+/* La liste prend la largeur du panneau, le bouton garde la sienne. */
+.journalPanel > .pane {
+    align-self: stretch;
+}
+
+/* Une lecture se lit en entier : son texte passe à la ligne plutôt que d'être
+   coupé, et le détail d'un écart s'ouvre dessous. */
+.readingRow {
+    flex-wrap: wrap;
+}
+
+.readingOutcome {
+    white-space: nowrap;
+    color: var(--text-primary);
+}
+
+.readingText {
+    flex: 1 1 8em;
+    min-width: 0;
+    color: var(--text-muted);
+    overflow-wrap: anywhere;
+}
+
+.readingLines {
+    flex-basis: 100%;
+    padding-left: calc(8px + var(--space-sm));
+    font-size: 0.78rem;
+}
+
+.readingLines > summary {
+    cursor: pointer;
+    color: var(--text-secondary);
+}
+
+.readingLines > summary:hover {
+    color: var(--accent);
+}
+
 /* The browser fills the popup exactly, so the journal (not the page) owns the
    overflow. `min-height: 0` is what lets a flex child actually shrink to the
    space left, instead of being floored at its content height. */
@@ -928,6 +995,14 @@
     .incident,
     .checkRow {
         flex-wrap: wrap;
+    }
+
+    .journals {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .readingText {
+        flex-basis: 100%;
     }
 
     .checkStatus,

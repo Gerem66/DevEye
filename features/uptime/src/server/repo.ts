@@ -2,6 +2,8 @@ import type {
     UptimeCheckRow,
     UptimeCheckStats,
     UptimeIncidentRow,
+    UptimeIntegrityOutcome,
+    UptimeIntegrityReadingRow,
     UptimeMethod,
     UptimePoint,
     UptimeServiceRow,
@@ -164,11 +166,24 @@ export interface UptimeHistoryRepo {
     /** Close an outage at `endedAt`. */
     closeIncident(id: number, endedAt: number): Promise<void>;
     listIncidents(serviceId: number, limit: number): Promise<UptimeIncidentRow[]>;
+    /** Journal des intégrités : inscrit une lecture des fichiers. */
+    addReading(input: {
+        serviceId: number;
+        checkedAt: number;
+        outcome: UptimeIntegrityOutcome;
+        fileCount: number | null;
+        slowestMs: number | null;
+        /** `{ error, lines }` chiffré. */
+        detail: string | null;
+    }): Promise<void>;
+    /** Les lectures avant `before` (exclu), la plus récente d'abord. */
+    listReadings(serviceId: number, limit: number, before?: number): Promise<UptimeIntegrityReadingRow[]>;
     /**
-     * Drop raw pings older than each service's own `retention_days`. Services
-     * with no retention keep everything; the daily rollup is never touched.
+     * Drop raw pings and readings of the files older than each service's own
+     * `retention_days`. Services with no retention keep everything; the daily
+     * rollup is never touched.
      */
-    pruneByRetention(now: number): Promise<number>;
+    pruneByRetention(now: number): Promise<{ checks: number; readings: number }>;
 }
 
 export interface UptimeRepo {
@@ -602,14 +617,36 @@ function historyRepo(q: SdkQueryable): UptimeHistoryRepo {
                 [serviceId, limit]
             );
         },
+        async addReading({ serviceId, checkedAt, outcome, fileCount, slowestMs, detail }) {
+            await q.execute(
+                `INSERT INTO ft_uptime_integrity_readings (service_id, checked_at, outcome, file_count, slowest_ms, detail)
+                 VALUES (?, ?, ?, ?, ?, ?)`,
+                [serviceId, checkedAt, outcome, fileCount, slowestMs, detail]
+            );
+        },
+        async listReadings(serviceId, limit, before) {
+            return q.query<UptimeIntegrityReadingRow>(
+                `SELECT * FROM ft_uptime_integrity_readings
+                 WHERE service_id = ? ${before === undefined ? '' : 'AND checked_at < ?'}
+                 ORDER BY checked_at DESC, id DESC
+                 LIMIT ?`,
+                before === undefined ? [serviceId, limit] : [serviceId, before, limit]
+            );
+        },
         async pruneByRetention(now) {
-            const res = await q.execute(
+            const checks = await q.execute(
                 `DELETE c FROM uptime_checks c
                  JOIN uptime_services s ON s.id = c.service_id
                  WHERE s.retention_days IS NOT NULL AND c.checked_at < ? - s.retention_days * 86400`,
                 [now]
             );
-            return res.affectedRows;
+            const readings = await q.execute(
+                `DELETE r FROM ft_uptime_integrity_readings r
+                 JOIN uptime_services s ON s.id = r.service_id
+                 WHERE s.retention_days IS NOT NULL AND r.checked_at < ? - s.retention_days * 86400`,
+                [now]
+            );
+            return { checks: checks.affectedRows, readings: readings.affectedRows };
         }
     };
 }

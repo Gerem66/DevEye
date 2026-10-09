@@ -17,6 +17,7 @@ import {
     uptimeCheckSchema,
     uptimeCheckStatsSchema,
     uptimeIncidentSchema,
+    uptimeIntegrityReadingSchema,
     uptimeMethodSchema,
     uptimePageSchema,
     uptimePageServiceSchema,
@@ -193,6 +194,20 @@ export const uptimeIncidents = {
     output: z.object({ incidents: z.array(uptimeIncidentSchema) })
 };
 
+/**
+ * Journal des intégrités : les lectures des fichiers, la plus récente d'abord.
+ * `before` remonte le temps (borne haute exclue, en secondes).
+ */
+export const uptimeIntegrityReadings = {
+    command: 'uptime.integrityReadings' as const,
+    input: z.object({
+        id: serviceId,
+        limit: z.number().int().min(1).max(100),
+        before: z.number().int().nonnegative().optional()
+    }),
+    output: z.object({ readings: z.array(uptimeIntegrityReadingSchema) })
+};
+
 const pageId = z.number().int().positive();
 
 /** Tout ce qui se règle sur une page de statut. */
@@ -276,6 +291,7 @@ export const uptimeCommands = [
     uptimeChecks,
     uptimeCheckStats,
     uptimeIncidents,
+    uptimeIntegrityReadings,
     uptimePageList,
     uptimePageAdd,
     uptimePageUpdate,

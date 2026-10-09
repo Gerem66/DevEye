@@ -172,7 +172,7 @@ describe('diffCapture', () => {
         assert.equal(hasDrift(diff), true);
         assert.equal(
             describeDrift(diff),
-            'Intégrité : 1 fichier modifié, 1 fichier ajouté, 1 fichier retiré, politique de contenu modifiée'
+            '1 fichier modifié, 1 fichier ajouté, 1 fichier retiré, politique de contenu modifiée'
         );
         assert.deepEqual(detailDrift(diff), [
             'Modifié : /x.js',

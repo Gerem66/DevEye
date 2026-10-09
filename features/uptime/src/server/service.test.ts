@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import type { UptimeCheckRow, UptimeIncidentRow, UptimeServiceRow } from '../contracts/domain';
+import type {
+    UptimeCheckRow,
+    UptimeIncidentRow,
+    UptimeIntegrityReadingRow,
+    UptimeServiceRow
+} from '../contracts/domain';
 import { UPTIME_ITEMS_PROVIDER, type UptimeItemsProvider } from '@deveye/types/sdk';
 import { createTestServiceDeps } from '@deveye/types/sdk/testing';
 
@@ -21,6 +26,7 @@ interface FakeRepo extends UptimeRepo {
     rows: UptimeServiceRow[];
     checks: UptimeCheckRow[];
     incidents: UptimeIncidentRow[];
+    readings: UptimeIntegrityReadingRow[];
 }
 
 /**
@@ -60,6 +66,7 @@ function fakeRepo(over: Partial<UptimeServiceRow> = {}): FakeRepo {
     ];
     const checks: UptimeCheckRow[] = [];
     const incidents: UptimeIncidentRow[] = [];
+    const readings: UptimeIntegrityReadingRow[] = [];
     let incidentSeq = 0;
     const unused = async () => {
         throw new Error('non attendu ici');
@@ -68,6 +75,7 @@ function fakeRepo(over: Partial<UptimeServiceRow> = {}): FakeRepo {
         rows,
         checks,
         incidents,
+        readings,
         services: {
             listByWorkspace: unused,
             countInWorkspaces: unused,
@@ -167,7 +175,19 @@ function fakeRepo(over: Partial<UptimeServiceRow> = {}): FakeRepo {
                 if (incident) incident.ended_at = endedAt;
             },
             listIncidents: unused,
-            pruneByRetention: async () => 0
+            addReading: async ({ serviceId, checkedAt, outcome, fileCount, slowestMs, detail }) => {
+                readings.push({
+                    id: readings.length + 1,
+                    service_id: serviceId,
+                    checked_at: checkedAt,
+                    outcome,
+                    file_count: fileCount,
+                    slowest_ms: slowestMs,
+                    detail
+                });
+            },
+            listReadings: unused,
+            pruneByRetention: async () => ({ checks: 0, readings: 0 })
         },
         // Les pages de statut ont leurs propres tests (`pages.test.ts`).
         pages: {} as UptimePagesRepo,
@@ -286,11 +306,12 @@ describe('l’option d’intégrité', () => {
     const BASELINE = JSON.stringify({ capturedAt: 1, csp: CAPTURE.csp, files: CAPTURE.files, source: 'page' });
     const read = (reading: IntegrityReading): ProbeOutcome => ({ ...UP, reading });
     const LEARNED = read({ kind: 'learned', slowestMs: 300, capture: CAPTURE });
-    const CONFORM = read({ kind: 'conform', slowestMs: 20 });
+    const CONFORM = read({ kind: 'conform', slowestMs: 20, fileCount: 2 });
     const DRIFT = read({
         kind: 'drift',
         slowestMs: 90,
-        error: 'Intégrité : 1 fichier modifié',
+        fileCount: 2,
+        summary: '1 fichier modifié',
         lines: ['Modifié : /assets/app.js']
     });
     const UNREADABLE = read({ kind: 'failed', error: 'Statut HTTP 404 sur /assets/app.js' });
@@ -441,6 +462,45 @@ describe('l’option d’intégrité', () => {
         await probe(DOWN);
         assert.equal(repo.rows[0].integrity_checked_at, null);
         assert.equal(repo.rows[0].last_error, DOWN.error);
+        assert.equal(repo.readings.length, 0);
+    });
+
+    it('inscrit chaque lecture au journal des intégrités, et elle seule', async () => {
+        const repo = fakeRepo({ integrity_interval_seconds: 900, failure_threshold: 3 });
+        const { probe, age } = integrityMonitor(repo);
+
+        await probe(LEARNED);
+        await probe(UP);
+        age(900);
+        await probe(CONFORM);
+        age(900);
+        await probe(DRIFT);
+        age(900);
+        await probe(UNREADABLE);
+
+        const entries = repo.readings.map((r) => ({
+            outcome: r.outcome,
+            files: r.file_count,
+            ms: r.slowest_ms,
+            detail: r.detail === null ? null : (JSON.parse(r.detail) as unknown)
+        }));
+        // Le harnais chiffre à l'identité : le détail se lit tel qu'il a été écrit.
+        assert.deepEqual(entries, [
+            { outcome: 'learned', files: 2, ms: 300, detail: null },
+            { outcome: 'conform', files: 2, ms: 20, detail: null },
+            {
+                outcome: 'drift',
+                files: 2,
+                ms: 90,
+                detail: { error: '1 fichier modifié', lines: ['Modifié : /assets/app.js'] }
+            },
+            {
+                outcome: 'failed',
+                files: null,
+                ms: null,
+                detail: { error: 'Statut HTTP 404 sur /assets/app.js', lines: [] }
+            }
+        ]);
     });
 });
 

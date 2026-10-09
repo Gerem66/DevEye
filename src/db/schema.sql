@@ -1273,6 +1273,19 @@ CREATE TABLE `ft_sentinel_device_config` (
   CONSTRAINT `fk_ft_sentinel_device_config_device` FOREIGN KEY (`device_id`) REFERENCES `devices` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+CREATE TABLE `ft_uptime_integrity_readings` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `service_id` int NOT NULL,
+  `checked_at` bigint NOT NULL,
+  `outcome` varchar(8) COLLATE utf8mb4_general_ci NOT NULL,
+  `file_count` int DEFAULT NULL,
+  `slowest_ms` int DEFAULT NULL,
+  `detail` text COLLATE utf8mb4_general_ci,
+  PRIMARY KEY (`id`),
+  KEY `idx_ft_uptime_integrity_readings_service` (`service_id`,`checked_at`),
+  CONSTRAINT `fk_ft_uptime_integrity_readings_service` FOREIGN KEY (`service_id`) REFERENCES `uptime_services` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 CREATE TABLE `ft_uptime_page_services` (
   `page_id` int NOT NULL,
   `service_id` int NOT NULL,

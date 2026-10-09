@@ -1,4 +1,9 @@
-import { UPTIME_INTEGRITY_INTERVAL_MIN, type UptimeServiceRow, type UptimeStatus } from '../contracts/domain';
+import {
+    UPTIME_INTEGRITY_INTERVAL_MIN,
+    type UptimeIntegrityOutcome,
+    type UptimeServiceRow,
+    type UptimeStatus
+} from '../contracts/domain';
 import { mapLimit, type FeatureService, type FeatureServiceDeps, type SdkCipher } from '@deveye/types/sdk/server';
 
 // Horodatage et durée partagés par tous les émetteurs de l'app : importés, pas recopiés.
@@ -39,15 +44,15 @@ import type { UptimeRepo } from './repo';
  * workspace's *open* cipher (`deps.cipherFor`); see `Docs/SECURITY_MODEL.md`.
  */
 
-/** Élagage des pings bruts, une fois par heure. */
+/** Élagage des pings bruts et du journal des intégrités, une fois par heure. */
 const PRUNE_INTERVAL_MS = 60 * 60 * 1000;
 
 /** What a reading of the files found. */
 export type IntegrityReading =
     /** No reference yet: what the site serves becomes it. */
     | { kind: 'learned'; slowestMs: number; capture: IntegrityCapture }
-    | { kind: 'conform'; slowestMs: number }
-    | { kind: 'drift'; slowestMs: number; error: string; lines: string[] }
+    | { kind: 'conform'; slowestMs: number; fileCount: number }
+    | { kind: 'drift'; slowestMs: number; fileCount: number; summary: string; lines: string[] }
     /** A file could not be read (status, timeout, rate limit, too many files). */
     | { kind: 'failed'; error: string };
 
@@ -101,8 +106,9 @@ async function readFiles(
         const slowestMs = capture.slowestMs;
         if (!baseline) return { kind: 'learned', slowestMs, capture };
         const diff = diffCapture(baseline, capture);
-        if (!hasDrift(diff)) return { kind: 'conform', slowestMs };
-        return { kind: 'drift', slowestMs, error: describeDrift(diff), lines: detailDrift(diff) };
+        const fileCount = Object.keys(capture.files).length;
+        if (!hasDrift(diff)) return { kind: 'conform', slowestMs, fileCount };
+        return { kind: 'drift', slowestMs, fileCount, summary: describeDrift(diff), lines: detailDrift(diff) };
     } catch (e) {
         return { kind: 'failed', error: failureMessage(e, row) };
     }
@@ -134,11 +140,21 @@ export interface Measure {
     driftLines?: string[];
 }
 
-/** Ce qu'une lecture laisse sur la ligne du service. */
+/** Ce qu'une lecture inscrit au journal des intégrités. */
+export interface IntegrityEntry {
+    outcome: UptimeIntegrityOutcome;
+    fileCount: number | null;
+    slowestMs: number | null;
+    /** L'écart en une ligne et fichier par fichier, ou la raison d'une lecture ratée. */
+    detail: IntegrityVerdict | null;
+}
+
+/** Ce qu'une lecture laisse sur la ligne du service, et au journal. */
 export interface ReadingState {
     failures: number;
     verdict: IntegrityVerdict | null;
     learned: IntegrityCapture | null;
+    entry: IntegrityEntry;
 }
 
 /**
@@ -180,18 +196,49 @@ export function applyIntegrity(
         case 'learned':
             return {
                 measure: { ...http, responseMs: slowest(reading.slowestMs) },
-                reading: { failures: 0, verdict: null, learned: reading.capture }
+                reading: {
+                    failures: 0,
+                    verdict: null,
+                    learned: reading.capture,
+                    entry: {
+                        outcome: 'learned',
+                        fileCount: Object.keys(reading.capture.files).length,
+                        slowestMs: reading.slowestMs,
+                        detail: null
+                    }
+                }
             };
         case 'conform':
             return {
                 measure: { ...http, responseMs: slowest(reading.slowestMs) },
-                reading: { failures: 0, verdict: null, learned: null }
+                reading: {
+                    failures: 0,
+                    verdict: null,
+                    learned: null,
+                    entry: {
+                        outcome: 'conform',
+                        fileCount: reading.fileCount,
+                        slowestMs: reading.slowestMs,
+                        detail: null
+                    }
+                }
             };
         case 'drift': {
-            const verdict = { error: reading.error, lines: reading.lines };
+            // Le préfixe est ce que `publicReason` reconnaît d'un écart.
+            const verdict = { error: `Intégrité : ${reading.summary}`, lines: reading.lines };
             return {
                 measure: failWith(verdict, verdict.error, slowest(reading.slowestMs)),
-                reading: { failures: 0, verdict, learned: null }
+                reading: {
+                    failures: 0,
+                    verdict,
+                    learned: null,
+                    entry: {
+                        outcome: 'drift',
+                        fileCount: reading.fileCount,
+                        slowestMs: reading.slowestMs,
+                        detail: { error: reading.summary, lines: reading.lines }
+                    }
+                }
             };
         }
         case 'failed': {
@@ -206,7 +253,17 @@ export function applyIntegrity(
                       : null;
             return {
                 measure: verdict ? failWith(verdict, error) : { ...http, up: false, error },
-                reading: { failures, verdict, learned: null }
+                reading: {
+                    failures,
+                    verdict,
+                    learned: null,
+                    entry: {
+                        outcome: 'failed',
+                        fileCount: null,
+                        slowestMs: null,
+                        detail: { error: reading.error, lines: [] }
+                    }
+                }
             };
         }
     }
@@ -356,8 +413,13 @@ export class UptimeMonitor {
      */
     private async prune(): Promise<void> {
         try {
-            const uptimeChecks = await this.deps.repo.history.pruneByRetention(Math.floor(Date.now() / 1000));
-            if (uptimeChecks > 0) this.deps.logger.info({ uptimeChecks }, 'Pruned old uptime checks');
+            const pruned = await this.deps.repo.history.pruneByRetention(Math.floor(Date.now() / 1000));
+            if (pruned.checks + pruned.readings > 0) {
+                this.deps.logger.info(
+                    { uptimeChecks: pruned.checks, integrityReadings: pruned.readings },
+                    'Pruned old uptime checks'
+                );
+            }
         } catch (e) {
             this.deps.logger.error(
                 { err: e instanceof Error ? e.message : String(e) },
@@ -404,7 +466,7 @@ export class UptimeMonitor {
         }
     }
 
-    /** Persist a probe: raw ping, rollup, live state, reading of the files, incident, notification. */
+    /** Persist a probe: raw ping, rollup, live state, reading of the files and its journal entry, incident, notification. */
     private async record(
         row: UptimeServiceRow,
         target: ServicePayload,
@@ -432,6 +494,14 @@ export class UptimeMonitor {
                           source: learned.source
                       })
                     : null
+            });
+            await repo.history.addReading({
+                serviceId: row.id,
+                checkedAt: at,
+                outcome: reading.entry.outcome,
+                fileCount: reading.entry.fileCount,
+                slowestMs: reading.entry.slowestMs,
+                detail: await encryptVerdict(cipher, reading.entry.detail)
             });
         }
 

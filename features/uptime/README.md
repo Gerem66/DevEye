@@ -31,12 +31,13 @@ sont chiffrés à l'**étage ouvert**, puisque le vérificateur tourne en tâche
 session ni mot de passe. Aucune commande n'est verrouillée par le chiffrement
 par mot de passe : la feature s'ouvre et se lit sans prompt.
 
-Six tables : quatre du socle (`uptime_services`, `uptime_checks`,
+Sept tables : quatre du socle (`uptime_services`, `uptime_checks`,
 `uptime_daily`, `uptime_incidents`, dispensées du préfixe par l'allowlist de
-`deveye-feature.json`) et deux du module au préfixe `ft_uptime_` (les pages de
-statut, `src/server/migrations/001_status_pages.sql`). Les migrations
-`002_integrity.sql` et `003_integrity_option.sql` du module ajoutent à
-`uptime_services` les colonnes de l'option d'intégrité.
+`deveye-feature.json`) et trois du module au préfixe `ft_uptime_` (les pages de
+statut, `src/server/migrations/001_status_pages.sql`, et le journal des
+intégrités, `004_integrity_readings.sql`). Les migrations `002_integrity.sql` et
+`003_integrity_option.sql` du module ajoutent à `uptime_services` les colonnes
+de l'option d'intégrité.
 
 ## Le principe
 
@@ -130,6 +131,13 @@ que le site sert à cet instant devient la référence, et l'incident se referme
 par le chemin ordinaire, « rétabli » compris. Cocher ou décocher l'option,
 changer l'adresse ou la liste des chemins fait de même (`resetIntegrity`).
 
+Chaque lecture s'inscrit au **journal des intégrités**
+(`ft_uptime_integrity_readings`) avec son constat : référence apprise,
+conforme, écart ou lecture ratée, le nombre de fichiers comparés et le plus
+lent. Le détail d'un écart (fichier par fichier) ou la raison d'une lecture
+ratée y est chiffré à l'étage ouvert (`detail`). Une sonde qui ne relit pas les
+fichiers n'y laisse rien.
+
 Ce qu'elle voit et ne voit pas :
 
 - **Détecter, pas empêcher** : une attaque plus courte que le rythme de lecture
@@ -157,11 +165,12 @@ sessions distantes ([Docs/FEDERATION.md](../../Docs/FEDERATION.md)).
 
 ## Les trois niveaux d'historique
 
-| Table              | Contenu              | Purge                                                        |
-| ------------------ | -------------------- | ------------------------------------------------------------ |
-| `uptime_checks`    | chaque ping          | `retention_days` du service (90 j par défaut, `NULL` = tout) |
-| `uptime_daily`     | agrégat par jour UTC | **jamais**                                                   |
-| `uptime_incidents` | pannes (début / fin) | **jamais**                                                   |
+| Table                          | Contenu                     | Purge                                                        |
+| ------------------------------ | --------------------------- | ------------------------------------------------------------ |
+| `uptime_checks`                | chaque ping                 | `retention_days` du service (90 j par défaut, `NULL` = tout) |
+| `ft_uptime_integrity_readings` | chaque lecture des fichiers | `retention_days` du service, comme les pings                 |
+| `uptime_daily`                 | agrégat par jour UTC        | **jamais**                                                   |
+| `uptime_incidents`             | pannes (début / fin)        | **jamais**                                                   |
 
 C'est ce découpage qui tient la promesse « remonter des mois ou des années » :
 l'agrégat journalier est écrit dans le même souffle que le ping brut
@@ -286,8 +295,12 @@ client.
 Le journal complet a son propre étage (`MeasuresBrowser`) parce qu'un an de
 sondes fait des dizaines de milliers de lignes : en ligne dans le détail, il
 enterrerait les graphiques. Le détail n'en montre donc que les **8 dernières**
-(`CHECKS_PREVIEW`) et les 20 derniers incidents, et renvoie à l'étage du
-dessous, qui offre des filtres (période, échecs seulement), des agrégats
+(`CHECKS_PREVIEW`) et les 20 derniers incidents. Les mesures tiennent dans un
+panneau qui occupe la moitié gauche de la fiche ; avec l'option d'intégrité, le
+journal des intégrités (`IntegrityJournal`, `uptime.integrityReadings`) prend
+la moitié droite, 8 lectures à la fois et « Charger plus » pour remonter. Sur
+un téléphone, les deux panneaux s'empilent. « Voir toutes les mesures » mène à
+l'étage du dessous, qui offre des filtres (période, échecs seulement), des agrégats
 (`uptime.checkStats`, calculés sur toute la sélection et pas sur la page
 chargée) et une liste qui défile **dans sa propre boîte** : le panneau autour
 ne s'allonge jamais.
@@ -445,7 +458,7 @@ service.ts        UptimeMonitor : tick, pool, sonde HTTP, lecture des fichiers (
                   en pause
 integrity.ts      captureSite, diffCapture, describeDrift : la lecture des fichiers, pure, réseau injecté
 notice.ts         la mise en page Discord d'une alerte (down, recovered, integrity)
-handlers.ts       les treize commandes des services
+handlers.ts       les quatorze commandes des services
 pages.ts          les quatre commandes des pages de statut
 domains.ts        la vérification d'un domaine (jeton sous /.well-known/deveye-uptime), onRemoved
 statusPage/       routes.ts (cache, débit, domainRoot), view.ts (le modèle de la page), render.ts, html.ts,
@@ -454,8 +467,9 @@ copy.ts           uptimeTree : ce dont un service est fait (colonnes scellées),
 move.ts           le changement d'espace d'un service
 accountExport.ts  l'export des données du compte, table par table
 e2e.ts            le scénario de bout en bout : surveiller ce serveur même, tester, lire le verdict
-uninstall.sql     démonte les deux tables ft_uptime_*
-migrations/       001_status_pages.sql, 002_integrity.sql, 003_integrity_option.sql
+uninstall.sql     démonte les trois tables ft_uptime_*
+migrations/       001_status_pages.sql, 002_integrity.sql, 003_integrity_option.sql,
+                  004_integrity_readings.sql
 *.test.ts         handlers, service, integrity, notice, pages, repo, move, accountExport,
                   statusPage/routes, statusPage/view
 ```
@@ -468,6 +482,7 @@ Uptime.tsx             la vue complète : liste, fiche, journal
 ServiceList.tsx        la liste et le glisser-déposer (useDragReorder)
 ServiceCard.tsx        une ligne : état, bande 24 h, taux ; toute la ligne ouvre la fiche
 ServiceDetail.tsx      la fiche : graphiques, référence d'intégrité, incidents, aperçu du journal, « Tester »
+IntegrityJournal.tsx   le journal des intégrités, à droite des mesures quand l'option est cochée
 MeasuresBrowser.tsx    le journal complet : filtres, agrégats, défilement dans sa boîte
 StatusBars.tsx         la bande d'état (full / inline, trailing), le seuil « lent »
 UptimeChart.tsx        la courbe de latence, créneaux en échec ombrés

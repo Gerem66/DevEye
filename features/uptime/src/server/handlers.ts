@@ -7,6 +7,7 @@ import {
     uptimeCount,
     uptimeHistory,
     uptimeIncidents,
+    uptimeIntegrityReadings,
     uptimeList,
     uptimeRemove,
     uptimeReorder,
@@ -21,7 +22,7 @@ import {
     type UptimeService,
     type UptimeServiceRow
 } from '../contracts/domain';
-import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
+import { defineSdkFeature, FeatureError, type SdkCipher } from '@deveye/types/sdk/server';
 
 // Le garde des appels sortants, partagé par toute l'app : refuser l'adresse à
 // l'écriture, là où le membre voit pourquoi, plutôt qu'à la première sonde.
@@ -30,6 +31,7 @@ import { isAllowedOutboundUrl, OUTBOUND_REFUSED_MESSAGE } from '@/Services/netFe
 import {
     decryptError,
     decryptService,
+    decryptVerdict,
     encryptService,
     monitor,
     toIncident,
@@ -52,6 +54,15 @@ async function loadService(ctx: Ctx, id: number, level: 'read' | 'write' = 'read
     if (!row) throw new FeatureError('not_found', 'Uptime service not found');
     await ctx.items.assert(String(id), level);
     return row;
+}
+
+/**
+ * La clé de l'espace où vit le service : un service projeté d'ailleurs reste
+ * scellé sous celle de son domicile, et l'ouvrir avec celle d'ici rendrait ses
+ * messages vides.
+ */
+async function homeCipher(ctx: Ctx, id: number): Promise<SdkCipher> {
+    return (await ctx.sharing.scope()).cipherFor(String(id));
 }
 
 function ratio(stat: UptimeWindowStat | undefined): number | null {
@@ -394,6 +405,7 @@ export const uptimeHandlers = [
         ...uptimeChecks,
         handler: async (ctx: Ctx, input) => {
             await loadService(ctx, input.id);
+            const cipher = await homeCipher(ctx, input.id);
             const rows = await ctx.repo.history.listChecks(input.id, input.filter, input.limit, input.before);
             return {
                 checks: await Promise.all(
@@ -402,7 +414,7 @@ export const uptimeHandlers = [
                         up: row.up === 1,
                         httpStatus: row.http_status,
                         responseMs: row.response_ms,
-                        error: await decryptError(ctx.cipher(), row.error)
+                        error: await decryptError(cipher, row.error)
                     }))
                 )
             };
@@ -419,8 +431,32 @@ export const uptimeHandlers = [
         ...uptimeIncidents,
         handler: async (ctx: Ctx, input) => {
             await loadService(ctx, input.id);
+            const cipher = await homeCipher(ctx, input.id);
             const rows = await ctx.repo.history.listIncidents(input.id, input.limit);
-            return { incidents: await Promise.all(rows.map((row) => toIncident(ctx.cipher(), row))) };
+            return { incidents: await Promise.all(rows.map((row) => toIncident(cipher, row))) };
+        }
+    }),
+    defineSdkFeature({
+        ...uptimeIntegrityReadings,
+        handler: async (ctx: Ctx, input) => {
+            await loadService(ctx, input.id);
+            const cipher = await homeCipher(ctx, input.id);
+            const rows = await ctx.repo.history.listReadings(input.id, input.limit, input.before);
+            return {
+                readings: await Promise.all(
+                    rows.map(async (row) => {
+                        const detail = await decryptVerdict(cipher, row.detail);
+                        return {
+                            at: row.checked_at,
+                            outcome: row.outcome,
+                            fileCount: row.file_count,
+                            slowestMs: row.slowest_ms,
+                            error: detail?.error ?? null,
+                            lines: detail?.lines ?? []
+                        };
+                    })
+                )
+            };
         }
     })
 ];

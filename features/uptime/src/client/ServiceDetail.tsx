@@ -21,6 +21,7 @@ import type {
 import { api } from './api';
 import { formatDuration, formatEvery, formatMs, formatRatio } from '../contracts/format';
 import { formatAgo, formatMoment, rangeWindow, RANGES } from './format';
+import IntegrityJournal from './IntegrityJournal';
 import MeasuresBrowser from './MeasuresBrowser';
 import Pane from './Pane';
 import StatusBars from './StatusBars';
@@ -41,11 +42,12 @@ interface ServiceDetailProps {
 }
 
 /**
- * One service in full: availability curve over a chosen window, outage log and
- * the raw ping journal.
+ * One service in full: availability curve over a chosen window, outage log,
+ * the raw ping journal and, with the integrity option, the journal of the
+ * readings of its files.
  *
- * The three panels load independently (a slow journal never holds the chart
- * back), and only the chart re-queries when the range changes.
+ * The panels load independently (a slow journal never holds the chart back),
+ * and only the chart re-queries when the range changes.
  */
 export function ServiceDetail({ service, onBack, onCheckNow, onAcceptBaseline }: ServiceDetailProps) {
     const [range, setRange] = useState<UptimeRange>('24h');
@@ -316,32 +318,37 @@ export function ServiceDetail({ service, onBack, onCheckNow, onAcceptBaseline }:
                 </Pane>
             </section>
 
-            <section className={styles.section}>
-                <h4 className={styles.sectionTitle}>Journal des mesures</h4>
-                <Pane busy={busyChecks}>
-                    {checks.length === 0 ? (
-                        <p className={styles.empty}>Aucune mesure enregistrée.</p>
-                    ) : (
-                        <ul className={styles.list}>
-                            {checks.map((check, i) => (
-                                <li key={`${check.at}-${i}`} className={styles.checkRow}>
-                                    <span
-                                        className={`${styles.dot} ${check.up ? styles.dotUp : styles.dotDown}`}
-                                        aria-hidden='true'
-                                    />
-                                    <span className={styles.checkWhen}>{formatMoment(check.at)}</span>
-                                    <span className={styles.checkStatus}>{check.httpStatus ?? '–'}</span>
-                                    <span className={styles.checkMs}>{formatMs(check.responseMs)}</span>
-                                    <span className={styles.checkError}>{check.error ?? ''}</span>
-                                </li>
-                            ))}
-                        </ul>
-                    )}
-                </Pane>
-                <Button variant='ghost' icon='list' onClick={() => setJournalOpen(true)}>
-                    Voir toutes les mesures
-                </Button>
-            </section>
+            <div className={styles.journals}>
+                <section className={styles.journalPanel}>
+                    <h4 className={styles.sectionTitle}>Journal des mesures</h4>
+                    <Pane busy={busyChecks}>
+                        {checks.length === 0 ? (
+                            <p className={styles.empty}>Aucune mesure enregistrée.</p>
+                        ) : (
+                            <ul className={styles.list}>
+                                {checks.map((check, i) => (
+                                    <li key={`${check.at}-${i}`} className={styles.checkRow}>
+                                        <span
+                                            className={`${styles.dot} ${check.up ? styles.dotUp : styles.dotDown}`}
+                                            aria-hidden='true'
+                                        />
+                                        <span className={styles.checkWhen}>{formatMoment(check.at)}</span>
+                                        <span className={styles.checkStatus}>{check.httpStatus ?? '–'}</span>
+                                        <span className={styles.checkMs}>{formatMs(check.responseMs)}</span>
+                                        <span className={styles.checkError}>{check.error ?? ''}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                    </Pane>
+                    <Button variant='ghost' icon='list' onClick={() => setJournalOpen(true)}>
+                        Voir toutes les mesures
+                    </Button>
+                </section>
+                {service.integrityIntervalSeconds !== null && (
+                    <IntegrityJournal serviceId={service.id} stamp={service.integrityCheckedAt} />
+                )}
+            </div>
 
             <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
 

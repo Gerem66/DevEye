@@ -38,13 +38,23 @@ export const uptimeTree: ItemTree = [
         ]
     },
     { table: 'uptime_checks', idColumn: 'id', ownerColumn: 'service_id', sealed: ['error'], cache: true },
-    { table: 'uptime_incidents', idColumn: 'id', ownerColumn: 'service_id', sealed: ['error'], cache: true }
+    { table: 'uptime_incidents', idColumn: 'id', ownerColumn: 'service_id', sealed: ['error'], cache: true },
+    {
+        table: 'ft_uptime_integrity_readings',
+        idColumn: 'id',
+        ownerColumn: 'service_id',
+        sealed: ['detail'],
+        cache: true
+    }
 ];
 
 export const uptimeCopy: FeatureItemsCopy<UptimeRepo> = {
     tree: uptimeTree,
     async plan() {
-        return { blockers: [], drops: ['Son historique de contrôles et d’incidents : la copie repart de zéro'] };
+        return {
+            blockers: [],
+            drops: ['Son historique de contrôles, d’incidents et de lectures des fichiers : la copie repart de zéro']
+        };
     },
     async admit({ repo, quota }) {
         await quota.assert('monitors', async (owned) => (await repo.services.countInWorkspaces(owned)) + 1);
