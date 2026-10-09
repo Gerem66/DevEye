@@ -12,6 +12,24 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: readonly ChangelogEntry[] = [
     {
+        version: '0.24.5',
+        date: '2026-10-09',
+        changes: [
+            {
+                kind: 'added',
+                text: 'Uptime : un onglet Intégrité dans les réglages d’un service, qui peut accepter sans alerte les changements de fichiers apportés par un déploiement réussi, repéré dans vos projets, vos déploiements, vos dépôts Git ou par une adresse que votre CI appelle'
+            },
+            {
+                kind: 'added',
+                text: 'Uptime : sur la fiche d’un service, le journal des intégrités s’affiche à côté de celui des mesures, avec chaque relecture des fichiers et le détail d’un écart'
+            },
+            {
+                kind: 'fixed',
+                text: 'Uptime : les journaux d’un service partagé depuis un autre espace affichent de nouveau leurs messages d’erreur'
+            }
+        ]
+    },
+    {
         version: '0.24.4',
         date: '2026-10-09',
         changes: [
