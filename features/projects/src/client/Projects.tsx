@@ -5,6 +5,7 @@ import {
     humanizeError,
     invalidate,
     StatusBadge,
+    StickyHeader,
     useActiveWorkspace,
     useCurrentUser,
     useDragReorder,
@@ -310,56 +311,58 @@ export function FeatureProjects(_props: FeatureViewProps) {
 
     return (
         <div className={styles.root}>
-            <header className={styles.header}>
-                <div className={sideView ? styles.detailHead : undefined}>
-                    {sideView && (
-                        <Button
-                            variant='ghost'
-                            icon='arrow-left'
-                            onClick={() => {
-                                setShowMine(false);
-                                setShowArchived(false);
-                            }}
-                        >
-                            Retour
-                        </Button>
-                    )}
-                    <div>
-                        <h2 className={styles.heading}>
-                            {showMine ? 'Mes tâches' : showArchived ? 'Projets archivés' : 'Projets'}
-                        </h2>
-                        {totals && !sideView && (
-                            <p className={styles.subheading}>
-                                {totals.count} projet{totals.count > 1 ? 's' : ''}
-                                {totals.overdue > 0 &&
-                                    ` · ${totals.overdue} tâche${totals.overdue > 1 ? 's' : ''} en retard`}
-                                {totals.unread > 0 &&
-                                    ` · ${totals.unread} message${totals.unread > 1 ? 's' : ''} non lu${totals.unread > 1 ? 's' : ''}`}
-                            </p>
-                        )}
-                    </div>
-                </div>
-
-                {!sideView && (
-                    <div className={styles.actions}>
-                        <Button variant='secondary' onClick={() => setShowMine(true)}>
-                            <span className='icon icon-user' />
-                            Mes tâches
-                        </Button>
-
-                        <Button variant='secondary' onClick={() => setShowArchived(true)}>
-                            <span className='icon icon-archive' />
-                            Archives
-                        </Button>
-
-                        {canManage && (
-                            <Button icon='add' onClick={openCreate}>
-                                Nouveau projet
+            <StickyHeader>
+                <header className={styles.header}>
+                    <div className={sideView ? styles.detailHead : undefined}>
+                        {sideView && (
+                            <Button
+                                variant='ghost'
+                                icon='arrow-left'
+                                onClick={() => {
+                                    setShowMine(false);
+                                    setShowArchived(false);
+                                }}
+                            >
+                                Retour
                             </Button>
                         )}
+                        <div>
+                            <h2 className={styles.heading}>
+                                {showMine ? 'Mes tâches' : showArchived ? 'Projets archivés' : 'Projets'}
+                            </h2>
+                            {totals && !sideView && (
+                                <p className={styles.subheading}>
+                                    {totals.count} projet{totals.count > 1 ? 's' : ''}
+                                    {totals.overdue > 0 &&
+                                        ` · ${totals.overdue} tâche${totals.overdue > 1 ? 's' : ''} en retard`}
+                                    {totals.unread > 0 &&
+                                        ` · ${totals.unread} message${totals.unread > 1 ? 's' : ''} non lu${totals.unread > 1 ? 's' : ''}`}
+                                </p>
+                            )}
+                        </div>
                     </div>
-                )}
-            </header>
+
+                    {!sideView && (
+                        <div className={styles.actions}>
+                            <Button variant='secondary' onClick={() => setShowMine(true)}>
+                                <span className='icon icon-user' />
+                                Mes tâches
+                            </Button>
+
+                            <Button variant='secondary' onClick={() => setShowArchived(true)}>
+                                <span className='icon icon-archive' />
+                                Archives
+                            </Button>
+
+                            {canManage && (
+                                <Button icon='add' onClick={openCreate}>
+                                    Nouveau projet
+                                </Button>
+                            )}
+                        </div>
+                    )}
+                </header>
+            </StickyHeader>
 
             {error && <p className={styles.error}>{error}</p>}
 

@@ -44,6 +44,7 @@ declare const styles: {
     readonly formatArrow: string;
     readonly formatField: string;
     readonly formats: string;
+    readonly headBand: string;
     readonly header: string;
     readonly job: string;
     readonly jobActions: string;

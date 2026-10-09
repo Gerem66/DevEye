@@ -1,0 +1,20 @@
+/* Le fond doit être opaque : sans lui, le contenu défilerait visiblement dessous.
+   Au-dessus des voiles et des bandeaux collants du contenu, sous ses menus. */
+.band {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: var(--surface-popup-solid);
+}
+
+/* Le retrait du bas reste à la main de l'appelant : une barre d'onglets, qui
+   porte déjà son trait, le ramène à zéro. */
+:where(.band) {
+    padding-bottom: var(--space-sm);
+}
+
+/* Un trait intérieur, que la bordure d'une barre d'onglets recouvre au lieu de
+   le doubler. */
+.band[data-stuck] {
+    box-shadow: inset 0 -1px 0 var(--glass-border);
+}

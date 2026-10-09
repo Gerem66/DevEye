@@ -3,6 +3,7 @@ import {
     Button,
     SearchSelect,
     SegmentedControl,
+    StickyHeader,
     TextInput,
     useResource,
     useWorkspacePermissions,
@@ -98,24 +99,26 @@ export default function DocumentsPage({ currency, onBack, onOpen, onNew }: Docum
 
     return (
         <div className={styles.page}>
-            <header className={styles.pageHead}>
-                <Button
-                    variant='ghost'
-                    icon='arrow-left'
-                    className={styles.back}
-                    aria-label='Accueil'
-                    title='Accueil'
-                    onClick={onBack}
-                >
-                    <span className={styles.backLabel}>Accueil</span>
-                </Button>
-                <h2 className={styles.pageTitle}>Documents</h2>
-                {canWrite && (
-                    <Button icon='add' onClick={onNew}>
-                        Document
+            <StickyHeader>
+                <header className={styles.pageHead}>
+                    <Button
+                        variant='ghost'
+                        icon='arrow-left'
+                        className={styles.back}
+                        aria-label='Accueil'
+                        title='Accueil'
+                        onClick={onBack}
+                    >
+                        <span className={styles.backLabel}>Accueil</span>
                     </Button>
-                )}
-            </header>
+                    <h2 className={styles.pageTitle}>Documents</h2>
+                    {canWrite && (
+                        <Button icon='add' onClick={onNew}>
+                            Document
+                        </Button>
+                    )}
+                </header>
+            </StickyHeader>
 
             <div className={styles.filters}>
                 <div className={styles.filterKind}>

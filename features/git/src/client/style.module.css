@@ -152,13 +152,20 @@
     pointer-events: none;
 }
 
-/* Collé à la zone visible : `.gitContent` dépasse la fenêtre, un `inset: 0`
-   centrerait hors écran ; `position: sticky` se cale sur le corps défilant de
-   la popup. Hauteur déduite de la géométrie de la popup, pas d'un `100vh`. */
+/* Collé à la zone visible, sous l'en-tête collant : `.gitContent` dépasse la
+   fenêtre, un `inset: 0` centrerait hors écran ; `position: sticky` se cale sur
+   le corps défilant de la popup. Hauteur déduite de la géométrie de la popup,
+   pas d'un `100vh`. */
 .syncPanel {
     position: sticky;
-    top: 0;
-    height: min(100%, calc(100vh - var(--navbar-height) - var(--space-md) - var(--space-lg) - 2 * var(--space-md)));
+    top: var(--sticky-head, 0px);
+    height: min(
+        100%,
+        calc(
+            100vh - var(--navbar-height) - var(--space-md) - var(--space-lg) - 2 * var(--space-md) -
+                var(--sticky-head, 0px)
+        )
+    );
     display: flex;
     flex-direction: column;
     align-items: center;

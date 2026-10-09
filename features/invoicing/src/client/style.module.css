@@ -1390,6 +1390,15 @@
 
 /* ── Les onglets d'une fiche, soulignés, sur toute la largeur ───────────── */
 
+/* L'en-tête et les onglets d'une fiche dans le même bandeau collant, dont le
+   trait des onglets borde déjà le bas. */
+.detailSticky {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    padding-bottom: 0;
+}
+
 .tabs {
     display: flex;
     gap: var(--space-xs);

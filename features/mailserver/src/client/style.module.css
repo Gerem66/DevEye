@@ -9,10 +9,6 @@
 }
 
 .header {
-    position: sticky;
-    top: var(--sticky-head, 0px);
-    z-index: 2;
-    background: var(--block-bg, var(--surface-popup-solid));
     display: flex;
     align-items: flex-start;
     justify-content: space-between;

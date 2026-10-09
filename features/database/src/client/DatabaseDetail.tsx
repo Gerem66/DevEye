@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button } from 'deveye-sdk-client';
+import { Button, StickyHeader } from 'deveye-sdk-client';
 import type { Database, DatabaseAlert, DatabaseProbe, DatabaseUsage } from '../contracts/domain';
 
 import { DatabaseHeader } from './DatabaseHeader';
@@ -43,19 +43,21 @@ export function DatabaseDetail({
     return (
         <div className={expanded ? styles.rootExpanded : styles.root}>
             {!expanded && (
-                <DatabaseHeader
-                    database={database}
-                    canWrite={canWrite}
-                    busy={busy}
-                    onTest={onTest}
-                    onInspect={onInspect}
-                    onGone={onBack}
-                    before={
-                        <Button variant='ghost' icon='arrow-left' onClick={onBack}>
-                            Bases
-                        </Button>
-                    }
-                />
+                <StickyHeader>
+                    <DatabaseHeader
+                        database={database}
+                        canWrite={canWrite}
+                        busy={busy}
+                        onTest={onTest}
+                        onInspect={onInspect}
+                        onGone={onBack}
+                        before={
+                            <Button variant='ghost' icon='arrow-left' onClick={onBack}>
+                                Bases
+                            </Button>
+                        }
+                    />
+                </StickyHeader>
             )}
 
             <DatabaseView

@@ -6,6 +6,7 @@ import {
     onResourceChange,
     onSocketOpen,
     PlanPausedNotice,
+    StickyHeader,
     useActiveWorkspace,
     useLiveSegment
 } from 'deveye-sdk-client';
@@ -133,24 +134,26 @@ export default function Uptime(_props: FeatureViewProps) {
                     }
                 />
             ) : (
-                <>
-                    <div className={styles.toolbar}>
-                        <p className={styles.headline}>
-                            {loading
-                                ? 'Chargement…'
-                                : services.length === 0
-                                  ? 'Aucun service surveillé'
-                                  : downCount > 0
-                                    ? `${downCount} service${downCount > 1 ? 's' : ''} hors ligne`
-                                    : 'Tous les services répondent'}
-                        </p>
-                        <div className={styles.toolbarActions}>
-                            <FeatureSettingsButton scope={{ kind: 'feature', feature: 'uptime' }} />
-                            <Button icon='plus' onClick={() => setAddOpen(true)}>
-                                Ajouter un service
-                            </Button>
+                <div className={styles.overview}>
+                    <StickyHeader className={styles.toolbarBand}>
+                        <div className={styles.toolbar}>
+                            <p className={styles.headline}>
+                                {loading
+                                    ? 'Chargement…'
+                                    : services.length === 0
+                                      ? 'Aucun service surveillé'
+                                      : downCount > 0
+                                        ? `${downCount} service${downCount > 1 ? 's' : ''} hors ligne`
+                                        : 'Tous les services répondent'}
+                            </p>
+                            <div className={styles.toolbarActions}>
+                                <FeatureSettingsButton scope={{ kind: 'feature', feature: 'uptime' }} />
+                                <Button icon='plus' onClick={() => setAddOpen(true)}>
+                                    Ajouter un service
+                                </Button>
+                            </div>
                         </div>
-                    </div>
+                    </StickyHeader>
 
                     {error && <p className={styles.error}>{error}</p>}
                     <PlanPausedNotice count={planPausedCount} one='service surveillé' many='services surveillés' />
@@ -170,7 +173,7 @@ export default function Uptime(_props: FeatureViewProps) {
                             }}
                         />
                     )}
-                </>
+                </div>
             )}
 
             <ServiceDialog

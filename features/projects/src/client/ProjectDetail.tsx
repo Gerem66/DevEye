@@ -6,10 +6,10 @@ import {
     humanizeError,
     invalidate,
     StatusBadge,
+    StickyHeader,
     useLiveOutlines,
     useLiveSegment,
     useResourceVersion,
-    useStickyOffset,
     useSubView,
     withSecrecy
 } from 'deveye-sdk-client';
@@ -85,10 +85,6 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
     /** Le geste que le menu « + » a lancé, tant qu'il n'est pas clos. */
     const [adding, setAdding] = useState<ProjectTabAddKey | null>(null);
 
-    // Un onglet peut porter son propre bandeau collant (Audience et sa barre de
-    // période) : il se pose sous l'en-tête du projet, dont la hauteur varie avec
-    // le titre et les retours à la ligne des onglets. D'où la mesure.
-    const sticky = useStickyOffset<HTMLDivElement>();
     const [columns, setColumns] = useState<ProjectColumn[]>([]);
     const [cards, setCards] = useState<ProjectCard[]>([]);
     const [loaded, setLoaded] = useState(false);
@@ -502,13 +498,10 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
     };
 
     return (
-        <div
-            className={tab === 'board' || tab === 'timeline' ? `${styles.root} ${styles.rootFit}` : styles.root}
-            style={sticky.style}
-        >
+        <div className={tab === 'board' || tab === 'timeline' ? `${styles.root} ${styles.rootFit}` : styles.root}>
             {/* En-tête et onglets dans un seul bloc collant : deux blocs
                 superposés glisseraient l'un sous l'autre au défilement. */}
-            <div ref={sticky.ref} className={styles.detailSticky}>
+            <StickyHeader className={styles.detailSticky}>
                 <header className={styles.header}>
                     <div className={styles.detailHead}>
                         <Button variant='ghost' icon='arrow-left' onClick={onBack}>
@@ -574,7 +567,7 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
                     onAdd={(_tab, action) => setAdding(action.key)}
                     outline={outlineForTab}
                 />
-            </div>
+            </StickyHeader>
 
             {error && <p className={styles.error}>{error}</p>}
             {actionError && (

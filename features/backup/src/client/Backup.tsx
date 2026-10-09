@@ -8,6 +8,7 @@ import {
     formatBytesFr,
     humanizeError,
     invalidate,
+    StickyHeader,
     useLiveSegment,
     useResource,
     useSubView,
@@ -89,24 +90,26 @@ export default function Backup(_props: FeatureViewProps) {
         <div className={styles.root}>
             {opened === null ? (
                 <>
-                    <div className={styles.toolbar}>
-                        <div className={styles.toolbarInfo}>
-                            <h2 className={styles.title}>Sauvegardes</h2>
-                            <p className={styles.subtitle}>
-                                {destinationCount === 0
-                                    ? 'Aucune destination pour l’instant : le premier travail vous proposera d’en déclarer une, ou passez par Réglages → Destinations.'
-                                    : `${destinationCount} destination${destinationCount > 1 ? 's' : ''} déclarée${destinationCount > 1 ? 's' : ''}`}
-                            </p>
+                    <StickyHeader>
+                        <div className={styles.toolbar}>
+                            <div className={styles.toolbarInfo}>
+                                <h2 className={styles.title}>Sauvegardes</h2>
+                                <p className={styles.subtitle}>
+                                    {destinationCount === 0
+                                        ? 'Aucune destination pour l’instant : le premier travail vous proposera d’en déclarer une, ou passez par Réglages → Destinations.'
+                                        : `${destinationCount} destination${destinationCount > 1 ? 's' : ''} déclarée${destinationCount > 1 ? 's' : ''}`}
+                                </p>
+                            </div>
+                            <div className={styles.toolbarActions}>
+                                <FeatureSettingsButton scope={{ kind: 'feature', feature: 'backup' }} />
+                                {canWrite && (
+                                    <Button icon='plus' onClick={() => setAddOpen(true)}>
+                                        Nouveau travail
+                                    </Button>
+                                )}
+                            </div>
                         </div>
-                        <div className={styles.toolbarActions}>
-                            <FeatureSettingsButton scope={{ kind: 'feature', feature: 'backup' }} />
-                            {canWrite && (
-                                <Button icon='plus' onClick={() => setAddOpen(true)}>
-                                    Nouveau travail
-                                </Button>
-                            )}
-                        </div>
-                    </div>
+                    </StickyHeader>
 
                     {(error ?? jobsResource.error) && <p className={styles.error}>{error ?? jobsResource.error}</p>}
                     {jobs === null && !jobsResource.error && <p className={styles.empty}>Chargement…</p>}

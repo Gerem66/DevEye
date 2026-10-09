@@ -11,6 +11,7 @@ import { ws, WsError } from '@/api/ws';
 import Button from '@/Components/Button';
 import { ConfirmDialog, type ConfirmRequest } from '@/Components/ConfirmDialog';
 import SegmentedControl from '@/Components/SegmentedControl';
+import StickyHeader from '@/Components/StickyHeader';
 import TextInput from '@/Components/TextInput';
 import { SnapshotView } from './SnapshotView';
 
@@ -201,26 +202,28 @@ export default function FeatureFeedback() {
 
     return (
         <div className={styles.container}>
-            <header className={styles.header}>
-                <div className={styles.headerText}>
-                    <h2 className={styles.title}>Retours</h2>
-                    <p className={styles.subtitle}>
-                        {total.toLocaleString('fr-FR')} signalement{total !== 1 ? 's' : ''}
-                        {filtered ? ' (filtré)' : ''}
-                        {pending > 0 && ` · ${pending} en attente`}
-                    </p>
-                </div>
-                <div className={styles.headerActions}>
-                    <Button icon='refresh' variant='secondary' onClick={() => void reload(filter)}>
-                        Actualiser
-                    </Button>
-                    {filtered && (
-                        <Button icon='x' variant='ghost' onClick={() => setFilter(EMPTY_FILTER)}>
-                            Réinitialiser
+            <StickyHeader className={styles.headerBand}>
+                <header className={styles.header}>
+                    <div className={styles.headerText}>
+                        <h2 className={styles.title}>Retours</h2>
+                        <p className={styles.subtitle}>
+                            {total.toLocaleString('fr-FR')} signalement{total !== 1 ? 's' : ''}
+                            {filtered ? ' (filtré)' : ''}
+                            {pending > 0 && ` · ${pending} en attente`}
+                        </p>
+                    </div>
+                    <div className={styles.headerActions}>
+                        <Button icon='refresh' variant='secondary' onClick={() => void reload(filter)}>
+                            Actualiser
                         </Button>
-                    )}
-                </div>
-            </header>
+                        {filtered && (
+                            <Button icon='x' variant='ghost' onClick={() => setFilter(EMPTY_FILTER)}>
+                                Réinitialiser
+                            </Button>
+                        )}
+                    </div>
+                </header>
+            </StickyHeader>
 
             <div className={styles.filters}>
                 <SegmentedControl

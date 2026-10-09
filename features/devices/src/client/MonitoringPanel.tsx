@@ -7,6 +7,7 @@ import {
     onServerEvent,
     openInfo,
     PlanPausedBadge,
+    StickyHeader,
     useWorkspacePermissions
 } from 'deveye-sdk-client';
 import {
@@ -1053,65 +1054,67 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
 
     return (
         <div className={styles.metricsPanel}>
-            <div className={styles.metricsPanelHeader}>
-                <h3>{selected.name}</h3>
-                <div className={styles.headerRight}>
-                    {/* L'état de l'appareil ouvre la rangée : on le lit avant
-                        de choisir quoi faire de la machine. */}
-                    {report?.agent?.insecureTransport && (
-                        <span
-                            className={`${styles.onlineBadge} ${styles.offline}`}
-                            title='Cet agent joint le serveur en http : son jeton et tout ce qu’il reçoit, terminal compris, circulent en clair'
-                        >
-                            Transport non chiffré
-                        </span>
-                    )}
-                    {archived ? (
-                        <span className={`${styles.onlineBadge} ${styles.archived}`}>Archivé</span>
-                    ) : pending ? (
-                        <span className={`${styles.onlineBadge} ${styles.awaiting}`}>En attente d’approbation</span>
-                    ) : (
-                        <span
-                            className={`${styles.onlineBadge} ${online ? styles.online : styles.offline}`}
-                            title={`Relevé ${formatEvery(selected.effectiveMetricIntervalSeconds)}`}
-                        >
-                            {online ? 'En ligne' : 'Hors ligne'}
-                        </span>
-                    )}
-                    {paused && <PlanPausedBadge />}
-                    {online && !archived && canWrite && agentUpdatable(selected) && (
-                        <button
-                            className={`${styles.iconHeaderBtn} ${styles.iconHeaderUpdate}`}
-                            onClick={() => void updater.update(selected.id)}
-                            disabled={updater.isBusy(selected.id)}
-                            title={
-                                selected.latestAgentVersion
-                                    ? `Mettre à jour l’agent vers la v${selected.latestAgentVersion}`
-                                    : 'Mettre à jour l’agent'
-                            }
-                        >
+            <StickyHeader className={styles.metricsBand}>
+                <div className={styles.metricsPanelHeader}>
+                    <h3>{selected.name}</h3>
+                    <div className={styles.headerRight}>
+                        {/* L'état de l'appareil ouvre la rangée : on le lit avant
+                            de choisir quoi faire de la machine. */}
+                        {report?.agent?.insecureTransport && (
                             <span
-                                className={`icon ${updater.isBusy(selected.id) ? `icon-spinner ${styles.spinning}` : 'icon-cloud'}`}
-                            />
-                        </button>
-                    )}
-                    {online && !archived && (
-                        <button
-                            className={styles.iconHeaderBtn}
-                            onClick={refreshNow}
-                            disabled={refreshing}
-                            title='Rafraîchir maintenant'
-                        >
-                            <span className={`icon icon-refresh ${refreshing ? styles.spinning : ''}`} />
-                        </button>
-                    )}
-                    <DeviceActionsMenu actions={deviceActions} />
-                    {/* En dernier, comme partout : les réglages de CET appareil. */}
-                    <FeatureSettingsButton
-                        scope={{ kind: 'item', feature: 'devices', itemId: selected.id, itemLabel: selected.name }}
-                    />
+                                className={`${styles.onlineBadge} ${styles.offline}`}
+                                title='Cet agent joint le serveur en http : son jeton et tout ce qu’il reçoit, terminal compris, circulent en clair'
+                            >
+                                Transport non chiffré
+                            </span>
+                        )}
+                        {archived ? (
+                            <span className={`${styles.onlineBadge} ${styles.archived}`}>Archivé</span>
+                        ) : pending ? (
+                            <span className={`${styles.onlineBadge} ${styles.awaiting}`}>En attente d’approbation</span>
+                        ) : (
+                            <span
+                                className={`${styles.onlineBadge} ${online ? styles.online : styles.offline}`}
+                                title={`Relevé ${formatEvery(selected.effectiveMetricIntervalSeconds)}`}
+                            >
+                                {online ? 'En ligne' : 'Hors ligne'}
+                            </span>
+                        )}
+                        {paused && <PlanPausedBadge />}
+                        {online && !archived && canWrite && agentUpdatable(selected) && (
+                            <button
+                                className={`${styles.iconHeaderBtn} ${styles.iconHeaderUpdate}`}
+                                onClick={() => void updater.update(selected.id)}
+                                disabled={updater.isBusy(selected.id)}
+                                title={
+                                    selected.latestAgentVersion
+                                        ? `Mettre à jour l’agent vers la v${selected.latestAgentVersion}`
+                                        : 'Mettre à jour l’agent'
+                                }
+                            >
+                                <span
+                                    className={`icon ${updater.isBusy(selected.id) ? `icon-spinner ${styles.spinning}` : 'icon-cloud'}`}
+                                />
+                            </button>
+                        )}
+                        {online && !archived && (
+                            <button
+                                className={styles.iconHeaderBtn}
+                                onClick={refreshNow}
+                                disabled={refreshing}
+                                title='Rafraîchir maintenant'
+                            >
+                                <span className={`icon icon-refresh ${refreshing ? styles.spinning : ''}`} />
+                            </button>
+                        )}
+                        <DeviceActionsMenu actions={deviceActions} />
+                        {/* En dernier, comme partout : les réglages de CET appareil. */}
+                        <FeatureSettingsButton
+                            scope={{ kind: 'item', feature: 'devices', itemId: selected.id, itemLabel: selected.name }}
+                        />
+                    </div>
                 </div>
-            </div>
+            </StickyHeader>
 
             {display ? (
                 <div

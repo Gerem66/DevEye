@@ -515,6 +515,12 @@
     gap: var(--space-sm);
 }
 
+/* Le bandeau collant de la fiche prend la teinte de la carte, posée sur le fond
+   opaque de la popup : le fond nu de la popup s'y détacherait en bande. */
+.metricsPanel > .metricsBand {
+    background: linear-gradient(var(--glass-bg-light), var(--glass-bg-light)), var(--surface-popup-solid);
+}
+
 .metricsPanel h3 {
     font-size: 1.1rem;
     font-weight: 600;

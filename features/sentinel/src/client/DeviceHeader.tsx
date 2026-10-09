@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, FeatureSettingsButton, StatusBadge } from 'deveye-sdk-client';
+import { Button, FeatureSettingsButton, StatusBadge, StickyHeader } from 'deveye-sdk-client';
 
 import { SENTINEL_RULES, type DeviceSentinelState, type RuleProbe } from '../contracts/domain';
 
@@ -56,63 +56,71 @@ export default function DeviceHeader({ device, onScanNow }: Props) {
     }
 
     return (
-        <header className={styles.header}>
-            <div className={styles.headerTop}>
-                <div className={styles.headerIdentity}>
-                    <h2 className={styles.heading}>{device.deviceName}</h2>
-                    <div className={styles.headerBadges}>
-                        {!device.enabled ? (
-                            <StatusBadge tone='neutral'>non surveillé</StatusBadge>
-                        ) : device.learning ? (
-                            <StatusBadge tone='accent'>
-                                apprentissage, {learningLeft} j restant{(learningLeft ?? 0) > 1 ? 's' : ''}
-                            </StatusBadge>
-                        ) : (
-                            <StatusBadge tone='success'>surveillé</StatusBadge>
-                        )}
-                        {device.enabled && device.lastIntegrityAt === null && (
-                            <StatusBadge tone='warning' dot={false}>
-                                persistance pas encore relevée
-                            </StatusBadge>
-                        )}
+        <>
+            <StickyHeader>
+                <header className={styles.header}>
+                    <div className={styles.headerTop}>
+                        <div className={styles.headerIdentity}>
+                            <h2 className={styles.heading}>{device.deviceName}</h2>
+                            <div className={styles.headerBadges}>
+                                {!device.enabled ? (
+                                    <StatusBadge tone='neutral'>non surveillé</StatusBadge>
+                                ) : device.learning ? (
+                                    <StatusBadge tone='accent'>
+                                        apprentissage, {learningLeft} j restant{(learningLeft ?? 0) > 1 ? 's' : ''}
+                                    </StatusBadge>
+                                ) : (
+                                    <StatusBadge tone='success'>surveillé</StatusBadge>
+                                )}
+                                {device.enabled && device.lastIntegrityAt === null && (
+                                    <StatusBadge tone='warning' dot={false}>
+                                        persistance pas encore relevée
+                                    </StatusBadge>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className={styles.headerActions}>
+                            {device.enabled && (
+                                <Button variant='secondary' icon='search' disabled={busy} onClick={() => void scan()}>
+                                    Relever maintenant
+                                </Button>
+                            )}
+                            {/* Une machine non surveillée l'affiche en primaire, avec le
+                                seul geste qu'elle attend. */}
+                            <FeatureSettingsButton
+                                scope={{ kind: 'feature', feature: 'sentinel' }}
+                                initialSection='devices'
+                                variant={device.enabled ? 'ghost' : 'primary'}
+                                label={device.enabled ? 'Réglages' : 'Activer la surveillance'}
+                            />
+                        </div>
                     </div>
-                </div>
+                    {/* Sous le bouton qui l'a demandé, visible même la vue défilée. */}
+                    {notice && <p className={styles.notice}>{notice}</p>}
+                </header>
+            </StickyHeader>
 
-                <div className={styles.headerActions}>
-                    {device.enabled && (
-                        <Button variant='secondary' icon='search' disabled={busy} onClick={() => void scan()}>
-                            Relever maintenant
-                        </Button>
+            {device.enabled && (device.learning || missing.length > 0) && (
+                <div className={styles.headerExtras}>
+                    {device.learning && (
+                        <p className={styles.headerNote}>
+                            Pendant l’apprentissage, Sentinelle observe sans rien reprocher : les écarts de comportement
+                            restent muets. Les règles qui n’en dépendent pas (
+                            {SENTINEL_RULES['exec.suspicious_path'].label.toLowerCase()}, posture, authentification)
+                            répondent déjà.
+                        </p>
                     )}
-                    {/* Une machine non surveillée l'affiche en primaire, avec le
-                        seul geste qu'elle attend. */}
-                    <FeatureSettingsButton
-                        scope={{ kind: 'feature', feature: 'sentinel' }}
-                        initialSection='devices'
-                        variant={device.enabled ? 'ghost' : 'primary'}
-                        label={device.enabled ? 'Réglages' : 'Activer la surveillance'}
-                    />
+
+                    {missing.length > 0 && (
+                        <p className={styles.headerNote}>
+                            Non mesuré sur cette machine : {missing.map((p) => PROBE_LABEL[p]).join(', ')}. L’agent est
+                            probablement antérieur à ces sondes : les règles correspondantes restent muettes plutôt que
+                            de conclure à vide.
+                        </p>
+                    )}
                 </div>
-            </div>
-
-            {device.enabled && device.learning && (
-                <p className={styles.headerNote}>
-                    Pendant l’apprentissage, Sentinelle observe sans rien reprocher : les écarts de comportement restent
-                    muets. Les règles qui n’en dépendent pas (
-                    {SENTINEL_RULES['exec.suspicious_path'].label.toLowerCase()}, posture, authentification) répondent
-                    déjà.
-                </p>
             )}
-
-            {device.enabled && missing.length > 0 && (
-                <p className={styles.headerNote}>
-                    Non mesuré sur cette machine : {missing.map((p) => PROBE_LABEL[p]).join(', ')}. L’agent est
-                    probablement antérieur à ces sondes : les règles correspondantes restent muettes plutôt que de
-                    conclure à vide.
-                </p>
-            )}
-
-            {notice && <p className={styles.notice}>{notice}</p>}
-        </header>
+        </>
     );
 }

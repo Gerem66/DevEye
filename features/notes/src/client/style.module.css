@@ -36,10 +36,16 @@ html[data-theme='light'] {
     --note-purple: #7e22ce;
 }
 
+/* Une hauteur plancher et non fixe : l'en-tête ne colle que dans cette boîte,
+   qui doit donc tenir tout le contenu. */
 .container {
     display: flex;
     flex-direction: column;
-    height: 100%;
+    min-height: 100%;
+}
+
+.headerBand {
+    margin-bottom: var(--space-lg);
 }
 
 .header {
@@ -48,7 +54,6 @@ html[data-theme='light'] {
     align-items: center;
     gap: var(--space-md);
     flex-wrap: wrap;
-    margin-bottom: var(--space-lg);
 }
 
 .headerText {

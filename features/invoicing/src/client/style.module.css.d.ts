@@ -34,6 +34,7 @@ declare const styles: {
     readonly deliveryNote: string;
     readonly deliveryUrl: string;
     readonly detailHead: string;
+    readonly detailSticky: string;
     readonly dialogField: string;
     readonly dialogFields: string;
     readonly dialogHint: string;

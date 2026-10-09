@@ -55,21 +55,26 @@
     margin-top: auto;
 }
 
-/* Full view */
+/* La vue complète, à hauteur plancher et non fixe : l'en-tête ne colle que
+   dans cette boîte, qui doit donc tenir tout le contenu. */
 .container {
     display: flex;
     flex-direction: column;
-    height: 100%;
+    min-height: 100%;
 }
 
-/* L'en-tête commun : le titre à gauche, les actions à droite. C'est lui qui
-   porte la marge basse, le titre reste un simple intitulé. */
+/* Le bandeau de l'en-tête porte la marge basse, le titre reste un simple
+   intitulé. */
+.headerBand {
+    margin-bottom: var(--space-lg);
+}
+
+/* L'en-tête commun : le titre à gauche, les actions à droite. */
 .header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: var(--space-md);
-    margin-bottom: var(--space-lg);
 }
 
 .title {

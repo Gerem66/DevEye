@@ -7,6 +7,7 @@ import {
     FeatureSettingsButton,
     SegmentedControl,
     StatusBadge,
+    StickyHeader,
     useResource,
     type ErrorNoteInput
 } from 'deveye-sdk-client';
@@ -98,36 +99,38 @@ export function ReviewPage({ base, onBack, onImport }: ReviewPageProps) {
 
     return (
         <div className={styles.page}>
-            <header className={styles.header}>
-                <div className={styles.detailHead}>
-                    <Button variant='ghost' icon='arrow-left' onClick={onBack}>
-                        Accueil
-                    </Button>
-                    <div className={styles.ident}>
-                        <h2 className={styles.heading}>Relevés</h2>
-                        {data && (
-                            <p className={styles.subheading}>
-                                {pendingCount === 0
-                                    ? 'Tout est rapproché'
-                                    : `${pendingCount} ligne${pendingCount > 1 ? 's' : ''} à rapprocher`}
-                            </p>
+            <StickyHeader>
+                <header className={styles.header}>
+                    <div className={styles.detailHead}>
+                        <Button variant='ghost' icon='arrow-left' onClick={onBack}>
+                            Accueil
+                        </Button>
+                        <div className={styles.ident}>
+                            <h2 className={styles.heading}>Relevés</h2>
+                            {data && (
+                                <p className={styles.subheading}>
+                                    {pendingCount === 0
+                                        ? 'Tout est rapproché'
+                                        : `${pendingCount} ligne${pendingCount > 1 ? 's' : ''} à rapprocher`}
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                    <div className={styles.actions}>
+                        <FeatureSettingsButton
+                            scope={{ kind: 'feature', feature: 'finance' }}
+                            initialSection='rules'
+                            variant='ghost'
+                            label='Règles'
+                        />
+                        {base.canWrite && (
+                            <Button icon='file' onClick={onImport}>
+                                Importer
+                            </Button>
                         )}
                     </div>
-                </div>
-                <div className={styles.actions}>
-                    <FeatureSettingsButton
-                        scope={{ kind: 'feature', feature: 'finance' }}
-                        initialSection='rules'
-                        variant='ghost'
-                        label='Règles'
-                    />
-                    {base.canWrite && (
-                        <Button icon='file' onClick={onImport}>
-                            Importer
-                        </Button>
-                    )}
-                </div>
-            </header>
+                </header>
+            </StickyHeader>
 
             <ErrorNote note={note} />
 

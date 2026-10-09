@@ -130,6 +130,9 @@ export {
 } from '@/upload';
 /** La jauge d'un quota dans l'en-tête d'une fonctionnalité. */
 export { UsageMeter } from '@/Components/UsageMeter';
+/** Le bandeau du haut d'une vue, collé pendant qu'on fait défiler son contenu. */
+export { StickyHeader } from '@/Components/StickyHeader';
+export type { StickyHeaderProps } from '@/Components/StickyHeader';
 
 // ── Les données ────────────────────────────────────────────────────────────
 export { humanizeError, useResource } from '@/api/useResource';
@@ -173,8 +176,6 @@ export { userColorVar } from '@/Features/Profile/userColors';
  * (un canevas, une lib tierce) s'en sert pour les relire quand il change.
  */
 export { useColorScheme } from '@/stores/colorScheme';
-/** Deux bandeaux collants l'un sous l'autre : la mesure du haut, décalage du bas. */
-export { useStickyOffset, type StickyOffset } from '@/stickyOffset';
 /**
  * Le contrat client qu'un autre module offre (`FeatureClient.providers`), soit
  * l'inverse de `providers` du manifest. `undefined` quand ce module n'est pas

@@ -6,8 +6,8 @@ import {
     openFeature,
     PlanPausedBadge,
     StatusBadge,
+    StickyHeader,
     useLiveSegment,
-    useStickyOffset,
     useSubView
 } from 'deveye-sdk-client';
 import type { AudienceEventsQuota, AudienceForm, AudienceSite, AudienceUsage } from '../contracts/domain';
@@ -77,11 +77,6 @@ export function SiteDetail({
     useLiveSegment('l2', section);
     useSubView(section === null ? 'site' : `site/${section}`);
 
-    // La barre de période des sections colle juste sous cet en-tête. Sa hauteur est
-    // mesurée et non écrite en dur : elle change dès que le nom du site passe à la ligne
-    // ou que les boutons se replient.
-    const sticky = useStickyOffset<HTMLElement>();
-
     /**
      * Rien n'est encore arrivé sur cette section : le bouton d'installation y
      * passe en avant. Sur les Retours c'est l'absence de formulaire qui le dit,
@@ -107,68 +102,79 @@ export function SiteDetail({
     };
 
     return (
-        <div className={styles.detail} style={sticky.style}>
-            <header ref={sticky.ref} className={styles.detailHead}>
-                {/* Le bouton de retour des autres fiches, à l'identique : `Button`
+        <div className={styles.detail}>
+            <StickyHeader>
+                <header className={styles.detailHead}>
+                    {/* Le bouton de retour des autres fiches, à l'identique : `Button`
                     fantôme, flèche à gauche. Depuis une section il ramène au sommaire,
                     qui est le niveau juste au-dessus. */}
-                <Button variant='ghost' icon='arrow-left' onClick={section === null ? onBack : () => setSection(null)}>
-                    {section === null ? 'Sites' : site.name}
-                </Button>
-
-                <div className={styles.detailTitle}>
-                    <h2 className={styles.detailName}>
-                        {section === null ? site.name : SECTION_LABELS[section]}
-                        <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
-                        {site.planPaused && <PlanPausedBadge />}
-                        {/* Sans cette pastille, rien ne distingue un site local d'une
-                            fenêtre sur l'espace voisin. */}
-                        {site.foreign && (
-                            <span
-                                className={styles.detailBadge}
-                                title='Ce site appartient à un autre espace qui le partage ici'
-                            >
-                                <StatusBadge tone='accent'>partagé</StatusBadge>
-                            </span>
-                        )}
-                    </h2>
-                    {section === null && site.description && <p className={styles.detailDesc}>{site.description}</p>}
-                </div>
-
-                <div className={styles.detailActions}>
-                    <Button variant='secondary' onClick={refresh} aria-label='Rafraîchir' title='Rafraîchir'>
-                        <span className={`icon icon-refresh ${refreshing ? styles.spinning : ''}`} aria-hidden='true' />
+                    <Button
+                        variant='ghost'
+                        icon='arrow-left'
+                        onClick={section === null ? onBack : () => setSection(null)}
+                    >
+                        {section === null ? 'Sites' : site.name}
                     </Button>
 
-                    {/* Un seul bouton « Installer », à la même place quelle que soit
+                    <div className={styles.detailTitle}>
+                        <h2 className={styles.detailName}>
+                            {section === null ? site.name : SECTION_LABELS[section]}
+                            <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
+                            {site.planPaused && <PlanPausedBadge />}
+                            {/* Sans cette pastille, rien ne distingue un site local d'une
+                            fenêtre sur l'espace voisin. */}
+                            {site.foreign && (
+                                <span
+                                    className={styles.detailBadge}
+                                    title='Ce site appartient à un autre espace qui le partage ici'
+                                >
+                                    <StatusBadge tone='accent'>partagé</StatusBadge>
+                                </span>
+                            )}
+                        </h2>
+                        {section === null && site.description && (
+                            <p className={styles.detailDesc}>{site.description}</p>
+                        )}
+                    </div>
+
+                    <div className={styles.detailActions}>
+                        <Button variant='secondary' onClick={refresh} aria-label='Rafraîchir' title='Rafraîchir'>
+                            <span
+                                className={`icon icon-refresh ${refreshing ? styles.spinning : ''}`}
+                                aria-hidden='true'
+                            />
+                        </Button>
+
+                        {/* Un seul bouton « Installer », à la même place quelle que soit
                         la section : ce qu'il ouvre change, pas où on le cherche. La
                         balise au sommaire, la mesure sur Fréquentation, les signaux
                         nommés sur Entonnoirs, le formulaire ouvert sur Retours. Il
                         passe en avant tant que rien n'est arrivé : c'est la seule
                         chose à faire à ce moment-là. */}
-                    <Button
-                        variant={awaiting ? 'primary' : 'secondary'}
-                        icon='terminal'
-                        onClick={() => setInstallOpen(true)}
-                    >
-                        Installer
-                    </Button>
-                    {/* Les réglages de ce site, son identité et sa suppression
+                        <Button
+                            variant={awaiting ? 'primary' : 'secondary'}
+                            icon='terminal'
+                            onClick={() => setInstallOpen(true)}
+                        >
+                            Installer
+                        </Button>
+                        {/* Les réglages de ce site, son identité et sa suppression
                         comprises (onglet Général), avec le partage et les
                         restrictions par rôle. Le bouton se garde lui-même. Supprimé
                         ou déplacé depuis la coquille, le site n'est plus ici : la
                         fiche revient à la liste. */}
-                    {/* Ouvert depuis une section, il tombe sur l'onglet de cette
+                        {/* Ouvert depuis une section, il tombe sur l'onglet de cette
                         section : chercher « Fréquentation » alors qu'on la regarde
                         déjà est un clic qui n'apprend rien. Depuis le sommaire ou
                         les entonnoirs, la coquille garde son choix habituel. */}
-                    <FeatureSettingsButton
-                        scope={{ kind: 'item', feature: 'audience', itemId: String(site.id), itemLabel: site.name }}
-                        initialSection={section === 'traffic' || section === 'forms' ? section : undefined}
-                        onGone={onBack}
-                    />
-                </div>
-            </header>
+                        <FeatureSettingsButton
+                            scope={{ kind: 'item', feature: 'audience', itemId: String(site.id), itemLabel: site.name }}
+                            initialSection={section === 'traffic' || section === 'forms' ? section : undefined}
+                            onGone={onBack}
+                        />
+                    </div>
+                </header>
+            </StickyHeader>
 
             {/* Un site partagé ici est borné par l'offre de son propre espace, pas par celle-ci. */}
             {site.active && !site.planPaused && !site.foreign && <QuotaNotice quota={eventsQuota} />}

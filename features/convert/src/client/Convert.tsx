@@ -8,6 +8,7 @@ import {
     invalidate,
     onServerEvent,
     saveFrom,
+    StickyHeader,
     UploadError,
     uploadFile,
     useResource,
@@ -230,23 +231,28 @@ export default function Convert(_props: FeatureViewProps) {
 
     return (
         <div className={styles.root}>
-            <div className={styles.header}>
-                {!atRoot && (
-                    <Button
-                        variant='ghost'
-                        icon='arrow-left'
-                        disabled={sending !== null}
-                        // Un export parti suit son cours sans cet écran : il reste dans la liste de l'accueil.
-                        onClick={() => (active ? startOver() : wizard.open('kinds'))}
-                    >
-                        Tous les types
-                    </Button>
-                )}
-                <h2 className={styles.title}>{atRoot ? manifest.label : `Convertir ${KIND_NOUNS[kindOf(kind).id]}`}</h2>
-                <FeatureSettingsButton scope={{ kind: 'feature', feature: 'convert' }} />
-            </div>
+            <StickyHeader className={styles.headBand}>
+                <div className={styles.header}>
+                    {!atRoot && (
+                        <Button
+                            variant='ghost'
+                            icon='arrow-left'
+                            disabled={sending !== null}
+                            // Un export parti suit son cours sans cet écran : il reste dans la liste de l'accueil.
+                            onClick={() => (active ? startOver() : wizard.open('kinds'))}
+                        >
+                            Tous les types
+                        </Button>
+                    )}
+                    <h2 className={styles.title}>
+                        {atRoot ? manifest.label : `Convertir ${KIND_NOUNS[kindOf(kind).id]}`}
+                    </h2>
+                    <FeatureSettingsButton scope={{ kind: 'feature', feature: 'convert' }} />
+                </div>
 
-            <Stepper steps={steps} current={state.view} onGo={(id) => wizard.open(id as typeof state.view)} />
+                <Stepper steps={steps} current={state.view} onGo={(id) => wizard.open(id as typeof state.view)} />
+            </StickyHeader>
+
             {caps.error && (
                 <p className={styles.problem} role='alert'>
                     {caps.error}

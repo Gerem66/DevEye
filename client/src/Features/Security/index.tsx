@@ -4,6 +4,7 @@ import { Dialog } from '@/Components/Dialog';
 import { openInfo } from '@/Components/InfoPopup';
 import Button from '@/Components/Button';
 import CopyButton from '@/Components/CopyButton';
+import StickyHeader from '@/Components/StickyHeader';
 import Term from '@/Components/Term';
 import { useAuth } from '@/auth/AuthProvider';
 import { copyText } from '@/copyText';
@@ -328,10 +329,12 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
 
     return (
         <div className={styles.container}>
-            <h2 className={styles.title}>Sécurité</h2>
-            <p className={styles.subtitle}>
-                Protégez votre compte et vos données avec des couches de sécurité supplémentaires
-            </p>
+            <StickyHeader>
+                <h2 className={styles.title}>Sécurité</h2>
+                <p className={styles.subtitle}>
+                    Protégez votre compte et vos données avec des couches de sécurité supplémentaires
+                </p>
+            </StickyHeader>
 
             {loading ? (
                 <div className={styles.loader}>Chargement...</div>

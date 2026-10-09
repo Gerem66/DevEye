@@ -231,6 +231,7 @@ declare const styles: {
     readonly logView: string;
     readonly logViewWrap: string;
     readonly logsPanel: string;
+    readonly metricsBand: string;
     readonly metricsPanel: string;
     readonly metricsPanelHeader: string;
     readonly miniDot: string;

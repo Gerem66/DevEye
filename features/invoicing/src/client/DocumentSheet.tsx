@@ -10,6 +10,7 @@ import {
     humanizeError,
     invalidate,
     StatusBadge,
+    StickyHeader,
     TextInput,
     useLiveSegment,
     useResource,
@@ -628,112 +629,114 @@ export default function DocumentSheet({
 
     return (
         <div className={styles.sheet}>
-            <header className={`${styles.header} ${styles.sheetHeader}`}>
-                <div className={styles.detailHead}>
-                    <Button
-                        variant='ghost'
-                        icon='arrow-left'
-                        className={styles.back}
-                        aria-label={backLabel}
-                        title={backLabel}
-                        onClick={onBack}
-                    >
-                        <span className={styles.backLabel}>{backLabel}</span>
-                    </Button>
-                    <div className={styles.ident}>
-                        <h2 className={styles.heading}>
-                            {doc.numberLabel ?? `${kindLabel(doc.kind)} en préparation`}
-                            {doc.subject.length > 0 && (
-                                <span className={styles.headingSoft}>
-                                    <span className={styles.headingSep}> · </span>
-                                    {doc.subject}
-                                </span>
-                            )}
-                        </h2>
-                        <p className={styles.subheading}>
-                            <StatusBadge tone={STATUS_TONE[doc.displayStatus]}>
-                                {statusLabel(doc.kind, doc.displayStatus)}
-                            </StatusBadge>{' '}
-                            {doc.archived && (
-                                <>
-                                    <StatusBadge tone='neutral'>Archivé</StatusBadge>{' '}
-                                </>
-                            )}
-                            {clientName.length > 0 ? clientName : 'aucun client choisi'}
-                            {doc.issuedOn !== null && ` · émis le ${formatDate(doc.issuedOn)}`}
-                            {note !== null && ` · ${note}`}
-                            {draft && ` · ${STATE_WORDS[state]}`}
-                        </p>
+            <StickyHeader className={styles.detailSticky}>
+                <header className={`${styles.header} ${styles.sheetHeader}`}>
+                    <div className={styles.detailHead}>
+                        <Button
+                            variant='ghost'
+                            icon='arrow-left'
+                            className={styles.back}
+                            aria-label={backLabel}
+                            title={backLabel}
+                            onClick={onBack}
+                        >
+                            <span className={styles.backLabel}>{backLabel}</span>
+                        </Button>
+                        <div className={styles.ident}>
+                            <h2 className={styles.heading}>
+                                {doc.numberLabel ?? `${kindLabel(doc.kind)} en préparation`}
+                                {doc.subject.length > 0 && (
+                                    <span className={styles.headingSoft}>
+                                        <span className={styles.headingSep}> · </span>
+                                        {doc.subject}
+                                    </span>
+                                )}
+                            </h2>
+                            <p className={styles.subheading}>
+                                <StatusBadge tone={STATUS_TONE[doc.displayStatus]}>
+                                    {statusLabel(doc.kind, doc.displayStatus)}
+                                </StatusBadge>{' '}
+                                {doc.archived && (
+                                    <>
+                                        <StatusBadge tone='neutral'>Archivé</StatusBadge>{' '}
+                                    </>
+                                )}
+                                {clientName.length > 0 ? clientName : 'aucun client choisi'}
+                                {doc.issuedOn !== null && ` · émis le ${formatDate(doc.issuedOn)}`}
+                                {note !== null && ` · ${note}`}
+                                {draft && ` · ${STATE_WORDS[state]}`}
+                            </p>
+                        </div>
                     </div>
-                </div>
 
-                <div className={styles.actions}>
-                    {canWrite && !draft && doc.kind === 'quote' && doc.status !== 'declined' && (
-                        <Button
-                            variant='ghost'
-                            disabled={busy}
-                            onClick={() => setDeposit(String((depositBp || 3000) / 100).replace('.', ','))}
+                    <div className={styles.actions}>
+                        {canWrite && !draft && doc.kind === 'quote' && doc.status !== 'declined' && (
+                            <Button
+                                variant='ghost'
+                                disabled={busy}
+                                onClick={() => setDeposit(String((depositBp || 3000) / 100).replace('.', ','))}
+                            >
+                                Facture d’acompte
+                            </Button>
+                        )}
+
+                        {canWrite && !draft && doc.kind === 'invoice' && doc.displayStatus !== 'cancelled' && (
+                            <Button
+                                variant='ghost'
+                                disabled={busy}
+                                onClick={() =>
+                                    setConfirm({
+                                        title: 'Créer un avoir ?',
+                                        description:
+                                            'Une facture émise ne se modifie pas : l’avoir est la façon de la corriger. Il reprend ses lignes, que vous pourrez réduire avant de l’émettre.',
+                                        confirmLabel: 'Créer l’avoir',
+                                        tone: 'primary',
+                                        onConfirm: () => void derive('credit', 3000, 'L’avoir n’a pas pu être préparé.')
+                                    })
+                                }
+                            >
+                                Créer un avoir
+                            </Button>
+                        )}
+
+                        {/* Dupliquer, archiver ou supprimer, partir dans un autre
+                            espace : un document n'est pas un élément, mais ses
+                            réglages s'ouvrent par la même porte. */}
+                        <FeatureSettingsButton
+                            scope={{
+                                kind: 'record',
+                                feature: 'invoicing',
+                                recordId: String(doc.id),
+                                recordLabel: doc.numberLabel ?? `${kindLabel(doc.kind)} en préparation`,
+                                description: draft
+                                    ? 'Dupliquer ce brouillon, l’envoyer dans un autre espace ou le supprimer.'
+                                    : 'Repartir de ce document vers un brouillon neuf, le copier dans un autre espace ou l’archiver.'
+                            }}
+                            onGone={onBack}
+                            onOpenChange={(open) => {
+                                // Un brouillon ne se relit pas : sa vérité est à l'écran.
+                                if (!open && !draft) void load();
+                            }}
+                        />
+                    </div>
+                </header>
+
+                <nav className={styles.tabs} role='tablist'>
+                    {tabs.map((entry) => (
+                        <button
+                            key={entry.id}
+                            type='button'
+                            role='tab'
+                            aria-selected={entry.id === tab}
+                            className={entry.id === tab ? styles.tabActive : styles.tab}
+                            onClick={() => setTab(entry.id)}
                         >
-                            Facture d’acompte
-                        </Button>
-                    )}
-
-                    {canWrite && !draft && doc.kind === 'invoice' && doc.displayStatus !== 'cancelled' && (
-                        <Button
-                            variant='ghost'
-                            disabled={busy}
-                            onClick={() =>
-                                setConfirm({
-                                    title: 'Créer un avoir ?',
-                                    description:
-                                        'Une facture émise ne se modifie pas : l’avoir est la façon de la corriger. Il reprend ses lignes, que vous pourrez réduire avant de l’émettre.',
-                                    confirmLabel: 'Créer l’avoir',
-                                    tone: 'primary',
-                                    onConfirm: () => void derive('credit', 3000, 'L’avoir n’a pas pu être préparé.')
-                                })
-                            }
-                        >
-                            Créer un avoir
-                        </Button>
-                    )}
-
-                    {/* Dupliquer, archiver ou supprimer, partir dans un autre
-                        espace : un document n'est pas un élément, mais ses
-                        réglages s'ouvrent par la même porte. */}
-                    <FeatureSettingsButton
-                        scope={{
-                            kind: 'record',
-                            feature: 'invoicing',
-                            recordId: String(doc.id),
-                            recordLabel: doc.numberLabel ?? `${kindLabel(doc.kind)} en préparation`,
-                            description: draft
-                                ? 'Dupliquer ce brouillon, l’envoyer dans un autre espace ou le supprimer.'
-                                : 'Repartir de ce document vers un brouillon neuf, le copier dans un autre espace ou l’archiver.'
-                        }}
-                        onGone={onBack}
-                        onOpenChange={(open) => {
-                            // Un brouillon ne se relit pas : sa vérité est à l'écran.
-                            if (!open && !draft) void load();
-                        }}
-                    />
-                </div>
-            </header>
-
-            <nav className={styles.tabs} role='tablist'>
-                {tabs.map((entry) => (
-                    <button
-                        key={entry.id}
-                        type='button'
-                        role='tab'
-                        aria-selected={entry.id === tab}
-                        className={entry.id === tab ? styles.tabActive : styles.tab}
-                        onClick={() => setTab(entry.id)}
-                    >
-                        <span className={`icon ${styles.tabIcon} icon-${entry.icon}`} aria-hidden='true' />
-                        <span>{entry.label}</span>
-                    </button>
-                ))}
-            </nav>
+                            <span className={`icon ${styles.tabIcon} icon-${entry.icon}`} aria-hidden='true' />
+                            <span>{entry.label}</span>
+                        </button>
+                    ))}
+                </nav>
+            </StickyHeader>
 
             <div className={styles.sheetBody}>
                 <ErrorNote

@@ -69,6 +69,7 @@ declare const styles: {
     readonly header: string;
     readonly headerActions: string;
     readonly headerBadges: string;
+    readonly headerExtras: string;
     readonly headerIdentity: string;
     readonly headerNote: string;
     readonly headerTop: string;

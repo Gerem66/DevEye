@@ -8,6 +8,7 @@ import {
     invalidate,
     PlanPausedBadge,
     PlanPausedNotice,
+    StickyHeader,
     useActiveWorkspace,
     useLiveItemTarget,
     useLiveOutlines,
@@ -93,25 +94,28 @@ export function FeatureMailserver(_props: FeatureViewProps) {
 
     return (
         <div className={styles.root}>
-            <header className={styles.header}>
-                <div>
-                    <h2 className={styles.heading}>Serveur mail</h2>
-                    {mailboxes && (
-                        <p className={styles.subheading}>
-                            {mailboxes.length} adresse{mailboxes.length > 1 ? 's' : ''} sur {byDomain.length} domaine
-                            {byDomain.length > 1 ? 's' : ''}
-                        </p>
-                    )}
-                </div>
-                <div className={styles.actions}>
-                    <FeatureSettingsButton scope={{ kind: 'feature', feature: 'mailserver' }} />
-                    {canWrite && (
-                        <Button icon='add' onClick={() => setCreating(true)}>
-                            Nouvelle adresse
-                        </Button>
-                    )}
-                </div>
-            </header>
+            <StickyHeader>
+                <header className={styles.header}>
+                    <div>
+                        <h2 className={styles.heading}>Serveur mail</h2>
+                        {mailboxes && (
+                            <p className={styles.subheading}>
+                                {mailboxes.length} adresse{mailboxes.length > 1 ? 's' : ''} sur {byDomain.length}{' '}
+                                domaine
+                                {byDomain.length > 1 ? 's' : ''}
+                            </p>
+                        )}
+                    </div>
+                    <div className={styles.actions}>
+                        <FeatureSettingsButton scope={{ kind: 'feature', feature: 'mailserver' }} />
+                        {canWrite && (
+                            <Button icon='add' onClick={() => setCreating(true)}>
+                                Nouvelle adresse
+                            </Button>
+                        )}
+                    </div>
+                </header>
+            </StickyHeader>
 
             {error && <p className={styles.error}>{error}</p>}
             <PlanPausedNotice

@@ -4,6 +4,7 @@ import {
     FeatureSettingsButton,
     humanizeError,
     PlanPausedNotice,
+    StickyHeader,
     useActiveWorkspace,
     useLiveItemTarget,
     useLiveOutlines,
@@ -171,22 +172,26 @@ export function FeatureDeploy(_props: FeatureViewProps) {
         <div className={styles.feature}>
             {openedId === null ? (
                 <>
-                    <header className={styles.head}>
-                        <div>
-                            <h2 className={styles.title}>Déploiements</h2>
-                            <p className={styles.subtitle}>Ce que vous mettez en production, et ce que ça a donné.</p>
-                        </div>
-                        <div className={styles.actions}>
-                            {/* Les accès (Dokploy, GitHub) vivent dans Réglages →
-                                Sources, à côté des canaux d'alerte. */}
-                            <FeatureSettingsButton scope={{ kind: 'feature', feature: 'deploy' }} />
-                            {canWrite && (
-                                <Button icon='add' onClick={() => setAddOpen(true)}>
-                                    Déclarer une cible
-                                </Button>
-                            )}
-                        </div>
-                    </header>
+                    <StickyHeader>
+                        <header className={styles.head}>
+                            <div>
+                                <h2 className={styles.title}>Déploiements</h2>
+                                <p className={styles.subtitle}>
+                                    Ce que vous mettez en production, et ce que ça a donné.
+                                </p>
+                            </div>
+                            <div className={styles.actions}>
+                                {/* Les accès (Dokploy, GitHub) vivent dans Réglages →
+                                    Sources, à côté des canaux d'alerte. */}
+                                <FeatureSettingsButton scope={{ kind: 'feature', feature: 'deploy' }} />
+                                {canWrite && (
+                                    <Button icon='add' onClick={() => setAddOpen(true)}>
+                                        Déclarer une cible
+                                    </Button>
+                                )}
+                            </div>
+                        </header>
+                    </StickyHeader>
 
                     {error && <p className={styles.error}>{error}</p>}
 
@@ -224,20 +229,22 @@ export function FeatureDeploy(_props: FeatureViewProps) {
                 <>
                     {/* La même rangée d'en-tête que la liste et que les fiches
                         des autres features : retour à gauche, actions à droite. */}
-                    <header className={styles.head}>
-                        <Button variant='ghost' icon='arrow-left' onClick={() => setOpenedId(null)}>
-                            Déploiements
-                        </Button>
-                        <div className={styles.actions}>
-                            {/* Supprimée ou déplacée depuis ses réglages, la cible
-                                n'est plus ici : la fiche revient à la liste. */}
-                            <TargetActions
-                                target={opened.target}
-                                canWrite={canWrite}
-                                onGone={() => setOpenedId(null)}
-                            />
-                        </div>
-                    </header>
+                    <StickyHeader>
+                        <header className={styles.head}>
+                            <Button variant='ghost' icon='arrow-left' onClick={() => setOpenedId(null)}>
+                                Déploiements
+                            </Button>
+                            <div className={styles.actions}>
+                                {/* Supprimée ou déplacée depuis ses réglages, la cible
+                                    n'est plus ici : la fiche revient à la liste. */}
+                                <TargetActions
+                                    target={opened.target}
+                                    canWrite={canWrite}
+                                    onGone={() => setOpenedId(null)}
+                                />
+                            </div>
+                        </header>
+                    </StickyHeader>
 
                     <TargetView
                         target={opened.target}

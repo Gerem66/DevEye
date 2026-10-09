@@ -4,6 +4,7 @@ import {
     openInfo,
     PlanPausedBadge,
     PlanPausedNotice,
+    StickyHeader,
     useDragReorder,
     useLiveOutlines,
     useLiveSegment,
@@ -294,12 +295,14 @@ export default function Monitoring({ onPair }: MonitoringProps) {
                 <div className={styles.grid}>
                     {/* Left: title + device list */}
                     <div className={styles.deviceListFull}>
-                        <MonitoringTitle
-                            sidebar
-                            updatableIds={updatableIds}
-                            onUpdateAll={() => void updater.updateAll(updatableIds)}
-                            updating={updater.anyBusy}
-                        />
+                        <StickyHeader>
+                            <MonitoringTitle
+                                sidebar
+                                updatableIds={updatableIds}
+                                onUpdateAll={() => void updater.updateAll(updatableIds)}
+                                updating={updater.anyBusy}
+                            />
+                        </StickyHeader>
                         <PlanPausedNotice
                             count={devices.filter((d) => d.planPaused).length}
                             one='appareil'

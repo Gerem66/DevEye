@@ -23,12 +23,13 @@ declare const styles: {
     readonly errorIcon: string;
     readonly filters: string;
     readonly hasDetail: string;
-    readonly head: string;
+    readonly headBand: string;
     readonly headRow: string;
     readonly icon: string;
     readonly iconBtn: string;
     readonly list: string;
     readonly listPane: string;
+    readonly listTools: string;
     readonly refLink: string;
     readonly refList: string;
     readonly refRow: string;

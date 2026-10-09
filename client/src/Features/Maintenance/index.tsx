@@ -11,6 +11,7 @@ import Button from '@/Components/Button';
 import { Dialog } from '@/Components/Dialog';
 import { NumberInput } from '@/Components/NumberInput';
 import SegmentedControl from '@/Components/SegmentedControl';
+import StickyHeader from '@/Components/StickyHeader';
 import Switch from '@/Components/Switch';
 import { moduleManifest } from '@/sdk/registry';
 import { useResourceVersion } from '@/stores/invalidation';
@@ -140,12 +141,14 @@ export default function FeatureMaintenance() {
 
     return (
         <div className={styles.container}>
-            <div className={styles.headerText}>
-                <h2 className={styles.title}>Accès et maintenance</h2>
-                <p className={styles.subtitle}>
-                    Qui peut s’inscrire, qui passe en priorité, et fermer le site ou une fonctionnalité à l’instant.
-                </p>
-            </div>
+            <StickyHeader>
+                <div className={styles.headerText}>
+                    <h2 className={styles.title}>Accès et maintenance</h2>
+                    <p className={styles.subtitle}>
+                        Qui peut s’inscrire, qui passe en priorité, et fermer le site ou une fonctionnalité à l’instant.
+                    </p>
+                </div>
+            </StickyHeader>
 
             {error && <div className={styles.errorBanner}>{error}</div>}
 

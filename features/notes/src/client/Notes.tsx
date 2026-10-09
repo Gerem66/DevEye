@@ -5,6 +5,7 @@ import {
     humanizeError,
     invalidate,
     OpenPopup,
+    StickyHeader,
     TextInput,
     useActiveWorkspace,
     useLiveSegment,
@@ -409,24 +410,26 @@ function Notes() {
 
     return (
         <div className={styles.container}>
-            <header className={styles.header}>
-                <div className={styles.headerText}>
-                    <h2 className={styles.title}>Notes</h2>
-                    <p className={styles.subtitle}>
-                        {total} note{total !== 1 ? 's' : ''}
-                    </p>
-                </div>
-                <div className={styles.headerActions}>
-                    {maskedCount > 0 && (
-                        <Button icon='unlock' variant='secondary' onClick={() => void revealPrivate()}>
-                            Déchiffrer ({maskedCount})
+            <StickyHeader className={styles.headerBand}>
+                <header className={styles.header}>
+                    <div className={styles.headerText}>
+                        <h2 className={styles.title}>Notes</h2>
+                        <p className={styles.subtitle}>
+                            {total} note{total !== 1 ? 's' : ''}
+                        </p>
+                    </div>
+                    <div className={styles.headerActions}>
+                        {maskedCount > 0 && (
+                            <Button icon='unlock' variant='secondary' onClick={() => void revealPrivate()}>
+                                Déchiffrer ({maskedCount})
+                            </Button>
+                        )}
+                        <Button icon='folder-plus' onClick={() => void createFolder()}>
+                            Nouveau dossier
                         </Button>
-                    )}
-                    <Button icon='folder-plus' onClick={() => void createFolder()}>
-                        Nouveau dossier
-                    </Button>
-                </div>
-            </header>
+                    </div>
+                </header>
+            </StickyHeader>
 
             <div className={styles.toolbar}>
                 <div className={styles.searchBar}>

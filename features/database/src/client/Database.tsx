@@ -6,6 +6,7 @@ import {
     invalidate,
     openFeature,
     PlanPausedNotice,
+    StickyHeader,
     useActiveWorkspace,
     useLiveItemTarget,
     useLiveOutlines,
@@ -194,28 +195,30 @@ export function FeatureDatabase(_props: FeatureViewProps) {
 
     return (
         <div className={styles.root}>
-            <header className={styles.header}>
-                <div>
-                    <h2 className={styles.heading}>Bases de données</h2>
-                    {databases && (
-                        <p className={styles.subheading}>
-                            {databases.length} base{databases.length > 1 ? 's' : ''} ·{' '}
-                            {databases.filter((d) => d.monitorEnabled).length} surveillée
-                            {databases.filter((d) => d.monitorEnabled).length > 1 ? 's' : ''}
-                        </p>
-                    )}
-                </div>
-                <div className={styles.actions}>
-                    {/* Hors du `canWrite` : le bouton se garde lui-même, et un
-                        lecteur a le droit de voir où partent les alertes. */}
-                    <FeatureSettingsButton scope={{ kind: 'feature', feature: 'database' }} />
-                    {canWrite && (
-                        <Button icon='add' onClick={() => setAddOpen(true)}>
-                            Ajouter une base
-                        </Button>
-                    )}
-                </div>
-            </header>
+            <StickyHeader>
+                <header className={styles.header}>
+                    <div>
+                        <h2 className={styles.heading}>Bases de données</h2>
+                        {databases && (
+                            <p className={styles.subheading}>
+                                {databases.length} base{databases.length > 1 ? 's' : ''} ·{' '}
+                                {databases.filter((d) => d.monitorEnabled).length} surveillée
+                                {databases.filter((d) => d.monitorEnabled).length > 1 ? 's' : ''}
+                            </p>
+                        )}
+                    </div>
+                    <div className={styles.actions}>
+                        {/* Hors du `canWrite` : le bouton se garde lui-même, et un
+                            lecteur a le droit de voir où partent les alertes. */}
+                        <FeatureSettingsButton scope={{ kind: 'feature', feature: 'database' }} />
+                        {canWrite && (
+                            <Button icon='add' onClick={() => setAddOpen(true)}>
+                                Ajouter une base
+                            </Button>
+                        )}
+                    </div>
+                </header>
+            </StickyHeader>
 
             {error && <p className={styles.error}>{error}</p>}
 

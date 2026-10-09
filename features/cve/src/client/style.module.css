@@ -50,7 +50,7 @@
     overflow-x: clip;
 }
 
-.head {
+.listTools {
     display: flex;
     flex-direction: column;
     gap: var(--space-sm);
@@ -384,7 +384,7 @@
 
 .detailPane {
     position: sticky;
-    top: 0;
+    top: var(--sticky-head, 0px);
     flex-shrink: 0;
     max-width: 100%;
     overflow: hidden;
@@ -559,7 +559,8 @@
    bien que le retour la retrouve telle qu'elle était, onglet, filtres et
    résultats compris. */
 @media (max-width: 1000px) {
-    .hasDetail .head,
+    .hasDetail .headBand,
+    .hasDetail .listTools,
     .hasDetail .listPane {
         display: none;
     }

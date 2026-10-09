@@ -3,6 +3,7 @@ import {
     Button,
     FeatureSettingsButton,
     SegmentedControl,
+    StickyHeader,
     useResource,
     useWorkspacePermissions
 } from 'deveye-sdk-client';
@@ -60,31 +61,33 @@ export default function Home(props: HomeProps) {
 
     return (
         <div className={styles.home}>
-            <header className={styles.header}>
-                <div>
-                    <h2 className={styles.heading}>Facturation</h2>
-                    <p className={styles.subheading}>
-                        {board.outstandingCents > 0
-                            ? `${formatMoney(board.outstandingCents, currency)} à encaisser`
-                            : 'Rien à encaisser'}
-                        {board.overdueCount > 0 && (
-                            <span className={styles.countLate}>
-                                {' '}
-                                · {board.overdueCount} facture{board.overdueCount > 1 ? 's' : ''} en retard
-                            </span>
+            <StickyHeader>
+                <header className={styles.header}>
+                    <div>
+                        <h2 className={styles.heading}>Facturation</h2>
+                        <p className={styles.subheading}>
+                            {board.outstandingCents > 0
+                                ? `${formatMoney(board.outstandingCents, currency)} à encaisser`
+                                : 'Rien à encaisser'}
+                            {board.overdueCount > 0 && (
+                                <span className={styles.countLate}>
+                                    {' '}
+                                    · {board.overdueCount} facture{board.overdueCount > 1 ? 's' : ''} en retard
+                                </span>
+                            )}
+                            {board.quotesPendingCount > 0 && ` · ${board.quotesPendingCount} devis en attente`}
+                        </p>
+                    </div>
+                    <div className={styles.actions}>
+                        <FeatureSettingsButton scope={{ kind: 'feature', feature: 'invoicing' }} />
+                        {canWrite && (
+                            <Button icon='add' onClick={props.onNewDocument}>
+                                Document
+                            </Button>
                         )}
-                        {board.quotesPendingCount > 0 && ` · ${board.quotesPendingCount} devis en attente`}
-                    </p>
-                </div>
-                <div className={styles.actions}>
-                    <FeatureSettingsButton scope={{ kind: 'feature', feature: 'invoicing' }} />
-                    {canWrite && (
-                        <Button icon='add' onClick={props.onNewDocument}>
-                            Document
-                        </Button>
-                    )}
-                </div>
-            </header>
+                    </div>
+                </header>
+            </StickyHeader>
 
             {gaps.length > 0 && (
                 <div className={styles.banner} role='status'>

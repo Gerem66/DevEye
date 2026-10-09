@@ -86,15 +86,15 @@
 }
 
 /*
- * Le détail suit le défilement : remonter pour lire ce qu'on vient de
- * sélectionner annulerait l'intérêt des deux colonnes. Ni largeur ni marge ici,
- * framer-motion les anime depuis `index.tsx` et les déclarer aussi en CSS
- * ferait deux sources pour une même valeur ; `overflow: hidden` rend la largeur
- * animable sans que le contenu déborde pendant la transition.
+ * Le détail suit le défilement, sous l'en-tête : remonter pour lire ce qu'on
+ * vient de sélectionner annulerait l'intérêt des deux colonnes. Ni largeur ni
+ * marge ici, framer-motion les anime depuis `index.tsx` et les déclarer aussi
+ * en CSS ferait deux sources pour une même valeur ; `overflow: hidden` rend la
+ * largeur animable sans que le contenu déborde pendant la transition.
  */
 .detailPane {
     position: sticky;
-    top: 0;
+    top: var(--sticky-head, 0px);
     flex-shrink: 0;
     overflow: hidden;
 }
@@ -313,6 +313,13 @@
 }
 
 .header {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+/* Ce qui suit la rangée du titre sans coller avec elle : compteurs, filtres, notes. */
+.headerExtras {
     display: flex;
     flex-direction: column;
     gap: var(--space-sm);

@@ -562,19 +562,12 @@
     color: var(--text-muted);
 }
 
-/* Collant sur le corps défilant de la popup, et portant l'en-tête comme les
-   onglets : deux blocs collants distincts se recouvriraient au défilement, faute de
-   savoir la hauteur du premier. Le fond doit être opaque, sans quoi le contenu
-   défilerait visiblement dessous. */
+/* Le trait des onglets borde déjà le bandeau collant. */
 .detailSticky {
-    position: sticky;
-    top: 0;
-    z-index: 3;
     display: flex;
     flex-direction: column;
     gap: var(--space-md);
-    padding: var(--space-sm) 0 0;
-    background: var(--surface-popup-solid);
+    padding-bottom: 0;
 }
 
 /* La barre et sa rangée fantôme, qui se superposent sans se pousser. */

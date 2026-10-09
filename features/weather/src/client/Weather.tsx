@@ -3,6 +3,7 @@ import { motion, Reorder, useDragControls } from 'framer-motion';
 import {
     FeatureSettingsButton,
     onResourceChange,
+    StickyHeader,
     useDismissLayer,
     useLiveOutline,
     useLiveSegment
@@ -543,10 +544,12 @@ export default function Weather() {
 
     return (
         <div className={styles.container}>
-            <div className={styles.header}>
-                <h2 className={styles.title}>Météo</h2>
-                <FeatureSettingsButton scope={{ kind: 'feature', feature: 'weather' }} />
-            </div>
+            <StickyHeader className={styles.headerBand}>
+                <div className={styles.header}>
+                    <h2 className={styles.title}>Météo</h2>
+                    <FeatureSettingsButton scope={{ kind: 'feature', feature: 'weather' }} />
+                </div>
+            </StickyHeader>
 
             <form className={styles.searchForm} onSubmit={handleAdd}>
                 <input

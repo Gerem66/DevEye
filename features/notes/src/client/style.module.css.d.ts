@@ -72,6 +72,7 @@ declare const styles: {
     readonly grid: string;
     readonly header: string;
     readonly headerActions: string;
+    readonly headerBand: string;
     readonly headerText: string;
     readonly heading1: string;
     readonly heading2: string;

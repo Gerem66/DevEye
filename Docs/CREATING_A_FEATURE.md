@@ -134,6 +134,12 @@ schémas zod : pas de validation manuelle à écrire.
    `OpenPopup`) et les **jetons CSS du thème** (`var(--accent)`,
    `var(--space-md)`, `var(--text-primary)`…, jamais de couleur en dur).
    Interface en **français**, qui vouvoie.
+    - L'en-tête d'une vue (retour, titre, gestes, et la barre d'onglets qui
+      le suit) s'enveloppe dans `StickyHeader`, premier enfant de la racine :
+      il reste en haut de la popup pendant qu'on fait défiler le contenu. La
+      racine ne défile jamais elle-même (`min-height: 100%`, pas
+      d'`overflow`) ; un bandeau collant du contenu se pose dessous par
+      `top: var(--sticky-head, 0px)`.
     - Chiffrement par mot de passe : envelopper les appels qui peuvent répondre
       `locked` dans `withSecrecy` (`client/src/stores/secrecy.ts`, exporté par
       le barrel `deveye-sdk-client`), qui relance une fois après l'invite.

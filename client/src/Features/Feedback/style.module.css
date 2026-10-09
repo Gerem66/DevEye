@@ -10,13 +10,18 @@
     flex-direction: column;
 }
 
+/* L'écart sous l'en-tête reste hors du bandeau collant, que son trait borde au
+   plus près. */
+.headerBand {
+    margin-bottom: var(--space-lg);
+}
+
 .header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: var(--space-md);
     flex-wrap: wrap;
-    margin-bottom: var(--space-lg);
 }
 
 .headerText {

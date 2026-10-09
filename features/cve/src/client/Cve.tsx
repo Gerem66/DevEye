@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
     FeatureSettingsButton,
     SegmentedControl,
+    StickyHeader,
     TextInput,
     useLiveSegment,
     useSubView,
@@ -207,8 +208,8 @@ export default function Cve(_props: FeatureViewProps) {
 
     return (
         <div className={`${styles.root} ${selected ? styles.hasDetail : ''}`}>
-            <header className={styles.head}>
-                <div className={styles.headRow}>
+            <StickyHeader className={styles.headBand}>
+                <header className={styles.headRow}>
                     <h2 className={styles.title}>Veille CVE</h2>
                     <div className={styles.searchBox}>
                         {/* La classe du module EN PLUS de la globale : un module CSS
@@ -241,8 +242,10 @@ export default function Cve(_props: FeatureViewProps) {
                         )}
                     </div>
                     <FeatureSettingsButton scope={{ kind: 'feature', feature: 'cve' }} />
-                </div>
+                </header>
+            </StickyHeader>
 
+            <div className={styles.listTools}>
                 <div className={styles.filters}>
                     {searching ? (
                         <button type='button' className={styles.clearSearch} onClick={() => setQuery('')}>
@@ -273,7 +276,7 @@ export default function Cve(_props: FeatureViewProps) {
                 </div>
 
                 <p className={styles.status}>{statusLine({ searching, search, news, loading, count: shown.length })}</p>
-            </header>
+            </div>
 
             {banner && (
                 <p className={styles.error} role='alert'>

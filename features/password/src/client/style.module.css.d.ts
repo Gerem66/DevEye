@@ -22,6 +22,7 @@ declare const styles: {
     readonly generatorWarning: string;
     readonly generatorWrap: string;
     readonly header: string;
+    readonly headerBand: string;
     readonly headerText: string;
     readonly icon: string;
     readonly loadingCard: string;

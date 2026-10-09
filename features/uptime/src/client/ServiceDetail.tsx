@@ -5,6 +5,7 @@ import {
     FeatureSettingsButton,
     safeHref,
     StatusBadge,
+    StickyHeader,
     useSubView,
     type ConfirmRequest
 } from 'deveye-sdk-client';
@@ -145,59 +146,61 @@ export function ServiceDetail({ service, onBack, onCheckNow, onAcceptBaseline }:
 
     return (
         <div className={styles.detail}>
-            <div className={styles.detailHead}>
-                <Button variant='ghost' icon='arrow-left' onClick={onBack}>
-                    Services
-                </Button>
-                <div className={styles.detailTitle}>
-                    <h3 className={styles.detailName}>{service.name}</h3>
-                    <a className={styles.detailUrl} href={safeHref(service.url)} target='_blank' rel='noreferrer'>
-                        {service.url}
-                    </a>
-                </div>
-                <div className={styles.detailActions}>
-                    <Button variant='secondary' icon='refresh' onClick={onCheckNow}>
-                        Tester
+            <StickyHeader>
+                <div className={styles.detailHead}>
+                    <Button variant='ghost' icon='arrow-left' onClick={onBack}>
+                        Services
                     </Button>
-                    {/* Un écart constaté, ou pas encore de référence : ce que le site
-                        sert maintenant devient la référence. Confirmé, parce que c'est
-                        valider ce qu'un attaquant aurait pu y mettre. */}
-                    {service.kind === 'integrity' && (service.status === 'down' || service.baseline === null) && (
-                        <Button
-                            variant='secondary'
-                            icon='shield'
-                            onClick={() =>
-                                setConfirm({
-                                    title: 'Accepter la version actuelle ?',
-                                    confirmLabel: 'Accepter',
-                                    tone: 'primary',
-                                    description:
-                                        'Les fichiers que le site sert à cet instant deviennent la référence, et l’écart en cours est clos. À ne faire que pour un déploiement que vous reconnaissez.',
-                                    onConfirm: () => {
-                                        setConfirm(null);
-                                        onAcceptBaseline();
-                                    }
-                                })
-                            }
-                        >
-                            Accepter la version actuelle
+                    <div className={styles.detailTitle}>
+                        <h3 className={styles.detailName}>{service.name}</h3>
+                        <a className={styles.detailUrl} href={safeHref(service.url)} target='_blank' rel='noreferrer'>
+                            {service.url}
+                        </a>
+                    </div>
+                    <div className={styles.detailActions}>
+                        <Button variant='secondary' icon='refresh' onClick={onCheckNow}>
+                            Tester
                         </Button>
-                    )}
-                    {/* Les réglages de ce service, son identité et sa suppression
-                        comprises (onglet Général). Supprimé ou déplacé depuis la
-                        coquille, le service n'est plus ici : la fiche revient à
-                        la liste. */}
-                    <FeatureSettingsButton
-                        scope={{
-                            kind: 'item',
-                            feature: 'uptime',
-                            itemId: String(service.id),
-                            itemLabel: service.name
-                        }}
-                        onGone={onBack}
-                    />
+                        {/* Un écart constaté, ou pas encore de référence : ce que le site
+                            sert maintenant devient la référence. Confirmé, parce que c'est
+                            valider ce qu'un attaquant aurait pu y mettre. */}
+                        {service.kind === 'integrity' && (service.status === 'down' || service.baseline === null) && (
+                            <Button
+                                variant='secondary'
+                                icon='shield'
+                                onClick={() =>
+                                    setConfirm({
+                                        title: 'Accepter la version actuelle ?',
+                                        confirmLabel: 'Accepter',
+                                        tone: 'primary',
+                                        description:
+                                            'Les fichiers que le site sert à cet instant deviennent la référence, et l’écart en cours est clos. À ne faire que pour un déploiement que vous reconnaissez.',
+                                        onConfirm: () => {
+                                            setConfirm(null);
+                                            onAcceptBaseline();
+                                        }
+                                    })
+                                }
+                            >
+                                Accepter la version actuelle
+                            </Button>
+                        )}
+                        {/* Les réglages de ce service, son identité et sa suppression
+                            comprises (onglet Général). Supprimé ou déplacé depuis la
+                            coquille, le service n'est plus ici : la fiche revient à
+                            la liste. */}
+                        <FeatureSettingsButton
+                            scope={{
+                                kind: 'item',
+                                feature: 'uptime',
+                                itemId: String(service.id),
+                                itemLabel: service.name
+                            }}
+                            onGone={onBack}
+                        />
+                    </div>
                 </div>
-            </div>
+            </StickyHeader>
 
             {staleError && <p className={styles.error}>{staleError}</p>}
 

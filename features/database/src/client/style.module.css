@@ -20,13 +20,7 @@
     overflow: hidden;
 }
 
-/* L'en-tête d'une base reste en vue tant qu'on parcourt son bloc, sous
-   l'en-tête du projet (`--sticky-head`) ; le repli à 0 vaut dans la feature. */
 .header {
-    position: sticky;
-    top: var(--sticky-head, 0px);
-    z-index: 2;
-    background: var(--block-bg, var(--surface-popup-solid));
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
@@ -1359,6 +1353,15 @@
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-lg);
     background: var(--surface-subtle);
+}
+
+/* Dans l'onglet d'un projet, l'en-tête d'une base reste en vue tant qu'on
+   parcourt son bloc, sous l'en-tête du projet (`--sticky-head`). */
+.linkedBlock > .header {
+    position: sticky;
+    top: var(--sticky-head, 0px);
+    z-index: 2;
+    background: var(--block-bg, var(--surface-popup-solid));
 }
 
 /* Le geste d'ajout, centré : il conclut la liste au lieu de la continuer. */

@@ -315,18 +315,11 @@
     gap: var(--space-md);
 }
 
-/* Collant sur le corps défilant de la popup. Le fond doit être opaque : sans
-   lui, le contenu défilerait visiblement dessous. */
 .detailHead {
-    position: sticky;
-    top: 0;
-    z-index: 3;
     display: flex;
     align-items: center;
     gap: var(--space-md);
     flex-wrap: wrap;
-    padding: var(--space-sm) 0;
-    background: var(--surface-popup-solid);
 }
 
 .detailTitle {

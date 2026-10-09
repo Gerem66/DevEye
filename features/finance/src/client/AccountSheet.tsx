@@ -1,4 +1,4 @@
-import { Button, FeatureSettingsButton, StatusBadge, useResource } from 'deveye-sdk-client';
+import { Button, FeatureSettingsButton, StatusBadge, StickyHeader, useResource } from 'deveye-sdk-client';
 import type { FinanceTransaction } from '../contracts/domain';
 
 import Journal from './Journal';
@@ -57,52 +57,54 @@ export function AccountSheet({
 
     return (
         <div className={styles.page}>
-            <header className={styles.header}>
-                <div className={styles.detailHead}>
-                    <Button variant='ghost' icon='arrow-left' onClick={onBack}>
-                        Accueil
-                    </Button>
-                    <div className={styles.ident}>
-                        <h2 className={styles.heading}>{account.name}</h2>
-                        <p className={styles.subheading}>
-                            {account.archived && (
-                                <StatusBadge tone='neutral' dot={false}>
-                                    Archivé
-                                </StatusBadge>
-                            )}
-                            {connection !== null && connection.status !== 'ok' && (
-                                <StatusBadge tone='warning' dot={false}>
-                                    {connection.status === 'expired' ? 'Banque à reconnecter' : 'Relève en échec'}
-                                </StatusBadge>
-                            )}
-                            {accountKindLabel(account.kind)}
-                            {connection && ` · relevé par ${connection.label}`}
-                            {account.note && ` · ${account.note}`}
-                        </p>
+            <StickyHeader>
+                <header className={styles.header}>
+                    <div className={styles.detailHead}>
+                        <Button variant='ghost' icon='arrow-left' onClick={onBack}>
+                            Accueil
+                        </Button>
+                        <div className={styles.ident}>
+                            <h2 className={styles.heading}>{account.name}</h2>
+                            <p className={styles.subheading}>
+                                {account.archived && (
+                                    <StatusBadge tone='neutral' dot={false}>
+                                        Archivé
+                                    </StatusBadge>
+                                )}
+                                {connection !== null && connection.status !== 'ok' && (
+                                    <StatusBadge tone='warning' dot={false}>
+                                        {connection.status === 'expired' ? 'Banque à reconnecter' : 'Relève en échec'}
+                                    </StatusBadge>
+                                )}
+                                {accountKindLabel(account.kind)}
+                                {connection && ` · relevé par ${connection.label}`}
+                                {account.note && ` · ${account.note}`}
+                            </p>
+                        </div>
                     </div>
-                </div>
-                <div className={styles.actions}>
-                    {base.canWrite && !account.archived && (
-                        <>
-                            <Button variant='secondary' icon='file' onClick={() => onImport(account.id)}>
-                                Importer
-                            </Button>
-                            <Button icon='add' onClick={() => onNewTransaction(account.id)}>
-                                Opération
-                            </Button>
-                        </>
-                    )}
-                    <FeatureSettingsButton
-                        scope={{
-                            kind: 'item',
-                            feature: 'finance',
-                            itemId: String(account.id),
-                            itemLabel: account.name
-                        }}
-                        onGone={onGone}
-                    />
-                </div>
-            </header>
+                    <div className={styles.actions}>
+                        {base.canWrite && !account.archived && (
+                            <>
+                                <Button variant='secondary' icon='file' onClick={() => onImport(account.id)}>
+                                    Importer
+                                </Button>
+                                <Button icon='add' onClick={() => onNewTransaction(account.id)}>
+                                    Opération
+                                </Button>
+                            </>
+                        )}
+                        <FeatureSettingsButton
+                            scope={{
+                                kind: 'item',
+                                feature: 'finance',
+                                itemId: String(account.id),
+                                itemLabel: account.name
+                            }}
+                            onGone={onGone}
+                        />
+                    </div>
+                </header>
+            </StickyHeader>
 
             <dl className={styles.figures}>
                 <div className={`${styles.figure} ${account.balance < 0 ? styles.figureBad : ''}`}>

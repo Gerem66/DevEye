@@ -68,6 +68,7 @@ declare const styles: {
     readonly legendItem: string;
     readonly legendSwatch: string;
     readonly list: string;
+    readonly overview: string;
     readonly pageLink: string;
     readonly pageService: string;
     readonly pageServices: string;
@@ -99,6 +100,7 @@ declare const styles: {
     readonly textarea: string;
     readonly toolbar: string;
     readonly toolbarActions: string;
+    readonly toolbarBand: string;
     readonly 'uptime-spin': string;
     readonly widget: string;
     readonly widgetDown: string;

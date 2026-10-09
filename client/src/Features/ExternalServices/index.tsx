@@ -5,6 +5,7 @@ import { ws, WsError } from '@/api/ws';
 import Button from '@/Components/Button';
 import LoadingVeil from '@/Components/LoadingVeil';
 import StatusBadge, { type BadgeTone } from '@/Components/StatusBadge/StatusBadge';
+import StickyHeader from '@/Components/StickyHeader';
 import { formatBytesFr } from '@/format';
 import { requestOpenView } from '@/stores/viewRequest';
 import styles from './ExternalServices.module.css';
@@ -134,18 +135,20 @@ export default function FeatureExternalServices() {
 
     return (
         <div className={styles.container}>
-            <div className={styles.header}>
-                <div className={styles.headerText}>
-                    <h2 className={styles.title}>Services externes</h2>
-                    <p className={styles.subtitle}>
-                        Ce dont dépend cette instance, son état, et ce qu’il en coûte.
-                        {state && ` Vérifié ${ago(state.checkedAt, now)}.`}
-                    </p>
+            <StickyHeader>
+                <div className={styles.header}>
+                    <div className={styles.headerText}>
+                        <h2 className={styles.title}>Services externes</h2>
+                        <p className={styles.subtitle}>
+                            Ce dont dépend cette instance, son état, et ce qu’il en coûte.
+                            {state && ` Vérifié ${ago(state.checkedAt, now)}.`}
+                        </p>
+                    </div>
+                    <Button variant='secondary' icon='refresh' disabled={busy} onClick={() => void load(true)}>
+                        Revérifier
+                    </Button>
                 </div>
-                <Button variant='secondary' icon='refresh' disabled={busy} onClick={() => void load(true)}>
-                    Revérifier
-                </Button>
-            </div>
+            </StickyHeader>
 
             {error && <div className={styles.errorBanner}>{error}</div>}
 

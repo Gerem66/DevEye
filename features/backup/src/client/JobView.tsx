@@ -8,6 +8,7 @@ import {
     formatBytesFr,
     humanizeError,
     StatusBadge,
+    StickyHeader,
     useResource,
     type ConfirmRequest
 } from 'deveye-sdk-client';
@@ -72,41 +73,43 @@ export default function JobView({ job, canWrite, onBack, onRun, running }: JobVi
 
     return (
         <div className={styles.detail}>
-            <div className={styles.detailHead}>
-                <Button variant='ghost' icon='arrow-left' onClick={onBack}>
-                    Travaux
-                </Button>
-                <h2 className={styles.detailTitle}>
-                    {job.name}
-                    {job.foreign && (
-                        <span title='Ce travail appartient à un autre espace qui le partage ici'>
-                            {' '}
-                            <StatusBadge tone='accent'>partagé</StatusBadge>
-                        </span>
-                    )}
-                </h2>
-                <div className={styles.detailActions}>
-                    {canWrite && (
-                        <Button
-                            icon={running ? 'spinner' : 'play'}
-                            disabled={running}
-                            onClick={onRun}
-                            title='Lancer une sauvegarde maintenant'
-                        >
-                            {running ? 'En cours…' : 'Sauvegarder'}
-                        </Button>
-                    )}
-                    {/* Les réglages de ce travail, sa suppression comprise
-                        (onglet Général) ; un travail projeté se modifie chez
-                        lui, le sauvegarder d'ici reste permis. Supprimé ou
-                        déplacé depuis la coquille, le travail n'est plus ici :
-                        la fiche revient à la liste. */}
-                    <FeatureSettingsButton
-                        scope={{ kind: 'item', feature: 'backup', itemId: String(job.id), itemLabel: job.name }}
-                        onGone={onBack}
-                    />
+            <StickyHeader>
+                <div className={styles.detailHead}>
+                    <Button variant='ghost' icon='arrow-left' onClick={onBack}>
+                        Travaux
+                    </Button>
+                    <h2 className={styles.detailTitle}>
+                        {job.name}
+                        {job.foreign && (
+                            <span title='Ce travail appartient à un autre espace qui le partage ici'>
+                                {' '}
+                                <StatusBadge tone='accent'>partagé</StatusBadge>
+                            </span>
+                        )}
+                    </h2>
+                    <div className={styles.detailActions}>
+                        {canWrite && (
+                            <Button
+                                icon={running ? 'spinner' : 'play'}
+                                disabled={running}
+                                onClick={onRun}
+                                title='Lancer une sauvegarde maintenant'
+                            >
+                                {running ? 'En cours…' : 'Sauvegarder'}
+                            </Button>
+                        )}
+                        {/* Les réglages de ce travail, sa suppression comprise
+                            (onglet Général) ; un travail projeté se modifie chez
+                            lui, le sauvegarder d'ici reste permis. Supprimé ou
+                            déplacé depuis la coquille, le travail n'est plus ici :
+                            la fiche revient à la liste. */}
+                        <FeatureSettingsButton
+                            scope={{ kind: 'item', feature: 'backup', itemId: String(job.id), itemLabel: job.name }}
+                            onGone={onBack}
+                        />
+                    </div>
                 </div>
-            </div>
+            </StickyHeader>
 
             <div className={styles.facts}>
                 <Fact label='Source'>

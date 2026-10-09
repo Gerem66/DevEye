@@ -68,6 +68,20 @@
     height: 100%;
 }
 
+/* La liste a sa propre boîte, à la hauteur de son contenu : la racine est
+   bornée à la popup pour le journal des mesures, et l'en-tête ne colle que
+   dans la boîte de son parent. */
+.overview {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+/* La barre porte déjà son trait. */
+.toolbarBand {
+    padding-bottom: 0;
+}
+
 .toolbar {
     display: flex;
     align-items: center;

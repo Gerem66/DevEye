@@ -5,6 +5,7 @@ import {
     humanizeError,
     invalidate,
     OpenPopup,
+    StickyHeader,
     TextInput,
     UnlockCancelledError,
     useActiveWorkspace,
@@ -241,18 +242,20 @@ function Password({ closeFeature }: FeatureViewProps) {
 
     return (
         <div className={styles.container}>
-            <header className={styles.header}>
-                <div className={styles.headerText}>
-                    <h2 className={styles.title}>Mots de passe</h2>
-                    <p className={styles.subtitle}>
-                        {allPasswords.length} entrée{allPasswords.length !== 1 ? 's' : ''} enregistrée
-                        {allPasswords.length !== 1 ? 's' : ''}
-                    </p>
-                </div>
-                <Button icon='plus' onClick={() => void openEditPopup(null)}>
-                    Ajouter
-                </Button>
-            </header>
+            <StickyHeader className={styles.headerBand}>
+                <header className={styles.header}>
+                    <div className={styles.headerText}>
+                        <h2 className={styles.title}>Mots de passe</h2>
+                        <p className={styles.subtitle}>
+                            {allPasswords.length} entrée{allPasswords.length !== 1 ? 's' : ''} enregistrée
+                            {allPasswords.length !== 1 ? 's' : ''}
+                        </p>
+                    </div>
+                    <Button icon='plus' onClick={() => void openEditPopup(null)}>
+                        Ajouter
+                    </Button>
+                </header>
+            </StickyHeader>
 
             <div className={styles.searchBar}>
                 <TextInput

@@ -24,6 +24,7 @@ declare const styles: {
     readonly forecastTemps: string;
     readonly forecastTitle: string;
     readonly header: string;
+    readonly headerBand: string;
     readonly hourlyCard: string;
     readonly hourlyCurrent: string;
     readonly hourlyIcon: string;
@@ -61,12 +62,12 @@ declare const styles: {
     readonly tempBlock: string;
     readonly temperature: string;
     readonly title: string;
+    readonly topbarTemp: string;
     readonly weatherContent: string;
     readonly weatherIcon: string;
     readonly widgetContent: string;
     readonly widgetEmpty: string;
     readonly widgetEmptyIcon: string;
     readonly widgetLoading: string;
-    readonly topbarTemp: string;
 };
 export = styles;

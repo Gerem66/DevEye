@@ -5,6 +5,7 @@ import {
     FeatureSettingsButton,
     SegmentedControl,
     StatusBadge,
+    StickyHeader,
     formatBytesFr,
     humanizeError,
     invalidate,
@@ -69,44 +70,46 @@ export default function AddressView({
 
     return (
         <div className={styles.root}>
-            <header className={styles.header}>
-                <div className={styles.identity}>
-                    <Button variant='ghost' icon='arrow-left' onClick={onBack}>
-                        Adresses
-                    </Button>
-                    <div>
-                        <h2 className={styles.heading}>{mailbox.address}</h2>
-                        <p className={styles.subheading}>
-                            {mailbox.displayName || 'Sans nom affiché'}
-                            {mailbox.foreign && ' · vue depuis un autre espace'}
-                        </p>
-                    </div>
-                    {/* En pause, elle ne sert pas : « Active » serait faux, « Éteinte » reste vrai. */}
-                    {(!mailbox.enabled || !mailbox.planPaused) && (
-                        <StatusBadge tone={mailbox.enabled ? 'success' : 'neutral'}>
-                            {mailbox.enabled ? 'Active' : 'Éteinte'}
-                        </StatusBadge>
-                    )}
-                    {mailbox.planPaused && <PlanPausedBadge />}
-                </div>
-                <div className={styles.actions}>
-                    {typeof link.linkedId === 'number' && (
-                        <Button variant='secondary' icon='mail' onClick={link.open}>
-                            Ouvrir dans Mail
+            <StickyHeader>
+                <header className={styles.header}>
+                    <div className={styles.identity}>
+                        <Button variant='ghost' icon='arrow-left' onClick={onBack}>
+                            Adresses
                         </Button>
-                    )}
-                    <FeatureSettingsButton
-                        scope={{
-                            kind: 'item',
-                            feature: 'mailserver',
-                            itemId,
-                            itemLabel: mailbox.address,
-                            shareable: true
-                        }}
-                        onGone={onBack}
-                    />
-                </div>
-            </header>
+                        <div>
+                            <h2 className={styles.heading}>{mailbox.address}</h2>
+                            <p className={styles.subheading}>
+                                {mailbox.displayName || 'Sans nom affiché'}
+                                {mailbox.foreign && ' · vue depuis un autre espace'}
+                            </p>
+                        </div>
+                        {/* En pause, elle ne sert pas : « Active » serait faux, « Éteinte » reste vrai. */}
+                        {(!mailbox.enabled || !mailbox.planPaused) && (
+                            <StatusBadge tone={mailbox.enabled ? 'success' : 'neutral'}>
+                                {mailbox.enabled ? 'Active' : 'Éteinte'}
+                            </StatusBadge>
+                        )}
+                        {mailbox.planPaused && <PlanPausedBadge />}
+                    </div>
+                    <div className={styles.actions}>
+                        {typeof link.linkedId === 'number' && (
+                            <Button variant='secondary' icon='mail' onClick={link.open}>
+                                Ouvrir dans Mail
+                            </Button>
+                        )}
+                        <FeatureSettingsButton
+                            scope={{
+                                kind: 'item',
+                                feature: 'mailserver',
+                                itemId,
+                                itemLabel: mailbox.address,
+                                shareable: true
+                            }}
+                            onGone={onBack}
+                        />
+                    </div>
+                </header>
+            </StickyHeader>
 
             {showBanner && <MailsBanner link={link} canAdd={canPasswords} onDismiss={canWrite ? dismiss : null} />}
             {error && <p className={styles.error}>{error}</p>}

@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, SegmentedControl, TextInput, useResource, useWorkspacePermissions } from 'deveye-sdk-client';
+import {
+    Button,
+    SegmentedControl,
+    StickyHeader,
+    TextInput,
+    useResource,
+    useWorkspacePermissions
+} from 'deveye-sdk-client';
 
 import ClientRow from './ClientRow';
 import { api } from './api';
@@ -44,24 +51,26 @@ export default function ClientsPage({ currency, onBack, onOpen, onNew }: Clients
 
     return (
         <div className={styles.page}>
-            <header className={styles.pageHead}>
-                <Button
-                    variant='ghost'
-                    icon='arrow-left'
-                    className={styles.back}
-                    aria-label='Accueil'
-                    title='Accueil'
-                    onClick={onBack}
-                >
-                    <span className={styles.backLabel}>Accueil</span>
-                </Button>
-                <h2 className={styles.pageTitle}>Clients</h2>
-                {canWrite && (
-                    <Button icon='add' onClick={onNew}>
-                        Client
+            <StickyHeader>
+                <header className={styles.pageHead}>
+                    <Button
+                        variant='ghost'
+                        icon='arrow-left'
+                        className={styles.back}
+                        aria-label='Accueil'
+                        title='Accueil'
+                        onClick={onBack}
+                    >
+                        <span className={styles.backLabel}>Accueil</span>
                     </Button>
-                )}
-            </header>
+                    <h2 className={styles.pageTitle}>Clients</h2>
+                    {canWrite && (
+                        <Button icon='add' onClick={onNew}>
+                            Client
+                        </Button>
+                    )}
+                </header>
+            </StickyHeader>
 
             <div className={styles.filters}>
                 <div className={styles.filterKind}>

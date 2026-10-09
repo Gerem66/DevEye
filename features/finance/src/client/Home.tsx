@@ -5,6 +5,7 @@ import {
     FeatureSettingsButton,
     openFeature,
     SegmentedControl,
+    StickyHeader,
     useResource,
     useWorkspacePermissions,
     type ErrorNoteInput
@@ -57,31 +58,33 @@ export function Home(props: HomeProps) {
     const accountCount = base.accounts.length;
 
     const header = (
-        <header className={styles.header}>
-            <div>
-                <h2 className={styles.heading}>Finances</h2>
-                <p className={styles.subheading}>
-                    {!hasAccounts
-                        ? 'Aucun compte'
-                        : data
-                          ? `${formatMoney(data.netBalance, currency)} sur ${accountCount} compte${accountCount > 1 ? 's' : ''}`
-                          : `${accountCount} compte${accountCount > 1 ? 's' : ''}`}
-                </p>
-            </div>
-            <div className={styles.actions}>
-                <FeatureSettingsButton scope={{ kind: 'feature', feature: 'finance' }} />
-                {base.canWrite && hasAccounts && (
-                    <>
-                        <Button variant='secondary' icon='file' onClick={props.onImport}>
-                            Importer
-                        </Button>
-                        <Button icon='add' onClick={props.onNewTransaction}>
-                            Opération
-                        </Button>
-                    </>
-                )}
-            </div>
-        </header>
+        <StickyHeader>
+            <header className={styles.header}>
+                <div>
+                    <h2 className={styles.heading}>Finances</h2>
+                    <p className={styles.subheading}>
+                        {!hasAccounts
+                            ? 'Aucun compte'
+                            : data
+                              ? `${formatMoney(data.netBalance, currency)} sur ${accountCount} compte${accountCount > 1 ? 's' : ''}`
+                              : `${accountCount} compte${accountCount > 1 ? 's' : ''}`}
+                    </p>
+                </div>
+                <div className={styles.actions}>
+                    <FeatureSettingsButton scope={{ kind: 'feature', feature: 'finance' }} />
+                    {base.canWrite && hasAccounts && (
+                        <>
+                            <Button variant='secondary' icon='file' onClick={props.onImport}>
+                                Importer
+                            </Button>
+                            <Button icon='add' onClick={props.onNewTransaction}>
+                                Opération
+                            </Button>
+                        </>
+                    )}
+                </div>
+            </header>
+        </StickyHeader>
     );
 
     if (!hasAccounts) {

@@ -6,6 +6,7 @@ import {
     invalidate,
     openFeature,
     PlanPausedNotice,
+    StickyHeader,
     useActiveWorkspace,
     useLiveItemTarget,
     useLiveOutlines,
@@ -261,28 +262,30 @@ export function FeatureGit(_props: FeatureViewProps) {
 
     return (
         <div className={styles.root}>
-            <header className={styles.header}>
-                <div>
-                    <h2 className={styles.heading}>Dépôts Git</h2>
-                    {repos && (
-                        <p className={styles.subheading}>
-                            {repos.length} dépôt{repos.length > 1 ? 's' : ''} · {credentials.length} jeton
-                            {credentials.length > 1 ? 's' : ''} d’accès
-                        </p>
-                    )}
-                </div>
-                <div className={styles.actions}>
-                    {/* Les jetons sont une propriété de l'espace, pas d'un dépôt :
+            <StickyHeader>
+                <header className={styles.header}>
+                    <div>
+                        <h2 className={styles.heading}>Dépôts Git</h2>
+                        {repos && (
+                            <p className={styles.subheading}>
+                                {repos.length} dépôt{repos.length > 1 ? 's' : ''} · {credentials.length} jeton
+                                {credentials.length > 1 ? 's' : ''} d’accès
+                            </p>
+                        )}
+                    </div>
+                    <div className={styles.actions}>
+                        {/* Les jetons sont une propriété de l'espace, pas d'un dépôt :
                         ils vivent dans Réglages → Sources, comme les sources de
                         toute feature. */}
-                    <FeatureSettingsButton scope={{ kind: 'feature', feature: 'git' }} />
-                    {canWrite && (
-                        <Button icon='add' onClick={() => setAddOpen(true)}>
-                            Ajouter un dépôt
-                        </Button>
-                    )}
-                </div>
-            </header>
+                        <FeatureSettingsButton scope={{ kind: 'feature', feature: 'git' }} />
+                        {canWrite && (
+                            <Button icon='add' onClick={() => setAddOpen(true)}>
+                                Ajouter un dépôt
+                            </Button>
+                        )}
+                    </div>
+                </header>
+            </StickyHeader>
 
             {error && <p className={styles.error}>{error}</p>}
 

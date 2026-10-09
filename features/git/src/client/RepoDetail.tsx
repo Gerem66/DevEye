@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import type { MinimalUser } from '@deveye/types';
-import { Button, FeatureSettingsButton, PlanPausedBadge, StatusBadge } from 'deveye-sdk-client';
+import { Button, FeatureSettingsButton, PlanPausedBadge, StatusBadge, StickyHeader } from 'deveye-sdk-client';
 import type { GitRepo, GitRepoUsage } from '../contracts/domain';
 
 import { PROJECT_STATUS_LABELS } from '@deveye/types';
@@ -43,72 +43,77 @@ export function RepoDetail({
 
     return (
         <div className={styles.root}>
-            <header className={styles.header}>
-                <div className={styles.detailHead}>
-                    <Button variant='ghost' icon='arrow-left' onClick={onBack}>
-                        Dépôts
-                    </Button>
-                    <div className={styles.repoIdent}>
-                        <p className={styles.repoName}>
-                            <span className='icon icon-branch' /> {repo.owner}/{repo.repo}
-                            {repo.foreign && (
-                                <span title='Ce dépôt appartient à un autre espace qui le partage ici'>
-                                    {' '}
-                                    <StatusBadge tone='accent'>partagé</StatusBadge>
-                                </span>
-                            )}
-                        </p>
-                        <p className={styles.repoMeta}>
-                            {repo.defaultBranch && <span>branche {repo.defaultBranch}</span>}
-                            {repo.lastSyncAt !== null && (
-                                <span> · synchronisé {new Date(repo.lastSyncAt * 1000).toLocaleString('fr-FR')}</span>
-                            )}
-                            {repo.credentialId === null && (
-                                <span className={styles.overdue}> · jeton retiré, synchronisation arrêtée</span>
-                            )}
-                            {repo.credentialId !== null && !repo.enabled && (
-                                <span className={styles.overdue}> · synchronisation suspendue</span>
-                            )}
-                            {repo.planPaused && (
-                                <>
-                                    {' '}
-                                    <PlanPausedBadge />
-                                </>
-                            )}
-                        </p>
-                    </div>
-                </div>
-                <div className={styles.actions}>
-                    {canWrite && (
-                        <Button
-                            variant='secondary'
-                            icon='refresh'
-                            onClick={() => {
-                                setSyncRequest((n) => n + 1);
-                                onSyncNow();
-                            }}
-                            disabled={busy || syncing}
-                        >
-                            {syncing ? 'Synchronisation…' : 'Synchroniser'}
+            <StickyHeader>
+                <header className={styles.header}>
+                    <div className={styles.detailHead}>
+                        <Button variant='ghost' icon='arrow-left' onClick={onBack}>
+                            Dépôts
                         </Button>
-                    )}
-                    {/* Les réglages de ce dépôt, son jeton et sa suppression
+                        <div className={styles.repoIdent}>
+                            <p className={styles.repoName}>
+                                <span className='icon icon-branch' /> {repo.owner}/{repo.repo}
+                                {repo.foreign && (
+                                    <span title='Ce dépôt appartient à un autre espace qui le partage ici'>
+                                        {' '}
+                                        <StatusBadge tone='accent'>partagé</StatusBadge>
+                                    </span>
+                                )}
+                            </p>
+                            <p className={styles.repoMeta}>
+                                {repo.defaultBranch && <span>branche {repo.defaultBranch}</span>}
+                                {repo.lastSyncAt !== null && (
+                                    <span>
+                                        {' '}
+                                        · synchronisé {new Date(repo.lastSyncAt * 1000).toLocaleString('fr-FR')}
+                                    </span>
+                                )}
+                                {repo.credentialId === null && (
+                                    <span className={styles.overdue}> · jeton retiré, synchronisation arrêtée</span>
+                                )}
+                                {repo.credentialId !== null && !repo.enabled && (
+                                    <span className={styles.overdue}> · synchronisation suspendue</span>
+                                )}
+                                {repo.planPaused && (
+                                    <>
+                                        {' '}
+                                        <PlanPausedBadge />
+                                    </>
+                                )}
+                            </p>
+                        </div>
+                    </div>
+                    <div className={styles.actions}>
+                        {canWrite && (
+                            <Button
+                                variant='secondary'
+                                icon='refresh'
+                                onClick={() => {
+                                    setSyncRequest((n) => n + 1);
+                                    onSyncNow();
+                                }}
+                                disabled={busy || syncing}
+                            >
+                                {syncing ? 'Synchronisation…' : 'Synchroniser'}
+                            </Button>
+                        )}
+                        {/* Les réglages de ce dépôt, son jeton et sa suppression
                         compris (onglet Général). Le bouton se garde de lui-même,
                         sans section accessible il ne s'affiche pas. Supprimé ou
                         déplacé depuis la coquille, le dépôt n'est plus ici : la
                         fiche revient à la liste. */}
-                    <FeatureSettingsButton
-                        scope={{
-                            kind: 'item',
-                            feature: 'git',
-                            itemId: String(repo.id),
-                            itemLabel: `${repo.owner}/${repo.repo}`
-                        }}
-                        onGone={onBack}
-                    />
-                </div>
-                {repo.lastSyncError && <p className={styles.error}>{repo.lastSyncError}</p>}
-            </header>
+                        <FeatureSettingsButton
+                            scope={{
+                                kind: 'item',
+                                feature: 'git',
+                                itemId: String(repo.id),
+                                itemLabel: `${repo.owner}/${repo.repo}`
+                            }}
+                            onGone={onBack}
+                        />
+                    </div>
+                    {repo.lastSyncError && <p className={styles.error}>{repo.lastSyncError}</p>}
+                </header>
+            </StickyHeader>
 
             <RepoView
                 repo={repo}

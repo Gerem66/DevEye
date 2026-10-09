@@ -4,6 +4,7 @@ import type { CommandOutput } from '@deveye/types';
 import { ws, WsError } from '@/api/ws';
 import SideNav, { type SideNavItem } from '@/Components/FeatureSettings/SideNav';
 import { StatusBadge } from '@/Components/StatusBadge';
+import StickyHeader from '@/Components/StickyHeader';
 import { useResourceVersion } from '@/stores/invalidation';
 import Gallery from './Gallery/Gallery';
 import BenchSection from './sections/BenchSection';
@@ -80,22 +81,24 @@ export default function FeatureDebug() {
 
     return (
         <div className={styles.container}>
-            <header className={styles.header}>
-                <div className={styles.headerText}>
-                    <h2 className={styles.title}>Tests et débogage</h2>
-                    <p className={styles.subtitle}>Vérifier ce serveur tel qu’il tourne, sans rien y laisser.</p>
-                </div>
-                {overview && (
-                    <div className={styles.instance}>
-                        <StatusBadge tone={overview.instance.environment === 'prod' ? 'warning' : 'accent'}>
-                            {ENVIRONMENT_LABEL[overview.instance.environment]}
-                        </StatusBadge>
-                        <span className={styles.instanceMeta}>
-                            {overview.instance.origin} · v{overview.instance.version}
-                        </span>
+            <StickyHeader>
+                <header className={styles.header}>
+                    <div className={styles.headerText}>
+                        <h2 className={styles.title}>Tests et débogage</h2>
+                        <p className={styles.subtitle}>Vérifier ce serveur tel qu’il tourne, sans rien y laisser.</p>
                     </div>
-                )}
-            </header>
+                    {overview && (
+                        <div className={styles.instance}>
+                            <StatusBadge tone={overview.instance.environment === 'prod' ? 'warning' : 'accent'}>
+                                {ENVIRONMENT_LABEL[overview.instance.environment]}
+                            </StatusBadge>
+                            <span className={styles.instanceMeta}>
+                                {overview.instance.origin} · v{overview.instance.version}
+                            </span>
+                        </div>
+                    )}
+                </header>
+            </StickyHeader>
 
             {error && <div className={styles.errorBanner}>{error}</div>}
 

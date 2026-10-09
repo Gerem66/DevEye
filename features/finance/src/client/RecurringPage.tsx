@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Button, ErrorNote, StatusBadge, useResource, type ErrorNoteInput } from 'deveye-sdk-client';
+import { Button, ErrorNote, StatusBadge, StickyHeader, useResource, type ErrorNoteInput } from 'deveye-sdk-client';
 import type { FinanceRecurring } from '../contracts/domain';
 
 import PostDialog from './PostDialog';
@@ -55,25 +55,27 @@ export function RecurringPage({ base, onBack }: RecurringPageProps) {
 
     return (
         <div className={styles.page}>
-            <header className={styles.pageHead}>
-                <Button variant='ghost' icon='arrow-left' onClick={onBack}>
-                    Accueil
-                </Button>
-                <div className={styles.ident}>
-                    <h2 className={styles.pageTitle}>Échéances</h2>
-                    {rows.length > 0 && (
-                        <p className={styles.subheading}>
-                            {activeCount} active{activeCount > 1 ? 's' : ''}
-                            {dueCount > 0 && `, ${dueCount} à enregistrer`}
-                        </p>
-                    )}
-                </div>
-                {base.canWrite && base.accounts.length > 0 && (
-                    <Button icon='add' onClick={() => setEditing({ recurring: null })}>
-                        Échéance
+            <StickyHeader>
+                <header className={styles.pageHead}>
+                    <Button variant='ghost' icon='arrow-left' onClick={onBack}>
+                        Accueil
                     </Button>
-                )}
-            </header>
+                    <div className={styles.ident}>
+                        <h2 className={styles.pageTitle}>Échéances</h2>
+                        {rows.length > 0 && (
+                            <p className={styles.subheading}>
+                                {activeCount} active{activeCount > 1 ? 's' : ''}
+                                {dueCount > 0 && `, ${dueCount} à enregistrer`}
+                            </p>
+                        )}
+                    </div>
+                    {base.canWrite && base.accounts.length > 0 && (
+                        <Button icon='add' onClick={() => setEditing({ recurring: null })}>
+                            Échéance
+                        </Button>
+                    )}
+                </header>
+            </StickyHeader>
 
             <ErrorNote note={note} />
 

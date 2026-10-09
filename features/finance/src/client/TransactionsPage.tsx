@@ -1,4 +1,4 @@
-import { Button } from 'deveye-sdk-client';
+import { Button, StickyHeader } from 'deveye-sdk-client';
 import type { FinanceTransaction } from '../contracts/domain';
 
 import Journal from './Journal';
@@ -16,17 +16,19 @@ interface TransactionsPageProps {
 export function TransactionsPage({ base, onBack, onNew, onEdit }: TransactionsPageProps) {
     return (
         <div className={styles.page}>
-            <header className={styles.pageHead}>
-                <Button variant='ghost' icon='arrow-left' onClick={onBack}>
-                    Accueil
-                </Button>
-                <h2 className={styles.pageTitle}>Opérations</h2>
-                {base.canWrite && base.accounts.length > 0 && (
-                    <Button icon='add' onClick={onNew}>
-                        Opération
+            <StickyHeader>
+                <header className={styles.pageHead}>
+                    <Button variant='ghost' icon='arrow-left' onClick={onBack}>
+                        Accueil
                     </Button>
-                )}
-            </header>
+                    <h2 className={styles.pageTitle}>Opérations</h2>
+                    {base.canWrite && base.accounts.length > 0 && (
+                        <Button icon='add' onClick={onNew}>
+                            Opération
+                        </Button>
+                    )}
+                </header>
+            </StickyHeader>
             <Journal base={base} onEdit={onEdit} />
         </div>
     );

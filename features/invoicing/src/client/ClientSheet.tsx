@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Button, FeatureSettingsButton, humanizeError, StatusBadge, useResource } from 'deveye-sdk-client';
+import {
+    Button,
+    FeatureSettingsButton,
+    humanizeError,
+    StatusBadge,
+    StickyHeader,
+    useResource
+} from 'deveye-sdk-client';
 
 import type { InvoicingClient } from '../contracts/domain';
 import DocumentRow from './DocumentRow';
@@ -93,42 +100,44 @@ export default function ClientSheet({ id, currency, backLabel, onBack, onGone, o
 
     return (
         <div className={styles.page}>
-            <header className={`${styles.header} ${styles.sheetHeader}`}>
-                <div className={styles.detailHead}>
-                    <Button
-                        variant='ghost'
-                        icon='arrow-left'
-                        className={styles.back}
-                        aria-label={backLabel}
-                        title={backLabel}
-                        onClick={onBack}
-                    >
-                        <span className={styles.backLabel}>{backLabel}</span>
-                    </Button>
-                    <div className={styles.ident}>
-                        <h2 className={styles.heading}>{client.name}</h2>
-                        <p className={styles.subheading}>
-                            {client.archived && <StatusBadge tone='neutral'>De côté</StatusBadge>}
-                            {client.kind === 'company' ? 'Entreprise' : 'Particulier'}
-                            {client.city.length > 0 && ` · ${client.city}`}
-                        </p>
+            <StickyHeader>
+                <header className={`${styles.header} ${styles.sheetHeader}`}>
+                    <div className={styles.detailHead}>
+                        <Button
+                            variant='ghost'
+                            icon='arrow-left'
+                            className={styles.back}
+                            aria-label={backLabel}
+                            title={backLabel}
+                            onClick={onBack}
+                        >
+                            <span className={styles.backLabel}>{backLabel}</span>
+                        </Button>
+                        <div className={styles.ident}>
+                            <h2 className={styles.heading}>{client.name}</h2>
+                            <p className={styles.subheading}>
+                                {client.archived && <StatusBadge tone='neutral'>De côté</StatusBadge>}
+                                {client.kind === 'company' ? 'Entreprise' : 'Particulier'}
+                                {client.city.length > 0 && ` · ${client.city}`}
+                            </p>
+                        </div>
                     </div>
-                </div>
-                <div className={styles.actions}>
-                    <FeatureSettingsButton
-                        scope={{
-                            kind: 'item',
-                            feature: 'invoicing',
-                            itemId: String(client.id),
-                            itemLabel: client.name
-                        }}
-                        onGone={onGone}
-                        onOpenChange={(open) => {
-                            if (!open) void load();
-                        }}
-                    />
-                </div>
-            </header>
+                    <div className={styles.actions}>
+                        <FeatureSettingsButton
+                            scope={{
+                                kind: 'item',
+                                feature: 'invoicing',
+                                itemId: String(client.id),
+                                itemLabel: client.name
+                            }}
+                            onGone={onGone}
+                            onOpenChange={(open) => {
+                                if (!open) void load();
+                            }}
+                        />
+                    </div>
+                </header>
+            </StickyHeader>
 
             <dl className={styles.figures}>
                 <div className={styles.figure}>

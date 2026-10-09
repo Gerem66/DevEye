@@ -4,6 +4,7 @@ import {
     FeatureSettingsButton,
     humanizeError,
     PlanPausedNotice,
+    StickyHeader,
     useActiveWorkspace,
     useLiveItemTarget,
     useLiveOutlines,
@@ -148,20 +149,24 @@ export function FeatureAudience(_props: FeatureViewProps) {
         <div className={styles.feature}>
             {openedId === null ? (
                 <>
-                    <header className={styles.head}>
-                        <div>
-                            <h2 className={styles.title}>Sites suivis</h2>
-                            <p className={styles.subtitle}>Ce que les visiteurs font de vos projets une fois livrés.</p>
-                        </div>
-                        {/* Le bouton commun, monté sans condition : il se supprime
+                    <StickyHeader>
+                        <header className={styles.head}>
+                            <div>
+                                <h2 className={styles.title}>Sites suivis</h2>
+                                <p className={styles.subtitle}>
+                                    Ce que les visiteurs font de vos projets une fois livrés.
+                                </p>
+                            </div>
+                            {/* Le bouton commun, monté sans condition : il se supprime
                             lui-même tant qu'aucune section n'existe à cette échelle. */}
-                        <FeatureSettingsButton scope={{ kind: 'feature', feature: 'audience' }} />
-                        {canWrite && (
-                            <Button icon='add' onClick={() => setAddOpen(true)}>
-                                Suivre un site
-                            </Button>
-                        )}
-                    </header>
+                            <FeatureSettingsButton scope={{ kind: 'feature', feature: 'audience' }} />
+                            {canWrite && (
+                                <Button icon='add' onClick={() => setAddOpen(true)}>
+                                    Suivre un site
+                                </Button>
+                            )}
+                        </header>
+                    </StickyHeader>
 
                     {error && <p className={styles.error}>{error}</p>}
                     <QuotaNotice quota={eventsQuota} />

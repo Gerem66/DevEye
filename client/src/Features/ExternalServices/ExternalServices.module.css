@@ -1,7 +1,9 @@
+/* `min-height` et non `height` : l'en-tête colle dans la boîte de la racine,
+   qui doit grandir avec son contenu. */
 .container {
     display: flex;
     flex-direction: column;
-    height: 100%;
+    min-height: 100%;
     gap: var(--space-lg);
 }
 
