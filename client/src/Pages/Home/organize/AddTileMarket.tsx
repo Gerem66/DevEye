@@ -4,6 +4,7 @@ import type { HomeSection, ShortcutItem } from '@deveye/types';
 import { Dialog } from '@/Components/Dialog';
 import TextInput from '@/Components/TextInput';
 import { useDevices } from '@/devicesProvider';
+import { foldText } from '@/foldText';
 import {
     addDevice,
     addFeature,
@@ -211,7 +212,7 @@ export function AddTileMarket({ section, editShortcut, onClose }: AddTileMarketP
         });
     }
 
-    const search = query.trim().toLowerCase();
+    const search = foldText(query.trim());
 
     /**
      * Une recherche traverse les rayons : chercher « git » depuis les appareils
@@ -219,9 +220,7 @@ export function AddTileMarket({ section, editShortcut, onClose }: AddTileMarketP
      * vide.
      */
     const shown = search
-        ? items.filter((item) =>
-              `${item.title} ${item.description} ${item.keywords ?? ''}`.toLowerCase().includes(search)
-          )
+        ? items.filter((item) => foldText(`${item.title} ${item.description} ${item.keywords ?? ''}`).includes(search))
         : rayon === 'all'
           ? items
           : rayon === 'recommended'
@@ -234,7 +233,7 @@ export function AddTileMarket({ section, editShortcut, onClose }: AddTileMarketP
     counts.set('all', items.length);
     counts.set('recommended', items.filter((item) => item.recommended).length);
 
-    // Le rayon des raccourcis montre son formulaire, pas des cartes — sauf
+    // Le rayon des raccourcis montre son formulaire, pas des cartes, sauf
     // pendant une recherche, qui traverse tout et reprend la main sur l'affichage.
     const showShortcutForm = !search && rayon === 'shortcut';
 
