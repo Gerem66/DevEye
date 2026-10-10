@@ -320,18 +320,16 @@ function LocationTab({
             >
                 {loc.isPrimary ? '★' : '☆'}
             </button>
-            {!loc.isPrimary && (
-                <button
-                    className={styles.removeTabBtn}
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        onRemove();
-                    }}
-                    aria-label='Supprimer'
-                >
-                    ×
-                </button>
-            )}
+            <button
+                className={styles.removeTabBtn}
+                onClick={(e) => {
+                    e.stopPropagation();
+                    onRemove();
+                }}
+                aria-label='Supprimer'
+            >
+                ×
+            </button>
         </Reorder.Item>
     );
 }
@@ -504,10 +502,10 @@ export default function Weather() {
     const handleRemove = async (id: string) => {
         try {
             const res = await api.send('weather.remove', { id });
-            const next = locations.filter((l) => l.id !== res.id);
-            applyLocations(next);
+            applyLocations(res.locations);
             if (selectedId === id) {
-                const fallback = next[0] ?? null;
+                // La ville consultée vient de partir : la première qui reste prend sa place.
+                const fallback = res.locations[0] ?? null;
                 setSelectedId(fallback?.id ?? null);
                 setReport(null);
                 if (fallback) await loadReport(fallback.id);

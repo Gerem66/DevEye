@@ -167,7 +167,8 @@ export const weatherHandlers = [
                 description: 'Ville météo supprimée',
                 metadata: { locationId: input.id }
             });
-            return { id: input.id };
+            const rows = await ctx.repo.listLocations(ctx.workspaceId);
+            return { locations: rows.map(toLocation) };
         }
     }),
     defineSdkFeature({

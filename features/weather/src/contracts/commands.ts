@@ -33,10 +33,11 @@ export const weatherUpdate = {
     output: z.object({ location: weatherLocationSchema })
 };
 
+/** Retirer une ville, principale comprise : la première qui reste prend l'étoile. */
 export const weatherRemove = {
     command: 'weather.remove' as const,
     input: z.object({ id: locationId }),
-    output: z.object({ id: locationId })
+    output: z.object({ locations: z.array(weatherLocationSchema) })
 };
 
 /** Réordonner les villes de l'espace : `ids` est le nouvel ordre complet. */
