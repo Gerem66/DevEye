@@ -101,24 +101,31 @@
     white-space: nowrap;
 }
 
-/* Coin haut-droite du titre : une case de largeur fixe où le bouclier (repos)
-   et la flèche (survol) se superposent en absolu, sinon la case changerait de
-   largeur au survol et le titre sauterait. */
 .badge {
     flex: none;
     display: flex;
 }
 
+/*
+ * La flèche n'existe qu'au survol : au repos, sa marge négative l'absorbe avec la
+ * gouttière, et la pastille ou le titre touchent le bord. Le survol la fait
+ * paraître en poussant la pastille ; c'est la marge qui s'anime, si bien que le
+ * titre change vraiment de largeur et que ses points de suspension suivent.
+ * Sans pointeur, puisqu'elle recouvre la fin de la pastille au repos.
+ */
 .headerMark {
-    position: relative;
+    --mark-width: 16px;
+
+    display: flex;
     flex: none;
-    width: 16px;
-    height: 16px;
+    width: var(--mark-width);
+    margin-left: calc(-1 * (var(--mark-width) + var(--space-sm)));
+    pointer-events: none;
+    transition: margin-left var(--transition-fast);
 }
 
-.headerMark > * {
-    position: absolute;
-    inset: 0;
+.widget:hover .headerMark {
+    margin-left: 0;
 }
 
 .expandHint {
@@ -147,8 +154,8 @@
 }
 
 /* Téléphone : deux cartes par rangée ne laissent qu'une centaine de pixels à
-   l'en-tête, d'où un chrome resserré. La flèche disparaît : elle ne se montre
-   qu'au survol, qui n'existe pas là, et elle coûtait 20px au titre. */
+   l'en-tête, d'où un chrome resserré. La flèche disparaît : le survol n'existe
+   pas là, et celui qu'un toucher laisse collé pousserait la pastille. */
 @media (max-width: 640px) {
     .header {
         gap: var(--space-xs);
