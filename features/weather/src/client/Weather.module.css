@@ -307,6 +307,10 @@
     opacity: 0.35;
 }
 
+.emptyAdd {
+    pointer-events: auto;
+}
+
 .weatherContent {
     display: flex;
     flex-direction: column;

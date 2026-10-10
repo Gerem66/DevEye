@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { motion, Reorder, useDragControls } from 'framer-motion';
 import {
+    Button,
     FeatureSettingsButton,
     onResourceChange,
     StickyHeader,
@@ -345,6 +346,8 @@ export default function Weather() {
     const [searchInput, setSearchInput] = useState('');
     const [adding, setAdding] = useState(false);
     const [addError, setAddError] = useState<string | null>(null);
+    const searchFormId = useId();
+    const searchRef = useRef<HTMLInputElement>(null);
     // Les fournisseurs dont l'espace tient la clé : ce qui ouvre ou ferme le
     // choix de source. Jamais la clé elle-même, seulement le fait qu'elle existe.
     const [held, setHeld] = useState<Record<string, boolean>>({});
@@ -493,6 +496,11 @@ export default function Weather() {
         }
     };
 
+    // Un bouton « + » rend la saisie au champ sans la lui retirer au clic, puis
+    // soumet : un champ vide n'ajoute rien et garde le focus.
+    const keepSearchFocus = (e: React.MouseEvent) => e.preventDefault();
+    const focusSearch = () => searchRef.current?.focus();
+
     const handleRemove = async (id: string) => {
         try {
             const res = await api.send('weather.remove', { id });
@@ -551,8 +559,9 @@ export default function Weather() {
                 </div>
             </StickyHeader>
 
-            <form className={styles.searchForm} onSubmit={handleAdd}>
+            <form id={searchFormId} className={styles.searchForm} onSubmit={handleAdd}>
                 <input
+                    ref={searchRef}
                     type='text'
                     className={styles.searchInput}
                     placeholder='Ajouter une ville…'
@@ -562,7 +571,14 @@ export default function Weather() {
                         if (addError) setAddError(null);
                     }}
                 />
-                <button type='submit' className={styles.searchBtn} disabled={adding}>
+                <button
+                    type='submit'
+                    className={styles.searchBtn}
+                    disabled={adding}
+                    aria-label='Ajouter la ville'
+                    onMouseDown={keepSearchFocus}
+                    onClick={focusSearch}
+                >
                     {adding ? <span className={styles.spinner} /> : <span className='icon icon-plus' />}
                 </button>
             </form>
@@ -575,6 +591,17 @@ export default function Weather() {
                 <div className={styles.empty}>
                     <span className={styles.emptyIcon}>🌡️</span>
                     <p>Ajoutez une ville pour voir la météo</p>
+                    <Button
+                        type='submit'
+                        form={searchFormId}
+                        icon='plus'
+                        className={styles.emptyAdd}
+                        disabled={adding}
+                        onMouseDown={keepSearchFocus}
+                        onClick={focusSearch}
+                    >
+                        Ajouter une ville
+                    </Button>
                 </div>
             ) : (
                 <div className={styles.weatherContent}>

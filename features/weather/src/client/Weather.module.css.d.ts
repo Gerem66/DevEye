@@ -13,6 +13,7 @@ declare const styles: {
     readonly detailsGrid: string;
     readonly dragHandle: string;
     readonly empty: string;
+    readonly emptyAdd: string;
     readonly emptyIcon: string;
     readonly errorBanner: string;
     readonly forecastCard: string;
