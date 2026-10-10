@@ -70,7 +70,7 @@ export const workspaceAddFeature: FeatureDefinition<
                         username: owner.username,
                         avatar: owner.avatar,
                         color: owner.color,
-                        lastLogin: Number(owner.last_login),
+                        lastSeen: Number(owner.last_seen),
                         created: Number(owner.created)
                     }
                 ],

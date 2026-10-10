@@ -41,6 +41,8 @@ export interface UsersRepo {
         e2eRun?: string | null;
     }): Promise<UserRow>;
     updateLastLogin(id: number, lastLogin: number): Promise<void>;
+    /** Avance la dernière visite, jamais en arrière. */
+    updateLastSeen(id: number, lastSeen: number): Promise<void>;
     /** Rattache le compte à son espace personnel, juste après l'avoir créé. */
     setPersonalWorkspace(id: number, workspaceId: number): Promise<void>;
     /** Espace « favori » chargé en premier ; `null` → l'espace personnel. */
@@ -141,6 +143,9 @@ export function usersRepo(pool: Q): UsersRepo {
         },
         async updateLastLogin(id, lastLogin) {
             await pool.query('UPDATE users SET last_login = ? WHERE id = ?', [lastLogin, id]);
+        },
+        async updateLastSeen(id, lastSeen) {
+            await pool.query('UPDATE users SET last_seen = ? WHERE id = ? AND last_seen < ?', [lastSeen, id, lastSeen]);
         },
         async setPersonalWorkspace(id, workspaceId) {
             await pool.query('UPDATE users SET personal_workspace_id = ? WHERE id = ?', [workspaceId, id]);

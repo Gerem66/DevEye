@@ -17,10 +17,16 @@ import styles from './Workspace.module.css';
 /** Les vues de la page. « general » existe toujours, les autres dépendent des droits. */
 type TabId = 'general' | 'members' | 'roles';
 
-/** « il y a 3 j », ou « jamais » pour un compte qui n'est pas encore venu. */
+/** Minuit du jour de `date`, en heure locale. */
+function dayStart(date: Date): number {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+}
+
+/** « vu il y a 3 j », ou « jamais connecté » pour un compte qui n'est pas encore venu. */
 function lastSeen(epoch: number): string {
     if (!epoch) return 'jamais connecté';
-    const days = Math.floor((Date.now() / 1000 - epoch) / 86400);
+    // En jours du calendrier : vu hier soir n'est pas « aujourd'hui » ce matin.
+    const days = Math.round((dayStart(new Date()) - dayStart(new Date(epoch * 1000))) / 86_400_000);
     if (days <= 0) return 'vu aujourd’hui';
     if (days === 1) return 'vu hier';
     if (days < 30) return `vu il y a ${days} j`;
@@ -178,7 +184,7 @@ export default function FeatureWorkspace() {
                                                     )}
                                             </span>
                                             <span className={styles.rowMeta}>
-                                                {u.email} · {lastSeen(u.lastLogin)}
+                                                {u.email} · {lastSeen(u.lastSeen)}
                                             </span>
                                         </div>
                                         {/* Le propriétaire n'a pas de rôle : il a tout par

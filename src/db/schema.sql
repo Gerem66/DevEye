@@ -2310,6 +2310,7 @@ CREATE TABLE `users` (
   `settings` json NOT NULL,
   `re_auth_interval` int DEFAULT NULL,
   `last_login` bigint NOT NULL DEFAULT '0',
+  `last_seen` bigint NOT NULL DEFAULT '0',
   `created` bigint NOT NULL DEFAULT (unix_timestamp()),
   `terms_accepted_at` bigint DEFAULT NULL,
   `e2e_run` varchar(48) COLLATE utf8mb4_general_ci DEFAULT NULL,

@@ -49,6 +49,7 @@ import {
     verifyRefreshToken,
     verifyTwoFactorChallenge
 } from './jwt';
+import { markSeen } from './lastSeen';
 import { loadUserBundle } from './loadUserBundle';
 import { issueSession } from './session';
 
@@ -519,6 +520,8 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live 
         const claims = await verifyAccessToken(accessToken);
         if (!claims) return reply.code(401).send(err('auth_expired', 'Access token expired'));
 
+        // Avant la lecture : sa propre ligne dans la liste des membres dit déjà « aujourd'hui ».
+        await markSeen(db, Number(claims.sub));
         const bundle = await loadUserBundle(db, Number(claims.sub), requestedWorkspace(req));
         if (!bundle) return reply.code(401).send(err('auth_invalid', 'Unknown user'));
 

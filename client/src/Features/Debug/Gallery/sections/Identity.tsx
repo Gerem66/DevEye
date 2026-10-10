@@ -11,7 +11,7 @@ const SAMPLE = (color: MinimalUser['color']): MinimalUser => ({
     username: 'Camille',
     avatar: '',
     color,
-    lastLogin: 0,
+    lastSeen: 0,
     created: 0
 });
 

@@ -174,7 +174,7 @@ async function describe(ctx: FeatureContext, workspaceId: number): Promise<Works
             username: u.username,
             avatar: u.avatar,
             color: u.color,
-            lastLogin: Number(u.last_login),
+            lastSeen: Number(u.last_seen),
             created: Number(u.created)
         })),
         features: parseFeatures(row.features),

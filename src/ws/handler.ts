@@ -25,6 +25,7 @@ import {
 import type { FastifyInstance } from 'fastify';
 
 import { ACCESS_COOKIE } from '@/auth/cookies';
+import { markSeen } from '@/auth/lastSeen';
 import { isFederatedOrigin } from '@/auth/federation';
 import { redeemWsTicket } from '@/auth/wsTicket';
 import { verifyAccessToken } from '@/auth/jwt';
@@ -185,9 +186,11 @@ export async function registerWS(
             const { command, payload, requestId: clientReqId, workspaceId } = parsed.data;
             const replyId = clientReqId ?? requestId;
 
-            // La personne vient de se servir de la page : sa place n'est pas inactive.
+            // La personne vient de se servir de la page : sa place n'est pas inactive,
+            // et les autres membres la voient passer.
             if (command === SESSION_ACTIVE_COMMAND) {
                 liveHub.noteActive(socket);
+                void markSeen(db, session!.userId);
                 return;
             }
 

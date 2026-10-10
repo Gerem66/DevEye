@@ -80,6 +80,7 @@ const SCOPES: { [K in RepoKey]: RepoScope<K> } = {
             search: { args: ['u', 10], global: "recherche d'administration" },
             create: { args: [{ email: 'a@b.c', username: 'u', passwordHash: 'h' }] },
             updateLastLogin: { args: [1, 0] },
+            updateLastSeen: { args: [1, 0] },
             setPersonalWorkspace: { args: [1, 2] },
             setDefaultWorkspace: { args: [1, null] },
             updatePasswordHash: { args: [1, 'h'] },

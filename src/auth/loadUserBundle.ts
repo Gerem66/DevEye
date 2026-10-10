@@ -60,7 +60,7 @@ export async function loadUserBundle(
                 username: u.username,
                 avatar: u.avatar,
                 color: u.color,
-                lastLogin: Number(u.last_login),
+                lastSeen: Number(u.last_seen),
                 created: Number(u.created)
             }));
         return {

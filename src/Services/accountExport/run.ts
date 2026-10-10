@@ -190,6 +190,7 @@ export async function writeAccountExport(zip: ZipWriter, host: ExportHost, req: 
             couleur: account.color,
             creeLe: iso(account.created),
             derniereConnexion: iso(account.last_login),
+            derniereVisite: iso(account.last_seen),
             conditionsAccepteesLe: iso(account.terms_accepted_at),
             reglages: parseJson(account.settings)
         },
