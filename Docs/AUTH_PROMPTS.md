@@ -60,6 +60,22 @@ chiffrement.
   (voir [SECURITY_MODEL.md](./SECURITY_MODEL.md#la-dek-prêtée-à-une-exportation)),
   la session reste verrouillée.
 
+## 1 quater. `StepUpGate` : le code avant de piloter une machine
+
+- Fichier : `client/src/Components/StepUpGate/StepUpGate.tsx`, monté une fois
+  au niveau de l'app, store `client/src/stores/stepUp.ts`.
+- Déclencheur : un refus `stepup_required` sur n'importe quelle commande,
+  intercepté par `DevEyeWs.send` (`client/src/api/ws.ts`) : aucun site d'appel
+  ne l'enrobe, les modules compris. Le code confirmé (`stepup.confirm`, sur la
+  connexion qui l'a demandé), la commande repart une seule fois ; l'invite
+  fermée, elle rend le refus d'origine.
+- Saisie : le code à six chiffres de l'application, ou un code de secours
+  (`AuthenticatorCodeField` de `client/src/Components/CodeInput`, le champ de
+  toute saisie de code de la 2FA). Sans application, l'invite l'explique et
+  ouvre Sécurité.
+- Ce n'est pas un mot de passe et ne déverrouille aucune donnée : voir
+  [SECURITY_MODEL.md](./SECURITY_MODEL.md#lagent).
+
 ## 2. Notes privées : aucune invite dédiée
 
 Une note marquée « privée » est chiffrée avec la DEK gardée au lieu de la DEK
@@ -78,7 +94,8 @@ mail) suivent eux le contrat du composant `client/src/Components/Popup` :
 
 Même réutilisation partout ailleurs : une boîte mail à l'étage gardé,
 l'historique OSINT, une note privée passent tous par `withSecrecy()` et donc
-par l'invite n°1. Il n'existe aucune autre invite de mot de passe dans l'app.
+par l'invite n°1. Il n'existe aucune autre invite de mot de passe dans l'app,
+hors des gestes de compte (n° 1 ter, mise en place de la 2FA dans Sécurité).
 
 ## Modèle de sécurité global
 

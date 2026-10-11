@@ -2409,6 +2409,7 @@ CREATE TABLE `users` (
   `default_workspace_id` int DEFAULT NULL,
   `settings` json NOT NULL,
   `re_auth_interval` int DEFAULT NULL,
+  `step_up_interval` int unsigned NOT NULL DEFAULT '900',
   `last_login` bigint NOT NULL DEFAULT '0',
   `last_seen` bigint NOT NULL DEFAULT '0',
   `created` bigint NOT NULL DEFAULT (unix_timestamp()),

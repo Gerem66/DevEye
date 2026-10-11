@@ -25,7 +25,7 @@ export const agentTermOpenFeature: FeatureDefinition<
     ...agentTermOpen,
     access: { feature: 'devices', extras: ['terminal'] },
     handler: async (ctx, input) => {
-        const row = await authorizeReachableDevice(ctx, input.deviceId);
+        const row = await authorizeReachableDevice(ctx, input.deviceId, { control: true });
         const ok = ctx.monitor?.requestTermOpen(row.id, {
             sessionId: input.sessionId,
             cols: input.cols,

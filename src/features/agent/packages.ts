@@ -35,7 +35,7 @@ export const agentUpgradePackagesFeature: FeatureDefinition<
     ...agentUpgradePackages,
     access: { feature: 'devices', extras: ['system'] },
     handler: async (ctx, input) => {
-        const row = await authorizeReachableDevice(ctx, input.deviceId);
+        const row = await authorizeReachableDevice(ctx, input.deviceId, { control: true });
         const monitor = ctx.monitor;
         if (!monitor) throw new FeatureError('conflict', 'Agent hors ligne');
         // Le verrou d'abord : la seule barrière qui tienne quel que soit l'écran

@@ -209,7 +209,10 @@ Application directe des deux étages ci-dessus (`features/notes/src/server/handl
 - 2FA TOTP optionnel avec codes de secours à usage unique. Un code TOTP accepté
   ne se rejoue pas (`last_used_counter`) ; les codes de secours (16 caractères)
   sont condensés sous une clé dérivée de la clé serveur, pas en SHA-256 nu : un
-  dump seul ne permet pas de les tester hors ligne.
+  dump seul ne permet pas de les tester hors ligne. La mettre en place exige le
+  mot de passe du compte, en régénérer les codes de secours exige un code : la
+  2FA ouvre les machines (voir [L'agent](#lagent)), une session seule ne doit
+  pas se la donner.
 - **Verrouillage progressif** sur tout ce qui vérifie un secret : login, 2FA,
   déverrouillage du coffre, récupération, activation/désactivation de la 2FA.
   Compteur d'échecs par compte (par identifiant pour le login), 5 échecs → 30 s,
@@ -248,6 +251,21 @@ de paquets et l'extinction, sous le compte de l'agent (root pour un service
 système). Le modèle de confiance se dit donc sans détour : **qui contrôle le
 serveur contrôle les machines**, à ceci près.
 
+- **La confirmation pour piloter.** Le serveur signe pour toute session qui a
+  les droits : un mot de passe ou un cookie volés suffiraient donc à piloter
+  les machines. Faire agir une machine ou en lire le contenu (terminal,
+  fichiers, journaux, conteneurs, paquets, alimentation, privilèges, tunnels,
+  CloudSync, un appairage) exige en plus la double authentification et un code
+  de l'application saisi dans CETTE session depuis moins que le délai choisi
+  par le compte (15 min par défaut, de 1 à 480), glissant à chaque action, au
+  plus 12 h d'affilée (`src/features/stepup`, `assertStepUp`). La règle est par
+  personne : un membre sans double authentification voit les machines, il ne
+  les pilote pas. Regarder (mesures, état, processus, inventaire Docker) ne
+  demande rien, et une tâche de fond (sauvegarde, déploiement) non plus : la
+  confirmation a eu lieu quand on l'a réglée. Une session volée ne peut ni poser
+  sa propre application (le mot de passe est exigé pour mettre la 2FA en
+  place) ni se fabriquer des codes de secours (un code est exigé pour les
+  régénérer). Ce que ça ne protège pas : un serveur compromis.
 - **La politique locale.** La section `[policy]` de l'`agent.toml` dit ce que la
   machine accepte (onze interrupteurs, listés plus bas). Aucune trame ne la
   modifie, l'explorateur n'écrit

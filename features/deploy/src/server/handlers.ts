@@ -158,7 +158,7 @@ async function addAccessTarget(ctx: Ctx, credentialId: number, input: TargetInpu
 async function addMachineTarget(ctx: Ctx, deviceId: string, input: TargetInput): Promise<DeployTarget> {
     if (input.kind !== 'service') throw new FeatureError('validation', 'Une machine déploie un service compose.');
     parseServiceId(input.externalId);
-    await ctx.deveye.devices.authorize(deviceId, { extras: ['docker'] });
+    await ctx.deveye.devices.authorize(deviceId, { extras: ['docker'], control: true });
 
     const content = await ctx.cipher().encrypt(JSON.stringify({ name: input.name } satisfies StoredTarget));
     const existing = await ctx.repo.findTargetByDevice(ctx.workspaceId, deviceId, input.externalId);
@@ -202,6 +202,8 @@ async function triggerOnMachine(
     if (!ctx.deveye.devices.isOnline(target.device_id)) {
         throw new FeatureError('conflict', 'La machine est hors ligne : rien ne peut s’y déployer pour l’instant.');
     }
+    // Relancer un service fait agir la machine, comme un ordre Docker.
+    await ctx.deveye.devices.assertControl();
 
     const cipher = await targetCipherFor(ctx, target);
     const title = input.title || 'Déploiement depuis DevEye';
@@ -331,7 +333,9 @@ export const deployHandlers = [
                     );
                 }
                 parseServiceId(input.externalId);
-                if (target.device_id) await ctx.deveye.devices.authorize(target.device_id, { extras: ['docker'] });
+                if (target.device_id) {
+                    await ctx.deveye.devices.authorize(target.device_id, { extras: ['docker'], control: true });
+                }
             } else if (input.credentialId !== null) {
                 const { provider } = await loadAccess(ctx, input.credentialId);
                 if (provider.id !== target.provider) {

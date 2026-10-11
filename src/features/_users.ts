@@ -3,6 +3,7 @@ import type { LiveTransport } from '@/live/hub';
 import { logger } from '@/logger';
 import { accountDeletedMail } from '@/Services/accountMails';
 import { forgetSessionsOf } from '@/Services/SecureStore';
+import { forgetStepUpsOf } from '@/Services/stepUp';
 import { serverMail } from '@/Services/serverMail';
 import { invalidateAccess } from './_access';
 import { notifyAdmins } from './admin/notify';
@@ -38,6 +39,7 @@ export async function deleteUserEverywhere(
     await db.users.delete(userId);
     invalidateAccess();
     forgetSessionsOf(userId);
+    forgetStepUpsOf(userId);
     if (serverMail.configured) {
         const mail = accountDeletedMail({
             username: target.username,

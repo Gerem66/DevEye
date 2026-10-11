@@ -21,7 +21,7 @@ export const agentUpdateFeature: FeatureDefinition<
         // aussi un appareil passé en lecture seule pour le rôle de l'appelant.
         // Pousser un binaire n'est pas de la lecture, et `admin: true` ne
         // déroge pas à une surcharge par élément qui abaisse.
-        const row = await authorizeReachableDevice(ctx, input.deviceId);
+        const row = await authorizeReachableDevice(ctx, input.deviceId, { control: true });
         // Pre-flight: the agent must have told us its build target, and we must
         // hold a NEWER, SIGNED binary for it. Each gate maps to a clear French
         // error so the UI can explain why the button did nothing.

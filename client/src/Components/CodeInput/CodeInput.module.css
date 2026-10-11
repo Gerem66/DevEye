@@ -1,0 +1,59 @@
+.input {
+    width: 140px;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 1.25rem;
+    letter-spacing: 0.2em;
+    text-align: center;
+    outline: none;
+    transition: border-color var(--transition-fast);
+}
+
+.input:focus {
+    border-color: var(--accent);
+}
+
+.input::placeholder {
+    color: var(--text-muted);
+    letter-spacing: 0.2em;
+}
+
+/* Seize caractères et trois tirets : la largeur suit, la police rétrécit. */
+.recovery {
+    width: min(100%, 280px);
+    font-size: 1rem;
+    letter-spacing: 0.08em;
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.switch {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 0.85rem;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.switch:hover,
+.switch:focus-visible {
+    color: var(--text-primary);
+}
+
+.error {
+    color: var(--danger);
+    font-size: 0.85rem;
+    text-align: center;
+}

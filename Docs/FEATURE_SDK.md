@@ -557,7 +557,12 @@ ceux que l'espace a réglés pour LA feature
 
 `devices.read` : `devices.authorize(id, { extras })` est LA garde de l'app et
 éprouve, avec `extras`, les permissions d'Appareils de l'appelant sur CET
-appareil, qu'un module ne peut pas nommer dans son `access` ; `devices.list()`
+appareil, qu'un module ne peut pas nommer dans son `access` ; avec
+`control: true`, là où la machine va agir (un dossier qu'elle archive, un
+service qu'elle redéploie, un tunnel qu'elle ouvre), elle exige aussi un code
+d'application récent (`stepup_required`, que le client transforme en invite
+puis en un seul nouvel essai), et `devices.assertControl()` exige ce code seul,
+sans appareil (un code d'appairage) ; `devices.list()`
 rend ceux de l'espace et ceux qui y sont projetés ; côté service,
 `devicesFor(ws)` et `deps.devices.find(id)`, et `deps.access.feature` /
 `deps.access.device` relisent le droit d'un auteur sans session (Sauvegardes).

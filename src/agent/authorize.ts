@@ -1,6 +1,7 @@
 import type { Device, DeviceRow } from '@deveye/types';
 
 import { FeatureError, type FeatureContext } from '@/features/_define';
+import { assertStepUp } from '@/features/stepup';
 import { isPlanPaused } from '@/Services/planPauses';
 import { metricIntervalOf } from './cadence';
 import { computeAgentUpdate, deviceRowToDevice } from './mappers';
@@ -52,7 +53,8 @@ export async function toDevice(ctx: FeatureContext, row: DeviceRow): Promise<Dev
  * Comme {@link authorizeDevice}, mais exige en plus que l'agent soit joignable :
  * pour les commandes qui ne font que relayer un ordre à la machine. Un appareil
  * masqué ou passé en lecture seule pour le rôle de l'appelant ne prend pas
- * d'ordre.
+ * d'ordre. `control` : l'ordre fait agir la machine ou en lit le contenu, et
+ * exige un code d'application récent ({@link assertStepUp}).
  *
  * La surcharge est lue directement, et non par `ctx.assertItem(…, 'write')` :
  * celui-ci réclamerait l'écriture, alors que le droit d'agir sur la machine
@@ -61,7 +63,11 @@ export async function toDevice(ctx: FeatureContext, row: DeviceRow): Promise<Dev
  * QUI ABAISSE ferme la porte ici : un appareil passé en lecture seule pour un
  * rôle ne prend pas d'ordre, quelles que soient ses permissions.
  */
-export async function authorizeReachableDevice(ctx: FeatureContext, deviceId: string): Promise<DeviceRow> {
+export async function authorizeReachableDevice(
+    ctx: FeatureContext,
+    deviceId: string,
+    options: { control?: boolean } = {}
+): Promise<DeviceRow> {
     const row = await authorizeDevice(ctx, deviceId);
     const override = (await ctx.itemRestrictions('devices')).get(row.id);
     if (override === 'none') throw new FeatureError('forbidden', 'Cet appareil ne vous est pas accessible');
@@ -90,5 +96,7 @@ export async function authorizeReachableDevice(ctx: FeatureContext, deviceId: st
     if (!(online(ctx, [row.id])[row.id] ?? false)) {
         throw new FeatureError('conflict', 'Agent hors ligne');
     }
+    // En dernier : le code ne se demande que pour un ordre qui partirait.
+    if (options.control) await assertStepUp(ctx);
     return row;
 }

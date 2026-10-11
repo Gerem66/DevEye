@@ -37,7 +37,7 @@ export const agentLogQueryFeature: FeatureDefinition<
     ...agentLogQuery,
     access: { feature: 'devices', extras: ['logs'] },
     handler: async (ctx, input) => {
-        const row = await authorizeReachableDevice(ctx, input.deviceId);
+        const row = await authorizeReachableDevice(ctx, input.deviceId, { control: true });
         const ok =
             ctx.monitor?.requestLogQuery(row.id, {
                 queryId: input.queryId,

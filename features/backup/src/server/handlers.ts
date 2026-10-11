@@ -239,7 +239,7 @@ async function assertDeviceInWorkspace(ctx: Ctx, deviceId: string | null): Promi
     if (!deviceId || !devices.some((d) => d.id === deviceId)) {
         throw new FeatureError('not_found', "Cet appareil n'appartient pas à cet espace.");
     }
-    return ctx.deveye.devices.authorize(deviceId, { extras: ['files'] });
+    return ctx.deveye.devices.authorize(deviceId, { extras: ['files'], control: true });
 }
 
 const destinationAddFeature = defineSdkFeature({

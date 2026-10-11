@@ -95,6 +95,7 @@ const SCOPES: { [K in RepoKey]: RepoScope<K> } = {
             listAdminIds: { args: [], global: 'les administrateurs à prévenir' },
             listModeratorIds: { args: [], global: 'les comptes qui modèrent, à prévenir' },
             setReAuthInterval: { args: [1, null] },
+            setStepUpInterval: { args: [1, 900] },
             count: { args: [], global: 'le premier compte devient administrateur' },
             countForUpdate: { args: [], global: 'le premier compte devient administrateur' }
         }

@@ -80,6 +80,7 @@ export interface UsersRepo {
     listModeratorIds(): Promise<{ id: number; personalWorkspaceId: number }[]>;
     /** Password re-validation window in seconds; `null` resets to the default. */
     setReAuthInterval(id: number, seconds: number | null): Promise<void>;
+    setStepUpInterval(id: number, seconds: number): Promise<void>;
     count(): Promise<number>;
     /**
      * En transaction, verrouille la lecture : deux premiers comptes simultanés
@@ -237,6 +238,9 @@ export function usersRepo(pool: Q): UsersRepo {
         },
         async setReAuthInterval(id, seconds) {
             await pool.query('UPDATE users SET re_auth_interval = ? WHERE id = ?', [seconds, id]);
+        },
+        async setStepUpInterval(id, seconds) {
+            await pool.query('UPDATE users SET step_up_interval = ? WHERE id = ?', [seconds, id]);
         },
         async count() {
             const r = await pool.query<{ n: number }>('SELECT COUNT(*) AS n FROM users');

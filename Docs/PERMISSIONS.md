@@ -250,6 +250,12 @@ règle des commandes natives (une machine passée en lecture seule pour son rôl
 ne prend pas d'ordre). Sauvegardes l'exige pour écrire des archives sur une
 machine ou en archiver un dossier : c'est la surface Fichiers.
 
+Faire agir une machine demande en plus, quel que soit le rôle, un code
+d'application récent dans la session (`control: true`, voir
+[SECURITY_MODEL.md](./SECURITY_MODEL.md#lagent)). C'est une règle par
+personne, pas par rôle : un membre sans double authentification voit les
+machines de l'espace, il ne les pilote pas.
+
 Un travail planifié s'exécute longtemps après que son auteur l'a réglé. Le
 service d'un module relit donc les droits de cet auteur à chaque passage, sans
 session (`deps.access.feature` pour les siens, `deps.access.device` pour une

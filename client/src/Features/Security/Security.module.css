@@ -269,13 +269,13 @@
 }
 
 /* Inline re-auth window editor. */
-.reAuthEditor {
+.minutesEditor {
     display: flex;
     align-items: center;
     gap: var(--space-sm);
 }
 
-.reAuthInput {
+.minutesInput {
     flex: 1;
     min-width: 0;
     padding: var(--space-sm);
@@ -292,30 +292,30 @@
     appearance: textfield;
 }
 
-.reAuthInput::-webkit-outer-spin-button,
-.reAuthInput::-webkit-inner-spin-button {
+.minutesInput::-webkit-outer-spin-button,
+.minutesInput::-webkit-inner-spin-button {
     -webkit-appearance: none;
     margin: 0;
 }
 
-.reAuthInput:focus {
+.minutesInput:focus {
     border-color: var(--accent);
 }
 
-.reAuthInput:disabled {
+.minutesInput:disabled {
     opacity: 0.4;
     cursor: not-allowed;
 }
 
-.reAuthUnit {
+.minutesUnit {
     font-size: 0.85rem;
     color: var(--text-secondary);
 }
 
-/* Le délai quand le chiffrement par mot de passe est coupé : un mot plutôt
-   qu'un champ grisé, qui laisserait croire qu'il gouverne encore quelque chose.
-   Mêmes métriques que `Button` pour aligner les cartes, sans `:hover`. */
-.reAuthOff {
+/* Un réglage sans objet (délai sans chiffrement, pilotage sans 2FA) : un mot
+   plutôt qu'un champ grisé, qui laisserait croire qu'il gouverne encore quelque
+   chose. Mêmes métriques que `Button` pour aligner les cartes, sans `:hover`. */
+.rowOff {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -333,7 +333,7 @@
 
 /* Transient autosave indicator next to the re-auth input. Fixed width so the
    editor row doesn't shift when the icon appears/disappears. */
-.reAuthStatus {
+.minutesStatus {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -341,34 +341,34 @@
     height: 18px;
 }
 
-.reAuthStatus .icon {
+.minutesStatus .icon {
     width: 16px;
     opacity: 0.9;
 }
 
 /* Saved / error icons fade-and-settle in: a subtle pop that feels like a gentle
    confirmation rather than a flash. */
-.reAuthOk,
-.reAuthErr {
-    animation: reAuthPop 250ms cubic-bezier(0.34, 1.4, 0.64, 1) both;
+.minutesOk,
+.minutesErr {
+    animation: minutesPop 250ms cubic-bezier(0.34, 1.4, 0.64, 1) both;
 }
 
-.reAuthOk {
+.minutesOk {
     color: var(--success);
 }
 
-.reAuthErr {
+.minutesErr {
     color: var(--danger);
 }
 
 /* Spinner: thin, low-contrast, smooth continuous rotation. */
-.reAuthSpin {
+.minutesSpin {
     color: var(--text-muted);
     opacity: 0.7;
-    animation: reAuthSpin 0.7s linear infinite;
+    animation: minutesSpin 0.7s linear infinite;
 }
 
-@keyframes reAuthPop {
+@keyframes minutesPop {
     from {
         opacity: 0;
         transform: scale(0.6);
@@ -379,18 +379,18 @@
     }
 }
 
-@keyframes reAuthSpin {
+@keyframes minutesSpin {
     to {
         transform: rotate(360deg);
     }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .reAuthOk,
-    .reAuthErr {
+    .minutesOk,
+    .minutesErr {
         animation: none;
     }
-    .reAuthSpin {
+    .minutesSpin {
         animation-duration: 1.4s;
     }
 }
@@ -402,11 +402,6 @@
     border-radius: var(--radius-sm);
     color: var(--danger);
     font-size: 0.85rem;
-}
-
-/* The disable-dialog variant follows the code input, so keep it off the field. */
-.disableError {
-    margin-top: var(--space-md);
 }
 
 /* 2FA setup steps, inside the setup dialog. */
@@ -518,30 +513,6 @@
     font-size: 0.85rem;
     color: var(--accent);
     word-break: break-all;
-}
-
-.codeInput {
-    width: 140px;
-    padding: var(--space-sm) var(--space-md);
-    background: var(--glass-bg);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-sm);
-    color: var(--text-primary);
-    font-family: var(--font-mono);
-    font-size: 1.25rem;
-    letter-spacing: 0.2em;
-    text-align: center;
-    outline: none;
-    transition: border-color var(--transition-fast);
-}
-
-.codeInput:focus {
-    border-color: var(--accent);
-}
-
-.codeInput::placeholder {
-    color: var(--text-muted);
-    letter-spacing: 0.2em;
 }
 
 .codesGrid {

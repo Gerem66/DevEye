@@ -81,6 +81,7 @@ const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
     // cadence que la liste d'appareils.
     sentinel: 'sentinel',
     shortlinks: 'shortlinks',
+    stepup: 'account',
     twofa: 'account',
     uptime: 'uptime',
     user: 'account',
@@ -112,6 +113,8 @@ function knownTopic(topic: string, modules: ReadonlySet<string>): boolean {
  * mutante non déclarée saute aux yeux au démarrage.
  */
 const NON_MUTATING = new Set([
+    // Un état de la session, en mémoire : rien d'écrit.
+    'stepup.confirm',
     'secrecy.unlock',
     'secrecy.hold',
     'secrecy.touch',

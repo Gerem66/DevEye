@@ -9,8 +9,10 @@ import {
 
 import QRCode from 'qrcode';
 
+import { verifyPassword } from '@/auth/argon';
 import { clearAttempts, guardAttempt, recordFailedAttempt } from '@/Services/attempts';
 import { totpContext } from '@/Services/sealContexts';
+import { forgetStepUpsOf } from '@/Services/stepUp';
 import { generateBackupCodes, generateTotpSecret, hashBackupCode, verifyTotp } from '@/Services/Totp';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 
@@ -31,10 +33,11 @@ async function buildStatus(ctx: FeatureContext): Promise<TwoFactorStatus> {
 
 /**
  * Verify a current TOTP or single-use backup code; throws on failure. Every
- * failure counts toward the account's lockout and is audited: this is a
- * password-equivalent check reachable from any live session.
+ * failure counts toward the account's lockout and is audited under
+ * `failedAction`: this is a password-equivalent check reachable from any live
+ * session.
  */
-async function assertValidCode(ctx: FeatureContext, code: string): Promise<void> {
+export async function assertValidCode(ctx: FeatureContext, code: string, failedAction = 'twofa.failed'): Promise<void> {
     const row = await ctx.db.twoFactor.get(ctx.userId);
     if (!row || !row.enabled) throw new FeatureError('conflict', '2FA is not enabled');
     const key = String(ctx.userId);
@@ -51,8 +54,28 @@ async function assertValidCode(ctx: FeatureContext, code: string): Promise<void>
         return;
     }
     recordFailedAttempt('twofa', key);
-    ctx.audit({ action: 'twofa.failed', level: 'warning', description: 'Code 2FA invalide' });
-    throw new FeatureError('auth_invalid', 'Invalid 2FA code');
+    ctx.audit({ action: failedAction, level: 'warning', description: 'Code 2FA invalide' });
+    throw new FeatureError('auth_invalid', 'Code incorrect');
+}
+
+/**
+ * Le mot de passe du compte, sous le compteur des mots de passe. Une session
+ * volée ne doit pas poser sa propre application : elle ouvrirait les machines.
+ */
+async function assertAccountPassword(ctx: FeatureContext, password: string): Promise<void> {
+    const key = String(ctx.userId);
+    guardAttempt('password', key);
+    const user = await ctx.db.users.findById(ctx.userId);
+    if (!user?.password_hash || !(await verifyPassword(user.password_hash, password))) {
+        recordFailedAttempt('password', key);
+        ctx.audit({
+            action: 'twofa.setup_failed',
+            level: 'warning',
+            description: 'Mise en place de la 2FA refusée : mot de passe incorrect'
+        });
+        throw new FeatureError('auth_invalid', 'Mot de passe incorrect');
+    }
+    clearAttempts('password', key);
 }
 
 export const twoFactorStatusFeature: FeatureDefinition<
@@ -73,9 +96,10 @@ export const twoFactorSetupFeature: FeatureDefinition<
     ...twoFactorSetup,
     mutates: true,
     access: { scope: 'account' },
-    handler: async (ctx) => {
+    handler: async (ctx, input) => {
         const existing = await ctx.db.twoFactor.get(ctx.userId);
         if (existing?.enabled) throw new FeatureError('conflict', '2FA is already enabled');
+        await assertAccountPassword(ctx, input.password);
 
         const user = await ctx.db.users.findById(ctx.userId);
         const account = user?.email ?? `user-${ctx.userId}`;
@@ -135,6 +159,7 @@ export const twoFactorDisableFeature: FeatureDefinition<
     handler: async (ctx, input) => {
         await assertValidCode(ctx, input.code);
         await ctx.db.twoFactor.disable(ctx.userId);
+        forgetStepUpsOf(ctx.userId);
         ctx.audit({ action: 'twofa.disable', level: 'warning', description: 'Double authentification désactivée' });
         return { status: await buildStatus(ctx) };
     }
@@ -148,9 +173,8 @@ export const twoFactorRegenBackupFeature: FeatureDefinition<
     ...twoFactorRegenBackup,
     mutates: true,
     access: { scope: 'account' },
-    handler: async (ctx) => {
-        const row = await ctx.db.twoFactor.get(ctx.userId);
-        if (!row || !row.enabled) throw new FeatureError('conflict', '2FA is not enabled');
+    handler: async (ctx, input) => {
+        await assertValidCode(ctx, input.code);
         const backupCodes = generateBackupCodes();
         await ctx.db.twoFactor.replaceBackupCodes(
             ctx.userId,

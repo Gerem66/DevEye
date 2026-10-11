@@ -24,6 +24,7 @@ import {
     rememberSessionDek,
     touchSessionDek
 } from '@/Services/SecureStore';
+import { forgetStepUpsOf } from '@/Services/stepUp';
 import { invalidateAccess } from '../_access';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 
@@ -313,6 +314,7 @@ export const secrecyRecoverFeature: FeatureDefinition<
         // Whatever was open under the old password closes everywhere else.
         await ctx.db.refreshTokens.revokeUserExcept(ctx.userId, ctx.sessionId);
         forgetSessionsOf(ctx.userId, ctx.sessionId);
+        forgetStepUpsOf(ctx.userId, ctx.sessionId);
         ctx.live?.closeSessionsOf(ctx.userId, ctx.sessionId);
         rememberSessionDek(ctx.sessionId, ctx.userId, dek, await graceMs(ctx));
         wrapModeChanged(ctx);

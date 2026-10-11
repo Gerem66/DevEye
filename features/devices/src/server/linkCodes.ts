@@ -29,6 +29,8 @@ export const devicesLinkCodeCreateFeature = defineSdkFeature<
     mutates: true,
     access: WRITE,
     handler: async (ctx, input) => {
+        // Une machine appairée se pilote : l'appairer se confirme de même.
+        await ctx.deveye.devices.assertControl();
         // La variable d'environnement ne passe pas le plafond que la demande respecte.
         const ttlSeconds = input.ttlSeconds ?? Math.min(env.LINK_CODE_TTL_SECONDS, LINK_CODE_TTL_MAX_SECONDS);
         const maxUses = input.maxUses ?? 1;

@@ -325,7 +325,8 @@ maintenable**.
 Statuts (`devices.status`) : `pending`, `active`, `pending_deletion`,
 `archived`.
 
-- **Appairage** : qui tient `devices: write` émet un code
+- **Appairage** : qui tient `devices: write` et a confirmé avec le code de son
+  application (`assertControl`, voir le modèle de sécurité) émet un code
   (`devices.linkCodeCreate`, toujours pour l'espace actif, sept jours au plus,
   pour 1 à 1000 machines), l'agent le présente à `POST /api/agent/enroll`. La
   route relit le code sans en dépenser d'usage (verrouillage de l'adresse sur

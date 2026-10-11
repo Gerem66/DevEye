@@ -3,6 +3,7 @@ import { adminDeleteUser, adminSetUserRole, adminSetUserStatus, adminUserList, t
 import { invalidateAccess } from '../_access';
 import { schedulePlanReconcile } from '@/Services/planPauses';
 import { forgetSessionsOf } from '@/Services/SecureStore';
+import { forgetStepUpsOf } from '@/Services/stepUp';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import { deleteUserEverywhere } from '../_users';
 import { adminExternalServicesFeature } from './externalServices';
@@ -102,6 +103,7 @@ export const adminSetUserStatusFeature: FeatureDefinition<
             // Ses coffres déverrouillés se referment tout de suite, sans attendre
             // que ses sockets tombent.
             forgetSessionsOf(input.userId);
+            forgetStepUpsOf(input.userId);
             // Et la présence : sinon le suspendu resterait dans le roster des
             // autres jusqu'à sa prochaine commande.
             ctx.live?.evictEverywhere(input.userId);

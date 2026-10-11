@@ -26,6 +26,7 @@ import { traceCall } from '../diagnostics/trace';
 import { notifyQuotaExceeded } from '@/stores/quotaPrompt';
 import { setAdmission, type Admission } from '@/stores/admission';
 import { forgetMaintenance, setMaintenance } from '@/stores/maintenance';
+import { ensureStepUp } from '@/stores/stepUp';
 import { randomUuid } from '@/randomUuid';
 
 const BASE_URL: string = (import.meta.env.VITE_SERVER_URL as string | undefined) ?? '';
@@ -477,8 +478,36 @@ export class DevEyeWs {
     /**
      * Send a feature command and await its typed response.
      * Validates input against the descriptor schema before sending.
+     *
+     * Un ordre à une machine qui réclame le code d'application
+     * (`stepup_required`) ouvre l'invite, puis repart une seule fois ; fermée,
+     * l'invite rend le refus d'origine.
      */
-    send<N extends FeatureCommandName>(
+    async send<N extends FeatureCommandName>(
+        command: N,
+        input: CommandInput<N>,
+        opts: SendOptions = {}
+    ): Promise<CommandOutput<N>> {
+        try {
+            return await this.sendOnce(command, input, opts);
+        } catch (e) {
+            if (!(e instanceof WsError) || e.code !== 'stepup_required') throw e;
+            const twoFactor = (e.details as { twoFactor?: unknown } | undefined)?.twoFactor === true;
+            try {
+                await ensureStepUp({
+                    twoFactor,
+                    confirm: async (code) => {
+                        await this.sendOnce('stepup.confirm', { code });
+                    }
+                });
+            } catch {
+                throw e;
+            }
+            return this.sendOnce(command, input, opts);
+        }
+    }
+
+    private sendOnce<N extends FeatureCommandName>(
         command: N,
         input: CommandInput<N>,
         opts: SendOptions = {}

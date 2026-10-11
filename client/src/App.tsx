@@ -9,6 +9,7 @@ import WaitingRoomPage from './Pages/WaitingRoom';
 import { readSignupRoute, type SignupRoute } from './Pages/Signup/route';
 import { useRootView } from './telemetry/useView';
 import { SecrecyGate } from './Components/SecrecyGate';
+import { StepUpGate } from './Components/StepUpGate';
 import ErrorBoundary from './Components/ErrorBoundary';
 import { ReportButton } from './Components/ReportButton';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
@@ -115,6 +116,7 @@ function AppRoot() {
                 </ErrorBoundary>
             )}
             {status === 'authenticated' && <SecrecyGate />}
+            {status === 'authenticated' && <StepUpGate />}
             {/* Monté ici et non dans l'accueil : le bouton doit survivre à
                 n'importe quelle vue, et se poser au-dessus d'elles toutes. */}
             {status === 'authenticated' && <ReportButton />}

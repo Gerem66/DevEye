@@ -37,7 +37,7 @@ export const agentSetAutostartFeature: FeatureDefinition<
     access: { feature: 'devices', level: 'write', admin: true },
     mutates: true,
     handler: async (ctx, input) => {
-        const row = await authorizeReachableDevice(ctx, input.deviceId);
+        const row = await authorizeReachableDevice(ctx, input.deviceId, { control: true });
         const pushed = ctx.monitor?.requestService(row.id, {
             action: input.enabled ? 'autostart-on' : 'autostart-off'
         });
@@ -63,7 +63,7 @@ export const agentElevateFeature: FeatureDefinition<
     access: { feature: 'devices', level: 'write', admin: true },
     mutates: true,
     handler: async (ctx, input) => {
-        const row = await authorizeReachableDevice(ctx, input.deviceId);
+        const row = await authorizeReachableDevice(ctx, input.deviceId, { control: true });
         const pushed = ctx.monitor?.requestService(row.id, { action: 'elevate' });
         if (!pushed) throw new FeatureError('conflict', 'Agent hors ligne');
         ctx.audit({
@@ -85,7 +85,7 @@ export const agentDropPrivilegesFeature: FeatureDefinition<
     access: { feature: 'devices', level: 'write', admin: true },
     mutates: true,
     handler: async (ctx, input) => {
-        const row = await authorizeReachableDevice(ctx, input.deviceId);
+        const row = await authorizeReachableDevice(ctx, input.deviceId, { control: true });
         const pushed = ctx.monitor?.requestService(row.id, { action: 'drop' });
         if (!pushed) throw new FeatureError('conflict', 'Agent hors ligne');
         ctx.audit({

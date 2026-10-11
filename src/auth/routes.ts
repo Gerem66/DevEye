@@ -32,6 +32,7 @@ import {
     rememberSessionDek,
     stashPendingDek
 } from '@/Services/SecureStore';
+import { forgetStepUp, forgetStepUpsOf } from '@/Services/stepUp';
 import { hashPassword, needsRehash, verifyPassword } from './argon';
 import {
     REFRESH_COOKIE,
@@ -459,6 +460,7 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live 
             if (!benign) {
                 await db.refreshTokens.revokeSession(claims.sid);
                 forgetSessionDek(claims.sid);
+                forgetStepUp(claims.sid);
                 live.closeSession(claims.sid);
                 dropAuthCookies(req, reply);
                 audit.record({
@@ -496,6 +498,7 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live 
                 // La socket s'est authentifiée une fois pour toutes : sans la
                 // fermer, elle servirait encore le coffre après la déconnexion.
                 forgetSessionDek(claims.sid);
+                forgetStepUp(claims.sid);
                 live.closeSession(claims.sid);
                 audit.record({
                     source: 'web',
@@ -599,6 +602,7 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live 
             // DEK and its socket. This one continues under fresh tokens, same `sid`.
             await db.refreshTokens.revokeUser(row.id);
             forgetSessionsOf(row.id, claims.sid);
+            forgetStepUpsOf(row.id, claims.sid);
             live.closeSessionsOf(row.id, claims.sid);
             const { tokens } = await issueSession(reply, db, row.id, authTransport(req), claims.sid);
 

@@ -69,7 +69,7 @@ export const agentDockerActionFeature: FeatureDefinition<
     ...agentDockerAction,
     access: { feature: 'devices', extras: ['docker'] },
     handler: async (ctx, input) => {
-        const row = await authorizeReachableDevice(ctx, input.deviceId);
+        const row = await authorizeReachableDevice(ctx, input.deviceId, { control: true });
         const monitor = ctx.monitor;
         if (!monitor) throw new FeatureError('conflict', 'Agent hors ligne');
 

@@ -26,7 +26,7 @@ export const agentFilesListFeature: FeatureDefinition<
     ...agentFilesList,
     access: { feature: 'devices', extras: ['files'] },
     handler: async (ctx, input) => {
-        const row = await authorizeReachableDevice(ctx, input.deviceId);
+        const row = await authorizeReachableDevice(ctx, input.deviceId, { control: true });
         const ok = ctx.monitor?.requestFilesList(row.id, { opId: input.opId, path: input.path });
         if (!ok) throw new FeatureError('conflict', 'Agent hors ligne');
         return { ok: true };
@@ -41,7 +41,7 @@ export const agentFilesAnalyzeFeature: FeatureDefinition<
     ...agentFilesAnalyze,
     access: { feature: 'devices', extras: ['files'] },
     handler: async (ctx, input) => {
-        const row = await authorizeReachableDevice(ctx, input.deviceId);
+        const row = await authorizeReachableDevice(ctx, input.deviceId, { control: true });
         const ok = ctx.monitor?.requestFilesAnalyze(row.id, { opId: input.opId, path: input.path });
         if (!ok) throw new FeatureError('conflict', 'Agent hors ligne');
         return { ok: true };
@@ -56,7 +56,7 @@ export const agentFilesSearchFeature: FeatureDefinition<
     ...agentFilesSearch,
     access: { feature: 'devices', extras: ['files'] },
     handler: async (ctx, input) => {
-        const row = await authorizeReachableDevice(ctx, input.deviceId);
+        const row = await authorizeReachableDevice(ctx, input.deviceId, { control: true });
         const ok = ctx.monitor?.requestFilesSearch(row.id, {
             opId: input.opId,
             path: input.path,
@@ -82,7 +82,7 @@ export const agentFilesMutateFeature: FeatureDefinition<
     ...agentFilesMutate,
     access: { feature: 'devices', extras: ['files'] },
     handler: async (ctx, input) => {
-        const row = await authorizeReachableDevice(ctx, input.deviceId);
+        const row = await authorizeReachableDevice(ctx, input.deviceId, { control: true });
         const ok = ctx.monitor?.requestFilesMutate(row.id, {
             opId: input.opId,
             op: input.op,
@@ -115,7 +115,7 @@ export const agentFilesDownloadFeature: FeatureDefinition<
     ...agentFilesDownload,
     access: { feature: 'devices', extras: ['files'] },
     handler: async (ctx, input) => {
-        const row = await authorizeReachableDevice(ctx, input.deviceId);
+        const row = await authorizeReachableDevice(ctx, input.deviceId, { control: true });
         const ok = ctx.monitor?.requestFilesDownload(row.id, { opId: input.opId, path: input.path });
         if (!ok) throw new FeatureError('conflict', 'Agent hors ligne');
         return { ok: true };
@@ -134,7 +134,7 @@ export const agentFilesUploadFeature: FeatureDefinition<
     ...agentFilesUpload,
     access: { feature: 'devices', extras: ['files'] },
     handler: async (ctx, input) => {
-        const row = await authorizeReachableDevice(ctx, input.deviceId);
+        const row = await authorizeReachableDevice(ctx, input.deviceId, { control: true });
         const ok = ctx.monitor?.requestFilesUpload(row.id, {
             opId: input.opId,
             path: input.path,

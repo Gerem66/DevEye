@@ -24,7 +24,7 @@ interface Pending {
 type Envelope = {
     requestId?: string;
     command: string;
-    payload: { ok: true; data: unknown } | { ok: false; error: { code: string; message: string } };
+    payload: { ok: true; data: unknown } | { ok: false; error: { code: string; message: string; details?: unknown } };
 };
 
 /**
@@ -150,7 +150,8 @@ export function createTestClient({
                         waiting.reject(
                             new FeatureError(
                                 msg.payload.error.code as ErrorCode,
-                                `${msg.command} : ${msg.payload.error.message}`
+                                `${msg.command} : ${msg.payload.error.message}`,
+                                msg.payload.error.details
                             )
                         );
                 });

@@ -27,7 +27,7 @@ export const agentPowerFeature: FeatureDefinition<
     ...agentPower,
     access: { feature: 'devices', extras: ['system'] },
     handler: async (ctx, input) => {
-        const row = await authorizeReachableDevice(ctx, input.deviceId);
+        const row = await authorizeReachableDevice(ctx, input.deviceId, { control: true });
         const ok = ctx.monitor?.requestPower(row.id, { action: input.action }) ?? false;
         if (!ok) throw new FeatureError('conflict', 'Agent hors ligne');
         ctx.audit({

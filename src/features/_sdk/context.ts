@@ -20,6 +20,7 @@ import type { NotificationFeature } from '@deveye/types';
 import type { FeatureContext } from '@/features/_define';
 import { accountUsages } from '@/features/_quota';
 import { shareScope } from '@/features/_sharing';
+import { assertStepUp } from '@/features/stepup';
 import { sdkDomains } from './domains';
 import { createFacade } from './facade';
 import { moduleManifest } from './register';
@@ -83,6 +84,7 @@ export function createSdkContext(
             accountUsages: (ids) => accountUsages(ctx.db, ids),
             // Les permissions d'Appareils de l'appelant sur une machine, surcharges
             // de l'élément comprises : ce que `agent.dockerAction` éprouve pour lui.
+            assertStepUp: () => assertStepUp(ctx),
             assertDeviceExtras: async (deviceId, keys) => {
                 if (!ctx.canFeature('devices', 'read')) {
                     throw new FeatureError('forbidden', 'Les appareils ne vous sont pas ouverts dans cet espace');

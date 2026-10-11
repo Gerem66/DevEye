@@ -52,6 +52,11 @@ export interface FacadeDeps {
      * d'appelant dont éprouver les droits.
      */
     assertDeviceExtras?: (deviceId: string, extras: readonly string[]) => Promise<void>;
+    /**
+     * Lève `stepup_required` sans code d'application récent dans la session de
+     * l'appelant (`features/stepup`). Absent hors d'une commande.
+     */
+    assertStepUp?: () => Promise<void>;
     /** Ce qu'utilisent ces comptes (`_quota.ts`), injecté pour ne pas lier la façade au registre. */
     accountUsages(userIds: readonly number[]): Promise<SdkAccountUsage[]>;
 }
@@ -64,6 +69,12 @@ const DOCKER_INVENTORY_TIMEOUT_MS = 15_000;
 
 export function createFacade(deps: FacadeDeps): DevEyeFacade {
     const declared = new Set<NativeCapability>(deps.manifest.nativeCapabilities ?? []);
+    const requireStepUp = async (): Promise<void> => {
+        if (!deps.assertStepUp) {
+            throw new FeatureError('forbidden', 'Le pilotage d’une machine se confirme depuis une commande');
+        }
+        await deps.assertStepUp();
+    };
     const gate = (cap: NativeCapability): void => {
         if (!declared.has(cap)) {
             throw new FeatureError('forbidden', `Declare '${cap}' in the manifest's nativeCapabilities`);
@@ -218,7 +229,12 @@ export function createFacade(deps: FacadeDeps): DevEyeFacade {
                     }
                     await deps.assertDeviceExtras(device.id, extras);
                 }
+                if (options?.control) await requireStepUp();
                 return device;
+            },
+            async assertControl() {
+                gate('devices.read');
+                await requireStepUp();
             },
             // Une seule règle : les appareils de l'espace actif, les siens et
             // ceux qui y sont projetés.

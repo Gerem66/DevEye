@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { ws } from '@/api/ws';
+import { useCallback, useEffect, useState } from 'react';
+import { ws, WsError } from '@/api/ws';
+import { AuthenticatorCodeField, authenticatorCodeReady, CodeInput } from '@/Components/CodeInput';
 import { Dialog } from '@/Components/Dialog';
+import TextInput from '@/Components/TextInput';
 import { openInfo } from '@/Components/InfoPopup';
 import Button from '@/Components/Button';
 import CopyButton from '@/Components/CopyButton';
@@ -9,8 +11,15 @@ import Term from '@/Components/Term';
 import { useAuth } from '@/auth/AuthProvider';
 import { copyText } from '@/copyText';
 import { refreshSecrecyStatus } from '@/stores/secrecy';
-import type { SecrecyStatus, TwoFactorStatus } from '@deveye/types';
+import {
+    STEP_UP_MINUTES_MAX,
+    STEP_UP_MINUTES_MIN,
+    type SecrecyStatus,
+    type StepUpStatus,
+    type TwoFactorStatus
+} from '@deveye/types';
 import type { FeatureProps } from '../types';
+import { MinutesEditor } from './MinutesEditor';
 import { SecurityDialog } from './SecurityDialog';
 import styles from './Security.module.css';
 
@@ -101,6 +110,30 @@ function showReauthInfo() {
     });
 }
 
+function showStepUpInfo() {
+    void openInfo({
+        title: 'Confirmation pour piloter vos machines',
+        body: (
+            <>
+                <p>
+                    Un agent DevEye peut tout faire sur sa machine : ouvrir un terminal, lire et écrire ses fichiers,
+                    l&apos;éteindre, mettre à jour ses paquets. Quelqu&apos;un qui aurait volé votre mot de passe, ou le
+                    cookie de votre navigateur, ne doit pas pouvoir le faire à votre place.
+                </p>
+                <p>
+                    Avant de piloter une machine, DevEye demande donc le code de votre application
+                    d&apos;authentification. Il reste valable dans ce navigateur tant que vous continuez à piloter, et
+                    se redemande après le délai choisi ici sans aucune action sur une machine.
+                </p>
+                <p>
+                    Regarder une machine (mesures, état, processus) ne demande rien : seul ce qui la fait agir ou en lit
+                    le contenu est confirmé.
+                </p>
+            </>
+        )
+    });
+}
+
 interface SetupData {
     secret: string;
     otpauthUrl: string;
@@ -114,6 +147,11 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
     const [loading, setLoading] = useState(true);
     const [setupData, setSetupData] = useState<SetupData | null>(null);
     const [setupOpen, setSetupOpen] = useState(false);
+    // Le mot de passe du compte, demandé avant de produire le secret : une
+    // session volée ne pose pas sa propre application.
+    const [setupPassword, setSetupPassword] = useState('');
+    const [setupPasswordError, setSetupPasswordError] = useState<string | null>(null);
+    const [setupLoading, setSetupLoading] = useState(false);
     const [verifyCode, setVerifyCode] = useState('');
     const [verifying, setVerifying] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -121,20 +159,17 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
     const [backupCodes, setBackupCodes] = useState<string[]>([]);
     const [showDisableConfirm, setShowDisableConfirm] = useState(false);
     const [disableCode, setDisableCode] = useState('');
+    const [disableRecovery, setDisableRecovery] = useState(false);
     // Disable-dialog error (e.g. wrong code) lives here, not in the page-level
     // `error`, so it shows inside the dialog where the code was entered.
     const [disableError, setDisableError] = useState<string | null>(null);
     const [showRegenConfirm, setShowRegenConfirm] = useState(false);
+    const [regenCode, setRegenCode] = useState('');
+    const [regenRecovery, setRegenRecovery] = useState(false);
+    const [regenError, setRegenError] = useState<string | null>(null);
     const [secrecy, setSecrecy] = useState<SecrecyStatus | null>(null);
     const [securityOpen, setSecurityOpen] = useState(false);
-    // Re-auth window editor, expressed in minutes (0 = always re-prompt). Kept as
-    // a string so the field can be cleared mid-edit without snapping to 0.
-    const [reAuthInput, setReAuthInput] = useState('');
-    // Autosave status for the re-auth window, surfaced as a small transient icon
-    // next to the input rather than a button.
-    const [reAuthSaveState, setReAuthSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-    const reAuthDebounce = useRef<number | undefined>(undefined);
-    const reAuthSavedTimer = useRef<number | undefined>(undefined);
+    const [stepUp, setStepUp] = useState<StepUpStatus | null>(null);
 
     const fetchStatus = useCallback(async () => {
         try {
@@ -151,9 +186,15 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
         try {
             const res = await ws.send('secrecy.status', {});
             setSecrecy(res.status);
-            // Seed the editor in minutes. `null` means the server default (60s = 1 min).
-            const seconds = res.status.reAuthInterval ?? 60;
-            setReAuthInput(String(Math.round(seconds / 60)));
+        } catch {
+            // ignore
+        }
+    }, []);
+
+    const fetchStepUp = useCallback(async () => {
+        try {
+            const res = await ws.send('stepup.status', {});
+            setStepUp(res.status);
         } catch {
             // ignore
         }
@@ -162,7 +203,8 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
     useEffect(() => {
         void fetchStatus();
         void fetchSecrecy();
-    }, [fetchStatus, fetchSecrecy]);
+        void fetchStepUp();
+    }, [fetchStatus, fetchSecrecy, fetchStepUp]);
 
     // Keeps the profile's "Sécurité x / 3" counter live. Waits for both statuses
     // to avoid flicker, and counts the re-auth window only when it is strict AND
@@ -180,19 +222,35 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
         });
     }, [status, secrecy, updateUser]);
 
-    const startSetup = async () => {
-        // Open the dialog right away (with a loader) so it doesn't feel laggy
-        // while the secret/QR are minted server-side.
+    const startSetup = () => {
         setError(null);
         setSetupData(null);
         setVerifyCode('');
+        setSetupPassword('');
+        setSetupPasswordError(null);
         setSetupOpen(true);
+    };
+
+    /** Le mot de passe vérifié, le serveur produit le secret et son QR code. */
+    const requestSetup = async () => {
+        if (!setupPassword || setupLoading) return;
+        setSetupLoading(true);
+        setSetupPasswordError(null);
         try {
-            const res = await ws.send('twofa.setup', {});
+            const res = await ws.send('twofa.setup', { password: setupPassword });
+            setSetupPassword('');
             setSetupData(res.setup);
-        } catch {
-            setSetupOpen(false);
-            setError('Erreur lors de la génération du QR code');
+        } catch (e) {
+            setSetupPassword('');
+            setSetupPasswordError(
+                e instanceof WsError && e.code === 'auth_invalid'
+                    ? 'Mot de passe incorrect'
+                    : e instanceof Error
+                      ? e.message
+                      : 'Erreur lors de la génération du QR code'
+            );
+        } finally {
+            setSetupLoading(false);
         }
     };
 
@@ -200,6 +258,8 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
         setSetupOpen(false);
         setSetupData(null);
         setVerifyCode('');
+        setSetupPassword('');
+        setSetupPasswordError(null);
     };
 
     const verifyAndEnable = async () => {
@@ -212,6 +272,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
             const codes = setupData?.backupCodes ?? [];
             closeSetup();
             await fetchStatus();
+            void fetchStepUp();
             if (codes.length > 0) {
                 setBackupCodes(codes);
                 setShowBackupCodes(true);
@@ -231,6 +292,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
             setShowDisableConfirm(false);
             setDisableCode('');
             await fetchStatus();
+            void fetchStepUp();
         } catch {
             setDisableCode('');
             setDisableError('Code invalide');
@@ -240,6 +302,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
     /** Open the disable dialog from a clean slate (no stale code or error). */
     const openDisableConfirm = () => {
         setDisableCode('');
+        setDisableRecovery(false);
         setDisableError(null);
         setShowDisableConfirm(true);
     };
@@ -249,19 +312,36 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
         setDisableError(null);
     };
 
-    const regenerateBackupCodes = async () => {
-        setError(null);
+    const openRegenConfirm = () => {
+        setRegenCode('');
+        setRegenRecovery(false);
+        setRegenError(null);
+        setShowRegenConfirm(true);
+    };
+
+    const regenerateBackupCodes = async (code: string = regenCode) => {
+        if (!authenticatorCodeReady(code, regenRecovery)) return;
+        setRegenError(null);
         try {
-            const res = await ws.send('twofa.regenBackup', {});
+            const res = await ws.send('twofa.regenBackup', { code });
             setShowRegenConfirm(false);
             setBackupCodes(res.backupCodes);
             setShowBackupCodes(true);
             await fetchStatus();
-        } catch {
-            setShowRegenConfirm(false);
-            setError('Erreur lors de la régénération des codes');
+        } catch (e) {
+            setRegenCode('');
+            setRegenError(
+                e instanceof WsError && e.code === 'auth_invalid'
+                    ? 'Code incorrect'
+                    : 'Erreur lors de la régénération des codes'
+            );
         }
     };
+
+    const saveStepUpMinutes = useCallback(async (minutes: number) => {
+        const res = await ws.send('stepup.setInterval', { minutes });
+        setStepUp(res.status);
+    }, []);
 
     // The re-auth window only makes sense once password encryption is ON: it
     // governs how often that password is re-checked. Disabled otherwise.
@@ -288,44 +368,17 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
           : reAuthStrict
             ? `Bon niveau : votre mot de passe reste valide ${currentReAuthMinutes} min avant d’être redemandé.`
             : `Confort privilégié : votre mot de passe reste valide ${currentReAuthMinutes} min avant d’être redemandé. Réduisez à 5 min ou moins pour renforcer la sécurité.`;
-    const parsedReAuth = Number(reAuthInput);
-    const reAuthValid =
-        reAuthInput.trim() !== '' && Number.isInteger(parsedReAuth) && parsedReAuth >= 0 && parsedReAuth <= 1440;
-    const reAuthDirty = encryptionEnabled && reAuthValid && parsedReAuth !== currentReAuthMinutes;
 
-    const saveReAuth = useCallback(async () => {
-        if (!reAuthValid) return;
-        setReAuthSaveState('saving');
-        try {
-            const res = await ws.send('secrecy.setReauth', { seconds: parsedReAuth * 60 });
-            setSecrecy(res.status);
-            // Keep the global unlock store in sync: switching to/from 0 changes the
-            // "validate on every action" mode, which governs whether actions re-prompt.
-            void refreshSecrecyStatus();
-            setReAuthSaveState('saved');
-            window.clearTimeout(reAuthSavedTimer.current);
-            reAuthSavedTimer.current = window.setTimeout(() => setReAuthSaveState('idle'), 2000);
-        } catch {
-            setReAuthSaveState('error');
-        }
-    }, [reAuthValid, parsedReAuth]);
+    const saveReAuth = useCallback(async (minutes: number) => {
+        const res = await ws.send('secrecy.setReauth', { seconds: minutes * 60 });
+        setSecrecy(res.status);
+        // Keep the global unlock store in sync: switching to/from 0 changes the
+        // "validate on every action" mode, which governs whether actions re-prompt.
+        void refreshSecrecyStatus();
+    }, []);
 
-    // Debounced autosave: 500 ms after the last edit, and only when the value is
-    // valid and actually differs from what is stored.
-    useEffect(() => {
-        if (!reAuthDirty) return;
-        window.clearTimeout(reAuthDebounce.current);
-        reAuthDebounce.current = window.setTimeout(() => void saveReAuth(), 500);
-        return () => window.clearTimeout(reAuthDebounce.current);
-    }, [reAuthDirty, reAuthInput, saveReAuth]);
-
-    useEffect(
-        () => () => {
-            window.clearTimeout(reAuthDebounce.current);
-            window.clearTimeout(reAuthSavedTimer.current);
-        },
-        []
-    );
+    const stepUpMinutes = stepUp?.minutes ?? 15;
+    const stepUpReady = stepUp?.twoFactor === true;
 
     return (
         <div className={styles.container}>
@@ -370,7 +423,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                                 <div className={styles.extraSlot}>
                                     <button
                                         className={styles.resetBtn}
-                                        onClick={() => setShowRegenConfirm(true)}
+                                        onClick={openRegenConfirm}
                                         title='Régénérer les codes de secours'
                                     >
                                         <span className='icon icon-refresh' />
@@ -384,6 +437,49 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                                     <Button variant='danger' onClick={openDisableConfirm}>
                                         Désactiver
                                     </Button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className={styles.statusCard}>
+                        <div className={`${styles.statusIcon} ${stepUpReady ? styles.enabled : ''}`}>
+                            <span className='icon icon-shield' />
+                        </div>
+                        <div className={styles.statusInfo}>
+                            <h3>
+                                {stepUpReady
+                                    ? `Pilotage des machines : code redemandé après ${stepUpMinutes} min`
+                                    : 'Pilotage des machines'}
+                            </h3>
+                            <p>
+                                {stepUpReady
+                                    ? 'Le code de votre application est demandé avant d’agir sur une machine, puis après ce délai sans y toucher.'
+                                    : 'Activez la 2FA : piloter une machine (terminal, fichiers, mises à jour) demande le code de votre application.'}
+                            </p>
+                        </div>
+                        <div className={styles.statusControls}>
+                            <div className={styles.infoSlot}>
+                                <button
+                                    className={styles.infoBtn}
+                                    onClick={showStepUpInfo}
+                                    title='Comment ça fonctionne ?'
+                                >
+                                    <span className='icon icon-info' />
+                                </button>
+                            </div>
+                            {extraColumn && <div className={styles.extraSlot} />}
+                            <div className={styles.actionSlot}>
+                                {!stepUpReady ? (
+                                    <span className={styles.rowOff}>Sans 2FA</span>
+                                ) : (
+                                    <MinutesEditor
+                                        value={stepUpMinutes}
+                                        min={STEP_UP_MINUTES_MIN}
+                                        max={STEP_UP_MINUTES_MAX}
+                                        onSave={saveStepUpMinutes}
+                                        aria-label='Délai avant de redemander le code, en minutes'
+                                    />
                                 )}
                             </div>
                         </div>
@@ -454,48 +550,15 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                             {extraColumn && <div className={styles.extraSlot} />}
                             <div className={styles.actionSlot}>
                                 {!encryptionEnabled ? (
-                                    <span className={styles.reAuthOff}>Désactivé</span>
+                                    <span className={styles.rowOff}>Désactivé</span>
                                 ) : (
-                                    <div className={styles.reAuthEditor}>
-                                        <input
-                                            type='number'
-                                            inputMode='numeric'
-                                            min={0}
-                                            max={1440}
-                                            step={1}
-                                            className={styles.reAuthInput}
-                                            value={reAuthInput}
-                                            onChange={(e) => setReAuthInput(e.target.value.replace(/\D/g, ''))}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter' && reAuthDirty) void saveReAuth();
-                                            }}
-                                            aria-label='Délai de validation en minutes'
-                                        />
-                                        <span className={styles.reAuthUnit}>min</span>
-                                        <span className={styles.reAuthStatus} aria-live='polite'>
-                                            {reAuthSaveState === 'saving' && (
-                                                <span
-                                                    key='saving'
-                                                    className={`icon icon-spinner ${styles.reAuthSpin}`}
-                                                    title='Enregistrement…'
-                                                />
-                                            )}
-                                            {reAuthSaveState === 'saved' && (
-                                                <span
-                                                    key='saved'
-                                                    className={`icon icon-check-circle ${styles.reAuthOk}`}
-                                                    title='Enregistré'
-                                                />
-                                            )}
-                                            {reAuthSaveState === 'error' && (
-                                                <span
-                                                    key='error'
-                                                    className={`icon icon-x-circle ${styles.reAuthErr}`}
-                                                    title="Échec de l'enregistrement"
-                                                />
-                                            )}
-                                        </span>
-                                    </div>
+                                    <MinutesEditor
+                                        value={currentReAuthMinutes}
+                                        min={0}
+                                        max={1440}
+                                        onSave={saveReAuth}
+                                        aria-label='Délai de validation en minutes'
+                                    />
                                 )}
                             </div>
                         </div>
@@ -508,25 +571,46 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                         onClose={closeSetup}
                         title='Configurer la 2FA'
                         width={640}
+                        description={
+                            setupData ? undefined : 'Pour commencer, saisissez le mot de passe de votre compte.'
+                        }
                         onSubmit={() => {
-                            if (setupData && verifyCode.length === 6) void verifyAndEnable();
+                            if (!setupData) void requestSetup();
+                            else if (verifyCode.length === 6) void verifyAndEnable();
                         }}
                         footer={
                             <>
-                                <Button variant='secondary' onClick={closeSetup} disabled={verifying}>
+                                <Button variant='secondary' onClick={closeSetup} disabled={verifying || setupLoading}>
                                     Annuler
                                 </Button>
-                                <Button
-                                    onClick={verifyAndEnable}
-                                    disabled={!setupData || verifyCode.length !== 6 || verifying}
-                                >
-                                    {verifying ? 'Vérification...' : 'Vérifier et activer'}
-                                </Button>
+                                {setupData ? (
+                                    <Button onClick={verifyAndEnable} disabled={verifyCode.length !== 6 || verifying}>
+                                        {verifying ? 'Vérification...' : 'Vérifier et activer'}
+                                    </Button>
+                                ) : (
+                                    <Button
+                                        onClick={() => void requestSetup()}
+                                        disabled={!setupPassword || setupLoading}
+                                    >
+                                        {setupLoading ? 'Génération du QR code…' : 'Continuer'}
+                                    </Button>
+                                )}
                             </>
                         }
                     >
                         {!setupData ? (
-                            <div className={styles.loader}>Génération du QR code…</div>
+                            <TextInput
+                                type='password'
+                                enableShowHideButton
+                                autoComplete='current-password'
+                                placeholder='Mot de passe'
+                                value={setupPassword}
+                                error={setupPasswordError ?? undefined}
+                                onChange={(e) => {
+                                    setSetupPassword(e.target.value);
+                                    setSetupPasswordError(null);
+                                }}
+                            />
                         ) : (
                             <div className={styles.steps}>
                                 <div className={styles.step}>
@@ -559,16 +643,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                                     <div className={styles.stepContent}>
                                         <h4>Entrez le code de vérification</h4>
                                         <p>Saisissez le code à 6 chiffres affiché dans votre application.</p>
-                                        <input
-                                            type='text'
-                                            inputMode='numeric'
-                                            pattern='[0-9]*'
-                                            maxLength={6}
-                                            className={styles.codeInput}
-                                            value={verifyCode}
-                                            onChange={(e) => setVerifyCode(e.target.value.replace(/\D/g, ''))}
-                                            placeholder='000000'
-                                        />
+                                        <CodeInput value={verifyCode} onChange={setVerifyCode} />
                                     </div>
                                 </div>
                             </div>
@@ -605,54 +680,71 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                         open={showDisableConfirm}
                         onClose={closeDisableConfirm}
                         title='Désactiver la 2FA'
-                        description='⚠️ Votre compte sera moins sécurisé. Entrez un code de votre application pour confirmer.'
+                        description='⚠️ Votre compte sera moins sécurisé, et vos machines ne pourront plus être pilotées. Entrez un code de votre application pour confirmer.'
                         onSubmit={() => {
-                            if (disableCode.length === 6) void disable2FA();
+                            if (authenticatorCodeReady(disableCode, disableRecovery)) void disable2FA();
                         }}
                         footer={
                             <>
                                 <Button variant='ghost' onClick={closeDisableConfirm}>
                                     Annuler
                                 </Button>
-                                <Button variant='danger' onClick={disable2FA} disabled={disableCode.length !== 6}>
+                                <Button
+                                    variant='danger'
+                                    onClick={disable2FA}
+                                    disabled={!authenticatorCodeReady(disableCode, disableRecovery)}
+                                >
                                     Confirmer la désactivation
                                 </Button>
                             </>
                         }
                     >
-                        <input
-                            type='text'
-                            inputMode='numeric'
-                            pattern='[0-9]*'
-                            maxLength={6}
-                            className={styles.codeInput}
+                        <AuthenticatorCodeField
                             value={disableCode}
-                            onChange={(e) => {
-                                setDisableCode(e.target.value.replace(/\D/g, ''));
+                            recovery={disableRecovery}
+                            onRecoveryChange={setDisableRecovery}
+                            error={disableError}
+                            autoFocus
+                            onChange={(value) => {
+                                setDisableCode(value);
                                 setDisableError(null);
                             }}
-                            placeholder='000000'
                         />
-                        {disableError && <div className={`${styles.error} ${styles.disableError}`}>{disableError}</div>}
                     </Dialog>
 
                     <Dialog
                         open={showRegenConfirm}
                         onClose={() => setShowRegenConfirm(false)}
                         title='Réinitialiser les codes de secours'
-                        description='⚠️ Vos anciens codes de secours seront définitivement invalidés et de nouveaux seront générés. Continuer ?'
+                        description='⚠️ Vos anciens codes de secours seront définitivement invalidés et de nouveaux seront générés. Entrez un code de votre application pour confirmer.'
                         onSubmit={() => void regenerateBackupCodes()}
                         footer={
                             <>
                                 <Button variant='ghost' onClick={() => setShowRegenConfirm(false)}>
-                                    Non
+                                    Annuler
                                 </Button>
-                                <Button variant='danger' onClick={regenerateBackupCodes}>
-                                    Oui, réinitialiser
+                                <Button
+                                    variant='danger'
+                                    onClick={() => void regenerateBackupCodes()}
+                                    disabled={!authenticatorCodeReady(regenCode, regenRecovery)}
+                                >
+                                    Réinitialiser
                                 </Button>
                             </>
                         }
-                    />
+                    >
+                        <AuthenticatorCodeField
+                            value={regenCode}
+                            recovery={regenRecovery}
+                            onRecoveryChange={setRegenRecovery}
+                            error={regenError}
+                            autoFocus
+                            onChange={(value) => {
+                                setRegenCode(value);
+                                setRegenError(null);
+                            }}
+                        />
+                    </Dialog>
 
                     <SecurityDialog
                         open={securityOpen}
