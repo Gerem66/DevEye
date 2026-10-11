@@ -160,15 +160,12 @@ function accountViewHost(featureId: string, View: ComponentType<AccountViewProps
 
 /*
  * Les portes réservées, gardées au rendu : le menu ne les montre qu'au bon rôle,
- * mais `handleExpand` ne vérifie aucun rôle global. Une seule porte
- * d'administration des fonctionnalités par compte, jamais les deux.
+ * mais `handleExpand` ne vérifie aucun rôle global. L'administrateur voit dans
+ * « Modération » toutes les fonctionnalités, le modérateur les seules modérées.
  */
-function FeaturesDoor({ user }: FeatureProps) {
-    return user.role === 'admin' ? <FeatureAdmin mode='admin' /> : null;
-}
-
 function ModerationDoor({ user }: FeatureProps) {
-    return user.role === 'moderator' ? <FeatureAdmin mode='moderation' /> : null;
+    if (!canModerate(user.role)) return null;
+    return <FeatureAdmin mode={user.role === 'admin' ? 'admin' : 'moderation'} />;
 }
 
 function FeedbackDoor({ user }: FeatureProps) {
@@ -176,11 +173,8 @@ function FeedbackDoor({ user }: FeatureProps) {
 }
 
 /** Les deux groupes réservés du menu, dans cet ordre ; leur titre et leur icône sont ceux de leur vue. */
-const MODERATION_VIEW_IDS = {
-    moderator: ['moderation', 'feedback'],
-    admin: ['feedback']
-} as const;
-const ADMIN_VIEW_IDS = ['features', 'logs', 'users', 'maintenance', 'services', 'debug'] as const;
+const MODERATION_VIEW_IDS = ['moderation', 'feedback'] as const;
+const ADMIN_VIEW_IDS = ['logs', 'users', 'maintenance', 'services', 'debug'] as const;
 
 function menuPages(ids: readonly string[], countOf: (id: string) => number): MenuPage[] {
     return ids.map((id) => {
@@ -247,14 +241,6 @@ const buildStaticViews = (): ViewConfig[] => [
         cacheDurationMinutes: 0,
         hasCard: false,
         FullComponent: ModerationDoor
-    },
-    {
-        id: 'features',
-        title: 'Fonctionnalités',
-        icon: 'list',
-        cacheDurationMinutes: 0,
-        hasCard: false,
-        FullComponent: FeaturesDoor
     },
     {
         id: 'logs',
@@ -1081,19 +1067,15 @@ export default function HomePage() {
     const pending = useAdminPending();
     const role = user?.role;
     const moderationPages = useMemo((): MenuPage[] => {
-        if (role !== 'moderator' && role !== 'admin') return [];
-        const ids = MODERATION_VIEW_IDS[role].filter(
+        if (!role || !canModerate(role)) return [];
+        const ids = MODERATION_VIEW_IDS.filter(
             (id) =>
                 (id !== 'feedback' || feedbackEnabled) &&
-                (id !== 'moderation' || adminFeatures('moderation').length > 0)
+                (id !== 'moderation' || role === 'admin' || adminFeatures('moderation').length > 0)
         );
         return menuPages(ids, (id) => (id === 'feedback' ? pending.feedback : pending.features));
     }, [role, feedbackEnabled, pending]);
-    const adminPages = useMemo(
-        (): MenuPage[] =>
-            role === 'admin' ? menuPages(ADMIN_VIEW_IDS, (id) => (id === 'features' ? pending.features : 0)) : [],
-        [role, pending]
-    );
+    const adminPages = useMemo((): MenuPage[] => (role === 'admin' ? menuPages(ADMIN_VIEW_IDS, () => 0) : []), [role]);
 
     const views = staticViews();
     const viewsRef = useRef(views);

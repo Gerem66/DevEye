@@ -6,7 +6,7 @@ et comment cela évolue dans le temps. Un lien se règle (mot de passe, date de
 fin, nombre de visites, destination par appareil, paramètres de campagne), se
 partage en QR code, et se sert sur l'adresse de DevEye ou sur un domaine à soi.
 C'est une feature de grille (carte d'accueil + panneau) avec un onglet de
-modération dans l'administration des fonctionnalités.
+modération dans la popup « Modération ».
 
 Documents voisins : [Docs/FEATURE_SDK.md](../../Docs/FEATURE_SDK.md) (les noms
 servis en entier et le pays d'un visiteur), [Docs/SHARING.md](../../Docs/SHARING.md),
@@ -211,7 +211,7 @@ signalant ; son bouton ouvre la modération sur Liens courts
 (`/?moderation=shortlinks`). Le signalement enregistré, la route appelle
 `live.pendingChanged()` : les badges de la modération s'allument en direct.
 
-L'onglet « Signalements » de l'administration des fonctionnalités
+L'onglet « Signalements » de la popup « Modération »
 (`adminTabs`, `moderation: true`, commandes `shortlinks.reports`,
 `reportDecide`, `restore`, `access: { scope: 'account', moderation: true }`)
 liste ce qui est **à traiter**, et dessous, replié, ce qui est **traité**. Il

@@ -408,8 +408,9 @@ facturation des comptes (Stripe) en déclarent.
 
 ### L'administration d'une fonctionnalité
 
-La popup d'administration des fonctionnalités liste chaque module installé.
-Pour l'administrateur, chacun s'ouvre sur une vue d'ensemble que l'hôte compte
+La popup « Modération » liste, à part et en tête, les modules qui ont un onglet
+de modération ; l'administrateur y voit ensuite tous les autres. Pour lui,
+chacun s'ouvre sur une vue d'ensemble que l'hôte compte
 seul (`admin.featureStats`, gardée 5 minutes, « Actualiser » la refait) : les
 espaces dont l'accueil porte la tuile (dossiers compris, `null` pour un module
 `accountOnly`), les comptes membres de ces espaces, les tables que
@@ -417,7 +418,8 @@ espaces dont l'accueil porte la tuile (dossiers compris, `null` pour un module
 MySQL, des estimations), et le total de chaque quota qui se compte, tous
 espaces confondus. `FeatureServer.adminFacts({ repo, pauses })` y ajoute les
 chiffres propres du module (`{ label, value, unit: 'count' | 'bytes' }`, les
-liens et leurs clics) ; un module qui lève y laisse un trou, pas une panne.
+visites et les ouvertures des liens courts), ce que ses tables et ses quotas ne
+disent pas déjà ; un module qui lève y laisse un trou, pas une panne.
 
 Après la vue d'ensemble viennent ses onglets : `manifest.adminTabs`
 (`{ id, label, moderation? }`, ids au motif des clés de permission, uniques),
@@ -591,7 +593,7 @@ rien d'interactif dedans (Appareils, Uptime, Rendez-vous). `accountEntry` ouvre
 `AccountView` depuis le menu du compte, `accountOnly` retire carte et ligne de
 rôle et impose `access.scope: 'account'` à toutes les commandes (facturation des
 comptes) ; [QUOTAS.md](./QUOTAS.md) les détaille. `adminTabs` ajoute des
-onglets à la popup d'administration des fonctionnalités (§ L'administration
+onglets à la popup « Modération » (§ L'administration
 d'une fonctionnalité). `extraPermissions` (dix au plus) et `access.extras` :
 [PERMISSIONS.md](./PERMISSIONS.md). `settings` et `settingsPanels` :
 [SETTINGS.md](./SETTINGS.md). `sources` : [SOURCES.md](./SOURCES.md). `links`

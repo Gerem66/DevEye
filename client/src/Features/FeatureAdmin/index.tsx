@@ -29,11 +29,14 @@ interface AdminFeature {
     /** Les onglets que le mode ouvre : tous pour l'administrateur, ceux de modération sinon. */
     tabs: readonly AdminTabSpec[];
     components: Readonly<Record<string, ComponentType>>;
+    /** Un onglet de modération au moins : la catégorie à part, en tête de liste. */
+    moderated: boolean;
 }
 
 /**
- * Les fonctionnalités que la popup liste : toutes pour l'administrateur, celles
- * qui ont un onglet de modération pour le modérateur. Par nom.
+ * Les fonctionnalités que la popup liste : celles qui ont un onglet de
+ * modération d'abord, puis, pour l'administrateur seul, toutes les autres.
+ * Par nom dans chaque catégorie.
  */
 export function adminFeatures(mode: FeatureAdminMode): AdminFeature[] {
     return clientModules()
@@ -43,10 +46,11 @@ export function adminFeatures(mode: FeatureAdminMode): AdminFeature[] {
             icon: manifest.icon,
             description: manifest.description,
             tabs: (manifest.adminTabs ?? []).filter((tab) => mode === 'admin' || tab.moderation === true),
-            components: client.AdminTabs ?? {}
+            components: client.AdminTabs ?? {},
+            moderated: (manifest.adminTabs ?? []).some((tab) => tab.moderation === true)
         }))
-        .filter((feature) => mode === 'admin' || feature.tabs.length > 0)
-        .sort((a, b) => a.label.localeCompare(b.label, 'fr'));
+        .filter((feature) => mode === 'admin' || feature.moderated)
+        .sort((a, b) => Number(b.moderated) - Number(a.moderated) || a.label.localeCompare(b.label, 'fr'));
 }
 
 /** `null` : la vue d'ensemble, que l'hôte dessine et qu'un id d'onglet de module ne peut pas imiter. */
@@ -289,7 +293,9 @@ export default function FeatureAdmin({ mode }: FeatureAdminProps) {
         label: f.label,
         icon: lockOf(f.id) ? 'lock' : f.icon,
         badge: pending.featureTotal(f.id),
-        badgeTone: 'accent'
+        badgeTone: 'accent',
+        // Le modérateur n'a qu'une catégorie : la nommer n'apprendrait rien.
+        group: mode === 'admin' ? (f.moderated ? 'Modération' : 'Autres fonctionnalités') : undefined
     }));
 
     const select = (featureId: string) => {
@@ -299,7 +305,7 @@ export default function FeatureAdmin({ mode }: FeatureAdminProps) {
     };
 
     const Tab = feature && tab !== null ? feature.components[tab] : undefined;
-    const title = mode === 'admin' ? 'Fonctionnalités' : 'Modération';
+    const title = 'Modération';
 
     return (
         <div className={styles.root}>
@@ -309,8 +315,8 @@ export default function FeatureAdmin({ mode }: FeatureAdminProps) {
                         <h2 className={styles.title}>{title}</h2>
                         <p className={styles.subtitle}>
                             {mode === 'admin'
-                                ? 'Chaque fonctionnalité installée, ses chiffres et ce qui attend une décision.'
-                                : 'Ce que les utilisateurs ont signalé et qui attend votre décision.'}
+                                ? 'Ce qui attend une décision, et les chiffres de chaque fonctionnalité installée.'
+                                : 'Ce que les visiteurs ont signalé et qui attend votre décision.'}
                         </p>
                     </div>
                     {overviewShown && (

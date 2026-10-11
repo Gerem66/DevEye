@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { Fragment, useEffect, useRef } from 'react';
 
 import styles from './FeatureSettings.module.css';
 
@@ -11,6 +11,8 @@ export interface SideNavItem<T extends string> {
     badge?: number;
     /** `accent` : le compteur réclame une action, comme les badges du menu du compte. */
     badgeTone?: 'accent';
+    /** La catégorie : son titre précède la première entrée qui la porte. Les entrées d'une catégorie se suivent. */
+    group?: string;
 }
 
 export interface SideNavProps<T extends string> {
@@ -57,25 +59,31 @@ export default function SideNav<T extends string>({ items, active, onSelect, lab
 
     return (
         <nav ref={navRef} className={styles.nav} role='tablist' aria-label={label}>
-            {items.map((item) => (
-                <button
-                    key={item.id}
-                    type='button'
-                    role='tab'
-                    aria-selected={item.id === active}
-                    className={`${styles.navItem} ${item.id === active ? styles.navItemActive : ''}`}
-                    onClick={() => onSelect(item.id)}
-                >
-                    <span className={`icon icon-${item.icon}`} />
-                    <span className={styles.navLabel}>{item.label}</span>
-                    {item.badge !== undefined && item.badge > 0 && (
-                        <span
-                            className={`${styles.navBadge} ${item.badgeTone === 'accent' ? styles.navBadgeAccent : ''}`}
-                        >
-                            {item.badge}
+            {items.map((item, i) => (
+                <Fragment key={item.id}>
+                    {item.group !== undefined && item.group !== items[i - 1]?.group && (
+                        <span className={styles.navGroup} role='presentation'>
+                            {item.group}
                         </span>
                     )}
-                </button>
+                    <button
+                        type='button'
+                        role='tab'
+                        aria-selected={item.id === active}
+                        className={`${styles.navItem} ${item.id === active ? styles.navItemActive : ''}`}
+                        onClick={() => onSelect(item.id)}
+                    >
+                        <span className={`icon icon-${item.icon}`} />
+                        <span className={styles.navLabel}>{item.label}</span>
+                        {item.badge !== undefined && item.badge > 0 && (
+                            <span
+                                className={`${styles.navBadge} ${item.badgeTone === 'accent' ? styles.navBadgeAccent : ''}`}
+                            >
+                                {item.badge}
+                            </span>
+                        )}
+                    </button>
+                </Fragment>
             ))}
         </nav>
     );

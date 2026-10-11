@@ -268,7 +268,7 @@ au module qui déclare `accountEntry.signupHint`.
 ## Les onglets d'administration d'un module
 
 `manifest.adminTabs` (`id`, `label`, `moderation?`) ajoute des onglets à la
-fiche du module dans la popup d'administration des fonctionnalités, après la
+fiche du module dans la popup « Modération » du menu du compte, après la
 vue d'ensemble que l'hôte dessine : chacun ouvre `FeatureClient.AdminTabs[id]`.
 Un onglet `moderation` (les signalements d'Hébergement ou des liens courts)
 s'ouvre aussi aux modérateurs, et ses commandes déclarent

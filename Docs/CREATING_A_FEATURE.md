@@ -127,13 +127,12 @@ schémas zod : pas de validation manuelle à écrire.
    `style.module.css`), puis une entrée dans `buildStaticViews()`
    (`src/Pages/Home/index.tsx`, `hasCard: false`). Une page réservée aux
    administrateurs s'ajoute à `ADMIN_VIEW_IDS` dans le même fichier (les pages
-   système, « Fonctionnalités » en tête), une page de modération à
-   `MODERATION_VIEW_IDS`, par rôle (« Modération » et « Retours » pour un
-   modérateur, « Retours » seul pour un administrateur, qui a
-   « Fonctionnalités ») : `TopNavbar` les reçoit en `adminPages` et
-   `moderationPages`, deux groupes du menu du compte. Ce qu'une fonctionnalité
+   système), une page de modération à `MODERATION_VIEW_IDS` (« Modération » et
+   « Retours », ouvertes aux modérateurs comme aux administrateurs) :
+   `TopNavbar` les reçoit en `adminPages` et `moderationPages`, deux groupes du
+   menu du compte. Ce qu'une fonctionnalité
    fait administrer ou modérer n'est pas une page : c'est un onglet de la popup
-   d'administration des fonctionnalités (`manifest.adminTabs`,
+   « Modération » (`manifest.adminTabs`,
    [FEATURE_SDK.md](./FEATURE_SDK.md)). Appels via
    `ws.send('x.action', input)` (typé, validé). Réutiliser les primitives
    (`Button`, `TextInput`, `SearchSelect`, `LoadingVeil`, `LogOutput`,

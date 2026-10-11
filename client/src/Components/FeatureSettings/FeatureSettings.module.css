@@ -56,6 +56,19 @@
     flex: 1;
 }
 
+.navGroup {
+    padding: var(--space-md) var(--space-md) var(--space-xs);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.navGroup:first-child {
+    padding-top: 0;
+}
+
 .navBadge {
     display: inline-flex;
     align-items: center;
@@ -506,9 +519,19 @@
     }
 
     /* La rangée défile : une entrée garde sa largeur et son libellé sur une ligne. */
-    .navItem {
+    .navItem,
+    .navGroup {
         flex: none;
         white-space: nowrap;
+    }
+
+    .navGroup {
+        align-self: center;
+        padding: 0 var(--space-xs) 0 var(--space-md);
+    }
+
+    .navGroup:first-child {
+        padding-left: 0;
     }
 
     .channelActions {
