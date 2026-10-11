@@ -14,7 +14,7 @@ import { api } from '../api';
 import { formatAgo, formatCount } from '../format';
 import styles from '../style.module.css';
 import FormEditor from '../FormEditor';
-import { downloadCsv, toCsv } from './export';
+import { downloadCsv, submissionsCsv } from './export';
 import Results from './Results';
 import SubmissionDialog from './SubmissionDialog';
 import SubmissionTable from './SubmissionTable';
@@ -247,7 +247,7 @@ export function Forms({ site, canWrite, onCurrentForm }: FormsProps) {
                             variant='secondary'
                             icon='download'
                             disabled={submissions.length === 0}
-                            onClick={() => downloadCsv(current.name, toCsv(columns, submissions))}
+                            onClick={() => downloadCsv(current.name, submissionsCsv(columns, submissions))}
                         >
                             Exporter
                         </Button>

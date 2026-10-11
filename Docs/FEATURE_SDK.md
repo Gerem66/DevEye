@@ -367,7 +367,9 @@ Le conteneur `DEVB` du SDK (`@deveye/types/sdk/server`) scelle ce qui y entre
 (`sealStream`) et le relit en entier ou par intervalle (`openSealedStream`,
 `openSealedRange`) ; `contentDisposition` et `parseByteRange` servent un
 fichier en HTTP. Sauvegardes, CloudSync et Hébergement l'utilisent ; le harnais
-offre `memoryObjectStore()`.
+offre `memoryObjectStore()`. `toCsv` et `csvCell` écrivent un CSV qu'un
+tableur ouvre sans rien évaluer : un libellé venu d'un formulaire ou d'une
+banque n'y devient pas une formule.
 
 ### L'export des données d'un compte
 

@@ -17,6 +17,7 @@ import type {
     DatabaseTable
 } from '../contracts/domain';
 import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
+import { csvCell as csvField } from '@deveye/types/sdk';
 
 import { ROWS_PAGE_DEFAULT, type IdRanges, type Session } from './engine';
 import { withSession } from './probe';
@@ -188,10 +189,9 @@ const databaseExecuteFeature = defineSdkFeature({
     })
 });
 
-/** Une valeur dans une cellule CSV : guillemets doublés, champ toujours cité. */
+/** Une valeur dans une cellule CSV : `null` vide, le reste neutralisé contre ce qu'un tableur évaluerait. */
 function csvCell(value: string | null): string {
-    if (value === null) return '';
-    return `"${value.replace(/"/g, '""')}"`;
+    return value === null ? '' : csvField(value, ',');
 }
 
 /** Une valeur dans un `INSERT` : littéral cité, apostrophes doublées. */

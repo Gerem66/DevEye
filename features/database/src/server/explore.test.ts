@@ -100,12 +100,9 @@ function twelveRows(): FakeTable {
 }
 
 describe('buildExport : les trois formats', () => {
-    it('CSV : champs toujours cités, guillemets doublés, NULL vide', async () => {
+    it('CSV : champs cités quand il le faut, guillemets doublés, NULL vide', async () => {
         const out = await buildExport(fakeSession([TRICKY]), { format: 'csv', schema: 'shop', table: 'clients' });
-        assert.equal(
-            out.content,
-            '"id","name","note"\n' + '"1","Dupont ""Le Grand""","l\'été, à Nîmes"\n' + '"2","Émilie",\n'
-        );
+        assert.equal(out.content, 'id,name,note\n' + '1,"Dupont ""Le Grand""","l\'été, à Nîmes"\n' + '2,Émilie,\n');
         assert.deepEqual([out.rowCount, out.tableCount, out.truncated], [2, 1, false]);
     });
 

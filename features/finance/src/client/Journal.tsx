@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Button, ErrorNote, SearchSelect, SegmentedControl, TextInput, useResource } from 'deveye-sdk-client';
+import { toCsv } from '@deveye/types/sdk';
 import type { FinanceTransaction, FinanceTransactionKind } from '../contracts/domain';
 
 import TransactionRow, { useClearedToggle } from './TransactionRow';
@@ -106,25 +107,23 @@ export function Journal({ base, accountId: lockedAccountId, onEdit }: JournalPro
      * exactement ce qui est à l'écran, filtre et recherche compris.
      */
     const exportCsv = () => {
-        const escape = (value: string) => `"${value.replace(/"/g, '""')}"`;
         const header = ['Date', 'Nature', 'Intitulé', 'Tiers', 'Compte', 'Catégorie', 'Montant', 'TVA', 'Pointée'];
-        const lines = rows.map((row) =>
-            [
-                row.date,
-                row.kind === 'income' ? 'Recette' : row.kind === 'expense' ? 'Dépense' : 'Virement',
-                escape(row.label),
-                escape(row.counterparty),
-                escape(accountName(base.accounts, row.accountId)),
-                escape(categoryOf(base.categories, row.categoryId)?.name ?? ''),
-                // Point décimal : le seul qu'aucun tableur ne prend pour un séparateur de colonnes.
-                (row.amount / 100).toFixed(2),
-                row.vatAmount === null ? '' : (row.vatAmount / 100).toFixed(2),
-                row.cleared ? 'oui' : 'non'
-            ].join(';')
-        );
-        // La marque d'ordre des octets : sans elle, Excel lit l'UTF-8 comme du
-        // latin-1 et transforme chaque accent en deux caractères.
-        const csv = `\uFEFF${[header.join(';'), ...lines].join('\r\n')}`;
+        // Un libellé vient d'une banque ou d'un tiers : `toCsv` neutralise ce
+        // qu'un tableur prendrait pour une formule, et pose la marque d'ordre
+        // des octets qu'Excel attend.
+        const lines = rows.map((row) => [
+            row.date,
+            row.kind === 'income' ? 'Recette' : row.kind === 'expense' ? 'Dépense' : 'Virement',
+            row.label,
+            row.counterparty,
+            accountName(base.accounts, row.accountId),
+            categoryOf(base.categories, row.categoryId)?.name ?? '',
+            // Point décimal : le seul qu'aucun tableur ne prend pour un séparateur de colonnes.
+            (row.amount / 100).toFixed(2),
+            row.vatAmount === null ? '' : (row.vatAmount / 100).toFixed(2),
+            row.cleared ? 'oui' : 'non'
+        ]);
+        const csv = toCsv([header, ...lines]);
         const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
         const link = document.createElement('a');
         link.href = url;
