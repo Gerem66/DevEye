@@ -44,7 +44,22 @@ export interface MemoryStore {
 export function emptyStore(): MemoryStore {
     return {
         settings: new Map(),
-        clients: new Map(),
+        // Le client des documents tout faits (`docRow`) : un document d'ici a
+        // un client d'ici, et les gardes le vérifient.
+        clients: new Map([
+            [
+                1,
+                {
+                    id: 1,
+                    workspace_id: 1,
+                    kind: 'company',
+                    payment_terms_days: 30,
+                    default_vat_bp: null,
+                    archived: 0,
+                    content: JSON.stringify({ name: 'Client 1' })
+                }
+            ]
+        ]),
         docs: [],
         lines: [],
         payments: [],

@@ -184,10 +184,15 @@ export async function docOr404(ctx: Ctx, id: number): Promise<InvoicingDocRow> {
 /**
  * Le client d'un document est l'élément de la feature : c'est par lui qu'un rôle
  * ouvre ou ferme l'accès. Un document sans client n'est restreint par personne,
- * ce qui est le cas d'un brouillon qu'on vient de commencer.
+ * ce qui est le cas d'un brouillon qu'on vient de commencer. Le client doit
+ * être d'ici : la clé étrangère ne connaît pas l'espace, et un identifiant venu
+ * d'un autre y accrocherait un document.
  */
 export async function assertClient(ctx: Ctx, clientId: number | null, level: 'read' | 'write'): Promise<void> {
     if (clientId === null) return;
+    if ((await ctx.repo.findClient(clientId, ctx.workspaceId)) === null) {
+        throw new FeatureError('not_found', 'Ce client n’existe pas dans cet espace.');
+    }
     await ctx.items.assert(String(clientId), level);
 }
 
