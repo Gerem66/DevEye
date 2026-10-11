@@ -394,15 +394,21 @@ function toAddress(a?: { name?: string; address?: string }): MailAddress | null 
     return { name: a.name || null, address: a.address };
 }
 
+/** imapflow rend telle quelle, en chaîne, une date qu'il n'a pas su lire. */
+function readableDate(value: unknown): Date | null {
+    return value instanceof Date && !Number.isNaN(value.getTime()) ? value : null;
+}
+
 /** Shared envelope mapping between {@link syncFolder} and {@link fetchOlderMessages}. */
-function mapFetchedMessage(msg: FetchMessageObject): RemoteEnvelope {
+export function mapFetchedMessage(msg: FetchMessageObject): RemoteEnvelope {
     const flags = msg.flags ?? new Set<string>();
+    const date = readableDate(msg.envelope?.date) ?? readableDate(msg.internalDate) ?? new Date();
     return {
         uid: msg.uid,
         subject: msg.envelope?.subject ?? '(sans objet)',
         from: toAddress(msg.envelope?.from?.[0]),
         to: (msg.envelope?.to ?? []).map(toAddress).filter((a): a is MailAddress => a !== null),
-        date: Math.floor((msg.envelope?.date ?? (msg.internalDate as Date | undefined) ?? new Date()).getTime() / 1000),
+        date: Math.floor(date.getTime() / 1000),
         seen: flags.has('\\Seen'),
         flagged: flags.has('\\Flagged'),
         answered: flags.has('\\Answered'),

@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, it, mock } from 'node:test';
 
+import type { FetchMessageObject } from 'imapflow';
+
 import type { MailOAuthCredentials } from './client';
 
 /**
@@ -15,7 +17,7 @@ import type { MailOAuthCredentials } from './client';
 
 process.env.OAUTH_GOOGLE_CLIENT_ID = 'google-client';
 process.env.OAUTH_GOOGLE_CLIENT_SECRET = 'google-secret';
-const { resolveAuth, MailReauthRequiredError } = await import('./client');
+const { resolveAuth, MailReauthRequiredError, mapFetchedMessage } = await import('./client');
 const { OAuthTokenError } = await import('./oauth');
 
 /** Une boîte Google dont le jeton d'accès est déjà hors délai. */
@@ -83,5 +85,34 @@ describe('resolveAuth : le renouvellement du jeton', () => {
         const auth = await resolveAuth(expiredAccount({ expiresAt: Date.now() + 3_600_000 }));
         assert.equal(fetched.mock.callCount(), 0);
         assert.equal(auth.imapAuth.accessToken, 'stale');
+    });
+});
+
+/**
+ * imapflow laisse en chaîne une date que `new Date()` ne lit pas (un en-tête
+ * `Date` de pourriel), malgré ses types : un seul message ainsi daté ferait
+ * échouer la relève de toute la boîte.
+ */
+describe('mapFetchedMessage : la date d’un message', () => {
+    const unreadable = 'Mon, 32 Oct 2026 10:00:00 +0200' as unknown as Date;
+
+    function fetched(envelopeDate: Date, internalDate: Date | string): FetchMessageObject {
+        return { seq: 1, uid: 7, flags: new Set(), envelope: { date: envelopeDate }, internalDate };
+    }
+
+    it('un en-tête Date illisible cède la place à la date de réception', () => {
+        const msg = fetched(unreadable, new Date('2026-10-03T08:00:00Z'));
+        assert.equal(mapFetchedMessage(msg).date, Date.parse('2026-10-03T08:00:00Z') / 1000);
+    });
+
+    it('sans aucune date lisible, le message est daté de sa relève', () => {
+        const before = Math.floor(Date.now() / 1000);
+        const { date } = mapFetchedMessage(fetched(unreadable, '32-Oct-2026 10:00:00 +0200'));
+        assert.ok(date >= before && date <= Math.floor(Date.now() / 1000));
+    });
+
+    it('un en-tête Date lisible reste la date du message', () => {
+        const msg = fetched(new Date('2026-10-01T12:00:00Z'), new Date('2026-10-03T08:00:00Z'));
+        assert.equal(mapFetchedMessage(msg).date, Date.parse('2026-10-01T12:00:00Z') / 1000);
     });
 });
