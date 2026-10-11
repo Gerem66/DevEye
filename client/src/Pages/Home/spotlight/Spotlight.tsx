@@ -1,11 +1,11 @@
 import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import type { FeatureId, HomeLayout } from '@deveye/types';
+import { placedFeatureIds, type FeatureId, type HomeLayout } from '@deveye/types';
 
 import { useDismissLayer } from '@/Components/Dialog';
 import { foldText } from '@/foldText';
-import { installFeature, placedFeatureIds } from '@/stores/homeLayout';
+import { installFeature } from '@/stores/homeLayout';
 import { closeSpotlight, useSpotlight } from '@/stores/spotlight';
 import { catalogEntries, visibleFeatureCatalog, type FeatureCatalogEntry } from '../catalog';
 import styles from './Spotlight.module.css';

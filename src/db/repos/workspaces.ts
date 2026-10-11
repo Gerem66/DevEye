@@ -22,6 +22,13 @@ export interface WorkspacesRepo {
     listOwnedShared(ownerUserId: number): Promise<{ id: number }[]>;
     /** Tous les comptes qui possèdent un espace. */
     listOwnerIds(): Promise<number[]>;
+    /** Tous les espaces, par leur seul identifiant. */
+    listIds(): Promise<number[]>;
+    /**
+     * Les dispositions d'accueil où l'identifiant de cette fonctionnalité paraît,
+     * brutes : un tri grossier, que la lecture du JSON confirme.
+     */
+    listHomeLayoutsNaming(featureId: string): Promise<{ id: number; homeLayout: string }[]>;
     /** Crée l'espace personnel d'un compte (un seul par compte) et y inscrit son propriétaire. */
     createPersonal(ownerUserId: number, name: string): Promise<WorkspaceRow>;
     create(input: { ownerUserId: number; name: string }): Promise<WorkspaceRow>;
@@ -81,6 +88,19 @@ export function workspacesRepo(pool: Q): WorkspacesRepo {
         async listOwnerIds() {
             const r = await pool.query<{ owner_user_id: number }>('SELECT DISTINCT owner_user_id FROM workspaces');
             return r.rows.map((row) => Number(row.owner_user_id));
+        },
+        async listIds() {
+            const r = await pool.query<{ id: number }>('SELECT id FROM workspaces');
+            return r.rows.map((row) => Number(row.id));
+        },
+        async listHomeLayoutsNaming(featureId) {
+            // L'identifiant tel que le JSON l'écrit, entre guillemets, jokers de LIKE échappés.
+            const pattern = `%"${featureId.replace(/[\\%_]/g, (c) => `\\${c}`)}"%`;
+            const r = await pool.query<{ id: number; home_layout: string }>(
+                'SELECT id, home_layout FROM workspaces WHERE home_layout LIKE ?',
+                [pattern]
+            );
+            return r.rows.map((row) => ({ id: Number(row.id), homeLayout: row.home_layout }));
         },
         async listAll() {
             const r = await pool.query<WorkspaceListRow>(
@@ -146,6 +166,8 @@ export interface WorkspaceMembersRepo {
     add(input: { userId: number; workspaceId: number }): Promise<WorkspaceMemberRow>;
     remove(userId: number, workspaceId: number): Promise<void>;
     isMember(userId: number, workspaceId: number): Promise<boolean>;
+    /** Les comptes distincts membres de ces espaces, propriétaires compris. */
+    countUsersIn(workspaceIds: readonly number[]): Promise<number>;
 }
 
 export function workspaceMembersRepo(pool: Q): WorkspaceMembersRepo {
@@ -180,6 +202,14 @@ export function workspaceMembersRepo(pool: Q): WorkspaceMembersRepo {
                 [userId, workspaceId]
             );
             return Number(r.rows[0].count) > 0;
+        },
+        async countUsersIn(workspaceIds) {
+            if (workspaceIds.length === 0) return 0;
+            const r = await pool.query<{ count: number }>(
+                'SELECT COUNT(DISTINCT user_id) AS count FROM workspace_members WHERE workspace_id IN (?)',
+                [workspaceIds]
+            );
+            return Number(r.rows[0]?.count ?? 0);
         }
     };
 }

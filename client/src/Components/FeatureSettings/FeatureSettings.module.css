@@ -75,6 +75,11 @@
     color: var(--accent);
 }
 
+.navBadge.navBadgeAccent {
+    background: var(--accent);
+    color: var(--on-accent);
+}
+
 .panel {
     min-width: 0;
     overflow-y: auto;
@@ -498,6 +503,12 @@
         border-bottom: 1px solid var(--glass-border);
         padding: 0 0 var(--space-sm);
         scrollbar-width: none;
+    }
+
+    /* La rangée défile : une entrée garde sa largeur et son libellé sur une ligne. */
+    .navItem {
+        flex: none;
+        white-space: nowrap;
     }
 
     .channelActions {

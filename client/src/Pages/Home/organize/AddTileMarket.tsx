@@ -1,18 +1,11 @@
 import { useEffect, useState, type ComponentType, type ReactNode } from 'react';
-import type { HomeSection, ShortcutItem } from '@deveye/types';
+import { placedFeatureIds, type HomeSection, type ShortcutItem } from '@deveye/types';
 
 import { Dialog } from '@/Components/Dialog';
 import TextInput from '@/Components/TextInput';
 import { useDevices } from '@/devicesProvider';
 import { foldText } from '@/foldText';
-import {
-    addDevice,
-    addFeature,
-    getHomeLayout,
-    placedDeviceIds,
-    placedFeatureIds,
-    useHomeLayout
-} from '@/stores/homeLayout';
+import { addDevice, addFeature, getHomeLayout, placedDeviceIds, useHomeLayout } from '@/stores/homeLayout';
 import {
     FEATURE_CATEGORIES,
     FEATURE_CATEGORY_ICON,

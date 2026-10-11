@@ -354,10 +354,13 @@
     background: var(--glass-bg-light);
 }
 
-/* Subtle admin-only marker — a small shield pushed to the right of the label so
-   reserved features are quietly distinguishable from the ones everyone sees. */
-.menuItem .adminBadge {
+/* Le repère d'une entrée réservée, poussé à droite du libellé : un badge quand
+   quelque chose attend, sinon le logo discret de son groupe. */
+.menuItem .marker {
     margin-left: auto;
+}
+
+.menuItem .markerIcon {
     width: 12px;
     height: 12px;
     color: var(--text-muted);

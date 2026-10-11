@@ -1,4 +1,4 @@
-import { adminDeleteUser, adminSetUserRole, adminSetUserStatus, adminUserList } from '@deveye/types';
+import { adminDeleteUser, adminSetUserRole, adminSetUserStatus, adminUserList, type UserRole } from '@deveye/types';
 
 import { invalidateAccess } from '../_access';
 import { schedulePlanReconcile } from '@/Services/planPauses';
@@ -6,8 +6,10 @@ import { forgetSessionsOf } from '@/Services/SecureStore';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import { deleteUserEverywhere } from '../_users';
 import { adminExternalServicesFeature } from './externalServices';
+import { adminFeatureStatsFeature } from './featureStats';
 import { adminMaintenanceFeatures } from './maintenance';
 import { notifyAdmins } from './notify';
+import { adminPendingFeature } from './pending';
 
 /**
  * Administration des comptes, à l'échelle du site : `admin: true`, et
@@ -15,6 +17,12 @@ import { notifyAdmins } from './notify';
  * espace.
  */
 const ADMIN = { admin: true, scope: 'account' } as const;
+
+const ROLE_LABELS: Record<UserRole, string> = {
+    user: 'Utilisateur',
+    moderator: 'Modérateur',
+    admin: 'Administrateur'
+};
 
 /** Se retirer soi-même son propre accès est toujours une erreur. */
 function assertNotSelf(ctx: FeatureContext, userId: number, what: string): void {
@@ -45,21 +53,29 @@ export const adminSetUserRoleFeature: FeatureDefinition<
         // Se retirer l'administration laisserait potentiellement le site sans
         // aucun administrateur, sans moyen de revenir en arrière.
         assertNotSelf(ctx, input.userId, 'changer le rôle de');
+        const target = await ctx.db.users.findById(input.userId);
+        if (!target) throw new FeatureError('not_found', 'Compte introuvable');
         await ctx.db.users.setRole(input.userId, input.role);
         invalidateAccess();
         // Un administrateur n'a aucune limite : ce rôle ôté, son offre s'applique.
         schedulePlanReconcile(input.userId);
         if (ctx.live) {
-            // L'intéressé relit sa session : la page Utilisateurs entre dans
-            // son menu ou en sort à l'instant, et son offre avec.
-            ctx.live.userChanged(input.userId, ctx.workspaceId, ['workspace', 'account'], ctx.userId);
+            // L'intéressé relit sa session (`workspace`), qui porte son rôle : les
+            // pages réservées entrent dans son menu ou en sortent à l'instant, son
+            // offre (`account`) et ses badges (`pending`) avec.
+            ctx.live.userChanged(
+                input.userId,
+                target.personal_workspace_id,
+                ['workspace', 'account', 'pending'],
+                ctx.userId
+            );
             await notifyAdmins(ctx.db, ctx.live, ctx.workspaceId, ctx.userId);
         }
         ctx.audit({
             action: 'user.setRole',
             level: 'warning',
             category: 'user',
-            description: `Rôle du compte modifié : ${input.role}`,
+            description: `Rôle du compte « ${target.username} » : ${ROLE_LABELS[input.role]}`,
             metadata: { targetUserId: input.userId }
         });
         return { userId: input.userId, role: input.role };
@@ -140,5 +156,7 @@ export const adminFeatures: FeatureDefinition<string, any, any>[] = [
     adminSetUserStatusFeature,
     adminDeleteUserFeature,
     adminExternalServicesFeature,
+    adminPendingFeature,
+    adminFeatureStatsFeature,
     ...adminMaintenanceFeatures
 ];

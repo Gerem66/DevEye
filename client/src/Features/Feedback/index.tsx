@@ -21,9 +21,10 @@ import styles from './style.module.css';
  * Page « Retours » : ce que les utilisateurs ont signalé, retours libres et
  * bugs mêlés, du plus récent au plus ancien.
  *
- * Réservée à l'administrateur global. L'entrée de menu est déjà masquée pour
- * les autres, mais chaque commande est gatée serveur : le masquage n'est qu'un
- * confort.
+ * Réservée aux modérateurs et aux administrateurs ; seul l'administrateur
+ * reçoit l'adresse IP de l'auteur. L'entrée de menu est déjà masquée pour les
+ * autres, mais chaque commande est gardée par le serveur : le masquage n'est
+ * qu'un confort.
  */
 
 /** L'état des filtres. `''` vaut « aucune contrainte ». */
@@ -129,7 +130,7 @@ export default function FeatureFeedback() {
             setHasMore(false);
             setError(
                 e instanceof WsError && e.code === 'forbidden'
-                    ? 'Accès réservé aux administrateurs.'
+                    ? 'Accès réservé à la modération.'
                     : 'Impossible de charger les retours.'
             );
         } finally {
@@ -286,7 +287,7 @@ export default function FeatureFeedback() {
 
                                     <div className={styles.meta}>
                                         <span>DevEye {entry.appVersion}</span>
-                                        <span>{entry.ip || 'IP inconnue'}</span>
+                                        {entry.ip && <span>{entry.ip}</span>}
                                         {entry.workspaceId !== null && <span>Espace #{entry.workspaceId}</span>}
                                         {entry.handledAt !== null && (
                                             <span>

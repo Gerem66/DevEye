@@ -1,4 +1,11 @@
-import { defaultUserColor, type AdminUser, type UserColor, type UserRow } from '@deveye/types';
+import {
+    defaultUserColor,
+    userRoleSchema,
+    type AdminUser,
+    type UserColor,
+    type UserRole,
+    type UserRow
+} from '@deveye/types';
 import { selectColumns } from '../columns';
 import type { Queryable } from '../pool';
 
@@ -6,6 +13,12 @@ type Q = Queryable;
 
 /** Ce qu'un compte montre de lui hors de sa session : ni avatar, ni secret. */
 export type AccountRow = Pick<UserRow, 'id' | 'email' | 'username' | 'role' | 'status' | 'e2e_run' | 'created'>;
+
+/** Le rôle d'une ligne : une valeur que l'enum ne connaît pas vaut `user`, le rôle sans privilège. */
+export function roleOf(raw: string): UserRole {
+    const parsed = userRoleSchema.safeParse(raw);
+    return parsed.success ? parsed.data : 'user';
+}
 
 const ACCOUNT_COLUMNS = selectColumns<AccountRow>(null, {
     id: true,
@@ -34,7 +47,7 @@ export interface UsersRepo {
         email: string;
         username: string;
         passwordHash: string;
-        role?: 'user' | 'admin';
+        role?: UserRole;
         /** Secondes : quand les conditions du site ont été acceptées ; `null` sans site. */
         termsAcceptedAt?: number | null;
         /** L'essai de bout en bout qui crée ce compte jetable ; `null` pour une personne. */
@@ -55,7 +68,7 @@ export interface UsersRepo {
     updateColor(id: number, color: UserColor): Promise<void>;
     /** Remplace le sac de drapeaux du compte (`userSettingFlagSchema`). */
     updateSettings(id: number, settings: string[]): Promise<void>;
-    setRole(id: number, role: 'user' | 'admin'): Promise<void>;
+    setRole(id: number, role: UserRole): Promise<void>;
     setStatus(id: number, status: 'active' | 'suspended'): Promise<void>;
     /** Supprime le compte ; les FK CASCADE emportent ses espaces et leur contenu. */
     delete(id: number): Promise<void>;
@@ -63,6 +76,8 @@ export interface UsersRepo {
     listForAdmin(): Promise<AdminUser[]>;
     /** Les administrateurs en activité, à prévenir quand un compte change. */
     listAdminIds(): Promise<number[]>;
+    /** Les modérateurs et administrateurs en activité : ceux qu'attend ce qui est à traiter. */
+    listModeratorIds(): Promise<{ id: number; personalWorkspaceId: number }[]>;
     /** Password re-validation window in seconds; `null` resets to the default. */
     setReAuthInterval(id: number, seconds: number | null): Promise<void>;
     count(): Promise<number>;
@@ -200,7 +215,7 @@ export function usersRepo(pool: Q): UsersRepo {
                 username: x.username,
                 email: x.email,
                 avatar: x.avatar,
-                role: x.role === 'admin' ? ('admin' as const) : ('user' as const),
+                role: roleOf(x.role),
                 status: x.status === 'suspended' ? ('suspended' as const) : ('active' as const),
                 workspaceCount: Number(x.workspace_count),
                 lastLogin: Number(x.last_login),
@@ -213,6 +228,12 @@ export function usersRepo(pool: Q): UsersRepo {
                 "SELECT id FROM users WHERE role = 'admin' AND status = 'active'"
             );
             return r.rows.map((x) => x.id);
+        },
+        async listModeratorIds() {
+            const r = await pool.query<{ id: number; personal_workspace_id: number }>(
+                "SELECT id, personal_workspace_id FROM users WHERE role IN ('moderator', 'admin') AND status = 'active'"
+            );
+            return r.rows.map((x) => ({ id: x.id, personalWorkspaceId: x.personal_workspace_id }));
         },
         async setReAuthInterval(id, seconds) {
             await pool.query('UPDATE users SET re_auth_interval = ? WHERE id = ?', [seconds, id]);

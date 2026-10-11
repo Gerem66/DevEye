@@ -3,9 +3,9 @@ import {
     homeLayoutSchema,
     homeTileId,
     homeTileKind,
-    isFeatureTile,
     isHomeFolder,
     isShortcutTile,
+    placedFeatureIds,
     HOME_FOLDER_MAX_ITEMS,
     HOME_SECTION_MAX_TILES,
     HOME_TOPBAR_MAX_WIDGETS,
@@ -110,17 +110,6 @@ export function placedDeviceIds(layout: HomeLayout): string[] {
     return allTiles(layout)
         .filter((tile) => homeTileKind(tile) === 'device')
         .map((tile) => homeTileId(tile));
-}
-
-/**
- * Same, for feature tiles, folder contents included: a feature filed in a folder
- * counts as placed, so the "not twice" rule needs no knowledge of folders.
- */
-export function placedFeatureIds(layout: HomeLayout): HomeFeatureId[] {
-    return allTiles(layout).flatMap((tile) => {
-        if (isHomeFolder(tile)) return tile.items;
-        return isFeatureTile(tile) ? [tile] : [];
-    });
 }
 
 /** Les fonctionnalités rangées dans un dossier, où qu'il soit. */

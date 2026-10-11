@@ -11,6 +11,7 @@ import {
     type SdkFeatureContext
 } from '@deveye/types/sdk/server';
 
+import { assertDeclaredRole } from '@/features/_access';
 import type { FeatureContext } from '@/features/_define';
 import {
     createModuleServices,
@@ -143,6 +144,26 @@ const external: FeatureServer = {
             command: 'x-sdkregister.list',
             input: z.object({}),
             output,
+            handler: async (ctx: SdkFeatureContext) => {
+                handled.push(ctx);
+                return { ok: true };
+            }
+        }),
+        defineSdkFeature({
+            command: 'x-sdkregister.reports',
+            input: z.object({}),
+            output,
+            access: { moderation: true, scope: 'account' },
+            handler: async (ctx: SdkFeatureContext) => {
+                handled.push(ctx);
+                return { ok: true };
+            }
+        }),
+        defineSdkFeature({
+            command: 'x-sdkregister.fleet',
+            input: z.object({}),
+            output,
+            access: { admin: true },
             handler: async (ctx: SdkFeatureContext) => {
                 handled.push(ctx);
                 return { ok: true };
@@ -445,6 +466,29 @@ describe('moduleFeatureHandlers : la projection en définitions natives', () => 
         const ctx = handled.at(-1);
         assert.ok(ctx);
         assert.equal(ctx.canExtra('manage'), true);
+    });
+
+    it('le rôle global se déclare au dispatcheur, comme pour une native : jamais éprouvé dans l’enveloppe', async () => {
+        const reports = byCommand.get('x-sdkregister.reports');
+        const fleet = byCommand.get('x-sdkregister.fleet');
+        assert.ok(reports && fleet);
+        assert.deepEqual(reports.access, {
+            feature: 'x-sdkregister',
+            level: 'read',
+            moderation: true,
+            scope: 'account'
+        });
+        assert.deepEqual(fleet.access, { feature: 'x-sdkregister', level: 'read', admin: true });
+
+        const forbidden = { name: 'FeatureError', code: 'forbidden' };
+        const user = { isAdmin: false, canModerate: false };
+        const moderator = { isAdmin: false, canModerate: true };
+        assert.throws(() => assertDeclaredRole(reports.access, user), forbidden);
+        assert.doesNotThrow(() => assertDeclaredRole(reports.access, moderator));
+        assert.throws(() => assertDeclaredRole(fleet.access, moderator), forbidden);
+
+        // Le contexte de test n'a pas d'`assertAdmin` : l'enveloppe ne garde rien elle-même.
+        assert.deepEqual(await fleet.handler(fakeCtx(), {} as never), { ok: true });
     });
 
     it('une commande sans extras ne demande rien', async () => {

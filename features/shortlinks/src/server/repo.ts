@@ -79,6 +79,8 @@ export interface ShortlinksRepo {
         findByCode(code: string): Promise<LinkRow | null>;
         findBySlug(domainId: number, slug: string): Promise<LinkRow | null>;
         countIn(workspaceIds: readonly number[]): Promise<number>;
+        /** Tous espaces confondus, pour la vue d'ensemble de l'administration. */
+        totals(): Promise<{ visits: number; clicks: number }>;
         /** Les plus anciens d'abord : c'est l'excédent le plus récent que l'offre met en pause. */
         listStock(workspaceIds: readonly number[]): Promise<SdkStockItem[]>;
         create(input: {
@@ -224,6 +226,17 @@ export function createRepo(q: SdkQueryable): ShortlinksRepo {
                     [[...workspaceIds]]
                 );
                 return Number(rows[0]?.total ?? 0);
+            },
+            async totals() {
+                const rows = await q.query<{ visits: number; clicks: number }>(
+                    `SELECT COALESCE(SUM(visits_total), 0) AS visits, COALESCE(SUM(clicks_total), 0) AS clicks
+                       FROM ft_shortlinks_links`,
+                    []
+                );
+                return {
+                    visits: Number(rows[0]?.visits ?? 0),
+                    clicks: Number(rows[0]?.clicks ?? 0)
+                };
             },
             async listStock(workspaceIds) {
                 if (workspaceIds.length === 0) return [];

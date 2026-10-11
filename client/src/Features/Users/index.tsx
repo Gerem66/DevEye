@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { AdminUser } from '@deveye/types';
+import type { AdminUser, UserRole } from '@deveye/types';
 
 import { ws, WsError } from '@/api/ws';
 import Button from '@/Components/Button';
@@ -17,8 +17,9 @@ function when(epoch: number): string {
     return new Date(epoch * 1000).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-const ROLE_OPTIONS: readonly SearchSelectOption<'user' | 'admin'>[] = [
+const ROLE_OPTIONS: readonly SearchSelectOption<UserRole>[] = [
     { value: 'user', label: 'Utilisateur' },
+    { value: 'moderator', label: 'Modérateur' },
     { value: 'admin', label: 'Administrateur' }
 ];
 

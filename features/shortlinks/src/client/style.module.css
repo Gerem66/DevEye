@@ -842,6 +842,54 @@ a.factUrl:hover {
 
 /* ----------------------------------------------------- les signalements */
 
+/* L'onglet de modération : la popup d'administration dessine l'en-tête au-dessus. */
+.reportsTab {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+}
+
+/* Ceux qui sont traités, repliés sous ceux qui attendent : on les ouvre pour relire une décision. */
+.foldedTitle {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    width: fit-content;
+    cursor: pointer;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    list-style: none;
+}
+
+.foldedTitle::-webkit-details-marker {
+    display: none;
+}
+
+.foldedTitle:hover {
+    color: var(--accent);
+}
+
+.foldedChevron {
+    width: 16px;
+    transform: rotate(-90deg);
+    transition: transform 0.15s ease;
+}
+
+.foldedSection[open] > .foldedTitle {
+    margin-bottom: var(--space-md);
+}
+
+.foldedSection[open] .foldedChevron {
+    transform: none;
+}
+
+.reportsNote {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
 .reports {
     display: flex;
     flex-direction: column;

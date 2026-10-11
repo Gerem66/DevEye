@@ -16,8 +16,7 @@ import {
     SHORTLINK_CODE_PATTERN,
     SHORTLINK_SLUG_PATTERN,
     SHORTLINKS_PATH,
-    shortlinkReportReasonSchema,
-    type ShortlinkReportReason
+    shortlinkReportReasonSchema
 } from '../contracts/domain';
 import {
     deviceOfAgent,
@@ -34,7 +33,7 @@ import {
     type LinkContent
 } from './_shared';
 import type { Counters } from './counters';
-import { reportMail } from './mails';
+import { reportMail, type ReportMailInput } from './mails';
 import {
     PAGE_CSP,
     renderBlocked,
@@ -354,42 +353,31 @@ export function createRedirector(deps: FeatureServiceDeps<ShortlinksRepo>, count
                 ip: req.ip
             })
         });
+        deps.live.pendingChanged();
         deps.audit({
             action: 'shortlinks.report',
             description: `Signalement ${ref} reçu sur un lien court.`,
             level: 'warning',
             metadata: { linkId: row.id, reason: reason.data }
         });
-        void mailAdmins({
+        void mailModerators({
             ref,
             url,
             title: content.title,
             target,
             reason: reason.data,
             message: values.message,
-            reporterName: values.name,
-            reporterEmail: values.email,
-            ip: req.ip
+            reporterName: values.name
         });
         return sendHtml(reply, 200, renderReportDone(ref, options));
     }
 
     /** Le signalement est déjà en base : un mail qui ne part pas n'en perd rien, la page de modération le montre. */
-    async function mailAdmins(input: {
-        ref: string;
-        url: string;
-        title: string;
-        target: string;
-        reason: ShortlinkReportReason;
-        message: string;
-        reporterName: string;
-        reporterEmail: string;
-        ip: string;
-    }) {
+    async function mailModerators(input: Omit<ReportMailInput, 'origins'>) {
         try {
             if (!deps.accountMail.configured) return;
             if ((await deps.repo.reports.countSince(now() - 3_600)) > REPORT_MAILS_PER_HOUR) return;
-            await deps.accountMail.sendToAdmins(reportMail({ ...input, origins: deps.origins }));
+            await deps.accountMail.sendToModerators(reportMail({ ...input, origins: deps.origins }));
         } catch (error) {
             deps.logger.warn({ err: error, ref: input.ref }, 'shortlinks: mail de signalement non parti');
         }

@@ -371,6 +371,7 @@ describe('Backup : moteur, les droits de l’auteur, relus à chaque passage', (
         email: 'gerem@exemple.fr',
         username: 'gerem',
         isAdmin: true,
+        canModerate: true,
         e2e: false,
         suspended: false,
         created: 1,

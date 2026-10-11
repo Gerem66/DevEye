@@ -182,8 +182,9 @@ export const shortlinkReportSchema = z.object({
     reason: shortlinkReportReasonSchema,
     message: z.string(),
     reporterName: z.string(),
-    reporterEmail: z.string(),
-    ip: z.string(),
+    /** L'adresse et l'IP du signalant : `null` pour un modérateur, qui juge le contenu sans savoir d'où il vient. */
+    reporterEmail: z.string().nullable(),
+    ip: z.string().nullable(),
     status: shortlinkReportStatusSchema,
     /** La note de décision, lue par le propriétaire quand le lien est retiré. */
     decision: z.string(),

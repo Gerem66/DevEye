@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { allFeatureDescriptors, WORKSPACE_CAPABILITIES } from '@deveye/types';
+import { allFeatureDescriptors, placedFeatureIds, WORKSPACE_CAPABILITIES } from '@deveye/types';
 import type {
     FeatureAccess,
     FeatureId,
@@ -14,7 +14,7 @@ import { Dialog } from '@/Components/Dialog';
 import SegmentedControl from '@/Components/SegmentedControl';
 import SearchSelect from '@/Components/SearchSelect';
 import TextInput from '@/Components/TextInput';
-import { placedFeatureIds, useHomeLayout } from '@/stores/homeLayout';
+import { useHomeLayout } from '@/stores/homeLayout';
 import { useHiddenFeatures } from '@/stores/maintenance';
 import { moduleManifest } from '@/sdk/registry';
 import shell from '@/Components/FeatureSettings/FeatureSettings.module.css';

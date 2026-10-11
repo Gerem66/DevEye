@@ -3,9 +3,9 @@ import type { SdkAccountMailMessage, SdkMailSample, SdkOrigins } from '@deveye/t
 import { SHORTLINK_REPORT_REASON_LABELS, type ShortlinkReportReason } from '../contracts/domain';
 
 /**
- * Les mails du module, tous par l'expéditeur du serveur : un signalement va à
- * l'administration du service, et la décision de retirer un lien va à son
- * auteur, avec sa raison.
+ * Les mails du module, tous par l'expéditeur du serveur : un signalement va aux
+ * modérateurs et aux administrateurs, sans l'adresse ni l'IP du signalant, et
+ * la décision de retirer un lien va à son auteur, avec sa raison.
  */
 
 export interface ReportMailInput {
@@ -16,14 +16,12 @@ export interface ReportMailInput {
     reason: ShortlinkReportReason;
     message: string;
     reporterName: string;
-    reporterEmail: string;
-    ip: string;
     origins: SdkOrigins;
 }
 
-/** La page système des signalements, ouverte par le lien d'arrivée de l'app. */
+/** La modération ouverte sur Liens courts, par le lien d'arrivée de l'app. */
 export function reportsPageUrl(origins: SdkOrigins): string {
-    return `${origins.app}/?admin=shortlinks`;
+    return `${origins.app}/?moderation=shortlinks`;
 }
 
 export function reportMail(input: ReportMailInput): SdkAccountMailMessage {
@@ -35,11 +33,11 @@ export function reportMail(input: ReportMailInput): SdkAccountMailMessage {
             `Il mène à : ${input.target || 'destination illisible'}`,
             `Motif : ${SHORTLINK_REPORT_REASON_LABELS[input.reason]}`,
             `Message : ${input.message}`,
-            `Signalé par : ${input.reporterName} (${input.reporterEmail}), depuis l’adresse IP ${input.ip || 'inconnue'}.`
+            `Signalé par : ${input.reporterName}`
         ],
         notice: 'Le lien continue de rediriger tant qu’aucune décision n’est prise. Retirez-le si la destination est manifestement trompeuse ou illicite.',
         button: { label: 'Examiner le signalement', url: reportsPageUrl(input.origins) },
-        footnote: `Référence ${input.ref}. Vous recevez ce mail parce que vous administrez cette installation de DevEye.`
+        footnote: `Référence ${input.ref}. Vous recevez ce mail parce que vous modérez cette installation de DevEye.`
     };
 }
 
@@ -77,7 +75,7 @@ export function shortlinksMailSamples(): SdkMailSample[] {
     return [
         {
             key: 'report',
-            label: 'Lien signalé, vers les administrateurs',
+            label: 'Lien signalé, vers la modération',
             sender: 'server',
             build: ({ origins }) =>
                 reportMail({
@@ -88,8 +86,6 @@ export function shortlinksMailSamples(): SdkMailSample[] {
                     reason: 'phishing',
                     message: 'Ce lien imite la page de connexion de ma banque et demande mes identifiants.',
                     reporterName: 'Camille Martin',
-                    reporterEmail: 'camille@exemple.fr',
-                    ip: '203.0.113.7',
                     origins
                 })
         },

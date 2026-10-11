@@ -5,8 +5,8 @@ passe par là : combien de personnes, d'où elles viennent, avec quel appareil,
 et comment cela évolue dans le temps. Un lien se règle (mot de passe, date de
 fin, nombre de visites, destination par appareil, paramètres de campagne), se
 partage en QR code, et se sert sur l'adresse de DevEye ou sur un domaine à soi.
-C'est une feature de grille (carte d'accueil + panneau) avec une page système
-de modération pour les administrateurs.
+C'est une feature de grille (carte d'accueil + panneau) avec un onglet de
+modération dans l'administration des fonctionnalités.
 
 Documents voisins : [Docs/FEATURE_SDK.md](../../Docs/FEATURE_SDK.md) (les noms
 servis en entier et le pays d'un visiteur), [Docs/SHARING.md](../../Docs/SHARING.md),
@@ -204,16 +204,32 @@ Un visiteur signale un lien depuis son aperçu (`<adresse>+`) ou
 `/l/<code>/signaler` : motif, message, nom, adresse e-mail, déclaration de bonne
 foi, et un champ piège pour les robots. Le signalement (`ft_shortlinks_reports`)
 est scellé par la clé du serveur, lisible sans aucun espace, et survit au lien
-comme à son auteur : c'est la trace de la décision. Les administrateurs le
-reçoivent par mail (au plus trente par heure, au-delà la page suffit).
+comme à son auteur : c'est la trace de la décision. Les modérateurs et les
+administrateurs le reçoivent par mail (`accountMail.sendToModerators`, au plus
+trente par heure, au-delà l'onglet suffit), sans l'adresse ni l'IP du
+signalant ; son bouton ouvre la modération sur Liens courts
+(`/?moderation=shortlinks`). Le signalement enregistré, la route appelle
+`live.pendingChanged()` : les badges de la modération s'allument en direct.
 
-La page système « Signalements des liens » (`adminEntry`, commandes
-`shortlinks.reports`, `reportDecide`, `restore`, `access: { scope: 'account',
-admin: true }`) permet de **retirer** le lien, pour tout le monde, sans rien
-supprimer, en prévenant son auteur par mail et l'espace par ses canaux, avec le
-motif ; de classer sans suite ; ou de remettre un lien en service. Le compte,
-lui, n'est jamais coupé par cette page : on sanctionne un lien, pas un usage
-(la restriction d'un compte se fait dans l'administration des abonnements).
+L'onglet « Signalements » de l'administration des fonctionnalités
+(`adminTabs`, `moderation: true`, commandes `shortlinks.reports`,
+`reportDecide`, `restore`, `access: { scope: 'account', moderation: true }`)
+liste ce qui est **à traiter**, et dessous, replié, ce qui est **traité**. Il
+permet de **retirer** le lien, pour tout le monde, sans rien supprimer, en
+prévenant son auteur par mail et l'espace par ses canaux, avec le motif ; de
+classer sans suite ; ou de remettre un lien en service. Le compte, lui, n'est
+jamais coupé par cet onglet : on sanctionne un lien, pas un usage (la
+restriction d'un compte se fait dans l'administration des abonnements).
+
+Un modérateur juge le contenu (adresse, destination, motif, message, nom du
+signalant) ; l'adresse e-mail et l'IP du signalant ne sortent du serveur que
+vers un administrateur, les autres les reçoivent à `null`. Chaque décision et
+chaque remise en service appelle `ctx.live.pendingChanged()` : le compteur
+`adminPending` (`reports`, les signalements ouverts) se relit, et la liste se
+rafraîchit chez les autres modérateurs (`alsoInvalidatedBy` sur le sujet
+`pending`). La vue d'ensemble de l'administrateur montre en plus les visites et
+les ouvertures de toute l'instance (`adminFacts`), les liens étant déjà comptés
+par leur quota.
 
 Un signalement clos se garde un an.
 
@@ -241,41 +257,41 @@ s'y supprime pas : on retire la projection.
 
 ## Commandes
 
-| Commande                    | Accès          | Rôle                                     |
-| --------------------------- | -------------- | ---------------------------------------- |
-| `shortlinks.count`          | lecture        | la carte d'accueil                       |
-| `shortlinks.list`           | lecture        | les liens visibles et l'usage de l'offre |
-| `shortlinks.get`            | lecture        | un lien                                  |
-| `shortlinks.add`            | écriture       | créer : destination, titre, adresse      |
-| `shortlinks.update`         | écriture       | l'onglet Général                         |
-| `shortlinks.updateAccess`   | écriture       | l'onglet Accès (mot de passe, fin)       |
-| `shortlinks.updateCampaign` | écriture       | l'onglet Campagne                        |
-| `shortlinks.setEnabled`     | écriture       | couper ou rétablir                       |
-| `shortlinks.remove`         | écriture       | supprimer avec ses chiffres              |
-| `shortlinks.stats`          | lecture        | les chiffres d'un lien ou de tous        |
-| `shortlinks.qr`             | lecture        | le QR code d'une adresse, en SVG         |
-| `shortlinks.checkNow`       | écriture       | vérifier la destination tout de suite    |
-| `shortlinks.reports`        | administrateur | les signalements                         |
-| `shortlinks.reportDecide`   | administrateur | retirer le lien, ou classer              |
-| `shortlinks.restore`        | administrateur | remettre un lien retiré en service       |
+| Commande                    | Accès      | Rôle                                     |
+| --------------------------- | ---------- | ---------------------------------------- |
+| `shortlinks.count`          | lecture    | la carte d'accueil                       |
+| `shortlinks.list`           | lecture    | les liens visibles et l'usage de l'offre |
+| `shortlinks.get`            | lecture    | un lien                                  |
+| `shortlinks.add`            | écriture   | créer : destination, titre, adresse      |
+| `shortlinks.update`         | écriture   | l'onglet Général                         |
+| `shortlinks.updateAccess`   | écriture   | l'onglet Accès (mot de passe, fin)       |
+| `shortlinks.updateCampaign` | écriture   | l'onglet Campagne                        |
+| `shortlinks.setEnabled`     | écriture   | couper ou rétablir                       |
+| `shortlinks.remove`         | écriture   | supprimer avec ses chiffres              |
+| `shortlinks.stats`          | lecture    | les chiffres d'un lien ou de tous        |
+| `shortlinks.qr`             | lecture    | le QR code d'une adresse, en SVG         |
+| `shortlinks.checkNow`       | écriture   | vérifier la destination tout de suite    |
+| `shortlinks.reports`        | modération | les signalements                         |
+| `shortlinks.reportDecide`   | modération | retirer le lien, ou classer              |
+| `shortlinks.restore`        | modération | remettre un lien retiré en service       |
 
 ## Carte du code
 
 ### Le module : `features/shortlinks/`
 
 - `src/manifest.ts` : capacités (`notify`, `routes.public`, `accounts.mail`,
-  `geoip`), quotas, domaines web, page système, onglets.
+  `geoip`), quotas, domaines web, onglet de modération, onglets.
 - `src/contracts/domain.ts`, `commands.ts` : les formes et les commandes.
 
 ### Serveur : `src/server/`
 
 - `index.ts` : l'entrée, le service (compteurs, contrôle, entretien horaire),
-  `ownHosts`, `publicRoutes`, `hostRequest`.
+  `ownHosts`, `publicRoutes`, `hostRequest`, `adminPending`, `adminFacts`.
 - `_shared.ts` : adresses, destination d'un appareil, mot de passe, expiration,
   le pont vers le service (`runtime()`).
 - `repo.ts` : toutes les requêtes ; `_testing.ts` : son double en mémoire.
-- `handlers.ts` : les commandes des membres ; `moderation.ts` : celles des
-  administrateurs.
+- `handlers.ts` : les commandes des membres ; `moderation.ts` : celles de la
+  modération.
 - `redirect.ts` : les routes publiques ; `render.ts` : leurs pages.
 - `counters.ts` : visites, ouvertures, provenances, usage, avis de limite.
 - `stats.ts` : les séries et les classements.

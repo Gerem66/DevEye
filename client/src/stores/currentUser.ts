@@ -36,6 +36,11 @@ export function setActingUser(user: User | null): void {
     emit();
 }
 
+/** Hors rendu : le compte courant a changé (session relue, bascule vers une autre instance). */
+export function onCurrentUserChange(fn: () => void): () => void {
+    return subscribe(fn);
+}
+
 export function getCurrentUser(): User | null {
     return acting ?? local;
 }

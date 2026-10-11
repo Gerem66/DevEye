@@ -1,0 +1,267 @@
+/* `min-height` et non `height` : l'en-tête colle dans la boîte de la racine,
+   qui grandit avec son contenu, et c'est la popup qui défile. */
+.root {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+    min-height: 100%;
+}
+
+.header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--space-md);
+}
+
+.headerText {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    min-width: 0;
+}
+
+.title {
+    margin: 0;
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.subtitle {
+    margin: 0;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.empty {
+    margin: 0;
+    padding: var(--space-xl) 0;
+    text-align: center;
+    color: var(--text-muted);
+}
+
+/* La colonne de gauche suit la page : une liste plus haute que l'écran ne
+   peut pas coller sans cacher son bas. */
+.layout {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    align-items: start;
+    gap: var(--space-lg);
+}
+
+.panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    min-width: 0;
+}
+
+.identity {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-md);
+}
+
+.identityIcon {
+    width: 28px;
+    margin-top: 2px;
+    color: var(--accent);
+}
+
+.identityText {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    min-width: 0;
+}
+
+.identityTitle {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+}
+
+.name {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+}
+
+.description {
+    margin: 0;
+    font-size: 0.85rem;
+    line-height: 1.45;
+    color: var(--text-secondary);
+}
+
+/* Peu d'onglets par fonctionnalité : ils passent à la ligne plutôt que de
+   défiler. */
+.tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.tab,
+.tabActive {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-bottom: -1px;
+    padding: var(--space-sm) var(--space-md);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: color var(--transition-fast);
+}
+
+.tab:hover:not(:disabled) {
+    color: var(--text-primary);
+}
+
+.tab:disabled {
+    color: var(--text-muted);
+    cursor: not-allowed;
+}
+
+.tabActive {
+    border-bottom-color: var(--accent);
+    color: var(--accent);
+}
+
+.locked {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    margin: 0;
+    padding: var(--space-md);
+    background: var(--warning-bg);
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    line-height: 1.45;
+    color: var(--text-primary);
+}
+
+.lockedIcon {
+    width: 16px;
+    margin-top: 2px;
+    color: var(--warning);
+}
+
+/* Le parent du voile de chargement, qui se pose par-dessus les chiffres. */
+.body {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    min-height: 120px;
+}
+
+/* `filter`, jamais `opacity` : framer-motion possède celle de la popup. */
+.dimmed {
+    filter: opacity(0.6);
+}
+
+.errorBanner {
+    padding: var(--space-sm) var(--space-md);
+    background: var(--danger-bg);
+    border: 1px solid var(--danger);
+    border-radius: var(--radius-sm);
+    color: var(--danger);
+    font-size: 0.875rem;
+}
+
+.sections {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+}
+
+.section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.sectionLabel {
+    margin: 0;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.figures {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 160px), 1fr));
+    gap: var(--space-md);
+}
+
+.figure {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    padding: var(--space-md);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+}
+
+.figureLabel {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    overflow-wrap: anywhere;
+}
+
+/* Les chiffres de même chasse : deux tuiles voisines s'alignent. */
+.figureValue {
+    font-size: 1.5rem;
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+}
+
+.figureHint {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.note {
+    margin: 0;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: var(--text-muted);
+}
+
+.computedAt {
+    margin: var(--space-lg) 0 0;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+/* Le seuil où `SideNav` passe en rangée défilante : la liste monte au-dessus. */
+@media (max-width: 720px) {
+    .layout {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}

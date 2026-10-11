@@ -42,8 +42,8 @@ const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
     devices: 'devices',
     // Les domaines d'une fonctionnalité, relus depuis ses réglages.
     domain: 'domain',
-    // Les signalements ne se lisent que dans l'administration, relus à
-    // l'ouverture de la vue : rien ne les observe en direct, comme les logs.
+    // Les signalements ne se lisent que dans la modération : les comptes qui
+    // modèrent sont visés un par un, par le sujet `pending` (`adminPending`).
     feedback: null,
     finance: 'finance',
     git: 'git',
@@ -151,7 +151,7 @@ const NON_MUTATING = new Set([
     'agent.filesSearch',
     'agent.filesAnalyze',
     'agent.logQuery',
-    // Écrivent, mais la vue d'administration relit à l'ouverture.
+    // Écrivent, et préviennent les comptes qui modèrent eux-mêmes (`adminPending`).
     'feedback.setStatus',
     'feedback.delete',
     // Écrivent, et préviennent le compte eux-mêmes (`userChanged`).

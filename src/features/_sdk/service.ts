@@ -23,6 +23,7 @@ import { renderAccountMail } from '@/Services/mailLayout';
 import { verifyModuleTicket } from '@/auth/jwt';
 import { maintenance } from '@/Services/maintenance';
 import { featureHealth } from '@/Services/featureHealth';
+import { adminPending } from '@/Services/adminPending';
 import { describeError, systemAlerts } from '@/Services/systemAlerts';
 import type { Logger } from 'pino';
 import type { AuditLog } from '@/Services/AuditLog';
@@ -218,7 +219,8 @@ export function createServiceDeps(
             changed: (workspaceId, topics) =>
                 host.live.changed(workspaceId, (topics ?? [manifest.id]) as LiveTopic[], null),
             publish: (workspaceId, event, payload) => publishFrame(manifest, workspaceId, event, payload),
-            accountChanged: (userId) => accountChanged(host.db, manifest, userId)
+            accountChanged: (userId) => accountChanged(host.db, manifest, userId),
+            pendingChanged: () => adminPending.changed()
         },
         quotaFor: (workspaceId) =>
             createQuota(
@@ -282,7 +284,7 @@ export function createServiceDeps(
                 await host.mailer.send({ to: row.email, ...renderAccountMail(message) });
                 return row.email;
             },
-            sendToAdmins: async (message) => {
+            sendToModerators: async (message) => {
                 gateMail();
                 if (!host.mailer.configured) {
                     throw new FeatureError('conflict', 'Aucun serveur SMTP configuré (SMTP_HOST)');
@@ -290,7 +292,7 @@ export function createServiceDeps(
                 const rendered = renderAccountMail(message);
                 const reached: string[] = [];
                 let refusal: unknown = null;
-                for (const id of await host.db.users.listAdminIds()) {
+                for (const { id } of await host.db.users.listModeratorIds()) {
                     const row = await host.db.users.findById(id);
                     if (!row) continue;
                     try {

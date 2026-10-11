@@ -93,6 +93,9 @@ facturation ne sautent jamais à cause d'une maintenance.
   aussi.
 - **Administrateur** : un bandeau à l'accueil tant que le site est en
   maintenance, ou la priorité donnée.
+- **Modérateur** : un compte comme les autres. Une fonctionnalité en
+  maintenance ou en préversion se verrouille dans sa popup de modération, et
+  ses badges ne s'allument plus pour lui : il ne pourrait pas agir.
 - **Page d'état** (`STATUS_PAGE.md`) : la maintenance y compte comme une
   indisponibilité, avec son message ; la priorité aux abonnés, comme une
   perturbation. La page de maintenance et la fenêtre d'une feature fermée y
@@ -139,8 +142,9 @@ en direct). Chaque démarrage sous la variable le réarme.
 - `src/Services/maintenance.ts` : l'état, lu de façon synchrone par les gardes ;
   chaque changement (interface, relecture) passe par `apply`, qui diffuse
   `maintenance.state` à toutes les sockets, ferme en `4503` celles des
-  non-administrateurs quand le site se ferme, relance la passe des pauses quand
-  la priorité change, puis arrête ou relance les services. Les changements
+  non-administrateurs quand le site se ferme, fait recompter les badges de
+  modération (`adminPending`), relance la passe des pauses quand la priorité
+  change, puis arrête ou relance les services. Les changements
   s'appliquent l'un après l'autre.
 - `src/Services/quota.ts` : `isHeld` et `limitIn`, par où la priorité agit.
 - `src/Services/signup/setting.ts` : le réglage des inscriptions.

@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 
 import type { FeatureService } from '@deveye/types/sdk/server';
-import type { SignupStatus } from '@deveye/types';
+import type { SignupStatus, UserRole } from '@deveye/types';
 
 import type { Database } from '@/db';
 import { openAccount } from '@/Services/accounts';
@@ -38,7 +38,7 @@ export interface CreatedAccount {
     personalWorkspaceId: number;
     username: string;
     email: string;
-    role: 'user' | 'admin';
+    role: UserRole;
     plan: string | null;
 }
 

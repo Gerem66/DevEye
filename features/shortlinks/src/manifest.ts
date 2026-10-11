@@ -19,12 +19,18 @@ export const manifest = {
     resources: ['shortlinks.count', 'shortlinks.list', 'shortlinks.get', 'shortlinks.stats', 'shortlinks.reports'],
     /** Les visites battent ce sujet, au plus une fois par minute : la fiche et la liste se relisent sans recharger le reste. */
     topics: [{ id: 'shortlinksStats', keys: ['shortlinks.stats', 'shortlinks.list', 'shortlinks.count'] }],
-    /** Un domaine vérifié ou retiré change l'adresse qu'un lien donne à partager. */
-    alsoInvalidatedBy: [{ topic: 'domain', keys: ['shortlinks.list', 'shortlinks.get'] }],
+    /**
+     * Un domaine vérifié ou retiré change l'adresse qu'un lien donne à partager.
+     * La décision d'un modérateur relit la liste des signalements chez les autres.
+     */
+    alsoInvalidatedBy: [
+        { topic: 'domain', keys: ['shortlinks.list', 'shortlinks.get'] },
+        { topic: 'pending', keys: ['shortlinks.reports'] }
+    ],
     /**
      * `routes.public` : les redirections, lisibles sans compte. `notify` : la
      * destination tombée et la limite des visites. `accounts.mail` : les
-     * signalements aux administrateurs et la décision à l'auteur du lien.
+     * signalements à la modération et la décision à l'auteur du lien.
      * `geoip` : le pays des visiteurs, sans garder leur adresse.
      */
     nativeCapabilities: ['notify', 'routes.public', 'accounts.mail', 'geoip'],
@@ -45,7 +51,7 @@ export const manifest = {
             'Les liens qui l’utilisent gardent leur adresse sur DevEye, et leurs adresses sur ce domaine cessent de fonctionner.',
         web: true
     },
-    adminEntry: { label: 'Signalements des liens', icon: 'shield' },
+    adminTabs: [{ id: 'reports', label: 'Signalements', moderation: true }],
     /**
      * À l'échelle d'un lien, Général (titre, destinations, adresse, contrôle),
      * Accès (mot de passe, fin) et Campagne (paramètres ajoutés). Notifications,

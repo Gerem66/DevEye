@@ -265,13 +265,17 @@ retour d'un paiement, dont le module lit le reste de l'URL) et la fin d'une
 inscription qui portait un indice (`/signup?plan=…`), remis une fois en `hint`
 au module qui déclare `accountEntry.signupHint`.
 
-## La page système d'un module
+## Les onglets d'administration d'un module
 
-`manifest.adminEntry` (`label`, `icon?`) ajoute une page aux pages système du
-menu du compte, après celles de l'app, avec la pastille « Réservé aux
-administrateurs » : elle ouvre `FeatureClient.AdminView` (`close`), et l'hôte ne
-la rend qu'à un administrateur. Ses commandes déclarent
-`access: { scope: 'account', admin: true }`. C'est la place de ce que
-l'exploitant traite pour toute l'instance : les signalements d'Hébergement.
-L'arrivée `/?admin=<id du module>` l'ouvre d'elle-même, pour le bouton d'un mail
-envoyé par `accountMail.sendToAdmins`.
+`manifest.adminTabs` (`id`, `label`, `moderation?`) ajoute des onglets à la
+fiche du module dans la popup d'administration des fonctionnalités, après la
+vue d'ensemble que l'hôte dessine : chacun ouvre `FeatureClient.AdminTabs[id]`.
+Un onglet `moderation` (les signalements d'Hébergement ou des liens courts)
+s'ouvre aussi aux modérateurs, et ses commandes déclarent
+`access: { scope: 'account', moderation: true }` ; un autre reste à
+l'administrateur, ses commandes déclarant `admin: true`. C'est la place de ce
+que l'exploitant traite pour toute l'instance. `server.adminPending` compte,
+par onglet, ce qui attend une décision : les badges du menu s'en allument, et
+`live.pendingChanged()` les ravive. L'arrivée `/?moderation=<id du module>`
+ouvre la popup sur le module, pour le bouton d'un mail envoyé par
+`accountMail.sendToModerators`.

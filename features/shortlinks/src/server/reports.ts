@@ -38,7 +38,8 @@ export function openReport(keys: SdkServerKeys, row: Pick<ReportRow, 'ref' | 'co
     }
 }
 
-export function reportView(keys: SdkServerKeys, row: ReportRow): ShortlinkReport {
+/** `origin` : l'adresse e-mail et l'IP du signalant, que seul un administrateur lit. */
+export function reportView(keys: SdkServerKeys, row: ReportRow, origin: boolean): ShortlinkReport {
     const content = openReport(keys, row);
     const reason = shortlinkReportReasonSchema.safeParse(row.reason);
     return {
@@ -51,8 +52,8 @@ export function reportView(keys: SdkServerKeys, row: ReportRow): ShortlinkReport
         reason: reason.success ? reason.data : 'other',
         message: content?.message ?? 'Contenu illisible : les clés du serveur ont changé.',
         reporterName: content?.name ?? '',
-        reporterEmail: content?.email ?? '',
-        ip: content?.ip ?? '',
+        reporterEmail: origin ? (content?.email ?? '') : null,
+        ip: origin ? (content?.ip ?? '') : null,
         status: row.status,
         decision: row.decision,
         linkBlocked: row.link_blocked_at !== null,

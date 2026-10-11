@@ -87,6 +87,10 @@ export function memoryRepo(initial: LinkRow[] = []): MemoryRepo {
             findBySlug: async (domainId, slug) =>
                 rows.find((row) => row.domain_id === domainId && row.slug === slug) ?? null,
             countIn: async (ids) => rows.filter((row) => ids.includes(row.workspace_id)).length,
+            totals: async () => ({
+                visits: rows.reduce((sum, row) => sum + row.visits_total, 0),
+                clicks: rows.reduce((sum, row) => sum + row.clicks_total, 0)
+            }),
             listStock: async (ids) =>
                 rows
                     .filter((row) => ids.includes(row.workspace_id))

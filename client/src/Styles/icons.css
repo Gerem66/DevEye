@@ -224,6 +224,10 @@
     -webkit-mask-image: url(/icons/star-outline.svg);
     mask-image: url(/icons/star-outline.svg);
 }
+.icon.icon-flag {
+    -webkit-mask-image: url(/icons/flag.svg);
+    mask-image: url(/icons/flag.svg);
+}
 .icon.icon-folder {
     -webkit-mask-image: url(/icons/folder.svg);
     mask-image: url(/icons/folder.svg);
@@ -280,6 +284,10 @@
 .icon.icon-shield {
     -webkit-mask-image: url(/icons/shield.svg);
     mask-image: url(/icons/shield.svg);
+}
+.icon.icon-moderation {
+    -webkit-mask-image: url(/icons/moderation.svg);
+    mask-image: url(/icons/moderation.svg);
 }
 .icon.icon-cpu {
     -webkit-mask-image: url(/icons/cpu.svg);

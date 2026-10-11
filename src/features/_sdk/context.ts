@@ -24,6 +24,7 @@ import { sdkDomains } from './domains';
 import { createFacade } from './facade';
 import { moduleManifest } from './register';
 import { accountChanged } from './live';
+import { adminPending } from '@/Services/adminPending';
 import { createQuota, quotaCounter } from './quota';
 import { createFeatureStore } from './store';
 
@@ -121,7 +122,8 @@ export function createSdkContext(
         keys: serverKeysOf(ctx.crypt, manifest.id),
         live: {
             publish: (event, payload) => publishFrame(manifest, ctx.workspaceId, event, payload),
-            accountChanged: (userId) => accountChanged(ctx.db, manifest, userId)
+            accountChanged: (userId) => accountChanged(ctx.db, manifest, userId),
+            pendingChanged: () => adminPending.changed()
         },
         // Le compte visé est le propriétaire de l'espace, pas l'appelant : dans
         // un espace partagé, ce qu'un membre crée pèse sur l'offre de son hôte.

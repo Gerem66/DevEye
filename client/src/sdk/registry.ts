@@ -34,6 +34,19 @@ export function registerClientModules(installed: readonly InstalledClientFeature
         if (!mod.manifest.accountOnly && (!mod.client.Widget || !mod.client.Full)) {
             throw new Error(`Module « ${mod.manifest.id} » : Widget et Full sont requis`);
         }
+        const adminTabIds = new Set((mod.manifest.adminTabs ?? []).map((tab) => tab.id));
+        for (const id of adminTabIds) {
+            if (!mod.client.AdminTabs?.[id]) {
+                throw new Error(
+                    `Module « ${mod.manifest.id} » : l'onglet d'administration « ${id} » n'a pas de composant`
+                );
+            }
+        }
+        for (const id of Object.keys(mod.client.AdminTabs ?? {})) {
+            if (!adminTabIds.has(id)) {
+                throw new Error(`Module « ${mod.manifest.id} » : AdminTabs.${id} ne répond à aucun onglet du manifest`);
+            }
+        }
         // Un module à id natif a déjà son descripteur dans le registre publié :
         // seuls les ids externes s'enregistrent ici. Un module de compte n'a ni
         // carte ni ligne dans l'écran des rôles : pas de descripteur.
@@ -69,11 +82,6 @@ export function clientModules(): readonly InstalledClientFeature[] {
 /** Les modules qui ont une carte : tous, sauf ceux qui ne vivent que dans le menu du compte. */
 export function cardModules(): readonly InstalledClientFeature[] {
     return MODULES.filter((m) => !m.manifest.accountOnly);
-}
-
-/** Les pages système que les modules ajoutent au menu, pour les administrateurs. */
-export function adminEntries(): readonly InstalledClientFeature[] {
-    return MODULES.filter((m) => m.manifest.adminEntry && m.client.AdminView);
 }
 
 /** Les entrées que les modules ajoutent au menu du compte, sous « Sécurité ». */

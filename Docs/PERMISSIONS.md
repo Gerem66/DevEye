@@ -10,7 +10,7 @@ surcharges par élément), [NOTIFICATIONS.md](./NOTIFICATIONS.md).
 
 | #   | Étage                       | Où                                           | Ce qu'il tranche                                                         |
 | --- | --------------------------- | -------------------------------------------- | ------------------------------------------------------------------------ |
-| 1   | Compte DevEye               | `users.role`                                 | administrateur ou utilisateur : les pages système (journal, comptes)     |
+| 1   | Compte DevEye               | `users.role`                                 | administrateur, modérateur ou utilisateur : pages système, modération    |
 | 2   | Appartenance à l'espace     | `workspace_members`                          | la frontière absolue : même un administrateur n'entre pas chez autrui    |
 | 3   | Rôle : capacités + features | `workspace_roles.capabilities` / `.features` | gouverner l'espace ; ouvrir une fonctionnalité en lecture ou en écriture |
 | 4   | Surcharges par élément      | `item_role_grants`                           | ce qu'un rôle fait de **cette** ligne-là, en surcharge de l'étage 3      |
@@ -25,6 +25,16 @@ au moins la lecture sur la fonctionnalité, aucun élément n'existe pour le rô
 et rien ne se surcharge. « Qui a accès à Appareils ? » se répond donc toujours
 sur l'écran des rôles ; seul « qu'en fait-il, appareil par appareil ? »
 demande d'aller voir les éléments.
+
+L'étage 1 connaît trois rôles. L'**administrateur** tient l'instance : pages
+système (journal, comptes, maintenance), chiffres de chaque fonctionnalité. Le
+**modérateur** traite ce qui attend une décision humaine : les retours, et les
+onglets de modération que les fonctionnalités déclarent (`manifest.adminTabs`,
+les signalements). Pour le reste, il est un utilisateur : la maintenance d'une
+fonctionnalité le refuse comme les autres, il prend une place d'admission, son
+offre s'applique. Il voit le contenu d'un signalement, jamais d'où il vient :
+l'adresse IP et l'e-mail de son auteur restent à l'administrateur, qui modère
+aussi.
 
 Les **appareils** ne relèvent pas de l'étage 1 : un appareil habite l'espace où
 il a été appairé, et tout ce qui le concerne (l'appairer, l'approuver, le
@@ -157,13 +167,18 @@ export interface FeatureAccessSpec {
     level?: FeatureAccess; // défaut 'read'
     extras?: readonly string[]; // permissions propres à `feature` (§2)
     capabilities?: WorkspaceCapability[];
-    admin?: true;
+    admin?: true; // l'administrateur seul
+    moderation?: true; // un modérateur ou un administrateur
     scope?: 'account';
 }
 ```
 
 Appliqué par le dispatcheur **avant** le handler, comme la validation zod
-(`src/features/_define.ts`, `src/ws/handler.ts`).
+(`src/features/_define.ts`, `src/ws/handler.ts`). `admin` et `moderation`
+valent pour une commande de module comme pour une native : la projection d'un
+module (`src/features/_sdk/register.ts`) les reporte dans sa spec native, et le
+dispatcheur les éprouve par `assertDeclaredRole` (`src/features/_access.ts`),
+avant le droit de la fonctionnalité.
 
 ### Le contrôle de démarrage
 

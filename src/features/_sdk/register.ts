@@ -9,6 +9,7 @@ import type {
     SdkDnsRecord,
     SdkDomain,
     SdkDomainProbe,
+    SdkAdminFact,
     SdkExternalService,
     SdkHostRequest,
     SdkMailSample,
@@ -66,7 +67,7 @@ import type { ExportModule } from '@/Services/accountExport/run';
 import { serverKeysOf } from './host';
 import { createSdkContext, ORIGINS } from './context';
 import { createDomainsContext, sdkFleetDomains, type DomainsHost } from './domains';
-import { createQuota, quotaCounter } from './quota';
+import { createQuota, modulePauses, quotaCounter } from './quota';
 import { createServiceDeps, type ModuleServiceHost } from './service';
 
 /**
@@ -254,11 +255,12 @@ export function moduleManifest(featureId: string): FeatureManifest | undefined {
 
 /**
  * Les définitions natives issues des modules, prêtes pour `featureHandlers`.
- * Chaque commande est gardée par le droit de sa feature (`read` par défaut) et
- * par ses permissions propres, toutes deux appliquées par le dispatcheur : les
- * déclarer plutôt que les éprouver ici est ce qui permet à la surcharge d'un
- * élément de mordre, `ctx.items.assert` tranchant pour l'élément visé. Une
- * commande qui n'en vise aucun garde donc sa vérification dans son handler.
+ * Chaque commande est gardée par le droit de sa feature (`read` par défaut),
+ * par ses permissions propres et par le rôle global qu'elle exige (`admin`,
+ * `moderation`), tous appliqués par le dispatcheur : déclarer les permissions
+ * plutôt que les éprouver ici est ce qui permet à la surcharge d'un élément de
+ * mordre, `ctx.items.assert` tranchant pour l'élément visé. Une commande qui
+ * n'en vise aucun garde donc sa vérification dans son handler.
  */
 export function moduleFeatureHandlers(): FeatureDefinition<string, never, never>[] {
     return MODULES.flatMap((mod) =>
@@ -271,15 +273,14 @@ export function moduleFeatureHandlers(): FeatureDefinition<string, never, never>
                     feature: mod.manifest.id,
                     level: def.access?.level ?? 'read',
                     ...(def.access?.extras ? { extras: def.access.extras } : {}),
+                    ...(def.access?.admin ? { admin: true as const } : {}),
+                    ...(def.access?.moderation ? { moderation: true as const } : {}),
                     ...(def.access?.scope ? { scope: def.access.scope } : {})
                 },
                 // Un booléen bat le sujet du module ; une liste nomme les sujets,
                 // que `buildTopicIndex` valide au boot.
                 mutates: def.mutates === true ? true : def.mutates ? (def.mutates as readonly LiveTopic[]) : undefined,
                 handler: async (ctx, input) => {
-                    // L'administrateur global, en plus du droit de feature :
-                    // les gestes de flotte (appairer, révoquer, supprimer).
-                    if (def.access?.admin) ctx.assertAdmin();
                     const sdkCtx = createSdkContext(
                         ctx,
                         mod.manifest,
@@ -630,6 +631,62 @@ export function moduleExternalServices(db: Database): {
         label: mod.manifest.label,
         read: (refresh) => mod.server.externalServices!({ repo: mod.repoFor(db), refresh })
     }));
+}
+
+/** Un onglet de la popup d'administration, tel que le manifest le déclare. */
+export type ModuleAdminTab = NonNullable<FeatureManifest['adminTabs']>[number];
+
+/**
+ * Ce qu'attend une décision humaine dans chaque module qui le compte
+ * (`server.adminPending`), lié à son repo et à ses pauses, avec les onglets
+ * que le manifest déclare : seuls ceux-là s'allument.
+ */
+export function moduleAdminPending(db: Database): {
+    featureId: string;
+    tabs: readonly ModuleAdminTab[];
+    read(): Promise<Readonly<Record<string, number>>>;
+}[] {
+    return MODULES.filter((mod) => mod.server.adminPending).map((mod) => ({
+        featureId: mod.manifest.id,
+        tabs: mod.manifest.adminTabs ?? [],
+        read: () => mod.server.adminPending!({ repo: mod.repoFor(db), pauses: modulePauses(mod.manifest) })
+    }));
+}
+
+/** Les chiffres propres des modules (`server.adminFacts`), pour la vue d'ensemble de l'administration. */
+export function moduleAdminFacts(db: Database): {
+    featureId: string;
+    read(): Promise<readonly SdkAdminFact[]>;
+}[] {
+    return MODULES.filter((mod) => mod.server.adminFacts).map((mod) => ({
+        featureId: mod.manifest.id,
+        read: () => mod.server.adminFacts!({ repo: mod.repoFor(db), pauses: modulePauses(mod.manifest) })
+    }));
+}
+
+/**
+ * Les tables d'un module : celles que son export déclare, chacune vérifiée au
+ * boot contre le schéma (`accountExport/coverage.ts`). Vide sans export.
+ */
+export function moduleOwnedTables(featureId: string): string[] {
+    return Object.keys(BY_ID.get(featureId)?.server.accountExport?.tables ?? {});
+}
+
+/** Les quotas d'un module qui se comptent, chacun lié à son compteur : une limite par opération n'accumule rien. */
+export function moduleQuotaCounters(
+    featureId: string,
+    db: Database
+): { label: string; unit: 'count' | 'bytes'; count(workspaceIds: readonly number[]): Promise<number> }[] {
+    const mod = BY_ID.get(featureId);
+    if (!mod) return [];
+    const count = quotaCounter(mod.server.quotas, mod.repoFor(db));
+    return (mod.manifest.quotas ?? [])
+        .filter((spec) => !spec.perOperation)
+        .map((spec) => ({
+            label: spec.label,
+            unit: spec.unit === 'bytes' ? ('bytes' as const) : ('count' as const),
+            count: (workspaceIds) => count(spec.key, workspaceIds)
+        }));
 }
 
 /**

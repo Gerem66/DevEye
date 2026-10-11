@@ -29,8 +29,8 @@ import { setPermissions, useWorkspacePermissions } from '@/stores/workspace';
 import { useResourceVersion } from '@/stores/invalidation';
 import { syncThemeFromServer } from '@/stores/theme';
 import { syncHomeLayoutFromServer } from '@/stores/homeLayout';
-import { useHomeLayout, findFolder, getHomeLayout, placedFeatureIds, pruneMissingDevices } from '@/stores/homeLayout';
-import { onOpenViewRequest, onSelectWorkspaceRequest, requestOpenView } from '@/stores/viewRequest';
+import { useHomeLayout, findFolder, getHomeLayout, pruneMissingDevices } from '@/stores/homeLayout';
+import { onOpenViewRequest, onSelectWorkspaceRequest } from '@/stores/viewRequest';
 import { closeSpotlight, isSpotlightOpen, openSpotlight } from '@/stores/spotlight';
 import {
     ensureRemoteReady,
@@ -42,10 +42,11 @@ import {
 } from '@/stores/remoteInstances';
 import { setUnlocked } from '@/stores/secrecy';
 import { accountViewFeature, accountViewId, openAccountView, takeAccountViewHint } from '@/stores/accountView';
-import { adminViewFeature, adminViewId } from '@/stores/adminView';
+import { useAdminPending } from '@/stores/adminPending';
+import { openFeatureAdmin } from '@/stores/featureAdminIntent';
 import { takeSignupPlan } from '@/stores/signupPlan';
-import { accountEntries, adminEntries } from '@/sdk/registry';
-import type { AccountViewProps, AdminViewProps } from '@deveye/types/sdk/client';
+import { accountEntries } from '@/sdk/registry';
+import type { AccountViewProps } from '@deveye/types/sdk/client';
 import { useFeedbackEnabled } from '@/stores/feedbackEnabled';
 import {
     featureMaintenance,
@@ -64,7 +65,7 @@ import { LiveCursors } from '@/live/LiveCursors';
 import { CursorChatInput } from '@/live/CursorChatInput';
 import { useLiveSegment } from '@/live/useLiveSegment';
 import { cancelTeleport, startTeleport } from '@/stores/live';
-import { TopNavbar, type SiteBanner } from '@/Components/TopNavbar';
+import { TopNavbar, type MenuPage, type SiteBanner } from '@/Components/TopNavbar';
 import { QuotaPrompt } from '@/Components/QuotaPrompt';
 import { WidgetGrid } from '@/Components/WidgetGrid';
 import { WidgetPopup, FeatureKeepAlive, type PopupOrigin } from '@/Components/WidgetPopup';
@@ -89,6 +90,7 @@ import FeatureUsers from '@/Features/Users';
 import FeatureMaintenance from '@/Features/Maintenance';
 import FeatureDebug from '@/Features/Debug';
 import FeatureExternalServices from '@/Features/ExternalServices';
+import FeatureAdmin, { adminFeatures } from '@/Features/FeatureAdmin';
 
 import { catalogEntries, featureCatalog, featureCatalogEntry } from './catalog';
 import { EmptyHome } from './EmptyHome';
@@ -114,11 +116,13 @@ import type {
     WorkspacePermissions
 } from '@deveye/types';
 import {
+    canModerate,
     HOME_SECTION_MAX_TILES,
     isExternalFeatureId,
     isFeatureTile,
     isHomeFolder,
     isShortcutTile,
+    placedFeatureIds,
     WORKSPACE_FEATURE_IDS
 } from '@deveye/types';
 import type { FeatureProps } from '@/Features/types';
@@ -154,24 +158,34 @@ function accountViewHost(featureId: string, View: ComponentType<AccountViewProps
     };
 }
 
-/**
- * La page système d'un module. Le menu ne la montre qu'aux administrateurs ;
- * ce garde couvre le reste des chemins qui ouvrent une vue.
+/*
+ * Les portes réservées, gardées au rendu : le menu ne les montre qu'au bon rôle,
+ * mais `handleExpand` ne vérifie aucun rôle global. Une seule porte
+ * d'administration des fonctionnalités par compte, jamais les deux.
  */
-function adminViewHost(View: ComponentType<AdminViewProps>): ComponentType<FeatureProps> {
-    return function AdminViewHost({ user, closeFeature }) {
-        return user.role === 'admin' ? <View close={closeFeature} /> : null;
-    };
+function FeaturesDoor({ user }: FeatureProps) {
+    return user.role === 'admin' ? <FeatureAdmin mode='admin' /> : null;
 }
 
-/** Les pages système du menu du compte, dans cet ordre ; leur titre et leur icône sont ceux de leur vue. */
-const ADMIN_VIEW_IDS = ['logs', 'feedback', 'users', 'maintenance', 'services', 'debug'] as const;
+function ModerationDoor({ user }: FeatureProps) {
+    return user.role === 'moderator' ? <FeatureAdmin mode='moderation' /> : null;
+}
 
-function adminMenu(): { id: string; label: string; icon: string }[] {
-    const ids = [...ADMIN_VIEW_IDS, ...adminEntries().map(({ manifest }) => adminViewId(manifest.id))];
+function FeedbackDoor({ user }: FeatureProps) {
+    return canModerate(user.role) ? <FeatureFeedback /> : null;
+}
+
+/** Les deux groupes réservés du menu, dans cet ordre ; leur titre et leur icône sont ceux de leur vue. */
+const MODERATION_VIEW_IDS = {
+    moderator: ['moderation', 'feedback'],
+    admin: ['feedback']
+} as const;
+const ADMIN_VIEW_IDS = ['features', 'logs', 'users', 'maintenance', 'services', 'debug'] as const;
+
+function menuPages(ids: readonly string[], countOf: (id: string) => number): MenuPage[] {
     return ids.map((id) => {
         const view = staticViews().find((v) => v.id === id)!;
-        return { id, label: view.title, icon: view.icon };
+        return { id, label: view.title, icon: view.icon, count: countOf(id) };
     });
 }
 
@@ -226,14 +240,22 @@ const buildStaticViews = (): ViewConfig[] => [
         hasCard: false,
         FullComponent: accountViewHost(manifest.id, client.AccountView!)
     })),
-    ...adminEntries().map(({ manifest, client }) => ({
-        id: adminViewId(manifest.id),
-        title: manifest.adminEntry!.label,
-        icon: manifest.adminEntry!.icon ?? manifest.icon,
+    {
+        id: 'moderation',
+        title: 'Modération',
+        icon: 'flag',
         cacheDurationMinutes: 0,
         hasCard: false,
-        FullComponent: adminViewHost(client.AdminView!)
-    })),
+        FullComponent: ModerationDoor
+    },
+    {
+        id: 'features',
+        title: 'Fonctionnalités',
+        icon: 'list',
+        cacheDurationMinutes: 0,
+        hasCard: false,
+        FullComponent: FeaturesDoor
+    },
     {
         id: 'logs',
         title: 'Journaux',
@@ -248,7 +270,7 @@ const buildStaticViews = (): ViewConfig[] => [
         icon: 'bug',
         cacheDurationMinutes: 0,
         hasCard: false,
-        FullComponent: FeatureFeedback
+        FullComponent: FeedbackDoor
     },
     {
         id: 'users',
@@ -306,9 +328,9 @@ function featureBehind(viewId: string): FeatureId | null {
     return null;
 }
 
-/** Le module derrière une vue, fonctionnalité, entrée de compte ou page système : ce que ferme sa maintenance. */
+/** Le module derrière une vue, fonctionnalité ou entrée de compte : ce que ferme sa maintenance. */
 function moduleBehind(viewId: string): string | null {
-    return featureBehind(viewId) ?? accountViewFeature(viewId) ?? adminViewFeature(viewId);
+    return featureBehind(viewId) ?? accountViewFeature(viewId);
 }
 
 /**
@@ -949,32 +971,30 @@ export default function HomePage() {
 
     // Trois arrivées ouvrent d'elles-mêmes une vue : le retour d'un paiement
     // (`?account=<module>`, dont le module lit le reste de l'URL), le lien d'un
-    // mail aux administrateurs vers la page système d'un module
-    // (`?admin=<module>`) et la fin d'une inscription qui portait un indice
-    // (`/signup?plan=…`).
+    // mail de signalement vers la modération d'un module
+    // (`?moderation=<module>`, sur la porte du rôle) et la fin d'une
+    // inscription qui portait un indice (`/signup?plan=…`).
     const arrivalHandled = useRef(false);
     useEffect(() => {
         if (arrivalHandled.current || switching) return;
         arrivalHandled.current = true;
         const url = new URL(window.location.href);
         const returning = url.searchParams.get('account');
-        const adminPage = url.searchParams.get('admin');
+        const moderated = url.searchParams.get('moderation');
         const plan = takeSignupPlan();
         if (returning) {
             url.searchParams.delete('account');
             window.history.replaceState({}, '', url);
             if (accountEntries().some((m) => m.manifest.id === returning)) openAccountView(returning);
-        } else if (adminPage) {
-            url.searchParams.delete('admin');
+        } else if (moderated) {
+            url.searchParams.delete('moderation');
             window.history.replaceState({}, '', url);
-            if (isAdmin && adminEntries().some((m) => m.manifest.id === adminPage)) {
-                requestOpenView(adminViewId(adminPage));
-            }
+            openFeatureAdmin(moderated);
         } else if (plan) {
             const target = accountEntries().find((m) => m.manifest.accountEntry?.signupHint);
             if (target) openAccountView(target.manifest.id, plan);
         }
-    }, [switching, isAdmin]);
+    }, [switching]);
 
     // Racine de l'arborescence de présence. Les niveaux plus profonds sont
     // déclarés par les features elles-mêmes, chacune ne connaissant que le sien.
@@ -1058,12 +1078,21 @@ export default function HomePage() {
                 .map((entry) => ({ ...entry, adminTools: isAdmin && entry.adminTools })),
         [hiddenFeatures, isAdmin]
     );
+    const pending = useAdminPending();
+    const role = user?.role;
+    const moderationPages = useMemo((): MenuPage[] => {
+        if (role !== 'moderator' && role !== 'admin') return [];
+        const ids = MODERATION_VIEW_IDS[role].filter(
+            (id) =>
+                (id !== 'feedback' || feedbackEnabled) &&
+                (id !== 'moderation' || adminFeatures('moderation').length > 0)
+        );
+        return menuPages(ids, (id) => (id === 'feedback' ? pending.feedback : pending.features));
+    }, [role, feedbackEnabled, pending]);
     const adminPages = useMemo(
-        () =>
-            isAdmin
-                ? adminMenu().filter((page) => (page.id !== 'feedback' || feedbackEnabled) && !isHiddenView(page.id))
-                : [],
-        [isAdmin, feedbackEnabled, isHiddenView]
+        (): MenuPage[] =>
+            role === 'admin' ? menuPages(ADMIN_VIEW_IDS, (id) => (id === 'features' ? pending.features : 0)) : [],
+        [role, pending]
     );
 
     const views = staticViews();
@@ -1480,8 +1509,9 @@ export default function HomePage() {
                     onOpenSecurity={(e) => handleExpand('security', isForceReload(e))}
                     accountEntries={accountMenuEntries}
                     onOpenAccountEntry={(id, e) => handleExpand(accountViewId(id), isForceReload(e))}
+                    moderationPages={moderationPages}
                     adminPages={adminPages}
-                    onOpenAdminPage={(id, e) => handleExpand(id, isForceReload(e))}
+                    onOpenPage={(id, e) => handleExpand(id, isForceReload(e))}
                     siteBanner={siteBanner}
                     onDismissMaintenanceBanner={dismissEnvNotice}
                     onOpenSettings={canAppearance ? () => setSettingsOpen(true) : undefined}

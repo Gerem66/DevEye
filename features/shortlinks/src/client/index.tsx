@@ -10,7 +10,7 @@ import ShortlinksWidget from './ShortlinksWidget';
 export const clientEntry: FeatureClient = {
     Widget: ShortlinksWidget,
     Full: Shortlinks,
-    AdminView: Reports,
+    AdminTabs: { reports: Reports },
     /** Les onglets d'un lien ; Domaines, Notifications, Partage et Permissions viennent de la coquille. */
     settingsPanels: { general: LinkGeneralPanel, access: LinkAccessPanel, campaign: LinkCampaignPanel },
     // Démonté dès la fermeture : les chiffres sont bornés par une période, et

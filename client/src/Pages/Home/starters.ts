@@ -1,6 +1,5 @@
-import type { HomeFeatureId, HomeLayout, HomeTopbarWidgetId } from '@deveye/types';
+import { placedFeatureIds, type HomeFeatureId, type HomeLayout, type HomeTopbarWidgetId } from '@deveye/types';
 
-import { placedFeatureIds } from '@/stores/homeLayout';
 import { catalogEntries, type FeatureCatalogEntry } from './catalog';
 
 /**

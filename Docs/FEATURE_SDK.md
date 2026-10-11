@@ -406,6 +406,36 @@ module garde en cache ce qui coûte (un quota d'API, une liste longue). Météo
 (Open-Meteo), Mail (Google, Microsoft), Finances (Enable Banking) et la
 facturation des comptes (Stripe) en déclarent.
 
+### L'administration d'une fonctionnalité
+
+La popup d'administration des fonctionnalités liste chaque module installé.
+Pour l'administrateur, chacun s'ouvre sur une vue d'ensemble que l'hôte compte
+seul (`admin.featureStats`, gardée 5 minutes, « Actualiser » la refait) : les
+espaces dont l'accueil porte la tuile (dossiers compris, `null` pour un module
+`accountOnly`), les comptes membres de ces espaces, les tables que
+`accountExport.tables` déclare (lignes et taille d'après les statistiques de
+MySQL, des estimations), et le total de chaque quota qui se compte, tous
+espaces confondus. `FeatureServer.adminFacts({ repo, pauses })` y ajoute les
+chiffres propres du module (`{ label, value, unit: 'count' | 'bytes' }`, les
+liens et leurs clics) ; un module qui lève y laisse un trou, pas une panne.
+
+Après la vue d'ensemble viennent ses onglets : `manifest.adminTabs`
+(`{ id, label, moderation? }`, ids au motif des clés de permission, uniques),
+dessinés par `FeatureClient.AdminTabs[id]` sous l'en-tête de la popup, sans
+titre propre ni prop. Un onglet `moderation` s'ouvre aussi aux modérateurs, et
+ses commandes déclarent `access: { moderation: true, scope: 'account' }` ; un
+autre est à l'administrateur seul, ses commandes en `access.admin`. Un
+modérateur ne voit que les modules qui ont un onglet de modération, et ce que
+la maintenance lui ferme reste verrouillé.
+
+`FeatureServer.adminPending({ repo, pauses })` rend, par id d'onglet, ce qui
+attend une décision humaine (`{ reports: 3 }`) : les badges de l'onglet, du
+module, de l'entrée du menu et du pseudo. Des comptes bon marché : l'hôte les
+relit à chaque `live.pendingChanged()`, coalescé ; un onglet absent, à 0 ou
+non déclaré n'allume rien, et un module qui lève compte pour rien. Liens
+courts et Hébergement comptent leurs signalements ouverts (onglet de
+modération), Audit sa file en retard (onglet d'administration).
+
 ### Tests et débogage
 
 Pour la page Tests et débogage ([DEBUG.md](./DEBUG.md)) : `mailSamples`, chaque
@@ -507,7 +537,9 @@ d'un projet), celui d'une autre feature dont les écrans reflètent la donnée.
 nommée sous le préfixe du module aux connexions qui ont `read` sur la feature,
 que le client lit par `onServerEvent` (Convertisseur, Mail, Jeu de la vie).
 `accountChanged(userId)` fait relire l'offre d'un compte et réappliquer ses
-pauses. [LIVE.md](./LIVE.md) dit le reste.
+pauses ; `pendingChanged()` (commande ou service) fait recompter
+`adminPending` et rallume les badges des comptes qui modèrent.
+[LIVE.md](./LIVE.md) dit le reste.
 
 ### Les notifications
 
@@ -537,8 +569,10 @@ compte (Git, Projets, Sauvegardes, Jeu de la vie). `accounts.read` :
 `findByEmail`, `list`, `search`, `all` ; `e2e` dit un compte jetable,
 `suspended` un compte suspendu). `accounts.usage` : `usage.of`,
 `usage.ofMany`. `accounts.mail` : `deps.accountMail.send(userId, message)`
-écrit à l'adresse du compte par l'expéditeur du serveur, `sendToAdmins` à
-chaque administrateur actif, `configured` est faux sans SMTP. Le module de
+écrit à l'adresse du compte par l'expéditeur du serveur, `sendToModerators` à
+chaque modérateur et administrateur actif (un signalement : sans l'adresse IP
+ni l'e-mail de son auteur, qu'un modérateur ne voit pas), `configured` est
+faux sans SMTP. Le module de
 facturation des comptes déclare les trois capacités de compte, Hébergement et
 Liens courts `accounts.mail`.
 
@@ -551,9 +585,9 @@ accorde la feature ; l'hôte l'enveloppe dans un bouton qui ouvre la feature,
 rien d'interactif dedans (Appareils, Uptime, Rendez-vous). `accountEntry` ouvre
 `AccountView` depuis le menu du compte, `accountOnly` retire carte et ligne de
 rôle et impose `access.scope: 'account'` à toutes les commandes (facturation des
-comptes) ; `adminEntry` ouvre `AdminView` parmi les pages système, pour
-l'administrateur global (Hébergement, Liens courts) ; [QUOTAS.md](./QUOTAS.md)
-les détaille. `extraPermissions` (dix au plus) et `access.extras` :
+comptes) ; [QUOTAS.md](./QUOTAS.md) les détaille. `adminTabs` ajoute des
+onglets à la popup d'administration des fonctionnalités (§ L'administration
+d'une fonctionnalité). `extraPermissions` (dix au plus) et `access.extras` :
 [PERMISSIONS.md](./PERMISSIONS.md). `settings` et `settingsPanels` :
 [SETTINGS.md](./SETTINGS.md). `sources` : [SOURCES.md](./SOURCES.md). `links`
 (six au plus) dessine les liaisons de la fiche « À propos ». `commandPrefix`
@@ -652,9 +686,10 @@ Par requête (`SdkFeatureContext`, construit dans `_sdk/context.ts`) :
 - l'identité de l'appel : `userId`, `workspaceId`, `workspace`, `isOwner`,
   `isAdmin`, `canWrite`, `canExtra(key)` et `extraValue(key)` (par
   `resolveExtras`, la même règle que le harnais). Une commande qui exige
-  l'administrateur global le déclare par `access: { admin: true }`, une qui agit
-  sur le compte plutôt que sur un espace par `access: { scope: 'account' }` ;
-  le dispatcheur applique les deux ;
+  l'administrateur global le déclare par `access: { admin: true }`, celle d'un
+  onglet de modération par `access: { moderation: true }` (un modérateur ou un
+  administrateur), une qui agit sur le compte plutôt que sur un espace par
+  `access: { scope: 'account' }` ; le dispatcheur applique les trois ;
 - `repo`, `store` (magasin clé-valeur chiffrable,
   `'server' | 'private' | 'none'`), `cipher(mode)` ;
 - `deveye`, la façade gardée par `nativeCapabilities` : `notify` (`hasRoute`,
@@ -663,8 +698,8 @@ Par requête (`SdkFeatureContext`, construit dans `_sdk/context.ts`) :
   `accounts.me`, `usage` (`of`, `ofMany`), `telemetry` (`snapshot`,
   `pinInstant`), `agents` (la façade de la flotte, décrite plus haut) ;
 - `transport` (le socket appelant, `agents`) ;
-- `live.publish(event, payload)` (capacité `live.publish`) et
-  `live.accountChanged(userId)` ;
+- `live.publish(event, payload)` (capacité `live.publish`),
+  `live.accountChanged(userId)` et `live.pendingChanged()` ;
 - `secrecy.isUnlocked()` et `secrecy.ticket(payload, { ttlSeconds })` ;
 - `items` (`restrictions`, `assert`, `canExtra`, `forget`) ;
 - `quota` (`limit`, `assert`, `usage`, `assertActive`, `paid`, `isPaused`,
@@ -694,7 +729,7 @@ Par service (`FeatureServiceDeps`, `_sdk/service.ts`) :
   `{ ok: false, reason }`, relu à chaque appel ;
 - `quotaFor(ws)`, `pauses` (`isPaused`, `paused`) ;
 - `live.changed(ws, topics?)`, `live.publish(ws, event, payload)`,
-  `live.accountChanged(userId)` ;
+  `live.accountChanged(userId)`, `live.pendingChanged()` ;
 - `keys`, `objects(localDir)`, `secrecy.redeem(ticket)`, `origins`,
   `providers` ;
 - `audit` (source système, `userId` facultatif), `createTicker({ intervalMs,
@@ -704,12 +739,12 @@ tick })` (boucle avec garde de réentrance, `stop()` attend le tick en cours),
 Par entrée serveur (`FeatureServer`) : `createRepo`, `features`,
 `migrationsDir`, `createService`, `items` (`homeOf`, `labelOf`, `shareable?`,
 `move?`, `copy?`), `domains`, `accountExport`, `quotas`, `env`,
-`externalServices`, `mailSamples`, `e2e`.
+`externalServices`, `mailSamples`, `e2e`, `adminPending`, `adminFacts`.
 
 Par service créé (`FeatureService`) : `start`, `stop`, `agentHooks`,
 `providers`, `publicRoutes`, `domainRoot`, `ownHosts`, `hostRequest`,
 `onPlanPause`, `onAccountDeleted`, `health`.
 
 Par entrée client (`FeatureClient`) : `Widget`, `Full`, `AccountView`,
-`AdminView`, `Art`, `settingsPanels`, `TopbarWidget`, `cacheDurationMinutes`,
+`AdminTabs`, `Art`, `settingsPanels`, `TopbarWidget`, `cacheDurationMinutes`,
 `preload`, `holdSecrecy`, `providers`.

@@ -1,3 +1,5 @@
+import { useEffect, useRef } from 'react';
+
 import styles from './FeatureSettings.module.css';
 
 export interface SideNavItem<T extends string> {
@@ -7,6 +9,8 @@ export interface SideNavItem<T extends string> {
     icon: string;
     /** Compteur affiché en pastille. Omis quand il n'apporte rien. */
     badge?: number;
+    /** `accent` : le compteur réclame une action, comme les badges du menu du compte. */
+    badgeTone?: 'accent';
 }
 
 export interface SideNavProps<T extends string> {
@@ -27,8 +31,32 @@ export interface SideNavProps<T extends string> {
  * disparaît (`FeatureSettingsButton`).
  */
 export default function SideNav<T extends string>({ items, active, onSelect, label }: SideNavProps<T>) {
+    const navRef = useRef<HTMLElement>(null);
+
+    // En rangée défilante (écran étroit), l'entrée active peut naître hors champ.
+    // `scrollLeft` et non `scrollIntoView`, qui ferait aussi défiler la popup ; et
+    // à chaque taille, la vue d'une popup étant montée avant d'être affichée.
+    useEffect(() => {
+        const nav = navRef.current;
+        if (!nav) return;
+        const reveal = () => {
+            if (nav.scrollWidth <= nav.clientWidth) return;
+            const current = nav.querySelector<HTMLElement>('[aria-selected="true"]');
+            if (!current) return;
+            const box = nav.getBoundingClientRect();
+            const item = current.getBoundingClientRect();
+            if (item.left < box.left || item.right > box.right) {
+                nav.scrollLeft += item.left - box.left - (box.width - item.width) / 2;
+            }
+        };
+        reveal();
+        const observer = new ResizeObserver(reveal);
+        observer.observe(nav);
+        return () => observer.disconnect();
+    }, [active]);
+
     return (
-        <nav className={styles.nav} role='tablist' aria-label={label}>
+        <nav ref={navRef} className={styles.nav} role='tablist' aria-label={label}>
             {items.map((item) => (
                 <button
                     key={item.id}
@@ -41,7 +69,11 @@ export default function SideNav<T extends string>({ items, active, onSelect, lab
                     <span className={`icon icon-${item.icon}`} />
                     <span className={styles.navLabel}>{item.label}</span>
                     {item.badge !== undefined && item.badge > 0 && (
-                        <span className={styles.navBadge}>{item.badge}</span>
+                        <span
+                            className={`${styles.navBadge} ${item.badgeTone === 'accent' ? styles.navBadgeAccent : ''}`}
+                        >
+                            {item.badge}
+                        </span>
                     )}
                 </button>
             ))}

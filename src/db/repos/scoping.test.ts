@@ -93,6 +93,7 @@ const SCOPES: { [K in RepoKey]: RepoScope<K> } = {
             delete: { args: [1] },
             listForAdmin: { args: [], global: 'la page Utilisateurs' },
             listAdminIds: { args: [], global: 'les administrateurs à prévenir' },
+            listModeratorIds: { args: [], global: 'les comptes qui modèrent, à prévenir' },
             setReAuthInterval: { args: [1, null] },
             count: { args: [], global: 'le premier compte devient administrateur' },
             countForUpdate: { args: [], global: 'le premier compte devient administrateur' }
@@ -107,6 +108,8 @@ const SCOPES: { [K in RepoKey]: RepoScope<K> } = {
             listOwnedIds: { args: [1], guard: OWNER },
             listOwnedShared: { args: [1], guard: OWNER },
             listOwnerIds: { args: [], global: 'tous les propriétaires, pour les quotas' },
+            listIds: { args: [], global: "les totaux d'une fonctionnalité, pour l'administration" },
+            listHomeLayoutsNaming: { args: ['f'], global: "les tuiles d'une fonctionnalité, pour l'administration" },
             createPersonal: { args: [1, 'p'] },
             create: { args: [{ ownerUserId: 1, name: 'w' }] },
             rename: { args: [1, 'w'] },
@@ -122,7 +125,8 @@ const SCOPES: { [K in RepoKey]: RepoScope<K> } = {
             listByWorkspaceIds: { args: [[1]] },
             add: { args: [{ userId: 1, workspaceId: 2 }], guard: ROW },
             remove: { args: [1, 2] },
-            isMember: { args: [1, 2] }
+            isMember: { args: [1, 2] },
+            countUsersIn: { args: [[1]] }
         }
     },
     workspaceSecretKeys: {
@@ -186,7 +190,7 @@ const SCOPES: { [K in RepoKey]: RepoScope<K> } = {
         }
     },
     feedback: {
-        global: "les signalements, relus par l'administration",
+        global: 'les signalements, relus par la modération',
         methods: {
             record: {
                 args: [
@@ -197,7 +201,8 @@ const SCOPES: { [K in RepoKey]: RepoScope<K> } = {
             findById: { args: [1] },
             setStatus: { args: [1, 'new', 2] },
             remove: { args: [1] },
-            countSince: { args: [1, 0] }
+            countSince: { args: [1, 0] },
+            countPending: { args: [] }
         }
     },
     maintenance: {

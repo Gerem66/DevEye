@@ -31,6 +31,9 @@ declare const styles: {
     readonly factUrl: string;
     readonly facts: string;
     readonly fixedValue: string;
+    readonly foldedChevron: string;
+    readonly foldedSection: string;
+    readonly foldedTitle: string;
     readonly form: string;
     readonly header: string;
     readonly heading: string;
@@ -71,6 +74,8 @@ declare const styles: {
     readonly reportTitle: string;
     readonly reportUrl: string;
     readonly reports: string;
+    readonly reportsNote: string;
+    readonly reportsTab: string;
     readonly root: string;
     readonly row: string;
     readonly rowAddress: string;

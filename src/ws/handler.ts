@@ -30,7 +30,7 @@ import { isFederatedOrigin } from '@/auth/federation';
 import { redeemWsTicket } from '@/auth/wsTicket';
 import { verifyAccessToken } from '@/auth/jwt';
 import { createMonitorTransport, type MonitorHub } from '@/agent/hub';
-import { accessEpochNow, createAccessResolver, isAdminUser } from '@/features/_access';
+import { accessEpochNow, assertDeclaredRole, createAccessResolver, isAdminUser } from '@/features/_access';
 import { moduleManifest } from '@/features/_sdk/register';
 import { resolveExtras } from '@deveye/types/sdk';
 import type { LiveHub } from '@/live/hub';
@@ -280,9 +280,7 @@ export async function registerWS(
                 // tout rôle d'espace.
                 hub.rememberGrants(socket, scope.workspace.id, scope.isAdmin || scope.features.has('devices'), epoch);
 
-                const assertAdmin = (): void => {
-                    if (!scope.isAdmin) throw new FeatureError('forbidden', 'Réservé aux administrateurs');
-                };
+                const assertAdmin = (): void => assertDeclaredRole({ admin: true }, scope);
                 // Toute porte vers une feature passe par l'une des deux gardes
                 // ci-dessous : les commandes qui la déclarent comme celles qui la
                 // reçoivent en entrée (`share.*`, `notify.*`, `domain.*`).
@@ -426,7 +424,7 @@ export async function registerWS(
 
                 // Declared authorization (see `FeatureAccessSpec`), enforced here
                 // so a command can never ship without its guard.
-                if (def.access?.admin) assertAdmin();
+                assertDeclaredRole(def.access, scope);
                 if (def.access?.feature) await assertDeclaredFeature(def.access.feature, def.access.level);
                 for (const c of def.access?.capabilities ?? []) assertCan(c);
                 // Les extras derrière le niveau : ils affinent un accès, ils ne

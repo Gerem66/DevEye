@@ -40,6 +40,7 @@ import {
     keepRawBody,
     moduleAgentHooks,
     moduleManifests,
+    moduleAdminPending,
     modulePublicRoutes,
     moduleProvider,
     moduleServiceControl,
@@ -49,6 +50,7 @@ import {
 } from '@/features/_sdk/register';
 import { setSdkHost } from '@/features/_sdk/host';
 import { createPlanPausesService } from '@/features/_planPauses';
+import { adminPending } from '@/Services/adminPending';
 import { admission } from '@/Services/admission';
 import { planOf } from '@/Services/quota';
 import { createAuditLog } from '@/Services/AuditLog';
@@ -412,6 +414,14 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         services: moduleServiceControl,
         hasPlanProvider: () => moduleProvider(ACCOUNT_PLAN_PROVIDER) !== undefined
     });
+    adminPending.init({
+        db: deps.db,
+        live,
+        logger,
+        sources: moduleAdminPending(deps.db),
+        feedbackEnabled: env.FEEDBACK_ENABLED,
+        refuses: (featureId, isAdmin) => maintenance.refuses(featureId, isAdmin)
+    });
     await admission.init({
         db: deps.db,
         live,
@@ -427,6 +437,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     const stopServices = async (): Promise<PromiseSettledResult<void>[]> => {
         await maintenance.close();
         admission.close();
+        adminPending.close();
         const [modules, host] = await Promise.all([
             stopModuleServices(),
             Promise.allSettled([...hostServices, planPauses].map(async (svc) => svc.stop()))

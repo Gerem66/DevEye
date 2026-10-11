@@ -1,4 +1,4 @@
-import type { UserRow } from '@deveye/types';
+import type { UserRole, UserRow } from '@deveye/types';
 
 import type { Database } from '@/db';
 import { e2eRunOf } from '@/Services/debug/e2e/identity';
@@ -8,7 +8,7 @@ export interface OpenAccountInput {
     username: string;
     /** Déjà haché : Argon2 ne tourne pas en transaction. */
     passwordHash: string;
-    role: 'user' | 'admin';
+    role: UserRole;
     /** Secondes : quand les conditions du site ont été acceptées ; `null` sans site. */
     termsAcceptedAt: number | null;
 }

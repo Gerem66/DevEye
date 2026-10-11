@@ -14,8 +14,9 @@ import type Encryption from '@/Services/Encryption';
 import { createSecureStore, type SecureStore } from '@/Services/SecureStore';
 import type { SecretKeyService } from '@/Services/SecretKeyService';
 import type { Database } from '@/db';
-import { WORKSPACE_CAPABILITIES, WORKSPACE_FEATURE_IDS } from '@deveye/types';
-import { FeatureError } from './_define';
+import { canModerate, WORKSPACE_CAPABILITIES, WORKSPACE_FEATURE_IDS } from '@deveye/types';
+import { FeatureError, type FeatureAccessSpec } from './_define';
+import { roleOf } from '@/db/repos/users';
 import { moduleManifest, moduleManifests } from './_sdk/register';
 import { memberPausedIn } from '@/Services/planPauses';
 import { parseJsonArray } from '@/Utils/json';
@@ -58,6 +59,18 @@ export function accessEpochNow(): number {
 export async function isAdminUser(db: Database, userId: number): Promise<boolean> {
     const user = await db.users.findById(userId);
     return user?.role === 'admin';
+}
+
+/**
+ * Les gardes de rôle global qu'une commande déclare, native ou de module :
+ * `admin`, l'administrateur seul ; `moderation`, un modérateur ou un administrateur.
+ */
+export function assertDeclaredRole(
+    access: Pick<FeatureAccessSpec, 'admin' | 'moderation'> | undefined,
+    scope: Pick<ResolvedScope, 'isAdmin' | 'canModerate'>
+): void {
+    if (access?.admin && !scope.isAdmin) throw new FeatureError('forbidden', 'Réservé aux administrateurs');
+    if (access?.moderation && !scope.canModerate) throw new FeatureError('forbidden', 'Réservé à la modération');
 }
 
 /**
@@ -192,6 +205,8 @@ export interface ResolvedScope {
     workspace: WorkspaceContext;
     /** Rôle global du compte : flotte d'appareils et pages système. */
     isAdmin: boolean;
+    /** Modérateur ou administrateur : ce qui attend une décision humaine (signalements, retours). */
+    canModerate: boolean;
     /** L'appelant possède cet espace. */
     isOwner: boolean;
     /** Capacités de gouvernance accordées par son rôle. */
@@ -408,9 +423,11 @@ export function createAccessResolver(
         const itemExtraOverrides = (feature: FeatureId): Promise<ReadonlyMap<string, ItemExtraOverrides>> =>
             itemGrants(feature).then((g) => g.extras);
 
+        const globalRole = roleOf(user.role);
         return {
             workspace: toContext(row),
-            isAdmin: user.role === 'admin',
+            isAdmin: globalRole === 'admin',
+            canModerate: canModerate(globalRole),
             isOwner,
             capabilities,
             features,

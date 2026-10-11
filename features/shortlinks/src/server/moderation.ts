@@ -8,13 +8,14 @@ import type { LinkRow, ReportRow } from './repo';
 import { openReport, reportView } from './reports';
 
 /**
- * La modération : ce que l'administration du service lit et décide des
- * signalements, tous espaces confondus. Retirer un lien le coupe pour tout le
- * monde sans rien supprimer, et prévient son auteur avec la raison. Le compte,
- * lui, n'est jamais coupé : on sanctionne un lien, pas un usage.
+ * La modération : ce que les modérateurs et les administrateurs lisent et
+ * décident des signalements, tous espaces confondus. Retirer un lien le coupe
+ * pour tout le monde sans rien supprimer, et prévient son auteur avec la
+ * raison. Le compte, lui, n'est jamais coupé : on sanctionne un lien, pas un
+ * usage. L'adresse et l'IP du signalant ne sortent que vers un administrateur.
  */
 
-const ADMIN = { scope: 'account', admin: true } as const;
+const MODERATION = { scope: 'account', moderation: true } as const;
 const LIST_LIMIT = 200;
 
 async function requireReport(ctx: Ctx, id: number): Promise<ReportRow> {
@@ -24,7 +25,7 @@ async function requireReport(ctx: Ctx, id: number): Promise<ReportRow> {
 }
 
 async function fresh(ctx: Ctx, id: number) {
-    return reportView(ctx.keys, await requireReport(ctx, id));
+    return reportView(ctx.keys, await requireReport(ctx, id), ctx.isAdmin);
 }
 
 /** L'auteur l'apprend par mail, et l'espace par ses canaux. Aucun des deux ne doit bloquer la décision. */
@@ -59,19 +60,19 @@ async function tellAuthor(ctx: Ctx, report: ReportRow, link: LinkRow, note: stri
 export const moderationHandlers = [
     defineSdkFeature({
         ...shortlinksReports,
-        access: ADMIN,
+        access: MODERATION,
         handler: async (ctx: Ctx, input) => {
             const [rows, open] = await Promise.all([
                 ctx.repo.reports.list(input.status, LIST_LIMIT),
                 ctx.repo.reports.countOpen()
             ]);
-            return { reports: rows.map((row) => reportView(ctx.keys, row)), open };
+            return { reports: rows.map((row) => reportView(ctx.keys, row, ctx.isAdmin)), open };
         }
     }),
 
     defineSdkFeature({
         ...shortlinksReportDecide,
-        access: ADMIN,
+        access: MODERATION,
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             const report = await requireReport(ctx, input.reportId);
@@ -80,6 +81,7 @@ export const moderationHandlers = [
 
             if (input.decision === 'dismiss') {
                 await ctx.repo.reports.close(report.id, 'dismissed', input.note, ctx.userId, at);
+                ctx.live.pendingChanged();
                 ctx.audit({
                     action: 'shortlinks.reportDismiss',
                     description: `Signalement ${report.ref} classé sans suite.`,
@@ -97,6 +99,7 @@ export const moderationHandlers = [
                     : SHORTLINK_REPORT_REASON_LABELS[motive.success ? motive.data : 'other'];
             if (link.blocked_at === null) await ctx.repo.links.block(link.id, at, note);
             await ctx.repo.reports.close(report.id, 'actioned', note, ctx.userId, at);
+            ctx.live.pendingChanged();
 
             const service = runtime();
             service?.forget(link.id);
@@ -114,7 +117,7 @@ export const moderationHandlers = [
 
     defineSdkFeature({
         ...shortlinksRestore,
-        access: ADMIN,
+        access: MODERATION,
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             const report = await requireReport(ctx, input.reportId);
@@ -122,6 +125,7 @@ export const moderationHandlers = [
             if (link === null) throw new FeatureError('conflict', 'Ce lien n’existe plus.');
             if (link.blocked_at !== null) {
                 await ctx.repo.links.unblock(link.id);
+                ctx.live.pendingChanged();
                 const service = runtime();
                 service?.forget(link.id);
                 service?.deps.live.changed(link.workspace_id);

@@ -607,6 +607,20 @@ serveur a de toute façon déjà effacé la bulle (`relocated`).
   que les autres onglets de l'auteur. Un compte supprimé prévient de plus les
   membres de ses espaces (sujet `workspace`) : il sort des listes de membres, et
   un espace qu'il possédait sort des menus.
+- **Le sujet `pending` non plus.** Il dit que ce qui attend un modérateur ou un
+  administrateur a pu bouger (signalements ouverts, retours non lus, file en
+  retard) : le client relit `admin.pending`, qui allume les badges du menu.
+  `src/Services/adminPending.ts` le pousse par compte, à chaque modérateur et
+  administrateur actif (`listModeratorIds`), vers son espace personnel, une
+  fois par rafale (une seconde de coalescence). L'appellent les commandes
+  `feedback.*` (envoi, changement d'état, suppression), un module par
+  `ctx.live.pendingChanged()` (une décision de modération) ou
+  `deps.live.pendingChanged()` (un signalement reçu par une route publique, une
+  file qui prend du retard), et chaque changement de maintenance, qui change ce
+  qu'un modérateur peut ouvrir. `admin.setUserRole` le pousse en plus au seul
+  compte promu ou rétrogradé, avec `workspace` qui lui fait relire son rôle. Le
+  relevé est partagé quelques secondes entre les comptes qui relisent sur la
+  même trame.
 - **Le battement de cœur inscrit toute connexion `/ws`** (`liveHub.register` à
   la poignée de main, `src/ws/handler.ts`), avant tout `live.here` : sinon il ne
   couvrirait que les utilisateurs ayant ouvert une vue instrumentée.

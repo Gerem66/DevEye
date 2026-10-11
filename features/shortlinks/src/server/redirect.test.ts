@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import type { SdkDomain, SdkPublicApp, SdkPublicReply, SdkPublicRequest } from '@deveye/types/sdk/server';
+import type { SdkAccount, SdkDomain, SdkPublicApp, SdkPublicReply, SdkPublicRequest } from '@deveye/types/sdk/server';
 import { createTestServiceDeps, testDomain } from '@deveye/types/sdk/testing';
 
 import { hashPassword } from './_shared';
@@ -58,7 +58,12 @@ function content(over: Record<string, unknown> = {}) {
 
 function mount(
     rows: LinkRow[],
-    opts: { domains?: readonly SdkDomain[]; paused?: string[]; visitsLimit?: number } = {}
+    opts: {
+        domains?: readonly SdkDomain[];
+        paused?: string[];
+        visitsLimit?: number;
+        accounts?: readonly SdkAccount[];
+    } = {}
 ) {
     const repo: MemoryRepo = memoryRepo(rows);
     const deps = createTestServiceDeps({
@@ -67,7 +72,8 @@ function mount(
         pausedItems: { links: opts.paused ?? [] },
         quotas: serverEntry.quotas,
         quotaLimits: opts.visitsLimit === undefined ? {} : { visits: opts.visitsLimit },
-        countries: { '203.0.113.7': 'FR' }
+        countries: { '203.0.113.7': 'FR' },
+        accounts: opts.accounts
     });
     const counters = new Counters(deps);
     const redirector = createRedirector(deps, counters);
@@ -261,8 +267,26 @@ describe('le comptage', () => {
 });
 
 describe('le signalement', () => {
+    const account = (id: number, over: Partial<SdkAccount>): SdkAccount => ({
+        id,
+        email: `u${id}@exemple.fr`,
+        username: `u${id}`,
+        isAdmin: false,
+        canModerate: false,
+        e2e: false,
+        suspended: false,
+        created: 1,
+        ...over
+    });
+
     it('enregistre un signalement complet, et ignore un robot qui remplit le piège', async () => {
-        const m = mount([linkRow({ id: 1, code: 'abcdef', content: content() })]);
+        const m = mount([linkRow({ id: 1, code: 'abcdef', content: content() })], {
+            accounts: [
+                account(1, { isAdmin: true, canModerate: true }),
+                account(2, { canModerate: true }),
+                account(3, {})
+            ]
+        });
         assert.equal((await m.reportForm('abcdef')).status, 200);
         const body = {
             reason: 'phishing',
@@ -280,5 +304,17 @@ describe('le signalement', () => {
         assert.equal(m.repo.reportRows.length, 1);
         assert.equal(m.repo.reportRows[0].reason, 'phishing');
         assert.ok(!m.repo.reportRows[0].content.includes('camille@exemple.fr'));
+        assert.equal(m.deps.recorded.pendingChanges, 1);
+
+        // La modération l'apprend par mail, sans l'adresse ni l'IP du signalant.
+        await new Promise((resolve) => setImmediate(resolve));
+        const mails = m.deps.recorded.mails;
+        assert.deepEqual(
+            mails.map((mail) => mail.to),
+            ['u1@exemple.fr', 'u2@exemple.fr']
+        );
+        const text = JSON.stringify(mails[0].message);
+        assert.ok(!text.includes('camille@exemple.fr') && !text.includes('203.0.113.7'));
+        assert.match(text, /\?moderation=shortlinks/);
     });
 });

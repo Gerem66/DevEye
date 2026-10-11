@@ -1,7 +1,8 @@
 import type { Database } from '@/db';
-import type { HomeLayout, MinimalUser, SessionBundle, ThemeStateDTO, UserRole, Workspace } from '@deveye/types';
+import type { HomeLayout, MinimalUser, SessionBundle, ThemeStateDTO, Workspace } from '@deveye/types';
 import { homeLayoutSchema, themeStateSchema } from '@deveye/types';
 import { toRemoteInstance } from '@/db/repos/remoteInstances';
+import { roleOf } from '@/db/repos/users';
 import { permissionsFor } from '@/features/_access';
 import { ORIGINS } from '@/features/_sdk/context';
 import { maintenance, MaintenanceError } from '@/Services/maintenance';
@@ -28,7 +29,8 @@ export async function loadUserBundle(
     // Un compte suspendu n'a pas de session : `/me` et `/refresh` passent ici,
     // et le jeton d'accès déjà émis reste valide jusqu'à son expiration.
     if (row.status === 'suspended') return null;
-    const isAdmin = row.role === 'admin';
+    const role = roleOf(row.role);
+    const isAdmin = role === 'admin';
     // Même passage obligé : pendant la maintenance du site, seul l'administrateur
     // obtient une session.
     if (maintenance.siteDown() && !isAdmin) throw new MaintenanceError(maintenance.message());
@@ -98,7 +100,7 @@ export async function loadUserBundle(
             username: row.username,
             avatar: row.avatar,
             color: row.color,
-            role: (isAdmin ? 'admin' : 'user') as UserRole,
+            role,
             settings: parseStringArray(row.settings),
             security,
             personalWorkspaceId: row.personal_workspace_id,

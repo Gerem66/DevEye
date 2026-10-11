@@ -26,7 +26,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { HomeFeatureId, HomeFolder, HomeSection, HomeTile, ShortcutItem } from '@deveye/types';
-import { homeTileId, isFeatureTile, isHomeFolder, isShortcutTile } from '@deveye/types';
+import { homeTileId, isFeatureTile, isHomeFolder, isShortcutTile, placedFeatureIds } from '@deveye/types';
 import type { SdkDeviceSummary } from '@deveye/types/sdk/client';
 
 import { useDevices } from '@/devicesProvider';
@@ -38,7 +38,6 @@ import {
     getHomeLayout,
     moveFolderItem,
     moveSectionItem,
-    placedFeatureIds,
     removeFolderItem,
     removeSection,
     removeTile,

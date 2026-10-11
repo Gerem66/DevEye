@@ -73,6 +73,7 @@ export interface FeatureAccessSpec {
     extras?: readonly string[]; // permissions propres de la fonctionnalité, toutes exigées
     capabilities?: WorkspaceCapability[]; // capacités de gouvernance, toutes exigées
     admin?: true; // administrateur global : pages système
+    moderation?: true; // modérateur ou administrateur : retours, signalements
     scope?: 'account'; // force l'espace personnel de l'appelant
 }
 ```
@@ -180,14 +181,19 @@ Un grant de feature peut porter un **réglage** de la fonctionnalité (`channels
 
 ### L'administrateur global
 
-Il ne contourne que les pages système (Journaux, Utilisateurs), par `admin: true`.
-Les appareils n'en relèvent pas : un appareil habite l'espace où il a été
-appairé, tout ce qui le concerne tient au droit `devices` de cet espace, et
-`authorizeDevice` (`src/agent/authorize.ts`) ne connaît aucune dérogation. Un
+Il ne contourne que les pages système (Journaux, Utilisateurs), par
+`admin: true`, et la modération, par `moderation: true`, qu'il partage avec le
+modérateur. Les appareils n'en relèvent pas : un appareil habite l'espace où il
+a été appairé, tout ce qui le concerne tient au droit `devices` de cet espace,
+et `authorizeDevice` (`src/agent/authorize.ts`) ne connaît aucune dérogation. Un
 administrateur ne voit d'un espace où il n'entre pas ni ses appareils ni le
 reste. Il n'accède **pas** aux mots de passe ni aux notes d'autrui : ce serait
 contredire [SECURITY_MODEL.md](./SECURITY_MODEL.md), et c'est de toute façon
 mécaniquement impossible sur un espace personnel chiffré par mot de passe.
+
+Le **modérateur** n'a que la modération : les retours et les onglets de
+modération des fonctionnalités, sans l'adresse IP ni l'e-mail des auteurs. Il
+n'entre pas davantage chez autrui.
 
 ### Révocation immédiate
 

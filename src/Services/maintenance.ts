@@ -13,6 +13,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Database } from '@/db';
 import type { LiveHub } from '@/live/hub';
 import type { logger as appLogger } from '@/logger';
+import { adminPending } from '@/Services/adminPending';
 import { scheduleAllPlanReconciles } from '@/Services/planPauses';
 import { env } from '@/Utils/Env';
 
@@ -283,6 +284,8 @@ class MaintenanceStore {
         );
 
         live.broadcast(MAINTENANCE_EVENT, this.clientState());
+        // Une fonctionnalité que la maintenance ferme n'allume plus les badges de qui elle refuse.
+        adminPending.changed();
         if (!prev.site && next.site) {
             const admins = new Set(await db.users.listAdminIds());
             live.closeWhere((userId) => !admins.has(userId), MAINTENANCE_CLOSE_CODE, 'maintenance');

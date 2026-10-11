@@ -41,6 +41,8 @@ export interface FeedbackRepo {
     remove(id: number): Promise<boolean>;
     /** Envois d'un compte depuis cet instant (unix secondes) : borne l'abus. */
     countSince(uid: number, since: number): Promise<number>;
+    /** Les signalements encore intacts (`new`) : ce qu'un modérateur n'a pas lu. */
+    countPending(): Promise<number>;
 }
 
 /** Ligne du listage, jointe aux comptes pour les noms affichés. */
@@ -211,6 +213,13 @@ export function feedbackRepo(pool: Q): FeedbackRepo {
                 [uid, since]
             );
             return Number(res.rows[0]?.total ?? 0);
+        },
+
+        async countPending() {
+            const res = await pool.query<{ pending: number }>(
+                "SELECT COUNT(*) AS pending FROM feedback WHERE status = 'new'"
+            );
+            return Number(res.rows[0]?.pending ?? 0);
         }
     };
 }

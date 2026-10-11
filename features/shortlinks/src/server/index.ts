@@ -60,6 +60,14 @@ export const serverEntry: FeatureServer<ShortlinksRepo> = {
     ],
     mailSamples: shortlinksMailSamples(),
     e2e: shortlinksE2e,
+    adminPending: async ({ repo }) => ({ reports: await repo.reports.countOpen() }),
+    async adminFacts({ repo }) {
+        const totals = await repo.links.totals();
+        return [
+            { label: 'Visites', value: totals.visits, unit: 'count' },
+            { label: 'Ouvertures', value: totals.clicks, unit: 'count' }
+        ];
+    },
     createService(deps) {
         if (env.SHORTLINKS_LISTEN_PORT > 0 && SHORT_HOST === null) {
             throw new Error(

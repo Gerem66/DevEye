@@ -1,9 +1,9 @@
-import type { LiveTopic } from '@deveye/types';
+import { canModerate, type LiveTopic } from '@deveye/types';
 import type { FeatureManifest } from '@deveye/types/sdk';
 import type { SdkAccount } from '@deveye/types/sdk/server';
 
 import type { Database } from '@/db';
-import type { AccountRow } from '@/db/repos/users';
+import { roleOf, type AccountRow } from '@/db/repos/users';
 import { schedulePlanReconcile } from '@/Services/planPauses';
 import { sdkLive } from './host';
 
@@ -26,11 +26,13 @@ export function accountChanged(db: Pick<Database, 'users'>, manifest: FeatureMan
 
 /** `users.created` est en secondes. */
 export function toSdkAccount(row: AccountRow): SdkAccount {
+    const role = roleOf(row.role);
     return {
         id: row.id,
         email: row.email,
         username: row.username,
-        isAdmin: row.role === 'admin',
+        isAdmin: role === 'admin',
+        canModerate: canModerate(role),
         e2e: row.e2e_run !== null,
         suspended: row.status === 'suspended',
         created: Number(row.created) * 1000

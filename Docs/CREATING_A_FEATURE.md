@@ -96,10 +96,10 @@ pour être vu sans publication (section G).
    `ctx.ip`, `ctx.logger`, `ctx.isAdmin`…) et renvoie l'`output`. Une erreur
    typée se lève par `FeatureError(code, message)`.
     - **Autorisation** : déclarer `access` (`feature` et `level`, `extras`,
-      `capabilities`, `admin: true`, `scope: 'account'`) ; le dispatcheur
-      l'applique avant le handler, comme la validation zod. Une commande dont
-      la cible est un argument (`notify.route*`, `share.*`, `domain.*`) vérifie
-      en tête de handler et figure dans `ACCESS_EXEMPT`
+      `capabilities`, `admin: true`, `moderation: true`, `scope: 'account'`) ;
+      le dispatcheur l'applique avant le handler, comme la validation zod.
+      Une commande dont la cible est un argument (`notify.route*`, `share.*`,
+      `domain.*`) vérifie en tête de handler et figure dans `ACCESS_EXEMPT`
       (`src/features/_permissions.ts`) : `assertAccessDeclared` refuse sinon le
       démarrage. Voir [PERMISSIONS.md](./PERMISSIONS.md).
     - **Sujet en direct** : une commande qui modifie des données déclare
@@ -126,9 +126,15 @@ schémas zod : pas de validation manuelle à écrire.
 1. **Page structurelle** : `src/Features/<Name>/index.tsx` (+
    `style.module.css`), puis une entrée dans `buildStaticViews()`
    (`src/Pages/Home/index.tsx`, `hasCard: false`). Une page réservée aux
-   administrateurs s'ajoute à `ADMIN_VIEW_IDS` dans le même fichier : c'est la
-   liste des pages système du menu du compte, que `TopNavbar` reçoit en
-   `adminPages` et ne rend qu'à un administrateur. Appels via
+   administrateurs s'ajoute à `ADMIN_VIEW_IDS` dans le même fichier (les pages
+   système, « Fonctionnalités » en tête), une page de modération à
+   `MODERATION_VIEW_IDS`, par rôle (« Modération » et « Retours » pour un
+   modérateur, « Retours » seul pour un administrateur, qui a
+   « Fonctionnalités ») : `TopNavbar` les reçoit en `adminPages` et
+   `moderationPages`, deux groupes du menu du compte. Ce qu'une fonctionnalité
+   fait administrer ou modérer n'est pas une page : c'est un onglet de la popup
+   d'administration des fonctionnalités (`manifest.adminTabs`,
+   [FEATURE_SDK.md](./FEATURE_SDK.md)). Appels via
    `ws.send('x.action', input)` (typé, validé). Réutiliser les primitives
    (`Button`, `TextInput`, `SearchSelect`, `LoadingVeil`, `LogOutput`,
    `OpenPopup`) et les **jetons CSS du thème** (`var(--accent)`,
@@ -269,15 +275,15 @@ des types, workflow publish), puis réinstaller côté serveur et client.
 
 ## Récapitulatif des points d'enregistrement
 
-| #   | Fichier                                                       | Action                                          |
-| --- | ------------------------------------------------------------- | ----------------------------------------------- |
-| 1   | types : `src/domain/<f>.ts`                                   | schémas + types d'entité                        |
-| 2   | types : `src/features/<f>.ts`                                 | commandes + `<f>Commands`                       |
-| 3   | types : `src/features/registry.ts`, `src/index.ts`            | spread `...<f>Commands`, exports                |
-| 4   | `src/db/migrations/NNN_*.sql`                                 | migration, sort dans l'export (si table)        |
-| 5   | `src/db/repos/<f>.ts`, `src/db/index.ts`                      | repo, `Database` + `createDatabase` (si table)  |
-| 6   | `src/features/<f>/index.ts`, `src/features/registry.ts`       | handlers avec `access`, spread `...<f>Features` |
-| 7   | `client/src/Features/<F>/`, `client/src/Pages/Home/index.tsx` | page, `buildStaticViews`, `ADMIN_VIEW_IDS`      |
+| #   | Fichier                                                       | Action                                                              |
+| --- | ------------------------------------------------------------- | ------------------------------------------------------------------- |
+| 1   | types : `src/domain/<f>.ts`                                   | schémas + types d'entité                                            |
+| 2   | types : `src/features/<f>.ts`                                 | commandes + `<f>Commands`                                           |
+| 3   | types : `src/features/registry.ts`, `src/index.ts`            | spread `...<f>Commands`, exports                                    |
+| 4   | `src/db/migrations/NNN_*.sql`                                 | migration, sort dans l'export (si table)                            |
+| 5   | `src/db/repos/<f>.ts`, `src/db/index.ts`                      | repo, `Database` + `createDatabase` (si table)                      |
+| 6   | `src/features/<f>/index.ts`, `src/features/registry.ts`       | handlers avec `access`, spread `...<f>Features`                     |
+| 7   | `client/src/Features/<F>/`, `client/src/Pages/Home/index.tsx` | page, `buildStaticViews`, `ADMIN_VIEW_IDS` ou `MODERATION_VIEW_IDS` |
 
 Selon ce que la commande touche, les systèmes transverses ont chacun leur doc :
 toute configuration → [SETTINGS.md](./SETTINGS.md) (la coquille unique et son

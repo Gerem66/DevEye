@@ -182,6 +182,12 @@ export interface FeatureAccessSpec {
     /** Global account admin: the device fleet and the system pages. */
     admin?: true;
     /**
+     * Modérateur ou administrateur : ce qui attend une décision humaine
+     * (signalements, retours). Un modérateur reste un compte ordinaire pour le
+     * reste : la maintenance d'une fonctionnalité le refuse comme les autres.
+     */
+    moderation?: true;
+    /**
      * Commande de compte et non d'espace (secrecy, 2FA, avatar) : le
      * dispatcheur force `ctx.workspace` sur l'espace personnel de l'appelant,
      * quoi que dise l'enveloppe, pour que `ctx.secure` reste son propre coffre.

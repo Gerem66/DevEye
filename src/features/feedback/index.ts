@@ -1,17 +1,30 @@
-import { feedbackDelete, feedbackList, feedbackSetStatus, feedbackSubmit, FEEDBACK_PAGE_DEFAULT } from '@deveye/types';
+import {
+    feedbackDelete,
+    feedbackList,
+    feedbackSetStatus,
+    feedbackSubmit,
+    FEEDBACK_PAGE_DEFAULT,
+    type FeedbackEntry
+} from '@deveye/types';
 
 import type { FeedbackQueryFilter } from '@/db/repos/feedback';
+import { adminPending } from '@/Services/adminPending';
 import { env } from '@/Utils/Env';
 import { appVersion } from '@/version';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 
 /**
  * Les signalements. Écrire est ouvert à tout compte connecté, relire ne l'est
- * qu'aux administrateurs : un retour est adressé à celui qui tient le produit,
+ * qu'à la modération : un retour est adressé à ceux qui tiennent le produit,
  * pas aux autres membres. `scope: 'account'` parce qu'un signalement porte sur
  * DevEye et non sur le contenu d'un espace.
  */
-const ADMIN = { admin: true, scope: 'account' } as const;
+const MODERATION = { moderation: true, scope: 'account' } as const;
+
+/** Seul un administrateur voit d'où vient un signalement. */
+function forViewer(ctx: FeatureContext, entry: FeedbackEntry): FeedbackEntry {
+    return ctx.isAdmin ? entry : { ...entry, ip: null };
+}
 
 /**
  * Combien de signalements un même compte peut envoyer par heure. Assez haut
@@ -70,6 +83,7 @@ export const feedbackSubmitFeature: FeatureDefinition<
             appVersion: appVersion()
         });
 
+        adminPending.changed();
         ctx.audit({
             action: 'feedback.submit',
             level: 'info',
@@ -87,7 +101,7 @@ export const feedbackListFeature: FeatureDefinition<
     typeof feedbackList.output
 > = defineFeature({
     ...feedbackList,
-    access: ADMIN,
+    access: MODERATION,
     handler: async (ctx, input) => {
         const { limit, offset, ...rest } = input;
         // Seuls les champs réellement posés partent au repo : un filtre absent
@@ -105,7 +119,12 @@ export const feedbackListFeature: FeatureDefinition<
             offset: start
         });
 
-        return { entries, total, pending, hasMore: start + entries.length < total };
+        return {
+            entries: entries.map((entry) => forViewer(ctx, entry)),
+            total,
+            pending,
+            hasMore: start + entries.length < total
+        };
     }
 });
 
@@ -115,19 +134,20 @@ export const feedbackSetStatusFeature: FeatureDefinition<
     typeof feedbackSetStatus.output
 > = defineFeature({
     ...feedbackSetStatus,
-    access: ADMIN,
+    access: MODERATION,
     handler: async (ctx, input) => {
         await loadOr404(ctx, input.id);
         await ctx.db.feedback.setStatus(input.id, input.status, ctx.userId);
 
         const entry = await loadOr404(ctx, input.id);
+        adminPending.changed();
         ctx.audit({
             action: 'feedback.setStatus',
             level: 'info',
             description: `Signalement #${input.id} passé à « ${input.status} »`,
             metadata: { feedbackId: input.id, status: input.status }
         });
-        return { entry };
+        return { entry: forViewer(ctx, entry) };
     }
 });
 
@@ -137,10 +157,11 @@ export const feedbackDeleteFeature: FeatureDefinition<
     typeof feedbackDelete.output
 > = defineFeature({
     ...feedbackDelete,
-    access: ADMIN,
+    access: MODERATION,
     handler: async (ctx, input) => {
         await loadOr404(ctx, input.id);
         await ctx.db.feedback.remove(input.id);
+        adminPending.changed();
 
         ctx.audit({
             action: 'feedback.delete',

@@ -1,6 +1,7 @@
 import { type MouseEvent as ReactMouseEvent, type ReactNode, useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Button from '@/Components/Button';
+import { CountBadge } from '@/Components/CountBadge';
 import { Hint, useHint } from '@/Components/Hint';
 import { openInfo } from '@/Components/InfoPopup';
 import { useAuth } from '@/auth/AuthProvider';
@@ -44,6 +45,19 @@ const BANNER: Record<SiteBanner, { icon: string; title: string; hint: string }> 
         hint: 'Ce qui tourne pour votre compte est en pause, rien n’est supprimé, et tout reprendra de soi-même.'
     }
 };
+/** Une entrée réservée du menu : modération ou administration. `count` allume son badge. */
+export interface MenuPage {
+    id: string;
+    label: string;
+    icon: string;
+    count: number;
+}
+
+const GROUP_MARKER = {
+    moderation: { icon: 'moderation', label: 'Réservé à la modération' },
+    admin: { icon: 'shield', label: 'Réservé aux administrateurs' }
+} as const;
+
 const BACK_BTN_SIZE = 34;
 /** Le menu s'attarde après une bascule : le temps de couvrir le début du
  *  chargement, et de voir les actions d'espace rejoindre l'espace choisi. */
@@ -82,10 +96,12 @@ export interface TopNavbarProps {
     onRemoveRemote?: (instanceId: number) => void;
     /** Ouvrir la création d'un espace. */
     onCreateWorkspace?: () => void;
+    /** Les pages de modération, pour les modérateurs et les administrateurs : vide pour les autres. */
+    moderationPages?: readonly MenuPage[];
     /** Les pages système, réservées aux administrateurs : vide pour les autres. */
-    adminPages?: readonly { id: string; label: string; icon: string }[];
-    /** Le clic porte le modificateur de rechargement forcé. */
-    onOpenAdminPage?: (id: string, e: ReactMouseEvent) => void;
+    adminPages?: readonly MenuPage[];
+    /** Ouvre une page de l'un des deux groupes. Le clic porte le modificateur de rechargement forcé. */
+    onOpenPage?: (id: string, e: ReactMouseEvent) => void;
     /**
      * Le bandeau de l'accueil. Pour l'administrateur : le site est en
      * maintenance, la priorité aux abonnés est active, ou la maintenance est
@@ -126,8 +142,9 @@ export default function TopNavbar({
     onRemoveRemote,
     onCreateWorkspace,
     onManageWorkspace,
+    moderationPages,
     adminPages,
-    onOpenAdminPage,
+    onOpenPage,
     siteBanner,
     onDismissMaintenanceBanner,
     aboutBody
@@ -174,6 +191,41 @@ export default function TopNavbar({
         document.addEventListener('mousedown', handler);
         return () => document.removeEventListener('mousedown', handler);
     }, [menuOpen]);
+
+    // La somme des badges du menu : le pseudo ne peut pas annoncer autre chose que ce qu'il ouvre.
+    const pendingTotal = [...(moderationPages ?? []), ...(adminPages ?? [])].reduce((sum, page) => sum + page.count, 0);
+
+    const renderGroup = (pages: readonly MenuPage[] | undefined, group: keyof typeof GROUP_MARKER) =>
+        pages && pages.length > 0 ? (
+            <>
+                <hr className={styles.divider} />
+                {pages.map((page) => (
+                    <button
+                        key={page.id}
+                        className={styles.menuItem}
+                        onClick={(e) => {
+                            onOpenPage?.(page.id, e);
+                            setMenuOpen(false);
+                        }}
+                    >
+                        <span className={`icon icon-${page.icon}`} /> {page.label}
+                        {page.count > 0 ? (
+                            <CountBadge
+                                count={page.count}
+                                className={styles.marker}
+                                aria-label={`${page.count} en attente`}
+                            />
+                        ) : (
+                            <span
+                                className={`icon icon-${GROUP_MARKER[group].icon} ${styles.marker} ${styles.markerIcon}`}
+                                title={GROUP_MARKER[group].label}
+                                aria-label={GROUP_MARKER[group].label}
+                            />
+                        )}
+                    </button>
+                ))}
+            </>
+        ) : null;
 
     const inFeature = Boolean(viewTitle);
     const versionShown = !(inFeature && viewTitle);
@@ -316,11 +368,11 @@ export default function TopNavbar({
                             <span className={styles.organizeBannerTitle}>{BANNER[siteBanner].title}</span>
                             <span className={styles.organizeBannerHint}>{BANNER[siteBanner].hint}</span>
                         </span>
-                        {(siteBanner === 'site' || siteBanner === 'priority') && onOpenAdminPage && (
+                        {(siteBanner === 'site' || siteBanner === 'priority') && onOpenPage && (
                             <Button
                                 variant='secondary'
                                 className={styles.organizeBannerDone}
-                                onClick={(e) => onOpenAdminPage('maintenance', e)}
+                                onClick={(e) => onOpenPage('maintenance', e)}
                             >
                                 Gérer
                             </Button>
@@ -369,6 +421,13 @@ export default function TopNavbar({
                                 </span>
                             )}
                         </span>
+                        {/* Hors de l'identité, que l'écran étroit masque : le badge reste à côté de l'avatar. */}
+                        {pendingTotal > 0 && (
+                            <CountBadge
+                                count={pendingTotal}
+                                aria-label={`${pendingTotal} élément${pendingTotal > 1 ? 's' : ''} à traiter, voir le menu`}
+                            />
+                        )}
                         <span className={`icon icon-chevron-down ${styles.chevron} ${menuOpen ? styles.open : ''}`} />
                     </button>
                 )}
@@ -457,33 +516,15 @@ export default function TopNavbar({
                                     <span className={`icon icon-${entry.icon}`} /> {entry.label}
                                     {entry.adminTools && (
                                         <span
-                                            className={`icon icon-shield ${styles.adminBadge}`}
+                                            className={`icon icon-shield ${styles.marker} ${styles.markerIcon}`}
                                             title='Contient des outils d’administration'
                                             aria-label='Contient des outils d’administration'
                                         />
                                     )}
                                 </button>
                             ))}
-                            {/* Second separator: groups the system pages apart
-                                from the account pages above. */}
-                            {adminPages && adminPages.length > 0 && <hr className={styles.divider} />}
-                            {adminPages?.map((page) => (
-                                <button
-                                    key={page.id}
-                                    className={styles.menuItem}
-                                    onClick={(e) => {
-                                        onOpenAdminPage?.(page.id, e);
-                                        setMenuOpen(false);
-                                    }}
-                                >
-                                    <span className={`icon icon-${page.icon}`} /> {page.label}
-                                    <span
-                                        className={`icon icon-shield ${styles.adminBadge}`}
-                                        title='Réservé aux administrateurs'
-                                        aria-label='Réservé aux administrateurs'
-                                    />
-                                </button>
-                            ))}
+                            {renderGroup(moderationPages, 'moderation')}
+                            {renderGroup(adminPages, 'admin')}
                             <hr className={styles.divider} />
                             <button
                                 className={`${styles.menuItem} ${styles.danger}`}
