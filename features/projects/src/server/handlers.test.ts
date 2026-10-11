@@ -105,6 +105,9 @@ import { memoryPublicationRepo, type MemoryPublicationRepo } from './testing/pub
  */
 
 /** Le handler d'un contrat, typé par ce contrat (le registre est hétérogène). */
+
+/** Le module Bases de données qui laisse interroger toute base. */
+const MAY_QUERY = { authorize: async () => ({ ok: true as const }) };
 function handlerFor<C extends { command: string; input: ZodType; output: ZodType }>(contract: C) {
     const def = projectsHandlers.find((h) => h.command === contract.command);
     assert.ok(def, `handler ${contract.command} manquant`);
@@ -1780,6 +1783,7 @@ describe('les liaisons par les contrats d’éléments', () => {
         );
         const providers = {
             [DATABASE_ITEMS_PROVIDER]: { exists: async () => true },
+            [DATABASE_MEASURE_PROVIDER]: MAY_QUERY,
             [AUDIENCE_ITEMS_PROVIDER]: { exists: async () => true },
             [DEPLOY_ITEMS_PROVIDER]: { exists: async () => true }
         };
@@ -2426,7 +2430,7 @@ describe('la vue d’ensemble d’un projet', () => {
         const repo = fakeRepo();
         seedTwoTiers(repo);
         repo.rows.links.database.push({ project_id: 1, workspace_id: 1, item_id: 6 });
-        const ctx = contextWith(repo);
+        const ctx = contextWith(repo, { providers: { [DATABASE_MEASURE_PROVIDER]: MAY_QUERY } });
         const kpi = {
             title: 'Commandes',
             sql: 'SELECT COUNT(*) FROM orders',
@@ -2462,6 +2466,18 @@ describe('la vue d’ensemble d’un projet', () => {
             handlerFor(projectDashboardKpiSave)(ctx, { projectId: 2, databaseId: 6, kpi }),
             failsWith('validation')
         );
+        // Sans le droit d'interroger la base, ni l'écrire ni l'essayer.
+        const refused = contextWith(repo, {
+            providers: {
+                [DATABASE_MEASURE_PROVIDER]: {
+                    authorize: async () => ({ ok: false as const, reason: 'level' as const })
+                }
+            }
+        });
+        await assert.rejects(
+            handlerFor(projectDashboardKpiSave)(refused, { projectId: 1, databaseId: 6, kpi }),
+            failsWith('forbidden')
+        );
 
         const saved = await handlerFor(projectDashboardKpiSave)(ctx, { projectId: 1, databaseId: 6, kpi });
         const tile = saved.tiles.find((t) => t.kpi !== null);
@@ -2488,6 +2504,7 @@ describe('la vue d’ensemble d’un projet', () => {
         const ctx = contextWith(repo, {
             providers: {
                 [DATABASE_MEASURE_PROVIDER]: {
+                    ...MAY_QUERY,
                     measure: async (databaseId: number, _ws: number, queries: readonly string[]) => {
                         calls.push({ databaseId, queries });
                         return answer;
@@ -2527,7 +2544,7 @@ describe('la vue d’ensemble d’un projet', () => {
         repo.rows.links.database.push({ project_id: 1, workspace_id: 1, item_id: 6 });
         const ctx = contextWith(repo, {
             providers: {
-                [DATABASE_MEASURE_PROVIDER]: { measure: async () => [{ value: 1, error: null }] }
+                [DATABASE_MEASURE_PROVIDER]: { ...MAY_QUERY, measure: async () => [{ value: 1, error: null }] }
             }
         });
         const kpi = {

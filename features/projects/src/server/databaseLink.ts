@@ -3,6 +3,7 @@ import { DATABASE_ITEMS_PROVIDER, type DatabaseItemsProvider } from '@deveye/typ
 import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 
 import { assertAtHome, linkLabels, LINKS, loadProject, type Ctx } from './_shared';
+import { assertMayQuery } from './dashboard';
 
 /**
  * Le pointeur d'un projet vers des bases de données, même forme que `repoLink.ts` :
@@ -38,15 +39,16 @@ export const projectDatabaseLinkFeature = defineSdkFeature({
             );
         }
 
-        // Seule la visibilité d'ici (chez elle ou projetée) est vérifiée, et par le
-        // contrat qu'offre le module : le droit d'ouvrir la base reste celui de Bases
-        // de données. Sans cette garde on lierait l'identifiant d'une base d'un
-        // espace qui ne partage rien ici, dont l'existence n'a pas à fuiter.
+        // La visibilité d'ici (chez elle ou projetée), puis le droit de l'interroger :
+        // une base reliée se mesure par des requêtes, que son module seul autorise.
+        // Sans la première garde on lierait l'identifiant d'une base d'un espace
+        // qui ne partage rien ici, dont l'existence n'a pas à fuiter.
         const databases = ctx.providers.get<DatabaseItemsProvider>(DATABASE_ITEMS_PROVIDER);
         if (!databases) throw new FeatureError('validation', 'Le module Bases de données n’est pas installé.');
         if (!(await databases.exists(input.databaseId, project.workspace_id))) {
             throw new FeatureError('not_found', 'Cette base n’existe pas dans cet espace.');
         }
+        await assertMayQuery(ctx, input.databaseId, project.workspace_id);
 
         await ctx.repo.links.linkDatabase(input.projectId, project.workspace_id, input.databaseId);
         return { databaseIds: await ctx.repo.links.listDatabaseIds(input.projectId, project.workspace_id) };

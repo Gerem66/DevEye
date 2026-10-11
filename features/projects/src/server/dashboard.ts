@@ -85,10 +85,20 @@ async function assertMeasurable(ctx: Ctx, projectId: number, workspaceId: number
     }
 }
 
-function measureProvider(ctx: Ctx): DatabaseMeasureProvider {
+export function measureProvider(ctx: Ctx): DatabaseMeasureProvider {
     const provider = ctx.providers.get<DatabaseMeasureProvider>(DATABASE_MEASURE_PROVIDER);
     if (!provider) throw new FeatureError('validation', 'Le module Bases de données n’est pas installé.');
     return provider;
+}
+
+/**
+ * Une requête d'indicateur lit n'importe quelle table : l'écrire ou l'essayer
+ * exige le droit d'explorer la base, que seul son module sait trancher. Une
+ * mesure déjà posée se relance sans lui, sa requête ayant été admise ainsi.
+ */
+export async function assertMayQuery(ctx: Ctx, databaseId: number, workspaceId: number): Promise<void> {
+    const verdict = await measureProvider(ctx).authorize(databaseId, workspaceId, ctx.userId);
+    if (!verdict.ok) throw new FeatureError('forbidden', 'Vous n’avez pas le droit d’interroger cette base.');
 }
 
 export const projectDashboardFeature = defineSdkFeature({
@@ -157,6 +167,7 @@ export const projectDashboardKpiSaveFeature = defineSdkFeature({
         }
         const home = project.workspace_id;
         await assertMeasurable(ctx, input.projectId, home, input.databaseId);
+        await assertMayQuery(ctx, input.databaseId, home);
         // Le formulaire refuse tout de suite ce que la mesure refuserait plus tard.
         assertReadOnlyDraft(input.kpi.sql);
 
@@ -271,6 +282,7 @@ export const projectDashboardKpiTestFeature = defineSdkFeature({
         const project = await loadProject(ctx, input.projectId, 'write');
         assertAtHome(ctx, project, 'essayer un indicateur');
         await assertMeasurable(ctx, input.projectId, project.workspace_id, input.databaseId);
+        await assertMayQuery(ctx, input.databaseId, project.workspace_id);
         assertReadOnlyDraft(input.sql);
         const outcome = (await measureProvider(ctx).measure(input.databaseId, project.workspace_id, [input.sql]))?.[0];
         return outcome ?? { value: null, error: 'Cette base n’existe plus dans cet espace.' };

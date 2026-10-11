@@ -298,6 +298,25 @@ export function assertSingleStatement(sql: string): void {
     }
 }
 
+/**
+ * Une lecture dans une transaction en lecture seule, toujours annulée. Le filtre
+ * de `assertReadOnly` garde l'intention ; la base, elle, refuse ce qui passerait
+ * entre ses mailles (`WITH … DELETE`, `EXPLAIN ANALYZE DELETE`).
+ */
+async function readOnly(
+    run: (sql: string) => Promise<DatabaseRows>,
+    begin: string,
+    sql: string
+): Promise<DatabaseRows> {
+    await run(begin);
+    try {
+        return await run(sql);
+    } finally {
+        // Une session morte n'a rien à annuler : son échec est déjà celui de la requête.
+        await run('ROLLBACK').catch(() => undefined);
+    }
+}
+
 /** La valeur numérique d'une condition d'alerte : un seul nombre, ou une erreur claire plutôt qu'un `NaN`. */
 export function singleNumber(rows: DatabaseRows): number {
     if (rows.rows.length === 0) throw new Error('La requête n’a rendu aucune ligne.');
@@ -308,7 +327,8 @@ export function singleNumber(rows: DatabaseRows): number {
     const raw = first[0];
     if (raw === null) throw new Error('La requête a rendu une valeur nulle.');
     const value = Number(raw);
-    if (!Number.isFinite(value)) throw new Error(`« ${raw} » n’est pas un nombre.`);
+    // Sans recopier la valeur : le message s'affiche à qui ne lit pas la base.
+    if (!Number.isFinite(value)) throw new Error('La requête n’a pas rendu un nombre.');
     return value;
 }
 
@@ -475,7 +495,7 @@ async function openMysql(target: EngineTarget, tunnel: { host: string; port: num
         },
         async query(sql) {
             assertReadOnly(sql);
-            return run(sql);
+            return readOnly(run, 'START TRANSACTION READ ONLY', sql);
         },
         async execute(sql) {
             assertSingleStatement(sql);
@@ -705,7 +725,7 @@ async function openPostgres(target: EngineTarget, tunnel: { host: string; port: 
         },
         async query(sql) {
             assertReadOnly(sql);
-            return run(sql);
+            return readOnly(run, 'BEGIN READ ONLY', sql);
         },
         async execute(sql) {
             assertSingleStatement(sql);

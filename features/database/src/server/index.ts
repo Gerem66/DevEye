@@ -117,7 +117,10 @@ function createMeasureProvider(
                     /* la fermeture d'une session déjà morte n'a rien à dire */
                 }
             }
-        }
+        },
+        // Une mesure lit n'importe quelle table : le droit d'explorer la base.
+        authorize: (databaseId, workspaceId, userId) =>
+            deps.access.feature(workspaceId, userId, { level: 'write', itemId: String(databaseId) })
     };
 }
 

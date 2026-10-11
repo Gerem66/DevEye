@@ -50,6 +50,10 @@ describe('singleNumber', () => {
         assert.throws(() => singleNumber(rows(['n'], [['1'], ['2']])), /2 lignes/);
         assert.throws(() => singleNumber(rows(['a', 'b'], [['1', '2']])), /2 colonnes/);
         assert.throws(() => singleNumber(rows(['n'], [[null]])), /nulle/);
-        assert.throws(() => singleNumber(rows(['n'], [['douze']])), /n’est pas un nombre/);
+        // Sans recopier la valeur : l'erreur s'affiche à qui ne lit pas la base.
+        assert.throws(
+            () => singleNumber(rows(['n'], [['douze']])),
+            (e: unknown) => e instanceof Error && /pas rendu un nombre/.test(e.message) && !e.message.includes('douze')
+        );
     });
 });
