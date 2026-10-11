@@ -39,6 +39,7 @@ import {
     isModulePublicPath,
     keepRawBody,
     moduleAgentHooks,
+    moduleManifests,
     modulePublicRoutes,
     moduleProvider,
     moduleServiceControl,
@@ -57,6 +58,7 @@ import { registerProxyRoute } from '@/Services/domains/proxy';
 import { registerStatusProbeRoutes } from '@/Services/statusProbe';
 import { createDomainVerifier } from '@/Services/domains/verifier';
 import { createLogRetention } from '@/Services/logRetention';
+import { geoip } from '@/Services/geoip';
 import { createMailer } from '@/Services/mailer';
 import { serverMail } from '@/Services/serverMail';
 import { createDebugService } from '@/Services/debug';
@@ -380,8 +382,13 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         logger,
         origin: env.PUBLIC_ORIGIN.replace(/\/+$/, '')
     });
+    geoip.init({
+        logger,
+        enabled: moduleManifests().some((m) => m.nativeCapabilities?.includes('geoip'))
+    });
     createModuleServices({ db: deps.db, crypt: deps.crypt, audit, logger, live, mailer });
     const hostServices = [
+        geoip,
         createDomainVerifier({ db: deps.db, crypt: deps.crypt, logger, live }),
         signup,
         createLogRetention({ db: deps.db, logger }),

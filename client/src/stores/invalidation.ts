@@ -113,6 +113,13 @@ export type ResourceKey =
     | 'invoicing.doc'
     | 'invoicing.clientList'
     | 'invoicing.config'
+    | 'shortlinks.count'
+    | 'shortlinks.list'
+    | 'shortlinks.get'
+    /** Les chiffres des liens, relus au plus une fois par minute quand des visites arrivent. */
+    | 'shortlinks.stats'
+    /** Les signalements, lus par l'administration du service. */
+    | 'shortlinks.reports'
     /** Les clés d'un module externe (`<id>.<nom>`), déclarées par son manifest. */
     | ExternalResourceKey;
 

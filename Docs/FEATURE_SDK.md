@@ -213,8 +213,8 @@ garde de maintenance, et retient leurs chemins pour son délégateur CORS
 (`isModulePublicPath`, motifs compris pour un chemin paramétré). La racine `/`
 est refusée au boot : elle appartient à l'hôte (voir les domaines). Audience
 (la balise), Mail (`exposure: 'app'`), Uptime, Projets, Facturation, Serveur
-mail, Finances, Convertisseur, Hébergement, Rendez-vous et le module de
-facturation des comptes en déclarent.
+mail, Finances, Convertisseur, Hébergement, Rendez-vous, Liens courts et le
+module de facturation des comptes en déclarent.
 
 Une route qui reçoit un fichier se déclare par
 `postStream(path, { maxBytes, exposure: 'app', rateLimit? }, handler)` : le
@@ -248,22 +248,22 @@ suppression : s'il lève, le domaine reste. Le module lit ses domaines par
 `ctx.domains` (`list`, `get`, `verified`, dans l'espace actif) et
 `deps.domains` (`findByHost`, `get`, `listVerified`, tous espaces : de quoi
 router une requête entrante par son nom d'hôte). Rendez-vous, Serveur mail,
-Uptime, Projets, Facturation et Hébergement déclarent des domaines.
+Uptime, Projets, Facturation, Hébergement et Liens courts déclarent des
+domaines.
 
 Un manifest dont les domaines servent des pages déclare `domains.web: true`
-(Uptime, Projets, Facturation, Rendez-vous, Hébergement). Le socle ajoute
-alors, entre la propriété et la sonde du module, ses propres contrôles
+(Uptime, Projets, Facturation, Rendez-vous, Hébergement, Liens courts). Le socle
+ajoute alors, entre la propriété et la sonde du module, ses propres contrôles
 (`Services/domains/web.ts`) : le nom pointe vers l'origine publique, puis y
-répond en HTTPS avec un certificat valable, chacun avec sa phrase. Ces noms
-sont ceux que le proxy lit sur `/api/domains/proxy`
-(`Services/domains/proxy.ts`, env `DOMAIN_PROXY_TOKEN`,
-`DOMAIN_PROXY_UPSTREAM`, `DOMAIN_PROXY_ENTRYPOINT`,
+répond en HTTPS avec un certificat valable, chacun avec sa phrase. Ces noms sont
+ceux que le proxy lit sur `/api/domains/proxy` (`Services/domains/proxy.ts`, env
+`DOMAIN_PROXY_TOKEN`, `DOMAIN_PROXY_UPSTREAM`, `DOMAIN_PROXY_ENTRYPOINT`,
 `DOMAIN_PROXY_CERT_RESOLVER`) pour obtenir seul leurs certificats ; un
-certificat qui arrive laisse le service `pending`, pas `failed`. Ils se
-comptent à la limite d'offre `domains.hosts` ([QUOTAS.md](./QUOTAS.md)), et
-`domain.list` rend le mode des certificats (`https`) et cette limite (`quota`).
-La sonde du module n'a plus qu'à prouver que c'est cette installation qui
-répond : un jeton servi sous `/.well-known/deveye-<slug>` (Facturation :
+certificat qui arrive laisse le service `pending`, pas `failed`. Ils se comptent
+à la limite d'offre `domains.hosts` ([QUOTAS.md](./QUOTAS.md)), et `domain.list`
+rend le mode des certificats (`https`) et cette limite (`quota`). La sonde du
+module n'a plus qu'à prouver que c'est cette installation qui répond : un jeton
+servi sous `/.well-known/deveye-<slug>` (Facturation :
 `features/invoicing/src/server/domains.ts`), et chaque route publique ne sert,
 sous un domaine client, que l'espace qui le possède.
 
@@ -277,6 +277,36 @@ ceux-là) va au premier module installé qui sert sa racine, derrière la garde 
 maintenance ; tout le reste retombe sur le repli de l'écouteur, le client sur
 l'app et 404 sur la surface publique. Le module route par le `domain` reçu,
 jamais par l'en-tête. Uptime, Projets et Hébergement servent une racine.
+
+Un nom dont le module définit tous les chemins (`go.example.com/promo`) se sert
+par `hostRequest(req, reply, domain)`, exclusif de `domainRoot` : il reçoit
+chaque GET ou HEAD qu'aucune route n'a pris, racine comprise. La requête
+(`SdkHostRequest`) ajoute à celle d'une route publique `method` et `path` tel
+que reçu (encodé, sans la chaîne de requête) ; l'hôte n'a aucune route pour la
+décoder. Le module y répond sur ses domaines VÉRIFIÉS (`domain` est ce domaine)
+et sur ses hôtes propres, `ownHosts` : des noms de l'instance que le module sert
+en entier, hors de tout client, lus dans sa configuration (le domaine court de
+Liens courts, `SHORTLINKS_ORIGIN`), et alors `domain` vaut `null`.
+`hostHooksProblem` (`_sdk/register.ts`) arrête le boot sur `hostRequest` à côté
+de `domainRoot`, sans `'routes.public'`, ou sous un manifest dont les
+`domains` ne sont pas `web` ; sur un `ownHosts` sans `hostRequest`, mal formé
+(`DOMAIN_HOST_PATTERN`), égal à l'hôte de l'app ou de la surface publique, ou
+revendiqué par deux modules.
+
+`modulePublicRoutes` monte alors, en plus de `GET /`, une route `GET /*` sur les
+deux écouteurs, et seulement si un module installé déclare `hostRequest`. Les
+routes déclarées gagnent toujours. `serveHost` cherche d'abord le module dont
+c'est un hôte propre, puis le premier module installé qui a vérifié ce nom et
+répond à ce chemin (`domainRoot` à la racine, `hostRequest` partout), derrière
+la garde de maintenance et le même plafond de débit que la racine ; ce qu'aucun
+ne prend retombe sur le repli de l'écouteur. La recherche d'un domaine vérifié
+reste en cache 30 secondes par module et par nom, absences comprises : une
+redirection ne relit pas la base à chaque passage. Les hôtes propres sont
+réservés comme ceux de DevEye (`reservedHosts`) : `domain.add` les refuse à tout
+espace, et le fournisseur HTTP de Traefik (`/api/domains/proxy`) ne les route
+jamais : l'exploitant les fait router lui-même vers l'écouteur public
+(`SHORTLINKS_ORIGIN` dans `.env.template`). Liens courts sert ainsi ses
+redirections.
 
 L'hôte sert aussi, sur les deux écouteurs et donc sous tout domaine client,
 l'icône de DevEye en 64 pixels à `DEVEYE_ICON_PATH` (`/deveye-icon.png`,
@@ -343,8 +373,8 @@ production. Une variable posée vide compte comme posée ; `optional` fait taire
 celles qu'une installation peut ne pas utiliser (clés OAuth, certificat
 fourni) ; un secret n'est jamais écrit. Une spec mal formée arrête le
 démarrage (`moduleEnvProblem`). Uptime, Sauvegardes, Mail, Appareils,
-Sentinelle, Convertisseur, Météo, Finances, Serveur mail et les modules privés
-en déclarent.
+Sentinelle, Convertisseur, Météo, Finances, Serveur mail, Liens courts et les
+modules privés en déclarent.
 
 ### Les services externes
 
@@ -352,13 +382,13 @@ en déclarent.
 externes du module au niveau de l'instance (un fournisseur joint avec la clé de
 l'instance, jamais un service qu'un espace règle lui-même) : une carte chacune
 (`SdkExternalService` : `state` parmi `ok`, `degraded`, `down`, `inactive`, une
-phrase, des faits « clé : valeur », des jauges). La page admin Services
-externes les lit par `moduleExternalServices` (`Services/externalServices`),
-après les sondes de l'hôte (stockage objet, SMTP, versions de l'agent, proxy
-des domaines, page d'état). Appels réseau permis, bornés à 8 s par module ; un
-module qui lève, tarde ou rend une forme invalide devient une carte en panne.
-La page garde sa mesure 5 minutes, `refresh` la demande à nouveau : un module
-garde en cache ce qui coûte (un quota d'API, une liste longue). Météo
+phrase, des faits « clé : valeur », des jauges). La page admin Services externes
+les lit par `moduleExternalServices` (`Services/externalServices`), après les
+sondes de l'hôte (stockage objet, SMTP, versions de l'agent, proxy des domaines,
+page d'état, pays des visiteurs). Appels réseau permis, bornés à 8 s par module
+; un module qui lève, tarde ou rend une forme invalide devient une carte en
+panne. La page garde sa mesure 5 minutes, `refresh` la demande à nouveau : un
+module garde en cache ce qui coûte (un quota d'API, une liste longue). Météo
 (Open-Meteo), Mail (Google, Microsoft), Finances (Enable Banking) et la
 facturation des comptes (Stripe) en déclarent.
 
@@ -369,11 +399,14 @@ mail du module construit par son vrai constructeur sur des données d'exemple
 (`sender: 'server'` exige `accounts.mail` ; `sender: 'workspace'` passe par une
 boîte Mail que l'administrateur choisit), et `e2e`, ses scénarios de bout en
 bout (`SdkE2eContext` : `send` par un vrai socket d'un compte jetable, `fetch`
-sans session, `waitFor`, `defer`) et le `sweep()` de ce qu'ils laisseraient
-hors de ses tables. Clés en `[a-z][a-zA-Z0-9]*`, uniques, vérifiées par
-`registerModules`. Facturation, Rendez-vous, Hébergement et le module de
-facturation des comptes déclarent des échantillons ; Uptime, Notes, Audience,
-CloudSync, Hébergement et la facturation des comptes des scénarios.
+sans session, `waitFor`, `defer`) et le `sweep()` de ce qu'ils laisseraient hors
+de ses tables. `fetch` rend `status`, `body` et `headers` : noms en minuscules,
+valeurs répétées jointes par `, `, et une redirection n'est pas suivie (un 302
+revient tel quel, sa cible dans `headers.location`). Clés en
+`[a-z][a-zA-Z0-9]*`, uniques, vérifiées par `registerModules`. Facturation,
+Rendez-vous, Hébergement, Liens courts et le module de facturation des comptes
+déclarent des échantillons ; Uptime, Notes, Audience, CloudSync, Hébergement,
+Liens courts et la facturation des comptes des scénarios.
 
 Un service peut aussi dire `health()` (`up`, `degraded`, `down`, une raison
 lisible par le public) : la page d'état l'interroge par `moduleServiceHealth`
@@ -382,6 +415,32 @@ maintenance tient à l'arrêt ([STATUS_PAGE.md](./STATUS_PAGE.md)). Serveur mail
 et la facturation des comptes le déclarent. `onAccountDeleted(userId)` passe
 avant la suppression d'un compte (un abonnement à résilier) et peut rendre une
 phrase que le mail de confirmation porte.
+
+### Le pays d'un visiteur
+
+Capacité `'geoip'` : `deps.geo.country(ip)` rend le code ISO 3166-1 du pays
+d'une adresse (`FR`), `null` pour une adresse privée ou inconnue et tant que la
+base n'est pas chargée. La réponse vient de la mémoire, sans appel réseau :
+assez bon marché pour une route publique. La base est celle de DB-IP
+(`Services/geoip.ts`), que l'hôte télécharge et relit seul, et seulement quand
+un module installé déclare la capacité
+([EXTERNAL_SERVICES.md](./EXTERNAL_SERVICES.md)). `deps.geo.attribution`
+(`text`, `url`) est la mention que sa licence exige partout où un pays
+s'affiche. Le module garde le pays, jamais l'adresse. Le harnais répond par
+`countries` (adresse → code) de `createTestServiceDeps`. Liens courts la
+déclare.
+
+Les règles qui comptent les visiteurs sans les reconnaître sont des fonctions
+pures de `@deveye/types/sdk/server` (`src/sdk/visitors.ts`), partagées par
+Audience et Liens courts : `parseUserAgent(ua)` rend navigateur, système (`null`
+quand ils sont inconnus) et appareil (`desktop`, `mobile`, `tablet`) ;
+`looksLikeBot(ua)` écarte les robots qui se déclarent ;
+`visitorRef(sel, portée, ip, ua)` est l'empreinte qui compte une personne une
+fois, sans garder ni l'adresse ni l'agent, avec un sel qui change chaque jour et
+une portée (un site, un lien) qui empêche de croiser deux compteurs ;
+`originHost(raw)` ramène une origine à son nom d'hôte ;
+`normalizeReferrer(raw, ownHosts, maxLength)` garde du référent son seul nom
+d'hôte, `null` quand il vient de l'un des noms du module lui-même.
 
 ### Le partage, les éléments, le déplacement et la copie
 
@@ -466,8 +525,8 @@ compte (Git, Projets, Sauvegardes, Jeu de la vie). `accounts.read` :
 `usage.ofMany`. `accounts.mail` : `deps.accountMail.send(userId, message)`
 écrit à l'adresse du compte par l'expéditeur du serveur, `sendToAdmins` à
 chaque administrateur actif, `configured` est faux sans SMTP. Le module de
-facturation des comptes déclare les trois capacités de compte, Hébergement
-`accounts.mail`.
+facturation des comptes déclare les trois capacités de compte, Hébergement et
+Liens courts `accounts.mail`.
 
 ### Le manifest, au-delà des commandes
 
@@ -477,17 +536,16 @@ SA feature, autorisées côté serveur) et seulement pour les membres dont le r�
 accorde la feature ; l'hôte l'enveloppe dans un bouton qui ouvre la feature,
 rien d'interactif dedans (Appareils, Uptime, Rendez-vous). `accountEntry` ouvre
 `AccountView` depuis le menu du compte, `accountOnly` retire carte et ligne de
-rôle et impose `access.scope: 'account'` à toutes les commandes (facturation
-des comptes) ; `adminEntry` ouvre `AdminView` parmi les pages système, pour
-l'administrateur global (Hébergement) ; [QUOTAS.md](./QUOTAS.md) les détaille.
-`extraPermissions` (dix au plus) et `access.extras` :
+rôle et impose `access.scope: 'account'` à toutes les commandes (facturation des
+comptes) ; `adminEntry` ouvre `AdminView` parmi les pages système, pour
+l'administrateur global (Hébergement, Liens courts) ; [QUOTAS.md](./QUOTAS.md)
+les détaille. `extraPermissions` (dix au plus) et `access.extras` :
 [PERMISSIONS.md](./PERMISSIONS.md). `settings` et `settingsPanels` :
 [SETTINGS.md](./SETTINGS.md). `sources` : [SOURCES.md](./SOURCES.md). `links`
 (six au plus) dessine les liaisons de la fiche « À propos ». `commandPrefix`
 n'existe que pour un id natif dont la casse des commandes diffère de l'id
-(CloudSync : `cloudSync.*`). `Art` est la vignette de la carte au marché
-d'ajout et sur sa fiche « À propos » : des enfants SVG colorés aux jetons du
-thème.
+(CloudSync : `cloudSync.*`). `Art` est la vignette de la carte au marché d'ajout
+et sur sa fiche « À propos » : des enfants SVG colorés aux jetons du thème.
 
 ### Le client
 
@@ -615,7 +673,8 @@ Par service (`FeatureServiceDeps`, `_sdk/service.ts`) :
 - `repo`, `listWorkspaceIds()`, `storeFor(ws)`, `cipherFor(ws)` (étage ouvert
   seul), `deveyeFor(ws)` (`notify`), `devicesFor(ws)`, `membersFor(ws)` ;
 - `devices` (`find`, `isOnline`), `telemetry`, `agents`, `accounts`, `usage`,
-  `accountMail`, `domains` (`findByHost`, `get`, `listVerified`) ;
+  `accountMail`, `domains` (`findByHost`, `get`, `listVerified`), `geo`
+  (`country`, `attribution`) ;
 - `access.feature(ws, userId, { level, extras, itemId })` et
   `access.device(ws, userId, deviceId, extras)` : un verdict `{ ok }` ou
   `{ ok: false, reason }`, relu à chaque appel ;
@@ -634,8 +693,8 @@ Par entrée serveur (`FeatureServer`) : `createRepo`, `features`,
 `externalServices`, `mailSamples`, `e2e`.
 
 Par service créé (`FeatureService`) : `start`, `stop`, `agentHooks`,
-`providers`, `publicRoutes`, `domainRoot`, `onPlanPause`, `onAccountDeleted`,
-`health`.
+`providers`, `publicRoutes`, `domainRoot`, `ownHosts`, `hostRequest`,
+`onPlanPause`, `onAccountDeleted`, `health`.
 
 Par entrée client (`FeatureClient`) : `Widget`, `Full`, `AccountView`,
 `AdminView`, `Art`, `settingsPanels`, `TopbarWidget`, `cacheDurationMinutes`,

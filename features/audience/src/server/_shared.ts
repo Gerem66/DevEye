@@ -10,9 +10,9 @@ import {
     type AudienceSiteRow
 } from '../contracts/domain';
 import { PROJECTS_USAGE_PROVIDER, type ProjectsUsageProvider, type ProjectUsage } from '@deveye/types/sdk';
-import { FeatureError, type SdkCipher, type SdkFeatureContext } from '@deveye/types/sdk/server';
+import { FeatureError, originHost, type SdkCipher, type SdkFeatureContext } from '@deveye/types/sdk/server';
 
-import { normalizeHost, normalizePath } from './normalize';
+import { normalizePath } from './normalize';
 import type { AudienceMetricsRow, AudienceRepo, AudienceSiteWithStatsRow } from './repo';
 import type { AudienceIngest } from './service';
 
@@ -82,7 +82,7 @@ export function generatePublicKey(): string {
  */
 export function packOrigins(origins: string[]): string | null {
     if (origins.some((origin) => origin.trim() === AUDIENCE_ORIGIN_ANY)) return AUDIENCE_ORIGIN_ANY;
-    const hosts = [...new Set(origins.map(normalizeHost).filter((h) => h.length > 0))];
+    const hosts = [...new Set(origins.map(originHost).filter((h) => h.length > 0))];
     return hosts.length > 0 ? hosts.join('\n') : null;
 }
 

@@ -2,6 +2,7 @@ import {
     AUDIENCE_FORM_SUBMISSIONS_MAX,
     AUDIENCE_SUBMISSION_BAN_SECONDS,
     AUDIENCE_MAX_FORMS,
+    AUDIENCE_LABEL_MAX_LENGTH,
     AUDIENCE_SESSION_GAP_SECONDS,
     type AudienceEventInput,
     type AudienceFieldValue,
@@ -11,24 +12,24 @@ import {
     type AudienceSiteRow,
     type AudienceVisitorMode
 } from '../contracts/domain';
-import type { FeatureService, FeatureServiceDeps, SdkCipher } from '@deveye/types/sdk/server';
-
 import {
-    dayBounds,
-    dayKey,
-    labelRef,
-    monthKey,
-    normalizePath,
+    looksLikeBot,
     normalizeReferrer,
-    originAllowed,
-    persistentVisitorRef,
-    visitorRef
-} from './normalize';
+    parseUserAgent,
+    visitorRef,
+    type FeatureService,
+    type FeatureServiceDeps,
+    type SdkCipher
+} from '@deveye/types/sdk/server';
+
+import { dayBounds, dayKey, labelRef, monthKey, normalizePath, originAllowed, persistentVisitorRef } from './normalize';
 import { countAnswers } from './answers';
 import type { AudienceRepo, PendingEventRow } from './repo';
 import { validateSubmission, type ValidationReason } from './validate';
 import { nameRef, parseOrigins, readJson } from './_shared';
-import { looksLikeBot, parseUserAgent } from './userAgent';
+
+/** Le navigateur ou le système qu'aucune règle ne reconnaît : le libellé que les statistiques gardent. */
+const UNKNOWN_LABEL = 'Autre';
 
 /**
  * L'ingestion de l'audience : le seul chemin de DevEye ouvert sur Internet.
@@ -340,11 +341,11 @@ export class AudienceIngest {
                 kind: event.type === 'event' ? 1 : 0,
                 path: normalizePath(event.path),
                 name,
-                referrer: normalizeReferrer(event.referrer, site.origins),
+                referrer: normalizeReferrer(event.referrer, site.origins, AUDIENCE_LABEL_MAX_LENGTH),
                 // Ce que le client déclare l'emporte sur ce qu'on devine : un client natif
                 // sait, là où le user-agent est une supposition.
-                browser: event.browser?.trim() || ua.browser,
-                os: event.os?.trim() || ua.os,
+                browser: event.browser?.trim() || ua.browser || UNKNOWN_LABEL,
+                os: event.os?.trim() || ua.os || UNKNOWN_LABEL,
                 device: event.device?.trim() || ua.device,
                 timezone: event.timezone?.trim() || null,
                 language: event.language?.trim().slice(0, 35) || null,

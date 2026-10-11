@@ -2,6 +2,7 @@ import type { ExternalService, ExternalServiceFact } from '@deveye/types';
 
 import { status } from '@/status';
 import { proxyLastReadAt } from '@/Services/domains/proxy';
+import { geoip } from '@/Services/geoip';
 import { objectStorageUsage, probeObjectStorage, type ObjectStorageUsage } from '@/Services/objectStorage';
 import { sizeFr } from '@/Services/quota';
 import { serverMail } from '@/Services/serverMail';
@@ -237,6 +238,33 @@ async function statusPage(base: HostBase): Promise<ExternalService> {
     return pollingClient(base, statusProbeLastReadAt(), [{ label: 'Adresse', value: env.STATUS_PAGE_URL }]);
 }
 
+async function countries(host: HostBase): Promise<ExternalService> {
+    const base = { ...host, provider: 'DB-IP' };
+    const state = geoip.state();
+    if (!state.enabled) {
+        return { ...base, state: 'inactive', summary: 'Aucun module installé ne demande le pays des visiteurs.' };
+    }
+    const facts: ExternalServiceFact[] = [];
+    if (state.edition) facts.push({ label: 'Édition', value: state.edition });
+    if (state.loadedAt !== null) {
+        facts.push({ label: 'Chargée', value: new Date(state.loadedAt).toLocaleString('fr-FR') });
+    }
+    if (state.error) facts.push({ label: 'Erreur', value: state.error, tone: 'danger' });
+    if (!state.edition) {
+        return state.error
+            ? { ...base, state: 'down', summary: 'La base ne se télécharge pas : les pays restent inconnus.', facts }
+            : { ...base, state: 'degraded', summary: 'Téléchargement de la base en cours.', facts };
+    }
+    return state.error
+        ? {
+              ...base,
+              state: 'degraded',
+              summary: 'La base du mois ne se télécharge pas : la précédente reste en service.',
+              facts
+          }
+        : { ...base, state: 'ok', summary: 'La base des pays est chargée, et relue chaque mois.', facts };
+}
+
 /** Ce que l'hôte sait de ses propres dépendances, sans module. */
 export function hostServices(refresh: boolean): { base: HostBase; read: Promise<ExternalService> }[] {
     const probes: [HostBase, (base: HostBase) => Promise<ExternalService>][] = [
@@ -244,7 +272,8 @@ export function hostServices(refresh: boolean): { base: HostBase; read: Promise<
         [{ id: 'smtp', name: 'Envoi des mails du serveur' }, smtp],
         [{ id: 'agent-releases', name: 'Versions de l’agent' }, agentReleases],
         [{ id: 'domain-proxy', name: 'Domaines des clients' }, domainProxy],
-        [{ id: 'status-page', name: 'Page d’état' }, statusPage]
+        [{ id: 'status-page', name: 'Page d’état' }, statusPage],
+        [{ id: 'geoip', name: 'Pays des visiteurs' }, countries]
     ];
     return probes.map(([base, probe]) => ({ base, read: probe(base) }));
 }

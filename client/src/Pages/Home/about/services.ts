@@ -55,7 +55,14 @@ export const EXTERNAL_SERVICES: readonly ExternalService[] = [
         name: 'Let’s Encrypt',
         purpose: 'Délivre les certificats HTTPS des domaines que vous reliez et du serveur mail',
         receives: 'Le nom de domaine à certifier, qui devient public',
-        features: ['uptime', 'projects', 'invoicing', 'x-rdv', 'x-hosting', 'mailserver']
+        features: ['uptime', 'projects', 'invoicing', 'x-rdv', 'x-hosting', 'mailserver', 'shortlinks']
+    },
+    {
+        name: 'DB-IP',
+        purpose:
+            'Fournit la base « IP to Country Lite » (licence CC BY 4.0), téléchargée chaque mois par le serveur, qui donne le pays des visiteurs',
+        receives: 'Rien qui vous concerne : la base est lue sur le serveur, aucune adresse ne lui est envoyée',
+        features: ['shortlinks']
     },
     {
         name: 'Gmail (Google)',

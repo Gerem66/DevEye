@@ -57,6 +57,9 @@
     },
     {
       "package": "deveye-feature-invoicing"
+    },
+    {
+      "package": "deveye-feature-shortlinks"
     }
   ]
 }

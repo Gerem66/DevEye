@@ -15,7 +15,7 @@ import { domainFeatures } from './index';
  * fois en tête de fichier (le registre est un état de processus).
  */
 
-type TestFeature = 'x-domyes' | 'x-domno' | 'x-domweb' | 'x-domsite' | 'x-domplan';
+type TestFeature = 'x-domyes' | 'x-domno' | 'x-domweb' | 'x-domsite' | 'x-domplan' | 'x-domown';
 
 function manifest(id: TestFeature, domains: boolean, web = false): FeatureManifest {
     return {
@@ -65,6 +65,18 @@ registerModules([
     { manifest: manifest('x-domno', false), server: { features: [] } },
     { manifest: manifest('x-domweb', true, true), server: { features: [], domains: webHooks } },
     { manifest: manifest('x-domsite', true, true), server: { features: [], domains: webHooks } },
+    {
+        manifest: { ...manifest('x-domown', false), nativeCapabilities: ['routes.public'] },
+        server: {
+            features: [],
+            createService: () => ({
+                start() {},
+                stop() {},
+                ownHosts: ['court.exemple.fr'],
+                hostRequest: () => Promise.resolve()
+            })
+        }
+    },
     {
         manifest: manifest('x-domplan', false),
         server: {
@@ -208,6 +220,14 @@ describe('domain.add', () => {
         const { ctx } = context(memoryRepo());
         await assert.rejects(
             run('domain.add', ctx, { feature: 'x-domyes', host: 'https://exemple.fr/x' }),
+            code('validation')
+        );
+    });
+
+    it('refuse un nom que l’instance tient elle-même', async () => {
+        const { ctx } = context(memoryRepo());
+        await assert.rejects(
+            run('domain.add', ctx, { feature: 'x-domweb', host: 'Court.Exemple.fr' }),
             code('validation')
         );
     });

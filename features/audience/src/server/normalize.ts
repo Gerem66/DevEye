@@ -1,4 +1,5 @@
 import { createHash } from 'crypto';
+import { originHost } from '@deveye/types/sdk/server';
 
 import { AUDIENCE_LABEL_MAX_LENGTH, AUDIENCE_ORIGIN_ANY, type AudiencePlatform } from '../contracts/domain';
 
@@ -51,40 +52,6 @@ export function normalizePath(raw: string): string {
 }
 
 /**
- * L'hôte d'une origine, quelle que soit la forme reçue : `https://exemple.fr`,
- * `exemple.fr:443` et `EXEMPLE.FR/` rendent tous `exemple.fr`. Une seule forme
- * canonique des deux côtés de la comparaison (le réglage saisi et l'en-tête
- * `Origin`), sinon l'autorisation dépendrait de la façon de taper le domaine.
- */
-export function normalizeHost(raw: string): string {
-    let value = raw.trim().toLowerCase();
-    if (!value) return '';
-    value = value.replace(/^[a-z]+:\/\//, '');
-    // Chemin, requête, ancre : rien de tout cela n'appartient à un hôte.
-    value = value.split('/')[0].split('?')[0].split('#')[0];
-    // Le port ne fait pas partie de l'identité d'une origine : le même site en 3000
-    // sur un poste de dev et en 443 en production reste le même. IPv6 littérale
-    // exceptée, dont les deux-points sont l'écriture même.
-    if (!value.startsWith('[')) value = value.split(':')[0];
-    return value;
-}
-
-/**
- * D'où vient le visiteur : l'hôte seul, jamais l'URL complète, qui serait un
- * bon moyen d'accumuler des adresses personnelles sans l'avoir voulu.
- *
- * Une navigation interne ne produit aucun référent, sans quoi le premier du
- * classement serait toujours le site lui-même.
- */
-export function normalizeReferrer(raw: string | undefined, ownHosts: readonly string[]): string | null {
-    if (!raw) return null;
-    const host = normalizeHost(raw);
-    if (!host) return null;
-    if (ownHosts.includes(host)) return null;
-    return host.slice(0, AUDIENCE_LABEL_MAX_LENGTH);
-}
-
-/**
  * L'origine a-t-elle le droit d'écrire sur ce site ? Quatre règles, dans
  * l'ordre :
  *
@@ -114,31 +81,9 @@ export function originAllowed(
     if (origins.includes(AUDIENCE_ORIGIN_ANY)) return true;
     if (platform === 'app') return true;
 
-    const host = originHeader ? normalizeHost(originHeader) : '';
+    const host = originHeader ? originHost(originHeader) : '';
     if (!host) return platform === 'both';
     return origins.includes(host);
-}
-
-/**
- * Le condensé d'un visiteur : `sel + clé du site + IP + user-agent`, tronqué.
- * Ni l'IP ni le user-agent ne sont conservés, ils entrent ici et n'en ressortent
- * pas. Le sel tournant chaque jour, le même visiteur n'est pas reconnaissable
- * d'un jour à l'autre : c'est le prix d'une mesure sans consentement.
- *
- * La clé du site entre dans le condensé pour qu'un même visiteur ne porte pas
- * le même identifiant sur deux sites, donc qu'on ne puisse pas les croiser.
- */
-export function visitorRef(salt: string, siteKey: string, ip: string, userAgent: string): string {
-    return createHash('sha256')
-        .update(salt)
-        .update(' ')
-        .update(siteKey)
-        .update(' ')
-        .update(ip)
-        .update(' ')
-        .update(userAgent)
-        .digest('hex')
-        .slice(0, 16);
 }
 
 /**

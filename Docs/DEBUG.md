@@ -63,11 +63,15 @@ Dans un module : une entrée `e2e` de son `FeatureServer`, un scénario
 (`id`, `label`, `skip?`, `steps`), des étapes qui lèvent pour échouer. Le
 contexte (`SdkE2eContext`) donne un compte jetable connecté, `send` par sa
 socket, `fetch` vers une route publique, `waitFor`, et `defer`, à appeler
-juste après avoir créé quelque chose, avant ce qui peut échouer. Ce qui vit
+juste après avoir créé quelque chose, avant ce qui peut échouer. `fetch` rend
+`status`, `body` et `headers`, aux noms en minuscules et aux valeurs répétées
+jointes par `, ` ; il ne suit pas les redirections : un 302 revient tel quel,
+sa cible dans `headers.location`. Ce qui vit
 dans les tables du module part avec le compte ; seul ce qui vit ailleurs
 (un planificateur en mémoire, un objet chez un tiers) demande un `defer`, et un
 `sweep` s'il peut survivre à un plantage. Exemples : `features/notes`,
-`features/uptime`, `features/audience` ; pour un objet chez un tiers (un client
+`features/uptime`, `features/audience`, `features/shortlinks` (une redirection
+lue par `headers.location`) ; pour un objet chez un tiers (un client
 Stripe), le module de facturation des comptes déclare un `sweep`.
 
 Dans le socle : `src/Services/debug/e2e/scenarios/`, même forme, avec

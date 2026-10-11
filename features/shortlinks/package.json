@@ -1,0 +1,24 @@
+{
+  "name": "deveye-feature-shortlinks",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "description": "Liens courts : un long lien devient une adresse courte qui redirige, compte les visites et se règle (mot de passe, expiration, appareil, campagne), sur l'adresse de DevEye ou sur un domaine à soi.",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./server": "./src/server/index.ts",
+    "./client": "./src/client/index.tsx",
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4"
+  },
+  "peerDependencies": {
+    "@deveye/types": ">=0.24.5",
+    "react": "^19.0.0",
+    "zod": "^4.0.0"
+  }
+}

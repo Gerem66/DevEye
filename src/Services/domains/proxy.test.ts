@@ -19,7 +19,7 @@ function build(rows: { host: string; verified: boolean }[], addresses: Record<st
     const config = createProxyConfig({ routable: () => Promise.resolve(rows) }, SETTINGS, {
         features: () => ['x-rdv'],
         publicHost: HERE,
-        reserved: ['app.deveye.test', 'api.deveye.test'],
+        reserved: () => ['app.deveye.test', 'api.deveye.test'],
         seam,
         clock
     });
@@ -96,7 +96,7 @@ describe('createProxyConfig et les pauses de l’offre', () => {
                 }
             },
             SETTINGS,
-            { features: () => ['x-rdv'], pausedIds: () => ['4', '9'], publicHost: HERE, reserved: [] }
+            { features: () => ['x-rdv'], pausedIds: () => ['4', '9'], publicHost: HERE, reserved: () => [] }
         );
         await config();
         assert.deepEqual(seen, [['4', '9']]);

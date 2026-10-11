@@ -80,6 +80,7 @@ const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
     // Sujet distinct de `devices` : les constats changent à une tout autre
     // cadence que la liste d'appareils.
     sentinel: 'sentinel',
+    shortlinks: 'shortlinks',
     twofa: 'account',
     uptime: 'uptime',
     user: 'account',

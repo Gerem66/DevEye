@@ -5,7 +5,7 @@ import type { FastifyInstance } from 'fastify';
 
 import type { FeatureDomainsRepo } from '@/db/repos/featureDomains';
 import { ORIGINS } from '@/features/_sdk/context';
-import { moduleWebDomainFeatures } from '@/features/_sdk/register';
+import { moduleWebDomainFeatures, reservedHosts } from '@/features/_sdk/register';
 import { planPausedIds } from '@/Services/planPauses';
 import { env } from '@/Utils/Env';
 import { pointsHere, systemWeb, type WebSeam } from './web';
@@ -63,15 +63,14 @@ export function createProxyConfig(
         pausedIds?: () => readonly string[];
         /** L'origine publique, vers laquelle un nom doit pointer. */
         publicHost: string;
-        /** Les noms de DevEye lui-même, qu'aucun client ne peut réclamer. */
-        reserved: readonly string[];
+        /** Les noms que l'instance tient elle-même, qu'aucun client ne peut réclamer : relus à chaque lecture. */
+        reserved: () => readonly string[];
         seam?: WebSeam;
         clock?: () => number;
     }
 ): () => Promise<TraefikConfig> {
     const seam = opts.seam ?? systemWeb;
     const clock = opts.clock ?? Date.now;
-    const reserved = new Set(opts.reserved);
     const cache = new Map<string, { ok: boolean; until: number }>();
 
     const points = async (host: string): Promise<boolean> => {
@@ -85,6 +84,7 @@ export function createProxyConfig(
 
     return async () => {
         const rows = await repo.routable(opts.features(), opts.pausedIds?.() ?? []);
+        const reserved = new Set(opts.reserved());
         const listed = new Set(rows.map((row) => row.host));
         for (const host of cache.keys()) if (!listed.has(host)) cache.delete(host);
 
@@ -135,7 +135,7 @@ export function registerProxyRoute(app: FastifyInstance, repo: FeatureDomainsRep
             features: moduleWebDomainFeatures,
             pausedIds: () => planPausedIds('domains.hosts'),
             publicHost: new URL(ORIGINS.public).hostname,
-            reserved: [new URL(ORIGINS.app).hostname, new URL(ORIGINS.public).hostname]
+            reserved: reservedHosts
         }
     );
     const expected = Buffer.from(`Bearer ${token}`);

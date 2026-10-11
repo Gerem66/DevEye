@@ -47,6 +47,7 @@ lancement sont dans le [README de la racine](../README.md#quick-start).
 | [Facturation](../features/invoicing/README.md)     | les devis et les factures d'un espace, le carnet de clients, le suivi du dû         |
 | [Finances](../features/finance/README.md)          | la trésorerie de l'activité : comptes, opérations, échéances, TVA                   |
 | [Git](../features/git/README.md)                   | les dépôts de l'espace et leur cache                                                |
+| [Liens courts](../features/shortlinks/README.md)   | des adresses courtes qui redirigent, leurs visites, leurs signalements              |
 | [Mail](../features/mail/README.md)                 | les boîtes mail de l'espace, leurs deux paliers, les alertes                        |
 | [Notes](../features/notes/README.md)               | les notes et leurs dossiers, la note privée, la note projetée                       |
 | [Projets](../features/projects/README.md)          | le pilotage du travail, et ses liaisons vers les objets d'espace                    |

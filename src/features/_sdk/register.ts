@@ -10,6 +10,7 @@ import type {
     SdkDomain,
     SdkDomainProbe,
     SdkExternalService,
+    SdkHostRequest,
     SdkMailSample,
     SdkMovePlan,
     SdkPlanPauseChange,
@@ -702,13 +703,62 @@ let servicesCreated = false;
 /** Ce que les modules reçoivent : la recherche à l'appel, parmi les services créés. */
 const PROVIDERS: SdkProviders = { get: <T>(key: string) => moduleProvider<T>(key) };
 
+/**
+ * Ce que le boot refuse des crochets d'hôte : `hostRequest` à côté de
+ * `domainRoot`, sans porte publique, ou sur des domaines qui ne sont pas des
+ * sites ; un hôte propre sans `hostRequest`, mal formé, qui est un nom de
+ * DevEye, ou que deux modules revendiquent. `null` quand tout tient.
+ */
+export function hostHooksProblem(
+    entries: readonly { manifest: FeatureManifest; service: FeatureService }[],
+    originHosts: readonly string[]
+): string | null {
+    const claimed = new Map<string, string>();
+    for (const { manifest, service } of entries) {
+        const id = manifest.id;
+        if (service.hostRequest) {
+            if (service.domainRoot) return `Module « ${id} » : hostRequest et domainRoot s'excluent`;
+            if (!(manifest.nativeCapabilities ?? []).includes('routes.public')) {
+                return `Module « ${id} » : hostRequest exige la capacité 'routes.public'`;
+            }
+            if (manifest.domains && !manifest.domains.web) {
+                return `Module « ${id} » : hostRequest exige domains.web`;
+            }
+        }
+        for (const raw of service.ownHosts ?? []) {
+            if (!service.hostRequest) return `Module « ${id} » : ownHosts sans hostRequest`;
+            const name = normaliseDomainHost(raw);
+            if (!DOMAIN_HOST_PATTERN.test(name)) return `Module « ${id} » : hôte propre invalide « ${raw} »`;
+            if (originHosts.includes(name)) return `Module « ${id} » : « ${name} » est un nom de DevEye`;
+            const other = claimed.get(name);
+            if (other) return `Hôte « ${name} » revendiqué par « ${other} » et « ${id} »`;
+            claimed.set(name, id);
+        }
+    }
+    return null;
+}
+
+const originHosts = (): string[] => [new URL(ORIGINS.app).hostname, new URL(ORIGINS.public).hostname];
+
+/**
+ * Les noms que l'instance tient elle-même : les siens et les hôtes propres des
+ * modules. Aucun espace ne les déclare comme domaine, et le proxy des domaines
+ * ne les route jamais. Lu à l'appel : le proxy s'enregistre avant les services.
+ */
+export function reservedHosts(): string[] {
+    return [
+        ...originHosts(),
+        ...SERVICES.flatMap((s) => (s.service.ownHosts ?? []).map((raw) => normaliseDomainHost(raw)))
+    ];
+}
+
 export function createModuleServices(host: ModuleServiceHost): FeatureService[] {
     // Une seule fois par processus : un second appel doublerait les hooks et
     // laisserait `moduleProvider` sur les premiers services.
     if (servicesCreated) throw new Error('createModuleServices : déjà appelée');
     servicesCreated = true;
     const providers = new Map<string, string>();
-    return MODULES.flatMap((m) => {
+    const services = MODULES.flatMap((m) => {
         if (!m.server.createService) return [];
         const service = m.server.createService(
             createServiceDeps(host, m.manifest, m.repoFor(host.db), PROVIDERS, m.server.quotas)
@@ -727,6 +777,9 @@ export function createModuleServices(host: ModuleServiceHost): FeatureService[] 
         });
         return [service];
     });
+    const problem = hostHooksProblem(SERVICES, originHosts());
+    if (problem) throw new Error(problem);
+    return services;
 }
 
 /** Le démarrage : un service qu'un arrêt complet tient à l'arrêt ne démarre pas. */
@@ -986,12 +1039,16 @@ export async function modulePublicRoutes(app: FastifyInstance, listener: 'app' |
 
     // La racine appartient à l'hôte : servie par le module qui a vérifié ce
     // domaine client, sinon le repli de l'écouteur (le client sur l'app, 404
-    // sur la surface publique).
-    app.get('/', { logLevel: 'silent', config: { rateLimit: DOMAIN_ROOT_RATE_LIMIT } }, async (req, reply) => {
-        if (await serveDomainRoot(req, reply)) return reply;
+    // sur la surface publique). Le reste d'un nom servi en entier passe par la
+    // route générique, que les routes déclarées battent toujours.
+    const serveOrFallBack = async (req: FastifyRequest, reply: FastifyReply) => {
+        if (await serveHost(req, reply)) return reply;
         reply.callNotFound();
         return reply;
-    });
+    };
+    const hostRoute = { logLevel: 'silent' as const, config: { rateLimit: DOMAIN_ROOT_RATE_LIMIT } };
+    app.get('/', hostRoute, serveOrFallBack);
+    if (SERVICES.some((s) => s.service.hostRequest)) app.get('/*', hostRoute, serveOrFallBack);
 
     // L'icône des pages publiques qui n'en ont pas à elles : sur les deux
     // écouteurs, donc sous tout domaine client, et même en maintenance.
@@ -1018,26 +1075,64 @@ const DEVEYE_ICON = (() => {
 /** Une page de statut se rafraîchit en bloc pendant une panne, souvent depuis un même bureau. */
 const DOMAIN_ROOT_RATE_LIMIT = { max: 300, timeWindow: '1 minute' };
 
+/** Une demi-minute : une redirection sous un domaine client ne relit pas la base à chaque passage. */
+const DOMAIN_LOOKUP_MS = 30_000;
+/** Un hôte inventé par requête ne fait pas grossir la table sans fin. */
+const DOMAIN_LOOKUP_MAX = 5_000;
+/** `module:hôte` → son domaine vérifié, ou `null`, négatifs compris. */
+const domainLookups = new Map<string, { expires: number; domain: SdkDomain | null }>();
+
+async function verifiedDomain(s: (typeof SERVICES)[number], host: string): Promise<SdkDomain | null> {
+    if (!s.domains) return null;
+    const key = `${s.manifest.id}:${host}`;
+    const hit = domainLookups.get(key);
+    if (hit && hit.expires > Date.now()) return hit.domain;
+    const found = await s.domains.findByHost(host);
+    const domain = found?.verified ? found : null;
+    if (domainLookups.size >= DOMAIN_LOOKUP_MAX) domainLookups.clear();
+    domainLookups.set(key, { expires: Date.now() + DOMAIN_LOOKUP_MS, domain });
+    return domain;
+}
+
+function hostRequestOf(req: FastifyRequest): SdkHostRequest {
+    const end = req.url.indexOf('?');
+    return {
+        headers: req.headers,
+        body: undefined,
+        query: req.query,
+        host: req.host,
+        ip: req.ip,
+        method: req.method === 'HEAD' ? 'HEAD' : 'GET',
+        path: end === -1 ? req.url : req.url.slice(0, end)
+    };
+}
+
 /**
- * La racine d'un domaine client : le premier module installé qui a VÉRIFIÉ ce
- * nom et qui sert `domainRoot`. Vérifié et pas seulement pointé : le proxy
- * reçoit aussi les noms qui pointent ici avant leur preuve. Les hôtes de
- * DevEye ne sont jamais des domaines clients.
+ * Une requête sans route sous un nom qu'un module sert : son hôte propre
+ * d'abord, puis le premier module installé qui a VÉRIFIÉ ce domaine client et
+ * répond à ce chemin (`domainRoot` à la racine, `hostRequest` partout).
+ * Vérifié et pas seulement pointé : le proxy reçoit aussi les noms qui
+ * pointent ici avant leur preuve. Les hôtes de DevEye ne sont jamais servis.
  */
-async function serveDomainRoot(req: FastifyRequest, reply: FastifyReply): Promise<boolean> {
+async function serveHost(req: FastifyRequest, reply: FastifyReply): Promise<boolean> {
     const host = normaliseDomainHost(req.host ?? '');
     if (!DOMAIN_HOST_PATTERN.test(host)) return false;
-    if (host === new URL(ORIGINS.app).hostname || host === new URL(ORIGINS.public).hostname) return false;
+    if (originHosts().includes(host)) return false;
+    const atRoot = req.url === '/' || req.url.startsWith('/?');
+    const owner = SERVICES.find((s) => s.service.ownHosts?.some((raw) => normaliseDomainHost(raw) === host));
+    if (owner?.service.hostRequest) {
+        if (maintenance.refusesPublic(owner.manifest.id, false)) await replyMaintenance(req, reply);
+        else await owner.service.hostRequest.call(owner.service, hostRequestOf(req), reply, null);
+        return true;
+    }
     for (const s of SERVICES) {
-        const root = s.service.domainRoot;
-        if (!root || !s.domains) continue;
-        const domain = await s.domains.findByHost(host);
-        if (!domain?.verified) continue;
-        if (maintenance.refusesPublic(s.manifest.id, false)) {
-            await replyMaintenance(req, reply);
-            return true;
-        }
-        await root.call(s.service, req, reply, domain);
+        const { domainRoot, hostRequest } = s.service;
+        if (!(atRoot ? (domainRoot ?? hostRequest) : hostRequest)) continue;
+        const domain = await verifiedDomain(s, host);
+        if (!domain) continue;
+        if (maintenance.refusesPublic(s.manifest.id, false)) await replyMaintenance(req, reply);
+        else if (atRoot && domainRoot) await domainRoot.call(s.service, req, reply, domain);
+        else if (hostRequest) await hostRequest.call(s.service, hostRequestOf(req), reply, domain);
         return true;
     }
     return false;

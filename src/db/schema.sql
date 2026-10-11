@@ -1273,6 +1273,106 @@ CREATE TABLE `ft_sentinel_device_config` (
   CONSTRAINT `fk_ft_sentinel_device_config_device` FOREIGN KEY (`device_id`) REFERENCES `devices` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+CREATE TABLE `ft_shortlinks_daily` (
+  `link_id` int NOT NULL,
+  `day` int NOT NULL,
+  `clicks` int NOT NULL DEFAULT '0',
+  `visits` int NOT NULL DEFAULT '0',
+  `bots` int NOT NULL DEFAULT '0',
+  PRIMARY KEY (`link_id`,`day`),
+  CONSTRAINT `fk_ft_shortlinks_daily_link` FOREIGN KEY (`link_id`) REFERENCES `ft_shortlinks_links` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_shortlinks_dims` (
+  `link_id` int NOT NULL,
+  `day` int NOT NULL,
+  `kind` varchar(10) COLLATE utf8mb4_general_ci NOT NULL,
+  `value` varchar(64) COLLATE utf8mb4_general_ci NOT NULL,
+  `visits` int NOT NULL DEFAULT '0',
+  PRIMARY KEY (`link_id`,`day`,`kind`,`value`),
+  KEY `idx_ft_shortlinks_dims_day` (`day`),
+  CONSTRAINT `fk_ft_shortlinks_dims_link` FOREIGN KEY (`link_id`) REFERENCES `ft_shortlinks_links` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_shortlinks_labels` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `workspace_id` int NOT NULL,
+  `kind` varchar(10) COLLATE utf8mb4_general_ci NOT NULL,
+  `label_ref` char(32) COLLATE utf8mb4_general_ci NOT NULL,
+  `content` text COLLATE utf8mb4_general_ci NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_ft_shortlinks_label` (`workspace_id`,`kind`,`label_ref`),
+  CONSTRAINT `fk_ft_shortlinks_labels_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_shortlinks_links` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `workspace_id` int NOT NULL,
+  `user_id` int DEFAULT NULL,
+  `code` char(6) COLLATE utf8mb4_general_ci NOT NULL,
+  `domain_id` int DEFAULT NULL,
+  `slug` varchar(64) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `content` text COLLATE utf8mb4_general_ci NOT NULL,
+  `password_hash` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `expires_at` bigint DEFAULT NULL,
+  `max_visits` int DEFAULT NULL,
+  `visits_total` bigint NOT NULL DEFAULT '0',
+  `clicks_total` bigint NOT NULL DEFAULT '0',
+  `enabled` tinyint NOT NULL DEFAULT '1',
+  `blocked_at` bigint DEFAULT NULL,
+  `blocked_reason` varchar(1000) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `check_enabled` tinyint NOT NULL DEFAULT '1',
+  `check_state` varchar(8) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'unknown',
+  `check_error` varchar(64) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `checked_at` bigint DEFAULT NULL,
+  `check_due` bigint DEFAULT NULL,
+  `created` bigint NOT NULL DEFAULT (unix_timestamp()),
+  `updated` bigint NOT NULL DEFAULT (unix_timestamp()),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_ft_shortlinks_code` (`code`),
+  UNIQUE KEY `uniq_ft_shortlinks_slug` (`domain_id`,`slug`),
+  KEY `idx_ft_shortlinks_ws` (`workspace_id`,`created`),
+  KEY `idx_ft_shortlinks_check` (`check_enabled`,`check_due`),
+  CONSTRAINT `fk_ft_shortlinks_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_shortlinks_reports` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `ref` char(12) COLLATE utf8mb4_general_ci NOT NULL,
+  `link_id` int DEFAULT NULL,
+  `workspace_id` int DEFAULT NULL,
+  `reason` varchar(16) COLLATE utf8mb4_general_ci NOT NULL,
+  `content` text COLLATE utf8mb4_general_ci NOT NULL,
+  `status` varchar(10) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'open',
+  `decision` varchar(1000) COLLATE utf8mb4_general_ci NOT NULL DEFAULT '',
+  `handled_by` int DEFAULT NULL,
+  `created` bigint NOT NULL DEFAULT (unix_timestamp()),
+  `closed_at` bigint DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_ft_shortlinks_report_ref` (`ref`),
+  KEY `idx_ft_shortlinks_reports_status` (`status`,`created`),
+  KEY `idx_ft_shortlinks_reports_link` (`link_id`),
+  CONSTRAINT `fk_ft_shortlinks_report_link` FOREIGN KEY (`link_id`) REFERENCES `ft_shortlinks_links` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_shortlinks_seen` (
+  `day` int NOT NULL,
+  `link_id` int NOT NULL,
+  `visitor_ref` char(16) COLLATE utf8mb4_general_ci NOT NULL,
+  PRIMARY KEY (`day`,`link_id`,`visitor_ref`),
+  KEY `idx_ft_shortlinks_seen_link` (`link_id`),
+  CONSTRAINT `fk_ft_shortlinks_seen_link` FOREIGN KEY (`link_id`) REFERENCES `ft_shortlinks_links` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_shortlinks_usage` (
+  `workspace_id` int NOT NULL,
+  `month` char(7) COLLATE utf8mb4_general_ci NOT NULL,
+  `visits` int NOT NULL DEFAULT '0',
+  `notified` tinyint NOT NULL DEFAULT '0',
+  PRIMARY KEY (`workspace_id`,`month`),
+  CONSTRAINT `fk_ft_shortlinks_usage_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 CREATE TABLE `ft_uptime_deploy_sources` (
   `service_id` int NOT NULL,
   `kind` varchar(8) COLLATE utf8mb4_general_ci NOT NULL,

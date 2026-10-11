@@ -265,6 +265,10 @@
     -webkit-mask-image: url(/icons/uptime.svg);
     mask-image: url(/icons/uptime.svg);
 }
+.icon.icon-shortlinks {
+    -webkit-mask-image: url(/icons/shortlinks.svg);
+    mask-image: url(/icons/shortlinks.svg);
+}
 .icon.icon-cloud {
     -webkit-mask-image: url(/icons/cloud.svg);
     mask-image: url(/icons/cloud.svg);

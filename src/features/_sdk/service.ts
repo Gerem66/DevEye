@@ -33,6 +33,7 @@ import { sdkFleetDomains } from './domains';
 import { createFeatureStore } from './store';
 import { sdkHub } from './host';
 import { objectStoreFor } from '@/Services/objectStorage';
+import { GEOIP_ATTRIBUTION, geoip } from '@/Services/geoip';
 import { metricIntervalOf } from '@/agent/cadence';
 
 /**
@@ -113,6 +114,7 @@ export function createServiceDeps(
                 | 'accounts.mail'
                 | 'members.read'
                 | 'objects'
+                | 'geoip'
         ) =>
         (): void => {
             if (!capabilities.has(cap)) {
@@ -129,6 +131,7 @@ export function createServiceDeps(
     const gateMail = gate('accounts.mail');
     const gateMembers = gate('members.read');
     const gateObjects = gate('objects');
+    const gateGeo = gate('geoip');
     const keys = serverKeysOf(host.crypt, manifest.id);
 
     return {
@@ -204,6 +207,10 @@ export function createServiceDeps(
             isOnline: (deviceId) => (gateDevices(), sdkHub().isOnline(deviceId))
         },
         telemetry: createTelemetry(host.db, gate('telemetry.read')),
+        geo: {
+            country: (ip) => (gateGeo(), geoip.country(ip)),
+            attribution: GEOIP_ATTRIBUTION
+        },
         live: {
             // Le sujet du module (son id), ou ceux que le service nomme : la même
             // règle que `mutates`, sans le filet du boot (un sujet inconnu n'a

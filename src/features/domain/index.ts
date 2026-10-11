@@ -16,7 +16,7 @@ import { httpsMode } from '@/Services/domains/proxy';
 import { schedulePlanReconcile } from '@/Services/planPauses';
 import { verifyFeatureDomain } from '@/Services/domains/verifier';
 import { toSdkDomain } from '../_sdk/domains';
-import { moduleDomains, moduleWebDomainFeatures } from '../_sdk/register';
+import { moduleDomains, moduleWebDomainFeatures, reservedHosts } from '../_sdk/register';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import { assertCoreLimit, coreAllowance } from '../_quota';
 
@@ -117,6 +117,9 @@ const addFeature = defineFeature({
                 'validation',
                 'Nom de domaine attendu, sans https:// ni chemin (ex. rdv.exemple.fr).'
             );
+        }
+        if (reservedHosts().includes(host)) {
+            throw new FeatureError('validation', 'Ce nom appartient à DevEye : choisissez un domaine à vous.');
         }
         // Tous espaces confondus : deux espaces ne peuvent pas servir le même nom.
         if (await ctx.db.featureDomains.findByHost(input.feature, host)) {

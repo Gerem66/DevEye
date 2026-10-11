@@ -4,9 +4,8 @@ import {
     audienceIngestSchema,
     audienceSubmitSchema
 } from '../contracts/domain';
-import type { SdkPublicApp, SdkPublicReply, SdkPublicRequest } from '@deveye/types/sdk/server';
+import { originHost, type SdkPublicApp, type SdkPublicReply, type SdkPublicRequest } from '@deveye/types/sdk/server';
 
-import { normalizeHost } from './normalize';
 import { TRACKER_SCRIPT, TRACKER_SCRIPT_ETAG } from './script';
 import type { AudienceIngest, IngestRequest, SubmitOutcome } from './service';
 
@@ -321,7 +320,7 @@ function redirectTarget(req: SdkPublicRequest, next: string | null): string | nu
         const base = new URL(origin);
         const target = new URL(next, base);
         if (target.protocol !== 'http:' && target.protocol !== 'https:') return null;
-        if (normalizeHost(target.host) !== normalizeHost(base.host)) return null;
+        if (originHost(target.host) !== originHost(base.host)) return null;
         return target.toString();
     } catch {
         return null;

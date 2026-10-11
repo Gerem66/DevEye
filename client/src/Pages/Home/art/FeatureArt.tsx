@@ -413,6 +413,19 @@ const ART: Record<ArtId, ReactNode> = {
             <rect x='96' y='68' width='24' height='8' rx='4' fill={A} opacity='0.85' />
         </>
     ),
+    // Une longue adresse repliée en une courte, et la courbe des visites qui passent par elle.
+    shortlinks: (
+        <>
+            <rect x='16' y='12' width='128' height='12' rx='6' fill={M} opacity='0.14' />
+            <Line x={24} y={15.5} w={108} o={0.35} />
+            <path d='M80 28v9M75 32.5l5 5 5-5' stroke={A} {...thin} />
+            <rect x='48' y='42' width='64' height='14' rx='7' fill={A} opacity='0.16' />
+            <rect x='48' y='42' width='64' height='14' rx='7' stroke={A} {...thin} />
+            <Line x={58} y={46.5} w={36} c={A} o={0.85} />
+            <path d='M19 76 36 71 53 73 70 66 88 69 105 62 122 64 140 58' stroke={A} {...stroke} />
+            <circle cx='140' cy='58' r='3.5' fill={A} />
+        </>
+    ),
 
     // Une machine : son nom, son état, et l'activité qui la traverse.
     device: (

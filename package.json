@@ -63,6 +63,7 @@
     "fastify": "^5.8.5",
     "jose": "^6.2.3",
     "libphonenumber-js": "^1.13.10",
+    "mmdb-lib": "^3.0.3",
     "mysql2": "^3.22.5",
     "nodemailer": "^10.0.10",
     "pino": "^10.3.1",

@@ -11,6 +11,8 @@ const COMMAND_TIMEOUT_MS = 20_000;
 export interface HttpReply {
     status: number;
     body: string;
+    /** Noms en minuscules, valeurs répétées jointes par `, `. */
+    headers: Readonly<Record<string, string>>;
 }
 
 interface Pending {
@@ -92,7 +94,11 @@ export function createTestClient({
                 signal: AbortSignal.any([signal, AbortSignal.timeout(HTTP_TIMEOUT_MS)])
             });
             for (const c of [response.headers['set-cookie'] ?? []].flat()) absorb(c);
-            return { status: response.statusCode, body: await response.body.text() };
+            const replyHeaders: Record<string, string> = {};
+            for (const [name, value] of Object.entries(response.headers)) {
+                if (value !== undefined) replyHeaders[name.toLowerCase()] = [value].flat().join(', ');
+            }
+            return { status: response.statusCode, body: await response.body.text(), headers: replyHeaders };
         },
 
         /** Une route de l'API : ses données, ou le refus du serveur en `FeatureError`. */

@@ -124,8 +124,8 @@ champ `channels` du grant de feature, confié fonctionnalité par fonctionnalit�
 (voir [NOTIFICATIONS.md](./NOTIFICATIONS.md) §5).
 
 **Droits par feature** : une carte uniforme `feature → read | write`, absent =
-aucun accès. Vingt entrées pour les fonctionnalités du dépôt
-(`workspaceFeatureIdSchema`, de `devices` à `invoicing`), plus les identifiants
+aucun accès. Vingt et une entrées pour les fonctionnalités du dépôt
+(`workspaceFeatureIdSchema`, de `devices` à `shortlinks`), plus les identifiants
 `x-…` des modules externes (`featureIdSchema`). Le droit `devices` couvre la
 tuile de supervision des appareils.
 

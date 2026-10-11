@@ -32,6 +32,7 @@ Une carte a un état parmi quatre : Opérationnel, Dégradé, En panne, Inactif
 | Versions de l'agent        | `AGENT_DOWNLOAD_TOKEN`, `AGENT_REPO`    | l'issue de la synchronisation au démarrage                                                                                                          |
 | Domaines des clients       | `DOMAIN_PROXY_TOKEN`                    | la dernière lecture de la liste par Traefik                                                                                                         |
 | Page d'état                | `STATUS_PAGE_URL`, `STATUS_PROBE_TOKEN` | la dernière sonde de la page d'état                                                                                                                 |
+| Pays des visiteurs         | aucune                                  | l'édition de la base DB-IP en mémoire, l'instant de son chargement, l'erreur du dernier téléchargement                                              |
 
 L'espace occupé se mesure en listant tout le bucket, une requête par millier
 d'objets : une mesure par heure au plus, et la page n'attend pas plus de 5 s
@@ -39,6 +40,19 @@ une mesure en cours. Le coût estimé multiplie cet espace par
 `STORAGE_S3_PRICE_PER_GB` (€ HT par Go et par mois) ; sans elle, la page le dit
 plutôt que d'inventer un tarif. Au-delà de 50 Tio, le Go coûte moins cher chez
 OVHcloud et l'estimation est majorée.
+
+Pays des visiteurs est la base gratuite de DB-IP (IP to Country Lite, sous
+CC BY 4.0) : elle donne le pays d'une adresse IP aux modules qui déclarent la
+capacité `geoip` ([FEATURE_SDK.md](./FEATURE_SDK.md#le-pays-dun-visiteur)),
+comme Liens courts. Sans module installé qui la déclare, rien ne se télécharge
+et la carte est inactive. Sinon, le serveur la télécharge au démarrage, sans
+le faire attendre, et la tient en mémoire : aucune adresse ne part vers un tiers
+à la lecture. Il prend l'édition du mois, ou celle du mois précédent tant que la
+nouvelle n'a pas paru, et revérifie chaque jour, ou dans l'heure après un échec.
+Quand aucune édition ne se télécharge, un avertissement part dans les journaux
+et les pays restent inconnus (la carte est en panne), ou la dernière édition
+chargée reste en service (la carte est dégradée). Partout où un pays
+s'affiche, la licence exige la mention « IP Geolocation by DB-IP » et son lien.
 
 ## Les cartes des modules
 

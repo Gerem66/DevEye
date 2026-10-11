@@ -42,7 +42,18 @@ export const CREDITS: readonly CreditGroup[] = [
             { name: 'sanitize-html', license: 'MIT', purpose: 'Le nettoyage des contenus affichés' },
             { name: 'libphonenumber-js', license: 'MIT', purpose: 'Les numéros de téléphone' },
             { name: 'node-qrcode', license: 'MIT', purpose: 'Les QR codes' },
+            { name: 'mmdb-lib', license: 'MIT', purpose: 'La lecture de la base des pays' },
             { name: 'Pino', license: 'MIT', purpose: 'Les journaux du serveur' }
+        ]
+    },
+    {
+        title: 'Données',
+        items: [
+            {
+                name: 'DB-IP Lite (IP to Country)',
+                license: 'CC BY 4.0',
+                purpose: 'Le pays des visiteurs des liens courts. IP Geolocation by DB-IP (https://db-ip.com)'
+            }
         ]
     },
     {
