@@ -14,6 +14,7 @@ import { defineSdkFeature, FeatureError, logFailure } from '@deveye/types/sdk/se
 
 import * as mailClient from './client';
 import { parseAndSanitize } from './parse';
+import { imageSourcesFor } from './sanitize';
 import type { MailRepo } from './repo';
 import { cacheEnvelopes, refreshFolderCounts } from './sync';
 import {
@@ -185,9 +186,11 @@ export const mailMessageGetFeature = defineSdkFeature<
         });
         const settings = await ctx.repo.settings.get(ctx.workspaceId);
         const bodyRenderMode = settings?.body_render_mode ?? 'embedded';
+        const allowRemoteImages = input.allowRemoteImages || account.allow_remote_images === 1;
+        const trustedDomains = parseTrustedImageDomains(settings?.trusted_image_domains ?? null);
         const body = await parseAndSanitize(raw, {
-            allowRemoteImages: input.allowRemoteImages || account.allow_remote_images === 1,
-            trustedDomains: parseTrustedImageDomains(settings?.trusted_image_domains ?? null),
+            allowRemoteImages,
+            trustedDomains,
             preserveStyling: bodyRenderMode === 'raw'
         });
 
@@ -211,7 +214,8 @@ export const mailMessageGetFeature = defineSdkFeature<
                 headers: body.headers,
                 sizeBytes: raw.length,
                 folderPath: folder.imap_path,
-                bodyRenderMode
+                bodyRenderMode,
+                imageSources: imageSourcesFor(allowRemoteImages, trustedDomains)
             }
         };
     }

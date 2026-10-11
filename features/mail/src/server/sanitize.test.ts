@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { sanitizeMailHtml } from './sanitize';
+import { imageSourcesFor, sanitizeMailHtml } from './sanitize';
 
 /**
  * La barrière HTML des corps de message : ce qui doit tomber tombe quel que
@@ -77,5 +77,17 @@ describe('sanitizeMailHtml', () => {
         assert.ok(html.includes('url(none)'));
         assert.equal(remoteImagesBlocked, true);
         assert.deepEqual(blockedSources, ['pixel.tracker.fr']);
+    });
+});
+
+describe('imageSourcesFor', () => {
+    it('ouvre tout https quand les images sont autorisées, sinon les seuls domaines de confiance et leurs sous-domaines', () => {
+        assert.deepEqual(imageSourcesFor(true, ['cdn.exemple.fr']), ['data:', 'https:']);
+        assert.deepEqual(imageSourcesFor(false, ['cdn.exemple.fr']), [
+            'data:',
+            'https://cdn.exemple.fr',
+            'https://*.cdn.exemple.fr'
+        ]);
+        assert.deepEqual(imageSourcesFor(false, []), ['data:']);
     });
 });

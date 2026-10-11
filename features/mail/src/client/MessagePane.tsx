@@ -36,11 +36,17 @@ function formatFullDate(epochSeconds: number): string {
     });
 }
 
-/** Minimal standalone document the "raw" mode iframe renders — white background, the message's own styling untouched. */
-function rawDocument(bodyHtml: string): string {
-    // `meta referrer` couvre tout ce que le document chargerait, au-dela des
-    // `referrerpolicy` que le serveur pose sur les images.
-    return `<!doctype html><html><head><meta charset="utf-8"><meta name="referrer" content="no-referrer"><base target="_blank"></head><body style="background:#fff;color:#111;margin:0;padding:16px;font-family:sans-serif;">${bodyHtml}</body></html>`;
+/**
+ * Minimal standalone document the "raw" mode iframe renders — white background,
+ * the message's own styling untouched. Sa politique de contenu ne laisse charger
+ * que les images que le serveur a admises (`imageSources`) : un `url()` distant
+ * que le nettoyage textuel a manqué (`image-set`, échappement CSS) ne part pas.
+ * `meta referrer` couvre tout ce que le document chargerait, au-delà des
+ * `referrerpolicy` que le serveur pose sur les images.
+ */
+function rawDocument(bodyHtml: string, imageSources: readonly string[]): string {
+    const policy = `default-src 'none'; style-src 'unsafe-inline'; img-src ${imageSources.join(' ')}`;
+    return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${policy}"><meta name="referrer" content="no-referrer"><base target="_blank"></head><body style="background:#fff;color:#111;margin:0;padding:16px;font-family:sans-serif;">${bodyHtml}</body></html>`;
 }
 
 /**
@@ -208,7 +214,7 @@ export function MessagePane({
                         className={styles.messageBodyFrame}
                         sandbox=''
                         title='Contenu du message'
-                        srcDoc={rawDocument(message.bodyHtml)}
+                        srcDoc={rawDocument(message.bodyHtml, message.imageSources)}
                     />
                 ) : (
                     <div className={styles.messageBody} dangerouslySetInnerHTML={{ __html: message.bodyHtml }} />

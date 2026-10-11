@@ -154,7 +154,10 @@ export function sanitizeMailHtml(rawHtml: string, opts: SanitizeOptions): Saniti
 
     // `<style>`/`style=""` content isn't parsed as CSS above, so a
     // `background-image: url(...)` could still act as a tracking pixel in `raw`
-    // mode. Best-effort text-level strip, same trust rules as the `<img>` pass.
+    // mode. Text-level strip, same trust rules as the `<img>` pass: it misses
+    // `image-set(...)`, CSS escapes and `&quot;`-quoted urls, which is why the
+    // frame's own Content-Security-Policy (`imageSourcesFor`) is what blocks;
+    // this pass is what lights the "load images" button.
     if (opts.preserveStyling && !opts.allowRemoteImages) {
         html = html.replace(
             /url\(\s*(['"]?)((?:https?:)?\/\/[^'")]+)\1\s*\)/gi,
@@ -169,4 +172,14 @@ export function sanitizeMailHtml(rawHtml: string, opts: SanitizeOptions): Saniti
     }
 
     return { html, remoteImagesBlocked, blockedSources: Array.from(blockedHosts) };
+}
+
+/**
+ * The image sources the `raw` frame's Content-Security-Policy allows: exactly
+ * what the sanitizer let through, so a remote url the text pass missed still
+ * never loads. A trusted domain covers its subdomains, as `isTrusted` does.
+ */
+export function imageSourcesFor(allowRemoteImages: boolean, trustedDomains: string[]): string[] {
+    if (allowRemoteImages) return ['data:', 'https:'];
+    return ['data:', ...trustedDomains.flatMap((domain) => [`https://${domain}`, `https://*.${domain}`])];
 }

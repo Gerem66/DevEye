@@ -307,7 +307,14 @@ export const mailMessageSchema = mailMessageSummarySchema.extend({
      * Mode `bodyHtml` was sanitized for. The client renders with it, never with
      * the current setting: a `raw` body keeps `<style>` and must stay in the iframe.
      */
-    bodyRenderMode: mailBodyRenderModeSchema
+    bodyRenderMode: mailBodyRenderModeSchema,
+    /**
+     * The image sources the `raw` frame may load, as Content-Security-Policy
+     * sources: what the sanitizer let through (`data:`, then `https:` when remote
+     * images are allowed, or the trusted domains). Set by the server, so the
+     * frame blocks what a text-level sanitizer could miss.
+     */
+    imageSources: z.array(z.string())
 });
 export type MailMessage = z.infer<typeof mailMessageSchema>;
 

@@ -178,7 +178,11 @@ export function mailRoutes(app: SdkPublicApp, deps: MailRouteDeps, seam: MailRou
             const attachment = await findAttachmentBytes(raw, claims.data.attachmentId);
             if (!attachment) return reply.code(404).send({ error: 'not_found' });
 
-            reply.header('Content-Type', attachment.mimeType || 'application/octet-stream');
+            // Toujours un fichier à enregistrer, jamais le type que l'expéditeur
+            // annonce : du HTML ou du SVG servis comme tels sur l'origine de
+            // l'app y tourneraient avec ses droits.
+            reply.header('Content-Type', 'application/octet-stream');
+            reply.header('X-Content-Type-Options', 'nosniff');
             reply.header('Content-Length', String(attachment.content.length));
             reply.header('Content-Disposition', contentDisposition(attachment.filename));
             return reply.send(attachment.content);

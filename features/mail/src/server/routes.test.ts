@@ -353,7 +353,9 @@ describe('GET /api/mail/attachment', () => {
         assert.deepEqual(fetched, [{ imapPath: 'INBOX', uid: 5 }]);
         assert.ok(Buffer.isBuffer(state.payload));
         assert.equal((state.payload as Buffer).toString(), '%PDF-1.4 test');
-        assert.equal(state.headers['Content-Type'], 'application/pdf');
+        // Jamais le type annoncé par l'expéditeur : toujours un fichier à enregistrer.
+        assert.equal(state.headers['Content-Type'], 'application/octet-stream');
+        assert.equal(state.headers['X-Content-Type-Options'], 'nosniff');
         assert.equal(state.headers['Content-Length'], String(Buffer.byteLength('%PDF-1.4 test')));
         assert.equal(
             state.headers['Content-Disposition'],
