@@ -58,6 +58,7 @@ const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
     // projet, qui n'est pas forcément l'actif.
     links: 'projects',
     logs: null,
+    loginChecks: 'account',
     mail: 'mail',
     // Le courrier qui passe bat un sujet secondaire (`mailserverFlow`), par le moteur : celui-ci ne sert
     // qu'aux écritures d'un membre.

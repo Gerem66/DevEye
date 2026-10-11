@@ -14,11 +14,13 @@ import { refreshSecrecyStatus } from '@/stores/secrecy';
 import {
     STEP_UP_MINUTES_MAX,
     STEP_UP_MINUTES_MIN,
+    type LoginChecksStatus,
     type SecrecyStatus,
     type StepUpStatus,
     type TwoFactorStatus
 } from '@deveye/types';
 import type { FeatureProps } from '../types';
+import { EmailCheckRow, TrustedBrowsersCard } from './LoginChecks';
 import { MinutesEditor } from './MinutesEditor';
 import { SecurityDialog } from './SecurityDialog';
 import styles from './Security.module.css';
@@ -170,6 +172,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
     const [secrecy, setSecrecy] = useState<SecrecyStatus | null>(null);
     const [securityOpen, setSecurityOpen] = useState(false);
     const [stepUp, setStepUp] = useState<StepUpStatus | null>(null);
+    const [checks, setChecks] = useState<LoginChecksStatus | null>(null);
 
     const fetchStatus = useCallback(async () => {
         try {
@@ -200,27 +203,38 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
         }
     }, []);
 
+    const fetchChecks = useCallback(async () => {
+        try {
+            const res = await ws.send('loginChecks.status', {});
+            setChecks(res.status);
+        } catch {
+            // ignore
+        }
+    }, []);
+
     useEffect(() => {
         void fetchStatus();
         void fetchSecrecy();
         void fetchStepUp();
-    }, [fetchStatus, fetchSecrecy, fetchStepUp]);
+        void fetchChecks();
+    }, [fetchStatus, fetchSecrecy, fetchStepUp, fetchChecks]);
 
-    // Keeps the profile's "Sécurité x / 3" counter live. Waits for both statuses
+    // Keeps the profile's "Sécurité x / y" counter live. Waits for every status
     // to avoid flicker, and counts the re-auth window only when it is strict AND
-    // encryption is on (see STRICT_RE_AUTH_MINUTES below).
+    // encryption is on.
     useEffect(() => {
-        if (status === null || secrecy === null) return;
+        if (status === null || secrecy === null || checks === null) return;
         const reAuth = secrecy.reAuthInterval ?? 60;
         const reAuthValidation = secrecy.enabled && reAuth <= 300;
         updateUser({
             security: {
+                loginConfirmation: checks.email.available ? checks.email.enabled : null,
                 twoFactor: status.enabled,
                 passwordEncryption: secrecy.enabled,
                 reAuthValidation
             }
         });
-    }, [status, secrecy, updateUser]);
+    }, [status, secrecy, checks, updateUser]);
 
     const startSetup = () => {
         setError(null);
@@ -393,6 +407,10 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                 <div className={styles.loader}>Chargement...</div>
             ) : (
                 <div className={styles.content}>
+                    {checks?.email.available && (
+                        <EmailCheckRow checks={checks} onChange={setChecks} extraColumn={extraColumn} />
+                    )}
+
                     <div className={styles.statusCard}>
                         <div className={`${styles.statusIcon} ${status?.enabled ? styles.enabled : ''}`}>
                             <span className='icon icon-shield' />
@@ -563,6 +581,10 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                             </div>
                         </div>
                     </div>
+
+                    {checks?.email.available && (
+                        <TrustedBrowsersCard checks={checks} onChange={setChecks} extraColumn={extraColumn} />
+                    )}
 
                     {error && <div className={styles.error}>{error}</div>}
 

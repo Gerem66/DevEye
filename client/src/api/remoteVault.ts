@@ -52,6 +52,22 @@ export async function deleteRemoteToken(localUserId: number, instanceId: number)
     await run('readwrite', (s) => s.delete(keyOf(localUserId, instanceId)));
 }
 
+/**
+ * Le jeton de confiance d'un navigateur pour le compte de là-bas : ses
+ * connexions y sautent les codes envoyés par mail ou SMS. Gardé à part du jeton
+ * de rafraîchissement, qu'une session morte efface.
+ */
+const trustKeyOf = (localUserId: number, instanceId: number): string => `trust:${keyOf(localUserId, instanceId)}`;
+
+export async function readRemoteTrust(localUserId: number, instanceId: number): Promise<string | null> {
+    const value = await run<unknown>('readonly', (s) => s.get(trustKeyOf(localUserId, instanceId)));
+    return typeof value === 'string' ? value : null;
+}
+
+export async function writeRemoteTrust(localUserId: number, instanceId: number, token: string): Promise<void> {
+    await run('readwrite', (s) => s.put(token, trustKeyOf(localUserId, instanceId)));
+}
+
 export async function clearRemoteVault(): Promise<void> {
     await run('readwrite', (s) => s.clear());
 }

@@ -85,9 +85,10 @@ export const env = {
     // flagging a build that's merely slow. Raise it above your agent build time.
     AGENT_SYNC_TIMEOUT_SECONDS: getEnvVar('AGENT_SYNC_TIMEOUT_SECONDS', 'number', false) || 300,
 
-    // Interim 2FA challenge token (between password check and TOTP verify).
     TWOFA_ISSUER: getEnvVar('TWOFA_ISSUER', 'string', false) || 'DevEye',
-    TWOFA_CHALLENGE_TTL_SECONDS: getEnvVar('TWOFA_CHALLENGE_TTL_SECONDS', 'number', false) || 60 * 5,
+    // Une connexion en cours, du mot de passe au dernier code : le temps
+    // d'aller lire un mail ou un SMS.
+    LOGIN_CHALLENGE_TTL_SECONDS: getEnvVar('LOGIN_CHALLENGE_TTL_SECONDS', 'number', false) || 60 * 15,
     // La vérification des domaines des fonctionnalités : cadence de la passe,
     // puis délai avant de revoir un domaine sain ou un domaine en attente.
     DOMAIN_PROBE_TICK_SECONDS: getEnvVar('DOMAIN_PROBE_TICK_SECONDS', 'number', false) || 300,

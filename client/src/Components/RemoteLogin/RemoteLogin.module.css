@@ -28,3 +28,26 @@
     font-size: 0.85rem;
     color: var(--danger);
 }
+
+/* « Renvoyer le code » : un geste discret, sous la case de confiance. */
+.link {
+    align-self: flex-start;
+    padding: 0;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 0.85rem;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.link:hover:not(:disabled),
+.link:focus-visible {
+    color: var(--text-primary);
+}
+
+.link:disabled {
+    color: var(--text-muted);
+    cursor: default;
+}

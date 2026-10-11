@@ -57,8 +57,11 @@ Le transport se décide à l'en-tête `Origin` (`src/auth/federation.ts`) :
 Les deux canaux ne se mélangent jamais : une origine fédérée n'est jamais servie
 sur la foi d'un cookie (deux instances sous un même domaine parent partageraient
 les leurs via `COOKIE_DOMAIN`), ni notre page sur la foi d'un en-tête. En
-transport `bearer`, `login`, `2fa/challenge`, `refresh` et `change-password`
-rendent les jetons dans le corps (`tokens`) et ne posent aucun cookie.
+transport `bearer`, `login`, `login/verify`, `refresh` et `change-password`
+rendent les jetons dans le corps (`tokens`) et ne posent aucun cookie. Une
+connexion par étapes y nomme sa connexion en cours dans le corps
+(`challenge`), et un navigateur de confiance y présente son jeton dans celui de
+`login` (`trustToken`), que la page garde elle-même.
 
 **La socket.** Un navigateur ne sait poser aucun en-tête sur une WebSocket. La
 page demande donc un **ticket** (`POST /api/auth/ws-ticket`, porteur seulement)

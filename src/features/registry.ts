@@ -10,6 +10,7 @@ import { notifyFeatures } from './notify';
 import { domainFeatures } from './domain';
 import { sharingFeatures } from './sharing';
 import { secrecyFeatures } from './secrecy';
+import { loginChecksFeatures } from './loginChecks';
 import { stepUpFeatures } from './stepup';
 import { twoFactorFeatures } from './twofa';
 import { userDeleteAccountFeature } from './user/deleteAccount';
@@ -76,6 +77,7 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     ...agentFeatures,
     ...twoFactorFeatures,
     ...stepUpFeatures,
+    ...loginChecksFeatures,
     ...secrecyFeatures,
     ...logsFeatures,
     ...feedbackFeatures,

@@ -96,6 +96,7 @@ const SCOPES: { [K in RepoKey]: RepoScope<K> } = {
             listModeratorIds: { args: [], global: 'les comptes qui modèrent, à prévenir' },
             setReAuthInterval: { args: [1, null] },
             setStepUpInterval: { args: [1, 900] },
+            setLoginEmailCheck: { args: [1, true] },
             count: { args: [], global: 'le premier compte devient administrateur' },
             countForUpdate: { args: [], global: 'le premier compte devient administrateur' }
         }
@@ -166,6 +167,17 @@ const SCOPES: { [K in RepoKey]: RepoScope<K> } = {
             revokeUser: { args: [1] },
             revokeUserExcept: { args: [1, 's'] },
             hasLiveSession: { args: ['s'] }
+        }
+    },
+    trustedBrowsers: {
+        guard: ACCOUNT,
+        methods: {
+            create: { args: [{ userId: 1, tokenHash: 'h', label: 'l', now: 0, expiresAt: 1 }] },
+            findValid: { args: [['h'], 0], guard: [/\btoken_hash IN \(/] },
+            touch: { args: [1, 0, 1], guard: ROW },
+            listByUser: { args: [1, 0] },
+            remove: { args: [1, 2] },
+            removeAllOf: { args: [1] }
         }
     },
     remoteInstances: {

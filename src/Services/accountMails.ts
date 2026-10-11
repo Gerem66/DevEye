@@ -61,3 +61,37 @@ export function accountExportedMail({ username, at, site }: AccountExportedFacts
         ...(site ? { footnote: `Pour toute question, nos coordonnées sont sur ${site}/mentions-legales` } : {})
     };
 }
+
+export interface LoginCodeFacts {
+    username: string;
+    code: string;
+    /** Le navigateur qui se connecte, tel que son User-Agent le décrit. */
+    browser: string;
+    ip: string;
+    /** Secondes. */
+    at: number;
+}
+
+/**
+ * Le code d'une connexion depuis un navigateur que le compte ne connaît pas.
+ * Il part dès le mot de passe validé : même si la 2FA arrête l'intrus, le
+ * titulaire apprend que son mot de passe est connu.
+ */
+export function loginCodeMail({ username, code, browser, ip, at }: LoginCodeFacts): SdkAccountMailMessage {
+    const moment = new Date(at * 1000).toLocaleString('fr-FR', {
+        dateStyle: 'long',
+        timeStyle: 'short',
+        timeZone: 'Europe/Paris'
+    });
+    return {
+        subject: 'Votre code de connexion à DevEye',
+        paragraphs: [
+            `Bonjour ${username},`,
+            `Une connexion à votre compte attend ce code, depuis un navigateur que DevEye ne connaît pas encore : ${browser}, adresse IP ${ip}, le ${moment}.`,
+            'Saisissez-le sur la page de connexion. Il expire dans 10 minutes.'
+        ],
+        notice: `Votre code : ${code}`,
+        footnote:
+            'Si ce n’est pas vous, quelqu’un connaît votre mot de passe : changez-le depuis votre profil, cela ferme toutes vos sessions. Ne communiquez jamais ce code, DevEye ne vous le demandera pas.'
+    };
+}

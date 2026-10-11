@@ -27,8 +27,6 @@ import { SchemeHint } from './SchemeHint';
 import type { CSSProperties } from 'react';
 import type { UserColor, UserSettingFlag } from '@deveye/types';
 
-const SECURITY_MAX = 3;
-
 const RENDER_MODES: readonly { value: RenderMode; label: string; title: string }[] = [
     { value: 'auto', label: 'Auto', title: "Mesure la fluidité réelle et allège si l'appareil ne suit pas" },
     { value: 'full', label: 'Complet', title: "Verre et flous, quoi qu'il en coûte" },
@@ -63,10 +61,13 @@ export default function FeatureProfile({ user }: FeatureProps) {
     const [exportOpen, setExportOpen] = useState(false);
 
     const securityScore =
+        (user.security.loginConfirmation ? 1 : 0) +
         (user.security.twoFactor ? 1 : 0) +
         (user.security.passwordEncryption ? 1 : 0) +
         (user.security.reAuthValidation ? 1 : 0);
-    const securityFull = securityScore >= SECURITY_MAX;
+    // Sans moyen d'envoyer un code, la confirmation des connexions n'existe pas ici.
+    const securityMax = user.security.loginConfirmation === null ? 3 : 4;
+    const securityFull = securityScore >= securityMax;
     const [uploading, setUploading] = useState(false);
     /** L'échec d'une modification, l'image ou un réglage. Gardé à la fermeture :
      *  la boîte s'efface en fondu avec son texte. */
@@ -236,9 +237,9 @@ export default function FeatureProfile({ user }: FeatureProps) {
                                         }`}
                                         onClick={() => requestOpenView('security')}
                                         title='Ouvrir la sécurité'
-                                        aria-label={`Sécurité ${securityScore} sur ${SECURITY_MAX}, ouvrir la sécurité`}
+                                        aria-label={`Sécurité ${securityScore} sur ${securityMax}, ouvrir la sécurité`}
                                     >
-                                        {securityScore} / {SECURITY_MAX}
+                                        {securityScore} / {securityMax}
                                     </button>
                                 </span>
                             </div>

@@ -9,12 +9,12 @@ import {
 
 import QRCode from 'qrcode';
 
-import { verifyPassword } from '@/auth/argon';
 import { clearAttempts, guardAttempt, recordFailedAttempt } from '@/Services/attempts';
 import { totpContext } from '@/Services/sealContexts';
 import { forgetStepUpsOf } from '@/Services/stepUp';
 import { generateBackupCodes, generateTotpSecret, hashBackupCode, verifyTotp } from '@/Services/Totp';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
+import { assertAccountPassword } from '../_password';
 
 /*
  * The TOTP secret is an authentication-bound secret: it must be decryptable at
@@ -58,26 +58,6 @@ export async function assertValidCode(ctx: FeatureContext, code: string, failedA
     throw new FeatureError('auth_invalid', 'Code incorrect');
 }
 
-/**
- * Le mot de passe du compte, sous le compteur des mots de passe. Une session
- * volée ne doit pas poser sa propre application : elle ouvrirait les machines.
- */
-async function assertAccountPassword(ctx: FeatureContext, password: string): Promise<void> {
-    const key = String(ctx.userId);
-    guardAttempt('password', key);
-    const user = await ctx.db.users.findById(ctx.userId);
-    if (!user?.password_hash || !(await verifyPassword(user.password_hash, password))) {
-        recordFailedAttempt('password', key);
-        ctx.audit({
-            action: 'twofa.setup_failed',
-            level: 'warning',
-            description: 'Mise en place de la 2FA refusée : mot de passe incorrect'
-        });
-        throw new FeatureError('auth_invalid', 'Mot de passe incorrect');
-    }
-    clearAttempts('password', key);
-}
-
 export const twoFactorStatusFeature: FeatureDefinition<
     typeof twoFactorGetStatus.command,
     typeof twoFactorGetStatus.input,
@@ -99,7 +79,8 @@ export const twoFactorSetupFeature: FeatureDefinition<
     handler: async (ctx, input) => {
         const existing = await ctx.db.twoFactor.get(ctx.userId);
         if (existing?.enabled) throw new FeatureError('conflict', '2FA is already enabled');
-        await assertAccountPassword(ctx, input.password);
+        // Une session volée ne doit pas poser sa propre application : elle ouvrirait les machines.
+        await assertAccountPassword(ctx, input.password, 'twofa.setup_failed');
 
         const user = await ctx.db.users.findById(ctx.userId);
         const account = user?.email ?? `user-${ctx.userId}`;

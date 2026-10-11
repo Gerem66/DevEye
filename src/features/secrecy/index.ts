@@ -24,6 +24,7 @@ import {
     rememberSessionDek,
     touchSessionDek
 } from '@/Services/SecureStore';
+import { abandonLoginChallengesOf } from '@/auth/loginChallenge';
 import { forgetStepUpsOf } from '@/Services/stepUp';
 import { invalidateAccess } from '../_access';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
@@ -315,6 +316,8 @@ export const secrecyRecoverFeature: FeatureDefinition<
         await ctx.db.refreshTokens.revokeUserExcept(ctx.userId, ctx.sessionId);
         forgetSessionsOf(ctx.userId, ctx.sessionId);
         forgetStepUpsOf(ctx.userId, ctx.sessionId);
+        await ctx.db.trustedBrowsers.removeAllOf(ctx.userId);
+        abandonLoginChallengesOf(ctx.userId);
         ctx.live?.closeSessionsOf(ctx.userId, ctx.sessionId);
         rememberSessionDek(ctx.sessionId, ctx.userId, dek, await graceMs(ctx));
         wrapModeChanged(ctx);

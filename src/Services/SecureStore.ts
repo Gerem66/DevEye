@@ -5,6 +5,7 @@ import type { Database } from '@/db';
 import type { SecrecyStatePush, UserSecretKeyRow, WorkspaceRow } from '@deveye/types';
 import Encryption from './Encryption';
 import { SecretKeyService } from './SecretKeyService';
+import { env } from '@/Utils/Env';
 
 /**
  * Default "sudo-like" grace window when the user hasn't configured one: once
@@ -323,9 +324,9 @@ export function exitSessionCommand(sessionId: string, ticketId: number): void {
 
 /**
  * Short-lived holding area for a DEK unwrapped at login but not yet bound to a
- * WS session (the 2FA bridge): rather than carrying the password through the
- * challenge, the DEK is stashed under an opaque single-use token that travels
- * inside the challenge JWT. Entries self-expire.
+ * WS session (the codes of a login still to come): rather than carrying the
+ * password through the challenge, the DEK is stashed under an opaque single-use
+ * token that the login challenge holds. Entries self-expire.
  */
 interface PendingDek {
     userId: number;
@@ -336,8 +337,8 @@ interface PendingDek {
 
 const pendingDeks = new Map<string, PendingDek>();
 
-/** TTL for a stashed DEK; sized to the 2FA challenge window with margin. */
-const PENDING_DEK_TTL_MS = 5 * 60_000;
+/** TTL for a stashed DEK: the login challenge's own window. */
+const PENDING_DEK_TTL_MS = env.LOGIN_CHALLENGE_TTL_SECONDS * 1000;
 
 function sweepPendingDeks(now: number): void {
     for (const [token, entry] of pendingDeks) {
@@ -382,8 +383,8 @@ export function sweepSessionDeksForTest(now: number): void {
 }
 
 /**
- * Stash a login-unwrapped DEK for an imminent 2FA completion. Returns an opaque
- * token to embed in the challenge; pass it to {@link claimPendingDek}. Any prior
+ * Stash a login-unwrapped DEK for an imminent login completion. Returns an
+ * opaque token to keep in the challenge; pass it to {@link claimPendingDek}. Any prior
  * pending DEK for the same user is dropped first: a fresh login supersedes an
  * abandoned challenge.
  */
@@ -411,10 +412,9 @@ export function claimPendingDek(token: string): { dek: Buffer; graceMs: number }
 }
 
 /**
- * Drop a stashed DEK without binding it, wiping its key material. For terminal
- * 2FA failures where the session won't be issued (e.g. 2FA was disabled between
- * the password step and the TOTP step) so the DEK isn't left dangling until its
- * TTL. A no-op for unknown tokens.
+ * Drop a stashed DEK without binding it, wiping its key material. For a login
+ * that will not open a session (cancelled, too many wrong codes) so the DEK
+ * isn't left dangling until its TTL. A no-op for unknown tokens.
  */
 export function discardPendingDek(token: string): void {
     const entry = pendingDeks.get(token);

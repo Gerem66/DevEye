@@ -1,6 +1,15 @@
-import type { SessionBundle, User } from '@deveye/types';
+import type { LoginResponse, LoginStep, SessionBundle, User } from '@deveye/types';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ApiError, login as apiLogin, logout as apiLogout, me as apiMe, refresh as apiRefresh } from '../api/http';
+import {
+    ApiError,
+    login as apiLogin,
+    loginCancel as apiLoginCancel,
+    loginResend as apiLoginResend,
+    loginVerify as apiLoginVerify,
+    logout as apiLogout,
+    me as apiMe,
+    refresh as apiRefresh
+} from '../api/http';
 import { startActivityBeacon } from '../api/activity';
 import { ws } from '../api/ws';
 import { setAdmission } from '../stores/admission';
@@ -24,14 +33,17 @@ interface AuthState {
     user: User | null;
 }
 
-export interface LoginResult {
-    twoFactorRequired: boolean;
-}
+/** L'étape qu'attend une connexion, ou `null` quand la session est ouverte. */
+export type LoginResult = { step: LoginStep; to?: string } | null;
 
 interface AuthContextValue extends AuthState {
     /** Le serveur ne répond plus depuis plusieurs tentatives : l'écran d'attente le dit. */
     unreachable: boolean;
     login: (username: string, password: string) => Promise<LoginResult>;
+    /** Le code de l'étape en cours ; `trust` : ce navigateur ne redemandera plus les codes envoyés. */
+    verifyLogin: (code: string, trust: boolean) => Promise<LoginResult>;
+    resendLoginCode: () => Promise<LoginResult>;
+    cancelLogin: () => void;
     logout: () => Promise<void>;
     refresh: () => Promise<void>;
     updateUser: (patch: Partial<User>) => void;
@@ -218,21 +230,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     }, [setAnonymous, scheduleRetry, startSession, holdForMaintenance]);
 
+    /** Une réponse de connexion : l'étape suivante, ou la session ouverte. */
+    const settleLogin = useCallback(
+        async (reply: LoginResponse): Promise<LoginResult> => {
+            if (reply.status === 'pending') return { step: reply.step, to: reply.to };
+            await startSession(reply);
+            return null;
+        },
+        [startSession]
+    );
+
     const login = useCallback(
         async (username: string, password: string): Promise<LoginResult> => {
-            const bundle = await apiLogin({ username, password }).catch((e: unknown) => {
+            const reply = await apiLogin({ username, password }).catch((e: unknown) => {
                 // Le message du refus s'affiche sous le formulaire, comme les autres.
                 isMaintenanceRefusal(e);
                 throw e;
             });
-            if (bundle.twoFactorRequired) {
-                return { twoFactorRequired: true };
-            }
-            await startSession(bundle);
-            return { twoFactorRequired: false };
+            return settleLogin(reply);
         },
-        [startSession]
+        [settleLogin]
     );
+
+    const verifyLogin = useCallback(
+        async (code: string, trust: boolean): Promise<LoginResult> =>
+            settleLogin(await apiLoginVerify({ code, trust })),
+        [settleLogin]
+    );
+
+    const resendLoginCode = useCallback(
+        async (): Promise<LoginResult> => settleLogin(await apiLoginResend()),
+        [settleLogin]
+    );
+
+    const cancelLogin = useCallback(() => void apiLoginCancel(), []);
 
     const logout = useCallback(async () => {
         try {
@@ -297,8 +328,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // portent cet id, pas celui du compte d'ici.
     const acting = useActingUser();
     const value = useMemo<AuthContextValue>(
-        () => ({ ...state, user: acting ?? state.user, unreachable, login, logout, refresh, updateUser }),
-        [state, acting, unreachable, login, logout, refresh, updateUser]
+        () => ({
+            ...state,
+            user: acting ?? state.user,
+            unreachable,
+            login,
+            verifyLogin,
+            resendLoginCode,
+            cancelLogin,
+            logout,
+            refresh,
+            updateUser
+        }),
+        [state, acting, unreachable, login, verifyLogin, resendLoginCode, cancelLogin, logout, refresh, updateUser]
     );
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

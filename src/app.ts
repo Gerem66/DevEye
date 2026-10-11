@@ -138,8 +138,9 @@ export const CONTENT_SECURITY_POLICY = {
 const FEDERATED_PATHS = new Set([
     '/api/status',
     '/api/auth/login',
-    '/api/auth/2fa/challenge',
-    '/api/auth/2fa/cancel',
+    '/api/auth/login/verify',
+    '/api/auth/login/resend',
+    '/api/auth/login/cancel',
     '/api/auth/refresh',
     '/api/auth/logout',
     '/api/auth/me',

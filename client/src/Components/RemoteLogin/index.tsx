@@ -5,7 +5,14 @@ import Button from '@/Components/Button';
 import { Checkbox } from '@/Components/Checkbox';
 import { Dialog } from '@/Components/Dialog';
 import TextInput from '@/Components/TextInput';
-import { cancelRemoteTwoFactor, loginRemote, submitRemoteTwoFactor, type RemoteEntry } from '@/stores/remoteInstances';
+import {
+    cancelRemoteLogin,
+    loginRemote,
+    resendRemoteCode,
+    submitRemoteCode,
+    type RemoteEntry,
+    type RemoteLoginStep
+} from '@/stores/remoteInstances';
 
 import styles from './RemoteLogin.module.css';
 
@@ -35,6 +42,20 @@ function humanize(err: unknown): string {
     return 'La connexion a échoué.';
 }
 
+type Pending = Extract<RemoteLoginStep, { status: 'pending' }>;
+
+/** Ce que l'étape en cours demande, dit simplement. */
+function stepHint(pending: Pending): string {
+    switch (pending.step) {
+        case 'email':
+            return `Un code vient d’être envoyé à ${pending.to ?? 'votre adresse de là-bas'}. Saisissez-le pour confirmer cette connexion.`;
+        case 'sms':
+            return `Un code vient d’être envoyé par SMS au ${pending.to ?? 'numéro de votre compte là-bas'}.`;
+        case 'totp':
+            return 'Saisissez le code de votre application d’authentification, ou un code de secours.';
+    }
+}
+
 /**
  * Connexion au compte d'une instance distante. Les identifiants partent du
  * navigateur vers cette instance et nulle part ailleurs : le serveur d'ici ne
@@ -44,7 +65,8 @@ export function RemoteLogin({ entry, onClose, onConnected }: RemoteLoginProps) {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [code, setCode] = useState('');
-    const [challenge, setChallenge] = useState<string | null>(null);
+    const [pending, setPending] = useState<Pending | null>(null);
+    const [trust, setTrust] = useState(false);
     const [remember, setRemember] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
@@ -54,17 +76,42 @@ export function RemoteLogin({ entry, onClose, onConnected }: RemoteLoginProps) {
         setUsername('');
         setPassword('');
         setCode('');
-        setChallenge(null);
+        setPending(null);
+        setTrust(false);
         setError(null);
         setLoading(false);
     }, [instanceId]);
 
     const close = (): void => {
-        if (instanceId !== null && challenge) cancelRemoteTwoFactor(instanceId, challenge);
+        if (instanceId !== null && pending) cancelRemoteLogin(instanceId, pending.challenge);
         setPassword('');
         setCode('');
-        setChallenge(null);
+        setPending(null);
         onClose();
+    };
+
+    /** L'étape suivante, ou la session ouverte là-bas. */
+    const settle = (step: RemoteLoginStep): void => {
+        if (step.status === 'pending') {
+            setPending(step);
+            setCode('');
+            return;
+        }
+        setPassword('');
+        setCode('');
+        setPending(null);
+        if (instanceId !== null) onConnected(instanceId);
+    };
+
+    const resend = async (): Promise<void> => {
+        if (instanceId === null || !pending || loading) return;
+        setError(null);
+        try {
+            settle(await resendRemoteCode(instanceId, pending.challenge, remember));
+        } catch (e) {
+            if (e instanceof ApiError && e.code === 'auth_expired') setPending(null);
+            setError(humanize(e));
+        }
     };
 
     const submit = async (): Promise<void> => {
@@ -72,29 +119,25 @@ export function RemoteLogin({ entry, onClose, onConnected }: RemoteLoginProps) {
         setError(null);
         setLoading(true);
         try {
-            if (challenge) {
-                await submitRemoteTwoFactor(instanceId, { code: code.trim(), challenge }, remember);
-            } else {
-                const step = await loginRemote(instanceId, { username: username.trim(), password }, remember);
-                if (step.twoFactorRequired) {
-                    setChallenge(step.challenge);
-                    return;
-                }
-            }
-            setPassword('');
-            setCode('');
-            setChallenge(null);
-            onConnected(instanceId);
+            settle(
+                pending
+                    ? await submitRemoteCode(
+                          instanceId,
+                          { code: code.trim(), challenge: pending.challenge, trust: pending.step !== 'totp' && trust },
+                          remember
+                      )
+                    : await loginRemote(instanceId, { username: username.trim(), password }, remember)
+            );
         } catch (e) {
-            // Un défi épuisé ou expiré ne se rejoue pas : retour au mot de passe.
-            if (e instanceof ApiError && e.code === 'auth_expired') setChallenge(null);
+            // Une connexion épuisée ou expirée ne se rejoue pas : retour au mot de passe.
+            if (e instanceof ApiError && e.code === 'auth_expired') setPending(null);
             setError(humanize(e));
         } finally {
             setLoading(false);
         }
     };
 
-    const ready = challenge ? code.trim().length >= 6 : Boolean(username.trim() && password);
+    const ready = pending ? code.trim().length >= 6 : Boolean(username.trim() && password);
 
     return (
         <Dialog
@@ -109,29 +152,47 @@ export function RemoteLogin({ entry, onClose, onConnected }: RemoteLoginProps) {
                         Annuler
                     </Button>
                     <Button onClick={() => void submit()} disabled={!ready || loading}>
-                        {loading ? 'Connexion…' : challenge ? 'Vérifier' : 'Se connecter'}
+                        {loading ? 'Connexion…' : pending ? 'Vérifier' : 'Se connecter'}
                     </Button>
                 </>
             }
         >
             <div className={styles.form}>
                 <p className={styles.hint}>
-                    {challenge
-                        ? 'Saisissez le code de votre application d’authentification, ou un code de secours.'
+                    {pending
+                        ? stepHint(pending)
                         : `Votre compte sur ${entry?.instance.origin ?? ''}. Vos identifiants ne passent que par ce navigateur.`}
                 </p>
-                {challenge ? (
-                    <label className={styles.field}>
-                        <span className={styles.fieldLabel}>Code de vérification</span>
-                        <TextInput
-                            value={code}
-                            onChange={(e) => setCode(e.target.value)}
-                            inputMode='numeric'
-                            autoComplete='one-time-code'
-                            maxLength={24}
-                            autoFocus
-                        />
-                    </label>
+                {pending ? (
+                    <>
+                        <label className={styles.field}>
+                            <span className={styles.fieldLabel}>Code de vérification</span>
+                            <TextInput
+                                key={pending.step}
+                                value={code}
+                                onChange={(e) => setCode(e.target.value)}
+                                inputMode={pending.step === 'totp' ? 'text' : 'numeric'}
+                                autoComplete='one-time-code'
+                                maxLength={24}
+                                autoFocus
+                            />
+                        </label>
+                        {pending.step !== 'totp' && (
+                            <>
+                                <Checkbox checked={trust} onChange={setTrust}>
+                                    Faire confiance à ce navigateur
+                                </Checkbox>
+                                <button
+                                    type='button'
+                                    className={styles.link}
+                                    onClick={() => void resend()}
+                                    disabled={loading}
+                                >
+                                    Renvoyer le code
+                                </button>
+                            </>
+                        )}
+                    </>
                 ) : (
                     <>
                         <label className={styles.field}>

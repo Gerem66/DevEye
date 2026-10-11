@@ -7,6 +7,7 @@ import { permissionsFor } from '@/features/_access';
 import { ORIGINS } from '@/features/_sdk/context';
 import { maintenance, MaintenanceError } from '@/Services/maintenance';
 import { memberPausedIn, workspacePauses } from '@/Services/planPauses';
+import { serverMail } from '@/Services/serverMail';
 import { env } from '@/Utils/Env';
 
 /**
@@ -35,13 +36,14 @@ export async function loadUserBundle(
     // obtient une session.
     if (maintenance.siteDown() && !isAdmin) throw new MaintenanceError(maintenance.message());
 
-    // Security posture surfaced as "Sécurité → x / 3" in the profile. The
+    // Security posture surfaced as "Sécurité → x / y" in the profile. The
     // re-auth window counts when strict — short enough (≤ 5 min) to be a
     // meaningful protection, 0 being the strongest setting (always re-prompt).
     // A null interval falls back to the 60s server default, which is strict.
     const [twoFaRow, secretKeyRow] = await Promise.all([db.twoFactor.get(userId), db.userSecretKeys.get(userId)]);
     const reAuth = row.re_auth_interval ?? 60;
     const security = {
+        loginConfirmation: serverMail.configured ? row.login_email_check === 1 : null,
         twoFactor: Boolean(twoFaRow?.enabled),
         passwordEncryption: secretKeyRow?.wrap_mode === 'password',
         reAuthValidation: reAuth <= 300

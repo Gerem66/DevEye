@@ -38,10 +38,12 @@ chiffrement.
 
 - Fichier : `client/src/Components/RemoteLogin/index.tsx`, monté une fois par
   l'accueil.
-- Appels : `POST /api/auth/login` puis, si besoin, `POST /api/auth/2fa/challenge`
-  sur l'**instance distante**, en transport porteur
-  (`client/src/stores/remoteInstances.ts`, `loginRemote` /
-  `submitRemoteTwoFactor`). Le serveur d'ici ne voit rien.
+- Appels : `POST /api/auth/login` puis, pour chaque étape demandée (code par
+  mail, application, SMS), `POST /api/auth/login/verify` sur l'**instance
+  distante**, en transport porteur (`client/src/stores/remoteInstances.ts`,
+  `loginRemote` / `submitRemoteCode`). Le serveur d'ici ne voit rien. La
+  confiance accordée à ce navigateur là-bas se garde dans le même coffre du
+  navigateur que le jeton de rafraîchissement.
 - Rôle : ouvrir la session du compte qu'on a là-bas. Ce n'est ni le mot de
   passe du compte d'ici, ni celui du coffre : le coffre de l'instance distante
   se déverrouille ensuite par l'invite n°1, qui parle alors à cette instance.

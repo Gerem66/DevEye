@@ -2281,6 +2281,20 @@ CREATE TABLE `sync_versions` (
   CONSTRAINT `fk_sync_version_share` FOREIGN KEY (`share_id`) REFERENCES `sync_shares` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+CREATE TABLE `trusted_browsers` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `token_hash` char(64) COLLATE utf8mb4_general_ci NOT NULL,
+  `label` varchar(120) COLLATE utf8mb4_general_ci NOT NULL,
+  `created_at` bigint NOT NULL,
+  `last_used_at` bigint NOT NULL,
+  `expires_at` bigint NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_trusted_browsers_token` (`token_hash`),
+  KEY `idx_trusted_browsers_user` (`user_id`),
+  CONSTRAINT `fk_trusted_browsers_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 CREATE TABLE `uptime_checks` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `service_id` int NOT NULL,
@@ -2410,6 +2424,7 @@ CREATE TABLE `users` (
   `settings` json NOT NULL,
   `re_auth_interval` int DEFAULT NULL,
   `step_up_interval` int unsigned NOT NULL DEFAULT '900',
+  `login_email_check` tinyint(1) NOT NULL DEFAULT '1',
   `last_login` bigint NOT NULL DEFAULT '0',
   `last_seen` bigint NOT NULL DEFAULT '0',
   `created` bigint NOT NULL DEFAULT (unix_timestamp()),

@@ -530,3 +530,42 @@
     color: var(--text-primary);
     text-align: center;
 }
+
+/* Les navigateurs de confiance : sous l'en-tête de leur carte, sur toute sa largeur. */
+.browserList {
+    flex-basis: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.browserItem {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    background: var(--glass-bg);
+}
+
+.browserText {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.browserLabel {
+    color: var(--text-primary);
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.browserMeta {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}

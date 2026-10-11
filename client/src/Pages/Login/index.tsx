@@ -1,20 +1,34 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
-import { signupAvailabilitySchema } from '@deveye/types';
+import { signupAvailabilitySchema, type LoginStep } from '@deveye/types';
 
-import { ApiError, get, post } from '../../api/http';
-import { useAuth } from '../../auth/AuthProvider';
+import { ApiError, get } from '../../api/http';
+import { useAuth, type LoginResult } from '../../auth/AuthProvider';
 import { isHomeReady, onHomeReady } from '../../stores/homeReady';
-import { TextInput } from '../../Components';
+import { Checkbox, TextInput } from '../../Components';
 import StatusPageLink from '../../Components/StatusPageLink';
-import { z } from 'zod';
 import { TextLink } from './TextLink';
 import './style.css';
 
-const twoFaResponseSchema = z.object({
-    user: z.unknown(),
-    workspaces: z.unknown()
-});
+/** Entre deux envois d'un code par mail ou SMS ; le serveur tient le même délai. */
+const RESEND_MS = 60_000;
+const RECOVERY_LENGTH = 19;
+
+/** L'étape en cours d'une connexion, dite simplement. */
+function stepPrompt(step: LoginStep, to: string | undefined, recovery: boolean): string {
+    switch (step) {
+        case 'email':
+            return `Un code à 6 chiffres vient d’être envoyé à ${to ?? 'votre adresse'}. Saisissez-le pour confirmer cette connexion.`;
+        case 'sms':
+            return `Un code à 6 chiffres vient d’être envoyé par SMS au ${to ?? 'numéro de votre compte'}.`;
+        case 'totp':
+            return recovery
+                ? 'Entrez l’un de vos codes de secours. Il ne servira qu’une fois.'
+                : 'Entrez le code à 6 chiffres de votre application d’authentification';
+    }
+}
+
+const STEP_ICON: Record<LoginStep, string> = { email: 'icon-mail', sms: 'icon-phone', totp: 'icon-shield' };
 
 /** Total duration of the card → progress-bar fill (0.3s delay + 1s fill, see the
  *  `.progress-bar.filling` transition in style.css — keep these in sync). */
@@ -54,14 +68,20 @@ interface LoginPageProps {
 }
 
 function LoginPage({ onSignup, onBack }: LoginPageProps) {
-    const { status, unreachable, login, refresh } = useAuth();
+    const { status, unreachable, login, verifyLogin, resendLoginCode, cancelLogin } = useAuth();
     const [signupOpen, setSignupOpen] = useState(false);
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
-    const [twoFaRequired, setTwoFaRequired] = useState(false);
-    const [twoFaCode, setTwoFaCode] = useState('');
+    // L'étape qu'attend la connexion après le mot de passe ; `null` : le formulaire.
+    const [prompt, setPrompt] = useState<Exclude<LoginResult, null> | null>(null);
+    const [code, setCode] = useState('');
+    // À l'étape de l'application : un code de secours plutôt que six chiffres.
+    const [recovery, setRecovery] = useState(false);
+    const [trust, setTrust] = useState(false);
+    const [resendAt, setResendAt] = useState(0);
+    const [clock, setClock] = useState(Date.now());
     // Start collapsed when the app is still resolving the session (`unknown`), so
     // an auto-login lands directly on the bar with no flash of the open card.
     const [phase, setPhase] = useState<CardPhase>(status === 'unknown' ? 'auto' : 'form');
@@ -73,7 +93,7 @@ function LoginPage({ onSignup, onBack }: LoginPageProps) {
     const contentRef = useRef<HTMLDivElement | null>(null);
     const inputUsername = useRef<HTMLInputElement | null>(null);
     const inputPassword = useRef<HTMLInputElement | null>(null);
-    const inputTwoFa = useRef<HTMLInputElement | null>(null);
+    const inputCode = useRef<HTMLInputElement | null>(null);
     const animStartRef = useRef<number>(Date.now());
 
     // Montée alors que la session est déjà ouverte (au sortir de l'inscription),
@@ -101,9 +121,9 @@ function LoginPage({ onSignup, onBack }: LoginPageProps) {
             setPhase('form');
             setFilling(false);
             // LoginPage is never unmounted, only hidden: wipe residual form state
-            // (a previous 2FA prompt, code or error) on landing back here.
-            setTwoFaRequired(false);
-            setTwoFaCode('');
+            // (a previous step, code or error) on landing back here.
+            setPrompt(null);
+            setCode('');
             setPassword('');
             setError('');
             setLoading(false);
@@ -131,7 +151,7 @@ function LoginPage({ onSignup, onBack }: LoginPageProps) {
         const ro = new ResizeObserver(sync);
         ro.observe(content);
         return () => ro.disconnect();
-    }, [twoFaRequired]);
+    }, [prompt, recovery]);
 
     // Fade to the homepage only once authenticated, the progress-bar animation
     // has fully played, and the home has its first data. A cap keeps a stalled
@@ -179,16 +199,44 @@ function LoginPage({ onSignup, onBack }: LoginPageProps) {
     }, [status]);
 
     // Whenever the card (re)opens to a form, return focus to its primary field
-    // once interactive (`loading` gates this so the disabled 2FA input is never
+    // once interactive (`loading` gates this so the disabled code input is never
     // focused).
     useEffect(() => {
         if (phase !== 'form' || loading) return;
         // `username` is read but intentionally NOT a dependency: we only refocus on a
-        // reopen (phase/loading/twoFaRequired change), never while the user is typing.
-        if (twoFaRequired) inputTwoFa.current?.focus();
+        // reopen (phase/loading/prompt change), never while the user is typing.
+        if (prompt) inputCode.current?.focus();
         else if (username !== '') inputPassword.current?.focus();
         else inputUsername.current?.focus();
-    }, [phase, loading, twoFaRequired]);
+    }, [phase, loading, prompt, recovery]);
+
+    // Le compte à rebours de « Renvoyer le code », tant qu'il court.
+    const resendIn = Math.max(0, Math.ceil((resendAt - clock) / 1000));
+    useEffect(() => {
+        if (resendAt <= Date.now()) return;
+        const timer = window.setInterval(() => setClock(Date.now()), 1000);
+        return () => window.clearInterval(timer);
+    }, [resendAt]);
+
+    /** Une étape s'ouvre : code vide, et pour un code envoyé, le délai avant d'en redemander un. */
+    const openStep = (next: Exclude<LoginResult, null>) => {
+        setPrompt(next);
+        setCode('');
+        setRecovery(false);
+        setError('');
+        if (next.step !== 'totp') {
+            setResendAt(Date.now() + RESEND_MS);
+            setClock(Date.now());
+        }
+    };
+
+    /** La connexion en cours est tombée (expirée, trop de codes faux) : retour au mot de passe. */
+    const backToForm = (message: string) => {
+        setPrompt(null);
+        setCode('');
+        setTrust(false);
+        setError(message);
+    };
 
     // Collapse the card and (re)start the progress fill — a submit is under way.
     const startAnim = () => {
@@ -221,16 +269,17 @@ function LoginPage({ onSignup, onBack }: LoginPageProps) {
 
         try {
             const result = await login(username, password);
-            if (result.twoFactorRequired) {
+            if (result) {
                 // Let the collapse-and-fill animation finish before re-opening the
-                // card as the 2FA prompt: the next view is never revealed mid-fill.
+                // card on the next step: it is never revealed mid-fill.
                 await waitUntil(startedAt, PROGRESS_MS);
                 stopAnim();
                 // Already authenticated against the server: clear them now, Back
                 // must return to a fresh form.
                 setUsername('');
                 setPassword('');
-                setTwoFaRequired(true);
+                setTrust(false);
+                openStep(result);
             } else {
                 await waitUntil(startedAt, PROGRESS_MS);
                 setPassword('');
@@ -249,50 +298,72 @@ function LoginPage({ onSignup, onBack }: LoginPageProps) {
         }
     };
 
-    // `code` is passed explicitly by the input's auto-submit so we verify the
-    // freshly-entered value without waiting for the `twoFaCode` state to settle;
+    const codeReady = (value: string): boolean =>
+        value.length === (prompt?.step === 'totp' && recovery ? RECOVERY_LENGTH : 6);
+
+    // `value` is passed explicitly by the input's auto-submit so we verify the
+    // freshly-entered value without waiting for the `code` state to settle;
     // it defaults to the state for the Enter-key path.
-    const onSubmit2FA = async (code: string = twoFaCode) => {
-        if (loading || code.length !== 6) return;
+    const onSubmitCode = async (value: string = code) => {
+        if (loading || !prompt || !codeReady(value)) return;
         setError('');
         setLoading(true);
         startAnim();
         const startedAt = Date.now();
         try {
-            await post('/api/auth/2fa/challenge', { code }, twoFaResponseSchema);
-            await refresh();
+            const next = await verifyLogin(value, prompt.step !== 'totp' && trust);
             await waitUntil(startedAt, PROGRESS_MS);
+            if (next) {
+                stopAnim();
+                openStep(next);
+            }
         } catch (e) {
             await waitUntil(startedAt, ERROR_MS);
-            if (e instanceof ApiError) {
-                setError('Code invalide');
-            } else {
-                setError('Erreur réseau');
-            }
-            setTwoFaCode('');
+            if (e instanceof ApiError && e.code === 'auth_expired') backToForm(e.message);
+            else if (e instanceof ApiError && e.code === 'auth_invalid') setError('Code incorrect');
+            else setError(e instanceof ApiError ? humanizeAuthError(e) : 'Erreur réseau');
+            setCode('');
             stopAnim();
         } finally {
             setLoading(false);
         }
     };
 
-    /**
-     * Leave the 2FA prompt: reset the form and tell the server to drop the
-     * pending challenge (and any DEK stashed at the password step). Best-effort:
-     * a network error must not trap the user on the 2FA card.
-     */
-    const onCancel2FA = () => {
-        setTwoFaRequired(false);
-        setTwoFaCode('');
+    const onResend = async () => {
+        if (loading || !prompt || resendIn > 0) return;
         setError('');
-        void post('/api/auth/2fa/cancel', {}).catch(() => {});
+        try {
+            const next = await resendLoginCode();
+            if (next) openStep(next);
+        } catch (e) {
+            const retryAfterMs = (e instanceof ApiError ? (e.details as { retryAfterMs?: unknown }) : null)
+                ?.retryAfterMs;
+            if (typeof retryAfterMs === 'number') {
+                setResendAt(Date.now() + retryAfterMs);
+                setClock(Date.now());
+            } else if (e instanceof ApiError && e.code === 'auth_expired') backToForm(e.message);
+            else setError(e instanceof ApiError ? humanizeAuthError(e) : 'Erreur réseau');
+        }
     };
 
-    const signupShown = signupOpen && phase === 'form' && !twoFaRequired && !loading;
+    /**
+     * Leave the current step: reset the form and tell the server to drop the
+     * pending login (and any DEK stashed at the password step). Best-effort:
+     * a network error must not trap the user on the step card.
+     */
+    const onCancelStep = () => {
+        setPrompt(null);
+        setCode('');
+        setTrust(false);
+        setError('');
+        cancelLogin();
+    };
+
+    const signupShown = signupOpen && phase === 'form' && !prompt && !loading;
 
     const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
         if (e.key === 'Enter') {
-            if (twoFaRequired) void onSubmit2FA();
+            if (prompt) void onSubmitCode();
             else void onSubmit();
         }
     };
@@ -309,7 +380,7 @@ function LoginPage({ onSignup, onBack }: LoginPageProps) {
                         <div className={'progress-bar' + (filling ? ' filling' : '')} />
 
                         <div ref={contentRef} className='login-card-content'>
-                            {!twoFaRequired ? (
+                            {!prompt ? (
                                 <>
                                     {onBack && (
                                         <p className='signup-intro'>
@@ -345,30 +416,80 @@ function LoginPage({ onSignup, onBack }: LoginPageProps) {
                                 </>
                             ) : (
                                 <>
-                                    <p className='twofa-prompt'>
-                                        Entrez le code à 6 chiffres de votre application d&apos;authentification
-                                    </p>
+                                    <p className='twofa-prompt'>{stepPrompt(prompt.step, prompt.to, recovery)}</p>
                                     <div className='input-group'>
                                         <TextInput
-                                            ref={inputTwoFa}
-                                            placeholder='000000'
-                                            value={twoFaCode}
-                                            inputMode='numeric'
+                                            ref={inputCode}
+                                            placeholder={recovery ? 'XXXX-XXXX-XXXX-XXXX' : '000000'}
+                                            value={code}
+                                            inputMode={recovery ? 'text' : 'numeric'}
                                             autoComplete='one-time-code'
                                             disabled={loading}
                                             onChange={(e) => {
-                                                const code = e.target.value.replace(/\D/g, '').slice(0, 6);
-                                                setTwoFaCode(code);
-                                                // No "Verify" button: auto-submit the instant a full
-                                                // 6-digit code is present, whether typed or pasted.
-                                                if (code.length === 6) void onSubmit2FA(code);
+                                                const next = recovery
+                                                    ? e.target.value
+                                                          .toUpperCase()
+                                                          .replace(/[^A-Z0-9-]/g, '')
+                                                          .slice(0, RECOVERY_LENGTH)
+                                                    : e.target.value.replace(/\D/g, '').slice(0, 6);
+                                                setCode(next);
+                                                // The app code needs no button: it goes the instant six
+                                                // digits are there, typed or pasted. A mailed or texted
+                                                // code waits for the trust box and « Valider ».
+                                                if (prompt.step === 'totp' && !recovery && next.length === 6) {
+                                                    void onSubmitCode(next);
+                                                }
                                             }}
                                             error={error}
                                         />
-                                        <span className='icon icon-shield' />
+                                        <span className={`icon ${STEP_ICON[prompt.step]}`} />
                                     </div>
 
-                                    <button className='cancel' onClick={onCancel2FA} disabled={loading}>
+                                    {prompt.step !== 'totp' && (
+                                        <Checkbox
+                                            checked={trust}
+                                            onChange={setTrust}
+                                            disabled={loading}
+                                            className='login-trust'
+                                        >
+                                            Faire confiance à ce navigateur
+                                        </Checkbox>
+                                    )}
+
+                                    {(prompt.step !== 'totp' || recovery) && (
+                                        <button
+                                            className='submit'
+                                            onClick={() => void onSubmitCode()}
+                                            disabled={loading || !codeReady(code)}
+                                        >
+                                            Valider
+                                        </button>
+                                    )}
+
+                                    <button
+                                        type='button'
+                                        className='login-link'
+                                        disabled={loading || (prompt.step !== 'totp' && resendIn > 0)}
+                                        onClick={() => {
+                                            if (prompt.step !== 'totp') {
+                                                void onResend();
+                                                return;
+                                            }
+                                            setRecovery((r) => !r);
+                                            setCode('');
+                                            setError('');
+                                        }}
+                                    >
+                                        {prompt.step === 'totp'
+                                            ? recovery
+                                                ? 'Utiliser le code de l’application'
+                                                : 'Utiliser un code de secours'
+                                            : resendIn > 0
+                                              ? `Renvoyer le code (${resendIn} s)`
+                                              : 'Renvoyer le code'}
+                                    </button>
+
+                                    <button className='cancel' onClick={onCancelStep} disabled={loading}>
                                         {loading ? (
                                             <span className='icon icon-spinner login-spin' aria-label='Vérification' />
                                         ) : (
@@ -382,7 +503,7 @@ function LoginPage({ onSignup, onBack }: LoginPageProps) {
                     {/* Toujours monté, pour que son arrivée se joue aussi (l'ouverture
                         des inscriptions n'est connue qu'après coup) : seul `shown` change. */}
                     {onBack ? (
-                        <TextLink href='/' shown={phase === 'form' && !twoFaRequired && !loading} onNavigate={onBack}>
+                        <TextLink href='/' shown={phase === 'form' && !prompt && !loading} onNavigate={onBack}>
                             Retour
                         </TextLink>
                     ) : (

@@ -169,7 +169,7 @@
     animation: loadAnim 1s;
 }
 
-/* 2FA styles */
+/* Les étapes après le mot de passe : codes par mail, SMS ou application. */
 .login .twofa-prompt {
     font-size: 0.85rem;
     color: var(--text-secondary);
@@ -221,7 +221,39 @@
     cursor: default;
 }
 
-/* Spinner on the "Back" button while the 2FA code auto-verifies. */
+/* « Faire confiance à ce navigateur », sous un code envoyé, avant de valider. */
+.login .login-trust {
+    margin: 0.25rem 0;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+/* Le geste discret d'une étape : renvoyer le code, ou passer au code de secours. */
+.login .login-link {
+    display: block;
+    margin: 0.75rem auto 0;
+    padding: 0;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 0.8rem;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.login .login-link:hover:not(:disabled),
+.login .login-link:focus-visible {
+    color: var(--text-primary);
+}
+
+.login .login-link:disabled {
+    color: var(--text-muted);
+    text-decoration: none;
+    cursor: default;
+}
+
+/* Spinner on the "Back" button while the code auto-verifies. */
 .login .login-spin {
     vertical-align: middle;
     animation: login-spin 0.7s linear infinite;

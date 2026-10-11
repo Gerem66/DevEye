@@ -3,6 +3,7 @@ import { adminDeleteUser, adminSetUserRole, adminSetUserStatus, adminUserList, t
 import { invalidateAccess } from '../_access';
 import { schedulePlanReconcile } from '@/Services/planPauses';
 import { forgetSessionsOf } from '@/Services/SecureStore';
+import { abandonLoginChallengesOf } from '@/auth/loginChallenge';
 import { forgetStepUpsOf } from '@/Services/stepUp';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import { deleteUserEverywhere } from '../_users';
@@ -104,6 +105,7 @@ export const adminSetUserStatusFeature: FeatureDefinition<
             // que ses sockets tombent.
             forgetSessionsOf(input.userId);
             forgetStepUpsOf(input.userId);
+            abandonLoginChallengesOf(input.userId);
             // Et la présence : sinon le suspendu resterait dans le roster des
             // autres jusqu'à sa prochaine commande.
             ctx.live?.evictEverywhere(input.userId);

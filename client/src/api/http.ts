@@ -69,7 +69,15 @@ function activeTarget(): HttpTarget | null {
  * rafraîchissement automatique ci-dessous, sous peine de boucle (un `/refresh`
  * expiré relancerait un `/refresh`).
  */
-const AUTH_PATHS = ['/api/auth/refresh', '/api/auth/login', '/api/auth/me', '/api/auth/logout'];
+const AUTH_PATHS = [
+    '/api/auth/refresh',
+    '/api/auth/login',
+    '/api/auth/login/verify',
+    '/api/auth/login/resend',
+    '/api/auth/login/cancel',
+    '/api/auth/me',
+    '/api/auth/logout'
+];
 
 /** Le jeton d'accès a expiré ou manque : les deux se rattrapent par un refresh. */
 const isExpiredCode = (code: string): boolean => code === 'auth_expired' || code === 'auth_required';
@@ -192,6 +200,29 @@ async function runRequest<TOut>(
 export function login(payload: LoginRequest): Promise<LoginResponse> {
     const body = loginRequestSchema.parse(payload);
     return request('/api/auth/login', { method: 'POST', body: JSON.stringify(body) }, loginResponseSchema, null);
+}
+
+/** Le code de l'étape en cours d'une connexion ; `trust` : ce navigateur ne le redemandera plus. */
+export function loginVerify(payload: { code: string; trust?: boolean }): Promise<LoginResponse> {
+    return request(
+        '/api/auth/login/verify',
+        { method: 'POST', body: JSON.stringify(payload) },
+        loginResponseSchema,
+        null
+    );
+}
+
+/** Un nouveau code pour l'étape en cours. */
+export function loginResend(): Promise<LoginResponse> {
+    return request('/api/auth/login/resend', { method: 'POST', body: '{}' }, loginResponseSchema, null);
+}
+
+/** Abandonne la connexion en cours ; ne rejette jamais. */
+export function loginCancel(): Promise<void> {
+    return request('/api/auth/login/cancel', { method: 'POST', body: '{}' }, z.unknown(), null).then(
+        () => undefined,
+        () => undefined
+    );
 }
 
 /**

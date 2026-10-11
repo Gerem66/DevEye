@@ -4,6 +4,8 @@ import {
     resultSchema,
     serverStatusSchema,
     wsTicketResponseSchema,
+    type LoginResponse,
+    type LoginStep,
     type RemoteInstance,
     type SessionBundle,
     type SessionTokens,
@@ -15,7 +17,14 @@ import { useEffect, useSyncExternalStore } from 'react';
 import { z } from 'zod';
 
 import { ApiError, requestAt, setHttpTargetResolver, type HttpTarget } from '@/api/http';
-import { clearRemoteVault, deleteRemoteToken, readRemoteToken, writeRemoteToken } from '@/api/remoteVault';
+import {
+    clearRemoteVault,
+    deleteRemoteToken,
+    readRemoteToken,
+    readRemoteTrust,
+    writeRemoteToken,
+    writeRemoteTrust
+} from '@/api/remoteVault';
 import { ws, wsUrlOf, WsUnauthorizedError } from '@/api/ws';
 import { getLocalUser, setActingUser } from './currentUser';
 import { requestSelectWorkspace } from './viewRequest';
@@ -349,47 +358,71 @@ function dropSession(instanceId: number): void {
     patch(instanceId, { user: null });
 }
 
-export type RemoteLoginStep = { twoFactorRequired: true; challenge: string } | { twoFactorRequired: false };
+/** L'étape qu'attend la connexion de là-bas, ou la session ouverte. */
+export type RemoteLoginStep =
+    { status: 'pending'; step: LoginStep; to?: string; challenge: string } | { status: 'signedIn' };
+
+async function settleRemote(instanceId: number, res: LoginResponse, remember: boolean): Promise<RemoteLoginStep> {
+    if (res.status === 'pending') {
+        if (!res.challenge) throw new ApiError('forbidden', NOT_FEDERATED);
+        return { status: 'pending', step: res.step, to: res.to, challenge: res.challenge };
+    }
+    if (!res.tokens) throw new ApiError('forbidden', NOT_FEDERATED);
+    // La confiance accordée à ce navigateur vaut sans « Retenir » : c'est elle qu'on a cochée.
+    const me = getLocalUser();
+    if (res.trustToken && me) void writeRemoteTrust(me.id, instanceId, res.trustToken);
+    await openSession(instanceId, res, res.tokens, remember);
+    return { status: 'signedIn' };
+}
 
 export async function loginRemote(
     instanceId: number,
     credentials: { username: string; password: string },
     remember: boolean
 ): Promise<RemoteLoginStep> {
+    const me = getLocalUser();
+    const trustToken = me ? await readRemoteTrust(me.id, instanceId) : null;
     const res = await requestAt(
         anonymous(instanceId),
         '/api/auth/login',
-        { method: 'POST', body: JSON.stringify(credentials) },
+        { method: 'POST', body: JSON.stringify({ ...credentials, ...(trustToken ? { trustToken } : {}) }) },
         loginResponseSchema
     );
-    if (res.twoFactorRequired) {
-        if (!res.challenge) throw new ApiError('forbidden', NOT_FEDERATED);
-        return { twoFactorRequired: true, challenge: res.challenge };
-    }
-    if (!res.tokens) throw new ApiError('forbidden', NOT_FEDERATED);
-    await openSession(instanceId, res, res.tokens, remember);
-    return { twoFactorRequired: false };
+    return settleRemote(instanceId, res, remember);
 }
 
-export async function submitRemoteTwoFactor(
+export async function submitRemoteCode(
     instanceId: number,
-    step: { code: string; challenge: string },
+    step: { code: string; challenge: string; trust: boolean },
     remember: boolean
-): Promise<void> {
+): Promise<RemoteLoginStep> {
     const res = await requestAt(
         anonymous(instanceId),
-        '/api/auth/2fa/challenge',
+        '/api/auth/login/verify',
         { method: 'POST', body: JSON.stringify(step) },
         loginResponseSchema
     );
-    if (res.twoFactorRequired || !res.tokens) throw new ApiError('forbidden', NOT_FEDERATED);
-    await openSession(instanceId, res, res.tokens, remember);
+    return settleRemote(instanceId, res, remember);
 }
 
-export function cancelRemoteTwoFactor(instanceId: number, challenge: string): void {
+export async function resendRemoteCode(
+    instanceId: number,
+    challenge: string,
+    remember: boolean
+): Promise<RemoteLoginStep> {
+    const res = await requestAt(
+        anonymous(instanceId),
+        '/api/auth/login/resend',
+        { method: 'POST', body: JSON.stringify({ challenge }) },
+        loginResponseSchema
+    );
+    return settleRemote(instanceId, res, remember);
+}
+
+export function cancelRemoteLogin(instanceId: number, challenge: string): void {
     void requestAt(
         anonymous(instanceId),
-        '/api/auth/2fa/cancel',
+        '/api/auth/login/cancel',
         { method: 'POST', body: JSON.stringify({ challenge }) },
         z.unknown()
     ).catch(() => {});

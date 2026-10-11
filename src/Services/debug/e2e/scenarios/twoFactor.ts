@@ -81,11 +81,14 @@ export const twoFactor: E2eScenario = {
                 const [account] = ctx.accounts;
                 account.client.close();
                 await account.client.api('/api/auth/logout', {});
-                const login = await account.client.api<{ twoFactorRequired: boolean }>('/api/auth/login', {
+                const login = await account.client.api<{ status: string; step?: string }>('/api/auth/login', {
                     username: account.username,
                     password: account.password
                 });
-                check(login.twoFactorRequired, 'La connexion n’a pas demandé de code');
+                check(
+                    login.status === 'pending' && login.step === 'totp',
+                    'La connexion n’a pas demandé le code de l’application'
+                );
             }
         },
         {
@@ -97,7 +100,7 @@ export const twoFactor: E2eScenario = {
                 const enabledStep = Math.floor((ctx.state.get('enabledAt') as number) / STEP_MS);
                 const wait = (enabledStep + 1) * STEP_MS - Date.now() + 500;
                 if (wait > 0) await sleep(wait, ctx.signal);
-                await account.client.api('/api/auth/2fa/challenge', { code: totpCode(setupOf(ctx).secret) });
+                await account.client.api('/api/auth/login/verify', { code: totpCode(setupOf(ctx).secret) });
                 await account.client.connect();
                 return wait > 0 ? `Après ${Math.round(wait / 1000)} s d’attente` : undefined;
             }

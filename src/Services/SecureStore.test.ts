@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 
+import { env } from '@/Utils/Env';
+
 import Encryption from './Encryption';
 import {
     DEK_ABSOLUTE_TTL_MS,
@@ -49,11 +51,11 @@ describe('le cache de DEK par session', () => {
         assert.equal(peekDekExpiry('s1'), null);
     });
 
-    it('le balayage efface aussi une DEK mise de côté pour un challenge 2FA abandonné', () => {
+    it('le balayage efface aussi une DEK mise de côté pour une connexion abandonnée', () => {
         at(2_000_000);
         const dek = Buffer.alloc(32, 9);
         const token = stashPendingDek(42, dek, 60_000);
-        sweepSessionDeksForTest(2_000_000 + 5 * 60_000 + 1);
+        sweepSessionDeksForTest(2_000_000 + env.LOGIN_CHALLENGE_TTL_SECONDS * 1000 + 1);
         assert.ok(dek.every((b) => b === 0));
         assert.equal(claimPendingDek(token), null);
     });

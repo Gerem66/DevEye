@@ -38,7 +38,7 @@ La clé prêtée est décrite dans [SECURITY_MODEL.md](./SECURITY_MODEL.md#la-de
 ## L'archive
 
 ```
-Compte/compte.json          profil, réglages, sessions, espaces dont il n'est que membre
+Compte/compte.json          profil, réglages, sessions, navigateurs de confiance, espaces dont il n'est que membre
 Compte/avatar.<ext>
 Compte/journal.json         son journal d'activité
 Compte/retours.json         ses retours envoyés

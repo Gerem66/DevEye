@@ -180,6 +180,10 @@ export async function writeAccountExport(zip: ZipWriter, host: ExportHost, req: 
         'SELECT created_at, expires_at, revoked_at FROM refresh_tokens WHERE user_id = ? ORDER BY created_at',
         [req.userId]
     );
+    const browsers = await q.query<{ label: string; created_at: number; last_used_at: number; expires_at: number }>(
+        'SELECT label, created_at, last_used_at, expires_at FROM trusted_browsers WHERE user_id = ? ORDER BY created_at',
+        [req.userId]
+    );
     await json('Compte/compte.json', {
         compte: {
             id: account.id,
@@ -195,8 +199,10 @@ export async function writeAccountExport(zip: ZipWriter, host: ExportHost, req: 
             reglages: parseJson(account.settings)
         },
         securite: {
+            codeParMailAuxNouveauxNavigateurs: account.login_email_check === 1,
             chiffrementParMotDePasse: new SecretKeyService(db, host.crypt).isPasswordWrapped(keyRow),
-            doubleAuthentification: Boolean(twoFactor?.enabled)
+            doubleAuthentification: Boolean(twoFactor?.enabled),
+            codeAvantDePiloterUneMachineMinutes: Math.round(account.step_up_interval / 60)
         },
         espacesPossedes: owned.map((w) => ({ id: w.id, nom: w.name, genre: w.kind })),
         espacesOuVousEtesMembre: memberships.map((w) => ({ id: Number(w.id), nom: w.name, proprietaire: w.owner })),
@@ -205,6 +211,12 @@ export async function writeAccountExport(zip: ZipWriter, host: ExportHost, req: 
             ouverteLe: iso(s.created_at),
             expireLe: iso(s.expires_at),
             fermeeLe: iso(s.revoked_at)
+        })),
+        navigateursDeConfiance: browsers.map((b) => ({
+            navigateur: b.label,
+            ajouteLe: iso(b.created_at),
+            derniereConnexion: iso(b.last_used_at),
+            expireLe: iso(b.expires_at)
         }))
     });
     const avatar = dataUrlFile(account.avatar);

@@ -133,23 +133,26 @@ Handlers dans `src/features/secrecy/index.ts`. Quand elle est **ON** :
 Pour éviter de saisir le mot de passe deux fois d'affilée (login, puis unlock),
 la DEK est déballée **au moment du login** (route `POST /api/auth/login`, où le
 mot de passe est disponible en clair) et cachée sous la `sessionId` émise, via
-`rememberSessionDek`. Voir `unwrapDekForLogin` dans `src/auth/routes.ts`.
+`rememberSessionDek`. Voir `unwrapDekForLogin` dans `src/auth/loginRoutes.ts`.
 
 - Ne se déclenche **que** si la feature est ON **et** `reAuthInterval > 0`.
 - **Ne se déclenche jamais** au F5 / auto-login : ces flux réutilisent le cookie
   d'accès et n'appellent jamais `/api/auth/login`, donc aucune DEK n'est
   pré-cachée : le serveur redemande alors le mot de passe (comportement voulu).
-- **2FA :** la session n'existe qu'après l'étape TOTP. La DEK déballée au login
-  est gardée côté serveur dans un _pending store_ (`stashPendingDek`) sous un
-  token opaque transporté dans le challenge JWT (champ `pdk`, jamais le mot de
-  passe lui-même). L'étape TOTP la réclame (`claimPendingDek`) et la lie à la
-  session émise. Nettoyage du matériel crypto en attente :
-    - les entrées expirent (≤ fenêtre du challenge 2FA, sweep paresseux) ;
+- **Étapes après le mot de passe** (code par mail, application, SMS) : la
+  session n'existe qu'après la dernière. La DEK déballée au login est gardée
+  côté serveur dans un _pending store_ (`stashPendingDek`) sous un token opaque
+  que la connexion en cours garde en mémoire (`src/auth/loginChallenge.ts`),
+  jamais le mot de passe lui-même. La dernière étape la réclame
+  (`claimPendingDek`) et la lie à la session émise. Nettoyage du matériel crypto
+  en attente :
+    - les entrées expirent avec la connexion en cours
+      (`LOGIN_CHALLENGE_TTL_SECONDS`, 15 min par défaut, sweep paresseux) ;
     - un nouveau login purge les pending DEK du même user (`stashPendingDek`
       appelle `discardPendingDeksForUser`), ce qui couvre "Retour puis re-login" ;
-    - le bouton "Retour" du prompt 2FA appelle `POST /api/auth/2fa/cancel` qui
-      efface le cookie de challenge et `discardPendingDek` (libération immédiate) ;
-    - une 2FA désactivée entre les deux étapes libère aussi la DEK.
+    - le bouton "Retour" appelle `POST /api/auth/login/cancel`, qui efface le
+      cookie de la connexion en cours et `discardPendingDek` (libération
+      immédiate), comme cinq codes faux ou trop de codes redemandés.
 
 ## La DEK prêtée à une exportation
 
@@ -206,6 +209,31 @@ Application directe des deux étages ci-dessus (`features/notes/src/server/handl
   ticket à usage unique pour la socket, sans jamais un cookie. Éteint par défaut.
   Voir [FEDERATION.md](./FEDERATION.md), qui dit aussi ce que ce montage protège
   et ce qu'il ne protège pas.
+- **Les étapes d'une connexion** (`src/auth/loginRoutes.ts`), dans l'ordre :
+  le mot de passe, un code par mail si le navigateur est inconnu, le code de
+  l'application si la 2FA est active, un code par SMS si le compte l'a
+  demandé et que le navigateur est inconnu. Le mail part dès le mot de passe
+  validé : même si la 2FA arrête l'intrus, le titulaire apprend que son mot de
+  passe est connu. Le SMS, payant, part en dernier : seul qui a franchi le
+  reste peut en déclencher un. Un code envoyé vaut 10 minutes, n'existe côté
+  serveur que condensé sous une clé dérivée de la clé serveur, se redemande au
+  plus toutes les 60 s et cinq fois ; cinq codes faux annulent la connexion. La
+  connexion en cours vit en mémoire, nommée par un jeton signé (cookie `dv_lc`,
+  ou le corps pour une origine fédérée) qui ne porte aucun secret.
+    - **Code par mail** : actif par défaut pour tout compte, il n'existe que si
+      le serveur envoie du mail (`SMTP_HOST`). Le couper demande le mot de
+      passe. Un serveur de mail en panne ne ferme pas la porte à tous : l'étape
+      est sautée, journalisée en erreur et auditée. C'est un choix assumé
+      (l'administrateur aussi se connecte par là), et la limite de cette
+      protection.
+    - **Navigateurs de confiance** : cochée à une étape de code envoyé, la
+      confiance pose un jeton aléatoire dans le cookie `dv_tb` (`HttpOnly`,
+      `SameSite=Strict`, chemin `/api/auth`, jusqu'à quatre comptes par
+      navigateur) ; la base n'en garde que le condensé, le libellé tiré du
+      User-Agent et ses dates (`trusted_browsers`). Ce navigateur saute alors
+      les codes envoyés, jamais la 2FA, pendant 90 jours après sa dernière
+      connexion. Sécurité les liste et les retire ; changer de mot de passe ou
+      récupérer le coffre les retire tous.
 - 2FA TOTP optionnel avec codes de secours à usage unique. Un code TOTP accepté
   ne se rejoue pas (`last_used_counter`) ; les codes de secours (16 caractères)
   sont condensés sous une clé dérivée de la clé serveur, pas en SHA-256 nu : un
@@ -214,7 +242,8 @@ Application directe des deux étages ci-dessus (`features/notes/src/server/handl
   2FA ouvre les machines (voir [L'agent](#lagent)), une session seule ne doit
   pas se la donner.
 - **Verrouillage progressif** sur tout ce qui vérifie un secret : login, 2FA,
-  déverrouillage du coffre, récupération, activation/désactivation de la 2FA.
+  code envoyé par mail ou SMS, déverrouillage du coffre, récupération,
+  activation/désactivation de la 2FA.
   Compteur d'échecs par compte (par identifiant pour le login), 5 échecs → 30 s,
   10 → 5 min, 20 → 1 h ; les commandes WS y passent aussi, puisque la limite de
   débit HTTP ne voit que la poignée de main. Chaque échec est audité.

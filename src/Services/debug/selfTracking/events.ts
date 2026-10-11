@@ -32,7 +32,8 @@ export function failureEvent(command: string, code: string): AudienceSelfEvent {
 
 const AUTH_ROUTES: Record<string, string> = {
     '/api/auth/login': 'auth.login',
-    '/api/auth/2fa/challenge': 'auth.twoFactor',
+    '/api/auth/login/verify': 'auth.loginCode',
+    '/api/auth/login/resend': 'auth.loginResend',
     '/api/auth/logout': 'auth.logout',
     '/api/auth/change-password': 'auth.changePassword',
     '/api/auth/signup': 'auth.signup',

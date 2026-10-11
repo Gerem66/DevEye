@@ -1,6 +1,6 @@
 import type { SdkMailSample } from '@deveye/types/sdk/server';
 
-import { accountDeletedMail } from '@/Services/accountMails';
+import { accountDeletedMail, loginCodeMail } from '@/Services/accountMails';
 import { alertMail } from '@/Services/alertCore';
 import { sampleAlert } from '@/Services/notifications';
 import { existingAccountMail, verificationMail } from '@/Services/signup/mails';
@@ -45,6 +45,19 @@ export const CORE_MAIL_SAMPLES: readonly SdkMailSample[] = [
                 at: Math.floor(now / 1000),
                 notes: [],
                 site: origins.site
+            })
+    },
+    {
+        key: 'loginCode',
+        label: 'Code de connexion d’un nouveau navigateur',
+        sender: 'server',
+        build: ({ now }) =>
+            loginCodeMail({
+                username: HOLDER,
+                code: '482915',
+                browser: 'Firefox sur Linux',
+                ip: '203.0.113.42',
+                at: Math.floor(now / 1000)
             })
     },
     {

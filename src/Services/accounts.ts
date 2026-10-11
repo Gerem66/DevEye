@@ -22,7 +22,11 @@ export async function openAccount(
     db: Pick<Database, 'users' | 'workspaces'>,
     input: OpenAccountInput
 ): Promise<{ user: UserRow; personalWorkspaceId: number }> {
-    const user = await db.users.create({ ...input, e2eRun: e2eRunOf(input.email) });
+    const e2eRun = e2eRunOf(input.email);
+    const user = await db.users.create({ ...input, e2eRun });
+    // Un compte d'essai se connecte sans boîte mail : le scénario qui éprouve
+    // le code par mail rallume la confirmation lui-même.
+    if (e2eRun) await db.users.setLoginEmailCheck(user.id, false);
     // L'espace personnel ne peut pas exister avant le compte (sa FK
     // propriétaire le référence) : compte, espace, puis rattachement.
     const personal = await db.workspaces.createPersonal(user.id, input.username);

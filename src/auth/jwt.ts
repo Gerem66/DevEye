@@ -111,34 +111,32 @@ export async function verifyDeviceToken(token: string): Promise<DeviceClaims | n
 }
 
 /**
- * Short-lived token proving a password check passed, pending a TOTP code.
- * `pendingDekToken` (optional) references a DEK unwrapped at login time and held
- * server-side, so the TOTP step can pre-cache it without re-prompting for the
- * password. It's only an opaque lookup key — no secret material lives in the JWT.
+ * Short-lived token proving a password check passed, pending the codes of a
+ * login (`auth/loginChallenge.ts`). It names the challenge held server-side,
+ * no secret material lives in it.
  */
-export async function signTwoFactorChallenge(userId: number, pendingDekToken?: string): Promise<string> {
-    const builder = new SignJWT(pendingDekToken ? { purpose: '2fa', pdk: pendingDekToken } : { purpose: '2fa' })
+export async function signLoginChallenge(userId: number, challengeId: string): Promise<string> {
+    return new SignJWT({ purpose: 'login', cid: challengeId })
         .setProtectedHeader({ alg: 'HS256' })
         .setSubject(String(userId))
         .setIssuer(issuer)
-        .setAudience('deveye-2fa')
+        .setAudience('deveye-login')
         .setIssuedAt()
-        .setExpirationTime(`${env.TWOFA_CHALLENGE_TTL_SECONDS}s`);
-    return builder.sign(accessSecret);
+        .setExpirationTime(`${env.LOGIN_CHALLENGE_TTL_SECONDS}s`)
+        .sign(accessSecret);
 }
 
-export async function verifyTwoFactorChallenge(
-    token: string
-): Promise<{ sub: string; pendingDekToken?: string } | null> {
+export async function verifyLoginChallenge(token: string): Promise<{ userId: number; challengeId: string } | null> {
     try {
         const { payload } = await jwtVerify(token, accessSecret, {
             issuer,
-            audience: 'deveye-2fa',
+            audience: 'deveye-login',
             algorithms: JWT_ALGORITHMS
         });
-        if (typeof payload.sub !== 'string' || payload.purpose !== '2fa') return null;
-        const pdk = typeof payload.pdk === 'string' ? payload.pdk : undefined;
-        return { sub: payload.sub, pendingDekToken: pdk };
+        if (typeof payload.sub !== 'string' || payload.purpose !== 'login' || typeof payload.cid !== 'string') {
+            return null;
+        }
+        return { userId: Number(payload.sub), challengeId: payload.cid };
     } catch {
         return null;
     }
