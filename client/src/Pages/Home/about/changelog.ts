@@ -12,6 +12,25 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: readonly ChangelogEntry[] = [
     {
+        version: '0.24.6',
+        date: '2026-10-11',
+        changes: [
+            {
+                kind: 'added',
+                text: 'Liens courts : raccourcissez un lien et suivez ses visites (sites d’origine, pays, appareils), avec mot de passe, date de fin, QR code et destination par appareil, jusqu’à 1 lien et 100 visites par mois avec l’offre Gratuite, 100 liens et 100 000 visites avec l’offre Pro'
+            },
+            {
+                kind: 'fixed',
+                text: 'Espace de travail : un membre actif ne paraît plus absent depuis des jours, « vu » suit sa dernière visite et non sa dernière saisie du mot de passe'
+            },
+            {
+                kind: 'improved',
+                text: 'Météo : la ville principale se supprime aussi, et le bouton « + » garde le curseur dans le champ de recherche'
+            },
+            { kind: 'fixed', text: 'Accueil : la recherche de « Ajouter à l’accueil » ignore la casse et les accents' }
+        ]
+    },
+    {
         version: '0.24.5',
         date: '2026-10-09',
         changes: [
