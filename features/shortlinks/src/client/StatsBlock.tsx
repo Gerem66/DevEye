@@ -1,4 +1,4 @@
-import { safeHref, useResource } from 'deveye-sdk-client';
+import { Button, safeHref, useResource } from 'deveye-sdk-client';
 import { useMemo, useState } from 'react';
 
 import type { ShortlinkRange } from '../contracts/domain';
@@ -40,7 +40,18 @@ export default function StatsBlock({ linkId, title, detailed }: StatsBlockProps)
         <section className={styles.section}>
             <div className={styles.sectionHead}>
                 <h3 className={styles.sectionTitle}>{title}</h3>
-                <RangeBar value={range} onChange={setRange} />
+                <div className={styles.actions}>
+                    <Button
+                        variant='ghost'
+                        icon='refresh'
+                        disabled={read.loading}
+                        onClick={read.reload}
+                        title='Relire les chiffres sans attendre'
+                    >
+                        Actualiser
+                    </Button>
+                    <RangeBar value={range} onChange={setRange} />
+                </div>
             </div>
 
             {read.error !== null && <p className={styles.error}>{read.error}</p>}
