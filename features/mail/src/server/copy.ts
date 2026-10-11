@@ -1,6 +1,27 @@
 import type { FeatureItemsCopy, ItemTree } from '@deveye/types/sdk/server';
 
+import type { MailCredentials } from './client';
 import type { MailRepo } from './repo';
+
+/**
+ * Les serveurs de la boîte, sans aucun mot de passe ni jeton : une copie passe
+ * par le navigateur de qui la fait, qui peut n'avoir que la lecture sur la
+ * boîte. Elle arrive à reconnecter.
+ */
+function withoutSecrets(plain: string): string {
+    const credentials = JSON.parse(plain) as MailCredentials;
+    const proxy = credentials.proxy && { ...credentials.proxy, password: null };
+    return JSON.stringify(
+        credentials.kind === 'password'
+            ? {
+                  ...credentials,
+                  imap: { ...credentials.imap, password: '' },
+                  smtp: { ...credentials.smtp, password: '' },
+                  proxy
+              }
+            : { ...credentials, accessToken: '', refreshToken: null, expiresAt: 0, proxy }
+    );
+}
 
 /**
  * Ce dont une boîte est faite : son compte, et ce que la relève en a rapatrié.
@@ -21,6 +42,7 @@ export const mailTree: ItemTree = [
         userColumn: 'user_id',
         orderColumn: 'sort_order',
         sealed: ['display_name_enc', 'email_address_enc', 'last_sync_error_enc', 'credentials_enc'],
+        redact: { credentials_enc: withoutSecrets },
         omit: ['last_sync_at', 'last_sync_status', 'last_error_at', 'last_sync_error_enc', 'created'],
         tier: { column: 'security_tier', open: 'open', private: 'guarded' }
     },
@@ -45,20 +67,12 @@ export const mailCopy: FeatureItemsCopy<MailRepo> = {
         ]);
         return {
             blockers: [],
-            // Le mot de passe de la boîte voyage avec elle, rescellé sous la clé
-            // de la destination : dans un espace partagé, ses membres relèvent
-            // et envoient au nom de cette adresse. Rien à l'écran ne le dirait.
-            carries:
-                rows[0]?.auth_method === 'password'
-                    ? ['Le mot de passe de la boîte : qui peut lire la copie peut s’y connecter']
-                    : ['L’accès à la boîte : qui peut lire la copie peut relever et envoyer en son nom'],
+            carries: [],
             drops: [
-                'Ses dossiers et messages déjà relevés : la copie les relèvera de nouveau',
-                // Un jeton OAuth est lié à l'application enregistrée par CE
-                // serveur : ailleurs, le fournisseur peut le refuser.
-                ...(rows[0]?.auth_method !== 'password'
-                    ? ['Sa connexion par le fournisseur, à refaire si la copie part vers un autre serveur']
-                    : [])
+                rows[0]?.auth_method === 'password'
+                    ? 'Son mot de passe : la copie arrive à reconnecter, en le saisissant de nouveau'
+                    : 'Sa connexion par le fournisseur : la copie arrive à reconnecter',
+                'Ses dossiers et messages déjà relevés : la copie les relèvera de nouveau'
             ]
         };
     },

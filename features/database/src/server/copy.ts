@@ -23,7 +23,12 @@ export const databaseTree: ItemTree = [
         // tel quel, n'étant dérivé que du nom.
         unique: { column: 'name_ref', message: 'Une base du même nom existe déjà dans cet espace.' },
         sealed: ['content', 'secret_enc', 'access_content', 'access_secret_enc', 'last_error'],
+        // Une copie passe par le navigateur de qui la fait, qui peut n'avoir que
+        // la lecture : les secrets restent sur le serveur, rescellés au seul
+        // déplacement.
         omit: [
+            'secret_enc',
+            'access_secret_enc',
             'last_check_at',
             'last_elapsed_ms',
             'status',
@@ -46,6 +51,13 @@ export const databaseTree: ItemTree = [
 
 export const databaseCopy: FeatureItemsCopy<DatabaseRepo> = {
     tree: databaseTree,
+    async plan() {
+        return {
+            blockers: [],
+            carries: [],
+            drops: ['Son mot de passe et le secret de son accès : la copie arrive à reconnecter']
+        };
+    },
     async admit({ repo, quota }) {
         await quota.assert('connections', async (owned) => (await repo.countInWorkspaces(owned)) + 1);
     }

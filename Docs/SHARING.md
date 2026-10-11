@@ -395,7 +395,10 @@ Ce qui voyage est **en clair**, par construction : la destination scelle sous un
 clé que la source ne connaît pas. Il n'existe que dans la mémoire des deux
 serveurs et de l'onglet, trois minutes au plus (`TTL_MS`,
 `src/features/sharing/copy.ts`), et la dernière tranche rendue fait oublier le
-paquet à la source.
+paquet à la source. **Aucun secret ne voyage** : l'onglet est celui d'un membre
+qui peut n'avoir que la lecture. Un mot de passe ou un jeton rangé dans sa propre
+colonne est omis (`omit`), celui qui partage une colonne avec d'autres données
+est expurgé (`redact`), et la copie arrive à reconnecter.
 
 ### Rien de ce qui arrive n'est cru
 
@@ -422,7 +425,7 @@ Un module ne code pas sa copie : il **décrit ce dont un élément est fait**
 (`items.copy.tree`, un `ItemTree`), et le moteur du SDK (`src/sdk/copy.ts` de
 `@deveye/types` : `exportItemTree`, `importItemTree`) fait le reste pour toutes
 les fonctionnalités. Par table : sa clé, la colonne qui la rattache à l'élément,
-ses colonnes scellées (`sealed`), ses références vers d'autres tables de l'arbre
+ses colonnes scellées (`sealed`, dont `redact` retire un secret), ses références vers d'autres tables de l'arbre
 (`refs`, réécrites vers les nouveaux ids), la colonne d'espace, celle du compte
 (réécrite vers qui copie), et ce que la copie laisse à sa valeur par défaut
 (`omit` : une source de l'espace quitté, un état de synchronisation). La racine

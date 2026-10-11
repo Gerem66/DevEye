@@ -288,6 +288,8 @@ export async function toAccountDTO(
         // Loose on purpose, here and below: a blob written before `proxy`
         // existed has no key at all, and `!== null` would read as configured.
         proxyConfigured = credentials.proxy != null;
+        // Une copie arrive sans mot de passe : à saisir de nouveau.
+        needsReauth = !credentials.imap.password || !credentials.smtp.password;
     } else if (credentials?.kind === 'oauth') {
         const endpoints = oauthProviderEndpoints(credentials.provider);
         imapHost = endpoints.imapHost;
