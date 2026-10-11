@@ -417,23 +417,27 @@ async fn stream_session(
         }
         match tokio::time::timeout(remaining, stream.next()).await {
             Ok(Some(Ok(Message::Text(txt)))) => {
-                if let crate::orders::Admission::Refused {
-                    command,
-                    payload,
-                    reason,
-                } = crate::orders::admit(&txt, guard, &config.policy, now_ms())
-                {
-                    commands::refuse_order(&mut sink, device_id, &command, &payload, &reason).await;
-                    continue;
-                }
-                match serde_json::from_str::<ServerMessage>(&txt) {
-                    Ok(ServerMessage::Config {
+                let message = match crate::orders::admit(&txt, guard, &config.policy, now_ms()) {
+                    crate::orders::Admission::Refused {
+                        command,
+                        payload,
+                        reason,
+                    } => {
+                        commands::refuse_order(&mut sink, device_id, &command, &payload, &reason)
+                            .await;
+                        continue;
+                    }
+                    crate::orders::Admission::Ignore => continue,
+                    crate::orders::Admission::Dispatch(message) => message,
+                };
+                match message {
+                    ServerMessage::Config {
                         metric_interval_ms,
                         process_capture,
                         sentinel_enabled,
                         integrity_interval_ms,
                         auth_events_enabled,
-                    }) => {
+                    } => {
                         capture = process_capture;
                         interval = Duration::from_millis(metric_interval_ms.max(1000));
                         sentinel = sentinel_enabled.unwrap_or(false);
@@ -445,7 +449,7 @@ async fn stream_session(
                     }
                     // The server may greet a pending-deletion device with destroy
                     // straight away, before any config.
-                    Ok(ServerMessage::Destroy {}) => {
+                    ServerMessage::Destroy {} => {
                         commands::handle_destroy(&mut sink, device_id).await;
                         // Only reached if self-destruct failed → end the session.
                         return Ok(SessionOutcome::Established);
@@ -713,15 +717,20 @@ async fn stream_session(
                 }
                 match incoming {
                     Some(Ok(Message::Text(txt))) => {
-                        if let crate::orders::Admission::Refused { command, payload, reason } =
-                            crate::orders::admit(&txt, guard, &config.policy, now_ms())
-                        {
-                            commands::refuse_order(&mut sink, device_id, &command, &payload, &reason).await;
-                            continue;
-                        }
-                        match serde_json::from_str::<ServerMessage>(&txt) {
+                        let message = match crate::orders::admit(&txt, guard, &config.policy, now_ms()) {
+                            crate::orders::Admission::Refused { command, payload, reason } => {
+                                commands::refuse_order(&mut sink, device_id, &command, &payload, &reason).await;
+                                continue;
+                            }
+                            crate::orders::Admission::Ignore => {
+                                debug!("ignoring unrecognized server frame");
+                                continue;
+                            }
+                            crate::orders::Admission::Dispatch(message) => message,
+                        };
+                        match message {
                             // "Collect now" (user refresh): one full instant + report.
-                            Ok(ServerMessage::Collect {}) => {
+                            ServerMessage::Collect {} => {
                                 let (snapshot, sockets) = collect(collector, &capture, true).await?;
                                 push_bounded(queue, snapshot);
                                 marks.snapshot = Some(Instant::now());
@@ -732,13 +741,13 @@ async fn stream_session(
                                 marks.report = Some(Instant::now());
                                 last_sockets = sockets;
                             }
-                            Ok(ServerMessage::Config {
+                            ServerMessage::Config {
                                 metric_interval_ms,
                                 process_capture,
                                 sentinel_enabled,
                                 integrity_interval_ms,
                                 auth_events_enabled,
-                            }) => {
+                            } => {
                                 capture = process_capture;
                                 let new_interval = Duration::from_millis(metric_interval_ms.max(1000));
                                 if new_interval != interval {
@@ -778,7 +787,7 @@ async fn stream_session(
                             }
                             // Relevé Sentinelle à la demande. Jamais borné (c'est un
                             // ordre explicite), mais pose le jalon comme les autres.
-                            Ok(ServerMessage::Scan {}) => {
+                            ServerMessage::Scan {} => {
                                 if sentinel {
                                     spawn_scan(&scan_tx, auth_enabled, auth_cursor);
                                     marks.scan = Some(Instant::now());
@@ -787,18 +796,18 @@ async fn stream_session(
                                 }
                             }
                             // Device deleted while we're online: wipe and exit.
-                            Ok(ServerMessage::Destroy {}) => {
+                            ServerMessage::Destroy {} => {
                                 commands::handle_destroy(&mut sink, device_id).await;
                                 // Only reached if self-destruct failed → end session.
                                 return Ok(SessionOutcome::Established);
                             }
                             // Self-update: verify + swap the binary, then restart.
-                            Ok(ServerMessage::Update {
+                            ServerMessage::Update {
                                 target_id,
                                 version,
                                 sha256,
                                 signature,
-                            }) => {
+                            } => {
                                 commands::handle_update(
                                     &mut sink, config, device_id, &target_id, &version, &sha256, &signature,
                                 )
@@ -807,7 +816,7 @@ async fn stream_session(
                                 // running on the current binary.
                             }
                             // Stop / clean restart of this process (from the UI).
-                            Ok(ServerMessage::Lifecycle { action }) => match action.as_str() {
+                            ServerMessage::Lifecycle { action } => match action.as_str() {
                                 "stop" => {
                                     info!("lifecycle: stop ordered by server");
                                     return Ok(SessionOutcome::Stop);
@@ -821,7 +830,7 @@ async fn stream_session(
                             // The server replaced the token before it expires. Kept
                             // in memory even if the save fails: the server still
                             // accepts the old one until the new one has been used.
-                            Ok(ServerMessage::TokenRotate { token }) => {
+                            ServerMessage::TokenRotate { token } => {
                                 match Config::persist_rotated_token(device_id, &token) {
                                     Ok(()) => info!("device token rotated"),
                                     Err(e) => warn!(error = %e, "rotated token could not be saved"),
@@ -829,26 +838,26 @@ async fn stream_session(
                                 config.device_token = Some(token);
                             }
                             // Persistence/privilege change (install autostart, elevate…).
-                            Ok(ServerMessage::Service { action }) => {
+                            ServerMessage::Service { action } => {
                                 commands::handle_service(&mut sink, device_id, &action).await;
                             }
                             // System power action (shutdown/reboot/suspend/hibernate/lock).
-                            Ok(ServerMessage::Power { action }) => {
+                            ServerMessage::Power { action } => {
                                 commands::handle_power(&mut sink, device_id, &action).await;
                             }
                             // Enumerate log sources (off-loop; replies via log_rx).
-                            Ok(ServerMessage::LogSources {}) => {
+                            ServerMessage::LogSources {} => {
                                 tokio::spawn(crate::logs::detect_task(log_tx.clone()));
                             }
                             // Run a log query (off-loop; streams via log_rx).
-                            Ok(ServerMessage::LogQuery {
+                            ServerMessage::LogQuery {
                                 query_id,
                                 source_id,
                                 filter,
                                 limit,
                                 offset,
                                 anchor,
-                            }) => {
+                            } => {
                                 let cancel = Arc::new(AtomicBool::new(false));
                                 if let Some((_, previous)) =
                                     log_queries.insert(source_id.clone(), (query_id.clone(), Arc::clone(&cancel)))
@@ -869,7 +878,7 @@ async fn stream_session(
                                 ));
                             }
                             // Open an interactive terminal (PTY + shell).
-                            Ok(ServerMessage::TermOpen { session_id, cols, rows, user }) => {
+                            ServerMessage::TermOpen { session_id, cols, rows, user } => {
                                 if let Err(e) = terminals.open(session_id.clone(), cols, rows, user) {
                                     commands::send_term_event(
                                         &mut sink,
@@ -884,7 +893,7 @@ async fn stream_session(
                                 }
                             }
                             // Keystrokes for a terminal session (base64 → raw bytes).
-                            Ok(ServerMessage::TermInput { session_id, data }) => {
+                            ServerMessage::TermInput { session_id, data } => {
                                 if let Ok(bytes) =
                                     base64::engine::general_purpose::STANDARD.decode(data.as_bytes())
                                 {
@@ -892,14 +901,14 @@ async fn stream_session(
                                 }
                             }
                             // Resize a terminal session's PTY.
-                            Ok(ServerMessage::TermResize { session_id, cols, rows }) => {
+                            ServerMessage::TermResize { session_id, cols, rows } => {
                                 terminals.resize(&session_id, cols, rows);
                             }
                             // Close a terminal session (the reader then emits a final exit).
-                            Ok(ServerMessage::TermClose { session_id }) => {
+                            ServerMessage::TermClose { session_id } => {
                                 terminals.close(&session_id);
                             }
-                            Ok(ServerMessage::TunnelOpen { tunnel_id, host, port, window }) => {
+                            ServerMessage::TunnelOpen { tunnel_id, host, port, window } => {
                                 if let Err(error) = tunnels.open(tunnel_id.clone(), host, port, window) {
                                     commands::send_tunnel_event(
                                         &mut sink,
@@ -909,7 +918,7 @@ async fn stream_session(
                                     .await;
                                 }
                             }
-                            Ok(ServerMessage::TunnelWrite { tunnel_id, data }) => {
+                            ServerMessage::TunnelWrite { tunnel_id, data } => {
                                 if let Ok(bytes) =
                                     base64::engine::general_purpose::STANDARD.decode(data.as_bytes())
                                 {
@@ -927,42 +936,42 @@ async fn stream_session(
                                     }
                                 }
                             }
-                            Ok(ServerMessage::TunnelCredit { tunnel_id, credits }) => {
+                            ServerMessage::TunnelCredit { tunnel_id, credits } => {
                                 tunnels.credit(&tunnel_id, credits);
                             }
-                            Ok(ServerMessage::TunnelClose { tunnel_id }) => {
+                            ServerMessage::TunnelClose { tunnel_id } => {
                                 tunnels.close(&tunnel_id);
                             }
                             // File explorer (all off-loop; stream via files_rx).
-                            Ok(ServerMessage::FilesList { op_id, path }) => {
+                            ServerMessage::FilesList { op_id, path } => {
                                 tokio::spawn(crate::files::list_task(op_id, path, files_tx.clone()));
                             }
-                            Ok(ServerMessage::FilesAnalyze { op_id, path }) => {
+                            ServerMessage::FilesAnalyze { op_id, path } => {
                                 tokio::spawn(crate::files::analyze_task(op_id, path, files_tx.clone()));
                             }
-                            Ok(ServerMessage::FilesSearch { op_id, path, filter }) => {
+                            ServerMessage::FilesSearch { op_id, path, filter } => {
                                 tokio::spawn(crate::files::search_task(op_id, path, filter, files_tx.clone()));
                             }
-                            Ok(ServerMessage::FilesMutate { op_id, op, path, dest }) => {
+                            ServerMessage::FilesMutate { op_id, op, path, dest } => {
                                 tokio::spawn(crate::files::mutate_task(op_id, op, path, dest, files_tx.clone()));
                             }
                             // Download streams on its own thread (bounded by the channel).
-                            Ok(ServerMessage::FilesDownload { op_id, path }) => {
+                            ServerMessage::FilesDownload { op_id, path } => {
                                 crate::files::spawn_download(op_id, path, files_tx.clone());
                             }
-                            Ok(ServerMessage::FilesArchive { op_id, path, exclusions, one_file_system, window }) => {
+                            ServerMessage::FilesArchive { op_id, path, exclusions, one_file_system, window } => {
                                 let request = crate::archive::ArchiveRequest { path, exclusions, one_file_system };
                                 archives.start(op_id, request, window);
                             }
-                            Ok(ServerMessage::FilesArchiveCredit { op_id, credits }) => {
+                            ServerMessage::FilesArchiveCredit { op_id, credits } => {
                                 archives.credit(&op_id, credits);
                             }
-                            Ok(ServerMessage::FilesArchiveCancel { op_id }) => {
+                            ServerMessage::FilesArchiveCancel { op_id } => {
                                 archives.cancel(&op_id);
                             }
                             // Upload chunks are applied inline (sequentially), so an
                             // offset-based write never races another chunk of the same file.
-                            Ok(ServerMessage::FilesUpload { op_id, path, offset, data, done }) => {
+                            ServerMessage::FilesUpload { op_id, path, offset, data, done } => {
                                 let bytes = base64::engine::general_purpose::STANDARD
                                     .decode(data.as_bytes())
                                     .unwrap_or_default();
@@ -991,24 +1000,24 @@ async fn stream_session(
                                 }
                             }
                             // CloudSync: full assignment list (watchers started/stopped here).
-                            Ok(ServerMessage::SyncConfig { shares }) => {
+                            ServerMessage::SyncConfig { shares } => {
                                 sync_mgr.apply_config(shares);
                             }
                             // CloudSync: scan the share's folder (off-loop; streams via sync_rx).
-                            Ok(ServerMessage::SyncScan { session_id, share_id, mode }) => {
+                            ServerMessage::SyncScan { session_id, share_id, mode } => {
                                 sync_mgr.start_scan(session_id, share_id, mode);
                             }
                             // CloudSync: upload one file (off-loop; streams via sync_rx).
-                            Ok(ServerMessage::SyncPush { op_id, share_id, rel_path, start_offset, window, hash, resume }) => {
+                            ServerMessage::SyncPush { op_id, share_id, rel_path, start_offset, window, hash, resume } => {
                                 sync_mgr.start_push(op_id, share_id, rel_path, start_offset, window, hash, resume);
                             }
                             // CloudSync: one credit back for a windowed push (never blocks).
-                            Ok(ServerMessage::SyncPushAck { op_id, seq }) => {
+                            ServerMessage::SyncPushAck { op_id, seq } => {
                                 sync_mgr.push_ack(&op_id, seq);
                             }
                             // CloudSync: install one download chunk, routed to the op's worker
                             // thread; acks and the outcome come back through sync_rx.
-                            Ok(ServerMessage::SyncApplyChunk { op_id, share_id, rel_path, seq, data, done, hash, size, mtime, mode, resume_from }) => {
+                            ServerMessage::SyncApplyChunk { op_id, share_id, rel_path, seq, data, done, hash, size, mtime, mode, resume_from } => {
                                 let frame = crate::sync::ApplyFrame {
                                     op_id,
                                     rel_path,
@@ -1026,14 +1035,14 @@ async fn stream_session(
                                 }
                             }
                             // CloudSync: tell the server where to resume a download.
-                            Ok(ServerMessage::SyncApplyStart { op_id, share_id, hash, .. }) => {
+                            ServerMessage::SyncApplyStart { op_id, share_id, hash, .. } => {
                                 let ev = tokio::task::block_in_place(|| {
                                     sync_mgr.apply_start(&op_id, share_id, &hash)
                                 });
                                 commands::send_sync_event(&mut sink, device_id, ev).await;
                             }
                             // CloudSync: create an empty directory (no bytes transferred).
-                            Ok(ServerMessage::SyncApplyDir { op_id, share_id, rel_path, kind, mode }) => {
+                            ServerMessage::SyncApplyDir { op_id, share_id, rel_path, kind, mode } => {
                                 let ev = tokio::task::block_in_place(|| {
                                     sync_mgr.apply_dir(&op_id, share_id, &rel_path, &kind, mode)
                                 });
@@ -1042,20 +1051,20 @@ async fn stream_session(
                             // CloudSync: install content already held elsewhere in the share
                             // (rename/move) by local copy, nothing crosses the network. Off-loop:
                             // the source is hashed first; the outcome comes back through sync_rx.
-                            Ok(ServerMessage::SyncApplyLocal { op_id, share_id, rel_path, source_rel_path, hash, size, mtime, mode }) => {
+                            ServerMessage::SyncApplyLocal { op_id, share_id, rel_path, source_rel_path, hash, size, mtime, mode } => {
                                 sync_mgr.apply_local(&op_id, share_id, &rel_path, &source_rel_path, &hash, size, mtime, mode);
                             }
                             // CloudSync: rename in place (no transfer, no trash). Off-loop as above.
-                            Ok(ServerMessage::SyncMove { op_id, share_id, from_rel_path, rel_path, hash, size, mtime, mode }) => {
+                            ServerMessage::SyncMove { op_id, share_id, from_rel_path, rel_path, hash, size, mtime, mode } => {
                                 sync_mgr.move_file(&op_id, share_id, &from_rel_path, &rel_path, &hash, size, mtime, mode);
                             }
                             // CloudSync: propagate a deletion (local trash, never unlink).
                             // Off-loop: the rename may wait on a lock; the outcome comes back through sync_rx.
-                            Ok(ServerMessage::SyncDelete { op_id, share_id, rel_path, force }) => {
+                            ServerMessage::SyncDelete { op_id, share_id, rel_path, force } => {
                                 sync_mgr.delete(&op_id, share_id, &rel_path, force);
                             }
                             // Update tools, then their counts (off-loop; replies via pkg_rx).
-                            Ok(ServerMessage::PkgList {}) => {
+                            ServerMessage::PkgList {} => {
                                 tokio::spawn(crate::packages::run_list(pkg_tx.clone()));
                             }
                             // Apply a manager's updates (off-loop; streams via pkg_rx).
@@ -1064,7 +1073,7 @@ async fn stream_session(
                             // à jour) : une demande en double est ignorée, jamais
                             // terminée par un `Done`, qui relâcherait le verrou de
                             // celle qui tourne.
-                            Ok(ServerMessage::PkgUpgrade { manager }) => {
+                            ServerMessage::PkgUpgrade { manager } => {
                                 if pkg_running.insert(manager.clone()) {
                                     let busy = live_status::begin(Task::Packages);
                                     let upgrade = crate::packages::run_upgrade(manager, pkg_tx.clone());
@@ -1077,7 +1086,7 @@ async fn stream_session(
                                 }
                             }
                             // Container inventory (off-loop; replies via docker_rx).
-                            Ok(ServerMessage::DockerInventory {}) => {
+                            ServerMessage::DockerInventory {} => {
                                 let tx = docker_tx.clone();
                                 tokio::spawn(async move {
                                     let inv = tokio::task::spawn_blocking(crate::docker::inventory)
@@ -1089,7 +1098,7 @@ async fn stream_session(
                                 });
                             }
                             // One-shot container stats sample (off-loop).
-                            Ok(ServerMessage::DockerStats {}) => {
+                            ServerMessage::DockerStats {} => {
                                 let tx = docker_tx.clone();
                                 tokio::spawn(async move {
                                     let stats = tokio::task::spawn_blocking(crate::docker::stats)
@@ -1099,7 +1108,7 @@ async fn stream_session(
                                 });
                             }
                             // Act on a container/image/volume/network (off-loop; streams via docker_rx).
-                            Ok(ServerMessage::DockerAction { op_id, engine, action, target }) => {
+                            ServerMessage::DockerAction { op_id, engine, action, target } => {
                                 let long = crate::docker::is_long_action(&action);
                                 if long && docker_long.is_some() {
                                     warn!(%action, "docker action already running — request ignored");
@@ -1121,11 +1130,10 @@ async fn stream_session(
                                     });
                                 }
                             }
-                            Ok(ServerMessage::Ack { received }) => debug!(received, "ack"),
-                            Ok(ServerMessage::Error { code, message }) => {
+                            ServerMessage::Ack { received } => debug!(received, "ack"),
+                            ServerMessage::Error { code, message } => {
                                 warn!(%code, %message, "server error")
                             }
-                            Err(_) => debug!("ignoring unrecognized server frame"),
                         }
                     }
                     Some(Ok(Message::Ping(payload))) => {

@@ -19,7 +19,7 @@ use base64::Engine;
 use ed25519_dalek::{Signature, VerifyingKey};
 
 use crate::config::{Config, Policy};
-use crate::protocol::{Envelope, SIGNED_COMMANDS};
+use crate::protocol::{Envelope, ServerMessage, SIGNED_COMMANDS};
 
 /// How far an order's `issuedAt` may be from this machine's clock, either way.
 const ORDER_WINDOW: Duration = Duration::from_secs(5 * 60);
@@ -140,9 +140,14 @@ impl OrderGuard {
     }
 }
 
-/// Whether a server frame may be interpreted at all.
+/// What becomes of a server frame at the single gate.
 pub enum Admission {
-    Allowed,
+    /// Admitted, parsed once: dispatch this message.
+    Dispatch(ServerMessage),
+    /// Not a frame this agent acts on (malformed, or an unknown command). The
+    /// frame is read ONLY here, so a signed order can never slip past the gate
+    /// by being rejected as an envelope yet accepted by a second, laxer parser.
+    Ignore,
     /// Refused before execution. `payload` is kept so the reply can name the
     /// session or the operation the server is waiting on.
     Refused {
@@ -152,39 +157,49 @@ pub enum Admission {
     },
 }
 
-/// The single gate every server frame passes before it is dispatched: the
-/// signature for the orders that need one, then what this machine's operator
-/// refuses whatever the server says, then the agent's own directory, which the
-/// file explorer never writes to (its config is what holds the policy).
+/// The single gate every server frame passes, and the only place it is parsed:
+/// the signature for the orders that need one, then what this machine's
+/// operator refuses whatever the server says, then the agent's own directory,
+/// which the file explorer never writes to (its config is what holds the
+/// policy). A frame that is not a well-formed envelope is ignored, never run.
 pub fn admit(text: &str, guard: &mut OrderGuard, policy: &Policy, now_ms: i64) -> Admission {
-    // Not an envelope: the regular parser reports it as it always did.
     let Ok(env) = serde_json::from_str::<Envelope<'_>>(text) else {
-        return Admission::Allowed;
+        return Admission::Ignore;
     };
+    let payload: serde_json::Value =
+        serde_json::from_str(env.payload.get()).unwrap_or(serde_json::Value::Null);
     let refuse = |reason: String| Admission::Refused {
         command: env.command.clone(),
-        payload: serde_json::from_str(env.payload.get()).unwrap_or(serde_json::Value::Null),
+        payload: payload.clone(),
         reason,
     };
     if let Err(why) = guard.check(&env, now_ms) {
         return refuse(why.to_string());
     }
-    let payload: serde_json::Value =
-        serde_json::from_str(env.payload.get()).unwrap_or(serde_json::Value::Null);
     let field = |name: &str| payload.get(name).and_then(|v| v.as_str());
     if let Some(reason) = policy.refusal(&env.command, field("action")) {
         return refuse(reason);
     }
-    if matches!(env.command.as_str(), "files.mutate" | "files.upload") {
+    if matches!(
+        env.command.as_str(),
+        "files.mutate" | "files.upload" | "files.download" | "files.archive"
+    ) {
         let own = ["path", "dest"]
             .iter()
             .filter_map(|name| field(name))
             .any(|p| Config::is_own_path(Path::new(p)));
         if own {
-            return refuse("refused: the agent's own directory is not writable remotely".into());
+            return refuse("refused: the agent's own directory is not reachable remotely".into());
         }
     }
-    Admission::Allowed
+    // Built from the command and payload already admitted, so the gate and the
+    // dispatch can never see two different things.
+    match serde_json::from_value::<ServerMessage>(
+        serde_json::json!({ "command": env.command, "payload": payload }),
+    ) {
+        Ok(message) => Admission::Dispatch(message),
+        Err(_) => Admission::Ignore,
+    }
 }
 
 #[cfg(test)]
@@ -305,7 +320,7 @@ mod tests {
                 assert_eq!(payload["sessionId"], "s9");
                 assert!(reason.contains("allow_terminal"), "{reason}");
             }
-            Admission::Allowed => panic!("a closed policy must refuse term.open"),
+            _ => panic!("a closed policy must refuse term.open"),
         }
         let again = frame(
             "term.open",
@@ -315,7 +330,7 @@ mod tests {
         );
         assert!(matches!(
             admit(&again, &mut guard, &Policy::default(), NOW),
-            Admission::Allowed
+            Admission::Dispatch(_)
         ));
 
         // Elevation is one action of `agent.service`; the others stay allowed.
@@ -331,7 +346,7 @@ mod tests {
         let install = frame("agent.service", r#"{"action":"autostart-on"}"#, "n4", NOW);
         assert!(matches!(
             admit(&install, &mut guard, &no_elevate, NOW),
-            Admission::Allowed
+            Admission::Dispatch(_)
         ));
     }
 
@@ -363,8 +378,86 @@ mod tests {
         );
         assert!(matches!(
             admit(&restart, &mut guard, &no_deploy, NOW),
-            Admission::Allowed
+            Admission::Dispatch(_)
         ));
+    }
+
+    /// The gate parses a frame once and dispatches what it parsed: a signed
+    /// order can no longer slip past it by being malformed as an envelope yet
+    /// readable by a laxer parser.
+    #[test]
+    fn a_frame_the_gate_cannot_read_is_never_run() {
+        let mut guard = OrderGuard::new(Some(&pinned()));
+        let payload = r#"{"sessionId":"x","cols":80,"rows":24,"user":"root"}"#;
+        for sig in [
+            "0",
+            "{}",
+            r#"{"nonce":"n","issuedAt":1.5,"signature":"s"}"#,
+            r#""x""#,
+        ] {
+            let frame = format!(r#"{{"command":"term.open","payload":{payload},"sig":{sig}}}"#);
+            assert!(
+                matches!(
+                    admit(&frame, &mut guard, &Policy::default(), NOW),
+                    Admission::Ignore
+                ),
+                "sig {sig} must not be run"
+            );
+        }
+        let extra = format!(r#"{{"command":"term.open","payload":{payload},"extra":1}}"#);
+        assert!(matches!(
+            admit(&extra, &mut guard, &Policy::default(), NOW),
+            Admission::Ignore
+        ));
+
+        // The same order, properly signed, is the one that runs.
+        let good = frame("term.open", payload, "n1", NOW);
+        match admit(&good, &mut guard, &Policy::default(), NOW) {
+            Admission::Dispatch(ServerMessage::TermOpen { session_id, .. }) => {
+                assert_eq!(session_id, "x")
+            }
+            _ => panic!("a signed order dispatches as what it is"),
+        }
+    }
+
+    #[test]
+    fn reading_the_agent_directory_is_refused_like_writing_it() {
+        let mut guard = OrderGuard::new(Some(&pinned()));
+        let dir = Config::path()
+            .parent()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        let parent = Path::new(&dir)
+            .parent()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        for (command, payload) in [
+            (
+                "files.download",
+                format!(r#"{{"opId":"o","path":"{dir}/agent.toml"}}"#),
+            ),
+            (
+                "files.archive",
+                format!(
+                    r#"{{"opId":"o","path":"{parent}","exclusions":[],"oneFileSystem":true,"window":4}}"#
+                ),
+            ),
+            (
+                "files.mutate",
+                format!(r#"{{"opId":"o","op":"rename","path":"{parent}","dest":"/tmp/x"}}"#),
+            ),
+        ] {
+            let order = frame(command, &payload, &format!("n-{command}"), NOW);
+            assert!(
+                matches!(
+                    admit(&order, &mut guard, &Policy::default(), NOW),
+                    Admission::Refused { .. }
+                ),
+                "{command} on the agent directory must be refused"
+            );
+        }
     }
 
     #[test]

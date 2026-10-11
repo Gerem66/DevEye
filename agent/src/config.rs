@@ -440,8 +440,10 @@ impl Config {
         on_disk.save()
     }
 
-    /// Is this path the agent's own directory, or inside it? The server may
-    /// write files on this machine, never the file that says what it may do.
+    /// Is this path the agent's own directory, inside it, or one of its
+    /// parents? The server may read and write files on this machine, never the
+    /// file that says what it may do, nor the token it holds: renaming or
+    /// deleting a parent, or archiving one, reaches it just as well.
     pub fn is_own_path(path: &Path) -> bool {
         let Some(dir) = Self::path().parent().map(Path::to_path_buf) else {
             return false;
@@ -451,10 +453,10 @@ impl Config {
         let mut probe = path.to_path_buf();
         loop {
             if let Ok(real) = probe.canonicalize() {
-                return real.starts_with(&dir);
+                return real.starts_with(&dir) || dir.starts_with(&real);
             }
             if !probe.pop() {
-                return path.starts_with(&dir);
+                return path.starts_with(&dir) || dir.starts_with(path);
             }
         }
     }

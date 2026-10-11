@@ -307,8 +307,8 @@ serveur contrôle les machines**, à ceci près.
   régénérer). Ce que ça ne protège pas : un serveur compromis.
 - **La politique locale.** La section `[policy]` de l'`agent.toml` dit ce que la
   machine accepte (onze interrupteurs, listés plus bas). Aucune trame ne la
-  modifie, l'explorateur n'écrit
-  jamais dans le dossier de l'agent, et le rapport de l'appareil la publie pour
+  modifie, l'explorateur n'atteint jamais le dossier de l'agent (ni en écriture,
+  ni en lecture, ni par un de ses parents), et le rapport de l'appareil la publie pour
   que l'interface grise ce qui serait refusé. C'est le seul réglage de la machine
   que le serveur ne décide pas : une installation « supervision seule » se fait
   là. Limite honnête : un terminal root autorisé rend le reste consultatif.
@@ -319,9 +319,12 @@ serveur contrôle les machines**, à ceci près.
   la commande, un nonce, un horodatage et les octets exacts du payload. L'agent
   épingle la clé publique à l'enrôlement, refuse un ordre non signé, rejoué, ou
   daté à plus de cinq minutes de son horloge, et refuse tout sans clé épinglée.
-  Ce que ça protège : tenir la socket ne suffit plus (un proxy qui termine le
-  TLS, un jeton d'appareil volé et présenté à un faux serveur). Ce que ça ne
-  protège pas : un serveur compromis avec sa clé, d'où la politique locale.
+  Une trame n'est lue qu'une fois, à cette porte : ce qu'elle admet est ce qui
+  s'exécute, et une trame qu'elle ne sait pas lire (une signature mal formée,
+  un champ inconnu) est ignorée, jamais exécutée. Ce que ça protège : tenir la
+  socket ne suffit plus (un proxy qui termine le TLS, un jeton d'appareil volé
+  et présenté à un faux serveur). Ce que ça ne protège pas : un serveur
+  compromis avec sa clé, d'où la politique locale.
 - **L'enrôlement d'un service système.** La config dit à l'agent quel serveur
   croire et quelle clé épingler : un agent root qui la lirait dans un dossier
   qu'un compte ordinaire peut écrire donnerait root à ce compte. Un service

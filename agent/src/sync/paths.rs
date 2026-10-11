@@ -323,7 +323,12 @@ pub fn root_problem(
     let removable = REMOVABLE_MOUNTS
         .iter()
         .any(|m| is_under(&real, Path::new(m)));
-    if let Some(denied) = DENIED_ROOTS.iter().find(|d| is_under(&real, Path::new(d))) {
+    // Under a system folder, or above one: a share rooted at `/var` writes into
+    // `/var/spool` as surely as one rooted there.
+    if let Some(denied) = DENIED_ROOTS
+        .iter()
+        .find(|d| is_under(&real, Path::new(d)) || is_under(Path::new(d), &real))
+    {
         if !removable {
             return Some(format!(
                 "« {denied} » est un dossier système, refusé comme partage (pour l'ouvrir quand même : `sync_roots` dans agent.toml)"
@@ -508,6 +513,8 @@ mod tests {
             "/root",
             "/root/Documents",
             "/var/spool/cron",
+            // Above a system folder: a share there would write into it.
+            "/var",
             "/home/u/.ssh",
         ] {
             assert!(root_problem(denied, &[], None).is_some(), "{denied}");

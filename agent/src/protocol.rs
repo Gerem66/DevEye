@@ -1509,8 +1509,10 @@ pub struct OrderSig {
 }
 
 /// A server frame before it is interpreted: the payload is kept as the exact
-/// bytes received, because that is what the signature covers.
+/// bytes received, because that is what the signature covers. Unknown root
+/// fields are refused, so a frame cannot carry anything the gate does not see.
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Envelope<'a> {
     pub command: String,
     #[serde(borrow)]
