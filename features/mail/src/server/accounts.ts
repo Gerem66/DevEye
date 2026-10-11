@@ -9,15 +9,22 @@ import {
     mailAccountSetProfile,
     mailAccountTestConnection,
     mailAccountUpdate,
+    mailOAuthFinish,
     mailOAuthProviders,
     mailOAuthStart
 } from '../contracts/commands';
-import { MAIL_SYNC_INTERVAL_DEFAULT_MINUTES, mailOAuthProviderSchema, type MailAccountRow } from '../contracts/domain';
+import {
+    MAIL_SYNC_INTERVAL_DEFAULT_MINUTES,
+    mailOAuthProviderSchema,
+    mailSecurityTierSchema,
+    type MailAccountRow
+} from '../contracts/domain';
 import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
+import { z } from 'zod';
 
 import * as mailClient from './client';
-import type { MailCredentials } from './client';
-import { buildAuthorizationUrl, isOAuthConfigured } from './oauth';
+import type { MailCredentials, MailOAuthCredentials } from './client';
+import { buildAuthorizationUrl, exchangeCodeForTokens, isOAuthConfigured } from './oauth';
 import type { MailRepo } from './repo';
 import {
     accountCipher,
@@ -35,6 +42,7 @@ import {
     refreshCallback,
     rekeyTier,
     toAccountDTO,
+    tryDecryptCredentials,
     WRITE,
     type Ctx
 } from './_shared';
@@ -402,11 +410,25 @@ export const mailOAuthProvidersFeature = defineSdkFeature<
     handler: async () => ({ configured: mailOAuthProviderSchema.options.filter(isOAuthConfigured) })
 });
 
+/** La charge du `state` OAuth, telle que `mail.oauthStart` la pose et `mail.oauthFinish` la relit. */
+export const oauthStateSchema = z.object({
+    provider: mailOAuthProviderSchema,
+    securityTier: mailSecurityTierSchema,
+    /** Le nom saisi au formulaire. Vide : le compte prend son adresse. */
+    displayName: z.string().default(''),
+    /**
+     * La boîte à renouveler, déjà vérifiée par `mail.oauthStart` (existence,
+     * domicile, méthode) : le ticket est signé, cet identifiant ne se falsifie
+     * pas. `null` pour une création.
+     */
+    accountId: z.number().int().positive().nullable().default(null)
+});
+
 /**
  * L'entrée du consentement OAuth. Le `state` est un ticket de session de dix
  * minutes (le temps de choisir un compte chez le fournisseur) qui porte le
- * fournisseur et le palier ; la route de retour (`routes.ts`) le rend contre les
- * codecs de l'appelant et crée le compte sous le bon.
+ * fournisseur et le palier ; `mail.oauthFinish` le rend, dans la même session,
+ * et crée ou renouvelle le compte sous le bon codec.
  */
 export const mailOAuthStartFeature = defineSdkFeature<
     MailRepo,
@@ -444,3 +466,110 @@ export const mailOAuthStartFeature = defineSdkFeature<
         return { authUrl: buildAuthorizationUrl(input.provider, state, ctx.origins.app) };
     }
 });
+
+/**
+ * La fin du consentement, dans la session qui l'a lancé : la fenêtre du
+ * fournisseur n'a fait que rapporter le code et le `state`, et le `state` ne se
+ * rend qu'à la session qui l'a émis. Un lien de consentement envoyé à un tiers
+ * n'aboutit donc nulle part. `oauth` s'injecte pour les tests, l'échange du
+ * code sortant sur le réseau.
+ */
+export function mailOAuthFinishFeature(
+    oauth: { exchangeCodeForTokens: typeof exchangeCodeForTokens } = { exchangeCodeForTokens }
+) {
+    return defineSdkFeature<
+        MailRepo,
+        typeof mailOAuthFinish.command,
+        typeof mailOAuthFinish.input,
+        typeof mailOAuthFinish.output
+    >({
+        ...mailOAuthFinish,
+        access: WRITE,
+        mutates: true,
+        handler: async (ctx, input) => {
+            const ticket = await ctx.secrecy.redeem(input.state);
+            const claims = ticket ? oauthStateSchema.safeParse(ticket.payload) : null;
+            if (!claims?.success) throw new FeatureError('validation', 'Lien de connexion expiré ou invalide');
+            const { provider, securityTier, displayName, accountId } = claims.data;
+            // Le palier a été vérifié à l'émission du ticket ; il reste à tenir
+            // le codec, un compte gardé exigeant que la session le soit encore.
+            await assertMailUnlocked(ctx, securityTier);
+            const cipher = cipherFor(ctx, securityTier);
+            const tokens = await oauth.exchangeCodeForTokens(provider, input.code, ctx.origins.app).catch((e) => {
+                throw new FeatureError('validation', e instanceof Error ? e.message : String(e));
+            });
+            const credentials: MailOAuthCredentials = {
+                kind: 'oauth',
+                provider,
+                email: tokens.email,
+                accessToken: tokens.accessToken,
+                refreshToken: tokens.refreshToken,
+                expiresAt: tokens.expiresAt,
+                // Posé ensuite depuis le formulaire du compte, si on en veut un.
+                proxy: null
+            };
+            const providerName = provider === 'google' ? 'Google' : 'Microsoft';
+            const authMethod = provider === 'google' ? ('oauth_google' as const) : ('oauth_microsoft' as const);
+
+            if (accountId !== null) {
+                const existing = await ctx.repo.accounts.findById(accountId, ctx.workspaceId);
+                if (!existing) {
+                    throw new FeatureError('not_found', 'Boîte introuvable : elle a pu être supprimée entre-temps');
+                }
+                // L'adresse consentie doit être celle de la boîte : sans ce contrôle,
+                // se tromper de compte chez le fournisseur écraserait les jetons
+                // d'une boîte par ceux d'une autre, dont elle porterait le nom.
+                const known = await cipher.tryDecrypt(existing.email_address_enc);
+                if (known !== null && known.toLowerCase() !== tokens.email.toLowerCase()) {
+                    throw new FeatureError('validation', `Ce consentement porte sur ${tokens.email}, pas sur ${known}`);
+                }
+                // Le proxy, et le jeton de rafraîchissement quand le fournisseur
+                // n'en rend pas un neuf, appartiennent à la boîte : l'écran de
+                // consentement ne les redemande pas, les écraser les perd.
+                const previous = await tryDecryptCredentials(cipher, existing.credentials_enc);
+                const reconnected: MailOAuthCredentials = {
+                    ...credentials,
+                    refreshToken: tokens.refreshToken ?? (previous?.kind === 'oauth' ? previous.refreshToken : null),
+                    proxy: previous?.proxy ?? null
+                };
+                await ctx.repo.accounts.update(existing.id, ctx.workspaceId, {
+                    displayNameEnc: existing.display_name_enc,
+                    emailAddressEnc: existing.email_address_enc,
+                    securityTier: existing.security_tier,
+                    authMethod,
+                    credentialsEnc: await encryptCredentials(cipher, reconnected),
+                    enabled: existing.enabled === 1,
+                    syncIntervalSeconds: existing.sync_interval_seconds
+                });
+                // L'état d'erreur ne survit pas au renouvellement : le laisser
+                // ferait dire à la boîte qu'elle est toujours refusée.
+                await ctx.repo.accounts.recordStatus(existing.id, Math.floor(Date.now() / 1000), null, 'ok');
+                ctx.audit({
+                    action: 'mail.oauthReconnect',
+                    description: `Compte mail reconnecté via ${providerName}`,
+                    metadata: { accountId: existing.id, provider }
+                });
+                return { accountId: existing.id };
+            }
+
+            await ctx.quota.assert('accounts', async (owned) => (await ctx.repo.accounts.countInWorkspaces(owned)) + 1);
+            const account = await ctx.repo.accounts.create({
+                userId: ctx.userId,
+                workspaceId: ctx.workspaceId,
+                displayNameEnc: await cipher.encrypt(displayName || tokens.email),
+                emailAddressEnc: await cipher.encrypt(tokens.email),
+                securityTier,
+                authMethod,
+                credentialsEnc: await encryptCredentials(cipher, credentials),
+                enabled: true,
+                syncIntervalSeconds: MAIL_SYNC_INTERVAL_DEFAULT_MINUTES * 60
+            });
+            ctx.audit({
+                action: 'mail.oauthConnect',
+                description: `Compte mail connecté via ${providerName}`,
+                metadata: { accountId: account.id, provider }
+            });
+            return { accountId: account.id };
+        }
+    });
+}

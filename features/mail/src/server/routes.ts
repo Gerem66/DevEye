@@ -1,12 +1,6 @@
 import { z } from 'zod';
 
-import {
-    MAIL_SYNC_INTERVAL_DEFAULT_MINUTES,
-    mailOAuthProviderSchema,
-    mailSecurityTierSchema,
-    type MailAccountRow,
-    type MailSecurityTier
-} from '../contracts/domain';
+import type { MailAccountRow } from '../contracts/domain';
 import {
     contentDisposition,
     logFailure,
@@ -17,26 +11,20 @@ import {
 } from '@deveye/types/sdk/server';
 
 import * as mailClient from './client';
-import type { MailOAuthCredentials } from './client';
-import * as mailOAuth from './oauth';
 import { findAttachmentBytes } from './parse';
 import type { MailRepo } from './repo';
-import {
-    decryptCredentials,
-    encryptCredentials,
-    isOwnerSideMailError,
-    persistRefreshedToken,
-    tryDecryptCredentials
-} from './_shared';
+import { decryptCredentials, isOwnerSideMailError, persistRefreshedToken } from './_shared';
 
 /**
  * Les deux portes HTTP de Mail, sur la surface publique du SDK (capacité
  * `routes.public`, `exposure: 'app'` : l'origine de l'app seulement). Toutes
  * deux sont des GET nus, sans session : le navigateur télécharge nativement, la
- * fenêtre de consentement revient de chez Google ou Microsoft. Ce qui les
- * autorise est un ticket de session signé par l'hôte (`deps.secrecy.redeem`) :
- * il lie l'appelant, son espace et ce module, et se rend contre ses codecs,
- * l'étage gardé compris tant que sa session est déverrouillée.
+ * fenêtre de consentement revient de chez Google ou Microsoft. La pièce jointe
+ * est autorisée par un ticket de session signé par l'hôte
+ * (`deps.secrecy.redeem`) : il lie l'appelant, son espace et ce module, et se
+ * rend contre ses codecs, l'étage gardé compris tant que sa session est
+ * déverrouillée. Le retour OAuth, lui, ne fait que rapporter le code et le
+ * `state` à la session qui les termine (`mail.oauthFinish`).
  */
 
 export type MailRouteDeps = Pick<
@@ -44,33 +32,15 @@ export type MailRouteDeps = Pick<
     'repo' | 'secrecy' | 'cipherFor' | 'origins' | 'logger' | 'audit' | 'quotaFor' | 'pauses'
 >;
 
-/**
- * La couture de test des routes : le client IMAP et l'échange OAuth, sans
- * réseau. Le reste, tickets compris, tourne tel quel.
- */
+/** La couture de test des routes : le client IMAP, sans réseau. Le reste, tickets compris, tourne tel quel. */
 export interface MailRouteSeam {
     client?: Pick<typeof mailClient, 'fetchMessageRaw'>;
-    oauth?: Pick<typeof mailOAuth, 'exchangeCodeForTokens'>;
 }
 
 /** La charge d'un ticket de pièce jointe, telle que `mail.attachmentDownload` la pose. */
 export const attachmentTicketSchema = z.object({
     messageId: z.number().int().positive(),
     attachmentId: z.string()
-});
-
-/** La charge du `state` OAuth, telle que `mail.oauthStart` la pose. */
-export const oauthStateSchema = z.object({
-    provider: mailOAuthProviderSchema,
-    securityTier: mailSecurityTierSchema,
-    /** Le nom saisi au formulaire. Vide : le compte prend son adresse. */
-    displayName: z.string().default(''),
-    /**
-     * La boîte à renouveler, déjà vérifiée par `mail.oauthStart` (existence,
-     * domicile, méthode) : le ticket est signé, cet identifiant ne se falsifie
-     * pas. `null` pour une création.
-     */
-    accountId: z.number().int().positive().nullable().default(null)
 });
 
 const attachmentQuerySchema = z.object({ token: z.string().min(1) });
@@ -93,11 +63,6 @@ function ticketAccountCipher(
     account: MailAccountRow
 ): SdkCipher | null {
     return account.security_tier === 'open' ? deps.cipherFor(account.workspace_id) : ticket.cipher.private;
-}
-
-/** Le codec du palier qu'un consentement OAuth va créer, sous l'espace du ticket. */
-function ticketCipher(ticket: SdkRedeemedTicket, tier: MailSecurityTier): SdkCipher | null {
-    return tier === 'open' ? ticket.cipher.server : ticket.cipher.private;
 }
 
 function escapeHtml(value: string): string {
@@ -124,10 +89,15 @@ const POPUP_SCRIPT_PATH = '/api/mail/oauth/close.js';
  * plus, en silence.
  */
 const POPUP_SCRIPT = `(function () {
-    var verdict = document.body.dataset;
+    var relay = document.body.dataset;
     if (window.opener) {
         window.opener.postMessage(
-            { source: 'deveye-mail-oauth', ok: verdict.ok === 'true', error: verdict.error || null },
+            {
+                source: 'deveye-mail-oauth',
+                code: relay.code || null,
+                state: relay.state || null,
+                error: relay.error || null
+            },
             window.location.origin
         );
     }
@@ -135,23 +105,33 @@ const POPUP_SCRIPT = `(function () {
 })();
 `;
 
+/** Ce que la fenêtre rapporte à l'app : le code à échanger, ou le refus du fournisseur. */
+export type OAuthRelay = { code: string; state: string } | { error: string };
+
 /**
  * The single OAuth redirect target for Gmail/Microsoft 365 mailboxes. Opened in
  * a popup by the client; it always answers with a small self-closing HTML page
  * rather than a redirect, `window.opener.postMessage` being how the popup
- * reports back.
+ * reports back. Elle ne finalise rien : elle rapporte le code et le `state` à
+ * la page qui l'a ouverte, et c'est `mail.oauthFinish`, dans cette session, qui
+ * crée ou renouvelle la boîte. Un lien de consentement ouvert ailleurs
+ * n'aboutit donc nulle part.
  *
- * `message` is never trustworthy: on the error path it is `?error=` straight off
- * the query string, so this page is reachable with arbitrary content on DevEye's
- * own origin. Il n'y traverse qu'échappé, en texte et en attribut ; la page ne
- * porte aucun script où il pourrait se glisser.
+ * `error` is never trustworthy: it is `?error=` straight off the query string,
+ * so this page is reachable with arbitrary content on DevEye's own origin. Il
+ * n'y traverse qu'échappé, en texte et en attribut ; la page ne porte aucun
+ * script où il pourrait se glisser.
  */
-export function popupResponse(ok: boolean, message?: string): string {
-    const text = ok
-        ? 'Compte connecté, vous pouvez fermer cette fenêtre.'
-        : `Échec de la connexion : ${escapeHtml(message ?? 'inconnu')}`;
+export function popupResponse(relay: OAuthRelay): string {
+    const failed = 'error' in relay;
+    const text = failed
+        ? `Échec de la connexion : ${escapeHtml(relay.error)}`
+        : 'Connexion en cours, vous pouvez fermer cette fenêtre.';
+    const data = failed
+        ? `data-error="${escapeHtml(relay.error)}"`
+        : `data-code="${escapeHtml(relay.code)}" data-state="${escapeHtml(relay.state)}"`;
     return `<!doctype html><html><head><meta charset="utf-8"><title>DevEye Mail</title></head>
-<body style="font-family:sans-serif;padding:2rem;color:#333" data-ok="${ok}" data-error="${escapeHtml(message ?? '')}">
+<body style="font-family:sans-serif;padding:2rem;color:#333" ${data}>
 <p>${text}</p>
 <script src="${POPUP_SCRIPT_PATH}"></script>
 </body></html>`;
@@ -159,7 +139,6 @@ export function popupResponse(ok: boolean, message?: string): string {
 
 export function mailRoutes(app: SdkPublicApp, deps: MailRouteDeps, seam: MailRouteSeam = {}): void {
     const client = seam.client ?? mailClient;
-    const oauth = seam.oauth ?? mailOAuth;
 
     /**
      * Streams one attachment's bytes, re-derived live from IMAP (never cached
@@ -225,116 +204,10 @@ export function mailRoutes(app: SdkPublicApp, deps: MailRouteDeps, seam: MailRou
 
     app.get('/api/mail/oauth/callback', { exposure: 'app' }, async (req, reply) => {
         reply.header('Content-Type', 'text/html; charset=utf-8');
-        const page = (ok: boolean, message?: string) => reply.send(popupResponse(ok, message));
         const query = oauthQuerySchema.safeParse(req.query);
         const { code, state, error } = query.success ? query.data : {};
-
-        if (error) return page(false, error);
-        if (!code || !state) return page(false, 'Réponse incomplète du fournisseur');
-
-        const ticket = await deps.secrecy.redeem(state);
-        const claims = ticket ? oauthStateSchema.safeParse(ticket.payload) : null;
-        if (!ticket || !claims?.success) return page(false, 'Lien de connexion expiré ou invalide');
-
-        // Le palier a été vérifié à l'émission du ticket (`mail.oauthStart`) ;
-        // ici il reste à tenir le codec, un compte gardé exigeant que la session
-        // le soit encore.
-        const cipher = ticketCipher(ticket, claims.data.securityTier);
-        if (!cipher) return page(false, 'Session verrouillée entre-temps : déverrouillez puis recommencez');
-
-        try {
-            const tokens = await oauth.exchangeCodeForTokens(claims.data.provider, code, deps.origins.app);
-            const credentials: MailOAuthCredentials = {
-                kind: 'oauth',
-                provider: claims.data.provider,
-                email: tokens.email,
-                accessToken: tokens.accessToken,
-                refreshToken: tokens.refreshToken,
-                expiresAt: tokens.expiresAt,
-                // Set afterwards from the account form if the user wants one.
-                proxy: null
-            };
-
-            const provider = claims.data.provider === 'google' ? 'Google' : 'Microsoft';
-            const authMethod =
-                claims.data.provider === 'google' ? ('oauth_google' as const) : ('oauth_microsoft' as const);
-
-            if (claims.data.accountId !== null) {
-                const existing = await deps.repo.accounts.findById(claims.data.accountId, ticket.workspaceId);
-                if (!existing) return page(false, 'Boîte introuvable : elle a pu être supprimée entre-temps');
-                // L'adresse consentie doit être celle de la boîte : sans ce contrôle,
-                // se tromper de compte chez le fournisseur écraserait les jetons
-                // d'une boîte par ceux d'une autre, dont elle porterait le nom.
-                const known = await cipher.tryDecrypt(existing.email_address_enc);
-                if (known !== null && known.toLowerCase() !== tokens.email.toLowerCase()) {
-                    return page(false, `Ce consentement porte sur ${tokens.email}, pas sur ${known}`);
-                }
-                // Le proxy, et le jeton de rafraîchissement quand le
-                // fournisseur n'en rend pas un neuf, appartiennent à la boîte :
-                // l'écran de consentement ne les redemande pas, les écraser les
-                // perd. Lecture tolérante, un blob illisible ne devant pas faire
-                // échouer une reconnexion.
-                const previous = await tryDecryptCredentials(cipher, existing.credentials_enc);
-                const reconnected: MailOAuthCredentials = {
-                    ...credentials,
-                    refreshToken: tokens.refreshToken ?? (previous?.kind === 'oauth' ? previous.refreshToken : null),
-                    proxy: previous?.proxy ?? null
-                };
-                await deps.repo.accounts.update(existing.id, ticket.workspaceId, {
-                    displayNameEnc: existing.display_name_enc,
-                    emailAddressEnc: existing.email_address_enc,
-                    securityTier: existing.security_tier,
-                    authMethod,
-                    credentialsEnc: await encryptCredentials(cipher, reconnected),
-                    enabled: existing.enabled === 1,
-                    syncIntervalSeconds: existing.sync_interval_seconds
-                });
-                // L'état d'erreur ne survit pas au renouvellement : le laisser
-                // ferait dire à la boîte qu'elle est toujours refusée.
-                await deps.repo.accounts.recordStatus(existing.id, Math.floor(Date.now() / 1000), null, 'ok');
-                deps.audit({
-                    action: 'mail.oauthReconnect',
-                    userId: ticket.userId,
-                    description: `Compte mail reconnecté via ${provider}`,
-                    metadata: {
-                        accountId: existing.id,
-                        provider: claims.data.provider,
-                        workspaceId: ticket.workspaceId
-                    }
-                });
-                return page(true);
-            }
-
-            // Même barrage que `mail.accountAdd` : sans lui, le consentement
-            // serait la porte par laquelle on dépasse l'offre de son compte.
-            await deps
-                .quotaFor(ticket.workspaceId)
-                .assert('accounts', async (owned) => (await deps.repo.accounts.countInWorkspaces(owned)) + 1);
-
-            const account = await deps.repo.accounts.create({
-                userId: ticket.userId,
-                workspaceId: ticket.workspaceId,
-                displayNameEnc: await cipher.encrypt(claims.data.displayName || tokens.email),
-                emailAddressEnc: await cipher.encrypt(tokens.email),
-                securityTier: claims.data.securityTier,
-                authMethod,
-                credentialsEnc: await encryptCredentials(cipher, credentials),
-                enabled: true,
-                syncIntervalSeconds: MAIL_SYNC_INTERVAL_DEFAULT_MINUTES * 60
-            });
-
-            deps.audit({
-                action: 'mail.oauthConnect',
-                userId: ticket.userId,
-                description: `Compte mail connecté via ${provider}`,
-                metadata: { accountId: account.id, provider: claims.data.provider, workspaceId: ticket.workspaceId }
-            });
-
-            return page(true);
-        } catch (e) {
-            const message = e instanceof Error ? e.message : String(e);
-            logFailure(deps.logger, isOwnerSideMailError(e), { err: message }, 'Mail OAuth callback failed', 'error');
-            return page(false, message);
-        }
+        if (error) return reply.send(popupResponse({ error }));
+        if (!code || !state) return reply.send(popupResponse({ error: 'Réponse incomplète du fournisseur' }));
+        return reply.send(popupResponse({ code, state }));
     });
 }

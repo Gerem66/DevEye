@@ -6,7 +6,7 @@ import type {
     SdkSocketTransport
 } from '@deveye/types/sdk/server';
 import { env } from '@/Utils/Env';
-import { signModuleTicket } from '@/auth/jwt';
+import { signModuleTicket, verifyModuleTicket } from '@/auth/jwt';
 import { sdkLive, serverKeysOf } from './host';
 import { FeatureError } from '@deveye/types/sdk/server';
 import {
@@ -124,7 +124,18 @@ export function createSdkContext(
                     manifest.id,
                     { userId: ctx.userId, workspaceId: ctx.workspaceId, sessionId: ctx.sessionId, payload },
                     opts?.ttlSeconds ?? 120
-                )
+                ),
+            // Le ticket d'une autre session, d'un autre compte ou d'un autre
+            // espace vaut un faux : le geste finit là où il a commencé.
+            redeem: async (ticket) => {
+                const claims = await verifyModuleTicket(manifest.id, ticket);
+                const mine =
+                    claims !== null &&
+                    claims.sessionId === ctx.sessionId &&
+                    claims.userId === ctx.userId &&
+                    claims.workspaceId === ctx.workspaceId;
+                return mine ? { payload: claims.payload } : null;
+            }
         },
         keys: serverKeysOf(ctx.crypt, manifest.id),
         live: {

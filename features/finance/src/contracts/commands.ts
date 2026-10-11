@@ -435,6 +435,16 @@ export const financeConnectionStart = {
     output: z.object({ authUrl: z.string() })
 };
 /**
+ * La fin du consentement, depuis la session qui l'a lancé : la fenêtre de la
+ * banque rend `code` et `state` à la page qui l'a ouverte, qui les remet ici.
+ * Un lien de consentement envoyé à quelqu'un d'autre n'aboutit donc nulle part.
+ */
+export const financeBankFinish = {
+    command: 'finance.bankFinish' as const,
+    input: z.object({ code: z.string().min(1).max(4096), state: z.string().min(1).max(4096) }),
+    output: z.object({ connectionId })
+};
+/**
  * Relie un compte du livre à un compte de la banque, ou le délie. La première
  * relève part aussitôt, à partir du lendemain de la dernière ligne déjà
  * importée (le solde de départ sinon) : rien n'arrive en double.
@@ -493,6 +503,7 @@ export const financeCommands = [
     financeConnectionSync,
     financeBankList,
     financeConnectionStart,
+    financeBankFinish,
     financeAccountBankLink,
     financeOverview
 ] as const;

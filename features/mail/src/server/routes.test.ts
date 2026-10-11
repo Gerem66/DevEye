@@ -286,8 +286,6 @@ const RAW = Buffer.from(
 function mount(
     accounts: MailAccountRow[] = [account({ id: 1 })],
     projections: Record<number, number[]> = {},
-    /** Ce que le fournisseur rend au consentement, pour en simuler les avarices. */
-    tokens: { refreshToken?: string | null } = {},
     /** Les comptes que l'offre tient en pause. */
     paused: string[] = []
 ) {
@@ -300,26 +298,12 @@ function mount(
         })
     );
     const fetched: { imapPath: string; uid: number }[] = [];
-    const exchanged: { provider: string; code: string; appOrigin: string }[] = [];
     const { app, routes } = fakeApp();
     mailRoutes(app, deps, {
         client: {
             fetchMessageRaw: async (_credentials, imapPath, uid) => {
                 fetched.push({ imapPath, uid });
                 return RAW;
-            }
-        },
-        oauth: {
-            exchangeCodeForTokens: async (provider, code, appOrigin) => {
-                exchanged.push({ provider, code, appOrigin });
-                return {
-                    accessToken: 'access',
-                    refreshToken: 'refresh',
-                    expiresAt: Date.now() + 3_600_000,
-                    scope: 'mail',
-                    email: 'moi@gmail.com',
-                    ...tokens
-                };
             }
         }
     });
@@ -333,7 +317,7 @@ function mount(
         await routeOf(path).handler({ headers: {}, body: undefined, query, ip: '127.0.0.1' }, reply);
         return state;
     };
-    return { repo, deps, routes, fetched, exchanged, call };
+    return { repo, deps, routes, fetched, call };
 }
 
 describe('la déclaration', () => {
@@ -378,7 +362,7 @@ describe('GET /api/mail/attachment', () => {
     });
 
     it('un compte mis en pause par l’offre après la délivrance du ticket : 403, rien n’atteint IMAP', async () => {
-        const { call, fetched } = mount([account({ id: 1 })], {}, {}, ['1']);
+        const { call, fetched } = mount([account({ id: 1 })], {}, ['1']);
         const state = await call('/api/mail/attachment', { token: ticket({ messageId: 20, attachmentId: 'att-0' }) });
         assert.equal(state.status, 403);
         assert.deepEqual(fetched, []);
@@ -455,170 +439,29 @@ describe('GET /api/mail/oauth/close.js', () => {
 });
 
 describe('GET /api/mail/oauth/callback', () => {
-    it('avec un `state` valide, crée le compte sous le codec de son palier et referme la fenêtre vers l’app', async () => {
-        const { call, repo, deps, exchanged } = mount([]);
-        const state = await call('/api/mail/oauth/callback', {
-            code: 'code-1',
-            state: ticket({ provider: 'google', securityTier: 'open' })
-        });
+    it('rapporte le code et le `state` à la page qui a ouvert la fenêtre, sans rien écrire', async () => {
+        const { call, repo } = mount([]);
+        const state = await call('/api/mail/oauth/callback', { code: 'code-1', state: 'ticket-1' });
         assert.equal(state.status, 200);
         assert.equal(state.headers['Content-Type'], 'text/html; charset=utf-8');
-        assert.deepEqual(exchanged, [{ provider: 'google', code: 'code-1', appOrigin: 'https://app.test' }]);
-
-        assert.equal(repo.accountRows.length, 1);
-        const row = repo.accountRows[0];
-        assert.equal(row.auth_method, 'oauth_google');
-        assert.equal(row.security_tier, 'open');
-        assert.equal(row.workspace_id, 1);
-        assert.equal(row.email_address_enc, 'server:moi@gmail.com');
-        assert.equal(row.display_name_enc, 'server:moi@gmail.com');
-        assert.ok(row.credentials_enc.startsWith('server:'));
-        assert.equal(JSON.parse(row.credentials_enc.slice('server:'.length)).refreshToken, 'refresh');
-
         const html = String(state.payload);
-        assert.ok(html.includes('data-ok="true"'));
-        // Le verdict voyage par les attributs : la page ne porte aucun script
+        assert.ok(html.includes('data-code="code-1" data-state="ticket-1"'));
+        // Le relais voyage par les attributs : la page ne porte aucun script
         // écrit à la volée, donc aucune politique de contenu à elle.
         assert.ok(html.includes('<script src="/api/mail/oauth/close.js"></script>'));
         assert.doesNotMatch(html, /<script(?![^>]*\ssrc=)/);
         assert.equal(state.headers['Content-Security-Policy'], undefined);
-        assert.equal(deps.recorded.audits.at(-1)?.action, 'mail.oauthConnect');
+        // Rien ne se crée ici : c'est `mail.oauthFinish`, dans la session, qui le fait.
+        assert.equal(repo.accountRows.length, 0);
     });
 
-    it('avec `accountId`, le consentement renouvelle la boîte au lieu d’en créer une', async () => {
-        const existing = account({
-            id: 7,
-            auth_method: 'oauth_google',
-            email_address_enc: 'server:moi@gmail.com',
-            display_name_enc: 'server:Perso Gmail',
-            last_sync_status: 'auth',
-            last_sync_error_enc: 'server:accès refusé'
-        });
-        const { call, repo } = mount([existing]);
-        const state = await call('/api/mail/oauth/callback', {
-            code: 'code-r',
-            state: ticket({ provider: 'google', securityTier: 'open', displayName: '', accountId: 7 })
-        });
-
-        assert.ok(String(state.payload).includes('data-ok="true"'));
-        assert.equal(repo.accountRows.length, 1, 'aucune boîte de plus');
-        // Le nom et l'adresse survivent : seuls les jetons sont remplacés.
-        assert.equal(repo.accountRows[0].display_name_enc, 'server:Perso Gmail');
-        assert.equal(JSON.parse(repo.accountRows[0].credentials_enc.slice('server:'.length)).refreshToken, 'refresh');
-        // L'accès refusé ne survit pas au renouvellement.
-        assert.equal(repo.accountRows[0].last_sync_status, 'ok');
-        assert.equal(repo.accountRows[0].last_sync_error_enc, null);
-    });
-
-    it('une reconnexion garde le proxy de la boîte : le consentement ne le redemande pas', async () => {
-        const proxy = { kind: 'socks5' as const, host: '10.0.0.9', port: 1080, username: null, password: null };
-        const existing = account({
-            id: 7,
-            auth_method: 'oauth_google',
-            email_address_enc: 'server:moi@gmail.com',
-            credentials_enc: `server:${JSON.stringify({
-                kind: 'oauth',
-                provider: 'google',
-                email: 'moi@gmail.com',
-                accessToken: 'vieux',
-                refreshToken: 'ancien-refresh',
-                expiresAt: 1,
-                proxy
-            })}`
-        });
-        const { call, repo } = mount([existing]);
-        await call('/api/mail/oauth/callback', {
-            code: 'code-r',
-            state: ticket({ provider: 'google', securityTier: 'open', displayName: '', accountId: 7 })
-        });
-
-        const stored = JSON.parse(repo.accountRows[0].credentials_enc.slice('server:'.length));
-        assert.deepEqual(stored.proxy, proxy);
-        assert.equal(stored.refreshToken, 'refresh');
-    });
-
-    it('un fournisseur qui ne rend pas de jeton de rafraîchissement ne fait pas perdre l’ancien', async () => {
-        const existing = account({
-            id: 7,
-            auth_method: 'oauth_google',
-            email_address_enc: 'server:moi@gmail.com',
-            credentials_enc: `server:${JSON.stringify({
-                kind: 'oauth',
-                provider: 'google',
-                email: 'moi@gmail.com',
-                accessToken: 'vieux',
-                refreshToken: 'ancien-refresh',
-                expiresAt: 1,
-                proxy: null
-            })}`
-        });
-        const { call, repo } = mount([existing], {}, { refreshToken: null });
-        await call('/api/mail/oauth/callback', {
-            code: 'code-r',
-            state: ticket({ provider: 'google', securityTier: 'open', displayName: '', accountId: 7 })
-        });
-
-        const stored = JSON.parse(repo.accountRows[0].credentials_enc.slice('server:'.length));
-        assert.equal(stored.refreshToken, 'ancien-refresh');
-    });
-
-    it('un consentement donné sur une autre adresse n’écrase pas la boîte visée', async () => {
-        const other = account({ id: 8, auth_method: 'oauth_google', email_address_enc: 'server:pro@gmail.com' });
-        const { call, repo } = mount([other]);
-        const state = await call('/api/mail/oauth/callback', {
-            code: 'code-x',
-            state: ticket({ provider: 'google', securityTier: 'open', displayName: '', accountId: 8 })
-        });
-
-        assert.ok(String(state.payload).includes('data-ok="false"'));
-        assert.ok(String(state.payload).includes('moi@gmail.com'));
-        assert.equal(repo.accountRows[0].credentials_enc, other.credentials_enc, 'les jetons n’ont pas bougé');
-    });
-
-    it('le nom saisi au formulaire nomme la boîte ; sans lui, c’est l’adresse', async () => {
-        const named = mount([]);
-        await named.call('/api/mail/oauth/callback', {
-            code: 'code-n',
-            state: ticket({ provider: 'google', securityTier: 'open', displayName: 'Perso Gmail' })
-        });
-        assert.equal(named.repo.accountRows[0]?.display_name_enc, 'server:Perso Gmail');
-        // L'adresse, elle, reste celle du fournisseur : elle n'est pas saisie.
-        assert.equal(named.repo.accountRows[0]?.email_address_enc, 'server:moi@gmail.com');
-    });
-
-    it('un compte gardé s’écrit sous le codec gardé ; une session verrouillée entre-temps échoue sans écrire', async () => {
-        const open = mount([]);
-        await open.call('/api/mail/oauth/callback', {
-            code: 'code-2',
-            state: ticket({ provider: 'google', securityTier: 'guarded' })
-        });
-        assert.equal(open.repo.accountRows[0]?.security_tier, 'guarded');
-        assert.ok(open.repo.accountRows[0]?.credentials_enc.startsWith('private:'));
-
-        const locked = mount([]);
-        const state = await locked.call('/api/mail/oauth/callback', {
-            code: 'code-3',
-            state: ticket({ provider: 'google', securityTier: 'guarded' }, false)
-        });
-        assert.ok(String(state.payload).includes('data-ok="false"'));
-        assert.ok(String(state.payload).includes('verrouillée'));
-        assert.deepEqual(locked.exchanged, []);
-        assert.equal(locked.repo.accountRows.length, 0);
-    });
-
-    it('un `state` invalide, une réponse incomplète ou un refus du fournisseur rendent la page d’échec, sans rien écrire', async () => {
-        const { call, repo, exchanged } = mount([]);
-        const queries: Record<string, string>[] = [
-            { code: 'c', state: 'faux' },
-            { code: 'c', state: ticket({ messageId: 20, attachmentId: 'att-0' }) },
-            { state: ticket({ provider: 'google', securityTier: 'open' }) },
-            { error: 'access_denied' }
-        ];
-        for (const query of queries) {
-            const state = await call('/api/mail/oauth/callback', query);
-            assert.equal(state.status, 200);
-            const html = String(state.payload);
-            assert.ok(html.includes('data-ok="false"'), html);
+    it('une réponse incomplète ou un refus du fournisseur rendent la page d’échec, le message échappé', async () => {
+        const { call } = mount([]);
+        const incomplete: Record<string, string>[] = [{ state: 'ticket-1' }, { code: 'c' }, { error: 'access_denied' }];
+        for (const query of incomplete) {
+            const html = String((await call('/api/mail/oauth/callback', query)).payload);
+            assert.ok(html.includes('data-error="'), html);
+            assert.ok(!html.includes('data-code='));
             assert.ok(html.includes('Échec de la connexion'));
         }
         // Le message d'erreur du fournisseur traverse échappé, jamais tel quel.
@@ -627,7 +470,5 @@ describe('GET /api/mail/oauth/callback', () => {
         assert.ok(!page.includes('<script>alert'));
         // Y compris dans l'attribut qui le rend au client, guillemets compris.
         assert.ok(page.includes('data-error="&lt;script&gt;alert(1)&lt;/script&gt;"'));
-        assert.deepEqual(exchanged, []);
-        assert.equal(repo.accountRows.length, 0);
     });
 });

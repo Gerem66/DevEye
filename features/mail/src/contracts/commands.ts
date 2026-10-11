@@ -153,6 +153,18 @@ export const mailOAuthStart = {
     output: z.object({ authUrl: z.string().url() })
 };
 
+/**
+ * La fin du consentement, depuis la session qui l'a lancé : la fenêtre du
+ * fournisseur rend `code` et `state` à la page qui l'a ouverte, qui les remet
+ * ici. Un lien de consentement envoyé à quelqu'un d'autre n'aboutit donc nulle
+ * part.
+ */
+export const mailOAuthFinish = {
+    command: 'mail.oauthFinish' as const,
+    input: z.object({ code: z.string().min(1).max(4096), state: z.string().min(1).max(4096) }),
+    output: z.object({ accountId })
+};
+
 export const mailFolderList = {
     command: 'mail.folderList' as const,
     input: z.object({ accountId }),
@@ -375,6 +387,7 @@ export const mailCommands = [
     mailAccountSetRemoteImages,
     mailAccountTestConnection,
     mailOAuthStart,
+    mailOAuthFinish,
     mailOAuthProviders,
     mailFolderList,
     mailFolderReorder,

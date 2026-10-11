@@ -193,6 +193,6 @@ export function createService(deps: FeatureServiceDeps<FinanceRepo>, clock: () =
         async stop() {
             await Promise.all([ticker.stop(), bankTicker.stop()]);
         },
-        publicRoutes: (app) => financeRoutes(app, deps)
+        publicRoutes: (app) => financeRoutes(app)
     };
 }

@@ -35,6 +35,7 @@ import {
     financeConnectionAddQontoFeature,
     financeConnectionListFeature,
     financeConnectionRemoveFeature,
+    financeBankFinishFeature,
     financeConnectionStartFeature,
     financeConnectionSyncFeature,
     financeConnectionUpdateFeature
@@ -102,6 +103,7 @@ export const financeHandlers: ReadonlyArray<SdkFeatureDefinition<FinanceRepo>> =
     financeConnectionSyncFeature,
     financeBankListFeature,
     financeConnectionStartFeature,
+    financeBankFinishFeature(),
     financeAccountBankLinkFeature,
     financeOverviewFeature
 ];

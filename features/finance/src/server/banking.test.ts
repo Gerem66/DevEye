@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createVerify, generateKeyPairSync } from 'node:crypto';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 
-import type { SdkPublicApp, SdkPublicHandler, SdkPublicReply } from '@deveye/types/sdk/server';
+import { FeatureError } from '@deveye/types/sdk/server';
 import { createTestContext, createTestServiceDeps } from '@deveye/types/sdk/testing';
 
 import {
@@ -21,11 +21,11 @@ import { enableBankingProblem, type EnableBankingAccount } from './banks/enableB
 import { bankHttp, centsOf } from './banks/types';
 import { sealConnection, type StoredConnection } from './banking';
 import { env } from './env';
-import { financeRoutes, type FinanceRouteSeam } from './routes';
 import { serverEntry } from './index';
 import { createService } from './service';
 import { addDays, today, type Ctx } from './_shared';
 import { fakeRepo, handlerFor, type FakeRepo } from './_testing';
+import { financeBankFinishFeature } from './handlers/connections';
 
 /**
  * Les connexions bancaires, contre de faux serveurs Qonto et Enable Banking.
@@ -360,17 +360,20 @@ describe('Enable Banking', () => {
         const days = (Date.parse(request.access.valid_until) - Date.now()) / 86_400_000;
         assert.ok(days > 89 && days <= 90);
 
-        const deps = createTestServiceDeps({ repo: b.repo });
-        const { page, text } = await callback(deps, { code: 'c-1', state: request.state }, async () => ({
-            sessionId: 's-1',
-            validUntil: Math.floor(Date.now() / 1000) + 90 * 86_400,
-            accounts: [{ id: 'uid-1', name: 'Courant', ibanEnd: '1234', currency: 'EUR', key: 'hash-1' }]
-        }));
-        assert.match(text(), /Banque reliée/);
-        assert.equal(page.ok, 'true');
+        // La fin se joue dans la session qui a lancé le consentement : le `state`
+        // d'une autre session ne vaut rien.
+        const stranger = createTestContext({ repo: b.repo, userId: 9 });
+        await assert.rejects(
+            finish(stranger, { code: 'c-1', state: request.state }, exchangeTo('s-1', 'uid-1')),
+            (e: unknown) => e instanceof FeatureError && e.code === 'validation'
+        );
+        assert.equal(b.repo.connections.length, 0);
+
+        const { connectionId } = await finish(b.ctx, { code: 'c-1', state: request.state }, exchangeTo('s-1', 'uid-1'));
         assert.equal(b.repo.connections.length, 1);
+        assert.equal(b.repo.connections[0].id, connectionId);
         assert.equal(b.repo.connections[0].provider, 'enablebanking');
-        assert.deepEqual(deps.recorded.liveChanges, [1]);
+        assert.equal(b.ctx.recorded.audits.at(-1)?.action, 'finance.connectionAdd');
     });
 
     it('reconnecte sans rien délier : chaque compte retrouve le sien', async () => {
@@ -385,12 +388,7 @@ describe('Enable Banking', () => {
             country: 'FR',
             psuType: 'business'
         });
-        const deps = createTestServiceDeps({ repo: b.repo });
-        await callback(deps, { code: 'c-2', state }, async () => ({
-            sessionId: 's-new',
-            validUntil: Math.floor(Date.now() / 1000) + 90 * 86_400,
-            accounts: [{ id: 'uid-new', name: 'Courant', ibanEnd: '1234', currency: 'EUR', key: 'hash-1' }]
-        }));
+        await finish(b.ctx, { code: 'c-2', state }, exchangeTo('s-new', 'uid-new'));
         assert.equal(b.repo.links[0].external_account_id, 'uid-new');
         assert.equal(b.repo.links[0].since, DAY);
         assert.ok(calls.some((call) => call.method === 'DELETE' && call.url.pathname === '/sessions/s-old'));
@@ -500,31 +498,18 @@ async function addEnableBanking(repo: FakeRepo, ctx: Pick<Ctx, 'cipher'>, key: s
     });
 }
 
-/** Le retour de la banque, sur une surface qui retient la route. */
-async function callback(
-    deps: ReturnType<typeof createTestServiceDeps<FakeRepo>>,
-    query: Record<string, string>,
-    openSession: NonNullable<FinanceRouteSeam['openSession']>
-) {
-    const handlers = new Map<string, SdkPublicHandler>();
-    const app: SdkPublicApp = {
-        get: (path, _opts, handler) => handlers.set(path, handler),
-        post: () => assert.fail('aucune route POST attendue'),
-        postStream: () => assert.fail('aucune route en flux attendue')
-    };
-    financeRoutes(app, deps, { openSession });
-    let payload = '';
-    const reply: SdkPublicReply = {
-        header: () => reply,
-        code: () => reply,
-        send(body) {
-            payload = String(body);
-            return reply;
-        }
-    };
-    const handler = handlers.get('/api/finance/bank/callback');
-    assert.ok(handler);
-    await handler({ query } as never, reply);
-    const ok = /data-ok="(true|false)"/.exec(payload)?.[1];
-    return { page: { ok }, text: () => payload };
+/** La fin du consentement, remise par la session à `finance.bankFinish`, avec l'échange du code simulé. */
+function finish(ctx: Ctx, input: { code: string; state: string }, exchange: Exchange) {
+    return financeBankFinishFeature(exchange).handler(ctx, input);
 }
+
+type Exchange = Parameters<typeof financeBankFinishFeature>[0];
+
+/** Ce que la banque rend à l'échange : une session et un compte portant `hash-1`. */
+const exchangeTo =
+    (sessionId: string, accountId: string): Exchange =>
+    async () => ({
+        sessionId,
+        validUntil: Math.floor(Date.now() / 1000) + 90 * 86_400,
+        accounts: [{ id: accountId, name: 'Courant', ibanEnd: '1234', currency: 'EUR', key: 'hash-1' }]
+    });

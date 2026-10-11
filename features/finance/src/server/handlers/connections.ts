@@ -1,5 +1,6 @@
 import {
     financeAccountBankLink,
+    financeBankFinish,
     financeBankList,
     financeConnectionAddQonto,
     financeConnectionList,
@@ -20,11 +21,12 @@ import {
     toLink,
     type StoredConnection
 } from '../banking';
-import { closeSession, enableBankingApp, listBanks, startAuthorization } from '../banks/enableBanking';
+import { closeSession, enableBankingApp, listBanks, openSession, startAuthorization } from '../banks/enableBanking';
 import { qontoConnector } from '../banks/qonto';
 import { BankError } from '../banks/types';
-import type { FinanceConnectionRow } from '../../contracts/banking';
+import { bankPsuTypeSchema, type FinanceConnectionRow } from '../../contracts/banking';
 import { addDays, isDuplicate, WRITE, type Ctx } from '../_shared';
+import { z } from 'zod';
 
 /**
  * Les connexions bancaires de l'espace, gérées dans Réglages, Sources : le seul
@@ -37,6 +39,15 @@ const QUOTA = 'bankConnections';
 
 /** La plus longue durée de consentement demandée, quand la banque en accepte davantage. */
 const CONSENT_MAX_SECONDS = 180 * 86_400;
+
+/** La charge du `state`, telle que `finance.connectionStart` la pose et `finance.bankFinish` la relit. */
+const bankStateSchema = z.object({
+    connectionId: z.number().int().positive().nullable(),
+    label: z.string(),
+    bank: z.string(),
+    country: z.string().length(2),
+    psuType: bankPsuTypeSchema
+});
 
 const paused = (ctx: Ctx, id: number) => ctx.quota.isPaused(QUOTA, String(id));
 
@@ -249,6 +260,83 @@ export const financeConnectionStartFeature = defineSdkFeature({
         return { authUrl };
     }
 });
+
+/**
+ * La fin du consentement, dans la session qui l'a lancé : la fenêtre de la
+ * banque n'a fait que rapporter le code et le `state`, et le `state` ne se rend
+ * qu'à la session qui l'a émis. Un lien de consentement envoyé à un tiers
+ * n'aboutit donc nulle part. `exchange` s'injecte pour les tests.
+ */
+export function financeBankFinishFeature(exchange: typeof openSession = openSession) {
+    return defineSdkFeature({
+        ...financeBankFinish,
+        mutates: true,
+        access: WRITE,
+        handler: async (ctx: Ctx, input) => {
+            const ticket = await ctx.secrecy.redeem(input.state);
+            const claims = ticket ? bankStateSchema.safeParse(ticket.payload) : null;
+            if (!claims?.success) {
+                throw new FeatureError('validation', 'Lien de connexion expiré : recommencez depuis DevEye.');
+            }
+            const { connectionId, label, bank, country, psuType } = claims.data;
+            const app = requireEnableBanking();
+            const session = await exchange(app, input.code).catch(refused);
+            const stored: StoredConnection = {
+                label,
+                bankName: bank,
+                country,
+                psuType,
+                secret: { sessionId: session.sessionId },
+                accounts: session.accounts
+            };
+
+            if (connectionId !== null) {
+                const row = await load(ctx, connectionId);
+                const previous = await readConnection(ctx, row);
+                if (previous !== null && 'sessionId' in previous.secret) {
+                    await closeSession(app, previous.secret.sessionId);
+                }
+                // Une session neuve renomme les comptes : chaque compte du livre
+                // retrouve le sien par ce que la banque garde d'une fois à l'autre.
+                for (const link of await ctx.repo.listConnectionLinks(row.id, ctx.workspaceId)) {
+                    const before = previous?.accounts.find((account) => account.id === link.external_account_id);
+                    const after = session.accounts.find(
+                        (account) => before?.key !== undefined && account.key === before.key
+                    );
+                    await ctx.repo.setBankLink(
+                        link.account_id,
+                        ctx.workspaceId,
+                        after ? { connectionId: row.id, externalAccountId: after.id, since: link.since } : null
+                    );
+                }
+                await ctx.repo.replaceConnection(row.id, ctx.workspaceId, {
+                    validUntil: session.validUntil,
+                    content: await sealConnection(ctx, stored)
+                });
+                ctx.audit({
+                    action: 'finance.connectionRenew',
+                    description: `Banque reconnectée (${bank})`,
+                    metadata: { connectionId: row.id }
+                });
+                return { connectionId: row.id };
+            }
+
+            // Même barrage qu'au départ : entre-temps, une autre connexion a pu prendre la place.
+            await ctx.quota.assert(QUOTA, async (owned) => (await ctx.repo.countConnectionsInWorkspaces(owned)) + 1);
+            const id = await ctx.repo.createConnection(ctx.workspaceId, {
+                provider: 'enablebanking',
+                validUntil: session.validUntil,
+                content: await sealConnection(ctx, stored)
+            });
+            ctx.audit({
+                action: 'finance.connectionAdd',
+                description: `Connexion bancaire ajoutée (${bank})`,
+                metadata: { connectionId: id, provider: 'enablebanking' }
+            });
+            return { connectionId: id };
+        }
+    });
+}
 
 export const financeAccountBankLinkFeature = defineSdkFeature({
     ...financeAccountBankLink,

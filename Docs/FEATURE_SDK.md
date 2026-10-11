@@ -191,10 +191,19 @@ l'espace et au module, deux minutes par défaut. Une route publique du service
 le rend par `deps.secrecy.redeem(ticket)` en
 `{ userId, workspaceId, payload, cipher: { server, private | null } }` :
 l'étage gardé tant que la session est déverrouillée, `null` sinon, et `null`
-pour un ticket périmé ou d'un autre module. Mail (pièces jointes, OAuth),
-Convertisseur (envoi et récupération d'un fichier), Finances et Hébergement
-s'en servent. Le harnais simule les deux bouts
-(`createTestContext().secrecy.ticket`,
+pour un ticket périmé, d'un autre module, ou dont la session a pris fin. Mail
+(pièces jointes), Convertisseur (envoi et récupération d'un fichier) et
+Hébergement s'en servent.
+
+Un ticket est au porteur : qui le présente est servi. Un geste qui doit finir
+là où il a commencé (un consentement OAuth : le `state` d'un lien envoyé à un
+tiers ne doit jamais ranger le compte de ce tiers dans l'espace de
+l'expéditeur) ne se finalise donc pas dans la route de retour. Celle-ci rend
+le code et le `state` à la page qui a ouvert la fenêtre, qui les remet à une
+commande du module ; celle-ci rend le ticket par `ctx.secrecy.redeem(state)`,
+qui ne répond qu'à la session qui l'a émis. Mail (`mail.oauthFinish`) et
+Finances (`finance.bankFinish`) font ainsi. Le harnais simule les trois
+(`createTestContext().secrecy.ticket` et `.redeem`,
 `createTestServiceDeps().secrecy.redeem`).
 
 ### Les routes publiques et `postStream`

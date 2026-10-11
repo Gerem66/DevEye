@@ -16,6 +16,7 @@ import {
     mailGetSettings,
     mailMessageGet,
     mailMessageList,
+    mailOAuthFinish,
     mailOAuthProviders,
     mailOAuthStart,
     mailSend,
@@ -50,6 +51,7 @@ const { mailHandlers } = await import('./handlers');
 const { MailReauthRequiredError } = await import('./client');
 const { imapFor } = await import('./_shared');
 const { serverEntry } = await import('./index');
+const { mailOAuthFinishFeature } = await import('./accounts');
 
 /** Le handler d'un contrat, typé par ce contrat (le registre est hétérogène). */
 function handlerFor<C extends { command: string; input: ZodType; output: ZodType }>(contract: C) {
@@ -413,6 +415,115 @@ describe('mail.oauthProviders', () => {
     it('ne rend que les fournisseurs dont le serveur porte les identifiants', async () => {
         const ctx = createTestContext({ repo: fakeRepo() });
         assert.deepEqual(await handlerFor(mailOAuthProviders)(ctx, {}), { configured: ['google'] });
+    });
+});
+
+/** Ce que le fournisseur rend à l'échange du code, et ce qu'on lui a demandé. */
+function fakeOAuth(tokens: { refreshToken?: string | null } = {}) {
+    const exchanged: { provider: string; code: string; appOrigin: string }[] = [];
+    const finish = mailOAuthFinishFeature({
+        exchangeCodeForTokens: async (provider, code, appOrigin) => {
+            exchanged.push({ provider, code, appOrigin });
+            return {
+                accessToken: 'access',
+                refreshToken: 'refresh',
+                expiresAt: Date.now() + 3_600_000,
+                scope: 'mail',
+                email: 'moi@gmail.com',
+                ...tokens
+            };
+        }
+    }).handler as (
+        ctx: SdkFeatureContext<MailRepo>,
+        input: z.output<typeof mailOAuthFinish.input>
+    ) => Promise<z.input<typeof mailOAuthFinish.output>>;
+    return { finish, exchanged };
+}
+
+const ORIGINS = { app: 'https://app.test', public: 'https://p.test', site: null };
+
+describe('mail.oauthFinish', () => {
+    it('crée le compte sous le codec de son palier, dans la session qui a lancé le consentement', async () => {
+        const repo = fakeRepo();
+        const ctx = createTestContext({ repo, origins: ORIGINS });
+        const { finish, exchanged } = fakeOAuth();
+        const state = await ctx.secrecy.ticket({ provider: 'google', securityTier: 'open', displayName: 'Perso' });
+
+        const { accountId } = await finish(ctx, { code: 'code-1', state });
+        assert.deepEqual(exchanged, [{ provider: 'google', code: 'code-1', appOrigin: 'https://app.test' }]);
+        const row = repo.accountRows.find((a) => a.id === accountId);
+        assert.ok(row);
+        assert.equal(row.auth_method, 'oauth_google');
+        assert.equal(row.workspace_id, 1);
+        assert.equal(row.email_address_enc, 'moi@gmail.com');
+        assert.equal(row.display_name_enc, 'Perso');
+        assert.equal(JSON.parse(row.credentials_enc).refreshToken, 'refresh');
+        assert.equal(ctx.recorded.audits.at(-1)?.action, 'mail.oauthConnect');
+    });
+
+    it('ne rend rien à une autre session : un lien de consentement envoyé à un tiers n’aboutit nulle part', async () => {
+        const repo = fakeRepo();
+        const sender = createTestContext({ repo, origins: ORIGINS, userId: 2 });
+        const state = await sender.secrecy.ticket({ provider: 'google', securityTier: 'open' });
+        const victim = createTestContext({ repo, origins: ORIGINS, userId: 1 });
+        const { finish, exchanged } = fakeOAuth();
+        await assert.rejects(finish(victim, { code: 'code-1', state }), failsWith('validation'));
+        await assert.rejects(finish(victim, { code: 'code-1', state: 'faux' }), failsWith('validation'));
+        assert.deepEqual(exchanged, []);
+        assert.equal(repo.accountRows.length, 0);
+    });
+
+    it('renouvelle la boîte visée : nom, adresse et proxy gardés, jetons remplacés, accès refusé oublié', async () => {
+        const repo = fakeRepo();
+        const proxy = { kind: 'socks5', host: '10.0.0.9', port: 1080, username: null, password: null };
+        repo.accountRows.push(
+            row({
+                id: 7,
+                workspace_id: 1,
+                auth_method: 'oauth_google',
+                display_name_enc: 'Perso Gmail',
+                email_address_enc: 'moi@gmail.com',
+                last_sync_status: 'auth',
+                credentials_enc: JSON.stringify({
+                    kind: 'oauth',
+                    provider: 'google',
+                    email: 'moi@gmail.com',
+                    accessToken: 'vieux',
+                    refreshToken: 'ancien',
+                    expiresAt: 1,
+                    proxy
+                })
+            })
+        );
+        repo.accounts.recordStatus = async (id, _at, _error, status) => {
+            const target = repo.accountRows.find((a) => a.id === id);
+            if (target) target.last_sync_status = status;
+        };
+        const ctx = createTestContext({ repo, origins: ORIGINS });
+        const { finish } = fakeOAuth({ refreshToken: null });
+        const state = await ctx.secrecy.ticket({ provider: 'google', securityTier: 'open', accountId: 7 });
+
+        assert.deepEqual(await finish(ctx, { code: 'code-r', state }), { accountId: 7 });
+        assert.equal(repo.accountRows.length, 1, 'aucune boîte de plus');
+        const after = repo.accountRows[0];
+        assert.equal(after.display_name_enc, 'Perso Gmail');
+        const credentials = JSON.parse(after.credentials_enc);
+        assert.equal(credentials.accessToken, 'access');
+        // Sans jeton de rafraîchissement neuf, l'ancien reste ; le proxy aussi.
+        assert.equal(credentials.refreshToken, 'ancien');
+        assert.deepEqual(credentials.proxy, proxy);
+        assert.equal(after.last_sync_status, 'ok');
+    });
+
+    it('refuse un consentement donné pour une autre adresse que celle de la boîte', async () => {
+        const repo = fakeRepo();
+        repo.accountRows.push(
+            row({ id: 8, workspace_id: 1, auth_method: 'oauth_google', email_address_enc: 'pro@gmail.com' })
+        );
+        const ctx = createTestContext({ repo, origins: ORIGINS });
+        const state = await ctx.secrecy.ticket({ provider: 'google', securityTier: 'open', accountId: 8 });
+        await assert.rejects(fakeOAuth().finish(ctx, { code: 'c', state }), failsWith('validation'));
+        assert.equal(repo.accountRows[0].email_address_enc, 'pro@gmail.com');
     });
 });
 

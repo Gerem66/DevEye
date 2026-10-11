@@ -155,6 +155,8 @@ export function createServiceDeps(
             redeem: async (ticket) => {
                 const claims = await verifyModuleTicket(manifest.id, ticket);
                 if (!claims) return null;
+                // Un ticket survit à sa session ; pas ce qu'il ouvre.
+                if (!(await host.db.refreshTokens.hasLiveSession(claims.sessionId))) return null;
                 // Les routes réservées à l'app passent le filtre de maintenance :
                 // pendant elle, leur ticket ne vaut plus que pour un administrateur.
                 if (maintenance.siteDown() || maintenance.featureLevel(manifest.id) !== null) {

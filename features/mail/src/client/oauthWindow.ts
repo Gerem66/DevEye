@@ -14,9 +14,14 @@ export interface ConsentVerdict {
     error: string | null;
 }
 
+/** Ce que la fenêtre rapporte : le code à échanger, ou le refus du fournisseur. */
+type Relay = { code: string; state: string } | { error: string };
+
 /**
- * Attend la fin du consentement : le verdict du serveur s'il parvient à
- * traverser, la fermeture de la fenêtre sinon.
+ * Attend la fin du consentement, puis le termine ICI, dans la session qui l'a
+ * lancé : la page de retour ne fait que rapporter le code et le `state`, et
+ * c'est `mail.oauthFinish` qui crée ou renouvelle la boîte. Un lien de
+ * consentement ouvert ailleurs n'aboutit donc nulle part.
  *
  * La page de callback est servie sur l'origine de l'app, qui n'est pas
  * forcément celle d'où le SPA a été chargé (en développement, le port de
@@ -24,9 +29,9 @@ export interface ConsentVerdict {
  * correspond pas est jeté sans un mot. D'où `verdict: null` quand seule la
  * fermeture a parlé : on ne sait pas, et l'appelant va demander à la liste.
  */
-export function awaitConsentWindow(popup: Window): Promise<{ verdict: ConsentVerdict | null }> {
-    return new Promise((resolve) => {
-        const finish = (result: { verdict: ConsentVerdict | null }) => {
+export async function awaitConsentWindow(popup: Window): Promise<{ verdict: ConsentVerdict | null }> {
+    const relayed = await new Promise<Relay | null>((resolve) => {
+        const finish = (result: Relay | null) => {
             window.removeEventListener('message', onMessage);
             clearInterval(poll);
             resolve(result);
@@ -35,15 +40,25 @@ export function awaitConsentWindow(popup: Window): Promise<{ verdict: ConsentVer
             // La popup passe par le fournisseur, qui tient donc `window.opener` : seul
             // un message venu de notre origine ET de cette fenêtre fait foi.
             if (e.origin !== window.location.origin || e.source !== popup) return;
-            const data = e.data as { source?: string; ok?: boolean; error?: string } | undefined;
+            const data = e.data as { source?: string; code?: string; state?: string; error?: string } | undefined;
             if (data?.source !== 'deveye-mail-oauth') return;
-            finish({ verdict: { ok: data.ok === true, error: data.error ?? null } });
+            finish(
+                data.code && data.state ? { code: data.code, state: data.state } : { error: data.error ?? 'inconnu' }
+            );
         }
         const poll = window.setInterval(() => {
-            if (popup.closed) finish({ verdict: null });
+            if (popup.closed) finish(null);
         }, 500);
         window.addEventListener('message', onMessage);
     });
+    if (relayed === null) return { verdict: null };
+    if ('error' in relayed) return { verdict: { ok: false, error: relayed.error } };
+    try {
+        await api.send('mail.oauthFinish', relayed);
+        return { verdict: { ok: true, error: null } };
+    } catch (e) {
+        return { verdict: { ok: false, error: e instanceof Error ? e.message : String(e) } };
+    }
 }
 
 /** Le nom du fournisseur tel qu'il s'écrit dans un bouton. */
