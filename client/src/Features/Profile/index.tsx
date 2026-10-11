@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { ws } from '@/api/ws';
@@ -9,6 +9,7 @@ import Switch from '@/Components/Switch';
 import SegmentedControl from '@/Components/SegmentedControl';
 
 import type { FeatureProps } from '@/Features/types';
+import { PhoneDialog } from '@/Features/Security/PhoneDialog';
 import { ACCEPTED_TYPES, avatarSrc, fileToAvatarDataUrl } from './avatar';
 import { DeleteAccountDialog } from './DeleteAccountDialog';
 import { ExportDataDialog } from './ExportDataDialog';
@@ -25,7 +26,7 @@ import { setColorSchemeMode, useColorSchemeState, type ColorSchemeMode } from '@
 import { SchemeHint } from './SchemeHint';
 
 import type { CSSProperties } from 'react';
-import type { UserColor, UserSettingFlag } from '@deveye/types';
+import type { LoginChecksStatus, UserColor, UserSettingFlag } from '@deveye/types';
 
 const RENDER_MODES: readonly { value: RenderMode; label: string; title: string }[] = [
     { value: 'auto', label: 'Auto', title: "Mesure la fluidité réelle et allège si l'appareil ne suit pas" },
@@ -59,6 +60,15 @@ export default function FeatureProfile({ user }: FeatureProps) {
     const [usernameOpen, setUsernameOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [exportOpen, setExportOpen] = useState(false);
+    const [phoneOpen, setPhoneOpen] = useState(false);
+    // Le numéro du code par SMS, seulement si ce serveur en envoie.
+    const [checks, setChecks] = useState<LoginChecksStatus | null>(null);
+    useEffect(() => {
+        ws.send('loginChecks.status', {}).then(
+            ({ status }) => setChecks(status),
+            () => setChecks(null)
+        );
+    }, []);
 
     const securityScore =
         (user.security.loginConfirmation ? 1 : 0) +
@@ -224,6 +234,21 @@ export default function FeatureProfile({ user }: FeatureProps) {
                                     </Button>
                                 </span>
                             </div>
+                            {checks?.sms.available && (
+                                <div className={styles.row}>
+                                    <span className={styles.rowLabel}>
+                                        Téléphone
+                                        <span className={styles.rowHint}>
+                                            {checks.sms.phone ?? 'Pour le code par SMS à la connexion'}
+                                        </span>
+                                    </span>
+                                    <span className={styles.rowValue}>
+                                        <Button variant='secondary' onClick={() => setPhoneOpen(true)}>
+                                            {checks.sms.phone ? 'Modifier' : 'Ajouter'}
+                                        </Button>
+                                    </span>
+                                </div>
+                            )}
                             <div className={styles.row}>
                                 <span className={styles.rowLabel}>Sécurité</span>
                                 <span className={styles.rowValue}>
@@ -381,6 +406,12 @@ export default function FeatureProfile({ user }: FeatureProps) {
             </div>
 
             <UsernameDialog open={usernameOpen} onClose={() => setUsernameOpen(false)} />
+            <PhoneDialog
+                open={phoneOpen}
+                current={checks?.sms.phone ?? null}
+                onClose={() => setPhoneOpen(false)}
+                onChange={setChecks}
+            />
             <PasswordDialog open={passwordOpen} onClose={() => setPasswordOpen(false)} />
             <DeleteAccountDialog
                 open={deleteOpen}

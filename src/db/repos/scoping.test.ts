@@ -169,6 +169,15 @@ const SCOPES: { [K in RepoKey]: RepoScope<K> } = {
             hasLiveSession: { args: ['s'] }
         }
     },
+    userPhones: {
+        guard: ACCOUNT,
+        methods: {
+            get: { args: [1] },
+            save: { args: [1, 's', 0] },
+            setSmsCheck: { args: [1, true] },
+            remove: { args: [1] }
+        }
+    },
     trustedBrowsers: {
         guard: ACCOUNT,
         methods: {

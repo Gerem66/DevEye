@@ -116,6 +116,10 @@
     -webkit-mask-image: url(/icons/mail.svg);
     mask-image: url(/icons/mail.svg);
 }
+.icon.icon-phone {
+    -webkit-mask-image: url(/icons/phone.svg);
+    mask-image: url(/icons/phone.svg);
+}
 .icon.icon-menu {
     -webkit-mask-image: url(/icons/menu.svg);
     mask-image: url(/icons/menu.svg);

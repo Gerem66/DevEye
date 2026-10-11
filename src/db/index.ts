@@ -17,6 +17,7 @@ import { quotaPausesRepo, type QuotaPausesRepo } from './repos/quotaPauses';
 import { refreshTokensRepo, type RefreshTokensRepo } from './repos/refreshTokens';
 import { remoteInstancesRepo, type RemoteInstancesRepo } from './repos/remoteInstances';
 import { trustedBrowsersRepo, type TrustedBrowsersRepo } from './repos/trustedBrowsers';
+import { userPhonesRepo, type UserPhonesRepo } from './repos/userPhones';
 import { twoFactorRepo, type TwoFactorRepo } from './repos/twoFactor';
 import { userSecretKeysRepo, type UserSecretKeysRepo } from './repos/userSecretKeys';
 import { usersRepo, type UsersRepo } from './repos/users';
@@ -47,6 +48,7 @@ export interface Database {
     refreshTokens: RefreshTokensRepo;
     remoteInstances: RemoteInstancesRepo;
     trustedBrowsers: TrustedBrowsersRepo;
+    userPhones: UserPhonesRepo;
     logs: LogsRepo;
     /** Les signalements des utilisateurs, relus par l'administration. */
     feedback: FeedbackRepo;
@@ -102,6 +104,7 @@ export function databaseOn(q: Queryable, begin: BeginTransaction): Database {
         refreshTokens: refreshTokensRepo(q),
         remoteInstances: remoteInstancesRepo(q),
         trustedBrowsers: trustedBrowsersRepo(q),
+        userPhones: userPhonesRepo(q),
         logs: logsRepo(q),
         feedback: feedbackRepo(q),
         maintenance: maintenanceRepo(q),

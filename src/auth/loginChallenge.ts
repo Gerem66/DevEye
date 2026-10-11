@@ -105,15 +105,20 @@ export function abandonLoginChallengesOf(userId: number): void {
  * Le condensé d'un code envoyé, sous une clé dérivée de la clé serveur : six
  * chiffres se devinent hors ligne en un instant, une clé ne se devine pas.
  */
-function hashCode(crypt: Encryption, code: string): string {
+export function hashCode(crypt: Encryption, code: string): string {
     return createHmac('sha256', crypt.derive('deveye-login-codes', 'v1', 32))
         .update(code.trim())
         .digest('hex');
 }
 
 /** Un code neuf pour l'étape en cours : le précédent ne vaut plus rien. Rend le code en clair, à envoyer. */
+/** Six chiffres au hasard, pour un mail ou un SMS. */
+export function randomCode(): string {
+    return String(randomInt(0, 1_000_000)).padStart(6, '0');
+}
+
 export function issueLoginCode(crypt: Encryption, challenge: LoginChallenge, now = Date.now()): string {
-    const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
+    const code = randomCode();
     challenge.code = { hash: hashCode(crypt, code), expiresAt: now + LOGIN_CODE_TTL_MS };
     challenge.sentAt = now;
     challenge.sends += 1;

@@ -3,7 +3,8 @@ const BROWSERS: readonly [RegExp, string][] = [
     [/\b(OPR|Opera)\//, 'Opera'],
     [/\bSamsungBrowser\//, 'Samsung Internet'],
     [/\b(Firefox|FxiOS)\//, 'Firefox'],
-    [/\b(Chrome|CriOS|Chromium)\//, 'Chrome'],
+    // Sans borne de mot : `HeadlessChrome/`, et les navigateurs bâtis sur Chrome qui le disent.
+    [/(Chrome|CriOS|Chromium)\//, 'Chrome'],
     [/\bSafari\//, 'Safari']
 ];
 

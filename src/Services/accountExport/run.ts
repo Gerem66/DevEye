@@ -13,6 +13,7 @@ import {
 import type { Database } from '@/db';
 import type Encryption from '@/Services/Encryption';
 import { createOpenCipher, type Cipher } from '@/Services/SecureStore';
+import { phoneContext } from '@/Services/sealContexts';
 import { SecretKeyService } from '@/Services/SecretKeyService';
 import { NameBook, safeSegment } from './names';
 import type { ZipWriter } from './zip';
@@ -180,6 +181,10 @@ export async function writeAccountExport(zip: ZipWriter, host: ExportHost, req: 
         'SELECT created_at, expires_at, revoked_at FROM refresh_tokens WHERE user_id = ? ORDER BY created_at',
         [req.userId]
     );
+    const [phone] = await q.query<{ phone_sealed: string; verified_at: number; sms_check: number }>(
+        'SELECT phone_sealed, verified_at, sms_check FROM user_phones WHERE user_id = ?',
+        [req.userId]
+    );
     const browsers = await q.query<{ label: string; created_at: number; last_used_at: number; expires_at: number }>(
         'SELECT label, created_at, last_used_at, expires_at FROM trusted_browsers WHERE user_id = ? ORDER BY created_at',
         [req.userId]
@@ -200,6 +205,13 @@ export async function writeAccountExport(zip: ZipWriter, host: ExportHost, req: 
         },
         securite: {
             codeParMailAuxNouveauxNavigateurs: account.login_email_check === 1,
+            telephone: phone
+                ? {
+                      numero: host.crypt.openTextFor('phone', phone.phone_sealed, phoneContext(req.userId)),
+                      verifieLe: iso(phone.verified_at),
+                      codeParSmsAuxNouveauxNavigateurs: phone.sms_check === 1
+                  }
+                : null,
             chiffrementParMotDePasse: new SecretKeyService(db, host.crypt).isPasswordWrapped(keyRow),
             doubleAuthentification: Boolean(twoFactor?.enabled),
             codeAvantDePiloterUneMachineMinutes: Math.round(account.step_up_interval / 60)

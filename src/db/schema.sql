@@ -2394,6 +2394,15 @@ CREATE TABLE `user_2fa_backup_codes` (
   CONSTRAINT `fk_2fa_backup_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+CREATE TABLE `user_phones` (
+  `user_id` int NOT NULL,
+  `phone_sealed` text COLLATE utf8mb4_general_ci NOT NULL,
+  `verified_at` bigint NOT NULL,
+  `sms_check` tinyint(1) NOT NULL DEFAULT '1',
+  PRIMARY KEY (`user_id`),
+  CONSTRAINT `fk_user_phones_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 CREATE TABLE `user_secret_keys` (
   `user_id` int NOT NULL,
   `dek_wrapped` text COLLATE utf8mb4_general_ci NOT NULL,

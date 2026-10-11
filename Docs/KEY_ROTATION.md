@@ -36,6 +36,7 @@ figure dans le tableau ci-dessous.
 | `user_secret_keys.open_dek_wrapped`                            | `user-open-dek`   | `user_secret_keys:open_dek:<id>` | la DEK ouverte de chaque compte                                        |
 | `workspace_secret_keys.dek_wrapped`                            | `workspace-dek`   | `workspace_secret_keys:dek:<id>` | la WDK de chaque espace partagé                                        |
 | `user_2fa.secret_enc`                                          | `totp`            | `user_2fa:secret:<id>`           | le secret TOTP, scellé (pas une clé, mais lisible avant toute session) |
+| `user_phones.phone_sealed`                                     | `phone`           | `user_phones:phone:<id>`         | le numéro du code par SMS, lisible à la connexion avant toute session  |
 | chaque colonne qu'un module déclare                            | `module:<son id>` | celui qu'il passe, vide sinon    | son matériel de clé, là où il le range                                 |
 
 Parmi les modules : la BMK de CloudSync, les clés du Serveur mail (corps des

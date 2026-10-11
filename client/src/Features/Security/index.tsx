@@ -20,7 +20,7 @@ import {
     type TwoFactorStatus
 } from '@deveye/types';
 import type { FeatureProps } from '../types';
-import { EmailCheckRow, TrustedBrowsersCard } from './LoginChecks';
+import { EmailCheckRow, SmsCheckRow, TrustedBrowsersCard } from './LoginChecks';
 import { MinutesEditor } from './MinutesEditor';
 import { SecurityDialog } from './SecurityDialog';
 import styles from './Security.module.css';
@@ -228,7 +228,11 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
         const reAuthValidation = secrecy.enabled && reAuth <= 300;
         updateUser({
             security: {
-                loginConfirmation: checks.email.available ? checks.email.enabled : null,
+                loginConfirmation:
+                    checks.email.available || checks.sms.available
+                        ? (checks.email.available && checks.email.enabled) ||
+                          (checks.sms.available && checks.sms.enabled)
+                        : null,
                 twoFactor: status.enabled,
                 passwordEncryption: secrecy.enabled,
                 reAuthValidation
@@ -410,6 +414,9 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                     {checks?.email.available && (
                         <EmailCheckRow checks={checks} onChange={setChecks} extraColumn={extraColumn} />
                     )}
+                    {checks?.sms.available && (
+                        <SmsCheckRow checks={checks} onChange={setChecks} extraColumn={extraColumn} />
+                    )}
 
                     <div className={styles.statusCard}>
                         <div className={`${styles.statusIcon} ${status?.enabled ? styles.enabled : ''}`}>
@@ -582,7 +589,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                         </div>
                     </div>
 
-                    {checks?.email.available && (
+                    {(checks?.email.available || checks?.sms.available) && (
                         <TrustedBrowsersCard checks={checks} onChange={setChecks} extraColumn={extraColumn} />
                     )}
 

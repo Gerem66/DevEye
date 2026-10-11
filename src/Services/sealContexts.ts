@@ -7,3 +7,4 @@ export const userDekContext = (userId: number): string => `user_secret_keys:dek:
 export const userOpenDekContext = (userId: number): string => `user_secret_keys:open_dek:${userId}`;
 export const workspaceDekContext = (workspaceId: number): string => `workspace_secret_keys:dek:${workspaceId}`;
 export const totpContext = (userId: number): string => `user_2fa:secret:${userId}`;
+export const phoneContext = (userId: number): string => `user_phones:phone:${userId}`;

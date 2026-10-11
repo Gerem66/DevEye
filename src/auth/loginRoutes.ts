@@ -19,10 +19,12 @@ import type { AuditLog } from '@/Services/AuditLog';
 import { clearAttempts, recordFailedAttempt, type AttemptScope } from '@/Services/attempts';
 import type Encryption from '@/Services/Encryption';
 import { maintenance, MaintenanceError } from '@/Services/maintenance';
-import { totpContext } from '@/Services/sealContexts';
 import { SecretKeyService } from '@/Services/SecretKeyService';
 import { claimPendingDek, DEFAULT_DEK_GRACE_MS, rememberSessionDek, stashPendingDek } from '@/Services/SecureStore';
+import { phoneContext } from '@/Services/sealContexts';
 import { serverMail } from '@/Services/serverMail';
+import { sms, SmsQuotaError } from '@/Services/sms';
+import { totpContext } from '@/Services/sealContexts';
 import { hashBackupCode, verifyTotp } from '@/Services/Totp';
 import { sha256hex } from '@/Utils/hash';
 import { hashPassword, needsRehash, verifyPassword } from './argon';
@@ -52,7 +54,7 @@ import {
     openLoginChallenge,
     type LoginChallenge
 } from './loginChallenge';
-import { maskEmail } from './mask';
+import { maskEmail, maskPhone } from './mask';
 import { issueSession } from './session';
 
 interface LoginDeps {
@@ -197,6 +199,7 @@ export async function loginRoutes(app: FastifyInstance, { db, crypt, audit }: Lo
         const steps: LoginStep[] = [];
         if (!trusted && user.login_email_check === 1 && serverMail.configured) steps.push('email');
         if ((await db.twoFactor.get(user.id))?.enabled) steps.push('totp');
+        if (!trusted && sms.available && (await db.userPhones.get(user.id))?.sms_check === 1) steps.push('sms');
         return steps;
     };
 
@@ -231,6 +234,47 @@ export async function loginRoutes(app: FastifyInstance, { db, crypt, audit }: Lo
                 description: 'Code de connexion non envoyé (serveur de mail en panne) : étape sautée'
             });
             return false;
+        }
+    };
+
+    /**
+     * Le code par SMS, dès que l'étape s'ouvre : `skipped` quand le service
+     * d'envoi est en panne (même règle que le mail), `quota` quand ce compte
+     * ou cette adresse a épuisé ses SMS du jour (la connexion s'arrête alors :
+     * seul qui a franchi le reste peut en être là).
+     */
+    const textCode = async (
+        req: FastifyRequest,
+        challenge: LoginChallenge,
+        user: UserRow
+    ): Promise<{ to: string } | 'skipped' | 'quota'> => {
+        const row = await db.userPhones.get(user.id);
+        const phone = row ? crypt.openTextFor('phone', row.phone_sealed, phoneContext(user.id)) : null;
+        if (!phone) {
+            req.log.error({ userId: user.id }, 'Numéro de téléphone illisible : étape SMS sautée');
+            return 'skipped';
+        }
+        const code = issueLoginCode(crypt, challenge);
+        try {
+            await sms.send(
+                phone,
+                `DevEye : votre code de connexion est ${code}. Il expire dans 10 minutes. Ne le donnez à personne.`,
+                { userId: user.id, ip: req.ip }
+            );
+            return { to: maskPhone(phone) };
+        } catch (e) {
+            if (e instanceof SmsQuotaError) return 'quota';
+            req.log.error({ err: (e as Error).message, userId: user.id }, 'Code de connexion par SMS non envoyé');
+            audit.record({
+                source: 'web',
+                category: 'auth',
+                action: 'login.smsCodeFailed',
+                level: 'warning',
+                uid: user.id,
+                ip: req.ip,
+                description: 'Code de connexion par SMS non envoyé (service d’envoi en panne) : étape sautée'
+            });
+            return 'skipped';
         }
     };
 
@@ -288,16 +332,32 @@ export async function loginRoutes(app: FastifyInstance, { db, crypt, audit }: Lo
         const bearer = authTransport(req) === 'bearer';
         while (challenge.steps.length > 0) {
             const step = challenge.steps[0];
-            if (step === 'email' && !(await mailCode(req, challenge, user))) {
-                advanceLoginChallenge(challenge, false);
-                continue;
+            let to: string | undefined;
+            if (step === 'email') {
+                if (!(await mailCode(req, challenge, user))) {
+                    advanceLoginChallenge(challenge, false);
+                    continue;
+                }
+                to = maskEmail(user.email);
+            } else if (step === 'sms') {
+                const sent = await textCode(req, challenge, user);
+                if (sent === 'skipped') {
+                    advanceLoginChallenge(challenge, false);
+                    continue;
+                }
+                if (sent === 'quota') {
+                    abandonLoginChallenge(challenge);
+                    dropChallengeCookie(req, reply);
+                    return reply.code(429).send(err('rate_limited', new SmsQuotaError().message));
+                }
+                to = sent.to;
             }
             return reply.send(
                 ok(
                     loginResponseSchema.parse({
                         status: 'pending',
                         step,
-                        ...(step === 'email' ? { to: maskEmail(user.email) } : {}),
+                        ...(to ? { to } : {}),
                         ...(bearer ? { challenge: token } : {})
                     })
                 )

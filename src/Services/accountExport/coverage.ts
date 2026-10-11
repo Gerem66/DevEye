@@ -23,6 +23,7 @@ export const CORE_EXPORT_TABLES: Readonly<Record<string, 'host' | { skip: string
     remote_instances: 'host',
     refresh_tokens: 'host',
     trusted_browsers: 'host',
+    user_phones: 'host',
     notification_routes: { skip: 'Les routes de notification visent des éléments par leur numéro interne.' },
     notification_route_channels: { skip: 'Les routes de notification visent des éléments par leur numéro interne.' },
     item_shares: { skip: 'Le partage d’un élément entre espaces n’a de sens que sur ce serveur.' },

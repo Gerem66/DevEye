@@ -2,7 +2,7 @@ import type { FeatureSealedColumn } from '@deveye/types/sdk/server';
 
 import type { Queryable } from '@/db/pool';
 import { moduleSealLabel, SEAL_VERSION, type SealLabel } from './Encryption';
-import { totpContext, userDekContext, userOpenDekContext, workspaceDekContext } from './sealContexts';
+import { phoneContext, totpContext, userDekContext, userOpenDekContext, workspaceDekContext } from './sealContexts';
 
 /**
  * Une colonne que la clé serveur scelle : avec quelle étiquette, et sous quel
@@ -45,7 +45,14 @@ export const CORE_SEAL_TARGETS: readonly SealTarget[] = [
         label: 'workspace-dek',
         context: (id) => workspaceDekContext(Number(id))
     },
-    { table: 'user_2fa', column: 'secret_enc', id: 'user_id', label: 'totp', context: (id) => totpContext(Number(id)) }
+    { table: 'user_2fa', column: 'secret_enc', id: 'user_id', label: 'totp', context: (id) => totpContext(Number(id)) },
+    {
+        table: 'user_phones',
+        column: 'phone_sealed',
+        id: 'user_id',
+        label: 'phone',
+        context: (id) => phoneContext(Number(id))
+    }
 ];
 
 interface SealingModule {

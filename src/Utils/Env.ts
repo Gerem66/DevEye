@@ -148,6 +148,15 @@ export const env = {
     SMTP_USER: getEnvVar('SMTP_USER', 'string', false),
     SMTP_PASSWORD: getEnvVar('SMTP_PASSWORD', 'string', false),
     SMTP_FROM: getEnvVar('SMTP_FROM', 'string', false),
+    // L'envoi des SMS, par l'API d'OVHcloud : tout ou rien, et sans eux la
+    // confirmation par SMS n'existe nulle part. `SMS_OVH_SENDER` est facultatif :
+    // vide, le SMS part d'un numéro court d'OVH.
+    SMS_OVH_ENDPOINT: getEnvVar('SMS_OVH_ENDPOINT', 'string', false),
+    SMS_OVH_APP_KEY: getEnvVar('SMS_OVH_APP_KEY', 'string', false),
+    SMS_OVH_APP_SECRET: getEnvVar('SMS_OVH_APP_SECRET', 'string', false),
+    SMS_OVH_CONSUMER_KEY: getEnvVar('SMS_OVH_CONSUMER_KEY', 'string', false),
+    SMS_OVH_SERVICE: getEnvVar('SMS_OVH_SERVICE', 'string', false),
+    SMS_OVH_SENDER: getEnvVar('SMS_OVH_SENDER', 'string', false),
 
     RATE_LIMIT_MAX: getEnvVar('RATE_LIMIT_MAX', 'number', false) || 200,
     RATE_LIMIT_WINDOW: getEnvVar('RATE_LIMIT_WINDOW', 'string', false) || '1 minute',
@@ -230,6 +239,23 @@ if (env.SOURCE_URL && !/^https?:\/\/[^\s/]+/.test(env.SOURCE_URL)) {
 }
 if (env.SMTP_HOST && !env.SMTP_FROM) {
     throw new Error('SMTP_FROM est requis dès que SMTP_HOST est renseigné.');
+}
+// Un compte OVH à moitié décrit ferait croire que les SMS partent : on refuse.
+{
+    const sms = [
+        'SMS_OVH_ENDPOINT',
+        'SMS_OVH_APP_KEY',
+        'SMS_OVH_APP_SECRET',
+        'SMS_OVH_CONSUMER_KEY',
+        'SMS_OVH_SERVICE'
+    ] as const;
+    const missing = sms.filter((name) => !env[name]);
+    if (missing.length > 0 && missing.length < sms.length) {
+        throw new Error(`${missing.join(', ')} requis dès qu'une variable SMS_OVH_* est renseignée.`);
+    }
+    if (env.SMS_OVH_ENDPOINT && !/^https:\/\/[^\s/]+/.test(env.SMS_OVH_ENDPOINT)) {
+        throw new Error('SMS_OVH_ENDPOINT doit être une adresse https, par exemple https://eu.api.ovh.com/1.0.');
+    }
 }
 // Un S3 à moitié décrit écrirait sur le disque sans le dire : on refuse.
 if (env.STORAGE_S3_ENDPOINT) {

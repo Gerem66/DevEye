@@ -8,6 +8,7 @@ import { ORIGINS } from '@/features/_sdk/context';
 import { maintenance, MaintenanceError } from '@/Services/maintenance';
 import { memberPausedIn, workspacePauses } from '@/Services/planPauses';
 import { serverMail } from '@/Services/serverMail';
+import { sms } from '@/Services/sms';
 import { env } from '@/Utils/Env';
 
 /**
@@ -40,10 +41,18 @@ export async function loadUserBundle(
     // re-auth window counts when strict — short enough (≤ 5 min) to be a
     // meaningful protection, 0 being the strongest setting (always re-prompt).
     // A null interval falls back to the 60s server default, which is strict.
-    const [twoFaRow, secretKeyRow] = await Promise.all([db.twoFactor.get(userId), db.userSecretKeys.get(userId)]);
+    const [twoFaRow, secretKeyRow, phoneRow] = await Promise.all([
+        db.twoFactor.get(userId),
+        db.userSecretKeys.get(userId),
+        db.userPhones.get(userId)
+    ]);
     const reAuth = row.re_auth_interval ?? 60;
+    // Sans mail ni SMS, la confirmation des connexions n'existe pas ici : elle ne compte pas.
+    const confirms = serverMail.configured || sms.available;
     const security = {
-        loginConfirmation: serverMail.configured ? row.login_email_check === 1 : null,
+        loginConfirmation: confirms
+            ? (serverMail.configured && row.login_email_check === 1) || (sms.available && phoneRow?.sms_check === 1)
+            : null,
         twoFactor: Boolean(twoFaRow?.enabled),
         passwordEncryption: secretKeyRow?.wrap_mode === 'password',
         reAuthValidation: reAuth <= 300

@@ -226,6 +226,16 @@ Application directe des deux étages ci-dessus (`features/notes/src/server/handl
       est sautée, journalisée en erreur et auditée. C'est un choix assumé
       (l'administrateur aussi se connecte par là), et la limite de cette
       protection.
+    - **Code par SMS** : n'existe que si le serveur envoie des SMS
+      (`SMS_OVH_*`, l'API d'OVHcloud, `src/Services/sms`). Le numéro se
+      vérifie par un code reçu avant de servir ; l'ajouter, le changer, le
+      retirer ou couper le code demandent le mot de passe, pour qu'une session
+      volée ne déplace pas le code vers son propre téléphone. Il est scellé par
+      la clé serveur (`user_phones.phone_sealed`, étiquette `phone`) : la
+      connexion le lit avant toute session. Un SMS coûte : dix par compte et
+      vingt par adresse IP sur 24 h, au-delà la connexion s'arrête (seul qui a
+      franchi les autres étapes en est là) ; un service d'envoi en panne fait
+      sauter l'étape, comme pour le mail.
     - **Navigateurs de confiance** : cochée à une étape de code envoyé, la
       confiance pose un jeton aléatoire dans le cookie `dv_tb` (`HttpOnly`,
       `SameSite=Strict`, chemin `/api/auth`, jusqu'à quatre comptes par

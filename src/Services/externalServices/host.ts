@@ -6,6 +6,7 @@ import { geoip } from '@/Services/geoip';
 import { objectStorageUsage, probeObjectStorage, type ObjectStorageUsage } from '@/Services/objectStorage';
 import { sizeFr } from '@/Services/quota';
 import { serverMail } from '@/Services/serverMail';
+import { sms } from '@/Services/sms';
 import { statusProbeLastReadAt } from '@/Services/statusProbe';
 import { env } from '@/Utils/Env';
 
@@ -163,6 +164,44 @@ async function smtp(base: HostBase): Promise<ExternalService> {
     }
 }
 
+async function textMessages(host: HostBase): Promise<ExternalService> {
+    const base = { ...host, provider: 'OVHcloud' };
+    if (!sms.available) {
+        return {
+            ...base,
+            state: 'inactive',
+            summary: 'Aucun envoi de SMS : la confirmation des connexions par SMS n’est proposée à personne.'
+        };
+    }
+    const facts: ExternalServiceFact[] = [
+        { label: 'Compte SMS', value: env.SMS_OVH_SERVICE ?? '' },
+        { label: 'Expéditeur', value: env.SMS_OVH_SENDER || 'numéro court d’OVH' }
+    ];
+    try {
+        const credits = await sms.credits();
+        facts.push({
+            label: 'Crédits restants',
+            value: credits.toLocaleString('fr-FR'),
+            tone: credits < 50 ? 'danger' : undefined
+        });
+        return credits > 0
+            ? { ...base, state: 'ok', summary: 'Le compte répond et peut envoyer.', facts }
+            : {
+                  ...base,
+                  state: 'down',
+                  summary: 'Plus aucun crédit : les codes par SMS ne partent plus, l’étape est sautée.',
+                  facts
+              };
+    } catch (e) {
+        return {
+            ...base,
+            state: 'down',
+            summary: 'OVH refuse la connexion : aucun SMS ne part, l’étape est sautée.',
+            facts: [...facts, { label: 'Erreur', value: errorText(e), tone: 'danger' }]
+        };
+    }
+}
+
 async function agentReleases(host: HostBase): Promise<ExternalService> {
     const base = { ...host, provider: 'GitHub' };
     if (!env.AGENT_DOWNLOAD_TOKEN || !env.AGENT_REPO) {
@@ -270,6 +309,7 @@ export function hostServices(refresh: boolean): { base: HostBase; read: Promise<
     const probes: [HostBase, (base: HostBase) => Promise<ExternalService>][] = [
         [{ id: 'object-storage', name: 'Stockage objet (S3)' }, (base) => objectStorage(base, refresh)],
         [{ id: 'smtp', name: 'Envoi des mails du serveur' }, smtp],
+        [{ id: 'sms', name: 'Envoi des SMS' }, textMessages],
         [{ id: 'agent-releases', name: 'Versions de l’agent' }, agentReleases],
         [{ id: 'domain-proxy', name: 'Domaines des clients' }, domainProxy],
         [{ id: 'status-page', name: 'Page d’état' }, statusPage],

@@ -569,3 +569,33 @@
     color: var(--text-secondary);
     font-size: 0.8rem;
 }
+
+.phoneForm {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.phoneCode {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+/* « Changer de numéro » : un geste discret, dans le texte de sa carte. */
+.inlineLink {
+    margin-left: var(--space-xs);
+    padding: 0;
+    background: none;
+    border: none;
+    color: var(--accent);
+    font: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.inlineLink:hover,
+.inlineLink:focus-visible {
+    color: var(--text-primary);
+}
