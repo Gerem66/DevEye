@@ -118,8 +118,8 @@ interface AgentWSDeps {
     audit: AuditLog;
 }
 
-function send(socket: WebSocket, msg: AgentServerMessage): void {
-    socket.send(agentFrame(msg.command, msg.payload));
+function send(socket: WebSocket, deviceId: string, msg: AgentServerMessage): void {
+    socket.send(agentFrame(deviceId, msg.command, msg.payload));
 }
 
 /** En dessous de ce reste de vie, le jeton est remplacé à la connexion. */
@@ -256,7 +256,7 @@ async function rotateTokenIfDue(
         // doit rester valable, que ce soit le courant ou déjà le précédent.
         const stillHeld = presented === 'current' ? device.token_hash : device.token_hash_prev;
         await db.devices.setTokenHashes(device.id, sha256hex(token), stillHeld);
-        send(socket, { command: AGENT_TOKEN_ROTATE, payload: { token } });
+        send(socket, device.id, { command: AGENT_TOKEN_ROTATE, payload: { token } });
         log.info('Device token rotated');
     } catch (err) {
         log.warn({ err }, 'Device token rotation failed (socket kept open)');
@@ -312,7 +312,7 @@ export async function registerAgentWS(
             // L'agent ne lit une rotation qu'une fois sa config reçue. Aucun
             // gestionnaire n'est branché : ce qu'il envoie d'ici là est ignoré.
             const pausedLog = logger.child({ deviceId: device.id, ownerId: claims.oid });
-            send(socket, { command: AGENT_CONFIG, payload: await agentConfigFor(db, device) });
+            send(socket, device.id, { command: AGENT_CONFIG, payload: await agentConfigFor(db, device) });
             await rotateTokenIfDue(db, socket, device, claims, presented, pausedLog);
             setTimeout(() => socket.close(1012), PAUSED_ROTATION_GRACE_MS).unref();
             return;
@@ -333,12 +333,12 @@ export async function registerAgentWS(
         if (device.status === 'pending_deletion') {
             reqLogger.info('Agent connected while pending deletion — sending destroy');
             hub.agentOnline(deviceId, socket);
-            send(socket, { command: AGENT_DESTROY, payload: {} });
+            send(socket, deviceId, { command: AGENT_DESTROY, payload: {} });
         } else {
             reqLogger.info('Agent connected');
             const wasOnlineInHub = hub.isOnline(deviceId);
             hub.agentOnline(deviceId, socket);
-            send(socket, { command: AGENT_CONFIG, payload: await agentConfigFor(db, device) });
+            send(socket, deviceId, { command: AGENT_CONFIG, payload: await agentConfigFor(db, device) });
             await rotateTokenIfDue(db, socket, device, claims, presented, reqLogger);
             // Les modules (CloudSync) poussent leurs assignations et rattrapent
             // le retard éventuel.
@@ -387,7 +387,10 @@ export async function registerAgentWS(
                 parsed = agentClientMessageSchema.safeParse(JSON.parse(raw.toString()));
             } catch {
                 reqLogger.warn({ bytes: raw.length }, 'Agent sent malformed JSON');
-                send(socket, { command: AGENT_ERROR, payload: { code: 'validation', message: 'Malformed JSON' } });
+                send(socket, deviceId, {
+                    command: AGENT_ERROR,
+                    payload: { code: 'validation', message: 'Malformed JSON' }
+                });
                 return;
             }
             if (!parsed.success) {
@@ -401,7 +404,7 @@ export async function registerAgentWS(
                     },
                     'Agent frame rejected by validation'
                 );
-                send(socket, {
+                send(socket, deviceId, {
                     command: AGENT_ERROR,
                     payload: { code: 'validation', message: 'Invalid agent message' }
                 });
@@ -414,7 +417,10 @@ export async function registerAgentWS(
                 await dispatch(session, parsed.data);
             } catch (err) {
                 reqLogger.error({ err, command: parsed.data.command }, 'Agent frame handler failed');
-                send(socket, { command: AGENT_ERROR, payload: { code: 'internal', message: 'Handler failed' } });
+                send(socket, deviceId, {
+                    command: AGENT_ERROR,
+                    payload: { code: 'internal', message: 'Handler failed' }
+                });
             }
         };
 

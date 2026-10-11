@@ -198,7 +198,7 @@ export class AgentTunnels {
     private send(flow: TunnelFlow, command: string, payload: unknown): void {
         if (this.socketOf(flow.deviceId) !== flow.socket) return;
         try {
-            flow.socket.send(agentFrame(command, payload));
+            flow.socket.send(agentFrame(flow.deviceId, command, payload));
         } catch {
             /* la session se ferme : `failSocket` solde le tunnel */
         }

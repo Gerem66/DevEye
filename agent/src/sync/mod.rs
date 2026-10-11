@@ -224,6 +224,9 @@ pub struct SyncManager {
     shares: HashMap<i64, ShareState>,
     /// One worker per download in progress, by op id; dropping the sender ends it.
     applies: HashMap<String, Sender<ApplyFrame>>,
+    /// Downloads a signed `sync.applyStart` announced, by op id, with their
+    /// share and hash: an unsigned `sync.applyChunk` only opens one of them.
+    announced: HashMap<String, (i64, String)>,
     /// Index caches shared with the workers (freshness guard at install).
     caches: SharedCaches,
     /// `sync_roots` de la config locale : où cette machine accepte un partage.
@@ -250,6 +253,7 @@ impl SyncManager {
             tx,
             shares: HashMap::new(),
             applies: HashMap::new(),
+            announced: HashMap::new(),
             caches: SharedCaches::default(),
             sync_roots,
             refused: HashMap::new(),
@@ -644,6 +648,16 @@ impl SyncManager {
                     format!("premier chunk inattendu (seq {})", frame.seq),
                 ));
             }
+            // The chunks are not signed; the start that names what they build is.
+            match self.announced.remove(&frame.op_id) {
+                Some((share, hash)) if share == share_id && hash == frame.expected_hash => {}
+                _ => {
+                    return Some(apply_refused(
+                        &frame.op_id,
+                        "téléchargement non annoncé par un ordre signé".to_string(),
+                    ));
+                }
+            }
             let (root, keys) = match self.served(share_id) {
                 Ok(served) => served,
                 Err(reason) => return Some(apply_refused(&frame.op_id, reason)),
@@ -708,13 +722,22 @@ impl SyncManager {
 
     /// Amorce d'un download : dit au serveur combien d'octets de clair on
     /// détient déjà pour ce hash, pour qu'il ne renvoie que la suite.
-    pub fn apply_start(&self, op_id: &str, share_id: i64, hash: &str) -> SyncEvent {
+    pub fn apply_start(&mut self, op_id: &str, share_id: i64, hash: &str) -> SyncEvent {
         let (ok, resume_from, error) = match self.served(share_id) {
             Ok((root, _)) => (true, Some(transfer::held_bytes_for(&root, hash)), None),
             // Unknown share: 0, its frames are refused anyway. Locked: refused now.
             Err(_) if !self.shares.contains_key(&share_id) => (true, Some(0), None),
             Err(reason) => (false, None, Some(reason)),
         };
+        if ok {
+            // Starts whose first chunk never came are abandoned transfers: past a
+            // few, they are forgotten rather than kept for ever.
+            if self.announced.len() >= 4 * transfer::MAX_APPLY_OPS {
+                self.announced.clear();
+            }
+            self.announced
+                .insert(op_id.to_string(), (share_id, hash.to_string()));
+        }
         SyncEvent::OpResult {
             op_id: op_id.to_string(),
             op: "applyReady",
@@ -920,7 +943,21 @@ mod tests {
     #[test]
     fn a_frame_for_an_unknown_share_is_refused_without_a_worker() {
         let (mut mgr, _rx) = manager();
+        mgr.apply_start("op", 1, &"0".repeat(64));
         assert!(refusal(mgr.apply_chunk(frame(0), 1)).contains("inconnu"));
+        assert!(mgr.applies.is_empty());
+    }
+
+    /// The chunks are not signed: only a transfer a signed start announced,
+    /// for that share and that content, takes them.
+    #[test]
+    fn a_first_frame_without_a_signed_start_is_refused() {
+        let (mut mgr, _rx) = manager();
+        assert!(refusal(mgr.apply_chunk(frame(0), 1)).contains("non annoncé"));
+        mgr.apply_start("op", 1, &"f".repeat(64));
+        assert!(refusal(mgr.apply_chunk(frame(0), 1)).contains("non annoncé"));
+        mgr.apply_start("op", 2, &"0".repeat(64));
+        assert!(refusal(mgr.apply_chunk(frame(0), 1)).contains("non annoncé"));
         assert!(mgr.applies.is_empty());
     }
 

@@ -312,13 +312,22 @@ serveur contrôle les machines**, à ceci près.
   que l'interface grise ce qui serait refusé. C'est le seul réglage de la machine
   que le serveur ne décide pas : une installation « supervision seule » se fait
   là. Limite honnête : un terminal root autorisé rend le reste consultatif.
-- **Les ordres signés.** Ce qui exécute du code, écrit, supprime ou lit le
-  contenu d'un fichier, change les privilèges de l'agent ou sa vie, ou choisit
-  les dossiers où CloudSync écrit (`SIGNED_AGENT_COMMANDS`) porte une
+- **Les ordres signés.** Ce qui exécute du code, écrit, déplace, supprime ou
+  lit le contenu d'un fichier, change les privilèges de l'agent, sa vie ou son
+  jeton, ou commande ce que CloudSync écrit (`SIGNED_AGENT_COMMANDS`) porte une
   signature Ed25519 du serveur (`ORDER_SIGNING_KEY`, `src/agent/orders.ts`) sur
-  la commande, un nonce, un horodatage et les octets exacts du payload. L'agent
-  épingle la clé publique à l'enrôlement, refuse un ordre non signé, rejoué, ou
-  daté à plus de cinq minutes de son horloge, et refuse tout sans clé épinglée.
+  la commande, l'identifiant de l'appareil, un nonce, un horodatage et les
+  octets exacts du payload. Une seule clé signe pour toutes les machines d'un
+  serveur : sans l'identifiant, un ordre signé pour l'une vaudrait sur toutes.
+  L'agent épingle la clé publique à l'enrôlement, refuse un ordre non signé,
+  signé pour une autre machine, rejoué, ou daté à plus de cinq minutes de son
+  horloge, et refuse tout sans clé épinglée. Un jeton tourné qui nomme une autre
+  machine est refusé aussi : l'agent ne se réenrôle pas sous un autre appareil.
+  Les morceaux d'un téléchargement CloudSync ne sont pas signés (un par
+  mégaoctet épuiserait la fenêtre des nonces) mais n'atterrissent que dans un
+  transfert qu'un `sync.applyStart` signé a annoncé, pour ce partage et ce
+  contenu ; la mise à jour de l'agent ne l'est pas non plus, pour qu'un agent
+  d'avant ce format puisse encore la recevoir.
   Une trame n'est lue qu'une fois, à cette porte : ce qu'elle admet est ce qui
   s'exécute, et une trame qu'elle ne sait pas lire (une signature mal formée,
   un champ inconnu) est ignorée, jamais exécutée. Ce que ça protège : tenir la

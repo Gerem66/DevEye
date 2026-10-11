@@ -206,7 +206,7 @@ pub async fn run(mut config: Config, opts: RunOptions) -> Result<()> {
         return run_once(&config, &device_id).await;
     }
     // Across reconnects: an order captured on one connection must not pass on the next.
-    let mut guard = crate::orders::OrderGuard::new(config.order_key.as_deref());
+    let mut guard = crate::orders::OrderGuard::new(config.order_key.as_deref(), &device_id);
     if !guard.has_key() {
         warn!(
             "no usable order-signing key pinned: terminal, file writes, power, upgrades, elevation \
@@ -831,11 +831,17 @@ async fn stream_session(
                             // in memory even if the save fails: the server still
                             // accepts the old one until the new one has been used.
                             ServerMessage::TokenRotate { token } => {
-                                match Config::persist_rotated_token(device_id, &token) {
-                                    Ok(()) => info!("device token rotated"),
-                                    Err(e) => warn!(error = %e, "rotated token could not be saved"),
+                                // A token naming another device would re-enroll this
+                                // machine as that one, whose orders it would then obey.
+                                if Config::token_subject(&token).as_deref() != Some(device_id) {
+                                    warn!("rotated token names another device: refused");
+                                } else {
+                                    match Config::persist_rotated_token(device_id, &token) {
+                                        Ok(()) => info!("device token rotated"),
+                                        Err(e) => warn!(error = %e, "rotated token could not be saved"),
+                                    }
+                                    config.device_token = Some(token);
                                 }
-                                config.device_token = Some(token);
                             }
                             // Persistence/privilege change (install autostart, elevate…).
                             ServerMessage::Service { action } => {

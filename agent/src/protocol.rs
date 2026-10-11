@@ -1479,17 +1479,27 @@ pub enum ServerMessage {
 }
 
 /// The orders that must carry the server's signature (mirrors
-/// `SIGNED_AGENT_COMMANDS` in @deveye/types): what runs code, writes or deletes
-/// files, reads their content, changes the agent's privileges or its life,
-/// drives its containers, reaches into its network, or picks the folders
-/// CloudSync writes to.
-pub const SIGNED_COMMANDS: [&str; 13] = [
+/// `SIGNED_AGENT_COMMANDS` in @deveye/types): what runs code, writes, moves or
+/// deletes files, reads their content, changes the agent's privileges, its life
+/// or its token, drives its containers, reaches into its network, or drives
+/// what CloudSync writes. `sync.applyChunk` is not signed (a chunk per megabyte
+/// would exhaust the nonce window) but only lands in a transfer a signed
+/// `sync.applyStart` opened; `agent.update` is not signed so an agent that
+/// predates this format can still be updated.
+pub const SIGNED_COMMANDS: [&str; 21] = [
     "term.open",
     "files.mutate",
     "files.upload",
     "files.download",
     "files.archive",
     "sync.config",
+    "sync.scan",
+    "sync.push",
+    "sync.applyStart",
+    "sync.applyDir",
+    "sync.applyLocal",
+    "sync.move",
+    "sync.delete",
     "agent.service",
     "agent.power",
     "agent.destroy",
@@ -1497,6 +1507,7 @@ pub const SIGNED_COMMANDS: [&str; 13] = [
     "agent.lifecycle",
     "docker.action",
     "tunnel.open",
+    "agent.tokenRotate",
 ];
 
 /// Signature carried next to `command` and `payload` (see `orders.rs`).

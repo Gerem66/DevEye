@@ -3,8 +3,8 @@
 //! The agent executes what arrives on its socket. For the orders that run code,
 //! write or delete files, or change the agent's privileges or its life
 //! ([`SIGNED_COMMANDS`]), arriving is not enough: the frame must carry an Ed25519
-//! signature by the key pinned at enrollment, over the command, a nonce, a
-//! timestamp and the exact payload bytes. That defeats whoever holds the socket
+//! signature by the key pinned at enrollment, over the command, this device's
+//! id, a nonce, a timestamp and the exact payload bytes. That defeats whoever holds the socket
 //! without holding the key (a TLS-terminating proxy, a stolen device token
 //! replayed against a fake server). It does not defeat a server compromised with
 //! its key: what this machine refuses whatever the server says is `[policy]`.
@@ -59,6 +59,8 @@ impl fmt::Display for Refusal {
 /// an order captured on one connection must not pass on the next.
 pub struct OrderGuard {
     key: Option<VerifyingKey>,
+    /// One key signs for every machine of a server: the order must name this one.
+    device_id: String,
     seen: HashSet<String>,
     /// Nonces by arrival, to forget them once their order could no longer pass.
     order: VecDeque<(i64, String)>,
@@ -67,7 +69,7 @@ pub struct OrderGuard {
 impl OrderGuard {
     /// `order_key_b64` is the pinned key from the config; absent or unreadable,
     /// every signed order is refused (fail closed).
-    pub fn new(order_key_b64: Option<&str>) -> Self {
+    pub fn new(order_key_b64: Option<&str>, device_id: &str) -> Self {
         let key = order_key_b64.and_then(|b64| {
             let bytes = base64::engine::general_purpose::STANDARD
                 .decode(b64.trim())
@@ -77,6 +79,7 @@ impl OrderGuard {
         });
         Self {
             key,
+            device_id: device_id.to_string(),
             seen: HashSet::new(),
             order: VecDeque::new(),
         }
@@ -104,8 +107,11 @@ impl OrderGuard {
             .map_err(|_| Refusal::BadSignature)?;
         let signature = Signature::from_bytes(&arr);
 
-        let mut message =
-            format!("{}\n{}\n{}\n", env.command, sig.nonce, sig.issued_at).into_bytes();
+        let mut message = format!(
+            "{}\n{}\n{}\n{}\n",
+            env.command, self.device_id, sig.nonce, sig.issued_at
+        )
+        .into_bytes();
         message.extend_from_slice(env.payload.get().as_bytes());
         key.verify_strict(&message, &signature)
             .map_err(|_| Refusal::BadSignature)?;
@@ -208,6 +214,7 @@ mod tests {
     use ed25519_dalek::{Signer, SigningKey};
 
     const NOW: i64 = 1_700_000_000_000;
+    const DEVICE: &str = "11111111-1111-4111-8111-111111111111";
 
     fn key() -> SigningKey {
         SigningKey::from_bytes(&[7u8; 32])
@@ -219,7 +226,17 @@ mod tests {
 
     /// A frame as the server builds it: signature over the payload bytes as written.
     fn frame(command: &str, payload: &str, nonce: &str, issued_at: i64) -> String {
-        let mut message = format!("{command}\n{nonce}\n{issued_at}\n").into_bytes();
+        frame_for(DEVICE, command, payload, nonce, issued_at)
+    }
+
+    fn frame_for(
+        device: &str,
+        command: &str,
+        payload: &str,
+        nonce: &str,
+        issued_at: i64,
+    ) -> String {
+        let mut message = format!("{command}\n{device}\n{nonce}\n{issued_at}\n").into_bytes();
         message.extend_from_slice(payload.as_bytes());
         let signature =
             base64::engine::general_purpose::STANDARD.encode(key().sign(&message).to_bytes());
@@ -235,7 +252,7 @@ mod tests {
 
     #[test]
     fn a_signed_order_verifies_and_a_tampered_one_does_not() {
-        let mut guard = OrderGuard::new(Some(&pinned()));
+        let mut guard = OrderGuard::new(Some(&pinned()), DEVICE);
         let payload = r#"{"sessionId":"s1","cols":80,"rows":24}"#;
         let good = frame("term.open", payload, "n1", NOW);
         assert_eq!(check(&mut guard, &good, NOW), Ok(()));
@@ -252,11 +269,24 @@ mod tests {
             "\"command\":\"agent.destroy\"",
         );
         assert_eq!(check(&mut guard, &moved, NOW), Err(Refusal::BadSignature));
+
+        // Signed for another machine of the same server: not for this one.
+        let elsewhere = frame_for(
+            "22222222-2222-4222-8222-222222222222",
+            "term.open",
+            payload,
+            "n4",
+            NOW,
+        );
+        assert_eq!(
+            check(&mut guard, &elsewhere, NOW),
+            Err(Refusal::BadSignature)
+        );
     }
 
     #[test]
     fn replay_and_window() {
-        let mut guard = OrderGuard::new(Some(&pinned()));
+        let mut guard = OrderGuard::new(Some(&pinned()), DEVICE);
         let order = frame("agent.power", r#"{"action":"reboot"}"#, "n1", NOW);
         assert_eq!(check(&mut guard, &order, NOW), Ok(()));
         assert_eq!(
@@ -283,7 +313,7 @@ mod tests {
     #[test]
     fn without_a_pinned_key_signed_orders_fail_closed() {
         for key in [None, Some("not base64"), Some("AAAA")] {
-            let mut guard = OrderGuard::new(key);
+            let mut guard = OrderGuard::new(key, DEVICE);
             assert!(!guard.has_key());
             let order = frame("term.open", r#"{"sessionId":"s"}"#, "n1", NOW);
             assert_eq!(check(&mut guard, &order, NOW), Err(Refusal::NoPinnedKey));
@@ -292,14 +322,14 @@ mod tests {
 
     #[test]
     fn an_unsigned_high_impact_order_is_refused() {
-        let mut guard = OrderGuard::new(Some(&pinned()));
+        let mut guard = OrderGuard::new(Some(&pinned()), DEVICE);
         let bare = r#"{"command":"files.mutate","payload":{"opId":"o","op":"delete","path":"/x"}}"#;
         assert_eq!(check(&mut guard, bare, NOW), Err(Refusal::MissingSignature));
     }
 
     #[test]
     fn admission_applies_the_local_policy_after_the_signature() {
-        let mut guard = OrderGuard::new(Some(&pinned()));
+        let mut guard = OrderGuard::new(Some(&pinned()), DEVICE);
         let closed = Policy {
             allow_terminal: false,
             ..Policy::default()
@@ -352,7 +382,7 @@ mod tests {
 
     #[test]
     fn a_docker_action_needs_the_signature_and_a_deploy_the_policy() {
-        let mut guard = OrderGuard::new(Some(&pinned()));
+        let mut guard = OrderGuard::new(Some(&pinned()), DEVICE);
         let payload =
             r#"{"opId":"o1","engine":"docker","action":"composeDeploy","target":"site/web"}"#;
         let unsigned = format!(r#"{{"command":"docker.action","payload":{payload}}}"#);
@@ -387,7 +417,7 @@ mod tests {
     /// readable by a laxer parser.
     #[test]
     fn a_frame_the_gate_cannot_read_is_never_run() {
-        let mut guard = OrderGuard::new(Some(&pinned()));
+        let mut guard = OrderGuard::new(Some(&pinned()), DEVICE);
         let payload = r#"{"sessionId":"x","cols":80,"rows":24,"user":"root"}"#;
         for sig in [
             "0",
@@ -422,7 +452,7 @@ mod tests {
 
     #[test]
     fn reading_the_agent_directory_is_refused_like_writing_it() {
-        let mut guard = OrderGuard::new(Some(&pinned()));
+        let mut guard = OrderGuard::new(Some(&pinned()), DEVICE);
         let dir = Config::path()
             .parent()
             .unwrap()
@@ -462,7 +492,7 @@ mod tests {
 
     #[test]
     fn ordinary_commands_need_no_signature_and_ignore_a_bogus_one() {
-        let mut guard = OrderGuard::new(None);
+        let mut guard = OrderGuard::new(None, DEVICE);
         let bare = r#"{"command":"agent.collect","payload":{}}"#;
         assert_eq!(check(&mut guard, bare, NOW), Ok(()));
         let noisy = r#"{"command":"agent.collect","payload":{},"sig":{"nonce":"x","issuedAt":1,"signature":"zz"}}"#;

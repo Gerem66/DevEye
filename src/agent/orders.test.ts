@@ -17,7 +17,7 @@ function publicKey() {
 describe('agentFrame', () => {
     it('signe un ordre à fort impact, sur les octets exacts du payload', () => {
         const payload = { sessionId: 's1', cols: 80, rows: 24, user: 'é"\\n' };
-        const frame = agentFrame('term.open', payload, 1_700_000_000_000);
+        const frame = agentFrame('dev-1', 'term.open', payload, 1_700_000_000_000);
         const parsed = JSON.parse(frame) as { command: string; payload: unknown; sig: unknown };
         assert.deepEqual(parsed.payload, payload);
         const sig = orderSignatureSchema.parse(parsed.sig);
@@ -27,25 +27,31 @@ describe('agentFrame', () => {
         const payloadJson = JSON.stringify(payload);
         assert.ok(frame.includes(`"payload":${payloadJson}`));
         const message = Buffer.concat([
-            Buffer.from(`term.open\n${sig.nonce}\n${sig.issuedAt}\n`),
+            Buffer.from(`term.open\ndev-1\n${sig.nonce}\n${sig.issuedAt}\n`),
             Buffer.from(payloadJson)
         ]);
         assert.ok(verify(null, message, publicKey(), Buffer.from(sig.signature, 'base64')));
         const tampered = Buffer.concat([
-            Buffer.from(`term.open\n${sig.nonce}\n${sig.issuedAt}\n`),
+            Buffer.from(`term.open\ndev-1\n${sig.nonce}\n${sig.issuedAt}\n`),
             Buffer.from(payloadJson.replace('80', '81'))
         ]);
         assert.equal(verify(null, tampered, publicKey(), Buffer.from(sig.signature, 'base64')), false);
+        // Signé pour une machine : une autre ne le vérifie pas.
+        const elsewhere = Buffer.concat([
+            Buffer.from(`term.open\ndev-2\n${sig.nonce}\n${sig.issuedAt}\n`),
+            Buffer.from(payloadJson)
+        ]);
+        assert.equal(verify(null, elsewhere, publicKey(), Buffer.from(sig.signature, 'base64')), false);
     });
 
     it('deux trames du même ordre ne portent pas le même nonce', () => {
-        const a = JSON.parse(agentFrame('agent.power', { action: 'reboot' })) as { sig: { nonce: string } };
-        const b = JSON.parse(agentFrame('agent.power', { action: 'reboot' })) as { sig: { nonce: string } };
+        const a = JSON.parse(agentFrame('dev-1', 'agent.power', { action: 'reboot' })) as { sig: { nonce: string } };
+        const b = JSON.parse(agentFrame('dev-1', 'agent.power', { action: 'reboot' })) as { sig: { nonce: string } };
         assert.notEqual(a.sig.nonce, b.sig.nonce);
     });
 
     it('ne signe pas un ordre ordinaire', () => {
-        const frame = JSON.parse(agentFrame('agent.collect', {})) as Record<string, unknown>;
+        const frame = JSON.parse(agentFrame('dev-1', 'agent.collect', {})) as Record<string, unknown>;
         assert.deepEqual(Object.keys(frame), ['command', 'payload']);
     });
 });

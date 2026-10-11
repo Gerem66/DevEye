@@ -7,6 +7,7 @@
 //! read once at start: edit it (or run `deveye-agent policy`), then restart the
 //! agent.
 
+use base64::Engine;
 use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 
@@ -425,6 +426,18 @@ impl Config {
         write_private(&path, toml.as_bytes())
             .with_context(|| format!("writing {}", path.display()))?;
         Ok(())
+    }
+
+    /// The device a token was issued to (its `sub`), read without verifying the
+    /// token: only the server can, and it is the server's claim about which
+    /// machine this is that the agent checks against its own enrollment.
+    pub fn token_subject(token: &str) -> Option<String> {
+        let payload = token.split('.').nth(1)?;
+        let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(payload)
+            .ok()?;
+        let claims: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+        claims.get("sub")?.as_str().map(str::to_string)
     }
 
     /// Write a rotated device token into the file as it is on disk now, not as

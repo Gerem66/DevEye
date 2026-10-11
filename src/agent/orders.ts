@@ -40,14 +40,19 @@ export const orderSigningPublicKey: string = createPublicKey(privateKey)
  * La trame d'un ordre vers un agent, signée si l'ordre l'exige. Construite par
  * concaténation et non par `JSON.stringify` de l'ensemble : les octets du
  * payload sur le fil sont exactement ceux qui ont été signés, l'agent les relit
- * tels quels sans les re-sérialiser.
+ * tels quels sans les re-sérialiser. L'identifiant de l'appareil entre dans la
+ * signature : une seule clé signe pour toutes les machines, et sans lui un
+ * ordre signé pour l'une vaudrait sur toutes les autres.
  */
-export function agentFrame(command: string, payload: unknown, now: number = Date.now()): string {
+export function agentFrame(deviceId: string, command: string, payload: unknown, now: number = Date.now()): string {
     const payloadJson = JSON.stringify(payload);
     const head = `{"command":${JSON.stringify(command)},"payload":${payloadJson}`;
     if (!SIGNED_AGENT_COMMANDS.has(command)) return `${head}}`;
     const nonce = randomBytes(16).toString('hex');
-    const message = Buffer.concat([Buffer.from(`${command}\n${nonce}\n${now}\n`), Buffer.from(payloadJson)]);
+    const message = Buffer.concat([
+        Buffer.from(`${command}\n${deviceId}\n${nonce}\n${now}\n`),
+        Buffer.from(payloadJson)
+    ]);
     const signature = sign(null, message, privateKey).toString('base64');
     return `${head},"sig":${JSON.stringify({ nonce, issuedAt: now, signature })}}`;
 }

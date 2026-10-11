@@ -391,7 +391,7 @@ export class MonitorHub {
     private sendToAgent(deviceId: string, command: string, payload: unknown = {}): boolean {
         const socket = this.agents.get(deviceId);
         if (!socket) return false;
-        socket.send(agentFrame(command, payload));
+        socket.send(agentFrame(deviceId, command, payload));
         return true;
     }
 
@@ -870,7 +870,7 @@ export class MonitorHub {
         // Inscrite avant l'ordre : une réponse immédiate ne doit pas se perdre.
         this.archives.set(key, flow);
         try {
-            socket.send(agentFrame(AGENT_FILES_ARCHIVE, { ...payload, window: ARCHIVE_WINDOW }));
+            socket.send(agentFrame(deviceId, AGENT_FILES_ARCHIVE, { ...payload, window: ARCHIVE_WINDOW }));
             for (;;) {
                 if (signal?.aborted) throw abortReason(signal);
                 const piece = flow.pieces.shift();
@@ -967,7 +967,7 @@ export class MonitorHub {
     private sendToFlow(flow: ArchiveFlow, command: string, payload: unknown): void {
         if (this.agents.get(flow.deviceId) !== flow.socket) return;
         try {
-            flow.socket.send(agentFrame(command, payload));
+            flow.socket.send(agentFrame(flow.deviceId, command, payload));
         } catch {
             /* la session se ferme : `agentOffline` solde l'archive */
         }
