@@ -304,9 +304,23 @@ reste en cache 30 secondes par module et par nom, absences comprises : une
 redirection ne relit pas la base à chaque passage. Les hôtes propres sont
 réservés comme ceux de DevEye (`reservedHosts`) : `domain.add` les refuse à tout
 espace, et le fournisseur HTTP de Traefik (`/api/domains/proxy`) ne les route
-jamais : l'exploitant les fait router lui-même vers l'écouteur public
-(`SHORTLINKS_ORIGIN` dans `.env.template`). Liens courts sert ainsi ses
-redirections.
+jamais : l'exploitant les fait router lui-même (`SHORTLINKS_ORIGIN` dans
+`.env.template`). Liens courts sert ainsi ses redirections.
+
+Un module peut aussi tenir **son propre écouteur** : `ownListener: { port }`,
+lu dans son env, exige `ownHosts` et `hostRequest`. `index.ts` ouvre alors un
+troisième écouteur (`buildPublicApp(featureId)`, le harnais de la surface
+publique réduit à ce module, sans sonde de vivacité) ; `modulePublicRoutes(app,
+{ only })` n'y monte que lui, et les écouteurs de l'app et de la surface
+publique ne montent plus aucune de ses routes ni ne servent ses noms. Le
+fournisseur de Traefik envoie ses domaines vérifiés au même port que l'amont
+(`DOMAIN_PROXY_UPSTREAM`), sous un service à part, et `domain.add` refuse un nom
+déjà déclaré par une fonctionnalité servie par un autre écouteur : un nom ne va
+qu'à un seul. `hostHooksProblem` refuse un écouteur propre sans hôte propre, sur
+un port invalide, sur celui de l'app ou de la surface publique, ou revendiqué
+deux fois. Un essai de bout en bout qui demande l'un de ses noms
+(`headers.host`) part vers son port (`listenerPortForHost`). Liens courts
+l'ouvre par `SHORTLINKS_LISTEN_PORT`.
 
 L'hôte sert aussi, sur les deux écouteurs et donc sous tout domaine client,
 l'icône de DevEye en 64 pixels à `DEVEYE_ICON_PATH` (`/deveye-icon.png`,

@@ -27,6 +27,29 @@ function build(rows: { host: string; verified: boolean }[], addresses: Record<st
 }
 
 describe('createProxyConfig', () => {
+    it('envoie les noms d’une fonctionnalité à écouteur propre vers son port, et jamais vers l’écouteur public', async () => {
+        const rows: Record<string, { host: string; verified: boolean }[]> = {
+            'x-rdv': [{ host: 'rdv.exemple.fr', verified: true }],
+            shortlinks: [{ host: 'go.exemple.fr', verified: true }]
+        };
+        const config = createProxyConfig(
+            { routable: (features) => Promise.resolve(features.flatMap((f) => rows[f] ?? [])) },
+            SETTINGS,
+            {
+                features: () => ['x-rdv', 'shortlinks'],
+                ownPorts: () => new Map([['shortlinks', 3002]]),
+                publicHost: HERE,
+                reserved: () => []
+            }
+        );
+        const out = await config();
+        assert.equal(out.http.routers['deveye-rdv_exemple_fr'].service, 'deveye-domains');
+        assert.equal(out.http.routers['deveye-go_exemple_fr'].service, 'deveye-domains-shortlinks');
+        assert.deepEqual(out.http.services['deveye-domains-shortlinks'], {
+            loadBalancer: { servers: [{ url: 'http://deveye-server:3002' }] }
+        });
+    });
+
     it('un routeur par nom, vers l’écouteur public, avec le résolveur du proxy', async () => {
         const { config } = build([{ host: 'rdv.exemple.fr', verified: true }], {});
         const out = await config();

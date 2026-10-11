@@ -4,12 +4,12 @@ import { fileURLToPath } from 'node:url';
 import type { FeatureServer, SdkCipher } from '@deveye/types/sdk/server';
 
 import { monthOf, now, openContent, setRuntime, SHORT_HOST } from './_shared';
+import { env, SHORTLINKS_ENV } from './env';
 import { shortlinksAccountExport } from './accountExport';
 import { createChecker } from './checker';
 import { Counters } from './counters';
 import { createDomainHooks } from './domains';
 import { shortlinksE2e } from './e2e';
-import { SHORTLINKS_ENV } from './env';
 import { linkHandlers } from './handlers';
 import { shortlinksMailSamples } from './mails';
 import { moderationHandlers } from './moderation';
@@ -61,6 +61,11 @@ export const serverEntry: FeatureServer<ShortlinksRepo> = {
     mailSamples: shortlinksMailSamples(),
     e2e: shortlinksE2e,
     createService(deps) {
+        if (env.SHORTLINKS_LISTEN_PORT > 0 && SHORT_HOST === null) {
+            throw new Error(
+                'SHORTLINKS_LISTEN_PORT exige SHORTLINKS_ORIGIN : l’écouteur des liens ne sert que le domaine court.'
+            );
+        }
         const counters = new Counters(deps);
         const redirector = createRedirector(deps, counters);
         const checker = createChecker(deps);
@@ -91,6 +96,7 @@ export const serverEntry: FeatureServer<ShortlinksRepo> = {
                 setRuntime(null);
             },
             ownHosts: SHORT_HOST === null ? [] : [SHORT_HOST],
+            ...(env.SHORTLINKS_LISTEN_PORT > 0 ? { ownListener: { port: env.SHORTLINKS_LISTEN_PORT } } : {}),
             publicRoutes: (app) => redirector.routes(app),
             hostRequest: (req, reply, domain) => redirector.hostRequest(req, reply, domain)
         };

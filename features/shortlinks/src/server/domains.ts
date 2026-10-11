@@ -4,7 +4,7 @@ import type { FeatureDomainsEntry } from '@deveye/types/sdk/server';
 // choisi par un membre, et il ne doit mener ni au réseau privé ni en boucle.
 import { safeFetch } from '@/Services/netFetch';
 
-import { runtime } from './_shared';
+import { runtime, SHORT_HOST } from './_shared';
 import { WELL_KNOWN_PATH } from './redirect';
 import type { ShortlinksRepo } from './repo';
 
@@ -57,8 +57,11 @@ export function createDomainHooks(seam: DomainSeam = {}): FeatureDomainsEntry<Sh
     const proofOf = seam.fetchProof ?? fetchProof;
 
     return {
+        /** Vers le domaine court quand il est posé : c'est lui qui sert les liens, pas l'adresse publique. */
         records: (ctx, domain) =>
-            Promise.resolve([{ type: 'CNAME', name: domain.host, value: new URL(ctx.origins.public).host }]),
+            Promise.resolve([
+                { type: 'CNAME', name: domain.host, value: SHORT_HOST ?? new URL(ctx.origins.public).host }
+            ]),
 
         async probe(_ctx, domain) {
             try {

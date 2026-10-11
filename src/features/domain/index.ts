@@ -16,7 +16,7 @@ import { httpsMode } from '@/Services/domains/proxy';
 import { schedulePlanReconcile } from '@/Services/planPauses';
 import { verifyFeatureDomain } from '@/Services/domains/verifier';
 import { toSdkDomain } from '../_sdk/domains';
-import { moduleDomains, moduleWebDomainFeatures, reservedHosts } from '../_sdk/register';
+import { moduleDomains, moduleListeners, moduleWebDomainFeatures, reservedHosts } from '../_sdk/register';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import { assertCoreLimit, coreAllowance } from '../_quota';
 
@@ -120,6 +120,18 @@ const addFeature = defineFeature({
         }
         if (reservedHosts().includes(host)) {
             throw new FeatureError('validation', 'Ce nom appartient à DevEye : choisissez un domaine à vous.');
+        }
+        // Un nom ne va qu'à un écouteur : partagé avec une fonctionnalité servie
+        // ailleurs, l'une des deux ne le recevrait jamais.
+        const portOf = (feature: string) => moduleListeners().find((l) => l.featureId === feature)?.port ?? null;
+        for (const other of moduleWebDomainFeatures()) {
+            if (other === input.feature || portOf(other) === portOf(input.feature)) continue;
+            if (await ctx.db.featureDomains.findByHost(other, host)) {
+                throw new FeatureError(
+                    'conflict',
+                    `Ce nom sert déjà « ${featureDescriptor(other as typeof input.feature).label} » : choisissez-en un autre pour « ${featureDescriptor(input.feature).label} ».`
+                );
+            }
         }
         // Tous espaces confondus : deux espaces ne peuvent pas servir le même nom.
         if (await ctx.db.featureDomains.findByHost(input.feature, host)) {

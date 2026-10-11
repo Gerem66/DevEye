@@ -66,13 +66,15 @@ registerModules([
     { manifest: manifest('x-domweb', true, true), server: { features: [], domains: webHooks } },
     { manifest: manifest('x-domsite', true, true), server: { features: [], domains: webHooks } },
     {
-        manifest: { ...manifest('x-domown', false), nativeCapabilities: ['routes.public'] },
+        manifest: { ...manifest('x-domown', true, true), nativeCapabilities: ['routes.public'] },
         server: {
             features: [],
+            domains: webHooks,
             createService: () => ({
                 start() {},
                 stop() {},
                 ownHosts: ['court.exemple.fr'],
+                ownListener: { port: 3903 },
                 hostRequest: () => Promise.resolve()
             })
         }
@@ -229,6 +231,18 @@ describe('domain.add', () => {
         await assert.rejects(
             run('domain.add', ctx, { feature: 'x-domweb', host: 'Court.Exemple.fr' }),
             code('validation')
+        );
+    });
+
+    it('refuse un nom déjà servi par une fonctionnalité qui n’a pas le même écouteur', async () => {
+        const repo = memoryRepo();
+        await run('domain.add', context(repo).ctx, { feature: 'x-domweb', host: 'partage.exemple.fr' });
+        await assert.doesNotReject(
+            run('domain.add', context(repo).ctx, { feature: 'x-domsite', host: 'partage.exemple.fr' })
+        );
+        await assert.rejects(
+            run('domain.add', context(repo).ctx, { feature: 'x-domown', host: 'partage.exemple.fr' }),
+            code('conflict')
         );
     });
 

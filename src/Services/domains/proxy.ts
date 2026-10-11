@@ -5,16 +5,17 @@ import type { FastifyInstance } from 'fastify';
 
 import type { FeatureDomainsRepo } from '@/db/repos/featureDomains';
 import { ORIGINS } from '@/features/_sdk/context';
-import { moduleWebDomainFeatures, reservedHosts } from '@/features/_sdk/register';
+import { moduleListeners, moduleWebDomainFeatures, reservedHosts } from '@/features/_sdk/register';
 import { planPausedIds } from '@/Services/planPauses';
 import { env } from '@/Utils/Env';
 import { pointsHere, systemWeb, type WebSeam } from './web';
 
 /**
  * Les domaines web des clients, tels que Traefik les lit par son fournisseur
- * HTTP (`providers.http`) : un routeur par nom vers l'écouteur public, avec le
- * résolveur de certificats du proxy. C'est ce qui rend un domaine joignable en
- * HTTPS sans que personne ne touche au serveur.
+ * HTTP (`providers.http`) : un routeur par nom vers l'écouteur public, ou vers
+ * l'écouteur propre de la fonctionnalité qui en a un, avec le résolveur de
+ * certificats du proxy. C'est ce qui rend un domaine joignable en HTTPS sans
+ * que personne ne touche au serveur.
  *
  * Un nom n'entre que prouvé par son TXT et, tant qu'il n'a jamais été vérifié,
  * que s'il pointe déjà ici : Traefik ne redemande pas un certificat refusé tant
@@ -59,6 +60,8 @@ export function createProxyConfig(
     settings: ProxySettings,
     opts: {
         features: () => readonly string[];
+        /** Les fonctionnalités servies par leur propre écouteur, et son port : leurs noms vont là, pas à l'écouteur public. */
+        ownPorts?: () => ReadonlyMap<string, number>;
         /** Les lignes que l'offre de leur propriétaire tient en pause : leur nom n'est plus routé. */
         pausedIds?: () => readonly string[];
         /** L'origine publique, vers laquelle un nom doit pointer. */
@@ -83,36 +86,60 @@ export function createProxyConfig(
     };
 
     return async () => {
-        const rows = await repo.routable(opts.features(), opts.pausedIds?.() ?? []);
+        const features = opts.features();
+        const ownPorts = opts.ownPorts?.() ?? new Map<string, number>();
+        const groups = [
+            { service: SERVICE, url: settings.upstream, features: features.filter((f) => !ownPorts.has(f)) },
+            ...features
+                .filter((f) => ownPorts.has(f))
+                .map((f) => ({
+                    service: `${SERVICE}-${f}`,
+                    url: withPort(settings.upstream, ownPorts.get(f) as number),
+                    features: [f]
+                }))
+        ];
         const reserved = new Set(opts.reserved());
-        const listed = new Set(rows.map((row) => row.host));
-        for (const host of cache.keys()) if (!listed.has(host)) cache.delete(host);
-
-        const kept = await Promise.all(
-            rows.map(async (row) => {
-                // Le motif exclut l'accent grave : rien ne peut sortir de `Host(`…`)`.
-                if (!DOMAIN_HOST_PATTERN.test(row.host) || reserved.has(row.host)) return null;
-                return row.verified || (await points(row.host)) ? row.host : null;
-            })
-        );
-
+        const paused = opts.pausedIds?.() ?? [];
         const routers: Record<string, TraefikRouter> = {};
-        for (const host of kept) {
-            if (host === null) continue;
-            routers[`deveye-${host.replaceAll('.', '_')}`] = {
-                rule: `Host(\`${host}\`)`,
-                entryPoints: [settings.entryPoint],
-                service: SERVICE,
-                tls: { certResolver: settings.certResolver }
-            };
-        }
-        return {
-            http: {
-                routers,
-                services: { [SERVICE]: { loadBalancer: { servers: [{ url: settings.upstream }] } } }
-            }
+        const services: TraefikConfig['http']['services'] = {
+            [SERVICE]: { loadBalancer: { servers: [{ url: settings.upstream }] } }
         };
+        const listed = new Set<string>();
+        for (const group of groups) {
+            if (group.features.length === 0) continue;
+            const rows = await repo.routable(group.features, paused);
+            const kept = await Promise.all(
+                rows.map(async (row) => {
+                    // Le motif exclut l'accent grave : rien ne peut sortir de `Host(`…`)`.
+                    if (!DOMAIN_HOST_PATTERN.test(row.host) || reserved.has(row.host)) return null;
+                    return row.verified || (await points(row.host)) ? row.host : null;
+                })
+            );
+            for (const row of rows) listed.add(row.host);
+            for (const host of kept) {
+                if (host === null) continue;
+                const name = `deveye-${host.replaceAll('.', '_')}`;
+                // Un nom déclaré par deux fonctionnalités va à la première : `domain.add` l'empêche quand leurs écouteurs diffèrent.
+                if (routers[name]) continue;
+                routers[name] = {
+                    rule: `Host(\`${host}\`)`,
+                    entryPoints: [settings.entryPoint],
+                    service: group.service,
+                    tls: { certResolver: settings.certResolver }
+                };
+                services[group.service] = { loadBalancer: { servers: [{ url: group.url }] } };
+            }
+        }
+        for (const host of cache.keys()) if (!listed.has(host)) cache.delete(host);
+        return { http: { routers, services } };
     };
+}
+
+/** L'amont du proxy, sur un autre port du même conteneur. */
+function withPort(upstream: string, port: number): string {
+    const url = new URL(upstream);
+    url.port = String(port);
+    return url.toString().replace(/\/$/, '');
 }
 
 let lastReadAt: number | null = null;
@@ -135,7 +162,8 @@ export function registerProxyRoute(app: FastifyInstance, repo: FeatureDomainsRep
             features: moduleWebDomainFeatures,
             pausedIds: () => planPausedIds('domains.hosts'),
             publicHost: new URL(ORIGINS.public).hostname,
-            reserved: reservedHosts
+            reserved: reservedHosts,
+            ownPorts: () => new Map(moduleListeners().map((listener) => [listener.featureId, listener.port]))
         }
     );
     const expected = Buffer.from(`Bearer ${token}`);

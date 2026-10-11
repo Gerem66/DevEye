@@ -55,6 +55,7 @@ import type {
     SdkPublicStreamRouteOptions
 } from '@deveye/types/sdk/server';
 import { logger } from '@/logger';
+import { env } from '@/Utils/Env';
 import { maintenance, replyMaintenance, type MaintenanceServices } from '@/Services/maintenance';
 import { touchPlanPauses, type StockSource } from '@/Services/planPauses';
 import type { UsageSource } from '@/Services/quotaUsage';
@@ -707,13 +708,17 @@ const PROVIDERS: SdkProviders = { get: <T>(key: string) => moduleProvider<T>(key
  * Ce que le boot refuse des crochets d'hôte : `hostRequest` à côté de
  * `domainRoot`, sans porte publique, ou sur des domaines qui ne sont pas des
  * sites ; un hôte propre sans `hostRequest`, mal formé, qui est un nom de
- * DevEye, ou que deux modules revendiquent. `null` quand tout tient.
+ * DevEye, ou que deux modules revendiquent ; un écouteur propre sans hôte
+ * propre, sur un port invalide, déjà tenu par DevEye ou par un autre module.
+ * `null` quand tout tient.
  */
 export function hostHooksProblem(
     entries: readonly { manifest: FeatureManifest; service: FeatureService }[],
-    originHosts: readonly string[]
+    originHosts: readonly string[],
+    takenPorts: readonly number[]
 ): string | null {
     const claimed = new Map<string, string>();
+    const ports = new Map<number, string>();
     for (const { manifest, service } of entries) {
         const id = manifest.id;
         if (service.hostRequest) {
@@ -734,8 +739,37 @@ export function hostHooksProblem(
             if (other) return `Hôte « ${name} » revendiqué par « ${other} » et « ${id} »`;
             claimed.set(name, id);
         }
+        if (service.ownListener) {
+            const { port } = service.ownListener;
+            if (!service.hostRequest || (service.ownHosts ?? []).length === 0) {
+                return `Module « ${id} » : un écouteur propre exige ownHosts et hostRequest`;
+            }
+            if (!Number.isInteger(port) || port < 1 || port > 65535) {
+                return `Module « ${id} » : port d'écouteur invalide « ${port} »`;
+            }
+            if (takenPorts.includes(port)) return `Module « ${id} » : le port ${port} est déjà un écouteur de DevEye`;
+            const other = ports.get(port);
+            if (other) return `Port ${port} revendiqué par « ${other} » et « ${id} »`;
+            ports.set(port, id);
+        }
     }
     return null;
+}
+
+/** Les écouteurs que des modules tiennent seuls, par fonctionnalité. */
+export function moduleListeners(): { featureId: string; port: number }[] {
+    return SERVICES.flatMap((s) =>
+        s.service.ownListener ? [{ featureId: s.manifest.id, port: s.service.ownListener.port }] : []
+    );
+}
+
+/** Le port de l'écouteur propre qui sert ce nom, ou `null` : ce que vise un essai de bout en bout. */
+export function listenerPortForHost(rawHost: string): number | null {
+    const host = normaliseDomainHost(rawHost);
+    const owner = SERVICES.find(
+        (s) => s.service.ownListener && s.service.ownHosts?.some((raw) => normaliseDomainHost(raw) === host)
+    );
+    return owner?.service.ownListener?.port ?? null;
 }
 
 const originHosts = (): string[] => [new URL(ORIGINS.app).hostname, new URL(ORIGINS.public).hostname];
@@ -777,7 +811,11 @@ export function createModuleServices(host: ModuleServiceHost): FeatureService[] 
         });
         return [service];
     });
-    const problem = hostHooksProblem(SERVICES, originHosts());
+    const problem = hostHooksProblem(
+        SERVICES,
+        originHosts(),
+        [env.LISTEN_PORT, env.PUBLIC_LISTEN_PORT].filter((port): port is number => typeof port === 'number' && port > 0)
+    );
     if (problem) throw new Error(problem);
     return services;
 }
@@ -947,8 +985,19 @@ export function isModulePublicPath(url: string): boolean {
  * la capacité déclarée, refus : ouvrir une porte ne se fait pas en douce. Pas
  * de session, journal silencieux, plafond de débit par route à la demande.
  */
-export async function modulePublicRoutes(app: FastifyInstance, listener: 'app' | 'public'): Promise<void> {
-    for (const s of SERVICES) {
+/**
+ * L'écouteur sur lequel monter : celui de l'app, la surface publique, ou
+ * l'écouteur propre d'un module, qui ne porte que lui.
+ */
+export type PublicListener = 'app' | 'public' | { only: string };
+
+export async function modulePublicRoutes(app: FastifyInstance, target: PublicListener): Promise<void> {
+    const only = typeof target === 'object' ? target.only : null;
+    const listener = only === null ? (target as 'app' | 'public') : 'public';
+    // Un module qui a son écouteur n'est servi que là : ses routes ne touchent
+    // jamais les ports de l'app ni de la surface publique.
+    const scope = SERVICES.filter((s) => (only === null ? !s.service.ownListener : s.manifest.id === only));
+    for (const s of scope) {
         const exposed = (s.manifest.nativeCapabilities ?? []).includes('routes.public');
         if (s.service.domainRoot && !(exposed && s.manifest.domains?.web)) {
             throw new Error(
@@ -1042,13 +1091,13 @@ export async function modulePublicRoutes(app: FastifyInstance, listener: 'app' |
     // sur la surface publique). Le reste d'un nom servi en entier passe par la
     // route générique, que les routes déclarées battent toujours.
     const serveOrFallBack = async (req: FastifyRequest, reply: FastifyReply) => {
-        if (await serveHost(req, reply)) return reply;
+        if (await serveHost(req, reply, scope)) return reply;
         reply.callNotFound();
         return reply;
     };
     const hostRoute = { logLevel: 'silent' as const, config: { rateLimit: DOMAIN_ROOT_RATE_LIMIT } };
     app.get('/', hostRoute, serveOrFallBack);
-    if (SERVICES.some((s) => s.service.hostRequest)) app.get('/*', hostRoute, serveOrFallBack);
+    if (scope.some((s) => s.service.hostRequest)) app.get('/*', hostRoute, serveOrFallBack);
 
     // L'icône des pages publiques qui n'en ont pas à elles : sur les deux
     // écouteurs, donc sous tout domaine client, et même en maintenance.
@@ -1108,24 +1157,28 @@ function hostRequestOf(req: FastifyRequest): SdkHostRequest {
 }
 
 /**
- * Une requête sans route sous un nom qu'un module sert : son hôte propre
- * d'abord, puis le premier module installé qui a VÉRIFIÉ ce domaine client et
- * répond à ce chemin (`domainRoot` à la racine, `hostRequest` partout).
+ * Une requête sans route sous un nom qu'un module de cet écouteur sert : son
+ * hôte propre d'abord, puis le premier module installé qui a VÉRIFIÉ ce domaine
+ * client et répond à ce chemin (`domainRoot` à la racine, `hostRequest` partout).
  * Vérifié et pas seulement pointé : le proxy reçoit aussi les noms qui
  * pointent ici avant leur preuve. Les hôtes de DevEye ne sont jamais servis.
  */
-async function serveHost(req: FastifyRequest, reply: FastifyReply): Promise<boolean> {
+async function serveHost(
+    req: FastifyRequest,
+    reply: FastifyReply,
+    scope: readonly (typeof SERVICES)[number][]
+): Promise<boolean> {
     const host = normaliseDomainHost(req.host ?? '');
     if (!DOMAIN_HOST_PATTERN.test(host)) return false;
     if (originHosts().includes(host)) return false;
     const atRoot = req.url === '/' || req.url.startsWith('/?');
-    const owner = SERVICES.find((s) => s.service.ownHosts?.some((raw) => normaliseDomainHost(raw) === host));
+    const owner = scope.find((s) => s.service.ownHosts?.some((raw) => normaliseDomainHost(raw) === host));
     if (owner?.service.hostRequest) {
         if (maintenance.refusesPublic(owner.manifest.id, false)) await replyMaintenance(req, reply);
         else await owner.service.hostRequest.call(owner.service, hostRequestOf(req), reply, null);
         return true;
     }
-    for (const s of SERVICES) {
+    for (const s of scope) {
         const { domainRoot, hostRequest } = s.service;
         if (!(atRoot ? (domainRoot ?? hostRequest) : hostRequest)) continue;
         const domain = await verifiedDomain(s, host);

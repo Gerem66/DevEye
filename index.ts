@@ -16,6 +16,7 @@ import { seedDevAccount } from '@/db/seedDev';
 import {
     installedSealTargets,
     moduleExportDeclarations,
+    moduleListeners,
     moduleMigrationDirs,
     sdkQueryable,
     warnUnsetModuleEnv
@@ -96,6 +97,11 @@ async function main() {
     // processus : `LiveHub`, qui prévient les écrans, est local au processus.
     // Après `buildApp`, qui crée les services que ces routes prolongent.
     const publicApp = env.PUBLIC_LISTEN_PORT ? await buildPublicApp() : null;
+    // Les écouteurs que des modules tiennent seuls : les noms qu'ils servent ne
+    // partagent aucun port avec ceux de l'instance.
+    const moduleApps = await Promise.all(
+        moduleListeners().map(async (listener) => ({ ...listener, app: await buildPublicApp(listener.featureId) }))
+    );
 
     let stopping = false;
     const shutdown = async (signal: string) => {
@@ -132,6 +138,8 @@ async function main() {
             }
             step = 'public surface';
             if (publicApp) await publicApp.close();
+            step = 'module listeners';
+            await Promise.all(moduleApps.map((listener) => listener.app.close()));
             step = 'http server';
             await app.close();
             step = 'database pool';
@@ -159,6 +167,10 @@ async function main() {
             { port: env.PUBLIC_LISTEN_PORT, origin: env.AUDIENCE_ORIGIN || null },
             'Public surface listening: module public routes only, no session route registered'
         );
+    }
+    for (const listener of moduleApps) {
+        await listener.app.listen({ port: listener.port, host: '0.0.0.0' });
+        logger.info({ port: listener.port, module: listener.featureId }, 'Module listener ready');
     }
 
     audit.record({

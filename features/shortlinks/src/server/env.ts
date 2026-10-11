@@ -8,7 +8,14 @@ export const SHORTLINKS_ENV = defineModuleEnv({
      * Vide : les liens partent de l'adresse publique, sous `/l/`. Un nom à part
      * garde l'adresse de DevEye loin de ce qu'un lien abusif ferait marquer.
      */
-    SHORTLINKS_ORIGIN: { kind: 'url', default: '' }
+    SHORTLINKS_ORIGIN: { kind: 'url', default: '' },
+    /**
+     * Le port d'un écouteur réservé aux liens (`3002`), où l'exploitant route
+     * le domaine court : aucune route des liens ne reste sur les ports de l'app
+     * et de la surface publique, et rien d'autre ne répond sur celui-ci. Exige
+     * `SHORTLINKS_ORIGIN`. `0` : les liens restent sur la surface publique.
+     */
+    SHORTLINKS_LISTEN_PORT: { kind: 'int', default: 0, min: 0 }
 });
 
 export const env = readModuleEnv(SHORTLINKS_ENV).values;

@@ -91,8 +91,9 @@ export async function runScenario(
         signal,
         accounts: [],
         newIdentity: env.nextIdentity,
-        newClient: () => {
-            const client = createTestClient({ base: env.base, host: env.host, runToken: env.runToken, signal });
+        newClient: (port) => {
+            const base = port === undefined ? env.base : `http://127.0.0.1:${port}`;
+            const client = createTestClient({ base, host: env.host, runToken: env.runToken, signal });
             ledger.defer('Fermer une socket', async () => client.close());
             return client;
         },

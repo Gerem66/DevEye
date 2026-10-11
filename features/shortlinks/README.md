@@ -74,8 +74,17 @@ l'adresse publique.
 **Le domaine court est un nom à part**, ni l'app ni sa surface publique : un
 lien abusif ne fait marquer que lui, et l'app et les pages des clients n'en
 souffrent pas. L'hôte le réserve comme ses propres noms : aucun espace ne peut
-le déclarer, et le proxy des domaines ne le route pas (il se route vers la
-surface publique dans le déploiement, voir `deploy/README.md`).
+le déclarer, et le proxy des domaines ne le route pas.
+
+**Un écouteur à lui** (`SHORTLINKS_LISTEN_PORT`, `FeatureService.ownListener`).
+Avec un port propre, l'hôte ouvre un troisième écouteur qui ne porte que les
+liens : aucune de leurs routes ne reste sur les ports de l'app et de la surface
+publique, et rien de DevEye ne répond sur le leur, pas même la sonde de
+vivacité. Le domaine court se route vers ce port (voir `deploy/README.md`), et
+le proxy y envoie aussi les domaines des espaces qui servent des liens. Leurs
+enregistrements DNS pointent alors vers le domaine court. Un nom déclaré par une
+autre fonctionnalité ne peut plus l'être pour les liens : il n'irait qu'à un
+seul écouteur. Sans port propre, les liens restent sur la surface publique.
 
 Sous ces trois formes :
 
@@ -300,9 +309,10 @@ s'y supprime pas : on retire la projection.
 Lue par le module lui-même (`src/server/env.ts`, `defineModuleEnv`), pas par
 `Utils/Env`, et nommée au démarrage si elle reste à son défaut :
 
-| Variable            | Défaut | Rôle                                                                 |
-| ------------------- | ------ | -------------------------------------------------------------------- |
-| `SHORTLINKS_ORIGIN` | vide   | le domaine court de l'instance (`https://dvy.fr`), servi à la racine |
+| Variable                 | Défaut | Rôle                                                                         |
+| ------------------------ | ------ | ---------------------------------------------------------------------------- |
+| `SHORTLINKS_ORIGIN`      | vide   | le domaine court de l'instance (`https://dvy.fr`), servi à la racine         |
+| `SHORTLINKS_LISTEN_PORT` | `0`    | le port de l'écouteur réservé aux liens (`3002`), qui exige le domaine court |
 
 Du socle : `PUBLIC_ORIGIN` et `AUDIENCE_ORIGIN` (l'adresse sous laquelle `/l/`
 répond), `SITE_URL` (le pied des pages et la racine du domaine court),

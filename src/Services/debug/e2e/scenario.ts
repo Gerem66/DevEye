@@ -1,6 +1,7 @@
 import type { SdkE2eContext, SdkE2eScenario, SdkOrigins } from '@deveye/types/sdk/server';
 
 import type { Database } from '@/db';
+import { listenerPortForHost } from '@/features/_sdk/register';
 import type { LiveHub } from '@/live/hub';
 import { maintenance } from '@/Services/maintenance';
 import type { Mailer } from '@/Services/mailer';
@@ -26,8 +27,11 @@ export interface E2eContext {
     /** Les comptes jetables que le scénario a demandés, connectés. */
     accounts: TestSession[];
     newIdentity(): TestIdentity;
-    /** Un navigateur de plus, sans session, fermé à la fin du scénario. */
-    newClient(): TestClient;
+    /**
+     * Un navigateur de plus, sans session, fermé à la fin du scénario. `port` :
+     * vers un autre écouteur de ce serveur que celui de l'app.
+     */
+    newClient(port?: number): TestClient;
     ledger: Ledger;
     state: Map<string, unknown>;
     /** Le vrai chemin de suppression d'un compte jetable, au nom de qui a lancé l'essai. */
@@ -103,7 +107,11 @@ function sdkContextOf(ctx: E2eContext, repo: unknown): SdkE2eContext {
             workspaceId: account.workspaceId
         },
         send: (command, input, opts) => account.client.send(command, input, opts),
-        fetch: (path, init) => ctx.newClient().http(path, init),
+        // Un nom qu'un module sert sur son propre écouteur se demande à ce port-là.
+        fetch: (path, init) => {
+            const host = init?.headers?.host;
+            return ctx.newClient((host && listenerPortForHost(host)) || undefined).http(path, init);
+        },
         waitFor: (probe, opts) => waitFor(probe, ctx.signal, opts),
         defer: (label, undo) => ctx.ledger.defer(label, undo),
         state: ctx.state,

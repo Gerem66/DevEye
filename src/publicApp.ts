@@ -56,9 +56,14 @@ function warnOnProxyMismatch(app: FastifyInstance): void {
     });
 }
 
-export async function buildPublicApp(): Promise<FastifyInstance> {
+/**
+ * `only` : l'écouteur propre d'un module (`FeatureService.ownListener`), le même
+ * harnais réduit à ce seul module, sans même la sonde de vivacité : rien de
+ * DevEye ne répond sous les noms qu'il sert.
+ */
+export async function buildPublicApp(only: string | null = null): Promise<FastifyInstance> {
     const app = Fastify({
-        loggerInstance: logger.child({ surface: 'public' }) as FastifyBaseLogger,
+        loggerInstance: logger.child({ surface: only === null ? 'public' : `module:${only}` }) as FastifyBaseLogger,
         // Le plafond de débit compte par IP : sans cela il verrait celle du
         // proxy, et un seul visiteur actif fermerait la porte à tous.
         trustProxy: TRUST_PROXY,
@@ -149,9 +154,9 @@ export async function buildPublicApp(): Promise<FastifyInstance> {
 
     // Sonde de vivacité seulement : ni version ni état de la base, `/api/status`
     // reste sur le port privé.
-    app.get('/api/health', { logLevel: 'silent' }, async () => ({ ok: true }));
+    if (only === null) app.get('/api/health', { logLevel: 'silent' }, async () => ({ ok: true }));
 
-    await modulePublicRoutes(app, 'public');
+    await modulePublicRoutes(app, only === null ? 'public' : { only });
 
     // Pas de repli SPA : tout ce qui n'est pas déclaré ci-dessus n'existe pas.
     // C'est la différence avec `app.ts`, où un GET inconnu rend `index.html`.

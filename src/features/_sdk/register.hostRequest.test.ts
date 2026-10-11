@@ -162,29 +162,30 @@ describe('hostHooksProblem', () => {
     const service = (extra: Partial<FeatureService>): FeatureService => ({ start() {}, stop() {}, ...extra });
     const hook = async () => undefined;
     const origins = ['app.deveye.test', 'api.deveye.test'];
+    const PORTS = [3000, 3001];
 
     it('accepte un module bien déclaré', () => {
-        assert.equal(hostHooksProblem([{ manifest, service: service({ hostRequest: hook }) }], origins), null);
+        assert.equal(hostHooksProblem([{ manifest, service: service({ hostRequest: hook }) }], origins, PORTS), null);
     });
 
     it('refuse hostRequest avec domainRoot, sans porte publique, ou sur des domaines qui ne sont pas des sites', () => {
         const both = service({ hostRequest: hook, domainRoot: hook });
-        assert.match(hostHooksProblem([{ manifest, service: both }], origins) ?? '', /s'excluent/);
+        assert.match(hostHooksProblem([{ manifest, service: both }], origins, PORTS) ?? '', /s'excluent/);
         const closed = { ...manifest, nativeCapabilities: [] };
         assert.match(
-            hostHooksProblem([{ manifest: closed, service: service({ hostRequest: hook }) }], origins) ?? '',
+            hostHooksProblem([{ manifest: closed, service: service({ hostRequest: hook }) }], origins, PORTS) ?? '',
             /routes\.public/
         );
         const notWeb = { ...manifest, domains: { hint: 'h', service: 's' } };
         assert.match(
-            hostHooksProblem([{ manifest: notWeb, service: service({ hostRequest: hook }) }], origins) ?? '',
+            hostHooksProblem([{ manifest: notWeb, service: service({ hostRequest: hook }) }], origins, PORTS) ?? '',
             /domains\.web/
         );
     });
 
     it('refuse un hôte propre sans hostRequest, mal formé, de DevEye, ou revendiqué deux fois', () => {
         const check = (extra: Partial<FeatureService>) =>
-            hostHooksProblem([{ manifest, service: service(extra) }], origins) ?? '';
+            hostHooksProblem([{ manifest, service: service(extra) }], origins, PORTS) ?? '';
         assert.match(check({ ownHosts: ['a.exemple.fr'] }), /sans hostRequest/);
         assert.match(check({ ownHosts: ['localhost'], hostRequest: hook }), /invalide/);
         assert.match(check({ ownHosts: ['API.deveye.test'], hostRequest: hook }), /nom de DevEye/);
@@ -195,9 +196,32 @@ describe('hostHooksProblem', () => {
                     { manifest, service: twice },
                     { manifest: { ...manifest, id: 'x-other' }, service: twice }
                 ],
-                origins
+                origins,
+                PORTS
             ) ?? '',
             /revendiqué/
+        );
+    });
+
+    it('refuse un écouteur propre sans hôte propre, sur un port invalide, de DevEye, ou pris deux fois', () => {
+        const check = (extra: Partial<FeatureService>) =>
+            hostHooksProblem([{ manifest, service: service(extra) }], origins, PORTS) ?? '';
+        const withHost = { ownHosts: ['a.exemple.fr'], hostRequest: hook };
+        assert.equal(check({ ...withHost, ownListener: { port: 3002 } }), '');
+        assert.match(check({ hostRequest: hook, ownListener: { port: 3002 } }), /écouteur propre exige/);
+        assert.match(check({ ...withHost, ownListener: { port: 0 } }), /port d'écouteur invalide/);
+        assert.match(check({ ...withHost, ownListener: { port: 3001 } }), /déjà un écouteur de DevEye/);
+        const twice = (host: string) => service({ ownHosts: [host], hostRequest: hook, ownListener: { port: 3002 } });
+        assert.match(
+            hostHooksProblem(
+                [
+                    { manifest, service: twice('a.exemple.fr') },
+                    { manifest: { ...manifest, id: 'x-other' }, service: twice('b.exemple.fr') }
+                ],
+                origins,
+                PORTS
+            ) ?? '',
+            /Port 3002 revendiqué/
         );
     });
 });

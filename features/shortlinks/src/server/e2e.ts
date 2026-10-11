@@ -111,7 +111,7 @@ export const shortlinksE2e: FeatureE2eEntry<ShortlinksRepo> = {
                             },
                             { timeoutMs: 15_000, intervalMs: 1_000, what: 'La visite dans les chiffres du lien' }
                         );
-                        return `${link.visits} visite, ${link.clicks} ouvertures`;
+                        return `${link.visits} visite(s), ${link.clicks} ouverture(s)`;
                     }
                 },
                 {
