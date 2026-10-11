@@ -496,7 +496,10 @@ d'hôte, `null` quand il vient de l'un des noms du module lui-même.
 choisi ligne par ligne (`cipherFor`, `homeOf`, `orderOf`),
 `ctx.sharing.setOrder` pour ranger un élément projeté dans l'espace actif, et
 `ctx.items.restrictions()` sur ce qu'ils rendent ([SHARING.md](./SHARING.md)).
-`ctx.items.assert(itemId, level)` garde une commande qui vise un élément,
+Une commande qui vise un élément le nomme dans `access.item` (le champ de son
+entrée, ou une fonction qui le retrouve) : le dispatcheur l'éprouve avant le
+handler ([PERMISSIONS.md](./PERMISSIONS.md) §5). `ctx.items.assert(itemId,
+level)` garde un élément atteint autrement,
 `ctx.items.canExtra(itemId, key)` répond pour une permission propre sur CET
 élément (Projets, Sauvegardes), `ctx.items.forget(itemId)` fait le ménage d'un
 élément supprimé (projections, restrictions, route de notification). Côté app,

@@ -24,7 +24,7 @@ export const projectAudienceListFeature = defineSdkFeature({
 export const projectAudienceLinkFeature = defineSdkFeature({
     ...projectAudienceLink,
     mutates: ['projects', 'audience'],
-    access: LINKS,
+    access: { ...LINKS, item: 'projectId' },
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId, 'write');
         assertAtHome(ctx, project, 'relier un site suivi');
@@ -53,7 +53,7 @@ export const projectAudienceLinkFeature = defineSdkFeature({
 export const projectAudienceUnlinkFeature = defineSdkFeature({
     ...projectAudienceUnlink,
     mutates: ['projects', 'audience'],
-    access: LINKS,
+    access: { ...LINKS, item: 'projectId' },
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId, 'write');
         assertAtHome(ctx, project, 'délier un site suivi');

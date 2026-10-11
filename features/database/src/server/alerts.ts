@@ -9,7 +9,7 @@ import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 
 import { withSession } from './probe';
 import { isFiring, runConditions } from './rules';
-import { loadDatabase, toAlert, type Ctx, type StoredAlert } from './_shared';
+import { databaseOfAlert, loadDatabase, toAlert, type Ctx, type StoredAlert } from './_shared';
 
 /**
  * Les alertes d'une base. Évaluées par le relevé périodique seulement (inertes
@@ -28,7 +28,7 @@ export const databaseAlertFeatures = [
     }),
     defineSdkFeature({
         ...databaseAlertAdd,
-        access: { level: 'write' },
+        access: { level: 'write', item: 'databaseId' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             // Domicile seulement : une alerte posée d'une fenêtre serait scellée
@@ -59,7 +59,7 @@ export const databaseAlertFeatures = [
     }),
     defineSdkFeature({
         ...databaseAlertUpdate,
-        access: { level: 'write' },
+        access: { level: 'write', item: databaseOfAlert },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             const cipher = ctx.cipher();
@@ -93,7 +93,7 @@ export const databaseAlertFeatures = [
     }),
     defineSdkFeature({
         ...databaseAlertRemove,
-        access: { level: 'write' },
+        access: { level: 'write', item: databaseOfAlert },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             const ok = await ctx.repo.removeAlert(input.alertId, ctx.workspaceId);
@@ -104,7 +104,7 @@ export const databaseAlertFeatures = [
     /** Prend les conditions en entrée : une condition s'essaie avant d'être enregistrée. */
     defineSdkFeature({
         ...databaseAlertTest,
-        access: { level: 'write' },
+        access: { level: 'write', item: 'databaseId' },
         handler: async (ctx: Ctx, input) => {
             await loadDatabase(ctx, input.databaseId);
             const started = Date.now();

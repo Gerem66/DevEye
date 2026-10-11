@@ -80,9 +80,10 @@ export interface FeatureContext {
     canManageItemGrants: (feature: FeatureId) => boolean;
     /**
      * Les éléments d'une feature que le rôle de l'appelant voit autrement :
-     * `'none'` masqué, `'read'` en lecture seule. Restrictif seulement : la
-     * carte ne peut qu'abaisser ce que `canFeature` accorde. Les listages s'en
-     * servent pour filtrer ; les commandes visant un élément passent par `assertItem`.
+     * `'none'` masqué, `'read'` en lecture seule, `'write'` ouvert en écriture
+     * là où le rôle ne donne que la lecture. La surcharge remplace le niveau du
+     * rôle, dans les deux sens. Les listages s'en servent pour filtrer ; les
+     * commandes visant un élément passent par `assertItem`.
      */
     itemRestrictions: (feature: FeatureId) => Promise<ReadonlyMap<string, ItemAccess>>;
     /**
@@ -102,13 +103,12 @@ export interface FeatureContext {
     assertItemExtras: (feature: FeatureId, itemId: string) => Promise<void>;
     /**
      * Lève `forbidden` si cet élément précis n'est pas accessible au niveau
-     * demandé, restriction de rôle comprise. Vérifie d'abord la feature : une
-     * restriction d'élément n'ouvre jamais ce qu'un droit de feature ferme.
+     * demandé, surcharge de rôle comprise. La lecture de la feature reste le
+     * plancher : sans elle, aucun élément n'existe pour le rôle.
      *
-     * Vérifie aussi les permissions propres que la commande en cours déclare
-     * (`access.extras`) contre cet élément : le dispatcheur les a appliquées à
-     * l'échelle de la fonctionnalité, sans connaître la cible. C'est ici, où
-     * l'élément est enfin nommé, que le refus posé sur lui mord.
+     * Vérifie aussi, contre cet élément, les permissions propres que la
+     * commande en cours déclare (`access.extras`). Le dispatcheur l'appelle
+     * déjà pour l'élément nommé par `access.item`.
      */
     assertItem: (feature: FeatureId, itemId: string, level?: FeatureAccess) => Promise<void>;
     /**
@@ -155,6 +155,9 @@ export interface FeatureContext {
  */
 export { FeatureError } from '@deveye/types/sdk/server';
 
+/** Retrouve l'élément d'une commande ; `undefined` ou `null` quand la ligne n'existe pas. */
+export type ItemResolver = (ctx: FeatureContext, input: never) => Promise<string | number | null | undefined>;
+
 /**
  * Authorization a command requires, declared beside its schemas and enforced by
  * the WS dispatcher before the handler runs: the whole authorization surface is
@@ -169,6 +172,15 @@ export interface FeatureAccessSpec {
      */
     feature?: FeatureId;
     level?: FeatureAccess;
+    /**
+     * L'élément visé : le champ de l'entrée qui le porte, ou la fonction qui le
+     * retrouve quand la commande passe par une autre ligne (la carte d'un
+     * projet). Le dispatcheur éprouve alors le niveau et les `extras` sur CET
+     * élément, dont la surcharge remplace le rôle dans les deux sens. Sans
+     * élément, le rôle seul décide : une surcharge n'ouvre jamais un geste qui
+     * ne vise pas son élément.
+     */
+    item?: string | ItemResolver;
     /**
      * Permissions propres à `feature` (ses `extraPermissions`), toutes exigées
      * en plus du niveau. Ce que le SDK offre déjà à un module pour ses propres

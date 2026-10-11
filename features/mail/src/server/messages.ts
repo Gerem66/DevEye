@@ -18,6 +18,7 @@ import type { MailRepo } from './repo';
 import { cacheEnvelopes, refreshFolderCounts } from './sync';
 import {
     accountCipher,
+    accountOfMessage,
     assertMailUnlocked,
     imapFor,
     isOwnerSideMailError,
@@ -223,7 +224,7 @@ export const mailMessageSetFlagsFeature = defineSdkFeature<
     typeof mailMessageSetFlags.output
 >({
     ...mailMessageSetFlags,
-    access: WRITE,
+    access: { ...WRITE, item: accountOfMessage },
     mutates: true,
     handler: async (ctx, input) => {
         const { message, folder, account } = await loadMessageChain(ctx, input.messageId, 'write');
@@ -251,7 +252,7 @@ export const mailMessageMoveFeature = defineSdkFeature<
     typeof mailMessageMove.output
 >({
     ...mailMessageMove,
-    access: WRITE,
+    access: { ...WRITE, item: accountOfMessage },
     mutates: true,
     handler: async (ctx, input) => {
         const { message, folder, account } = await loadMessageChain(ctx, input.messageId, 'write');
@@ -281,7 +282,7 @@ export const mailMessageDeleteFeature = defineSdkFeature<
     typeof mailMessageDelete.output
 >({
     ...mailMessageDelete,
-    access: WRITE,
+    access: { ...WRITE, item: accountOfMessage },
     mutates: true,
     handler: async (ctx, input) => {
         const { message, folder, account } = await loadMessageChain(ctx, input.messageId, 'write');
@@ -363,7 +364,7 @@ export const mailSendFeature = defineSdkFeature<
     typeof mailSend.output
 >({
     ...mailSend,
-    access: WRITE,
+    access: { ...WRITE, item: 'accountId' },
     mutates: true,
     handler: async (ctx, input) => {
         const account = await loadAccount(ctx, input.accountId, 'write');

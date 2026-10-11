@@ -15,7 +15,7 @@ export const agentLogSourcesFeature: FeatureDefinition<
     typeof agentLogSources.output
 > = defineFeature({
     ...agentLogSources,
-    access: { feature: 'devices', extras: ['logs'] },
+    access: { feature: 'devices', extras: ['logs'], item: 'deviceId' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
         const ok = ctx.monitor?.requestLogSources(row.id) ?? false;
@@ -35,7 +35,7 @@ export const agentLogQueryFeature: FeatureDefinition<
     typeof agentLogQuery.output
 > = defineFeature({
     ...agentLogQuery,
-    access: { feature: 'devices', extras: ['logs'] },
+    access: { feature: 'devices', extras: ['logs'], item: 'deviceId' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId, { control: true });
         const ok =

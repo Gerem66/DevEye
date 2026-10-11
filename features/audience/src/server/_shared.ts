@@ -26,6 +26,17 @@ import type { AudienceIngest } from './service';
 
 export type Ctx = SdkFeatureContext<AudienceRepo>;
 
+/**
+ * Le site d'un formulaire, d'un entonnoir ou d'un retour, pour `access.item` :
+ * ils pendent au site, seul élément partageable, dont le droit tranche.
+ */
+export const siteOfForm = async (ctx: Ctx, input: { formId: number }) =>
+    (await ctx.repo.findForm(input.formId))?.site_id;
+export const siteOfFunnel = async (ctx: Ctx, input: { funnelId: number }) =>
+    (await ctx.repo.findFunnelInWorkspace(input.funnelId, ctx.workspaceId))?.site_id;
+export const siteOfSubmission = async (ctx: Ctx, input: { submissionId: number }) =>
+    (await ctx.repo.findSubmission(input.submissionId))?.site_id;
+
 /** Ce que porte `audience_sites.content`, chiffré. */
 export interface StoredSite {
     name: string;

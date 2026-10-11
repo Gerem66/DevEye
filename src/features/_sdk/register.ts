@@ -15,6 +15,7 @@ import type {
     SdkMailSample,
     SdkMovePlan,
     SdkPlanPauseChange,
+    SdkFeatureContext,
     SdkQueryable,
     SdkServiceHealth,
     SdkStockItem
@@ -45,7 +46,7 @@ import type { Readable } from 'node:stream';
 
 import type { Database } from '@/db';
 import type { Queryable } from '@/db/pool';
-import { defineFeature, type FeatureDefinition } from '@/features/_define';
+import { defineFeature, type FeatureContext, type FeatureDefinition, type ItemResolver } from '@/features/_define';
 import type {
     SdkProviders,
     SdkPublicApp,
@@ -256,15 +257,15 @@ export function moduleManifest(featureId: string): FeatureManifest | undefined {
 /**
  * Les définitions natives issues des modules, prêtes pour `featureHandlers`.
  * Chaque commande est gardée par le droit de sa feature (`read` par défaut),
- * par ses permissions propres et par le rôle global qu'elle exige (`admin`,
- * `moderation`), tous appliqués par le dispatcheur : déclarer les permissions
- * plutôt que les éprouver ici est ce qui permet à la surcharge d'un élément de
- * mordre, `ctx.items.assert` tranchant pour l'élément visé. Une commande qui
- * n'en vise aucun garde donc sa vérification dans son handler.
+ * par ses permissions propres, par l'élément qu'elle nomme (`item`) et par le
+ * rôle global qu'elle exige (`admin`, `moderation`), tous appliqués par le
+ * dispatcheur.
  */
 export function moduleFeatureHandlers(): FeatureDefinition<string, never, never>[] {
-    return MODULES.flatMap((mod) =>
-        mod.server.features.map((def) =>
+    return MODULES.flatMap((mod) => {
+        const sdkContext = (ctx: FeatureContext): SdkFeatureContext =>
+            createSdkContext(ctx, mod.manifest, mod.repoFor(ctx.db), PROVIDERS, mod.server.quotas);
+        return mod.server.features.map((def) =>
             defineFeature({
                 command: def.command,
                 input: def.input as never,
@@ -273,6 +274,7 @@ export function moduleFeatureHandlers(): FeatureDefinition<string, never, never>
                     feature: mod.manifest.id,
                     level: def.access?.level ?? 'read',
                     ...(def.access?.extras ? { extras: def.access.extras } : {}),
+                    ...(def.access?.item ? { item: sdkItem(def.access.item, sdkContext) } : {}),
                     ...(def.access?.admin ? { admin: true as const } : {}),
                     ...(def.access?.moderation ? { moderation: true as const } : {}),
                     ...(def.access?.scope ? { scope: def.access.scope } : {})
@@ -281,22 +283,23 @@ export function moduleFeatureHandlers(): FeatureDefinition<string, never, never>
                 // que `buildTopicIndex` valide au boot.
                 mutates: def.mutates === true ? true : def.mutates ? (def.mutates as readonly LiveTopic[]) : undefined,
                 handler: async (ctx, input) => {
-                    const sdkCtx = createSdkContext(
-                        ctx,
-                        mod.manifest,
-                        mod.repoFor(ctx.db),
-                        PROVIDERS,
-                        mod.server.quotas
-                    );
-                    const out = await def.handler(sdkCtx, input as never);
+                    const out = await def.handler(sdkContext(ctx), input as never);
                     // Une suppression a pu libérer une place : le plus ancien en
                     // pause la reprend, sans que le module ait à y penser.
                     if (def.mutates) touchPlanPauses(ctx.workspace.ownerUserId, mod.manifest.id);
                     return out as never;
                 }
             })
-        )
-    ) as FeatureDefinition<string, never, never>[];
+        );
+    }) as FeatureDefinition<string, never, never>[];
+}
+
+/** L'élément d'une commande de module : son champ tel quel, ou sa fonction appelée avec le contexte SDK. */
+function sdkItem(
+    item: string | ((ctx: SdkFeatureContext, input: never) => Promise<string | number | null | undefined>),
+    sdkContext: (ctx: FeatureContext) => SdkFeatureContext
+): string | ItemResolver {
+    return typeof item === 'string' ? item : (ctx, input) => item(sdkContext(ctx), input);
 }
 
 /** Les répertoires de migrations des modules, dans l'ordre d'installation. */

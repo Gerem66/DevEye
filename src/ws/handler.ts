@@ -18,8 +18,6 @@ import {
     type SessionFrame,
     type WorkspaceCapability,
     type FeatureId,
-    type ItemAccess,
-    type ItemExtraOverrides,
     liveTopicSchema
 } from '@deveye/types';
 import type { FastifyInstance } from 'fastify';
@@ -30,7 +28,15 @@ import { isFederatedOrigin } from '@/auth/federation';
 import { redeemWsTicket } from '@/auth/wsTicket';
 import { verifyAccessToken } from '@/auth/jwt';
 import { createMonitorTransport, type MonitorHub } from '@/agent/hub';
-import { accessEpochNow, assertDeclaredRole, createAccessResolver, isAdminUser } from '@/features/_access';
+import {
+    accessEpochNow,
+    assertDeclaredFeature,
+    assertDeclaredRole,
+    createAccessResolver,
+    declaredItemId,
+    isAdminUser,
+    itemRefusal
+} from '@/features/_access';
 import { moduleManifest } from '@/features/_sdk/register';
 import { resolveExtras } from '@deveye/types/sdk';
 import type { LiveHub } from '@/live/hub';
@@ -51,7 +57,7 @@ import { progressLane, type ProgressLane } from './progress';
 import type { Database } from '@/db';
 import type Encryption from '@/Services/Encryption';
 import type { AuditLog } from '@/Services/AuditLog';
-import type { FeatureAuditEntry } from '@/features/_define';
+import type { FeatureAuditEntry, FeatureContext } from '@/features/_define';
 
 interface WSDeps {
     db: Database;
@@ -328,26 +334,16 @@ export async function registerWS(
                     // Le plancher : sans lecture sur la fonctionnalité, aucun
                     // élément n'existe pour ce rôle et rien ne se surcharge.
                     assertFeature(f, 'read');
-                    // Au-dessus, la surcharge REMPLACE ce que la feature donne,
-                    // dans les deux sens : elle peut ouvrir l'écriture à un rôle
-                    // qui n'a que la lecture ailleurs.
                     const override = (await scope.itemRestrictions(f)).get(itemId);
-                    const effective = override ?? scope.features.get(f) ?? 'none';
-                    if (effective === 'none') {
-                        throw new FeatureError('forbidden', 'Cet élément ne vous est pas accessible');
-                    }
-                    if (level === 'write' && effective !== 'write') {
-                        throw new FeatureError('forbidden', 'Cet élément est en lecture seule pour votre rôle');
-                    }
+                    const refusal = itemRefusal(override, scope.features.get(f), level);
+                    if (refusal) throw new FeatureError('forbidden', refusal);
                     await assertItemExtras(f, itemId);
                 };
 
                 /**
                  * Les permissions propres que CETTE commande déclare, éprouvées
-                 * contre l'élément qu'elle vise. Le dispatcheur n'a pu vérifier
-                 * qu'une chose en amont : qu'un élément AU MOINS les accorde. La
-                 * surcharge de celui-ci ne peut mordre qu'ici, la cible n'étant
-                 * nommée que dans l'entrée du handler.
+                 * contre l'élément qu'elle vise : la surcharge de l'élément
+                 * remplace ce que le rôle accorde, dans les deux sens.
                  */
                 const assertItemExtras = async (f: FeatureId, itemId: string): Promise<void> => {
                     const required = def.access?.extras ?? [];
@@ -376,99 +372,61 @@ export async function registerWS(
                         scope.extras.get(f) ?? {}
                     ).canExtra(key);
 
-                /**
-                 * Les gardes déclarées ne connaissent pas la cible : une commande
-                 * ne nomme son élément que dans son entrée. Elles ne peuvent donc
-                 * demander qu'une chose ici : que le droit soit tenu sur la
-                 * fonctionnalité, OU qu'un élément au moins le surcharge en ce
-                 * sens. `assertItem` tranche ensuite pour l'élément visé — sans
-                 * cette souplesse, une surcharge ne serait jamais atteinte, le
-                 * refus tombant avant le handler.
-                 */
-                const someItemGrants = async (
-                    f: FeatureId,
-                    holds: (o: { access?: ItemAccess; extras: ItemExtraOverrides }) => boolean
-                ): Promise<boolean> => {
-                    const [access, extras] = await Promise.all([
-                        scope.itemRestrictions(f),
-                        scope.itemExtraOverrides(f)
-                    ]);
-                    const ids = new Set([...access.keys(), ...extras.keys()]);
-                    for (const id of ids) {
-                        if (holds({ access: access.get(id), extras: extras.get(id) ?? {} })) return true;
-                    }
-                    return false;
-                };
-
-                const assertDeclaredFeature = async (f: FeatureId, level: FeatureAccess = 'read'): Promise<void> => {
-                    assertNotInMaintenance(f);
-                    if (canFeature(f, level)) return;
-                    // Le plancher de visibilité reste le rôle : sans lecture sur
-                    // la fonctionnalité, aucun élément n'existe pour lui.
-                    assertFeature(f, 'read');
-                    if (await someItemGrants(f, (o) => o.access === level)) return;
-                    throw new FeatureError('forbidden', 'Cette fonctionnalité ne vous est pas ouverte ici');
-                };
-
-                const assertDeclaredExtra = async (f: FeatureId, key: string): Promise<void> => {
-                    if (holdsExtra(f, key)) return;
-                    if (await someItemGrants(f, (o) => o.extras[key] === true)) return;
-                    throw new FeatureError('forbidden', 'Cette permission ne vous est pas accordée');
-                };
-
                 // La socket d'un compte fermé par la maintenance du site peut
                 // encore parler entre la bascule et sa fermeture.
                 if (maintenance.siteDown() && !scope.isAdmin) {
                     throw new FeatureError('maintenance', maintenance.message());
                 }
 
+                progress = progressLane(replyId, (msg) => send(socket, msg));
+                const ctx: FeatureContext = {
+                    db,
+                    crypt,
+                    secure: scope.secure,
+                    secretKeys: scope.secretKeys,
+                    userId: session!.userId,
+                    sessionId: session!.sessionId,
+                    workspace: scope.workspace,
+                    workspaceId: scope.workspace.id,
+                    isOwner: scope.isOwner,
+                    isAdmin: scope.isAdmin,
+                    assertAdmin,
+                    can,
+                    assertCan,
+                    canFeature,
+                    assertFeature,
+                    canChannels,
+                    canManageItemGrants,
+                    assertChannels,
+                    itemRestrictions: scope.itemRestrictions,
+                    itemExtraOverrides: scope.itemExtraOverrides,
+                    assertItemExtras,
+                    assertItem,
+                    extrasFor: (f) => scope.extras.get(f) ?? {},
+                    ip,
+                    logger: reqLogger.child({ command, requestId: replyId }),
+                    requestId: replyId,
+                    progress: progress.report,
+                    audit: recordAudit,
+                    monitor,
+                    live
+                };
+
                 // Declared authorization (see `FeatureAccessSpec`), enforced here
                 // so a command can never ship without its guard.
                 assertDeclaredRole(def.access, scope);
-                if (def.access?.feature) await assertDeclaredFeature(def.access.feature, def.access.level);
-                for (const c of def.access?.capabilities ?? []) assertCan(c);
-                // Les extras derrière le niveau : ils affinent un accès, ils ne
-                // le remplacent pas. Le contrôle de démarrage garantit qu'ils
-                // ne vont jamais sans la feature qui les déclare.
                 const gated = def.access?.feature;
-                if (gated) for (const key of def.access?.extras ?? []) await assertDeclaredExtra(gated, key);
-
-                progress = progressLane(replyId, (msg) => send(socket, msg));
-                const result = await def.handler(
-                    {
-                        db,
-                        crypt,
-                        secure: scope.secure,
-                        secretKeys: scope.secretKeys,
-                        userId: session!.userId,
-                        sessionId: session!.sessionId,
-                        workspace: scope.workspace,
-                        workspaceId: scope.workspace.id,
-                        isOwner: scope.isOwner,
-                        isAdmin: scope.isAdmin,
-                        assertAdmin,
-                        can,
-                        assertCan,
-                        canFeature,
-                        assertFeature,
-                        canChannels,
-                        canManageItemGrants,
-                        assertChannels,
-                        itemRestrictions: scope.itemRestrictions,
-                        itemExtraOverrides: scope.itemExtraOverrides,
-                        assertItemExtras,
+                if (gated) {
+                    const itemId = await declaredItemId(def.access, ctx, inputParse.data);
+                    await assertDeclaredFeature({ ...def.access, feature: gated }, itemId, {
                         assertItem,
-                        extrasFor: (f) => scope.extras.get(f) ?? {},
-                        ip,
-                        logger: reqLogger.child({ command, requestId: replyId }),
-                        requestId: replyId,
-                        progress: progress.report,
-                        audit: recordAudit,
-                        monitor,
-                        live
-                    },
-                    inputParse.data
-                );
+                        assertFeature,
+                        holdsExtra
+                    });
+                }
+                for (const c of def.access?.capabilities ?? []) assertCan(c);
+
+                const result = await def.handler(ctx, inputParse.data);
                 progress.close();
                 const outputParse = def.output.safeParse(result);
                 if (!outputParse.success) {

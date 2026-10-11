@@ -108,13 +108,10 @@ manifest : une clé que le manifest ne déclare pas ne peut jamais valoir
 « accordée ». Le contrôle de démarrage refuse un `extras` sans `feature`, faute
 de quoi le dispatcheur ne saurait pas où chercher la spec et laisserait passer.
 Les commandes des modules passent par la même porte : `moduleFeatureHandlers`
-reporte leur `extras` dans la garde native, et c'est ce report qui les rend
-surchargeables par élément (§5) : sans lui, la vérification se ferait à
-l'échelle de la fonctionnalité seule et la surcharge d'un élément resterait
-lettre morte. En contrepartie, la garde déclarée se contente ici aussi de
-« accordé par au moins un élément », et c'est `ctx.items.assert` qui tranche
-pour l'élément visé : une commande qui n'en vise aucun (poser une clé d'API)
-garde donc sa vérification entière dans son handler.
+reporte leur `extras` et leur `item` dans la garde native. Une commande qui
+nomme son élément (§5) voit ses permissions éprouvées sur lui, surcharge
+comprise ; une commande qui n'en nomme aucun (poser une clé d'API) les exige du
+rôle.
 
 Côté interface, le menu « Fonctions » d'un appareil **ne varie jamais** : rien
 n'y est masqué, et ce qui empêche un geste se lit sur lui, par un glyphe à
@@ -213,13 +210,15 @@ qu'il faut en retenir ici :
   l'absence restant ce qui exprime « comme la fonctionnalité ». Les booléens
   seulement : un choix borné n'a pas d'ordre que le socle sache poser, il reste
   réglé sur le rôle ;
-- **les gardes déclarées ne connaissent pas la cible** : une commande ne nomme
-  son élément que dans son entrée. Le dispatcheur ne peut donc exiger qu'une
-  chose en amont : le droit tenu sur la fonctionnalité, OU un élément au moins
-  qui le surcharge en ce sens ; `ctx.assertItem` tranche ensuite pour
-  l'élément visé. Une garde qui vérifie le niveau autrement appelle
-  `ctx.assertItemExtras` seule (l'accès aux agents : piloter une machine ne
-  suppose pas l'écriture sur la flotte) ;
+- **la commande nomme son élément** dans `access.item` : le champ de son
+  entrée qui le porte (`'databaseId'`), ou la fonction qui le retrouve quand
+  elle passe par une autre ligne (le projet d'une carte, la base d'une
+  alerte). Le dispatcheur éprouve alors le niveau et les permissions propres
+  sur CET élément, surcharge comprise, avant le handler. Une commande qui n'en
+  nomme aucun (ajouter, réordonner, régler un accès ou une destination) exige
+  le droit du rôle sur la fonctionnalité : une surcharge n'ouvre jamais un
+  geste qui ne vise pas son élément. Le contrôle de démarrage refuse un champ
+  que l'entrée ne porte pas ;
 - se règle **sur l'élément** : ses réglages → Permissions. C'est le bon endroit
   parce que la question qu'on se pose est « qui voit cette base ? », posée
   devant la base ;

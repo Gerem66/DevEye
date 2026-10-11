@@ -123,7 +123,7 @@ export const projectDashboardFeature = defineSdkFeature({
 export const projectDashboardArrangeFeature = defineSdkFeature({
     ...projectDashboardArrange,
     mutates: true,
-    access: LINKS,
+    access: { ...LINKS, item: 'projectId' },
     handler: async (ctx: Ctx, input) => {
         // Pas d'`assertAtHome` : l'agencement ne désigne aucun objet d'un autre
         // espace, il n'écrit que des rangs et des booléens. Les deux espaces
@@ -143,7 +143,7 @@ export const projectDashboardArrangeFeature = defineSdkFeature({
 export const projectDashboardKpiSaveFeature = defineSdkFeature({
     ...projectDashboardKpiSave,
     mutates: true,
-    access: LINKS,
+    access: { ...LINKS, item: 'projectId' },
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId, 'write');
         // La base visée est un objet de l'espace d'origine : une fenêtre ne la
@@ -183,7 +183,7 @@ export const projectDashboardKpiSaveFeature = defineSdkFeature({
 export const projectDashboardKpiRemoveFeature = defineSdkFeature({
     ...projectDashboardKpiRemove,
     mutates: true,
-    access: LINKS,
+    access: { ...LINKS, item: 'projectId' },
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId, 'write');
         const home = project.workspace_id;
@@ -197,7 +197,7 @@ export const projectDashboardKpiRemoveFeature = defineSdkFeature({
 export const projectDashboardKpiRunFeature = defineSdkFeature({
     ...projectDashboardKpiRun,
     mutates: true,
-    access: LINKS,
+    access: { ...LINKS, item: 'projectId' },
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId, 'write');
         assertAtHome(ctx, project, 'mesurer un indicateur');
@@ -266,7 +266,7 @@ export const projectDashboardKpiRunFeature = defineSdkFeature({
 
 export const projectDashboardKpiTestFeature = defineSdkFeature({
     ...projectDashboardKpiTest,
-    access: LINKS,
+    access: { ...LINKS, item: 'projectId' },
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId, 'write');
         assertAtHome(ctx, project, 'essayer un indicateur');

@@ -125,7 +125,7 @@ export const projectUptimeLinkFeature = defineSdkFeature({
     ...projectUptimeLink,
     // Et Uptime : sa liste dit combien de projets tiennent chaque service.
     mutates: ['projects', 'uptime'],
-    access: LINKS,
+    access: { ...LINKS, item: 'projectId' },
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId, 'write');
         assertAtHome(ctx, project, 'relier un service surveillé');
@@ -148,7 +148,7 @@ export const projectUptimeLinkFeature = defineSdkFeature({
 export const projectUptimeUnlinkFeature = defineSdkFeature({
     ...projectUptimeUnlink,
     mutates: ['projects', 'uptime'],
-    access: LINKS,
+    access: { ...LINKS, item: 'projectId' },
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId, 'write');
         assertAtHome(ctx, project, 'délier un service surveillé');

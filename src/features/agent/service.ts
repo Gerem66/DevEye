@@ -34,7 +34,7 @@ export const agentSetAutostartFeature: FeatureDefinition<
     typeof agentSetAutostart.output
 > = defineFeature({
     ...agentSetAutostart,
-    access: { feature: 'devices', level: 'write', admin: true },
+    access: { feature: 'devices', level: 'write', item: 'deviceId', admin: true },
     mutates: true,
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId, { control: true });
@@ -60,7 +60,7 @@ export const agentElevateFeature: FeatureDefinition<
     typeof agentElevate.output
 > = defineFeature({
     ...agentElevate,
-    access: { feature: 'devices', level: 'write', admin: true },
+    access: { feature: 'devices', level: 'write', item: 'deviceId', admin: true },
     mutates: true,
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId, { control: true });
@@ -82,7 +82,7 @@ export const agentDropPrivilegesFeature: FeatureDefinition<
     typeof agentDropPrivileges.output
 > = defineFeature({
     ...agentDropPrivileges,
-    access: { feature: 'devices', level: 'write', admin: true },
+    access: { feature: 'devices', level: 'write', item: 'deviceId', admin: true },
     mutates: true,
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId, { control: true });

@@ -43,7 +43,7 @@ export async function withSession<T>(ctx: Ctx, databaseId: number, run: (s: Sess
 export const databaseProbeFeatures = [
     defineSdkFeature({
         ...databaseTest,
-        access: { level: 'write' },
+        access: { level: 'write', item: 'databaseId' },
         handler: async (ctx: Ctx, input) => {
             await loadDatabase(ctx, input.databaseId);
             // Avant l'essai, qui rend tout échec comme un résultat : la pause doit lever.
@@ -62,7 +62,7 @@ export const databaseProbeFeatures = [
     /** Le même essai sur des réglages pas encore enregistrés ; n'écrit rien. */
     defineSdkFeature({
         ...databaseTestDraft,
-        access: { level: 'write' },
+        access: { level: 'write', item: 'databaseId' },
         handler: async (ctx: Ctx, input) => {
             const cipher = ctx.cipher();
             let password = input.password ?? null;
@@ -121,7 +121,7 @@ export const databaseProbeFeatures = [
     /** Le même chemin que l'ordonnanceur (`DatabaseMonitor.checkNow`), notifications comprises. */
     defineSdkFeature({
         ...databaseInspect,
-        access: { level: 'write' },
+        access: { level: 'write', item: 'databaseId' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             const row = await loadDatabase(ctx, input.databaseId);
@@ -133,7 +133,7 @@ export const databaseProbeFeatures = [
     }),
     defineSdkFeature({
         ...databaseQuery,
-        access: { level: 'write' },
+        access: { level: 'write', item: 'databaseId' },
         handler: async (ctx: Ctx, input) => ({
             // `session.query` refuse tout ce qui n'est pas une lecture unique.
             rows: await withSession(ctx, input.databaseId, (s) => s.query(input.sql))

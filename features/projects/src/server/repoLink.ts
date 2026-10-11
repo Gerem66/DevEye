@@ -32,7 +32,7 @@ export const projectRepoListFeature = defineSdkFeature({
 export const projectRepoLinkFeature = defineSdkFeature({
     ...projectRepoLink,
     mutates: ['projects', 'git'],
-    access: LINKS,
+    access: { ...LINKS, item: 'projectId' },
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId, 'write');
         assertAtHome(ctx, project, 'relier un dépôt');
@@ -69,7 +69,7 @@ export const projectRepoLinkFeature = defineSdkFeature({
 export const projectRepoUnlinkFeature = defineSdkFeature({
     ...projectRepoUnlink,
     mutates: ['projects', 'git'],
-    access: LINKS,
+    access: { ...LINKS, item: 'projectId' },
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId, 'write');
         assertAtHome(ctx, project, 'délier un dépôt');

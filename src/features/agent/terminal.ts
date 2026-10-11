@@ -23,7 +23,7 @@ export const agentTermOpenFeature: FeatureDefinition<
     typeof agentTermOpen.output
 > = defineFeature({
     ...agentTermOpen,
-    access: { feature: 'devices', extras: ['terminal'] },
+    access: { feature: 'devices', extras: ['terminal'], item: 'deviceId' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId, { control: true });
         const ok = ctx.monitor?.requestTermOpen(row.id, {
@@ -50,7 +50,7 @@ export const agentTermInputFeature: FeatureDefinition<
     typeof agentTermInput.output
 > = defineFeature({
     ...agentTermInput,
-    access: { feature: 'devices', extras: ['terminal'] },
+    access: { feature: 'devices', extras: ['terminal'], item: 'deviceId' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
         assertOwnsSession(ctx, input.sessionId);
@@ -67,7 +67,7 @@ export const agentTermResizeFeature: FeatureDefinition<
     typeof agentTermResize.output
 > = defineFeature({
     ...agentTermResize,
-    access: { feature: 'devices', extras: ['terminal'] },
+    access: { feature: 'devices', extras: ['terminal'], item: 'deviceId' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
         assertOwnsSession(ctx, input.sessionId);
@@ -88,7 +88,7 @@ export const agentTermCloseFeature: FeatureDefinition<
     typeof agentTermClose.output
 > = defineFeature({
     ...agentTermClose,
-    access: { feature: 'devices', extras: ['terminal'] },
+    access: { feature: 'devices', extras: ['terminal'], item: 'deviceId' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
         assertOwnsSession(ctx, input.sessionId);

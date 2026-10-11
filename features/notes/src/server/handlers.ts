@@ -150,7 +150,7 @@ export const notesHandlers = [
     defineSdkFeature({
         ...notesEdit,
         mutates: true,
-        access: WRITE,
+        access: { ...WRITE, item: 'noteId' },
         handler: async (ctx: Ctx, input) => {
             const existing = await loadNote(ctx, input.noteId, 'write');
             const foreign = isForeign(ctx, existing);
@@ -235,7 +235,7 @@ export const notesHandlers = [
     defineSdkFeature({
         ...notesArchive,
         mutates: true,
-        access: WRITE,
+        access: { ...WRITE, item: 'noteId' },
         handler: async (ctx: Ctx, input) => {
             const existing = await loadNote(ctx, input.noteId, 'write');
             await assertPrivateUnlocked(ctx, existing);
@@ -252,7 +252,7 @@ export const notesHandlers = [
     defineSdkFeature({
         ...notesRestore,
         mutates: true,
-        access: WRITE,
+        access: { ...WRITE, item: 'noteId' },
         handler: async (ctx: Ctx, input) => {
             const existing = await loadNote(ctx, input.noteId, 'write');
             await assertPrivateUnlocked(ctx, existing);
@@ -268,7 +268,7 @@ export const notesHandlers = [
     defineSdkFeature({
         ...notesDelete,
         mutates: true,
-        access: WRITE,
+        access: { ...WRITE, item: 'noteId' },
         handler: async (ctx: Ctx, input) => {
             const existing = await loadNote(ctx, input.noteId, 'write');
             // Supprimer depuis un espace qui ne fait que la voir détruirait la

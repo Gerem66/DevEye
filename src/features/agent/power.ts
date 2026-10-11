@@ -25,7 +25,7 @@ export const agentPowerFeature: FeatureDefinition<
     typeof agentPower.output
 > = defineFeature({
     ...agentPower,
-    access: { feature: 'devices', extras: ['system'] },
+    access: { feature: 'devices', extras: ['system'], item: 'deviceId' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId, { control: true });
         const ok = ctx.monitor?.requestPower(row.id, { action: input.action }) ?? false;

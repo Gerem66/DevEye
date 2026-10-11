@@ -143,7 +143,7 @@ export const audienceSiteAddFeature = defineSdkFeature({
 export const audienceSiteUpdateFeature = defineSdkFeature({
     ...audienceSiteUpdate,
     mutates: true,
-    access: { level: 'write' },
+    access: { level: 'write', item: 'siteId' },
     handler: async (ctx: Ctx, input) => {
         // Domicile seulement : les réglages d'un site (origines, rétention, mode
         // visiteur) appartiennent à son espace.
@@ -184,7 +184,7 @@ export const audienceSiteUpdateFeature = defineSdkFeature({
 export const audienceSiteRotateKeyFeature = defineSdkFeature({
     ...audienceSiteRotateKey,
     mutates: true,
-    access: { level: 'write' },
+    access: { level: 'write', item: 'siteId' },
     handler: async (ctx: Ctx, input) => {
         await loadHomeSite(ctx, input.siteId);
         await ctx.repo.setPublicKey(input.siteId, ctx.workspaceId, generatePublicKey());
@@ -205,7 +205,7 @@ export const audienceSiteRotateKeyFeature = defineSdkFeature({
 export const audienceSiteRemoveFeature = defineSdkFeature({
     ...audienceSiteRemove,
     mutates: true,
-    access: { level: 'write' },
+    access: { level: 'write', item: 'siteId' },
     handler: async (ctx: Ctx, input) => {
         await loadHomeSite(ctx, input.siteId);
         // Libellés, sessions, événements, agrégat et liaisons partent en CASCADE ; les

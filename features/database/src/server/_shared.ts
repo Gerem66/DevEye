@@ -24,6 +24,10 @@ import type { TunnelConfig } from './tunnel';
 /** Le contexte du SDK, sur le dépôt du module. */
 export type Ctx = SdkFeatureContext<DatabaseRepo>;
 
+/** La base d'une alerte, pour `access.item`. */
+export const databaseOfAlert = async (ctx: Ctx, input: { alertId: number }) =>
+    (await ctx.repo.findAlert(input.alertId, ctx.workspaceId))?.database_id;
+
 /** Ce que porte `database_alerts.content`, chiffré. */
 export interface StoredAlert {
     name: string;

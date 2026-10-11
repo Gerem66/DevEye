@@ -14,7 +14,7 @@ export const agentListPackagesFeature: FeatureDefinition<
     typeof agentListPackages.output
 > = defineFeature({
     ...agentListPackages,
-    access: { feature: 'devices', extras: ['system'] },
+    access: { feature: 'devices', extras: ['system'], item: 'deviceId' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
         const ok = ctx.monitor?.requestPkgList(row.id) ?? false;
@@ -33,7 +33,7 @@ export const agentUpgradePackagesFeature: FeatureDefinition<
     typeof agentUpgradePackages.output
 > = defineFeature({
     ...agentUpgradePackages,
-    access: { feature: 'devices', extras: ['system'] },
+    access: { feature: 'devices', extras: ['system'], item: 'deviceId' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId, { control: true });
         const monitor = ctx.monitor;

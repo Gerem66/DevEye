@@ -34,6 +34,7 @@ import {
     getEngine,
     loadHomeMailbox,
     loadMailbox,
+    mailboxOfQueueEntry,
     now,
     seal,
     toEvent,
@@ -166,7 +167,7 @@ export const mailserverHandlers = [
 
     defineSdkFeature({
         ...mailserverUpdate,
-        access: { level: 'write' },
+        access: { level: 'write', item: 'id' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             const row = await loadHomeMailbox(ctx, input.id);
@@ -184,7 +185,7 @@ export const mailserverHandlers = [
 
     defineSdkFeature({
         ...mailserverDelete,
-        access: { level: 'write' },
+        access: { level: 'write', item: 'id' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             const row = await loadHomeMailbox(ctx, input.id);
@@ -202,7 +203,7 @@ export const mailserverHandlers = [
 
     defineSdkFeature({
         ...mailserverSetBanner,
-        access: { level: 'write' },
+        access: { level: 'write', item: 'id' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             const row = await loadHomeMailbox(ctx, input.id);
@@ -213,7 +214,7 @@ export const mailserverHandlers = [
 
     defineSdkFeature({
         ...mailserverPasswordReset,
-        access: { level: 'write', extras: ['managePasswords'] },
+        access: { level: 'write', extras: ['managePasswords'], item: 'id' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             const row = await loadHomeMailbox(ctx, input.id);
@@ -240,7 +241,7 @@ export const mailserverHandlers = [
 
     defineSdkFeature({
         ...mailserverAppPasswordCreate,
-        access: { level: 'write', extras: ['managePasswords'] },
+        access: { level: 'write', extras: ['managePasswords'], item: 'id' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             const row = await loadHomeMailbox(ctx, input.id);
@@ -266,7 +267,7 @@ export const mailserverHandlers = [
 
     defineSdkFeature({
         ...mailserverAppPasswordRevoke,
-        access: { level: 'write', extras: ['managePasswords'] },
+        access: { level: 'write', extras: ['managePasswords'], item: 'id' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             const row = await loadHomeMailbox(ctx, input.id);
@@ -347,7 +348,7 @@ export const mailserverHandlers = [
 
     defineSdkFeature({
         ...mailserverQueueRetry,
-        access: { level: 'write', extras: ['manageQueue'] },
+        access: { level: 'write', extras: ['manageQueue'], item: mailboxOfQueueEntry },
         mutates: ['mailserverFlow'],
         handler: async (ctx: Ctx, input) => {
             const entry = await ctx.repo.findQueue(input.queueId);
@@ -363,7 +364,7 @@ export const mailserverHandlers = [
 
     defineSdkFeature({
         ...mailserverQueueDrop,
-        access: { level: 'write', extras: ['manageQueue'] },
+        access: { level: 'write', extras: ['manageQueue'], item: mailboxOfQueueEntry },
         mutates: ['mailserverFlow'],
         handler: async (ctx: Ctx, input) => {
             const entry = await ctx.repo.findQueue(input.queueId);

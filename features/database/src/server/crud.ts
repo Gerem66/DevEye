@@ -165,7 +165,7 @@ export const databaseCrudFeatures = [
     }),
     defineSdkFeature({
         ...databaseUpdate,
-        access: { level: 'write' },
+        access: { level: 'write', item: 'databaseId' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             // Domicile seulement : la ligne serait réécrite sous la clé d'ici,
@@ -221,7 +221,7 @@ export const databaseCrudFeatures = [
     }),
     defineSdkFeature({
         ...databaseRemove,
-        access: { level: 'write' },
+        access: { level: 'write', item: 'databaseId' },
         // Le sujet `projects` n'est pas nommable par un module : le tableau et
         // les compteurs d'un projet se remettent à jour à leur prochaine lecture.
         mutates: true,

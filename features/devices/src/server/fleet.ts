@@ -67,7 +67,7 @@ export const devicesConfirmFeature = defineSdkFeature<
 >({
     ...devicesConfirm,
     mutates: true,
-    access: WRITE,
+    access: { ...WRITE, item: 'deviceId' },
     handler: async (ctx, input) => {
         const row = await loadHomeDevice(ctx, input.deviceId);
         // Un archivé n'a plus de jeton : l'activer ferait une fiche sans agent.
@@ -97,7 +97,7 @@ export const devicesRevokeFeature = defineSdkFeature<
 >({
     ...devicesRevoke,
     mutates: true,
-    access: WRITE,
+    access: { ...WRITE, item: 'deviceId' },
     handler: async (ctx, input) => {
         const row = await loadHomeDevice(ctx, input.deviceId);
         if (row.status === 'archived') throw new FeatureError('conflict', 'Appareil déjà archivé');
@@ -125,7 +125,7 @@ export const devicesRenameFeature = defineSdkFeature<
 >({
     ...devicesRename,
     mutates: true,
-    access: WRITE,
+    access: { ...WRITE, item: 'deviceId' },
     handler: async (ctx, input) => {
         const row = await loadHomeDevice(ctx, input.deviceId);
         await ctx.repo.devices.rename(row.id, input.name);
@@ -179,7 +179,7 @@ export const devicesSetConfigFeature = defineSdkFeature<
 >({
     ...devicesSetConfig,
     mutates: true,
-    access: WRITE,
+    access: { ...WRITE, item: 'deviceId' },
     handler: async (ctx, input) => {
         const row = await loadHomeDevice(ctx, input.deviceId);
         const { deviceId: _id, ...patch } = input;
@@ -207,7 +207,7 @@ export const devicesRequestDeleteFeature = defineSdkFeature<
 >({
     ...devicesRequestDelete,
     mutates: true,
-    access: WRITE,
+    access: { ...WRITE, item: 'deviceId' },
     handler: async (ctx, input) => {
         const row = await loadHomeDevice(ctx, input.deviceId);
         if (row.status === 'archived' || row.status === 'pending_deletion') {
@@ -236,7 +236,7 @@ export const devicesCancelDeleteFeature = defineSdkFeature<
 >({
     ...devicesCancelDelete,
     mutates: true,
-    access: WRITE,
+    access: { ...WRITE, item: 'deviceId' },
     handler: async (ctx, input) => {
         const row = await loadHomeDevice(ctx, input.deviceId);
         // Revenir actif, c'est reprendre une place de l'offre, comme une approbation.
@@ -260,7 +260,7 @@ export const devicesForceDeleteFeature = defineSdkFeature<
 >({
     ...devicesForceDelete,
     mutates: true,
-    access: WRITE,
+    access: { ...WRITE, item: 'deviceId' },
     handler: async (ctx, input) => {
         const row = await loadHomeDevice(ctx, input.deviceId);
         if (row.status === 'archived') {
@@ -293,7 +293,7 @@ export const devicesDeleteFeature = defineSdkFeature<
 >({
     ...devicesDelete,
     mutates: true,
-    access: WRITE,
+    access: { ...WRITE, item: 'deviceId' },
     handler: async (ctx, input) => {
         const row = await loadHomeDevice(ctx, input.deviceId);
         await ctx.repo.devices.delete(row.id);

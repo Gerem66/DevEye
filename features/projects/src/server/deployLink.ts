@@ -26,7 +26,7 @@ export const projectDeployListFeature = defineSdkFeature({
 export const projectDeployLinkFeature = defineSdkFeature({
     ...projectDeployLink,
     mutates: ['projects', 'deploy'],
-    access: LINKS,
+    access: { ...LINKS, item: 'projectId' },
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId, 'write');
         assertAtHome(ctx, project, 'relier une cible de déploiement');
@@ -63,7 +63,7 @@ export const projectDeployLinkFeature = defineSdkFeature({
 export const projectDeployUnlinkFeature = defineSdkFeature({
     ...projectDeployUnlink,
     mutates: ['projects', 'deploy'],
-    access: LINKS,
+    access: { ...LINKS, item: 'projectId' },
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId, 'write');
         assertAtHome(ctx, project, 'délier une cible de déploiement');

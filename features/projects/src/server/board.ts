@@ -31,6 +31,8 @@ import {
     MANAGE,
     priorityToDb,
     projectCipher,
+    projectOfCard,
+    projectOfColumn,
     recordEvent,
     TASKS,
     toCard,
@@ -181,7 +183,7 @@ export const projectBoardFeature = defineSdkFeature({
 export const projectColumnAddFeature = defineSdkFeature({
     ...projectColumnAdd,
     mutates: true,
-    access: MANAGE,
+    access: { ...MANAGE, item: 'projectId' },
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId, 'write');
         await assertProjectUnlocked(ctx, project);
@@ -207,7 +209,7 @@ export const projectColumnAddFeature = defineSdkFeature({
 export const projectColumnUpdateFeature = defineSdkFeature({
     ...projectColumnUpdate,
     mutates: true,
-    access: MANAGE,
+    access: { ...MANAGE, item: projectOfColumn },
     handler: async (ctx: Ctx, input) => {
         const { project } = await loadColumn(ctx, input.columnId, 'write');
         await assertProjectUnlocked(ctx, project);
@@ -227,7 +229,7 @@ export const projectColumnUpdateFeature = defineSdkFeature({
 export const projectColumnRemoveFeature = defineSdkFeature({
     ...projectColumnRemove,
     mutates: true,
-    access: MANAGE,
+    access: { ...MANAGE, item: projectOfColumn },
     handler: async (ctx: Ctx, input) => {
         const { project } = await loadColumn(ctx, input.columnId, 'write');
         await assertProjectUnlocked(ctx, project);
@@ -252,7 +254,7 @@ export const projectColumnRemoveFeature = defineSdkFeature({
 export const projectColumnReorderFeature = defineSdkFeature({
     ...projectColumnReorder,
     mutates: true,
-    access: MANAGE,
+    access: { ...MANAGE, item: 'projectId' },
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId, 'write');
         // Ne touche à aucun corps chiffré : marche session verrouillée.
@@ -264,7 +266,7 @@ export const projectColumnReorderFeature = defineSdkFeature({
 export const projectCardAddFeature = defineSdkFeature({
     ...projectCardAdd,
     mutates: true,
-    access: TASKS,
+    access: { ...TASKS, item: 'projectId' },
     handler: async (ctx: Ctx, input) => {
         const { column, project } = await loadColumn(ctx, input.columnId, 'write');
         if (column.project_id !== input.projectId) {
@@ -296,7 +298,7 @@ export const projectCardAddFeature = defineSdkFeature({
 export const projectCardUpdateFeature = defineSdkFeature({
     ...projectCardUpdate,
     mutates: true,
-    access: WRITE,
+    access: { ...WRITE, item: projectOfCard },
     handler: async (ctx: Ctx, input) => {
         const { card, project } = await loadCard(ctx, input.cardId, 'write');
         await assertProjectUnlocked(ctx, project);
@@ -344,7 +346,7 @@ export const projectCardUpdateFeature = defineSdkFeature({
 export const projectCardMoveFeature = defineSdkFeature({
     ...projectCardMove,
     mutates: true,
-    access: WRITE,
+    access: { ...WRITE, item: projectOfColumn },
     handler: async (ctx: Ctx, input) => {
         const { column, project } = await loadColumn(ctx, input.columnId, 'write');
 
@@ -384,7 +386,7 @@ export const projectCardMoveFeature = defineSdkFeature({
 export const projectCardArchiveFeature = defineSdkFeature({
     ...projectCardArchive,
     mutates: true,
-    access: TASKS,
+    access: { ...TASKS, item: projectOfCard },
     handler: async (ctx: Ctx, input) => {
         const { card, project } = await loadCard(ctx, input.cardId, 'write');
         await assertProjectUnlocked(ctx, project);
@@ -412,7 +414,7 @@ export const projectCardArchiveFeature = defineSdkFeature({
 export const projectColumnPurgeFeature = defineSdkFeature({
     ...projectColumnPurge,
     mutates: true,
-    access: TASKS,
+    access: { ...TASKS, item: projectOfColumn },
     handler: async (ctx: Ctx, input) => {
         const { column, project } = await loadColumn(ctx, input.columnId, 'write');
         await assertProjectUnlocked(ctx, project);
@@ -446,7 +448,7 @@ export const projectColumnPurgeFeature = defineSdkFeature({
 export const projectCardRestoreFeature = defineSdkFeature({
     ...projectCardRestore,
     mutates: true,
-    access: TASKS,
+    access: { ...TASKS, item: projectOfCard },
     handler: async (ctx: Ctx, input) => {
         const { card, project } = await loadCard(ctx, input.cardId, 'write');
         await assertProjectUnlocked(ctx, project);

@@ -30,6 +30,19 @@ import type { ProjectsRepo, ProjectStats } from './repo';
 
 export type Ctx = SdkFeatureContext<ProjectsRepo>;
 
+/**
+ * Le projet d'une colonne, d'une carte, d'un jalon ou d'un message, pour
+ * `access.item` : le dispatcheur éprouve le droit sur ce projet avant le handler.
+ */
+export const projectOfColumn = async (ctx: Ctx, input: { columnId: number }) =>
+    (await ctx.repo.board.findColumn(input.columnId))?.project_id;
+export const projectOfCard = async (ctx: Ctx, input: { cardId: number }) =>
+    (await ctx.repo.board.findCard(input.cardId))?.project_id;
+export const projectOfMilestone = async (ctx: Ctx, input: { milestoneId: number }) =>
+    (await ctx.repo.plan.findMilestone(input.milestoneId))?.project_id;
+export const projectOfMessage = async (ctx: Ctx, input: { messageId: number }) =>
+    (await ctx.repo.chat.findById(input.messageId))?.project_id;
+
 /** La lecture est le défaut du SDK : seules les écritures déclarent leur niveau. */
 export const WRITE = { level: 'write' } as const;
 /**

@@ -317,7 +317,7 @@ export const deployHandlers = [
     }),
     defineSdkFeature({
         ...deployUpdate,
-        access: { level: 'write' },
+        access: { level: 'write', item: 'targetId' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             // Domicile seulement : le jeton d'une cible se choisit parmi les clés
@@ -357,7 +357,7 @@ export const deployHandlers = [
     }),
     defineSdkFeature({
         ...deployRemove,
-        access: { level: 'write' },
+        access: { level: 'write', item: 'targetId' },
         // Le sujet du module seulement : les compteurs d'onglets d'un projet
         // (sujet `projects`, qu'un module ne nomme pas) se relisent à leur
         // prochaine ouverture.
@@ -417,7 +417,7 @@ export const deployHandlers = [
     }),
     defineSdkFeature({
         ...deployTrigger,
-        access: { level: 'write' },
+        access: { level: 'write', item: 'targetId' },
         // L'onglet du projet suit `deploy.detail` ; sa frise (sujet `projects`,
         // qu'un module ne nomme pas) se relit à sa prochaine ouverture.
         mutates: true,

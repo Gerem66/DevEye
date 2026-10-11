@@ -256,7 +256,7 @@ export const uptimeHandlers = [
     }),
     defineSdkFeature({
         ...uptimeUpdate,
-        access: { level: 'write' },
+        access: { level: 'write', item: 'id' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             const existing = await loadService(ctx, input.id, 'write');
@@ -296,7 +296,7 @@ export const uptimeHandlers = [
     }),
     defineSdkFeature({
         ...uptimeUpdateIntegrity,
-        access: { level: 'write' },
+        access: { level: 'write', item: 'id' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             const existing = await loadService(ctx, input.id, 'write');
@@ -374,7 +374,7 @@ export const uptimeHandlers = [
     }),
     defineSdkFeature({
         ...uptimeDeployHook,
-        access: { level: 'write' },
+        access: { level: 'write', item: 'id' },
         handler: async (ctx: Ctx, input) => {
             // En écriture : qui détient l'adresse fait accepter une version.
             const row = await loadService(ctx, input.id, 'write');
@@ -397,7 +397,7 @@ export const uptimeHandlers = [
     }),
     defineSdkFeature({
         ...uptimeSetEnabled,
-        access: { level: 'write' },
+        access: { level: 'write', item: 'id' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             // Chez lui, pas ici : un service projeté vit dans son espace
@@ -417,7 +417,7 @@ export const uptimeHandlers = [
     }),
     defineSdkFeature({
         ...uptimeRemove,
-        access: { level: 'write' },
+        access: { level: 'write', item: 'id' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             const existing = await loadService(ctx, input.id, 'write');
@@ -455,7 +455,7 @@ export const uptimeHandlers = [
     }),
     defineSdkFeature({
         ...uptimeCheckNow,
-        access: { level: 'write' },
+        access: { level: 'write', item: 'id' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             const row = await loadService(ctx, input.id);
@@ -470,7 +470,7 @@ export const uptimeHandlers = [
     }),
     defineSdkFeature({
         ...uptimeAcceptBaseline,
-        access: { level: 'write' },
+        access: { level: 'write', item: 'id' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             const row = await loadService(ctx, input.id, 'write');

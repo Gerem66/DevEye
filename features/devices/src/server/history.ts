@@ -136,7 +136,7 @@ export const devicesDeleteSnapshotsFeature = defineSdkFeature<
     ...devicesDeleteSnapshots,
     mutates: true,
     // Effacer l'historique d'une machine n'est pas de la lecture.
-    access: WRITE,
+    access: { ...WRITE, item: 'deviceId' },
     handler: async (ctx, input) => {
         const device = await loadHomeDevice(ctx, input.deviceId);
         const { snapshots } = await ctx.repo.processSamples.deleteRange(input.deviceId, input.from, input.to);
@@ -164,7 +164,7 @@ export const devicesSetSnapshotsPinnedFeature = defineSdkFeature<
     ...devicesSetSnapshotsPinned,
     mutates: true,
     // Désépingler peut supprimer sur-le-champ : même niveau que la suppression.
-    access: WRITE,
+    access: { ...WRITE, item: 'deviceId' },
     handler: async (ctx, input) => {
         const device = await loadHomeDevice(ctx, input.deviceId);
         const { deviceId, from, to, pinned } = input;

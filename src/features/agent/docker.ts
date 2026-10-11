@@ -37,7 +37,7 @@ export const agentDockerInventoryFeature: FeatureDefinition<
     typeof agentDockerInventory.output
 > = defineFeature({
     ...agentDockerInventory,
-    access: { feature: 'devices', extras: ['docker'] },
+    access: { feature: 'devices', extras: ['docker'], item: 'deviceId' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
         const ok = ctx.monitor?.requestDockerInventory(row.id) ?? false;
@@ -52,7 +52,7 @@ export const agentDockerStatsFeature: FeatureDefinition<
     typeof agentDockerStats.output
 > = defineFeature({
     ...agentDockerStats,
-    access: { feature: 'devices', extras: ['docker'] },
+    access: { feature: 'devices', extras: ['docker'], item: 'deviceId' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId);
         const ok = ctx.monitor?.requestDockerStats(row.id) ?? false;
@@ -67,7 +67,7 @@ export const agentDockerActionFeature: FeatureDefinition<
     typeof agentDockerAction.output
 > = defineFeature({
     ...agentDockerAction,
-    access: { feature: 'devices', extras: ['docker'] },
+    access: { feature: 'devices', extras: ['docker'], item: 'deviceId' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId, { control: true });
         const monitor = ctx.monitor;

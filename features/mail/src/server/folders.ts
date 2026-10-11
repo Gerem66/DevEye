@@ -12,15 +12,16 @@ import type { MailRepo } from './repo';
 import { backfillFolder, resetFolder, syncAccountFolders, syncOneFolder } from './sync';
 import {
     accountCipher,
+    accountOfFolder,
     assertMailUnlocked,
     classifyMailError,
     isOwnerSideMailError,
-    sessionFor,
     loadAccount,
     loadFolderWithAccount,
+    sessionFor,
     toFolderDTO,
-    type Ctx,
-    WRITE
+    WRITE,
+    type Ctx
 } from './_shared';
 
 /**
@@ -106,7 +107,7 @@ export const mailFolderReorderFeature = defineSdkFeature<
     typeof mailFolderReorder.output
 >({
     ...mailFolderReorder,
-    access: WRITE,
+    access: { ...WRITE, item: 'accountId' },
     mutates: true,
     handler: async (ctx, input) => {
         await loadAccount(ctx, input.accountId, 'write');
@@ -122,7 +123,7 @@ export const mailFolderSyncFeature = defineSdkFeature<
     typeof mailFolderSync.output
 >({
     ...mailFolderSync,
-    access: WRITE,
+    access: { ...WRITE, item: accountOfFolder },
     mutates: true,
     handler: async (ctx, input) => {
         const { folder, account } = await loadFolderWithAccount(ctx, input.folderId, 'write');
@@ -142,7 +143,7 @@ export const mailFolderBackfillFeature = defineSdkFeature<
     typeof mailFolderBackfill.output
 >({
     ...mailFolderBackfill,
-    access: WRITE,
+    access: { ...WRITE, item: accountOfFolder },
     mutates: true,
     handler: async (ctx, input) => {
         const { folder, account } = await loadFolderWithAccount(ctx, input.folderId, 'write');
@@ -161,7 +162,7 @@ export const mailFolderResetFeature = defineSdkFeature<
     typeof mailFolderReset.output
 >({
     ...mailFolderReset,
-    access: WRITE,
+    access: { ...WRITE, item: accountOfFolder },
     mutates: true,
     handler: async (ctx, input) => {
         const { folder, account } = await loadFolderWithAccount(ctx, input.folderId, 'write');

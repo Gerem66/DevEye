@@ -21,7 +21,7 @@ export const agentLifecycleFeature: FeatureDefinition<
     typeof agentLifecycle.output
 > = defineFeature({
     ...agentLifecycle,
-    access: { feature: 'devices', level: 'write' },
+    access: { feature: 'devices', level: 'write', item: 'deviceId' },
     handler: async (ctx, input) => {
         const row = await authorizeReachableDevice(ctx, input.deviceId, { control: true });
         const ok = ctx.monitor?.requestLifecycle(row.id, { action: input.action }) ?? false;

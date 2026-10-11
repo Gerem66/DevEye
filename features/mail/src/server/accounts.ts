@@ -150,7 +150,7 @@ export const mailAccountUpdateFeature = defineSdkFeature<
     typeof mailAccountUpdate.output
 >({
     ...mailAccountUpdate,
-    access: WRITE,
+    access: { ...WRITE, item: 'id' },
     mutates: true,
     handler: async (ctx, input) => {
         const existing = await loadAccount(ctx, input.id, 'write');
@@ -217,7 +217,7 @@ export const mailAccountSetProfileFeature = defineSdkFeature<
     typeof mailAccountSetProfile.output
 >({
     ...mailAccountSetProfile,
-    access: WRITE,
+    access: { ...WRITE, item: 'id' },
     mutates: true,
     handler: async (ctx, input) => {
         const existing = await loadAccount(ctx, input.id, 'write');
@@ -275,7 +275,7 @@ export const mailAccountDeleteFeature = defineSdkFeature<
     typeof mailAccountDelete.output
 >({
     ...mailAccountDelete,
-    access: WRITE,
+    access: { ...WRITE, item: 'id' },
     mutates: true,
     handler: async (ctx, input) => {
         const existing = await loadAccount(ctx, input.id, 'write');
@@ -319,7 +319,7 @@ export const mailAccountSetEnabledFeature = defineSdkFeature<
     typeof mailAccountSetEnabled.output
 >({
     ...mailAccountSetEnabled,
-    access: WRITE,
+    access: { ...WRITE, item: 'id' },
     mutates: true,
     handler: async (ctx, input) => {
         // La pause est un état de la boîte, pas un de ses réglages de domicile :
@@ -345,7 +345,7 @@ export const mailAccountSetRemoteImagesFeature = defineSdkFeature<
     typeof mailAccountSetRemoteImages.output
 >({
     ...mailAccountSetRemoteImages,
-    access: WRITE,
+    access: { ...WRITE, item: 'id' },
     mutates: true,
     handler: async (ctx, input) => {
         const existing = await loadAccount(ctx, input.id, 'write');
@@ -369,7 +369,7 @@ export const mailAccountTestConnectionFeature = defineSdkFeature<
     typeof mailAccountTestConnection.output
 >({
     ...mailAccountTestConnection,
-    access: WRITE,
+    access: { ...WRITE, item: 'id' },
     handler: async (ctx, input) => {
         if (input.draft) {
             const credentials: MailCredentials = {
@@ -415,7 +415,7 @@ export const mailOAuthStartFeature = defineSdkFeature<
     typeof mailOAuthStart.output
 >({
     ...mailOAuthStart,
-    access: WRITE,
+    access: { ...WRITE, item: 'accountId' },
     handler: async (ctx, input) => {
         if (!isOAuthConfigured(input.provider)) {
             throw new FeatureError('validation', `OAuth ${input.provider} n'est pas configuré sur ce serveur`);

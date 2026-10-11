@@ -219,7 +219,7 @@ export const gitCrudFeatures = [
     }),
     defineSdkFeature({
         ...gitRepoUpdate,
-        access: { level: 'write' },
+        access: { level: 'write', item: 'repoId' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             // Domicile seulement : le jeton d'un dépôt se choisit parmi les clés de
@@ -243,7 +243,7 @@ export const gitCrudFeatures = [
     }),
     defineSdkFeature({
         ...gitRepoRemove,
-        access: { level: 'write' },
+        access: { level: 'write', item: 'repoId' },
         // Un seul sujet, celui du module : les compteurs d'onglets d'un projet
         // dépendent du sujet `projects`, qu'un module ne peut pas nommer, et se
         // remettent à jour à leur prochaine lecture.
@@ -286,7 +286,7 @@ export const gitCrudFeatures = [
         ...gitRepoSyncNow,
         // Pas de `mutates` : cette commande n'écrit rien elle-même, elle réveille
         // l'ordonnanceur. C'est lui qui diffusera quand il aura écrit.
-        access: { level: 'write' },
+        access: { level: 'write', item: 'repoId' },
         handler: async (ctx: Ctx, input) => {
             // Depuis la fenêtre aussi : réveiller la synchronisation d'un dépôt
             // projeté rafraîchit la même donnée pour tout le monde, chez lui.
@@ -303,7 +303,7 @@ export const gitCrudFeatures = [
      */
     defineSdkFeature({
         ...gitRepoResync,
-        access: { level: 'write' },
+        access: { level: 'write', item: 'repoId' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             // Refusé avant de jeter le cache : un dépôt en pause ne le relirait pas.

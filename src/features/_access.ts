@@ -15,7 +15,7 @@ import { createSecureStore, type SecureStore } from '@/Services/SecureStore';
 import type { SecretKeyService } from '@/Services/SecretKeyService';
 import type { Database } from '@/db';
 import { canModerate, WORKSPACE_CAPABILITIES, WORKSPACE_FEATURE_IDS } from '@deveye/types';
-import { FeatureError, type FeatureAccessSpec } from './_define';
+import { FeatureError, type FeatureAccessSpec, type FeatureContext } from './_define';
 import { roleOf } from '@/db/repos/users';
 import { moduleManifest, moduleManifests } from './_sdk/register';
 import { memberPausedIn } from '@/Services/planPauses';
@@ -71,6 +71,65 @@ export function assertDeclaredRole(
 ): void {
     if (access?.admin && !scope.isAdmin) throw new FeatureError('forbidden', 'Réservé aux administrateurs');
     if (access?.moderation && !scope.canModerate) throw new FeatureError('forbidden', 'Réservé à la modération');
+}
+
+/**
+ * L'élément que la commande vise, d'après son `access.item` : le champ de
+ * l'entrée validée qui le porte, ou la fonction qui le retrouve. Absent quand
+ * la commande n'en déclare pas, quand ce champ facultatif manque à la requête
+ * ou quand la ligne n'existe pas : c'est alors le rôle qui décide.
+ */
+export async function declaredItemId(
+    access: Pick<FeatureAccessSpec, 'item'> | undefined,
+    ctx: FeatureContext,
+    input: unknown
+): Promise<string | undefined> {
+    const item = access?.item;
+    if (item === undefined) return undefined;
+    const value = typeof item === 'string' ? (input as Record<string, unknown>)[item] : await item(ctx, input as never);
+    return value === undefined || value === null ? undefined : String(value);
+}
+
+/**
+ * Le refus que mérite un élément au niveau demandé, ou `null`. Sa surcharge
+ * remplace le niveau du rôle dans les deux sens : elle ouvre l'écriture à un
+ * rôle qui n'a que la lecture ailleurs, comme elle masque ce qu'il voit.
+ */
+export function itemRefusal(
+    override: ItemAccess | undefined,
+    role: FeatureAccess | undefined,
+    level: FeatureAccess
+): string | null {
+    const effective = override ?? role ?? 'none';
+    if (effective === 'none') return 'Cet élément ne vous est pas accessible';
+    if (level === 'write' && effective !== 'write') return 'Cet élément est en lecture seule pour votre rôle';
+    return null;
+}
+
+/**
+ * La garde qu'une commande déclare sur sa fonctionnalité : l'élément qu'elle
+ * vise quand elle en nomme un, sa surcharge comprise ; le rôle seul sinon. Une
+ * surcharge n'ouvre donc jamais un geste qui ne vise pas son élément.
+ */
+export async function assertDeclaredFeature(
+    access: Pick<FeatureAccessSpec, 'level' | 'extras'> & { feature: FeatureId },
+    itemId: string | undefined,
+    guards: {
+        assertItem(feature: FeatureId, itemId: string, level?: FeatureAccess): Promise<void>;
+        assertFeature(feature: FeatureId, level?: FeatureAccess): void;
+        holdsExtra(feature: FeatureId, key: string): boolean;
+    }
+): Promise<void> {
+    if (itemId !== undefined) {
+        await guards.assertItem(access.feature, itemId, access.level);
+        return;
+    }
+    guards.assertFeature(access.feature, access.level);
+    for (const key of access.extras ?? []) {
+        if (!guards.holdsExtra(access.feature, key)) {
+            throw new FeatureError('forbidden', 'Cette permission ne vous est pas accordée');
+        }
+    }
 }
 
 /**

@@ -45,6 +45,7 @@ import { safeRelPath } from './sinks';
 import {
     databaseProvider,
     isTreeKind,
+    jobOfRun,
     loadDestination,
     loadHomeJob,
     loadJob,
@@ -661,7 +662,7 @@ const jobAddFeature = defineSdkFeature({
 
 const jobUpdateFeature = defineSdkFeature({
     ...backupJobUpdate,
-    access: { level: 'write' },
+    access: { level: 'write', item: 'jobId' },
     mutates: true,
     handler: async (ctx: Ctx, input) => {
         // Domicile seulement : sa destination et sa source se choisissent parmi
@@ -708,7 +709,7 @@ const jobUpdateFeature = defineSdkFeature({
 
 const jobRemoveFeature = defineSdkFeature({
     ...backupJobRemove,
-    access: { level: 'write' },
+    access: { level: 'write', item: 'jobId' },
     mutates: true,
     handler: async (ctx: Ctx, input) => {
         const job = await loadHomeJob(ctx, input.jobId);
@@ -747,7 +748,7 @@ const jobRemoveFeature = defineSdkFeature({
 
 const runRemoveFeature = defineSdkFeature({
     ...backupRunRemove,
-    access: { level: 'write' },
+    access: { level: 'write', item: jobOfRun },
     mutates: true,
     handler: async (ctx: Ctx, input) => {
         const run = await ctx.repo.findRun(input.runId);
@@ -780,7 +781,7 @@ const jobRunFeature = defineSdkFeature({
     // Écrit une exécution en base : les autres écrans doivent voir le travail
     // passer en « en cours » sans recharger.
     mutates: true,
-    access: { level: 'write' },
+    access: { level: 'write', item: 'jobId' },
     handler: async (ctx: Ctx, input) => {
         // Permis depuis une fenêtre : le moteur lit tout depuis l'espace du
         // travail, jamais depuis celui de l'appelant.

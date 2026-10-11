@@ -74,7 +74,11 @@ const ACCESS_EXEMPT = new Set([
  * commande reste ouverte pendant ce temps.
  */
 export function assertAccessDeclared(
-    defs: readonly { command: string; access?: { feature?: string; extras?: readonly string[] } }[]
+    defs: readonly {
+        command: string;
+        input?: unknown;
+        access?: { feature?: string; extras?: readonly string[]; item?: unknown };
+    }[]
 ): void {
     const naked = defs.filter((d) => !d.access && !ACCESS_EXEMPT.has(d.command)).map((d) => d.command);
     if (naked.length > 0) {
@@ -92,6 +96,23 @@ export function assertAccessDeclared(
         throw new Error(
             `Commandes dont les permissions propres ne visent aucune fonctionnalité : ${orphans.join(', ')}. ` +
                 'Un `access.extras` exige un `access.feature`.'
+        );
+    }
+    // Un `access.item` qui ne nomme aucun champ de l'entrée ne trouverait jamais
+    // d'élément : la commande retomberait en silence sur le rôle seul.
+    const unnamed = defs
+        .filter((d) => d.access?.item !== undefined)
+        .filter((d) => {
+            const item = d.access?.item;
+            if (!d.access?.feature) return true;
+            if (typeof item !== 'string') return false;
+            return !(item in ((d.input as { shape?: object } | undefined)?.shape ?? {}));
+        })
+        .map((d) => d.command);
+    if (unnamed.length > 0) {
+        throw new Error(
+            `Commandes dont l'élément ne nomme aucun champ de leur entrée : ${unnamed.join(', ')}. ` +
+                'Un `access.item` exige un `access.feature`, et une entrée objet qui porte ce champ.'
         );
     }
 }

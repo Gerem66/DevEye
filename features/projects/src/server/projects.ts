@@ -198,7 +198,7 @@ export const projectAddFeature = defineSdkFeature({
 export const projectUpdateFeature = defineSdkFeature({
     ...projectUpdate,
     mutates: true,
-    access: MANAGE,
+    access: { ...MANAGE, item: 'projectId' },
     handler: async (ctx: Ctx, input) => {
         const existing = await loadProject(ctx, input.projectId, 'write');
         await assertProjectUnlocked(ctx, existing);
@@ -247,7 +247,7 @@ export const projectUpdateFeature = defineSdkFeature({
 export const projectSetStatusFeature = defineSdkFeature({
     ...projectSetStatus,
     mutates: true,
-    access: MANAGE,
+    access: { ...MANAGE, item: 'projectId' },
     handler: async (ctx: Ctx, input) => {
         const existing = await loadProject(ctx, input.projectId, 'write');
         await assertProjectUnlocked(ctx, existing);
@@ -268,7 +268,7 @@ export const projectSetStatusFeature = defineSdkFeature({
 export const projectSetVersionFeature = defineSdkFeature({
     ...projectSetVersion,
     mutates: true,
-    access: MANAGE,
+    access: { ...MANAGE, item: 'projectId' },
     handler: async (ctx: Ctx, input) => {
         const existing = await loadProject(ctx, input.projectId, 'write');
         await assertProjectUnlocked(ctx, existing);
@@ -322,7 +322,7 @@ export const projectSetVersionFeature = defineSdkFeature({
 export const projectSetSecurityTierFeature = defineSdkFeature({
     ...projectSetSecurityTier,
     mutates: true,
-    access: MANAGE,
+    access: { ...MANAGE, item: 'projectId' },
     handler: async (ctx: Ctx, input) => {
         const existing = await loadProject(ctx, input.projectId, 'write');
         // Le palier relie l'arbre au mot de passe d'un membre de l'espace
@@ -445,7 +445,7 @@ export const projectSetSecurityTierFeature = defineSdkFeature({
 export const projectArchiveFeature = defineSdkFeature({
     ...projectArchive,
     mutates: true,
-    access: MANAGE,
+    access: { ...MANAGE, item: 'projectId' },
     handler: async (ctx: Ctx, input) => {
         const existing = await loadProject(ctx, input.projectId, 'write');
         await assertProjectUnlocked(ctx, existing);
@@ -470,7 +470,7 @@ export const projectArchiveFeature = defineSdkFeature({
 export const projectRestoreFeature = defineSdkFeature({
     ...projectRestore,
     mutates: true,
-    access: MANAGE,
+    access: { ...MANAGE, item: 'projectId' },
     handler: async (ctx: Ctx, input) => {
         const existing = await loadProject(ctx, input.projectId, 'write');
         await assertProjectUnlocked(ctx, existing);

@@ -6,6 +6,10 @@ import type { EventRow, MailboxRow, MailserverRepo, QueueRow } from './repo';
 
 export type Ctx = SdkFeatureContext<MailserverRepo>;
 
+/** La boîte d'un message en file d'envoi, pour `access.item`. */
+export const mailboxOfQueueEntry = async (ctx: Ctx, input: { queueId: number }) =>
+    (await ctx.repo.findQueue(input.queueId))?.mailbox_id;
+
 export const now = (): number => Math.floor(Date.now() / 1000);
 
 /** `AAAA-MM-JJ` en UTC : la clé des compteurs journaliers. */

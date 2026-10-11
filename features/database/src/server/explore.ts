@@ -86,7 +86,7 @@ function checkKey(structure: DatabaseStructure, key: DatabaseCell[]): void {
 
 const databaseTableListFeature = defineSdkFeature({
     ...databaseTableList,
-    access: { level: 'write' },
+    access: { level: 'write', item: 'databaseId' },
     handler: async (ctx: Ctx, input) => ({
         tables: await withSession(ctx, input.databaseId, (s) => s.tables())
     })
@@ -94,7 +94,7 @@ const databaseTableListFeature = defineSdkFeature({
 
 const databaseTableStructureFeature = defineSdkFeature({
     ...databaseTableStructure,
-    access: { level: 'write' },
+    access: { level: 'write', item: 'databaseId' },
     handler: async (ctx: Ctx, input) => ({
         structure: await withSession(ctx, input.databaseId, async (s) => {
             const table = await resolveTable(s, input.schema, input.table);
@@ -105,7 +105,7 @@ const databaseTableStructureFeature = defineSdkFeature({
 
 const databaseTableRowsFeature = defineSdkFeature({
     ...databaseTableRows,
-    access: { level: 'write' },
+    access: { level: 'write', item: 'databaseId' },
     handler: async (ctx: Ctx, input) => {
         return withSession(ctx, input.databaseId, async (s) => {
             const table = await resolveTable(s, input.schema, input.table);
@@ -136,7 +136,7 @@ const databaseTableRowsFeature = defineSdkFeature({
 
 const databaseRowInsertFeature = defineSdkFeature({
     ...databaseRowInsert,
-    access: { level: 'write' },
+    access: { level: 'write', item: 'databaseId' },
     handler: async (ctx: Ctx, input) => ({
         inserted: await withSession(ctx, input.databaseId, async (s) => {
             const table = await resolveTable(s, input.schema, input.table);
@@ -152,7 +152,7 @@ const databaseRowInsertFeature = defineSdkFeature({
 
 const databaseRowUpdateFeature = defineSdkFeature({
     ...databaseRowUpdate,
-    access: { level: 'write' },
+    access: { level: 'write', item: 'databaseId' },
     handler: async (ctx: Ctx, input) => ({
         updated: await withSession(ctx, input.databaseId, async (s) => {
             const table = await resolveTable(s, input.schema, input.table);
@@ -169,7 +169,7 @@ const databaseRowUpdateFeature = defineSdkFeature({
 
 const databaseRowDeleteFeature = defineSdkFeature({
     ...databaseRowDelete,
-    access: { level: 'write' },
+    access: { level: 'write', item: 'databaseId' },
     handler: async (ctx: Ctx, input) => ({
         deleted: await withSession(ctx, input.databaseId, async (s) => {
             const table = await resolveTable(s, input.schema, input.table);
@@ -182,7 +182,7 @@ const databaseRowDeleteFeature = defineSdkFeature({
 
 const databaseExecuteFeature = defineSdkFeature({
     ...databaseExecute,
-    access: { level: 'write' },
+    access: { level: 'write', item: 'databaseId' },
     handler: async (ctx: Ctx, input) => ({
         result: await withSession(ctx, input.databaseId, (s) => s.execute(input.sql))
     })
@@ -325,7 +325,7 @@ export async function buildExport(
 
 const databaseExportFeature = defineSdkFeature({
     ...databaseExport,
-    access: { level: 'write' },
+    access: { level: 'write', item: 'databaseId' },
     handler: async (ctx: Ctx, input) => {
         const built = await withSession(ctx, input.databaseId, (s) => buildExport(s, input));
         const scope = input.table === undefined ? 'base' : input.table;

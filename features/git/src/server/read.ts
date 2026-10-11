@@ -186,7 +186,7 @@ export const gitReadFeatures = [
     }),
     defineSdkFeature({
         ...gitAuthorMap,
-        access: { level: 'write' },
+        access: { level: 'write', item: 'repoId' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             // Domicile seulement : le rattachement lie un auteur aux MEMBRES de

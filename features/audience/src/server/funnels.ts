@@ -14,7 +14,7 @@ import { defineSdkFeature, FeatureError, type SdkCipher } from '@deveye/types/sd
 
 import { labelRef, normalizePath } from './normalize';
 import type { ResolvedStep } from './repo';
-import { loadHomeSite, loadSite, nameRef, rangeWindow, readLabel, siteCipher, type Ctx } from './_shared';
+import { loadHomeSite, loadSite, nameRef, rangeWindow, readLabel, siteCipher, siteOfFunnel, type Ctx } from './_shared';
 
 /**
  * Les entonnoirs d'un site : où les gens décrochent.
@@ -110,7 +110,7 @@ export const audienceFunnelListFeature = defineSdkFeature({
 export const audienceFunnelAddFeature = defineSdkFeature({
     ...audienceFunnelAdd,
     mutates: true,
-    access: { level: 'write' },
+    access: { level: 'write', item: 'siteId' },
     handler: async (ctx: Ctx, input) => {
         // Domicile seulement : un entonnoir appartient au site, donc à son espace.
         await loadHomeSite(ctx, input.siteId);
@@ -144,7 +144,7 @@ export const audienceFunnelAddFeature = defineSdkFeature({
 export const audienceFunnelUpdateFeature = defineSdkFeature({
     ...audienceFunnelUpdate,
     mutates: true,
-    access: { level: 'write' },
+    access: { level: 'write', item: siteOfFunnel },
     handler: async (ctx: Ctx, input) => {
         const funnel = await loadFunnel(ctx, input.funnelId);
         const ref = nameRef(input.name);
@@ -167,7 +167,7 @@ export const audienceFunnelUpdateFeature = defineSdkFeature({
 export const audienceFunnelRemoveFeature = defineSdkFeature({
     ...audienceFunnelRemove,
     mutates: true,
-    access: { level: 'write' },
+    access: { level: 'write', item: siteOfFunnel },
     handler: async (ctx: Ctx, input) => {
         const funnel = await loadFunnel(ctx, input.funnelId);
         // Pas de confirmation lourde : aucune mesure ne disparaît, seule la lecture

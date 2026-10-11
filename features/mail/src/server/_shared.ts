@@ -26,6 +26,14 @@ import { getAccountSyncStatus } from './syncStatus';
 
 export type Ctx = SdkFeatureContext<MailRepo>;
 
+/** La boîte d'un dossier ou d'un message, pour `access.item`. */
+export const accountOfFolder = async (ctx: Ctx, input: { folderId: number }) =>
+    (await ctx.repo.folders.findById(input.folderId))?.account_id;
+export const accountOfMessage = async (ctx: Ctx, input: { messageId: number }) => {
+    const message = await ctx.repo.messages.findById(input.messageId);
+    return message ? (await ctx.repo.folders.findById(message.folder_id))?.account_id : undefined;
+};
+
 /** La lecture est implicite (le défaut du SDK) : seules les écritures déclarent leur niveau. */
 export const WRITE = { level: 'write' } as const;
 

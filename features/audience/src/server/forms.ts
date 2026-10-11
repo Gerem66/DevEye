@@ -24,7 +24,18 @@ import {
 import { defineSdkFeature, FeatureError, type SdkCipher } from '@deveye/types/sdk/server';
 
 import { countAnswers } from './answers';
-import { ingestOf, loadHomeSite, loadSite, nameRef, readJson, readLabel, siteCipher, type Ctx } from './_shared';
+import {
+    ingestOf,
+    loadHomeSite,
+    loadSite,
+    nameRef,
+    readJson,
+    readLabel,
+    siteCipher,
+    siteOfForm,
+    siteOfSubmission,
+    type Ctx
+} from './_shared';
 import type { AudienceFormsRepo, AudienceSubmissionWithContextRow } from './repoForms';
 
 /**
@@ -157,7 +168,7 @@ export async function createFormRecord(
 export const audienceFormAddFeature = defineSdkFeature({
     ...audienceFormAdd,
     mutates: true,
-    access: { level: 'write' },
+    access: { level: 'write', item: 'siteId' },
     handler: async (ctx: Ctx, input) => {
         const site = await loadHomeSite(ctx, input.siteId);
         const cipher = ctx.cipher();
@@ -177,7 +188,7 @@ export const audienceFormAddFeature = defineSdkFeature({
 export const audienceFormUpdateFeature = defineSdkFeature({
     ...audienceFormUpdate,
     mutates: true,
-    access: { level: 'write' },
+    access: { level: 'write', item: siteOfForm },
     handler: async (ctx: Ctx, input) => {
         const form = await loadHomeForm(ctx, input.formId);
         const ref = nameRef(input.name);
@@ -208,7 +219,7 @@ export const audienceFormUpdateFeature = defineSdkFeature({
 export const audienceFormClearFeature = defineSdkFeature({
     ...audienceFormClear,
     mutates: true,
-    access: { level: 'write' },
+    access: { level: 'write', item: siteOfForm },
     handler: async (ctx: Ctx, input) => {
         const form = await loadHomeForm(ctx, input.formId);
         const removed = await ctx.repo.clearForm(Number(form.id));
@@ -226,7 +237,7 @@ export const audienceFormClearFeature = defineSdkFeature({
 export const audienceFormRemoveFeature = defineSdkFeature({
     ...audienceFormRemove,
     mutates: true,
-    access: { level: 'write' },
+    access: { level: 'write', item: siteOfForm },
     handler: async (ctx: Ctx, input) => {
         const form = await loadHomeForm(ctx, input.formId);
         // Retours, libellés et compteurs partent en CASCADE. Le nom reviendra au
@@ -247,7 +258,7 @@ export const audienceSubmissionListFeature = defineSdkFeature({
     ...audienceSubmissionList,
     // Ce que les visiteurs ont écrit est la seule donnée nominative du module :
     // un rôle peut lire toutes les statistiques d'un site sans y avoir accès.
-    access: { extras: ['submissions'] },
+    access: { extras: ['submissions'], item: siteOfForm },
     handler: async (ctx: Ctx, input) => {
         const form = await loadForm(ctx, input.formId);
         const cipher = await siteCipher(ctx, Number(form.site_id));
@@ -286,7 +297,7 @@ export const audienceSubmissionListFeature = defineSdkFeature({
 export const audienceSubmissionRemoveFeature = defineSdkFeature({
     ...audienceSubmissionRemove,
     mutates: true,
-    access: { level: 'write', extras: ['submissions'] },
+    access: { level: 'write', extras: ['submissions'], item: siteOfSubmission },
     handler: async (ctx: Ctx, input) => {
         const row = await ctx.repo.findSubmission(input.submissionId);
         if (!row) throw new FeatureError('not_found', 'Retour introuvable');
@@ -316,7 +327,7 @@ export const audienceResultsFeature = defineSdkFeature({
     ...audienceResults,
     // La répartition est un agrégat, mais de ce que les gens ont écrit : les
     // valeurs y figurent en clair, et la partager n'est pas partager un chiffre.
-    access: { extras: ['submissions'] },
+    access: { extras: ['submissions'], item: siteOfForm },
     handler: async (ctx: Ctx, input) => {
         const form = await loadForm(ctx, input.formId);
         const cipher = await siteCipher(ctx, Number(form.site_id));

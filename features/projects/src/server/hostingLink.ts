@@ -24,7 +24,7 @@ export const projectHostingListFeature = defineSdkFeature({
 export const projectHostingLinkFeature = defineSdkFeature({
     ...projectHostingLink,
     mutates: ['projects'],
-    access: LINKS,
+    access: { ...LINKS, item: 'projectId' },
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId, 'write');
         assertAtHome(ctx, project, 'relier un dossier');
@@ -46,7 +46,7 @@ export const projectHostingLinkFeature = defineSdkFeature({
 export const projectHostingUnlinkFeature = defineSdkFeature({
     ...projectHostingUnlink,
     mutates: ['projects'],
-    access: LINKS,
+    access: { ...LINKS, item: 'projectId' },
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId, 'write');
         assertAtHome(ctx, project, 'délier un dossier');

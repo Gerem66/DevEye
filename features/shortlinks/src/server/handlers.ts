@@ -282,7 +282,7 @@ export const linkHandlers = [
 
     defineSdkFeature({
         ...shortlinksUpdate,
-        access: { level: 'write' },
+        access: { level: 'write', item: 'id' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             const row = await loadLink(ctx, input.id, 'write');
@@ -320,7 +320,7 @@ export const linkHandlers = [
 
     defineSdkFeature({
         ...shortlinksUpdateAccess,
-        access: { level: 'write' },
+        access: { level: 'write', item: 'id' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             const row = await loadLink(ctx, input.id, 'write');
@@ -350,7 +350,7 @@ export const linkHandlers = [
 
     defineSdkFeature({
         ...shortlinksUpdateCampaign,
-        access: { level: 'write' },
+        access: { level: 'write', item: 'id' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             const row = await loadLink(ctx, input.id, 'write');
@@ -369,7 +369,7 @@ export const linkHandlers = [
 
     defineSdkFeature({
         ...shortlinksSetEnabled,
-        access: { level: 'write' },
+        access: { level: 'write', item: 'id' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             const row = await loadLink(ctx, input.id, 'write');
@@ -381,7 +381,7 @@ export const linkHandlers = [
 
     defineSdkFeature({
         ...shortlinksRemove,
-        access: { level: 'write' },
+        access: { level: 'write', item: 'id' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             const row = await loadLink(ctx, input.id, 'write');
@@ -439,7 +439,7 @@ export const linkHandlers = [
 
     defineSdkFeature({
         ...shortlinksCheckNow,
-        access: { level: 'write' },
+        access: { level: 'write', item: 'id' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             const row = await loadLink(ctx, input.id, 'write');

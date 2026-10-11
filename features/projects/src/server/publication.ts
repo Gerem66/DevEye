@@ -194,7 +194,7 @@ export const projectPublicationFeatures = [
     defineSdkFeature({
         ...projectPublish,
         mutates: true,
-        access: MANAGE,
+        access: { ...MANAGE, item: 'projectId' },
         handler: async (ctx: Ctx, input) => {
             const project = await loadProject(ctx, input.projectId, 'write');
             assertPublishable(ctx, project);
@@ -259,7 +259,7 @@ export const projectPublicationFeatures = [
     defineSdkFeature({
         ...projectPublicationRelink,
         mutates: true,
-        access: MANAGE,
+        access: { ...MANAGE, item: 'projectId' },
         handler: async (ctx: Ctx, input) => {
             const project = await loadProject(ctx, input.projectId, 'write');
             assertPublishable(ctx, project);

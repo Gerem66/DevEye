@@ -24,7 +24,7 @@ export const projectDatabaseListFeature = defineSdkFeature({
 export const projectDatabaseLinkFeature = defineSdkFeature({
     ...projectDatabaseLink,
     mutates: ['projects', 'database'],
-    access: LINKS,
+    access: { ...LINKS, item: 'projectId' },
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId, 'write');
         assertAtHome(ctx, project, 'relier une base de données');
@@ -56,7 +56,7 @@ export const projectDatabaseLinkFeature = defineSdkFeature({
 export const projectDatabaseUnlinkFeature = defineSdkFeature({
     ...projectDatabaseUnlink,
     mutates: ['projects', 'database'],
-    access: LINKS,
+    access: { ...LINKS, item: 'projectId' },
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId, 'write');
         assertAtHome(ctx, project, 'délier une base de données');
