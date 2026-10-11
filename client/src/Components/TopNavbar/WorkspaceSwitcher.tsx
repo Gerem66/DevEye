@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useRemoteInstances, useRemotePing, type RemoteEntry } from '@/stores/remoteInstances';
 import { useLocalUser } from '@/stores/currentUser';
 import { isShutOutByPlan, useWorkspaceState } from '@/stores/workspace';
+import { WorkspaceInvitations } from './WorkspaceInvitations';
 import styles from './TopNavbar.module.css';
 
 /** Le dépli des actions de l'espace quand la bascule change d'espace courant. */
@@ -209,6 +210,9 @@ export function WorkspaceSwitcher({
                 ligne d'un espace qui donne son sens au retrait sous elle, et sans
                 elle ses actions ne désigneraient plus rien. */}
             {workspaces.map((w) => row(w, null))}
+            {/* Les invitations reçues suivent les espaces d'ici : c'est parmi eux
+                que l'espace accepté va paraître. */}
+            <WorkspaceInvitations onJoined={(id) => onSelect(id, null)} />
             {remotes.map((entry) =>
                 entry.user ? (remoteWorkspaces[entry.instance.id] ?? []).map((w) => row(w, entry)) : signedOut(entry)
             )}

@@ -1,19 +1,17 @@
-import { workspaceLeave, workspaceAddMember, workspaceRemoveMember, workspaceRename } from '@deveye/types';
+import { workspaceLeave, workspaceRemoveMember, workspaceRename } from '@deveye/types';
 import type { Workspace } from '@deveye/types';
 
 import { invalidateAccess } from '../_access';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
-import { assertCoreLimit } from '../_quota';
 import { schedulePlanReconcile, workspacePauses } from '@/Services/planPauses';
 
 /**
  * Gestion des membres d'un espace, par les capacités `workspace.members` et
- * `workspace.manage`. On rejoint un espace parce qu'un membre vous y met,
- * jamais par un lien : une adresse suffit à désigner un compte.
+ * `workspace.manage`. L'entrée d'un membre est dans `invitations.ts`.
  */
 
 /** Un espace personnel n'a pas de membres : il est personnel. */
-function assertShared(ctx: FeatureContext): void {
+export function assertShared(ctx: FeatureContext): void {
     if (ctx.workspace.kind === 'personal') {
         throw new FeatureError('validation', 'L’espace personnel ne se partage pas');
     }
@@ -34,7 +32,7 @@ export const workspaceRenameFeature: FeatureDefinition<
             action: 'workspace.rename',
             description: `Espace renommé : « ${ctx.workspace.name} » → « ${name} »`
         });
-        return { workspace: await describe(ctx, ctx.workspaceId) };
+        return { workspace: await describeWorkspace(ctx, ctx.workspaceId) };
     }
 });
 
@@ -101,63 +99,8 @@ export const workspaceRemoveMemberFeature: FeatureDefinition<
     }
 });
 
-export const workspaceAddMemberFeature: FeatureDefinition<
-    typeof workspaceAddMember.command,
-    typeof workspaceAddMember.input,
-    typeof workspaceAddMember.output
-> = defineFeature({
-    ...workspaceAddMember,
-    mutates: true,
-    access: { capabilities: ['workspace.members'] },
-    handler: async (ctx, input) => {
-        assertShared(ctx);
-        const email = input.email.trim().toLowerCase();
-        const target = await ctx.db.users.findByEmail(email);
-        if (!target) {
-            throw new FeatureError('not_found', 'Aucun compte DevEye avec cette adresse');
-        }
-        if (target.status === 'suspended') {
-            throw new FeatureError('validation', 'Ce compte est suspendu');
-        }
-        if (await ctx.db.workspaceMembers.isMember(target.id, ctx.workspaceId)) {
-            throw new FeatureError('conflict', `« ${target.username} » est déjà membre de cet espace`);
-        }
-
-        // L'offre qui compte est celle du propriétaire de l'espace : c'est lui
-        // qui héberge ses membres, quels que soient leurs propres comptes.
-        await assertCoreLimit(ctx, {
-            ownerUserId: ctx.workspace.ownerUserId,
-            fullKey: 'workspace.members',
-            label: 'membres par espace',
-            countAfter: async () => (await ctx.db.workspaceMembers.listByWorkspaceIds([ctx.workspaceId])).length + 1
-        });
-
-        await ctx.db.workspaceMembers.add({ userId: target.id, workspaceId: ctx.workspaceId });
-
-        // Sans rôle, un arrivant n'a aucun droit (fail-closed) : le rôle par
-        // défaut est attribué d'office ; s'il n'y en a pas, le membre entre sans
-        // droits, corrigeable depuis l'onglet Membres.
-        const fallback = await ctx.db.workspaceRoles.findDefault(ctx.workspaceId);
-        if (fallback) {
-            await ctx.db.workspaceRoles.assign(target.id, ctx.workspaceId, fallback.id);
-        }
-
-        invalidateAccess();
-        // L'arrivant n'est pas dans la salle de cet espace : s'il est connecté
-        // ailleurs, on le vise par compte pour que l'espace apparaisse dans son menu.
-        ctx.live?.userChanged(target.id, ctx.workspaceId, ['workspace'], ctx.userId);
-        ctx.audit({
-            action: 'workspace.member.add',
-            level: 'warning',
-            description: `« ${target.username} » ajouté à « ${ctx.workspace.name} »`,
-            metadata: { addedUserId: target.id }
-        });
-        return { workspace: await describe(ctx, ctx.workspaceId) };
-    }
-});
-
 /** Un espace tel que le client l'attend, membres résolus. */
-async function describe(ctx: FeatureContext, workspaceId: number): Promise<Workspace> {
+export async function describeWorkspace(ctx: FeatureContext, workspaceId: number): Promise<Workspace> {
     const row = await ctx.db.workspaces.findById(workspaceId);
     if (!row) throw new FeatureError('not_found', 'Espace introuvable');
     const members = await ctx.db.workspaceMembers.listByWorkspaceIds([workspaceId]);

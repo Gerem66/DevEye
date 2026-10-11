@@ -64,6 +64,10 @@ export type ResourceKey =
     | 'workspace.activate'
     /** Ce qui ne vit que dans le bundle de session (nom, logo, membres) : déclenche un `/me`, plus lourd. */
     | 'workspace.session'
+    /** Les invitations en attente de l'espace, vues par qui gère ses membres. */
+    | 'workspace.invitations'
+    /** Les invitations reçues par le compte, dans le menu des espaces. */
+    | 'user.invitations'
     /** La page Utilisateurs : les comptes du site. */
     | 'admin.userList'
     | 'admin.maintenanceGet'
@@ -146,7 +150,7 @@ const TOPIC_KEYS: Partial<Record<LiveTopic, ResourceKey[]>> = {
      * sujet `workspace` n'exige aucun droit de feature, donc la trame atteint
      * celui à qui on vient de tout retirer.
      */
-    workspace: ['workspace.roleList', 'workspace.session'],
+    workspace: ['workspace.roleList', 'workspace.session', 'workspace.invitations', 'user.invitations'],
     /* L'accueil ou l'apparence de l'espace : `workspace.activate` seule, sans recharger la session. */
     home: ['workspace.activate'],
     /* Réglages de compte, diffusés dans l'espace personnel de leur auteur. Seule

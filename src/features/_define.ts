@@ -141,8 +141,9 @@ export interface FeatureContext {
     monitor?: MonitorTransport;
     /**
      * Présence en direct, liée à cette connexion. Absent hors socket (tests).
-     * Ne sert qu'à *déclarer* : la diffusion des changements est faite par le
-     * dispatcheur depuis `mutates`, jamais par un handler.
+     * La diffusion des changements de l'espace de l'enveloppe est faite par le
+     * dispatcheur depuis `mutates` : un handler n'appelle `changed` que pour
+     * un espace où il écrit sans y être assis.
      */
     live?: LiveTransport;
 }

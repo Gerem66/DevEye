@@ -207,24 +207,34 @@ de statut. Pas de minuteur, pas d'attente. **Toute mutation d'accès appelle
 
 ## 4. Membres
 
-On rejoint un espace **parce qu'un membre vous y met**, en désignant votre
-adresse (`workspace.addMember`, capacité `workspace.members`). Immédiat, sans
-acceptation, avec le rôle par défaut de l'espace, et immédiat aussi **chez
-l'intéressé** s'il est connecté : le hub le vise par compte (`userChanged`, voir
-[LIVE.md](./LIVE.md)), puisqu'assis dans un autre espace il ne recevrait pas la
-diffusion de celui-ci. Même voie au retrait (`workspace.removeMember`), à la
-suppression d'un espace, et pour les membres en place quand un administrateur
-supprime l'un d'eux.
+On rejoint un espace **en acceptant une invitation**. Un membre qui gère les
+membres (capacité `workspace.members`) invite une adresse (`workspace.invite`) ;
+la réponse est la même quelle que soit l'adresse, qu'un compte la porte ou non :
+inviter ne permet pas de savoir qui a un compte. L'invitation
+(`workspace_invitations`) vaut quatorze jours, une seule par adresse et par
+espace (une réinvitation la renouvelle), et fixe le rôle que l'invité recevra :
+le rôle par défaut de l'espace **au moment d'inviter**, que l'invitant doit
+pouvoir accorder (`roleExceeds`, comme à l'attribution d'un rôle). Chaque
+invitation ouverte compte avec les membres dans la limite de l'offre du
+propriétaire ; la limite se relit à l'entrée.
 
-Il n'y a ni lien d'invitation ni invitation de compte : une adresse suffit à
-désigner un compte existant, et un jeton n'ajouterait qu'un secret transmissible
-à expirer et à révoquer, pour le même résultat.
+L'invité la retrouve dans son menu des espaces (`user.invitations`, par
+l'adresse de son compte) et l'accepte ou la refuse (`workspace.acceptInvite`,
+`workspace.declineInvite`). Ces commandes sont de compte (`scope: 'account'`) :
+elles valent d'où qu'il soit assis, et `mutates` bat alors ses autres onglets.
+L'espace rejoint est prévenu à part (`ctx.live.changed`), puisque l'invité n'y
+est pas encore assis au moment d'écrire. À l'invitation comme à l'annulation
+(`workspace.cancelInvite`), l'invité connecté est visé par compte
+(`userChanged`, voir [LIVE.md](./LIVE.md)) pour que son menu bouge.
 
-Une adresse sans compte est refusée (« Aucun compte DevEye avec cette adresse »)
-plutôt que de créer le compte : on n'invite pas, l'intéressé s'inscrit d'abord.
-L'inscription publique existe (`src/auth/signupRoutes.ts`) et s'ouvre ou se ferme
-par le réglage d'instance `signups` ([MAINTENANCE.md](./MAINTENANCE.md)) ; elle
-est toujours ouverte tant que la base n'a aucun compte.
+Une adresse sans compte reçoit l'invitation quand même : elle l'y trouvera après
+s'être inscrite. L'inscription publique existe (`src/auth/signupRoutes.ts`) et
+s'ouvre ou se ferme par le réglage d'instance `signups`
+([MAINTENANCE.md](./MAINTENANCE.md)) ; elle est toujours ouverte tant que la
+base n'a aucun compte.
+
+Le retrait (`workspace.removeMember`) et la suppression d'un espace suivent la
+même voie par compte, pour les membres connectés ailleurs.
 
 Le propriétaire ne quitte pas son espace et seul lui le supprime
 (`workspace.leave`, `workspace.delete`) ; l'espace personnel ne se supprime pas.

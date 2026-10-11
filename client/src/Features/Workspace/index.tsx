@@ -22,6 +22,11 @@ function dayStart(date: Date): number {
     return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
 }
 
+/** « 12 oct. » : le jour d'une échéance proche. */
+function dayLabel(epoch: number): string {
+    return new Date(epoch * 1000).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+}
+
 /** « vu il y a 3 j », ou « jamais connecté » pour un compte qui n'est pas encore venu. */
 function lastSeen(epoch: number): string {
     if (!epoch) return 'jamais connecté';
@@ -44,8 +49,8 @@ export default function FeatureWorkspace() {
     const { workspace, isShared, isOwner } = admin;
 
     const [name, setName] = useState('');
-    const [addOpen, setAddOpen] = useState(false);
-    const [addEmail, setAddEmail] = useState('');
+    const [inviteOpen, setInviteOpen] = useState(false);
+    const [inviteEmail, setInviteEmail] = useState('');
     const [confirmLeave, setConfirmLeave] = useState(false);
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [roleEdited, setRoleEdited] = useState<{ role: WorkspaceRole | null } | null>(null);
@@ -89,15 +94,15 @@ export default function FeatureWorkspace() {
 
     const nameChanged = name.trim() !== '' && name.trim() !== workspace.name;
 
-    const submitAdd = (): void => {
-        const email = addEmail.trim();
+    const submitInvite = (): void => {
+        const email = inviteEmail.trim();
         if (email === '') return;
-        // Le dialogue ne se ferme qu'en cas de succès : une adresse inconnue ou
-        // déjà membre doit rester corrigeable sans tout ressaisir.
-        void admin.addMember(email).then((ok) => {
+        // Le dialogue ne se ferme qu'en cas de succès : une adresse déjà membre
+        // doit rester corrigeable sans tout ressaisir.
+        void admin.invite(email).then((ok) => {
             if (ok) {
-                setAddEmail('');
-                setAddOpen(false);
+                setInviteEmail('');
+                setInviteOpen(false);
             }
         });
     };
@@ -153,8 +158,8 @@ export default function FeatureWorkspace() {
                                 {workspace.users.length} membre{workspace.users.length > 1 ? 's' : ''}
                             </span>
                             {canManageMembers && (
-                                <Button icon='add' onClick={() => setAddOpen(true)}>
-                                    Ajouter un membre
+                                <Button icon='add' onClick={() => setInviteOpen(true)}>
+                                    Inviter un membre
                                 </Button>
                             )}
                         </div>
@@ -219,6 +224,37 @@ export default function FeatureWorkspace() {
                                     </div>
                                 );
                             })}
+                        </div>
+                    </section>
+                )}
+
+                {active === 'members' && admin.invitations.length > 0 && (
+                    <section className={styles.section}>
+                        <div className={styles.sectionHeader}>
+                            <span className={styles.sectionLabel}>
+                                {admin.invitations.length} invitation{admin.invitations.length > 1 ? 's' : ''} en
+                                attente
+                            </span>
+                        </div>
+                        <div className={`${styles.card} ${styles.rowList}`}>
+                            {admin.invitations.map((i) => (
+                                <div key={i.id} className={styles.row}>
+                                    <div className={styles.rowText}>
+                                        <span className={styles.rowTitle}>{i.email}</span>
+                                        <span className={styles.rowMeta}>expire le {dayLabel(i.expiresAt)}</span>
+                                    </div>
+                                    <button
+                                        type='button'
+                                        className={`${styles.actionBtn} ${styles.actionDanger}`}
+                                        title={`Annuler l’invitation de ${i.email}`}
+                                        aria-label={`Annuler l’invitation de ${i.email}`}
+                                        onClick={() => void admin.cancelInvite(i.id)}
+                                        disabled={admin.busy}
+                                    >
+                                        <span className='icon icon-x' />
+                                    </button>
+                                </div>
+                            ))}
                         </div>
                     </section>
                 )}
@@ -347,34 +383,34 @@ export default function FeatureWorkspace() {
             </div>
 
             <Dialog
-                open={addOpen}
-                onClose={() => setAddOpen(false)}
-                title='Ajouter un membre'
-                description='La personne rejoint l’espace immédiatement, avec le rôle par défaut. Son compte DevEye doit déjà exister.'
+                open={inviteOpen}
+                onClose={() => setInviteOpen(false)}
+                title='Inviter un membre'
+                description='La personne retrouve l’invitation dans son menu des espaces et rejoint l’espace en l’acceptant, avec le rôle par défaut. Elle a quatorze jours pour répondre.'
                 width={440}
-                onSubmit={submitAdd}
+                onSubmit={submitInvite}
                 footer={
                     <>
-                        <Button variant='secondary' onClick={() => setAddOpen(false)} disabled={admin.busy}>
+                        <Button variant='secondary' onClick={() => setInviteOpen(false)} disabled={admin.busy}>
                             Annuler
                         </Button>
-                        <Button onClick={submitAdd} disabled={admin.busy || addEmail.trim() === ''}>
-                            {admin.busy ? 'Ajout…' : 'Ajouter'}
+                        <Button onClick={submitInvite} disabled={admin.busy || inviteEmail.trim() === ''}>
+                            {admin.busy ? 'Envoi…' : 'Inviter'}
                         </Button>
                     </>
                 }
             >
-                <label className={styles.sectionLabel} htmlFor='add-member-email'>
+                <label className={styles.sectionLabel} htmlFor='invite-email'>
                     Adresse email
                 </label>
                 <TextInput
-                    id='add-member-email'
+                    id='invite-email'
                     type='email'
-                    value={addEmail}
-                    onChange={(e) => setAddEmail(e.target.value)}
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
                     maxLength={320}
                     placeholder='personne@exemple.fr'
-                    aria-label='Adresse email du membre'
+                    aria-label='Adresse email de la personne à inviter'
                 />
             </Dialog>
 

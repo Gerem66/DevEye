@@ -2477,6 +2477,24 @@ CREATE TABLE `weather_provider_keys` (
   CONSTRAINT `fk_weatherkey_workspace` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+CREATE TABLE `workspace_invitations` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `workspace_id` int NOT NULL,
+  `email` varchar(320) COLLATE utf8mb4_general_ci NOT NULL,
+  `role_id` int DEFAULT NULL,
+  `invited_by` int NOT NULL,
+  `created_at` bigint NOT NULL,
+  `expires_at` bigint NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_workspace_invitation` (`workspace_id`,`email`),
+  KEY `idx_workspace_invitations_email` (`email`),
+  KEY `fk_invitation_role` (`role_id`),
+  KEY `fk_invitation_inviter` (`invited_by`),
+  CONSTRAINT `fk_invitation_inviter` FOREIGN KEY (`invited_by`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_invitation_role` FOREIGN KEY (`role_id`) REFERENCES `workspace_roles` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_invitation_workspace` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 CREATE TABLE `workspace_members` (
   `id` int NOT NULL AUTO_INCREMENT,
   `user_id` int NOT NULL,

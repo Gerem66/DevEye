@@ -27,6 +27,7 @@ import {
     type WorkspaceMembersRepo,
     type WorkspacesRepo
 } from './repos/workspaces';
+import { workspaceInvitationsRepo, type WorkspaceInvitationsRepo } from './repos/workspaceInvitations';
 import { workspaceSecretKeysRepo, type WorkspaceSecretKeysRepo } from './repos/workspaceSecretKeys';
 import { workspaceRolesRepo, type WorkspaceRolesRepo } from './repos/workspaceRoles';
 
@@ -43,6 +44,7 @@ export interface Database {
     users: UsersRepo;
     workspaces: WorkspacesRepo;
     workspaceMembers: WorkspaceMembersRepo;
+    workspaceInvitations: WorkspaceInvitationsRepo;
     workspaceSecretKeys: WorkspaceSecretKeysRepo;
     workspaceRoles: WorkspaceRolesRepo;
     refreshTokens: RefreshTokensRepo;
@@ -99,6 +101,7 @@ export function databaseOn(q: Queryable, begin: BeginTransaction): Database {
         users: usersRepo(q),
         workspaces: workspacesRepo(q),
         workspaceMembers: workspaceMembersRepo(q),
+        workspaceInvitations: workspaceInvitationsRepo(q),
         workspaceSecretKeys: workspaceSecretKeysRepo(q),
         workspaceRoles: workspaceRolesRepo(q),
         refreshTokens: refreshTokensRepo(q),

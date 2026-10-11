@@ -28,6 +28,7 @@ export const CORE_EXPORT_TABLES: Readonly<Record<string, 'host' | { skip: string
     notification_route_channels: { skip: 'Les routes de notification visent des éléments par leur numéro interne.' },
     item_shares: { skip: 'Le partage d’un élément entre espaces n’a de sens que sur ce serveur.' },
     item_role_grants: { skip: 'Les droits d’un rôle sur un élément n’ont de sens que sur ce serveur.' },
+    workspace_invitations: { skip: 'Une invitation ouvre un accès et porte l’adresse d’un tiers.' },
     user_2fa: { skip: 'Le secret de la double authentification ne sort jamais.' },
     user_2fa_backup_codes: { skip: 'Les codes de secours ne sortent jamais.' },
     user_secret_keys: { skip: 'Les clés de chiffrement ne sortent jamais.' },

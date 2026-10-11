@@ -168,6 +168,12 @@ export interface LiveTransport {
      * aux sujets sans droit de feature (comme `workspace`).
      */
     userChanged(userId: number, workspaceId: number, topics: readonly LiveTopic[], byUserId: number | null): void;
+    /**
+     * Prévenir la salle d'un espace autre que celui de l'enveloppe, le seul que
+     * `mutates` sache battre : accepter une invitation écrit dans un espace où
+     * l'appelant n'est pas encore assis.
+     */
+    changed(workspaceId: number, topics: readonly LiveTopic[], byUserId: number): void;
     /** Un rôle a changé sans que personne ne perde l'espace : droits re-résolus sur place. */
     resync(db: Database, workspaceId: number): Promise<void>;
 }
@@ -938,6 +944,7 @@ export function createLiveTransport(hub: LiveHub, socket: WebSocket): LiveTransp
         closeSessionsOf: (userId, keepSessionId) => hub.closeSessionsOf(userId, keepSessionId),
         closeSession: (sessionId) => hub.closeSession(sessionId),
         userChanged: (userId, workspaceId, topics, byUserId) => hub.userChanged(userId, workspaceId, topics, byUserId),
+        changed: (workspaceId, topics, byUserId) => hub.changed(workspaceId, topics, byUserId),
         resync: (db, workspaceId) => hub.resync(db, workspaceId)
     };
 }

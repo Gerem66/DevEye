@@ -54,6 +54,8 @@ const DEVICE: Guard = [/\bdevice_id = \?/];
 const ROW: Guard = [/\bid = \?/, /\bid IN \(/];
 /** Un secret que seul son porteur détient : il vaut identité. */
 const SECRET: Guard = [/\b(code|jti|session_id|token_hash|watch_hash) = \?/];
+/** L'adresse du compte appelant, relue en base : elle le désigne comme son `user_id`. */
+const INVITEE: Guard = [/\bemail = \?/];
 
 const ROLE_INPUT = { name: 'r', color: 'red', capabilities: [], features: [] };
 const CHANNEL_INPUT = { kind: 'email' as const, labelEnc: null, targetEnc: null, mailAccountId: null, enabled: true };
@@ -129,6 +131,16 @@ const SCOPES: { [K in RepoKey]: RepoScope<K> } = {
             remove: { args: [1, 2] },
             isMember: { args: [1, 2] },
             countUsersIn: { args: [[1]] }
+        }
+    },
+    workspaceInvitations: {
+        guard: WORKSPACE,
+        methods: {
+            listByWorkspace: { args: [1, 0] },
+            listByEmail: { args: ['a@b.c', 0], guard: INVITEE },
+            find: { args: [1, 2] },
+            upsert: { args: [{ workspaceId: 1, email: 'a@b.c', roleId: null, invitedBy: 2, now: 0, expiresAt: 1 }] },
+            remove: { args: [1, 2] }
         }
     },
     workspaceSecretKeys: {

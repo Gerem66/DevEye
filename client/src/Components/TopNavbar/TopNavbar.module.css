@@ -503,6 +503,70 @@
     width: 12px;
 }
 
+/* Une invitation reçue : la même silhouette qu'un espace, sans être cliquable,
+   et deux réponses à droite. */
+.invitationRow {
+    display: flex;
+    flex-direction: column;
+}
+
+.invitationLine {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    font-size: 0.875rem;
+    color: var(--text-primary);
+}
+
+.invitationLine > .icon {
+    width: 16px;
+    color: var(--text-secondary);
+}
+
+.invitationLine > .workspaceText {
+    flex: 1;
+}
+
+.invitationAnswer {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.invitationAnswer:disabled {
+    cursor: default;
+}
+
+.invitationAnswer .icon {
+    width: 12px;
+}
+
+.invitationAccept:hover {
+    background: var(--glass-bg-light);
+    color: var(--accent);
+}
+
+.invitationDecline:hover {
+    background: var(--glass-bg-light);
+    color: var(--danger);
+}
+
+.invitationError {
+    margin: 0;
+    padding: 0 var(--space-md) var(--space-sm) calc(var(--space-md) + 16px + var(--space-sm));
+    font-size: 0.72rem;
+    color: var(--danger);
+}
+
 /* Le conteneur du dépli : sa hauteur est animée, le débord doit donc être coupé
    pendant la course, sinon le libellé dépasse avant que la place existe. */
 .workspaceActions {

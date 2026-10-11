@@ -4,7 +4,7 @@ const ROLE = { name: 'Essai', color: '#22d3ee', features: [] };
 
 const workspaceOf = (ctx: E2eContext): number => ctx.state.get('workspaceId') as number;
 
-/** Un espace à deux : l'invitation, un rôle qui refuse puis accorde, le départ du membre, la suppression. */
+/** Un espace à deux : l'invitation acceptée, un rôle qui refuse puis accorde, le retrait du membre, la suppression. */
 export const sharedWorkspace: E2eScenario = {
     id: 'core.sharing',
     label: 'Espace partagé à deux',
@@ -34,15 +34,27 @@ export const sharedWorkspace: E2eScenario = {
             label: 'Inviter le second compte',
             run: async (ctx) => {
                 const [owner, member] = ctx.accounts;
-                await owner.client.send(
-                    'workspace.addMember',
-                    { email: member.email },
-                    { workspaceId: workspaceOf(ctx) }
-                );
+                await owner.client.send('workspace.invite', { email: member.email }, { workspaceId: workspaceOf(ctx) });
+                const { invitations } = await member.client.send<{
+                    invitations: { id: number; workspaceId: number }[];
+                }>('user.invitations', {});
+                const invitation = invitations.find((i) => i.workspaceId === workspaceOf(ctx));
+                check(invitation, 'L’invité ne voit pas l’invitation');
+                ctx.state.set('invitationId', invitation.id);
+                const me = await member.client.api<{ workspaces: { id: number }[] }>('/api/auth/me');
+                check(!me.workspaces.some((w) => w.id === workspaceOf(ctx)), 'L’invité est entré sans accepter');
+                return 'Invitation en attente chez lui';
+            }
+        },
+        {
+            label: 'Accepter l’invitation',
+            run: async (ctx) => {
+                const [, member] = ctx.accounts;
+                await member.client.send('workspace.acceptInvite', { invitationId: ctx.state.get('invitationId') });
                 const me = await member.client.api<{ workspaces: { id: number }[] }>('/api/auth/me');
                 check(
                     me.workspaces.some((w) => w.id === workspaceOf(ctx)),
-                    'Le membre ne voit pas l’espace qui l’a invité'
+                    'Le membre ne voit pas l’espace rejoint'
                 );
             }
         },

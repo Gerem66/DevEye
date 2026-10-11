@@ -45,6 +45,7 @@ export function useWorkspaceAdmin() {
 
     const [roles, setRoles] = useState<WorkspaceRole[]>([]);
     const [memberRoles, setMemberRoles] = useState<{ userId: number; roleId: number | null }[]>([]);
+    const [invitations, setInvitations] = useState<{ id: number; email: string; expiresAt: number }[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
 
@@ -83,6 +84,20 @@ export function useWorkspaceAdmin() {
         void loadRoles();
     }, [loadRoles, rolesVersion]);
 
+    /** Vide pour qui ne gère pas les membres : la section ne s'affiche pas. */
+    const loadInvitations = useCallback(async () => {
+        try {
+            const res = await ws.send('workspace.invitations', {});
+            setInvitations(res.invitations);
+        } catch {
+            setInvitations([]);
+        }
+    }, []);
+    const invitationsVersion = useResourceVersion('workspace.invitations');
+    useEffect(() => {
+        if (isShared) void loadInvitations();
+    }, [isShared, loadInvitations, invitationsVersion]);
+
     /**
      * Exécute une action, en portant l'erreur et l'état occupé. Renvoie si elle a
      * abouti : un appelant qui doit enchaîner le décide sur ce booléen plutôt qu'en
@@ -108,6 +123,7 @@ export function useWorkspaceAdmin() {
         isOwner,
         roles,
         memberRoles,
+        invitations,
         error,
         busy,
         clearError: () => setError(null),
@@ -197,17 +213,18 @@ export function useWorkspaceAdmin() {
                 upsertWorkspace(res.workspace);
             }, 'Renommage impossible.'),
 
-        /**
-         * Le serveur renvoie l'espace complet plutôt que le seul arrivant : la liste
-         * des membres se recompose d'une source unique, sans reconstruire un
-         * `MinimalUser` de fortune côté client.
-         */
-        addMember: (email: string) =>
+        /** Le serveur répond la même chose pour toute adresse : la liste des invitations en attente dit la suite. */
+        invite: (email: string) =>
             run(async () => {
-                const res = await ws.send('workspace.addMember', { email });
-                upsertWorkspace(res.workspace);
-                await loadRoles();
-            }, 'Ajout impossible.'),
+                await ws.send('workspace.invite', { email });
+                await loadInvitations();
+            }, 'Invitation impossible.'),
+
+        cancelInvite: (invitationId: number) =>
+            run(async () => {
+                await ws.send('workspace.cancelInvite', { invitationId });
+                setInvitations((list) => list.filter((i) => i.id !== invitationId));
+            }, 'Annulation impossible.'),
 
         removeMember: (userId: number) =>
             run(async () => {

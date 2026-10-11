@@ -24,11 +24,14 @@ import { userSetUsernameFeature } from './user/setUsername';
 import { userSetThemeFeature } from './user/setTheme';
 import { workspaceActivateFeature, workspaceSetFavoriteFeature } from './workspace/activate';
 import {
-    workspaceAddMemberFeature,
-    workspaceLeaveFeature,
-    workspaceRemoveMemberFeature,
-    workspaceRenameFeature
-} from './workspace/members';
+    userInvitationsFeature,
+    workspaceAcceptInviteFeature,
+    workspaceCancelInviteFeature,
+    workspaceDeclineInviteFeature,
+    workspaceInvitationsFeature,
+    workspaceInviteFeature
+} from './workspace/invitations';
+import { workspaceLeaveFeature, workspaceRemoveMemberFeature, workspaceRenameFeature } from './workspace/members';
 import {
     workspaceAssignRoleFeature,
     workspaceRoleCreateFeature,
@@ -57,7 +60,12 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     workspaceRenameFeature,
     workspaceLeaveFeature,
     workspaceRemoveMemberFeature,
-    workspaceAddMemberFeature,
+    workspaceInviteFeature,
+    workspaceInvitationsFeature,
+    workspaceCancelInviteFeature,
+    workspaceAcceptInviteFeature,
+    workspaceDeclineInviteFeature,
+    userInvitationsFeature,
     workspaceRoleListFeature,
     workspaceRoleCreateFeature,
     workspaceRoleUpdateFeature,
