@@ -11,6 +11,7 @@ import {
 import { authorizeRelayDevice, defineSdkFeature, FeatureError, relayDeviceOptions } from '@deveye/types/sdk/server';
 
 import {
+    assertSecretsStay,
     databaseCipherFor,
     loadDatabase,
     nameRef,
@@ -196,6 +197,13 @@ export const databaseCrudFeatures = [
 
             // Secret absent = inchangé, chaîne vide = effacé. Le client ne le reçoit
             // jamais, il ne peut donc pas le renvoyer tel quel.
+            const access = await accessBody(ctx, input.access);
+            await assertSecretsStay(
+                cipher,
+                home,
+                { engine: home.engine, ...body, access },
+                { password: input.password === undefined, accessSecret: input.access.secret === undefined }
+            );
             const row = await ctx.repo.update(input.databaseId, ctx.workspaceId, {
                 nameRef: ref,
                 content: await cipher.encrypt(JSON.stringify(body)),
@@ -205,7 +213,7 @@ export const databaseCrudFeatures = [
                         : input.password
                           ? await cipher.encrypt(input.password)
                           : null,
-                accessContent: await cipher.encrypt(JSON.stringify(await accessBody(ctx, input.access))),
+                accessContent: await cipher.encrypt(JSON.stringify(access)),
                 accessSecretEnc:
                     input.access.secret === undefined
                         ? undefined

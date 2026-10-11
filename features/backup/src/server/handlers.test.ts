@@ -550,7 +550,10 @@ describe('Backup : handlers', () => {
         assert.equal((await update(ctx, { ...body, resetHostKey: true })).destination.hostKey, null);
 
         repo.destinations[0].content = await ctx.cipher().encrypt(JSON.stringify(stored));
-        assert.equal((await update(ctx, { ...body, host: 'autre.exemple.fr' })).destination.hostKey, null);
+        // Un autre serveur : le mot de passe gardé ne s'y présente pas, il se ressaisit.
+        await assert.rejects(update(ctx, { ...body, host: 'autre.exemple.fr' }), failsWith('validation'));
+        const moved = await update(ctx, { ...body, host: 'autre.exemple.fr', secret: 'nouveau' });
+        assert.equal(moved.destination.hostKey, null);
     });
 
     it('refuse de retirer une destination encore visée, en disant combien', async () => {

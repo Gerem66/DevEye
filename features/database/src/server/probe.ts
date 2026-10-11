@@ -2,7 +2,7 @@ import { databaseInspect, databaseQuery, databaseTest, databaseTestDraft } from 
 import { authorizeRelayDevice, defineSdkFeature, FeatureError, relayOf } from '@deveye/types/sdk/server';
 
 import { explainError, openSession, type Session } from './engine';
-import { loadDatabase, monitorOf, reloadDatabase, type Ctx } from './_shared';
+import { assertSecretsStay, loadDatabase, monitorOf, reloadDatabase, type Ctx } from './_shared';
 
 /**
  * Ce qui joint réellement un serveur, toujours sur un geste explicite. Sous le
@@ -68,11 +68,25 @@ export const databaseProbeFeatures = [
             let password = input.password ?? null;
             let accessSecret = input.access.secret ?? null;
 
-            // Champ laissé intact : le secret enregistré prend le relais, lu sur
-            // la base visée que `loadDatabase` borne à l'espace ; on ne peut pas
-            // essayer le mot de passe d'autrui sur son propre hôte.
+            // Champ laissé intact : le secret enregistré prend le relais, pour
+            // la même base seulement, au même endroit. Sinon il se ressaisit.
             if (input.databaseId !== undefined && (input.password === undefined || input.access.secret === undefined)) {
                 const row = await loadDatabase(ctx, input.databaseId);
+                await assertSecretsStay(
+                    cipher,
+                    row,
+                    {
+                        engine: input.engine,
+                        host: input.host,
+                        port: input.port,
+                        username: input.username,
+                        access: {
+                            ...input.access,
+                            deviceId: input.access.kind === 'device' ? input.access.deviceId : null
+                        }
+                    },
+                    { password: input.password === undefined, accessSecret: input.access.secret === undefined }
+                );
                 if (input.password === undefined) {
                     password = row.secret_enc ? await cipher.tryDecrypt(row.secret_enc) : null;
                 }

@@ -661,14 +661,21 @@ describe('les clés Dokploy', () => {
         const kept = await update(ctx, {
             credentialId: 10,
             label: 'Renommée',
-            baseUrl: 'https://autre.exemple.fr',
+            baseUrl: 'https://dokploy.exemple.fr',
             deviceId: null
         });
         assert.deepEqual(
             [kept.credential.label, kept.credential.baseUrl, kept.credential.useCount],
-            ['Renommée', 'https://autre.exemple.fr', 1]
+            ['Renommée', 'https://dokploy.exemple.fr', 1]
         );
         assert.equal(repo.credentials[0].secret_enc, 'clé-secrète');
+
+        // La clé gardée ne suit pas une autre adresse : elle s'y présenterait.
+        await assert.rejects(
+            update(ctx, { credentialId: 10, label: 'Renommée', baseUrl: 'https://autre.exemple.fr', deviceId: null }),
+            failsWith('validation')
+        );
+        assert.equal(repo.credentials[0].base_url, 'https://dokploy.exemple.fr');
 
         await update(ctx, {
             credentialId: 10,

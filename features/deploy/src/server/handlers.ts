@@ -627,10 +627,17 @@ export const deployHandlers = [
         handler: async (ctx: Ctx, input) => {
             const existing = await ctx.repo.findCredential(input.credentialId, ctx.workspaceId);
             if (!existing) throw new FeatureError('not_found', 'Accès de déploiement introuvable');
+            const route = await routeFor(ctx, existing.provider, input);
+            // Secret absent = inchangé, le client ne l'ayant jamais reçu, mais
+            // pour la même instance seulement : changer l'adresse suffirait sinon
+            // à le faire présenter au serveur de son choix.
+            const moved = route.baseUrl !== existing.base_url || route.deviceId !== existing.device_id;
+            if (!input.secret && moved) {
+                throw new FeatureError('validation', 'Ressaisissez la clé : l’instance qu’elle ouvre a changé.');
+            }
             const row = await ctx.repo.updateCredential(input.credentialId, ctx.workspaceId, {
                 label: input.label,
-                ...(await routeFor(ctx, existing.provider, input)),
-                // Secret absent = inchangé : le client ne l'a jamais reçu.
+                ...route,
                 secretEnc: input.secret ? await ctx.cipher().encrypt(input.secret) : undefined
             });
             if (!row) throw new FeatureError('not_found', 'Accès de déploiement introuvable');

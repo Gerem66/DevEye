@@ -60,6 +60,69 @@ export interface StoredAccess {
     authorUserId?: number | null;
 }
 
+/** Où un secret est présenté : la base, son compte, et le chemin qui y mène. */
+export interface SecretTarget {
+    engine: string;
+    host: string;
+    port: number;
+    username: string;
+    access: Pick<StoredAccess, 'kind' | 'host' | 'port' | 'username' | 'auth' | 'deviceId'>;
+}
+
+const passwordPlace = (t: SecretTarget): string =>
+    JSON.stringify([
+        t.engine,
+        t.host.trim(),
+        t.port,
+        t.username.trim(),
+        t.access.kind,
+        t.access.host.trim(),
+        t.access.port,
+        t.access.deviceId ?? null
+    ]);
+
+const accessSecretPlace = (a: SecretTarget['access']): string =>
+    JSON.stringify([a.kind, a.host.trim(), a.port, a.username.trim(), a.auth, a.deviceId ?? null]);
+
+/**
+ * Un secret enregistré ne se garde que pour l'endroit où il est présenté :
+ * changer l'hôte, le compte ou le chemin suffirait sinon à le faire envoyer à
+ * un serveur de son choix. `kept` nomme les secrets que le client n'a pas
+ * ressaisis.
+ */
+export async function assertSecretsStay(
+    cipher: SdkCipher,
+    row: DatabaseRow,
+    next: SecretTarget,
+    kept: { password: boolean; accessSecret: boolean }
+): Promise<void> {
+    const body = await readJson<StoredDatabase>(cipher, row.content);
+    const access = (await readJson<StoredAccess>(cipher, row.access_content)) ?? {
+        kind: 'direct' as const,
+        host: '',
+        port: null,
+        username: '',
+        auth: 'password' as const
+    };
+    const stored: SecretTarget | null = body && {
+        engine: row.engine,
+        host: body.host,
+        port: body.port,
+        username: body.username,
+        access
+    };
+    if (kept.password && row.secret_enc && (!stored || passwordPlace(stored) !== passwordPlace(next))) {
+        throw new FeatureError('validation', 'Ressaisissez le mot de passe : la base qu’il ouvre a changé.');
+    }
+    if (
+        kept.accessSecret &&
+        row.access_secret_enc &&
+        (!stored || accessSecretPlace(stored.access) !== accessSecretPlace(next.access))
+    ) {
+        throw new FeatureError('validation', 'Ressaisissez le secret de l’accès : le rebond qu’il ouvre a changé.');
+    }
+}
+
 /**
  * Ce que disent les chemins sans session (relevé, mesure pour Projets, accès pour
  * Sauvegardes) d'une base que l'offre tient en pause : une commande, elle, lève

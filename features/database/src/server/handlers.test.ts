@@ -264,6 +264,9 @@ const DRAFT = {
     autoLoadTables: true
 };
 
+/** Le même brouillon, sur le même serveur et le même compte : les secrets enregistrés y restent valables. */
+const SAME = { ...DRAFT, host: 'db.exemple.fr', port: 3306, username: 'ro' };
+
 describe('database.count et database.list', () => {
     it('retirent une base masquée pour ce rôle, et comptent les projets par le contrat de Projets', async () => {
         const repo = seed(
@@ -536,12 +539,20 @@ describe('database.update', () => {
         const ctx = createTestContext({ repo });
         const update = handlerFor(databaseUpdate);
 
-        const kept = await update(ctx, { databaseId: 1, ...DRAFT });
+        const kept = await update(ctx, { databaseId: 1, ...SAME });
         assert.equal(kept.database.hasPassword, true);
         assert.equal(kept.database.access.hasSecret, true);
         assert.equal(kept.database.name, 'Prod renommée');
         assert.equal(repo.rows[0].secret_enc, 'motdepasse');
         assert.equal(repo.rows[0].interval_seconds, 600);
+
+        // Un secret gardé ne suit pas la base ailleurs : sinon, changer l'hôte
+        // suffirait à le faire présenter à un serveur de son choix.
+        await assert.rejects(update(ctx, { databaseId: 1, ...DRAFT }), failsWith('validation'));
+        await assert.rejects(
+            update(ctx, { databaseId: 1, ...SAME, password: 'x', access: { ...ACCESS, kind: 'ssh', host: 'rebond' } }),
+            failsWith('validation')
+        );
 
         const cleared = await update(ctx, { databaseId: 1, ...DRAFT, password: '', access: { ...ACCESS, secret: '' } });
         assert.equal(cleared.database.hasPassword, false);
@@ -561,8 +572,8 @@ describe('database.update', () => {
             row({ id: 2, workspace_id: 1, name_ref: nameRef('Prod renommée') })
         );
         const ctx = createTestContext({ repo });
-        await assert.rejects(handlerFor(databaseUpdate)(ctx, { databaseId: 1, ...DRAFT }), failsWith('conflict'));
-        const same = await handlerFor(databaseUpdate)(ctx, { databaseId: 2, ...DRAFT });
+        await assert.rejects(handlerFor(databaseUpdate)(ctx, { databaseId: 1, ...SAME }), failsWith('conflict'));
+        const same = await handlerFor(databaseUpdate)(ctx, { databaseId: 2, ...SAME });
         assert.equal(same.database.id, 2);
     });
 });

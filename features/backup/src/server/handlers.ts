@@ -221,6 +221,11 @@ function storedFrom(kind: BackupDestinationKind, input: DestinationInput, hostKe
     };
 }
 
+/** Là où le secret d'une destination est présenté : son serveur, son seau, son compte. */
+function destinationPlace(d: Partial<StoredDestination>): string {
+    return JSON.stringify([d.endpoint, d.region, d.bucket, d.accessKeyId, d.host, d.port, d.username]);
+}
+
 /** Ce qu'une destination sans secret ne peut pas faire ; `null` pour un genre qui n'en a pas. */
 function missingSecretMessage(kind: BackupDestinationKind, auth: BackupSftpAuth | null): string | null {
     if (kind === 's3') return 'Une destination S3 exige sa clé secrète.';
@@ -298,6 +303,12 @@ const destinationUpdateFeature = defineSdkFeature({
         const hostKey = input.resetHostKey || !sameServer ? null : (previous.hostKey ?? null);
 
         const stored = storedFrom(kind, input, hostKey);
+        // Le secret gardé ne vaut que pour le même serveur et le même compte :
+        // changer l'adresse suffirait sinon à le faire présenter au serveur de
+        // son choix, ou à y envoyer les archives.
+        if (!input.secret && row.secret_enc && destinationPlace(previous) !== destinationPlace(stored)) {
+            throw new FeatureError('validation', 'Ressaisissez le secret : le serveur qu’il ouvre a changé.');
+        }
         const cipher = ctx.cipher();
         const updated = await ctx.repo.updateDestination(input.destinationId, ctx.workspaceId, {
             deviceId: row.kind === 'device' ? input.deviceId : null,
