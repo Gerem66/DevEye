@@ -31,7 +31,12 @@ import {
     workspaceInvitationsFeature,
     workspaceInviteFeature
 } from './workspace/invitations';
-import { workspaceLeaveFeature, workspaceRemoveMemberFeature, workspaceRenameFeature } from './workspace/members';
+import {
+    workspaceLeaveFeature,
+    workspaceMemberSharesFeature,
+    workspaceRemoveMemberFeature,
+    workspaceRenameFeature
+} from './workspace/members';
 import {
     workspaceAssignRoleFeature,
     workspaceRoleCreateFeature,
@@ -60,6 +65,7 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     workspaceRenameFeature,
     workspaceLeaveFeature,
     workspaceRemoveMemberFeature,
+    workspaceMemberSharesFeature,
     workspaceInviteFeature,
     workspaceInvitationsFeature,
     workspaceCancelInviteFeature,

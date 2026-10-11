@@ -236,6 +236,13 @@ base n'a aucun compte.
 Le retrait (`workspace.removeMember`) et la suppression d'un espace suivent la
 même voie par compte, pour les membres connectés ailleurs.
 
+Qui part emporte ses projections (`dropSharesOf`, `src/features/workspace/members.ts`) :
+celles qu'il avait réglées de cet espace vers les siens, sans quoi il lirait
+encore par la fenêtre ce qu'on vient de lui fermer, et celles des siens vers
+cet espace, une donnée dont il ne pourrait plus répondre
+([SHARING.md](./SHARING.md) §4). `workspace.memberShares` les nomme avant, pour
+la confirmation de l'exclusion comme du départ.
+
 Le propriétaire ne quitte pas son espace et seul lui le supprime
 (`workspace.leave`, `workspace.delete`) ; l'espace personnel ne se supprime pas.
 

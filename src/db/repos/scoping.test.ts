@@ -429,6 +429,7 @@ const SCOPES: { [K in RepoKey]: RepoScope<K> } = {
             // Les restrictions d'un élément supprimé partent de tous les espaces :
             // l'identifiant d'un élément est unique dans sa fonctionnalité.
             forgetItem: { args: ['f', 'i', 1], guard: [...WORKSPACE, /\bitem_id = \?/] },
+            sharedByUserAround: { args: [1, 2] },
             linkedWorkspaces: { args: [1, 'f'] },
             grantsOf: { args: [1, 'f', 'i'] },
             grantsForRole: { args: [1, 'f', 2] },

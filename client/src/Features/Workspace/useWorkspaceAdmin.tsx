@@ -226,6 +226,13 @@ export function useWorkspaceAdmin() {
                 setInvitations((list) => list.filter((i) => i.id !== invitationId));
             }, 'Annulation impossible.'),
 
+        /** Ce que le départ de ce membre emporte, pour le dire avant de confirmer. Vide sur refus. */
+        memberShares: (userId: number) =>
+            ws
+                .send('workspace.memberShares', { userId })
+                .then((res) => res.shares)
+                .catch(() => [] as { feature: string; label: string }[]),
+
         removeMember: (userId: number) =>
             run(async () => {
                 await ws.send('workspace.removeMember', { userId });

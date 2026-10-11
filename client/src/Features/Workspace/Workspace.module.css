@@ -146,6 +146,15 @@
     white-space: nowrap;
 }
 
+/* Ce qu'un départ emporte, listé sous la phrase de la confirmation. */
+.lossList {
+    margin: var(--space-sm) 0 0;
+    padding-left: var(--space-md);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    line-height: 1.6;
+}
+
 /* Le lien lui-même : monospace, tronqué, jamais sur deux lignes. */
 .token {
     font-family: var(--font-mono);

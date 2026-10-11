@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 
 import Button from '@/Components/Button';
+import { ConfirmDialog, type ConfirmRequest } from '@/Components/ConfirmDialog';
 import { Dialog } from '@/Components/Dialog';
 import SearchSelect from '@/Components/SearchSelect';
 import TextInput from '@/Components/TextInput';
-import type { WorkspaceRole } from '@deveye/types';
+import { featureLabel, type FeatureId, type WorkspaceRole } from '@deveye/types';
 import { useAuth } from '@/auth/AuthProvider';
 import { PlanPausedBadge, PlanPausedNotice } from '@/Components/PlanPause';
 import { useWorkspacePermissions } from '@/stores/workspace';
@@ -20,6 +21,29 @@ type TabId = 'general' | 'members' | 'roles';
 /** Minuit du jour de `date`, en heure locale. */
 function dayStart(date: Date): number {
     return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+}
+
+/** Ce qu'un départ retire avec le membre : ses projections, nommées. */
+type MemberShare = { feature: string; label: string };
+
+/**
+ * La liste des projections qu'un départ emporte, après la phrase qui dit à qui
+ * elles sont. Rien quand il n'y en a pas : la confirmation reste courte.
+ */
+function sharesNotice(lead: string, shares: MemberShare[]) {
+    if (shares.length === 0) return null;
+    return (
+        <>
+            <p>{lead}</p>
+            <ul className={styles.lossList}>
+                {shares.map((s, i) => (
+                    <li key={i}>
+                        {featureLabel(s.feature as FeatureId)} · {s.label}
+                    </li>
+                ))}
+            </ul>
+        </>
+    );
 }
 
 /** « 12 oct. » : le jour d'une échéance proche. */
@@ -45,13 +69,14 @@ function lastSeen(epoch: number): string {
  */
 export default function FeatureWorkspace() {
     const admin = useWorkspaceAdmin();
-    const { refresh } = useAuth();
+    const { refresh, user } = useAuth();
     const { workspace, isShared, isOwner } = admin;
 
     const [name, setName] = useState('');
     const [inviteOpen, setInviteOpen] = useState(false);
     const [inviteEmail, setInviteEmail] = useState('');
-    const [confirmLeave, setConfirmLeave] = useState(false);
+    const [confirmLeave, setConfirmLeave] = useState<MemberShare[] | null>(null);
+    const [confirmRemove, setConfirmRemove] = useState<ConfirmRequest | null>(null);
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [roleEdited, setRoleEdited] = useState<{ role: WorkspaceRole | null } | null>(null);
     const [tab, setTab] = useState<TabId>('general');
@@ -91,6 +116,26 @@ export default function FeatureWorkspace() {
     }, [workspace?.name]);
 
     if (!workspace) return null;
+
+    const openLeave = (): void => {
+        void admin.memberShares(user?.id ?? 0).then(setConfirmLeave);
+    };
+
+    const askRemove = (member: { id: number; username: string }): void => {
+        void admin.memberShares(member.id).then((shares) =>
+            setConfirmRemove({
+                title: `Exclure « ${member.username} » ?`,
+                confirmLabel: 'Exclure',
+                description: (
+                    <>
+                        <p>Cette personne perdra l’accès à cet espace. Un membre pourra la réinviter.</p>
+                        {sharesNotice('Ses partages entre cet espace et les siens seront retirés :', shares)}
+                    </>
+                ),
+                onConfirm: () => void admin.removeMember(member.id)
+            })
+        );
+    };
 
     const nameChanged = name.trim() !== '' && name.trim() !== workspace.name;
 
@@ -215,7 +260,7 @@ export default function FeatureWorkspace() {
                                                 className={`${styles.actionBtn} ${styles.actionDanger}`}
                                                 title={`Exclure ${u.username}`}
                                                 aria-label={`Exclure ${u.username}`}
-                                                onClick={() => void admin.removeMember(u.id)}
+                                                onClick={() => askRemove(u)}
                                                 disabled={admin.busy}
                                             >
                                                 <span className='icon icon-x' />
@@ -372,7 +417,7 @@ export default function FeatureWorkspace() {
                                         Supprimer l’espace
                                     </Button>
                                 ) : (
-                                    <Button variant='danger' onClick={() => setConfirmLeave(true)}>
+                                    <Button variant='danger' onClick={openLeave}>
                                         Quitter l’espace
                                     </Button>
                                 )}
@@ -426,15 +471,25 @@ export default function FeatureWorkspace() {
                 }}
             />
 
+            <ConfirmDialog request={confirmRemove} busy={admin.busy} onClose={() => setConfirmRemove(null)} />
+
             <Dialog
-                open={confirmLeave}
-                onClose={() => setConfirmLeave(false)}
+                open={confirmLeave !== null}
+                onClose={() => setConfirmLeave(null)}
                 title={`Quitter « ${workspace.name} » ?`}
-                description='Vous perdrez l’accès à son contenu. Un membre pourra vous réinviter.'
+                description={
+                    <>
+                        <p>Vous perdrez l’accès à son contenu. Un membre pourra vous réinviter.</p>
+                        {sharesNotice(
+                            'Vos partages entre cet espace et les vôtres seront retirés :',
+                            confirmLeave ?? []
+                        )}
+                    </>
+                }
                 onSubmit={() => void admin.leave(() => void refresh())}
                 footer={
                     <>
-                        <Button variant='secondary' onClick={() => setConfirmLeave(false)}>
+                        <Button variant='secondary' onClick={() => setConfirmLeave(null)}>
                             Annuler
                         </Button>
                         <Button

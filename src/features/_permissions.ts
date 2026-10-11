@@ -22,6 +22,8 @@ const ACCESS_EXEMPT = new Set([
     'workspace.activate',
     'workspace.add',
     'workspace.leave',
+    // Pour soi-même ; pour un autre membre, `workspace.members` en première ligne du handler.
+    'workspace.memberShares',
     'workspace.delete',
     'workspace.roleList',
     'agent.unsubscribe',

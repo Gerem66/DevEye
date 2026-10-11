@@ -24,6 +24,11 @@ export interface ItemSharingRepo {
     /** Retire toutes les projections d'un élément, à sa suppression. */
     forgetItem(feature: string, itemId: string, homeWorkspaceId: number): Promise<void>;
     /**
+     * Les projections que ce compte a réglées entre cet espace et d'autres,
+     * dans les deux sens : ce qu'un départ de l'espace emporte avec lui.
+     */
+    sharedByUserAround(userId: number, workspaceId: number): Promise<ItemShareRow[]>;
+    /**
      * Les espaces reliés à celui-ci par au moins une projection de cette
      * feature, dans les deux sens : l'éventail de la diffusion live.
      */
@@ -137,6 +142,14 @@ export function itemSharingRepo(pool: Q): ItemSharingRepo {
             return r.rows.map((row) => row.id);
         },
 
+        async sharedByUserAround(userId, workspaceId) {
+            const r = await pool.query<ItemShareRow>(
+                `SELECT * FROM item_shares
+                 WHERE shared_by_user_id = ? AND (home_workspace_id = ? OR workspace_id = ?)`,
+                [userId, workspaceId, workspaceId]
+            );
+            return r.rows;
+        },
         async forgetItem(feature, itemId, homeWorkspaceId) {
             await pool.query('DELETE FROM item_shares WHERE feature = ? AND item_id = ? AND home_workspace_id = ?', [
                 feature,

@@ -158,6 +158,11 @@ Deux corollaires, gardés côté serveur :
   espace personnel pour lire par la fenêtre ce qui lui est fermé.
 - **on ne supprime pas depuis une fenêtre.** Retirer la projection, oui ;
   détruire l'élément, seulement depuis chez lui.
+- **un membre qui part emporte ses projections.** Exclu ou parti, il ne
+  répond plus de ce qu'il avait projeté vers cet espace, et ne doit plus lire
+  par une fenêtre ce qu'on vient de lui fermer : `workspace.removeMember` et
+  `workspace.leave` retirent ses projections dans les deux sens, nommées avant
+  dans la confirmation (`workspace.memberShares`).
 
 `share.set` traite **un espace par appel** : la case de l'écran est la
 commande, et un échec ne laisse pas les autres dans un état incertain.
