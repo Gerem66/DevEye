@@ -12,6 +12,33 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: readonly ChangelogEntry[] = [
     {
+        version: '0.25.0',
+        date: '2026-10-12',
+        changes: [
+            {
+                kind: 'added',
+                text: 'Sécurité : une connexion depuis un navigateur inconnu demande un code reçu par mail, puis par SMS si vous avez vérifié votre numéro ; « Faire confiance à ce navigateur » vous en dispense 90 jours, et l’onglet Sécurité liste ces navigateurs'
+            },
+            {
+                kind: 'added',
+                text: 'Sécurité : agir sur une machine (terminal, fichiers, conteneurs, paquets, CloudSync, appairage) demande la double authentification et un code de l’application saisi récemment, pendant un délai réglable dans Sécurité'
+            },
+            {
+                kind: 'added',
+                text: 'Espace de travail : rejoindre un espace passe par une invitation à accepter ou refuser depuis le menu des espaces, valable quatorze jours ; qui gère les membres voit les invitations en attente et les annule, et l’exclusion d’un membre liste les partages qu’il emporte'
+            },
+            {
+                kind: 'improved',
+                text: 'Liens courts : un bouton Actualiser relit les chiffres sans attendre la relecture automatique'
+            },
+            {
+                kind: 'fixed',
+                text: 'Sécurité : des sessions révoquées qui ne renaissent plus, des rôles qui ne dépassent jamais celui de leur auteur, des copies d’éléments sans mot de passe ni jeton, des secrets qui ne suivent plus une adresse changée, des consentements Google, Microsoft et bancaires qui restent dans votre session, et des pièces jointes de Mail, exports CSV, agents et pages publiques de Rendez-vous durcis'
+            },
+            { kind: 'fixed', text: 'Mail : un message dont la date est illisible ne bloque plus la relève de la boîte' }
+        ]
+    },
+    {
         version: '0.24.6',
         date: '2026-10-11',
         changes: [
