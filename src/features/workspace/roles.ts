@@ -10,7 +10,7 @@ import {
 } from '@deveye/types';
 import type { WorkspaceCapability, WorkspaceFeatureGrant, WorkspaceRole, WorkspaceRoleRow } from '@deveye/types';
 
-import { grantsFor, invalidateAccess } from '../_access';
+import { invalidateAccess, roleExceeds } from '../_access';
 import { validateGrantExtras } from '../_sdk/register';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import { parseJsonArray } from '@/Utils/json';
@@ -212,16 +212,8 @@ export const workspaceAssignRoleFeature: FeatureDefinition<
         }
         const role = input.roleId === null ? null : await ctx.db.workspaceRoles.findById(input.roleId, ctx.workspaceId);
         if (input.roleId !== null && !role) throw new FeatureError('not_found', 'Rôle introuvable');
-        // Un rôle attribué ne doit pas dépasser ce que l'appelant tient : sinon
-        // gérer les membres permettrait d'élever un complice, puis soi-même.
-        if (role && !ctx.isOwner && !ctx.can('workspace.roles')) {
-            const granted = grantsFor(false, role);
-            const exceeds =
-                [...granted.capabilities].some((c) => !ctx.can(c)) ||
-                [...granted.features].some(([f, level]) => !ctx.canFeature(f, level));
-            if (exceeds) {
-                throw new FeatureError('forbidden', 'Ce rôle accorde plus que le vôtre : attribution refusée');
-            }
+        if (role && !ctx.can('workspace.roles') && roleExceeds(ctx, role)) {
+            throw new FeatureError('forbidden', 'Ce rôle accorde plus que le vôtre : attribution refusée');
         }
 
         await ctx.db.workspaceRoles.assign(input.userId, ctx.workspaceId, input.roleId);

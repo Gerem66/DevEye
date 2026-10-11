@@ -23,6 +23,7 @@ import { moveFeatures } from './move';
 import { projectLinkFeatures } from './projectLinks';
 import { extraOverridesOf } from '@/db/repos/itemSharing';
 import { parseJsonArray } from '@/Utils/json';
+import { resolveExtras } from '@deveye/types/sdk';
 
 /**
  * Rendre un élément visible depuis un autre espace, et restreindre qui le voit.
@@ -44,16 +45,20 @@ async function itemGrantsManageableIn(
     ctx: FeatureContext,
     workspaceId: number,
     feature: FeatureId
-): Promise<{ allowed: boolean; exceptRoleId: number | null }> {
-    const denied = { allowed: false, exceptRoleId: null };
+): Promise<{ allowed: boolean; exceptRoleId: number | null; holds: (extra: string) => boolean }> {
+    const everything = { allowed: true, exceptRoleId: null, holds: () => true };
     const workspace = await ctx.db.workspaces.findById(workspaceId);
-    if (!workspace || workspace.kind !== 'shared') return denied;
-    if (workspace.owner_user_id === ctx.userId) return { allowed: true, exceptRoleId: null };
+    if (!workspace || workspace.kind !== 'shared') return { ...everything, allowed: false };
+    if (workspace.owner_user_id === ctx.userId) return everything;
     const role = await ctx.db.workspaceRoles.findForMember(ctx.userId, workspaceId);
     const grants = grantsFor(false, role);
-    if (grants.capabilities.has('workspace.roles')) return { allowed: true, exceptRoleId: null };
-    if (grants.itemPermissions.has(feature)) return { allowed: true, exceptRoleId: role?.id ?? null };
-    return denied;
+    if (grants.capabilities.has('workspace.roles')) return everything;
+    if (grants.itemPermissions.has(feature)) {
+        // Ce titre-ci n'accorde, élément par élément, que ce que le rôle tient.
+        const held = resolveExtras(moduleManifest(feature)?.extraPermissions, false, grants.extras.get(feature) ?? {});
+        return { allowed: true, exceptRoleId: role?.id ?? null, holds: (extra) => held.canExtra(extra) };
+    }
+    return { ...everything, allowed: false };
 }
 
 /** L'état complet, relu après chaque écriture plutôt que reconstruit. */
@@ -353,9 +358,15 @@ const grantSetFeature = defineFeature({
                 .filter((spec) => spec.type === 'toggle')
                 .map((spec) => spec.key)
         );
-        for (const key of Object.keys(input.extraOverrides ?? {})) {
+        for (const [key, value] of Object.entries(input.extraOverrides ?? {})) {
             if (!toggles.has(key)) {
                 throw new FeatureError('validation', `Permission inconnue « ${key} » pour « ${input.feature} »`);
+            }
+            if (value === true && !manageable.holds(key)) {
+                throw new FeatureError(
+                    'forbidden',
+                    `Votre rôle ne tient pas « ${key} » : vous ne pouvez pas l'accorder.`
+                );
             }
         }
 

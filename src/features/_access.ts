@@ -371,6 +371,37 @@ export function grantsFor(
     };
 }
 
+/**
+ * Ce rôle accorde-t-il plus que l'appelant ne tient ? Capacités, niveaux,
+ * canaux, réglage par élément et permissions propres : sans cette comparaison
+ * complète, gérer les membres permettrait d'élever un complice, puis soi-même.
+ */
+export function roleExceeds(
+    ctx: Pick<FeatureContext, 'isOwner' | 'can' | 'canFeature' | 'canChannels' | 'canManageItemGrants' | 'extrasFor'>,
+    role: WorkspaceRoleRow
+): boolean {
+    if (ctx.isOwner) return false;
+    const granted = grantsFor(false, role);
+    if ([...granted.capabilities].some((c) => !ctx.can(c))) return true;
+    if ([...granted.features].some(([f, level]) => !ctx.canFeature(f, level))) return true;
+    if ([...granted.channels].some((f) => !ctx.canChannels(f))) return true;
+    if ([...granted.itemPermissions].some((f) => !ctx.canManageItemGrants(f))) return true;
+    for (const [f, extras] of granted.extras) {
+        const specs = moduleManifest(f)?.extraPermissions ?? [];
+        const theirs = resolveExtras(specs, false, extras);
+        const mine = resolveExtras(specs, false, ctx.extrasFor(f));
+        for (const spec of specs) {
+            const exceeds =
+                spec.type === 'toggle'
+                    ? theirs.canExtra(spec.key) && !mine.canExtra(spec.key)
+                    : theirs.extraValue(spec.key) !== spec.default &&
+                      theirs.extraValue(spec.key) !== mine.extraValue(spec.key);
+            if (exceeds) return true;
+        }
+    }
+    return false;
+}
+
 export interface AccessResolver {
     /**
      * Résout l'espace visé. `undefined` → l'espace personnel de l'appelant.
