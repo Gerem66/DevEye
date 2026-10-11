@@ -101,6 +101,16 @@ export function domainUrlOf(host: string, slug: string): string {
     return slug === '' ? `https://${host}/` : `https://${host}/${slug}`;
 }
 
+/**
+ * Le seul nom de DevEye sous lequel un lien redirige : le domaine court quand
+ * il est posé, sinon l'adresse publique, jamais l'app. Celui qui diffuse un lien
+ * choisit l'adresse qu'il diffuse : un lien abusif ne doit pouvoir faire marquer
+ * par les navigateurs que ce nom-là.
+ */
+export function redirectHost(origins: SdkOrigins, shortHost: string | null = SHORT_HOST): string {
+    return shortHost ?? normaliseDomainHost(new URL(origins.public).host);
+}
+
 /** Les noms que DevEye sert lui-même : une destination qui y mène bouclerait. */
 export function instanceHosts(origins: SdkOrigins): string[] {
     const hosts = [origins.app, origins.public].map((origin) => normaliseDomainHost(new URL(origin).host));

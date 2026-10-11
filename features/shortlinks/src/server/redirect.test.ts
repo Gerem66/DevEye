@@ -166,6 +166,14 @@ describe('la redirection', () => {
         assert.equal((await m.get('abcdef')).status, 404);
     });
 
+    it('ne redirige ni sous l’app ni sous un nom de DevEye qui ne sert pas les liens', async () => {
+        const m = mount([linkRow({ id: 1, code: 'abcdef' })]);
+        assert.equal((await m.get('abcdef', { host: 'deveye.test' })).status, 404);
+        assert.equal((await m.get('abcdef+', { host: 'deveye.test' })).status, 404);
+        assert.equal((await m.post('/l/:code/deverrouiller', 'abcdef', {}, { host: 'deveye.test' })).status, 404);
+        assert.equal((await m.reportForm('abcdef')).status, 200);
+    });
+
     it('ne paraît pas sous le domaine d’un autre espace', async () => {
         const domains = [
             testDomain({ id: 5, host: 'go.exemple.fr', workspaceId: 1 }),

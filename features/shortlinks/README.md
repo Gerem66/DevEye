@@ -19,7 +19,7 @@ Un **lien** appartient à un espace. Il porte :
 
 - un **code** de six caractères tiré au sort (minuscules et chiffres, sans
   `0 o 1 l i` pour se recopier depuis une affiche sans hésiter), unique sur
-  toute l'instance : son adresse sur DevEye, valable à vie ;
+  toute l'instance : son adresse sur DevEye ;
 - facultativement, un **domaine de l'espace** et un **alias** libre sur ce
   domaine (`go.client.fr/promo`, alias vide = la racine du domaine) ;
 - un contenu scellé à l'étage ouvert : titre, destination commune,
@@ -54,19 +54,25 @@ Une requête `HEAD` est redirigée sans rien compter.
 
 ## Les adresses
 
-| Où                         | Adresse                       | Route                                          |
-| -------------------------- | ----------------------------- | ---------------------------------------------- |
-| Adresse publique           | `<origine publique>/l/<code>` | `publicRoutes`, `/l/:code`, servie à vie       |
-| Domaine court (facultatif) | `<SHORTLINKS_ORIGIN>/<code>`  | `hostRequest` sur l'hôte propre (`ownHosts`)   |
-| Domaine de l'espace        | `https://<domaine>/<alias>`   | `hostRequest` sur un domaine vérifié du module |
+| Où                                  | Adresse                       | Route                                          |
+| ----------------------------------- | ----------------------------- | ---------------------------------------------- |
+| Domaine court (`SHORTLINKS_ORIGIN`) | `<domaine court>/<code>`      | `hostRequest` sur l'hôte propre (`ownHosts`)   |
+| Sans domaine court                  | `<origine publique>/l/<code>` | `publicRoutes`, `/l/:code`                     |
+| Domaine de l'espace                 | `https://<domaine>/<alias>`   | `hostRequest` sur un domaine vérifié du module |
 
 L'adresse que l'interface donne est celle du domaine quand le lien en a une
-qui répond, sinon celle du domaine court, sinon celle sous `/l/`. Un lien
-distribué sous `/l/` continue de marcher après la pose d'un domaine court.
+qui répond, sinon celle du domaine court, sinon celle sous `/l/`.
 
-**Le domaine court est un nom à part**, ni l'app ni sa surface publique. Un
-lien de hameçonnage repéré par un navigateur peut faire marquer tout le nom
-qui le sert : sur un domaine dédié, l'app et les pages des clients n'en
+**Un seul nom de DevEye redirige** (`redirectHost`) : le domaine court quand il
+est posé, sinon l'adresse publique, jamais l'app. Celui qui diffuse un lien
+choisit l'adresse qu'il diffuse : si plusieurs noms de DevEye redirigeaient, un
+lien de hameçonnage passerait par le plus crédible, et c'est lui que les
+navigateurs marqueraient. Le domaine court posé, `/l/<code>` ne répond plus que
+sous lui : un domaine court se pose donc avant que des liens ne circulent sous
+l'adresse publique.
+
+**Le domaine court est un nom à part**, ni l'app ni sa surface publique : un
+lien abusif ne fait marquer que lui, et l'app et les pages des clients n'en
 souffrent pas. L'hôte le réserve comme ses propres noms : aucun espace ne peut
 le déclarer, et le proxy des domaines ne le route pas (il se route vers la
 surface publique dans le déploiement, voir `deploy/README.md`).

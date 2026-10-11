@@ -1,13 +1,19 @@
-import type { FeatureE2eEntry } from '@deveye/types/sdk/server';
+import type { FeatureE2eEntry, SdkOrigins } from '@deveye/types/sdk/server';
 
 import { SHORTLINKS_PATH, type Shortlink } from '../contracts/domain';
-import { SHORT_HOST } from './_shared';
+import { redirectHost, SHORT_HOST } from './_shared';
 import type { ShortlinksRepo } from './repo';
 
 const TARGET = 'https://example.com/arrivee';
 const PASSWORD = 'essai-de-bout-en-bout';
 
 const linkOf = (ctx: { state: Map<string, unknown> }) => ctx.state.get('link') as Shortlink;
+
+/** Le seul nom de DevEye sous lequel un lien redirige : la requête part vers l'écouteur, sous ce nom. */
+const asVisitor = (ctx: { origins: SdkOrigins }, headers: Record<string, string> = {}) => ({
+    host: redirectHost(ctx.origins),
+    ...headers
+});
 
 /**
  * Un lien de ce serveur même, suivi comme le ferait un visiteur : la
@@ -44,7 +50,9 @@ export const shortlinksE2e: FeatureE2eEntry<ShortlinksRepo> = {
                 {
                     label: 'Suivre le lien',
                     run: async (ctx) => {
-                        const reply = await ctx.fetch(`${SHORTLINKS_PATH}/${linkOf(ctx).code}`);
+                        const reply = await ctx.fetch(`${SHORTLINKS_PATH}/${linkOf(ctx).code}`, {
+                            headers: asVisitor(ctx)
+                        });
                         const location = reply.headers.location ?? '';
                         if (reply.status !== 302) throw new Error(`HTTP ${reply.status} au lieu d’une redirection`);
                         if (!location.startsWith(TARGET) || !location.includes('utm_source=essai')) {
@@ -56,7 +64,9 @@ export const shortlinksE2e: FeatureE2eEntry<ShortlinksRepo> = {
                 {
                     label: 'Voir l’aperçu',
                     run: async (ctx) => {
-                        const reply = await ctx.fetch(`${SHORTLINKS_PATH}/${linkOf(ctx).code}+`);
+                        const reply = await ctx.fetch(`${SHORTLINKS_PATH}/${linkOf(ctx).code}+`, {
+                            headers: asVisitor(ctx)
+                        });
                         if (reply.status !== 200 || !reply.body.includes('example.com')) {
                             throw new Error(`Aperçu en HTTP ${reply.status}, sans la destination`);
                         }
@@ -70,18 +80,18 @@ export const shortlinksE2e: FeatureE2eEntry<ShortlinksRepo> = {
                             id: link.id,
                             access: { password: { mode: 'set', value: PASSWORD }, expiresAt: null, maxVisits: null }
                         });
-                        const asked = await ctx.fetch(`${SHORTLINKS_PATH}/${link.code}`);
+                        const asked = await ctx.fetch(`${SHORTLINKS_PATH}/${link.code}`, { headers: asVisitor(ctx) });
                         if (asked.status !== 401)
                             throw new Error(`HTTP ${asked.status} au lieu de la page du mot de passe`);
                         const wrong = await ctx.fetch(`${SHORTLINKS_PATH}/${link.code}/deverrouiller`, {
                             method: 'POST',
-                            headers: { 'content-type': 'application/x-www-form-urlencoded' },
+                            headers: asVisitor(ctx, { 'content-type': 'application/x-www-form-urlencoded' }),
                             body: 'password=faux'
                         });
                         if (wrong.status !== 403) throw new Error(`Un mauvais mot de passe rend HTTP ${wrong.status}`);
                         const right = await ctx.fetch(`${SHORTLINKS_PATH}/${link.code}/deverrouiller`, {
                             method: 'POST',
-                            headers: { 'content-type': 'application/x-www-form-urlencoded' },
+                            headers: asVisitor(ctx, { 'content-type': 'application/x-www-form-urlencoded' }),
                             body: `password=${encodeURIComponent(PASSWORD)}`
                         });
                         if (right.status !== 303 || !(right.headers.location ?? '').startsWith(TARGET)) {

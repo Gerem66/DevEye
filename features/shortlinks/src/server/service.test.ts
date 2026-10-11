@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 
 import { createTestServiceDeps } from '@deveye/types/sdk/testing';
 
-import { DAY, dayOf, destinationOf, isExpired, now } from './_shared';
+import { DAY, dayOf, destinationOf, isExpired, now, redirectHost } from './_shared';
 import { linkRow, memoryRepo } from './_testing';
 import { createChecker, type CheckVerdict } from './checker';
 import { Counters, primaryLanguage } from './counters';
@@ -154,6 +154,12 @@ describe('les règles pures', () => {
             'https://apps.apple.com/1?utm_source=affiche&utm_campaign=ete'
         );
         assert.equal(destinationOf({ ...targets, default: 'javascript:alert(1)' }, utm, 'other'), null);
+    });
+
+    it('font rediriger un seul nom de DevEye : le domaine court posé, sinon l’adresse publique', () => {
+        const origins = { app: 'https://app.exemple.fr', public: 'https://api.exemple.fr:443', site: null };
+        assert.equal(redirectHost(origins, null), 'api.exemple.fr');
+        assert.equal(redirectHost(origins, 'dvy.fr'), 'dvy.fr');
     });
 
     it('disent un lien expiré par sa date ou ses visites, en attente comprises', () => {

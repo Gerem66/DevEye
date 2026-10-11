@@ -25,6 +25,7 @@ import {
     domainUrlOf,
     instanceHosts,
     isExpired,
+    redirectHost,
     now,
     openContent,
     SHORT_HOST,
@@ -51,10 +52,11 @@ import type { LinkRow, ShortlinksRepo } from './repo';
 import { sealReport } from './reports';
 
 /**
- * Les routes publiques : la redirection elle-même, sous `/l/<code>` sur les
- * adresses de DevEye, à la racine du domaine court (`<code>`) et sous l'alias
- * d'un domaine de l'espace (`<alias>`), plus l'aperçu (`+`), le mot de passe et
- * le signalement. Aucune session : un lien se désigne par son adresse seule.
+ * Les routes publiques : la redirection elle-même, à la racine du domaine
+ * court (`<code>`), sous `/l/<code>` de ce seul nom de DevEye (le domaine court,
+ * sinon l'adresse publique) et sous l'alias d'un domaine de l'espace
+ * (`<alias>`), plus l'aperçu (`+`), le mot de passe et le signalement. Aucune
+ * session : un lien se désigne par son adresse seule.
  *
  * Le chemin chaud ne touche la base qu'au premier passage d'un lien par
  * demi-minute : la ligne se garde en mémoire, oubliée à chaque écriture d'un
@@ -114,6 +116,7 @@ export interface Redirector {
 export function createRedirector(deps: FeatureServiceDeps<ShortlinksRepo>, counters: Counters): Redirector {
     const options: PageOptions = { siteUrl: deps.origins.site ?? '' };
     const ownHosts = instanceHosts(deps.origins);
+    const servingHost = redirectHost(deps.origins);
     const cache = new Map<string, Cached>();
     const loads = new Map<string, Promise<Resolved | null>>();
     /** Un oubli pendant une lecture rend son résultat périmé : il ne se range pas. */
@@ -188,12 +191,13 @@ export function createRedirector(deps: FeatureServiceDeps<ShortlinksRepo>, count
     }
 
     /**
-     * Sous un domaine de l'espace, ou sous une adresse de DevEye : sans quoi
-     * n'importe qui ferait paraître un lien sous le domaine d'un autre.
+     * Sous le nom de DevEye qui sert les liens, ou sous un domaine de l'espace :
+     * sans quoi n'importe qui ferait paraître un lien sous l'app, ou sous le
+     * domaine d'un autre.
      */
     async function servedHere(req: SdkPublicRequest, row: LinkRow): Promise<boolean> {
         const host = normaliseDomainHost(req.host ?? '');
-        if (ownHosts.includes(host)) return true;
+        if (host === servingHost) return true;
         const domain = host.length > 0 ? await deps.domains.findByHost(host) : null;
         return domain !== null && domain.verified && domain.workspaceId === row.workspace_id;
     }
