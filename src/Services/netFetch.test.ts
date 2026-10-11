@@ -19,6 +19,8 @@ describe('safeFetch', () => {
             'http://169.254.169.254/latest/meta-data/',
             'http://10.0.0.5/',
             'http://[::1]/',
+            'http://[::ffff:127.0.0.1]:3306/',
+            'http://[::ffff:169.254.169.254]/latest/meta-data/',
             'http://localhost/',
             'file:///etc/passwd',
             'javascript:alert(1)'
@@ -76,7 +78,7 @@ describe('publicLookup', () => {
 
 describe('assertAllowedOutboundHost', () => {
     it('refuse une IP littérale interne, qu’aucune résolution ne verrait passer', async () => {
-        for (const host of ['127.0.0.1', '10.0.0.5', '169.254.169.254', '::1', '[::1]']) {
+        for (const host of ['127.0.0.1', '10.0.0.5', '169.254.169.254', '::1', '[::1]', '::ffff:7f00:1']) {
             await assert.rejects(assertAllowedOutboundHost(host), UnsafeTargetError, host);
         }
         await assert.rejects(assertAllowedOutboundHost('localhost'), UnsafeTargetError);
@@ -91,6 +93,7 @@ describe('assertAllowedOutboundHost', () => {
         try {
             await assertAllowedOutboundHost('10.0.0.5');
             await assert.rejects(assertAllowedOutboundHost('169.254.169.254'), UnsafeTargetError);
+            await assert.rejects(assertAllowedOutboundHost('::ffff:a9fe:a9fe'), UnsafeTargetError);
         } finally {
             setAllowPrivateForTest(false);
         }

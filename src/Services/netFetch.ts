@@ -9,7 +9,7 @@
  * peut l'atteindre : l'app ne l'importe pas deux fois.
  */
 import { lookup as dnsLookup, type LookupAddress, type LookupOptions } from 'node:dns';
-import { isIP } from 'node:net';
+import { BlockList, isIP } from 'node:net';
 
 import { isPublicIp, isSafePublicUrl, NetRefused } from '@deveye/types/sdk/server';
 import { Agent, fetch as undiciFetch, Headers, type RequestInit, type Response } from 'undici';
@@ -28,9 +28,15 @@ export function setAllowPrivateForTest(value: boolean): void {
 }
 
 /** 169.254.0.0/16 et fe80::/10 : les métadonnées cloud y vivent, aucune cible légitime. */
+const LINK_LOCAL = new BlockList();
+LINK_LOCAL.addSubnet('169.254.0.0', 16, 'ipv4');
+LINK_LOCAL.addSubnet('fe80::', 10, 'ipv6');
+
+/** `check` juge aussi une IPv4 écrite en IPv6 (`::ffff:a9fe:a9fe`) sur les règles IPv4. */
 function isLinkLocal(address: string): boolean {
-    const ip = address.replace(/^\[|\]$/g, '').toLowerCase();
-    return /^169\.254\./.test(ip) || /^::ffff:169\.254\./.test(ip) || /^fe[89ab]/.test(ip);
+    const ip = address.replace(/^\[|\]$/g, '');
+    const family = isIP(ip);
+    return family !== 0 && LINK_LOCAL.check(ip, family === 4 ? 'ipv4' : 'ipv6');
 }
 
 /** L'adresse jointe est-elle permise par le réglage de l'instance ? */
