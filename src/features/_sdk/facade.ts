@@ -311,7 +311,7 @@ export function agentsFacade(gate: () => void): AgentsFacade {
         // enrôlée une destination de sauvegarde.
         requestFilesMutate: (deviceId, payload) => (gate(), sdkHub().requestFilesMutate(deviceId, payload)),
         requestFilesUpload: (deviceId, payload) => (gate(), sdkHub().requestFilesUpload(deviceId, payload)),
-        awaitFilesOp: (opId, timeoutMs) => (gate(), sdkHub().awaitFilesOp(opId, timeoutMs)),
+        awaitFilesOp: (deviceId, opId, timeoutMs) => (gate(), sdkHub().awaitFilesOp(deviceId, opId, timeoutMs)),
         cancelFilesOp: (opId) => (gate(), sdkHub().cancelFilesOp(opId)),
         buffered: (deviceId) => (gate(), sdkHub().agentBuffered(deviceId)),
         // Le déploiement par une machine : l'action attendue hors socket, et

@@ -153,11 +153,18 @@ fn is_root() -> bool {
 ///
 /// `config` grave un fichier d'enrôlement précis : l'appelant qui élève l'agent
 /// le connaît, le processus élevé ne peut que le deviner ([`invoking_config_path`]).
+///
+/// A system service runs on an enrollment root alone can write: it is moved
+/// into the system folder first (`system_dir::adopt`), and that path is baked.
 pub fn install(system: bool, config: Option<&str>, autostart: bool) -> Result<()> {
     if system {
         require_privilege()?;
+        let from = std::path::PathBuf::from(unit_config_path(config));
+        let adopted = crate::system_dir::adopt(&from)?;
+        install_impl(true, Some(&adopted.to_string_lossy()), autostart)?;
+    } else {
+        install_impl(false, config, autostart)?;
     }
-    install_impl(system, config, autostart)?;
     let scope = if system {
         crate::tray::autostart::Scope::System
     } else {
@@ -182,6 +189,12 @@ pub fn preflight(system: bool) -> Result<()> {
         require_privilege()?;
     }
     preflight_impl(system)
+}
+
+/// Point the installed system service at another config file, without stopping
+/// it: the service running now is this very agent.
+pub fn rebake_system_config(config: &str) -> Result<()> {
+    rebake_system_config_impl(config)
 }
 
 /// Restart the installed service, so the agent reads its config again.
@@ -385,6 +398,13 @@ mod imp {
         // Pose l'état voulu, et lève au passage un « désactivé » hérité d'un
         // `unload -w`.
         set_autostart_impl(system, autostart)
+    }
+
+    /// launchd reads the plist again at the next load.
+    pub fn rebake_system_config_impl(cfg: &str) -> Result<()> {
+        let path = system_plist();
+        std::fs::write(&path, plist_xml(cfg)?)
+            .with_context(|| format!("writing {}", path.display()))
     }
 
     /// Désactivé, un travail reste chargé s'il l'est déjà, mais ne se charge
@@ -710,6 +730,16 @@ mod imp {
         Ok(())
     }
 
+    /// The executable is staged too: a unit written by an older version may
+    /// still name one left in a home folder, which its owner could replace.
+    pub fn rebake_system_config_impl(cfg: &str) -> Result<()> {
+        let exe = stage_system_exe()?;
+        let path = system_unit();
+        std::fs::write(&path, unit_text(true, &exe, cfg))
+            .with_context(|| format!("writing {}", path.display()))?;
+        systemctl_bare(true, "daemon-reload")
+    }
+
     /// Une unité utilisateur ne démarre avec la machine que sous « linger ».
     /// Le désarmement le laisse en place : l'éteindre arrêterait le gestionnaire
     /// de l'utilisateur, et l'agent avec lui, hors de toute session ouverte.
@@ -963,6 +993,14 @@ mod imp {
         Ok(())
     }
 
+    pub fn rebake_system_config_impl(cfg: &str) -> Result<()> {
+        let tr = task_run(cfg)?;
+        run_checked(
+            Command::new("schtasks").args(["/Change", "/TN", TASK, "/RU", "SYSTEM", "/TR", &tr]),
+            "schtasks /Change",
+        )
+    }
+
     /// Désactivée, la tâche ne part plus sur son déclencheur ; l'instance en
     /// cours n'est pas arrêtée.
     pub fn set_autostart_impl(_system: bool, on: bool) -> Result<()> {
@@ -1073,8 +1111,8 @@ mod imp {
 
 use imp::{
     autostart_enabled_impl, disable_linger_impl, end_supervision_impl, install_impl,
-    installed_scope_impl, preflight_impl, remove_definition_impl, restart_impl, set_autostart_impl,
-    start_impl, stop_impl, uninstall_impl, uninstall_user_impl,
+    installed_scope_impl, preflight_impl, rebake_system_config_impl, remove_definition_impl,
+    restart_impl, set_autostart_impl, start_impl, stop_impl, uninstall_impl, uninstall_user_impl,
 };
 
 /// `launchctl print-disabled` liste `"<label>" => disabled` (ou `=> true` avant

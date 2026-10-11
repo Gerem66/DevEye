@@ -218,14 +218,25 @@ export class MonitorHub {
     private readonly archives = new Map<string, ArchiveFlow>();
     /** Les connexions TCP que les agents relaient pour les modules. */
     readonly tunnels = new AgentTunnels((deviceId) => this.agents.get(deviceId));
-    private readonly fileOpWaiters = new Map<string, (result: { ok: boolean; error?: string }) => void>();
+    /**
+     * Les attentes par `opId` portent l'appareil qui doit y répondre : un autre
+     * agent qui connaîtrait l'identifiant ne résout rien.
+     */
+    private readonly fileOpWaiters = new Map<
+        string,
+        { deviceId: string; done: (result: { ok: boolean; error?: string }) => void }
+    >();
     /**
      * Les actions Docker qu'un appelant sans socket attend (un déploiement) :
      * leurs lignes au fil de l'eau, puis leur verdict, par `opId`.
      */
     private readonly dockerOpWaiters = new Map<
         string,
-        { onLine?: (line: string) => void; done: (result: { ok: boolean; error?: string }) => void }
+        {
+            deviceId: string;
+            onLine?: (line: string) => void;
+            done: (result: { ok: boolean; error?: string }) => void;
+        }
     >();
     /** Les inventaires Docker attendus hors socket web, par appareil. */
     private readonly inventoryWaiters = new Map<string, ((inventory: DockerInventory) => void)[]>();
@@ -552,6 +563,7 @@ export class MonitorHub {
             }, options.timeoutMs);
             timer.unref();
             this.dockerOpWaiters.set(payload.opId, {
+                deviceId,
                 onLine: options.onLine,
                 done: (result) => {
                     clearTimeout(timer);
@@ -603,7 +615,8 @@ export class MonitorHub {
 
     /** Fan out one output line of a running action to a device's subscribers. */
     publishDockerProgress(payload: DeviceDockerProgressPush): void {
-        this.dockerOpWaiters.get(payload.opId)?.onLine?.(payload.line);
+        const waiter = this.dockerOpWaiters.get(payload.opId);
+        if (waiter?.deviceId === payload.deviceId) waiter.onLine?.(payload.line);
         this.publishToSubscribers(payload.deviceId, DEVICE_DOCKER_PROGRESS_EVENT, payload);
     }
 
@@ -611,7 +624,7 @@ export class MonitorHub {
     publishDockerDone(payload: DeviceDockerDonePush): void {
         this.endDockerOp(payload.deviceId, payload.opId);
         const waiter = this.dockerOpWaiters.get(payload.opId);
-        if (waiter) {
+        if (waiter?.deviceId === payload.deviceId) {
             this.dockerOpWaiters.delete(payload.opId);
             waiter.done({ ok: payload.ok, error: payload.error });
         }
@@ -691,9 +704,9 @@ export class MonitorHub {
     }
 
     /** La trame d'une session de terminal, à sa seule socket propriétaire. */
-    private sendToTermOwner(sessionId: string, command: string, data: unknown): void {
+    private sendToTermOwner(sessionId: string, deviceId: string, command: string, data: unknown): void {
         const owner = this.termSessions.get(sessionId);
-        if (!owner) return;
+        if (owner?.deviceId !== deviceId) return;
         const epoch = accessEpochNow();
         if (!this.mayReceive(owner.socket, owner.deviceId, epoch)) return;
         owner.socket.send(JSON.stringify({ command, payload: { ok: true, data } }));
@@ -701,12 +714,13 @@ export class MonitorHub {
 
     /** A chunk of terminal output, to the session's owner only. */
     publishTermOutput(payload: DeviceTermOutputPush): void {
-        this.sendToTermOwner(payload.sessionId, DEVICE_TERM_OUTPUT_EVENT, payload);
+        this.sendToTermOwner(payload.sessionId, payload.deviceId, DEVICE_TERM_OUTPUT_EVENT, payload);
     }
 
     /** A terminal session-end, to the session's owner only. */
     publishTermExit(payload: DeviceTermExitPush): void {
-        this.sendToTermOwner(payload.sessionId, DEVICE_TERM_EXIT_EVENT, payload);
+        if (this.termSessions.get(payload.sessionId)?.deviceId !== payload.deviceId) return;
+        this.sendToTermOwner(payload.sessionId, payload.deviceId, DEVICE_TERM_EXIT_EVENT, payload);
         this.termSessions.delete(payload.sessionId);
     }
 
@@ -750,9 +764,9 @@ export class MonitorHub {
         // Le verdict part aux abonnés et à qui l'attendait par promesse : une
         // sauvegarde lancée depuis un écran doit débloquer le moteur et se voir.
         const waiter = this.fileOpWaiters.get(payload.opId);
-        if (waiter) {
+        if (waiter?.deviceId === payload.deviceId) {
             this.fileOpWaiters.delete(payload.opId);
-            waiter({ ok: payload.ok, error: payload.error });
+            waiter.done({ ok: payload.ok, error: payload.error });
         }
         this.publishToSubscribers(payload.deviceId, DEVICE_FILES_OP_EVENT, payload);
     }
@@ -762,16 +776,19 @@ export class MonitorHub {
      * L'échéance est nécessaire : un agent déconnecté en plein dépôt n'enverra
      * jamais de verdict.
      */
-    awaitFilesOp(opId: string, timeoutMs: number): Promise<{ ok: boolean; error?: string }> {
+    awaitFilesOp(deviceId: string, opId: string, timeoutMs: number): Promise<{ ok: boolean; error?: string }> {
         return new Promise((resolve) => {
             const timer = setTimeout(() => {
                 this.fileOpWaiters.delete(opId);
                 resolve({ ok: false, error: "L'agent n'a pas répondu dans le délai imparti." });
             }, timeoutMs);
             timer.unref();
-            this.fileOpWaiters.set(opId, (result) => {
-                clearTimeout(timer);
-                resolve(result);
+            this.fileOpWaiters.set(opId, {
+                deviceId,
+                done: (result) => {
+                    clearTimeout(timer);
+                    resolve(result);
+                }
             });
         });
     }

@@ -188,7 +188,7 @@ export class DeviceSink implements BackupSink {
 
     private async runOp(send: (opId: string) => boolean): Promise<void> {
         const opId = this.opId();
-        const waiter = this.hub.awaitFilesOp(opId, DeviceSink.OP_TIMEOUT_MS);
+        const waiter = this.hub.awaitFilesOp(this.deviceId, opId, DeviceSink.OP_TIMEOUT_MS);
         if (!send(opId)) {
             this.hub.cancelFilesOp(opId);
             throw new Error(`L'appareil « ${this.deviceName} » est hors ligne.`);
@@ -231,7 +231,7 @@ export class DeviceSink implements BackupSink {
         // La promesse est armée AVANT la première trame : l'agent ne répond
         // qu'au dernier morceau — ou au premier échec — et une réponse arrivée
         // avant qu'on écoute serait perdue.
-        const verdict = this.hub.awaitFilesOp(opId, DeviceSink.TRANSFER_TIMEOUT_MS);
+        const verdict = this.hub.awaitFilesOp(this.deviceId, opId, DeviceSink.TRANSFER_TIMEOUT_MS);
         try {
             for await (const chunk of source) {
                 pending.push(chunk);
@@ -309,7 +309,7 @@ export class DeviceSink implements BackupSink {
                 this.hub.requestFilesMutate(this.deviceId, { opId, op: 'mkdir', path: this.dir, dest: undefined })
             );
             const opId = this.opId();
-            const verdict = this.hub.awaitFilesOp(opId, DeviceSink.OP_TIMEOUT_MS);
+            const verdict = this.hub.awaitFilesOp(this.deviceId, opId, DeviceSink.OP_TIMEOUT_MS);
             if (
                 !this.hub.requestFilesUpload(this.deviceId, {
                     opId,

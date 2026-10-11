@@ -49,8 +49,11 @@ export interface DevicesRepo {
     countActiveInWorkspaces(workspaceIds: readonly number[]): Promise<number>;
     /** Finalise a deletion: archive the device (its history is kept, frozen). */
     archive(id: string): Promise<void>;
-    /** Abort a deletion after a self-destruct failure: restore status + record why. */
-    failDeletion(id: string, message: string): Promise<void>;
+    /**
+     * Abort a deletion after a self-destruct failure: restore status + record
+     * why. Only a device awaiting deletion: `false` for any other.
+     */
+    failDeletion(id: string, message: string): Promise<boolean>;
 }
 
 export function devicesRepo(pool: Q): DevicesRepo {
@@ -164,13 +167,14 @@ export function devicesRepo(pool: Q): DevicesRepo {
             );
         },
         async failDeletion(id, message) {
-            await pool.query(
+            const res = await pool.query(
                 `UPDATE devices
                  SET status = COALESCE(status_before_delete, 'active'),
                      status_before_delete = NULL, delete_error = ?
-                 WHERE id = ?`,
+                 WHERE id = ? AND status = 'pending_deletion'`,
                 [message.slice(0, 255), id]
             );
+            return res.rowCount === 1;
         }
     };
 }

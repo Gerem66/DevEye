@@ -183,9 +183,9 @@ fn confirm(
 /// ce que `dirs::config_dir()` rend pour l'utilisateur courant, appliqué à un
 /// autre foyer : celui de l'appelant derrière un `sudo`.
 #[cfg(target_os = "linux")]
-const CONFIG_SUBPATH: &str = ".config/deveye";
+pub(crate) const CONFIG_SUBPATH: &str = ".config/deveye";
 #[cfg(target_os = "macos")]
-const CONFIG_SUBPATH: &str = "Library/Application Support/deveye";
+pub(crate) const CONFIG_SUBPATH: &str = "Library/Application Support/deveye";
 
 /// Tous les dossiers de config à balayer : deux quand le retrait tourne élevé,
 /// `dirs::config_dir()` suivant `$HOME`, que `sudo` et `pkexec` réécrivent en
@@ -198,6 +198,9 @@ fn config_dirs() -> Vec<PathBuf> {
     #[cfg(unix)]
     if let Some(home) = service::invoking_home() {
         candidates.push(home.join(CONFIG_SUBPATH));
+    }
+    if crate::config::privileged() {
+        candidates.push(crate::system_dir::dir());
     }
 
     // Dédoublonnage par chemin résolu : sur un système ostree `/home` est un
@@ -240,7 +243,7 @@ fn share_roots(dirs: &[PathBuf]) -> Vec<PathBuf> {
     roots
 }
 
-fn sync_index_files(dir: &Path) -> Vec<PathBuf> {
+pub(crate) fn sync_index_files(dir: &Path) -> Vec<PathBuf> {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return Vec::new();
     };

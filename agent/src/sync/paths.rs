@@ -228,7 +228,8 @@ const DENIED_ROOTS: &[&str] = &[
     "/dev",
     "/run",
     "/var/lib",
-    "/root/.ssh",
+    "/var/spool",
+    "/root",
 ];
 #[cfg(target_os = "macos")]
 const DENIED_ROOTS: &[&str] = &[
@@ -329,7 +330,99 @@ pub fn root_problem(
             ));
         }
     }
+    sensitive_dir(&real).map(|dir| {
+        format!("« {dir} » ouvre la machine, refusé comme partage (pour l'ouvrir quand même : `sync_roots` dans agent.toml)")
+    })
+}
+
+/// Where a write from the server would become access to the machine or code run
+/// on it: an authorized key (`.ssh`), a program started at login (XDG
+/// autostart, `Library/LaunchAgents`, the Windows Startup folder, a PowerShell
+/// profile) or by the account's service manager (`.config/systemd`). Anywhere
+/// in the path, share root included: a share may hold and send these, the
+/// machine never installs them from the server.
+const SENSITIVE_DIRS: &[&[&str]] = &[
+    &[".ssh"],
+    &[".config", "autostart"],
+    &[".config", "systemd"],
+    &[".config", "fish"],
+    &["Library", "LaunchAgents"],
+    &["Start Menu", "Programs", "Startup"],
+    &["WindowsPowerShell"],
+    &["Documents", "PowerShell"],
+];
+
+/// What a shell reads when it starts, refused right inside a home folder.
+const SHELL_STARTUP_FILES: &[&str] = &[
+    ".bashrc",
+    ".bash_profile",
+    ".bash_login",
+    ".bash_logout",
+    ".profile",
+    ".zshrc",
+    ".zprofile",
+    ".zshenv",
+    ".zlogin",
+    ".login",
+    ".cshrc",
+    ".tcshrc",
+];
+
+/// The folders that hold the accounts' homes, plus root's own.
+const HOME_PARENTS: &[&str] = &["/home", "/var/home", "/Users"];
+const ROOT_HOME: &str = "/root";
+
+/// The [`SENSITIVE_DIRS`] entry `path` goes through, if any.
+fn sensitive_dir(path: &Path) -> Option<String> {
+    let names: Vec<String> = path
+        .components()
+        .filter_map(|c| match c {
+            Component::Normal(os) => Some(os.to_string_lossy().into_owned()),
+            _ => None,
+        })
+        .collect();
+    for pattern in SENSITIVE_DIRS {
+        let hit = names.windows(pattern.len()).any(|window| {
+            window
+                .iter()
+                .zip(pattern.iter())
+                .all(|(name, wanted)| name.eq_ignore_ascii_case(wanted))
+        });
+        if hit {
+            return Some(pattern.join("/"));
+        }
+    }
     None
+}
+
+/// Why the server may not write at `dest`, `None` when it may (see
+/// [`SENSITIVE_DIRS`] and [`SHELL_STARTUP_FILES`]).
+pub fn write_problem(dest: &Path) -> Option<String> {
+    if let Some(dir) = sensitive_dir(dest) {
+        return Some(format!(
+            "« {dir} » : cette machine n'y écrit jamais ce qui vient du serveur"
+        ));
+    }
+    let file = dest.file_name()?.to_string_lossy();
+    let in_home = dest.parent().is_some_and(|parent| {
+        parent == Path::new(ROOT_HOME)
+            || parent
+                .parent()
+                .is_some_and(|above| HOME_PARENTS.iter().any(|h| above == Path::new(h)))
+    });
+    (in_home && SHELL_STARTUP_FILES.contains(&file.as_ref())).then(|| {
+        format!("« {file} » se lance avec le shell : cette machine ne le reçoit jamais du serveur")
+    })
+}
+
+/// [`confined_join`] for a path the server is about to write: what
+/// [`write_problem`] refuses never reaches the disk.
+pub fn writable_join(root: &Path, rel_path: &str) -> Result<PathBuf> {
+    let joined = confined_join(root, rel_path)?;
+    if let Some(problem) = write_problem(&joined) {
+        bail!("écriture refusée : {problem}");
+    }
+    Ok(joined)
 }
 
 /// [`safe_join`], puis la garantie que le chemin obtenu est réellement sous la
@@ -357,6 +450,35 @@ pub fn confined_join(root: &Path, rel_path: &str) -> Result<PathBuf> {
 mod tests {
     use super::*;
 
+    #[cfg(unix)]
+    #[test]
+    fn the_server_never_writes_where_a_file_opens_the_machine() {
+        for refused in [
+            "/home/u/.ssh/authorized_keys",
+            "/srv/share/.ssh/authorized_keys",
+            "/home/u/.config/autostart/x.desktop",
+            "/home/u/.config/systemd/user/x.service",
+            "/Users/u/Library/LaunchAgents/x.plist",
+            "/home/u/.bashrc",
+            "/var/home/u/.profile",
+            "/root/.zshrc",
+        ] {
+            assert!(write_problem(Path::new(refused)).is_some(), "{refused}");
+        }
+        for fine in [
+            "/home/u/Docs/.bashrc",
+            "/home/u/Docs/notes.txt",
+            "/home/u/.config/app/settings.json",
+            "/home/u/sshfiles/key.pub",
+        ] {
+            assert!(write_problem(Path::new(fine)).is_none(), "{fine}");
+        }
+
+        let share = tempfile::tempdir().unwrap();
+        assert!(writable_join(share.path(), ".ssh/authorized_keys").is_err());
+        assert!(writable_join(share.path(), "docs/a.txt").is_ok());
+    }
+
     #[cfg(all(unix, not(target_os = "macos")))]
     #[test]
     fn root_problem_denies_system_dirs() {
@@ -382,6 +504,14 @@ mod tests {
             );
         }
         assert!(root_problem("/data/../etc", &[], None).is_some());
+        for denied in [
+            "/root",
+            "/root/Documents",
+            "/var/spool/cron",
+            "/home/u/.ssh",
+        ] {
+            assert!(root_problem(denied, &[], None).is_some(), "{denied}");
+        }
 
         assert!(
             root_problem("/run/media/u/USB", &[], None).is_none(),

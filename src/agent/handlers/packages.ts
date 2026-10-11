@@ -7,21 +7,22 @@ import { ack, type AgentSession, type PayloadOf } from './session';
  * one `pkg.count` per managed tool, live `pkg.progress` lines, terminal
  * `pkg.done`). All are fanned out to the device's subscribed user sockets;
  * only the start/end frames are acked (progress is a fire-and-forget stream,
- * so it isn't, to avoid ack flooding).
+ * so it isn't, to avoid ack flooding). The device is the session's, whatever
+ * the frame names: an agent speaks for its own machine only.
  */
 
 export function handlePkgListResult(s: AgentSession, payload: PayloadOf<typeof AGENT_PKG_LIST_RESULT>): void {
-    s.hub.publishPackageList(payload);
+    s.hub.publishPackageList({ ...payload, deviceId: s.device.id });
     ack(s, payload.managers.length);
 }
 
 export function handlePkgCount(s: AgentSession, payload: PayloadOf<typeof AGENT_PKG_COUNT>): void {
-    s.hub.publishPackageCount(payload);
+    s.hub.publishPackageCount({ ...payload, deviceId: s.device.id });
     ack(s, 1);
 }
 
 export function handlePkgProgress(s: AgentSession, payload: PayloadOf<typeof AGENT_PKG_PROGRESS>): void {
-    s.hub.publishPackageProgress(payload);
+    s.hub.publishPackageProgress({ ...payload, deviceId: s.device.id });
 }
 
 export function handlePkgDone(s: AgentSession, payload: PayloadOf<typeof AGENT_PKG_DONE>): void {
@@ -29,7 +30,7 @@ export function handlePkgDone(s: AgentSession, payload: PayloadOf<typeof AGENT_P
     // ré-interrogent la liste aussitôt, et elle doit déjà dire « plus rien en
     // cours ».
     s.hub.endUpgrade(s.device.id, payload.manager);
-    s.hub.publishPackageDone(payload);
+    s.hub.publishPackageDone({ ...payload, deviceId: s.device.id });
     s.audit.record({
         source: 'agent',
         category: 'device',

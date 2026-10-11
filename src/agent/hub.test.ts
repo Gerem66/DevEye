@@ -227,3 +227,43 @@ describe('MonitorHub : tunnel TCP', () => {
         await assert.rejects(new MonitorHub().tunnels.open(DEVICE, { host: '127.0.0.1', port: 5432 }), /pas connectée/);
     });
 });
+
+describe('MonitorHub : une machine ne répond que pour elle-même', () => {
+    it('le verdict d’une opération de fichier ne vient que de sa machine', async () => {
+        const hub = new MonitorHub();
+        const waiting = hub.awaitFilesOp(DEVICE, 'op-f', 1000);
+        hub.publishFilesOp({ deviceId: 'dev-other', opId: 'op-f', op: 'mkdir', ok: true });
+        hub.publishFilesOp({ deviceId: DEVICE, opId: 'op-f', op: 'mkdir', ok: false, error: 'refus' });
+        assert.deepEqual(await waiting, { ok: false, error: 'refus' });
+    });
+
+    it('le verdict d’une action Docker ne vient que de sa machine', async () => {
+        const hub = new MonitorHub();
+        const agent = fakeAgent();
+        hub.agentOnline(DEVICE, agent.socket);
+        const lines: string[] = [];
+        const verdict = hub.runDockerOp(
+            DEVICE,
+            { opId: 'op-d', engine: 'docker', action: 'restart', target: 'c1' },
+            { timeoutMs: 1000, onLine: (line) => lines.push(line) }
+        );
+        hub.publishDockerProgress({ deviceId: 'dev-other', opId: 'op-d', line: 'faux' });
+        hub.publishDockerDone({ deviceId: 'dev-other', opId: 'op-d', action: 'restart', ok: true });
+        hub.publishDockerProgress({ deviceId: DEVICE, opId: 'op-d', line: 'vrai' });
+        hub.publishDockerDone({ deviceId: DEVICE, opId: 'op-d', action: 'restart', ok: false, error: 'non' });
+        assert.deepEqual(await verdict, { ok: false, error: 'non' });
+        assert.deepEqual(lines, ['vrai']);
+    });
+
+    it('la fin d’une session de terminal ne vient que de sa machine', () => {
+        const hub = new MonitorHub();
+        const agent = fakeAgent();
+        const viewer = fakeAgent();
+        hub.agentOnline(DEVICE, agent.socket);
+        assert.ok(hub.requestTermOpen(viewer.socket, DEVICE, { sessionId: 's-1', cols: 80, rows: 24 }));
+        hub.publishTermExit({ deviceId: 'dev-other', sessionId: 's-1', code: 0 });
+        assert.ok(hub.ownsTermSession(viewer.socket, 's-1'));
+        hub.publishTermExit({ deviceId: DEVICE, sessionId: 's-1', code: 0 });
+        assert.ok(!hub.ownsTermSession(viewer.socket, 's-1'));
+    });
+});

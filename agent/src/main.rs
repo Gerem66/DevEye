@@ -28,6 +28,7 @@ mod service;
 mod sockets;
 mod state;
 mod sync;
+mod system_dir;
 mod terminal;
 mod tray;
 mod tunnel;
@@ -324,6 +325,18 @@ fn service_cmd(action: ServiceCmd) -> Result<()> {
         ServiceCmd::Uninstall => {
             service::uninstall()?;
             println!("✓ Service désinstallé.");
+            // The enrollment goes back to the account removing the system
+            // service, where `service install --user` will look for it.
+            if config::privileged() {
+                match system_dir::release() {
+                    Ok(Some(path)) => println!("✓ Enrollment handed back: {}", path.display()),
+                    Ok(None) => {}
+                    Err(e) => println!(
+                        "The enrollment stays in {}: {e:#}",
+                        system_dir::dir().display()
+                    ),
+                }
+            }
             Ok(())
         }
         ServiceCmd::Enable => service_autostart(true),
@@ -392,6 +405,9 @@ async fn run(
     }
 
     link::ensure_linked(&link, crate::managed()).await?;
+    if config::privileged() {
+        system_dir::secure_for_run(crate::managed())?;
+    }
     let mut config = Config::load().context("loading config (run `link` first)")?;
     link::tighten(&mut config, &link)?;
     let transport = config.check_transport()?;
@@ -533,6 +549,10 @@ pub(crate) fn kill_process(pid: &str) -> Result<()> {
 
 fn status() {
     if !Config::exists() {
+        if system_service_only() {
+            println!("The agent runs as a system service, enrolled for root alone. Run: sudo deveye-agent status");
+            return;
+        }
         println!("Not enrolled. Run: deveye-agent link <code>");
         return;
     }
@@ -618,6 +638,12 @@ fn status() {
         status_section("Local policy");
         status_row("Refused", &refused.join(", "));
     }
+}
+
+/// An ordinary account asking about an agent enrolled as a system service:
+/// the enrollment is root's alone.
+pub(crate) fn system_service_only() -> bool {
+    !config::privileged() && service::installed_scope() == service::ServiceScope::System
 }
 
 /// A `status` section header.

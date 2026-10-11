@@ -217,7 +217,10 @@ fn set_autostart(on: bool) -> Result<crate::elevate::Outcome> {
     use crate::service::{self, ServiceScope};
     let privileged = crate::report::is_privileged();
     match service::installed_scope() {
-        ServiceScope::None if on => service::install(privileged, None, true)?,
+        ServiceScope::None if on => {
+            let config = crate::config::Config::path();
+            service::install(privileged, Some(&config.to_string_lossy()), true)?
+        }
         ServiceScope::None => {}
         ServiceScope::System if !privileged => return Ok(Outcome::NeedsManual),
         scope => service::set_autostart(scope == ServiceScope::System, on)?,

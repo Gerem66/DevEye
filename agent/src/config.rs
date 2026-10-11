@@ -343,10 +343,25 @@ pub enum Transport {
     PlaintextRemote,
 }
 
+/// Whether this process runs as root (an elevated token on Windows). Asked
+/// once: on Windows the answer spawns a process.
+pub fn privileged() -> bool {
+    static PRIVILEGED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *PRIVILEGED.get_or_init(crate::report::is_privileged)
+}
+
 impl Config {
+    /// `$DEVEYE_CONFIG`, else the system service's enrollment for a privileged
+    /// process (so `sudo deveye-agent policy` reaches it), else this account's.
     pub fn path() -> PathBuf {
         if let Ok(p) = std::env::var("DEVEYE_CONFIG") {
             return PathBuf::from(p);
+        }
+        if privileged() {
+            let system = crate::system_dir::config_path();
+            if system.exists() {
+                return system;
+            }
         }
         dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("."))

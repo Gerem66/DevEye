@@ -36,7 +36,7 @@ use crate::ownership::adopt_owner;
 use crate::protocol::SyncPushResume;
 use crate::sync::e2e::{self, ContentHasher, ShareKeys, TagDigest, Unsealer, BLOCK, NONCE_LEN};
 use crate::sync::index_cache::IndexCache;
-use crate::sync::paths::confined_join;
+use crate::sync::paths::{confined_join, writable_join};
 use crate::sync::scanner::hash_file;
 use crate::sync::{error_text, Keepalive, SyncEvent};
 
@@ -893,6 +893,8 @@ fn open_partial(
     keys: Option<&Arc<ShareKeys>>,
     keepalive: &mut Keepalive,
 ) -> Result<ApplyState, ApplyFailure> {
+    // Refused before a single byte: the install would refuse it anyway.
+    writable_join(root, &frame.rel_path).map_err(ApplyFailure::corrupt)?;
     // Named by HASH, not by `opId`: that is what lets the next cycle find it.
     let tmp_path = partial_path(root, &frame.expected_hash).map_err(ApplyFailure::retry)?;
     let held = resumable_prefix(&tmp_path, frame.resume_from, keys.map(|k| &**k), keepalive)
@@ -949,7 +951,7 @@ fn install(
     tmp_path: &Path,
     frame: &ApplyFrame,
 ) -> Result<(), ApplyFailure> {
-    let dest = confined_join(root, &frame.rel_path).map_err(ApplyFailure::retry)?;
+    let dest = writable_join(root, &frame.rel_path).map_err(ApplyFailure::retry)?;
 
     // Overwrite guard: a target that changed since the scan behind this
     // download holds an unsynced local edit. Refuse the install; the next scan
@@ -1080,7 +1082,7 @@ fn create_parents_owned(root: &Path, dest: &Path) -> Result<()> {
 /// Si le chemin existe, on ne touche QUE le mode, quelle que soit sa nature ;
 /// un fichier absent arrive toujours par `applyChunk` ou `applyLocal`.
 pub fn apply_dir(root: &Path, rel_path: &str, kind: &str, mode: Option<u32>) -> Result<()> {
-    let dest = confined_join(root, rel_path)?;
+    let dest = writable_join(root, rel_path)?;
     if std::fs::symlink_metadata(&dest).is_err() {
         // Un `chmod` sur un FICHIER momentanément absent ne doit pas faire
         // naître un dossier à sa place : le planner écarterait ensuite ce chemin
@@ -1140,7 +1142,7 @@ pub fn apply_local(
     let (hash, size, keys) = content;
     let src = verified_source(root, source_rel_path, hash, size, keys, keepalive)?;
 
-    let dest = confined_join(root, rel_path)?;
+    let dest = writable_join(root, rel_path)?;
     // Same overwrite guard as a download: a local edit since the scan is not ours to erase.
     if let Ok(meta) = std::fs::symlink_metadata(&dest) {
         if meta.is_file() && !unchanged_since_scan(caches, share_id, rel_path, &meta) {
@@ -1194,7 +1196,7 @@ pub fn move_file(
     let (hash, size, keys) = content;
     let src = verified_source(root, from_rel_path, hash, size, keys, keepalive)?;
 
-    let dest = confined_join(root, rel_path)?;
+    let dest = writable_join(root, rel_path)?;
     if std::fs::symlink_metadata(&dest).is_ok() {
         bail!("la cible existe déjà");
     }

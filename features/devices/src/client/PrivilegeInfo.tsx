@@ -73,14 +73,15 @@ export function PrivilegeInfo({ agent, platform }: { agent: AgentInfo | null; pl
                     <p>
                         Pour des raisons de sécurité, l&apos;agent <b>ne peut pas s&apos;élever lui-même</b> à distance
                         depuis DevEye (ce serait une porte d&apos;escalade de privilèges). L&apos;élévation se fait sur
-                        la machine : arrêtez l&apos;agent puis relancez-le ainsi —
+                        la machine : arrêtez l&apos;agent puis installez-le en service système, lancé en {elevatedWord}{' '}
+                        dès le démarrage :
                     </p>
                     <pre>
                         <code>{relaunch}</code>
                     </pre>
                     <p>
-                        Idéalement, installez-le en service système lancé en {elevatedWord} (par ex. une unité systemd
-                        sur Linux) pour qu&apos;il démarre élevé au boot.
+                        Son enrôlement passe alors dans un dossier réservé au système : aucun autre compte de la machine
+                        ne peut plus changer ce que l&apos;agent accepte.
                     </p>
                 </>
             )}
@@ -100,8 +101,8 @@ export function PrivilegeInfo({ agent, platform }: { agent: AgentInfo | null; pl
 function relaunchCommand(platform: DevicePlatform): string {
     switch (platform) {
         case 'windows':
-            return 'deveye-agent stop\n# Ouvrez un terminal « En tant qu’administrateur », puis :\ndeveye-agent run --detach';
+            return 'deveye-agent stop\n# Ouvrez un terminal « En tant qu’administrateur », puis :\ndeveye-agent service install --system';
         default:
-            return 'deveye-agent stop\nsudo deveye-agent run --detach';
+            return 'deveye-agent stop\nsudo deveye-agent service install --system';
     }
 }

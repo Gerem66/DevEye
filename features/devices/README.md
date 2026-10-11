@@ -369,6 +369,8 @@ Statuts (`devices.status`) : `pending`, `active`, `pending_deletion`,
       `token_hash=''`).
     - En cas d'échec (`ok:false`) : `failDeletion` restaure le statut précédent et
       stocke `delete_error` (affiché sur la fiche). La suppression est **interrompue**.
+      Seul un appareil en attente de suppression change ainsi : un échec que
+      personne n'a demandé ne rend pas « actif » un appareil archivé.
     - Annulable (`devices.cancelDelete`) tant que l'agent ne s'est pas reconnecté.
 - **Archive** : l'appareil n'est plus gérable mais reste **consultable
   en lecture seule** (voyage temporel), rangé dans le groupe « Archivés » de la

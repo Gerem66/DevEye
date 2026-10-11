@@ -1480,12 +1480,16 @@ pub enum ServerMessage {
 
 /// The orders that must carry the server's signature (mirrors
 /// `SIGNED_AGENT_COMMANDS` in @deveye/types): what runs code, writes or deletes
-/// files, changes the agent's privileges or its life, drives its containers, or
-/// reaches into its network.
-pub const SIGNED_COMMANDS: [&str; 10] = [
+/// files, reads their content, changes the agent's privileges or its life,
+/// drives its containers, reaches into its network, or picks the folders
+/// CloudSync writes to.
+pub const SIGNED_COMMANDS: [&str; 13] = [
     "term.open",
     "files.mutate",
     "files.upload",
+    "files.download",
+    "files.archive",
+    "sync.config",
     "agent.service",
     "agent.power",
     "agent.destroy",

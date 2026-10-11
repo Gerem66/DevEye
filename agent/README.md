@@ -249,9 +249,23 @@ a clone take over its sibling's record.
 ### System scope
 
 A system service (`service install --system`, or `link --autostart` as root)
-differs from a per-user one in two ways that the code handles for you:
+differs from a per-user one in three ways that the code handles for you:
 
-1. **The elevated process has root's `$HOME`.** `pkexec` (Linux), `osascript …
+1. **Its enrollment lives where only root can write.** The config says which
+   server the agent trusts and which key signs its orders: a root agent reading
+   it from a folder an ordinary account can write would hand root to that
+   account. `service install --system` therefore moves the enrollment
+   (`agent.toml`, `sync-device.key`, the scan caches) to `/var/lib/deveye`
+   (macOS: `/Library/Application Support/deveye`; Windows:
+   `%ProgramData%\deveye`, SYSTEM and Administrators only) and bakes that path.
+   A privileged agent refuses to run on a file that any ordinary account, or any
+   folder above it, could rewrite. `sudo deveye-agent service uninstall` hands
+   the enrollment back to the calling account, where `service install --user`
+   finds it. A system service installed by an older version, whose unit names a
+   config in a home folder, moves it there itself at its first start and
+   rewrites its unit.
+
+2. **The elevated process has root's `$HOME`.** `pkexec` (Linux), `osascript …
 with administrator privileges` (macOS) and `sudo` on the distributions that
    set `always_set_home` all rewrite it, so a config path computed inside the
    elevated process would point at `/root/.config/deveye/agent.toml`, a file
@@ -260,7 +274,7 @@ with administrator privileges` (macOS) and `sudo` on the distributions that
    does, `invoking_config_path()` resolves the caller's home via `SUDO_USER` or
    `PKEXEC_UID` (`pkexec` sets only the latter).
 
-2. **SELinux forbids `init` from executing a file in a home directory.** A
+3. **SELinux forbids `init` from executing a file in a home directory.** A
    binary downloaded into `~` is labelled `user_home_t`, and `init_t` has no
    `execute` on that type: the unit would fail `203/EXEC` in a restart loop
    while `systemctl status` only says "Permission denied" about a file that is
@@ -445,6 +459,10 @@ The agent writes its own config during `link`. Location: `$DEVEYE_CONFIG`, or
 - macOS: `~/Library/Application Support/deveye/agent.toml`
 - Windows: `%APPDATA%\deveye\agent.toml`
 
+A system service keeps it in its own folder instead (see
+[System scope](#system-scope)), which `sudo deveye-agent status` and
+`sudo deveye-agent policy` reach on their own.
+
 Alongside it, when running: `agent.pid` (for `stop`/`status`), `agent.state`
 (the runtime facts `status` reports), `sync-<shareId>.index.json` (CloudSync
 scan caches), `sync-device.key` (this machine's X25519 private key, which opens
@@ -499,13 +517,13 @@ Whatever the policy, the explorer never writes into the agent's own directory:
 that is where the policy lives. Be honest about the limit: a machine that allows
 the terminal to a root agent has allowed everything else with it.
 
-**Signed orders.** Ten orders must carry the server's Ed25519 signature
+**Signed orders.** Thirteen orders must carry the server's Ed25519 signature
 (`ORDER_SIGNING_KEY` on the server) over the exact payload, a nonce and a
-timestamp: `term.open`, `files.mutate`, `files.upload`, `agent.service`,
-`agent.power`, `agent.destroy`, `pkg.upgrade`, `agent.lifecycle`,
-`docker.action` and `tunnel.open` (`SIGNED_COMMANDS` in `src/protocol.rs`).
-Reads (file listing, search and download, the Docker inventory) are bound by
-the policy only. The agent pins the public key at `link` (`order_key`), refuses
+timestamp: `term.open`, `files.mutate`, `files.upload`, `files.download`,
+`files.archive`, `sync.config`, `agent.service`, `agent.power`,
+`agent.destroy`, `pkg.upgrade`, `agent.lifecycle`, `docker.action` and
+`tunnel.open` (`SIGNED_COMMANDS` in `src/protocol.rs`). Listing and searching
+files and the Docker inventory are bound by the policy only. The agent pins the public key at `link` (`order_key`), refuses
 an unsigned or replayed order (nonces are remembered across reconnects), and
 refuses one whose timestamp is more than five minutes off (keep the clock
 right). Holding the socket is therefore not enough: a TLS-terminating proxy or a
@@ -523,12 +541,20 @@ off.
 **CloudSync roots.** The server chooses the folder of a share. The agent refuses
 the filesystem root, its own directory, a path that a symlink would lead out of
 the share, and the system directories: on Linux `/etc`, `/usr`, `/bin`, `/sbin`,
-`/lib`, `/lib64`, `/boot`, `/sys`, `/proc`, `/dev`, `/run`, `/var/lib` and
-`/root/.ssh`; on macOS the same plus `/Library`, `/System`, `/private` and
-`/Applications`; on Windows `C:\Windows`, `C:\Program Files`,
+`/lib`, `/lib64`, `/boot`, `/sys`, `/proc`, `/dev`, `/run`, `/var/lib`,
+`/var/spool` and `/root`; on macOS the same plus `/Library`, `/System`,
+`/private` and `/Applications`; on Windows `C:\Windows`, `C:\Program Files`,
 `C:\Program Files (x86)` and `C:\ProgramData`. `sync_roots = ["/data",
 "/home/lea/Sync"]` narrows it to the directories you name (and opens a system
 one if you name it).
+
+Within a share, the agent never installs from the server what would open the
+machine: anything under `.ssh`, `.config/autostart`, `.config/systemd`,
+`.config/fish`, `Library/LaunchAgents`, the Windows `Start Menu/Programs/Startup`
+folder or a PowerShell profile folder, nor a shell startup file (`.bashrc`,
+`.profile`, `.zshrc`…) right inside a home folder. Such a file still goes up from
+this machine; coming down, it is refused and shows in the share's journal. A
+share rooted in one of these folders is refused like a system directory.
 
 **Tunnel targets.** A tunnel is a TCP connection this machine opens for the
 server, so that a DevEye module reaches a service only this machine sees: the

@@ -255,8 +255,9 @@ serveur contrôle les machines**, à ceci près.
   que l'interface grise ce qui serait refusé. C'est le seul réglage de la machine
   que le serveur ne décide pas : une installation « supervision seule » se fait
   là. Limite honnête : un terminal root autorisé rend le reste consultatif.
-- **Les ordres signés.** Ce qui exécute du code, écrit ou supprime des fichiers,
-  change les privilèges de l'agent ou sa vie (`SIGNED_AGENT_COMMANDS`) porte une
+- **Les ordres signés.** Ce qui exécute du code, écrit, supprime ou lit le
+  contenu d'un fichier, change les privilèges de l'agent ou sa vie, ou choisit
+  les dossiers où CloudSync écrit (`SIGNED_AGENT_COMMANDS`) porte une
   signature Ed25519 du serveur (`ORDER_SIGNING_KEY`, `src/agent/orders.ts`) sur
   la commande, un nonce, un horodatage et les octets exacts du payload. L'agent
   épingle la clé publique à l'enrôlement, refuse un ordre non signé, rejoué, ou
@@ -264,6 +265,14 @@ serveur contrôle les machines**, à ceci près.
   Ce que ça protège : tenir la socket ne suffit plus (un proxy qui termine le
   TLS, un jeton d'appareil volé et présenté à un faux serveur). Ce que ça ne
   protège pas : un serveur compromis avec sa clé, d'où la politique locale.
+- **L'enrôlement d'un service système.** La config dit à l'agent quel serveur
+  croire et quelle clé épingler : un agent root qui la lirait dans un dossier
+  qu'un compte ordinaire peut écrire donnerait root à ce compte. Un service
+  système range donc son enrôlement dans un dossier à root seul
+  (`/var/lib/deveye`, `ProgramData\deveye` sous Windows), et un agent
+  privilégié refuse de tourner sur un fichier qu'un autre compte, ou l'un de ses
+  dossiers parents, pourrait réécrire. Les compromissions se bornent ainsi à
+  leur compte : prendre l'utilisateur d'une machine ne donne pas son agent root.
 - **Le transport.** TLS (rustls) sans aucun moyen de désactiver la vérification.
   Le `http://` en clair est refusé hors de la machine elle-même, sauf choix
   explicite à l'enrôlement (`--insecure-plaintext`), que l'interface signale. Le
@@ -315,9 +324,13 @@ serveur contrôle les machines**, à ceci près.
   terminal n'est relayée qu'à la connexion qui
   l'a ouvert, et n'est jamais persistée.
 - **CloudSync** : la racine d'un partage est choisie côté serveur, sous un droit
-  qui n'est pas celui du terminal. L'agent refuse un dossier système, la racine,
-  son propre dossier, un chemin qu'un lien symbolique ferait sortir du partage,
-  et, si `sync_roots` est renseigné sur la machine, tout ce qui n'y figure pas.
+  qui n'est pas celui du terminal. L'agent refuse un dossier système (`/root` et
+  `/var/spool` compris), la racine, son propre dossier, un chemin qu'un lien
+  symbolique ferait sortir du partage, et, si `sync_roots` est renseigné sur la
+  machine, tout ce qui n'y figure pas. Dans un partage, il n'installe jamais ce
+  qui ouvrirait la machine : `.ssh`, les dossiers de démarrage de session ou de
+  services de l'utilisateur, un fichier de démarrage du shell posé dans un
+  foyer. Sans cette règle, écrire dans un partage vaudrait un terminal.
 - **Tunnels** : une connexion TCP que la machine ouvre pour un module (une base
   de données sur sa boucle locale), sous un droit d'Appareils qui n'est pas
   celui du terminal (« Accès au réseau de l'appareil »). L'agent ne joint que sa

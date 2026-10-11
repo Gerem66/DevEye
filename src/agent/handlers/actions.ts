@@ -39,7 +39,8 @@ export async function handleUpdated(s: AgentSession, payload: PayloadOf<typeof A
 }
 
 /** `agent.destroyed` — result of a self-destruct. Archive the device on success,
- *  else record the failure (which restores its previous status). */
+ *  else record the failure (which restores its previous status). Only for a
+ *  deletion the server asked for: an agent cannot bring an archived device back. */
 export async function handleDestroyed(s: AgentSession, payload: PayloadOf<typeof AGENT_DESTROYED>): Promise<void> {
     if (payload.ok) {
         try {
@@ -60,7 +61,10 @@ export async function handleDestroyed(s: AgentSession, payload: PayloadOf<typeof
     } else {
         const reason = payload.error ?? "Échec de l'auto-destruction";
         try {
-            await s.db.devices.failDeletion(s.device.id, reason);
+            if (!(await s.db.devices.failDeletion(s.device.id, reason))) {
+                ack(s, 1);
+                return;
+            }
             s.audit.record({
                 source: 'agent',
                 category: 'device',
