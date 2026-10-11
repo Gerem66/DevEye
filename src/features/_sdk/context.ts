@@ -85,6 +85,11 @@ export function createSdkContext(
             // Les permissions d'Appareils de l'appelant sur une machine, surcharges
             // de l'élément comprises : ce que `agent.dockerAction` éprouve pour lui.
             assertStepUp: () => assertStepUp(ctx),
+            deviceAccess: async (deviceId) => {
+                if (!ctx.canFeature('devices')) return 'none';
+                const override = (await ctx.itemRestrictions('devices')).get(deviceId);
+                return override ?? (ctx.canFeature('devices', 'write') ? 'write' : 'read');
+            },
             assertDeviceExtras: async (deviceId, keys) => {
                 if (!ctx.canFeature('devices', 'read')) {
                     throw new FeatureError('forbidden', 'Les appareils ne vous sont pas ouverts dans cet espace');

@@ -560,9 +560,11 @@ ceux que l'espace a réglés pour LA feature
 
 ### La flotte, les comptes, les membres
 
-`devices.read` : `devices.authorize(id, { extras })` est LA garde de l'app et
-éprouve, avec `extras`, les permissions d'Appareils de l'appelant sur CET
-appareil, qu'un module ne peut pas nommer dans son `access` ; avec
+`devices.read` : `devices.authorize(id, { extras })` est LA garde de l'app ;
+elle refuse une machine que le rôle de l'appelant masque, et avec
+`level: 'write'` celle qu'il n'a qu'en lecture. Elle éprouve, avec `extras`,
+les permissions d'Appareils de l'appelant sur CET appareil, qu'un module ne
+peut pas nommer dans son `access` ; avec
 `control: true`, là où la machine va agir (un dossier qu'elle archive, un
 service qu'elle redéploie, un tunnel qu'elle ouvre), elle exige aussi un code
 d'application récent (`stepup_required`, que le client transforme en invite

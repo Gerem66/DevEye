@@ -34,6 +34,20 @@ interface AuthorizedFinding {
 }
 
 /**
+ * Un appareil que l'appelant règle depuis l'espace actif. Seul son domicile
+ * décide de sa surveillance : ses autorisations, sa ligne de base et ses
+ * réglages valent pour toute sa flotte, qu'un espace où il n'est que projeté
+ * ne voit pas.
+ */
+async function homeDevice(ctx: Ctx, deviceId: string, level: 'read' | 'write' = 'read'): Promise<SdkDevice> {
+    const device = await ctx.deveye.devices.authorize(deviceId, { level });
+    if (device.workspaceId !== ctx.workspaceId) {
+        throw new FeatureError('forbidden', "Sentinelle se règle depuis l'espace de cette machine");
+    }
+    return device;
+}
+
+/**
  * Les constats d'un lot, chacun avec son appareil autorisé. Tout est lu et
  * vérifié avant la première écriture : un identifiant inconnu ou hors périmètre
  * refuse le lot entier plutôt que de le laisser à moitié traité.
@@ -46,7 +60,7 @@ async function authorizedFindings(ctx: Ctx, ids: readonly number[]): Promise<Aut
         if (!row) throw new FeatureError('not_found', 'Constat introuvable');
         let device = devices.get(row.device_id);
         if (!device) {
-            device = await ctx.deveye.devices.authorize(row.device_id);
+            device = await homeDevice(ctx, row.device_id);
             devices.set(device.id, device);
         }
         out.push({ row, device });
@@ -169,16 +183,13 @@ export const sentinelHandlers = [
         mutates: true,
         handler: async (ctx: Ctx, input) => {
             const batch = await authorizedFindings(ctx, input.findingIds);
-            if (batch.some(({ device }) => device.workspaceId === null)) {
-                throw new FeatureError('conflict', "Cet appareil n'appartient plus à aucun espace");
-            }
 
             for (const { row, device } of batch) {
                 if (row.state === 'acknowledged') continue;
                 // L'autorisation d'abord, l'acquittement ensuite : dans l'autre ordre, un
                 // échec d'écriture laisserait un constat clos que le tour suivant rouvrirait.
                 await ctx.repo.allow.add({
-                    workspaceId: device.workspaceId!,
+                    workspaceId: ctx.workspaceId,
                     deviceId: input.scope === 'fleet' ? null : device.id,
                     rule: row.rule,
                     subject: row.subject,
@@ -236,13 +247,11 @@ export const sentinelHandlers = [
         handler: async (ctx: Ctx, input) => {
             const row = await ctx.repo.findings.find(input.findingId);
             if (!row) throw new FeatureError('not_found', 'Constat introuvable');
-            const device = await ctx.deveye.devices.authorize(row.device_id);
+            const device = await homeDevice(ctx, row.device_id);
 
             // Rouvrir sans retirer l'autorisation ne servirait à rien : le moteur
             // refiltrerait le constat au tour suivant.
-            if (device.workspaceId !== null) {
-                await ctx.repo.allow.removeFor(device.workspaceId, device.id, row.rule, row.subject);
-            }
+            await ctx.repo.allow.removeFor(ctx.workspaceId, device.id, row.rule, row.subject);
             await ctx.repo.findings.reopen(row.id, Date.now());
 
             ctx.audit({
@@ -292,7 +301,7 @@ export const sentinelHandlers = [
         access: { level: 'write' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
-            const device = await ctx.deveye.devices.authorize(input.deviceId);
+            const device = await homeDevice(ctx, input.deviceId, 'write');
             const current = await ctx.repo.deviceConfig.get(device.id);
             const wasEnabled = current?.enabled === 1;
 
@@ -341,7 +350,7 @@ export const sentinelHandlers = [
         ...sentinelScanNow,
         access: { level: 'write' },
         handler: async (ctx: Ctx, input) => {
-            const device = await ctx.deveye.devices.authorize(input.deviceId);
+            const device = await homeDevice(ctx, input.deviceId, 'write');
             const config = await ctx.repo.deviceConfig.get(device.id);
             if (config?.enabled !== 1) {
                 throw new FeatureError('conflict', "Sentinelle n'est pas active sur cet appareil");
@@ -356,7 +365,7 @@ export const sentinelHandlers = [
         access: { level: 'write' },
         mutates: true,
         handler: async (ctx: Ctx, input) => {
-            const device = await ctx.deveye.devices.authorize(input.deviceId);
+            const device = await homeDevice(ctx, input.deviceId, 'write');
             // Le moteur d'abord : sans lui, autant échouer avant d'avoir effacé quoi
             // que ce soit.
             const running = engine();

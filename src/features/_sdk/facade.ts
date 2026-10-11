@@ -10,7 +10,7 @@ import type {
 import { FeatureError } from '@deveye/types/sdk/server';
 import { MAIL_TRANSPORT_PROVIDER, type FeatureManifest, type NativeCapability } from '@deveye/types/sdk';
 import type { MailTransportProvider } from '@deveye/types/sdk';
-import type { DeviceRow, NotificationFeature } from '@deveye/types';
+import type { DeviceRow, ItemAccess, NotificationFeature } from '@deveye/types';
 
 import { randomUUID } from 'node:crypto';
 
@@ -47,10 +47,12 @@ export interface FacadeDeps {
     /** Les contrats nommés que l'hôte tient : c'est par eux que `mail` lit le module Mail. */
     providers: SdkProviders;
     /**
-     * Lève `forbidden` si l'APPELANT ne tient pas ces permissions d'Appareils
-     * sur cet appareil. Absent hors d'une commande : un service n'a pas
-     * d'appelant dont éprouver les droits.
+     * Le niveau de l'APPELANT sur cet appareil : sa surcharge, sinon son niveau
+     * sur Appareils, `none` sans lui. Absent hors d'une commande, comme les deux
+     * gardes suivantes : un service n'a pas d'appelant dont éprouver les droits.
      */
+    deviceAccess?: (deviceId: string) => Promise<ItemAccess>;
+    /** Lève `forbidden` si l'APPELANT ne tient pas ces permissions d'Appareils sur cet appareil. */
     assertDeviceExtras?: (deviceId: string, extras: readonly string[]) => Promise<void>;
     /**
      * Lève `stepup_required` sans code d'application récent dans la session de
@@ -218,6 +220,13 @@ export function createFacade(deps: FacadeDeps): DevEyeFacade {
             async authorize(deviceId, options) {
                 gate('devices.read');
                 const row = await authorizeDevice(deps, deviceId);
+                if (deps.deviceAccess) {
+                    const access = await deps.deviceAccess(row.id);
+                    if (access === 'none') throw new FeatureError('not_found', 'Appareil introuvable');
+                    if (options?.level === 'write' && access !== 'write') {
+                        throw new FeatureError('forbidden', 'Cet appareil est en lecture seule pour votre rôle');
+                    }
+                }
                 const device = toSdkDevice(row, await metricIntervalOf(deps.db, row));
                 const extras = options?.extras ?? [];
                 if (extras.length > 0) {
@@ -237,10 +246,11 @@ export function createFacade(deps: FacadeDeps): DevEyeFacade {
                 await requireStepUp();
             },
             // Une seule règle : les appareils de l'espace actif, les siens et
-            // ceux qui y sont projetés.
+            // ceux qui y sont projetés, moins ceux que le rôle de l'appelant masque.
             async list() {
                 gate('devices.read');
-                const rows = await deps.db.devices.listByWorkspace(deps.workspaceId);
+                const all = await deps.db.devices.listByWorkspace(deps.workspaceId);
+                const rows = deps.deviceAccess ? await visibleTo(deps.deviceAccess, all) : all;
                 const intervals = await metricIntervalsOf(deps.db, rows);
                 return rows.map((row) => toSdkDevice(row, intervals.get(row.id) as number));
             },
@@ -252,6 +262,12 @@ export function createFacade(deps: FacadeDeps): DevEyeFacade {
         telemetry: createTelemetry(deps.db, () => gate('telemetry.read')),
         agents: agentsFacade(() => gate('agents'))
     };
+}
+
+/** Les appareils que l'appelant voit : ceux qu'aucune surcharge ne lui masque. */
+async function visibleTo(access: (deviceId: string) => Promise<ItemAccess>, rows: DeviceRow[]): Promise<DeviceRow[]> {
+    const levels = await Promise.all(rows.map((row) => access(row.id)));
+    return rows.filter((_, i) => levels[i] !== 'none');
 }
 
 /** Ce que la façade révèle d'une ligne appareil : l'identité, l'état, le rapport. */

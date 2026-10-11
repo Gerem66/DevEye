@@ -426,3 +426,30 @@ describe('sentinel.resetBaseline : le moteur du module', () => {
         }
     });
 });
+
+describe('Sentinelle : une machine projetée se règle depuis son espace', () => {
+    it('refuse de l’acquitter ou de la régler depuis l’espace où elle est projetée', async () => {
+        const projected = testDevice({ id: 'dev-p', name: 'Prêtée', workspaceId: 2 });
+        const repo = fakeRepo([finding({ id: 1, device_id: 'dev-p' })]);
+        const ctx = createTestContext({ repo, devices: [projected] });
+        const homeOnly = (e: unknown) => e instanceof FeatureError && e.code === 'forbidden';
+
+        await assert.rejects(
+            handlerFor(sentinelAcknowledge)(ctx, { findingIds: [1], scope: 'fleet', reason: null }),
+            homeOnly
+        );
+        assert.equal(repo.allowRows.length, 0);
+        await assert.rejects(
+            handlerFor(sentinelSetConfig)(ctx, {
+                deviceId: 'dev-p',
+                enabled: false,
+                learningDays: null,
+                integrityMinutes: null,
+                authEvents: null,
+                pinEvidence: null
+            }),
+            homeOnly
+        );
+        await assert.rejects(handlerFor(sentinelResetBaseline)(ctx, { deviceId: 'dev-p' }), homeOnly);
+    });
+});

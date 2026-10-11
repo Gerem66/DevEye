@@ -4,11 +4,12 @@ import type { Logger } from 'pino';
 import { MAIL_TRANSPORT_PROVIDER, type FeatureManifest, type NativeCapability } from '@deveye/types/sdk';
 import type { MailTransportProvider } from '@deveye/types/sdk';
 import type { SdkAccountUsage, SdkCipher } from '@deveye/types/sdk/server';
+import type { ItemAccess } from '@deveye/types';
 
 import type { MonitorHub } from '@/agent/hub';
 import type { Database } from '@/db';
 import type { LiveHub } from '@/live/hub';
-import { createFacade } from './facade';
+import { createFacade, type FacadeDeps } from './facade';
 import { setSdkHost } from './host';
 import { setSafeFetchTransportForTest } from '@/Services/netFetch';
 import { Response } from 'undici';
@@ -99,7 +100,8 @@ function facadeWith(
     db: object = {},
     isAdmin = false,
     providers: Readonly<Record<string, unknown>> = {},
-    usages: readonly SdkAccountUsage[] = []
+    usages: readonly SdkAccountUsage[] = [],
+    caller: Partial<FacadeDeps> = {}
 ) {
     return createFacade({
         db: db as Database,
@@ -112,7 +114,8 @@ function facadeWith(
         manifest: manifest(caps),
         logger,
         providers: { get: <T>(key: string) => providers[key] as T | undefined },
-        accountUsages: (ids) => Promise.resolve(ids.flatMap((id) => usages.filter((u) => u.userId === id)))
+        accountUsages: (ids) => Promise.resolve(ids.flatMap((id) => usages.filter((u) => u.userId === id))),
+        ...caller
     });
 }
 
@@ -406,6 +409,28 @@ describe('createFacade : devices', () => {
             listed.map((d) => d.id),
             ['dev-1', 'dev-2']
         );
+    });
+
+    describe("depuis une commande, le niveau de l'appelant sur chaque machine", () => {
+        /** `dev-1` en lecture seule pour son rôle, `dev-2` masqué. */
+        const caller = { deviceAccess: async (id: string) => (id === 'dev-1' ? 'read' : 'none') as ItemAccess };
+
+        it('authorize : une machine masquée est introuvable, une machine en lecture ne se règle pas', async () => {
+            const { db } = devicesDb();
+            const facade = facadeWith(['devices.read'], db, false, {}, [], caller);
+            await assert.rejects(facade.devices.authorize('dev-2'), { name: 'FeatureError', code: 'not_found' });
+            await assert.rejects(facade.devices.authorize('dev-1', { level: 'write' }), forbidden);
+            assert.equal((await facade.devices.authorize('dev-1')).id, 'dev-1');
+        });
+
+        it('list : sans les machines masquées', async () => {
+            const { db } = devicesDb();
+            const listed = await facadeWith(['devices.read'], db, false, {}, [], caller).devices.list();
+            assert.deepEqual(
+                listed.map((d) => d.id),
+                ['dev-1']
+            );
+        });
     });
 
     it('isOnline : la présence du hub', () => {

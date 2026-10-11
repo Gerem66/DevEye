@@ -247,7 +247,10 @@ l'app au lieu de lire un rôle : `ctx.deveye.devices.authorize(id, { extras })`
 éprouve les permissions d'Appareils de l'appelant sur CETTE machine, avec la
 règle des commandes natives (une machine passée en lecture seule pour son rôle
 ne prend pas d'ordre). Sauvegardes l'exige pour écrire des archives sur une
-machine ou en archiver un dossier : c'est la surface Fichiers.
+machine ou en archiver un dossier : c'est la surface Fichiers. Même sans
+`extras`, une machine masquée pour le rôle reste introuvable, `level: 'write'`
+refuse celle qu'il n'a qu'en lecture, et `devices.list()` ne rend que celles
+qu'il voit : un module ne montre ni ne règle une machine qu'Appareils lui cache.
 
 Faire agir une machine demande en plus, quel que soit le rôle, un code
 d'application récent dans la session (`control: true`, voir
