@@ -94,6 +94,23 @@
     flex-wrap: wrap;
 }
 
+/* Le bouton Actualiser : son icône tourne le temps de la relecture. */
+.refreshing :global(.icon) {
+    animation: shortlinks-spin 0.8s linear infinite;
+}
+
+@keyframes shortlinks-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .refreshing :global(.icon) {
+        animation: none;
+    }
+}
+
 .sectionTitle {
     display: inline-flex;
     align-items: center;

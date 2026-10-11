@@ -67,6 +67,7 @@ declare const styles: {
     readonly quotaReached: string;
     readonly quotaTitle: string;
     readonly quotaUsage: string;
+    readonly refreshing: string;
     readonly report: string;
     readonly reportHead: string;
     readonly reportMessage: string;
@@ -91,6 +92,7 @@ declare const styles: {
     readonly section: string;
     readonly sectionHead: string;
     readonly sectionTitle: string;
+    readonly 'shortlinks-spin': string;
     readonly slugField: string;
     readonly slugPrefix: string;
     readonly sparkDot: string;

@@ -1,5 +1,5 @@
 import { Button, safeHref, useResource } from 'deveye-sdk-client';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { ShortlinkRange } from '../contracts/domain';
 import { api } from './api';
@@ -9,6 +9,11 @@ import StatBand from './Stats/StatBand';
 import TopList from './Stats/TopList';
 import TrendChart from './Stats/TrendChart';
 import styles from './style.module.css';
+
+/** Le bouton Actualiser reste grisé ce temps-là après la réponse : il ne se mitraille pas. */
+const REFRESH_HOLD_MS = 500;
+/** Une réponse qui ne change rien à l'écran (la même erreur) libère le bouton au bout du délai d'une commande. */
+const REFRESH_TIMEOUT_MS = 15_000;
 
 interface StatsBlockProps {
     /** Un lien, ou tous les liens visibles depuis l'espace quand `null`. */
@@ -32,6 +37,20 @@ export default function StatsBlock({ linkId, title, detailed }: StatsBlockProps)
         'Les statistiques n’ont pas pu être lues.',
         [linkId, range]
     );
+    const [refreshing, setRefreshing] = useState(false);
+    const asked = useRef<{ data: unknown; error: string | null } | null>(null);
+    const refresh = () => {
+        asked.current = { data: read.data, error: read.error };
+        setRefreshing(true);
+        read.reload();
+    };
+    useEffect(() => {
+        if (!refreshing) return;
+        const before = asked.current;
+        const answered = before !== null && (read.data !== before.data || read.error !== before.error);
+        const timer = setTimeout(() => setRefreshing(false), answered ? REFRESH_HOLD_MS : REFRESH_TIMEOUT_MS);
+        return () => clearTimeout(timer);
+    }, [refreshing, read.data, read.error]);
     const stats = read.data?.stats ?? null;
     const stale = stats !== null && stats.range !== range;
     const points = useMemo(() => (stats === null ? [] : fillSeries(stats)), [stats]);
@@ -44,8 +63,10 @@ export default function StatsBlock({ linkId, title, detailed }: StatsBlockProps)
                     <Button
                         variant='ghost'
                         icon='refresh'
-                        disabled={read.loading}
-                        onClick={read.reload}
+                        className={refreshing ? styles.refreshing : undefined}
+                        disabled={read.loading || refreshing}
+                        aria-busy={refreshing}
+                        onClick={refresh}
                         title='Relire les chiffres sans attendre'
                     >
                         Actualiser
