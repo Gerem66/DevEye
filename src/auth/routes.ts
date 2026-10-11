@@ -16,7 +16,7 @@ import { loadUserBundle } from './loadUserBundle';
 import { lockedOut } from './lockout';
 import { abandonLoginChallengesOf } from './loginChallenge';
 import { loginRoutes } from './loginRoutes';
-import { issueSession } from './session';
+import { issueSession, refreshVerdict } from './session';
 
 import type { AuditLog } from '@/Services/AuditLog';
 import { maintenance, MaintenanceError } from '@/Services/maintenance';
@@ -30,13 +30,6 @@ interface AuthDeps {
     audit: AuditLog;
     live: LiveHub;
 }
-
-/**
- * Grace window (seconds) during which an already-rotated refresh token is treated
- * as a benign concurrent use (page reload, multiple tabs sharing the cookie)
- * rather than theft. Keeps the session alive instead of revoking it.
- */
-const ROTATION_GRACE_SECONDS = 30;
 
 /** Le jeton de rafraîchissement, par le seul canal du transport (voir `readAccessToken`). */
 function readRefreshToken(req: FastifyRequest): string | undefined {
@@ -82,32 +75,24 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live 
             throw new MaintenanceError(maintenance.message());
         }
 
-        const valid = await db.refreshTokens.isValid(claims.jti, token);
-        if (valid) {
-            await db.refreshTokens.revoke(claims.jti);
-        } else {
-            // The token is no longer the active one. Within a short grace window this
-            // is a benign concurrent rotation (reload / multiple tabs share cookies),
-            // not theft — keep the session alive. Outside the window, treat as reuse.
-            const benign = await db.refreshTokens.wasRecentlyRotated(claims.jti, token, ROTATION_GRACE_SECONDS);
-            if (!benign) {
-                await db.refreshTokens.revokeSession(claims.sid);
-                forgetSessionDek(claims.sid);
-                forgetStepUp(claims.sid);
-                live.closeSession(claims.sid);
-                dropAuthCookies(req, reply);
-                audit.record({
-                    source: 'web',
-                    category: 'auth',
-                    action: 'token.reuse_detected',
-                    level: 'critical',
-                    uid: Number(claims.sub),
-                    ip: req.ip,
-                    description: 'Réutilisation de jeton de rafraîchissement détectée ; session révoquée',
-                    metadata: { sessionId: claims.sid }
-                });
-                return reply.code(401).send(err('auth_expired', 'Refresh token reuse detected'));
-            }
+        const verdict = await refreshVerdict(db.refreshTokens, claims, token);
+        if (verdict === 'reuse') {
+            await db.refreshTokens.revokeSession(claims.sid);
+            forgetSessionDek(claims.sid);
+            forgetStepUp(claims.sid);
+            live.closeSession(claims.sid);
+            dropAuthCookies(req, reply);
+            audit.record({
+                source: 'web',
+                category: 'auth',
+                action: 'token.reuse_detected',
+                level: 'critical',
+                uid: Number(claims.sub),
+                ip: req.ip,
+                description: 'Réutilisation de jeton de rafraîchissement détectée ; session révoquée',
+                metadata: { sessionId: claims.sid }
+            });
+            return reply.code(401).send(err('auth_expired', 'Refresh token reuse detected'));
         }
 
         const userId = Number(claims.sub);
@@ -118,6 +103,9 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live 
         }
 
         const { tokens } = await issueSession(reply, db, userId, authTransport(req), claims.sid);
+        // Révoqué une fois son successeur posé : la session garde toujours un
+        // jeton vivant, et un rafraîchissement concurrent tombe dans la grâce.
+        if (verdict === 'rotate') await db.refreshTokens.revoke(claims.jti);
         syncFederationCookie(req, reply, bundle);
         return reply.send(ok({ ...bundle, tokens }));
     });

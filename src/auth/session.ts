@@ -2,6 +2,7 @@ import type { SessionTokens } from '@deveye/types';
 import type { FastifyReply } from 'fastify';
 
 import type { Database } from '@/db';
+import type { RefreshTokensRepo } from '@/db/repos/refreshTokens';
 import { env } from '@/Utils/Env';
 import { setAuthCookies } from './cookies';
 import type { AuthTransport } from './federation';
@@ -47,4 +48,26 @@ export async function issueSession(
     }
     setAuthCookies(reply, access, refresh.token);
     return { sessionId };
+}
+
+/** Le temps où un jeton tout juste remplacé reste accepté : onglets et rechargements le partagent. */
+export const ROTATION_GRACE_SECONDS = 30;
+
+/**
+ * Ce que vaut un jeton de rafraîchissement présenté : l'actif, qui tourne ; un
+ * prédécesseur tout juste remplacé dans une session qui garde un jeton vivant,
+ * toléré ; sinon une réutilisation. Une session révoquée entière (déconnexion,
+ * changement de mot de passe, réutilisation détectée) ne garde aucun jeton
+ * vivant : les siens ne reviennent pas, même dans la fenêtre.
+ */
+export async function refreshVerdict(
+    tokens: Pick<RefreshTokensRepo, 'isValid' | 'wasRecentlyRotated' | 'hasLiveSession'>,
+    claims: { jti: string; sid: string },
+    token: string
+): Promise<'rotate' | 'grace' | 'reuse'> {
+    if (await tokens.isValid(claims.jti, token)) return 'rotate';
+    const benign =
+        (await tokens.wasRecentlyRotated(claims.jti, token, ROTATION_GRACE_SECONDS)) &&
+        (await tokens.hasLiveSession(claims.sid));
+    return benign ? 'grace' : 'reuse';
 }
