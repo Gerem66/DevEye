@@ -219,7 +219,7 @@ export async function registerWS(
                 return;
             }
 
-            const def = featureHandlerMap[command];
+            const def = featureHandlerMap.get(command);
             if (!def) {
                 send(socket, {
                     requestId: replyId,

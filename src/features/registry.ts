@@ -98,7 +98,9 @@ for (const [i, f] of featureHandlers.entries()) {
     }
 }
 
+// Une `Map` et non un objet : la commande vient du client, et `constructor` ou
+// `__proto__` trouveraient sinon une entrée héritée du prototype.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const featureHandlerMap: Record<string, FeatureDefinition<string, any, any>> = Object.fromEntries(
+export const featureHandlerMap: ReadonlyMap<string, FeatureDefinition<string, any, any>> = new Map(
     featureHandlers.map((f) => [f.command, f])
 );
