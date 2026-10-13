@@ -25,6 +25,7 @@ declare const styles: {
     readonly archivedGroup: string;
     readonly awaiting: string;
     readonly bannerText: string;
+    readonly bannerTitle: string;
     readonly calDay: string;
     readonly calEmpty: string;
     readonly calGrid: string;
@@ -375,6 +376,7 @@ declare const styles: {
     readonly view: string;
     readonly viewBody: string;
     readonly waitingMsg: string;
+    readonly warnBanner: string;
     readonly widgetContent: string;
     readonly widgetFoot: string;
     readonly zoomChip: string;

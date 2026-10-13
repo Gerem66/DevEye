@@ -525,6 +525,28 @@
     flex-wrap: wrap;
 }
 
+/* ── Popup « Reconnecter l'agent » ── */
+.reconnectKnown {
+    margin-bottom: var(--space-lg);
+}
+
+.reconnectStep {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.commandRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+.commandRow .command {
+    flex: 1;
+    min-width: 0;
+}
+
 /* Generation controls: validity, number of machines, then Generate. */
 .genRow {
     display: flex;

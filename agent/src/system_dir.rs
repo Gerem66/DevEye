@@ -39,6 +39,31 @@ pub fn config_path() -> PathBuf {
     dir().join(CONFIG_FILE)
 }
 
+/// A system service holds this machine's enrollment, as far as this process
+/// can tell. An ordinary account is denied the folder: a refusal counts as
+/// held, since only an enrollment would have made the folder root's.
+pub fn held() -> bool {
+    if service::installed_scope() == ServiceScope::System {
+        return true;
+    }
+    match std::fs::metadata(config_path()) {
+        Ok(_) => true,
+        Err(e) => e.kind() == std::io::ErrorKind::PermissionDenied,
+    }
+}
+
+/// `deveye-agent <args>` as the system service's owner runs it, for messages.
+pub fn elevated(args: &str) -> String {
+    #[cfg(unix)]
+    {
+        format!("`sudo deveye-agent {args}`")
+    }
+    #[cfg(windows)]
+    {
+        format!("`deveye-agent {args}` from an administrator PowerShell")
+    }
+}
+
 /// Why a privileged agent cannot trust this file, `None` when it can: the file
 /// and every folder above it belong to root and are writable neither by their
 /// group nor by others. Checked on the path as written (a link an ordinary
@@ -225,6 +250,16 @@ pub fn release() -> Result<Option<PathBuf>> {
     let dest_dir = invoking_config_dir().context(
         "no invoking account to hand it back to: run `sudo deveye-agent service uninstall` from that account",
     )?;
+    // `adopt` moved the account's file away: one there now comes from a later
+    // link, newer than the system one, and stays.
+    let own = dest_dir.join(CONFIG_FILE);
+    if own.exists() {
+        bail!(
+            "this account has its own enrollment ({}), kept as is; delete {} if nothing uses it",
+            own.display(),
+            dir().display()
+        );
+    }
     crate::ownership::create_dir_all_owned(&dest_dir)
         .with_context(|| format!("creating {}", dest_dir.display()))?;
     private_dir(&dest_dir)?;

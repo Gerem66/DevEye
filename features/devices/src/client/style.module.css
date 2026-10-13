@@ -1727,6 +1727,44 @@
     min-width: 0;
 }
 
+/* Ce qui attend un geste : le ton d'avertissement des autres fonctionnalités. */
+.warnBanner {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm) var(--space-md);
+    flex-wrap: wrap;
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--warning);
+    border-radius: var(--radius-md);
+    background: var(--warning-bg);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.warnBanner > .icon {
+    flex: none;
+    color: var(--warning);
+}
+
+/* Assez étroit pour rester à côté de l'icône sur un téléphone. */
+.warnBanner .bannerText {
+    flex-basis: 12rem;
+}
+
+/* Renvoyé à la ligne sur un écran étroit, le bouton reste à droite. */
+.warnBanner > button {
+    margin-left: auto;
+}
+
+.warnBanner p {
+    margin: 0;
+}
+
+.bannerTitle {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
 /* ─── Timeline (uptime frieze + range selector) ───────────────────────────── */
 
 .timeline {

@@ -550,7 +550,10 @@ pub(crate) fn kill_process(pid: &str) -> Result<()> {
 fn status() {
     if !Config::exists() {
         if system_service_only() {
-            println!("The agent runs as a system service, enrolled for root alone. Run: sudo deveye-agent status");
+            println!(
+                "The agent runs as a system service, enrolled for root alone. Run: {}",
+                system_dir::elevated("status")
+            );
             return;
         }
         println!("Not enrolled. Run: deveye-agent link <code>");
@@ -643,7 +646,7 @@ fn status() {
 /// An ordinary account asking about an agent enrolled as a system service:
 /// the enrollment is root's alone.
 pub(crate) fn system_service_only() -> bool {
-    !config::privileged() && service::installed_scope() == service::ServiceScope::System
+    !config::privileged() && system_dir::held()
 }
 
 /// A `status` section header.

@@ -259,11 +259,16 @@ differs from a per-user one in three ways that the code handles for you:
    (macOS: `/Library/Application Support/deveye`; Windows:
    `%ProgramData%\deveye`, SYSTEM and Administrators only) and bakes that path.
    A privileged agent refuses to run on a file that any ordinary account, or any
-   folder above it, could rewrite. `sudo deveye-agent service uninstall` hands
+   folder above it, could rewrite. Run by hand under `sudo` or from an
+   administrator PowerShell, the agent therefore reads that system enrollment,
+   not the account's. From an ordinary account, `link` refuses while a system
+   service holds the enrollment: relinking the same machine would replace its
+   token and cut the service off. `sudo deveye-agent service uninstall` hands
    the enrollment back to the calling account, where `service install --user`
-   finds it. A system service installed by an older version, whose unit names a
-   config in a home folder, moves it there itself at its first start and
-   rewrites its unit.
+   finds it, unless that account has linked since: its own enrollment is the
+   newer one and stays. A system service installed by an older version, whose
+   unit names a config in a home folder, moves it there itself at its first
+   start and rewrites its unit.
 
 2. **The elevated process has root's `$HOME`.** `pkexec` (Linux), `osascript …
 with administrator privileges` (macOS) and `sudo` on the distributions that

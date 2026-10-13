@@ -30,7 +30,7 @@ const SCOPE_LABEL: Record<AgentServiceScope, string> = {
  * lui aussi avec la machine (« linger ») ; ailleurs il attend l'ouverture de
  * session.
  */
-function restartsAt(system: boolean, platform: FleetDevice['platform']): string {
+export function restartsAt(system: boolean, platform: FleetDevice['platform']): string {
     return system || platform === 'linux' ? 'au démarrage de la machine' : 'à l’ouverture de session';
 }
 
@@ -95,17 +95,28 @@ export interface AgentPanelProps {
     canWrite: boolean;
     updater: ReturnType<typeof useAgentUpdate>;
     onShowPrivilegeInfo: () => void;
+    /** Ouvre la popup des commandes qui relancent l'agent depuis la machine. */
+    onReconnect: () => void;
 }
 
 /**
  * La popup « Agent » d'un appareil : ce que l'agent est (version, compte,
  * privilèges, démarrage, transport, politique locale), et tout ce qui se fait
  * sur lui : démarrage automatique, élévation, mise à jour, redémarrage,
- * interruption, approbation d'un réappairage, révocation de son accès. Le
+ * reconnexion depuis la machine, interruption, approbation d'un réappairage,
+ * révocation de son accès. Le
  * démarrage automatique, l'élévation et la mise à jour relèvent de
  * l'administrateur global (`access.admin` côté serveur).
  */
-export function AgentPanel({ device, report, actions, canWrite, updater, onShowPrivilegeInfo }: AgentPanelProps) {
+export function AgentPanel({
+    device,
+    report,
+    actions,
+    canWrite,
+    updater,
+    onShowPrivilegeInfo,
+    onReconnect
+}: AgentPanelProps) {
     const isAdmin = useCurrentUser()?.role === 'admin';
     const agent = report?.agent ?? null;
     const target = { id: device.id, name: device.name };
@@ -184,6 +195,14 @@ export function AgentPanel({ device, report, actions, canWrite, updater, onShowP
             onClick: () => void actions.restartAgent(device.id),
             unavailable: firstReason(fleet, reach),
             busy: actions.restartingId === device.id
+        },
+        // Le geste qui reste quand l'agent ne répond plus : il se fait sur la machine.
+        {
+            key: 'reconnect',
+            icon: 'icon-terminal',
+            label: 'Reconnecter l’agent',
+            desc: 'Les commandes à lancer sur la machine pour relancer l’agent, avec ou sans root, avec ou sans démarrage automatique.',
+            onClick: onReconnect
         },
         {
             key: 'stop',

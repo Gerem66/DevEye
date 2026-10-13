@@ -123,6 +123,17 @@ pub fn prepare(options: &LinkOptions) -> Result<Config> {
 
 /// `deveye-agent link`.
 pub async fn link(code: &str, options: &LinkOptions, autostart: bool) -> Result<()> {
+    // Relinking the same machine replaces its token: the system service would
+    // be cut off without a word.
+    if crate::system_service_only() {
+        bail!(
+            "a system service holds this machine's enrollment ({}): linking from this account would \
+             replace its token and cut it off. Link it with {}, or remove it first with {}",
+            crate::system_dir::dir().display(),
+            crate::system_dir::elevated("link <code>"),
+            crate::system_dir::elevated("service uninstall")
+        );
+    }
     let mut config = prepare(options)?;
     // Before the link code leaves this machine: enrollment is the exchange that
     // mints the token.
@@ -205,6 +216,14 @@ pub async fn ensure_linked(options: &LinkOptions, managed: bool) -> Result<()> {
         .ok()
         .filter(|c| !c.trim().is_empty())
     else {
+        if crate::system_service_only() {
+            bail!(
+                "this machine's enrollment belongs to the system service ({}), out of this \
+                 account's reach: restart it with {}",
+                crate::system_dir::dir().display(),
+                crate::system_dir::elevated("service install --system")
+            );
+        }
         bail!("not linked: run `deveye-agent link <code>`, or set DEVEYE_LINK_CODE");
     };
 

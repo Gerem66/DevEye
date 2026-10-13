@@ -351,6 +351,13 @@ pub fn privileged() -> bool {
     *PRIVILEGED.get_or_init(crate::report::is_privileged)
 }
 
+#[cfg(unix)]
+const SYSTEM_ENROLLMENT_HINT: &str = "under sudo the agent uses the system service's enrollment, \
+     not this account's: run it without sudo to use the account's";
+#[cfg(windows)]
+const SYSTEM_ENROLLMENT_HINT: &str = "in an administrator PowerShell the agent uses the system \
+     service's enrollment, not this account's: run it from a non-elevated PowerShell to use the account's";
+
 impl Config {
     /// `$DEVEYE_CONFIG`, else the system service's enrollment for a privileged
     /// process (so `sudo deveye-agent policy` reaches it), else this account's.
@@ -372,10 +379,18 @@ impl Config {
 
     pub fn load() -> Result<Self> {
         let path = Self::path();
-        let raw = std::fs::read_to_string(&path)
-            .with_context(|| format!("reading config at {}", path.display()))?;
-        let cfg: Config = toml::from_str(&raw).context("parsing agent.toml")?;
-        Ok(cfg)
+        let parsed = std::fs::read_to_string(&path)
+            .with_context(|| format!("reading config at {}", path.display()))
+            .and_then(|raw| toml::from_str::<Config>(&raw).context("parsing agent.toml"));
+        // Elevated by habit, one reaches the system service's enrollment
+        // without having asked for it: say so, and how to reach one's own.
+        let implicit = std::env::var_os("DEVEYE_CONFIG").is_none()
+            && privileged()
+            && path == crate::system_dir::config_path();
+        if implicit {
+            return parsed.context(SYSTEM_ENROLLMENT_HINT);
+        }
+        parsed
     }
 
     pub fn exists() -> bool {

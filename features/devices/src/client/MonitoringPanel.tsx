@@ -43,6 +43,7 @@ import { LogsPanel } from './LogsPanel';
 import { useAgentUpdate } from './useAgentUpdate';
 import { DeviceDialogs } from './manage/DeviceDialogs';
 import { deviceLifecycleActions } from './manage/lifecycleActions';
+import { ReconnectAgent } from './manage/ReconnectAgent';
 import { useDeviceActions } from './manage/useDeviceActions';
 
 // xterm.js and the file explorer are heavy and rarely opened: loaded on demand.
@@ -250,6 +251,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     const [terminalOpen, setTerminalOpen] = useState(false);
     const [filesOpen, setFilesOpen] = useState(false);
     const [agentOpen, setAgentOpen] = useState(false);
+    const [reconnectOpen, setReconnectOpen] = useState(false);
     const updater = useAgentUpdate();
     const [storage, setStorage] = useState<{ snapshots: number; processes: number; bytes: number } | null>(null);
     const [deleteOpen, setDeleteOpen] = useState(false);
@@ -1155,7 +1157,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                         </Button>
                     )}
                 </div>
-            ) : (
+            ) : archived ? (
                 !online && (
                     <div className={styles.offlineBanner}>
                         <span className='icon icon-clock' />
@@ -1164,6 +1166,27 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                         {lastKnown
                             ? ` · dernières données le ${new Date(lastKnown.timestamp).toLocaleString('fr-FR')}`
                             : ''}
+                    </div>
+                )
+            ) : (
+                !online && (
+                    <div className={styles.warnBanner} role='status'>
+                        <span className='icon icon-warning' aria-hidden='true' />
+                        <div className={styles.bannerText}>
+                            <p className={styles.bannerTitle}>
+                                Hors ligne
+                                {selected.lastSeen ? ` depuis ${formatAgo(selected.lastSeen * 1000)}` : ''}
+                            </p>
+                            <p>
+                                La machine est éteinte, ou son agent ne tourne plus.
+                                {lastKnown
+                                    ? ` Dernières données le ${new Date(lastKnown.timestamp).toLocaleString('fr-FR')}.`
+                                    : ''}
+                            </p>
+                        </div>
+                        <Button variant='secondary' icon='terminal' onClick={() => setReconnectOpen(true)}>
+                            Reconnecter l’agent
+                        </Button>
                     </div>
                 )
             )}
@@ -1583,8 +1606,20 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                         canWrite={canWrite}
                         updater={updater}
                         onShowPrivilegeInfo={showPrivilegeInfo}
+                        onReconnect={() => setReconnectOpen(true)}
                     />
                 )}
+            </Dialog>
+
+            {/* Après la popup « Agent », qu'elle recouvre quand elle en est ouverte. */}
+            <Dialog
+                open={reconnectOpen}
+                onClose={() => setReconnectOpen(false)}
+                title={`Reconnecter l’agent · « ${selected.name} »`}
+                description='Les commandes à lancer sur l’appareil pour relancer son agent, avec les droits et le démarrage de votre choix.'
+                width={620}
+            >
+                {reconnectOpen && <ReconnectAgent device={selected} report={report} />}
             </Dialog>
 
             <Dialog

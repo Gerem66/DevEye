@@ -24,7 +24,8 @@ impl Change {
 pub fn run(change: Change) -> Result<()> {
     if !Config::exists() && crate::system_service_only() {
         anyhow::bail!(
-            "the agent runs as a system service, enrolled for root alone: sudo deveye-agent policy"
+            "the agent runs as a system service, enrolled for root alone: {}",
+            crate::system_dir::elevated("policy")
         );
     }
     let mut config = Config::load().context("loading config (run `link` first)")?;

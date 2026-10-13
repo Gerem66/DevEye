@@ -20,6 +20,7 @@ declare const styles: {
     readonly codeTable: string;
     readonly command: string;
     readonly commandActions: string;
+    readonly commandRow: string;
     readonly container: string;
     readonly copied: string;
     readonly deleteErrorHint: string;
@@ -66,6 +67,8 @@ declare const styles: {
     readonly pairOptions: string;
     readonly pairSection: string;
     readonly policyGrid: string;
+    readonly reconnectKnown: string;
+    readonly reconnectStep: string;
     readonly serviceBox: string;
     readonly serviceNoteError: string;
     readonly serviceNoteOk: string;
