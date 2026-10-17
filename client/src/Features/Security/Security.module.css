@@ -316,6 +316,25 @@
     overflow-wrap: anywhere;
 }
 
+/* « Celle-ci », « De confiance » : à la suite du navigateur, dans sa ligne. */
+.historyTag {
+    margin-left: var(--space-sm);
+    vertical-align: 2px;
+}
+
+/* Sous la liste : les connexions hors fenêtre, ou le résultat de la fermeture. */
+.historyNote {
+    margin: var(--space-sm) 0 0;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+}
+
+.historyDone {
+    margin: var(--space-sm) 0 0;
+    font-size: 0.85rem;
+    color: var(--success);
+}
+
 .browserMeta {
     color: var(--text-muted);
 }

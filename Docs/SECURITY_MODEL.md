@@ -244,6 +244,14 @@ Application directe des deux étages ci-dessus (`features/notes/src/server/handl
       les codes envoyés, jamais la 2FA, pendant 90 jours après sa dernière
       connexion. Sécurité les liste et les retire ; changer de mot de passe ou
       récupérer le coffre les retire tous.
+    - **Historique des connexions** : chaque connexion réussie laisse une ligne
+      (`login_history`) avec le navigateur, l'adresse IP, les codes franchis,
+      si le navigateur était de confiance et la session ouverte. Sécurité
+      montre les 30 derniers jours, en lecture seule : le compte ne l'efface
+      pas, un intrus n'y efface donc pas sa trace, et la purge quotidienne
+      garde 90 jours. À côté, « Déconnecter les autres appareils » révoque
+      toutes les sessions sauf la sienne, comme le fait un changement de mot de
+      passe.
 - 2FA TOTP optionnel avec codes de secours à usage unique. Un code TOTP accepté
   ne se rejoue pas (`last_used_counter`) ; les codes de secours (16 caractères)
   sont condensés sous une clé dérivée de la clé serveur, pas en SHA-256 nu : un

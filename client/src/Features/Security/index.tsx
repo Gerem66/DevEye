@@ -24,7 +24,7 @@ import {
     type UserSecurity
 } from '@deveye/types';
 import type { FeatureProps } from '../types';
-import { EmailCheckRow, SmsCheckRow, TrustedBrowsersRow } from './LoginChecks';
+import { EmailCheckRow, LoginHistoryRow, SmsCheckRow, TrustedBrowsersRow } from './LoginChecks';
 import { MinutesEditor } from './MinutesEditor';
 import { Reveal, Row, Section } from './Row';
 import { SecurityDialog } from './SecurityDialog';
@@ -443,6 +443,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                             <Reveal open={checks.email.enabled || checks.sms.enabled}>
                                 <TrustedBrowsersRow checks={checks} onChange={setChecks} />
                             </Reveal>
+                            <LoginHistoryRow checks={checks} />
                         </Section>
                     )}
 

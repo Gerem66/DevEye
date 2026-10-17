@@ -108,6 +108,22 @@ export const loginEmail: E2eScenario = {
                 check(done.status === 'signedIn', 'Le code n’a pas ouvert la session');
                 await account.client.connect();
             }
+        },
+        {
+            label: 'L’historique garde chaque connexion',
+            run: async (ctx) => {
+                const [account] = ctx.accounts;
+                const { entries } = await account.client.send<{
+                    entries: { steps: string[]; trusted: boolean; current: boolean }[];
+                }>('loginChecks.history', {});
+                check(entries.length >= 3, `L’historique ne compte que ${entries.length} connexion(s)`);
+                const [last, trusted] = entries;
+                check(
+                    last.current && last.steps.includes('email'),
+                    'La dernière connexion n’est pas celle-ci, par code'
+                );
+                check(trusted.trusted && trusted.steps.length === 0, 'La connexion de confiance n’est pas marquée');
+            }
         }
     ]
 };

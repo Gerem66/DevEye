@@ -2,26 +2,26 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import type { Database } from '@/db';
-import { LOG_RETENTION_DAYS, purgeExpiredLogs } from './logRetention';
+import { LOGIN_HISTORY_DAYS } from '@deveye/types';
+import { LOG_RETENTION_DAYS, purgeExpiredLoginHistory, purgeExpiredLogs } from './logRetention';
 
 const DAY = 24 * 3600;
 
-/** Une table de dates, et le DELETE … LIMIT que le repo exécute. */
-function memoryLogs(dates: number[]) {
+/** Une table de dates, et le DELETE … LIMIT que le repo exécute, sous le nom du dépôt voulu. */
+function memoryTable(repo: 'logs' | 'loginHistory', dates: number[]) {
     let rows = [...dates];
     const calls: number[] = [];
-    const db = {
-        logs: {
-            purgeBefore: (cutoff: number, batch: number) => {
-                const old = rows.filter((d) => d < cutoff).slice(0, batch);
-                rows = rows.filter((d) => !old.includes(d));
-                calls.push(old.length);
-                return Promise.resolve(old.length);
-            }
-        }
-    } as unknown as Pick<Database, 'logs'>;
+    const purgeBefore = (cutoff: number, batch: number) => {
+        const old = rows.filter((d) => d < cutoff).slice(0, batch);
+        rows = rows.filter((d) => !old.includes(d));
+        calls.push(old.length);
+        return Promise.resolve(old.length);
+    };
+    const db = { [repo]: { purgeBefore } } as unknown as Pick<Database, 'logs' | 'loginHistory'>;
     return { db, rows: () => rows, calls };
 }
+
+const memoryLogs = (dates: number[]) => memoryTable('logs', dates);
 
 describe('purgeExpiredLogs', () => {
     const now = 1_800_000_000;
@@ -48,5 +48,17 @@ describe('purgeExpiredLogs', () => {
         const removed = await purgeExpiredLogs(table.db, now * 1000);
         assert.equal(removed, 12_000);
         assert.deepEqual(table.calls, [5000, 5000, 2000]);
+    });
+});
+
+describe('purgeExpiredLoginHistory', () => {
+    const now = 1_800_000_000;
+
+    it('garde les connexions dans la durée, supprime les autres', async () => {
+        const edge = now - LOGIN_HISTORY_DAYS * DAY;
+        const table = memoryTable('loginHistory', [now - DAY, edge, edge - 1]);
+        const removed = await purgeExpiredLoginHistory(table.db, now * 1000);
+        assert.equal(removed, 1);
+        assert.deepEqual(table.rows(), [now - DAY, edge]);
     });
 });

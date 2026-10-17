@@ -189,6 +189,10 @@ export async function writeAccountExport(zip: ZipWriter, host: ExportHost, req: 
         'SELECT label, created_at, last_used_at, expires_at FROM trusted_browsers WHERE user_id = ? ORDER BY created_at',
         [req.userId]
     );
+    const logins = await q.query<{ label: string; ip: string; steps: string; trusted: number; logged_at: number }>(
+        'SELECT label, ip, steps, trusted, logged_at FROM login_history WHERE user_id = ? ORDER BY logged_at',
+        [req.userId]
+    );
     await json('Compte/compte.json', {
         compte: {
             id: account.id,
@@ -229,6 +233,13 @@ export async function writeAccountExport(zip: ZipWriter, host: ExportHost, req: 
             ajouteLe: iso(b.created_at),
             derniereConnexion: iso(b.last_used_at),
             expireLe: iso(b.expires_at)
+        })),
+        connexions: logins.map((l) => ({
+            le: iso(l.logged_at),
+            navigateur: l.label,
+            adresseIp: l.ip,
+            codes: l.steps ? l.steps.split(',') : [],
+            navigateurDeConfiance: l.trusted === 1
         }))
     });
     const avatar = dataUrlFile(account.avatar);

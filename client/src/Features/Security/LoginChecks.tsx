@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import { TRUSTED_BROWSER_DAYS, TRUSTED_BROWSERS_MAX, type LoginChecksStatus, type TrustedBrowser } from '@deveye/types';
+import {
+    LOGIN_HISTORY_WINDOW_DAYS,
+    TRUSTED_BROWSER_DAYS,
+    TRUSTED_BROWSERS_MAX,
+    type LoginChecksStatus,
+    type LoginEntry,
+    type LoginStep,
+    type TrustedBrowser
+} from '@deveye/types';
 
 import { ws, WsError } from '@/api/ws';
 import { humanizeError } from '@/api/useResource';
@@ -8,6 +16,7 @@ import Button from '@/Components/Button';
 import { ConfirmDialog, type ConfirmRequest } from '@/Components/ConfirmDialog';
 import { Dialog } from '@/Components/Dialog';
 import { openInfo } from '@/Components/InfoPopup';
+import { StatusBadge } from '@/Components/StatusBadge';
 import Switch from '@/Components/Switch';
 import TextInput from '@/Components/TextInput';
 import { PhoneDialog } from './PhoneDialog';
@@ -139,6 +148,26 @@ function PasswordConfirmDialog({
 
 function formatDay(seconds: number): string {
     return new Date(seconds * 1000).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+/** « 16 octobre à 14:32 » : l'année est celle en cours, la fenêtre ne remonte pas plus loin. */
+function formatMoment(seconds: number): string {
+    const date = new Date(seconds * 1000);
+    const day = date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' });
+    const time = date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    return `${day} à ${time}`;
+}
+
+const STEP_LABELS: Record<LoginStep, string> = {
+    email: 'code par mail',
+    totp: 'code de l’application',
+    sms: 'code par SMS'
+};
+
+/** Ce qu'une connexion a franchi après le mot de passe, en une poignée de mots. */
+function stepsLabel(entry: LoginEntry): string {
+    if (entry.steps.length > 0) return entry.steps.map((s) => STEP_LABELS[s]).join(', ');
+    return entry.trusted ? 'navigateur de confiance' : 'mot de passe seul';
 }
 
 /** Le code par mail : la protection qui s'applique à toute connexion. */
@@ -381,6 +410,151 @@ export function TrustedBrowsersRow({ checks, onChange }: RowProps) {
                 )}
             </Row>
             <TrustedBrowsersDialog open={open} browsers={browsers} onClose={close} onChange={onChange} />
+        </>
+    );
+}
+
+interface LoginHistoryDialogProps {
+    open: boolean;
+    onClose: () => void;
+}
+
+/**
+ * Les connexions réussies des derniers jours, en lecture seule : ce qu'on
+ * regarde quand on soupçonne une connexion depuis un appareil qui n'est pas
+ * le sien. Le geste qui va avec : fermer les autres sessions.
+ */
+function LoginHistoryDialog({ open, onClose }: LoginHistoryDialogProps) {
+    const [history, setHistory] = useState<{ entries: LoginEntry[]; older: number } | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
+    const [busy, setBusy] = useState(false);
+    /** Le résultat de la fermeture, le temps que le dialogue reste ouvert. */
+    const [closed, setClosed] = useState<number | null>(null);
+
+    useEffect(() => {
+        if (!open) return;
+        setHistory(null);
+        setError(null);
+        setClosed(null);
+        ws.send('loginChecks.history', {}).then(setHistory, (e: unknown) =>
+            setError(humanizeError(e, 'L’historique n’a pas pu être lu.'))
+        );
+    }, [open]);
+
+    const logoutOthers = async () => {
+        setBusy(true);
+        try {
+            setClosed((await ws.send('loginChecks.logoutOthers', {})).closed);
+        } catch (e) {
+            setError(humanizeError(e, 'Les autres appareils n’ont pas pu être déconnectés.'));
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <>
+            <Dialog
+                open={open}
+                onClose={onClose}
+                title='Connexions récentes'
+                description={`Chaque ouverture de session des ${LOGIN_HISTORY_WINDOW_DAYS} derniers jours, avec le navigateur et l’adresse d’où elle venait. Une connexion que vous ne reconnaissez pas : changez votre mot de passe et déconnectez les autres appareils.`}
+                width={600}
+                footer={
+                    <>
+                        <Button
+                            variant='danger'
+                            disabled={busy || closed !== null}
+                            onClick={() =>
+                                setConfirm({
+                                    title: 'Déconnecter les autres appareils ?',
+                                    description:
+                                        'Toutes vos sessions se ferment, sauf celle-ci. Chaque appareil devra se reconnecter avec votre mot de passe.',
+                                    confirmLabel: 'Déconnecter',
+                                    onConfirm: () => void logoutOthers()
+                                })
+                            }
+                        >
+                            Déconnecter les autres appareils
+                        </Button>
+                        <Button variant='secondary' onClick={onClose}>
+                            Fermer
+                        </Button>
+                    </>
+                }
+            >
+                {error ? (
+                    <div className={styles.error} role='alert'>
+                        {error}
+                    </div>
+                ) : history === null ? (
+                    <p className={styles.historyNote}>Chargement…</p>
+                ) : (
+                    <>
+                        <ul className={styles.browserList}>
+                            {history.entries.map((entry) => (
+                                <li key={entry.id} className={styles.browserItem}>
+                                    <span className={styles.browserText}>
+                                        <span className={styles.browserLabel}>
+                                            {entry.label}
+                                            {entry.current && (
+                                                <StatusBadge tone='accent' dot={false} className={styles.historyTag}>
+                                                    Celle-ci
+                                                </StatusBadge>
+                                            )}
+                                            {entry.trusted && (
+                                                <StatusBadge tone='neutral' dot={false} className={styles.historyTag}>
+                                                    De confiance
+                                                </StatusBadge>
+                                            )}
+                                        </span>
+                                        <span className={styles.browserMeta}>
+                                            Le {formatMoment(entry.at)} · {entry.ip} · {stepsLabel(entry)}
+                                        </span>
+                                    </span>
+                                </li>
+                            ))}
+                        </ul>
+                        {history.older > 0 && (
+                            <p className={styles.historyNote}>
+                                Et {history.older} connexion{history.older > 1 ? 's' : ''} plus ancienne
+                                {history.older > 1 ? 's' : ''}.
+                            </p>
+                        )}
+                        {closed !== null && (
+                            <p className={styles.historyDone} role='status'>
+                                {closed === 0
+                                    ? 'Aucune autre session n’était ouverte.'
+                                    : `${closed} autre${closed > 1 ? 's' : ''} session${closed > 1 ? 's' : ''} fermée${closed > 1 ? 's' : ''}.`}
+                            </p>
+                        )}
+                    </>
+                )}
+            </Dialog>
+            <ConfirmDialog request={confirm} busy={busy} onClose={() => setConfirm(null)} />
+        </>
+    );
+}
+
+/** Les connexions récentes : leur nombre, et le dialogue qui les montre. */
+export function LoginHistoryRow({ checks }: Pick<RowProps, 'checks'>) {
+    const [open, setOpen] = useState(false);
+    const close = useCallback(() => setOpen(false), []);
+    const count = checks.recentLogins;
+    return (
+        <>
+            <Row
+                sub
+                icon='clock'
+                label='Connexions récentes'
+                hint={`Chaque ouverture de session des ${LOGIN_HISTORY_WINDOW_DAYS} derniers jours, avec son navigateur et son adresse : de quoi repérer un appareil qui n’est pas le vôtre.`}
+            >
+                <Button variant='secondary' onClick={() => setOpen(true)}>
+                    {count} connexion{count > 1 ? 's' : ''}
+                </Button>
+            </Row>
+            <LoginHistoryDialog open={open} onClose={close} />
         </>
     );
 }

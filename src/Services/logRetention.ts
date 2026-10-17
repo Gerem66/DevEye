@@ -1,4 +1,5 @@
 import type { Logger } from 'pino';
+import { LOGIN_HISTORY_DAYS } from '@deveye/types';
 import type { FeatureService } from '@deveye/types/sdk/server';
 
 import type { Database } from '@/db';
@@ -25,6 +26,17 @@ export async function purgeExpiredLogs(db: Pick<Database, 'logs'>, now: number):
     }
 }
 
+/** Supprime l'historique des connexions au-delà de sa durée de conservation, et dit combien de lignes sont parties. */
+export async function purgeExpiredLoginHistory(db: Pick<Database, 'loginHistory'>, now: number): Promise<number> {
+    const cutoff = Math.floor(now / 1000) - LOGIN_HISTORY_DAYS * 24 * 3600;
+    let total = 0;
+    for (;;) {
+        const removed = await db.loginHistory.purgeBefore(cutoff, BATCH);
+        total += removed;
+        if (removed < BATCH) return total;
+    }
+}
+
 /** Une passe au démarrage, puis une par jour. */
 export function createLogRetention(host: { db: Database; logger: Logger }): FeatureService {
     let timer: ReturnType<typeof setInterval> | null = null;
@@ -36,6 +48,10 @@ export function createLogRetention(host: { db: Database; logger: Logger }): Feat
         try {
             const removed = await purgeExpiredLogs(host.db, Date.now());
             if (removed > 0) host.logger.info({ removed, days: LOG_RETENTION_DAYS }, 'Expired audit logs purged');
+            const logins = await purgeExpiredLoginHistory(host.db, Date.now());
+            if (logins > 0) {
+                host.logger.info({ removed: logins, days: LOGIN_HISTORY_DAYS }, 'Expired login history purged');
+            }
         } catch (e) {
             host.logger.error({ err: e }, 'Audit log purge failed');
         } finally {

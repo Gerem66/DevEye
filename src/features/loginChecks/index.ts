@@ -1,13 +1,18 @@
 import {
+    LOGIN_HISTORY_WINDOW_DAYS,
     loginChecksForgetBrowser,
     loginChecksForgetBrowsers,
+    loginChecksHistory,
+    loginChecksLogoutOthers,
     loginChecksPhoneConfirm,
     loginChecksPhoneRemove,
     loginChecksPhoneStart,
     loginChecksSetEmail,
     loginChecksSetSms,
     loginChecksStatus,
-    type LoginChecksStatus
+    loginStepSchema,
+    type LoginChecksStatus,
+    type LoginStep
 } from '@deveye/types';
 import { parsePhoneNumberFromString } from 'libphonenumber-js/max';
 
@@ -16,8 +21,10 @@ import { timingSafeEqual } from 'node:crypto';
 import { LOGIN_CODE_TTL_MS, hashCode, randomCode } from '@/auth/loginChallenge';
 import { maskEmail, maskPhone } from '@/auth/mask';
 import { phoneContext } from '@/Services/sealContexts';
+import { forgetSessionsOf } from '@/Services/SecureStore';
 import { serverMail } from '@/Services/serverMail';
 import { sms, SmsQuotaError, SmsReceiverRefusedError } from '@/Services/sms';
+import { forgetStepUpsOf } from '@/Services/stepUp';
 import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 import { assertAccountPassword } from '../_password';
 
@@ -33,10 +40,16 @@ export async function phoneOf(ctx: Pick<FeatureContext, 'db' | 'crypt'>, userId:
     return row ? ctx.crypt.openTextFor('phone', row.phone_sealed, phoneContext(userId)) : null;
 }
 
+/** Le début de la fenêtre de l'historique montrée au compte, en secondes. */
+const historySince = (): number => Math.floor(Date.now() / 1000) - LOGIN_HISTORY_WINDOW_DAYS * 86400;
+
+const isLoginStep = (step: string): step is LoginStep => (loginStepSchema.options as readonly string[]).includes(step);
+
 async function buildStatus(ctx: FeatureContext): Promise<LoginChecksStatus> {
     const user = await ctx.db.users.findById(ctx.userId);
     if (!user) throw new FeatureError('not_found', 'Compte introuvable');
     const browsers = await ctx.db.trustedBrowsers.listByUser(ctx.userId, Math.floor(Date.now() / 1000));
+    const recentLogins = await ctx.db.loginHistory.countSince(ctx.userId, historySince());
     const phoneRow = await ctx.db.userPhones.get(ctx.userId);
     const phone = phoneRow ? await phoneOf(ctx, ctx.userId) : null;
     return {
@@ -55,7 +68,8 @@ async function buildStatus(ctx: FeatureContext): Promise<LoginChecksStatus> {
             label: b.label,
             createdAt: Number(b.created_at),
             lastUsedAt: Number(b.last_used_at)
-        }))
+        })),
+        recentLogins
     };
 }
 
@@ -259,6 +273,62 @@ export const loginChecksForgetBrowsersFeature: FeatureDefinition<
     }
 });
 
+export const loginChecksHistoryFeature: FeatureDefinition<
+    typeof loginChecksHistory.command,
+    typeof loginChecksHistory.input,
+    typeof loginChecksHistory.output
+> = defineFeature({
+    ...loginChecksHistory,
+    access: { scope: 'account' },
+    handler: async (ctx) => {
+        const since = historySince();
+        const [rows, older] = await Promise.all([
+            ctx.db.loginHistory.listSince(ctx.userId, since),
+            ctx.db.loginHistory.countBefore(ctx.userId, since)
+        ]);
+        return {
+            entries: rows.map((r) => ({
+                id: Number(r.id),
+                at: Number(r.logged_at),
+                label: r.label,
+                ip: r.ip,
+                steps: r.steps ? r.steps.split(',').filter(isLoginStep) : [],
+                trusted: r.trusted === 1,
+                current: r.session_id === ctx.sessionId
+            })),
+            older
+        };
+    }
+});
+
+export const loginChecksLogoutOthersFeature: FeatureDefinition<
+    typeof loginChecksLogoutOthers.command,
+    typeof loginChecksLogoutOthers.input,
+    typeof loginChecksLogoutOthers.output
+> = defineFeature({
+    ...loginChecksLogoutOthers,
+    access: { scope: 'account' },
+    handler: async (ctx) => {
+        // Le même geste qu'un changement de mot de passe, le mot de passe en
+        // moins : les autres sessions, leur clé en mémoire, leur confirmation
+        // de pilotage et leur socket.
+        const closed = await ctx.db.refreshTokens.countLiveSessionsExcept(ctx.userId, ctx.sessionId);
+        await ctx.db.refreshTokens.revokeUserExcept(ctx.userId, ctx.sessionId);
+        forgetSessionsOf(ctx.userId, ctx.sessionId);
+        forgetStepUpsOf(ctx.userId, ctx.sessionId);
+        ctx.live?.closeSessionsOf(ctx.userId, ctx.sessionId);
+        ctx.audit({
+            action: 'loginChecks.logoutOthers',
+            level: 'warning',
+            description:
+                closed === 0
+                    ? 'Autres appareils déconnectés : aucune autre session ouverte'
+                    : `Autres appareils déconnectés : ${closed} session${closed > 1 ? 's' : ''} fermée${closed > 1 ? 's' : ''}`
+        });
+        return { closed };
+    }
+});
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const loginChecksFeatures: FeatureDefinition<string, any, any>[] = [
     loginChecksStatusFeature,
@@ -268,5 +338,7 @@ export const loginChecksFeatures: FeatureDefinition<string, any, any>[] = [
     loginChecksPhoneConfirmFeature,
     loginChecksPhoneRemoveFeature,
     loginChecksForgetBrowserFeature,
-    loginChecksForgetBrowsersFeature
+    loginChecksForgetBrowsersFeature,
+    loginChecksHistoryFeature,
+    loginChecksLogoutOthersFeature
 ];

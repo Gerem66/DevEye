@@ -288,6 +288,15 @@ export async function loginRoutes(app: FastifyInstance, { db, crypt, audit }: Lo
         const bundle = await loadUserBundle(db, user.id);
         if (!bundle) return reply.code(500).send(err('internal', 'Unable to load user'));
         const { sessionId, tokens } = await issueSession(reply, db, user.id, authTransport(req));
+        await db.loginHistory.record({
+            userId: user.id,
+            sessionId,
+            label: browserLabel(req.headers['user-agent']),
+            ip: req.ip,
+            steps: opts.passed,
+            trusted: opts.trusted,
+            now: Math.floor(Date.now() / 1000)
+        });
         syncFederationCookie(req, reply, bundle);
         if (opts.dek) rememberSessionDek(sessionId, user.id, opts.dek.dek, opts.dek.graceMs);
         const trustToken = opts.trust ? await trust(req, reply, user.id) : undefined;

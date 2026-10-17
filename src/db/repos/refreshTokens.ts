@@ -33,6 +33,8 @@ export interface RefreshTokensRepo {
     revokeUser(userId: number): Promise<void>;
     /** Toutes les sessions d'un compte sauf celle qui vient de prouver son secret. */
     revokeUserExcept(userId: number, keepSessionId: string): Promise<void>;
+    /** Les sessions encore vivantes du compte, celle-ci exceptée : ce que `revokeUserExcept` fermerait. */
+    countLiveSessionsExcept(userId: number, keepSessionId: string): Promise<number>;
     /** Cette session a-t-elle encore un jeton vivant ? Vérifié à la poignée de main WebSocket. */
     hasLiveSession(sessionId: string): Promise<boolean>;
 }
@@ -91,6 +93,14 @@ export function refreshTokensRepo(pool: Q): RefreshTokensRepo {
                  WHERE user_id = ? AND session_id <> ? AND revoked_at IS NULL`,
                 [userId, keepSessionId]
             );
+        },
+        async countLiveSessionsExcept(userId, keepSessionId) {
+            const r = await pool.query<{ n: number }>(
+                `SELECT COUNT(DISTINCT session_id) AS n FROM refresh_tokens
+                 WHERE user_id = ? AND session_id <> ? AND revoked_at IS NULL AND expires_at > UNIX_TIMESTAMP()`,
+                [userId, keepSessionId]
+            );
+            return Number(r.rows[0]?.n ?? 0);
         },
         async hasLiveSession(sessionId) {
             const r = await pool.query<{ n: number }>(

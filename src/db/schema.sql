@@ -1574,6 +1574,21 @@ CREATE TABLE `item_shares` (
   CONSTRAINT `fk_item_share_workspace` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+CREATE TABLE `login_history` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `session_id` char(36) COLLATE utf8mb4_general_ci NOT NULL,
+  `label` varchar(120) COLLATE utf8mb4_general_ci NOT NULL,
+  `ip` varchar(45) COLLATE utf8mb4_general_ci NOT NULL,
+  `steps` varchar(32) COLLATE utf8mb4_general_ci NOT NULL,
+  `trusted` tinyint(1) NOT NULL,
+  `logged_at` bigint NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_login_history_user` (`user_id`,`logged_at`),
+  KEY `idx_login_history_logged` (`logged_at`),
+  CONSTRAINT `fk_login_history_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 CREATE TABLE `logs` (
   `id` int NOT NULL AUTO_INCREMENT,
   `uid` int NOT NULL DEFAULT '0',

@@ -178,7 +178,22 @@ const SCOPES: { [K in RepoKey]: RepoScope<K> } = {
             revokeSession: { args: ['s'] },
             revokeUser: { args: [1] },
             revokeUserExcept: { args: [1, 's'] },
+            countLiveSessionsExcept: { args: [1, 's'] },
             hasLiveSession: { args: ['s'] }
+        }
+    },
+    loginHistory: {
+        guard: ACCOUNT,
+        methods: {
+            record: {
+                args: [
+                    { userId: 1, sessionId: 's', label: 'l', ip: '1.2.3.4', steps: ['email'], trusted: false, now: 0 }
+                ]
+            },
+            listSince: { args: [1, 0] },
+            countSince: { args: [1, 0] },
+            countBefore: { args: [1, 0] },
+            purgeBefore: { args: [0, 100], global: 'La purge de rétention balaie toute l’instance.' }
         }
     },
     userPhones: {
