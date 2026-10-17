@@ -206,11 +206,6 @@
     color: var(--text-secondary);
 }
 
-/* Le bandeau d'un geste raté se détache de l'explication, serrée sous l'intitulé. */
-.rowText > [role='alert'] {
-    margin-top: var(--space-xs);
-}
-
 .rowValue {
     display: flex;
     align-items: center;
@@ -540,10 +535,6 @@
     font-size: 0.85rem;
     color: var(--text-secondary);
     margin: 0 0 var(--space-md) 0;
-}
-
-.stepContent > [role='alert'] {
-    margin-top: var(--space-md);
 }
 
 .qrContainer {

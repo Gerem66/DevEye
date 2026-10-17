@@ -58,7 +58,7 @@ export function ProbeCard({ probe, state, onRetry, onPivot }: Props): React.Reac
             )}
 
             {state.kind === 'failed' && (
-                <ErrorNote note={state.note}>
+                <ErrorNote note={state.note} inline>
                     <Button variant='secondary' onClick={onRetry}>
                         Réessayer
                     </Button>

@@ -2,6 +2,7 @@ import { type ReactNode, useRef, useState, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 
 import ErrorBoundary from '@/Components/ErrorBoundary';
+import { ErrorSlotViewScope } from '@/Components/ErrorNote/slot';
 
 export interface FeatureKeepAliveProps {
     /**
@@ -53,7 +54,7 @@ export default function FeatureKeepAlive({ target, featureId, children }: Featur
                 frontière suit l'arbre React, pas le DOM où le portail l'emmène. */}
             {createPortal(
                 <ErrorBoundary variant='view' canReport featureId={featureId}>
-                    {children}
+                    <ErrorSlotViewScope>{children}</ErrorSlotViewScope>
                 </ErrorBoundary>,
                 container
             )}

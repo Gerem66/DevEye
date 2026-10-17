@@ -10,11 +10,6 @@
     margin-bottom: var(--space-lg);
 }
 
-/* Les blocs de la vue s'espacent par leurs marges : le bandeau d'un échec aussi. */
-.container > [role='alert'] {
-    margin-bottom: var(--space-md);
-}
-
 .header {
     display: flex;
     justify-content: space-between;

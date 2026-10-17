@@ -1,5 +1,6 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
 
+import { useErrorSlotRegister } from '@/Components/ErrorNote/slot';
 import styles from './StickyHeader.module.css';
 
 export interface StickyHeaderProps {
@@ -26,9 +27,21 @@ function scrollerOf(element: HTMLElement): Element | null {
  * collant du contenu se pose dessous par `top: var(--sticky-head, 0px)`. Ce
  * parent doit donc être la racine de la vue, qui est aussi la boîte dans laquelle
  * le bandeau colle.
+ *
+ * Il porte aussi, sous l'en-tête, l'emplacement des bandeaux d'erreur de la vue :
+ * ils collent avec lui, toujours en vue.
  */
 export function StickyHeader({ className, children }: StickyHeaderProps) {
     const ref = useRef<HTMLDivElement>(null);
+    const errorsRef = useRef<HTMLDivElement>(null);
+    const register = useErrorSlotRegister();
+
+    // Avant la peinture : un bandeau déjà là ne passe pas une image à sa place d'origine.
+    useLayoutEffect(() => {
+        const errors = errorsRef.current;
+        if (!register || !errors) return;
+        return register(errors);
+    }, [register]);
 
     useEffect(() => {
         const band = ref.current;
@@ -68,6 +81,7 @@ export function StickyHeader({ className, children }: StickyHeaderProps) {
     return (
         <div ref={ref} className={className ? `${styles.band} ${className}` : styles.band}>
             {children}
+            {register && <div ref={errorsRef} className={styles.errors} />}
         </div>
     );
 }

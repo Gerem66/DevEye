@@ -378,7 +378,7 @@ export function FeatureProjects(_props: FeatureViewProps) {
                 />
             )}
 
-            {!showMine && summaries === null && <p className={styles.empty}>Chargement…</p>}
+            {!showMine && summaries === null && error === null && <p className={styles.empty}>Chargement…</p>}
 
             {!showMine && summaries?.length === 0 && (
                 <p className={styles.empty}>

@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 import Button from '@/Components/Button';
 import { useFeedbackEnabled } from '@/stores/feedbackEnabled';
 import { requestOpenReport } from '@/stores/reportRequest';
+import { useErrorSlot } from './slot';
 
 import styles from './ErrorNote.module.css';
 
@@ -41,6 +43,11 @@ export interface ErrorNoteProps {
     children?: ReactNode;
     /** Rend le bandeau refermable : la croix vient en bout de rangée, après le signalement. */
     onDismiss?: () => void;
+    /**
+     * Garde le bandeau là où il est posé, au lieu de l'emplacement du cadre :
+     * l'échec d'une rangée parmi d'autres (une entrée d'historique, un envoi).
+     */
+    inline?: boolean;
 }
 
 /**
@@ -52,32 +59,48 @@ export interface ErrorNoteProps {
  * Le signalement ne s'offre pas sur un refus qui se suffit : inviter à signaler
  * une date mal saisie remplirait la boîte de l'administrateur de choses qu'il
  * ne peut pas corriger.
+ *
+ * Le bandeau se range en haut de son cadre, sur toute sa largeur : sous
+ * l'en-tête collant de la vue, sous le titre du dialogue (voir `./slot`).
  */
-export default function ErrorNote({ note, children, onDismiss }: ErrorNoteProps) {
+export default function ErrorNote({ note, children, onDismiss, inline = false }: ErrorNoteProps) {
     const feedback = useFeedbackEnabled();
+    const slot = useErrorSlot();
     if (note === null) return null;
 
     const reportable = feedback && (note.code === null || !SPOKEN_FOR.includes(note.code));
+    const hasActions = children !== undefined || reportable || onDismiss !== undefined;
 
-    return (
+    const banner = (
         <div className={styles.note} role='alert'>
             <span className={styles.text}>{note.message}</span>
-            {children}
-            {reportable && (
-                <Button
-                    variant='secondary'
-                    icon='bug'
-                    title='Envoyer ce refus à l’administrateur de ce DevEye'
-                    onClick={() => requestOpenReport(note.message)}
-                >
-                    Signaler
-                </Button>
-            )}
-            {onDismiss && (
-                <button type='button' className={styles.dismiss} onClick={onDismiss} title='Fermer' aria-label='Fermer'>
-                    <span className='icon icon-x' />
-                </button>
+            {hasActions && (
+                <span className={styles.actions}>
+                    {children}
+                    {reportable && (
+                        <Button
+                            variant='secondary'
+                            icon='bug'
+                            title='Envoyer ce refus à l’administrateur de ce DevEye'
+                            onClick={() => requestOpenReport(note.message)}
+                        >
+                            Signaler
+                        </Button>
+                    )}
+                    {onDismiss && (
+                        <button
+                            type='button'
+                            className={styles.dismiss}
+                            onClick={onDismiss}
+                            title='Fermer'
+                            aria-label='Fermer'
+                        >
+                            <span className='icon icon-x' />
+                        </button>
+                    )}
+                </span>
             )}
         </div>
     );
+    return slot && !inline ? createPortal(banner, slot) : banner;
 }

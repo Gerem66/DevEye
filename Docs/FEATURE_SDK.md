@@ -635,7 +635,10 @@ absent sur un refus qui se suffit (saisie, droit, quota, verrou, session,
 connexion coupée), présent sur une panne que l'utilisateur ne peut pas réparer
 (`internal`, `timeout`, pas de code). Un serveur qui lève `internal` pour une
 panne du côté de l'utilisateur (son hôte, son jeton, son agent) fait donc
-proposer un signalement à tort : il lève `conflict` ou `validation`.
+proposer un signalement à tort : il lève `conflict` ou `validation`. Le bandeau
+se range de lui-même en haut de son cadre, sur toute sa largeur : sous le
+`StickyHeader` de la vue, sous le titre du dialogue (`ErrorNote/slot.tsx`) ;
+`inline` le garde dans sa rangée.
 `invalidate(clé)` et `useResourceVersion` relient une
 mutation aux widgets qui la lisent, `onServerEvent` écoute la voie de poussée,
 `openFeature` ouvre une autre feature sur un élément, `useDomains(feature)` lit

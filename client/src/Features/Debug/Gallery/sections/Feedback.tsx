@@ -76,19 +76,26 @@ export default function Feedback() {
                     <CountBadge count={7} tone='neutral' />
                 </Variant>
             </Specimen>
-            <Specimen title='ErrorNote' note='Le bouton de signalement n’apparaît que pour une panne.'>
+            <Specimen
+                title='ErrorNote'
+                note='Le bouton de signalement n’apparaît que pour une panne. Hors d’ici, le bandeau se range sous l’en-tête de sa vue ou le titre de son dialogue.'
+            >
                 <Variant label='refus ordinaire' wide>
-                    <ErrorNote note={{ message: 'Ce nom est déjà pris.', code: 'conflict' }} />
+                    <ErrorNote note={{ message: 'Ce nom est déjà pris.', code: 'conflict' }} inline />
                 </Variant>
                 <Variant label='panne' wide>
-                    <ErrorNote note={{ message: 'Erreur interne du serveur.', code: 'internal' }}>
+                    <ErrorNote note={{ message: 'Erreur interne du serveur.', code: 'internal' }} inline>
                         <Button variant='secondary' disabled={disabled}>
                             Réessayer
                         </Button>
                     </ErrorNote>
                 </Variant>
                 <Variant label='refermable' wide>
-                    <ErrorNote note={{ message: 'Le déplacement a échoué.', code: 'timeout' }} onDismiss={() => {}} />
+                    <ErrorNote
+                        note={{ message: 'Le déplacement a échoué.', code: 'timeout' }}
+                        onDismiss={() => {}}
+                        inline
+                    />
                 </Variant>
             </Specimen>
             <Specimen title='LoadingVeil' note='Un frère de la zone défilante, dans un parent positionné.'>

@@ -17,6 +17,16 @@
     flex: 1 1 16rem;
 }
 
+/* Les gestes, le signalement et la croix vont ensemble : à la ligne, ils
+   passent d'un bloc, calés à droite. */
+.actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
 .dismiss {
     display: inline-flex;
     flex-shrink: 0;

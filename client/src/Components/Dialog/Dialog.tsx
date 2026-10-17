@@ -5,6 +5,7 @@ import { useDismissLayer } from './dismissLayer';
 import { DialogPrimaryContext, type RegisterPrimary } from './dialogPrimary';
 import { DialogCloseContext } from './dialogClose';
 import Button from '@/Components/Button';
+import { ErrorSlotFixedScope } from '@/Components/ErrorNote/slot';
 import { useSecrecyHold } from '@/stores/secrecy';
 import styles from './Dialog.module.css';
 
@@ -204,6 +205,8 @@ export default function Dialog({
     // envoie une mesure par image : la boîte le suit image par image, le
     // ressort ne joue que sur un saut isolé (un onglet, une étape).
     const bodyRef = useRef<HTMLDivElement>(null);
+    /** Sous le titre, hors du défilement du corps : les bandeaux d'erreur du dialogue. */
+    const [errorSlot, setErrorSlot] = useState<HTMLDivElement | null>(null);
     useLayoutEffect(() => {
         const dialog = dialogRef.current;
         const body = bodyRef.current;
@@ -378,17 +381,20 @@ export default function Dialog({
                             {kicker && <div className={styles.kicker}>{kicker}</div>}
                             {title && <h3 className={styles.title}>{title}</h3>}
                             {description && <p className={styles.description}>{description}</p>}
+                            <div ref={setErrorSlot} className={styles.errors} />
                             {/* Le pied aussi : un `DialogCancelButton` y est le cas courant. */}
                             <DialogCloseContext.Provider value={attemptClose}>
-                                <DialogPrimaryContext.Provider value={registerPrimary}>
-                                    <div
-                                        ref={bodyRef}
-                                        className={`${styles.body} ${tall || fill ? styles.bodyFill : ''}`}
-                                    >
-                                        {children}
-                                    </div>
-                                </DialogPrimaryContext.Provider>
-                                {footer && <div className={styles.footer}>{footer}</div>}
+                                <ErrorSlotFixedScope slot={errorSlot}>
+                                    <DialogPrimaryContext.Provider value={registerPrimary}>
+                                        <div
+                                            ref={bodyRef}
+                                            className={`${styles.body} ${tall || fill ? styles.bodyFill : ''}`}
+                                        >
+                                            {children}
+                                        </div>
+                                    </DialogPrimaryContext.Provider>
+                                    {footer && <div className={styles.footer}>{footer}</div>}
+                                </ErrorSlotFixedScope>
                             </DialogCloseContext.Provider>
                         </div>
                     </motion.div>

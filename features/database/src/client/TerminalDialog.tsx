@@ -118,7 +118,7 @@ export function TerminalDialog({ open, databaseId, databaseName, onClose, onWrot
                         {history.map((entry, i) => (
                             <div key={i} className={styles.terminalEntry}>
                                 <pre className={styles.terminalSql}>{entry.sql}</pre>
-                                <ErrorNote note={entry.error} />
+                                <ErrorNote note={entry.error} inline />
                                 {entry.result?.affected !== null && entry.result !== null && (
                                     <p className={styles.ok}>
                                         {entry.result.affected} ligne

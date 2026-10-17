@@ -154,14 +154,17 @@
     line-height: 1.5;
 }
 
-/* Un bandeau d'erreur posé à même le corps, sous un champ seul ou au-dessus
-   d'une liste, s'en détache ; dans un formulaire en flex, le `gap` suffit. */
-.body > * + [role='alert'] {
-    margin-top: var(--space-md);
+/* Les bandeaux d'erreur du dialogue, entre son titre et son corps. */
+.errors {
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-md);
 }
 
-.body > [role='alert']:not(:last-child) {
-    margin-bottom: var(--space-md);
+.errors:empty {
+    display: none;
 }
 
 .footer {
