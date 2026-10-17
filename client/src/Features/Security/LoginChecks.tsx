@@ -290,6 +290,7 @@ export function TrustedBrowsersRow({ checks, onChange }: RowProps) {
     return (
         <Row
             sub
+            icon='globe'
             label='Navigateurs de confiance'
             hint={
                 browsers.length === 0

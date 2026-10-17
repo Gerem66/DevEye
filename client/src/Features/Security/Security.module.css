@@ -55,9 +55,61 @@
 }
 
 .cardHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
     padding: var(--space-md);
     background: var(--surface-subtle);
     border-bottom: 1px solid var(--glass-border);
+}
+
+.cardHeadText {
+    min-width: 0;
+}
+
+/* Le bouclier du groupe et son compte : vert quand tout est en place, orange
+   tant qu'il manque une protection. */
+.cardStatus {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-shrink: 0;
+}
+
+.cardCount {
+    font-size: 0.85rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.cardShield {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+}
+
+.cardShield .icon {
+    width: 18px;
+}
+
+.cardStatusOn {
+    color: var(--success);
+}
+
+.cardStatusOn .cardShield {
+    background: var(--success-bg);
+}
+
+.cardStatusOff {
+    color: var(--warning);
+}
+
+.cardStatusOff .cardShield {
+    background: var(--warning-bg);
 }
 
 .cardTitle {
@@ -79,12 +131,13 @@
 }
 
 /* Une rangée : la tuile, l'intitulé et son état à gauche, la commande à
-   droite. Le liseré sépare, il n'encadre pas : la première n'en porte pas. */
+   droite (par sa marge, pour qu'une rangée sans commande garde son texte
+   contre sa tuile). Le liseré sépare, il n'encadre pas : la première n'en
+   porte pas. */
 .row {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    justify-content: space-between;
     gap: var(--space-sm) var(--space-md);
     padding: var(--space-md) 0;
     border-top: 1px solid var(--glass-border);
@@ -94,9 +147,17 @@
     border-top: none;
 }
 
-/* Sans tuile, alignée sur le texte de la protection qu'elle précise. */
-.sub {
-    padding-left: calc(var(--row-icon) + var(--space-md));
+/* Une tuile plus petite, calée au bord droit de la colonne des tuiles : le
+   texte reste aligné sur celui de la protection qu'elle précise. */
+.sub .rowIcon {
+    width: 28px;
+    height: 28px;
+    margin-left: calc(var(--row-icon) - 28px);
+    color: var(--text-muted);
+}
+
+.sub .rowIcon .icon {
+    width: 15px;
 }
 
 .sub .rowLabel {
@@ -214,13 +275,13 @@
     color: var(--text-primary);
 }
 
-/* Les navigateurs de confiance : un encart sous leur rangée, sur toute sa
-   largeur et au même retrait, une ligne par navigateur. */
+/* Les navigateurs de confiance : un encart sous leur rangée, aligné sur son
+   texte, une ligne par navigateur. */
 .browserList {
-    flex-basis: 100%;
+    flex-basis: calc(100% - var(--row-icon) - var(--space-md));
     display: flex;
     flex-direction: column;
-    margin: var(--space-xs) 0 0;
+    margin: var(--space-xs) 0 0 calc(var(--row-icon) + var(--space-md));
     padding: 0 var(--space-md);
     list-style: none;
     background: var(--surface-subtle);

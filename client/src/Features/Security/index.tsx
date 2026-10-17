@@ -396,14 +396,12 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
     // Le même compte que le score du Profil : la confirmation des connexions
     // n'entre en jeu que si ce serveur peut envoyer un code.
     const loginAvailable = checks !== null && (checks.email.available || checks.sms.available);
-    const protections = [
-        ...(loginAvailable ? [checks.email.enabled || checks.sms.enabled] : []),
-        twoFactorOn,
-        encryptionEnabled,
-        encryptionEnabled && currentReAuthMinutes <= 5
-    ];
-    const activeCount = protections.filter(Boolean).length;
-    const allActive = activeCount === protections.length;
+    const loginOn = loginAvailable && (checks.email.enabled || checks.sms.enabled);
+    const reAuthStrict = encryptionEnabled && currentReAuthMinutes <= 5;
+    const encryptionCount = (encryptionEnabled ? 1 : 0) + (reAuthStrict ? 1 : 0);
+    const activeCount = (loginOn ? 1 : 0) + (twoFactorOn ? 1 : 0) + encryptionCount;
+    const totalCount = (loginAvailable ? 1 : 0) + 1 + 2;
+    const allActive = activeCount === totalCount;
 
     return (
         <div className={styles.container}>
@@ -415,7 +413,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                     </div>
                     {!loading && (
                         <StatusBadge tone={allActive ? 'success' : 'warning'}>
-                            {activeCount} protection{activeCount > 1 ? 's' : ''} sur {protections.length}
+                            {activeCount} protection{activeCount > 1 ? 's' : ''} sur {totalCount}
                         </StatusBadge>
                     )}
                 </div>
@@ -429,6 +427,8 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                         <Section
                             title='Connexion'
                             description='Ce qui est vérifié, en plus du mot de passe, quand vous vous connectez depuis un navigateur que DevEye ne connaît pas.'
+                            active={loginOn ? 1 : 0}
+                            total={1}
                         >
                             {checks.email.available && <EmailCheckRow checks={checks} onChange={setChecks} />}
                             {checks.sms.available && <SmsCheckRow checks={checks} onChange={setChecks} />}
@@ -441,6 +441,8 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                     <Section
                         title='Double authentification'
                         description='Un code généré par une application sur votre téléphone, à chaque connexion et avant de piloter une machine.'
+                        active={twoFactorOn ? 1 : 0}
+                        total={1}
                     >
                         <Row
                             label='Application d’authentification'
@@ -463,7 +465,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                             />
                         </Row>
                         <Reveal open={twoFactorOn}>
-                            <Row sub label='Codes de secours' hint={backupCodesHint}>
+                            <Row sub icon='key' label='Codes de secours' hint={backupCodesHint}>
                                 <Button variant='secondary' onClick={openRegenConfirm}>
                                     Régénérer
                                 </Button>
@@ -472,6 +474,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                         <Reveal open={stepUpReady}>
                             <Row
                                 sub
+                                icon='refresh'
                                 label='Pilotage des machines'
                                 onInfo={showStepUpInfo}
                                 hint='Le code est demandé avant d’agir sur une machine, puis de nouveau après ce délai sans y toucher.'
@@ -490,6 +493,8 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                     <Section
                         title='Chiffrement'
                         description='Vos données chiffrées, verrouillées par votre mot de passe plutôt que par la clé du serveur.'
+                        active={encryptionCount}
+                        total={2}
                     >
                         <Row
                             label='Chiffrement par mot de passe'
@@ -509,7 +514,13 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                             />
                         </Row>
                         <Reveal open={encryptionEnabled}>
-                            <Row sub label='Validation du mot de passe' onInfo={showReauthInfo} hint={reAuthHint}>
+                            <Row
+                                sub
+                                icon='refresh'
+                                label='Validation du mot de passe'
+                                onInfo={showReauthInfo}
+                                hint={reAuthHint}
+                            >
                                 <MinutesEditor
                                     value={currentReAuthMinutes}
                                     min={0}

@@ -7,16 +7,38 @@ interface SectionProps {
     title: string;
     /** Ce que le groupe couvre, en une phrase, sous son titre. */
     description: string;
+    /** Les protections du groupe en place, sur celles qu'il compte (le même compte que le score du Profil). */
+    active: number;
+    total: number;
     children: ReactNode;
 }
 
-/** Un groupe de protections : une carte, son titre et son propos en tête, ses rangées dessous. */
-export function Section({ title, description, children }: SectionProps) {
+/**
+ * Un groupe de protections : une carte, son titre et son propos en tête, son
+ * bouclier à droite (vert quand tout est en place, orange sinon), ses rangées
+ * dessous.
+ */
+export function Section({ title, description, active, total, children }: SectionProps) {
+    const complete = active >= total;
     return (
         <section className={styles.card}>
             <header className={styles.cardHead}>
-                <h3 className={styles.cardTitle}>{title}</h3>
-                <p className={styles.cardText}>{description}</p>
+                <div className={styles.cardHeadText}>
+                    <h3 className={styles.cardTitle}>{title}</h3>
+                    <p className={styles.cardText}>{description}</p>
+                </div>
+                <div
+                    className={`${styles.cardStatus} ${complete ? styles.cardStatusOn : styles.cardStatusOff}`}
+                    role='img'
+                    aria-label={`${active} protection${active > 1 ? 's' : ''} sur ${total}`}
+                >
+                    <span className={styles.cardCount}>
+                        {active} / {total}
+                    </span>
+                    <span className={styles.cardShield}>
+                        <span className='icon icon-shield' />
+                    </span>
+                </div>
             </header>
             <div className={styles.rows}>{children}</div>
         </section>
@@ -68,7 +90,7 @@ interface RowProps {
     hint?: ReactNode;
     /** Ouvre l'explication détaillée : le « i » à côté de l'intitulé. */
     onInfo?: () => void;
-    /** Une rangée qui précise la protection au-dessus d'elle : sans tuile, alignée sur son texte. */
+    /** Une rangée qui précise la protection au-dessus d'elle : tuile plus petite, texte aligné sur le sien. */
     sub?: boolean;
     /** L'échec du dernier geste, sous l'explication. */
     error?: string | null;
