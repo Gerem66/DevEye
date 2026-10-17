@@ -77,6 +77,12 @@
     gap: var(--space-sm);
 }
 
+.variantBodyFill {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+}
+
 .groupTitle {
     margin: 0;
     font-size: 0.7rem;
@@ -210,6 +216,39 @@
     margin: 0;
     font-size: 0.85rem;
     color: var(--text-secondary);
+}
+
+/* Une vue en miniature : son en-tête, l'emplacement des erreurs, son contenu. */
+.frameDemo {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    padding: var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+}
+
+.frameHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+}
+
+.frameTitle {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.frameErrors {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.frameErrors:empty {
+    display: none;
 }
 
 /* Une zone défilante sous un voile : le parent positionné, le voile en frère

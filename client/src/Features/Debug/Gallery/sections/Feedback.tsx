@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import Button from '@/Components/Button';
 import CountBadge from '@/Components/CountBadge';
 import ErrorNote from '@/Components/ErrorNote';
+import { ErrorSlotFixedScope } from '@/Components/ErrorNote/slot';
 import ReadOnlyNotice from '@/Components/FeatureSettings/ReadOnlyNotice';
 import { openInfo } from '@/Components/InfoPopup';
 import LoadingVeil from '@/Components/LoadingVeil';
@@ -13,6 +14,29 @@ import { StatusBadge } from '@/Components/StatusBadge';
 import Term from '@/Components/Term';
 import { Specimen, useGalleryDisabled, Variant } from '../Specimen';
 import styles from '../Gallery.module.css';
+
+/**
+ * Le placement réel : le bandeau est écrit sous le contenu, et s'affiche dans
+ * l'emplacement posé sous l'en-tête, comme dans une vue ou un dialogue.
+ */
+function FramedErrorNote({ disabled }: { disabled: boolean }) {
+    const [slot, setSlot] = useState<HTMLDivElement | null>(null);
+    return (
+        <div className={styles.frameDemo}>
+            <div className={styles.frameHead}>
+                <span className={styles.frameTitle}>Titre de la vue</span>
+                <Button variant='secondary' icon='plus' disabled={disabled}>
+                    Ajouter
+                </Button>
+            </div>
+            <div ref={setSlot} className={styles.frameErrors} />
+            <ErrorSlotFixedScope slot={slot}>
+                <p className={styles.demoText}>Le contenu de la vue, sous lequel le bandeau est écrit.</p>
+                <ErrorNote note={{ message: 'Impossible de charger la liste.', code: 'internal' }} />
+            </ErrorSlotFixedScope>
+        </div>
+    );
+}
 
 const TONES = ['online', 'offline', 'success', 'warning', 'danger', 'accent', 'neutral'] as const;
 
@@ -78,19 +102,22 @@ export default function Feedback() {
             </Specimen>
             <Specimen
                 title='ErrorNote'
-                note='Le bouton de signalement n’apparaît que pour une panne. Hors d’ici, le bandeau se range sous l’en-tête de sa vue ou le titre de son dialogue.'
+                note='Le bouton de signalement n’apparaît que pour une panne. Le bandeau se range sous l’en-tête de sa vue ou le titre de son dialogue, sur toute la largeur.'
             >
-                <Variant label='refus ordinaire' wide>
+                <Variant label='dans un cadre' wide fill>
+                    <FramedErrorNote disabled={disabled} />
+                </Variant>
+                <Variant label='refus ordinaire' wide fill>
                     <ErrorNote note={{ message: 'Ce nom est déjà pris.', code: 'conflict' }} inline />
                 </Variant>
-                <Variant label='panne' wide>
+                <Variant label='panne' wide fill>
                     <ErrorNote note={{ message: 'Erreur interne du serveur.', code: 'internal' }} inline>
                         <Button variant='secondary' disabled={disabled}>
                             Réessayer
                         </Button>
                     </ErrorNote>
                 </Variant>
-                <Variant label='refermable' wide>
+                <Variant label='refermable' wide fill>
                     <ErrorNote
                         note={{ message: 'Le déplacement a échoué.', code: 'timeout' }}
                         onDismiss={() => {}}

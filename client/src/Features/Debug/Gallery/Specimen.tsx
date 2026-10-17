@@ -22,11 +22,22 @@ export function Specimen({ title, note, children }: { title: string; note?: stri
     );
 }
 
-export function Variant({ label, children, wide }: { label: string; children: ReactNode; wide?: boolean }) {
+/** `fill` étire chaque enfant sur toute la largeur, comme dans un cadre de l'app. */
+export function Variant({
+    label,
+    children,
+    wide,
+    fill
+}: {
+    label: string;
+    children: ReactNode;
+    wide?: boolean;
+    fill?: boolean;
+}) {
     return (
         <div className={`${styles.variant} ${wide ? styles.variantWide : ''}`}>
             <span className={styles.variantLabel}>{label}</span>
-            <div className={styles.variantBody}>{children}</div>
+            <div className={`${styles.variantBody} ${fill ? styles.variantBodyFill : ''}`}>{children}</div>
         </div>
     );
 }
