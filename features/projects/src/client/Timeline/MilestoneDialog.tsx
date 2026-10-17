@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Button, Checkbox, Dialog, TextInput } from 'deveye-sdk-client';
+import { Button, Checkbox, Dialog, ErrorNote, TextInput, type ErrorNoteInput } from 'deveye-sdk-client';
 import { dateInputToSeconds, dateInputValue } from '../api';
 import {
     PROJECT_MILESTONE_COLORS,
@@ -22,7 +22,7 @@ interface MilestoneDialogProps {
     /** Sans la planification, le jalon se lit sans pouvoir s'écrire. */
     canPlan: boolean;
     busy: boolean;
-    error: string | null;
+    error: ErrorNoteInput | null;
     onClose: () => void;
     onSubmit: (draft: ProjectMilestoneDraft) => void;
     onSetReached?: (reached: boolean) => void;
@@ -157,7 +157,7 @@ export function MilestoneDialog({
                     </Checkbox>
                 )}
 
-                {error && <p className={styles.error}>{error}</p>}
+                <ErrorNote note={error} />
             </div>
         </Dialog>
     );

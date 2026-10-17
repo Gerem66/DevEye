@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     Button,
+    errorNote,
+    ErrorNote,
     FeatureSettingsButton,
-    humanizeError,
     invalidate,
     openFeature,
     PlanPausedNotice,
@@ -12,7 +13,8 @@ import {
     useLiveOutlines,
     useResourceVersion,
     useSubView,
-    useWorkspacePermissions
+    useWorkspacePermissions,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { FeatureViewProps } from '@deveye/types/sdk/client';
 import type { Database, DatabaseAlert, DatabaseProbe, DatabaseUsage } from '../contracts/domain';
@@ -34,7 +36,7 @@ export function FeatureDatabase(_props: FeatureViewProps) {
     const workspaceId = useActiveWorkspace()?.id ?? null;
 
     const [databases, setDatabases] = useState<Database[] | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     /** La base ouverte ; `null` = on est sur la liste. */
     const [openedId, setOpenedId] = useState<number | null>(null);
@@ -81,7 +83,7 @@ export function FeatureDatabase(_props: FeatureViewProps) {
             setDatabases(res.databases);
             setError(null);
         } catch (e) {
-            setError(humanizeError(e, 'Impossible de charger les bases.'));
+            setError(errorNote(e, 'Impossible de charger les bases.'));
         }
     }, []);
 
@@ -114,8 +116,8 @@ export function FeatureDatabase(_props: FeatureViewProps) {
                 return ids.flatMap((id) => byId.get(id) ?? []);
             });
             // Relue d'abord : son succès efface l'erreur affichée.
-            api.send('database.reorder', { ids }).catch(() => {
-                void reload().then(() => setError('Réorganisation impossible.'));
+            api.send('database.reorder', { ids }).catch((e: unknown) => {
+                void reload().then(() => setError(errorNote(e, 'Réorganisation impossible.')));
             });
         },
         [reload]
@@ -127,7 +129,7 @@ export function FeatureDatabase(_props: FeatureViewProps) {
             setOpened({ database: res.database, usage: res.usage, alerts: res.alerts });
             setError(null);
         } catch (e) {
-            setError(humanizeError(e, 'Impossible d’ouvrir cette base.'));
+            setError(errorNote(e, 'Impossible d’ouvrir cette base.'));
             setOpenedId(null);
             setOpened(null);
         }
@@ -146,11 +148,12 @@ export function FeatureDatabase(_props: FeatureViewProps) {
         setBusy(true);
         setTesting(true);
         setProbe(null);
+        setError(null);
         try {
             const res = await api.send('database.test', { databaseId });
             setProbe(res.probe);
         } catch (e) {
-            setError(humanizeError(e, 'Le test n’a pas pu être lancé.'));
+            setError(errorNote(e, 'Le test n’a pas pu être lancé.'));
         } finally {
             setTesting(false);
             setBusy(false);
@@ -161,11 +164,12 @@ export function FeatureDatabase(_props: FeatureViewProps) {
     // bandeau d'état, la phrase de connexion est réservée aux essais.
     const inspect = async (databaseId: number) => {
         setBusy(true);
+        setError(null);
         try {
             await api.send('database.inspect', { databaseId });
             invalidate('database.list', 'database.detail', 'database.count');
         } catch (e) {
-            setError(humanizeError(e, 'Le relevé n’a pas pu être fait.'));
+            setError(errorNote(e, 'Le relevé n’a pas pu être fait.'));
         } finally {
             setBusy(false);
         }
@@ -185,6 +189,7 @@ export function FeatureDatabase(_props: FeatureViewProps) {
                 busy={busy}
                 testing={testing}
                 probe={probe}
+                error={error}
                 onBack={() => setOpenedId(null)}
                 onTest={() => void test(opened.database.id)}
                 onInspect={() => void inspect(opened.database.id)}
@@ -220,7 +225,7 @@ export function FeatureDatabase(_props: FeatureViewProps) {
                 </header>
             </StickyHeader>
 
-            {error && <p className={styles.error}>{error}</p>}
+            <ErrorNote note={error} />
 
             {databases && (
                 <PlanPausedNotice

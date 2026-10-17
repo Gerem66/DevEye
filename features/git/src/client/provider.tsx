@@ -1,11 +1,14 @@
 import { useCallback, useState } from 'react';
 import {
     Button,
+    ErrorNote,
+    errorNote,
     FeatureSettingsButton,
     openFeature,
     PlanPausedBadge,
     useResource,
-    useWorkspaceMembers
+    useWorkspaceMembers,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { GitClientProvider, SdkTileSummary } from '@deveye/types/sdk/client';
 
@@ -43,8 +46,21 @@ function LinkedRepo({ repoId, canWrite, onUnlink }: LinkedRepoProps) {
     const [syncing, setSyncing] = useState(false);
     const onSyncingChange = useCallback((v: boolean) => setSyncing(v), []);
     const [syncRequest, setSyncRequest] = useState(0);
+    const [syncError, setSyncError] = useState<ErrorNoteInput | null>(null);
 
-    if (!data) return <p className={error ? styles.error : styles.hint}>{error ?? 'Chargement…'}</p>;
+    if (!data) {
+        if (!error) return <p className={styles.hint}>Chargement…</p>;
+        // Un dépôt illisible reste déliable : sinon l'onglet le garderait pour toujours.
+        return (
+            <ErrorNote note={error}>
+                {canWrite && (
+                    <Button variant='ghost' onClick={onUnlink}>
+                        Délier
+                    </Button>
+                )}
+            </ErrorNote>
+        );
+    }
     const { repo } = data;
 
     // Toujours encadré, même sur un dépôt unique : le cadre dit où finit ce que
@@ -88,7 +104,10 @@ function LinkedRepo({ repoId, canWrite, onUnlink }: LinkedRepoProps) {
                             icon='refresh'
                             onClick={() => {
                                 setSyncRequest((n) => n + 1);
-                                void api.send('git.repoSyncNow', { repoId: repo.id });
+                                setSyncError(null);
+                                api.send('git.repoSyncNow', { repoId: repo.id }).catch((e: unknown) =>
+                                    setSyncError(errorNote(e, 'La synchronisation n’a pas pu être lancée.'))
+                                );
                             }}
                             disabled={syncing}
                         >
@@ -124,6 +143,8 @@ function LinkedRepo({ repoId, canWrite, onUnlink }: LinkedRepoProps) {
                 </div>
                 {repo.lastSyncError && <p className={styles.error}>{repo.lastSyncError}</p>}
             </header>
+
+            <ErrorNote note={syncError} />
 
             <RepoView
                 repo={repo}

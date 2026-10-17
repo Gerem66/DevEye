@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import { UPTIME_CLIENT_PROVIDER } from '@deveye/types/sdk';
 import type { UptimeClientProvider, UptimeLinkedService } from '@deveye/types/sdk/client';
-import { Button, humanizeError, moduleClientProvider, useWorkspacePermissions, WsError } from 'deveye-sdk-client';
+import {
+    Button,
+    ErrorNote,
+    errorNote,
+    moduleClientProvider,
+    useWorkspacePermissions,
+    WsError,
+    type ErrorNoteInput
+} from 'deveye-sdk-client';
 import { api } from '../api';
 import type { Project, ProjectLinkLabel } from '../../contracts/domain';
 import { LinkUptimeDialog } from './LinkUptimeDialog';
@@ -35,7 +43,7 @@ export function Uptime({ project, canWrite }: UptimeProps) {
     const [labels, setLabels] = useState<readonly ProjectLinkLabel[]>([]);
     const [services, setServices] = useState<readonly UptimeLinkedService[] | null>(null);
     const [linkOpen, setLinkOpen] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [busy, setBusy] = useState(false);
 
     const load = useCallback(async () => {
@@ -45,7 +53,7 @@ export function Uptime({ project, canWrite }: UptimeProps) {
             setLabels(res.labels);
             setError(null);
         } catch (e) {
-            setError(humanizeError(e, 'Impossible de charger les services rattachés.'));
+            setError(errorNote(e, 'Impossible de charger les services rattachés.'));
         }
     }, [projectId]);
 
@@ -69,7 +77,7 @@ export function Uptime({ project, canWrite }: UptimeProps) {
             } catch (e) {
                 if (alive) setServices([]);
                 if (!(e instanceof WsError && e.code === 'forbidden')) {
-                    setError(humanizeError(e, 'Impossible de charger les services surveillés.'));
+                    setError(errorNote(e, 'Impossible de charger les services surveillés.'));
                 }
             }
         })();
@@ -85,7 +93,7 @@ export function Uptime({ project, canWrite }: UptimeProps) {
             setServiceIds(res.serviceIds);
             setError(null);
         } catch (e) {
-            setError(humanizeError(e, 'Le déliement a échoué.'));
+            setError(errorNote(e, 'Le déliement a échoué.'));
         } finally {
             setBusy(false);
         }
@@ -94,7 +102,7 @@ export function Uptime({ project, canWrite }: UptimeProps) {
     if (foreign) {
         return (
             <div className={styles.uptimeLinks}>
-                {error && <p className={styles.error}>{error}</p>}
+                <ErrorNote note={error} />
                 {!uptime && <p className={styles.hint}>Le module Uptime n’est pas installé.</p>}
                 <ForeignLinks labels={labels} empty='Aucun service rattaché à ce projet.' />
             </div>
@@ -105,7 +113,7 @@ export function Uptime({ project, canWrite }: UptimeProps) {
 
     return (
         <div className={styles.uptimeLinks}>
-            {error && <p className={styles.error}>{error}</p>}
+            <ErrorNote note={error} />
             {!uptime && <p className={styles.hint}>Le module Uptime n’est pas installé.</p>}
 
             {serviceIds.map((id) => {

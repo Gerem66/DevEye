@@ -10,7 +10,7 @@ import type { CveEntryWithFavoriteRow } from '../contracts/domain';
 import { manifest } from '../manifest';
 
 import { cveHandlers, setNvdClient } from './handlers';
-import type { NvdClient } from './nvd';
+import { NvdQuotaError, type NvdClient } from './nvd';
 import type { CveRepo, CveStateKey, CveUpsert } from './repo';
 
 /**
@@ -263,6 +263,22 @@ describe('cve.get', () => {
         fakeNvd();
         const ctx = createTestContext({ repo: fakeRepo() });
         await assert.rejects(handlerFor(cveGet)(ctx, { id: 'CVE-1999-9999' }), /inconnue du NVD/);
+    });
+
+    it('dit le quota du NVD en refus, et garde une panne du NVD pour l’administrateur', async () => {
+        const failing = (error: Error): NvdClient => ({
+            window: () => Promise.reject(error),
+            product: () => Promise.reject(error),
+            byId: () => Promise.reject(error),
+            keyword: () => Promise.reject(error)
+        });
+        const ctx = createTestContext({ repo: fakeRepo() });
+
+        setNvdClient(failing(new NvdQuotaError('Quota du NVD atteint, réessayer plus tard.')));
+        await assert.rejects(handlerFor(cveGet)(ctx, { id: 'CVE-2024-3094' }), { code: 'rate_limited' });
+
+        setNvdClient(failing(new Error('NVD a répondu HTTP 503.')));
+        await assert.rejects(handlerFor(cveGet)(ctx, { id: 'CVE-2024-3094' }), { code: 'internal' });
     });
 });
 

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { ws, WsError } from '@/api/ws';
+import { errorNote } from '@/api/useResource';
+import { ws } from '@/api/ws';
+import ErrorNote, { type ErrorNoteInput } from '@/Components/ErrorNote';
 import { useResourceVersion } from '@/stores/invalidation';
 import { upsertWorkspace } from '@/stores/workspace';
 import styles from './TopNavbar.module.css';
@@ -25,7 +27,7 @@ export interface WorkspaceInvitationsProps {
 export function WorkspaceInvitations({ onJoined }: WorkspaceInvitationsProps) {
     const [invitations, setInvitations] = useState<Invitation[]>([]);
     const [busy, setBusy] = useState<number | null>(null);
-    const [error, setError] = useState<{ id: number; message: string } | null>(null);
+    const [error, setError] = useState<{ id: number; note: ErrorNoteInput } | null>(null);
 
     const version = useResourceVersion('user.invitations');
     useEffect(() => {
@@ -56,7 +58,7 @@ export function WorkspaceInvitations({ onJoined }: WorkspaceInvitationsProps) {
             }
             setInvitations((list) => list.filter((i) => i.id !== invitation.id));
         } catch (e) {
-            setError({ id: invitation.id, message: e instanceof WsError ? e.message : 'Réponse impossible.' });
+            setError({ id: invitation.id, note: errorNote(e, 'Réponse impossible.') });
         } finally {
             setBusy(null);
         }
@@ -94,7 +96,11 @@ export function WorkspaceInvitations({ onJoined }: WorkspaceInvitationsProps) {
                             <span className='icon icon-x' />
                         </button>
                     </div>
-                    {error?.id === invitation.id && <p className={styles.invitationError}>{error.message}</p>}
+                    {error?.id === invitation.id && (
+                        <div className={styles.invitationError}>
+                            <ErrorNote note={error.note} />
+                        </div>
+                    )}
                 </div>
             ))}
         </>

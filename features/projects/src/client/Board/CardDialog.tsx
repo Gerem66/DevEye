@@ -3,11 +3,13 @@ import {
     Button,
     CountBadge,
     Dialog,
+    ErrorNote,
     NumberInput,
     SearchSelect,
     TextInput,
     useLiveOutlines,
     useLiveSegment,
+    type ErrorNoteInput,
     type SearchSelectOption
 } from 'deveye-sdk-client';
 import type { MinimalUser } from '@deveye/types';
@@ -65,7 +67,7 @@ interface CardDialogProps {
     /** Les arêtes du projet ; on n'affiche que celles de cette carte. */
     deps: ProjectCardDep[];
     busy: boolean;
-    error: string | null;
+    error: ErrorNoteInput | null;
     onClose: () => void;
     /**
      * Le brouillon et ses rattachements. Ni le jalon ni les dépendances ne tiennent
@@ -524,7 +526,7 @@ export function CardDialog({
 
                     {!card && subtasks}
 
-                    {error && <p className={styles.error}>{error}</p>}
+                    <ErrorNote note={error} />
                 </div>
             </div>
         </Dialog>

@@ -1,7 +1,15 @@
 import { useEffect, useState } from 'react';
 import { GIT_CLIENT_PROVIDER } from '@deveye/types/sdk';
 import type { GitClientProvider, GitLinkedCandidate } from '@deveye/types/sdk/client';
-import { Button, Dialog, humanizeError, moduleClientProvider, SearchSelect } from 'deveye-sdk-client';
+import {
+    Button,
+    Dialog,
+    ErrorNote,
+    errorNote,
+    moduleClientProvider,
+    SearchSelect,
+    type ErrorNoteInput
+} from 'deveye-sdk-client';
 import { api } from '../api';
 import styles from '../style.module.css';
 
@@ -28,7 +36,7 @@ export function LinkRepoDialog({ open, projectId, linkedRepoIds, onClose, onSave
     const [repos, setRepos] = useState<readonly GitLinkedCandidate[]>([]);
     const [picked, setPicked] = useState('');
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     /** Le dialogue d'ajout de la feature, ouvert par-dessus celui-ci. */
     const [createOpen, setCreateOpen] = useState(false);
 
@@ -41,7 +49,7 @@ export function LinkRepoDialog({ open, projectId, linkedRepoIds, onClose, onSave
             try {
                 setRepos(await provider.listRepos());
             } catch (e) {
-                setError(humanizeError(e, 'Impossible de charger les dépôts de l’espace.'));
+                setError(errorNote(e, 'Impossible de charger les dépôts de l’espace.'));
             }
         })();
     }, [open, provider]);
@@ -56,7 +64,7 @@ export function LinkRepoDialog({ open, projectId, linkedRepoIds, onClose, onSave
             for (const repoId of repoIds) await api.send('projects.repoLink', { projectId, repoId });
             onSaved();
         } catch (e) {
-            setError(humanizeError(e, 'La liaison a échoué.'));
+            setError(errorNote(e, 'La liaison a échoué.'));
         } finally {
             setBusy(false);
         }
@@ -122,7 +130,7 @@ export function LinkRepoDialog({ open, projectId, linkedRepoIds, onClose, onSave
                         </>
                     )}
 
-                    {error && <p className={styles.error}>{error}</p>}
+                    <ErrorNote note={error} />
                 </div>
             </Dialog>
 

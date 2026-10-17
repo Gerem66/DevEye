@@ -4,6 +4,7 @@ import {
     Dialog,
     DialogCancelButton,
     ErrorNote,
+    errorNote,
     SearchSelect,
     SegmentedControl,
     type ErrorNoteInput
@@ -12,7 +13,7 @@ import { STATEMENT_LINES_MAX, type StatementImportResult } from '../contracts/st
 
 import { api, refreshFinance } from './api';
 import { formatDate, formatMoney } from './format';
-import { accountOf, activeAccounts, errorNote, signOf } from './shared';
+import { accountOf, activeAccounts, signOf } from './shared';
 import {
     columnCount,
     columnName,
@@ -84,7 +85,7 @@ export function ImportDialog({ base, open, accountId: preset, onClose, onReview 
     const read = async (file: File) => {
         setError(null);
         if (file.size > MAX_BYTES) {
-            setError({ message: 'Ce fichier dépasse 5 Mo : ce n’est sans doute pas un relevé.', code: null });
+            setError({ message: 'Ce fichier dépasse 5 Mo : ce n’est sans doute pas un relevé.', code: 'validation' });
             return;
         }
         setBusy(true);
@@ -93,7 +94,7 @@ export function ImportDialog({ base, open, accountId: preset, onClose, onReview 
             if (looksLikeOfx(text)) {
                 const statement = parseOfx(text);
                 if (statement.lines.length === 0) {
-                    setError({ message: 'Aucune opération lue dans ce fichier OFX.', code: null });
+                    setError({ message: 'Aucune opération lue dans ce fichier OFX.', code: 'validation' });
                     return;
                 }
                 setStep({ kind: 'ofx', fileName: file.name, parsed: statement });
@@ -104,7 +105,7 @@ export function ImportDialog({ base, open, accountId: preset, onClose, onReview 
                 setError({
                     message:
                         'Ce fichier ne ressemble ni à un CSV ni à un OFX. Exportez le relevé depuis votre banque dans l’un de ces formats.',
-                    code: null
+                    code: 'validation'
                 });
                 return;
             }
@@ -290,7 +291,7 @@ export function ImportDialog({ base, open, accountId: preset, onClose, onReview 
                     <ErrorNote
                         note={{
                             message: `Ce relevé compte ${count} lignes : exportez-le en plusieurs fichiers de ${STATEMENT_LINES_MAX} lignes au plus, par trimestre par exemple.`,
-                            code: null
+                            code: 'validation'
                         }}
                     />
                 )}

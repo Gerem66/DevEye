@@ -4,7 +4,8 @@ import {
     Button,
     ConfirmDialog,
     copyText,
-    humanizeError,
+    ErrorNote,
+    errorNote,
     invalidate,
     openAccountView,
     PlanPausedBadge,
@@ -15,7 +16,8 @@ import {
     useDomains,
     useResource,
     useWorkspacePermissions,
-    type ConfirmRequest
+    type ConfirmRequest,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { UptimePage } from '../contracts/domain';
 
@@ -38,7 +40,7 @@ export default function StatusPagesPanel({ canWrite }: SettingsPanelProps) {
     const { isOwner } = useWorkspacePermissions();
     const [dialog, setDialog] = useState<{ page: UptimePage | null } | null>(null);
     const [copied, setCopied] = useState<{ id: number; ok: boolean } | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
 
     const pages = data?.pages ?? null;
@@ -79,7 +81,7 @@ export default function StatusPagesPanel({ canWrite }: SettingsPanelProps) {
                         await api.send('uptime.pageRemove', { id: page.id });
                         changed();
                     } catch (e) {
-                        setError(humanizeError(e, 'Impossible de supprimer cette page.'));
+                        setError(errorNote(e, 'Impossible de supprimer cette page.'));
                     }
                 })()
         });
@@ -193,7 +195,7 @@ export default function StatusPagesPanel({ canWrite }: SettingsPanelProps) {
                 })}
             </div>
 
-            {(error ?? loadError) && <p className={shell.notice}>{error ?? loadError}</p>}
+            <ErrorNote note={error ?? loadError} />
 
             {canWrite && !closed && (
                 <div className={shell.sectionActions}>

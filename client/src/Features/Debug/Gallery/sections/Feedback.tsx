@@ -87,6 +87,9 @@ export default function Feedback() {
                         </Button>
                     </ErrorNote>
                 </Variant>
+                <Variant label='refermable' wide>
+                    <ErrorNote note={{ message: 'Le déplacement a échoué.', code: 'timeout' }} onDismiss={() => {}} />
+                </Variant>
             </Specimen>
             <Specimen title='LoadingVeil' note='Un frère de la zone défilante, dans un parent positionné.'>
                 <Variant label='centré'>

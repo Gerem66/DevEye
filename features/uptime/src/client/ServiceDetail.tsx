@@ -2,12 +2,15 @@ import { useEffect, useMemo, useState } from 'react';
 import {
     Button,
     ConfirmDialog,
+    ErrorNote,
+    errorNote,
     FeatureSettingsButton,
     safeHref,
     StatusBadge,
     StickyHeader,
     useSubView,
-    type ConfirmRequest
+    type ConfirmRequest,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type {
     UptimeCheck,
@@ -35,6 +38,8 @@ const INCIDENTS_MAX = 20;
 
 interface ServiceDetailProps {
     service: UptimeService;
+    /** Le refus du dernier geste de la fiche (tester, accepter), que la liste tient. */
+    actionError: ErrorNoteInput | null;
     onBack: () => void;
     onCheckNow: () => void;
     /** Intégrité : prendre ce que le site sert maintenant comme référence. */
@@ -49,7 +54,7 @@ interface ServiceDetailProps {
  * The panels load independently (a slow journal never holds the chart back),
  * and only the chart re-queries when the range changes.
  */
-export function ServiceDetail({ service, onBack, onCheckNow, onAcceptBaseline }: ServiceDetailProps) {
+export function ServiceDetail({ service, actionError, onBack, onCheckNow, onAcceptBaseline }: ServiceDetailProps) {
     const [range, setRange] = useState<UptimeRange>('24h');
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
     const [points, setPoints] = useState<UptimePoint[]>([]);
@@ -65,7 +70,7 @@ export function ServiceDetail({ service, onBack, onCheckNow, onAcceptBaseline }:
     useSubView(journalOpen ? 'service/journal' : 'service');
     // A failed refresh must never masquerade as "there is nothing here": the last
     // good data stays on screen and this says so. Cleared when a cycle starts.
-    const [staleError, setStaleError] = useState<string | null>(null);
+    const [staleError, setStaleError] = useState<ErrorNoteInput | null>(null);
 
     const id = service.id;
     // `lastCheckedAt` moves on every probe, so threading it through the deps is
@@ -83,8 +88,8 @@ export function ServiceDetail({ service, onBack, onCheckNow, onAcceptBaseline }:
                 setPoints(res.points);
                 setResolution(res.resolution);
             })
-            .catch(() => {
-                if (!cancelled) setStaleError('Historique indisponible.');
+            .catch((e: unknown) => {
+                if (!cancelled) setStaleError(errorNote(e, 'Historique indisponible.'));
             })
             .finally(() => {
                 if (!cancelled) setBusyChart(false);
@@ -101,8 +106,8 @@ export function ServiceDetail({ service, onBack, onCheckNow, onAcceptBaseline }:
             .then((res) => {
                 if (!cancelled) setIncidents(res.incidents);
             })
-            .catch(() => {
-                if (!cancelled) setStaleError('Incidents indisponibles.');
+            .catch((e: unknown) => {
+                if (!cancelled) setStaleError(errorNote(e, 'Incidents indisponibles.'));
             })
             .finally(() => {
                 if (!cancelled) setBusyIncidents(false);
@@ -119,8 +124,8 @@ export function ServiceDetail({ service, onBack, onCheckNow, onAcceptBaseline }:
             .then((res) => {
                 if (!cancelled) setChecks(res.checks);
             })
-            .catch(() => {
-                if (!cancelled) setStaleError('Mesures indisponibles.');
+            .catch((e: unknown) => {
+                if (!cancelled) setStaleError(errorNote(e, 'Mesures indisponibles.'));
             })
             .finally(() => {
                 if (!cancelled) setBusyChecks(false);
@@ -205,7 +210,8 @@ export function ServiceDetail({ service, onBack, onCheckNow, onAcceptBaseline }:
                 </div>
             </StickyHeader>
 
-            {staleError && <p className={styles.error}>{staleError}</p>}
+            <ErrorNote note={actionError} />
+            <ErrorNote note={staleError} />
 
             {service.integrityIntervalSeconds !== null && (
                 <p className={styles.reference}>

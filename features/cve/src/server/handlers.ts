@@ -3,7 +3,7 @@ import { defineSdkFeature, FeatureError, type SdkFeatureContext } from '@deveye/
 import { cveFavorites, cveGet, cveKeyList, cveNews, cveSearch, cveSetFavorite, cveSetKey } from '../contracts/commands';
 import { cveProviderSchema, type CveEntry, type CveSeverityFilter } from '../contracts/domain';
 import { cveIdCandidate, NVD_KEY_STORE_KEY, searchTerms, toEntry, upsertToEntry } from './_shared';
-import { nvdClient, type NvdClient } from './nvd';
+import { nvdClient, NvdQuotaError, type NvdClient } from './nvd';
 import type { CveRepo, CveUpsert } from './repo';
 
 type Ctx = SdkFeatureContext<CveRepo>;
@@ -22,6 +22,11 @@ export function setNvdClient(next: NvdClient): void {
 async function apiKeyOf(ctx: Ctx): Promise<string | null> {
     const stored = await ctx.store.get(NVD_KEY_STORE_KEY);
     return stored && stored.length > 0 ? stored : null;
+}
+
+/** Le quota du NVD se dit tel quel ; un NVD injoignable ou en erreur reste une panne à remonter. */
+function nvdFailure(e: unknown): FeatureError {
+    return new FeatureError(e instanceof NvdQuotaError ? 'rate_limited' : 'internal', (e as Error).message);
 }
 
 function matchesSeverity(entry: CveUpsert, severity: CveSeverityFilter): boolean {
@@ -116,7 +121,7 @@ export const cveHandlers = [
             try {
                 found = await client.byId(input.id, apiKey);
             } catch (e) {
-                throw new FeatureError('internal', (e as Error).message);
+                throw nvdFailure(e);
             }
             if (!found) throw new FeatureError('not_found', `${input.id} est inconnue du NVD.`);
             await cache(ctx, [found]);
@@ -146,7 +151,7 @@ export const cveHandlers = [
                     try {
                         found = await client.byId(input.id, apiKey);
                     } catch (e) {
-                        throw new FeatureError('internal', (e as Error).message);
+                        throw nvdFailure(e);
                     }
                     if (!found) throw new FeatureError('not_found', `${input.id} est inconnue du NVD.`);
                     await ctx.repo.upsertMany([found]);

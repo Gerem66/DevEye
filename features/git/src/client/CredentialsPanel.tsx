@@ -3,12 +3,14 @@ import {
     Button,
     ConfirmDialog,
     Dialog,
-    humanizeError,
+    ErrorNote,
+    errorNote,
     invalidate,
     settingsStyles as shell,
     TextInput,
     useResource,
-    type ConfirmRequest
+    type ConfirmRequest,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import {
@@ -45,7 +47,9 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
     const [label, setLabel] = useState('');
     const [secret, setSecret] = useState('');
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    /** Le refus du formulaire, montré dans son dialogue ; `error`, celui d'un retrait, sous la liste. */
+    const [formError, setFormError] = useState<ErrorNoteInput | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
 
     /**
@@ -58,6 +62,7 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
         setEditing({ credential });
         setLabel(credential?.label ?? '');
         setSecret('');
+        setFormError(null);
         setError(null);
     };
 
@@ -65,12 +70,12 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
         if (busy || !label.trim()) return;
         const existing = editing?.credential ?? null;
         if (!existing && !secret.trim()) {
-            setError('Un jeton sans secret ne sert à rien.');
+            setFormError({ message: 'Un jeton sans secret ne sert à rien.', code: 'validation' });
             return;
         }
 
         setBusy(true);
-        setError(null);
+        setFormError(null);
         try {
             if (existing) {
                 await api.send('git.credentialUpdate', {
@@ -85,7 +90,7 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
             setEditing(null);
             changed();
         } catch (e) {
-            setError(humanizeError(e, 'Le jeton n’a pas pu être enregistré.'));
+            setFormError(errorNote(e, 'Le jeton n’a pas pu être enregistré.'));
         } finally {
             setBusy(false);
         }
@@ -105,11 +110,12 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
             onConfirm: () =>
                 void (async () => {
                     setBusy(true);
+                    setError(null);
                     try {
                         await api.send('git.credentialRemove', { credentialId: credential.id });
                         changed();
                     } catch (e) {
-                        setError(humanizeError(e, 'Le retrait a échoué.'));
+                        setError(errorNote(e, 'Le retrait a échoué.'));
                     } finally {
                         setBusy(false);
                     }
@@ -178,7 +184,7 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
                 ))}
             </div>
 
-            {(error ?? loadError) && <p className={shell.notice}>{error ?? loadError}</p>}
+            <ErrorNote note={error ?? loadError} />
 
             {canWrite && (
                 <div className={shell.sectionActions}>
@@ -238,6 +244,8 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
                                 : 'Un jeton en lecture seule suffit (Contents). Ajoutez Actions et Deployments en lecture pour qu’Uptime reconnaisse vos mises en ligne.'}
                         </span>
                     </label>
+
+                    <ErrorNote note={formError} />
                 </div>
             </Dialog>
 

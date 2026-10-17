@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { humanizeError, SegmentedControl, useResourceVersion } from 'deveye-sdk-client';
+import { ErrorNote, errorNote, SegmentedControl, useResourceVersion, type ErrorNoteInput } from 'deveye-sdk-client';
 import {
     AUDIENCE_BREAKDOWN_MAX,
     type AudienceActivity,
@@ -68,7 +68,7 @@ export function SiteView({ site, heading, actions }: SiteViewProps) {
     const [activity, setActivity] = useState<AudienceActivity | null>(null);
     const [live, setLive] = useState<number | null>(null);
     const [technical, setTechnical] = useState<AudienceDimension>('browser');
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [loading, setLoading] = useState(true);
 
     /**
@@ -113,7 +113,7 @@ export function SiteView({ site, heading, actions }: SiteViewProps) {
             );
             setError(null);
         } catch (e) {
-            setError(humanizeError(e, 'Impossible de charger les statistiques.'));
+            setError(errorNote(e, 'Impossible de charger les statistiques.'));
         } finally {
             setLoading(false);
         }
@@ -134,7 +134,7 @@ export function SiteView({ site, heading, actions }: SiteViewProps) {
                 });
                 setBreakdowns((prev) => ({ ...prev, [dimension]: res.items }));
             } catch (e) {
-                setError(humanizeError(e, 'Impossible de charger la suite du classement.'));
+                setError(errorNote(e, 'Impossible de charger la suite du classement.'));
             }
         },
         [site.id, range]
@@ -230,7 +230,7 @@ export function SiteView({ site, heading, actions }: SiteViewProps) {
                 {actions}
             </div>
 
-            {error && <p className={styles.error}>{error}</p>}
+            <ErrorNote note={error} />
 
             {overview && <StatBand metrics={overview.metrics} previous={overview.previous} site={site} />}
 

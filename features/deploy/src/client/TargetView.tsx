@@ -3,11 +3,13 @@ import {
     Avatar,
     Button,
     Dialog,
+    ErrorNote,
+    errorNote,
     FeatureSettingsButton,
-    humanizeError,
     invalidate,
     PlanPausedBadge,
-    TextInput
+    TextInput,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { MinimalUser } from '@deveye/types';
 import {
@@ -51,7 +53,7 @@ interface TargetViewProps {
      */
     fullHistory?: DeployHistoryEntry[] | null;
     /** Fournisseur injoignable pendant le chargement de `fullHistory` ; le reste de la fiche fonctionne. */
-    fullHistoryError?: string | null;
+    fullHistoryError?: ErrorNoteInput | null;
     /**
      * Ouvre le journal d'une ligne : celles de l'historique, et le dernier
      * déploiement de l'en-tête. L'état dit si le journal s'écrit encore.
@@ -289,7 +291,7 @@ export function TargetView({
                 <section className={`${styles.block} ${styles.historyBlock} ${styles.history}`}>
                     <h3 className={styles.sectionTitle}>Déploiements</h3>
                     {fullHistoryError ? (
-                        <p className={styles.error}>{fullHistoryError}</p>
+                        <ErrorNote note={fullHistoryError} />
                     ) : rows === null ? (
                         <p className={styles.empty}>Chargement…</p>
                     ) : rows.length === 0 ? (
@@ -365,7 +367,7 @@ interface TriggerDialogProps {
 function TriggerDialog({ open, targetId, projectId, busy, setBusy, onClose, onDone }: TriggerDialogProps) {
     const [title, setTitle] = useState('Déploiement DevEye');
     const [description, setDescription] = useState('');
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     const submit = async () => {
         if (busy) return;
@@ -386,7 +388,7 @@ function TriggerDialog({ open, targetId, projectId, busy, setBusy, onClose, onDo
             setDescription('');
             onDone();
         } catch (e) {
-            setError(humanizeError(e, 'Le déclenchement a échoué.'));
+            setError(errorNote(e, 'Le déclenchement a échoué.'));
         } finally {
             setBusy(false);
         }
@@ -431,7 +433,7 @@ function TriggerDialog({ open, targetId, projectId, busy, setBusy, onClose, onDo
                         onChange={(e) => setDescription(e.target.value)}
                     />
                 </label>
-                {error && <p className={styles.error}>{error}</p>}
+                <ErrorNote note={error} />
             </div>
         </Dialog>
     );

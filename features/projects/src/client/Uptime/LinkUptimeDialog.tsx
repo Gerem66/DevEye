@@ -1,7 +1,15 @@
 import { useEffect, useState } from 'react';
 import { UPTIME_CLIENT_PROVIDER } from '@deveye/types/sdk';
 import type { UptimeClientProvider, UptimeLinkedService } from '@deveye/types/sdk/client';
-import { Button, Dialog, humanizeError, moduleClientProvider, SearchSelect } from 'deveye-sdk-client';
+import {
+    Button,
+    Dialog,
+    ErrorNote,
+    errorNote,
+    moduleClientProvider,
+    SearchSelect,
+    type ErrorNoteInput
+} from 'deveye-sdk-client';
 import { api } from '../api';
 import styles from '../style.module.css';
 
@@ -25,7 +33,7 @@ export function LinkUptimeDialog({ open, projectId, linkedIds, onClose, onSaved 
     const [services, setServices] = useState<readonly UptimeLinkedService[]>([]);
     const [picked, setPicked] = useState('');
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     /** Le dialogue de déclaration de la feature, ouvert par-dessus celui-ci. */
     const [createOpen, setCreateOpen] = useState(false);
 
@@ -38,7 +46,7 @@ export function LinkUptimeDialog({ open, projectId, linkedIds, onClose, onSaved 
             try {
                 setServices(await uptime.listServices());
             } catch (e) {
-                setError(humanizeError(e, 'Impossible de charger les services de l’espace.'));
+                setError(errorNote(e, 'Impossible de charger les services de l’espace.'));
             }
         })();
     }, [open, uptime]);
@@ -52,7 +60,7 @@ export function LinkUptimeDialog({ open, projectId, linkedIds, onClose, onSaved 
             await api.send('projects.uptimeLink', { projectId, serviceId });
             onSaved();
         } catch (e) {
-            setError(humanizeError(e, 'La liaison a échoué.'));
+            setError(errorNote(e, 'La liaison a échoué.'));
         } finally {
             setBusy(false);
         }
@@ -108,7 +116,7 @@ export function LinkUptimeDialog({ open, projectId, linkedIds, onClose, onSaved 
                         </Button>
                     )}
 
-                    {error && <p className={styles.error}>{error}</p>}
+                    <ErrorNote note={error} />
                 </div>
             </Dialog>
 

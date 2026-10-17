@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     Button,
+    ErrorNote,
     SegmentedControl,
     StickyHeader,
     TextInput,
@@ -96,7 +97,7 @@ export default function ClientsPage({ currency, onBack, onOpen, onNew }: Clients
                 </div>
             </div>
 
-            {error !== null && <p className={styles.error}>{error}</p>}
+            <ErrorNote note={error} />
             {loading && data === null && <p className={styles.placeholder}>Chargement…</p>}
 
             {data !== null && shown.length === 0 ? (

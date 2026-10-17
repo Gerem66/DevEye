@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { ws } from '@/api/ws';
-import { humanizeError } from '@/api/useResource';
+import { errorNote } from '@/api/useResource';
 import { Dialog } from '@/Components/Dialog';
+import ErrorNote, { type ErrorNoteInput } from '@/Components/ErrorNote';
 import Button from '@/Components/Button';
 import Switch from '@/Components/Switch';
 import SegmentedControl from '@/Components/SegmentedControl';
@@ -86,10 +87,10 @@ export default function FeatureProfile({ user }: FeatureProps) {
     const [uploading, setUploading] = useState(false);
     /** L'échec d'une modification, l'image ou un réglage. Gardé à la fermeture :
      *  la boîte s'efface en fondu avec son texte. */
-    const [failure, setFailure] = useState<{ title: string; message: string } | null>(null);
+    const [failure, setFailure] = useState<{ title: string; note: ErrorNoteInput } | null>(null);
     const [failureOpen, setFailureOpen] = useState(false);
-    const showFailure = (title: string, message: string) => {
-        setFailure({ title, message });
+    const showFailure = (title: string, note: ErrorNoteInput) => {
+        setFailure({ title, note });
         setFailureOpen(true);
     };
     const [savingColor, setSavingColor] = useState(false);
@@ -136,7 +137,7 @@ export default function FeatureProfile({ user }: FeatureProps) {
             updateUser({ settings: res.settings });
         } catch (err) {
             updateUser({ settings: previous });
-            showFailure('Réglage non enregistré', humanizeError(err, 'Le réglage n’a pas pu être enregistré.'));
+            showFailure('Réglage non enregistré', errorNote(err, 'Le réglage n’a pas pu être enregistré.'));
         } finally {
             setSavingSetting(false);
         }
@@ -159,10 +160,7 @@ export default function FeatureProfile({ user }: FeatureProps) {
             await ws.send('user.setAvatar', { avatar });
             updateUser({ avatar });
         } catch (err) {
-            showFailure(
-                "Modification de l'image",
-                err instanceof Error ? err.message : "La mise à jour de l'image a échoué."
-            );
+            showFailure("Modification de l'image", errorNote(err, "La mise à jour de l'image a échoué."));
         } finally {
             setUploading(false);
         }
@@ -435,7 +433,7 @@ export default function FeatureProfile({ user }: FeatureProps) {
                 onSubmit={() => setFailureOpen(false)}
                 footer={<Button onClick={() => setFailureOpen(false)}>Compris</Button>}
             >
-                {failure?.message}
+                <ErrorNote note={failure?.note ?? null} />
             </Dialog>
         </div>
     );

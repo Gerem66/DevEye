@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Button, Checkbox, Dialog, humanizeError, useRequestPopupWidth } from 'deveye-sdk-client';
+import {
+    Button,
+    Checkbox,
+    Dialog,
+    errorNote,
+    ErrorNote,
+    useRequestPopupWidth,
+    type ErrorNoteInput
+} from 'deveye-sdk-client';
 import type {
     DatabaseCombinator,
     DatabaseFilter,
@@ -88,7 +96,7 @@ export function TableExplorer({ databaseId, databaseName, autoLoad, expanded, on
     const [highlight, setHighlight] = useState<string | null>(null);
     const [dialogue, setDialogue] = useState<Dialogue | null>(null);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
     /** Le plein écran était déjà installé au rendu précédent. */
@@ -160,7 +168,7 @@ export function TableExplorer({ databaseId, databaseName, autoLoad, expanded, on
             // d'une clé étrangère lisent celle-ci.
             setTables([...res.tables].sort(compareTables));
         } catch (e) {
-            setError(humanizeError(e, 'Impossible de lire les tables.'));
+            setError(errorNote(e, 'Impossible de lire les tables.'));
         } finally {
             setBusy(false);
         }
@@ -208,7 +216,7 @@ export function TableExplorer({ databaseId, databaseName, autoLoad, expanded, on
                 setShown(target);
                 if (res.structure) setStructure(res.structure);
             } catch (e) {
-                setError(humanizeError(e, 'Impossible de lire cette table.'));
+                setError(errorNote(e, 'Impossible de lire cette table.'));
                 // Un échec en changeant de table ne doit pas laisser le contenu
                 // de la précédente passer pour celui de la nouvelle ; un échec
                 // de pagination garde la page affichée, toujours juste.
@@ -249,7 +257,7 @@ export function TableExplorer({ databaseId, databaseName, autoLoad, expanded, on
     const followForeignKey = (refSchema: string, refTable: string, refColumn: string, value: string) => {
         const target = tables?.find((t) => t.name === refTable && (refSchema === '' || t.schema === refSchema));
         if (!target) {
-            setError(`La table « ${refTable} » n’est pas dans la liste chargée.`);
+            setError({ message: `La table « ${refTable} » n’est pas dans la liste chargée.`, code: 'not_found' });
             return;
         }
         open(target, [{ column: refColumn, operator: 'eq', value }]);
@@ -303,7 +311,7 @@ export function TableExplorer({ databaseId, databaseName, autoLoad, expanded, on
             setSelected(new Set());
             await loadRows(table, offset);
         } catch (e) {
-            setError(humanizeError(e, 'La suppression a échoué.'));
+            setError(errorNote(e, 'La suppression a échoué.'));
             setDialogue(null);
         } finally {
             setBusy(false);
@@ -356,7 +364,7 @@ export function TableExplorer({ databaseId, databaseName, autoLoad, expanded, on
                 </motion.header>
             )}
 
-            {error && <p className={styles.error}>{error}</p>}
+            <ErrorNote note={error} />
 
             {tables === null && (
                 <p className={styles.hint}>

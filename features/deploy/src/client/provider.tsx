@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, openFeature, useResource, useWorkspaceMembers } from 'deveye-sdk-client';
+import { Button, ErrorNote, openFeature, useResource, useWorkspaceMembers } from 'deveye-sdk-client';
 import type { DeployClientProvider, SdkTileSummary } from '@deveye/types/sdk/client';
 
 import { api } from './api';
@@ -40,7 +40,19 @@ function LinkedTarget({ targetId, projectId, canWrite, onUnlink }: LinkedTargetP
         [targetId]
     );
 
-    if (!data) return <p className={error ? styles.error : styles.hint}>{error ?? 'Chargement…'}</p>;
+    if (!data) {
+        if (!error) return <p className={styles.hint}>Chargement…</p>;
+        // Une cible illisible reste déliable : sinon l'onglet la garderait pour toujours.
+        return (
+            <ErrorNote note={error}>
+                {canWrite && (
+                    <Button variant='ghost' onClick={onUnlink}>
+                        Délier
+                    </Button>
+                )}
+            </ErrorNote>
+        );
+    }
     const { target, deployments } = data;
 
     return (

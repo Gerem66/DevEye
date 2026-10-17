@@ -2,12 +2,14 @@ import { useCallback, useEffect, useState } from 'react';
 import {
     Button,
     Dialog,
-    humanizeError,
+    ErrorNote,
+    errorNote,
     invalidate,
     moduleClientProvider,
     useResourceVersion,
     useWorkspacePermissions,
-    WsError
+    WsError,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import { api } from '../api';
 import type { Project, ProjectLinkLabel } from '../../contracts/domain';
@@ -45,10 +47,12 @@ export function Deploy({ project, canWrite }: DeployProps) {
     const [candidates, setCandidates] = useState<readonly DeployLinkedCandidate[]>([]);
     const [loaded, setLoaded] = useState(false);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [linkOpen, setLinkOpen] = useState(false);
     /** La cible qu'on s'apprête à délier ; `null` = aucune confirmation ouverte. */
     const [unlinking, setUnlinking] = useState<number | null>(null);
+    /** L'échec du déliement, dit dans la confirmation qui reste ouverte. */
+    const [unlinkError, setUnlinkError] = useState<ErrorNoteInput | null>(null);
 
     const boardVersion = useResourceVersion('projects.board');
     const listVersion = useResourceVersion('deploy.list');
@@ -66,7 +70,7 @@ export function Deploy({ project, canWrite }: DeployProps) {
             setLabels(res.labels);
             setError(null);
         } catch (e) {
-            setError(humanizeError(e, 'Impossible de charger les cibles reliées.'));
+            setError(errorNote(e, 'Impossible de charger les cibles reliées.'));
         } finally {
             setLoaded(true);
         }
@@ -93,7 +97,7 @@ export function Deploy({ project, canWrite }: DeployProps) {
             } catch (e) {
                 if (alive) setCandidates([]);
                 if (!(e instanceof WsError && e.code === 'forbidden')) {
-                    setError(humanizeError(e, 'Impossible de charger les cibles de l’espace.'));
+                    setError(errorNote(e, 'Impossible de charger les cibles de l’espace.'));
                 }
             }
         })();
@@ -104,15 +108,21 @@ export function Deploy({ project, canWrite }: DeployProps) {
 
     const unlink = async (targetId: number) => {
         setBusy(true);
+        setUnlinkError(null);
         try {
             await api.send('projects.deployUnlink', { projectId: project.id, targetId });
             setUnlinking(null);
             invalidate('projects.board', 'deploy.list');
         } catch (e) {
-            setError(humanizeError(e, 'Le déliement a échoué.'));
+            setUnlinkError(errorNote(e, 'Le déliement a échoué.'));
         } finally {
             setBusy(false);
         }
+    };
+
+    const closeUnlink = () => {
+        setUnlinking(null);
+        setUnlinkError(null);
     };
 
     if (!loaded) return <p className={styles.empty}>Chargement…</p>;
@@ -122,7 +132,7 @@ export function Deploy({ project, canWrite }: DeployProps) {
     if (foreign) {
         return (
             <div className={styles.linkedTargets}>
-                {error && <p className={styles.error}>{error}</p>}
+                <ErrorNote note={error} />
                 {!provider && <p className={styles.hint}>Le module Déploiements n’est pas installé.</p>}
                 <ForeignLinks labels={labels} empty='Aucune cible reliée à ce projet.' />
             </div>
@@ -133,7 +143,7 @@ export function Deploy({ project, canWrite }: DeployProps) {
 
     return (
         <div className={styles.linkedTargets}>
-            {error && <p className={styles.error}>{error}</p>}
+            <ErrorNote note={error} />
 
             <section className={styles.deployLinks}>
                 {!provider && <p className={styles.hint}>Le module Déploiements n’est pas installé.</p>}
@@ -212,13 +222,13 @@ export function Deploy({ project, canWrite }: DeployProps) {
 
             <Dialog
                 open={unlinking !== null}
-                onClose={() => setUnlinking(null)}
+                onClose={closeUnlink}
                 title='Délier cette cible ?'
                 width={460}
                 onSubmit={() => unlinking !== null && void unlink(unlinking)}
                 footer={
                     <>
-                        <Button variant='secondary' onClick={() => setUnlinking(null)} disabled={busy}>
+                        <Button variant='secondary' onClick={closeUnlink} disabled={busy}>
                             Annuler
                         </Button>
                         <Button
@@ -235,6 +245,7 @@ export function Deploy({ project, canWrite }: DeployProps) {
                     <strong>{unlinkingName ?? 'Cette cible'}</strong> quitte ce projet : plus rien ne sera déclenché
                     d’ici. La cible, son historique et les autres projets qui la déploient ne sont pas touchés.
                 </p>
+                <ErrorNote note={unlinkError} />
             </Dialog>
         </div>
     );

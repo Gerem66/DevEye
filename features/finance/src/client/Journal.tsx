@@ -134,7 +134,7 @@ export function Journal({ base, accountId: lockedAccountId, onEdit }: JournalPro
 
     const pages = data ? Math.max(1, Math.ceil(data.total / PAGE)) : 1;
     const currency = base.config.currency;
-    const note = cleared.error ?? (error ? { message: error, code: null } : null);
+    const note = cleared.error ?? error;
 
     return (
         <div className={styles.page}>

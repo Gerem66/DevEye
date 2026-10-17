@@ -3,10 +3,12 @@ import {
     Button,
     Dialog,
     DialogCancelButton,
-    humanizeError,
+    ErrorNote,
+    errorNote,
     SegmentedControl,
     TextInput,
-    useResource
+    useResource,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 
 import type { DocumentKind } from '../contracts/domain';
@@ -37,7 +39,7 @@ export default function DocumentDialog({ open, onClose, onCreated }: DocumentDia
     const [clientId, setClientId] = useState<number | null>(null);
     const [subject, setSubject] = useState('');
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     const close = () => {
         setSubject('');
@@ -69,7 +71,7 @@ export default function DocumentDialog({ open, onClose, onCreated }: DocumentDia
                 setSubject('');
                 onCreated(res.doc.id);
             })
-            .catch((e) => setError(humanizeError(e, 'Ce document n’a pas pu être créé.')))
+            .catch((e: unknown) => setError(errorNote(e, 'Ce document n’a pas pu être créé.')))
             .finally(() => setBusy(false));
     };
 
@@ -120,7 +122,7 @@ export default function DocumentDialog({ open, onClose, onCreated }: DocumentDia
                     />
                 </label>
 
-                {error && <p className={styles.error}>{error}</p>}
+                <ErrorNote note={error} />
             </div>
         </Dialog>
     );

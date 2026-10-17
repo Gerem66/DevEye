@@ -1,10 +1,17 @@
 import { useEffect, useState } from 'react';
-import { Button, Dialog, DialogCancelButton, ErrorNote, TextInput, type ErrorNoteInput } from 'deveye-sdk-client';
+import {
+    Button,
+    Dialog,
+    DialogCancelButton,
+    ErrorNote,
+    errorNote,
+    TextInput,
+    type ErrorNoteInput
+} from 'deveye-sdk-client';
 import type { FinanceRecurring } from '../contracts/domain';
 
 import { api, refreshFinance } from './api';
 import { amountToInput, formatDate, parseAmount } from './format';
-import { errorNote } from './shared';
 import styles from './style.module.css';
 
 interface PostDialogProps {

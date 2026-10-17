@@ -2,8 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     Button,
     ConfirmDialog,
+    ErrorNote,
+    errorNote,
     FeatureSettingsButton,
-    humanizeError,
     invalidate,
     ReadOnlyNotice,
     SaveButton,
@@ -11,7 +12,8 @@ import {
     SegmentedControl,
     settingsStyles as shell,
     TextInput,
-    type ConfirmRequest
+    type ConfirmRequest,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import {
@@ -24,7 +26,7 @@ import {
 } from '../contracts/domain';
 
 import { api } from './api';
-import { DOKPLOY_KIND_OPTIONS, PROVIDER_LABELS, PROVIDER_TIMEOUT_MS, providerError } from './format';
+import { DOKPLOY_KIND_OPTIONS, PROVIDER_LABELS, PROVIDER_TIMEOUT_MS } from './format';
 
 /**
  * La cible elle-même : son accès (du même fournisseur), ce qu'elle vise chez
@@ -49,7 +51,7 @@ export default function TargetGeneralPanel({ scope, canWrite, gone }: SettingsPa
     const [kind, setKind] = useState<DeployTargetKind>('application');
     const [ref, setRef] = useState('');
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
     /**
      * Les accès connus au moment d'ouvrir les réglages de la feature : celui
@@ -76,7 +78,7 @@ export default function TargetGeneralPanel({ scope, canWrite, gone }: SettingsPa
                 setKind(res.target.kind);
                 setRef(res.target.ref ?? '');
             } catch (e) {
-                setError(humanizeError(e, 'La cible n’a pas pu être lue.'));
+                setError(errorNote(e, 'La cible n’a pas pu être lue.'));
             }
         })();
     }, [targetId, loadCredentials]);
@@ -110,7 +112,7 @@ export default function TargetGeneralPanel({ scope, canWrite, gone }: SettingsPa
             } catch (e) {
                 // Un fournisseur injoignable n'empêche pas de régler la cible :
                 // le repli manuel reste ouvert.
-                if (alive) setError(providerError(e, 'Impossible de joindre le fournisseur.'));
+                if (alive) setError(errorNote(e, 'Impossible de joindre le fournisseur.'));
             } finally {
                 if (alive) setLoadingCandidates(false);
             }
@@ -136,7 +138,7 @@ export default function TargetGeneralPanel({ scope, canWrite, gone }: SettingsPa
                 const fresh = list.find((c) => !knownIds.current?.has(c.id));
                 if (fresh) setCredentialId(String(fresh.id));
             })
-            .catch(() => setError('Impossible de relire les accès de l’espace.'))
+            .catch((e: unknown) => setError(errorNote(e, 'Impossible de relire les accès de l’espace.')))
             .finally(() => {
                 knownIds.current = null;
             });
@@ -175,7 +177,7 @@ export default function TargetGeneralPanel({ scope, canWrite, gone }: SettingsPa
             // La liste, la fiche, et l'onglet du projet qui la déploie.
             invalidate('deploy.list', 'deploy.detail', 'projects.board');
         } catch (e) {
-            setError(humanizeError(e, 'L’enregistrement a échoué.'));
+            setError(errorNote(e, 'L’enregistrement a échoué.'));
             // Relancé : le bouton n'annonce « Enregistré » que sur un succès.
             throw e;
         }
@@ -192,14 +194,14 @@ export default function TargetGeneralPanel({ scope, canWrite, gone }: SettingsPa
             gone();
             invalidate('deploy.list', 'deploy.count', 'projects.board');
         } catch (e) {
-            setError(humanizeError(e, 'La suppression a échoué.'));
+            setError(errorNote(e, 'La suppression a échoué.'));
         } finally {
             setBusy(false);
         }
     };
 
     if (!target) {
-        return <p className={error ? shell.notice : shell.empty}>{error ?? 'Chargement…'}</p>;
+        return error ? <ErrorNote note={error} /> : <p className={shell.empty}>Chargement…</p>;
     }
 
     // Régler une cible exige les clés de SON espace : le serveur refuse depuis
@@ -416,7 +418,7 @@ export default function TargetGeneralPanel({ scope, canWrite, gone }: SettingsPa
                 </div>
             )}
 
-            {error && <p className={shell.notice}>{error}</p>}
+            <ErrorNote note={error} />
 
             <ConfirmDialog request={confirm} busy={busy} onClose={() => setConfirm(null)} />
         </div>

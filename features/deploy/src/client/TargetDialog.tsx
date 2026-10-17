@@ -2,12 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     Button,
     Dialog,
+    ErrorNote,
+    errorNote,
     FeatureSettingsButton,
-    humanizeError,
     invalidate,
     SearchSelect,
     SegmentedControl,
-    TextInput
+    TextInput,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import {
     DEPLOY_REF_MAX_LENGTH,
@@ -20,7 +22,7 @@ import {
 } from '../contracts/domain';
 
 import { api } from './api';
-import { DOKPLOY_KIND_OPTIONS, PROVIDER_LABELS, PROVIDER_TIMEOUT_MS, providerError } from './format';
+import { DOKPLOY_KIND_OPTIONS, PROVIDER_LABELS, PROVIDER_TIMEOUT_MS } from './format';
 import styles from './style.module.css';
 
 /** Par un accès (Dokploy, GitHub), ou sur une machine de l'espace. */
@@ -78,7 +80,7 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
     const [ref, setRef] = useState('');
     const [busy, setBusy] = useState(false);
     const [loadingCandidates, setLoadingCandidates] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     /**
      * Les accès connus au moment d'ouvrir les réglages : celui qui apparaît
      * ensuite vient d'y être créé, et c'est pour cette cible-ci ; il se
@@ -93,7 +95,7 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
             return res.credentials;
         } catch (e) {
             setCredentials([]);
-            setError(humanizeError(e, 'Impossible de charger les accès de l’espace.'));
+            setError(errorNote(e, 'Impossible de charger les accès de l’espace.'));
             return [];
         }
     }, []);
@@ -142,9 +144,9 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
         if (!open || source !== 'machine' || machines !== null) return;
         api.send('deploy.machines', {})
             .then((res) => setMachines(res.machines))
-            .catch((e) => {
+            .catch((e: unknown) => {
                 setMachines([]);
-                setError(humanizeError(e, 'Impossible de lister les machines de l’espace.'));
+                setError(errorNote(e, 'Impossible de lister les machines de l’espace.'));
             });
     }, [open, source, machines]);
 
@@ -188,9 +190,12 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
                 // le repli manuel reste ouvert.
                 if (alive) {
                     setError(
-                        source === 'machine'
-                            ? humanizeError(e, 'Impossible d’interroger la machine.')
-                            : providerError(e, 'Impossible de joindre le fournisseur.')
+                        errorNote(
+                            e,
+                            source === 'machine'
+                                ? 'Impossible d’interroger la machine.'
+                                : 'Impossible de joindre le fournisseur.'
+                        )
                     );
                 }
             } finally {
@@ -234,7 +239,7 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
             invalidate('deploy.list', 'deploy.count', 'deploy.detail');
             onSaved(res.target);
         } catch (e) {
-            setError(humanizeError(e, 'L’enregistrement a échoué.'));
+            setError(errorNote(e, 'L’enregistrement a échoué.'));
         } finally {
             setBusy(false);
         }
@@ -495,7 +500,7 @@ export function TargetDialog({ open, onClose, onSaved }: TargetDialogProps) {
                     </>
                 )}
 
-                {error && <p className={styles.error}>{error}</p>}
+                <ErrorNote note={error} />
             </div>
         </Dialog>
     );

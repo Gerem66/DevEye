@@ -12,7 +12,7 @@ import { defaultUserColor, USER_COLORS, type UserColor } from '@deveye/types';
 import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 
 import { fetchCommitDetail } from './github';
-import { loadHomeRepo, loadRepo, readJson, repoCipher, type Ctx, type StoredRepo } from './_shared';
+import { fromGitHub, loadHomeRepo, loadRepo, readJson, repoCipher, type Ctx, type StoredRepo } from './_shared';
 
 /**
  * Lecture du cache alimenté par le service de fond.
@@ -293,7 +293,7 @@ export const gitReadFeatures = [
             if (!credential) throw new FeatureError('not_found', 'Jeton introuvable');
             const token = await cipher.decrypt(credential.secret_enc);
 
-            const detail = await fetchCommitDetail(target.owner, target.repo, token, input.sha);
+            const detail = await fromGitHub(fetchCommitDetail(target.owner, target.repo, token, input.sha));
             return {
                 detail: {
                     sha: detail.sha,

@@ -5,17 +5,19 @@ import {
     SaveButton,
     Checkbox,
     ConfirmDialog,
+    ErrorNote,
     invalidate,
     SegmentedControl,
     settingsStyles as shell,
     Term,
     TextInput,
     useResourceVersion,
-    type ConfirmRequest
+    type ConfirmRequest,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 
-import { api, humanizeError } from './api';
+import { api, errorNote } from './api';
 import { ProviderCard } from './ProviderCard';
 import { reconnectAccount } from './oauthWindow';
 import styles from './style.module.css';
@@ -48,7 +50,9 @@ export default function MailAccountSettingsPanel({ scope, canWrite, gone }: Sett
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
     const [busy, setBusy] = useState(false);
     const [testing, setTesting] = useState(false);
+    /** Le résultat d'un essai ou d'une reconnexion ; les échecs vont à `error`. */
     const [status, setStatus] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [errorName, setErrorName] = useState('');
     const [errorEmail, setErrorEmail] = useState('');
     const [reconnecting, setReconnecting] = useState(false);
@@ -76,11 +80,11 @@ export default function MailAccountSettingsPanel({ scope, canWrite, gone }: Sett
                 setProxyTouched(false);
                 blank.current = true;
             })
-            .catch((e) => setStatus(humanizeError(e, 'Chargement impossible.')));
+            .catch((e: unknown) => setError(errorNote(e, 'Chargement impossible.')));
     }, [accountId, version]);
 
     if (accountId === null) return null;
-    if (!account || !draft) return <p className={shell.notice}>{status ?? 'Chargement…'}</p>;
+    if (!account || !draft) return error ? <ErrorNote note={error} /> : <p className={shell.notice}>Chargement…</p>;
 
     const providerManaged = account.authMethod !== 'password';
     /** Projetée depuis un autre espace : elle se règle chez elle, le serveur refuse d'ici. */
@@ -115,6 +119,7 @@ export default function MailAccountSettingsPanel({ scope, canWrite, gone }: Sett
         if (!draft || !account || !validate()) return;
         setBusy(true);
         setStatus(null);
+        setError(null);
         try {
             if (providerManaged) {
                 await api.send('mail.accountSetProfile', {
@@ -137,10 +142,8 @@ export default function MailAccountSettingsPanel({ scope, canWrite, gone }: Sett
                 await api.send('mail.accountUpdate', { id: account.id, draft: edit });
             }
             invalidate('mail.accountList');
-            // Le bouton le dit ; ce canal reste aux erreurs et au test de connexion.
-            setStatus(null);
         } catch (e) {
-            setStatus(humanizeError(e, 'Enregistrement impossible.'));
+            setError(errorNote(e, 'Enregistrement impossible.'));
             // Relancé : le bouton n'annonce « Enregistré » que sur un succès.
             throw e;
         } finally {
@@ -152,6 +155,7 @@ export default function MailAccountSettingsPanel({ scope, canWrite, gone }: Sett
         if (!account || !validate()) return;
         setTesting(true);
         setStatus(null);
+        setError(null);
         try {
             // Le compte existant : le serveur reprend ses secrets stockés, que ce
             // formulaire n'a pas. Le brouillon ne sert qu'à un compte pas encore créé.
@@ -159,7 +163,7 @@ export default function MailAccountSettingsPanel({ scope, canWrite, gone }: Sett
             if (res.imapOk && res.smtpOk) setStatus('Connexion IMAP et SMTP réussie.');
             else setStatus(res.error ?? 'Échec de la connexion.');
         } catch (e) {
-            setStatus(humanizeError(e, 'Test impossible.'));
+            setError(errorNote(e, 'Test impossible.'));
         } finally {
             setTesting(false);
         }
@@ -169,12 +173,13 @@ export default function MailAccountSettingsPanel({ scope, canWrite, gone }: Sett
         if (!account) return;
         setReconnecting(true);
         setStatus(null);
+        setError(null);
         try {
             const verdict = await reconnectAccount(account);
             invalidate('mail.accountList');
             setStatus(verdict?.ok ? 'Boîte reconnectée.' : 'Fenêtre fermée : vérifiez l’état de la boîte.');
         } catch (e) {
-            setStatus(humanizeError(e, 'Reconnexion impossible.'));
+            setError(errorNote(e, 'Reconnexion impossible.'));
         } finally {
             setReconnecting(false);
         }
@@ -199,7 +204,7 @@ export default function MailAccountSettingsPanel({ scope, canWrite, gone }: Sett
                         gone();
                         invalidate('mail.accountCount', 'mail.accountList');
                     })
-                    .catch((e) => setStatus(humanizeError(e, 'Suppression impossible.')))
+                    .catch((e: unknown) => setError(errorNote(e, 'Suppression impossible.')))
                     .finally(() => setBusy(false));
             }
         });
@@ -407,6 +412,7 @@ export default function MailAccountSettingsPanel({ scope, canWrite, gone }: Sett
             )}
 
             {status && <p className={shell.notice}>{status}</p>}
+            <ErrorNote note={error} />
 
             {!readOnly && (
                 <div className={shell.field}>

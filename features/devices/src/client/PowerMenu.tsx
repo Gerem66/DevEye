@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { acquireMetrics, Button, onServerEvent } from 'deveye-sdk-client';
+import { acquireMetrics, Button, errorNote, ErrorNote, onServerEvent, type ErrorNoteInput } from 'deveye-sdk-client';
 import { DEVICE_POWER_EVENT, devicePowerPushSchema, type AgentPowerAction } from '@deveye/types';
 
 import { agent } from './api';
@@ -73,6 +73,8 @@ export function PowerMenu({ deviceId }: { deviceId: string }) {
     const [armed, setArmed] = useState<PowerActionDef | null>(null);
     const [sending, setSending] = useState<AgentPowerAction | null>(null);
     const [result, setResult] = useState<ResultState | null>(null);
+    /** La commande n'a pas atteint l'agent : un échec d'envoi, distinct du verdict de la machine. */
+    const [failure, setFailure] = useState<ErrorNoteInput | null>(null);
 
     // Live subscription so the result push reaches us.
     useEffect(() => acquireMetrics(deviceId), [deviceId]);
@@ -90,9 +92,10 @@ export function PowerMenu({ deviceId }: { deviceId: string }) {
     const fire = (def: PowerActionDef) => {
         setArmed(null);
         setResult(null);
+        setFailure(null);
         setSending(def.action);
-        agent.send('agent.power', { deviceId, action: def.action }).catch((e) => {
-            setResult({ action: def.action, ok: false, error: e instanceof Error ? e.message : 'Échec' });
+        agent.send('agent.power', { deviceId, action: def.action }).catch((e: unknown) => {
+            setFailure(errorNote(e, 'La commande n’a pas pu être envoyée.'));
             setSending(null);
         });
     };
@@ -152,6 +155,7 @@ export function PowerMenu({ deviceId }: { deviceId: string }) {
                         : `Échec — ${result.error ?? 'erreur inconnue'}`}
                 </p>
             )}
+            <ErrorNote note={failure} />
             {busy && !result && <p className={styles.powerHint}>Commande envoyée à l’agent…</p>}
         </div>
     );

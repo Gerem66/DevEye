@@ -2,12 +2,14 @@ import { useEffect, useState } from 'react';
 import {
     Button,
     Dialog,
+    ErrorNote,
+    errorNote,
     FeatureSettingsButton,
     SearchSelect,
     TextInput,
-    humanizeError,
     settingsStyles as shell,
-    useDomains
+    useDomains,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 
 import {
@@ -30,14 +32,14 @@ export default function CreateDialog({
     onClose: () => void;
     onCreated: (mailbox: Mailbox, password: string) => void;
 }) {
-    const { domains, loading } = useDomains('mailserver');
+    const { domains, loading, error: domainsError } = useDomains('mailserver');
     const verified = domains.filter((domain) => domain.verifiedAt !== null);
     const [localPart, setLocalPart] = useState('');
     const [domainId, setDomainId] = useState<number | null>(null);
     const [displayName, setDisplayName] = useState('');
     const [quotaMb, setQuotaMb] = useState(MAILSERVER_QUOTA_MB_DEFAULT);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     useEffect(() => {
         if (!open) return;
@@ -69,7 +71,7 @@ export default function CreateDialog({
             });
             onCreated(res.mailbox, res.password);
         } catch (failure) {
-            setError(humanizeError(failure, 'Cette adresse n’a pas pu être créée.'));
+            setError(errorNote(failure, 'Cette adresse n’a pas pu être créée.'));
         } finally {
             setBusy(false);
         }
@@ -94,7 +96,9 @@ export default function CreateDialog({
                 </>
             }
         >
-            {!loading && verified.length === 0 ? (
+            {/* Sans la liste, « aucun domaine vérifié » serait faux : l'échec le dit à sa place. */}
+            <ErrorNote note={domainsError} />
+            {!loading && domainsError === null && verified.length === 0 ? (
                 <div className={shell.section}>
                     <p className={shell.sectionHint}>
                         Aucun domaine vérifié pour l’instant. Déclarez-en un, publiez ses enregistrements DNS, puis
@@ -154,7 +158,7 @@ export default function CreateDialog({
                             onChange={(e) => setQuotaMb(Number(e.target.value))}
                         />
                     </label>
-                    {error && <p className={shell.errorText}>{error}</p>}
+                    <ErrorNote note={error} />
                 </div>
             )}
         </Dialog>

@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import {
     Button,
+    ErrorNote,
     FeatureSettingsButton,
     SegmentedControl,
     StickyHeader,
@@ -52,7 +53,7 @@ export default function Home(props: HomeProps) {
     const { data, error, loading } = useResource('invoicing.dashboard', load, 'Chargement impossible.', [range]);
 
     if (loading && data === null) return <p className={styles.placeholder}>Chargement…</p>;
-    if (data === null) return <p className={styles.error}>{error ?? 'Chargement impossible.'}</p>;
+    if (data === null) return <ErrorNote note={error} />;
 
     const board = data.dashboard;
     const currency = board.currency;

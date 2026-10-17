@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import Button from '@/Components/Button';
 import { ConfirmDialog, type ConfirmRequest } from '@/Components/ConfirmDialog';
+import ErrorNote from '@/Components/ErrorNote';
 import { Dialog } from '@/Components/Dialog';
 import SearchSelect from '@/Components/SearchSelect';
 import TextInput from '@/Components/TextInput';
@@ -167,7 +168,7 @@ export default function FeatureWorkspace() {
 
             <Tabs tabs={tabs} active={active} onSelect={setTab} />
 
-            {admin.error && <div className={styles.errorBanner}>{admin.error}</div>}
+            <ErrorNote note={admin.error} />
 
             <div className={styles.sections}>
                 {active === 'general' && (

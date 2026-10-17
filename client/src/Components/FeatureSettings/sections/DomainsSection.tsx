@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { featureDescriptor, type FeatureDomain } from '@deveye/types';
 
 import { ws } from '@/api/ws';
-import { humanizeError } from '@/api/useResource';
+import { errorNote } from '@/api/useResource';
 import Button from '@/Components/Button';
 import { ConfirmDialog, type ConfirmRequest } from '@/Components/ConfirmDialog';
 import { Dialog } from '@/Components/Dialog';
+import ErrorNote, { type ErrorNoteInput } from '@/Components/ErrorNote';
 import { PlanPausedBadge } from '@/Components/PlanPause';
 import { StatusBadge, type BadgeTone } from '@/Components/StatusBadge';
 import TextInput from '@/Components/TextInput';
@@ -63,7 +64,7 @@ export default function DomainsSection({ scope }: { scope: SettingsScope }) {
     const [shownId, setShownId] = useState<number | null>(null);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     if (!copy) return null;
 
@@ -76,7 +77,7 @@ export default function DomainsSection({ scope }: { scope: SettingsScope }) {
             invalidateTopic('domain');
             return true;
         } catch (failure) {
-            setError(humanizeError(failure, fallback));
+            setError(errorNote(failure, fallback));
             return false;
         } finally {
             setBusy(false);
@@ -210,7 +211,7 @@ export default function DomainsSection({ scope }: { scope: SettingsScope }) {
             </div>
 
             {/* Dialogue d'ajout ouvert : c'est lui qui porte l'erreur du geste. */}
-            {host === null && (error ?? loadError) && <p className={styles.errorText}>{error ?? loadError}</p>}
+            {host === null && <ErrorNote note={error ?? loadError} />}
 
             {quota !== null && (
                 <p className={full ? styles.warning : styles.notice}>{quotaSentence(quota, permissions.isOwner)}</p>
@@ -255,7 +256,7 @@ export default function DomainsSection({ scope }: { scope: SettingsScope }) {
                         spellCheck={false}
                     />
                 </label>
-                {error && host !== null && <p className={styles.errorText}>{error}</p>}
+                {host !== null && <ErrorNote note={error} />}
             </Dialog>
 
             <DomainRecordsDialog

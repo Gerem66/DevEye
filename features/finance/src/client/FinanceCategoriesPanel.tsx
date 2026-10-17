@@ -4,14 +4,16 @@ import {
     ConfirmDialog,
     Dialog,
     DialogCancelButton,
-    humanizeError,
+    ErrorNote,
+    errorNote,
     ReadOnlyNotice,
     SegmentedControl,
     settingsStyles as shell,
     Switch,
     TextInput,
     useResource,
-    type ConfirmRequest
+    type ConfirmRequest,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import { FINANCE_NAME_MAX_LENGTH } from '../contracts/domain';
@@ -56,8 +58,8 @@ const FLOWS: { value: FinanceFlow; label: string }[] = [
 export default function FinanceCategoriesPanel({ canWrite }: SettingsPanelProps) {
     const [editing, setEditing] = useState<Draft | null>(null);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [formError, setFormError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
+    const [formError, setFormError] = useState<ErrorNoteInput | null>(null);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
 
     const load = useCallback(async () => (await api.send('finance.categoryList', {})).categories, []);
@@ -93,7 +95,7 @@ export default function FinanceCategoriesPanel({ canWrite }: SettingsPanelProps)
             refreshFinance();
             setEditing(null);
         } catch (e) {
-            setFormError(humanizeError(e, 'Enregistrement impossible.'));
+            setFormError(errorNote(e, 'Enregistrement impossible.'));
         } finally {
             setBusy(false);
         }
@@ -109,7 +111,7 @@ export default function FinanceCategoriesPanel({ canWrite }: SettingsPanelProps)
             }
             refreshFinance();
         } catch (e) {
-            setError(humanizeError(e, 'Création impossible.'));
+            setError(errorNote(e, 'Création impossible.'));
         } finally {
             setBusy(false);
         }
@@ -129,7 +131,7 @@ export default function FinanceCategoriesPanel({ canWrite }: SettingsPanelProps)
                         await api.send('finance.categoryRemove', { categoryId: category.id });
                         refreshFinance();
                     } catch (e) {
-                        setError(humanizeError(e, 'Retrait impossible.'));
+                        setError(errorNote(e, 'Retrait impossible.'));
                     } finally {
                         setBusy(false);
                         setConfirm(null);
@@ -224,7 +226,7 @@ export default function FinanceCategoriesPanel({ canWrite }: SettingsPanelProps)
                 </ReadOnlyNotice>
             )}
 
-            {(error ?? loadError) && <p className={shell.notice}>{error ?? loadError}</p>}
+            <ErrorNote note={error ?? loadError} />
 
             <Dialog
                 open={editing !== null}
@@ -336,7 +338,7 @@ export default function FinanceCategoriesPanel({ canWrite }: SettingsPanelProps)
                             </div>
                         </div>
 
-                        {formError && <p className={shell.notice}>{formError}</p>}
+                        <ErrorNote note={formError} />
                     </div>
                 )}
             </Dialog>

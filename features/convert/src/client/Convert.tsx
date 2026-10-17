@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Button,
     Dialog,
+    errorNote,
+    ErrorNote,
     FeatureSettingsButton,
     formatBytesFr,
-    humanizeError,
     invalidate,
     onServerEvent,
     saveFrom,
@@ -14,6 +15,7 @@ import {
     useResource,
     useSubView,
     useWorkspacePermissions,
+    type ErrorNoteInput,
     type UploadHandle
 } from 'deveye-sdk-client';
 import type { FeatureViewProps } from '@deveye/types/sdk/client';
@@ -107,7 +109,7 @@ export default function Convert(_props: FeatureViewProps) {
     const ready = Boolean(file && source && target && !fileProblem);
 
     const [sending, setSending] = useState<Sending | null>(null);
-    const [exportError, setExportError] = useState<string | null>(null);
+    const [exportError, setExportError] = useState<ErrorNoteInput | null>(null);
     const upload = useRef<{ handle: UploadHandle; jobId: number } | null>(null);
 
     // Le travail né du dernier export. `seen` : la liste l'a déjà montré, si bien
@@ -158,10 +160,7 @@ export default function Convert(_props: FeatureViewProps) {
             const aborted = e instanceof UploadError && e.aborted;
             if (aborted && upload.current)
                 void api.send('convert.cancel', { jobId: upload.current.jobId }).catch(() => undefined);
-            if (!aborted)
-                setExportError(
-                    e instanceof UploadError ? e.message : humanizeError(e, 'La conversion n’a pas pu démarrer.')
-                );
+            if (!aborted) setExportError(errorNote(e, 'La conversion n’a pas pu démarrer.'));
         } finally {
             upload.current = null;
             setSending(null);
@@ -175,7 +174,7 @@ export default function Convert(_props: FeatureViewProps) {
             await run();
             return true;
         } catch (e) {
-            setExportError(humanizeError(e, fallback));
+            setExportError(errorNote(e, fallback));
             return false;
         } finally {
             invalidate('convert.list');
@@ -253,11 +252,7 @@ export default function Convert(_props: FeatureViewProps) {
                 <Stepper steps={steps} current={state.view} onGo={(id) => wizard.open(id as typeof state.view)} />
             </StickyHeader>
 
-            {caps.error && (
-                <p className={styles.problem} role='alert'>
-                    {caps.error}
-                </p>
-            )}
+            <ErrorNote note={caps.error} />
 
             {atRoot ? (
                 <KindStep
@@ -317,15 +312,11 @@ export default function Convert(_props: FeatureViewProps) {
                 </div>
             )}
 
-            {state.view !== 'export' && exportError && (
-                <p className={styles.problem} role='alert'>
-                    {exportError}
-                </p>
-            )}
+            {state.view !== 'export' && <ErrorNote note={exportError} />}
             {/* À l'accueil, et une fois l'export terminé : entre les deux, la liste n'aide à rien. */}
             {(atRoot || done) && (
                 <>
-                    {list.error && <p className={styles.problem}>{list.error}</p>}
+                    <ErrorNote note={list.error} />
                     <JobList
                         // Le travail suivi est déjà à l'écran : il ne s'y montre pas deux fois.
                         jobs={(list.data ?? []).filter((job) => !(done && job.id === active?.job.id))}

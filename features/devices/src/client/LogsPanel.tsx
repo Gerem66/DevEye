@@ -3,10 +3,13 @@ import {
     acquireMetrics,
     Button,
     CopyButton,
+    errorNote,
+    ErrorNote,
     LoadingVeil,
     onServerEvent,
     SearchSelect,
     TextInput,
+    type ErrorNoteInput,
     type SearchSelectFilter,
     type SearchSelectOption
 } from 'deveye-sdk-client';
@@ -187,7 +190,7 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
     const [lines, setLines] = useState<KeyedLine[]>([]);
     const [hasMore, setHasMore] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [live, setLive] = useState(false);
 
     /**
@@ -288,7 +291,8 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
 
             clearWatchdog();
             setLoading(false);
-            setError(d.error ?? null);
+            // L'agent dit ce qui a échoué sur sa machine : une cause de l'appareil, pas de l'instance.
+            setError(d.error ? { message: d.error, code: 'conflict' } : null);
             if (d.error) {
                 // Ni la sentinelle ni le direct ne relancent en rafale une source
                 // en erreur : le direct effacerait l'erreur toutes les 3 s pour
@@ -337,7 +341,10 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
                 setLoading(false);
                 setHasMore(false);
                 setLive(false);
-                setError("L'appareil n'a pas répondu. Resserrez la fenêtre de temps ou le filtre, puis réessayez.");
+                setError({
+                    message: "L'appareil n'a pas répondu. Resserrez la fenêtre de temps ou le filtre, puis réessayez.",
+                    code: 'conflict'
+                });
             }, QUERY_TIMEOUT_MS);
             const filter: DeviceLogFilter = {};
             if (search.trim()) {
@@ -357,12 +364,12 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
                     offset: mode === 'replace' ? 0 : linesRef.current.length,
                     anchor
                 })
-                .catch((e) => {
+                .catch((e: unknown) => {
                     clearWatchdog();
                     setLoading(false);
                     setHasMore(false);
                     setLive(false);
-                    setError(e instanceof Error ? e.message : 'Échec de la requête');
+                    setError(errorNote(e, 'Le journal n’a pas pu être lu.'));
                 });
         },
         [deviceId, sourceId, search, regex, levelMin, unit, sinceSec, anchor, selectedSource, clearWatchdog]
@@ -496,16 +503,16 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
         return (
             <div className={styles.logsPanel}>
                 {sourcesTimedOut ? (
-                    <>
-                        <p className={styles.logErr}>
-                            L’appareil n’a pas répondu à l’inventaire de ses sources de logs.
-                        </p>
-                        <div className={styles.logToolbar}>
-                            <Button variant='secondary' onClick={requestSources}>
-                                Réessayer
-                            </Button>
-                        </div>
-                    </>
+                    <ErrorNote
+                        note={{
+                            message: 'L’appareil n’a pas répondu à l’inventaire de ses sources de logs.',
+                            code: 'conflict'
+                        }}
+                    >
+                        <Button variant='secondary' onClick={requestSources}>
+                            Réessayer
+                        </Button>
+                    </ErrorNote>
                 ) : (
                     <div className={styles.logViewWrap}>
                         <div className={styles.logView} />
@@ -676,7 +683,7 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
             <div className={styles.logViewWrap}>
                 <div className={styles.logView} ref={scrollRef}>
                     {error ? (
-                        <p className={styles.logErr}>{error}</p>
+                        <ErrorNote note={error} />
                     ) : lines.length === 0 && !loading ? (
                         <div className={styles.logEmpty}>
                             <p className={styles.logHint}>

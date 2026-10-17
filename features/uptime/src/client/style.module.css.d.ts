@@ -55,7 +55,6 @@ declare const styles: {
     readonly driftLines: string;
     readonly dropBar: string;
     readonly empty: string;
-    readonly error: string;
     readonly feature: string;
     readonly field: string;
     readonly fieldHint: string;

@@ -2,8 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ACCEPTED_TYPES,
     Button,
+    ErrorNote,
+    errorNote,
     fileToSquareDataUrl,
-    humanizeError,
     moduleClientProvider,
     openFeature,
     ReadOnlyNotice,
@@ -12,6 +13,7 @@ import {
     settingsStyles as shell,
     TextInput,
     useDomains,
+    type ErrorNoteInput,
     type SearchSelectOption
 } from 'deveye-sdk-client';
 import { MAIL_CLIENT_PROVIDER } from '@deveye/types/sdk';
@@ -70,7 +72,7 @@ const FIELDS: { key: keyof InvoicingIssuer; label: string; hint?: string; wide?:
 
 export default function IssuerPanel({ canWrite }: SettingsPanelProps) {
     const { draft, error, patch, save, busy } = useSettingsDraft();
-    const [logoError, setLogoError] = useState<string | null>(null);
+    const [logoError, setLogoError] = useState<ErrorNoteInput | null>(null);
     const [senders, setSenders] = useState<{ id: number; label: string; address: string }[] | null>(null);
     // Sans module Mail installé, `undefined` : les deux gestes se désactivent
     // plutôt que de disparaître, la rangée garde la même forme partout.
@@ -118,7 +120,7 @@ export default function IssuerPanel({ canWrite }: SettingsPanelProps) {
     }, [patch]);
 
     if (draft === null) {
-        return <p className={error ? shell.notice : shell.empty}>{error ?? 'Chargement…'}</p>;
+        return error ? <ErrorNote note={error} /> : <p className={shell.empty}>Chargement…</p>;
     }
 
     const issuer = draft.issuer;
@@ -130,7 +132,7 @@ export default function IssuerPanel({ canWrite }: SettingsPanelProps) {
         try {
             setIssuer({ logo: await fileToSquareDataUrl(file, { size: LOGO_SIZE, maxLength: LOGO_MAX_LENGTH }) });
         } catch (e) {
-            setLogoError(humanizeError(e, 'Cette image n’a pas pu être préparée.'));
+            setLogoError(errorNote(e, 'Cette image n’a pas pu être préparée.'));
         }
     };
 
@@ -172,7 +174,7 @@ export default function IssuerPanel({ canWrite }: SettingsPanelProps) {
                     <span className={shell.fieldHint}>Une vignette carrée, en haut à gauche du document.</span>
                 </div>
             </div>
-            {logoError && <p className={shell.errorText}>{logoError}</p>}
+            <ErrorNote note={logoError} />
 
             <div className={styles.fieldGrid}>
                 {/* Une entreprise individuelle n'a pas de capital : le champ s'efface
@@ -287,7 +289,7 @@ export default function IssuerPanel({ canWrite }: SettingsPanelProps) {
                 </ReadOnlyNotice>
             )}
 
-            {error && <p className={shell.notice}>{error}</p>}
+            <ErrorNote note={error} />
         </div>
     );
 }

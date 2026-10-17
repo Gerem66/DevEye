@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Button,
-    humanizeError,
+    ErrorNote,
+    errorNote,
     invalidate,
     useResourceVersion,
     useTypers,
     useTypingSignal,
-    withSecrecy
+    withSecrecy,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { MinimalUser } from '@deveye/types';
 import { api } from '../api';
@@ -40,7 +42,7 @@ export function Chat({ cardId, members, meUserId, canWrite, active, onRead }: Ch
     const [hasMore, setHasMore] = useState(false);
     const [text, setText] = useState('');
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     const version = useResourceVersion('projects.messages');
     const bottomRef = useRef<HTMLDivElement | null>(null);
@@ -58,7 +60,7 @@ export function Chat({ cardId, members, meUserId, canWrite, active, onRead }: Ch
                 setError(null);
                 return res.messages;
             } catch (e) {
-                setError(humanizeError(e, 'Impossible de charger la discussion.'));
+                setError(errorNote(e, 'Impossible de charger la discussion.'));
                 return [];
             }
         },
@@ -107,7 +109,7 @@ export function Chat({ cardId, members, meUserId, canWrite, active, onRead }: Ch
             invalidate('projects.board', 'projects.list');
             await load();
         } catch (e) {
-            setError(humanizeError(e, 'L’envoi a échoué.'));
+            setError(errorNote(e, 'L’envoi a échoué.'));
         } finally {
             setBusy(false);
         }
@@ -122,7 +124,7 @@ export function Chat({ cardId, members, meUserId, canWrite, active, onRead }: Ch
 
     return (
         <div className={styles.chat}>
-            {error && <p className={styles.error}>{error}</p>}
+            <ErrorNote note={error} />
 
             <div className={styles.chatScroll}>
                 {hasMore && (

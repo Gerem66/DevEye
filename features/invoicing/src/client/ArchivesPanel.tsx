@@ -1,5 +1,12 @@
 import { useCallback, useState } from 'react';
-import { Button, humanizeError, settingsStyles as shell, useResource } from 'deveye-sdk-client';
+import {
+    Button,
+    ErrorNote,
+    errorNote,
+    settingsStyles as shell,
+    useResource,
+    type ErrorNoteInput
+} from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 
 import DocumentRow from './DocumentRow';
@@ -17,7 +24,7 @@ const PAGE = 50;
 export default function ArchivesPanel({ canWrite, close }: SettingsPanelProps) {
     const [limit, setLimit] = useState(PAGE);
     const [busy, setBusy] = useState<number | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     const load = useCallback(
         async () =>
@@ -45,14 +52,14 @@ export default function ArchivesPanel({ canWrite, close }: SettingsPanelProps) {
             await api.send('invoicing.docArchive', { id, archived: false });
             refreshInvoicing();
         } catch (e) {
-            setError(humanizeError(e, 'Ce document n’a pas pu être ressorti.'));
+            setError(errorNote(e, 'Ce document n’a pas pu être ressorti.'));
         } finally {
             setBusy(null);
         }
     };
 
     if (data === null) {
-        return <p className={loadError ? shell.notice : shell.empty}>{loadError ?? 'Chargement…'}</p>;
+        return loadError ? <ErrorNote note={loadError} /> : <p className={shell.empty}>Chargement…</p>;
     }
 
     if (data.docs.length === 0) {
@@ -106,7 +113,7 @@ export default function ArchivesPanel({ canWrite, close }: SettingsPanelProps) {
                 </div>
             )}
 
-            {error && <p className={shell.notice}>{error}</p>}
+            <ErrorNote note={error} />
         </div>
     );
 }

@@ -1160,12 +1160,6 @@
     color: var(--text-muted);
 }
 
-.error {
-    margin: 0;
-    font-size: 0.8rem;
-    color: var(--danger);
-}
-
 .notice {
     margin: 0;
     font-size: 0.8rem;

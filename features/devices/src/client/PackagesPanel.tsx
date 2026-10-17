@@ -1,5 +1,14 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
-import { acquireMetrics, Button, Checkbox, onServerEvent, WsError } from 'deveye-sdk-client';
+import {
+    acquireMetrics,
+    Button,
+    Checkbox,
+    errorNote,
+    ErrorNote,
+    onServerEvent,
+    WsError,
+    type ErrorNoteInput
+} from 'deveye-sdk-client';
 import {
     isManagedPackageManager,
     PACKAGE_COUNT_EVENT,
@@ -93,7 +102,9 @@ const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : 
 export function PackagesPanel({ deviceId, privileged }: { deviceId: string; privileged: boolean | null }) {
     const [managers, setManagers] = useState<PackageManager[] | null>(null);
     const [counts, setCounts] = useState<Counts>({});
-    const [listError, setListError] = useState<string | null>(null);
+    const [listError, setListError] = useState<ErrorNoteInput | null>(null);
+    /** Une mise à jour qui n'a pas atteint l'agent : dite au-dessus du tableau, pas dans sa rangée. */
+    const [upgradeFailure, setUpgradeFailure] = useState<ErrorNoteInput | null>(null);
     /** Avancement par gestionnaire : plusieurs peuvent tourner si lancés ailleurs. */
     const [upgrades, setUpgrades] = useState<Partial<Record<PackageManagerId, UpgradeState>>>({});
     /** Tout est coché d'office : on retient ce que l'utilisateur a décoché. */
@@ -129,7 +140,10 @@ export function PackagesPanel({ deviceId, privileged }: { deviceId: string; priv
             detectTimer.current = null;
             const known = managersRef.current;
             if (known === null) {
-                setListError('L’agent n’a pas répondu : la détection a peut-être échoué sur l’appareil.');
+                setListError({
+                    message: 'L’agent n’a pas répondu : la détection a peut-être échoué sur l’appareil.',
+                    code: 'conflict'
+                });
                 return;
             }
             // Les comptes jamais arrivés passent « inconnu » : aucune ligne ne
@@ -141,7 +155,7 @@ export function PackagesPanel({ deviceId, privileged }: { deviceId: string; priv
                 }
                 return next;
             });
-            setListError('Certains outils n’ont pas répondu : leur compte est inconnu.');
+            setListError({ message: 'Certains outils n’ont pas répondu : leur compte est inconnu.', code: 'conflict' });
         }, DETECT_TIMEOUT_MS);
     }, [disarmDetect]);
 
@@ -149,16 +163,17 @@ export function PackagesPanel({ deviceId, privileged }: { deviceId: string; priv
         setListError(null);
         armDetect();
         agent.send('agent.listPackages', { deviceId }).catch((e: unknown) => {
-            // La raison vient du serveur (agent hors ligne, droits…) : l'afficher
-            // telle quelle plutôt qu'un « aucun gestionnaire détecté » faux.
+            // La raison vient du serveur (agent hors ligne, droits…) : la dire
+            // plutôt qu'un « aucun gestionnaire détecté » faux.
             disarmDetect();
-            setListError(e instanceof Error ? e.message : 'Détection impossible.');
+            setListError(errorNote(e, 'Détection impossible.'));
         });
     }, [deviceId, armDetect, disarmDetect]);
 
     const startUpgrade = useCallback(
         (manager: PackageManagerId) => {
             // Optimiste : le `package.started` du serveur fait foi.
+            setUpgradeFailure(null);
             setUpgrades((prev) => ({ ...prev, [manager]: { percent: null, line: 'Démarrage…', done: false } }));
             agent.send('agent.upgradePackages', { deviceId, manager }).catch((e: unknown) => {
                 // `conflict` : une mise à jour tourne, simplement pas la nôtre. On
@@ -168,16 +183,12 @@ export function PackagesPanel({ deviceId, privileged }: { deviceId: string; priv
                     return;
                 }
                 setQueue(null);
-                setUpgrades((prev) => ({
-                    ...prev,
-                    [manager]: {
-                        percent: 100,
-                        line: '',
-                        done: true,
-                        ok: false,
-                        error: e instanceof Error ? e.message : 'Échec'
-                    }
-                }));
+                setUpgrades((prev) => {
+                    const next = { ...prev };
+                    delete next[manager];
+                    return next;
+                });
+                setUpgradeFailure(errorNote(e, `La mise à jour ${MANAGERS[manager].label} n’a pas pu démarrer.`));
             });
         },
         [deviceId]
@@ -206,6 +217,7 @@ export function PackagesPanel({ deviceId, privileged }: { deviceId: string; priv
         setCounts({});
         setUnchecked(new Set());
         setUpgrades({});
+        setUpgradeFailure(null);
         setQueue(null);
         const offs = [
             onServerEvent(PACKAGE_LIST_EVENT, packageListPushSchema, (d) => {
@@ -280,12 +292,11 @@ export function PackagesPanel({ deviceId, privileged }: { deviceId: string; priv
     if (listError !== null && managers === null) {
         return (
             <div className={styles.pkgPanel}>
-                <p className={styles.pkgErr}>{listError}</p>
-                <div>
+                <ErrorNote note={listError}>
                     <Button variant='secondary' onClick={requestList}>
                         Réessayer
                     </Button>
-                </div>
+                </ErrorNote>
             </div>
         );
     }
@@ -349,7 +360,8 @@ export function PackagesPanel({ deviceId, privileged }: { deviceId: string; priv
                 </span>
             </div>
 
-            {listError !== null && <p className={styles.pkgErr}>{listError}</p>}
+            <ErrorNote note={listError} />
+            <ErrorNote note={upgradeFailure} />
 
             {(managed.length > 0 || (showOthers && unmanaged.length > 0)) && (
                 <table className={styles.pkgTable}>

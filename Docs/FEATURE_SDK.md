@@ -628,7 +628,15 @@ comme pour la copie d'un élément ; `commandsApi(commands)` fait de même pour
 les commandes de transport `agent.*`. Le chiffrement par mot de passe se lit
 par `useSecrecy()`, `ensureSecrecyUnlocked()` et `withSecrecy(run)` (réessaie
 une fois après l'invite) ; `humanizeError` traduit les codes, `locked` et
-`timeout` compris. `invalidate(clé)` et `useResourceVersion` relient une
+`timeout` compris. Tout échec montré passe par `ErrorNote`, qui prend une note
+`{ message, code }` : `useResource` rend la sienne dans `error`, `errorNote(e,
+repli)` la construit dans un `catch`. Le code décide du bouton « Signaler » :
+absent sur un refus qui se suffit (saisie, droit, quota, verrou, session,
+connexion coupée), présent sur une panne que l'utilisateur ne peut pas réparer
+(`internal`, `timeout`, pas de code). Un serveur qui lève `internal` pour une
+panne du côté de l'utilisateur (son hôte, son jeton, son agent) fait donc
+proposer un signalement à tort : il lève `conflict` ou `validation`.
+`invalidate(clé)` et `useResourceVersion` relient une
 mutation aux widgets qui la lisent, `onServerEvent` écoute la voie de poussée,
 `openFeature` ouvre une autre feature sur un élément, `useDomains(feature)` lit
 les domaines. Le reste du barrel (composants, dialogues,

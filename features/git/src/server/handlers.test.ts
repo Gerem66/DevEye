@@ -9,6 +9,7 @@ import {
     gitCredentialList,
     gitCredentialRemove,
     gitCredentialUpdate,
+    gitOwnerCandidates,
     gitRepoAdd,
     gitRepoGet,
     gitRepoList,
@@ -650,5 +651,36 @@ describe('les jetons GitHub', () => {
         assert.equal(ctx.recorded.audits[0].action, 'git.credentialRemove');
 
         await assert.rejects(handlerFor(gitCredentialRemove)(ctx, { credentialId: 12 }), failsWith('not_found'));
+    });
+});
+
+describe('les refus de GitHub', () => {
+    const realFetch = globalThis.fetch;
+    afterEach(() => {
+        globalThis.fetch = realFetch;
+    });
+    const refusedWith =
+        (message: string) =>
+        (e: unknown): boolean =>
+            e instanceof FeatureError && e.code === 'conflict' && e.message === message;
+
+    it('rend un jeton refusé ou un GitHub muet en `conflict` lisible, pas en panne de l’instance', async () => {
+        const store = fakeRepo();
+        store.credentials.push(credential({ id: 10, workspace_id: 1 }));
+        const ctx = createTestContext({ repo: store });
+
+        globalThis.fetch = (async () => new Response('{}', { status: 401 })) as typeof fetch;
+        await assert.rejects(
+            handlerFor(gitOwnerCandidates)(ctx, { credentialId: 10 }),
+            refusedWith('Jeton refusé par GitHub.')
+        );
+
+        globalThis.fetch = (async () => {
+            throw new TypeError('fetch failed');
+        }) as typeof fetch;
+        await assert.rejects(
+            handlerFor(gitOwnerCandidates)(ctx, { credentialId: 10 }),
+            refusedWith('GitHub ne répond pas : réessayez dans un instant.')
+        );
     });
 });

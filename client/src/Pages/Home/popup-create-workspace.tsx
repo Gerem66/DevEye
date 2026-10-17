@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { normalizeRemoteOrigin, REMOTE_LABEL_MAX, type RemoteInstance } from '@deveye/types';
-import { humanizeError } from '@/api/useResource';
+import { errorNote } from '@/api/useResource';
 import { ws } from '@/api/ws';
 import Button from '@/Components/Button';
+import ErrorNote, { type ErrorNoteInput } from '@/Components/ErrorNote';
 import Popup, { ClosePopup } from '@/Components/Popup';
 import SegmentedControl from '@/Components/SegmentedControl';
 import TextInput from '@/Components/TextInput';
@@ -37,7 +38,7 @@ export default function CreateWorkspacePopup() {
     const [name, setName] = useState('');
     const [address, setAddress] = useState('');
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     const close = (value: CreateWorkspaceChoice | null): void => {
         setWhere('local');
@@ -66,7 +67,7 @@ export default function CreateWorkspacePopup() {
         ws.local
             .send('remote.add', { label: trimmed, origin: origin! })
             .then((res) => close({ kind: 'remote', instance: res.instance }))
-            .catch((e: unknown) => setError(humanizeError(e, 'L’instance n’a pas pu être ajoutée.')))
+            .catch((e: unknown) => setError(errorNote(e, 'L’instance n’a pas pu être ajoutée.')))
             .finally(() => setBusy(false));
     };
 
@@ -142,11 +143,7 @@ export default function CreateWorkspacePopup() {
                     )}
                 </>
             )}
-            {error && (
-                <p className={styles.popupError} role='alert'>
-                    {error}
-                </p>
-            )}
+            <ErrorNote note={error} />
             <div className={styles.popupActions}>
                 <Button variant='secondary' onClick={() => close(null)}>
                     Annuler

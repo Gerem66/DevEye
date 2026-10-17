@@ -36,15 +36,6 @@
     color: var(--text-muted);
 }
 
-.error {
-    margin: 0;
-    padding: var(--space-sm) var(--space-md);
-    border-radius: var(--radius-md);
-    background: var(--danger-bg);
-    color: var(--danger);
-    font-size: 0.85rem;
-}
-
 .notice {
     margin: 0;
     padding: var(--space-sm) var(--space-md);

@@ -141,8 +141,6 @@ declare const styles: {
     readonly dropBar: string;
     readonly empty: string;
     readonly error: string;
-    readonly errorClose: string;
-    readonly errorDismissible: string;
     readonly field: string;
     readonly foreignLink: string;
     readonly foreignLinkGone: string;

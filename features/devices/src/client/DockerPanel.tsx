@@ -4,13 +4,15 @@ import {
     acquireMetrics,
     Button,
     ConfirmDialog,
+    errorNote,
+    ErrorNote,
     LogOutput,
     onServerEvent,
     SegmentedControl,
     StatusBadge,
     WsError
 } from 'deveye-sdk-client';
-import type { ConfirmRequest } from 'deveye-sdk-client';
+import type { ConfirmRequest, ErrorNoteInput } from 'deveye-sdk-client';
 import {
     DEVICE_DOCKER_DONE_EVENT,
     DEVICE_DOCKER_INVENTORY_EVENT,
@@ -109,7 +111,9 @@ function newOpId(): string {
 /** `actionable` : faux quand la machine refuse les actions Docker (`[policy]`), l'inventaire restant lisible. */
 export function DockerPanel({ deviceId, actionable }: { deviceId: string; actionable: boolean }) {
     const [inventory, setInventory] = useState<DockerInventory | null>(null);
-    const [listError, setListError] = useState<string | null>(null);
+    const [listError, setListError] = useState<ErrorNoteInput | null>(null);
+    /** L'action n'a pas atteint l'agent ; son verdict sur la machine, lui, s'affiche dans `op`. */
+    const [opFailure, setOpFailure] = useState<ErrorNoteInput | null>(null);
     const [refreshing, setRefreshing] = useState(false);
     const [tab, setTab] = useState<Tab>('containers');
     const [op, setOp] = useState<OpState | null>(null);
@@ -128,14 +132,17 @@ export function DockerPanel({ deviceId, actionable }: { deviceId: string; action
         if (detectTimer.current !== null) window.clearTimeout(detectTimer.current);
         detectTimer.current = window.setTimeout(() => {
             setRefreshing(false);
-            setListError('L’agent n’a pas répondu — l’inventaire a peut-être échoué sur l’appareil.');
+            setListError({
+                message: 'L’agent n’a pas répondu : l’inventaire a peut-être échoué sur l’appareil.',
+                code: 'conflict'
+            });
         }, DETECT_TIMEOUT_MS);
         agent.send('agent.dockerInventory', { deviceId }).catch((e: unknown) => {
-            // La raison vient du serveur (agent hors ligne, droits…) : l'afficher
-            // telle quelle plutôt qu'un « aucun conteneur » faux.
+            // La raison vient du serveur (agent hors ligne, droits…) : la dire
+            // plutôt qu'un « aucun conteneur » faux.
             if (detectTimer.current !== null) window.clearTimeout(detectTimer.current);
             setRefreshing(false);
-            setListError(e instanceof Error ? e.message : 'Inventaire impossible.');
+            setListError(errorNote(e, 'Inventaire impossible.'));
         });
     }, [deviceId]);
 
@@ -145,6 +152,7 @@ export function DockerPanel({ deviceId, actionable }: { deviceId: string; action
         setInventory(null);
         setStats([]);
         setOp(null);
+        setOpFailure(null);
         setExpanded(null);
         setSeries(new Map());
         opIdRef.current = null;
@@ -233,16 +241,12 @@ export function DockerPanel({ deviceId, actionable }: { deviceId: string; action
         (engine: ContainerEngine, action: DockerAction, target: string | null) => {
             const opId = newOpId();
             opIdRef.current = opId;
+            setOpFailure(null);
             setOp({ action, lines: [], done: false });
             agent.send('agent.dockerAction', { deviceId, opId, engine, action, target }).catch((e: unknown) => {
                 opIdRef.current = null;
-                setOp({
-                    action,
-                    lines: [],
-                    done: true,
-                    ok: false,
-                    error: e instanceof Error ? e.message : 'Action impossible.'
-                });
+                setOp(null);
+                setOpFailure(errorNote(e, 'Action impossible.'));
             });
         },
         [deviceId]
@@ -298,7 +302,8 @@ export function DockerPanel({ deviceId, actionable }: { deviceId: string; action
                 </div>
             </div>
 
-            {listError && <p className={styles.dockerError}>{listError}</p>}
+            <ErrorNote note={listError} />
+            <ErrorNote note={opFailure} />
             {!actionable && (
                 <p className={styles.dockerHint}>
                     Cette machine refuse les actions sur ses conteneurs (politique locale de l’agent) : l’inventaire

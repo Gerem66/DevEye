@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import type { UserExportPart } from '@deveye/types';
 
-import { humanizeError } from '@/api/useResource';
+import { errorNote } from '@/api/useResource';
 import { ws, WsError } from '@/api/ws';
 import { TextInput } from '@/Components';
 import Button from '@/Components/Button';
+import ErrorNote, { type ErrorNoteInput } from '@/Components/ErrorNote';
 import ChoiceCards from '@/Components/ChoiceCards';
 import { Dialog } from '@/Components/Dialog';
 import Switch from '@/Components/Switch';
@@ -19,9 +20,10 @@ interface ExportDataDialogProps {
 
 type Scope = 'all' | 'lite';
 
-function humanize(err: unknown): string {
-    if (err instanceof WsError && err.code === 'auth_invalid') return 'Mot de passe incorrect.';
-    return humanizeError(err, 'L’export n’a pas pu être préparé.');
+function humanize(err: unknown): ErrorNoteInput {
+    if (err instanceof WsError && err.code === 'auth_invalid')
+        return { message: 'Mot de passe incorrect.', code: err.code };
+    return errorNote(err, 'L’export n’a pas pu être préparé.');
 }
 
 /**
@@ -35,7 +37,7 @@ export function ExportDataDialog({ open, onClose }: ExportDataDialogProps) {
     const [scope, setScope] = useState<Scope>('all');
     const [kept, setKept] = useState<Record<string, boolean>>({});
     const [password, setPassword] = useState('');
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [loading, setLoading] = useState(false);
     const [started, setStarted] = useState(false);
     // Le compte de cette instance, même quand un espace distant est affiché : le lien s'ouvre avec son cookie.
@@ -55,7 +57,7 @@ export function ExportDataDialog({ open, onClose }: ExportDataDialogProps) {
                 setParts(preview.parts);
                 setForeign(preview.foreignWorkspaces);
             })
-            .catch((e: unknown) => setError(humanizeError(e, 'Les données du compte sont illisibles.')));
+            .catch((e: unknown) => setError(errorNote(e, 'Les données du compte sont illisibles.')));
     }, [open, local]);
 
     const optional = (parts ?? []).filter((part) => part.optional && part.bytes > 0);
@@ -77,7 +79,7 @@ export function ExportDataDialog({ open, onClose }: ExportDataDialogProps) {
     const onSubmit = async (): Promise<void> => {
         if (loading || !local) return;
         if (!password) {
-            setError('Le mot de passe est requis.');
+            setError({ message: 'Le mot de passe est requis.', code: 'validation' });
             return;
         }
         setError(null);
@@ -186,7 +188,7 @@ export function ExportDataDialog({ open, onClose }: ExportDataDialogProps) {
                         </label>
                     </>
                 )}
-                {error && <p className={styles.formError}>{error}</p>}
+                <ErrorNote note={error} />
             </div>
         </Dialog>
     );

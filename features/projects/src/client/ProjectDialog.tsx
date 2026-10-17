@@ -3,9 +3,11 @@ import {
     ACCEPTED_TYPES,
     Button,
     Dialog,
+    ErrorNote,
     fileToSquareDataUrl,
     SearchSelect,
     TextInput,
+    type ErrorNoteInput,
     type SearchSelectOption
 } from 'deveye-sdk-client';
 import { dateInputToSeconds, dateInputValue, PROJECT_ICON_SIZE, STATUS_OPTIONS, TAG_KIND_OPTIONS } from './api';
@@ -30,7 +32,7 @@ interface ProjectDialogProps {
     /** Un espace partagé n'accepte pas le tier confidentiel (voir `_shared.ts`). */
     allowGuarded: boolean;
     busy: boolean;
-    error: string | null;
+    error: ErrorNoteInput | null;
     onClose: () => void;
     onSubmit: (result: ProjectDialogResult) => void;
 }
@@ -278,7 +280,7 @@ export function ProjectDialog({ open, allowGuarded, busy, error, onClose, onSubm
                     </label>
                 )}
 
-                {error && <p className={styles.error}>{error}</p>}
+                <ErrorNote note={error} />
             </div>
         </Dialog>
     );

@@ -2,7 +2,8 @@ import { useState } from 'react';
 import {
     Button,
     ConfirmDialog,
-    humanizeError,
+    ErrorNote,
+    errorNote,
     invalidate,
     ReadOnlyNotice,
     SaveButton,
@@ -51,14 +52,14 @@ export default function SiteGeneralPanel({ scope, canWrite, gone }: SettingsPane
             gone();
             invalidate('audience.count', 'audience.list');
         } catch (e) {
-            setError(humanizeError(e, 'Suppression impossible.'));
+            setError(errorNote(e, 'Suppression impossible.'));
         } finally {
             setRemoving(false);
         }
     };
 
     if (!site || !draft) {
-        return <p className={error ? shell.notice : shell.empty}>{error ?? 'Chargement…'}</p>;
+        return error ? <ErrorNote note={error} /> : <p className={shell.empty}>Chargement…</p>;
     }
 
     if (site.foreign) {
@@ -160,7 +161,7 @@ export default function SiteGeneralPanel({ scope, canWrite, gone }: SettingsPane
                 </ReadOnlyNotice>
             )}
 
-            {error && <p className={shell.notice}>{error}</p>}
+            <ErrorNote note={error} />
 
             {canWrite && (
                 <div className={shell.field}>

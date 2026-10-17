@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { onResourceChange, onSocketOpen, useActiveWorkspace, useLiveSegment, useSubView } from 'deveye-sdk-client';
+import {
+    errorNote,
+    ErrorNote,
+    onResourceChange,
+    onSocketOpen,
+    useActiveWorkspace,
+    useLiveSegment,
+    useSubView,
+    type ErrorNoteInput
+} from 'deveye-sdk-client';
 import type { FeatureViewProps } from '@deveye/types/sdk/client';
 
 import type { AllowScope, DevicePosture, DeviceSentinelState, Finding, FindingSeverity } from '../contracts/domain';
@@ -37,7 +46,7 @@ export default function Sentinel(_props: FeatureViewProps) {
     const [minSeverity, setMinSeverity] = useState<FindingSeverity | null>(null);
     const [showSettled, setShowSettled] = useState(false);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     const workspaceId = useActiveWorkspace()?.id ?? null;
     const device = devices.find((d) => d.deviceId === deviceId) ?? null;
@@ -77,8 +86,8 @@ export default function Sentinel(_props: FeatureViewProps) {
             // du filtre, on referme.
             setSelected((cur) => (cur ? (list.findings.find((f) => f.id === cur.id) ?? null) : null));
             setError(null);
-        } catch {
-            setError('Chargement impossible.');
+        } catch (e) {
+            setError(errorNote(e, 'Chargement impossible.'));
         } finally {
             setLoading(false);
         }
@@ -270,7 +279,7 @@ export default function Sentinel(_props: FeatureViewProps) {
             </aside>
 
             <main className={styles.main}>
-                {error && <p className={styles.error}>{error}</p>}
+                <ErrorNote note={error} />
 
                 {device ? (
                     <DeviceHeader device={device} onScanNow={scanNow} />

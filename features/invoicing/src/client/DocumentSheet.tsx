@@ -7,7 +7,6 @@ import {
     copyText,
     NumberInput,
     FeatureSettingsButton,
-    humanizeError,
     invalidate,
     StatusBadge,
     StickyHeader,
@@ -17,6 +16,7 @@ import {
     useResourceVersion,
     useSubView,
     useWorkspacePermissions,
+    WsError,
     type ConfirmRequest
 } from 'deveye-sdk-client';
 
@@ -144,7 +144,7 @@ export default function DocumentSheet({
     /** Ce qui a changé depuis le dernier aperçu : il se relit alors, et pas avant. */
     const [revision, setRevision] = useState(0);
     const [paper, setPaper] = useState<string | null>(null);
-    const [paperError, setPaperError] = useState<string | null>(null);
+    const [paperError, setPaperError] = useState<Note | null>(null);
     const [busy, setBusy] = useState(false);
     const headerTimer = useRef<number | null>(null);
     const copyTimer = useRef<number | null>(null);
@@ -274,7 +274,7 @@ export default function DocumentSheet({
         let cancelled = false;
         setPaperError(null);
         void fetchPaper().catch((e) => {
-            if (!cancelled) setPaperError(humanizeError(e, 'L’aperçu n’a pas pu être préparé.'));
+            if (!cancelled) setPaperError(errorNote(e, 'L’aperçu n’a pas pu être préparé.'));
         });
         return () => {
             cancelled = true;
@@ -492,7 +492,9 @@ export default function DocumentSheet({
                 onConfirm: () =>
                     void act(async () => {
                         const res = await api.send('invoicing.send', { id: opened.id, to: '', message: '' });
-                        if (!res.sent) throw new Error(`Le compte mail n’a pas accepté l’envoi à ${res.to}.`);
+                        // Le serveur du compte mail a refusé : un refus à lire tel quel, pas un incident d'ici.
+                        if (!res.sent)
+                            throw new WsError('conflict', `Le compte mail n’a pas accepté l’envoi à ${res.to}.`);
                     }, 'Le document n’a pas pu être envoyé.')
             });
 

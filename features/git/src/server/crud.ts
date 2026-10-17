@@ -17,6 +17,7 @@ import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 
 import { listOwnerRepos, listTokenOwners } from './github';
 import {
+    fromGitHub,
     loadHomeRepo,
     loadRepo,
     projectCountsOf,
@@ -182,7 +183,7 @@ export const gitCrudFeatures = [
             }
 
             const [remote, known] = await Promise.all([
-                listOwnerRepos(owner, token),
+                fromGitHub(listOwnerRepos(owner, token)),
                 ctx.repo.listRepos(ctx.workspaceId)
             ]);
             const knownSlugs = new Set(known.map((r) => r.slug_ref));
@@ -214,7 +215,8 @@ export const gitCrudFeatures = [
         handler: async (ctx: Ctx, input) => {
             const credential = await ctx.repo.findCredential(input.credentialId, ctx.workspaceId);
             if (!credential) throw new FeatureError('not_found', 'Jeton introuvable');
-            return { owners: await listTokenOwners(await ctx.cipher().decrypt(credential.secret_enc)) };
+            const token = await ctx.cipher().decrypt(credential.secret_enc);
+            return { owners: await fromGitHub(listTokenOwners(token)) };
         }
     }),
     defineSdkFeature({

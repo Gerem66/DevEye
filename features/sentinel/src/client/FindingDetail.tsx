@@ -1,4 +1,4 @@
-import { Button } from 'deveye-sdk-client';
+import { Button, ErrorNote } from 'deveye-sdk-client';
 
 import { SENTINEL_RULES, type AllowScope, type Finding } from '../contracts/domain';
 
@@ -88,7 +88,7 @@ export default function FindingDetail({ finding, onAcknowledge, onResolve, onReo
 
             {finding.state === 'acknowledged' ? (
                 <div className={styles.actions}>
-                    {error && <p className={styles.error}>{error}</p>}
+                    <ErrorNote note={error} />
                     <p className={styles.ackNote}>
                         Jugé légitime : ce constat ne se rouvrira plus. Le rouvrir retire aussi l’autorisation qui le
                         couvrait.

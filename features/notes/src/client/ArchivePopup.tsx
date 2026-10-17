@@ -2,7 +2,17 @@ import { useCallback, useRef, useState } from 'react';
 
 import styles from './style.module.css';
 
-import { Button, ClosePopup, humanizeError, OpenPopup, Popup, StatusBadge, withSecrecy } from 'deveye-sdk-client';
+import {
+    Button,
+    ClosePopup,
+    errorNote,
+    ErrorNote,
+    OpenPopup,
+    Popup,
+    StatusBadge,
+    withSecrecy,
+    type ErrorNoteInput
+} from 'deveye-sdk-client';
 import { api } from './api';
 import { stripInline } from './markdown';
 import { NOTE_CONFIRM_POPUP, type ConfirmInput } from './ConfirmPopup';
@@ -31,7 +41,7 @@ function formatArchivedAt(time: number): string {
 export default function ArchivePopup() {
     const [notes, setNotes] = useState<NoteSummary[]>([]);
     const [loaded, setLoaded] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const changed = useRef(false);
 
     const load = useCallback(async () => {
@@ -41,7 +51,7 @@ export default function ArchivePopup() {
             setNotes(res.notes);
         } catch (e) {
             setNotes([]);
-            setError(humanizeError(e, 'Impossible de charger les archives.'));
+            setError(errorNote(e, 'Impossible de charger les archives.'));
         } finally {
             setLoaded(true);
         }
@@ -69,7 +79,7 @@ export default function ArchivePopup() {
             await withSecrecy(() => api.send('notes.restore', { noteId: note.id }));
             forget(note.id);
         } catch (e) {
-            setError(humanizeError(e, 'Restauration impossible.'));
+            setError(errorNote(e, 'Restauration impossible.'));
         }
     }
 
@@ -85,7 +95,7 @@ export default function ArchivePopup() {
             await withSecrecy(() => api.send('notes.delete', { noteId: note.id }));
             forget(note.id);
         } catch (e) {
-            setError(humanizeError(e, 'Suppression impossible.'));
+            setError(errorNote(e, 'Suppression impossible.'));
         }
     }
 
@@ -104,7 +114,7 @@ export default function ArchivePopup() {
                 vous les supprimez définitivement.
             </p>
 
-            {error && <div className={styles.errorBanner}>{error}</div>}
+            <ErrorNote note={error} />
 
             {loaded && notes.length === 0 && !error && <p className={styles.archiveEmpty}>Aucune note archivée.</p>}
 

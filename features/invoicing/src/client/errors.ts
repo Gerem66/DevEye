@@ -1,16 +1,12 @@
-import { humanizeError } from 'deveye-sdk-client';
+import { errorNote as sharedErrorNote, type ErrorNoteInput } from 'deveye-sdk-client';
 
 import { invoicingErrorDetailsSchema, type InvoicingSettingsSection } from '../contracts/domain';
 
 /**
- * Un refus, tel que l'écran doit le montrer : la phrase, et l'endroit qui la
- * lève quand le serveur en désigne un.
+ * Un refus, tel que l'écran doit le montrer : le bandeau du SDK, et l'endroit
+ * qui le lève quand le serveur en désigne un.
  */
-export interface ErrorNote {
-    message: string;
-    /** Le code du refus, `null` quand l'échec n'en porte pas : il décide si un
-     *  signalement a du sens. */
-    code: string | null;
+export interface ErrorNote extends ErrorNoteInput {
     /** L'onglet de réglages de la feature qui porte la réponse. */
     section: InvoicingSettingsSection | null;
     /** Ou bien : la réponse est dans la fiche du client de ce document. */
@@ -23,12 +19,9 @@ export interface ErrorNote {
  * d'erreur distinctes, et seule la forme compte ici.
  */
 export function errorNote(e: unknown, fallback: string): ErrorNote {
-    const details = (e as { details?: unknown } | null)?.details;
-    const parsed = invoicingErrorDetailsSchema.safeParse(details);
-    const code = (e as { code?: unknown } | null)?.code;
+    const parsed = invoicingErrorDetailsSchema.safeParse((e as { details?: unknown } | null)?.details);
     return {
-        message: humanizeError(e, fallback),
-        code: typeof code === 'string' ? code : null,
+        ...sharedErrorNote(e, fallback),
         section: parsed.success ? (parsed.data.settingsSection ?? null) : null,
         clientFiche: parsed.success && parsed.data.clientFiche === true
     };

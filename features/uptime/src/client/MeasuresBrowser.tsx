@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import { Button } from 'deveye-sdk-client';
+import { Button, ErrorNote, errorNote, type ErrorNoteInput } from 'deveye-sdk-client';
 import type { UptimeCheck, UptimeCheckStats, UptimeService } from '../contracts/domain';
 
 import { api } from './api';
@@ -50,7 +50,7 @@ export function MeasuresBrowser({ service, onBack }: MeasuresBrowserProps) {
     const [busy, setBusy] = useState(true);
     // Same rule as the detail view: a failed load says so instead of rendering
     // an empty journal, which would read as "this service has no measures".
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     const id = service.id;
 
@@ -78,8 +78,8 @@ export function MeasuresBrowser({ service, onBack }: MeasuresBrowserProps) {
                 setMore(page.checks.length === PAGE);
                 setStats(aggregate.stats);
             })
-            .catch(() => {
-                if (!cancelled) setError('Chargement des mesures impossible.');
+            .catch((e: unknown) => {
+                if (!cancelled) setError(errorNote(e, 'Chargement des mesures impossible.'));
             })
             .finally(() => {
                 if (!cancelled) setBusy(false);
@@ -99,8 +99,8 @@ export function MeasuresBrowser({ service, onBack }: MeasuresBrowserProps) {
             const page = await api.send('uptime.checks', { id, limit: PAGE, before, filter: buildFilter() });
             setChecks((prev) => [...prev, ...page.checks]);
             setMore(page.checks.length === PAGE);
-        } catch {
-            setError('Chargement des mesures impossible.');
+        } catch (e) {
+            setError(errorNote(e, 'Chargement des mesures impossible.'));
         } finally {
             setBusy(false);
         }
@@ -137,7 +137,7 @@ export function MeasuresBrowser({ service, onBack }: MeasuresBrowserProps) {
                 </button>
             </div>
 
-            {error && <p className={styles.error}>{error}</p>}
+            <ErrorNote note={error} />
 
             <Pane busy={busy}>
                 <div className={styles.summary}>

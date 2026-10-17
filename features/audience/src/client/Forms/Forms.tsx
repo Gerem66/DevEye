@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
     Button,
-    humanizeError,
+    ErrorNote,
+    errorNote,
     ReadOnlyNotice,
     SearchSelect,
     SegmentedControl,
     useResourceVersion,
-    useWorkspacePermissions
+    useWorkspacePermissions,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { AudienceForm, AudienceResults, AudienceSite, AudienceSubmission } from '../../contracts/domain';
 
@@ -59,7 +61,7 @@ export function Forms({ site, canWrite, onCurrentForm }: FormsProps) {
     /** `undefined` = fermé ; `null` = déclaration ; un formulaire = modification. */
     const [edit, setEdit] = useState<AudienceForm | null | undefined>(undefined);
 
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [loading, setLoading] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
 
@@ -80,7 +82,7 @@ export function Forms({ site, canWrite, onCurrentForm }: FormsProps) {
                 setError(null);
             })
             .catch((e: unknown) => {
-                if (!cancelled) setError(humanizeError(e, 'Impossible de charger les formulaires.'));
+                if (!cancelled) setError(errorNote(e, 'Impossible de charger les formulaires.'));
             });
         return () => {
             cancelled = true;
@@ -99,7 +101,7 @@ export function Forms({ site, canWrite, onCurrentForm }: FormsProps) {
             setResults(next);
             setError(null);
         } catch (e) {
-            setError(humanizeError(e, 'Impossible de charger les retours.'));
+            setError(errorNote(e, 'Impossible de charger les retours.'));
         } finally {
             setLoading(false);
         }
@@ -121,7 +123,7 @@ export function Forms({ site, canWrite, onCurrentForm }: FormsProps) {
             setSubmissions((prev) => [...prev, ...page.submissions]);
             setCursor(page.nextCursor);
         } catch (e) {
-            setError(humanizeError(e, 'Impossible de charger la suite.'));
+            setError(errorNote(e, 'Impossible de charger la suite.'));
         } finally {
             setLoadingMore(false);
         }
@@ -163,7 +165,7 @@ export function Forms({ site, canWrite, onCurrentForm }: FormsProps) {
         );
     }
 
-    if (forms === null) return <p className={error ? styles.error : styles.empty}>{error ?? 'Chargement…'}</p>;
+    if (forms === null) return error ? <ErrorNote note={error} /> : <p className={styles.empty}>Chargement…</p>;
 
     if (forms.length === 0) {
         return (
@@ -255,7 +257,7 @@ export function Forms({ site, canWrite, onCurrentForm }: FormsProps) {
                 </div>
             </div>
 
-            {error && <p className={styles.error}>{error}</p>}
+            <ErrorNote note={error} />
             {!current.open && (
                 <p className={styles.notice}>
                     {current.closedReason === 'full'

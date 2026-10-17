@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
     ChoiceCards,
+    ErrorNote,
+    errorNote,
     FeatureSettingsButton,
-    humanizeError,
     NumberInput,
     ReadOnlyNotice,
     SaveButton,
@@ -10,7 +11,8 @@ import {
     settingsStyles as shell,
     StatusBadge,
     Switch,
-    TextInput
+    TextInput,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import type { FinanceConfig, FinanceLegalStatus, FinanceStatusSettings } from '../contracts/domain';
@@ -36,7 +38,7 @@ function percent(bp: number): string {
 export default function FinanceGeneralPanel({ canWrite }: SettingsPanelProps) {
     const [config, setConfig] = useState<FinanceConfig | null>(null);
     const [draft, setDraft] = useState<FinanceStatusSettings | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [busy, setBusy] = useState(false);
 
     const load = useCallback(async () => {
@@ -45,7 +47,7 @@ export default function FinanceGeneralPanel({ canWrite }: SettingsPanelProps) {
             setConfig(res.config);
             setDraft(res.config.status);
         } catch (e) {
-            setError(humanizeError(e, 'Les réglages n’ont pas pu être lus.'));
+            setError(errorNote(e, 'Les réglages n’ont pas pu être lus.'));
         }
     }, []);
 
@@ -54,7 +56,7 @@ export default function FinanceGeneralPanel({ canWrite }: SettingsPanelProps) {
     }, [load]);
 
     if (config === null || draft === null) {
-        return <p className={error ? shell.notice : shell.empty}>{error ?? 'Chargement…'}</p>;
+        return error ? <ErrorNote note={error} /> : <p className={shell.empty}>Chargement…</p>;
     }
 
     const set = (change: Partial<FinanceStatusSettings>) => setDraft((d) => (d ? { ...d, ...change } : d));
@@ -84,7 +86,7 @@ export default function FinanceGeneralPanel({ canWrite }: SettingsPanelProps) {
             setDraft(res.config.status);
             refreshFinance();
         } catch (e) {
-            setError(humanizeError(e, 'Enregistrement impossible.'));
+            setError(errorNote(e, 'Enregistrement impossible.'));
             throw e;
         } finally {
             setBusy(false);
@@ -252,7 +254,7 @@ export default function FinanceGeneralPanel({ canWrite }: SettingsPanelProps) {
                     Votre rôle ne permet pas de modifier ces réglages : ils relèvent de l’écriture sur Finances.
                 </ReadOnlyNotice>
             )}
-            {error && <p className={shell.notice}>{error}</p>}
+            <ErrorNote note={error} />
 
             <div className={shell.field}>
                 <span className={shell.fieldLabel}>Devise</span>

@@ -9,11 +9,13 @@ import type {
 import {
     Button,
     Dialog,
+    ErrorNote,
+    errorNote,
     FeatureSettingsButton,
-    humanizeError,
     SearchSelect,
     Switch,
-    TextInput
+    TextInput,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import { api } from './api';
 import {
@@ -56,7 +58,7 @@ export default function JobDialog({ open, destinations, onClose, onSaved }: JobD
     const [day, setDay] = useState(1);
     const [keepLast, setKeepLast] = useState(7);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     /**
      * Les destinations connues à l'ouverture des réglages : celle qui apparaît
      * ensuite vient d'y être créée pour ce travail.
@@ -80,7 +82,7 @@ export default function JobDialog({ open, destinations, onClose, onSaved }: JobD
             .catch((e: unknown) => {
                 setKinds([]);
                 setCandidates([]);
-                setError(humanizeError(e, 'Les sources n’ont pas pu être lues.'));
+                setError(errorNote(e, 'Les sources n’ont pas pu être lues.'));
             });
         setName('');
         setSource('');
@@ -140,7 +142,7 @@ export default function JobDialog({ open, destinations, onClose, onSaved }: JobD
             onSaved();
             onClose();
         } catch (e) {
-            setError(humanizeError(e, 'Impossible de créer ce travail.'));
+            setError(errorNote(e, 'Impossible de créer ce travail.'));
         } finally {
             setBusy(false);
         }
@@ -297,7 +299,7 @@ export default function JobDialog({ open, destinations, onClose, onSaved }: JobD
                     hint='Désactivé, il ne part plus tout seul mais reste déclenchable à la main.'
                 />
 
-                {error && <p className={styles.error}>{error}</p>}
+                <ErrorNote note={error} />
             </div>
         </Dialog>
     );

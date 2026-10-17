@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     Button,
+    ErrorNote,
+    errorNote,
     FeatureSettingsButton,
     StatusBadge,
     formatBytesFr,
-    humanizeError,
     invalidate,
     PlanPausedBadge,
     PlanPausedNotice,
@@ -14,7 +15,8 @@ import {
     useLiveOutlines,
     useResourceVersion,
     useSubView,
-    useWorkspacePermissions
+    useWorkspacePermissions,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { FeatureViewProps } from '@deveye/types/sdk/client';
 
@@ -38,7 +40,7 @@ export function FeatureMailserver(_props: FeatureViewProps) {
     const [opened, setOpened] = useState<{ mailbox: Mailbox; connection: Connection | null } | null>(null);
     const [creating, setCreating] = useState(false);
     const [fresh, setFresh] = useState<{ address: string; password: string } | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     useLiveItemTarget('l1', openedId === null ? null : String(openedId), mailboxes !== null, (value) => {
         if (value === null) return setOpenedId(null);
@@ -54,7 +56,7 @@ export function FeatureMailserver(_props: FeatureViewProps) {
                 setMailboxes(res.mailboxes);
                 setError(null);
             })
-            .catch((failure: unknown) => setError(humanizeError(failure, 'Impossible de charger les adresses.')));
+            .catch((failure: unknown) => setError(errorNote(failure, 'Impossible de charger les adresses.')));
     }, [workspaceId, listVersion]);
 
     const close = useCallback(() => setOpenedId(null), []);
@@ -117,7 +119,7 @@ export function FeatureMailserver(_props: FeatureViewProps) {
                 </header>
             </StickyHeader>
 
-            {error && <p className={styles.error}>{error}</p>}
+            <ErrorNote note={error} />
             <PlanPausedNotice
                 count={mailboxes?.filter((m) => m.planPaused).length ?? 0}
                 one='adresse hébergée'

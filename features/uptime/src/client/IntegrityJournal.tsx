@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import { Button } from 'deveye-sdk-client';
+import { Button, ErrorNote, errorNote, type ErrorNoteInput } from 'deveye-sdk-client';
 import type { UptimeIntegrityOutcome, UptimeIntegrityReading } from '../contracts/domain';
 
 import { api } from './api';
@@ -41,7 +41,7 @@ export function IntegrityJournal({ serviceId, stamp }: IntegrityJournalProps) {
     const [readings, setReadings] = useState<UptimeIntegrityReading[]>([]);
     const [more, setMore] = useState(false);
     const [busy, setBusy] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     useEffect(() => {
         let cancelled = false;
@@ -53,8 +53,8 @@ export function IntegrityJournal({ serviceId, stamp }: IntegrityJournalProps) {
                 setReadings(res.readings);
                 setMore(res.readings.length === PAGE);
             })
-            .catch(() => {
-                if (!cancelled) setError('Journal des intégrités indisponible.');
+            .catch((e: unknown) => {
+                if (!cancelled) setError(errorNote(e, 'Journal des intégrités indisponible.'));
             })
             .finally(() => {
                 if (!cancelled) setBusy(false);
@@ -73,8 +73,8 @@ export function IntegrityJournal({ serviceId, stamp }: IntegrityJournalProps) {
             const page = await api.send('uptime.integrityReadings', { id: serviceId, limit: PAGE, before });
             setReadings((prev) => [...prev, ...page.readings]);
             setMore(page.readings.length === PAGE);
-        } catch {
-            setError('Journal des intégrités indisponible.');
+        } catch (e) {
+            setError(errorNote(e, 'Journal des intégrités indisponible.'));
         } finally {
             setBusy(false);
         }
@@ -83,7 +83,7 @@ export function IntegrityJournal({ serviceId, stamp }: IntegrityJournalProps) {
     return (
         <section className={styles.journalPanel}>
             <h4 className={styles.sectionTitle}>Journal des intégrités</h4>
-            {error && <p className={styles.error}>{error}</p>}
+            <ErrorNote note={error} />
             <Pane busy={busy}>
                 {readings.length === 0 ? (
                     // Un chargement raté ne se fait pas passer pour un journal vide.

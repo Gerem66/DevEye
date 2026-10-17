@@ -674,12 +674,6 @@
     white-space: nowrap;
 }
 
-.configError {
-    margin: var(--space-sm) 0 0;
-    color: var(--danger);
-    font-size: 0.82rem;
-}
-
 /* ── Clickable graph cards + detail popup ── */
 .graphCardClickable {
     cursor: pointer;
@@ -2764,12 +2758,6 @@
     padding: var(--space-md);
     text-align: center;
 }
-.logErr {
-    color: var(--danger);
-    font-size: 0.85rem;
-    padding: var(--space-md);
-    word-break: break-word;
-}
 .logAnchorGroup {
     display: flex;
     gap: var(--space-xs);
@@ -2887,12 +2875,6 @@
     margin-left: auto;
     color: var(--text-muted);
     font-size: 0.78rem;
-}
-.filesError {
-    color: var(--danger);
-    font-size: 0.85rem;
-    margin: 0;
-    word-break: break-word;
 }
 .filesList {
     height: 50vh;
@@ -3129,15 +3111,6 @@
 .dockerEngines {
     font-size: 0.74rem;
     color: var(--text-muted);
-}
-
-.dockerError {
-    margin: 0;
-    padding: var(--space-sm);
-    border-radius: var(--radius-sm);
-    background: var(--danger-bg);
-    color: var(--danger);
-    font-size: 0.78rem;
 }
 
 .dockerHint {

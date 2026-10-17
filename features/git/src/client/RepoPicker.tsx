@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { FeatureSettingsButton, humanizeError, SearchSelect, TextInput } from 'deveye-sdk-client';
+import {
+    ErrorNote,
+    errorNote,
+    FeatureSettingsButton,
+    SearchSelect,
+    TextInput,
+    type ErrorNoteInput
+} from 'deveye-sdk-client';
 import {
     GIT_REPO_OWNER_MAX_LENGTH,
     type GitCredential,
@@ -66,12 +73,12 @@ function splitNames(text: string): string[] {
 export function RepoPicker({ credentials, value, onChange, onSettingsOpenChange, autoFocus }: RepoPickerProps) {
     const [candidates, setCandidates] = useState<GitRepoCandidate[] | null>(null);
     const [looking, setLooking] = useState(false);
-    const [lookupError, setLookupError] = useState<string | null>(null);
+    const [lookupError, setLookupError] = useState<ErrorNoteInput | null>(null);
     const [manual, setManual] = useState(false);
     /** Le texte de la saisie libre, gardé tel quel : le reformater à chaque frappe déplacerait le curseur. */
     const [manualText, setManualText] = useState('');
     const [owners, setOwners] = useState<GitOwnerCandidate[] | null>(null);
-    const [ownersError, setOwnersError] = useState<string | null>(null);
+    const [ownersError, setOwnersError] = useState<ErrorNoteInput | null>(null);
     const [ownerManual, setOwnerManual] = useState(false);
 
     const owner = value.owner.trim();
@@ -86,8 +93,8 @@ export function RepoPicker({ credentials, value, onChange, onSettingsOpenChange,
             .then((res) => {
                 if (alive) setOwners(res.owners);
             })
-            .catch((e) => {
-                if (alive) setOwnersError(humanizeError(e, 'Les comptes de ce jeton n’ont pas pu être listés.'));
+            .catch((e: unknown) => {
+                if (alive) setOwnersError(errorNote(e, 'Les comptes de ce jeton n’ont pas pu être listés.'));
             });
         return () => {
             alive = false;
@@ -128,7 +135,7 @@ export function RepoPicker({ credentials, value, onChange, onSettingsOpenChange,
                 } catch (e) {
                     if (runId.current !== id) return;
                     setCandidates(null);
-                    setLookupError(humanizeError(e, 'Les dépôts n’ont pas pu être listés.'));
+                    setLookupError(errorNote(e, 'Les dépôts n’ont pas pu être listés.'));
                 } finally {
                     if (runId.current === id) setLooking(false);
                 }
@@ -213,7 +220,7 @@ export function RepoPicker({ credentials, value, onChange, onSettingsOpenChange,
                     />
                 )}
 
-                {ownersError && <span className={styles.lookupError}>{ownersError}</span>}
+                <ErrorNote note={ownersError} />
 
                 {/* Sans jeton, aucun compte à proposer : la saisie libre est le seul chemin. */}
                 {credentialId !== null && ownersError === null && owners?.length !== 0 && (
@@ -262,7 +269,7 @@ export function RepoPicker({ credentials, value, onChange, onSettingsOpenChange,
                     </>
                 )}
 
-                {lookupError && <span className={styles.lookupError}>{lookupError}</span>}
+                <ErrorNote note={lookupError} />
 
                 {candidates !== null && candidates.length === 0 && !lookupError && (
                     <span className={styles.hint}>

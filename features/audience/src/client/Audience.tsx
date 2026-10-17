@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     Button,
+    ErrorNote,
+    errorNote,
     FeatureSettingsButton,
-    humanizeError,
     PlanPausedNotice,
     StickyHeader,
     useActiveWorkspace,
     useLiveItemTarget,
     useLiveOutlines,
     useResourceVersion,
-    useWorkspacePermissions
+    useWorkspacePermissions,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { FeatureViewProps } from '@deveye/types/sdk/client';
 import type { AudienceEventsQuota, AudienceSite, AudienceUsage } from '../contracts/domain';
@@ -38,7 +40,7 @@ export function FeatureAudience(_props: FeatureViewProps) {
 
     const [sites, setSites] = useState<AudienceSite[] | null>(null);
     const [eventsQuota, setEventsQuota] = useState<AudienceEventsQuota | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     /** Le site ouvert ; `null` = on est sur la liste. */
     const [openedId, setOpenedId] = useState<number | null>(null);
@@ -84,7 +86,7 @@ export function FeatureAudience(_props: FeatureViewProps) {
             setEventsQuota(res.eventsQuota);
             setError(null);
         } catch (e) {
-            setError(humanizeError(e, 'Impossible de charger les sites.'));
+            setError(errorNote(e, 'Impossible de charger les sites.'));
         }
     }, []);
 
@@ -104,7 +106,7 @@ export function FeatureAudience(_props: FeatureViewProps) {
             setOpened({ site: res.site, usage: res.usage, ingestOrigin: res.ingestOrigin });
             setError(null);
         } catch (e) {
-            setError(humanizeError(e, 'Impossible de charger ce site.'));
+            setError(errorNote(e, 'Impossible de charger ce site.'));
             setOpened(null);
         }
     }, []);
@@ -138,8 +140,8 @@ export function FeatureAudience(_props: FeatureViewProps) {
                 return siteIds.flatMap((id) => byId.get(id) ?? []);
             });
             // Relue d'abord : son succès efface l'erreur affichée.
-            api.send('audience.reorder', { siteIds }).catch(() => {
-                void reload().then(() => setError('Réorganisation impossible.'));
+            api.send('audience.reorder', { siteIds }).catch((e: unknown) => {
+                void reload().then(() => setError(errorNote(e, 'Réorganisation impossible.')));
             });
         },
         [reload]
@@ -168,7 +170,7 @@ export function FeatureAudience(_props: FeatureViewProps) {
                         </header>
                     </StickyHeader>
 
-                    {error && <p className={styles.error}>{error}</p>}
+                    <ErrorNote note={error} />
                     <QuotaNotice quota={eventsQuota} />
                     {/* Un site partagé d'ailleurs relève de l'offre d'un autre compte que celle dont parle le bandeau. */}
                     <PlanPausedNotice
@@ -206,7 +208,7 @@ export function FeatureAudience(_props: FeatureViewProps) {
                     <Button variant='ghost' icon='arrow-left' onClick={() => setOpenedId(null)}>
                         Sites
                     </Button>
-                    <p className={error ? styles.error : styles.empty}>{error ?? 'Chargement…'}</p>
+                    {error ? <ErrorNote note={error} /> : <p className={styles.empty}>Chargement…</p>}
                 </div>
             ) : (
                 <SiteDetail

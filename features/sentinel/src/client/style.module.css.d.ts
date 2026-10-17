@@ -36,7 +36,6 @@ declare const styles: {
     readonly dotLearning: string;
     readonly dotOff: string;
     readonly empty: string;
-    readonly error: string;
     readonly evidence: string;
     readonly evidenceNote: string;
     readonly evidenceRow: string;

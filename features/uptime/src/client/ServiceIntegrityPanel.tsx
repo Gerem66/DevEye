@@ -1,13 +1,15 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import {
     Checkbox,
-    humanizeError,
+    ErrorNote,
+    errorNote,
     invalidate,
     ReadOnlyNotice,
     SaveButton,
     SearchSelect,
     settingsStyles as shell,
     Switch,
+    type ErrorNoteInput,
     type SearchSelectOption
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
@@ -86,7 +88,7 @@ export default function ServiceIntegrityPanel({ scope, canWrite }: SettingsPanel
     const [draft, setDraft] = useState<IntegrityDraft | null>(null);
     const [errorSources, setErrorSources] = useState('');
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     useEffect(() => {
         if (itemId === null) return;
@@ -96,9 +98,9 @@ export default function ServiceIntegrityPanel({ scope, canWrite }: SettingsPanel
                 const found = res.services.find((s) => s.id === itemId) ?? null;
                 setService(found);
                 setDraft(found ? draftOf(found) : null);
-                if (!found) setError('Ce service n’existe plus.');
+                if (!found) setError({ message: 'Ce service n’existe plus.', code: 'not_found' });
             })
-            .catch((e) => setError(humanizeError(e, 'Les réglages n’ont pas pu être lus.')));
+            .catch((e: unknown) => setError(errorNote(e, 'Les réglages n’ont pas pu être lus.')));
     }, [itemId]);
 
     const save = async () => {
@@ -123,7 +125,7 @@ export default function ServiceIntegrityPanel({ scope, canWrite }: SettingsPanel
             setDraft(draftOf(res.service));
             invalidate('uptime.list');
         } catch (e) {
-            setError(humanizeError(e, 'Enregistrement impossible.'));
+            setError(errorNote(e, 'Enregistrement impossible.'));
             throw e;
         } finally {
             setBusy(false);
@@ -131,7 +133,7 @@ export default function ServiceIntegrityPanel({ scope, canWrite }: SettingsPanel
     };
 
     if (!service || !draft) {
-        return <p className={error ? shell.notice : shell.empty}>{error ?? 'Chargement…'}</p>;
+        return error ? <ErrorNote note={error} /> : <p className={shell.empty}>Chargement…</p>;
     }
 
     const set = <K extends keyof IntegrityDraft>(key: K, value: IntegrityDraft[K]) =>
@@ -242,7 +244,7 @@ export default function ServiceIntegrityPanel({ scope, canWrite }: SettingsPanel
                 </ReadOnlyNotice>
             )}
 
-            {error && <p className={shell.notice}>{error}</p>}
+            <ErrorNote note={error} />
         </div>
     );
 }

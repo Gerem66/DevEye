@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { errorNote } from '@/api/useResource';
 import { ws, WsError } from '@/api/ws';
 import { AuthenticatorCodeField, authenticatorCodeReady, CodeInput } from '@/Components/CodeInput';
 import { Dialog } from '@/Components/Dialog';
+import ErrorNote, { type ErrorNoteInput } from '@/Components/ErrorNote';
 import TextInput from '@/Components/TextInput';
 import { openInfo } from '@/Components/InfoPopup';
 import Button from '@/Components/Button';
@@ -148,6 +150,18 @@ interface SetupData {
     backupCodes: string[];
 }
 
+/** Un code ou un mot de passe refusé se dit sous son champ ; le reste, dans le bandeau. */
+function codeFailure(e: unknown, refused: string, fallback: string): ErrorNoteInput {
+    return e instanceof WsError && e.code === 'auth_invalid'
+        ? { message: refused, code: e.code }
+        : errorNote(e, fallback);
+}
+
+const fieldError = (failure: ErrorNoteInput | null): string | null =>
+    failure?.code === 'auth_invalid' ? failure.message : null;
+
+const bannerError = (failure: ErrorNoteInput | null): ErrorNoteInput | null =>
+    failure?.code === 'auth_invalid' ? null : failure;
 export default function Security({ user: _user, workspace: _ws }: FeatureProps) {
     const { updateUser } = useAuth();
     const [status, setStatus] = useState<TwoFactorStatus | null>(null);
@@ -156,12 +170,12 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
     // Le mot de passe du compte, demandé avant de produire le secret : une
     // session volée ne pose pas sa propre application.
     const [setupPassword, setSetupPassword] = useState('');
-    const [setupPasswordError, setSetupPasswordError] = useState<string | null>(null);
+    const [setupPasswordError, setSetupPasswordError] = useState<ErrorNoteInput | null>(null);
     const [setupLoading, setSetupLoading] = useState(false);
     const [verifyCode, setVerifyCode] = useState('');
     const [verifying, setVerifying] = useState(false);
     // L'échec de la vérification du premier code, affiché dans le dialogue où il a été saisi.
-    const [verifyError, setVerifyError] = useState<string | null>(null);
+    const [verifyError, setVerifyError] = useState<ErrorNoteInput | null>(null);
     const [showBackupCodes, setShowBackupCodes] = useState(false);
     const [backupCodes, setBackupCodes] = useState<string[]>([]);
     const [showDisableConfirm, setShowDisableConfirm] = useState(false);
@@ -169,11 +183,11 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
     const [disableRecovery, setDisableRecovery] = useState(false);
     // L'erreur du dialogue de désactivation (code faux) s'affiche là où le code
     // a été saisi.
-    const [disableError, setDisableError] = useState<string | null>(null);
+    const [disableError, setDisableError] = useState<ErrorNoteInput | null>(null);
     const [showRegenConfirm, setShowRegenConfirm] = useState(false);
     const [regenCode, setRegenCode] = useState('');
     const [regenRecovery, setRegenRecovery] = useState(false);
-    const [regenError, setRegenError] = useState<string | null>(null);
+    const [regenError, setRegenError] = useState<ErrorNoteInput | null>(null);
     const [secrecy, setSecrecy] = useState<SecrecyStatus | null>(null);
     const [securityOpen, setSecurityOpen] = useState(false);
     const [stepUp, setStepUp] = useState<StepUpStatus | null>(null);
@@ -267,13 +281,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
             setSetupData(res.setup);
         } catch (e) {
             setSetupPassword('');
-            setSetupPasswordError(
-                e instanceof WsError && e.code === 'auth_invalid'
-                    ? 'Mot de passe incorrect'
-                    : e instanceof Error
-                      ? e.message
-                      : 'Erreur lors de la génération du QR code'
-            );
+            setSetupPasswordError(codeFailure(e, 'Mot de passe incorrect', 'Le QR code n’a pas pu être généré.'));
         } finally {
             setSetupLoading(false);
         }
@@ -302,8 +310,8 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                 setBackupCodes(codes);
                 setShowBackupCodes(true);
             }
-        } catch {
-            setVerifyError('Code invalide. Vérifiez et réessayez.');
+        } catch (e) {
+            setVerifyError(codeFailure(e, 'Code invalide. Vérifiez et réessayez.', 'Le code n’a pas pu être vérifié.'));
         } finally {
             setVerifying(false);
         }
@@ -318,9 +326,9 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
             setDisableCode('');
             await fetchStatus();
             void fetchStepUp();
-        } catch {
+        } catch (e) {
             setDisableCode('');
-            setDisableError('Code invalide');
+            setDisableError(codeFailure(e, 'Code invalide', 'La double authentification n’a pas pu être désactivée.'));
         }
     };
 
@@ -355,11 +363,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
             await fetchStatus();
         } catch (e) {
             setRegenCode('');
-            setRegenError(
-                e instanceof WsError && e.code === 'auth_invalid'
-                    ? 'Code incorrect'
-                    : 'Erreur lors de la régénération des codes'
-            );
+            setRegenError(codeFailure(e, 'Code incorrect', 'Les codes de secours n’ont pas pu être régénérés.'));
         }
     };
 
@@ -576,18 +580,21 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                         }
                     >
                         {!setupData ? (
-                            <TextInput
-                                type='password'
-                                enableShowHideButton
-                                autoComplete='current-password'
-                                placeholder='Mot de passe'
-                                value={setupPassword}
-                                error={setupPasswordError ?? undefined}
-                                onChange={(e) => {
-                                    setSetupPassword(e.target.value);
-                                    setSetupPasswordError(null);
-                                }}
-                            />
+                            <>
+                                <TextInput
+                                    type='password'
+                                    enableShowHideButton
+                                    autoComplete='current-password'
+                                    placeholder='Mot de passe'
+                                    value={setupPassword}
+                                    error={fieldError(setupPasswordError) ?? undefined}
+                                    onChange={(e) => {
+                                        setSetupPassword(e.target.value);
+                                        setSetupPasswordError(null);
+                                    }}
+                                />
+                                <ErrorNote note={bannerError(setupPasswordError)} />
+                            </>
                         ) : (
                             <div className={styles.steps}>
                                 <div className={styles.step}>
@@ -621,7 +628,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                                         <h4>Entrez le code de vérification</h4>
                                         <p>Saisissez le code à 6 chiffres affiché dans votre application.</p>
                                         <CodeInput value={verifyCode} onChange={setVerifyCode} />
-                                        {verifyError && <div className={styles.formError}>{verifyError}</div>}
+                                        <ErrorNote note={verifyError} />
                                     </div>
                                 </div>
                             </div>
@@ -681,13 +688,14 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                             value={disableCode}
                             recovery={disableRecovery}
                             onRecoveryChange={setDisableRecovery}
-                            error={disableError}
+                            error={fieldError(disableError)}
                             autoFocus
                             onChange={(value) => {
                                 setDisableCode(value);
                                 setDisableError(null);
                             }}
                         />
+                        <ErrorNote note={bannerError(disableError)} />
                     </Dialog>
 
                     <Dialog
@@ -715,13 +723,14 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                             value={regenCode}
                             recovery={regenRecovery}
                             onRecoveryChange={setRegenRecovery}
-                            error={regenError}
+                            error={fieldError(regenError)}
                             autoFocus
                             onChange={(value) => {
                                 setRegenCode(value);
                                 setRegenError(null);
                             }}
                         />
+                        <ErrorNote note={bannerError(regenError)} />
                     </Dialog>
 
                     <SecurityDialog

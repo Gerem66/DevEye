@@ -1,5 +1,15 @@
 import { useEffect, useState } from 'react';
-import { Button, Checkbox, Dialog, DialogCancelButton, SegmentedControl, TextInput } from 'deveye-sdk-client';
+import {
+    Button,
+    Checkbox,
+    Dialog,
+    DialogCancelButton,
+    ErrorNote,
+    errorNote,
+    SegmentedControl,
+    TextInput,
+    type ErrorNoteInput
+} from 'deveye-sdk-client';
 import {
     UPTIME_DEFAULT_RETENTION_DAYS,
     UPTIME_INTEGRITY_DEFAULT_INTERVAL_SECONDS,
@@ -68,7 +78,7 @@ export function ServiceDialog({ open, onClose, onSaved }: ServiceDialogProps) {
     const [draft, setDraft] = useState<ServiceIdentity>(DEFAULTS);
     const [errorName, setErrorName] = useState('');
     const [errorUrl, setErrorUrl] = useState('');
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [busy, setBusy] = useState(false);
 
     useEffect(() => {
@@ -112,8 +122,8 @@ export function ServiceDialog({ open, onClose, onSaved }: ServiceDialogProps) {
         try {
             const res = await api.send('uptime.add', { service: payload });
             onSaved(res.service);
-        } catch {
-            setError('Enregistrement impossible.');
+        } catch (e) {
+            setError(errorNote(e, 'Enregistrement impossible.'));
         } finally {
             setBusy(false);
         }
@@ -217,7 +227,7 @@ export function ServiceDialog({ open, onClose, onSaved }: ServiceDialogProps) {
                     Surveillance active
                 </Checkbox>
 
-                {error && <p className={styles.error}>{error}</p>}
+                <ErrorNote note={error} />
             </div>
 
             <div className={styles.popupActions}>

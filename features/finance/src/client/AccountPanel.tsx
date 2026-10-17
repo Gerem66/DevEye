@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import {
     Button,
     ConfirmDialog,
-    humanizeError,
+    ErrorNote,
+    errorNote,
     ReadOnlyNotice,
     SaveButton,
     SearchSelect,
@@ -10,7 +11,8 @@ import {
     settingsStyles as shell,
     Switch,
     TextInput,
-    type ConfirmRequest
+    type ConfirmRequest,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import type { FinanceAccount, FinanceCategory, FinanceConfig } from '../contracts/domain';
@@ -46,7 +48,7 @@ export default function AccountPanel({ scope, canWrite, gone }: SettingsPanelPro
     const [account, setAccount] = useState<FinanceAccount | null>(null);
     const [balance, setBalance] = useState('');
     const [link, setLink] = useState<Link>({ receives: false, categoryId: null });
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [busy, setBusy] = useState(false);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
 
@@ -62,7 +64,7 @@ export default function AccountPanel({ scope, canWrite, gone }: SettingsPanelPro
             ]);
             const found = accounts.accounts.find((entry) => entry.id === accountId) ?? null;
             if (found === null) {
-                setError('Ce compte n’existe plus.');
+                setError({ message: 'Ce compte n’existe plus.', code: 'not_found' });
                 return;
             }
             setLoaded({
@@ -78,7 +80,7 @@ export default function AccountPanel({ scope, canWrite, gone }: SettingsPanelPro
                 categoryId: config.config.invoicing.categoryId
             });
         } catch (e) {
-            setError(humanizeError(e, 'Ce compte n’a pas pu être lu.'));
+            setError(errorNote(e, 'Ce compte n’a pas pu être lu.'));
         }
     }, [accountId]);
 
@@ -87,7 +89,7 @@ export default function AccountPanel({ scope, canWrite, gone }: SettingsPanelPro
     }, [load]);
 
     if (account === null || loaded === null) {
-        return <p className={error ? shell.notice : shell.empty}>{error ?? 'Chargement…'}</p>;
+        return error ? <ErrorNote note={error} /> : <p className={shell.empty}>Chargement…</p>;
     }
 
     const set = (change: Partial<FinanceAccount>) => setAccount((a) => (a ? { ...a, ...change } : a));
@@ -102,11 +104,11 @@ export default function AccountPanel({ scope, canWrite, gone }: SettingsPanelPro
     const submit = async () => {
         if (busy || accountId === null) return;
         if (account.name.trim() === '') {
-            setError('Le compte a besoin d’un nom.');
+            setError({ message: 'Le compte a besoin d’un nom.', code: 'validation' });
             throw new Error('name');
         }
         if (initialBalance === null) {
-            setError('Le solde de départ est illisible.');
+            setError({ message: 'Le solde de départ est illisible.', code: 'validation' });
             throw new Error('balance');
         }
         setBusy(true);
@@ -133,7 +135,7 @@ export default function AccountPanel({ scope, canWrite, gone }: SettingsPanelPro
             refreshFinance();
             await load();
         } catch (e) {
-            setError(humanizeError(e, 'Enregistrement impossible.'));
+            setError(errorNote(e, 'Enregistrement impossible.'));
             throw e;
         } finally {
             setBusy(false);
@@ -157,7 +159,7 @@ export default function AccountPanel({ scope, canWrite, gone }: SettingsPanelPro
                         refreshFinance();
                     } catch (e) {
                         // La phrase du serveur dit ce qui bloque (une échéance, par exemple).
-                        setError(humanizeError(e, 'Ce compte n’a pas pu être retiré.'));
+                        setError(errorNote(e, 'Ce compte n’a pas pu être retiré.'));
                     } finally {
                         setBusy(false);
                         setConfirm(null);
@@ -317,7 +319,7 @@ export default function AccountPanel({ scope, canWrite, gone }: SettingsPanelPro
                 </ReadOnlyNotice>
             )}
 
-            {error && <p className={shell.notice}>{error}</p>}
+            <ErrorNote note={error} />
             <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} busy={busy} />
         </div>
     );

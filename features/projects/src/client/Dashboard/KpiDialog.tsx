@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { Button, Dialog, humanizeError, SearchSelect, TextInput, type SearchSelectOption } from 'deveye-sdk-client';
+import {
+    Button,
+    Dialog,
+    ErrorNote,
+    errorNote,
+    SearchSelect,
+    TextInput,
+    type ErrorNoteInput,
+    type SearchSelectOption
+} from 'deveye-sdk-client';
 
 import { api } from '../api';
 import {
@@ -54,7 +63,7 @@ export function KpiDialog({ open, projectId, editing, databases, onClose, onSave
     const [comparator, setComparator] = useState<DashboardComparator | ''>('');
     const [threshold, setThreshold] = useState('');
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     /** Ce qu'a rendu le dernier essai ; `null` = aucun depuis l'ouverture. */
     const [tried, setTried] = useState<{ value: number | null; error: string | null } | null>(null);
 
@@ -95,7 +104,7 @@ export function KpiDialog({ open, projectId, editing, databases, onClose, onSave
         void api
             .send('projects.dashboardKpiTest', { projectId, databaseId: Number(databaseId), sql: sql.trim() })
             .then(setTried)
-            .catch((e: unknown) => setError(humanizeError(e, 'L’essai a échoué.')))
+            .catch((e: unknown) => setError(errorNote(e, 'L’essai a échoué.')))
             .finally(() => setBusy(false));
     };
 
@@ -111,7 +120,7 @@ export function KpiDialog({ open, projectId, editing, databases, onClose, onSave
                 kpi: draft()
             })
             .then((res) => onSaved(res.tiles))
-            .catch((e: unknown) => setError(humanizeError(e, 'L’enregistrement a échoué.')))
+            .catch((e: unknown) => setError(errorNote(e, 'L’enregistrement a échoué.')))
             .finally(() => setBusy(false));
     };
 
@@ -214,7 +223,7 @@ export function KpiDialog({ open, projectId, editing, databases, onClose, onSave
                         {tried.error ?? `La requête rend ${tried.value}.`}
                     </p>
                 )}
-                {error && <p className={styles.error}>{error}</p>}
+                <ErrorNote note={error} />
             </div>
         </Dialog>
     );

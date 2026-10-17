@@ -72,36 +72,6 @@
 }
 
 /* L'échec d'un geste : il reste tant qu'on ne l'a pas lu, d'où la croix. */
-.errorDismissible {
-    composes: error;
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-sm);
-}
-
-.errorDismissible > span {
-    flex: 1;
-    min-width: 0;
-}
-
-.errorClose {
-    display: inline-flex;
-    flex-shrink: 0;
-    padding: 0;
-    border: none;
-    background: none;
-    color: inherit;
-    cursor: pointer;
-    filter: opacity(0.7);
-    transition: filter var(--transition-fast);
-}
-
-.errorClose:hover,
-.errorClose:focus-visible {
-    outline: none;
-    filter: opacity(1);
-}
-
 /* ------------------------------------------------------------ portefeuille */
 
 /*

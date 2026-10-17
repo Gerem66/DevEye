@@ -4,6 +4,7 @@ import { ApiError } from '@/api/http';
 import Button from '@/Components/Button';
 import { Checkbox } from '@/Components/Checkbox';
 import { Dialog } from '@/Components/Dialog';
+import ErrorNote, { type ErrorNoteInput } from '@/Components/ErrorNote';
 import TextInput from '@/Components/TextInput';
 import {
     cancelRemoteLogin,
@@ -24,7 +25,11 @@ interface RemoteLoginProps {
     onConnected: (instanceId: number) => void;
 }
 
-function humanize(err: unknown): string {
+function humanize(err: unknown): ErrorNoteInput {
+    return { message: phrase(err), code: err instanceof ApiError ? err.code : null };
+}
+
+function phrase(err: unknown): string {
     if (err instanceof ApiError) {
         switch (err.code) {
             case 'auth_invalid':
@@ -68,7 +73,7 @@ export function RemoteLogin({ entry, onClose, onConnected }: RemoteLoginProps) {
     const [pending, setPending] = useState<Pending | null>(null);
     const [trust, setTrust] = useState(false);
     const [remember, setRemember] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [loading, setLoading] = useState(false);
 
     const instanceId = entry?.instance.id ?? null;
@@ -221,11 +226,7 @@ export function RemoteLogin({ entry, onClose, onConnected }: RemoteLoginProps) {
                         </Checkbox>
                     </>
                 )}
-                {error && (
-                    <p className={styles.error} role='alert'>
-                        {error}
-                    </p>
-                )}
+                <ErrorNote note={error} />
             </div>
         </Dialog>
     );

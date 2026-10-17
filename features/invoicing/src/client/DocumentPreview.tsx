@@ -1,3 +1,5 @@
+import ErrorNote from './ErrorNote';
+import type { ErrorNote as Note } from './errors';
 import styles from './style.module.css';
 
 /**
@@ -12,13 +14,15 @@ import styles from './style.module.css';
  */
 export interface DocumentPreviewProps {
     html: string | null;
-    error: string | null;
+    error: Note | null;
 }
 
 export default function DocumentPreview({ html, error }: DocumentPreviewProps) {
     if (html === null) {
-        return (
-            <p className={error !== null ? styles.error : styles.placeholder}>{error ?? 'Préparation de l’aperçu…'}</p>
+        return error !== null ? (
+            <ErrorNote note={error} />
+        ) : (
+            <p className={styles.placeholder}>Préparation de l’aperçu…</p>
         );
     }
 

@@ -3,10 +3,12 @@ import {
     Button,
     Checkbox,
     Dialog,
-    humanizeError,
+    errorNote,
+    ErrorNote,
     SearchSelect,
     SegmentedControl,
     TextInput,
+    type ErrorNoteInput,
     type SearchSelectOption
 } from 'deveye-sdk-client';
 import type { DatabaseAlert, DatabaseCombinator, DatabaseComparator, DatabaseCondition } from '../contracts/domain';
@@ -62,7 +64,7 @@ export function AlertDialog({ open, databaseId, alert, monitorEnabled, onClose, 
     const [message, setMessage] = useState('');
     const [test, setTest] = useState<TestResult | null>(null);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [confirmRemove, setConfirmRemove] = useState(false);
 
     useEffect(() => {
@@ -89,7 +91,7 @@ export function AlertDialog({ open, databaseId, alert, monitorEnabled, onClose, 
             const res = await api.send('database.alertTest', { databaseId, combinator, conditions });
             setTest(res);
         } catch (e) {
-            setError(humanizeError(e, 'L’essai n’a pas pu être fait.'));
+            setError(errorNote(e, 'L’essai n’a pas pu être fait.'));
         } finally {
             setBusy(false);
         }
@@ -105,7 +107,7 @@ export function AlertDialog({ open, databaseId, alert, monitorEnabled, onClose, 
             else await api.send('database.alertAdd', { databaseId, ...body });
             onSaved();
         } catch (e) {
-            setError(humanizeError(e, 'L’enregistrement a échoué.'));
+            setError(errorNote(e, 'L’enregistrement a échoué.'));
         } finally {
             setBusy(false);
         }
@@ -296,7 +298,7 @@ export function AlertDialog({ open, databaseId, alert, monitorEnabled, onClose, 
                     </div>
                 )}
 
-                {error && <p className={styles.error}>{error}</p>}
+                <ErrorNote note={error} />
             </div>
         </Dialog>
     );

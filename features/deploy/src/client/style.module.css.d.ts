@@ -16,7 +16,6 @@ declare const styles: {
     readonly deployLivePulse: string;
     readonly dropBar: string;
     readonly empty: string;
-    readonly error: string;
     readonly feature: string;
     readonly field: string;
     readonly fieldWithAction: string;

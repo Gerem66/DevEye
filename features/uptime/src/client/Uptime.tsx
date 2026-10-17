@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     Button,
+    ErrorNote,
+    errorNote,
     FeatureSettingsButton,
-    humanizeError,
     onResourceChange,
     onSocketOpen,
     PlanPausedNotice,
     StickyHeader,
     useActiveWorkspace,
-    useLiveSegment
+    useLiveSegment,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { FeatureViewProps } from '@deveye/types/sdk/client';
 import type { UptimeService } from '../contracts/domain';
@@ -24,7 +26,7 @@ import styles from './style.module.css';
 export default function Uptime(_props: FeatureViewProps) {
     const [services, setServices] = useState<UptimeService[]>([]);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [selectedId, setSelectedId] = useState<number | null>(null);
     /** A row is in flight: the periodic reload must not reshuffle under it. */
     const dragging = useRef(false);
@@ -52,8 +54,8 @@ export default function Uptime(_props: FeatureViewProps) {
             const res = await api.send('uptime.list', {});
             setServices(res.services);
             setError(null);
-        } catch {
-            setError('Chargement impossible.');
+        } catch (e) {
+            setError(errorNote(e, 'Chargement impossible.'));
         } finally {
             setLoading(false);
         }
@@ -84,7 +86,7 @@ export default function Uptime(_props: FeatureViewProps) {
                 await reload();
                 void refreshUptime();
             } catch (e) {
-                setError(humanizeError(e, 'Action impossible.'));
+                setError(errorNote(e, 'Action impossible.'));
             }
         },
         [reload]
@@ -109,8 +111,8 @@ export default function Uptime(_props: FeatureViewProps) {
                 return ids.flatMap((id) => byId.get(id) ?? []);
             });
             // Relue d'abord : son succès efface l'erreur affichée.
-            api.send('uptime.reorder', { ids }).catch(() => {
-                void reload().then(() => setError('Réorganisation impossible.'));
+            api.send('uptime.reorder', { ids }).catch((e: unknown) => {
+                void reload().then(() => setError(errorNote(e, 'Réorganisation impossible.')));
             });
         },
         [reload]
@@ -121,6 +123,7 @@ export default function Uptime(_props: FeatureViewProps) {
             {selected ? (
                 <ServiceDetail
                     service={selected}
+                    actionError={error}
                     onBack={() => setSelectedId(null)}
                     onCheckNow={() =>
                         void runAction(async () => {
@@ -155,7 +158,7 @@ export default function Uptime(_props: FeatureViewProps) {
                         </div>
                     </StickyHeader>
 
-                    {error && <p className={styles.error}>{error}</p>}
+                    <ErrorNote note={error} />
                     <PlanPausedNotice count={planPausedCount} one='service surveillé' many='services surveillés' />
 
                     {!loading && services.length === 0 ? (

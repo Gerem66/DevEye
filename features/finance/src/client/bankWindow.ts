@@ -1,7 +1,22 @@
+import { errorNote, type ErrorNoteInput } from 'deveye-sdk-client';
+
 import { api } from './api';
 
 /** Ce que la fenêtre de la banque a dit, en une phrase à montrer telle quelle. */
-export class ConsentError extends Error {}
+export class ConsentError extends Error {
+    /** Le code du refus, pour le bandeau : `null` laisse le signalement s'offrir. */
+    readonly code: string | null;
+
+    constructor(message: string, code: string | null) {
+        super(message);
+        this.code = code;
+    }
+}
+
+/** Le bandeau d'un échec où la banque a pu avoir son mot à dire. */
+export function consentNote(e: unknown, fallback: string): ErrorNoteInput {
+    return e instanceof ConsentError ? { message: e.message, code: e.code } : errorNote(e, fallback);
+}
 
 /** Ce que la fenêtre rapporte : le code à échanger, ou le refus de la banque. */
 type Relay = { code: string; state: string } | { error: string };
@@ -46,14 +61,16 @@ export async function consentAtBank(authUrl: string): Promise<void> {
     const popup = window.open(authUrl, 'deveye-finance-bank', 'width=520,height=720');
     if (!popup)
         throw new ConsentError(
-            'Fenêtre bloquée par le navigateur : autorisez les fenêtres de DevEye, puis recommencez.'
+            'Fenêtre bloquée par le navigateur : autorisez les fenêtres de DevEye, puis recommencez.',
+            'validation'
         );
     const relayed = await awaitBankWindow(popup);
-    if (relayed === null) throw new ConsentError('La fenêtre de la banque s’est fermée avant la fin.');
-    if ('error' in relayed) throw new ConsentError(`La banque n’a pas été reliée : ${relayed.error}`);
+    if (relayed === null) throw new ConsentError('La fenêtre de la banque s’est fermée avant la fin.', 'validation');
+    if ('error' in relayed) throw new ConsentError(`La banque n’a pas été reliée : ${relayed.error}`, 'conflict');
     try {
         await api.send('finance.bankFinish', relayed);
     } catch (e) {
-        throw new ConsentError(`La banque n’a pas été reliée : ${e instanceof Error ? e.message : String(e)}`);
+        const { code } = errorNote(e, '');
+        throw new ConsentError(`La banque n’a pas été reliée : ${e instanceof Error ? e.message : String(e)}`, code);
     }
 }

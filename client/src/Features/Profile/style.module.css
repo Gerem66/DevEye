@@ -330,12 +330,6 @@
     outline-offset: 2px;
 }
 
-.formError {
-    margin: 0;
-    font-size: 0.85rem;
-    color: var(--danger);
-}
-
 .formSuccess {
     margin: 0;
     font-size: 0.9rem;

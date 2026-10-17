@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { humanizeError, useResourceVersion, withSecrecy } from 'deveye-sdk-client';
+import { ErrorNote, errorNote, useResourceVersion, withSecrecy, type ErrorNoteInput } from 'deveye-sdk-client';
 import type { ProjectStatus } from '@deveye/types';
 import { api, STATUS_LABELS } from '../api';
 import type { ProjectCard, ProjectEvent, ProjectEventKind } from '../../contracts/domain';
@@ -52,7 +52,7 @@ interface HistoryProps {
 export function History({ projectId, withEvents, archivedCards, onOpenArchived }: HistoryProps) {
     const [events, setEvents] = useState<ProjectEvent[] | null>(null);
     const [hasMore, setHasMore] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const version = useResourceVersion('projects.board');
 
     const load = useCallback(
@@ -65,7 +65,7 @@ export function History({ projectId, withEvents, archivedCards, onOpenArchived }
                 setEvents((prev) => (before === undefined ? res.events : [...(prev ?? []), ...res.events]));
                 setError(null);
             } catch (e) {
-                setError(humanizeError(e, 'Impossible de charger l’historique.'));
+                setError(errorNote(e, 'Impossible de charger l’historique.'));
             }
         },
         [projectId]
@@ -84,7 +84,7 @@ export function History({ projectId, withEvents, archivedCards, onOpenArchived }
 
     return (
         <div className={styles.history}>
-            {error && <p className={styles.error}>{error}</p>}
+            <ErrorNote note={error} />
             {entries === null && <p className={styles.empty}>Chargement…</p>}
             {entries?.length === 0 && (
                 <p className={styles.empty}>

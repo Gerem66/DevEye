@@ -214,18 +214,9 @@
     text-align: center;
 }
 
-.error {
-    margin: 0;
-    padding: var(--space-sm) var(--space-md);
-    border-radius: var(--radius-sm);
-    background: var(--danger-bg);
-    color: var(--danger);
-    font-size: 0.875rem;
-}
-
-/* L'état de la boîte ouverte, distinct de `.error` : celui-ci ne dit pas
-   qu'une action vient d'échouer, mais que la boîte est en panne depuis un
-   moment — il reste affiché tant que rien n'a réussi, d'où le ton porté par
+/* L'état de la boîte ouverte, distinct du bandeau d'erreur : celui-ci ne dit
+   pas qu'une action vient d'échouer, mais que la boîte est en panne depuis un
+   moment. Il reste affiché tant que rien n'a réussi, d'où le ton porté par
    `data-tone` (une boîte injoignable se répare seule, un accès refusé non). */
 .accountAlert {
     display: flex;

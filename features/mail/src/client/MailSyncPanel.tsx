@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
+    ErrorNote,
     invalidate,
     PlanPausedBadge,
     ReadOnlyNotice,
@@ -7,11 +8,12 @@ import {
     settingsStyles as shell,
     Switch,
     TextInput,
-    useResourceVersion
+    useResourceVersion,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 
-import { api, humanizeError } from './api';
+import { api, errorNote } from './api';
 import styles from './style.module.css';
 
 import {
@@ -40,7 +42,7 @@ export default function MailSyncPanel({ scope, canWrite }: SettingsPanelProps) {
     const [account, setAccount] = useState<MailAccount | null>(null);
     const [intervalMinutes, setIntervalMinutes] = useState('');
     const [busy, setBusy] = useState(false);
-    const [status, setStatus] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     useEffect(() => {
         if (accountId === null) return;
@@ -51,7 +53,7 @@ export default function MailSyncPanel({ scope, canWrite }: SettingsPanelProps) {
                 setAccount(found);
                 if (found) setIntervalMinutes(String(found.syncIntervalMinutes));
             })
-            .catch((e) => setStatus(humanizeError(e, 'Chargement impossible.')));
+            .catch((e: unknown) => setError(errorNote(e, 'Chargement impossible.')));
     }, [accountId, version]);
 
     const guarded = account?.securityTier === 'guarded';
@@ -63,7 +65,7 @@ export default function MailSyncPanel({ scope, canWrite }: SettingsPanelProps) {
             Math.max(MAIL_SYNC_INTERVAL_MIN_MINUTES, Number(intervalMinutes) || MAIL_SYNC_INTERVAL_DEFAULT_MINUTES)
         );
         setBusy(true);
-        setStatus(null);
+        setError(null);
         try {
             await api.send('mail.accountSetProfile', {
                 id: account.id,
@@ -73,9 +75,8 @@ export default function MailSyncPanel({ scope, canWrite }: SettingsPanelProps) {
             });
             setIntervalMinutes(String(minutes));
             invalidate('mail.accountList');
-            setStatus(null);
         } catch (e) {
-            setStatus(humanizeError(e, 'Enregistrement impossible.'));
+            setError(errorNote(e, 'Enregistrement impossible.'));
             // Relancé : le bouton n'annonce « Enregistré » que sur un succès.
             throw e;
         } finally {
@@ -87,13 +88,13 @@ export default function MailSyncPanel({ scope, canWrite }: SettingsPanelProps) {
         async (enabled: boolean) => {
             if (!account) return;
             setBusy(true);
-            setStatus(null);
+            setError(null);
             try {
                 await api.send('mail.accountSetEnabled', { id: account.id, enabled });
                 setAccount({ ...account, enabled });
                 invalidate('mail.accountList');
             } catch (e) {
-                setStatus(humanizeError(e, 'Changement impossible.'));
+                setError(errorNote(e, 'Changement impossible.'));
             } finally {
                 setBusy(false);
             }
@@ -102,7 +103,7 @@ export default function MailSyncPanel({ scope, canWrite }: SettingsPanelProps) {
     );
 
     if (accountId === null) return null;
-    if (!account) return <p className={shell.notice}>{status ?? 'Chargement…'}</p>;
+    if (!account) return error ? <ErrorNote note={error} /> : <p className={shell.notice}>Chargement…</p>;
 
     return (
         <div className={shell.section}>
@@ -145,7 +146,7 @@ export default function MailSyncPanel({ scope, canWrite }: SettingsPanelProps) {
                 </ReadOnlyNotice>
             )}
 
-            {status && <p className={shell.notice}>{status}</p>}
+            <ErrorNote note={error} />
         </div>
     );
 }

@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
 import {
-    humanizeError,
+    errorNote,
+    ErrorNote,
     invalidate,
     ReadOnlyNotice,
     SaveButton,
     SearchSelect,
     SegmentedControl,
     settingsStyles as shell,
-    useResource
+    useResource,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 
@@ -30,7 +32,7 @@ export default function GeneralPanel({ canWrite }: SettingsPanelProps) {
     );
     const rates = useResource('convert.rates', () => api.send('convert.rates', {}), 'Impossible de lire les devises.');
     const [draft, setDraft] = useState<ConvertSettings>(DEFAULT_SETTINGS);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     useEffect(() => {
         if (stored.data) setDraft(stored.data);
     }, [stored.data]);
@@ -42,7 +44,7 @@ export default function GeneralPanel({ canWrite }: SettingsPanelProps) {
             await api.send('convert.settingsSet', { settings: draft });
             invalidate('convert.settings');
         } catch (e) {
-            setError(humanizeError(e, 'Les réglages n’ont pas pu être enregistrés.'));
+            setError(errorNote(e, 'Les réglages n’ont pas pu être enregistrés.'));
             throw e;
         }
     };
@@ -83,7 +85,7 @@ export default function GeneralPanel({ canWrite }: SettingsPanelProps) {
                     Votre rôle ne permet pas de modifier ces réglages : ils relèvent de l’écriture sur le Convertisseur.
                 </ReadOnlyNotice>
             )}
-            {error && <p className={shell.notice}>{error}</p>}
+            <ErrorNote note={error} />
         </div>
     );
 }

@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react';
 
 import type { LoginChecksStatus } from '@deveye/types';
 
+import { errorNote } from '@/api/useResource';
 import { ws, WsError } from '@/api/ws';
 import Button from '@/Components/Button';
 import { CodeInput, CODE_LENGTH } from '@/Components/CodeInput';
 import { Dialog } from '@/Components/Dialog';
+import ErrorNote, { type ErrorNoteInput } from '@/Components/ErrorNote';
 import TextInput from '@/Components/TextInput';
 import styles from './Security.module.css';
 
@@ -17,9 +19,10 @@ interface PhoneDialogProps {
     onChange: (status: LoginChecksStatus) => void;
 }
 
-function messageOf(e: unknown, fallback: string): string {
-    if (e instanceof WsError && e.code === 'auth_invalid') return e.message || 'Mot de passe incorrect';
-    return e instanceof Error && e.message ? e.message : fallback;
+function noteOf(e: unknown, fallback: string): ErrorNoteInput {
+    if (e instanceof WsError && e.code === 'auth_invalid')
+        return { message: e.message || 'Mot de passe incorrect', code: e.code };
+    return errorNote(e, fallback);
 }
 
 /**
@@ -32,7 +35,7 @@ export function PhoneDialog({ open, current, onClose, onChange }: PhoneDialogPro
     const [password, setPassword] = useState('');
     const [sentTo, setSentTo] = useState<string | null>(null);
     const [code, setCode] = useState('');
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [busy, setBusy] = useState(false);
 
     useEffect(() => {
@@ -55,7 +58,7 @@ export function PhoneDialog({ open, current, onClose, onChange }: PhoneDialogPro
             setSentTo(to);
         } catch (e) {
             setPassword('');
-            setError(messageOf(e, 'Le code n’a pas pu partir.'));
+            setError(noteOf(e, 'Le code n’a pas pu partir.'));
         } finally {
             setBusy(false);
         }
@@ -73,8 +76,8 @@ export function PhoneDialog({ open, current, onClose, onChange }: PhoneDialogPro
             if (e instanceof WsError && e.code === 'auth_expired') setSentTo(null);
             setError(
                 e instanceof WsError && e.code === 'auth_invalid'
-                    ? 'Code incorrect'
-                    : messageOf(e, 'Vérification impossible.')
+                    ? { message: 'Code incorrect', code: e.code }
+                    : noteOf(e, 'Vérification impossible.')
             );
         } finally {
             setBusy(false);
@@ -90,7 +93,7 @@ export function PhoneDialog({ open, current, onClose, onChange }: PhoneDialogPro
             onClose();
         } catch (e) {
             setPassword('');
-            setError(messageOf(e, 'Le numéro n’a pas pu être retiré.'));
+            setError(noteOf(e, 'Le numéro n’a pas pu être retiré.'));
         } finally {
             setBusy(false);
         }
@@ -145,11 +148,7 @@ export function PhoneDialog({ open, current, onClose, onChange }: PhoneDialogPro
                         }}
                         onComplete={(value) => void confirm(value)}
                     />
-                    {error && (
-                        <div className={styles.error} role='alert'>
-                            {error}
-                        </div>
-                    )}
+                    <ErrorNote note={error} />
                 </div>
             ) : (
                 <div className={styles.phoneForm}>
@@ -170,12 +169,13 @@ export function PhoneDialog({ open, current, onClose, onChange }: PhoneDialogPro
                         autoComplete='current-password'
                         placeholder='Mot de passe du compte'
                         value={password}
-                        error={error ?? undefined}
+                        error={error?.code === 'auth_invalid' ? error.message : undefined}
                         onChange={(e) => {
                             setPassword(e.target.value);
                             setError(null);
                         }}
                     />
+                    {error?.code !== 'auth_invalid' && <ErrorNote note={error} />}
                 </div>
             )}
         </Dialog>

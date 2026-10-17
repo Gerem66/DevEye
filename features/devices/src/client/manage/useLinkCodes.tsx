@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { copyText, onResourceChange, openInfo } from 'deveye-sdk-client';
+import { copyText, errorNote, onResourceChange, openInfo, type ErrorNoteInput } from 'deveye-sdk-client';
 import type { LinkCodeResponse, LinkCodesListResponse } from '@deveye/types';
 
 import { api } from '../api';
@@ -26,10 +26,10 @@ export function useLinkCodes(refresh: () => Promise<void> | void) {
     const [server, setServer] = useState<string | null>(null);
     const [quota, setQuota] = useState<LinkCodesListResponse['quota']>(null);
     /** La liste n'a pas pu être relue : à dire, plutôt que d'afficher « aucun code ». */
-    const [codesError, setCodesError] = useState<string | null>(null);
+    const [codesError, setCodesError] = useState<ErrorNoteInput | null>(null);
     const [showLinkModal, setShowLinkModal] = useState(false);
     const [generatingCode, setGeneratingCode] = useState(false);
-    const [genError, setGenError] = useState<string | null>(null);
+    const [genError, setGenError] = useState<ErrorNoteInput | null>(null);
     const [copiedCode, setCopiedCode] = useState<string | null>(null);
     const [ttlPreset, setTtlPreset] = useState<TtlPreset>('900');
     /** `null` : le champ est vide le temps d'une saisie. */
@@ -48,7 +48,7 @@ export function useLinkCodes(refresh: () => Promise<void> | void) {
             // Ne PAS retomber sur une liste vide en silence : « Aucun code
             // actif » se lit comme une certitude, et un code encore valide peut
             // circuler.
-            setCodesError(e instanceof Error ? e.message : 'Codes actifs indisponibles.');
+            setCodesError(errorNote(e, 'Codes actifs indisponibles.'));
             return [];
         }
     };
@@ -64,8 +64,8 @@ export function useLinkCodes(refresh: () => Promise<void> | void) {
             // La commande affichée suit le code qu'on vient de demander.
             setSelectedCode(created.code);
             await fetchCodes();
-        } catch {
-            setGenError('Impossible de générer un code de liaison. Réessayez.');
+        } catch (e) {
+            setGenError(errorNote(e, 'Impossible de générer un code de liaison. Réessayez.'));
         } finally {
             setGeneratingCode(false);
         }

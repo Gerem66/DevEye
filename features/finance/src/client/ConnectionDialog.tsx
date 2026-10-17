@@ -4,11 +4,13 @@ import {
     ChoiceCards,
     Dialog,
     DialogCancelButton,
-    humanizeError,
+    ErrorNote,
+    errorNote,
     SearchSelect,
     SegmentedControl,
     settingsStyles as shell,
     TextInput,
+    type ErrorNoteInput,
     type SearchSelectOption
 } from 'deveye-sdk-client';
 import {
@@ -21,7 +23,7 @@ import {
 } from '../contracts/banking';
 
 import { api, refreshFinance } from './api';
-import { ConsentError, consentAtBank } from './bankWindow';
+import { consentAtBank, consentNote } from './bankWindow';
 
 interface ConnectionDialogProps {
     open: boolean;
@@ -58,7 +60,7 @@ export default function ConnectionDialog({ open, connection, enableBanking, onCl
     const [bank, setBank] = useState('');
     const [psuType, setPsuType] = useState<BankPsuType>('business');
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     useEffect(() => {
         if (!open) return;
@@ -80,9 +82,7 @@ export default function ConnectionDialog({ open, connection, enableBanking, onCl
         setBank('');
         api.send('finance.bankList', { country })
             .then((res) => !cancelled && setBanks(res.banks))
-            .catch(
-                (e: unknown) => !cancelled && setError(humanizeError(e, 'La liste des banques n’a pas pu être lue.'))
-            );
+            .catch((e: unknown) => !cancelled && setError(errorNote(e, 'La liste des banques n’a pas pu être lue.')));
         return () => {
             cancelled = true;
         };
@@ -99,7 +99,7 @@ export default function ConnectionDialog({ open, connection, enableBanking, onCl
         try {
             await work();
         } catch (e) {
-            setError(e instanceof ConsentError ? e.message : humanizeError(e, fallback));
+            setError(consentNote(e, fallback));
         } finally {
             setBusy(false);
         }
@@ -293,7 +293,7 @@ export default function ConnectionDialog({ open, connection, enableBanking, onCl
                     </p>
                 )}
 
-                {error && <p className={shell.notice}>{error}</p>}
+                <ErrorNote note={error} />
             </div>
         </Dialog>
     );

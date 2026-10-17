@@ -2,9 +2,10 @@ import { useMemo, useState } from 'react';
 import { itemNounForms, type FeatureId } from '@deveye/types';
 
 import { WsError } from '@/api/ws';
-import { humanizeError } from '@/api/useResource';
+import { errorNote } from '@/api/useResource';
 import Button from '@/Components/Button';
 import { ConfirmDialog, type ConfirmRequest } from '@/Components/ConfirmDialog';
+import ErrorNote, { type ErrorNoteInput } from '@/Components/ErrorNote';
 import { ProgressDialog } from '@/Components/ProgressDialog';
 import SearchSelect from '@/Components/SearchSelect';
 import { moduleManifest } from '@/sdk/registry';
@@ -44,7 +45,7 @@ export default function CopyItem({ feature, itemId }: Props) {
     useRemotePing(true);
     const [choice, setChoice] = useState('');
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [done, setDone] = useState<string | null>(null);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
     const [progress, setProgress] = useState<{ step: CopyStep; value: number } | null>(null);
@@ -72,10 +73,13 @@ export default function CopyItem({ feature, itemId }: Props) {
         return [...here, ...elsewhere];
     }, [workspaces, remoteWorkspaces, remotes, activeId, activeInstanceId]);
 
-    const explain = (e: unknown, fallback: string): string => {
-        if (e instanceof UnlockCancelledError) return 'Copie annulée : le mot de passe n’a pas été saisi.';
-        if (e instanceof WsError && e.code === 'closed') return 'Cette instance ne répond plus.';
-        return humanizeError(e, fallback);
+    const explain = (e: unknown, fallback: string): ErrorNoteInput => {
+        if (e instanceof UnlockCancelledError) {
+            return { message: 'Copie annulée : le mot de passe n’a pas été saisi.', code: 'locked' };
+        }
+        if (e instanceof WsError && e.code === 'closed')
+            return { message: 'Cette instance ne répond plus.', code: 'closed' };
+        return errorNote(e, fallback);
     };
 
     const ask = (): void => {
@@ -88,7 +92,7 @@ export default function CopyItem({ feature, itemId }: Props) {
             .then(({ plan, target }) => {
                 const blocker = plan.blockers[0] ?? target.blockers[0];
                 if (blocker) {
-                    setError(blocker);
+                    setError({ message: blocker, code: 'conflict' });
                     return;
                 }
                 setConfirm({
@@ -179,7 +183,7 @@ export default function CopyItem({ feature, itemId }: Props) {
                 Un double indépendant, dans un autre de vos espaces ou sur une instance distante où vous êtes connecté.
                 Ce qu’il n’emporte pas est nommé avant confirmation.
             </span>
-            {error && <p className={styles.notice}>{error}</p>}
+            <ErrorNote note={error} />
             {done && <p className={styles.sectionHint}>{done}</p>}
 
             <ConfirmDialog request={confirm} busy={busy} onClose={() => setConfirm(null)} />

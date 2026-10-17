@@ -1,4 +1,4 @@
-import { WsError } from 'deveye-sdk-client';
+import { errorNote, WsError, type ErrorNoteInput } from 'deveye-sdk-client';
 
 import { providerNeedsKey, weatherProviderSchema, type WeatherProvider } from '../contracts/domain';
 
@@ -33,6 +33,13 @@ export function providerFailure(e: unknown): { reason: string; message: string }
     if (!(e instanceof WsError)) return null;
     const reason = (e.details as { reason?: unknown } | undefined)?.reason;
     return typeof reason === 'string' ? { reason, message: e.message } : null;
+}
+
+/** La note d'un échec : la phrase du fournisseur quand il en a une, sinon celle de l'app. */
+export function weatherNote(e: unknown, fallback: string): ErrorNoteInput {
+    const note = errorNote(e, fallback);
+    const failure = providerFailure(e);
+    return failure ? { message: failure.message, code: note.code } : note;
 }
 
 /** La clé refusée : le seul échec qui périme un relevé déjà affiché. */

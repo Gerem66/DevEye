@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { Button, humanizeError, useResourceVersion } from 'deveye-sdk-client';
+import { Button, ErrorNote, errorNote, useResourceVersion, type ErrorNoteInput } from 'deveye-sdk-client';
 import type { AudienceFunnel, AudienceRange, AudienceSite } from '../contracts/domain';
 
 import { api } from './api';
@@ -34,7 +34,7 @@ export function Funnels({ site, canWrite, heading, actions }: FunnelsProps) {
     const [edit, setEdit] = useState<AudienceFunnel | null | undefined>(undefined);
     /** L'entonnoir dont on regarde le détail ; `null` = aucun. */
     const [opened, setOpened] = useState<AudienceFunnel | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [loading, setLoading] = useState(true);
 
     const statsVersion = useResourceVersion('audience.stats');
@@ -45,7 +45,7 @@ export function Funnels({ site, canWrite, heading, actions }: FunnelsProps) {
             setFunnels(res.funnels);
             setError(null);
         } catch (e) {
-            setError(humanizeError(e, 'Impossible de charger les entonnoirs.'));
+            setError(errorNote(e, 'Impossible de charger les entonnoirs.'));
         } finally {
             setLoading(false);
         }
@@ -75,13 +75,13 @@ export function Funnels({ site, canWrite, heading, actions }: FunnelsProps) {
                 {actions}
             </div>
 
-            {error && funnels.length > 0 && <p className={styles.error}>{error}</p>}
+            {funnels.length > 0 && <ErrorNote note={error} />}
 
             {/* L'erreur remplace la liste plutôt que de la coiffer : « Aucun
                 entonnoir » sous un bandeau rouge invite à créer là où la lecture a
                 simplement échoué. */}
             {error && funnels.length === 0 ? (
-                <p className={styles.error}>{error}</p>
+                <ErrorNote note={error} />
             ) : loading && funnels.length === 0 ? (
                 <p className={styles.empty}>Chargement…</p>
             ) : funnels.length === 0 ? (

@@ -5,6 +5,7 @@ import {
     Dialog,
     DialogCancelButton,
     ErrorNote,
+    errorNote,
     SegmentedControl,
     TextInput,
     type ErrorNoteInput
@@ -15,7 +16,6 @@ import { FINANCE_NAME_MAX_LENGTH } from '../contracts/domain';
 import ColorPicker from './ColorPicker';
 import { api } from './api';
 import { ACCOUNT_KINDS, parseAmount } from './format';
-import { errorNote } from './shared';
 import styles from './style.module.css';
 
 interface AccountDialogProps {

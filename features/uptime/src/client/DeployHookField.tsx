@@ -3,9 +3,11 @@ import {
     Button,
     ConfirmDialog,
     CopyButton,
-    humanizeError,
+    ErrorNote,
+    errorNote,
     settingsStyles as shell,
-    type ConfirmRequest
+    type ConfirmRequest,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 
 import { api } from './api';
@@ -18,7 +20,7 @@ import styles from './style.module.css';
  */
 export default function DeployHookField({ serviceId, disabled }: { serviceId: number; disabled?: boolean }) {
     const [url, setUrl] = useState<string | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [busy, setBusy] = useState(false);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
 
@@ -26,7 +28,7 @@ export default function DeployHookField({ serviceId, disabled }: { serviceId: nu
         void api
             .send('uptime.deployHook', { id: serviceId })
             .then((res) => setUrl(res.url))
-            .catch((e) => setError(humanizeError(e, 'L’adresse n’a pas pu être lue.')));
+            .catch((e: unknown) => setError(errorNote(e, 'L’adresse n’a pas pu être lue.')));
     }, [serviceId]);
 
     const regenerate = async () => {
@@ -36,7 +38,7 @@ export default function DeployHookField({ serviceId, disabled }: { serviceId: nu
         try {
             setUrl((await api.send('uptime.deployHook', { id: serviceId, regenerate: true })).url);
         } catch (e) {
-            setError(humanizeError(e, 'L’adresse n’a pas pu être régénérée.'));
+            setError(errorNote(e, 'L’adresse n’a pas pu être régénérée.'));
         } finally {
             setBusy(false);
         }
@@ -60,7 +62,7 @@ export default function DeployHookField({ serviceId, disabled }: { serviceId: nu
                     accepter une version.
                 </span>
             )}
-            {error && <span className={shell.notice}>{error}</span>}
+            <ErrorNote note={error} />
             <div className={shell.sectionActions}>
                 <Button
                     variant='secondary'

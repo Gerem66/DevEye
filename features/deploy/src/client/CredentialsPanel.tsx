@@ -4,14 +4,16 @@ import {
     ConfirmDialog,
     DeviceRelayField,
     Dialog,
-    humanizeError,
+    ErrorNote,
+    errorNote,
     invalidate,
     SegmentedControl,
     settingsStyles as shell,
     TextInput,
     useDevices,
     useResource,
-    type ConfirmRequest
+    type ConfirmRequest,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import {
@@ -76,7 +78,9 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
     const [deviceId, setDeviceId] = useState('');
     const [secret, setSecret] = useState('');
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    /** Le refus du formulaire, montré dans son dialogue ; `error`, celui d'un retrait, sous la liste. */
+    const [formError, setFormError] = useState<ErrorNoteInput | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
 
     /** Un accès qui change touche la liste (cible orpheline) et la fiche ouverte (« accès retiré »). */
@@ -90,6 +94,7 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
         setRoute(credential?.deviceId ? 'device' : 'direct');
         setDeviceId(credential?.deviceId ?? '');
         setSecret('');
+        setFormError(null);
         setError(null);
     };
 
@@ -97,28 +102,30 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
         if (busy || !label.trim()) return;
         // Un service auto-hébergé sans adresse n'est pas adressable.
         if (provider === 'dokploy' && !baseUrl.trim()) {
-            setError('Cette instance a besoin de l’adresse de son API.');
+            setFormError({ message: 'Cette instance a besoin de l’adresse de son API.', code: 'validation' });
             return;
         }
         const byDevice = provider === 'dokploy' && route === 'device';
         if (byDevice && !deviceId) {
-            setError('Choisissez l’appareil par lequel joindre cette instance.');
+            setFormError({ message: 'Choisissez l’appareil par lequel joindre cette instance.', code: 'validation' });
             return;
         }
         const existing = editing?.credential ?? null;
         if (!existing && !secret.trim()) {
-            setError(
-                provider === 'github'
-                    ? 'Un accès sans jeton ne sert à rien.'
-                    : 'Un accès sans clé d’API ne sert à rien.'
-            );
+            setFormError({
+                message:
+                    provider === 'github'
+                        ? 'Un accès sans jeton ne sert à rien.'
+                        : 'Un accès sans clé d’API ne sert à rien.',
+                code: 'validation'
+            });
             return;
         }
         const address = provider === 'dokploy' ? baseUrl.trim() : null;
         const device = byDevice ? deviceId : null;
 
         setBusy(true);
-        setError(null);
+        setFormError(null);
         try {
             if (existing) {
                 await api.send('deploy.credentialUpdate', {
@@ -141,7 +148,7 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
             setEditing(null);
             changed();
         } catch (e) {
-            setError(humanizeError(e, 'L’accès n’a pas pu être enregistré.'));
+            setFormError(errorNote(e, 'L’accès n’a pas pu être enregistré.'));
         } finally {
             setBusy(false);
         }
@@ -161,11 +168,12 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
             onConfirm: () =>
                 void (async () => {
                     setBusy(true);
+                    setError(null);
                     try {
                         await api.send('deploy.credentialRemove', { credentialId: credential.id });
                         changed();
                     } catch (e) {
-                        setError(humanizeError(e, 'Le retrait a échoué.'));
+                        setError(errorNote(e, 'Le retrait a échoué.'));
                     } finally {
                         setBusy(false);
                     }
@@ -247,7 +255,7 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
                 ))}
             </div>
 
-            {(error ?? loadError) && <p className={shell.notice}>{error ?? loadError}</p>}
+            <ErrorNote note={error ?? loadError} />
 
             {canWrite && (
                 <div className={shell.sectionActions}>
@@ -377,6 +385,8 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
                             )
                         )}
                     </label>
+
+                    <ErrorNote note={formError} />
                 </div>
             </Dialog>
 

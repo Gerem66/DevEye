@@ -7,12 +7,14 @@ import {
     type FileListing
 } from '@deveye/types';
 
+import { errorNote } from '@/api/useResource';
 import { ws } from '@/api/ws';
 import { joinPath } from '@/devicePath';
 import { randomUuid } from '@/randomUuid';
 import { acquireMetrics } from '@/stores/metricsSubscription';
 import Button from '../Button';
 import { Dialog } from '../Dialog';
+import ErrorNote, { type ErrorNoteInput } from '../ErrorNote';
 import TextInput from '../TextInput';
 import styles from './DeviceFolderPicker.module.css';
 
@@ -47,7 +49,8 @@ export function DeviceFolderPicker({
 }: DeviceFolderPickerProps) {
     const [listing, setListing] = useState<FileListing | null>(null);
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    /** Ce que l'agent répond d'un dossier (droits, chemin absent) tient à la machine : `conflict`. */
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [mkdirOpen, setMkdirOpen] = useState(false);
     const [mkdirName, setMkdirName] = useState('');
     const listOp = useRef('');
@@ -69,7 +72,7 @@ export function DeviceFolderPicker({
             setError(null);
             void ws.send('agent.filesList', { deviceId, opId, path: target }).catch((e) => {
                 setLoading(false);
-                setError(e instanceof Error ? e.message : 'Échec');
+                setError(errorNote(e, 'Le dossier n’a pas pu être lu.'));
             });
         },
         [deviceId]
@@ -92,7 +95,7 @@ export function DeviceFolderPicker({
                 if (d.deviceId !== deviceId || d.opId !== listOp.current) return;
                 setLoading(false);
                 if (d.error || !d.listing) {
-                    setError(d.error ?? 'Dossier illisible');
+                    setError({ message: d.error ?? 'Dossier illisible', code: 'conflict' });
                     return;
                 }
                 setError(null);
@@ -108,7 +111,7 @@ export function DeviceFolderPicker({
                 // Un dossier créé s'ouvre directement ; le dossier courant a
                 // changé de toute façon.
                 if (d.ok) navigate(created ?? pathRef.current);
-                else setError(d.error ?? 'Création impossible');
+                else setError({ message: d.error ?? 'Création impossible', code: 'conflict' });
             }
         });
         // Navigation lancée après l'écoute, sinon une réponse rapide se perdrait.
@@ -133,7 +136,7 @@ export function DeviceFolderPicker({
         setError(null);
         void ws.send('agent.filesMutate', { deviceId, opId, op: 'mkdir', path: mkdirTarget.current }).catch((e) => {
             mkdirTarget.current = null;
-            setError(e instanceof Error ? e.message : 'Création impossible');
+            setError(errorNote(e, 'Création impossible.'));
         });
     };
 
@@ -185,7 +188,7 @@ export function DeviceFolderPicker({
                         </button>
                     )}
                 </div>
-                {error && <div className={styles.mutedNote}>{error}</div>}
+                <ErrorNote note={error} />
                 <div className={styles.pickerList}>
                     {listing?.parent && (
                         <button

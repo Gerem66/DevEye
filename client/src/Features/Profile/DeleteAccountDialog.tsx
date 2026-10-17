@@ -1,11 +1,12 @@
 import { useState } from 'react';
 
-import { humanizeError } from '@/api/useResource';
+import { errorNote } from '@/api/useResource';
 import { ws, WsError } from '@/api/ws';
 import { useAuth } from '@/auth/AuthProvider';
 import { Dialog } from '@/Components/Dialog';
 import { TextInput } from '@/Components';
 import Button from '@/Components/Button';
+import ErrorNote, { type ErrorNoteInput } from '@/Components/ErrorNote';
 
 import styles from './style.module.css';
 
@@ -18,16 +19,17 @@ interface DeleteAccountDialogProps {
 
 const FALLBACK = 'La suppression a échoué.';
 
-function humanize(err: unknown): string {
-    if (err instanceof WsError && err.code === 'auth_invalid') return 'Mot de passe incorrect.';
-    return humanizeError(err, FALLBACK);
+function humanize(err: unknown): ErrorNoteInput {
+    if (err instanceof WsError && err.code === 'auth_invalid')
+        return { message: 'Mot de passe incorrect.', code: err.code };
+    return errorNote(err, FALLBACK);
 }
 
 /** La fin du compte : le mot de passe redit, puis plus rien à fermer, le serveur a déjà tout coupé. */
 export function DeleteAccountDialog({ open, onClose, onExport }: DeleteAccountDialogProps) {
     const { logout } = useAuth();
     const [password, setPassword] = useState('');
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [loading, setLoading] = useState(false);
 
     const close = () => {
@@ -40,7 +42,7 @@ export function DeleteAccountDialog({ open, onClose, onExport }: DeleteAccountDi
     const onSubmit = async () => {
         if (loading) return;
         if (!password) {
-            setError('Le mot de passe est requis.');
+            setError({ message: 'Le mot de passe est requis.', code: 'validation' });
             return;
         }
         // Le compte de cette instance, même quand un espace distant est affiché.
@@ -97,7 +99,7 @@ export function DeleteAccountDialog({ open, onClose, onExport }: DeleteAccountDi
                         onChange={(e) => setPassword(e.target.value)}
                     />
                 </label>
-                {error && <p className={styles.formError}>{error}</p>}
+                <ErrorNote note={error} />
             </div>
         </Dialog>
     );

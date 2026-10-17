@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Button, Dialog, humanizeError } from 'deveye-sdk-client';
+import { Button, Dialog, errorNote, ErrorNote, type ErrorNoteInput } from 'deveye-sdk-client';
 import type { DatabaseExecution } from '../contracts/domain';
 
 import { api } from './api';
@@ -22,7 +22,7 @@ interface TerminalDialogProps {
 interface Entry {
     sql: string;
     result: DatabaseExecution | null;
-    error: string | null;
+    error: ErrorNoteInput | null;
 }
 
 /** Une lecture ne demande pas de confirmation. */
@@ -65,10 +65,7 @@ export function TerminalDialog({ open, databaseId, databaseName, onClose, onWrot
             setSql('');
             if (res.result.affected !== null && res.result.affected > 0) onWrote();
         } catch (e) {
-            setHistory((h) => [
-                ...h,
-                { sql: statement, result: null, error: humanizeError(e, 'L’instruction a échoué.') }
-            ]);
+            setHistory((h) => [...h, { sql: statement, result: null, error: errorNote(e, 'L’instruction a échoué.') }]);
         } finally {
             setBusy(false);
         }
@@ -121,7 +118,7 @@ export function TerminalDialog({ open, databaseId, databaseName, onClose, onWrot
                         {history.map((entry, i) => (
                             <div key={i} className={styles.terminalEntry}>
                                 <pre className={styles.terminalSql}>{entry.sql}</pre>
-                                {entry.error && <p className={styles.error}>{entry.error}</p>}
+                                <ErrorNote note={entry.error} />
                                 {entry.result?.affected !== null && entry.result !== null && (
                                     <p className={styles.ok}>
                                         {entry.result.affected} ligne

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { errorNote, ErrorNote, type ErrorNoteInput } from 'deveye-sdk-client';
 
 import type { BaselineEntry, BaselineKind, DeviceSentinelState } from '../contracts/domain';
 
@@ -26,7 +27,7 @@ export default function BaselineSection({ device }: { device: DeviceSentinelStat
     const [entries, setEntries] = useState<BaselineEntry[]>([]);
     const [total, setTotal] = useState(0);
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     // Se referme en changeant de machine : garder l'inventaire de la
     // précédente ferait lire des chiffres qui ne sont plus les siens.
@@ -51,8 +52,8 @@ export default function BaselineSection({ device }: { device: DeviceSentinelStat
                 setEntries(res.entries);
                 setTotal(res.total);
                 setError(null);
-            } catch {
-                if (!cancelled) setError('Chargement impossible.');
+            } catch (e) {
+                if (!cancelled) setError(errorNote(e, 'Chargement impossible.'));
             } finally {
                 if (!cancelled) setLoading(false);
             }
@@ -94,7 +95,7 @@ export default function BaselineSection({ device }: { device: DeviceSentinelStat
                         ))}
                     </div>
 
-                    {error && <p className={styles.error}>{error}</p>}
+                    <ErrorNote note={error} />
 
                     {loading ? (
                         <p className={styles.empty}>Chargement…</p>

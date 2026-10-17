@@ -2,10 +2,12 @@ import { useCallback, useEffect, useState } from 'react';
 import {
     Button,
     ConfirmDialog,
-    humanizeError,
+    ErrorNote,
+    errorNote,
     ReadOnlyNotice,
     settingsStyles as shell,
-    type ConfirmRequest
+    type ConfirmRequest,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 
@@ -21,7 +23,7 @@ import { openDocument } from './navigation';
 export default function DocumentGeneralPanel({ scope, canWrite, close, gone }: SettingsPanelProps) {
     const id = scope.kind === 'record' ? Number(scope.recordId) : null;
     const [doc, setDoc] = useState<InvoicingDoc | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [busy, setBusy] = useState(false);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
 
@@ -30,7 +32,7 @@ export default function DocumentGeneralPanel({ scope, canWrite, close, gone }: S
         try {
             setDoc((await api.send('invoicing.doc', { id })).doc);
         } catch (e) {
-            setError(humanizeError(e, 'Ce document n’a pas pu être lu.'));
+            setError(errorNote(e, 'Ce document n’a pas pu être lu.'));
         }
     }, [id]);
 
@@ -39,7 +41,7 @@ export default function DocumentGeneralPanel({ scope, canWrite, close, gone }: S
     }, [load]);
 
     if (doc === null) {
-        return <p className={error ? shell.notice : shell.empty}>{error ?? 'Chargement…'}</p>;
+        return error ? <ErrorNote note={error} /> : <p className={shell.empty}>Chargement…</p>;
     }
 
     const draft = doc.status === 'draft';
@@ -53,7 +55,7 @@ export default function DocumentGeneralPanel({ scope, canWrite, close, gone }: S
             close();
             openDocument(res.doc.id);
         } catch (e) {
-            setError(humanizeError(e, 'Le brouillon n’a pas pu être préparé.'));
+            setError(errorNote(e, 'Le brouillon n’a pas pu être préparé.'));
         } finally {
             setBusy(false);
         }
@@ -67,7 +69,7 @@ export default function DocumentGeneralPanel({ scope, canWrite, close, gone }: S
             refreshInvoicing();
         } catch (e) {
             setError(
-                humanizeError(
+                errorNote(
                     e,
                     archived ? 'Ce document n’a pas pu être archivé.' : 'Ce document n’a pas pu être ressorti.'
                 )
@@ -94,7 +96,7 @@ export default function DocumentGeneralPanel({ scope, canWrite, close, gone }: S
                         gone();
                         refreshInvoicing();
                     } catch (e) {
-                        setError(humanizeError(e, 'Ce brouillon n’a pas pu être supprimé.'));
+                        setError(errorNote(e, 'Ce brouillon n’a pas pu être supprimé.'));
                     } finally {
                         setBusy(false);
                         setConfirm(null);
@@ -164,7 +166,7 @@ export default function DocumentGeneralPanel({ scope, canWrite, close, gone }: S
                 </div>
             )}
 
-            {error && <p className={shell.notice}>{error}</p>}
+            <ErrorNote note={error} />
             <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} busy={busy} />
         </div>
     );

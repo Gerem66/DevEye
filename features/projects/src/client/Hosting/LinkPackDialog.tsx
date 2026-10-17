@@ -1,7 +1,15 @@
 import { useEffect, useState } from 'react';
 import { HOSTING_CLIENT_PROVIDER } from '@deveye/types/sdk';
 import type { HostingClientProvider, HostingLinkedCandidate } from '@deveye/types/sdk/client';
-import { Button, Dialog, humanizeError, moduleClientProvider, SearchSelect } from 'deveye-sdk-client';
+import {
+    Button,
+    Dialog,
+    ErrorNote,
+    errorNote,
+    moduleClientProvider,
+    SearchSelect,
+    type ErrorNoteInput
+} from 'deveye-sdk-client';
 import { api } from '../api';
 import styles from '../style.module.css';
 
@@ -24,7 +32,7 @@ export function LinkPackDialog({ open, projectId, linkedIds, onClose, onSaved }:
     const [packs, setPacks] = useState<readonly HostingLinkedCandidate[]>([]);
     const [picked, setPicked] = useState('');
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     /** Le dialogue de création de la feature, ouvert par-dessus celui-ci. */
     const [createOpen, setCreateOpen] = useState(false);
 
@@ -37,7 +45,7 @@ export function LinkPackDialog({ open, projectId, linkedIds, onClose, onSaved }:
             try {
                 setPacks(await provider.listPacks());
             } catch (e) {
-                setError(humanizeError(e, 'Impossible de charger les dossiers de l’espace.'));
+                setError(errorNote(e, 'Impossible de charger les dossiers de l’espace.'));
             }
         })();
     }, [open, provider]);
@@ -51,7 +59,7 @@ export function LinkPackDialog({ open, projectId, linkedIds, onClose, onSaved }:
             await api.send('projects.hostingLink', { projectId, packId });
             onSaved();
         } catch (e) {
-            setError(humanizeError(e, 'La liaison a échoué.'));
+            setError(errorNote(e, 'La liaison a échoué.'));
         } finally {
             setBusy(false);
         }
@@ -123,7 +131,7 @@ export function LinkPackDialog({ open, projectId, linkedIds, onClose, onSaved }:
                         </>
                     )}
 
-                    {error && <p className={styles.error}>{error}</p>}
+                    <ErrorNote note={error} />
                 </div>
             </Dialog>
 

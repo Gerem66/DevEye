@@ -18,6 +18,11 @@ const INITIAL_QUALITY = 0.85;
 const MIN_QUALITY = 0.3;
 const QUALITY_STEP = 0.15;
 
+/** Un fichier qui ne fait pas une image utilisable : la faute est au fichier, pas à l'app. */
+class ImageRefused extends Error {
+    readonly code = 'validation';
+}
+
 function loadImage(file: File): Promise<HTMLImageElement> {
     return new Promise((resolve, reject) => {
         const url = URL.createObjectURL(file);
@@ -28,25 +33,26 @@ function loadImage(file: File): Promise<HTMLImageElement> {
         };
         img.onerror = () => {
             URL.revokeObjectURL(url);
-            reject(new Error('Image illisible'));
+            reject(new ImageRefused('Image illisible.'));
         };
         img.src = url;
     });
 }
 
 /**
- * Rend une URL de données JPEG tenant sous `maxLength`. Lève une `Error` au
- * message déjà lisible : c'est celui que l'utilisateur verra.
+ * Rend une URL de données JPEG tenant sous `maxLength`. Un fichier refusé lève
+ * une erreur de code `validation` au message déjà lisible : `errorNote` le
+ * montre tel quel.
  */
 export async function fileToSquareDataUrl(
     file: File,
     { size, maxLength }: { size: number; maxLength: number }
 ): Promise<string> {
     if (!ACCEPTED_TYPES.includes(file.type)) {
-        throw new Error('Format non supporté (PNG, JPEG ou WebP).');
+        throw new ImageRefused('Format non supporté (PNG, JPEG ou WebP).');
     }
     if (file.size > MAX_INPUT_BYTES) {
-        throw new Error('Image trop volumineuse (8 Mo max).');
+        throw new ImageRefused('Image trop volumineuse (8 Mo max).');
     }
 
     const img = await loadImage(file);
@@ -69,7 +75,7 @@ export async function fileToSquareDataUrl(
         dataUrl = canvas.toDataURL('image/jpeg', quality);
     }
     if (dataUrl.length > maxLength) {
-        throw new Error('Image trop lourde après compression.');
+        throw new ImageRefused('Image trop lourde après compression.');
     }
     return dataUrl;
 }

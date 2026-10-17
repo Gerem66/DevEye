@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Button,
     copyText,
-    humanizeError,
+    errorNote,
+    ErrorNote,
     invalidate,
     OpenPopup,
     StickyHeader,
@@ -12,7 +13,8 @@ import {
     useLiveSegment,
     useResourceVersion,
     useSecrecy,
-    withSecrecy
+    withSecrecy,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { FeatureViewProps } from '@deveye/types/sdk/client';
 import type { PasswordEntry, PasswordEntryMasked } from '../contracts/domain';
@@ -31,7 +33,7 @@ function Password({ closeFeature }: FeatureViewProps) {
     const [loaded, setLoaded] = useState(false);
     const [search, setSearch] = useState('');
     const [allPasswords, setAllPasswords] = useState<RowPassword[]>([]);
-    const [actionError, setActionError] = useState<string | null>(null);
+    const [actionError, setActionError] = useState<ErrorNoteInput | null>(null);
     /** L'entrée ouverte dans le formulaire : le niveau profond du coffre. */
     const [openEntryId, setOpenEntryId] = useState<number | null>(null);
     useLiveSegment('l1', openEntryId === null ? null : String(openEntryId));
@@ -139,7 +141,7 @@ function Password({ closeFeature }: FeatureViewProps) {
                 const res = await withSecrecy(() => api.send('password.get', { passwordId: id }));
                 replaceEntry(res.entry);
             } catch (e) {
-                setActionError(humanizeError(e, 'Impossible de récupérer le mot de passe.'));
+                setActionError(errorNote(e, 'Impossible de récupérer le mot de passe.'));
             }
         },
         [workspaceId, replaceEntry]
@@ -156,9 +158,10 @@ function Password({ closeFeature }: FeatureViewProps) {
             try {
                 const res = await withSecrecy(() => api.send('password.get', { passwordId: id }));
                 if (await copyText(res.entry.password)) return true;
-                setActionError(COPY_FAILED);
+                // Le presse-papiers refusé par le navigateur.
+                setActionError({ message: COPY_FAILED, code: 'forbidden' });
             } catch (e) {
-                setActionError(humanizeError(e, COPY_FAILED));
+                setActionError(errorNote(e, COPY_FAILED));
             }
             return false;
         },
@@ -178,7 +181,7 @@ function Password({ closeFeature }: FeatureViewProps) {
                     // into `allPasswords`, or the table would reveal the password.
                     initial = res.entry;
                 } catch (e) {
-                    setActionError(humanizeError(e, 'Impossible de récupérer le mot de passe.'));
+                    setActionError(errorNote(e, 'Impossible de récupérer le mot de passe.'));
                     return;
                 }
             }
@@ -194,7 +197,7 @@ function Password({ closeFeature }: FeatureViewProps) {
                     setAllPasswords((prev) => prev.filter((p) => p.id !== id));
                     invalidate('password.count');
                 } catch (e) {
-                    setActionError(humanizeError(e, 'Suppression impossible.'));
+                    setActionError(errorNote(e, 'Suppression impossible.'));
                 }
                 return;
             }
@@ -212,7 +215,7 @@ function Password({ closeFeature }: FeatureViewProps) {
                         upsertMasked(res.entry);
                     }
                 } catch (e) {
-                    setActionError(humanizeError(e, 'Enregistrement impossible.'));
+                    setActionError(errorNote(e, 'Enregistrement impossible.'));
                 }
             }
         },
@@ -265,7 +268,7 @@ function Password({ closeFeature }: FeatureViewProps) {
                 />
             </div>
 
-            {actionError && <div className={styles.errorBanner}>{actionError}</div>}
+            <ErrorNote note={actionError} />
 
             {!loaded && <LoadingTable />}
 

@@ -15,7 +15,6 @@ declare const styles: {
     readonly empty: string;
     readonly emptyAdd: string;
     readonly emptyIcon: string;
-    readonly errorBanner: string;
     readonly forecastCard: string;
     readonly forecastDate: string;
     readonly forecastDay: string;

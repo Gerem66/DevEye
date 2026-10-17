@@ -14,14 +14,16 @@ import {
 import {
     ConfirmDialog,
     ensureSecrecyUnlocked,
+    errorNote,
+    ErrorNote,
     FeatureSettingsButton,
-    humanizeError,
     invalidate,
     useResourceVersion,
     useSecrecy,
     withSecrecy,
     WsError,
-    type ConfirmRequest
+    type ConfirmRequest,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 
 import { api } from './api';
@@ -62,16 +64,16 @@ function utcMonth(): number {
 const targetKey = (t: OsintTarget): string => `${t.kind}|${t.value}`;
 
 /** Un refus de l'offre a déjà son invite et son encadré : un bandeau le dirait une troisième fois. */
-function searchFailure(e: unknown): string | null {
+function searchFailure(e: unknown): ErrorNoteInput | null {
     if (e instanceof WsError && e.code === 'quota_exceeded') return null;
-    return humanizeError(e, "La recherche n'a pas abouti.");
+    return errorNote(e, "La recherche n'a pas abouti.");
 }
 
 export default function Osint(): React.ReactElement {
     const [query, setQuery] = useState('');
     const [run, setRun] = useState<RunState | null>(null);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [historyOpen, setHistoryOpen] = useState(false);
     const [history, setHistory] = useState<OsintHistoryEntry[]>([]);
     const [usage, setUsage] = useState<OsintUsage | null>(null);
@@ -161,7 +163,7 @@ export default function Osint(): React.ReactElement {
                               ...prev,
                               cards: {
                                   ...prev.cards,
-                                  [probe]: { kind: 'failed', message: humanizeError(e, 'Sonde en échec.') }
+                                  [probe]: { kind: 'failed', note: errorNote(e, 'Sonde en échec.') }
                               }
                           }
                         : prev
@@ -273,7 +275,7 @@ export default function Osint(): React.ReactElement {
             await api.send('osint.historyClear', {});
             invalidate('osint.history');
         } catch (e) {
-            setError(humanizeError(e, "L'historique n'a pas pu être effacé."));
+            setError(errorNote(e, "L'historique n'a pas pu être effacé."));
         }
     }, []);
 
@@ -282,7 +284,7 @@ export default function Osint(): React.ReactElement {
             await api.send('osint.historyRemove', { id });
             invalidate('osint.history');
         } catch (e) {
-            setError(humanizeError(e, "L'entrée n'a pas pu être supprimée."));
+            setError(errorNote(e, "L'entrée n'a pas pu être supprimée."));
         }
     }, []);
 
@@ -376,7 +378,7 @@ export default function Osint(): React.ReactElement {
 
             <QuotaNotice usage={usage} />
 
-            {error && <p className={styles.banner}>{error}</p>}
+            <ErrorNote note={error} />
 
             <main className={styles.results}>
                 {!run && !busy && (

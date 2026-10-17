@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import {
+    ErrorNote,
     onResourceChange,
     ProviderKeys,
-    settingsStyles as shell,
     useWorkspacePermissions,
+    type ErrorNoteInput,
     type ProviderKeyRow
 } from 'deveye-sdk-client';
 
@@ -29,14 +30,14 @@ export default function CveKeysPanel() {
     // Poser une clé exige la permission déclarée `manageKeys`, pas seulement l'écriture.
     const canManage = useWorkspacePermissions().canExtra('cve', 'manageKeys');
     const [held, setHeld] = useState<Record<string, boolean>>({});
-    const [status, setStatus] = useState<string | null>(null);
+    const [status, setStatus] = useState<ErrorNoteInput | null>(null);
 
     const load = useCallback(async () => {
         try {
             const res = await api.send('cve.keyList', {});
             setHeld(Object.fromEntries(res.keys.map((k) => [k.provider, k.hasKey])));
         } catch (e) {
-            setStatus(cveError(e, 'La clé n’a pas pu être lue.').text);
+            setStatus(cveError(e, 'La clé n’a pas pu être lue.'));
         }
     }, []);
 
@@ -71,7 +72,7 @@ export default function CveKeysPanel() {
                 onRemove={(provider) => save(provider, '')}
                 readOnlyHint='Votre rôle ne permet pas de modifier cette clé : sa gestion se confie dans les permissions de la Veille CVE.'
             />
-            {status && <p className={shell.notice}>{status}</p>}
+            <ErrorNote note={status} />
         </>
     );
 }

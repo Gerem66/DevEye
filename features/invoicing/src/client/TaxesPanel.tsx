@@ -1,4 +1,11 @@
-import { ReadOnlyNotice, SaveButton, SegmentedControl, settingsStyles as shell, Switch } from 'deveye-sdk-client';
+import {
+    ErrorNote,
+    ReadOnlyNotice,
+    SaveButton,
+    SegmentedControl,
+    settingsStyles as shell,
+    Switch
+} from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 
 import { useSettingsDraft } from './settingsDraft';
@@ -28,7 +35,7 @@ export default function TaxesPanel({ canWrite }: SettingsPanelProps) {
     const { draft, error, patch, save, busy } = useSettingsDraft();
 
     if (draft === null) {
-        return <p className={error ? shell.notice : shell.empty}>{error ?? 'Chargement…'}</p>;
+        return error ? <ErrorNote note={error} /> : <p className={shell.empty}>Chargement…</p>;
     }
 
     const liable = draft.vatRegime === 'standard';
@@ -87,7 +94,7 @@ export default function TaxesPanel({ canWrite }: SettingsPanelProps) {
                 </ReadOnlyNotice>
             )}
 
-            {error && <p className={shell.notice}>{error}</p>}
+            <ErrorNote note={error} />
         </div>
     );
 }

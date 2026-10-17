@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-    humanizeError,
+    ErrorNote,
+    errorNote,
     invalidate,
     ReadOnlyNotice,
     settingsStyles as shell,
     useResourceVersion,
     useWorkspacePermissions,
-    withSecrecy
+    withSecrecy,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 
@@ -15,7 +17,6 @@ import type { ProjectCard } from '../contracts/domain';
 import { ArchivedCardDialog } from './History/ArchivedCardDialog';
 import { History } from './History/History';
 import { missingPermission } from './rights';
-import styles from './style.module.css';
 
 /**
  * L'histoire d'un projet, tâches archivées comprises, dans le dernier onglet de
@@ -37,7 +38,9 @@ export default function ProjectHistoryPanel({ scope, canWrite }: SettingsPanelPr
     const [archived, setArchived] = useState<ProjectCard[] | null>(null);
     const [viewing, setViewing] = useState<ProjectCard | null>(null);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
+    /** Dite dans la popup de la tâche, que le refus laisse ouverte par-dessus le panneau. */
+    const [restoreError, setRestoreError] = useState<ErrorNoteInput | null>(null);
     const version = useResourceVersion('projects.board');
 
     const load = useCallback(async () => {
@@ -47,7 +50,7 @@ export default function ProjectHistoryPanel({ scope, canWrite }: SettingsPanelPr
             setArchived(res.cards);
             setError(null);
         } catch (e) {
-            setError(humanizeError(e, 'Impossible de charger les tâches archivées.'));
+            setError(errorNote(e, 'Impossible de charger les tâches archivées.'));
         }
     }, [projectId]);
 
@@ -58,12 +61,13 @@ export default function ProjectHistoryPanel({ scope, canWrite }: SettingsPanelPr
     const restore = async () => {
         if (!viewing) return;
         setBusy(true);
+        setRestoreError(null);
         try {
             await withSecrecy(() => api.send('projects.cardRestore', { cardId: viewing.id }));
             invalidate('projects.board', 'projects.list');
             setViewing(null);
         } catch (e) {
-            setError(humanizeError(e, 'La restauration a échoué.'));
+            setRestoreError(errorNote(e, 'La restauration a échoué.'));
         } finally {
             setBusy(false);
         }
@@ -73,7 +77,7 @@ export default function ProjectHistoryPanel({ scope, canWrite }: SettingsPanelPr
 
     return (
         <div className={shell.section}>
-            {error && <p className={styles.error}>{error}</p>}
+            <ErrorNote note={error} />
 
             <div className={shell.field}>
                 <span className={shell.sectionLabel}>Historique</span>
@@ -89,7 +93,10 @@ export default function ProjectHistoryPanel({ scope, canWrite }: SettingsPanelPr
                     projectId={projectId}
                     withEvents={canHistory}
                     archivedCards={archived}
-                    onOpenArchived={setViewing}
+                    onOpenArchived={(card) => {
+                        setRestoreError(null);
+                        setViewing(card);
+                    }}
                 />
             </div>
 
@@ -98,6 +105,7 @@ export default function ProjectHistoryPanel({ scope, canWrite }: SettingsPanelPr
                 card={viewing}
                 canWrite={canTasks}
                 busy={busy}
+                error={restoreError}
                 onClose={() => setViewing(null)}
                 onRestore={() => void restore()}
             />

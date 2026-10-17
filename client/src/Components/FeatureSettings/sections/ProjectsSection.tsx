@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { itemNounForms, PROJECT_STATUS_LABELS, type ItemProjectsBlocker, type ItemProjectsState } from '@deveye/types';
 
-import { humanizeError } from '@/api/useResource';
+import { errorNote } from '@/api/useResource';
 import { ws } from '@/api/ws';
+import ErrorNote, { type ErrorNoteInput } from '@/Components/ErrorNote';
 import Switch from '@/Components/Switch';
 import { moduleManifest } from '@/sdk/registry';
 import { invalidate, type ResourceKey } from '@/stores/invalidation';
@@ -35,7 +36,7 @@ export default function ProjectsSection({ scope }: Props) {
     const itemId = scope.kind === 'item' ? scope.itemId : '';
     const [state, setState] = useState<ItemProjectsState | null>(null);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const { dem, Dem } = itemNounForms(feature);
 
     const reload = useCallback(async () => {
@@ -43,7 +44,7 @@ export default function ProjectsSection({ scope }: Props) {
     }, [feature, itemId]);
 
     useEffect(() => {
-        void reload().catch(() => setError('Chargement impossible.'));
+        void reload().catch((e: unknown) => setError(errorNote(e, 'Chargement impossible.')));
     }, [reload]);
 
     const toggle = (workspaceId: number, projectId: number, linked: boolean): void => {
@@ -59,11 +60,11 @@ export default function ProjectsSection({ scope }: Props) {
                 for (const key of moduleManifest('projects')?.resources ?? []) invalidate(key as ResourceKey);
                 for (const key of moduleManifest(feature)?.resources ?? []) invalidate(key as ResourceKey);
             })
-            .catch((e: unknown) => setError(humanizeError(e, 'Modification impossible.')))
+            .catch((e: unknown) => setError(errorNote(e, 'Modification impossible.')))
             .finally(() => setBusy(false));
     };
 
-    if (!state) return <p className={styles.sectionHint}>Chargement…</p>;
+    if (!state) return error ? <ErrorNote note={error} /> : <p className={styles.sectionHint}>Chargement…</p>;
 
     if (state.blocker) {
         return (
@@ -129,7 +130,7 @@ export default function ProjectsSection({ scope }: Props) {
                 </div>
             ))}
 
-            {error && <p className={styles.notice}>{error}</p>}
+            <ErrorNote note={error} />
         </div>
     );
 }

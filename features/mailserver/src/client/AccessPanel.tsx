@@ -3,14 +3,16 @@ import {
     Button,
     ConfirmDialog,
     Dialog,
+    ErrorNote,
+    errorNote,
     ReadOnlyNotice,
     TextInput,
-    humanizeError,
     invalidate,
     settingsStyles as shell,
     useResource,
     useWorkspacePermissions,
-    type ConfirmRequest
+    type ConfirmRequest,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 
@@ -40,7 +42,7 @@ export default function AccessPanel({ scope, canWrite }: SettingsPanelProps) {
     const [secret, setSecret] = useState<string | null>(null);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     const run = async (work: () => Promise<void>, fallback: string) => {
         setBusy(true);
@@ -49,7 +51,7 @@ export default function AccessPanel({ scope, canWrite }: SettingsPanelProps) {
             await work();
             invalidate('mailserver.appPasswordList');
         } catch (failure) {
-            setError(humanizeError(failure, fallback));
+            setError(errorNote(failure, fallback));
         } finally {
             setBusy(false);
         }
@@ -128,7 +130,7 @@ export default function AccessPanel({ scope, canWrite }: SettingsPanelProps) {
                 ))}
             </div>
 
-            {(error ?? loadError) && label === null && <p className={shell.errorText}>{error ?? loadError}</p>}
+            {label === null && <ErrorNote note={error ?? loadError} />}
 
             {canManage && (
                 <div className={shell.sectionActions}>
@@ -166,7 +168,7 @@ export default function AccessPanel({ scope, canWrite }: SettingsPanelProps) {
                         onChange={(e) => setLabel(e.target.value)}
                     />
                 </label>
-                {error && <p className={shell.errorText}>{error}</p>}
+                <ErrorNote note={error} />
             </Dialog>
 
             <SecretOnceDialog

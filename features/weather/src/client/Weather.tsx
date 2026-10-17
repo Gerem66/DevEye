@@ -2,16 +2,18 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from
 import { motion, Reorder, useDragControls } from 'framer-motion';
 import {
     Button,
+    ErrorNote,
     FeatureSettingsButton,
     onResourceChange,
     StickyHeader,
     useDismissLayer,
     useLiveOutline,
-    useLiveSegment
+    useLiveSegment,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import { useWeather, syncWeatherLocations } from './store';
 import { wmoIcon } from './wmoIcon';
-import { isKeyRefused, PROVIDER_META, providerFailure, selectableProviders } from './providers';
+import { isKeyRefused, PROVIDER_META, selectableProviders, weatherNote } from './providers';
 import type { WeatherHour, WeatherLocation, WeatherProvider, WeatherReport } from '../contracts/domain';
 import styles from './Weather.module.css';
 import { api } from './api';
@@ -338,12 +340,12 @@ export default function Weather() {
     const [locations, setLocations] = useState<WeatherLocation[]>([]);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [report, setReport] = useState<WeatherReport | null>(null);
-    const [reportError, setReportError] = useState<string | null>(null);
+    const [reportError, setReportError] = useState<ErrorNoteInput | null>(null);
     const [loading, setLoading] = useState(true);
     const [loadingReport, setLoadingReport] = useState(false);
     const [searchInput, setSearchInput] = useState('');
     const [adding, setAdding] = useState(false);
-    const [addError, setAddError] = useState<string | null>(null);
+    const [addError, setAddError] = useState<ErrorNoteInput | null>(null);
     const searchFormId = useId();
     const searchRef = useRef<HTMLInputElement>(null);
     // Les fournisseurs dont l'espace tient la clé : ce qui ouvre ou ferme le
@@ -382,7 +384,7 @@ export default function Weather() {
             // refusée : celui-là n'a plus le droit d'être montré.
             if (opts?.silent && !isKeyRefused(e)) return;
             setReport(null);
-            setReportError(providerFailure(e)?.message ?? null);
+            setReportError(weatherNote(e, 'Le relevé n’a pas pu être lu.'));
         } finally {
             if (request === latestRequest.current) setLoadingReport(false);
         }
@@ -488,7 +490,7 @@ export default function Weather() {
             setSelectedId(res.location.id);
             await loadReport(res.location.id);
         } catch (err) {
-            setAddError(providerFailure(err)?.message ?? 'La ville n’a pas pu être ajoutée.');
+            setAddError(weatherNote(err, 'La ville n’a pas pu être ajoutée.'));
         } finally {
             setAdding(false);
         }
@@ -581,7 +583,7 @@ export default function Weather() {
                 </button>
             </form>
 
-            {addError && <div className={styles.errorBanner}>{addError}</div>}
+            <ErrorNote note={addError} />
 
             {loading ? (
                 <div className={styles.loader}>Chargement…</div>
@@ -726,7 +728,7 @@ export default function Weather() {
                     ) : (
                         <div className={styles.empty}>
                             <p>Impossible de récupérer le rapport météo</p>
-                            {reportError && <p>{reportError}</p>}
+                            <ErrorNote note={reportError} />
                             {selected && (
                                 <ProviderBar
                                     provider={selected.provider}

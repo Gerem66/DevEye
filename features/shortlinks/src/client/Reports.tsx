@@ -4,13 +4,15 @@ import {
     CountBadge,
     Dialog,
     DialogCancelButton,
-    humanizeError,
+    errorNote,
+    ErrorNote,
     invalidate,
     settingsStyles as shell,
     StatusBadge,
     TextArea,
     useResource,
-    useSubView
+    useSubView,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import { useState } from 'react';
 
@@ -40,7 +42,7 @@ export default function Reports() {
     const [decision, setDecision] = useState<Decision>(null);
     const [note, setNote] = useState('');
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [showClosed, setShowClosed] = useState(false);
     useSubView('signalements');
 
@@ -61,9 +63,7 @@ export default function Reports() {
             void api
                 .send('shortlinks.restore', { reportId: report.id })
                 .then(() => invalidate('shortlinks.reports'))
-                .catch((failure: unknown) =>
-                    setError(humanizeError(failure, 'Le lien n’a pas pu être remis en service.'))
-                );
+                .catch((failure: unknown) => setError(errorNote(failure, 'Le lien n’a pas pu être remis en service.')));
         }
     };
 
@@ -80,7 +80,7 @@ export default function Reports() {
             setDecision(null);
             invalidate('shortlinks.reports');
         } catch (failure) {
-            setError(humanizeError(failure, 'La décision n’a pas pu être enregistrée.'));
+            setError(errorNote(failure, 'La décision n’a pas pu être enregistrée.'));
         } finally {
             setBusy(false);
         }
@@ -90,7 +90,7 @@ export default function Reports() {
 
     return (
         <div className={styles.reportsTab}>
-            {error !== null && decision === null && <p className={styles.error}>{error}</p>}
+            {decision === null && <ErrorNote note={error} />}
 
             <section className={styles.section}>
                 <div className={styles.sectionHead}>
@@ -158,7 +158,7 @@ export default function Reports() {
                         </span>
                     )}
                 </div>
-                {error !== null && <p className={styles.error}>{error}</p>}
+                <ErrorNote note={error} />
             </Dialog>
         </div>
     );
@@ -188,11 +188,11 @@ function ReportList({
     actions
 }: {
     reports: readonly ShortlinkReport[] | null;
-    error: string | null;
+    error: ErrorNoteInput | null;
     empty: string;
     actions: CardActions;
 }) {
-    if (error !== null) return <p className={styles.error}>{error}</p>;
+    if (error !== null) return <ErrorNote note={error} />;
     if (reports === null) return <p className={styles.reportsNote}>Chargement…</p>;
     if (reports.length === 0) return <p className={shell.empty}>{empty}</p>;
     return (

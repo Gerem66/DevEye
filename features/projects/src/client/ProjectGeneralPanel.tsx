@@ -3,8 +3,9 @@ import {
     ACCEPTED_TYPES,
     Button,
     ConfirmDialog,
+    ErrorNote,
+    errorNote,
     fileToSquareDataUrl,
-    humanizeError,
     invalidate,
     ReadOnlyNotice,
     SaveButton,
@@ -15,7 +16,8 @@ import {
     TextInput,
     useWorkspacePermissions,
     withSecrecy,
-    type ConfirmRequest
+    type ConfirmRequest,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import {
@@ -79,7 +81,7 @@ export default function ProjectGeneralPanel({ scope, canWrite, gone }: SettingsP
     const [tagLabel, setTagLabel] = useState('');
     const [iconError, setIconError] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
     const fileRef = useRef<HTMLInputElement>(null);
 
@@ -91,7 +93,7 @@ export default function ProjectGeneralPanel({ scope, canWrite, gone }: SettingsP
                 setProject(res.project);
                 setDraft(draftOf(res.project));
             } catch (e) {
-                setError(humanizeError(e, 'Le projet n’a pas pu être lu.'));
+                setError(errorNote(e, 'Le projet n’a pas pu être lu.'));
             }
         })();
     }, [projectId]);
@@ -147,7 +149,7 @@ export default function ProjectGeneralPanel({ scope, canWrite, gone }: SettingsP
             // l'historique, le renommage.
             invalidate('projects.list', 'projects.board');
         } catch (e) {
-            setError(humanizeError(e, 'L’enregistrement a échoué.'));
+            setError(errorNote(e, 'L’enregistrement a échoué.'));
             // Relancé : le bouton n'annonce « Enregistré » que sur un succès.
             throw e;
         } finally {
@@ -166,14 +168,14 @@ export default function ProjectGeneralPanel({ scope, canWrite, gone }: SettingsP
             gone();
             invalidate('projects.list', 'projects.count');
         } catch (e) {
-            setError(humanizeError(e, 'L’archivage a échoué.'));
+            setError(errorNote(e, 'L’archivage a échoué.'));
         } finally {
             setBusy(false);
         }
     };
 
     if (!project || !draft) {
-        return <p className={error ? shell.notice : shell.empty}>{error ?? 'Chargement…'}</p>;
+        return error ? <ErrorNote note={error} /> : <p className={shell.empty}>Chargement…</p>;
     }
 
     const editable = canManage && !busy;
@@ -373,7 +375,7 @@ export default function ProjectGeneralPanel({ scope, canWrite, gone }: SettingsP
                 </p>
             )}
 
-            {error && <p className={shell.notice}>{error}</p>}
+            <ErrorNote note={error} />
 
             {/* Réversible d'un clic depuis les archives : une confirmation au
                 ton ordinaire, pas celui d'une suppression. */}

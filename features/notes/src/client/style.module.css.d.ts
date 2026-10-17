@@ -59,7 +59,6 @@ declare const styles: {
     readonly editorTitleInput: string;
     readonly empty: string;
     readonly emptyIcon: string;
-    readonly errorBanner: string;
     readonly folderActions: string;
     readonly folderName: string;
     readonly folderSection: string;

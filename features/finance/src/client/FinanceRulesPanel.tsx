@@ -4,14 +4,16 @@ import {
     ConfirmDialog,
     Dialog,
     DialogCancelButton,
-    humanizeError,
+    ErrorNote,
+    errorNote,
     ReadOnlyNotice,
     SearchSelect,
     SegmentedControl,
     settingsStyles as shell,
     TextInput,
     useResource,
-    type ConfirmRequest
+    type ConfirmRequest,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import type { FinanceCategory } from '../contracts/domain';
@@ -48,8 +50,8 @@ const VAT_OPTIONS = VAT_RATES.map((rate) => ({
 export default function FinanceRulesPanel({ canWrite }: SettingsPanelProps) {
     const [editing, setEditing] = useState<Draft | null>(null);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [formError, setFormError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
+    const [formError, setFormError] = useState<ErrorNoteInput | null>(null);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
 
     const load = useCallback(async () => {
@@ -99,7 +101,7 @@ export default function FinanceRulesPanel({ canWrite }: SettingsPanelProps) {
             refreshFinance();
             setEditing(null);
         } catch (e) {
-            setFormError(humanizeError(e, 'Enregistrement impossible.'));
+            setFormError(errorNote(e, 'Enregistrement impossible.'));
         } finally {
             setBusy(false);
         }
@@ -119,7 +121,7 @@ export default function FinanceRulesPanel({ canWrite }: SettingsPanelProps) {
                         await api.send('finance.ruleRemove', { id: rule.id });
                         refreshFinance();
                     } catch (e) {
-                        setError(humanizeError(e, 'Retrait impossible.'));
+                        setError(errorNote(e, 'Retrait impossible.'));
                     } finally {
                         setBusy(false);
                         setConfirm(null);
@@ -210,7 +212,7 @@ export default function FinanceRulesPanel({ canWrite }: SettingsPanelProps) {
                 </ReadOnlyNotice>
             )}
 
-            {(error ?? loadError) && <p className={shell.notice}>{error ?? loadError}</p>}
+            <ErrorNote note={error ?? loadError} />
 
             <Dialog
                 open={editing !== null}
@@ -294,7 +296,7 @@ export default function FinanceRulesPanel({ canWrite }: SettingsPanelProps) {
                             </div>
                         )}
 
-                        {formError && <p className={shell.notice}>{formError}</p>}
+                        <ErrorNote note={formError} />
                     </div>
                 )}
             </Dialog>

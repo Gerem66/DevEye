@@ -570,6 +570,25 @@ describe('deploy.trigger', () => {
         assert.deepEqual(repo.deployments, []);
         assert.deepEqual(ctx.recorded.audits, []);
     });
+
+    it('rend le refus du fournisseur en `conflict`, et marque le déploiement en échec', async () => {
+        // La boucle locale, que le garde des appels sortants refuse : un refus
+        // du fournisseur sans réseau.
+        const repo = seed(fakeRepo(), target({ id: 1, workspace_id: 1 }));
+        repo.credentials.push(credential({ id: 10, workspace_id: 1, base_url: 'http://127.0.0.1:9' }));
+        await assert.rejects(
+            handlerFor(deployTrigger)(createTestContext({ repo }), {
+                targetId: 1,
+                title: 'Mise en prod',
+                description: ''
+            }),
+            failsWith('conflict')
+        );
+        assert.deepEqual(
+            repo.deployments.map((d) => d.status),
+            ['failed']
+        );
+    });
 });
 
 describe('la pause d’offre', () => {

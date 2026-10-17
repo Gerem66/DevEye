@@ -4,6 +4,7 @@ import { gitRepoSchema } from '../contracts/domain';
 import { PROJECTS_USAGE_PROVIDER, type ProjectsUsageProvider, type ProjectUsage } from '@deveye/types/sdk';
 import { FeatureError, type SdkCipher, type SdkFeatureContext } from '@deveye/types/sdk/server';
 
+import { GitHubError } from './github';
 import type { GitRepo } from './repo';
 import type { GitSync } from './service';
 
@@ -15,6 +16,22 @@ import type { GitSync } from './service';
  */
 
 export type Ctx = SdkFeatureContext<GitRepo>;
+
+/**
+ * Un appel à GitHub depuis une commande. Un jeton refusé, un dépôt introuvable,
+ * un quota épuisé ou GitHub muet se corrigent hors de l'instance : `conflict`,
+ * dans les mots de l'adaptateur. Toute autre erreur remonte telle quelle.
+ */
+export function fromGitHub<T>(call: Promise<T>): Promise<T> {
+    return call.catch((e: unknown) => {
+        if (!(e instanceof GitHubError)) throw e;
+        // Sans réponse, le message est celui de `fetch` (« fetch failed »).
+        throw new FeatureError(
+            'conflict',
+            e.status === 0 ? 'GitHub ne répond pas : réessayez dans un instant.' : e.message
+        );
+    });
+}
 
 /** Ce que porte `git_repos.content`, chiffré. */
 export interface StoredRepo {

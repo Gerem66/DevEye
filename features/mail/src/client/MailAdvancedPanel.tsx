@@ -2,15 +2,17 @@ import { useState } from 'react';
 import {
     Button,
     ConfirmDialog,
+    ErrorNote,
     invalidate,
     settingsStyles as shell,
     UnlockCancelledError,
     withSecrecy,
-    type ConfirmRequest
+    type ConfirmRequest,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 
-import { api, humanizeError } from './api';
+import { api, errorNote } from './api';
 
 /**
  * La maintenance d'une boîte : reconstruire son cache local, tous dossiers
@@ -32,11 +34,13 @@ export default function MailAdvancedPanel({ scope }: SettingsPanelProps) {
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
     const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
     const [status, setStatus] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     if (accountId === null) return null;
 
     const rebuild = async () => {
         setStatus(null);
+        setError(null);
         setProgress({ done: 0, total: 0 });
         try {
             const { folders } = await withSecrecy(() => api.send('mail.folderList', { accountId }));
@@ -47,7 +51,7 @@ export default function MailAdvancedPanel({ scope }: SettingsPanelProps) {
             invalidate('mail.folderList', 'mail.messageList');
             setStatus(folders.length === 0 ? 'Aucun dossier à reconstruire.' : 'Cache de la boîte reconstruit.');
         } catch (e) {
-            if (!(e instanceof UnlockCancelledError)) setStatus(humanizeError(e, 'Reconstruction impossible.'));
+            if (!(e instanceof UnlockCancelledError)) setError(errorNote(e, 'Reconstruction impossible.'));
         } finally {
             setProgress(null);
         }
@@ -90,6 +94,7 @@ export default function MailAdvancedPanel({ scope }: SettingsPanelProps) {
                     {status}
                 </p>
             )}
+            <ErrorNote note={error} />
 
             <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
         </div>

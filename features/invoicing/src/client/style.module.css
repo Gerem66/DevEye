@@ -28,21 +28,6 @@
     font-size: 0.9rem;
 }
 
-/* Le refus et, quand il désigne un réglage, le bouton qui y mène : sur une
-   ligne, le geste poussé à droite. */
-.error {
-    display: flex;
-    align-items: center;
-    gap: var(--space-md);
-    flex-wrap: wrap;
-    margin: 0 0 var(--space-md);
-    padding: var(--space-sm) var(--space-md);
-    border-radius: var(--radius-sm);
-    background: var(--danger-bg);
-    color: var(--danger);
-    font-size: 0.9rem;
-}
-
 /* Un état vide qui apprend quelque chose plutôt qu'une ligne grise. */
 .empty {
     display: flex;

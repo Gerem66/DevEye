@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { NumberInput, SearchSelect, useResource } from 'deveye-sdk-client';
+import { ErrorNote, NumberInput, SearchSelect, useResource } from 'deveye-sdk-client';
 
 import { convertCurrency } from '../contracts/units';
 import { api } from './api';
@@ -45,11 +45,7 @@ export function Currency() {
 
     return (
         <div className={styles.tool}>
-            {rates.error && (
-                <p className={styles.problem} role='alert'>
-                    {rates.error}
-                </p>
-            )}
+            <ErrorNote note={rates.error} />
             {rates.data && options.length === 0 && (
                 <p className={styles.note}>
                     Les taux de change n’ont pas encore été relevés : le serveur les lit à son démarrage, puis plusieurs

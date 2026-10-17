@@ -2,12 +2,14 @@ import { useCallback, useEffect, useState } from 'react';
 import {
     Button,
     Dialog,
-    humanizeError,
+    ErrorNote,
+    errorNote,
     invalidate,
     moduleClientProvider,
     useResourceVersion,
     useWorkspacePermissions,
-    WsError
+    WsError,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import { api } from '../api';
 import type { Project, ProjectLinkLabel } from '../../contracts/domain';
@@ -44,10 +46,12 @@ export function Hosting({ project, canWrite }: HostingProps) {
     const [candidates, setCandidates] = useState<readonly HostingLinkedCandidate[]>([]);
     const [loaded, setLoaded] = useState(false);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [linkOpen, setLinkOpen] = useState(false);
     /** Le dossier qu'on s'apprête à délier ; `null` = aucune confirmation ouverte. */
     const [unlinking, setUnlinking] = useState<number | null>(null);
+    /** L'échec du déliement, dit dans la confirmation qui reste ouverte. */
+    const [unlinkError, setUnlinkError] = useState<ErrorNoteInput | null>(null);
 
     const boardVersion = useResourceVersion('projects.board');
     const listVersion = useResourceVersion('x-hosting.list');
@@ -65,7 +69,7 @@ export function Hosting({ project, canWrite }: HostingProps) {
             setLabels(res.labels);
             setError(null);
         } catch (e) {
-            setError(humanizeError(e, 'Impossible de charger les dossiers liés.'));
+            setError(errorNote(e, 'Impossible de charger les dossiers liés.'));
         } finally {
             setLoaded(true);
         }
@@ -90,7 +94,7 @@ export function Hosting({ project, canWrite }: HostingProps) {
             } catch (e) {
                 if (alive) setCandidates([]);
                 if (!(e instanceof WsError && e.code === 'forbidden')) {
-                    setError(humanizeError(e, 'Impossible de charger les dossiers de l’espace.'));
+                    setError(errorNote(e, 'Impossible de charger les dossiers de l’espace.'));
                 }
             }
         })();
@@ -101,15 +105,21 @@ export function Hosting({ project, canWrite }: HostingProps) {
 
     const unlink = async (packId: number) => {
         setBusy(true);
+        setUnlinkError(null);
         try {
             await api.send('projects.hostingUnlink', { projectId: project.id, packId });
             setUnlinking(null);
             invalidate('projects.board', 'x-hosting.list');
         } catch (e) {
-            setError(humanizeError(e, 'Le déliement a échoué.'));
+            setUnlinkError(errorNote(e, 'Le déliement a échoué.'));
         } finally {
             setBusy(false);
         }
+    };
+
+    const closeUnlink = () => {
+        setUnlinking(null);
+        setUnlinkError(null);
     };
 
     if (guarded) {
@@ -128,7 +138,7 @@ export function Hosting({ project, canWrite }: HostingProps) {
     if (foreign) {
         return (
             <div className={styles.linkedSites}>
-                {error && <p className={styles.error}>{error}</p>}
+                <ErrorNote note={error} />
                 {!provider && <p className={styles.hint}>Le module Hébergement n’est pas installé.</p>}
                 <ForeignLinks labels={labels} empty='Aucun dossier relié à ce projet.' />
             </div>
@@ -139,7 +149,7 @@ export function Hosting({ project, canWrite }: HostingProps) {
 
     return (
         <div className={styles.linkedSites}>
-            {error && <p className={styles.error}>{error}</p>}
+            <ErrorNote note={error} />
             {!provider && <p className={styles.hint}>Le module Hébergement n’est pas installé.</p>}
 
             {linkedIds.length === 0 && <p className={styles.empty}>Aucun dossier relié à ce projet.</p>}
@@ -202,13 +212,13 @@ export function Hosting({ project, canWrite }: HostingProps) {
 
             <Dialog
                 open={unlinking !== null}
-                onClose={() => setUnlinking(null)}
+                onClose={closeUnlink}
                 title='Délier ce dossier ?'
                 width={460}
                 onSubmit={() => unlinking !== null && void unlink(unlinking)}
                 footer={
                     <>
-                        <Button variant='secondary' onClick={() => setUnlinking(null)} disabled={busy}>
+                        <Button variant='secondary' onClick={closeUnlink} disabled={busy}>
                             Annuler
                         </Button>
                         <Button
@@ -225,6 +235,7 @@ export function Hosting({ project, canWrite }: HostingProps) {
                     <strong>{unlinkingName ?? 'Ce dossier'}</strong> quitte ce projet. Le dossier, ses fichiers, ses
                     adresses et les autres projets qui le rattachent ne sont pas touchés.
                 </p>
+                <ErrorNote note={unlinkError} />
             </Dialog>
         </div>
     );

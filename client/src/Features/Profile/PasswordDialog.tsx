@@ -4,6 +4,7 @@ import { ApiError, changePassword } from '@/api/http';
 import { Dialog } from '@/Components/Dialog';
 import { TextInput } from '@/Components';
 import Button from '@/Components/Button';
+import ErrorNote, { type ErrorNoteInput } from '@/Components/ErrorNote';
 
 import styles from './style.module.css';
 
@@ -39,7 +40,7 @@ export function PasswordDialog({ open, onClose }: PasswordDialogProps) {
     const [current, setCurrent] = useState('');
     const [next, setNext] = useState('');
     const [confirm, setConfirm] = useState('');
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [loading, setLoading] = useState(false);
     const [done, setDone] = useState(false);
 
@@ -60,19 +61,22 @@ export function PasswordDialog({ open, onClose }: PasswordDialogProps) {
     const onSubmit = async () => {
         if (loading) return;
         if (!current || !next || !confirm) {
-            setError('Tous les champs sont requis.');
+            setError({ message: 'Tous les champs sont requis.', code: 'validation' });
             return;
         }
         if (next.length < MIN_LENGTH) {
-            setError(`Le nouveau mot de passe doit contenir au moins ${MIN_LENGTH} caractères.`);
+            setError({
+                message: `Le nouveau mot de passe doit contenir au moins ${MIN_LENGTH} caractères.`,
+                code: 'validation'
+            });
             return;
         }
         if (next !== confirm) {
-            setError('La confirmation ne correspond pas.');
+            setError({ message: 'La confirmation ne correspond pas.', code: 'validation' });
             return;
         }
         if (next === current) {
-            setError("Le nouveau mot de passe doit être différent de l'actuel.");
+            setError({ message: "Le nouveau mot de passe doit être différent de l'actuel.", code: 'validation' });
             return;
         }
 
@@ -82,7 +86,7 @@ export function PasswordDialog({ open, onClose }: PasswordDialogProps) {
             await changePassword({ currentPassword: current, newPassword: next });
             setDone(true);
         } catch (err) {
-            setError(humanizeError(err));
+            setError({ message: humanizeError(err), code: err instanceof ApiError ? err.code : null });
         } finally {
             setLoading(false);
         }
@@ -143,7 +147,7 @@ export function PasswordDialog({ open, onClose }: PasswordDialogProps) {
                             onChange={(e) => setConfirm(e.target.value)}
                         />
                     </label>
-                    {error && <p className={styles.formError}>{error}</p>}
+                    <ErrorNote note={error} />
                 </div>
             )}
         </Dialog>

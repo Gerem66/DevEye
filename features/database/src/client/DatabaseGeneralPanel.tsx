@@ -2,14 +2,16 @@ import { useEffect, useState } from 'react';
 import {
     Button,
     ConfirmDialog,
-    humanizeError,
+    errorNote,
+    ErrorNote,
     invalidate,
     ReadOnlyNotice,
     SaveButton,
     SearchSelect,
     settingsStyles as shell,
     Switch,
-    type ConfirmRequest
+    type ConfirmRequest,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import type { Database, DatabaseProbe } from '../contracts/domain';
@@ -73,7 +75,7 @@ export default function DatabaseGeneralPanel({ scope, canWrite, gone }: Settings
     const [database, setDatabase] = useState<Database | null>(null);
     const [draft, setDraft] = useState<Draft | null>(null);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     /** L'essai en cours, et son résultat ; distinct de l'enregistrement. */
     const [testing, setTesting] = useState(false);
     const [probe, setProbe] = useState<DatabaseProbe | null>(null);
@@ -87,11 +89,11 @@ export default function DatabaseGeneralPanel({ scope, canWrite, gone }: Settings
                 setDatabase(res.database);
                 setDraft(draftOf(res.database));
             })
-            .catch((e) => setError(humanizeError(e, 'Les réglages n’ont pas pu être lus.')));
+            .catch((e: unknown) => setError(errorNote(e, 'Les réglages n’ont pas pu être lus.')));
     }, [itemId]);
 
     if (!database || !draft) {
-        return <p className={error ? shell.notice : shell.empty}>{error ?? 'Chargement…'}</p>;
+        return error ? <ErrorNote note={error} /> : <p className={shell.empty}>Chargement…</p>;
     }
 
     // Le serveur refuse d'ici la modification comme la suppression : la ligne
@@ -134,7 +136,7 @@ export default function DatabaseGeneralPanel({ scope, canWrite, gone }: Settings
             setDraft(draftOf(res.database));
             invalidate('database.list', 'database.detail', 'database.count');
         } catch (e) {
-            setError(humanizeError(e, 'Enregistrement impossible.'));
+            setError(errorNote(e, 'Enregistrement impossible.'));
             // Relancé : le bouton n'annonce « Enregistré » que sur un succès.
             throw e;
         } finally {
@@ -157,7 +159,7 @@ export default function DatabaseGeneralPanel({ scope, canWrite, gone }: Settings
             });
             setProbe(res.probe);
         } catch (e) {
-            setError(humanizeError(e, 'L’essai de connexion a échoué.'));
+            setError(errorNote(e, 'L’essai de connexion a échoué.'));
         } finally {
             setTesting(false);
         }
@@ -173,7 +175,7 @@ export default function DatabaseGeneralPanel({ scope, canWrite, gone }: Settings
             gone();
             invalidate('database.list', 'database.count', 'projects.board');
         } catch (e) {
-            setError(humanizeError(e, 'La suppression a échoué.'));
+            setError(errorNote(e, 'La suppression a échoué.'));
         } finally {
             setBusy(false);
         }
@@ -266,7 +268,7 @@ export default function DatabaseGeneralPanel({ scope, canWrite, gone }: Settings
 
             <ProbeLine testing={testing} probe={probe} />
 
-            {error && <p className={shell.notice}>{error}</p>}
+            <ErrorNote note={error} />
 
             {canWrite && (
                 <div className={shell.field}>

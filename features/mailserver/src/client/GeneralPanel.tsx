@@ -2,15 +2,17 @@ import { useEffect, useState } from 'react';
 import {
     Button,
     ConfirmDialog,
+    ErrorNote,
+    errorNote,
     ReadOnlyNotice,
     SaveButton,
     Switch,
     TextInput,
-    humanizeError,
     invalidate,
     settingsStyles as shell,
     useWorkspacePermissions,
-    type ConfirmRequest
+    type ConfirmRequest,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 
@@ -35,15 +37,15 @@ export default function GeneralPanel(props: SettingsPanelProps) {
 
 function MailboxPanel({ canWrite, gone, mailboxId }: SettingsPanelProps & { mailboxId: number }) {
     const [held, setHeld] = useState<{ mailbox: Mailbox; connection: Connection | null } | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     useEffect(() => {
         api.send('mailserver.get', { id: mailboxId })
             .then(setHeld)
-            .catch((failure: unknown) => setError(humanizeError(failure, 'Cette adresse n’a pas pu être lue.')));
+            .catch((failure: unknown) => setError(errorNote(failure, 'Cette adresse n’a pas pu être lue.')));
     }, [mailboxId]);
 
-    if (error && !held) return <p className={shell.errorText}>{error}</p>;
+    if (error && !held) return <ErrorNote note={error} />;
     if (!held) return <p className={shell.sectionHint}>Chargement…</p>;
     return (
         <MailboxForm
@@ -81,7 +83,7 @@ function MailboxForm({
     const [secret, setSecret] = useState<string | null>(null);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     const refresh = () => invalidate('mailserver.list', 'mailserver.get', 'mailserver.count');
     const unchanged =
@@ -108,7 +110,7 @@ function MailboxForm({
             onChanged(res.mailbox);
             refresh();
         } catch (failure) {
-            setError(humanizeError(failure, 'Ces réglages n’ont pas pu être enregistrés.'));
+            setError(errorNote(failure, 'Ces réglages n’ont pas pu être enregistrés.'));
             throw failure;
         }
     };
@@ -119,7 +121,7 @@ function MailboxForm({
         try {
             await work();
         } catch (failure) {
-            setError(humanizeError(failure, fallback));
+            setError(errorNote(failure, fallback));
         } finally {
             setBusy(false);
         }
@@ -253,7 +255,7 @@ function MailboxForm({
                             )
                         )}
                     </div>
-                    {link.error && <p className={shell.errorText}>{link.error}</p>}
+                    <ErrorNote note={link.error} />
                 </div>
             )}
 
@@ -273,7 +275,7 @@ function MailboxForm({
                 </div>
             )}
 
-            {error && <p className={shell.errorText}>{error}</p>}
+            <ErrorNote note={error} />
             {link.dialog}
             <SecretOnceDialog
                 secret={secret}

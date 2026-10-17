@@ -13,7 +13,6 @@ declare const styles: {
     readonly 'edit-cell': string;
     readonly empty: string;
     readonly emptyIcon: string;
-    readonly errorBanner: string;
     readonly form: string;
     readonly generatorGenerateBtn: string;
     readonly generatorMenu: string;

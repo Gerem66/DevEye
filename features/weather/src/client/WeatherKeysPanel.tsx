@@ -2,11 +2,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { providerNeedsKey, weatherProviderSchema, type WeatherProvider } from '../contracts/domain';
 
 import {
+    errorNote,
+    ErrorNote,
     invalidate,
     onResourceChange,
     ProviderKeys,
-    settingsStyles as shell,
     useWorkspacePermissions,
+    type ErrorNoteInput,
     type ProviderKeyRow
 } from 'deveye-sdk-client';
 import { PROVIDER_META } from './providers';
@@ -25,14 +27,14 @@ export default function WeatherKeysPanel() {
     // Poser une clé exige la permission déclarée `manageKeys`, pas seulement l'écriture.
     const canManage = useWorkspacePermissions().canExtra('weather', 'manageKeys');
     const [held, setHeld] = useState<Record<string, boolean>>({});
-    const [status, setStatus] = useState<string | null>(null);
+    const [status, setStatus] = useState<ErrorNoteInput | null>(null);
 
     const load = useCallback(async () => {
         try {
             const res = await api.send('weather.keyList', {});
             setHeld(Object.fromEntries(res.providers.map((p) => [p.provider, p.hasKey])));
-        } catch {
-            setStatus('Les clés n’ont pas pu être lues.');
+        } catch (e) {
+            setStatus(errorNote(e, 'Les clés n’ont pas pu être lues.'));
         }
     }, []);
 
@@ -71,7 +73,7 @@ export default function WeatherKeysPanel() {
                 onRemove={(provider) => save(provider, '')}
                 readOnlyHint='Votre rôle ne permet pas de modifier ces clés : leur gestion se confie dans les permissions de la Météo.'
             />
-            {status && <p className={shell.notice}>{status}</p>}
+            <ErrorNote note={status} />
         </>
     );
 }

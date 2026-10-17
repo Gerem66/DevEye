@@ -1,6 +1,8 @@
 import { useState, type ReactNode } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 
+import ErrorNote, { type ErrorNoteInput } from '@/Components/ErrorNote';
+
 import styles from './Security.module.css';
 
 interface SectionProps {
@@ -98,7 +100,7 @@ interface RowProps {
     /** Une rangée qui précise la protection au-dessus d'elle. */
     sub?: boolean;
     /** L'échec du dernier geste, sous l'explication. */
-    error?: string | null;
+    error?: ErrorNoteInput | null;
     /** La commande, à droite. */
     children?: ReactNode;
     /** Ce qui s'étend sous la rangée sur toute sa largeur (la liste des navigateurs). */
@@ -131,11 +133,7 @@ export function Row({ label, icon, tone, hint, onInfo, sub, error, children, bel
                     )}
                 </span>
                 {hint && <span className={styles.rowHint}>{hint}</span>}
-                {error && (
-                    <span className={styles.rowError} role='alert'>
-                        {error}
-                    </span>
-                )}
+                <ErrorNote note={error ?? null} />
             </div>
             {children && <div className={styles.rowValue}>{children}</div>}
             {below}

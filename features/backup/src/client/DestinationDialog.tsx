@@ -5,12 +5,14 @@ import {
     Button,
     DeviceFolderField,
     Dialog,
-    humanizeError,
+    ErrorNote,
+    errorNote,
     SearchSelect,
     SegmentedControl,
     Switch,
     TextInput,
-    useDevices
+    useDevices,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import { api } from './api';
 import { DESTINATION_LABELS, DESTINATION_SHORT_LABELS } from './format';
@@ -86,7 +88,7 @@ export default function DestinationDialog({ open, destination, onClose, onSaved 
     const [pathStyle, setPathStyle] = useState(true);
     const [resetHostKey, setResetHostKey] = useState(false);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     useEffect(() => {
         if (!open) return;
@@ -166,7 +168,7 @@ export default function DestinationDialog({ open, destination, onClose, onSaved 
             onSaved();
             onClose();
         } catch (e) {
-            setError(humanizeError(e, 'Impossible d’enregistrer cette destination.'));
+            setError(errorNote(e, 'Impossible d’enregistrer cette destination.'));
         } finally {
             setBusy(false);
         }
@@ -451,7 +453,7 @@ export default function DestinationDialog({ open, destination, onClose, onSaved 
                     </>
                 )}
 
-                {error && <p className={styles.error}>{error}</p>}
+                <ErrorNote note={error} />
             </div>
         </Dialog>
     );

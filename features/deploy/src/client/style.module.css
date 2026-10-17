@@ -37,15 +37,6 @@
     gap: var(--space-sm);
 }
 
-.error {
-    margin: 0;
-    padding: var(--space-sm) var(--space-md);
-    border-radius: var(--radius-md);
-    background: var(--danger-bg);
-    color: var(--danger);
-    font-size: 0.85rem;
-}
-
 .empty {
     margin: 0;
     padding: var(--space-md);

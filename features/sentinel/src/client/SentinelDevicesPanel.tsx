@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import {
     Button,
     Checkbox,
-    humanizeError,
+    errorNote,
+    ErrorNote,
     ReadOnlyNotice,
     SaveButton,
     SearchSelect,
@@ -10,6 +11,7 @@ import {
     StatusBadge,
     Switch,
     useResource,
+    type ErrorNoteInput,
     type SearchSelectOption
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
@@ -53,7 +55,7 @@ export default function SentinelDevicesPanel({ canWrite }: SettingsPanelProps) {
     const devices = data ?? [];
 
     if (loading && !data) return <p className={shell.empty}>Chargement…</p>;
-    if (error) return <p className={shell.notice}>{error}</p>;
+    if (error) return <ErrorNote note={error} />;
     if (devices.length === 0) return <p className={shell.empty}>Aucun appareil dans cet espace.</p>;
 
     return (
@@ -90,7 +92,7 @@ function draftOf(device: DeviceSentinelState): Draft {
 function DeviceRow({ device, canWrite }: { device: DeviceSentinelState; canWrite: boolean }) {
     const [draft, setDraft] = useState<Draft>(() => draftOf(device));
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
 
     // Remis à l'état de l'appareil à chaque relecture : un formulaire qui garde
@@ -127,7 +129,7 @@ function DeviceRow({ device, canWrite }: { device: DeviceSentinelState; canWrite
                       : 'Surveillance désactivée.'
             );
         } catch (e) {
-            setError(humanizeError(e, "Le réglage n'a pas pu être appliqué."));
+            setError(errorNote(e, "Le réglage n'a pas pu être appliqué."));
             // Relancé : le bouton n'annonce « Enregistré » que sur un succès.
             throw e;
         } finally {
@@ -144,7 +146,7 @@ function DeviceRow({ device, canWrite }: { device: DeviceSentinelState; canWrite
             refreshSentinelViews();
             setNotice('Ligne de base effacée : l’apprentissage redémarre.');
         } catch (e) {
-            setError(humanizeError(e, 'La remise à zéro a échoué.'));
+            setError(errorNote(e, 'La remise à zéro a échoué.'));
         } finally {
             setBusy(false);
         }
@@ -257,7 +259,7 @@ function DeviceRow({ device, canWrite }: { device: DeviceSentinelState; canWrite
                 </div>
             )}
 
-            {error && <p className={shell.notice}>{error}</p>}
+            <ErrorNote note={error} />
             {notice && <p className={styles.notice}>{notice}</p>}
         </section>
     );

@@ -1,9 +1,11 @@
 import { useState } from 'react';
 
+import { errorNote } from '@/api/useResource';
 import { WsError } from '@/api/ws';
 import Button from '@/Components/Button';
 import { AuthenticatorCodeField, authenticatorCodeReady } from '@/Components/CodeInput';
 import { Dialog } from '@/Components/Dialog';
+import ErrorNote, { type ErrorNoteInput } from '@/Components/ErrorNote';
 import { cancelStepUp, resolveStepUp, useStepUpPrompt } from '@/stores/stepUp';
 import { requestOpenView } from '@/stores/viewRequest';
 
@@ -18,12 +20,15 @@ export default function StepUpGate() {
     const [code, setCode] = useState('');
     const [recovery, setRecovery] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    /** L'échec qui ne tient pas au code saisi. */
+    const [failure, setFailure] = useState<ErrorNoteInput | null>(null);
     const [loading, setLoading] = useState(false);
 
     const reset = () => {
         setCode('');
         setRecovery(false);
         setError(null);
+        setFailure(null);
         setLoading(false);
     };
 
@@ -36,18 +41,14 @@ export default function StepUpGate() {
         if (!prompt || loading || !authenticatorCodeReady(value, recovery)) return;
         setLoading(true);
         setError(null);
+        setFailure(null);
         try {
             await prompt.confirm(value);
             reset();
             resolveStepUp();
         } catch (e) {
-            setError(
-                e instanceof WsError && e.code === 'auth_invalid'
-                    ? 'Code incorrect.'
-                    : e instanceof Error
-                      ? e.message
-                      : 'Confirmation impossible.'
-            );
+            if (e instanceof WsError && e.code === 'auth_invalid') setError('Code incorrect.');
+            else setFailure(errorNote(e, 'Confirmation impossible.'));
             setCode('');
             setLoading(false);
         }
@@ -117,6 +118,7 @@ export default function StepUpGate() {
                 }}
                 onComplete={(value) => void submit(value)}
             />
+            <ErrorNote note={failure} />
         </Dialog>
     );
 }

@@ -4,13 +4,15 @@ import {
     Button,
     ClosePopup,
     DialogCancelButton,
+    ErrorNote,
     formatBytesFr,
     Popup,
     SearchSelect,
-    TextInput
+    TextInput,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 
-import { api, humanizeError } from './api';
+import { api, errorNote } from './api';
 import styles from './style.module.css';
 
 import type { MailAccount, MailAddress } from '../contracts/domain';
@@ -61,7 +63,7 @@ export function ComposePopup() {
     const [body, setBody] = useState('');
     const [attachments, setAttachments] = useState<DraftAttachment[]>([]);
     const [advancedOpen, setAdvancedOpen] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [sending, setSending] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -103,7 +105,7 @@ export function ComposePopup() {
     async function send(): Promise<void> {
         const recipients = parseAddresses(to);
         if (!accountId || recipients.length === 0 || !subject.trim()) {
-            setError('Compte, destinataire et objet sont obligatoires.');
+            setError({ message: 'Compte, destinataire et objet sont obligatoires.', code: 'validation' });
             return;
         }
         setSending(true);
@@ -127,7 +129,7 @@ export function ComposePopup() {
             });
             close(true);
         } catch (e) {
-            setError(humanizeError(e, 'Envoi impossible.'));
+            setError(errorNote(e, 'Envoi impossible.'));
         } finally {
             setSending(false);
         }
@@ -248,7 +250,7 @@ export function ComposePopup() {
                     )}
                 </div>
 
-                {error && <p className={styles.status}>{error}</p>}
+                <ErrorNote note={error} />
             </div>
             <div className={styles.popupActions}>
                 <div className={styles.popupActionsLeft}>

@@ -2,12 +2,14 @@ import { useCallback, useEffect, useState } from 'react';
 import {
     Button,
     Dialog,
-    humanizeError,
+    ErrorNote,
+    errorNote,
     invalidate,
     moduleClientProvider,
     useResourceVersion,
     useWorkspacePermissions,
-    WsError
+    WsError,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import { api } from '../api';
 import type { Project, ProjectLinkLabel } from '../../contracts/domain';
@@ -45,10 +47,12 @@ export function Git({ project, canWrite }: GitProps) {
     const [candidates, setCandidates] = useState<readonly GitLinkedCandidate[]>([]);
     const [loaded, setLoaded] = useState(false);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [linkOpen, setLinkOpen] = useState(false);
     /** Le dépôt qu'on s'apprête à délier ; `null` = aucune confirmation ouverte. */
     const [unlinking, setUnlinking] = useState<number | null>(null);
+    /** L'échec du déliement, dit dans la confirmation qui reste ouverte. */
+    const [unlinkError, setUnlinkError] = useState<ErrorNoteInput | null>(null);
 
     const boardVersion = useResourceVersion('projects.board');
     const listVersion = useResourceVersion('git.list');
@@ -66,7 +70,7 @@ export function Git({ project, canWrite }: GitProps) {
             setLabels(link.labels);
             setError(null);
         } catch (e) {
-            setError(humanizeError(e, 'Impossible de charger les dépôts liés.'));
+            setError(errorNote(e, 'Impossible de charger les dépôts liés.'));
         } finally {
             setLoaded(true);
         }
@@ -93,7 +97,7 @@ export function Git({ project, canWrite }: GitProps) {
             } catch (e) {
                 if (alive) setCandidates([]);
                 if (!(e instanceof WsError && e.code === 'forbidden')) {
-                    setError(humanizeError(e, 'Impossible de charger les dépôts de l’espace.'));
+                    setError(errorNote(e, 'Impossible de charger les dépôts de l’espace.'));
                 }
             }
         })();
@@ -104,15 +108,21 @@ export function Git({ project, canWrite }: GitProps) {
 
     const unlink = async (repoId: number) => {
         setBusy(true);
+        setUnlinkError(null);
         try {
             await api.send('projects.repoUnlink', { projectId: project.id, repoId });
             setUnlinking(null);
             invalidate('projects.board', 'git.list');
         } catch (e) {
-            setError(humanizeError(e, 'Le déliement a échoué.'));
+            setUnlinkError(errorNote(e, 'Le déliement a échoué.'));
         } finally {
             setBusy(false);
         }
+    };
+
+    const closeUnlink = () => {
+        setUnlinking(null);
+        setUnlinkError(null);
     };
 
     if (guarded) {
@@ -131,7 +141,7 @@ export function Git({ project, canWrite }: GitProps) {
     if (foreign) {
         return (
             <div className={styles.linkedRepos}>
-                {error && <p className={styles.error}>{error}</p>}
+                <ErrorNote note={error} />
                 {!provider && <p className={styles.hint}>Le module Git n’est pas installé.</p>}
                 <ForeignLinks labels={labels} empty='Aucun dépôt relié à ce projet.' />
             </div>
@@ -143,7 +153,7 @@ export function Git({ project, canWrite }: GitProps) {
 
     return (
         <div className={styles.linkedRepos}>
-            {error && <p className={styles.error}>{error}</p>}
+            <ErrorNote note={error} />
             {!provider && <p className={styles.hint}>Le module Git n’est pas installé.</p>}
 
             {repoIds.length === 0 && <p className={styles.empty}>Aucun dépôt relié à ce projet.</p>}
@@ -212,13 +222,13 @@ export function Git({ project, canWrite }: GitProps) {
 
             <Dialog
                 open={unlinking !== null}
-                onClose={() => setUnlinking(null)}
+                onClose={closeUnlink}
                 title='Délier ce dépôt ?'
                 width={460}
                 onSubmit={() => unlinking !== null && void unlink(unlinking)}
                 footer={
                     <>
-                        <Button variant='secondary' onClick={() => setUnlinking(null)} disabled={busy}>
+                        <Button variant='secondary' onClick={closeUnlink} disabled={busy}>
                             Annuler
                         </Button>
                         <Button
@@ -235,6 +245,7 @@ export function Git({ project, canWrite }: GitProps) {
                     <strong>{unlinkingName ?? 'Ce dépôt'}</strong> quitte ce projet. Le dépôt lui-même, son historique
                     et les autres projets qui l’utilisent ne sont pas touchés.
                 </p>
+                <ErrorNote note={unlinkError} />
             </Dialog>
         </div>
     );

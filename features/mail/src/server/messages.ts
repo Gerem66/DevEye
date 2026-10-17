@@ -197,7 +197,10 @@ export const mailMessageGetFeature = defineSdkFeature<
         // Opening a message marks it read, both on the server and in our cache —
         // regardless of whether the IMAP fetch itself already flipped \Seen.
         if (message.seen !== 1) {
-            await mailClient.setFlags(credentials, folder.imap_path, message.uid, { seen: true }, refresh);
+            // Par `imapFor` aussi : un serveur qui flanche ici est celui de la boîte, pas une panne d'ici.
+            await imapFor(ctx, account, () =>
+                mailClient.setFlags(credentials, folder.imap_path, message.uid, { seen: true }, refresh)
+            );
             await ctx.repo.messages.setFlags(message.id, { seen: true });
         }
 

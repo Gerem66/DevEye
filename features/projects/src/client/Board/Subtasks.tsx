@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { Button, Checkbox, Dialog, SearchSelect, useDragReorder } from 'deveye-sdk-client';
+import {
+    Button,
+    Checkbox,
+    Dialog,
+    ErrorNote,
+    SearchSelect,
+    useDragReorder,
+    type ErrorNoteInput
+} from 'deveye-sdk-client';
 import type { MinimalUser } from '@deveye/types';
 import { formatDate, formatDateTime, relativeAgo } from '../api';
 import {
@@ -48,8 +56,8 @@ export function Subtasks({
 }: SubtasksProps) {
     const [label, setLabel] = useState('');
     const [openId, setOpenId] = useState<string | null>(null);
-    /** Le refus de rouvrir une sous-tâche obligatoire, le temps qu'on le lise. */
-    const [refused, setRefused] = useState<string | null>(null);
+    /** Le refus de rouvrir une sous-tâche obligatoire, le temps qu'on le lise : celui du serveur, dit d'avance. */
+    const [refused, setRefused] = useState<ErrorNoteInput | null>(null);
     const [removing, setRemoving] = useState<ProjectChecklistItem | null>(null);
     /** Gardé à part : la popup s'efface en fondu, et y lire un nom vide serait pire que rien. */
     const [removingLabel, setRemovingLabel] = useState('');
@@ -89,9 +97,11 @@ export function Subtasks({
     // les recalcule et c'est sa version qui revient.
     const toggle = (item: ProjectChecklistItem) => {
         if (item.done && item.required && columnDone) {
-            setRefused(
-                'Cette tâche est dans une colonne terminée : sortez-l’en avant de rouvrir une sous-tâche obligatoire.'
-            );
+            setRefused({
+                message:
+                    'Cette tâche est dans une colonne terminée : sortez-l’en avant de rouvrir une sous-tâche obligatoire.',
+                code: 'conflict'
+            });
             return;
         }
         setRefused(null);
@@ -241,11 +251,7 @@ export function Subtasks({
                 </div>
             )}
 
-            {refused && (
-                <p className={styles.error} role='alert'>
-                    {refused}
-                </p>
-            )}
+            <ErrorNote note={refused} />
 
             <div className={styles.checkAdd}>
                 <div className={styles.grow} data-value={label}>

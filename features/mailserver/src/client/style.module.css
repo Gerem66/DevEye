@@ -51,12 +51,6 @@
     color: var(--text-muted);
 }
 
-.error {
-    margin: 0;
-    font-size: 0.82rem;
-    color: var(--danger);
-}
-
 /* ------------------------------------------------------------------ liste */
 
 .group {

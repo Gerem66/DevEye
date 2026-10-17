@@ -4,13 +4,15 @@ import type { BackupJob, BackupRun } from '../contracts/domain';
 import {
     Button,
     ConfirmDialog,
+    ErrorNote,
+    errorNote,
     FeatureSettingsButton,
     formatBytesFr,
-    humanizeError,
     StatusBadge,
     StickyHeader,
     useResource,
-    type ConfirmRequest
+    type ConfirmRequest,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import { api } from './api';
 import {
@@ -31,10 +33,12 @@ interface JobViewProps {
     onBack: () => void;
     onRun: () => void;
     running: boolean;
+    /** Le refus du dernier « Sauvegarder », que la liste tient pour la fiche. */
+    runError: ErrorNoteInput | null;
 }
 
 /** La fiche d'un travail : ses réglages en tête, son historique en dessous. */
-export default function JobView({ job, canWrite, onBack, onRun, running }: JobViewProps) {
+export default function JobView({ job, canWrite, onBack, onRun, running, runError }: JobViewProps) {
     const {
         data: runs,
         error,
@@ -47,7 +51,7 @@ export default function JobView({ job, canWrite, onBack, onRun, running }: JobVi
     );
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
     const [busy, setBusy] = useState(false);
-    const [removeError, setRemoveError] = useState<string | null>(null);
+    const [removeError, setRemoveError] = useState<ErrorNoteInput | null>(null);
     // Un travail projeté s'administre chez lui : ses archives aussi.
     const canErase = canWrite && !job.foreign;
 
@@ -58,7 +62,7 @@ export default function JobView({ job, canWrite, onBack, onRun, running }: JobVi
             await api.send('backup.runRemove', { runId: run.id });
             reload();
         } catch (failure) {
-            setRemoveError(humanizeError(failure, 'La sauvegarde n’a pas pu être effacée.'));
+            setRemoveError(errorNote(failure, 'La sauvegarde n’a pas pu être effacée.'));
         } finally {
             setBusy(false);
         }
@@ -134,8 +138,9 @@ export default function JobView({ job, canWrite, onBack, onRun, running }: JobVi
             </div>
 
             {job.lastError && <p className={styles.error}>Dernier échec : {job.lastError}</p>}
-            {error && <p className={styles.error}>{error}</p>}
-            {removeError && <p className={styles.error}>{removeError}</p>}
+            <ErrorNote note={runError} />
+            <ErrorNote note={error} />
+            <ErrorNote note={removeError} />
 
             <h3 className={styles.sectionTitle}>Historique</h3>
             {runs === null && !error && <p className={styles.empty}>Chargement…</p>}

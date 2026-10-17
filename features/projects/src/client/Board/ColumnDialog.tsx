@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Button, Checkbox, Dialog, TextInput } from 'deveye-sdk-client';
+import { Button, Checkbox, Dialog, ErrorNote, TextInput, type ErrorNoteInput } from 'deveye-sdk-client';
 import { PROJECT_COLUMN_NAME_MAX_LENGTH, type ProjectColumn } from '../../contracts/domain';
 import styles from '../style.module.css';
 
@@ -14,7 +14,7 @@ interface ColumnDialogProps {
     /** `null` = création. */
     column: ProjectColumn | null;
     busy: boolean;
-    error: string | null;
+    error: ErrorNoteInput | null;
     onClose: () => void;
     onSubmit: (result: ColumnDialogResult) => void;
     onRemove?: () => void;
@@ -101,7 +101,7 @@ export function ColumnDialog({ open, column, busy, error, onClose, onSubmit, onR
                     </span>
                 </label>
 
-                {error && <p className={styles.error}>{error}</p>}
+                <ErrorNote note={error} />
             </div>
         </Dialog>
     );

@@ -1,5 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Button, Dialog, humanizeError, invalidate, SegmentedControl, TextInput } from 'deveye-sdk-client';
+import {
+    Button,
+    Dialog,
+    ErrorNote,
+    errorNote,
+    invalidate,
+    SegmentedControl,
+    TextInput,
+    type ErrorNoteInput
+} from 'deveye-sdk-client';
 import {
     AUDIENCE_EVENT_IP_QUOTA_DEFAULT,
     AUDIENCE_FORM_HOURLY_QUOTA_DEFAULT,
@@ -42,7 +51,7 @@ export function SiteDialog({ open, onClose, onSaved }: SiteDialogProps) {
     const [platform, setPlatform] = useState<AudiencePlatform>('web');
     const [origins, setOrigins] = useState('');
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     useEffect(() => {
         if (!open) return;
@@ -55,7 +64,7 @@ export function SiteDialog({ open, onClose, onSaved }: SiteDialogProps) {
 
     const submit = async () => {
         if (name.trim().length === 0) {
-            setError('Donnez un nom à ce site.');
+            setError({ message: 'Donnez un nom à ce site.', code: 'validation' });
             return;
         }
         setBusy(true);
@@ -88,7 +97,7 @@ export function SiteDialog({ open, onClose, onSaved }: SiteDialogProps) {
             invalidate('audience.list');
             onSaved(res.site);
         } catch (e) {
-            setError(humanizeError(e, 'Enregistrement impossible.'));
+            setError(errorNote(e, 'Enregistrement impossible.'));
         } finally {
             setBusy(false);
         }
@@ -164,7 +173,7 @@ export function SiteDialog({ open, onClose, onSaved }: SiteDialogProps) {
                     </span>
                 </label>
 
-                {error && <p className={styles.error}>{error}</p>}
+                <ErrorNote note={error} />
             </div>
         </Dialog>
     );

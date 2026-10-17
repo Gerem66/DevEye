@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as
 import {
     Button,
     CountBadge,
-    humanizeError,
+    ErrorNote,
+    errorNote,
     invalidate,
     StatusBadge,
     StickyHeader,
@@ -15,7 +16,8 @@ import {
     useSubView,
     useWorkspaceMembers,
     useWorkspacePermissions,
-    withSecrecy
+    withSecrecy,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { FeatureViewProps } from '@deveye/types/sdk/client';
 import { api, formatDate, STATUS_LABELS } from './api';
@@ -62,7 +64,7 @@ export function FeatureProjects(_props: FeatureViewProps) {
     const me = useCurrentUser();
 
     const [summaries, setSummaries] = useState<ProjectSummary[] | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [selectedId, setSelectedId] = useState<number | null>(null);
     const [showArchived, setShowArchived] = useState(false);
     const [showMine, setShowMine] = useState(false);
@@ -71,7 +73,7 @@ export function FeatureProjects(_props: FeatureViewProps) {
     /** Le projet ouvert en vue détail ; `null` = on est sur le portefeuille. */
     const [opened, setOpened] = useState<Project | null>(null);
     const [busy, setBusy] = useState(false);
-    const [dialogError, setDialogError] = useState<string | null>(null);
+    const [dialogError, setDialogError] = useState<ErrorNoteInput | null>(null);
 
     const version = useResourceVersion('projects.list');
     const reloadRef = useRef<Promise<void> | null>(null);
@@ -92,7 +94,7 @@ export function FeatureProjects(_props: FeatureViewProps) {
                 setSummaries([...res.projects].sort(byHome));
                 setError(null);
             } catch (e) {
-                setError(humanizeError(e, 'Impossible de charger les projets.'));
+                setError(errorNote(e, 'Impossible de charger les projets.'));
             }
         })();
         reloadRef.current = task;
@@ -163,8 +165,8 @@ export function FeatureProjects(_props: FeatureViewProps) {
                 return [...ids.flatMap((id) => byId.get(id) ?? []), ...prev.filter((s) => s.foreign)];
             });
             // Relue d'abord : son succès efface l'erreur affichée.
-            api.send('projects.reorder', { projectIds: ids }).catch(() => {
-                void reload().then(() => setError('Réorganisation impossible.'));
+            api.send('projects.reorder', { projectIds: ids }).catch((e: unknown) => {
+                void reload().then(() => setError(errorNote(e, 'Réorganisation impossible.')));
             });
         },
         [reload]
@@ -181,7 +183,7 @@ export function FeatureProjects(_props: FeatureViewProps) {
             const res = await withSecrecy(() => api.send('projects.get', { projectId }));
             return res.project;
         } catch (e) {
-            setError(humanizeError(e, 'Impossible d’ouvrir ce projet.'));
+            setError(errorNote(e, 'Impossible d’ouvrir ce projet.'));
             return null;
         }
     }, []);
@@ -208,7 +210,7 @@ export function FeatureProjects(_props: FeatureViewProps) {
             invalidate('projects.list', 'projects.count');
             setDialogOpen(false);
         } catch (e) {
-            setDialogError(humanizeError(e, 'L’enregistrement a échoué.'));
+            setDialogError(errorNote(e, 'L’enregistrement a échoué.'));
         } finally {
             setBusy(false);
         }
@@ -223,7 +225,7 @@ export function FeatureProjects(_props: FeatureViewProps) {
             );
             invalidate('projects.list', 'projects.count');
         } catch (e) {
-            setError(humanizeError(e, archived ? 'L’archivage a échoué.' : 'La restauration a échoué.'));
+            setError(errorNote(e, archived ? 'L’archivage a échoué.' : 'La restauration a échoué.'));
         }
     };
 
@@ -364,7 +366,7 @@ export function FeatureProjects(_props: FeatureViewProps) {
                 </header>
             </StickyHeader>
 
-            {error && <p className={styles.error}>{error}</p>}
+            <ErrorNote note={error} />
 
             {showMine && (
                 <MyTasks

@@ -4,15 +4,17 @@ import {
     Checkbox,
     ClosePopup,
     DialogCancelButton,
+    ErrorNote,
     Popup,
     SegmentedControl,
     Term,
     TextInput,
-    useActiveWorkspace
+    useActiveWorkspace,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 
-import { api, humanizeError } from './api';
-import { awaitConsentWindow } from './oauthWindow';
+import { api, errorNote, MailRefusal } from './api';
+import { awaitConsentWindow, popupBlocked } from './oauthWindow';
 import { ProviderCard } from './ProviderCard';
 import { SecurityTierChoice } from './SecurityTierChoice';
 import { StepBody, StepFrame, StepHeader } from './AccountSteps';
@@ -86,6 +88,7 @@ export function AccountPopup() {
     const [errorName, setErrorName] = useState('');
     const [errorEmail, setErrorEmail] = useState('');
     const [testResult, setTestResult] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [testing, setTesting] = useState(false);
     const [oauthBusy, setOauthBusy] = useState<MailOAuthProvider | null>(null);
     /**
@@ -149,6 +152,7 @@ export function AccountPopup() {
                 .catch(() => setConfigured([]));
         }
         setTestResult(null);
+        setError(null);
         setErrorName('');
         setErrorEmail('');
         setConnected(false);
@@ -194,12 +198,13 @@ export function AccountPopup() {
         if (!validate()) return;
         setTesting(true);
         setTestResult(null);
+        setError(null);
         try {
             const res = await api.send('mail.accountTestConnection', accountId ? { id: accountId } : { draft });
             if (res.imapOk && res.smtpOk) setTestResult('Connexion IMAP et SMTP réussie.');
             else setTestResult(res.error ?? 'Échec de la connexion.');
         } catch (e) {
-            setTestResult(humanizeError(e, 'Test impossible.'));
+            setError(errorNote(e, 'Test impossible.'));
         } finally {
             setTesting(false);
         }
@@ -213,6 +218,7 @@ export function AccountPopup() {
 
     async function submit(): Promise<void> {
         if (!validate()) return;
+        setError(null);
 
         // A provider-managed account has no draft to submit — only the parts
         // that are ours, through the command that accepts exactly those.
@@ -227,7 +233,7 @@ export function AccountPopup() {
                 });
                 close('saved');
             } catch (e) {
-                setTestResult(humanizeError(e, 'Enregistrement impossible.'));
+                setError(errorNote(e, 'Enregistrement impossible.'));
             }
             return;
         }
@@ -255,7 +261,7 @@ export function AccountPopup() {
             }
             close('saved');
         } catch (e) {
-            setTestResult(humanizeError(e, 'Enregistrement impossible.'));
+            setError(errorNote(e, 'Enregistrement impossible.'));
         }
     }
 
@@ -277,6 +283,7 @@ export function AccountPopup() {
     async function connectOAuth(provider: MailOAuthProvider): Promise<void> {
         setOauthBusy(provider);
         setTestResult(null);
+        setError(null);
         try {
             const before = new Set((await api.send('mail.accountList', {})).accounts.map((a) => a.id));
             const res = await api.send('mail.oauthStart', {
@@ -285,12 +292,12 @@ export function AccountPopup() {
                 displayName: draft.displayName.trim()
             });
             const popup = window.open(res.authUrl, 'deveye-mail-oauth', 'width=520,height=680');
-            if (!popup) throw new Error('Fenêtre bloquée par le navigateur — autorisez les popups pour DevEye.');
+            if (!popup) throw popupBlocked();
 
             const { verdict } = await awaitConsentWindow(popup);
             // Un échec annoncé par le serveur s'affiche tel quel : lui seul sait
             // ce qui a manqué, et le paraphraser perdrait la seule information utile.
-            if (verdict && !verdict.ok) throw new Error(verdict.error ?? 'Échec de connexion.');
+            if (verdict && !verdict.ok) throw new MailRefusal(verdict.error);
 
             const created = await findNewAccount(before);
             if (created) {
@@ -309,9 +316,12 @@ export function AccountPopup() {
                 setTestResult('Boîte connectée. Fermez cette fenêtre pour la voir apparaître.');
                 return;
             }
-            throw new Error('La fenêtre de connexion s’est fermée avant la fin.');
+            throw new MailRefusal({
+                message: 'La fenêtre de connexion s’est fermée avant la fin.',
+                code: 'validation'
+            });
         } catch (e) {
-            setTestResult(e instanceof Error ? e.message : 'Échec de connexion.');
+            setError(errorNote(e, 'Échec de connexion.'));
         } finally {
             setOauthBusy(null);
         }
@@ -589,6 +599,7 @@ export function AccountPopup() {
                     )}
 
                     {testResult && <p className={styles.status}>{testResult}</p>}
+                    <ErrorNote note={error} />
                 </StepFrame>
             </div>
 

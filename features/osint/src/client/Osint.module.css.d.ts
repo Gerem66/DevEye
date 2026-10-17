@@ -1,5 +1,4 @@
 declare const styles: {
-    readonly banner: string;
     readonly card: string;
     readonly cardFoot: string;
     readonly cardHead: string;
@@ -11,7 +10,6 @@ declare const styles: {
     readonly empty: string;
     readonly emptyHint: string;
     readonly emptyTitle: string;
-    readonly errorText: string;
     readonly examples: string;
     readonly fieldRow: string;
     readonly fields: string;
@@ -38,7 +36,6 @@ declare const styles: {
     readonly raw: string;
     readonly rawToggle: string;
     readonly results: string;
-    readonly retry: string;
     readonly root: string;
     readonly score: string;
     readonly scoreHead: string;

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Dialog, humanizeError } from 'deveye-sdk-client';
+import { Dialog, ErrorNote, errorNote, type ErrorNoteInput } from 'deveye-sdk-client';
 import type { GitCommit, GitCommitCursor } from '../contracts/domain';
 
 import { api } from './api';
@@ -44,7 +44,7 @@ export function CommitListDialog({ open, repoId, onClose, onOpenCommit }: Commit
     const [commits, setCommits] = useState<GitCommit[]>([]);
     const [hasMore, setHasMore] = useState(false);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     /** La sentinelle de bas de liste : la voir, c'est charger la suite. */
     const sentinelRef = useRef<HTMLDivElement | null>(null);
 
@@ -73,7 +73,7 @@ export function CommitListDialog({ open, repoId, onClose, onOpenCommit }: Commit
                 cursor.current = last ? { committedAt: last.committedAt, id: last.id } : null;
                 setError(null);
             } catch (e) {
-                setError(humanizeError(e, 'Impossible de charger les commits.'));
+                setError(errorNote(e, 'Impossible de charger les commits.'));
                 // Une erreur ne doit pas laisser l'observateur réessayer en
                 // rafale sur le même curseur : on ferme le robinet.
                 setHasMore(false);
@@ -119,7 +119,7 @@ export function CommitListDialog({ open, repoId, onClose, onOpenCommit }: Commit
 
     return (
         <ListDialog open={open} title='Tous les commits' onClose={onClose}>
-            {error && <p className={styles.error}>{error}</p>}
+            <ErrorNote note={error} />
             <ul className={styles.gitList}>
                 {commits.map((c) => (
                     <CommitRow key={c.id} commit={c} onOpen={onOpenCommit} />

@@ -1,4 +1,6 @@
-import { api } from './api';
+import type { ErrorNoteInput } from 'deveye-sdk-client';
+
+import { api, errorNote, MailRefusal } from './api';
 
 import type { MailAccount } from '../contracts/domain';
 
@@ -9,10 +11,7 @@ import type { MailAccount } from '../contracts/domain';
  */
 
 /** Ce que le serveur a répondu, ou `null` quand seule la fermeture a parlé. */
-export interface ConsentVerdict {
-    ok: boolean;
-    error: string | null;
-}
+export type ConsentVerdict = { ok: true } | { ok: false; error: ErrorNoteInput };
 
 /** Ce que la fenêtre rapporte : le code à échanger, ou le refus du fournisseur. */
 type Relay = { code: string; state: string } | { error: string };
@@ -52,13 +51,28 @@ export async function awaitConsentWindow(popup: Window): Promise<{ verdict: Cons
         window.addEventListener('message', onMessage);
     });
     if (relayed === null) return { verdict: null };
-    if ('error' in relayed) return { verdict: { ok: false, error: relayed.error } };
+    if ('error' in relayed) {
+        // Seul `access_denied` est un refus de l'utilisateur ; les autres codes
+        // OAuth disent une application mal déclarée chez le fournisseur.
+        const code = relayed.error === 'access_denied' ? 'validation' : null;
+        return { verdict: { ok: false, error: { message: relayed.error, code } } };
+    }
     try {
         await api.send('mail.oauthFinish', relayed);
-        return { verdict: { ok: true, error: null } };
+        return { verdict: { ok: true } };
     } catch (e) {
-        return { verdict: { ok: false, error: e instanceof Error ? e.message : String(e) } };
+        // La phrase du serveur telle quelle, plus précise que la traduction de Mail.
+        const message = e instanceof Error ? e.message : String(e);
+        return { verdict: { ok: false, error: { message, code: errorNote(e, message).code } } };
     }
+}
+
+/** La fenêtre de consentement bloquée : un réglage du navigateur, que l'utilisateur seul peut changer. */
+export function popupBlocked(): MailRefusal {
+    return new MailRefusal({
+        message: 'Fenêtre bloquée par le navigateur : autorisez les popups pour DevEye.',
+        code: 'validation'
+    });
 }
 
 /** Le nom du fournisseur tel qu'il s'écrit dans un bouton. */
@@ -92,10 +106,10 @@ export async function reconnectAccount(account: MailAccount): Promise<ConsentVer
         accountId: account.id
     });
     const popup = window.open(res.authUrl, 'deveye-mail-oauth', 'width=520,height=680');
-    if (!popup) throw new Error('Fenêtre bloquée par le navigateur : autorisez les popups pour DevEye.');
+    if (!popup) throw popupBlocked();
     const { verdict } = await awaitConsentWindow(popup);
     // Un échec annoncé par le serveur s'affiche tel quel : lui seul sait ce qui
     // a manqué, et le paraphraser perdrait la seule information utile.
-    if (verdict && !verdict.ok) throw new Error(verdict.error ?? 'Échec de connexion.');
+    if (verdict && !verdict.ok) throw new MailRefusal(verdict.error);
     return verdict;
 }

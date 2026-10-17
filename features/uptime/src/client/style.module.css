@@ -106,15 +106,6 @@
     flex-wrap: wrap;
 }
 
-.error {
-    margin: 0;
-    padding: var(--space-sm) var(--space-md);
-    border-radius: var(--radius-sm);
-    background: var(--danger-bg);
-    color: var(--danger);
-    font-size: 0.875rem;
-}
-
 .empty {
     margin: 0;
     color: var(--text-muted);

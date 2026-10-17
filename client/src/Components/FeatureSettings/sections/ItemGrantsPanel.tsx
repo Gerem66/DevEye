@@ -8,7 +8,9 @@ import {
     type ItemGrantState
 } from '@deveye/types';
 
+import { errorNote } from '@/api/useResource';
 import { ws } from '@/api/ws';
+import ErrorNote, { type ErrorNoteInput } from '@/Components/ErrorNote';
 import SegmentedControl from '@/Components/SegmentedControl';
 import { useResourceVersion } from '@/stores/invalidation';
 
@@ -51,7 +53,7 @@ export default function ItemGrantsPanel({ feature, itemId, workspaceId }: Props)
     const version = useResourceVersion('workspace.roleList');
     const [state, setState] = useState<ItemGrantState | null>(null);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     const reload = useCallback(async () => {
         const res = await ws.send('share.grantList', { feature, itemId, workspaceId });
@@ -60,7 +62,7 @@ export default function ItemGrantsPanel({ feature, itemId, workspaceId }: Props)
     }, [feature, itemId, workspaceId]);
 
     useEffect(() => {
-        void reload().catch(() => setError('Chargement impossible.'));
+        void reload().catch((e: unknown) => setError(errorNote(e, 'Chargement impossible.')));
     }, [reload, version]);
 
     /** Un volet à la fois : l'autre reste tel quel côté serveur. */
@@ -70,9 +72,7 @@ export default function ItemGrantsPanel({ feature, itemId, workspaceId }: Props)
         void ws
             .send('share.grantSet', { feature, itemId, workspaceId, roleId, ...patch })
             .then(setState)
-            .catch(() =>
-                setError('Modification impossible. Régler les permissions de cet espace vous est peut-être fermé.')
-            )
+            .catch((e: unknown) => setError(errorNote(e, 'Modification impossible.')))
             .finally(() => setBusy(false));
     };
 
@@ -88,7 +88,7 @@ export default function ItemGrantsPanel({ feature, itemId, workspaceId }: Props)
         send(role.roleId, { extraOverrides: next });
     };
 
-    if (error && !state) return <p className={styles.notice}>{error}</p>;
+    if (error && !state) return <ErrorNote note={error} />;
     if (!state) return <p className={styles.sectionHint}>Chargement…</p>;
 
     const label = featureDescriptor(feature).label;
@@ -218,7 +218,7 @@ export default function ItemGrantsPanel({ feature, itemId, workspaceId }: Props)
                 );
             })}
 
-            {error && <p className={styles.notice}>{error}</p>}
+            <ErrorNote note={error} />
         </div>
     );
 }

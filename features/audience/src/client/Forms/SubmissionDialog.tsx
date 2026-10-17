@@ -5,8 +5,10 @@ import {
     copyText,
     Dialog,
     DialogCancelButton,
-    humanizeError,
-    invalidate
+    ErrorNote,
+    errorNote,
+    invalidate,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { AudienceSubmission } from '../../contracts/domain';
 
@@ -32,7 +34,7 @@ interface SubmissionDialogProps {
  */
 export function SubmissionDialog({ submission, canWrite, onClose, onRemoved }: SubmissionDialogProps) {
     const [confirm, setConfirm] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [copied, setCopied] = useState(false);
 
     if (!submission) return null;
@@ -53,7 +55,7 @@ export function SubmissionDialog({ submission, canWrite, onClose, onRemoved }: S
             onRemoved(submission.id);
             onClose();
         } catch (e) {
-            setError(humanizeError(e, 'Suppression impossible.'));
+            setError(errorNote(e, 'Suppression impossible.'));
         } finally {
             setConfirm(false);
         }
@@ -82,7 +84,7 @@ export function SubmissionDialog({ submission, canWrite, onClose, onRemoved }: S
                     </>
                 }
             >
-                {error && <p className={styles.error}>{error}</p>}
+                <ErrorNote note={error} />
 
                 {submission.path && (
                     <p className={styles.rawMeta}>

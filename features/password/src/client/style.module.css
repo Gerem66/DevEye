@@ -10,6 +10,11 @@
     margin-bottom: var(--space-lg);
 }
 
+/* Les blocs de la vue s'espacent par leurs marges : le bandeau d'un échec aussi. */
+.container > [role='alert'] {
+    margin-bottom: var(--space-md);
+}
+
 .header {
     display: flex;
     justify-content: space-between;
@@ -37,16 +42,6 @@
 
 .searchBar {
     max-width: 420px;
-    margin-bottom: var(--space-md);
-}
-
-.errorBanner {
-    background: var(--danger-bg);
-    border: 1px solid var(--danger);
-    color: var(--danger);
-    font-size: 0.85rem;
-    padding: var(--space-sm) var(--space-md);
-    border-radius: var(--radius-sm);
     margin-bottom: var(--space-md);
 }
 

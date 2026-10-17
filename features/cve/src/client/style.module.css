@@ -205,38 +205,6 @@
     color: var(--text-muted);
 }
 
-/* Le bandeau d'échec : ce qui s'est passé, et le code quand la phrase seule ne
-   permettrait pas de le rapporter. */
-.error {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-    margin: 0;
-    padding: var(--space-sm) var(--space-md);
-    border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
-    border-radius: var(--radius-md);
-    background: var(--danger-bg);
-    color: var(--danger);
-    font-size: 0.85rem;
-}
-
-.errorIcon {
-    width: 16px;
-    height: 16px;
-    flex-shrink: 0;
-    background-color: currentColor;
-}
-
-.errorCode {
-    flex-shrink: 0;
-    margin-left: auto;
-    padding: 1px 6px;
-    border-radius: var(--radius-sm);
-    background: color-mix(in srgb, var(--danger) 18%, transparent);
-    font-family: var(--font-mono, monospace);
-    font-size: 0.72rem;
-}
-
 /* Pas de gouttière ici : une `gap` appartient au parent et ne s'anime pas avec
    l'enfant. En fin de fermeture, le panneau atteignait zéro puis se démontait,
    et la liste s'élargissait d'un coup de toute la gouttière. L'écart vit donc

@@ -2,6 +2,7 @@ import { useCallback, useState, type ReactNode } from 'react';
 import {
     Button,
     ErrorNote,
+    errorNote,
     FeatureSettingsButton,
     openFeature,
     SegmentedControl,
@@ -18,7 +19,7 @@ import FlowChart from './Charts/FlowChart';
 import TransactionRow, { useClearedToggle } from './TransactionRow';
 import { api, refreshFinance } from './api';
 import { RANGES, formatDate, formatMoney, formatMonth, formatRelativeDay, formatSigned } from './format';
-import { accountName, activeAccounts, errorNote, flowOf, signOf } from './shared';
+import { accountName, activeAccounts, flowOf, signOf } from './shared';
 import styles from './style.module.css';
 import type { FinanceBase } from './shared';
 
@@ -108,11 +109,7 @@ export function Home(props: HomeProps) {
         return (
             <div className={styles.home}>
                 {header}
-                {loading ? (
-                    <p className={styles.placeholder}>Chargement…</p>
-                ) : (
-                    <ErrorNote note={{ message: error ?? 'Chargement impossible.', code: null }} />
-                )}
+                {loading ? <p className={styles.placeholder}>Chargement…</p> : <ErrorNote note={error} />}
             </div>
         );
     }

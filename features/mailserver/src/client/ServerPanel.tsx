@@ -1,4 +1,4 @@
-import { StatusBadge, settingsStyles as shell, useResource } from 'deveye-sdk-client';
+import { ErrorNote, StatusBadge, settingsStyles as shell, useResource } from 'deveye-sdk-client';
 
 import type { ListenerState } from '../contracts/domain';
 import { api } from './api';
@@ -19,7 +19,7 @@ export default function ServerPanel() {
         'L’état du serveur n’a pas pu être lu.'
     );
 
-    if (error) return <p className={shell.errorText}>{error}</p>;
+    if (error) return <ErrorNote note={error} />;
     if (!data) return <p className={shell.sectionHint}>Chargement…</p>;
 
     if (!data.configured) {

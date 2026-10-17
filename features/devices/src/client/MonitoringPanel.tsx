@@ -3,12 +3,15 @@ import {
     acquireMetrics,
     Button,
     Dialog,
+    errorNote,
+    ErrorNote,
     FeatureSettingsButton,
     onServerEvent,
     openInfo,
     PlanPausedBadge,
     StickyHeader,
-    useWorkspacePermissions
+    useWorkspacePermissions,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import {
     DEVICE_PRESENCE_EVENT,
@@ -69,6 +72,13 @@ import {
 import styles from './style.module.css';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+const READ_FAILED =
+    'Certaines données n’ont pas pu être chargées. Les cartes vides ne signifient pas forcément une absence de relevés.';
+/** Toutes les lectures ratées disent la même phrase ; le code de la dernière décide du signalement. */
+function readFailure(e: unknown): ErrorNoteInput {
+    return { message: READ_FAILED, code: errorNote(e, READ_FAILED).code };
+}
 /** Graphs shown before "Afficher plus" (≈ 2 rows at 3 columns on a wide panel). */
 const COLLAPSED_GRAPHS = 6;
 
@@ -292,12 +302,12 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     // hero come only from that query, everything else is seeded by the push.
     const [metricsReady, setMetricsReady] = useState(false);
     /**
-     * Une lecture de supervision a échoué. Un seul drapeau : la panne est la
+     * Une lecture de supervision a échoué. Un seul bandeau : la panne est la
      * même pour toutes les lectures (la socket), et il se lève dès que l'une
      * d'elles repasse. Sans lui, un échec réseau ressemble à une machine sans
      * données.
      */
-    const [readError, setReadError] = useState(false);
+    const [readError, setReadError] = useState<ErrorNoteInput | null>(null);
     /**
      * La fenêtre contenait plus d'instants que le serveur n'en rend : seuls les
      * plus récents sont là, sinon la frise s'arrête au milieu sans raison apparente.
@@ -329,7 +339,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     // bleeds into the new selection.
     useEffect(() => {
         setMetricsReady(false);
-        setReadError(false);
+        setReadError(null);
         setTimelineTruncated(false);
         setOverride({});
         setPoints([]);
@@ -354,7 +364,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             .then((res) => {
                 if (idRef.current === id) setDataDays(res.days);
             })
-            .catch(() => setReadError(true));
+            .catch((e: unknown) => setReadError(readFailure(e)));
     }, []);
 
     // Which days have data (for the calendar + day arrows).
@@ -369,7 +379,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 if (idRef.current === id)
                     setStorage({ snapshots: res.snapshots, processes: res.processes, bytes: res.bytes });
             })
-            .catch(() => setReadError(true));
+            .catch((e: unknown) => setReadError(readFailure(e)));
     }, [deviceId]);
 
     // Live subscription through the shared ref-counted store, so it coexists
@@ -395,8 +405,8 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 if (!cancelled && idRef.current === id)
                     setPresence({ onlineAtStart: res.onlineAtStart, events: res.events });
             })
-            .catch(() => {
-                if (!cancelled) setReadError(true);
+            .catch((e: unknown) => {
+                if (!cancelled) setReadError(readFailure(e));
             });
         api.send('devices.snapshots', { deviceId: id, from: start, to: end })
             .then((res) => {
@@ -406,8 +416,8 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 setProcTimes(res.withProcesses);
                 setTimelineTruncated(res.truncated);
             })
-            .catch(() => {
-                if (!cancelled) setReadError(true);
+            .catch((e: unknown) => {
+                if (!cancelled) setReadError(readFailure(e));
             });
         return () => {
             cancelled = true;
@@ -427,10 +437,10 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             .then((res) => {
                 if (cancelled || idRef.current !== id) return;
                 setPoints(res.points);
-                setReadError(false);
+                setReadError(null);
             })
-            .catch(() => {
-                if (!cancelled) setReadError(true);
+            .catch((e: unknown) => {
+                if (!cancelled) setReadError(readFailure(e));
             })
             // Success or failure: a transient error shows "no data" rather than
             // an endless loader.
@@ -444,8 +454,8 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 .then((res) => {
                     if (!cancelled && idRef.current === id) setHistProc(res.sample);
                 })
-                .catch(() => {
-                    if (!cancelled) setReadError(true);
+                .catch((e: unknown) => {
+                    if (!cancelled) setReadError(readFailure(e));
                 });
         }
         return () => {
@@ -563,7 +573,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                     setTimelineTruncated(res.truncated);
                 }
             })
-            .catch(() => setReadError(true));
+            .catch((e: unknown) => setReadError(readFailure(e)));
     }, [windowRange]);
 
     const refreshStorage = useCallback(() => {
@@ -573,7 +583,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 if (idRef.current === id)
                     setStorage({ snapshots: res.snapshots, processes: res.processes, bytes: res.bytes });
             })
-            .catch(() => setReadError(true));
+            .catch((e: unknown) => setReadError(readFailure(e)));
     }, []);
 
     const deleteSnapshots = useCallback(async () => {
@@ -626,7 +636,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         setRefreshing(true);
         agent
             .send('agent.collect', { deviceId: id })
-            .catch(() => setReadError(true))
+            .catch((e: unknown) => setReadError(readFailure(e)))
             .finally(() => setTimeout(() => setRefreshing(false), 1200));
     }, [refreshing]);
 
@@ -1191,13 +1201,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 )
             )}
 
-            {readError && (
-                <div className={styles.offlineBanner}>
-                    <span className='icon icon-x-circle' />
-                    Certaines données n’ont pas pu être chargées. Les cartes vides ne signifient pas forcément une
-                    absence de relevés.
-                </div>
-            )}
+            <ErrorNote note={readError} />
 
             {timelineTruncated && (
                 <div className={styles.offlineBanner}>
@@ -1702,7 +1706,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
             </Dialog>
 
             <DeviceDialogs actions={actions} device={selected} />
-            {actions.actionError && <p className={styles.waitingMsg}>{actions.actionError}</p>}
+            <ErrorNote note={actions.actionError} />
         </div>
     );
 }

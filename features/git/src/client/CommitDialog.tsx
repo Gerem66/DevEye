@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, copyText, Dialog, humanizeError, safeHref } from 'deveye-sdk-client';
+import { Button, copyText, Dialog, ErrorNote, errorNote, safeHref, type ErrorNoteInput } from 'deveye-sdk-client';
 import type { GitCommitDetail, GitDiffFile } from '../contracts/domain';
 
 import { api } from './api';
@@ -36,7 +36,7 @@ const STATUS_LABELS: Record<GitDiffFile['status'], string> = {
 export function CommitDialog({ open, repoId, sha, onClose }: CommitDialogProps) {
     const [detail, setDetail] = useState<GitCommitDetail | null>(null);
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [expanded, setExpanded] = useState<Set<string>>(new Set());
     /**
      * Les fichiers déjà ouverts au moins une fois : un diff ne se monte qu'au
@@ -66,7 +66,7 @@ export function CommitDialog({ open, repoId, sha, onClose }: CommitDialogProps) 
                 setExpanded(first);
                 setMounted(first);
             } catch (e) {
-                if (!cancelled) setError(humanizeError(e, 'Le détail du commit n’a pas pu être lu.'));
+                if (!cancelled) setError(errorNote(e, 'Le détail du commit n’a pas pu être lu.'));
             } finally {
                 if (!cancelled) setLoading(false);
             }
@@ -113,7 +113,7 @@ export function CommitDialog({ open, repoId, sha, onClose }: CommitDialogProps) 
         >
             <div className={styles.form}>
                 {loading && <p className={styles.empty}>Lecture du diff chez GitHub…</p>}
-                {error && <p className={styles.error}>{error}</p>}
+                <ErrorNote note={error} />
 
                 {detail && (
                     <>

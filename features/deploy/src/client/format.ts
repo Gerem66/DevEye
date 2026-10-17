@@ -42,17 +42,6 @@ function formatSpan(seconds: number): string {
 }
 
 /**
- * Le message d'un échec côté fournisseur, tel quel. `humanizeError` ne rend le
- * message du serveur que pour `validation` ou `conflict` ; ici l'échec vient du
- * fournisseur (`internal`), et son message est la seule piste. Une réponse
- * d'échec se reconnaît à son `code` ; une erreur de code garde le repli.
- */
-export function providerError(e: unknown, fallback: string): string {
-    if (e instanceof Error && 'code' in e && e.message) return e.message;
-    return fallback;
-}
-
-/**
  * Budget client pour un aller-retour chez le fournisseur, au-delà du défaut de
  * la socket (15 s) : le serveur borne chaque appel à 30 s, et le client doit
  * laisser ce délai s'écouler avant de conclure à une panne.

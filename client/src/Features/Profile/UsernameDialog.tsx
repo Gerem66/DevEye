@@ -1,11 +1,12 @@
 import { useState } from 'react';
 
-import { humanizeError } from '@/api/useResource';
-import { ws } from '@/api/ws';
+import { errorNote } from '@/api/useResource';
+import { ws, WsError } from '@/api/ws';
 import { useAuth } from '@/auth/AuthProvider';
 import { Dialog } from '@/Components/Dialog';
 import { TextInput } from '@/Components';
 import Button from '@/Components/Button';
+import ErrorNote, { type ErrorNoteInput } from '@/Components/ErrorNote';
 
 import styles from './style.module.css';
 
@@ -25,7 +26,7 @@ export function UsernameDialog({ open, onClose }: UsernameDialogProps) {
     const { user, updateUser } = useAuth();
     const current = user?.username ?? '';
     const [next, setNext] = useState(current);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [loading, setLoading] = useState(false);
     const [done, setDone] = useState<string | null>(null);
 
@@ -41,15 +42,15 @@ export function UsernameDialog({ open, onClose }: UsernameDialogProps) {
         if (loading) return;
         const username = next.trim();
         if (!username) {
-            setError('Le pseudo est requis.');
+            setError({ message: 'Le pseudo est requis.', code: 'validation' });
             return;
         }
         if (username === current) {
-            setError('Ce pseudo est déjà le vôtre.');
+            setError({ message: 'Ce pseudo est déjà le vôtre.', code: 'validation' });
             return;
         }
         if (username.length < MIN_LENGTH) {
-            setError(RULE);
+            setError({ message: RULE, code: 'validation' });
             return;
         }
 
@@ -62,7 +63,11 @@ export function UsernameDialog({ open, onClose }: UsernameDialogProps) {
         } catch (err) {
             // Un pseudo déjà pris est refusé par le serveur, qui porte sa
             // phrase ; le rejet local par le schéma n'en a pas, d'où la règle.
-            setError(humanizeError(err, RULE));
+            setError(
+                err instanceof WsError && err.code === 'protocol'
+                    ? { message: RULE, code: 'validation' }
+                    : errorNote(err, 'Le pseudo n’a pas pu être changé.')
+            );
         } finally {
             setLoading(false);
         }
@@ -103,7 +108,7 @@ export function UsernameDialog({ open, onClose }: UsernameDialogProps) {
                         />
                         <span className={styles.fieldHint}>C’est aussi votre identifiant de connexion.</span>
                     </label>
-                    {error && <p className={styles.formError}>{error}</p>}
+                    <ErrorNote note={error} />
                 </div>
             )}
         </Dialog>

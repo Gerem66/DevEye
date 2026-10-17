@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import type { ErrorNoteInput } from 'deveye-sdk-client';
+import { errorNote, type ErrorNoteInput } from 'deveye-sdk-client';
 import type { FinanceTransaction } from '../contracts/domain';
 
 import { api, refreshFinance } from './api';
 import { formatMoney } from './format';
-import { accountName, categoryOf, colorVar, errorNote, flowOf, signOf } from './shared';
+import { accountName, categoryOf, colorVar, flowOf, signOf } from './shared';
 import styles from './style.module.css';
 import type { FinanceBase } from './shared';
 

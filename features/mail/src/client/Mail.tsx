@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     Button,
+    ErrorNote,
     FeatureSettingsButton,
     invalidate,
     onResourceChange,
@@ -12,7 +13,8 @@ import {
     useLiveItemTarget,
     useLiveSegment,
     useSubView,
-    withSecrecy
+    withSecrecy,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { FeatureViewProps } from '@deveye/types/sdk/client';
 
@@ -27,7 +29,7 @@ import MessageList from './MessageList';
 import MessagePopup from './MessagePopup';
 import { describeAccountStatus } from './accountStatus';
 import { canReconnect, providerLabel, reconnectAccount } from './oauthWindow';
-import { api, humanizeError, withSettingsDefaults } from './api';
+import { api, errorNote, withSettingsDefaults } from './api';
 import styles from './style.module.css';
 
 import { MAIL_MESSAGE_PAGE_SIZE, MAIL_SYNC_PROGRESS_EVENT, mailSyncProgressSchema } from '../contracts/domain';
@@ -162,7 +164,7 @@ export default function Mail(_props: FeatureViewProps) {
     const [selectedMessage, setSelectedMessage] = useState<MailMessage | null>(null);
     const [messageLoading, setMessageLoading] = useState(false);
 
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [reconnecting, setReconnecting] = useState(false);
 
     /**
@@ -183,9 +185,10 @@ export default function Mail(_props: FeatureViewProps) {
             // Son propre échec seulement : cette relecture suit chaque
             // `live.changed` et chaque échec d'une commande, et effacerait le
             // bandeau d'un geste à peine affiché.
-            setError((current) => (current === ACCOUNTS_LOAD_ERROR ? null : current));
-        } catch {
-            setError(ACCOUNTS_LOAD_ERROR);
+            setError((current) => (current?.message === ACCOUNTS_LOAD_ERROR ? null : current));
+        } catch (e) {
+            // Toujours cette phrase : c'est elle que le succès suivant reconnaît.
+            setError({ message: ACCOUNTS_LOAD_ERROR, code: errorNote(e, ACCOUNTS_LOAD_ERROR).code });
         } finally {
             setAccountsLoading(false);
         }
@@ -296,7 +299,7 @@ export default function Mail(_props: FeatureViewProps) {
         } catch (e) {
             setFolders([]);
             setSelectedFolderId(null);
-            setError(humanizeError(e, 'Chargement des dossiers impossible.'));
+            setError(errorNote(e, 'Chargement des dossiers impossible.'));
             // Le serveur vient d'inscrire l'échec sur le compte : relire la
             // liste fait apparaître la pastille et le bandeau sans que
             // l'utilisateur ait à redemander quoi que ce soit.
@@ -398,7 +401,7 @@ export default function Mail(_props: FeatureViewProps) {
         } catch (e) {
             if (stale()) return true;
             setLoadFailed(true);
-            setError(humanizeError(e, 'Chargement des messages impossible.'));
+            setError(errorNote(e, 'Chargement des messages impossible.'));
             invalidate('mail.accountList');
             return false;
         } finally {
@@ -502,7 +505,7 @@ export default function Mail(_props: FeatureViewProps) {
                     setSearchResults([]);
                     setSearchTruncated(false);
                     setSearchRemote(false);
-                    setError(humanizeError(e, 'Recherche impossible.'));
+                    setError(errorNote(e, 'Recherche impossible.'));
                 } finally {
                     if (!cancelled) setSearching(false);
                 }
@@ -547,7 +550,7 @@ export default function Mail(_props: FeatureViewProps) {
             await refreshMessageHead();
             await refreshFolders();
         } catch (e) {
-            if (folderRunRef.current === run) setError(humanizeError(e, 'Relève impossible.'));
+            if (folderRunRef.current === run) setError(errorNote(e, 'Relève impossible.'));
         } finally {
             if (syncRunRef.current === run) {
                 syncRunRef.current = null;
@@ -629,7 +632,7 @@ export default function Mail(_props: FeatureViewProps) {
                 // du dossier se relit ici.
                 void refreshFolders();
             } catch (e) {
-                setError(humanizeError(e, 'Ouverture du message impossible.'));
+                setError(errorNote(e, 'Ouverture du message impossible.'));
                 invalidate('mail.accountList');
             } finally {
                 setMessageLoading(false);
@@ -673,7 +676,7 @@ export default function Mail(_props: FeatureViewProps) {
             await syncNow();
             await reloadAccounts();
         } catch (e) {
-            setError(humanizeError(e, 'Reconnexion impossible.'));
+            setError(errorNote(e, 'Reconnexion impossible.'));
         } finally {
             setReconnecting(false);
         }
@@ -691,8 +694,8 @@ export default function Mail(_props: FeatureViewProps) {
                     if (selectedAccountIdRef.current === account.id) setSelectedAccountId(null);
                 }
                 await reloadAfterAccountChange();
-            } catch {
-                setError('Action impossible.');
+            } catch (e) {
+                setError(errorNote(e, 'Action impossible.'));
             }
         },
         [reloadAfterAccountChange]
@@ -704,8 +707,8 @@ export default function Mail(_props: FeatureViewProps) {
             try {
                 await run();
                 await reloadAccounts();
-            } catch {
-                setError('Action impossible.');
+            } catch (e) {
+                setError(errorNote(e, 'Action impossible.'));
             } finally {
                 setBusyAccounts((prev) => {
                     const next = new Set(prev);
@@ -723,8 +726,8 @@ export default function Mail(_props: FeatureViewProps) {
                 const byId = new Map(prev.map((a) => [a.id, a]));
                 return ids.flatMap((id) => byId.get(id) ?? []);
             });
-            api.send('mail.accountReorder', { ids }).catch(() => {
-                setError('Réorganisation impossible.');
+            api.send('mail.accountReorder', { ids }).catch((e: unknown) => {
+                setError(errorNote(e, 'Réorganisation impossible.'));
                 void reloadAccounts();
             });
         },
@@ -756,7 +759,7 @@ export default function Mail(_props: FeatureViewProps) {
                 );
                 if (patch.seen !== undefined) void refreshFolders();
             } catch (e) {
-                setError(humanizeError(e, 'Action impossible.'));
+                setError(errorNote(e, 'Action impossible.'));
             }
         },
         [patchMessage, refreshFolders]
@@ -798,7 +801,7 @@ export default function Mail(_props: FeatureViewProps) {
                 if (openMessageIdRef.current === message.id) closeMessage();
                 void refreshFolders();
             } catch (e) {
-                setError(humanizeError(e, 'Suppression impossible.'));
+                setError(errorNote(e, 'Suppression impossible.'));
             }
         },
         [dropMessage, refreshFolders]
@@ -827,7 +830,7 @@ export default function Mail(_props: FeatureViewProps) {
             );
             window.open(res.downloadUrl, '_blank', 'noopener');
         } catch (e) {
-            setError(humanizeError(e, 'Téléchargement impossible.'));
+            setError(errorNote(e, 'Téléchargement impossible.'));
         }
     }
 
@@ -852,7 +855,7 @@ export default function Mail(_props: FeatureViewProps) {
             await api.send('mail.setSettings', { ...current, trustedImageDomains: merged });
             if (selectedMessage) void openMessage(selectedMessage.id);
         } catch (e) {
-            setError(humanizeError(e, 'Action impossible.'));
+            setError(errorNote(e, 'Action impossible.'));
         }
     }
 
@@ -996,7 +999,7 @@ export default function Mail(_props: FeatureViewProps) {
                 </div>
             )}
 
-            {error && <p className={styles.error}>{error}</p>}
+            <ErrorNote note={error} />
 
             <PlanPausedNotice count={accounts.filter((a) => a.planPaused).length} one='boîte mail' many='boîtes mail' />
 

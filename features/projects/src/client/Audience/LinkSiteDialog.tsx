@@ -1,7 +1,15 @@
 import { useEffect, useState } from 'react';
 import { AUDIENCE_CLIENT_PROVIDER } from '@deveye/types/sdk';
 import type { AudienceClientProvider, AudienceLinkedCandidate } from '@deveye/types/sdk/client';
-import { Button, Dialog, humanizeError, moduleClientProvider, SearchSelect } from 'deveye-sdk-client';
+import {
+    Button,
+    Dialog,
+    ErrorNote,
+    errorNote,
+    moduleClientProvider,
+    SearchSelect,
+    type ErrorNoteInput
+} from 'deveye-sdk-client';
 import { api } from '../api';
 import styles from '../style.module.css';
 
@@ -26,7 +34,7 @@ export function LinkSiteDialog({ open, projectId, linkedIds, onClose, onSaved }:
     const [sites, setSites] = useState<readonly AudienceLinkedCandidate[]>([]);
     const [picked, setPicked] = useState('');
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     /** Le dialogue de création de la feature, ouvert par-dessus celui-ci. */
     const [createOpen, setCreateOpen] = useState(false);
 
@@ -39,7 +47,7 @@ export function LinkSiteDialog({ open, projectId, linkedIds, onClose, onSaved }:
             try {
                 setSites(await provider.listSites());
             } catch (e) {
-                setError(humanizeError(e, 'Impossible de charger les sites de l’espace.'));
+                setError(errorNote(e, 'Impossible de charger les sites de l’espace.'));
             }
         })();
     }, [open, provider]);
@@ -53,7 +61,7 @@ export function LinkSiteDialog({ open, projectId, linkedIds, onClose, onSaved }:
             await api.send('projects.audienceLink', { projectId, siteId });
             onSaved();
         } catch (e) {
-            setError(humanizeError(e, 'La liaison a échoué.'));
+            setError(errorNote(e, 'La liaison a échoué.'));
         } finally {
             setBusy(false);
         }
@@ -125,7 +133,7 @@ export function LinkSiteDialog({ open, projectId, linkedIds, onClose, onSaved }:
                         </>
                     )}
 
-                    {error && <p className={styles.error}>{error}</p>}
+                    <ErrorNote note={error} />
                 </div>
             </Dialog>
 

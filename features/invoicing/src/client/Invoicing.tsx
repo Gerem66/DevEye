@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { useActiveWorkspace, useLiveSegment, useResource, useSubView } from 'deveye-sdk-client';
+import { ErrorNote, useActiveWorkspace, useLiveSegment, useResource, useSubView } from 'deveye-sdk-client';
 
 import { docIdOfSegment, docSegment } from '../contracts/domain';
 import ClientDialog from './ClientDialog';
@@ -115,7 +115,7 @@ export default function Invoicing() {
     if (data === null) {
         return (
             <div className={styles.feature}>
-                <p className={styles.error}>{error ?? 'Chargement impossible.'}</p>
+                <ErrorNote note={error} />
             </div>
         );
     }

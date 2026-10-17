@@ -1,9 +1,11 @@
 import { useState } from 'react';
 
+import { errorNote } from '@/api/useResource';
 import { ws, WsError } from '@/api/ws';
 import { Dialog } from '@/Components/Dialog';
 import { Checkbox, TextInput } from '@/Components';
 import Button from '@/Components/Button';
+import ErrorNote, { type ErrorNoteInput } from '@/Components/ErrorNote';
 import { copyText } from '@/copyText';
 import { setUnlocked } from '@/stores/secrecy';
 
@@ -20,13 +22,14 @@ interface SecurityDialogProps {
 
 type Mode = 'enable' | 'disable' | 'showRecovery';
 
-function humanize(e: unknown, fallback: string): string {
-    if (e instanceof WsError) {
-        if (e.code === 'auth_invalid') return 'Mot de passe incorrect.';
-        if (e.code === 'conflict') return e.message;
-    }
-    return fallback;
+function humanize(e: unknown, fallback: string): ErrorNoteInput {
+    if (e instanceof WsError && e.code === 'auth_invalid') return { message: 'Mot de passe incorrect.', code: e.code };
+    return errorNote(e, fallback);
 }
+
+/** Ce qui tient au mot de passe saisi se dit sous son champ. */
+const aboutPassword = (error: ErrorNoteInput | null): boolean =>
+    error?.code === 'auth_invalid' || error?.code === 'validation';
 
 /**
  * Manage password-based encryption from the profile: turn it on (optionally
@@ -37,7 +40,7 @@ export function SecurityDialog({ open, enabled, onClose, onChanged }: SecurityDi
     const [password, setPassword] = useState('');
     const [wantRecovery, setWantRecovery] = useState(true);
     const [recoveryCode, setRecoveryCode] = useState<string | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [loading, setLoading] = useState(false);
 
     const mode: Mode = recoveryCode ? 'showRecovery' : enabled ? 'disable' : 'enable';
@@ -57,7 +60,7 @@ export function SecurityDialog({ open, enabled, onClose, onChanged }: SecurityDi
 
     const onEnable = async () => {
         if (loading) return;
-        if (!password) return setError('Mot de passe requis.');
+        if (!password) return setError({ message: 'Mot de passe requis.', code: 'validation' });
         setLoading(true);
         setError(null);
         try {
@@ -79,7 +82,7 @@ export function SecurityDialog({ open, enabled, onClose, onChanged }: SecurityDi
 
     const onDisable = async () => {
         if (loading) return;
-        if (!password) return setError('Mot de passe requis.');
+        if (!password) return setError({ message: 'Mot de passe requis.', code: 'validation' });
         setLoading(true);
         setError(null);
         try {
@@ -141,9 +144,10 @@ export function SecurityDialog({ open, enabled, onClose, onChanged }: SecurityDi
                     autoComplete='current-password'
                     placeholder='Mot de passe'
                     value={password}
-                    error={error ?? undefined}
+                    error={aboutPassword(error) ? error?.message : undefined}
                     onChange={(e) => setPassword(e.target.value)}
                 />
+                {!aboutPassword(error) && <ErrorNote note={error} />}
             </Dialog>
         );
     }
@@ -181,7 +185,7 @@ export function SecurityDialog({ open, enabled, onClose, onChanged }: SecurityDi
                     Générer un code de récupération (si vous oubliez votre mot de passe, vos données seront
                     irrécupérables sans ce code)
                 </Checkbox>
-                {error && <p className={styles.formError}>{error}</p>}
+                <ErrorNote note={error} />
             </div>
         </Dialog>
     );

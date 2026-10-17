@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { itemNounForms, type ItemShareState, type ShareBlocker } from '@deveye/types';
 
-import { humanizeError } from '@/api/useResource';
+import { errorNote } from '@/api/useResource';
 import { ws, WsError } from '@/api/ws';
 import Button from '@/Components/Button';
 import { ConfirmDialog, type ConfirmRequest } from '@/Components/ConfirmDialog';
 import { Dialog } from '@/Components/Dialog';
+import ErrorNote, { type ErrorNoteInput } from '@/Components/ErrorNote';
 import { ProgressDialog } from '@/Components/ProgressDialog';
 import SearchSelect from '@/Components/SearchSelect';
 import Switch from '@/Components/Switch';
@@ -47,18 +48,18 @@ const MOVE_TIMEOUT_MS = 120_000;
 /**
  * Le refus du serveur, tel quel : ses phrases (« déjà suivi dans cet espace »,
  * « une ligne illisible ») disent la cause, qu'un libellé générique cacherait.
- * Une panne sans phrase renvoie au journal du serveur, seul à la connaître ; un
- * délai dépassé prévient que le geste se poursuit peut-être là-bas.
+ * Un délai dépassé prévient que le geste se poursuit peut-être là-bas.
  */
-function explain(e: unknown, fallback: string): string {
-    if (!(e instanceof WsError)) return fallback;
+function explain(e: unknown, fallback: string): ErrorNoteInput {
+    if (!(e instanceof WsError)) return errorNote(e, fallback);
     if (e.code === 'timeout') {
-        return `${fallback} Le serveur n’a pas répondu à temps : le geste se poursuit peut-être, vérifiez avant de réessayer.`;
+        return {
+            message: `${fallback} Le serveur n’a pas répondu à temps : le geste se poursuit peut-être, vérifiez avant de réessayer.`,
+            code: e.code
+        };
     }
-    if (e.code === 'internal') {
-        return e.message === 'Internal server error' ? `${fallback} Le journal du serveur dit pourquoi.` : e.message;
-    }
-    return humanizeError(e, fallback);
+    if (e.code === 'internal' && e.message !== 'Internal server error') return { message: e.message, code: e.code };
+    return errorNote(e, fallback);
 }
 
 interface Props {
@@ -71,7 +72,7 @@ export default function SharingSection({ scope, onGone }: Props) {
     const feature = scope.feature;
     const [state, setState] = useState<ItemShareState | null>(null);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     /** L'espace dont on règle les permissions ; `null` = aucun dialogue ouvert. */
     const [grantsFor, setGrantsFor] = useState<{ workspaceId: number; workspaceName: string } | null>(null);
     /** L'espace visé par un déplacement, tant qu'il n'est pas confirmé. */
@@ -89,7 +90,7 @@ export default function SharingSection({ scope, onGone }: Props) {
     }, [feature, itemId]);
 
     useEffect(() => {
-        void reload().catch(() => setError('Chargement impossible.'));
+        void reload().catch((e: unknown) => setError(explain(e, 'Chargement impossible.')));
     }, [reload]);
 
     const toggle = (workspaceId: number, shared: boolean): void => {
@@ -118,7 +119,7 @@ export default function SharingSection({ scope, onGone }: Props) {
             .send('share.movePreview', { feature, itemId, workspaceId })
             .then((preview) => {
                 if (preview.blockers.length > 0) {
-                    setError(preview.blockers[0]);
+                    setError({ message: preview.blockers[0], code: 'conflict' });
                     return;
                 }
                 const lost = [...preview.drops, ...preview.dependencies.map((d) => `${d.label} : ${d.reason}`)];
@@ -180,7 +181,7 @@ export default function SharingSection({ scope, onGone }: Props) {
             });
     };
 
-    if (!state) return <p className={styles.sectionHint}>Chargement…</p>;
+    if (!state) return error ? <ErrorNote note={error} /> : <p className={styles.sectionHint}>Chargement…</p>;
 
     // Sans le droit de régler le partage, on dit seulement où l'élément est
     // visible et pourquoi ça ne se règle pas d'ici.
@@ -316,7 +317,7 @@ export default function SharingSection({ scope, onGone }: Props) {
                 </div>
             )}
 
-            {error && <p className={styles.notice}>{error}</p>}
+            <ErrorNote note={error} />
 
             {/* Copier n'est ni partager ni déplacer : l'élément reste, un double
                 naît ailleurs. Le serveur le propose (`copyable`) depuis le

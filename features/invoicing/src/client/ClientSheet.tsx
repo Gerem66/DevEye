@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
     Button,
+    ErrorNote,
+    errorNote,
     FeatureSettingsButton,
-    humanizeError,
     StatusBadge,
     StickyHeader,
-    useResource
+    useResource,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 
 import type { InvoicingClient } from '../contracts/domain';
@@ -35,16 +37,16 @@ export interface ClientSheetProps {
 
 export default function ClientSheet({ id, currency, backLabel, onBack, onGone, onOpenDocument }: ClientSheetProps) {
     const [client, setClient] = useState<InvoicingClient | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     const load = useCallback(async () => {
         try {
             const res = await api.send('invoicing.clientList', { archived: true });
             const found = res.clients.find((entry) => entry.id === id) ?? null;
-            if (found === null) setError('Ce client n’existe plus.');
+            if (found === null) setError({ message: 'Ce client n’existe plus.', code: 'not_found' });
             setClient(found);
         } catch (e) {
-            setError(humanizeError(e, 'Ce client n’a pas pu être lu.'));
+            setError(errorNote(e, 'Ce client n’a pas pu être lu.'));
         }
     }, [id]);
 
@@ -66,7 +68,7 @@ export default function ClientSheet({ id, currency, backLabel, onBack, onGone, o
             }),
         [id]
     );
-    const { data: docs } = useResource('invoicing.docList', loadDocs, 'Documents illisibles.', [id]);
+    const { data: docs, error: docsError } = useResource('invoicing.docList', loadDocs, 'Documents illisibles.', [id]);
 
     if (client === null) {
         return (
@@ -76,7 +78,7 @@ export default function ClientSheet({ id, currency, backLabel, onBack, onGone, o
                         {backLabel}
                     </Button>
                 </header>
-                <p className={error !== null ? styles.error : styles.placeholder}>{error ?? 'Chargement…'}</p>
+                {error === null ? <p className={styles.placeholder}>Chargement…</p> : <ErrorNote note={error} />}
             </div>
         );
     }
@@ -174,7 +176,11 @@ export default function ClientSheet({ id, currency, backLabel, onBack, onGone, o
                     <h3 className={styles.sectionTitle}>Documents</h3>
                 </header>
                 {docs === null ? (
-                    <p className={styles.placeholder}>Chargement…</p>
+                    docsError === null ? (
+                        <p className={styles.placeholder}>Chargement…</p>
+                    ) : (
+                        <ErrorNote note={docsError} />
+                    )
                 ) : docs.docs.length === 0 ? (
                     <p className={styles.editorEmpty}>Aucun document pour ce client.</p>
                 ) : (

@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import {
     Button,
-    humanizeError,
+    errorNote,
+    ErrorNote,
     invalidate,
     ReadOnlyNotice,
     settingsStyles as shell,
-    useResource
+    useResource,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import type { DatabaseAlert } from '../contracts/domain';
@@ -29,9 +31,9 @@ export default function DatabaseAlertsPanel({ scope, canWrite }: SettingsPanelPr
         [itemId]
     );
     const [dialog, setDialog] = useState<{ alert: DatabaseAlert | null } | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
-    if (!data) return <p className={loadError ? shell.notice : shell.empty}>{loadError ?? 'Chargement…'}</p>;
+    if (!data) return loadError ? <ErrorNote note={loadError} /> : <p className={shell.empty}>Chargement…</p>;
 
     const { database, alerts } = data;
     // Une base projetée se règle chez elle : le serveur le refuse ici.
@@ -46,7 +48,7 @@ export default function DatabaseAlertsPanel({ scope, canWrite }: SettingsPanelPr
             await api.send('database.alertRemove', { alertId });
             changed();
         } catch (e) {
-            setError(humanizeError(e, 'La suppression de l’alerte a échoué.'));
+            setError(errorNote(e, 'La suppression de l’alerte a échoué.'));
         }
     };
 
@@ -108,7 +110,7 @@ export default function DatabaseAlertsPanel({ scope, canWrite }: SettingsPanelPr
                 ))}
             </div>
 
-            {error && <p className={shell.notice}>{error}</p>}
+            <ErrorNote note={error} />
 
             {editable ? (
                 <div className={shell.sectionActions}>

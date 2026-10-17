@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Dialog, humanizeError, SearchSelect, SegmentedControl, TextInput } from 'deveye-sdk-client';
+import {
+    Button,
+    Dialog,
+    errorNote,
+    ErrorNote,
+    SearchSelect,
+    SegmentedControl,
+    TextInput,
+    type ErrorNoteInput
+} from 'deveye-sdk-client';
 import type { DatabaseExportFormat, DatabaseIdRange, DatabaseTable } from '../contracts/domain';
 
 import { api } from './api';
@@ -78,7 +87,7 @@ export function ExportDialog({ open, databaseId, tables, table, onClose }: Expor
     const [scope, setScope] = useState<string>(WHOLE);
     const [ids, setIds] = useState('');
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [done, setDone] = useState<{ rowCount: number; tableCount: number; truncated: boolean } | null>(null);
 
     const listed = useMemo(() => (tables === null ? [] : [...tables].sort(compareTables)), [tables]);
@@ -132,7 +141,7 @@ export function ExportDialog({ open, databaseId, tables, table, onClose }: Expor
 
             setDone({ rowCount: res.rowCount, tableCount: res.tableCount, truncated: res.truncated });
         } catch (e) {
-            setError(humanizeError(e, 'L’export a échoué.'));
+            setError(errorNote(e, 'L’export a échoué.'));
         } finally {
             setBusy(false);
         }
@@ -226,7 +235,7 @@ export function ExportDialog({ open, databaseId, tables, table, onClose }: Expor
                     </p>
                 )}
 
-                {error && <p className={styles.error}>{error}</p>}
+                <ErrorNote note={error} />
             </div>
         </Dialog>
     );

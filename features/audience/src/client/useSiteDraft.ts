@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { humanizeError, invalidate } from 'deveye-sdk-client';
+import { errorNote, invalidate, type ErrorNoteInput } from 'deveye-sdk-client';
 import type { SdkSettingsScope } from '@deveye/types/sdk/client';
 import {
     AUDIENCE_MAX_TRANSIT_PATHS,
@@ -85,8 +85,8 @@ export interface SitePanel {
     draft: Draft | null;
     /** `true` tant que le site n'est pas lu, ou pendant une écriture. */
     busy: boolean;
-    error: string | null;
-    setError: (message: string | null) => void;
+    error: ErrorNoteInput | null;
+    setError: (note: ErrorNoteInput | null) => void;
     set: <K extends keyof Draft>(key: K, value: Draft[K]) => void;
     /** Lève sur un refus : le bouton n'annonce « Enregistré » que sur un succès. */
     save: () => Promise<void>;
@@ -104,7 +104,7 @@ export function useSiteDraft(scope: SdkSettingsScope): SitePanel {
     const [site, setSite] = useState<AudienceSite | null>(null);
     const [draft, setDraft] = useState<Draft | null>(null);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     const reload = useCallback(async () => {
         if (itemId === null) return;
@@ -113,7 +113,7 @@ export function useSiteDraft(scope: SdkSettingsScope): SitePanel {
             setSite(res.site);
             setDraft(draftOf(res.site));
         } catch (e) {
-            setError(humanizeError(e, 'Les réglages n’ont pas pu être lus.'));
+            setError(errorNote(e, 'Les réglages n’ont pas pu être lus.'));
         }
     }, [itemId]);
 
@@ -149,7 +149,7 @@ export function useSiteDraft(scope: SdkSettingsScope): SitePanel {
                       ? `Au plus ${AUDIENCE_MAX_TRANSIT_PATHS} pages de transit.`
                       : null;
         if (problem) {
-            setError(problem);
+            setError({ message: problem, code: 'validation' });
             throw new Error(problem);
         }
 
@@ -176,7 +176,7 @@ export function useSiteDraft(scope: SdkSettingsScope): SitePanel {
             setDraft(draftOf(res.site));
             invalidate('audience.detail', 'audience.list');
         } catch (e) {
-            setError(humanizeError(e, 'Enregistrement impossible.'));
+            setError(errorNote(e, 'Enregistrement impossible.'));
             throw e;
         } finally {
             setBusy(false);

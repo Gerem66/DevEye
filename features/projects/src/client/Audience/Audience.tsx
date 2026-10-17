@@ -2,12 +2,14 @@ import { useCallback, useEffect, useState } from 'react';
 import {
     Button,
     Dialog,
-    humanizeError,
+    ErrorNote,
+    errorNote,
     invalidate,
     moduleClientProvider,
     useResourceVersion,
     useWorkspacePermissions,
-    WsError
+    WsError,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import { api } from '../api';
 import type { Project, ProjectLinkLabel } from '../../contracts/domain';
@@ -44,10 +46,12 @@ export function Audience({ project, canWrite }: AudienceProps) {
     const [candidates, setCandidates] = useState<readonly AudienceLinkedCandidate[]>([]);
     const [loaded, setLoaded] = useState(false);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [linkOpen, setLinkOpen] = useState(false);
     /** Le site qu'on s'apprête à délier ; `null` = aucune confirmation ouverte. */
     const [unlinking, setUnlinking] = useState<number | null>(null);
+    /** L'échec du déliement, dit dans la confirmation qui reste ouverte. */
+    const [unlinkError, setUnlinkError] = useState<ErrorNoteInput | null>(null);
 
     const boardVersion = useResourceVersion('projects.board');
     const listVersion = useResourceVersion('audience.list');
@@ -65,7 +69,7 @@ export function Audience({ project, canWrite }: AudienceProps) {
             setLabels(res.labels);
             setError(null);
         } catch (e) {
-            setError(humanizeError(e, 'Impossible de charger les sites liés.'));
+            setError(errorNote(e, 'Impossible de charger les sites liés.'));
         } finally {
             setLoaded(true);
         }
@@ -92,7 +96,7 @@ export function Audience({ project, canWrite }: AudienceProps) {
             } catch (e) {
                 if (alive) setCandidates([]);
                 if (!(e instanceof WsError && e.code === 'forbidden')) {
-                    setError(humanizeError(e, 'Impossible de charger les sites de l’espace.'));
+                    setError(errorNote(e, 'Impossible de charger les sites de l’espace.'));
                 }
             }
         })();
@@ -103,15 +107,21 @@ export function Audience({ project, canWrite }: AudienceProps) {
 
     const unlink = async (siteId: number) => {
         setBusy(true);
+        setUnlinkError(null);
         try {
             await api.send('projects.audienceUnlink', { projectId: project.id, siteId });
             setUnlinking(null);
             invalidate('projects.board', 'audience.list');
         } catch (e) {
-            setError(humanizeError(e, 'Le déliement a échoué.'));
+            setUnlinkError(errorNote(e, 'Le déliement a échoué.'));
         } finally {
             setBusy(false);
         }
+    };
+
+    const closeUnlink = () => {
+        setUnlinking(null);
+        setUnlinkError(null);
     };
 
     if (guarded) {
@@ -130,7 +140,7 @@ export function Audience({ project, canWrite }: AudienceProps) {
     if (foreign) {
         return (
             <div className={styles.linkedSites}>
-                {error && <p className={styles.error}>{error}</p>}
+                <ErrorNote note={error} />
                 {!provider && <p className={styles.hint}>Le module Audience n’est pas installé.</p>}
                 <ForeignLinks labels={labels} empty='Aucun site suivi relié à ce projet.' />
             </div>
@@ -141,7 +151,7 @@ export function Audience({ project, canWrite }: AudienceProps) {
 
     return (
         <div className={styles.linkedSites}>
-            {error && <p className={styles.error}>{error}</p>}
+            <ErrorNote note={error} />
             {!provider && <p className={styles.hint}>Le module Audience n’est pas installé.</p>}
 
             {linkedIds.length === 0 && <p className={styles.empty}>Aucun site suivi relié à ce projet.</p>}
@@ -206,13 +216,13 @@ export function Audience({ project, canWrite }: AudienceProps) {
 
             <Dialog
                 open={unlinking !== null}
-                onClose={() => setUnlinking(null)}
+                onClose={closeUnlink}
                 title='Délier ce site ?'
                 width={460}
                 onSubmit={() => unlinking !== null && void unlink(unlinking)}
                 footer={
                     <>
-                        <Button variant='secondary' onClick={() => setUnlinking(null)} disabled={busy}>
+                        <Button variant='secondary' onClick={closeUnlink} disabled={busy}>
                             Annuler
                         </Button>
                         <Button
@@ -229,6 +239,7 @@ export function Audience({ project, canWrite }: AudienceProps) {
                     <strong>{unlinkingName ?? 'Ce site'}</strong> quitte ce projet. Le site, son historique et les
                     autres projets qui le suivent ne sont pas touchés.
                 </p>
+                <ErrorNote note={unlinkError} />
             </Dialog>
         </div>
     );

@@ -5,6 +5,7 @@ import {
     Dialog,
     DialogCancelButton,
     ErrorNote,
+    errorNote,
     moduleClientProvider,
     SearchSelect,
     SegmentedControl,
@@ -21,7 +22,7 @@ import type { StatementLine, StatementProposal } from '../contracts/statement';
 
 import { api, refreshFinance } from './api';
 import { VAT_RATES, formatDate, formatMoney, vatFromGross } from './format';
-import { accountName, activeAccounts, errorNote, signOf } from './shared';
+import { accountName, activeAccounts, signOf } from './shared';
 import { ruleKeyword } from './statement/keyword';
 import styles from './style.module.css';
 import type { FinanceBase } from './shared';
@@ -243,7 +244,7 @@ export function ResolveDialog({ base, lines, onClose }: ResolveDialogProps) {
                             note={{
                                 message:
                                     'Ces lignes mêlent des entrées et des sorties : rangez-les séparément, elles ne vont pas dans les mêmes catégories.',
-                                code: null
+                                code: 'validation'
                             }}
                         />
                     ) : (

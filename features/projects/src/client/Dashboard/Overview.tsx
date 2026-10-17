@@ -10,11 +10,13 @@ import {
 import type { SdkTileSummary } from '@deveye/types/sdk/client';
 import {
     Button,
-    humanizeError,
+    ErrorNote,
+    errorNote,
     moduleClientProvider,
     useDragReorder,
     useResourceVersion,
-    useWorkspacePermissions
+    useWorkspacePermissions,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 
 import { api, relativeAgo } from '../api';
@@ -102,7 +104,7 @@ export function Overview({
     const [tiles, setTiles] = useState<DashboardTile[]>([]);
     const [links, setLinks] = useState<DashboardLinks>(EMPTY_LINKS);
     const [loaded, setLoaded] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [busy, setBusy] = useState(false);
     /** `feature → résumé par identifiant` ; absent = pas encore demandé. */
     const [summaries, setSummaries] = useState<Record<string, Map<number, SdkTileSummary>>>({});
@@ -116,7 +118,7 @@ export function Overview({
             setLinks(res.links);
             setError(null);
         } catch (e) {
-            setError(humanizeError(e, 'Impossible de charger la vue d’ensemble.'));
+            setError(errorNote(e, 'Impossible de charger la vue d’ensemble.'));
         } finally {
             setLoaded(true);
         }
@@ -190,7 +192,7 @@ export function Overview({
             } catch (e) {
                 // Relu d'abord : son succès efface l'erreur affichée.
                 await load();
-                setError(humanizeError(e, 'L’agencement n’a pas pu être enregistré.'));
+                setError(errorNote(e, 'L’agencement n’a pas pu être enregistré.'));
             } finally {
                 setBusy(false);
             }
@@ -226,7 +228,7 @@ export function Overview({
         void api
             .send('projects.dashboardKpiRun', { projectId: project.id, tileKeys: keys })
             .then(() => load())
-            .catch((e: unknown) => setError(humanizeError(e, 'La mesure a échoué.')))
+            .catch((e: unknown) => setError(errorNote(e, 'La mesure a échoué.')))
             .finally(() => setBusy(false));
     };
 
@@ -392,7 +394,7 @@ export function Overview({
 
     return (
         <div className={styles.dashboard}>
-            {error && <p className={styles.error}>{error}</p>}
+            <ErrorNote note={error} />
 
             {barren && (
                 <section className={styles.dashStart}>

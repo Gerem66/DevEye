@@ -1,4 +1,4 @@
-import { useResource, useResourceVersion, useWorkspacePermissions } from 'deveye-sdk-client';
+import { ErrorNote, useResource, useResourceVersion, useWorkspacePermissions } from 'deveye-sdk-client';
 import type { AudienceSite, AudienceSummary } from '../contracts/domain';
 
 import { api } from './api';
@@ -35,7 +35,7 @@ export function SiteHub({ site, onOpen }: SiteHubProps) {
         [site.id, formsVersion]
     );
 
-    if (!data) return <p className={error ? styles.error : styles.empty}>{error ?? 'Chargement…'}</p>;
+    if (!data) return error ? <ErrorNote note={error} /> : <p className={styles.empty}>Chargement…</p>;
 
     return (
         <div className={styles.hub}>

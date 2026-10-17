@@ -2,12 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     Button,
     ConfirmDialog,
-    humanizeError,
+    ErrorNote,
+    errorNote,
     SearchSelect,
     settingsStyles as shell,
     useActiveWorkspace,
     useWorkspaces,
-    type ConfirmRequest
+    type ConfirmRequest,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 
@@ -67,7 +69,7 @@ export default function DocumentElsewherePanel({ scope, gone }: SettingsPanelPro
     const [here, setHere] = useState<InvoicingSettings | null>(null);
     const [choice, setChoice] = useState('');
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [done, setDone] = useState<string | null>(null);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
 
@@ -81,7 +83,7 @@ export default function DocumentElsewherePanel({ scope, gone }: SettingsPanelPro
             setDoc(opened.doc);
             setHere(config.settings);
         } catch (e) {
-            setError(humanizeError(e, 'Ce document n’a pas pu être lu.'));
+            setError(errorNote(e, 'Ce document n’a pas pu être lu.'));
         }
     }, [id]);
 
@@ -97,7 +99,7 @@ export default function DocumentElsewherePanel({ scope, gone }: SettingsPanelPro
     );
 
     if (doc === null || here === null) {
-        return <p className={error ? shell.notice : shell.empty}>{error ?? 'Chargement…'}</p>;
+        return error ? <ErrorNote note={error} /> : <p className={shell.empty}>Chargement…</p>;
     }
 
     const draft = doc.status === 'draft';
@@ -137,10 +139,14 @@ export default function DocumentElsewherePanel({ scope, gone }: SettingsPanelPro
                     : `Un brouillon est né dans « ${name} ».`
             );
         } catch (e) {
+            const note = errorNote(e, `Le document n’a pas pu partir vers « ${name} ».`);
             setError(
                 imported
-                    ? `Le brouillon est arrivé dans « ${name} », mais n’a pas pu être retiré d’ici : supprimez-le vous-même depuis l’onglet Général.`
-                    : humanizeError(e, `Le document n’a pas pu partir vers « ${name} ».`)
+                    ? {
+                          ...note,
+                          message: `Le brouillon est arrivé dans « ${name} », mais n’a pas pu être retiré d’ici : supprimez-le vous-même depuis l’onglet Général.`
+                      }
+                    : note
             );
         } finally {
             setBusy(false);
@@ -182,7 +188,7 @@ export default function DocumentElsewherePanel({ scope, gone }: SettingsPanelPro
                 onConfirm: () => void run(gesture, target.id, target.name)
             });
         } catch (e) {
-            setError(humanizeError(e, `« ${target.name} » n’a pas pu être consulté.`));
+            setError(errorNote(e, `« ${target.name} » n’a pas pu être consulté.`));
         } finally {
             setBusy(false);
         }
@@ -237,7 +243,7 @@ export default function DocumentElsewherePanel({ scope, gone }: SettingsPanelPro
                 </span>
             </div>
 
-            {error && <p className={shell.notice}>{error}</p>}
+            <ErrorNote note={error} />
             {done && <p className={shell.sectionHint}>{done}</p>}
             <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} busy={busy} />
         </div>

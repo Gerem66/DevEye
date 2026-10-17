@@ -3,7 +3,8 @@ import {
     Button,
     Checkbox,
     ConfirmDialog,
-    humanizeError,
+    ErrorNote,
+    errorNote,
     invalidate,
     ReadOnlyNotice,
     SaveButton,
@@ -12,6 +13,7 @@ import {
     settingsStyles as shell,
     TextInput,
     type ConfirmRequest,
+    type ErrorNoteInput,
     type SearchSelectOption
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
@@ -103,7 +105,7 @@ export default function ServiceGeneralPanel({ scope, canWrite, gone }: SettingsP
     const [errorName, setErrorName] = useState('');
     const [errorUrl, setErrorUrl] = useState('');
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
 
     useEffect(() => {
@@ -114,9 +116,9 @@ export default function ServiceGeneralPanel({ scope, canWrite, gone }: SettingsP
                 const found = res.services.find((s) => s.id === itemId) ?? null;
                 setService(found);
                 setDraft(found ? draftOf(found) : null);
-                if (!found) setError('Ce service n’existe plus.');
+                if (!found) setError({ message: 'Ce service n’existe plus.', code: 'not_found' });
             })
-            .catch((e) => setError(humanizeError(e, 'Les réglages n’ont pas pu être lus.')));
+            .catch((e: unknown) => setError(errorNote(e, 'Les réglages n’ont pas pu être lus.')));
     }, [itemId]);
 
     const save = async () => {
@@ -142,7 +144,7 @@ export default function ServiceGeneralPanel({ scope, canWrite, gone }: SettingsP
             // Le compte aussi : un service mis en pause n'y figure plus.
             invalidate('uptime.list', 'uptime.count');
         } catch (e) {
-            setError(humanizeError(e, 'Enregistrement impossible.'));
+            setError(errorNote(e, 'Enregistrement impossible.'));
             throw e;
         } finally {
             setBusy(false);
@@ -160,14 +162,14 @@ export default function ServiceGeneralPanel({ scope, canWrite, gone }: SettingsP
             gone();
             invalidate('uptime.list', 'uptime.count');
         } catch (e) {
-            setError(humanizeError(e, 'Suppression impossible.'));
+            setError(errorNote(e, 'Suppression impossible.'));
         } finally {
             setBusy(false);
         }
     };
 
     if (!service || !draft) {
-        return <p className={error ? shell.notice : shell.empty}>{error ?? 'Chargement…'}</p>;
+        return error ? <ErrorNote note={error} /> : <p className={shell.empty}>Chargement…</p>;
     }
 
     const set = <K extends keyof ServiceDraft>(key: K, value: ServiceDraft[K]) =>
@@ -320,7 +322,7 @@ export default function ServiceGeneralPanel({ scope, canWrite, gone }: SettingsP
                 </p>
             )}
 
-            {error && <p className={shell.notice}>{error}</p>}
+            <ErrorNote note={error} />
 
             {canWrite && !service.foreign && (
                 <div className={shell.field}>

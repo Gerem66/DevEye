@@ -1,7 +1,9 @@
 import { useState } from 'react';
 
+import { errorNote } from '@/api/useResource';
 import { ws, WsError } from '@/api/ws';
 import { Dialog } from '@/Components/Dialog';
+import ErrorNote, { type ErrorNoteInput } from '@/Components/ErrorNote';
 import { TextInput } from '@/Components';
 import Button from '@/Components/Button';
 import { cancelUnlock, resolveUnlock, useSecrecy, useUnlockTarget } from '@/stores/secrecy';
@@ -16,11 +18,14 @@ export default function SecrecyGate() {
     const promptFor = useUnlockTarget();
     const [password, setPassword] = useState('');
     const [error, setError] = useState<string | null>(null);
+    /** L'échec qui ne tient pas au mot de passe saisi. */
+    const [failure, setFailure] = useState<ErrorNoteInput | null>(null);
     const [loading, setLoading] = useState(false);
 
     const reset = () => {
         setPassword('');
         setError(null);
+        setFailure(null);
         setLoading(false);
     };
 
@@ -37,6 +42,7 @@ export default function SecrecyGate() {
         }
         setLoading(true);
         setError(null);
+        setFailure(null);
         try {
             // Le coffre d'une autre instance s'ouvre sur SA socket : le mot de
             // passe est celui du compte de là-bas, et ne passe que par elle.
@@ -46,7 +52,8 @@ export default function SecrecyGate() {
             reset();
             resolveUnlock();
         } catch (e) {
-            setError(e instanceof WsError && e.code === 'auth_invalid' ? 'Mot de passe incorrect' : 'Erreur inconnue');
+            if (e instanceof WsError && e.code === 'auth_invalid') setError('Mot de passe incorrect');
+            else setFailure(errorNote(e, 'Le déverrouillage a échoué.'));
             setPassword('');
         } finally {
             setLoading(false);
@@ -84,6 +91,7 @@ export default function SecrecyGate() {
                 error={error ?? undefined}
                 onChange={(e) => setPassword(e.target.value)}
             />
+            <ErrorNote note={failure} />
         </Dialog>
     );
 }

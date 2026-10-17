@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { DeviceRelayOption } from '@deveye/types/sdk';
 
-import { humanizeError } from '@/api/useResource';
+import { errorNote } from '@/api/useResource';
+import ErrorNote, { type ErrorNoteInput } from '@/Components/ErrorNote';
 import SearchSelect, { type SearchSelectOption } from '@/Components/SearchSelect';
 import { useDevices } from '@/devicesProvider';
 import styles from './style.module.css';
@@ -15,11 +16,11 @@ import styles from './style.module.css';
  */
 export function useDeviceRelayOptions(load: (() => Promise<readonly DeviceRelayOption[]>) | null): {
     devices: readonly DeviceRelayOption[];
-    error: string | null;
+    error: ErrorNoteInput | null;
 } {
     const workspace = useDevices();
     const [loaded, setLoaded] = useState<readonly DeviceRelayOption[] | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     useEffect(() => {
         if (!load) return;
         let live = true;
@@ -28,7 +29,7 @@ export function useDeviceRelayOptions(load: (() => Promise<readonly DeviceRelayO
                 if (live) setLoaded(devices);
             },
             (e) => {
-                if (live) setError(humanizeError(e, 'La liste des appareils n’a pas pu être chargée.'));
+                if (live) setError(errorNote(e, 'La liste des appareils n’a pas pu être chargée.'));
             }
         );
         return () => {
@@ -81,7 +82,7 @@ export function DeviceRelayField({ value, onChange, load, disabled, id, ...aria 
                 disabled={disabled}
                 onChange={onChange}
             />
-            {error && <span className={styles.note}>{error}</span>}
+            <ErrorNote note={error} />
             {blocked.map((d) => (
                 <span key={d.id} className={styles.note}>
                     « {d.name} » : {d.blocked}

@@ -3,7 +3,8 @@ import type { domainList, FeatureDomain, FeatureId } from '@deveye/types';
 import type { z } from 'zod';
 
 import { ws } from '@/api/ws';
-import { humanizeError } from '@/api/useResource';
+import { errorNote } from '@/api/useResource';
+import type { ErrorNoteInput } from '@/Components/ErrorNote';
 import { useResourceVersion } from '@/stores/invalidation';
 import { useActiveWorkspace } from '@/stores/workspace';
 
@@ -17,7 +18,7 @@ interface DomainsState {
     https: ListOutput['https'];
     quota: ListOutput['quota'];
     loading: boolean;
-    error: string | null;
+    error: ErrorNoteInput | null;
 }
 
 /**
@@ -50,7 +51,7 @@ export function useDomains(feature: FeatureId): DomainsState {
                 setState((held) => ({
                     ...held,
                     loading: false,
-                    error: humanizeError(failure, 'Les domaines n’ont pas pu être lus.')
+                    error: errorNote(failure, 'Les domaines n’ont pas pu être lus.')
                 }));
             });
         return () => {

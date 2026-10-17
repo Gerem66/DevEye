@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react';
 import {
+    ErrorNote,
     invalidate,
     ReadOnlyNotice,
     settingsStyles as shell,
     UnlockCancelledError,
     useActiveWorkspace,
     useResourceVersion,
-    withSecrecy
+    withSecrecy,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 
-import { api, humanizeError } from './api';
+import { api, errorNote } from './api';
 import { SecurityTierChoice } from './SecurityTierChoice';
 
 import type { MailAccount, MailSecurityTier } from '../contracts/domain';
@@ -36,6 +38,7 @@ export default function MailEncryptionPanel({ scope, canWrite }: SettingsPanelPr
     const [account, setAccount] = useState<MailAccount | null>(null);
     const [pending, setPending] = useState<MailSecurityTier | null>(null);
     const [status, setStatus] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     useEffect(() => {
         if (accountId === null) return;
@@ -45,11 +48,11 @@ export default function MailEncryptionPanel({ scope, canWrite }: SettingsPanelPr
                 const found = res.accounts.find((a) => a.id === accountId) ?? null;
                 setAccount(found);
             })
-            .catch((e) => setStatus(humanizeError(e, 'Chargement impossible.')));
+            .catch((e: unknown) => setError(errorNote(e, 'Chargement impossible.')));
     }, [accountId, version]);
 
     if (accountId === null) return null;
-    if (!account) return <p className={shell.notice}>{status ?? 'Chargement…'}</p>;
+    if (!account) return error ? <ErrorNote note={error} /> : <p className={shell.notice}>Chargement…</p>;
     if (account.foreign) {
         return (
             <p className={shell.sectionHint}>
@@ -70,6 +73,7 @@ export default function MailEncryptionPanel({ scope, canWrite }: SettingsPanelPr
     const apply = async (tier: MailSecurityTier) => {
         setPending(tier);
         setStatus(null);
+        setError(null);
         try {
             await withSecrecy(() =>
                 api.send('mail.accountSetProfile', {
@@ -83,7 +87,7 @@ export default function MailEncryptionPanel({ scope, canWrite }: SettingsPanelPr
             invalidate('mail.accountList');
             setStatus(tier === 'guarded' ? 'La boîte est maintenant protégée.' : 'La boîte est maintenant ouverte.');
         } catch (e) {
-            if (!(e instanceof UnlockCancelledError)) setStatus(humanizeError(e, 'Changement impossible.'));
+            if (!(e instanceof UnlockCancelledError)) setError(errorNote(e, 'Changement impossible.'));
         } finally {
             setPending(null);
         }
@@ -112,6 +116,7 @@ export default function MailEncryptionPanel({ scope, canWrite }: SettingsPanelPr
                     {status}
                 </p>
             )}
+            <ErrorNote note={error} />
         </div>
     );
 }

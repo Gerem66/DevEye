@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Button, Checkbox, Dialog, humanizeError, TextInput } from 'deveye-sdk-client';
+import { Button, Checkbox, Dialog, errorNote, ErrorNote, TextInput, type ErrorNoteInput } from 'deveye-sdk-client';
 import type { DatabaseCell, DatabaseColumn, DatabaseStructure } from '../contracts/domain';
 
 import { api } from './api';
@@ -36,7 +36,7 @@ function isLongText(column: DatabaseColumn): boolean {
 export function RowDialog({ open, databaseId, structure, row, onClose, onSaved }: RowDialogProps) {
     const [fields, setFields] = useState<Record<string, Field>>({});
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     const editing = row !== null;
 
@@ -99,7 +99,7 @@ export function RowDialog({ open, databaseId, structure, row, onClose, onSaved }
         } catch (e) {
             // Le message du moteur passe tel quel : « doublon », « clé
             // étrangère absente » sont des réponses utiles.
-            setError(humanizeError(e, 'L’écriture a échoué.'));
+            setError(errorNote(e, 'L’écriture a échoué.'));
         } finally {
             setBusy(false);
         }
@@ -219,7 +219,7 @@ export function RowDialog({ open, databaseId, structure, row, onClose, onSaved }
                     </p>
                 )}
 
-                {error && <p className={styles.error}>{error}</p>}
+                <ErrorNote note={error} />
             </div>
         </Dialog>
     );

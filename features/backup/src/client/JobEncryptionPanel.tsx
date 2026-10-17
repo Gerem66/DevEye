@@ -3,13 +3,15 @@ import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import type { BackupEncryption } from '../contracts/domain';
 
 import {
+    ErrorNote,
+    errorNote,
     ReadOnlyNotice,
     SaveButton,
-    humanizeError,
     invalidate,
     SegmentedControl,
     settingsStyles as shell,
-    useResource
+    useResource,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import { api } from './api';
 import { jobSourceInput } from './format';
@@ -30,7 +32,7 @@ export default function JobEncryptionPanel({ scope, canWrite }: SettingsPanelPro
     );
     const [mode, setMode] = useState<BackupEncryption>('server');
     const [busy, setBusy] = useState(false);
-    const [status, setStatus] = useState<string | null>(null);
+    const [status, setStatus] = useState<ErrorNoteInput | null>(null);
 
     // Suit le travail chargé seulement : une relecture (le sujet live bat à
     // chaque exécution) ne doit pas effacer un choix en cours.
@@ -38,7 +40,7 @@ export default function JobEncryptionPanel({ scope, canWrite }: SettingsPanelPro
         if (job) setMode(job.encryption);
     }, [job?.encryption, job]);
 
-    if (!job) return <p className={loadError ? shell.notice : shell.empty}>{loadError ?? 'Chargement…'}</p>;
+    if (!job) return loadError ? <ErrorNote note={loadError} /> : <p className={shell.empty}>Chargement…</p>;
 
     const save = async () => {
         setBusy(true);
@@ -62,7 +64,7 @@ export default function JobEncryptionPanel({ scope, canWrite }: SettingsPanelPro
             // déjà que le choix ne vaut que pour les archives à venir.
             setStatus(null);
         } catch (e) {
-            setStatus(humanizeError(e, 'Enregistrement impossible.'));
+            setStatus(errorNote(e, 'Enregistrement impossible.'));
             // Relancé : le bouton n'annonce « Enregistré » que sur un succès.
             throw e;
         } finally {
@@ -124,7 +126,7 @@ export default function JobEncryptionPanel({ scope, canWrite }: SettingsPanelPro
                 </ReadOnlyNotice>
             )}
 
-            {status && <p className={shell.notice}>{status}</p>}
+            <ErrorNote note={status} />
         </div>
     );
 }

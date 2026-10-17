@@ -4,10 +4,12 @@ import {
     ConfirmDialog,
     Dialog,
     DialogCancelButton,
-    humanizeError,
+    ErrorNote,
+    errorNote,
     SearchSelect,
     TextInput,
     type ConfirmRequest,
+    type ErrorNoteInput,
     type SearchSelectOption
 } from 'deveye-sdk-client';
 
@@ -43,7 +45,7 @@ export default function PaymentsBlock({ doc, payments, canWrite, onChanged }: Pa
     const [method, setMethod] = useState<PaymentMethod>('transfer');
     const [reference, setReference] = useState('');
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
 
     const open = () => {
@@ -58,7 +60,7 @@ export default function PaymentsBlock({ doc, payments, canWrite, onChanged }: Pa
     const submit = () => {
         const cents = parseAmount(amount);
         if (busy || cents === null || cents <= 0) {
-            setError('Un montant est attendu, par exemple 1 250,50.');
+            setError({ message: 'Un montant est attendu, par exemple 1 250,50.', code: 'validation' });
             return;
         }
         setBusy(true);
@@ -73,7 +75,7 @@ export default function PaymentsBlock({ doc, payments, canWrite, onChanged }: Pa
                 setReference('');
                 onChanged(res.doc, res.payments);
             })
-            .catch((e) => setError(humanizeError(e, 'Ce règlement n’a pas pu être enregistré.')))
+            .catch((e: unknown) => setError(errorNote(e, 'Ce règlement n’a pas pu être enregistré.')))
             .finally(() => setBusy(false));
     };
 
@@ -88,7 +90,7 @@ export default function PaymentsBlock({ doc, payments, canWrite, onChanged }: Pa
                 void api
                     .send('invoicing.paymentRemove', { docId: doc.id, id: payment.id })
                     .then((res) => onChanged(res.doc, res.payments))
-                    .catch((e) => setError(humanizeError(e, 'Ce règlement n’a pas pu être retiré.')))
+                    .catch((e: unknown) => setError(errorNote(e, 'Ce règlement n’a pas pu être retiré.')))
                     .finally(() => {
                         setBusy(false);
                         setConfirm(null);
@@ -111,7 +113,7 @@ export default function PaymentsBlock({ doc, payments, canWrite, onChanged }: Pa
                 )}
             </div>
 
-            {error && <p className={styles.error}>{error}</p>}
+            <ErrorNote note={error} />
 
             {payments.length > 0 && (
                 <ul className={styles.rows}>
@@ -193,7 +195,7 @@ export default function PaymentsBlock({ doc, payments, canWrite, onChanged }: Pa
                         <TextInput value={reference} onChange={(e) => setReference(e.target.value)} />
                     </label>
 
-                    {error && <p className={styles.error}>{error}</p>}
+                    <ErrorNote note={error} />
                 </div>
             </Dialog>
 

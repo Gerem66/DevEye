@@ -18,9 +18,6 @@ declare const styles: {
     readonly detailTitle: string;
     readonly detailVector: string;
     readonly empty: string;
-    readonly error: string;
-    readonly errorCode: string;
-    readonly errorIcon: string;
     readonly filters: string;
     readonly hasDetail: string;
     readonly headBand: string;

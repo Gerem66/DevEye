@@ -107,7 +107,7 @@ export default function Finance() {
     if (!data) {
         return (
             <div className={styles.feature}>
-                <ErrorNote note={{ message: error ?? 'Chargement impossible.', code: null }} />
+                <ErrorNote note={error} />
             </div>
         );
     }

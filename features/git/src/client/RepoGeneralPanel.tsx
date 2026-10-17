@@ -3,14 +3,16 @@ import {
     Button,
     Checkbox,
     ConfirmDialog,
+    ErrorNote,
+    errorNote,
     FeatureSettingsButton,
-    humanizeError,
     invalidate,
     ReadOnlyNotice,
     SaveButton,
     SearchSelect,
     settingsStyles as shell,
-    type ConfirmRequest
+    type ConfirmRequest,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import type { GitCredential, GitRepo } from '../contracts/domain';
@@ -36,7 +38,7 @@ export default function RepoGeneralPanel({ scope, canWrite, close, gone }: Setti
     const [credentialId, setCredentialId] = useState<number | null>(null);
     const [enabled, setEnabled] = useState(true);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
     /**
      * Les jetons connus au moment d'ouvrir les réglages de la feature : celui
@@ -60,7 +62,7 @@ export default function RepoGeneralPanel({ scope, canWrite, close, gone }: Setti
                 setCredentialId(res.repo.credentialId);
                 setEnabled(res.repo.enabled);
             } catch (e) {
-                setError(humanizeError(e, 'Le dépôt n’a pas pu être lu.'));
+                setError(errorNote(e, 'Le dépôt n’a pas pu être lu.'));
             }
         })();
     }, [repoId, loadCredentials]);
@@ -81,7 +83,7 @@ export default function RepoGeneralPanel({ scope, canWrite, close, gone }: Setti
                 const fresh = list.find((c) => !knownIds.current?.has(c.id));
                 if (fresh) setCredentialId(fresh.id);
             })
-            .catch(() => setError('Impossible de relire les jetons de l’espace.'))
+            .catch((e: unknown) => setError(errorNote(e, 'Impossible de relire les jetons de l’espace.')))
             .finally(() => {
                 knownIds.current = null;
             });
@@ -95,7 +97,7 @@ export default function RepoGeneralPanel({ scope, canWrite, close, gone }: Setti
             setRepo(res.repo);
             invalidate('git.list', 'git.repo', 'git.count');
         } catch (e) {
-            setError(humanizeError(e, 'L’enregistrement a échoué.'));
+            setError(errorNote(e, 'L’enregistrement a échoué.'));
             // Relancé : le bouton n'annonce « Enregistré » que sur un succès.
             throw e;
         }
@@ -115,7 +117,7 @@ export default function RepoGeneralPanel({ scope, canWrite, close, gone }: Setti
             invalidate('git.list', 'git.repo');
             close();
         } catch (e) {
-            setError(humanizeError(e, 'La resynchronisation n’a pas pu être lancée.'));
+            setError(errorNote(e, 'La resynchronisation n’a pas pu être lancée.'));
         } finally {
             setBusy(false);
         }
@@ -132,14 +134,14 @@ export default function RepoGeneralPanel({ scope, canWrite, close, gone }: Setti
             gone();
             invalidate('git.list', 'git.count', 'projects.board');
         } catch (e) {
-            setError(humanizeError(e, 'La suppression a échoué.'));
+            setError(errorNote(e, 'La suppression a échoué.'));
         } finally {
             setBusy(false);
         }
     };
 
     if (!repo) {
-        return <p className={error ? shell.notice : shell.empty}>{error ?? 'Chargement…'}</p>;
+        return error ? <ErrorNote note={error} /> : <p className={shell.empty}>Chargement…</p>;
     }
 
     // Le jeton d'un dépôt se choisit parmi les clés de son espace : le serveur
@@ -281,7 +283,7 @@ export default function RepoGeneralPanel({ scope, canWrite, close, gone }: Setti
                 </div>
             )}
 
-            {error && <p className={shell.notice}>{error}</p>}
+            <ErrorNote note={error} />
 
             <ConfirmDialog request={confirm} busy={busy} onClose={() => setConfirm(null)} />
         </div>

@@ -1176,11 +1176,6 @@
 /* L'échec de la découverte n'est pas une panne de l'application : GitHub a
    refusé (quota anonyme, propriétaire inconnu, jeton à portée réduite). On le
    dit dans le champ, sans le bandeau rouge des vraies erreurs. */
-.lookupError {
-    font-size: 0.75rem;
-    color: var(--warning);
-}
-
 /* Une action secondaire qui se lit comme un lien : basculer entre la liste et
    la saisie libre n'est pas une décision, c'est un repli. */
 .linkButton {

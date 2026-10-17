@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Button } from 'deveye-sdk-client';
+import { Button, errorNote, ErrorNote, type ErrorNoteInput } from 'deveye-sdk-client';
 
 import { SENTINEL_RULES, type AllowEntry } from '../contracts/domain';
 
@@ -24,7 +24,7 @@ export default function AllowlistSection({ deviceId, onChanged }: Props) {
     const [entries, setEntries] = useState<AllowEntry[]>([]);
     const [loading, setLoading] = useState(false);
     const [busyId, setBusyId] = useState<number | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -32,8 +32,8 @@ export default function AllowlistSection({ deviceId, onChanged }: Props) {
             const res = await api.send('sentinel.allowlist', { deviceId });
             setEntries(res.entries);
             setError(null);
-        } catch {
-            setError('Chargement impossible.');
+        } catch (e) {
+            setError(errorNote(e, 'Chargement impossible.'));
         } finally {
             setLoading(false);
         }
@@ -57,8 +57,8 @@ export default function AllowlistSection({ deviceId, onChanged }: Props) {
             await api.send('sentinel.removeAllow', { allowId: entry.id });
             setEntries((prev) => prev.filter((e) => e.id !== entry.id));
             onChanged();
-        } catch {
-            setError("L'autorisation n'a pas pu être retirée.");
+        } catch (e) {
+            setError(errorNote(e, "L'autorisation n'a pas pu être retirée."));
         } finally {
             setBusyId(null);
         }
@@ -83,7 +83,7 @@ export default function AllowlistSection({ deviceId, onChanged }: Props) {
 
             {open && (
                 <div className={styles.baseline}>
-                    {error && <p className={styles.error}>{error}</p>}
+                    <ErrorNote note={error} />
 
                     {loading ? (
                         <p className={styles.empty}>Chargement…</p>

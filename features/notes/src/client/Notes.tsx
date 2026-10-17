@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Button,
     ensureSecrecyUnlocked,
-    humanizeError,
+    errorNote,
+    ErrorNote,
     invalidate,
     OpenPopup,
     StickyHeader,
@@ -11,7 +12,8 @@ import {
     useLiveSegment,
     useResourceVersion,
     useSecrecy,
-    withSecrecy
+    withSecrecy,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { Note, NoteFolder, NoteSummary } from '../contracts/domain';
 
@@ -47,7 +49,7 @@ function Notes() {
     const [search, setSearch] = useState('');
     const [notes, setNotes] = useState<NoteSummary[]>([]);
     const [folders, setFolders] = useState<NoteFolder[]>([]);
-    const [actionError, setActionError] = useState<string | null>(null);
+    const [actionError, setActionError] = useState<ErrorNoteInput | null>(null);
     /** La note ouverte dans l'éditeur : c'est le niveau profond des Notes. */
     const [openNoteId, setOpenNoteId] = useState<number | null>(null);
     useLiveSegment('l1', openNoteId === null ? null : String(openNoteId));
@@ -132,7 +134,7 @@ function Notes() {
                     invalidate('notes.count');
                 }
             } catch (e) {
-                setActionError(humanizeError(e, 'Enregistrement impossible.'));
+                setActionError(errorNote(e, 'Enregistrement impossible.'));
             }
         },
         [workspaceId, upsert]
@@ -148,7 +150,7 @@ function Notes() {
                     const res = await withSecrecy(() => api.send('notes.get', { noteId: summary.id }));
                     existing = res.note;
                 } catch (e) {
-                    setActionError(humanizeError(e, 'Impossible d’ouvrir la note.'));
+                    setActionError(errorNote(e, 'Impossible d’ouvrir la note.'));
                     return;
                 }
             }
@@ -169,7 +171,7 @@ function Notes() {
                     setNotes((prev) => prev.filter((n) => n.id !== existing!.id));
                     invalidate('notes.count');
                 } catch (e) {
-                    setActionError(humanizeError(e, 'Archivage impossible.'));
+                    setActionError(errorNote(e, 'Archivage impossible.'));
                 }
                 return;
             }
@@ -253,7 +255,7 @@ function Notes() {
                 await api.send('notes.reorder', { folderId, noteIds });
             } catch (e) {
                 setNotes(previous);
-                setActionError(humanizeError(e, 'Déplacement impossible.'));
+                setActionError(errorNote(e, 'Déplacement impossible.'));
             }
         },
         [notes, workspaceId]
@@ -276,7 +278,7 @@ function Notes() {
             const res = await api.send('notes.folderAdd', { name });
             setFolders((prev) => [...prev, res.folder]);
         } catch (e) {
-            setActionError(humanizeError(e, 'Création du dossier impossible.'));
+            setActionError(errorNote(e, 'Création du dossier impossible.'));
         }
     }, [workspaceId]);
 
@@ -292,7 +294,7 @@ function Notes() {
                 const res = await api.send('notes.folderRename', { folderId: folder.id, name });
                 setFolders((prev) => prev.map((f) => (f.id === folder.id ? res.folder : f)));
             } catch (e) {
-                setActionError(humanizeError(e, 'Renommage impossible.'));
+                setActionError(errorNote(e, 'Renommage impossible.'));
             }
         },
         [workspaceId]
@@ -312,7 +314,7 @@ function Notes() {
                 setFolders((prev) => prev.filter((f) => f.id !== folder.id));
                 setNotes((prev) => prev.map((n) => (n.folderId === folder.id ? { ...n, folderId: null } : n)));
             } catch (e) {
-                setActionError(humanizeError(e, 'Suppression du dossier impossible.'));
+                setActionError(errorNote(e, 'Suppression du dossier impossible.'));
             }
         },
         [workspaceId]
@@ -376,7 +378,7 @@ function Notes() {
                 setFolders(res.folders);
             } catch (e) {
                 setFolders(previous);
-                setActionError(humanizeError(e, 'Réorganisation impossible.'));
+                setActionError(errorNote(e, 'Réorganisation impossible.'));
             }
         },
         [folders, workspaceId]
@@ -450,7 +452,7 @@ function Notes() {
                 </button>
             </div>
 
-            {actionError && <div className={styles.errorBanner}>{actionError}</div>}
+            <ErrorNote note={actionError} />
 
             {!loaded && (
                 <div className={styles.grid}>

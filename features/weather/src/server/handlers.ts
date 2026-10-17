@@ -70,9 +70,11 @@ const FAILURE_TEXT: Record<WeatherError['reason'], string> = {
     misconfigured: 'La météo de ce serveur est mal configurée : prévenez son administrateur.'
 };
 
-function errorCode(reason: WeatherError['reason']): 'not_found' | 'rate_limited' | 'internal' {
+/** La clé de l'espace refusée se corrige dans ses réglages ; un fournisseur muet ou une instance mal réglée se signalent. */
+function errorCode(reason: WeatherError['reason']): 'not_found' | 'rate_limited' | 'validation' | 'internal' {
     if (reason === 'not_found') return 'not_found';
     if (reason === 'rate_limited') return 'rate_limited';
+    if (reason === 'unauthorized') return 'validation';
     return 'internal';
 }
 

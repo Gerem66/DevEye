@@ -1,7 +1,9 @@
 import { useState } from 'react';
 
+import { errorNote } from '@/api/useResource';
 import Button from '@/Components/Button';
 import { Dialog, DialogCancelButton } from '@/Components/Dialog';
+import ErrorNote, { type ErrorNoteInput } from '@/Components/ErrorNote';
 import TextInput from '@/Components/TextInput';
 
 import ReadOnlyNotice from '../ReadOnlyNotice';
@@ -85,7 +87,7 @@ export function ProviderKeys({ rows, canWrite, onSave, onRemove, readOnlyHint }:
     const [editing, setEditing] = useState<ProviderKeyRow | null>(null);
     const [draft, setDraft] = useState('');
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     const open = (row: ProviderKeyRow): void => {
         setEditing(row);
@@ -102,7 +104,7 @@ export function ProviderKeys({ rows, canWrite, onSave, onRemove, readOnlyHint }:
         } catch (e) {
             // Le dialogue reste ouvert : la clé saisie ne doit pas être perdue
             // parce que le serveur l'a refusée.
-            setError(e instanceof Error ? e.message : 'Enregistrement impossible.');
+            setError(errorNote(e, 'Enregistrement impossible.'));
         } finally {
             setBusy(false);
         }
@@ -191,7 +193,7 @@ export function ProviderKeys({ rows, canWrite, onSave, onRemove, readOnlyHint }:
                         )}
                     </div>
 
-                    {error && <p className={styles.errorText}>{error}</p>}
+                    <ErrorNote note={error} />
 
                     <div className={styles.sectionActions}>
                         <Button

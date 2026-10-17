@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     Button,
+    ErrorNote,
     SearchSelect,
     SegmentedControl,
     StickyHeader,
@@ -165,7 +166,7 @@ export default function DocumentsPage({ currency, onBack, onOpen, onNew }: Docum
                 </div>
             </div>
 
-            {error !== null && <p className={styles.error}>{error}</p>}
+            <ErrorNote note={error} />
 
             {data !== null && (
                 <p className={styles.paneCount}>

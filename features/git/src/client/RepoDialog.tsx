@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Button, Dialog, humanizeError, invalidate } from 'deveye-sdk-client';
+import { Button, Dialog, ErrorNote, errorNote, invalidate, type ErrorNoteInput } from 'deveye-sdk-client';
 import type { GitCredential } from '../contracts/domain';
 
 import { api } from './api';
@@ -24,7 +24,8 @@ export function RepoDialog({ open, onClose, onSaved }: RepoDialogProps) {
     const [credentials, setCredentials] = useState<GitCredential[] | null>(null);
     const [target, setTarget] = useState<RepoTarget>({ owner: '', repos: [], credentialId: null });
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    /** Un bandeau par refus : chacun décide seul du signalement. */
+    const [errors, setErrors] = useState<ErrorNoteInput[]>([]);
     /**
      * Les jetons connus au moment d'ouvrir les réglages : celui qui apparaît
      * ensuite vient d'y être créé pour ce dépôt, et se sélectionne tout seul.
@@ -40,7 +41,7 @@ export function RepoDialog({ open, onClose, onSaved }: RepoDialogProps) {
             return res.credentials;
         } catch (e) {
             setCredentials([]);
-            setError(humanizeError(e, 'Impossible de charger les jetons de l’espace.'));
+            setErrors([errorNote(e, 'Impossible de charger les jetons de l’espace.')]);
             return [];
         }
     }, []);
@@ -50,7 +51,7 @@ export function RepoDialog({ open, onClose, onSaved }: RepoDialogProps) {
         knownIds.current = null;
         addedIds.current = [];
         setTarget({ owner: '', repos: [], credentialId: null });
-        setError(null);
+        setErrors([]);
         void reloadCredentials();
     }, [open, reloadCredentials]);
 
@@ -83,8 +84,8 @@ export function RepoDialog({ open, onClose, onSaved }: RepoDialogProps) {
     const submit = async () => {
         if (busy || !canSubmit) return;
         setBusy(true);
-        setError(null);
-        const refused: { name: string; reason: string }[] = [];
+        setErrors([]);
+        const refused: { name: string; note: ErrorNoteInput }[] = [];
         for (const name of names) {
             try {
                 const res = await api.send('git.repoAdd', {
@@ -95,7 +96,7 @@ export function RepoDialog({ open, onClose, onSaved }: RepoDialogProps) {
                 });
                 addedIds.current.push(res.repo.id);
             } catch (e) {
-                refused.push({ name, reason: humanizeError(e, 'L’enregistrement a échoué.') });
+                refused.push({ name, note: errorNote(e, 'L’enregistrement a échoué.') });
             }
         }
         setBusy(false);
@@ -106,7 +107,11 @@ export function RepoDialog({ open, onClose, onSaved }: RepoDialogProps) {
             return;
         }
         setTarget((prev) => ({ ...prev, repos: refused.map((r) => r.name) }));
-        setError(names.length === 1 ? refused[0].reason : refused.map((r) => `${r.name} : ${r.reason}`).join('\n'));
+        setErrors(
+            names.length === 1
+                ? [refused[0].note]
+                : refused.map((r) => ({ ...r.note, message: `${r.name} : ${r.note.message}` }))
+        );
     };
 
     return (
@@ -135,7 +140,9 @@ export function RepoDialog({ open, onClose, onSaved }: RepoDialogProps) {
                     onSettingsOpenChange={onSettingsOpenChange}
                     autoFocus
                 />
-                {error && <p className={styles.error}>{error}</p>}
+                {errors.map((note, i) => (
+                    <ErrorNote key={i} note={note} />
+                ))}
             </div>
         </Dialog>
     );

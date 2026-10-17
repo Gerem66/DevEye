@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { APP_VERSION, Button, Dialog, httpFetch, httpGet, useActiveWorkspace } from 'deveye-sdk-client';
+import {
+    APP_VERSION,
+    Button,
+    Dialog,
+    errorNote,
+    ErrorNote,
+    httpFetch,
+    httpGet,
+    useActiveWorkspace,
+    type ErrorNoteInput
+} from 'deveye-sdk-client';
 import {
     AGENT_TARGETS,
     agentTargetsResponseSchema,
@@ -39,7 +49,7 @@ export function DownloadAgent({ open, onClose }: { open: boolean; onClose: () =>
     const [statuses, setStatuses] = useState<AgentTargetStatus[]>([]);
     const [agentVersion, setAgentVersion] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     /** Cible en cours de téléchargement (un seul à la fois). */
     const [downloading, setDownloading] = useState<string | null>(null);
 
@@ -54,7 +64,7 @@ export function DownloadAgent({ open, onClose }: { open: boolean; onClose: () =>
                 setStatuses(res.targets);
                 setAgentVersion(res.agentVersion);
             })
-            .catch(() => setError('Impossible de récupérer les versions disponibles.'))
+            .catch((e: unknown) => setError(errorNote(e, 'Impossible de récupérer les versions disponibles.')))
             .finally(() => setLoading(false));
     }, [open, workspaceId]);
 
@@ -73,10 +83,14 @@ export function DownloadAgent({ open, onClose }: { open: boolean; onClose: () =>
         try {
             const res = await httpFetch(`/api/agent/download/${id}?workspace=${workspaceId ?? ''}`);
             if (!res.ok) {
+                // Un binaire absent manque à l'instance ; une session échue ou un droit refusé se suffisent.
                 setError(
                     res.status === 404
-                        ? 'Binaire indisponible pour cette plateforme sur ce serveur.'
-                        : `Téléchargement refusé par le serveur (${res.status}).`
+                        ? { message: 'Binaire indisponible pour cette plateforme sur ce serveur.', code: null }
+                        : {
+                              message: `Téléchargement refusé par le serveur (${res.status}).`,
+                              code: res.status === 401 ? 'auth_expired' : res.status === 403 ? 'forbidden' : null
+                          }
                 );
                 return;
             }
@@ -90,7 +104,7 @@ export function DownloadAgent({ open, onClose }: { open: boolean; onClose: () =>
             // l'enregistrement que le clic vient à peine de lancer.
             setTimeout(() => URL.revokeObjectURL(url), 0);
         } catch (e) {
-            setError(e instanceof Error ? e.message : 'Téléchargement impossible.');
+            setError(errorNote(e, 'Téléchargement impossible.'));
         } finally {
             setDownloading(null);
         }
@@ -129,7 +143,7 @@ export function DownloadAgent({ open, onClose }: { open: boolean; onClose: () =>
                 </Button>
             }
         >
-            {error && <p className={styles.genError}>{error}</p>}
+            <ErrorNote note={error} />
 
             {agentVersion !== null &&
                 (versionMismatch ? (

@@ -1,6 +1,13 @@
 import { useRef, useState } from 'react';
 import { DEVICE_SERVICE_EVENT, deviceServicePushSchema, type DeviceServicePush } from '@deveye/types';
-import { acquireMetrics, onServerEvent, openInfo, type ConfirmRequest } from 'deveye-sdk-client';
+import {
+    acquireMetrics,
+    errorNote,
+    onServerEvent,
+    openInfo,
+    type ConfirmRequest,
+    type ErrorNoteInput
+} from 'deveye-sdk-client';
 
 import { agent, api } from '../api';
 import styles from './style.module.css';
@@ -63,7 +70,7 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
         await sleep(ms);
         await refresh();
     };
-    const [actionError, setActionError] = useState<string | null>(null);
+    const [actionError, setActionError] = useState<ErrorNoteInput | null>(null);
     // Which toggle (per device) is mid-change, so only that one shows a loader.
     const [serviceBusy, setServiceBusy] = useState<{ id: string; kind: 'autostart' | 'privilege' } | null>(null);
     // Verdict de la dernière action de service, sur la carte visée : le bandeau
@@ -109,7 +116,7 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
             await api.send('devices.confirm', { deviceId: id });
             await refresh();
         } catch (e) {
-            setActionError(e instanceof Error ? e.message : 'Approbation impossible.');
+            setActionError(errorNote(e, 'Approbation impossible.'));
         }
     };
 
@@ -119,7 +126,7 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
             await api.send('devices.revoke', { deviceId: id });
             await refresh();
         } catch (e) {
-            setActionError(e instanceof Error ? e.message : 'Révocation impossible.');
+            setActionError(errorNote(e, 'Révocation impossible.'));
         }
     };
 
@@ -129,7 +136,7 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
             await api.send('devices.delete', { deviceId: id });
             await refresh();
         } catch (e) {
-            setActionError(e instanceof Error ? e.message : 'Effacement impossible.');
+            setActionError(errorNote(e, 'Effacement impossible.'));
         }
     };
 
@@ -205,9 +212,9 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
         } catch (e) {
             verdict.cancel();
             setServiceBusy(null);
-            const message = e instanceof Error ? e.message : labels.error;
-            setActionError(message);
-            showNote({ id, tone: 'error', message });
+            const note = errorNote(e, labels.error);
+            setActionError(note);
+            showNote({ id, tone: 'error', message: note.message });
             return;
         }
         const result = await verdict.result;
@@ -261,7 +268,7 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
             // Presence pushes flip the card; refresh for the rest.
             await settle(2000);
         } catch (e) {
-            setActionError(e instanceof Error ? e.message : 'Interruption impossible.');
+            setActionError(errorNote(e, 'Interruption impossible.'));
         } finally {
             setStopping(false);
         }
@@ -276,7 +283,7 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
             // Keep the spinner through the offline→online round trip.
             await settle(4000);
         } catch (e) {
-            setActionError(e instanceof Error ? e.message : 'Redémarrage impossible.');
+            setActionError(errorNote(e, 'Redémarrage impossible.'));
         } finally {
             setRestartingId(null);
         }
@@ -301,8 +308,8 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
             await api.send('devices.rename', { deviceId: renameTarget.id, name });
             setRenameTarget(null);
             await refresh();
-        } catch {
-            setActionError('Renommage impossible.');
+        } catch (e) {
+            setActionError(errorNote(e, 'Renommage impossible.'));
         } finally {
             setRenaming(false);
         }
@@ -317,8 +324,8 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
             await api.send('devices.requestDelete', { deviceId: deleteTarget.id });
             setDeleteTarget(null);
             await refresh();
-        } catch {
-            setActionError('Suppression impossible.');
+        } catch (e) {
+            setActionError(errorNote(e, 'Suppression impossible.'));
             void refresh();
         } finally {
             setDeleting(false);
@@ -330,8 +337,8 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
         try {
             await api.send('devices.cancelDelete', { deviceId: id });
             await refresh();
-        } catch {
-            setActionError('Annulation impossible.');
+        } catch (e) {
+            setActionError(errorNote(e, 'Annulation impossible.'));
         }
     };
 
@@ -344,8 +351,8 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
             await api.send('devices.forceDelete', { deviceId: forceTarget.id });
             setForceTarget(null);
             await refresh();
-        } catch {
-            setActionError('Suppression impossible.');
+        } catch (e) {
+            setActionError(errorNote(e, 'Suppression impossible.'));
         } finally {
             setForcing(false);
         }

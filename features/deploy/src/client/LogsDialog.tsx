@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Button, Dialog, LogOutput } from 'deveye-sdk-client';
+import { Button, Dialog, ErrorNote, errorNote, LogOutput, type ErrorNoteInput } from 'deveye-sdk-client';
 import type { DeployStatus } from '../contracts/domain';
 
 import { api } from './api';
-import { LOG_TIMEOUT_MS, providerError } from './format';
+import { LOG_TIMEOUT_MS } from './format';
 import styles from './style.module.css';
 
 /** Cadence de relecture d'un journal qui s'écrit encore. */
@@ -42,12 +42,11 @@ interface LogsDialogProps {
 /**
  * Le journal complet d'un déploiement, relu chez le fournisseur. Chez Dokploy,
  * par un point d'entrée non documenté (voir l'adaptateur) qu'une instance peut
- * refuser, d'où le message tel que le fournisseur l'a formulé (`providerError`,
- * pas `humanizeError`).
+ * refuser : le refus arrive dans les mots du fournisseur.
  */
 export function LogsDialog({ open, targetId, externalId, live, onClose }: LogsDialogProps) {
     const [log, setLog] = useState<string | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [busy, setBusy] = useState(false);
     /** Lu par le minuteur du suivi, qui ne doit pas dépendre du rendu. */
     const busyRef = useRef(false);
@@ -67,8 +66,8 @@ export function LogsDialog({ open, targetId, externalId, live, onClose }: LogsDi
                 // à chaque relecture tant que le fournisseur refuse.
                 setError(null);
             })
-            .catch((e) => {
-                if (seqRef.current === seq) setError(providerError(e, 'Impossible de charger le journal.'));
+            .catch((e: unknown) => {
+                if (seqRef.current === seq) setError(errorNote(e, 'Impossible de charger le journal.'));
             })
             .finally(() => {
                 if (seqRef.current !== seq) return;
@@ -117,7 +116,7 @@ export function LogsDialog({ open, targetId, externalId, live, onClose }: LogsDi
                 </>
             }
         >
-            {error && <p className={styles.error}>{error}</p>}
+            <ErrorNote note={error} />
             {/* Une relecture qui échoue garde le journal lu avant elle. */}
             {(log !== null || !error) && (
                 <LogOutput

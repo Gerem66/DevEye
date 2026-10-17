@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     Button,
+    ErrorNote,
+    errorNote,
     FeatureSettingsButton,
-    humanizeError,
     PlanPausedNotice,
     StickyHeader,
     useActiveWorkspace,
@@ -11,13 +12,14 @@ import {
     useResourceVersion,
     useSubView,
     useWorkspaceMembers,
-    useWorkspacePermissions
+    useWorkspacePermissions,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { FeatureViewProps } from '@deveye/types/sdk/client';
 import type { DeployHistoryEntry, DeployTarget, Deployment } from '../contracts/domain';
 
 import { api } from './api';
-import { PROVIDER_TIMEOUT_MS, providerError } from './format';
+import { PROVIDER_TIMEOUT_MS } from './format';
 import LogsDialog, { isLogLive, type LogsTarget } from './LogsDialog';
 import TargetDialog from './TargetDialog';
 import TargetList from './TargetList';
@@ -36,7 +38,7 @@ export function FeatureDeploy(_props: FeatureViewProps) {
     const members = useWorkspaceMembers();
 
     const [targets, setTargets] = useState<DeployTarget[] | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     /** La cible ouverte ; `null` = on est sur la liste. */
     const [openedId, setOpenedId] = useState<number | null>(null);
@@ -48,7 +50,7 @@ export function FeatureDeploy(_props: FeatureViewProps) {
      * bouton « Déployer ». `null` = en cours de chargement.
      */
     const [history, setHistory] = useState<DeployHistoryEntry[] | null>(null);
-    const [historyError, setHistoryError] = useState<string | null>(null);
+    const [historyError, setHistoryError] = useState<ErrorNoteInput | null>(null);
 
     const [addOpen, setAddOpen] = useState(false);
     /** La ligne dont on regarde le journal ; `null` = popup fermée. */
@@ -85,7 +87,7 @@ export function FeatureDeploy(_props: FeatureViewProps) {
             setTargets(res.targets);
             setError(null);
         } catch (e) {
-            setError(humanizeError(e, 'Impossible de charger les cibles.'));
+            setError(errorNote(e, 'Impossible de charger les cibles.'));
         }
     }, []);
 
@@ -105,7 +107,7 @@ export function FeatureDeploy(_props: FeatureViewProps) {
             setOpened({ target: res.target, deployments: res.deployments });
             setError(null);
         } catch (e) {
-            setError(humanizeError(e, 'Impossible de charger cette cible.'));
+            setError(errorNote(e, 'Impossible de charger cette cible.'));
             setOpened(null);
         }
     }, []);
@@ -125,9 +127,7 @@ export function FeatureDeploy(_props: FeatureViewProps) {
             const res = await api.send('deploy.history', { targetId }, { timeoutMs: PROVIDER_TIMEOUT_MS });
             setHistory(res.entries);
         } catch (e) {
-            // Le message du fournisseur lui-même (voir `providerError`) : la seule
-            // piste pour distinguer injoignable de refus d'authentification.
-            setHistoryError(providerError(e, 'Impossible de charger l’historique complet.'));
+            setHistoryError(errorNote(e, 'Impossible de charger l’historique complet.'));
         }
     }, []);
 
@@ -161,8 +161,8 @@ export function FeatureDeploy(_props: FeatureViewProps) {
                 return targetIds.flatMap((id) => byId.get(id) ?? []);
             });
             // Relue d'abord : son succès efface l'erreur affichée.
-            api.send('deploy.reorder', { targetIds }).catch(() => {
-                void reload().then(() => setError('Réorganisation impossible.'));
+            api.send('deploy.reorder', { targetIds }).catch((e: unknown) => {
+                void reload().then(() => setError(errorNote(e, 'Réorganisation impossible.')));
             });
         },
         [reload]
@@ -193,7 +193,7 @@ export function FeatureDeploy(_props: FeatureViewProps) {
                         </header>
                     </StickyHeader>
 
-                    {error && <p className={styles.error}>{error}</p>}
+                    <ErrorNote note={error} />
 
                     {targets && (
                         <PlanPausedNotice
@@ -224,7 +224,11 @@ export function FeatureDeploy(_props: FeatureViewProps) {
                     )}
                 </>
             ) : opened === null ? (
-                <p className={styles.empty}>{error ?? 'Chargement…'}</p>
+                error ? (
+                    <ErrorNote note={error} />
+                ) : (
+                    <p className={styles.empty}>Chargement…</p>
+                )
             ) : (
                 <>
                     {/* La même rangée d'en-tête que la liste et que les fiches

@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { humanizeError, SearchSelect, settingsStyles as shell, type SearchSelectOption } from 'deveye-sdk-client';
+import {
+    ErrorNote,
+    errorNote,
+    SearchSelect,
+    settingsStyles as shell,
+    type ErrorNoteInput,
+    type SearchSelectOption
+} from 'deveye-sdk-client';
 import type { UptimeDeployCandidate, UptimeDeployCandidateKind } from '../contracts/domain';
 
 import { api } from './api';
@@ -24,7 +31,7 @@ const compareNames = new Intl.Collator('fr', { sensitivity: 'base', numeric: tru
 export default function DeploySourcePicker({ serviceId, value, onChange, disabled }: DeploySourcePickerProps) {
     const [kinds, setKinds] = useState<UptimeDeployCandidateKind[]>([]);
     const [candidates, setCandidates] = useState<UptimeDeployCandidate[] | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     useEffect(() => {
         void api
@@ -33,7 +40,7 @@ export default function DeploySourcePicker({ serviceId, value, onChange, disable
                 setKinds(res.kinds);
                 setCandidates(res.candidates);
             })
-            .catch((e) => setError(humanizeError(e, 'Les sources n’ont pas pu être lues.')));
+            .catch((e: unknown) => setError(errorNote(e, 'Les sources n’ont pas pu être lues.')));
     }, [serviceId]);
 
     const options = useMemo(
@@ -68,7 +75,7 @@ export default function DeploySourcePicker({ serviceId, value, onChange, disable
                 searchPlaceholder='Rechercher un projet, une cible, un dépôt…'
                 emptyText='Aucune source ne correspond'
             />
-            {error && <span className={shell.notice}>{error}</span>}
+            <ErrorNote note={error} />
             {notes.map((c) => (
                 <span key={deployKey(c.kind, c.id)} className={shell.fieldHint}>
                     {c.name} : {c.reason}

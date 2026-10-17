@@ -2,7 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
-import { acquireMetrics, Button, FeatureSettingsButton, onServerEvent } from 'deveye-sdk-client';
+import {
+    acquireMetrics,
+    Button,
+    errorNote,
+    ErrorNote,
+    FeatureSettingsButton,
+    onServerEvent,
+    type ErrorNoteInput
+} from 'deveye-sdk-client';
 import {
     DEVICE_TERM_EXIT_EVENT,
     DEVICE_TERM_OUTPUT_EVENT,
@@ -64,6 +72,8 @@ export function TerminalPanel({ deviceId, onClose }: { deviceId: string; onClose
     const containerRef = useRef<HTMLDivElement>(null);
     const deviceName = useDevices().devices.find((d) => d.id === deviceId)?.name ?? 'Appareil';
     const [exited, setExited] = useState<{ code: number | null; error?: string } | null>(null);
+    /** La session n'a pas pu s'ouvrir : un échec de la commande, pas une fin de shell. */
+    const [failure, setFailure] = useState<ErrorNoteInput | null>(null);
     // Bumped to force a full remount of the effect (a fresh session) on "restart".
     const [generation, setGeneration] = useState(0);
     const relaunch = () => setGeneration((g) => g + 1);
@@ -79,6 +89,7 @@ export function TerminalPanel({ deviceId, onClose }: { deviceId: string; onClose
 
         const sessionId = crypto.randomUUID();
         setExited(null);
+        setFailure(null);
 
         const term = new Terminal({
             cursorBlink: true,
@@ -123,7 +134,7 @@ export function TerminalPanel({ deviceId, onClose }: { deviceId: string; onClose
                     rows: term.rows,
                     user: terminalPrefs(deviceId).user
                 })
-                .catch((e) => setExited({ code: null, error: e instanceof Error ? e.message : 'Échec' }));
+                .catch((e: unknown) => setFailure(errorNote(e, 'La session n’a pas pu s’ouvrir.')));
         });
 
         // Keystrokes / paste → agent.
@@ -168,6 +179,17 @@ export function TerminalPanel({ deviceId, onClose }: { deviceId: string; onClose
         };
     }, [deviceId, generation]);
 
+    const endActions = (
+        <>
+            <Button variant='secondary' onClick={relaunch}>
+                Relancer
+            </Button>
+            <Button variant='ghost' onClick={() => onCloseRef.current?.()}>
+                Fermer
+            </Button>
+        </>
+    );
+
     return (
         <div className={styles.terminalWrap}>
             {/* Les réglages vivent dans la coquille, à l'échelle de CET
@@ -182,6 +204,7 @@ export function TerminalPanel({ deviceId, onClose }: { deviceId: string; onClose
                 />
             </div>
             <div className={styles.terminalHost} ref={containerRef} />
+            <ErrorNote note={failure}>{endActions}</ErrorNote>
             {exited && (
                 <div className={styles.terminalExit}>
                     <span>
@@ -189,14 +212,7 @@ export function TerminalPanel({ deviceId, onClose }: { deviceId: string; onClose
                             ? `Session terminée — ${exited.error}`
                             : `Session terminée${exited.code != null ? ` (code ${exited.code})` : ''}.`}
                     </span>
-                    <div className={styles.terminalExitActions}>
-                        <Button variant='secondary' onClick={relaunch}>
-                            Relancer
-                        </Button>
-                        <Button variant='ghost' onClick={() => onCloseRef.current?.()}>
-                            Fermer
-                        </Button>
-                    </div>
+                    <div className={styles.terminalExitActions}>{endActions}</div>
                 </div>
             )}
         </div>

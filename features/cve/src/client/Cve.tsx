@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
+    ErrorNote,
     FeatureSettingsButton,
     SegmentedControl,
     StickyHeader,
     TextInput,
     useLiveSegment,
     useSubView,
-    useWorkspacePermissions
+    useWorkspacePermissions,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { FeatureViewProps } from '@deveye/types/sdk/client';
 
@@ -17,7 +19,7 @@ import type { CveEntry, CveSeverityFilter } from '../contracts/domain';
 import { api } from './api';
 import CveDetail from './CveDetail';
 import CveRow, { rowDomId } from './CveRow';
-import { cveError, type CveError } from './errors';
+import { cveError } from './errors';
 import { DETAIL_AS_PAGE } from './layout';
 import { SEVERITY_FILTERS } from './severity';
 import { NEWS_LIMIT, refreshCveNews, useCveNews } from './store';
@@ -53,7 +55,7 @@ interface SearchState {
     remote: boolean;
     remoteError: string | null;
     loading: boolean;
-    error: CveError | null;
+    error: ErrorNoteInput | null;
 }
 
 const NO_SEARCH: SearchState = {
@@ -75,7 +77,7 @@ export default function Cve(_props: FeatureViewProps) {
     const [selectedId, setSelectedId] = useState<string | null>(null);
     /** Une CVE ouverte qu'aucune liste ne porte : une téléportation, ou un résultat effacé depuis. */
     const [fetched, setFetched] = useState<CveEntry | null>(null);
-    const [error, setError] = useState<CveError | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     const news = useCveNews();
     const canWrite = useWorkspacePermissions().canFeature('cve', 'write');
@@ -278,13 +280,7 @@ export default function Cve(_props: FeatureViewProps) {
                 <p className={styles.status}>{statusLine({ searching, search, news, loading, count: shown.length })}</p>
             </div>
 
-            {banner && (
-                <p className={styles.error} role='alert'>
-                    <span className={`icon icon-x-circle ${styles.errorIcon}`} aria-hidden='true' />
-                    <span>{banner.text}</span>
-                    {banner.code && <span className={styles.errorCode}>{banner.code}</span>}
-                </p>
-            )}
+            <ErrorNote note={banner} />
 
             <div className={styles.split}>
                 <div className={styles.listPane}>

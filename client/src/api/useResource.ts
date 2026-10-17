@@ -1,27 +1,46 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import { ws, WsError } from '@/api/ws';
+import { ws } from '@/api/ws';
+import type { ErrorNoteInput } from '@/Components/ErrorNote';
 import { useResourceVersion, type ResourceKey } from '@/stores/invalidation';
+import { UploadError } from '@/upload';
 
-/** Traduit un échec WS en une phrase courte pour un bandeau d'erreur. */
+/**
+ * Traduit un échec en une phrase courte pour un bandeau d'erreur. Lu sur la
+ * forme (`code`, `message`) : une `WsError`, une `ApiError` ou le refus d'une
+ * image parlent la même langue.
+ */
 export function humanizeError(error: unknown, fallback: string): string {
-    if (error instanceof WsError) {
-        if (error.code === 'forbidden') return 'Accès refusé.';
-        // Le serveur renvoie déjà une phrase en français sur ces codes,
-        // plus précise que tout ce qu'on pourrait écrire ici.
-        if (
-            error.code === 'validation' ||
-            error.code === 'conflict' ||
-            error.code === 'rate_limited' ||
-            error.code === 'quota_exceeded'
-        ) {
-            return error.message;
-        }
-        if (error.code === 'not_found') return 'Introuvable: la donnée a peut-être été supprimée entre-temps.';
-        if (error.code === 'locked') return 'Déverrouillage requis.';
-        if (error.code === 'timeout') return 'Délai dépassé.';
+    const { code, message } = (error ?? {}) as { code?: unknown; message?: unknown };
+    if (typeof code !== 'string' || typeof message !== 'string') return fallback;
+    // Celui qui refuse a déjà écrit une phrase en français sur ces codes,
+    // plus précise que tout ce qu'on pourrait écrire ici.
+    if (
+        code === 'validation' ||
+        code === 'conflict' ||
+        code === 'forbidden' ||
+        code === 'rate_limited' ||
+        code === 'quota_exceeded'
+    ) {
+        return message || (code === 'forbidden' ? 'Accès refusé.' : fallback);
     }
+    if (code === 'not_found') return 'Introuvable: la donnée a peut-être été supprimée entre-temps.';
+    if (code === 'locked') return 'Déverrouillage requis.';
+    if (code === 'timeout') return 'Délai dépassé.';
     return fallback;
+}
+
+/**
+ * Un échec tel que `ErrorNote` le montre : la phrase, et le code qui décide du
+ * signalement. Le code est lu sur la forme, sans `instanceof` : un module et
+ * l'app peuvent résoudre deux classes d'erreur distinctes. Un envoi refusé
+ * garde la phrase du module qui a reçu le fichier.
+ */
+export function errorNote(error: unknown, fallback: string): ErrorNoteInput {
+    const raw = (error as { code?: unknown } | null)?.code;
+    const code = typeof raw === 'string' ? raw : null;
+    if (error instanceof UploadError && code !== 'internal') return { message: error.message, code };
+    return { message: humanizeError(error, fallback), code };
 }
 
 /**
@@ -38,10 +57,10 @@ export function useResource<T>(
     fallback: string,
     /** Ce qui, en changeant, change la requête elle-même (filtres, fenêtre). */
     deps: readonly unknown[] = []
-): { data: T | null; error: string | null; loading: boolean; reload: () => void } {
+): { data: T | null; error: ErrorNoteInput | null; loading: boolean; reload: () => void } {
     const version = useResourceVersion(key);
     const [data, setData] = useState<T | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [loading, setLoading] = useState(true);
     const [nonce, setNonce] = useState(0);
 
@@ -60,7 +79,7 @@ export function useResource<T>(
                 })
                 .catch((e: unknown) => {
                     if (cancelled) return;
-                    setError(humanizeError(e, fallback));
+                    setError(errorNote(e, fallback));
                     setLoading(false);
                 });
         };

@@ -21,7 +21,6 @@ declare const styles: {
     readonly chartLegend: string;
     readonly chartPlot: string;
     readonly columns: string;
-    readonly error: string;
     readonly factLabel: string;
     readonly factPlain: string;
     readonly factRow: string;

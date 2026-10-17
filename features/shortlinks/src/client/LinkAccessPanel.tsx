@@ -1,5 +1,6 @@
 import {
-    humanizeError,
+    errorNote,
+    ErrorNote,
     invalidate,
     NumberInput,
     ReadOnlyNotice,
@@ -7,7 +8,8 @@ import {
     SegmentedControl,
     settingsStyles as shell,
     Switch,
-    TextInput
+    TextInput,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import { useEffect, useState } from 'react';
@@ -54,7 +56,7 @@ export default function LinkAccessPanel({ scope, canWrite }: SettingsPanelProps)
     const [link, setLink] = useState<Shortlink | null>(null);
     const [draft, setDraft] = useState<Draft | null>(null);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     useEffect(() => {
         if (linkId === null) return;
@@ -66,7 +68,7 @@ export default function LinkAccessPanel({ scope, canWrite }: SettingsPanelProps)
                 setDraft(draftOf(res.link));
             })
             .catch((failure: unknown) => {
-                if (live) setError(humanizeError(failure, 'Le lien n’a pas pu être lu.'));
+                if (live) setError(errorNote(failure, 'Le lien n’a pas pu être lu.'));
             });
         return () => {
             live = false;
@@ -74,7 +76,7 @@ export default function LinkAccessPanel({ scope, canWrite }: SettingsPanelProps)
     }, [linkId]);
 
     if (link === null || draft === null) {
-        return <p className={error ? shell.notice : shell.empty}>{error ?? 'Chargement…'}</p>;
+        return error ? <ErrorNote note={error} /> : <p className={shell.empty}>Chargement…</p>;
     }
 
     if (link.foreign) {
@@ -129,7 +131,7 @@ export default function LinkAccessPanel({ scope, canWrite }: SettingsPanelProps)
             setDraft(draftOf(res.link));
             invalidate('shortlinks.list', 'shortlinks.get', 'shortlinks.count');
         } catch (failure) {
-            setError(humanizeError(failure, 'L’enregistrement a échoué.'));
+            setError(errorNote(failure, 'L’enregistrement a échoué.'));
             throw failure;
         } finally {
             setBusy(false);
@@ -274,7 +276,7 @@ export default function LinkAccessPanel({ scope, canWrite }: SettingsPanelProps)
                 </ReadOnlyNotice>
             )}
 
-            {error && <p className={shell.notice}>{error}</p>}
+            <ErrorNote note={error} />
         </div>
     );
 }

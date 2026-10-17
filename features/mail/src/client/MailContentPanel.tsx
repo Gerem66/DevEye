@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
     Button,
     ConfirmDialog,
+    ErrorNote,
     invalidate,
     ReadOnlyNotice,
     SegmentedControl,
@@ -9,11 +10,12 @@ import {
     Switch,
     TextInput,
     useResourceVersion,
-    type ConfirmRequest
+    type ConfirmRequest,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 
-import { api, humanizeError, withSettingsDefaults } from './api';
+import { api, errorNote, withSettingsDefaults } from './api';
 import styles from './style.module.css';
 
 import type { MailAccount, MailBodyRenderMode, MailSettings } from '../contracts/domain';
@@ -51,14 +53,14 @@ export default function MailContentPanel({ scope, canWrite }: SettingsPanelProps
     const version = useResourceVersion('mail.getSettings');
     const [settings, setSettings] = useState<MailSettings | null>(null);
     const [domainDraft, setDomainDraft] = useState('');
-    const [status, setStatus] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     const load = useCallback(async () => {
         try {
             const res = await api.send('mail.getSettings', {});
             setSettings(withSettingsDefaults(res.settings));
         } catch (e) {
-            setStatus(humanizeError(e, 'Chargement impossible.'));
+            setError(errorNote(e, 'Chargement impossible.'));
         }
     }, []);
 
@@ -69,19 +71,19 @@ export default function MailContentPanel({ scope, canWrite }: SettingsPanelProps
     const apply = useCallback(
         async (next: MailSettings) => {
             setSettings(next);
-            setStatus(null);
+            setError(null);
             try {
                 await api.send('mail.setSettings', next);
                 invalidate('mail.getSettings');
             } catch (e) {
-                setStatus(humanizeError(e, 'Enregistrement impossible.'));
+                setError(errorNote(e, 'Enregistrement impossible.'));
                 void load();
             }
         },
         [load]
     );
 
-    if (!settings) return <p className={shell.notice}>{status ?? 'Chargement…'}</p>;
+    if (!settings) return error ? <ErrorNote note={error} /> : <p className={shell.notice}>Chargement…</p>;
 
     const addDomain = () => {
         const domain = domainDraft.trim().toLowerCase();
@@ -176,7 +178,7 @@ export default function MailContentPanel({ scope, canWrite }: SettingsPanelProps
                 </ReadOnlyNotice>
             )}
 
-            {status && <p className={shell.notice}>{status}</p>}
+            <ErrorNote note={error} />
         </div>
     );
 }
@@ -190,26 +192,26 @@ function MailboxImagesField({ accountId, canWrite }: { accountId: number; canWri
     const [account, setAccount] = useState<MailAccount | null>(null);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
     const [busy, setBusy] = useState(false);
-    const [status, setStatus] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     useEffect(() => {
         void api
             .send('mail.accountList', {})
             .then((res) => setAccount(res.accounts.find((a) => a.id === accountId) ?? null))
-            .catch((e) => setStatus(humanizeError(e, 'Chargement impossible.')));
+            .catch((e: unknown) => setError(errorNote(e, 'Chargement impossible.')));
     }, [accountId, version]);
 
     const save = useCallback(
         async (allowed: boolean) => {
             if (!account) return;
             setBusy(true);
-            setStatus(null);
+            setError(null);
             try {
                 const res = await api.send('mail.accountSetRemoteImages', { id: account.id, allowed });
                 setAccount(res.account);
                 invalidate('mail.accountList');
             } catch (e) {
-                setStatus(humanizeError(e, 'Changement impossible.'));
+                setError(errorNote(e, 'Changement impossible.'));
             } finally {
                 setBusy(false);
             }
@@ -217,7 +219,7 @@ function MailboxImagesField({ accountId, canWrite }: { accountId: number; canWri
         [account]
     );
 
-    if (!account) return status ? <p className={shell.notice}>{status}</p> : null;
+    if (!account) return <ErrorNote note={error} />;
 
     const onChange = (on: boolean) => {
         if (!on) {
@@ -256,7 +258,7 @@ function MailboxImagesField({ accountId, canWrite }: { accountId: number; canWri
                     ? 'Toutes les images de ses messages s’affichent, y compris celles qui servent au suivi.'
                     : 'Bloquées par défaut, sauf les domaines approuvés ci-dessous.'}
             </span>
-            {status && <p className={shell.notice}>{status}</p>}
+            <ErrorNote note={error} />
             <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} busy={busy} />
         </div>
     );

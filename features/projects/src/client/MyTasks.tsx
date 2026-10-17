@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { CountBadge, humanizeError, StatusBadge, useResourceVersion } from 'deveye-sdk-client';
+import {
+    CountBadge,
+    ErrorNote,
+    errorNote,
+    StatusBadge,
+    useResourceVersion,
+    type ErrorNoteInput
+} from 'deveye-sdk-client';
 import { api, formatDate, PRIORITY_LABELS } from './api';
 import type { MyTask } from '../contracts/domain';
 import styles from './style.module.css';
@@ -20,7 +27,7 @@ interface MyTasksProps {
  */
 export function MyTasks({ foreignProjectIds, onOpenProject }: MyTasksProps) {
     const [tasks, setTasks] = useState<MyTask[] | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const version = useResourceVersion('projects.myTasks');
 
     const load = useCallback(async () => {
@@ -29,7 +36,7 @@ export function MyTasks({ foreignProjectIds, onOpenProject }: MyTasksProps) {
             setTasks(res.tasks);
             setError(null);
         } catch (e) {
-            setError(humanizeError(e, 'Impossible de charger vos tâches.'));
+            setError(errorNote(e, 'Impossible de charger vos tâches.'));
         }
     }, []);
 
@@ -41,7 +48,7 @@ export function MyTasks({ foreignProjectIds, onOpenProject }: MyTasksProps) {
 
     return (
         <div className={styles.myTasks}>
-            {error && <p className={styles.error}>{error}</p>}
+            <ErrorNote note={error} />
             {tasks === null && <p className={styles.empty}>Chargement…</p>}
             {tasks?.length === 0 && <p className={styles.empty}>Aucune tâche ne vous est attribuée.</p>}
 

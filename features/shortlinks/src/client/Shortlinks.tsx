@@ -1,6 +1,7 @@
 import {
     Button,
     CountBadge,
+    ErrorNote,
     FeatureSettingsButton,
     PlanPausedNotice,
     StickyHeader,
@@ -83,7 +84,7 @@ export default function Shortlinks(_props: FeatureViewProps) {
                 </header>
             </StickyHeader>
 
-            {list.error !== null && <p className={styles.error}>{list.error}</p>}
+            <ErrorNote note={list.error} />
             <UsageNotice usage={list.data?.usage ?? null} />
             <PlanPausedNotice
                 count={links.filter((link) => link.status === 'planPaused' && !link.foreign).length}

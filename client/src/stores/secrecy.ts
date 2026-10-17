@@ -44,9 +44,12 @@ let unlockTarget: UnlockTarget | null = null;
 
 /**
  * Rejection raised by {@link ensureUnlocked} when the user dismisses the prompt,
- * so callers can tell a deliberate cancel from a generic failure.
+ * so callers can tell a deliberate cancel from a generic failure. Coded
+ * `locked` so that `errorNote` treats it as a refusal, not as a failure.
  */
 export class UnlockCancelledError extends Error {
+    readonly code = 'locked';
+
     constructor() {
         super('cancelled');
         this.name = 'UnlockCancelledError';

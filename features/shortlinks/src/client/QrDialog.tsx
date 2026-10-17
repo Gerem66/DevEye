@@ -1,4 +1,12 @@
-import { Button, Dialog, DialogCancelButton, humanizeError, SegmentedControl } from 'deveye-sdk-client';
+import {
+    Button,
+    Dialog,
+    DialogCancelButton,
+    errorNote,
+    ErrorNote,
+    SegmentedControl,
+    type ErrorNoteInput
+} from 'deveye-sdk-client';
 import { useEffect, useState } from 'react';
 
 import type { Shortlink } from '../contracts/domain';
@@ -28,7 +36,7 @@ export default function QrDialog({ link, open, onClose }: { link: Shortlink; ope
     const hasDomain = link.domainUrl !== null;
     const [address, setAddress] = useState<Address>(hasDomain ? 'domain' : 'short');
     const [qr, setQr] = useState<{ url: string; svg: string } | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     useEffect(() => {
         if (!open) return;
@@ -40,7 +48,7 @@ export default function QrDialog({ link, open, onClose }: { link: Shortlink; ope
                 if (live) setQr(result);
             })
             .catch((failure: unknown) => {
-                if (live) setError(humanizeError(failure, 'Le QR code n’a pas pu être dessiné.'));
+                if (live) setError(errorNote(failure, 'Le QR code n’a pas pu être dessiné.'));
             });
         return () => {
             live = false;
@@ -78,7 +86,7 @@ export default function QrDialog({ link, open, onClose }: { link: Shortlink; ope
                     />
                 )}
                 {error !== null ? (
-                    <p className={styles.error}>{error}</p>
+                    <ErrorNote note={error} />
                 ) : qr === null ? (
                     <p className={styles.empty}>Dessin du QR code…</p>
                 ) : (

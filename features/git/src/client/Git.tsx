@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     Button,
+    ErrorNote,
+    errorNote,
     FeatureSettingsButton,
-    humanizeError,
     invalidate,
     openFeature,
     PlanPausedNotice,
@@ -13,7 +14,8 @@ import {
     useResourceVersion,
     useSubView,
     useWorkspaceMembers,
-    useWorkspacePermissions
+    useWorkspacePermissions,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { FeatureViewProps } from '@deveye/types/sdk/client';
 import type { GitCredential, GitRepo, GitRepoSyncState, GitRepoUsage } from '../contracts/domain';
@@ -50,7 +52,7 @@ export function FeatureGit(_props: FeatureViewProps) {
     const [repos, setRepos] = useState<GitRepo[] | null>(null);
     /** Les jetons de l'espace : la ligne sous le titre en donne le compte. */
     const [credentials, setCredentials] = useState<GitCredential[]>([]);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     /** Le dépôt ouvert ; `null` = on est sur la liste. */
     const [openedId, setOpenedId] = useState<number | null>(null);
@@ -106,7 +108,7 @@ export function FeatureGit(_props: FeatureViewProps) {
                 setCredentials(creds.credentials);
                 setError(null);
             } catch (e) {
-                setError(humanizeError(e, 'Impossible de charger les dépôts.'));
+                setError(errorNote(e, 'Impossible de charger les dépôts.'));
             }
         })();
         reloadRef.current = task;
@@ -153,8 +155,8 @@ export function FeatureGit(_props: FeatureViewProps) {
                 return ids.flatMap((id) => byId.get(id) ?? []);
             });
             // Relue d'abord : son succès efface l'erreur affichée.
-            api.send('git.repoReorder', { ids }).catch(() => {
-                void reload().then(() => setError('Réorganisation impossible.'));
+            api.send('git.repoReorder', { ids }).catch((e: unknown) => {
+                void reload().then(() => setError(errorNote(e, 'Réorganisation impossible.')));
             });
         },
         [reload]
@@ -207,7 +209,7 @@ export function FeatureGit(_props: FeatureViewProps) {
             setOpened({ repo: res.repo, usage: res.usage });
             setError(null);
         } catch (e) {
-            setError(humanizeError(e, 'Impossible d’ouvrir ce dépôt.'));
+            setError(errorNote(e, 'Impossible d’ouvrir ce dépôt.'));
             setOpenedId(null);
             setOpened(null);
         }
@@ -223,6 +225,7 @@ export function FeatureGit(_props: FeatureViewProps) {
 
     const syncNow = async (repoId: number) => {
         setBusy(true);
+        setError(null);
         try {
             await api.send('git.repoSyncNow', { repoId });
             // La vue du dépôt prend le relais : elle sonde l'avancement et pose son
@@ -230,7 +233,7 @@ export function FeatureGit(_props: FeatureViewProps) {
             invalidate('git.repo');
             setError(null);
         } catch (e) {
-            setError(humanizeError(e, 'La synchronisation n’a pas pu être lancée.'));
+            setError(errorNote(e, 'La synchronisation n’a pas pu être lancée.'));
         } finally {
             setBusy(false);
         }
@@ -253,6 +256,7 @@ export function FeatureGit(_props: FeatureViewProps) {
                 members={members}
                 canWrite={canWrite}
                 busy={busy}
+                error={error}
                 onBack={() => setOpenedId(null)}
                 onSyncNow={() => void syncNow(opened.repo.id)}
                 onOpenProject={openProject}
@@ -287,7 +291,7 @@ export function FeatureGit(_props: FeatureViewProps) {
                 </header>
             </StickyHeader>
 
-            {error && <p className={styles.error}>{error}</p>}
+            <ErrorNote note={error} />
 
             {repos === null && <p className={styles.empty}>Chargement…</p>}
 

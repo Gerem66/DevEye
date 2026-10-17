@@ -4,15 +4,17 @@ import type { BackupJob } from '../contracts/domain';
 
 import {
     Button,
+    ErrorNote,
+    errorNote,
     FeatureSettingsButton,
     formatBytesFr,
-    humanizeError,
     invalidate,
     StickyHeader,
     useLiveSegment,
     useResource,
     useSubView,
-    useWorkspacePermissions
+    useWorkspacePermissions,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import { api } from './api';
 import JobDialog from './JobDialog';
@@ -50,7 +52,7 @@ export default function Backup(_props: FeatureViewProps) {
         'Impossible de charger les destinations.'
     );
     const jobs = jobsResource.data;
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     const [openedId, setOpenedId] = useState<number | null>(null);
     const [addOpen, setAddOpen] = useState(false);
@@ -58,11 +60,12 @@ export default function Backup(_props: FeatureViewProps) {
     const refresh = useCallback(() => invalidate('backup.jobList', 'backup.destinationList', 'backup.count'), []);
 
     const runNow = async (job: BackupJob) => {
+        setError(null);
         try {
             await api.send('backup.jobRun', { jobId: job.id });
             invalidate('backup.jobList', 'backup.detail', 'backup.count');
         } catch (e) {
-            setError(humanizeError(e, 'Impossible de lancer cette sauvegarde.'));
+            setError(errorNote(e, 'Impossible de lancer cette sauvegarde.'));
         }
     };
 
@@ -111,7 +114,7 @@ export default function Backup(_props: FeatureViewProps) {
                         </div>
                     </StickyHeader>
 
-                    {(error ?? jobsResource.error) && <p className={styles.error}>{error ?? jobsResource.error}</p>}
+                    <ErrorNote note={error ?? jobsResource.error} />
                     {jobs === null && !jobsResource.error && <p className={styles.empty}>Chargement…</p>}
                     {jobs?.length === 0 && (
                         <p className={styles.empty}>
@@ -183,6 +186,7 @@ export default function Backup(_props: FeatureViewProps) {
                     job={opened}
                     canWrite={canWrite}
                     running={opened.lastStatus === 'running'}
+                    runError={error}
                     onBack={() => setOpenedId(null)}
                     onRun={() => void runNow(opened)}
                 />

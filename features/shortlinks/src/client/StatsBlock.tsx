@@ -1,4 +1,4 @@
-import { Button, safeHref, useResource } from 'deveye-sdk-client';
+import { Button, ErrorNote, safeHref, useResource, type ErrorNoteInput } from 'deveye-sdk-client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { ShortlinkRange } from '../contracts/domain';
@@ -12,7 +12,7 @@ import styles from './style.module.css';
 
 /** Le bouton Actualiser reste grisé ce temps-là après la réponse : il ne se mitraille pas. */
 const REFRESH_HOLD_MS = 500;
-/** Une réponse qui ne change rien à l'écran (la même erreur) libère le bouton au bout du délai d'une commande. */
+/** Sans réponse, le bouton se libère au bout du délai d'une commande. */
 const REFRESH_TIMEOUT_MS = 15_000;
 
 interface StatsBlockProps {
@@ -38,7 +38,7 @@ export default function StatsBlock({ linkId, title, detailed }: StatsBlockProps)
         [linkId, range]
     );
     const [refreshing, setRefreshing] = useState(false);
-    const asked = useRef<{ data: unknown; error: string | null } | null>(null);
+    const asked = useRef<{ data: unknown; error: ErrorNoteInput | null } | null>(null);
     const refresh = () => {
         asked.current = { data: read.data, error: read.error };
         setRefreshing(true);
@@ -75,7 +75,7 @@ export default function StatsBlock({ linkId, title, detailed }: StatsBlockProps)
                 </div>
             </div>
 
-            {read.error !== null && <p className={styles.error}>{read.error}</p>}
+            <ErrorNote note={read.error} />
 
             {stats === null ? (
                 read.error === null && <p className={styles.empty}>Chargement des statistiques…</p>

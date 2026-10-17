@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { humanizeError, invalidate } from 'deveye-sdk-client';
+import { errorNote, invalidate, type ErrorNoteInput } from 'deveye-sdk-client';
 
 import type { InvoicingQuotaUsage, InvoicingSettings } from '../contracts/domain';
 import { api } from './api';
@@ -13,7 +13,7 @@ import { api } from './api';
 export interface SettingsDraft {
     draft: InvoicingSettings | null;
     usage: InvoicingQuotaUsage | null;
-    error: string | null;
+    error: ErrorNoteInput | null;
     patch(change: Partial<InvoicingSettings>): void;
     save(): Promise<void>;
     busy: boolean;
@@ -22,7 +22,7 @@ export interface SettingsDraft {
 export function useSettingsDraft(): SettingsDraft {
     const [draft, setDraft] = useState<InvoicingSettings | null>(null);
     const [usage, setUsage] = useState<InvoicingQuotaUsage | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [busy, setBusy] = useState(false);
 
     const load = useCallback(async () => {
@@ -31,7 +31,7 @@ export function useSettingsDraft(): SettingsDraft {
             setDraft(res.settings);
             setUsage(res.usage);
         } catch (e) {
-            setError(humanizeError(e, 'Les réglages n’ont pas pu être lus.'));
+            setError(errorNote(e, 'Les réglages n’ont pas pu être lus.'));
         }
     }, []);
 
@@ -60,7 +60,7 @@ export function useSettingsDraft(): SettingsDraft {
                 'invoicing.dashboard'
             );
         } catch (e) {
-            setError(humanizeError(e, 'Enregistrement impossible.'));
+            setError(errorNote(e, 'Enregistrement impossible.'));
             // Relancé : le bouton n'annonce « Enregistré » que sur un succès.
             throw e;
         } finally {

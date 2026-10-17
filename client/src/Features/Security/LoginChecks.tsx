@@ -11,10 +11,11 @@ import {
 } from '@deveye/types';
 
 import { ws, WsError } from '@/api/ws';
-import { humanizeError } from '@/api/useResource';
+import { errorNote } from '@/api/useResource';
 import Button from '@/Components/Button';
 import { ConfirmDialog, type ConfirmRequest } from '@/Components/ConfirmDialog';
 import { Dialog } from '@/Components/Dialog';
+import ErrorNote, { type ErrorNoteInput } from '@/Components/ErrorNote';
 import { openInfo } from '@/Components/InfoPopup';
 import { StatusBadge } from '@/Components/StatusBadge';
 import Switch from '@/Components/Switch';
@@ -90,23 +91,23 @@ function PasswordConfirmDialog({
 }) {
     const [password, setPassword] = useState('');
     const [error, setError] = useState<string | null>(null);
+    /** L'échec qui ne tient pas au mot de passe : il se dit sous le champ. */
+    const [failure, setFailure] = useState<ErrorNoteInput | null>(null);
     const [busy, setBusy] = useState(false);
 
     const confirm = async () => {
         if (!password || busy) return;
         setBusy(true);
         setError(null);
+        setFailure(null);
         try {
             await onConfirm(password);
             setPassword('');
             onClose();
         } catch (e) {
             setPassword('');
-            setError(
-                e instanceof WsError && e.code === 'auth_invalid'
-                    ? 'Mot de passe incorrect'
-                    : 'Échec de la désactivation'
-            );
+            if (e instanceof WsError && e.code === 'auth_invalid') setError('Mot de passe incorrect');
+            else setFailure(errorNote(e, 'Échec de la désactivation.'));
         } finally {
             setBusy(false);
         }
@@ -142,6 +143,7 @@ function PasswordConfirmDialog({
                     setError(null);
                 }}
             />
+            <ErrorNote note={failure} />
         </Dialog>
     );
 }
@@ -174,7 +176,7 @@ function stepsLabel(entry: LoginEntry): string {
 export function EmailCheckRow({ checks, onChange }: RowProps) {
     const [disableOpen, setDisableOpen] = useState(false);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const { email } = checks;
 
     // Allumer ne demande rien : l'interrupteur bascule aussitôt, et revient si
@@ -187,7 +189,7 @@ export function EmailCheckRow({ checks, onChange }: RowProps) {
             onChange((await ws.send('loginChecks.setEmail', { enabled: true })).status);
         } catch (e) {
             onChange(checks);
-            setError(humanizeError(e, 'Le code par mail n’a pas pu être activé.'));
+            setError(errorNote(e, 'Le code par mail n’a pas pu être activé.'));
         } finally {
             setBusy(false);
         }
@@ -235,7 +237,7 @@ export function SmsCheckRow({ checks, onChange }: RowProps) {
     const [phoneOpen, setPhoneOpen] = useState(false);
     const [disableOpen, setDisableOpen] = useState(false);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const { sms } = checks;
 
     const enable = async () => {
@@ -246,7 +248,7 @@ export function SmsCheckRow({ checks, onChange }: RowProps) {
             onChange((await ws.send('loginChecks.setSms', { enabled: true })).status);
         } catch (e) {
             onChange(checks);
-            setError(humanizeError(e, 'Le code par SMS n’a pas pu être activé.'));
+            setError(errorNote(e, 'Le code par SMS n’a pas pu être activé.'));
         } finally {
             setBusy(false);
         }
@@ -426,7 +428,7 @@ interface LoginHistoryDialogProps {
  */
 function LoginHistoryDialog({ open, onClose }: LoginHistoryDialogProps) {
     const [history, setHistory] = useState<{ entries: LoginEntry[]; older: number } | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
     const [busy, setBusy] = useState(false);
     /** Le résultat de la fermeture, le temps que le dialogue reste ouvert. */
@@ -438,16 +440,17 @@ function LoginHistoryDialog({ open, onClose }: LoginHistoryDialogProps) {
         setError(null);
         setClosed(null);
         ws.send('loginChecks.history', {}).then(setHistory, (e: unknown) =>
-            setError(humanizeError(e, 'L’historique n’a pas pu être lu.'))
+            setError(errorNote(e, 'L’historique n’a pas pu être lu.'))
         );
     }, [open]);
 
     const logoutOthers = async () => {
         setBusy(true);
+        setError(null);
         try {
             setClosed((await ws.send('loginChecks.logoutOthers', {})).closed);
         } catch (e) {
-            setError(humanizeError(e, 'Les autres appareils n’ont pas pu être déconnectés.'));
+            setError(errorNote(e, 'Les autres appareils n’ont pas pu être déconnectés.'));
         } finally {
             setBusy(false);
         }
@@ -484,12 +487,9 @@ function LoginHistoryDialog({ open, onClose }: LoginHistoryDialogProps) {
                     </>
                 }
             >
-                {error ? (
-                    <div className={styles.error} role='alert'>
-                        {error}
-                    </div>
-                ) : history === null ? (
-                    <p className={styles.historyNote}>Chargement…</p>
+                <ErrorNote note={error} />
+                {history === null ? (
+                    !error && <p className={styles.historyNote}>Chargement…</p>
                 ) : (
                     <>
                         <ul className={styles.browserList}>

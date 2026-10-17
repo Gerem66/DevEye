@@ -17,11 +17,13 @@ import {
 } from '../contracts/domain';
 
 import {
-    humanizeError,
+    errorNote,
+    ErrorNote,
     invalidate,
     ProviderKeys,
     settingsStyles as shell,
     useResourceVersion,
+    type ErrorNoteInput,
     type ProviderKeyRow
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
@@ -87,7 +89,7 @@ function rowOf(probe: OsintProbeId, held: ReadonlySet<OsintProvider>, group: str
 
 export default function OsintProbesPanel({ canWrite }: SettingsPanelProps) {
     const [held, setHeld] = useState<ReadonlySet<OsintProvider> | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const keysVersion = useResourceVersion('osint.keyList');
     const usageVersion = useResourceVersion('osint.usage');
     const [usage, setUsage] = useState<OsintUsage | null>(null);
@@ -105,7 +107,7 @@ export default function OsintProbesPanel({ canWrite }: SettingsPanelProps) {
             const res = await api.send('osint.keyList', {});
             setHeld(new Set(res.providers.filter((p) => p.hasKey).map((p) => p.provider)));
         } catch (e) {
-            setError(humanizeError(e, 'Les clés n’ont pas pu être lues.'));
+            setError(errorNote(e, 'Les clés n’ont pas pu être lues.'));
         }
     }, []);
 
@@ -129,7 +131,7 @@ export default function OsintProbesPanel({ canWrite }: SettingsPanelProps) {
     }, []);
 
     // Avant la lecture des clés, l'état de chaque rangée serait un mensonge.
-    if (!held) return error ? <p className={shell.notice}>{error}</p> : null;
+    if (!held) return <ErrorNote note={error} />;
 
     const probes = osintProbeIdSchema.options;
     const usable = probes.filter((p) => osintProbeUsable(p, held));
@@ -160,7 +162,7 @@ export default function OsintProbesPanel({ canWrite }: SettingsPanelProps) {
                 onRemove={(probe) => save(probe, '')}
                 readOnlyHint='Votre rôle ne permet pas de modifier ces clés : elles relèvent de l’écriture sur OSINT.'
             />
-            {error && <p className={shell.notice}>{error}</p>}
+            <ErrorNote note={error} />
         </>
     );
 }

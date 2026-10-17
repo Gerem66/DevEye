@@ -1,9 +1,15 @@
 import { useEffect, useSyncExternalStore } from 'react';
-import { isSocketOpen, onResourceChange, onSocketOpen, useActiveWorkspace } from 'deveye-sdk-client';
+import {
+    isSocketOpen,
+    onResourceChange,
+    onSocketOpen,
+    useActiveWorkspace,
+    type ErrorNoteInput
+} from 'deveye-sdk-client';
 
 import type { CveEntry } from '../contracts/domain';
 import { api } from './api';
-import { cveError, type CveError } from './errors';
+import { cveError } from './errors';
 
 /**
  * Le fil partagé : la carte de l'accueil et l'onglet « Actualités » lisent le
@@ -21,7 +27,7 @@ export interface CveNewsState {
     /** Dernier tour d'ingestion réussi, `null` tant qu'il n'y en a pas eu. */
     ingestedAt: number | null;
     loading: boolean;
-    error: CveError | null;
+    error: ErrorNoteInput | null;
 }
 
 let state: CveNewsState = { entries: [], ingestedAt: null, loading: true, error: null };

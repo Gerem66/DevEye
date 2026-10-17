@@ -4,6 +4,7 @@ import {
     Button,
     Checkbox,
     ErrorNote,
+    errorNote,
     FeatureSettingsButton,
     SegmentedControl,
     StatusBadge,
@@ -16,7 +17,7 @@ import type { StatementLine } from '../contracts/statement';
 import ResolveDialog, { titleOf } from './ResolveDialog';
 import { api, refreshFinance } from './api';
 import { formatDate, formatMoney } from './format';
-import { accountName, errorNote, signOf } from './shared';
+import { accountName, signOf } from './shared';
 import styles from './style.module.css';
 import type { FinanceBase } from './shared';
 
@@ -95,7 +96,7 @@ export function ReviewPage({ base, onBack, onImport }: ReviewPageProps) {
         }
     };
 
-    const note = error ?? (loadError ? { message: loadError, code: null } : null);
+    const note = error ?? loadError;
 
     return (
         <div className={styles.page}>

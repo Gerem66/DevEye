@@ -1,4 +1,4 @@
-import { featureApi, WsError } from 'deveye-sdk-client';
+import { featureApi, UnlockCancelledError, WsError, type ErrorNoteInput } from 'deveye-sdk-client';
 
 import { manifest } from '../manifest';
 
@@ -24,7 +24,7 @@ function fieldErrorSummary(details: unknown): string | null {
  * (`auth_required`, `auth_invalid`), déplie les détails de validation par champ,
  * et laisse passer le message de tout autre code.
  */
-export function humanizeError(e: unknown, fallback: string): string {
+function humanizeError(e: unknown, fallback: string): string {
     if (e instanceof WsError) {
         if (e.code === 'auth_required' || e.code === 'locked') return 'Déverrouillage requis.';
         if (e.code === 'auth_invalid') return 'Identifiants invalides.';
@@ -37,6 +37,34 @@ export function humanizeError(e: unknown, fallback: string): string {
         if (e.message) return e.message;
     }
     return fallback;
+}
+
+/**
+ * Un refus que Mail constate sans le serveur (fenêtre bloquée, consentement
+ * refusé chez le fournisseur) : il porte déjà sa phrase et son code.
+ */
+export class MailRefusal extends Error {
+    constructor(readonly note: ErrorNoteInput) {
+        super(note.message);
+        this.name = 'MailRefusal';
+    }
+}
+
+/**
+ * Un échec tel que `ErrorNote` le montre, dans la traduction de Mail. Les deux
+ * codes d'authentification prennent celui qui dit la même chose que leur
+ * phrase, et une invite de déverrouillage annulée n'est pas une panne.
+ */
+export function errorNote(e: unknown, fallback: string): ErrorNoteInput {
+    if (e instanceof MailRefusal) return e.note;
+    const message = humanizeError(e, fallback);
+    if (e instanceof WsError) {
+        if (e.code === 'auth_required') return { message, code: 'locked' };
+        if (e.code === 'auth_invalid') return { message, code: 'validation' };
+        return { message, code: e.code };
+    }
+    if (e instanceof UnlockCancelledError) return { message, code: 'locked' };
+    return { message, code: null };
 }
 
 /**

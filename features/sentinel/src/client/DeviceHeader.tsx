@@ -1,5 +1,13 @@
 import { useState } from 'react';
-import { Button, FeatureSettingsButton, StatusBadge, StickyHeader } from 'deveye-sdk-client';
+import {
+    Button,
+    errorNote,
+    ErrorNote,
+    FeatureSettingsButton,
+    StatusBadge,
+    StickyHeader,
+    type ErrorNoteInput
+} from 'deveye-sdk-client';
 
 import { SENTINEL_RULES, type DeviceSentinelState, type RuleProbe } from '../contracts/domain';
 
@@ -31,6 +39,7 @@ interface Props {
 export default function DeviceHeader({ device, onScanNow }: Props) {
     const [busy, setBusy] = useState(false);
     const [notice, setNotice] = useState<string | null>(null);
+    const [failure, setFailure] = useState<ErrorNoteInput | null>(null);
 
     const learningLeft =
         device.learningUntil === null ? null : Math.max(0, Math.ceil((device.learningUntil - Date.now()) / 86400000));
@@ -39,6 +48,7 @@ export default function DeviceHeader({ device, onScanNow }: Props) {
     async function scan(): Promise<void> {
         setBusy(true);
         setNotice(null);
+        setFailure(null);
         try {
             const requested = await onScanNow(device.deviceId);
             // « Pas demandé » n'est pas une erreur : l'agent est hors ligne, et le
@@ -48,8 +58,8 @@ export default function DeviceHeader({ device, onScanNow }: Props) {
                     ? 'Relevé demandé : les résultats arrivent dans la minute.'
                     : 'Agent hors ligne : le relevé partira à sa prochaine connexion.'
             );
-        } catch {
-            setNotice("Le relevé n'a pas pu être demandé.");
+        } catch (e) {
+            setFailure(errorNote(e, "Le relevé n'a pas pu être demandé."));
         } finally {
             setBusy(false);
         }
@@ -98,6 +108,7 @@ export default function DeviceHeader({ device, onScanNow }: Props) {
                     </div>
                     {/* Sous le bouton qui l'a demandé, visible même la vue défilée. */}
                     {notice && <p className={styles.notice}>{notice}</p>}
+                    <ErrorNote note={failure} />
                 </header>
             </StickyHeader>
 

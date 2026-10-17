@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { MinimalUser } from '@deveye/types';
-import { humanizeError, invalidate, useResourceVersion } from 'deveye-sdk-client';
+import { ErrorNote, errorNote, invalidate, useResourceVersion, type ErrorNoteInput } from 'deveye-sdk-client';
 import type {
     GitBranch,
     GitCommit,
@@ -81,7 +81,9 @@ export function RepoView({ repo, members, canWrite, onSyncingChange, syncRequest
     const [commits, setCommits] = useState<GitCommit[]>([]);
     const [pulls, setPulls] = useState<GitPullRequest[]>([]);
     const [loaded, setLoaded] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
+    /** Le refus d'un rattachement, montré dans son dialogue. */
+    const [mapError, setMapError] = useState<ErrorNoteInput | null>(null);
     const [sync, setSync] = useState<GitSyncStatus | null>(null);
     const [openSha, setOpenSha] = useState<string | null>(null);
     const [openPull, setOpenPull] = useState<GitPullRequest | null>(null);
@@ -108,7 +110,7 @@ export function RepoView({ repo, members, canWrite, onSyncingChange, syncRequest
             setPulls(p.pullRequests);
             setError(null);
         } catch (e) {
-            setError(humanizeError(e, 'Impossible de charger ce dépôt.'));
+            setError(errorNote(e, 'Impossible de charger ce dépôt.'));
         } finally {
             setLoaded(true);
         }
@@ -226,11 +228,12 @@ export function RepoView({ repo, members, canWrite, onSyncingChange, syncRequest
     }, [syncRequest, startPolling]);
 
     const mapAuthor = async (authorRef: string, userId: number | null) => {
+        setMapError(null);
         try {
             await api.send('git.authorMap', { repoId, authorRef, userId });
             invalidate('git.repo');
         } catch (e) {
-            setError(humanizeError(e, 'Le rattachement a échoué.'));
+            setMapError(errorNote(e, 'Le rattachement a échoué.'));
         }
     };
 
@@ -245,7 +248,7 @@ export function RepoView({ repo, members, canWrite, onSyncingChange, syncRequest
 
     return (
         <>
-            {error && <p className={styles.error}>{error}</p>}
+            <ErrorNote note={error} />
 
             {/* Le voile couvre tout ce qui est en train d'être remplacé, et lui
                 seul : l'en-tête reste net et cliquable. */}
@@ -344,7 +347,11 @@ export function RepoView({ repo, members, canWrite, onSyncingChange, syncRequest
                 canWrite={canWrite}
                 groupByMember={prefs.groupAuthorsByMember}
                 onGroupByMemberChange={(v) => setGitPrefs({ groupAuthorsByMember: v })}
-                onClose={() => setAuthorMapOpen(false)}
+                error={mapError}
+                onClose={() => {
+                    setAuthorMapOpen(false);
+                    setMapError(null);
+                }}
                 onMap={(authorRef, userId) => void mapAuthor(authorRef, userId)}
             />
 

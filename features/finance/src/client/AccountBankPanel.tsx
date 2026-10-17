@@ -1,12 +1,14 @@
 import { useRef, useState } from 'react';
 import {
     Button,
+    ErrorNote,
+    errorNote,
     FeatureSettingsButton,
-    humanizeError,
     ReadOnlyNotice,
     SearchSelect,
     settingsStyles as shell,
-    useResource
+    useResource,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import type { BankConnection, BankRemoteAccount } from '../contracts/banking';
@@ -35,7 +37,7 @@ export default function AccountBankPanel({ scope, canWrite }: SettingsPanelProps
     /** `undefined` : suivre ce que le serveur dit du compte. Un nombre ou `null` : un choix en cours. */
     const [picked, setPicked] = useState<number | null | undefined>(undefined);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [flash, setFlash] = useState<string | null>(null);
     const known = useRef<Set<number> | null>(null);
 
@@ -67,7 +69,7 @@ export default function AccountBankPanel({ scope, canWrite }: SettingsPanelProps
                 );
             }
         } catch (e) {
-            setError(humanizeError(e, 'Le compte n’a pas pu être relié.'));
+            setError(errorNote(e, 'Le compte n’a pas pu être relié.'));
         } finally {
             setBusy(false);
         }
@@ -102,7 +104,7 @@ export default function AccountBankPanel({ scope, canWrite }: SettingsPanelProps
                 if (fresh.accounts.length === 1) void apply(fresh.id, fresh.accounts[0].id);
                 else setPicked(fresh.id);
             })
-            .catch(() => setError('Impossible de relire les connexions de l’espace.'))
+            .catch((e: unknown) => setError(errorNote(e, 'Impossible de relire les connexions de l’espace.')))
             .finally(() => {
                 known.current = null;
             });
@@ -124,7 +126,7 @@ export default function AccountBankPanel({ scope, canWrite }: SettingsPanelProps
                       : `${res.added} ligne${res.added > 1 ? 's' : ''} nouvelle${res.added > 1 ? 's' : ''}, à retrouver dans Relevés.`
             );
         } catch (e) {
-            setError(humanizeError(e, 'La relève a échoué.'));
+            setError(errorNote(e, 'La relève a échoué.'));
         } finally {
             setBusy(false);
         }
@@ -224,7 +226,7 @@ export default function AccountBankPanel({ scope, canWrite }: SettingsPanelProps
             )}
 
             {flash && <p className={shell.fieldHint}>{flash}</p>}
-            {(error ?? loadError) && <p className={shell.notice}>{error ?? loadError}</p>}
+            <ErrorNote note={error ?? loadError} />
             {!canWrite && (
                 <ReadOnlyNotice>
                     Votre rôle ne permet pas de relier ce compte : cela relève de l’écriture sur Finances.

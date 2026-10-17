@@ -1,11 +1,13 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import {
-    humanizeError,
+    errorNote,
+    ErrorNote,
     ReadOnlyNotice,
     SaveButton,
     SearchSelect,
     settingsStyles as shell,
     TextInput,
+    type ErrorNoteInput,
     type SearchSelectOption
 } from 'deveye-sdk-client';
 import { DEFAULT_PROCESS_CAPTURE, DEFAULT_RETENTION_DAYS, type Device, type ProcessCapture } from '@deveye/types';
@@ -84,7 +86,7 @@ export function ConfigPanel({ deviceId, canWrite }: { deviceId: string; canWrite
     const [capture, setCapture] = useState<ProcessCapture>(DEFAULT_PROCESS_CAPTURE);
     const [retSel, setRetSel] = useState(String(DEFAULT_RETENTION_DAYS));
     const [retCustom, setRetCustom] = useState(String(DEFAULT_RETENTION_DAYS));
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     // (Re)initialise only when the selected device changes: a list refresh
     // replaces the object reference and would wipe an in-progress entry.
@@ -124,7 +126,7 @@ export function ConfigPanel({ deviceId, canWrite }: { deviceId: string; canWrite
         const metricSec = planDefault ? null : resolve(metricSel, metricCustom);
         const retentionDays = resolve(retSel, retCustom);
         if ((!planDefault && metricSec === null) || retentionDays === null) {
-            setError('Une valeur personnalisée est invalide.');
+            setError({ message: 'Une valeur personnalisée est invalide.', code: 'validation' });
             throw new Error('valeur invalide');
         }
         setError(null);
@@ -137,7 +139,7 @@ export function ConfigPanel({ deviceId, canWrite }: { deviceId: string; canWrite
             });
             await refreshDevices();
         } catch (e) {
-            setError(humanizeError(e, 'Enregistrement impossible.'));
+            setError(errorNote(e, 'Enregistrement impossible.'));
             // Relancé : le bouton n'annonce « Enregistré » que sur un succès.
             throw e;
         }
@@ -208,7 +210,7 @@ export function ConfigPanel({ deviceId, canWrite }: { deviceId: string; canWrite
                     onCustom={setRetCustom}
                 />
             </div>
-            {error && <p className={styles.configError}>{error}</p>}
+            <ErrorNote note={error} />
             {editable && <SaveButton onSave={() => save(device)} />}
             {/* Le droit, jamais l'état : l'appareil archivé dit déjà pourquoi il
                 est inerte, et le motif de rôle passe avant lui. */}

@@ -1,4 +1,4 @@
-import { NumberInput, ReadOnlyNotice, SaveButton, settingsStyles as shell } from 'deveye-sdk-client';
+import { ErrorNote, NumberInput, ReadOnlyNotice, SaveButton, settingsStyles as shell } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 
 import type { InvoicingWording } from '../contracts/domain';
@@ -37,7 +37,7 @@ export default function WordingPanel({ canWrite }: SettingsPanelProps) {
     const { draft, error, patch, save, busy } = useSettingsDraft();
 
     if (draft === null) {
-        return <p className={error ? shell.notice : shell.empty}>{error ?? 'Chargement…'}</p>;
+        return error ? <ErrorNote note={error} /> : <p className={shell.empty}>Chargement…</p>;
     }
 
     const wording = draft.wording;
@@ -114,7 +114,7 @@ export default function WordingPanel({ canWrite }: SettingsPanelProps) {
                 </ReadOnlyNotice>
             )}
 
-            {error && <p className={shell.notice}>{error}</p>}
+            <ErrorNote note={error} />
         </div>
     );
 }

@@ -3,8 +3,9 @@ import {
     Button,
     ConfirmDialog,
     copyText,
+    ErrorNote,
+    errorNote,
     FeatureSettingsButton,
-    humanizeError,
     invalidate,
     openAccountView,
     PageLookFields,
@@ -20,7 +21,8 @@ import {
     useDomains,
     useResource,
     useWorkspacePermissions,
-    type ConfirmRequest
+    type ConfirmRequest,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import { resolvePageAccent } from '@deveye/types/sdk';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
@@ -70,7 +72,7 @@ export default function ProjectPublicPanel({ scope, canWrite }: SettingsPanelPro
     const [draft, setDraft] = useState<ProjectPublicationDraft>(() => draftOf(null));
     const [slugText, setSlugText] = useState('');
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [copied, setCopied] = useState<boolean | null>(null);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
 
@@ -89,7 +91,7 @@ export default function ProjectPublicPanel({ scope, canWrite }: SettingsPanelPro
     const chosen = domains.find((domain) => domain.id === draft.domainId) ?? null;
 
     if (!data) {
-        return <p className={loadError ? shell.notice : shell.empty}>{loadError ?? 'Chargement…'}</p>;
+        return loadError ? <ErrorNote note={loadError} /> : <p className={shell.empty}>Chargement…</p>;
     }
 
     if (data.blocked === 'guarded') {
@@ -138,7 +140,7 @@ export default function ProjectPublicPanel({ scope, canWrite }: SettingsPanelPro
             });
             invalidate('projects.publication');
         } catch (e) {
-            setError(humanizeError(e, 'L’enregistrement a échoué.'));
+            setError(errorNote(e, 'L’enregistrement a échoué.'));
             // Relancé : le bouton n'annonce « Enregistré » que sur un succès.
             throw e;
         } finally {
@@ -153,7 +155,7 @@ export default function ProjectPublicPanel({ scope, canWrite }: SettingsPanelPro
             await api.send('projects.publicationRelink', { projectId });
             invalidate('projects.publication');
         } catch (e) {
-            setError(humanizeError(e, 'Le lien n’a pas pu être changé.'));
+            setError(errorNote(e, 'Le lien n’a pas pu être changé.'));
         } finally {
             setBusy(false);
         }
@@ -329,7 +331,7 @@ export default function ProjectPublicPanel({ scope, canWrite }: SettingsPanelPro
                 </ReadOnlyNotice>
             )}
 
-            {error && <p className={shell.notice}>{error}</p>}
+            <ErrorNote note={error} />
 
             {canManage && publication !== null && (
                 <div className={shell.field}>

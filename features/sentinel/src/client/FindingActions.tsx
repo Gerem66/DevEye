@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, TextInput } from 'deveye-sdk-client';
+import { Button, errorNote, ErrorNote, TextInput, type ErrorNoteInput } from 'deveye-sdk-client';
 
 import type { AllowScope } from '../contracts/domain';
 
@@ -8,15 +8,15 @@ import styles from './style.module.css';
 /** Une action asynchrone et son état : occupé, ou l'échec à dire. */
 export function useAction() {
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     async function run(action: () => Promise<void>): Promise<void> {
         setBusy(true);
         setError(null);
         try {
             await action();
-        } catch {
-            setError("L'action n'a pas abouti.");
+        } catch (e) {
+            setError(errorNote(e, "L'action n'a pas abouti."));
         } finally {
             setBusy(false);
         }
@@ -45,7 +45,7 @@ export default function FindingActions({ count, canResolve, onAcknowledge, onRes
 
     return (
         <div className={styles.actions}>
-            {error && <p className={styles.error}>{error}</p>}
+            <ErrorNote note={error} />
 
             {canResolve && (
                 <div className={styles.settled}>

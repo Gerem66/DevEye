@@ -31,6 +31,9 @@ let queue: Promise<unknown> = Promise.resolve();
 let lastCallAt = 0;
 let blockedUntil = 0;
 
+/** Le NVD refuse d'en servir davantage pour l'instant : un refus du fournisseur, pas une panne. */
+export class NvdQuotaError extends Error {}
+
 function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -210,7 +213,7 @@ async function call(params: URLSearchParams, apiKey: string | null): Promise<Nvd
     );
     if (res.status === 403 || res.status === 429) {
         blockedUntil = Date.now() + RATE_LIMIT_BACKOFF_MS;
-        throw new Error('Quota du NVD atteint, réessayer plus tard.');
+        throw new NvdQuotaError('Quota du NVD atteint, réessayer plus tard.');
     }
     if (!res.ok) throw new Error(`NVD a répondu HTTP ${res.status}.`);
     return (await res.json()) as NvdResponse;

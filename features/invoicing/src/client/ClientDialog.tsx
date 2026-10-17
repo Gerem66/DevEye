@@ -3,10 +3,12 @@ import {
     Button,
     Dialog,
     DialogCancelButton,
-    humanizeError,
+    ErrorNote,
+    errorNote,
     invalidate,
     SegmentedControl,
-    TextInput
+    TextInput,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 
 import type { ClientKind, InvoicingClientInput } from '../contracts/domain';
@@ -45,7 +47,7 @@ const EMPTY: InvoicingClientInput = {
 export default function ClientDialog({ open, onClose, onCreated }: ClientDialogProps) {
     const [draft, setDraft] = useState<InvoicingClientInput>(EMPTY);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     const close = () => {
         setDraft(EMPTY);
@@ -67,7 +69,7 @@ export default function ClientDialog({ open, onClose, onCreated }: ClientDialogP
                 setDraft(EMPTY);
                 onCreated(res.client.id);
             })
-            .catch((e) => setError(humanizeError(e, 'Ce client n’a pas pu être enregistré.')))
+            .catch((e: unknown) => setError(errorNote(e, 'Ce client n’a pas pu être enregistré.')))
             .finally(() => setBusy(false));
     };
 
@@ -121,7 +123,7 @@ export default function ClientDialog({ open, onClose, onCreated }: ClientDialogP
                     <span className={styles.dialogHint}>C’est à cette adresse que partiront ses documents.</span>
                 </label>
 
-                {error && <p className={styles.error}>{error}</p>}
+                <ErrorNote note={error} />
             </div>
         </Dialog>
     );

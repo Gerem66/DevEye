@@ -2,12 +2,14 @@ import { useCallback, useEffect, useState } from 'react';
 import {
     Button,
     Dialog,
-    humanizeError,
+    ErrorNote,
+    errorNote,
     invalidate,
     moduleClientProvider,
     useResourceVersion,
     useWorkspacePermissions,
-    WsError
+    WsError,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import { api } from '../api';
 import type { Project, ProjectLinkLabel } from '../../contracts/domain';
@@ -44,10 +46,12 @@ export function Databases({ project, canWrite }: DatabasesProps) {
     const [candidates, setCandidates] = useState<readonly DatabaseLinkedCandidate[]>([]);
     const [loaded, setLoaded] = useState(false);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [linkOpen, setLinkOpen] = useState(false);
     /** La base qu'on s'apprête à délier ; `null` = aucune confirmation ouverte. */
     const [unlinking, setUnlinking] = useState<number | null>(null);
+    /** L'échec du déliement, dit dans la confirmation qui reste ouverte. */
+    const [unlinkError, setUnlinkError] = useState<ErrorNoteInput | null>(null);
 
     const boardVersion = useResourceVersion('projects.board');
     const listVersion = useResourceVersion('database.list');
@@ -65,7 +69,7 @@ export function Databases({ project, canWrite }: DatabasesProps) {
             setLabels(res.labels);
             setError(null);
         } catch (e) {
-            setError(humanizeError(e, 'Impossible de charger les bases liées.'));
+            setError(errorNote(e, 'Impossible de charger les bases liées.'));
         } finally {
             setLoaded(true);
         }
@@ -92,7 +96,7 @@ export function Databases({ project, canWrite }: DatabasesProps) {
             } catch (e) {
                 if (alive) setCandidates([]);
                 if (!(e instanceof WsError && e.code === 'forbidden')) {
-                    setError(humanizeError(e, 'Impossible de charger les bases de l’espace.'));
+                    setError(errorNote(e, 'Impossible de charger les bases de l’espace.'));
                 }
             }
         })();
@@ -103,15 +107,21 @@ export function Databases({ project, canWrite }: DatabasesProps) {
 
     const unlink = async (databaseId: number) => {
         setBusy(true);
+        setUnlinkError(null);
         try {
             await api.send('projects.databaseUnlink', { projectId: project.id, databaseId });
             setUnlinking(null);
             invalidate('projects.board', 'database.list');
         } catch (e) {
-            setError(humanizeError(e, 'Le déliement a échoué.'));
+            setUnlinkError(errorNote(e, 'Le déliement a échoué.'));
         } finally {
             setBusy(false);
         }
+    };
+
+    const closeUnlink = () => {
+        setUnlinking(null);
+        setUnlinkError(null);
     };
 
     if (guarded) {
@@ -130,7 +140,7 @@ export function Databases({ project, canWrite }: DatabasesProps) {
     if (foreign) {
         return (
             <div className={styles.linkedDatabases}>
-                {error && <p className={styles.error}>{error}</p>}
+                <ErrorNote note={error} />
                 {!provider && <p className={styles.hint}>Le module Bases de données n’est pas installé.</p>}
                 <ForeignLinks labels={labels} empty='Aucune base reliée à ce projet.' />
             </div>
@@ -141,7 +151,7 @@ export function Databases({ project, canWrite }: DatabasesProps) {
 
     return (
         <div className={styles.linkedDatabases}>
-            {error && <p className={styles.error}>{error}</p>}
+            <ErrorNote note={error} />
             {!provider && <p className={styles.hint}>Le module Bases de données n’est pas installé.</p>}
 
             {linkedIds.length === 0 && <p className={styles.empty}>Aucune base reliée à ce projet.</p>}
@@ -206,12 +216,12 @@ export function Databases({ project, canWrite }: DatabasesProps) {
 
             <Dialog
                 open={unlinking !== null}
-                onClose={() => setUnlinking(null)}
+                onClose={closeUnlink}
                 title='Délier cette base ?'
                 width={460}
                 footer={
                     <>
-                        <Button variant='secondary' onClick={() => setUnlinking(null)} disabled={busy}>
+                        <Button variant='secondary' onClick={closeUnlink} disabled={busy}>
                             Annuler
                         </Button>
                         <Button
@@ -228,6 +238,7 @@ export function Databases({ project, canWrite }: DatabasesProps) {
                     <strong>{unlinkingName ?? 'Cette base'}</strong> quitte ce projet. La base elle-même, ses alertes et
                     les autres projets qui l’utilisent ne sont pas touchés.
                 </p>
+                <ErrorNote note={unlinkError} />
             </Dialog>
         </div>
     );

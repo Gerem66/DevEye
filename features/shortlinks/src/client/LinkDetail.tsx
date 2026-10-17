@@ -1,13 +1,15 @@
 import {
     Button,
+    errorNote,
+    ErrorNote,
     FeatureSettingsButton,
-    humanizeError,
     invalidate,
     PlanPausedNotice,
     safeHref,
     StatusBadge,
     StickyHeader,
-    useResource
+    useResource,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import { useState } from 'react';
 
@@ -67,11 +69,7 @@ export default function LinkDetail({
                         </div>
                     </header>
                 </StickyHeader>
-                {read.error !== null ? (
-                    <p className={styles.error}>{read.error}</p>
-                ) : (
-                    <p className={styles.empty}>Chargement…</p>
-                )}
+                {read.error !== null ? <ErrorNote note={read.error} /> : <p className={styles.empty}>Chargement…</p>}
             </div>
         );
     }
@@ -256,7 +254,7 @@ function accessSummary(link: Shortlink): string {
 /** La vérification quotidienne de la destination, et le geste pour la refaire tout de suite. */
 function TargetCheck({ link, canWrite }: { link: Shortlink; canWrite: boolean }) {
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const { check } = link;
 
     const checkNow = async (): Promise<void> => {
@@ -266,7 +264,7 @@ function TargetCheck({ link, canWrite }: { link: Shortlink; canWrite: boolean })
             await api.send('shortlinks.checkNow', { id: link.id });
             invalidate('shortlinks.list', 'shortlinks.get');
         } catch (failure) {
-            setError(humanizeError(failure, 'La vérification n’a pas pu être lancée.'));
+            setError(errorNote(failure, 'La vérification n’a pas pu être lancée.'));
         } finally {
             setBusy(false);
         }
@@ -307,7 +305,7 @@ function TargetCheck({ link, canWrite }: { link: Shortlink; canWrite: boolean })
                     </Button>
                 </div>
             )}
-            {error !== null && <p className={styles.error}>{error}</p>}
+            <ErrorNote note={error} />
         </section>
     );
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, StickyHeader } from 'deveye-sdk-client';
+import { Button, ErrorNote, StickyHeader, type ErrorNoteInput } from 'deveye-sdk-client';
 import type { Database, DatabaseAlert, DatabaseProbe, DatabaseUsage } from '../contracts/domain';
 
 import { DatabaseHeader } from './DatabaseHeader';
@@ -15,6 +15,8 @@ interface DatabaseDetailProps {
     busy: boolean;
     testing: boolean;
     probe: DatabaseProbe | null;
+    /** L'échec d'un essai ou d'un relevé lancé depuis l'en-tête. */
+    error: ErrorNoteInput | null;
     onBack: () => void;
     onTest: () => void;
     onInspect: () => void;
@@ -33,6 +35,7 @@ export function DatabaseDetail({
     busy,
     testing,
     probe,
+    error,
     onBack,
     onTest,
     onInspect,
@@ -59,6 +62,8 @@ export function DatabaseDetail({
                     />
                 </StickyHeader>
             )}
+
+            <ErrorNote note={error} />
 
             <DatabaseView
                 database={database}

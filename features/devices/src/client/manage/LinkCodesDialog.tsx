@@ -5,6 +5,7 @@ import {
     ChoiceCards,
     copyText,
     Dialog,
+    ErrorNote,
     NumberInput,
     SegmentedControl,
     Switch
@@ -215,7 +216,13 @@ export function LinkCodesDialog({ links, onDownload }: { links: LinkCodes; onDow
                             </Button>
                         </div>
                         {copyError && (
-                            <p className={styles.genError}>Copie impossible : sélectionnez la commande à la main.</p>
+                            // Le presse-papiers refusé par le navigateur : rien que l'instance puisse corriger.
+                            <ErrorNote
+                                note={{
+                                    message: 'Copie impossible : sélectionnez la commande à la main.',
+                                    code: 'forbidden'
+                                }}
+                            />
                         )}
                         {plaintext && (
                             <p className={styles.genError}>
@@ -234,7 +241,7 @@ export function LinkCodesDialog({ links, onDownload }: { links: LinkCodes; onDow
                 {links.codesError ? (
                     // « Aucun code actif » se lit comme une certitude : ne l'affirmer
                     // que quand le serveur a répondu.
-                    <p className={styles.genError}>{links.codesError}</p>
+                    <ErrorNote note={links.codesError} />
                 ) : links.codes.length > 0 ? (
                     <table className={styles.codeTable}>
                         <thead>
@@ -314,7 +321,7 @@ export function LinkCodesDialog({ links, onDownload }: { links: LinkCodes; onDow
                         {links.generatingCode ? 'Génération…' : 'Nouveau code'}
                     </Button>
                 </div>
-                {links.genError && <p className={styles.genError}>{links.genError}</p>}
+                <ErrorNote note={links.genError} />
                 {links.quota && (
                     <p className={styles.pairHint}>
                         {quotaLine(links.quota)}

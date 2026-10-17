@@ -38,15 +38,6 @@
     gap: var(--space-sm);
 }
 
-.errorBanner {
-    padding: var(--space-sm) var(--space-md);
-    background: var(--danger-bg);
-    border: 1px solid var(--danger);
-    border-radius: var(--radius-sm);
-    color: var(--danger);
-    font-size: 0.875rem;
-}
-
 .sections {
     display: flex;
     flex-direction: column;

@@ -1,6 +1,14 @@
 import { useCallback, useState } from 'react';
 import type { MinimalUser } from '@deveye/types';
-import { Button, FeatureSettingsButton, PlanPausedBadge, StatusBadge, StickyHeader } from 'deveye-sdk-client';
+import {
+    Button,
+    ErrorNote,
+    FeatureSettingsButton,
+    PlanPausedBadge,
+    StatusBadge,
+    StickyHeader,
+    type ErrorNoteInput
+} from 'deveye-sdk-client';
 import type { GitRepo, GitRepoUsage } from '../contracts/domain';
 
 import { PROJECT_STATUS_LABELS } from '@deveye/types';
@@ -13,6 +21,8 @@ interface RepoDetailProps {
     members: readonly MinimalUser[];
     canWrite: boolean;
     busy: boolean;
+    /** Le refus du dernier « Synchroniser », que la liste tient pour la fiche. */
+    error: ErrorNoteInput | null;
     onBack: () => void;
     onSyncNow: () => void;
     /** Ouvre un projet qui utilise ce dépôt, dans la feature Projets. */
@@ -30,6 +40,7 @@ export function RepoDetail({
     members,
     canWrite,
     busy,
+    error,
     onBack,
     onSyncNow,
     onOpenProject
@@ -114,6 +125,8 @@ export function RepoDetail({
                     {repo.lastSyncError && <p className={styles.error}>{repo.lastSyncError}</p>}
                 </header>
             </StickyHeader>
+
+            <ErrorNote note={error} />
 
             <RepoView
                 repo={repo}

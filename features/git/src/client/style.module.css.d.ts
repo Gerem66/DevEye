@@ -76,7 +76,6 @@ declare const styles: {
     readonly linkButton: string;
     readonly listDialogBody: string;
     readonly listDialogFooter: string;
-    readonly lookupError: string;
     readonly openArrow: string;
     readonly overdue: string;
     readonly panel: string;

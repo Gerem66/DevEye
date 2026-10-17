@@ -561,10 +561,7 @@
 }
 
 .invitationError {
-    margin: 0;
     padding: 0 var(--space-md) var(--space-sm) calc(var(--space-md) + 16px + var(--space-sm));
-    font-size: 0.72rem;
-    color: var(--danger);
 }
 
 /* Le conteneur du dépli : sa hauteur est animée, le débord doit donc être coupé

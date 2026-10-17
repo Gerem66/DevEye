@@ -47,7 +47,6 @@ declare const styles: {
     readonly cardUpdateBtn: string;
     readonly configCustom: string;
     readonly configCustomInput: string;
-    readonly configError: string;
     readonly configField: string;
     readonly configGrid: string;
     readonly configHint: string;
@@ -82,7 +81,6 @@ declare const styles: {
     readonly dockerDetailRow: string;
     readonly dockerEngineError: string;
     readonly dockerEngines: string;
-    readonly dockerError: string;
     readonly dockerGraphs: string;
     readonly dockerHead: string;
     readonly dockerHeadRight: string;
@@ -114,7 +112,6 @@ declare const styles: {
     readonly filesCaption: string;
     readonly filesCrumb: string;
     readonly filesDeleteBtn: string;
-    readonly filesError: string;
     readonly filesField: string;
     readonly filesIconBtn: string;
     readonly filesIndet: string;
@@ -196,7 +193,6 @@ declare const styles: {
     readonly logDotOff: string;
     readonly logDotOn: string;
     readonly logEmpty: string;
-    readonly logErr: string;
     readonly logHint: string;
     readonly logIconBtn: string;
     readonly logKindIcon: string;

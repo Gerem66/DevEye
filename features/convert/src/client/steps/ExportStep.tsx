@@ -1,4 +1,4 @@
-import { Button, formatBytesFr } from 'deveye-sdk-client';
+import { Button, ErrorNote, formatBytesFr, type ErrorNoteInput } from 'deveye-sdk-client';
 
 import type { SourceFormat, TargetFormat } from '../../contracts/catalogue';
 import { outputName } from '../../contracts/catalogue';
@@ -37,7 +37,7 @@ interface ExportStepProps {
     pending: boolean;
     sending: Sending | null;
     tracked: Tracked | null;
-    error: string | null;
+    error: ErrorNoteInput | null;
     canWrite: boolean;
     resultTtlSeconds: number | null;
     onExport: () => void;
@@ -127,11 +127,7 @@ export function ExportStep(props: ExportStepProps) {
             <div aria-live='polite'>
                 <Status sending={sending} tracked={tracked} />
             </div>
-            {props.error && (
-                <p className={styles.problem} role='alert'>
-                    {props.error}
-                </p>
-            )}
+            <ErrorNote note={props.error} />
             {!props.canWrite && (
                 <p className={styles.note}>Votre rôle dans cet espace ne permet pas de lancer une conversion.</p>
             )}

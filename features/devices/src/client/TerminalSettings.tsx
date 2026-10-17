@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { terminalUser } from '@deveye/types';
 import {
-    humanizeError,
+    errorNote,
+    ErrorNote,
     ReadOnlyNotice,
     SaveButton,
     SearchSelect,
     settingsStyles as shell,
     TextInput,
+    type ErrorNoteInput,
     type SearchSelectOption
 } from 'deveye-sdk-client';
 
@@ -30,7 +32,7 @@ export function TerminalSettings({ deviceId, canWrite }: { deviceId: string; can
 
     const [defaultUser, setDefaultUser] = useState('');
     const [closeOnExit, setCloseOnExit] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     // Ne (ré)initialise qu'au changement d'appareil : un rafraîchissement de la
     // liste remplace la référence et effacerait une saisie en cours.
@@ -54,7 +56,7 @@ export function TerminalSettings({ deviceId, canWrite }: { deviceId: string; can
             });
             await refreshDevices();
         } catch (e) {
-            setError(humanizeError(e, 'Enregistrement impossible.'));
+            setError(errorNote(e, 'Enregistrement impossible.'));
             // Relancé : le bouton n'annonce « Enregistré » que sur un succès.
             throw e;
         }
@@ -104,7 +106,7 @@ export function TerminalSettings({ deviceId, canWrite }: { deviceId: string; can
                 />
             </label>
 
-            {error && <p className={shell.errorText}>{error}</p>}
+            <ErrorNote note={error} />
             {editable && <SaveButton onSave={save} disabled={!userValid} />}
             {/* Le droit, jamais l'état : l'appareil archivé dit déjà pourquoi il
                 est inerte, et le motif de rôle passe avant lui. */}

@@ -25,7 +25,6 @@ export default function MailsBanner({
                 <span className={styles.bannerHint}>
                     DevEye l’ajoute comme un compte de Mail, avec un mot de passe qui lui est réservé.
                 </span>
-                {link.error && <span className={styles.error}>{link.error}</span>}
             </div>
             <div className={styles.bannerActions}>
                 {canAdd && (

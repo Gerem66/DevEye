@@ -5,12 +5,14 @@ import type { BackupDestination, BackupDestinationProbe } from '../contracts/dom
 import {
     Button,
     ConfirmDialog,
+    ErrorNote,
+    errorNote,
     formatBytesFr,
-    humanizeError,
     invalidate,
     settingsStyles as shell,
     useResource,
-    type ConfirmRequest
+    type ConfirmRequest,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import { api } from './api';
 import DestinationDialog from './DestinationDialog';
@@ -38,7 +40,9 @@ export default function DestinationsPanel({ canWrite }: SettingsPanelProps) {
 
     const [dialog, setDialog] = useState<{ destination: BackupDestination | null } | null>(null);
     const [testing, setTesting] = useState<number | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
+    /** Le verdict du dernier contrôle : une réponse de la destination, pas un échec de DevEye. */
+    const [probeError, setProbeError] = useState<string | null>(null);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
     /**
      * Mesures du dernier contrôle, en mémoire de l'écran seulement :
@@ -53,6 +57,7 @@ export default function DestinationsPanel({ canWrite }: SettingsPanelProps) {
     const test = async (destination: BackupDestination) => {
         setTesting(destination.id);
         setError(null);
+        setProbeError(null);
         try {
             const probe = await api.send(
                 'backup.destinationTest',
@@ -60,10 +65,10 @@ export default function DestinationsPanel({ canWrite }: SettingsPanelProps) {
                 { timeoutMs: BACKUP_PROBE_TIMEOUT_MS }
             );
             setProbes((prev) => ({ ...prev, [destination.id]: probe }));
-            if (!probe.ok) setError(probe.error ?? 'Le contrôle a échoué.');
+            if (!probe.ok) setProbeError(probe.error ?? 'Le contrôle a échoué.');
             changed();
         } catch (e) {
-            setError(humanizeError(e, 'Le contrôle n’a pas abouti.'));
+            setError(errorNote(e, 'Le contrôle n’a pas abouti.'));
         } finally {
             setTesting(null);
         }
@@ -78,11 +83,12 @@ export default function DestinationsPanel({ canWrite }: SettingsPanelProps) {
             onConfirm: () =>
                 void (async () => {
                     setError(null);
+                    setProbeError(null);
                     try {
                         await api.send('backup.destinationRemove', { destinationId: destination.id });
                         changed();
                     } catch (e) {
-                        setError(humanizeError(e, 'Impossible de retirer cette destination.'));
+                        setError(errorNote(e, 'Impossible de retirer cette destination.'));
                     }
                 })()
         });
@@ -200,7 +206,8 @@ export default function DestinationsPanel({ canWrite }: SettingsPanelProps) {
                 })}
             </div>
 
-            {(error ?? loadError) && <p className={shell.notice}>{error ?? loadError}</p>}
+            {probeError && <p className={shell.notice}>{probeError}</p>}
+            <ErrorNote note={error ?? loadError} />
 
             {canWrite && (
                 <div className={shell.sectionActions}>

@@ -29,7 +29,7 @@ import { isAllowedOutboundUrl, OUTBOUND_REFUSED_MESSAGE } from '@/Services/netFe
 import { candidatesOf, machineOf, parseServiceId } from './agent';
 import { recallHistoryEntry, rememberHistory } from './historyCache';
 import { DOKPLOY_INSTANCE } from './providers/dokploy';
-import type { DeployProviderAdapter } from './providers/types';
+import { ProviderError, type DeployProviderAdapter } from './providers/types';
 import {
     deviceNamesOf,
     liveAgentLog,
@@ -63,8 +63,13 @@ import {
  * aucun. `mutates` est à relire à la main sur chaque écriture.
  */
 
-/** Le refus d'un fournisseur, dans ses mots : c'est lui qui sait pourquoi. */
+/**
+ * Le refus d'un fournisseur, dans ses mots : c'est lui qui sait pourquoi, et
+ * c'est l'accès ou la cible qui se corrige (`conflict`). Toute autre panne
+ * reste à l'instance.
+ */
 function refusal(e: unknown, fallback: string): FeatureError {
+    if (e instanceof ProviderError) return new FeatureError('conflict', e.message);
     return new FeatureError('internal', e instanceof Error ? e.message : fallback);
 }
 
@@ -470,7 +475,7 @@ export const deployHandlers = [
                         JSON.stringify({ ...body, description: `${input.description}\n${message}`.trim() })
                     )
                 });
-                throw new FeatureError('internal', message);
+                throw refusal(e, message);
             }
 
             // La frise du projet, quand le geste est parti de l'un d'eux ; depuis

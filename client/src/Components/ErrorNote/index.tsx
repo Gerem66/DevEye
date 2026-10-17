@@ -8,8 +8,9 @@ import styles from './ErrorNote.module.css';
 
 /**
  * Les refus dont le texte se suffit : l'utilisateur a mal saisi, n'a pas le
- * droit, a atteint sa limite, ou regarde une donnée disparue. Les signaler
- * n'apprendrait rien à personne.
+ * droit, a atteint sa limite, doit se reconnecter, ou regarde une donnée
+ * disparue. Les signaler n'apprendrait rien à personne. Une connexion coupée
+ * (`closed`, `network`) revient seule, et le signalement ne partirait pas.
  */
 const SPOKEN_FOR: readonly string[] = [
     'validation',
@@ -19,7 +20,13 @@ const SPOKEN_FOR: readonly string[] = [
     'locked',
     'rate_limited',
     'quota_exceeded',
-    'maintenance'
+    'maintenance',
+    'auth_invalid',
+    'auth_expired',
+    'auth_required',
+    'stepup_required',
+    'closed',
+    'network'
 ];
 
 export interface ErrorNoteInput {
@@ -32,6 +39,8 @@ export interface ErrorNoteProps {
     note: ErrorNoteInput | null;
     /** Les gestes de réparation propres à l'appelant, quand il en offre. */
     children?: ReactNode;
+    /** Rend le bandeau refermable : la croix vient en bout de rangée, après le signalement. */
+    onDismiss?: () => void;
 }
 
 /**
@@ -44,7 +53,7 @@ export interface ErrorNoteProps {
  * une date mal saisie remplirait la boîte de l'administrateur de choses qu'il
  * ne peut pas corriger.
  */
-export default function ErrorNote({ note, children }: ErrorNoteProps) {
+export default function ErrorNote({ note, children, onDismiss }: ErrorNoteProps) {
     const feedback = useFeedbackEnabled();
     if (note === null) return null;
 
@@ -63,6 +72,11 @@ export default function ErrorNote({ note, children }: ErrorNoteProps) {
                 >
                     Signaler
                 </Button>
+            )}
+            {onDismiss && (
+                <button type='button' className={styles.dismiss} onClick={onDismiss} title='Fermer' aria-label='Fermer'>
+                    <span className='icon icon-x' />
+                </button>
             )}
         </div>
     );

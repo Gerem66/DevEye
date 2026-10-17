@@ -2,16 +2,18 @@ import { useState } from 'react';
 import {
     Button,
     CopyButton,
+    ErrorNote,
+    errorNote,
     FeatureSettingsButton,
     SegmentedControl,
     StatusBadge,
     StickyHeader,
     formatBytesFr,
-    humanizeError,
     invalidate,
     PlanPausedBadge,
     useResource,
-    useWorkspacePermissions
+    useWorkspacePermissions,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 
 import type { Connection, Mailbox } from '../contracts/domain';
@@ -50,7 +52,7 @@ export default function AddressView({
     const canPasswords = canWrite && permissions.canExtra('mailserver', 'managePasswords', itemId);
     const link = useMailsLink(mailbox, connection);
     const [days, setDays] = useState<Days>('30');
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     const { data: activity, error: activityError } = useResource(
         'mailserver.activity',
@@ -62,7 +64,7 @@ export default function AddressView({
     const dismiss = () => {
         api.send('mailserver.setBanner', { id: mailbox.id, dismissed: true })
             .then(() => invalidate('mailserver.get', 'mailserver.list'))
-            .catch((failure: unknown) => setError(humanizeError(failure, 'La proposition n’a pas pu être fermée.')));
+            .catch((failure: unknown) => setError(errorNote(failure, 'La proposition n’a pas pu être fermée.')));
     };
 
     const used = Math.min(1, mailbox.usedBytes / Math.max(1, mailbox.quotaMb * 1024 * 1024));
@@ -112,7 +114,9 @@ export default function AddressView({
             </StickyHeader>
 
             {showBanner && <MailsBanner link={link} canAdd={canPasswords} onDismiss={canWrite ? dismiss : null} />}
-            {error && <p className={styles.error}>{error}</p>}
+            {/* L'échec de « Ajouter à Mail » se lit ici, pas dans la proposition : son bandeau la déborderait. */}
+            <ErrorNote note={link.error} />
+            <ErrorNote note={error} />
 
             <div className={styles.columns}>
                 <section className={styles.panel}>
@@ -178,7 +182,7 @@ export default function AddressView({
                         ]}
                     />
                 </div>
-                {activityError && <p className={styles.error}>{activityError}</p>}
+                <ErrorNote note={activityError} />
                 {activity && (
                     <>
                         <div className={styles.totals}>

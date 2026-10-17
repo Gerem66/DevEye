@@ -9,14 +9,33 @@ export interface UploadHandle {
     abort(): void;
 }
 
+/**
+ * Le refus d'un envoi : la phrase du module qui reçoit le fichier, et le code
+ * du protocole que son statut HTTP traduit, pour que `ErrorNote` sache si un
+ * signalement a du sens.
+ */
 export class UploadError extends Error {
     constructor(
         message: string,
+        public readonly code: string | null,
         public readonly aborted = false
     ) {
         super(message);
         this.name = 'UploadError';
     }
+}
+
+const STATUS_CODES: Readonly<Record<number, string>> = {
+    401: 'auth_expired',
+    403: 'forbidden',
+    404: 'not_found',
+    409: 'conflict',
+    429: 'rate_limited',
+    503: 'maintenance'
+};
+
+function statusCode(status: number): string {
+    return STATUS_CODES[status] ?? (status >= 500 ? 'internal' : 'validation');
 }
 
 /** Un fichier choisi ou déposé, avec son chemin relatif, nom compris (`photos/a.jpg`, `a.jpg` hors dossier). */
@@ -39,15 +58,17 @@ export function uploadFile(url: string, file: File, onProgress: (ratio: number) 
             if (xhr.status >= 200 && xhr.status < 300) return resolve();
             let message = 'L’envoi du fichier a échoué.';
             try {
-                const body = JSON.parse(xhr.responseText) as { message?: unknown };
-                if (typeof body.message === 'string') message = body.message;
+                // `{ message }` d'une route de module, ou l'enveloppe `{ error: { message } }` de l'app.
+                const body = JSON.parse(xhr.responseText) as { message?: unknown; error?: { message?: unknown } };
+                const said = body.message ?? body.error?.message;
+                if (typeof said === 'string') message = said;
             } catch {
                 // Une réponse sans corps lisible garde la phrase générique.
             }
-            reject(new UploadError(message));
+            reject(new UploadError(message, statusCode(xhr.status)));
         };
-        xhr.onerror = () => reject(new UploadError('La connexion a été coupée pendant l’envoi.'));
-        xhr.onabort = () => reject(new UploadError('Envoi annulé.', true));
+        xhr.onerror = () => reject(new UploadError('La connexion a été coupée pendant l’envoi.', 'network'));
+        xhr.onabort = () => reject(new UploadError('Envoi annulé.', null, true));
         xhr.open('POST', url);
         xhr.setRequestHeader('Content-Type', 'application/octet-stream');
         xhr.send(file);

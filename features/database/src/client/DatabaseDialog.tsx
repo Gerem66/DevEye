@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Button, Dialog, humanizeError, SegmentedControl } from 'deveye-sdk-client';
+import { Button, Dialog, errorNote, ErrorNote, SegmentedControl, type ErrorNoteInput } from 'deveye-sdk-client';
 import type { DatabaseEngine, DatabaseProbe } from '../contracts/domain';
 
 import { api } from './api';
@@ -41,7 +41,7 @@ export function DatabaseDialog({ open, onClose, onSaved }: DatabaseDialogProps) 
     const [form, setForm] = useState<ConnectionForm>(EMPTY_CONNECTION);
     const [tab, setTab] = useState<Tab>('connection');
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     /** L'essai en cours, et son résultat ; distinct de l'enregistrement. */
     const [testing, setTesting] = useState(false);
     const [probe, setProbe] = useState<DatabaseProbe | null>(null);
@@ -84,7 +84,7 @@ export function DatabaseDialog({ open, onClose, onSaved }: DatabaseDialogProps) 
             });
             onSaved(res.database.id);
         } catch (e) {
-            setError(humanizeError(e, 'L’enregistrement a échoué.'));
+            setError(errorNote(e, 'L’enregistrement a échoué.'));
         } finally {
             setBusy(false);
         }
@@ -103,7 +103,7 @@ export function DatabaseDialog({ open, onClose, onSaved }: DatabaseDialogProps) 
             });
             setProbe(res.probe);
         } catch (e) {
-            setError(humanizeError(e, 'L’essai de connexion a échoué.'));
+            setError(errorNote(e, 'L’essai de connexion a échoué.'));
         } finally {
             setTesting(false);
         }
@@ -184,7 +184,7 @@ export function DatabaseDialog({ open, onClose, onSaved }: DatabaseDialogProps) 
                     </div>
                 )}
 
-                {error && <p className={styles.error}>{error}</p>}
+                <ErrorNote note={error} />
             </div>
         </Dialog>
     );

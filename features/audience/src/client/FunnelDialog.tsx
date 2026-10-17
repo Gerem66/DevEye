@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react';
 import {
     Button,
     Dialog,
-    humanizeError,
+    ErrorNote,
+    errorNote,
     invalidate,
     SearchSelect,
     TextInput,
+    type ErrorNoteInput,
     type SearchSelectOption
 } from 'deveye-sdk-client';
 import {
@@ -55,7 +57,7 @@ export function FunnelDialog({ open, siteId, funnel, onClose, onSaved }: FunnelD
     const [paths, setPaths] = useState<string[]>([]);
     const [events, setEvents] = useState<string[]>([]);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [confirmRemove, setConfirmRemove] = useState(false);
 
     useEffect(() => {
@@ -97,11 +99,11 @@ export function FunnelDialog({ open, siteId, funnel, onClose, onSaved }: FunnelD
     const submit = async () => {
         const clean = steps.map((s) => ({ kind: s.kind, value: s.value.trim() })).filter((s) => s.value.length > 0);
         if (name.trim().length === 0) {
-            setError('Donnez un nom à cet entonnoir.');
+            setError({ message: 'Donnez un nom à cet entonnoir.', code: 'validation' });
             return;
         }
         if (clean.length < 2) {
-            setError('Un entonnoir demande au moins deux marches.');
+            setError({ message: 'Un entonnoir demande au moins deux marches.', code: 'validation' });
             return;
         }
 
@@ -114,7 +116,7 @@ export function FunnelDialog({ open, siteId, funnel, onClose, onSaved }: FunnelD
             invalidate('audience.stats');
             onSaved();
         } catch (e) {
-            setError(humanizeError(e, 'Enregistrement impossible.'));
+            setError(errorNote(e, 'Enregistrement impossible.'));
         } finally {
             setBusy(false);
         }
@@ -129,7 +131,7 @@ export function FunnelDialog({ open, siteId, funnel, onClose, onSaved }: FunnelD
             invalidate('audience.stats');
             onSaved();
         } catch (e) {
-            setError(humanizeError(e, 'Suppression impossible.'));
+            setError(errorNote(e, 'Suppression impossible.'));
         } finally {
             setBusy(false);
         }
@@ -275,7 +277,7 @@ export function FunnelDialog({ open, siteId, funnel, onClose, onSaved }: FunnelD
                         </span>
                     </div>
 
-                    {error && <p className={styles.error}>{error}</p>}
+                    <ErrorNote note={error} />
                 </div>
             )}
         </Dialog>

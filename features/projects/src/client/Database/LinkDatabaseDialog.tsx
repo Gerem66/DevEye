@@ -1,7 +1,15 @@
 import { useEffect, useState } from 'react';
 import { DATABASE_CLIENT_PROVIDER } from '@deveye/types/sdk';
 import type { DatabaseClientProvider, DatabaseLinkedCandidate } from '@deveye/types/sdk/client';
-import { Button, Dialog, humanizeError, moduleClientProvider, SearchSelect } from 'deveye-sdk-client';
+import {
+    Button,
+    Dialog,
+    ErrorNote,
+    errorNote,
+    moduleClientProvider,
+    SearchSelect,
+    type ErrorNoteInput
+} from 'deveye-sdk-client';
 import { api } from '../api';
 import styles from '../style.module.css';
 
@@ -26,7 +34,7 @@ export function LinkDatabaseDialog({ open, projectId, linkedIds, onClose, onSave
     const [databases, setDatabases] = useState<readonly DatabaseLinkedCandidate[]>([]);
     const [picked, setPicked] = useState('');
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     /** Le dialogue de création de la feature, ouvert par-dessus celui-ci. */
     const [createOpen, setCreateOpen] = useState(false);
 
@@ -39,7 +47,7 @@ export function LinkDatabaseDialog({ open, projectId, linkedIds, onClose, onSave
             try {
                 setDatabases(await provider.listDatabases());
             } catch (e) {
-                setError(humanizeError(e, 'Impossible de charger les bases de l’espace.'));
+                setError(errorNote(e, 'Impossible de charger les bases de l’espace.'));
             }
         })();
     }, [open, provider]);
@@ -53,7 +61,7 @@ export function LinkDatabaseDialog({ open, projectId, linkedIds, onClose, onSave
             await api.send('projects.databaseLink', { projectId, databaseId });
             onSaved();
         } catch (e) {
-            setError(humanizeError(e, 'La liaison a échoué.'));
+            setError(errorNote(e, 'La liaison a échoué.'));
         } finally {
             setBusy(false);
         }
@@ -122,7 +130,7 @@ export function LinkDatabaseDialog({ open, projectId, linkedIds, onClose, onSave
                         </>
                     )}
 
-                    {error && <p className={styles.error}>{error}</p>}
+                    <ErrorNote note={error} />
                 </div>
             </Dialog>
 

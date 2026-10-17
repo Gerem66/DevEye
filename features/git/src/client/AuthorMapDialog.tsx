@@ -1,5 +1,5 @@
 import type { MinimalUser } from '@deveye/types';
-import { Checkbox, Dialog, SearchSelect } from 'deveye-sdk-client';
+import { Checkbox, Dialog, ErrorNote, SearchSelect, type ErrorNoteInput } from 'deveye-sdk-client';
 import type { GitCommitAuthor } from '../contracts/domain';
 
 import styles from './style.module.css';
@@ -13,6 +13,8 @@ interface AuthorMapDialogProps {
     /** Réunir les auteurs rattachés sous leur membre, dans le graphe. */
     groupByMember: boolean;
     onGroupByMemberChange: (value: boolean) => void;
+    /** Le refus du dernier rattachement. */
+    error: ErrorNoteInput | null;
     onClose: () => void;
     onMap: (authorRef: string, userId: number | null) => void;
 }
@@ -32,6 +34,7 @@ export function AuthorMapDialog({
     canWrite,
     groupByMember,
     onGroupByMemberChange,
+    error,
     onClose,
     onMap
 }: AuthorMapDialogProps) {
@@ -81,6 +84,8 @@ export function AuthorMapDialog({
                         </li>
                     ))}
                 </ul>
+
+                <ErrorNote note={error} />
             </div>
         </Dialog>
     );

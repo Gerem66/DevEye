@@ -206,9 +206,9 @@
     color: var(--text-secondary);
 }
 
-.rowError {
-    font-size: 0.8rem;
-    color: var(--danger);
+/* Le bandeau d'un geste raté se détache de l'explication, serrée sous l'intitulé. */
+.rowText > [role='alert'] {
+    margin-top: var(--space-xs);
 }
 
 .rowValue {
@@ -459,12 +459,6 @@
     color: var(--text-secondary);
 }
 
-.formError {
-    margin: 0;
-    font-size: 0.85rem;
-    color: var(--danger);
-}
-
 .recoveryCodeBox {
     display: block;
     margin: var(--space-sm) 0;
@@ -478,15 +472,6 @@
     border: 1px solid var(--glass-border-strong);
     border-radius: var(--radius-md);
     word-break: break-all;
-}
-
-.error {
-    padding: var(--space-sm) var(--space-md);
-    background: var(--danger-bg);
-    border: 1px solid var(--danger);
-    border-radius: var(--radius-sm);
-    color: var(--danger);
-    font-size: 0.85rem;
 }
 
 /* Les deux étapes de l'enrôlement de l'application, dans leur dialogue. */
@@ -555,6 +540,10 @@
     font-size: 0.85rem;
     color: var(--text-secondary);
     margin: 0 0 var(--space-md) 0;
+}
+
+.stepContent > [role='alert'] {
+    margin-top: var(--space-md);
 }
 
 .qrContainer {

@@ -4,10 +4,12 @@ import {
     Button,
     copyText,
     Dialog,
-    humanizeError,
+    ErrorNote,
+    errorNote,
     invalidate,
     SegmentedControl,
-    useResourceVersion
+    useResourceVersion,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { AudienceBreakdownItem, AudienceForm, AudienceSite } from '../contracts/domain';
 
@@ -139,7 +141,7 @@ export function InstallDialog({
     /** Le bloc dont la copie vient d'aboutir, pour le retour visuel. */
     const [copied, setCopied] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [confirmRotate, setConfirmRotate] = useState(false);
     const [lang, setLang] = useState('js');
     const [submitLang, setSubmitLang] = useState('html');
@@ -229,7 +231,8 @@ export function InstallDialog({
 
     const copy = async (text: string, id: string) => {
         if (!(await copyText(text))) {
-            setError('Copie impossible : sélectionnez le texte à la main.');
+            // Le navigateur refuse le presse-papiers : la phrase dit le recours, rien à signaler.
+            setError({ message: 'Copie impossible : sélectionnez le texte à la main.', code: 'conflict' });
             return;
         }
         setCopied(id);
@@ -246,7 +249,7 @@ export function InstallDialog({
             setConfirmRotate(false);
             onRotated?.(res.site);
         } catch (e) {
-            setError(humanizeError(e, 'Renouvellement impossible.'));
+            setError(errorNote(e, 'Renouvellement impossible.'));
         } finally {
             setBusy(false);
         }
@@ -536,7 +539,7 @@ window.deveye?.identify(user.id);`}</pre>
                     </p>
                 )}
 
-                {error && <p className={styles.error}>{error}</p>}
+                <ErrorNote note={error} />
             </div>
         </Dialog>
     );

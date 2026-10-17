@@ -1,13 +1,21 @@
 import { useCallback, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Button, ErrorNote, StatusBadge, StickyHeader, useResource, type ErrorNoteInput } from 'deveye-sdk-client';
+import {
+    Button,
+    ErrorNote,
+    errorNote,
+    StatusBadge,
+    StickyHeader,
+    useResource,
+    type ErrorNoteInput
+} from 'deveye-sdk-client';
 import type { FinanceRecurring } from '../contracts/domain';
 
 import PostDialog from './PostDialog';
 import RecurringDialog from './RecurringDialog';
 import { api, refreshFinance } from './api';
 import { formatDate, formatMoney, formatRelativeDay, frequencyLabel, todayIso } from './format';
-import { accountName, categoryOf, colorVar, errorNote, flowOf, signOf } from './shared';
+import { accountName, categoryOf, colorVar, flowOf, signOf } from './shared';
 import styles from './style.module.css';
 import type { FinanceBase } from './shared';
 
@@ -51,7 +59,7 @@ export function RecurringPage({ base, onBack }: RecurringPageProps) {
     const today = todayIso();
     const activeCount = rows.filter((row) => row.active).length;
     const dueCount = rows.filter((row) => row.active && !row.automatic && row.nextDate <= today).length;
-    const note = error ?? (loadError ? { message: loadError, code: null } : null);
+    const note = error ?? loadError;
 
     return (
         <div className={styles.page}>

@@ -1,4 +1,11 @@
-import { ReadOnlyNotice, SaveButton, SegmentedControl, settingsStyles as shell, TextInput } from 'deveye-sdk-client';
+import {
+    ErrorNote,
+    ReadOnlyNotice,
+    SaveButton,
+    SegmentedControl,
+    settingsStyles as shell,
+    TextInput
+} from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import {
     AUDIENCE_MAX_TRANSIT_PATHS,
@@ -27,7 +34,7 @@ export default function SiteTrafficPanel({ scope, canWrite }: SettingsPanelProps
     const { site, draft, busy, error, set, save, dirty } = useSiteDraft(scope);
 
     if (!site || !draft) {
-        return <p className={error ? shell.notice : shell.empty}>{error ?? 'Chargement…'}</p>;
+        return error ? <ErrorNote note={error} /> : <p className={shell.empty}>Chargement…</p>;
     }
     if (site.foreign) {
         return <p className={shell.sectionHint}>Ce site vient d’un autre espace : sa mesure se règle depuis là-bas.</p>;
@@ -117,7 +124,7 @@ export default function SiteTrafficPanel({ scope, canWrite }: SettingsPanelProps
                 </ReadOnlyNotice>
             )}
 
-            {error && <p className={shell.notice}>{error}</p>}
+            <ErrorNote note={error} />
         </div>
     );
 }

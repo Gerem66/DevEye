@@ -135,7 +135,7 @@ export { StickyHeader } from '@/Components/StickyHeader';
 export type { StickyHeaderProps } from '@/Components/StickyHeader';
 
 // ── Les données ────────────────────────────────────────────────────────────
-export { humanizeError, useResource } from '@/api/useResource';
+export { errorNote, humanizeError, useResource } from '@/api/useResource';
 /** L'offre du compte, et l'ouverture d'une vue de compte (`manifest.accountEntry`). */
 export { useAccountPlan, usePlanPauses } from '@/stores/accountPlan';
 /** Un élément que l'offre tient en pause : sa pastille, et le bandeau de sa liste. */

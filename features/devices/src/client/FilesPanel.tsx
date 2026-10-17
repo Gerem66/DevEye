@@ -3,11 +3,14 @@ import {
     acquireMetrics,
     Button,
     Dialog,
+    errorNote,
+    ErrorNote,
     isWinPath,
     joinPath,
     onServerEvent,
     SearchSelect,
     TextInput,
+    type ErrorNoteInput,
     type SearchSelectOption
 } from 'deveye-sdk-client';
 import {
@@ -126,6 +129,9 @@ const SHOW_HIDDEN_KEY = 'deveye.files.showHidden';
 /** Dotfile convention; Windows hidden attributes aren't reported by the agent. */
 const isHidden = (name: string) => name.startsWith('.');
 
+/** Ce que l'agent dit avoir raté sur sa machine (droits, chemin) : une cause de l'appareil, pas de l'instance. */
+const onDevice = (message: string): ErrorNoteInput => ({ message, code: 'conflict' });
+
 /**
  * File explorer for one device, in the spirit of ncdu: browse, recursive disk
  * usage as bars, advanced search, new folder / rename / delete. All ops stream
@@ -141,7 +147,7 @@ export function FilesPanel({ deviceId, writable = true }: { deviceId: string; wr
     const [listing, setListing] = useState<FileListing | null>(null);
     const [usage, setUsage] = useState<Map<string, FileUsageEntry> | null>(null);
     const [analyzing, setAnalyzing] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [loading, setLoading] = useState(false);
 
     const [searchMode, setSearchMode] = useState(false);
@@ -197,10 +203,10 @@ export function FilesPanel({ deviceId, writable = true }: { deviceId: string; wr
             // Indeterminate bars until the cache hit / fresh analysis lands, so
             // navigation never flashes misleading own-size bars.
             setAnalyzing(true);
-            void agent.send('agent.filesList', { deviceId, opId, path: target }).catch((e) => {
+            void agent.send('agent.filesList', { deviceId, opId, path: target }).catch((e: unknown) => {
                 setLoading(false);
                 setAnalyzing(false);
-                setError(e instanceof Error ? e.message : 'Échec');
+                setError(errorNote(e, 'Le dossier n’a pas pu être lu.'));
             });
         },
         [deviceId]
@@ -237,7 +243,7 @@ export function FilesPanel({ deviceId, writable = true }: { deviceId: string; wr
                 if (d.deviceId !== deviceId || d.opId !== listOp.current) return;
                 setLoading(false);
                 if (d.error || !d.listing) {
-                    setError(d.error ?? 'Dossier illisible');
+                    setError(onDevice(d.error ?? 'Dossier illisible'));
                     return;
                 }
                 setError(null);
@@ -270,7 +276,7 @@ export function FilesPanel({ deviceId, writable = true }: { deviceId: string; wr
                 setSearching(false);
                 setMatches(d.error ? [] : d.matches);
                 setTruncated(d.truncated);
-                if (d.error) setError(d.error);
+                if (d.error) setError(onDevice(d.error));
             }),
             onServerEvent(DEVICE_FILES_OP_EVENT, deviceFilesOpPushSchema, (d) => {
                 if (d.deviceId !== deviceId) return;
@@ -280,19 +286,19 @@ export function FilesPanel({ deviceId, writable = true }: { deviceId: string; wr
                         // A successful mkdir opens the new folder directly.
                         navigate(mkdirTarget.current ?? path);
                         mkdirTarget.current = null;
-                    } else setError(d.error ?? 'Opération échouée');
+                    } else setError(onDevice(d.error ?? 'Opération échouée'));
                 } else if (d.opId === uploadOp.current) {
                     setUploading(null);
                     if (d.ok) {
                         invalidateUsage(path);
                         navigate(path);
-                    } else setError(d.error ?? 'Téléversement échoué');
+                    } else setError(onDevice(d.error ?? 'Téléversement échoué'));
                 }
             }),
             onServerEvent(DEVICE_FILES_CHUNK_EVENT, deviceFilesChunkPushSchema, (d) => {
                 if (d.deviceId !== deviceId || d.opId !== downloadOp.current) return;
                 if (d.error) {
-                    setError(d.error);
+                    setError(onDevice(d.error));
                     setDownloading(null);
                     dlBuf.current = [];
                     return;
@@ -327,10 +333,12 @@ export function FilesPanel({ deviceId, writable = true }: { deviceId: string; wr
             dlName.current = entry.kind === 'dir' ? `${entry.name}.tar.gz` : entry.name;
             setDownloading(entry.name);
             setError(null);
-            void agent.send('agent.filesDownload', { deviceId, opId, path: joinPath(path, entry.name) }).catch((e) => {
-                setDownloading(null);
-                setError(e instanceof Error ? e.message : 'Échec');
-            });
+            void agent
+                .send('agent.filesDownload', { deviceId, opId, path: joinPath(path, entry.name) })
+                .catch((e: unknown) => {
+                    setDownloading(null);
+                    setError(errorNote(e, 'Le téléchargement n’a pas pu démarrer.'));
+                });
         },
         [deviceId, path]
     );
@@ -366,7 +374,7 @@ export function FilesPanel({ deviceId, writable = true }: { deviceId: string; wr
                 // Completion is confirmed by the device.filesOp push (refreshes the listing).
             } catch (e) {
                 setUploading(null);
-                setError(e instanceof Error ? e.message : 'Téléversement échoué');
+                setError(errorNote(e, 'Le téléversement a échoué.'));
             }
         },
         [deviceId, path]
@@ -381,7 +389,7 @@ export function FilesPanel({ deviceId, writable = true }: { deviceId: string; wr
             setError(null);
             void agent
                 .send('agent.filesMutate', { deviceId, opId, op, path: target, dest })
-                .catch((e) => setError(e instanceof Error ? e.message : 'Échec'));
+                .catch((e: unknown) => setError(errorNote(e, 'L’opération n’a pas pu être envoyée.')));
         },
         [deviceId]
     );
@@ -407,9 +415,9 @@ export function FilesPanel({ deviceId, writable = true }: { deviceId: string; wr
         setSearching(true);
         setMatches(null);
         setError(null);
-        void agent.send('agent.filesSearch', { deviceId, opId, path, filter }).catch((e) => {
+        void agent.send('agent.filesSearch', { deviceId, opId, path, filter }).catch((e: unknown) => {
             setSearching(false);
-            setError(e instanceof Error ? e.message : 'Échec');
+            setError(errorNote(e, 'La recherche n’a pas pu démarrer.'));
         });
     }, [deviceId, path, form]);
 
@@ -553,7 +561,7 @@ export function FilesPanel({ deviceId, writable = true }: { deviceId: string; wr
                 </span>
             </div>
 
-            {error && <p className={styles.filesError}>{error}</p>}
+            <ErrorNote note={error} />
 
             {searchMode ? (
                 <SearchView

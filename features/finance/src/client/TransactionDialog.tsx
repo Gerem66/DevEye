@@ -6,6 +6,7 @@ import {
     Dialog,
     DialogCancelButton,
     ErrorNote,
+    errorNote,
     FeatureSettingsButton,
     openFeature,
     SearchSelect,
@@ -32,7 +33,7 @@ import {
     rateOfVat,
     vatFromGross
 } from './format';
-import { activeAccounts, errorNote } from './shared';
+import { activeAccounts } from './shared';
 import styles from './style.module.css';
 import type { FinanceBase } from './shared';
 

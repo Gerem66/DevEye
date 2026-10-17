@@ -1,4 +1,4 @@
-import { ReadOnlyNotice, SaveButton, settingsStyles as shell, Switch, TextInput } from 'deveye-sdk-client';
+import { ErrorNote, ReadOnlyNotice, SaveButton, settingsStyles as shell, Switch, TextInput } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 
 import { useSiteDraft } from './useSiteDraft';
@@ -17,7 +17,7 @@ export default function SiteFormsPanel({ scope, canWrite }: SettingsPanelProps) 
     const { site, draft, busy, error, set, save, dirty } = useSiteDraft(scope);
 
     if (!site || !draft) {
-        return <p className={error ? shell.notice : shell.empty}>{error ?? 'Chargement…'}</p>;
+        return error ? <ErrorNote note={error} /> : <p className={shell.empty}>Chargement…</p>;
     }
     if (site.foreign) {
         return (
@@ -97,7 +97,7 @@ export default function SiteFormsPanel({ scope, canWrite }: SettingsPanelProps) 
                 </ReadOnlyNotice>
             )}
 
-            {error && <p className={shell.notice}>{error}</p>}
+            <ErrorNote note={error} />
         </div>
     );
 }

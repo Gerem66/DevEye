@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import {
     Button,
     ConfirmDialog,
-    humanizeError,
+    ErrorNote,
+    errorNote,
     invalidate,
     NumberInput,
     ReadOnlyNotice,
@@ -11,7 +12,8 @@ import {
     settingsStyles as shell,
     Switch,
     TextInput,
-    type ConfirmRequest
+    type ConfirmRequest,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 
@@ -45,7 +47,7 @@ const FIELDS: { key: keyof InvoicingClientInput & string; label: string; hint?: 
 export default function ClientPanel({ scope, canWrite, gone }: SettingsPanelProps) {
     const itemId = scope.kind === 'item' ? Number(scope.itemId) : null;
     const [draft, setDraft] = useState<InvoicingClient | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [busy, setBusy] = useState(false);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
 
@@ -57,10 +59,10 @@ export default function ClientPanel({ scope, canWrite, gone }: SettingsPanelProp
             // n'apporterait rien.
             const res = await api.send('invoicing.clientList', { archived: true });
             const found = res.clients.find((client) => client.id === itemId) ?? null;
-            if (found === null) setError('Ce client n’existe plus.');
+            if (found === null) setError({ message: 'Ce client n’existe plus.', code: 'not_found' });
             setDraft(found);
         } catch (e) {
-            setError(humanizeError(e, 'Ce client n’a pas pu être lu.'));
+            setError(errorNote(e, 'Ce client n’a pas pu être lu.'));
         }
     }, [itemId]);
 
@@ -69,7 +71,7 @@ export default function ClientPanel({ scope, canWrite, gone }: SettingsPanelProp
     }, [load]);
 
     if (draft === null) {
-        return <p className={error ? shell.notice : shell.empty}>{error ?? 'Chargement…'}</p>;
+        return error ? <ErrorNote note={error} /> : <p className={shell.empty}>Chargement…</p>;
     }
 
     const set = (change: Partial<InvoicingClient>) => setDraft((d) => (d ? { ...d, ...change } : d));
@@ -83,7 +85,7 @@ export default function ClientPanel({ scope, canWrite, gone }: SettingsPanelProp
             await api.send('invoicing.clientSave', { id: itemId, client, archived });
             invalidate('invoicing.clientList', 'invoicing.docList', 'invoicing.doc');
         } catch (e) {
-            setError(humanizeError(e, 'Enregistrement impossible.'));
+            setError(errorNote(e, 'Enregistrement impossible.'));
             throw e;
         } finally {
             setBusy(false);
@@ -109,7 +111,7 @@ export default function ClientPanel({ scope, canWrite, gone }: SettingsPanelProp
                         gone();
                         invalidate('invoicing.clientList');
                     } catch (e) {
-                        setError(humanizeError(e, 'Ce client n’a pas pu être retiré.'));
+                        setError(errorNote(e, 'Ce client n’a pas pu être retiré.'));
                     } finally {
                         setConfirm(null);
                     }
@@ -193,7 +195,7 @@ export default function ClientPanel({ scope, canWrite, gone }: SettingsPanelProp
                 </ReadOnlyNotice>
             )}
 
-            {error && <p className={shell.notice}>{error}</p>}
+            <ErrorNote note={error} />
             <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} busy={busy} />
         </div>
     );

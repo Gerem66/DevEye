@@ -2,8 +2,9 @@ import { createElement, useCallback, useEffect, useMemo, useRef, useState, type 
 import {
     Button,
     Dialog,
+    ErrorNote,
+    errorNote,
     FeatureSettingsButton,
-    humanizeError,
     invalidate,
     StatusBadge,
     StickyHeader,
@@ -11,7 +12,8 @@ import {
     useLiveSegment,
     useResourceVersion,
     useSubView,
-    withSecrecy
+    withSecrecy,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { MinimalUser } from '@deveye/types';
 import { api, moveRefusal, STATUS_LABELS } from './api';
@@ -88,13 +90,13 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
     const [columns, setColumns] = useState<ProjectColumn[]>([]);
     const [cards, setCards] = useState<ProjectCard[]>([]);
     const [loaded, setLoaded] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     /**
      * L'échec d'un geste, à part de `error` : le geste raté re-sollicite le tableau,
      * et une relecture réussie efface `error`. Reste jusqu'à ce qu'on le ferme, ou
      * jusqu'au geste suivant.
      */
-    const [actionError, setActionError] = useState<string | null>(null);
+    const [actionError, setActionError] = useState<ErrorNoteInput | null>(null);
     /**
      * Le refus d'un déplacement, à part de `actionError` : le bandeau naît loin de
      * la carte, et on manquerait le retour en arrière à le lire. La popup, elle,
@@ -126,7 +128,7 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
         dueDate?: number;
     } | null>(null);
     const [busy, setBusy] = useState(false);
-    const [dialogError, setDialogError] = useState<string | null>(null);
+    const [dialogError, setDialogError] = useState<ErrorNoteInput | null>(null);
 
     /** Les colonnes qui valent « terminé » : la frise y lit ses tâches en vert. */
     const doneColumnIds = useMemo(() => new Set(columns.filter((c) => c.countsAsDone).map((c) => c.id)), [columns]);
@@ -223,7 +225,7 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
                 });
                 setError(null);
             } catch (e) {
-                setError(humanizeError(e, 'Impossible de charger le tableau.'));
+                setError(errorNote(e, 'Impossible de charger le tableau.'));
             } finally {
                 setLoaded(true);
             }
@@ -266,7 +268,7 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
         } catch (e) {
             const refusal = moveRefusal(e, before);
             if (refusal) setHeldBack(refusal);
-            else setActionError(humanizeError(e, 'Le déplacement a échoué.'));
+            else setActionError(errorNote(e, 'Le déplacement a échoué.'));
             void reload();
         }
     };
@@ -313,7 +315,7 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
             invalidate('projects.board', 'projects.list');
             setCardDialog(null);
         } catch (e) {
-            setDialogError(humanizeError(e, 'L’enregistrement a échoué.'));
+            setDialogError(errorNote(e, 'L’enregistrement a échoué.'));
         } finally {
             setBusy(false);
         }
@@ -352,8 +354,8 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
             await withSecrecy(() => api.send('projects.cardUpdate', { cardId: card.id, card: draft }));
             invalidate('projects.board', 'projects.list');
         } catch (e) {
-            if (inDialog) setDialogError(humanizeError(e, failure));
-            else setActionError(humanizeError(e, failure));
+            if (inDialog) setDialogError(errorNote(e, failure));
+            else setActionError(errorNote(e, failure));
             void reload();
         }
     };
@@ -368,7 +370,7 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
             invalidate('projects.board', 'projects.list');
             void reload();
         } catch (e) {
-            setActionError(humanizeError(e, 'L’archivage a échoué.'));
+            setActionError(errorNote(e, 'L’archivage a échoué.'));
         }
     };
 
@@ -380,7 +382,7 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
             invalidate('projects.board', 'projects.list');
             setCardDialog(null);
         } catch (e) {
-            setDialogError(humanizeError(e, 'L’archivage a échoué.'));
+            setDialogError(errorNote(e, 'L’archivage a échoué.'));
         } finally {
             setBusy(false);
         }
@@ -409,7 +411,7 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
             invalidate('projects.board', 'projects.list');
             setColumnDialog(null);
         } catch (e) {
-            setDialogError(humanizeError(e, 'L’enregistrement a échoué.'));
+            setDialogError(errorNote(e, 'L’enregistrement a échoué.'));
         } finally {
             setBusy(false);
         }
@@ -426,7 +428,7 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
         } catch (e) {
             // Le serveur refuse tant que la colonne porte des cartes : son
             // message dit exactement combien, on l'affiche tel quel.
-            setDialogError(humanizeError(e, 'Le retrait a échoué.'));
+            setDialogError(errorNote(e, 'Le retrait a échoué.'));
         } finally {
             setBusy(false);
         }
@@ -448,7 +450,7 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
             invalidate('projects.board');
             setMilestoneDialog(null);
         } catch (e) {
-            setDialogError(humanizeError(e, 'L’enregistrement a échoué.'));
+            setDialogError(errorNote(e, 'L’enregistrement a échoué.'));
         } finally {
             setBusy(false);
         }
@@ -464,7 +466,7 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
             setMilestoneDialog({ milestone: res.milestone });
             invalidate('projects.board');
         } catch (e) {
-            setDialogError(humanizeError(e, 'La mise à jour a échoué.'));
+            setDialogError(errorNote(e, 'La mise à jour a échoué.'));
         }
     };
 
@@ -477,7 +479,7 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
             invalidate('projects.board');
             setMilestoneDialog(null);
         } catch (e) {
-            setDialogError(humanizeError(e, 'Le retrait a échoué.'));
+            setDialogError(errorNote(e, 'Le retrait a échoué.'));
         } finally {
             setBusy(false);
         }
@@ -492,7 +494,7 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
         try {
             await api.send('projects.columnReorder', { projectId: project.id, columnIds });
         } catch (e) {
-            setActionError(humanizeError(e, 'Le déplacement a échoué.'));
+            setActionError(errorNote(e, 'Le déplacement a échoué.'));
             void reload();
         }
     };
@@ -569,20 +571,8 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
                 />
             </StickyHeader>
 
-            {error && <p className={styles.error}>{error}</p>}
-            {actionError && (
-                <p className={styles.errorDismissible} role='alert'>
-                    <span>{actionError}</span>
-                    <button
-                        type='button'
-                        className={styles.errorClose}
-                        aria-label='Fermer ce message'
-                        onClick={() => setActionError(null)}
-                    >
-                        <span className='icon icon-x' />
-                    </button>
-                </p>
-            )}
+            <ErrorNote note={error} />
+            <ErrorNote note={actionError} onDismiss={() => setActionError(null)} />
             {/* Les onglets de liaison portent leur propre chargement. */}
             {!loaded && !isProjectFeatureTabId(tab) && <p className={styles.empty}>Chargement…</p>}
 

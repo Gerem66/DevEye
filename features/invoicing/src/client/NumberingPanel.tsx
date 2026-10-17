@@ -1,4 +1,5 @@
 import {
+    ErrorNote,
     NumberInput,
     ReadOnlyNotice,
     SaveButton,
@@ -34,7 +35,7 @@ export default function NumberingPanel({ canWrite }: SettingsPanelProps) {
     const { draft, error, patch, save, busy } = useSettingsDraft();
 
     if (draft === null) {
-        return <p className={error ? shell.notice : shell.empty}>{error ?? 'Chargement…'}</p>;
+        return error ? <ErrorNote note={error} /> : <p className={shell.empty}>Chargement…</p>;
     }
 
     return (
@@ -108,7 +109,7 @@ export default function NumberingPanel({ canWrite }: SettingsPanelProps) {
                 </ReadOnlyNotice>
             )}
 
-            {error && <p className={shell.notice}>{error}</p>}
+            <ErrorNote note={error} />
         </div>
     );
 }

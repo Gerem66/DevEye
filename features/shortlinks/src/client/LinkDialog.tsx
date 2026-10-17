@@ -2,10 +2,12 @@ import {
     Button,
     Dialog,
     DialogCancelButton,
-    humanizeError,
+    errorNote,
+    ErrorNote,
     invalidate,
     settingsStyles as shell,
-    TextInput
+    TextInput,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import { useEffect, useState } from 'react';
 
@@ -41,7 +43,7 @@ export default function LinkDialog({
     const [form, setForm] = useState<Form>(EMPTY);
     const [touched, setTouched] = useState(false);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     useEffect(() => {
         if (!open) return;
@@ -75,7 +77,7 @@ export default function LinkDialog({
         } catch (failure) {
             // Une limite atteinte ouvre d'elle-même la proposition des offres ;
             // la phrase du serveur reste ici pour qui la ferme.
-            setError(humanizeError(failure, 'Le lien n’a pas pu être créé.'));
+            setError(errorNote(failure, 'Le lien n’a pas pu être créé.'));
         } finally {
             setBusy(false);
         }
@@ -148,7 +150,7 @@ export default function LinkDialog({
                     onChange={(next) => set(next)}
                 />
 
-                {error !== null && <p className={styles.error}>{error}</p>}
+                <ErrorNote note={error} />
             </div>
         </Dialog>
     );

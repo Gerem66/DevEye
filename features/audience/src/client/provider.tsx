@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, FeatureSettingsButton, openFeature, useResource } from 'deveye-sdk-client';
+import { Button, ErrorNote, FeatureSettingsButton, openFeature, useResource } from 'deveye-sdk-client';
 import type { AudienceClientProvider, SdkTileSummary } from '@deveye/types/sdk/client';
 
 import { api } from './api';
@@ -44,7 +44,7 @@ function LinkedSite({ siteId, canWrite, onUnlink }: LinkedSiteProps) {
     );
     const [installOpen, setInstallOpen] = useState(false);
 
-    if (!data) return <p className={error ? styles.error : styles.empty}>{error ?? 'Chargement…'}</p>;
+    if (!data) return error ? <ErrorNote note={error} /> : <p className={styles.empty}>Chargement…</p>;
     const { site, ingestOrigin } = data;
 
     return (

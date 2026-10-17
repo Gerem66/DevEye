@@ -1,4 +1,4 @@
-import { Button, Dialog } from 'deveye-sdk-client';
+import { Button, Dialog, ErrorNote, type ErrorNoteInput } from 'deveye-sdk-client';
 import { formatDate, PRIORITY_LABELS } from '../api';
 import type { ProjectCard } from '../../contracts/domain';
 import { MemberAvatar, MemberName } from '../Member';
@@ -9,6 +9,7 @@ interface ArchivedCardDialogProps {
     card: ProjectCard | null;
     canWrite: boolean;
     busy: boolean;
+    error: ErrorNoteInput | null;
     onClose: () => void;
     onRestore: () => void;
 }
@@ -17,7 +18,7 @@ interface ArchivedCardDialogProps {
  * Une tâche archivée, en lecture seule : la modifier réécrirait l'histoire que
  * la frise raconte. Seule la restauration est possible, et laisse sa propre trace.
  */
-export function ArchivedCardDialog({ open, card, canWrite, busy, onClose, onRestore }: ArchivedCardDialogProps) {
+export function ArchivedCardDialog({ open, card, canWrite, busy, error, onClose, onRestore }: ArchivedCardDialogProps) {
     const done = card?.checklist.filter((i) => i.done).length ?? 0;
 
     return (
@@ -93,6 +94,8 @@ export function ArchivedCardDialog({ open, card, canWrite, busy, onClose, onRest
                             </ul>
                         </div>
                     )}
+
+                    <ErrorNote note={error} />
                 </div>
             )}
         </Dialog>

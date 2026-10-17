@@ -26,7 +26,6 @@ declare const styles: {
     readonly emptyState: string;
     readonly emptyText: string;
     readonly emptyTitle: string;
-    readonly error: string;
     readonly fact: string;
     readonly factUrl: string;
     readonly facts: string;

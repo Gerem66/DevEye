@@ -11,8 +11,9 @@ import type {
 import {
     Button,
     ConfirmDialog,
+    ErrorNote,
+    errorNote,
     FeatureSettingsButton,
-    humanizeError,
     invalidate,
     ReadOnlyNotice,
     SaveButton,
@@ -21,7 +22,8 @@ import {
     Switch,
     TextInput,
     useResource,
-    type ConfirmRequest
+    type ConfirmRequest,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import { api } from './api';
 import {
@@ -63,7 +65,7 @@ export default function JobGeneralPanel({ scope, canWrite, gone }: SettingsPanel
     const [day, setDay] = useState(1);
     const [keepLast, setKeepLast] = useState(7);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     // Sur ce serveur, rien ne resterait pour les effacer ensuite.
     const removalNote =
         job?.destinationKind === 'local'
@@ -94,7 +96,7 @@ export default function JobGeneralPanel({ scope, canWrite, gone }: SettingsPanel
                 const [res, sources] = await Promise.all([
                     api.send('backup.jobGet', { jobId, limit: 1 }),
                     api.send('backup.sources', {}).catch((e: unknown) => {
-                        setError(humanizeError(e, 'Les sources n’ont pas pu être lues.'));
+                        setError(errorNote(e, 'Les sources n’ont pas pu être lues.'));
                         return { kinds: [], candidates: [] };
                     })
                 ]);
@@ -112,7 +114,7 @@ export default function JobGeneralPanel({ scope, canWrite, gone }: SettingsPanel
                 setDay(res.job.scheduleDay);
                 setKeepLast(res.job.keepLast);
             } catch (e) {
-                setError(humanizeError(e, 'Le travail n’a pas pu être lu.'));
+                setError(errorNote(e, 'Le travail n’a pas pu être lu.'));
             }
         })();
     }, [jobId]);
@@ -149,7 +151,7 @@ export default function JobGeneralPanel({ scope, canWrite, gone }: SettingsPanel
             setJob(res.job);
             invalidate('backup.jobList', 'backup.detail', 'backup.destinationList', 'backup.count');
         } catch (e) {
-            setError(humanizeError(e, 'Impossible d’enregistrer ce travail.'));
+            setError(errorNote(e, 'Impossible d’enregistrer ce travail.'));
             // Relancé : le bouton n'annonce « Enregistré » que sur un succès.
             throw e;
         }
@@ -166,15 +168,15 @@ export default function JobGeneralPanel({ scope, canWrite, gone }: SettingsPanel
             gone();
             invalidate('backup.jobList', 'backup.destinationList', 'backup.count');
         } catch (e) {
-            setError(humanizeError(e, 'Impossible de supprimer ce travail.'));
+            setError(errorNote(e, 'Impossible de supprimer ce travail.'));
         } finally {
             setBusy(false);
         }
     };
 
     if (!job || destinations === null) {
-        const message = error ?? destinationsError;
-        return <p className={message ? shell.notice : shell.empty}>{message ?? 'Chargement…'}</p>;
+        const note = error ?? destinationsError;
+        return note ? <ErrorNote note={note} /> : <p className={shell.empty}>Chargement…</p>;
     }
 
     // Un travail projeté se modifie chez lui : le serveur le refuse d'ici.
@@ -376,7 +378,7 @@ export default function JobGeneralPanel({ scope, canWrite, gone }: SettingsPanel
                 </div>
             )}
 
-            {error && <p className={shell.notice}>{error}</p>}
+            <ErrorNote note={error} />
 
             <ConfirmDialog request={confirm} busy={busy} onClose={() => setConfirm(null)} />
         </div>

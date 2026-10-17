@@ -3,7 +3,7 @@
     align-items: center;
     gap: var(--space-md);
     flex-wrap: wrap;
-    margin: 0 0 var(--space-md);
+    margin: 0;
     padding: var(--space-sm) var(--space-md);
     border-radius: var(--radius-sm);
     background: var(--danger-bg);
@@ -15,4 +15,22 @@
    ligne plutôt que de se comprimer contre eux. */
 .text {
     flex: 1 1 16rem;
+}
+
+.dismiss {
+    display: inline-flex;
+    flex-shrink: 0;
+    padding: 0;
+    border: none;
+    background: none;
+    color: inherit;
+    cursor: pointer;
+    filter: opacity(0.7);
+    transition: filter var(--transition-fast);
+}
+
+.dismiss:hover,
+.dismiss:focus-visible {
+    outline: none;
+    filter: opacity(1);
 }

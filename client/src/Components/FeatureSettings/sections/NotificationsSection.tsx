@@ -10,11 +10,12 @@ import {
 import { MAIL_CLIENT_PROVIDER } from '@deveye/types/sdk';
 import type { MailClientProvider } from '@deveye/types/sdk/client';
 
-import { humanizeError } from '@/api/useResource';
+import { errorNote } from '@/api/useResource';
 import { ws } from '@/api/ws';
 import Button from '@/Components/Button';
 import Checkbox from '@/Components/Checkbox';
 import { Dialog } from '@/Components/Dialog';
+import ErrorNote, { type ErrorNoteInput } from '@/Components/ErrorNote';
 import { ConfirmDialog, type ConfirmRequest } from '@/Components/ConfirmDialog';
 import SearchSelect, { type SearchSelectOption } from '@/Components/SearchSelect';
 import Term from '@/Components/Term';
@@ -105,7 +106,9 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
     const [draft, setDraft] = useState<NotificationChannelInput | null>(null);
     const [editing, setEditing] = useState<number | null>(null);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
+    /** Le compte rendu d'un essai d'envoi ; l'échec d'un geste va dans `error`. */
     const [status, setStatus] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [busy, setBusy] = useState(false);
     /** Le dialogue de compte Mail, monté à la demande par le « + » du formulaire. */
     const [mailAdd, setMailAdd] = useState(false);
@@ -151,7 +154,7 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
     }, [feature, itemId, showSelection]);
 
     useEffect(() => {
-        void reload().catch(() => setStatus('Chargement impossible.'));
+        void reload().catch((e: unknown) => setError(errorNote(e, 'Chargement impossible.')));
     }, [reload, channelsVersion, routeVersion]);
 
     // Les expéditeurs ne servent qu'au formulaire d'ajout, donc à qui peut
@@ -168,10 +171,11 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
     async function run(action: () => Promise<void>, failure: string): Promise<void> {
         setBusy(true);
         setStatus(null);
+        setError(null);
         try {
             await action();
         } catch (e) {
-            setStatus(humanizeError(e, failure));
+            setError(errorNote(e, failure));
         } finally {
             setBusy(false);
         }
@@ -195,6 +199,7 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
     };
 
     const startAdd = (): void => {
+        setError(null);
         setEditing(null);
         setDraft(emptyDraft(mail !== undefined));
     };
@@ -275,6 +280,7 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
         }, 'Envoi impossible.');
 
     const startEdit = (channel: NotificationChannel): void => {
+        setError(null);
         setEditing(channel.id);
         setDraft({
             kind: channel.kind,
@@ -653,9 +659,11 @@ export default function NotificationsSection({ scope, onManageChannels }: Props)
                         )}
                     </div>
                 )}
+                {draft !== null && <ErrorNote note={error} />}
             </Dialog>
 
             {status && <p className={styles.notice}>{status}</p>}
+            {draft === null && <ErrorNote note={error} />}
 
             {/* Le vrai dialogue de la feature Mail, offert par son contrat client
                 et monté à la demande. */}

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import {
     Button,
     ConfirmDialog,
-    humanizeError,
+    ErrorNote,
     openAccountView,
     PlanPausedBadge,
     PlanPausedNotice,
@@ -10,14 +10,15 @@ import {
     StatusBadge,
     useResource,
     useWorkspacePermissions,
-    type ConfirmRequest
+    type ConfirmRequest,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import type { BankConnection } from '../contracts/banking';
 
 import ConnectionDialog from './ConnectionDialog';
 import { api, refreshFinance } from './api';
-import { ConsentError, consentAtBank } from './bankWindow';
+import { consentAtBank, consentNote } from './bankWindow';
 import { formatDate } from './format';
 import styles from './style.module.css';
 
@@ -71,7 +72,7 @@ export default function FinanceSourcesPanel({ canWrite }: SettingsPanelProps) {
     );
     const [editing, setEditing] = useState<{ connection: BankConnection | null } | null>(null);
     const [busyId, setBusyId] = useState<number | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [flash, setFlash] = useState<string | null>(null);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
 
@@ -88,7 +89,7 @@ export default function FinanceSourcesPanel({ canWrite }: SettingsPanelProps) {
         try {
             await work();
         } catch (e) {
-            setError(e instanceof ConsentError ? e.message : humanizeError(e, fallback));
+            setError(consentNote(e, fallback));
         } finally {
             setBusyId(null);
         }
@@ -276,7 +277,7 @@ export default function FinanceSourcesPanel({ canWrite }: SettingsPanelProps) {
                 </p>
             )}
             {flash && <p className={shell.fieldHint}>{flash}</p>}
-            {(error ?? loadError) && <p className={shell.notice}>{error ?? loadError}</p>}
+            <ErrorNote note={error ?? loadError} />
 
             {canWrite && (
                 <div className={shell.sectionActions}>

@@ -23,12 +23,6 @@
     color: var(--text-secondary);
 }
 
-.error {
-    margin: 0;
-    font-size: 0.85rem;
-    color: var(--danger);
-}
-
 /* « Renvoyer le code » : un geste discret, sous la case de confiance. */
 .link {
     align-self: flex-start;

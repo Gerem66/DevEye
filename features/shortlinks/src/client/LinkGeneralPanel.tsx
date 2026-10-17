@@ -2,14 +2,16 @@ import {
     Button,
     Checkbox,
     ConfirmDialog,
-    humanizeError,
+    errorNote,
+    ErrorNote,
     invalidate,
     ReadOnlyNotice,
     SaveButton,
     settingsStyles as shell,
     Switch,
     TextInput,
-    type ConfirmRequest
+    type ConfirmRequest,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import { useEffect, useState } from 'react';
@@ -59,7 +61,7 @@ export default function LinkGeneralPanel({ scope, canWrite, gone }: SettingsPane
     const [enabled, setEnabled] = useState(true);
     const [toggling, setToggling] = useState(false);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
 
     useEffect(() => {
@@ -73,7 +75,7 @@ export default function LinkGeneralPanel({ scope, canWrite, gone }: SettingsPane
                 setEnabled(res.link.enabled);
             })
             .catch((failure: unknown) => {
-                if (live) setError(humanizeError(failure, 'Le lien n’a pas pu être lu.'));
+                if (live) setError(errorNote(failure, 'Le lien n’a pas pu être lu.'));
             });
         return () => {
             live = false;
@@ -81,7 +83,7 @@ export default function LinkGeneralPanel({ scope, canWrite, gone }: SettingsPane
     }, [linkId]);
 
     if (link === null || draft === null) {
-        return <p className={error ? shell.notice : shell.empty}>{error ?? 'Chargement…'}</p>;
+        return error ? <ErrorNote note={error} /> : <p className={shell.empty}>Chargement…</p>;
     }
 
     if (link.foreign) {
@@ -126,7 +128,7 @@ export default function LinkGeneralPanel({ scope, canWrite, gone }: SettingsPane
             setDraft(draftOf(res.link));
             invalidate('shortlinks.list', 'shortlinks.get');
         } catch (failure) {
-            setError(humanizeError(failure, 'L’enregistrement a échoué.'));
+            setError(errorNote(failure, 'L’enregistrement a échoué.'));
             // Relancé : le bouton n'annonce « Enregistré » que sur un succès.
             throw failure;
         } finally {
@@ -147,7 +149,7 @@ export default function LinkGeneralPanel({ scope, canWrite, gone }: SettingsPane
             invalidate('shortlinks.list', 'shortlinks.get', 'shortlinks.count');
         } catch (failure) {
             setEnabled(before);
-            setError(humanizeError(failure, 'Le lien n’a pas pu être changé.'));
+            setError(errorNote(failure, 'Le lien n’a pas pu être changé.'));
         } finally {
             setToggling(false);
         }
@@ -163,7 +165,7 @@ export default function LinkGeneralPanel({ scope, canWrite, gone }: SettingsPane
             gone();
             invalidate('shortlinks.list', 'shortlinks.count', 'shortlinks.stats');
         } catch (failure) {
-            setError(humanizeError(failure, 'La suppression a échoué.'));
+            setError(errorNote(failure, 'La suppression a échoué.'));
         } finally {
             setBusy(false);
         }
@@ -291,7 +293,7 @@ export default function LinkGeneralPanel({ scope, canWrite, gone }: SettingsPane
                 </ReadOnlyNotice>
             )}
 
-            {error && <p className={shell.notice}>{error}</p>}
+            <ErrorNote note={error} />
 
             {canWrite && (
                 <div className={shell.field}>

@@ -1,10 +1,12 @@
 import {
-    humanizeError,
+    errorNote,
+    ErrorNote,
     invalidate,
     ReadOnlyNotice,
     SaveButton,
     settingsStyles as shell,
-    TextInput
+    TextInput,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import { useEffect, useState } from 'react';
@@ -38,7 +40,7 @@ export default function LinkCampaignPanel({ scope, canWrite }: SettingsPanelProp
     const [link, setLink] = useState<Shortlink | null>(null);
     const [utm, setUtm] = useState<ShortlinkUtm | null>(null);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     useEffect(() => {
         if (linkId === null) return;
@@ -50,7 +52,7 @@ export default function LinkCampaignPanel({ scope, canWrite }: SettingsPanelProp
                 setUtm(res.link.utm);
             })
             .catch((failure: unknown) => {
-                if (live) setError(humanizeError(failure, 'Le lien n’a pas pu être lu.'));
+                if (live) setError(errorNote(failure, 'Le lien n’a pas pu être lu.'));
             });
         return () => {
             live = false;
@@ -58,7 +60,7 @@ export default function LinkCampaignPanel({ scope, canWrite }: SettingsPanelProp
     }, [linkId]);
 
     if (link === null || utm === null) {
-        return <p className={error ? shell.notice : shell.empty}>{error ?? 'Chargement…'}</p>;
+        return error ? <ErrorNote note={error} /> : <p className={shell.empty}>Chargement…</p>;
     }
 
     if (link.foreign) {
@@ -82,7 +84,7 @@ export default function LinkCampaignPanel({ scope, canWrite }: SettingsPanelProp
             setUtm(res.link.utm);
             invalidate('shortlinks.list', 'shortlinks.get');
         } catch (failure) {
-            setError(humanizeError(failure, 'L’enregistrement a échoué.'));
+            setError(errorNote(failure, 'L’enregistrement a échoué.'));
             throw failure;
         } finally {
             setBusy(false);
@@ -140,7 +142,7 @@ export default function LinkCampaignPanel({ scope, canWrite }: SettingsPanelProp
                 </ReadOnlyNotice>
             )}
 
-            {error && <p className={shell.notice}>{error}</p>}
+            <ErrorNote note={error} />
         </div>
     );
 }

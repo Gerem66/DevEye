@@ -3,11 +3,13 @@ import {
     Button,
     Checkbox,
     Dialog,
-    humanizeError,
+    ErrorNote,
+    errorNote,
     SearchSelect,
     SegmentedControl,
     TextInput,
     useResource,
+    type ErrorNoteInput,
     type SearchSelectOption
 } from 'deveye-sdk-client';
 import type { FeatureDomain } from '@deveye/types';
@@ -79,14 +81,14 @@ export default function StatusPageDialog({
     onClose,
     onSaved
 }: StatusPageDialogProps) {
-    const { data: services } = useResource(
+    const { data: services, error: servicesError } = useResource(
         'uptime.list',
         () => api.send('uptime.list', {}).then((res) => res.services.filter((service) => !service.foreign)),
         'Impossible de charger les services.'
     );
     const [draft, setDraft] = useState<Draft>(() => draftOf(page));
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     useEffect(() => {
         if (!open) return;
@@ -158,7 +160,7 @@ export default function StatusPageDialog({
             onSaved();
             onClose();
         } catch (e) {
-            setError(humanizeError(e, 'Impossible d’enregistrer cette page.'));
+            setError(errorNote(e, 'Impossible d’enregistrer cette page.'));
         } finally {
             setBusy(false);
         }
@@ -207,7 +209,12 @@ export default function StatusPageDialog({
 
                 <div className={styles.field}>
                     <span className={styles.fieldLabel}>Services montrés</span>
-                    {services === null && <span className={styles.fieldHint}>Chargement…</span>}
+                    {services === null &&
+                        (servicesError ? (
+                            <ErrorNote note={servicesError} />
+                        ) : (
+                            <span className={styles.fieldHint}>Chargement…</span>
+                        ))}
                     {services?.length === 0 && (
                         <span className={styles.fieldHint}>Ajoutez d’abord un service à surveiller.</span>
                     )}
@@ -287,7 +294,7 @@ export default function StatusPageDialog({
                     <span className={styles.fieldHint}>Non publiée, son lien répond « page introuvable ».</span>
                 </div>
 
-                {error && <p className={styles.error}>{error}</p>}
+                <ErrorNote note={error} />
             </div>
         </Dialog>
     );

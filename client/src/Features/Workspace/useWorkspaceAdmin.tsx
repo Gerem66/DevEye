@@ -2,7 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { FEATURE_REGISTRY, WORKSPACE_CAPABILITIES } from '@deveye/types';
 import type { WorkspaceCapability, WorkspaceFeatureGrant, WorkspaceRole } from '@deveye/types';
 
+import { errorNote } from '@/api/useResource';
 import { ws, WsError } from '@/api/ws';
+import type { ErrorNoteInput } from '@/Components/ErrorNote';
 import { useAuth } from '@/auth/AuthProvider';
 import { invalidate, useResourceVersion } from '@/stores/invalidation';
 import { getCurrentUser } from '@/stores/currentUser';
@@ -46,10 +48,16 @@ export function useWorkspaceAdmin() {
     const [roles, setRoles] = useState<WorkspaceRole[]>([]);
     const [memberRoles, setMemberRoles] = useState<{ userId: number; roleId: number | null }[]>([]);
     const [invitations, setInvitations] = useState<{ id: number; email: string; expiresAt: number }[]>([]);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [busy, setBusy] = useState(false);
 
-    const fail = (e: unknown, fallback: string): void => setError(e instanceof WsError ? e.message : fallback);
+    /** « Espace introuvable », « Invitation expirée » : plus précis que la phrase générique. */
+    const fail = (e: unknown, fallback: string): void =>
+        setError(
+            e instanceof WsError && e.code === 'not_found'
+                ? { message: e.message, code: e.code }
+                : errorNote(e, fallback)
+        );
 
     /**
      * Les droits de quelqu'un viennent de changer, les nôtres y compris. Le

@@ -1,4 +1,4 @@
-import { openInfo } from 'deveye-sdk-client';
+import { errorNote, ErrorNote, openInfo } from 'deveye-sdk-client';
 
 import { startAgentUpdate, useAgentUpdates } from './agentUpdates';
 
@@ -16,7 +16,7 @@ export function useAgentUpdate() {
         } catch (e) {
             void openInfo({
                 title: 'Mise à jour impossible',
-                body: <p>{e instanceof Error ? e.message : 'Échec de la mise à jour de l’agent.'}</p>,
+                body: <ErrorNote note={errorNote(e, 'Échec de la mise à jour de l’agent.')} />,
                 width: 420
             });
         }

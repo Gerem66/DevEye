@@ -1,4 +1,4 @@
-import { useCurrentUser } from 'deveye-sdk-client';
+import { ErrorNote, useCurrentUser } from 'deveye-sdk-client';
 import type { AgentServiceScope, DeviceReport } from '@deveye/types';
 
 import type { FleetDevice } from '../contracts/commands';
@@ -316,7 +316,7 @@ export function AgentPanel({
             </section>
 
             {note && <p className={note.tone === 'ok' ? styles.powerOk : styles.powerErr}>{note.message}</p>}
-            {actions.actionError && <p className={styles.powerErr}>{actions.actionError}</p>}
+            <ErrorNote note={actions.actionError} />
         </div>
     );
 }

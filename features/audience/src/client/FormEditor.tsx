@@ -4,7 +4,8 @@ import {
     ConfirmDialog,
     Dialog,
     DialogCancelButton,
-    humanizeError,
+    ErrorNote,
+    errorNote,
     invalidate,
     SaveButton,
     SearchSelect,
@@ -13,7 +14,8 @@ import {
     settingsStyles as shell,
     Switch,
     TextInput,
-    type ConfirmRequest
+    type ConfirmRequest,
+    type ErrorNoteInput
 } from 'deveye-sdk-client';
 import {
     AUDIENCE_FIELD_CHOICES_MAX,
@@ -133,7 +135,7 @@ export function FormEditor({ form, siteId, open, canWrite, onClose, onSaved }: F
     const [mode, setMode] = useState<AudienceFormMode>('strict');
     const [fields, setFields] = useState<FieldDraft[]>([]);
     const [accepting, setAccepting] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
 
     useEffect(() => {
@@ -165,7 +167,7 @@ export function FormEditor({ form, siteId, open, canWrite, onClose, onSaved }: F
                         ? 'Une question à choix doit proposer au moins une réponse.'
                         : null;
         if (problem) {
-            setError(problem);
+            setError({ message: problem, code: 'validation' });
             throw new Error(problem);
         }
 
@@ -185,7 +187,7 @@ export function FormEditor({ form, siteId, open, canWrite, onClose, onSaved }: F
             onSaved();
             onClose();
         } catch (e) {
-            setError(humanizeError(e, 'Enregistrement impossible.'));
+            setError(errorNote(e, 'Enregistrement impossible.'));
             throw e;
         }
     };
@@ -197,7 +199,7 @@ export function FormEditor({ form, siteId, open, canWrite, onClose, onSaved }: F
             onSaved();
             if (close) onClose();
         } catch (e) {
-            setError(humanizeError(e, fallback));
+            setError(errorNote(e, fallback));
         } finally {
             setConfirm(null);
         }
@@ -222,7 +224,7 @@ export function FormEditor({ form, siteId, open, canWrite, onClose, onSaved }: F
                     </>
                 }
             >
-                {error && <p className={shell.notice}>{error}</p>}
+                <ErrorNote note={error} />
 
                 <label className={shell.field}>
                     <span className={shell.sectionLabel}>Nom</span>

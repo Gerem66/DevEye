@@ -1,5 +1,13 @@
 import { useState } from 'react';
-import { Button, humanizeError, invalidate, openFeature, useResource } from 'deveye-sdk-client';
+import {
+    Button,
+    errorNote,
+    ErrorNote,
+    invalidate,
+    openFeature,
+    useResource,
+    type ErrorNoteInput
+} from 'deveye-sdk-client';
 import type { DatabaseClientProvider, SdkTileSummary } from '@deveye/types/sdk/client';
 import type { DatabaseProbe } from '../contracts/domain';
 
@@ -33,11 +41,11 @@ function LinkedDatabase({ databaseId, canWrite, onUnlink }: LinkedDatabaseProps)
     const [probe, setProbe] = useState<DatabaseProbe | null>(null);
     const [testing, setTesting] = useState(false);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
     /** L'explorateur occupe tout : l'en-tête et les voisins s'effacent. */
     const [expanded, setExpanded] = useState(false);
 
-    if (!data) return <p className={loadError ? styles.error : styles.hint}>{loadError ?? 'Chargement…'}</p>;
+    if (!data) return loadError ? <ErrorNote note={loadError} /> : <p className={styles.hint}>Chargement…</p>;
     const { database, alerts } = data;
 
     const test = async () => {
@@ -49,7 +57,7 @@ function LinkedDatabase({ databaseId, canWrite, onUnlink }: LinkedDatabaseProps)
             const res = await api.send('database.test', { databaseId: database.id });
             setProbe(res.probe);
         } catch (e) {
-            setError(humanizeError(e, 'Le test n’a pas pu être lancé.'));
+            setError(errorNote(e, 'Le test n’a pas pu être lancé.'));
         } finally {
             setTesting(false);
             setBusy(false);
@@ -64,7 +72,7 @@ function LinkedDatabase({ databaseId, canWrite, onUnlink }: LinkedDatabaseProps)
             await api.send('database.inspect', { databaseId: database.id });
             invalidate('database.list', 'database.detail', 'database.count');
         } catch (e) {
-            setError(humanizeError(e, 'Le relevé n’a pas pu être fait.'));
+            setError(errorNote(e, 'Le relevé n’a pas pu être fait.'));
         } finally {
             setBusy(false);
         }
@@ -92,7 +100,7 @@ function LinkedDatabase({ databaseId, canWrite, onUnlink }: LinkedDatabaseProps)
                 />
             )}
 
-            {error && <p className={styles.error}>{error}</p>}
+            <ErrorNote note={error} />
 
             <DatabaseView
                 database={database}

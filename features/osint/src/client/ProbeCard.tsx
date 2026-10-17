@@ -1,4 +1,4 @@
-import { safeHref } from 'deveye-sdk-client';
+import { Button, ErrorNote, safeHref, type ErrorNoteInput } from 'deveye-sdk-client';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { OSINT_PROBE_META, type OsintProbeId, type OsintProbeResult, type OsintTone } from '../contracts/domain';
@@ -12,7 +12,7 @@ import styles from './Osint.module.css';
  */
 
 export type ProbeCardState =
-    { kind: 'pending' } | { kind: 'done'; result: OsintProbeResult } | { kind: 'failed'; message: string };
+    { kind: 'pending' } | { kind: 'done'; result: OsintProbeResult } | { kind: 'failed'; note: ErrorNoteInput };
 
 interface Props {
     probe: OsintProbeId;
@@ -58,12 +58,11 @@ export function ProbeCard({ probe, state, onRetry, onPivot }: Props): React.Reac
             )}
 
             {state.kind === 'failed' && (
-                <>
-                    <p className={styles.errorText}>{state.message}</p>
-                    <button type='button' className={styles.retry} onClick={onRetry}>
+                <ErrorNote note={state.note}>
+                    <Button variant='secondary' onClick={onRetry}>
                         Réessayer
-                    </button>
-                </>
+                    </Button>
+                </ErrorNote>
             )}
 
             {state.kind === 'done' && (

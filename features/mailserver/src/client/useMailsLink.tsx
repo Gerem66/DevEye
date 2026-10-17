@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { humanizeError, moduleClientProvider, openFeature, useResourceVersion } from 'deveye-sdk-client';
+import {
+    errorNote,
+    moduleClientProvider,
+    openFeature,
+    useResourceVersion,
+    type ErrorNoteInput
+} from 'deveye-sdk-client';
 import { MAIL_CLIENT_PROVIDER } from '@deveye/types/sdk';
 import type { MailAccountPrefill, MailClientProvider } from '@deveye/types/sdk/client';
 
@@ -21,7 +27,7 @@ export interface MailsLink {
     /** Le compte Mail qui tient cette adresse ; `undefined` tant qu'on ne sait pas. */
     linkedId: number | null | undefined;
     busy: boolean;
-    error: string | null;
+    error: ErrorNoteInput | null;
     add(): void;
     open(): void;
     /** Le formulaire de Mail, à monter là où vit le bouton. */
@@ -34,7 +40,7 @@ export function useMailsLink(mailbox: Mailbox, connection: Connection | null): M
     const [linkedId, setLinkedId] = useState<number | null | undefined>(undefined);
     const [pending, setPending] = useState<{ prefill: MailAccountPrefill; credentialId: number } | null>(null);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     const lookup = useCallback(async () => {
         if (!mails) return setLinkedId(null);
@@ -67,7 +73,7 @@ export function useMailsLink(mailbox: Mailbox, connection: Connection | null): M
                     }
                 });
             })
-            .catch((failure: unknown) => setError(humanizeError(failure, 'Le lien avec Mail n’a pas pu être préparé.')))
+            .catch((failure: unknown) => setError(errorNote(failure, 'Le lien avec Mail n’a pas pu être préparé.')))
             .finally(() => setBusy(false));
     };
 

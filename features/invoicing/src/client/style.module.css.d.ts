@@ -50,7 +50,6 @@ declare const styles: {
     readonly emptyBody: string;
     readonly emptyIcon: string;
     readonly emptyTitle: string;
-    readonly error: string;
     readonly feature: string;
     readonly field: string;
     readonly fieldClient: string;
