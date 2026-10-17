@@ -1,20 +1,21 @@
 import { useState } from 'react';
 
-import type { LoginChecksStatus } from '@deveye/types';
+import { TRUSTED_BROWSER_DAYS, type LoginChecksStatus } from '@deveye/types';
 
 import { ws, WsError } from '@/api/ws';
+import { humanizeError } from '@/api/useResource';
 import Button from '@/Components/Button';
 import { Dialog } from '@/Components/Dialog';
 import { openInfo } from '@/Components/InfoPopup';
+import Switch from '@/Components/Switch';
 import TextInput from '@/Components/TextInput';
 import { PhoneDialog } from './PhoneDialog';
+import { Row } from './Row';
 import styles from './Security.module.css';
 
 interface RowProps {
     checks: LoginChecksStatus;
     onChange: (checks: LoginChecksStatus) => void;
-    /** Les cartes alignent leurs colonnes : l'emplacement du geste secondaire existe chez toutes ou chez aucune. */
-    extraColumn: boolean;
 }
 
 function showEmailCheckInfo() {
@@ -33,7 +34,8 @@ function showEmailCheckInfo() {
                 </p>
                 <p>
                     En cochant « Faire confiance à ce navigateur » à la connexion, ce navigateur ne redemande plus le
-                    code pendant 90 jours après sa dernière connexion. Vous pouvez le retirer à tout moment ici.
+                    code pendant {TRUSTED_BROWSER_DAYS} jours après sa dernière connexion. Vous pouvez le retirer à tout
+                    moment ici.
                 </p>
             </>
         )
@@ -138,53 +140,51 @@ function formatDay(seconds: number): string {
     return new Date(seconds * 1000).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-/** La confirmation par mail, en tête de la page : la protection qui s'applique à toute connexion. */
-export function EmailCheckRow({ checks, onChange, extraColumn }: RowProps) {
+/** Le code par mail : la protection qui s'applique à toute connexion. */
+export function EmailCheckRow({ checks, onChange }: RowProps) {
     const [disableOpen, setDisableOpen] = useState(false);
     const [busy, setBusy] = useState(false);
+    const [error, setError] = useState<string | null>(null);
     const { email } = checks;
 
+    // Allumer ne demande rien : l'interrupteur bascule aussitôt, et revient si
+    // le serveur refuse.
     const enable = async () => {
         setBusy(true);
+        setError(null);
+        onChange({ ...checks, email: { ...email, enabled: true } });
         try {
             onChange((await ws.send('loginChecks.setEmail', { enabled: true })).status);
+        } catch (e) {
+            onChange(checks);
+            setError(humanizeError(e, 'Le code par mail n’a pas pu être activé.'));
         } finally {
             setBusy(false);
         }
     };
 
     return (
-        <div className={styles.statusCard}>
-            <div className={`${styles.statusIcon} ${email.enabled ? styles.enabled : ''}`}>
-                <span className='icon icon-mail' />
-            </div>
-            <div className={styles.statusInfo}>
-                <h3>{email.enabled ? 'Code par mail activé' : 'Code par mail désactivé'}</h3>
-                <p>
-                    {email.enabled
-                        ? `Une connexion depuis un nouveau navigateur demande un code envoyé à ${email.to}.`
-                        : 'Activez-le : un mot de passe volé ne suffira plus pour entrer depuis un autre navigateur.'}
-                </p>
-            </div>
-            <div className={styles.statusControls}>
-                <div className={styles.infoSlot}>
-                    <button className={styles.infoBtn} onClick={showEmailCheckInfo} title='Comment ça fonctionne ?'>
-                        <span className='icon icon-info' />
-                    </button>
-                </div>
-                {extraColumn && <div className={styles.extraSlot} />}
-                <div className={styles.actionSlot}>
-                    {email.enabled ? (
-                        <Button variant='danger' onClick={() => setDisableOpen(true)}>
-                            Désactiver
-                        </Button>
-                    ) : (
-                        <Button onClick={() => void enable()} disabled={busy}>
-                            Activer
-                        </Button>
-                    )}
-                </div>
-            </div>
+        <>
+            <Row
+                label='Code par mail'
+                onInfo={showEmailCheckInfo}
+                error={error}
+                hint={
+                    email.enabled
+                        ? `Un code envoyé à ${email.to} confirme chaque connexion depuis un nouveau navigateur.`
+                        : 'Un mot de passe volé ne suffira plus pour entrer depuis un autre navigateur.'
+                }
+            >
+                <Switch
+                    checked={email.enabled}
+                    disabled={busy}
+                    aria-label='Code par mail à la connexion'
+                    onChange={(on) => {
+                        if (on) void enable();
+                        else setDisableOpen(true);
+                    }}
+                />
+            </Row>
             <PasswordConfirmDialog
                 open={disableOpen}
                 onClose={() => setDisableOpen(false)}
@@ -194,67 +194,67 @@ export function EmailCheckRow({ checks, onChange, extraColumn }: RowProps) {
                     onChange((await ws.send('loginChecks.setEmail', { enabled: false, password })).status)
                 }
             />
-        </div>
+        </>
     );
 }
 
 /** Le code par SMS : un numéro vérifié d'abord, puis la protection qu'il porte. */
-export function SmsCheckRow({ checks, onChange, extraColumn }: RowProps) {
+export function SmsCheckRow({ checks, onChange }: RowProps) {
     const [phoneOpen, setPhoneOpen] = useState(false);
     const [disableOpen, setDisableOpen] = useState(false);
     const [busy, setBusy] = useState(false);
+    const [error, setError] = useState<string | null>(null);
     const { sms } = checks;
 
     const enable = async () => {
         setBusy(true);
+        setError(null);
+        onChange({ ...checks, sms: { ...sms, enabled: true } });
         try {
             onChange((await ws.send('loginChecks.setSms', { enabled: true })).status);
+        } catch (e) {
+            onChange(checks);
+            setError(humanizeError(e, 'Le code par SMS n’a pas pu être activé.'));
         } finally {
             setBusy(false);
         }
     };
 
+    // Sans numéro, allumer commence par en vérifier un : le code reçu l'active.
+    const toggle = (on: boolean) => {
+        if (!on) setDisableOpen(true);
+        else if (!sms.phone) setPhoneOpen(true);
+        else void enable();
+    };
+
     return (
-        <div className={styles.statusCard}>
-            <div className={`${styles.statusIcon} ${sms.enabled ? styles.enabled : ''}`}>
-                <span className='icon icon-phone' />
-            </div>
-            <div className={styles.statusInfo}>
-                <h3>{sms.enabled ? 'Code par SMS activé' : 'Code par SMS désactivé'}</h3>
-                <p>
-                    {!sms.phone
-                        ? 'Ajoutez votre numéro : un code par SMS confirmera chaque connexion depuis un nouveau navigateur.'
-                        : sms.enabled
-                          ? `Une connexion depuis un nouveau navigateur demande aussi un code envoyé au ${sms.phone}.`
-                          : `Activez-le pour recevoir un code au ${sms.phone} à chaque connexion depuis un nouveau navigateur.`}
-                    {sms.phone && (
-                        <button type='button' className={styles.inlineLink} onClick={() => setPhoneOpen(true)}>
-                            Changer de numéro
-                        </button>
-                    )}
-                </p>
-            </div>
-            <div className={styles.statusControls}>
-                <div className={styles.infoSlot}>
-                    <button className={styles.infoBtn} onClick={showSmsCheckInfo} title='Comment ça fonctionne ?'>
-                        <span className='icon icon-info' />
-                    </button>
-                </div>
-                {extraColumn && <div className={styles.extraSlot} />}
-                <div className={styles.actionSlot}>
-                    {!sms.phone ? (
-                        <Button onClick={() => setPhoneOpen(true)}>Ajouter un numéro</Button>
-                    ) : sms.enabled ? (
-                        <Button variant='danger' onClick={() => setDisableOpen(true)}>
-                            Désactiver
-                        </Button>
-                    ) : (
-                        <Button onClick={() => void enable()} disabled={busy}>
-                            Activer
-                        </Button>
-                    )}
-                </div>
-            </div>
+        <>
+            <Row
+                label='Code par SMS'
+                onInfo={showSmsCheckInfo}
+                error={error}
+                hint={
+                    <>
+                        {!sms.phone
+                            ? 'Activez-le pour ajouter votre numéro : un code par SMS confirmera aussi chaque connexion depuis un nouveau navigateur.'
+                            : sms.enabled
+                              ? `Un code envoyé au ${sms.phone} confirme aussi chaque connexion depuis un nouveau navigateur.`
+                              : `Un code au ${sms.phone} confirmera aussi chaque connexion depuis un nouveau navigateur.`}
+                        {sms.phone && (
+                            <button type='button' className={styles.inlineLink} onClick={() => setPhoneOpen(true)}>
+                                Changer de numéro
+                            </button>
+                        )}
+                    </>
+                }
+            >
+                <Switch
+                    checked={sms.enabled}
+                    disabled={busy}
+                    aria-label='Code par SMS à la connexion'
+                    onChange={toggle}
+                />
+            </Row>
             <PhoneDialog open={phoneOpen} current={sms.phone} onClose={() => setPhoneOpen(false)} onChange={onChange} />
             <PasswordConfirmDialog
                 open={disableOpen}
@@ -265,12 +265,12 @@ export function SmsCheckRow({ checks, onChange, extraColumn }: RowProps) {
                     onChange((await ws.send('loginChecks.setSms', { enabled: false, password })).status)
                 }
             />
-        </div>
+        </>
     );
 }
 
 /** Les navigateurs qui sautent les codes, et de quoi leur retirer cette confiance. */
-export function TrustedBrowsersCard({ checks, onChange, extraColumn }: RowProps) {
+export function TrustedBrowsersRow({ checks, onChange }: RowProps) {
     const [busy, setBusy] = useState(false);
     const { browsers } = checks;
 
@@ -284,56 +284,49 @@ export function TrustedBrowsersCard({ checks, onChange, extraColumn }: RowProps)
     };
 
     return (
-        <div className={styles.statusCard}>
-            <div className={styles.statusIcon}>
-                <span className='icon icon-shield' />
-            </div>
-            <div className={styles.statusInfo}>
-                <h3>Navigateurs de confiance</h3>
-                <p>
-                    {browsers.length === 0
-                        ? 'Aucun : chaque nouvelle connexion demande un code.'
-                        : browsers.length === 1
-                          ? 'Un navigateur se connecte sans code. Retirez-le si vous ne le reconnaissez pas.'
-                          : `${browsers.length} navigateurs se connectent sans code. Retirez ceux que vous ne reconnaissez pas.`}
-                </p>
-            </div>
-            <div className={styles.statusControls}>
-                <div className={styles.infoSlot} />
-                {extraColumn && <div className={styles.extraSlot} />}
-                <div className={styles.actionSlot}>
-                    {browsers.length > 0 && (
-                        <Button
-                            variant='secondary'
-                            disabled={busy}
-                            onClick={() => void run(() => ws.send('loginChecks.forgetBrowsers', {}))}
-                        >
-                            Tout retirer
-                        </Button>
-                    )}
-                </div>
-            </div>
-            {browsers.length > 0 && (
-                <ul className={styles.browserList}>
-                    {browsers.map((browser) => (
-                        <li key={browser.id} className={styles.browserItem}>
-                            <div className={styles.browserText}>
-                                <span className={styles.browserLabel}>{browser.label}</span>
-                                <span className={styles.browserMeta}>
-                                    Dernière connexion le {formatDay(browser.lastUsedAt)}
+        <Row
+            sub
+            label='Navigateurs de confiance'
+            hint={
+                browsers.length === 0
+                    ? 'Aucun : chaque connexion depuis un nouveau navigateur demande un code.'
+                    : `Ils entrent sans code pendant ${TRUSTED_BROWSER_DAYS} jours après leur dernière connexion. Retirez ceux que vous ne reconnaissez pas.`
+            }
+            below={
+                browsers.length > 0 && (
+                    <ul className={styles.browserList}>
+                        {browsers.map((browser) => (
+                            <li key={browser.id} className={styles.browserItem}>
+                                <span className={styles.browserText}>
+                                    <span className={styles.browserLabel}>{browser.label}</span>
+                                    <span className={styles.browserMeta}>
+                                        Dernière connexion le {formatDay(browser.lastUsedAt)}
+                                    </span>
                                 </span>
-                            </div>
-                            <Button
-                                variant='ghost'
-                                disabled={busy}
-                                onClick={() => void run(() => ws.send('loginChecks.forgetBrowser', { id: browser.id }))}
-                            >
-                                Retirer
-                            </Button>
-                        </li>
-                    ))}
-                </ul>
+                                <Button
+                                    variant='ghost'
+                                    disabled={busy}
+                                    onClick={() =>
+                                        void run(() => ws.send('loginChecks.forgetBrowser', { id: browser.id }))
+                                    }
+                                >
+                                    Retirer
+                                </Button>
+                            </li>
+                        ))}
+                    </ul>
+                )
+            }
+        >
+            {browsers.length > 1 && (
+                <Button
+                    variant='secondary'
+                    disabled={busy}
+                    onClick={() => void run(() => ws.send('loginChecks.forgetBrowsers', {}))}
+                >
+                    Tout retirer
+                </Button>
             )}
-        </div>
+        </Row>
     );
 }

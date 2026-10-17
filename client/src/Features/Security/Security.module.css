@@ -1,59 +1,3 @@
-.widgetLoading {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-muted);
-    height: 100%;
-}
-
-.widgetContent {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-md);
-}
-
-.statusBadge {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-sm);
-    padding: var(--space-xs) var(--space-sm);
-    border-radius: var(--radius-sm);
-    font-size: 0.85rem;
-    font-weight: 500;
-    width: fit-content;
-}
-
-.statusBadge .icon {
-    width: 15px;
-}
-
-.statusBadge.enabled {
-    background: var(--success-bg);
-    color: var(--success);
-}
-
-.statusBadge.disabled {
-    background: var(--surface-subtle);
-    color: var(--text-muted);
-}
-
-.backupInfo {
-    display: flex;
-    align-items: baseline;
-    gap: var(--space-xs);
-}
-
-.backupCount {
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: var(--text-primary);
-}
-
-.backupLabel {
-    font-size: 0.8rem;
-    color: var(--text-secondary);
-}
-
 /* `min-height` et non `height` : l'en-tête colle dans la boîte de la racine,
    qui doit grandir avec son contenu. */
 .container {
@@ -88,7 +32,289 @@
     gap: var(--space-lg);
 }
 
-/* Password-based encryption dialog. */
+/* Un groupe de protections : un intitulé en petites capitales, puis une carte
+   de rangées, à la manière des réglages du Profil. */
+.section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    min-width: 0;
+}
+
+.sectionLabel {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+/* Les rangées portent leur respiration verticale : la carte ne garde que les côtés. */
+.card {
+    padding: 0 var(--space-md);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+}
+
+/* Une rangée : l'intitulé et son état à gauche, la commande à droite. Le liseré
+   sépare, il n'encadre pas : la première n'en porte pas. */
+.row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm) var(--space-lg);
+    padding: var(--space-md) 0;
+    border-top: 1px solid var(--glass-border);
+}
+
+.row:first-child {
+    border-top: none;
+}
+
+/* En retrait : la rangée précise la protection au-dessus d'elle. */
+.sub {
+    padding-left: var(--space-lg);
+}
+
+@media (max-width: 480px) {
+    .sub {
+        padding-left: var(--space-md);
+    }
+}
+
+.sub .rowLabel {
+    font-weight: 500;
+}
+
+/* Assez étroit pour garder sa commande à côté sur un téléphone ; au-delà, la
+   commande file à droite et l'explication reste lisible. */
+.rowText {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1 1 180px;
+    min-width: 0;
+    max-width: 70ch;
+}
+
+.rowLabel {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.rowHint {
+    font-size: 0.8rem;
+    line-height: 1.4;
+    color: var(--text-muted);
+}
+
+.rowError {
+    font-size: 0.8rem;
+    color: var(--danger);
+}
+
+.rowValue {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-sm);
+    margin-left: auto;
+}
+
+/* Le « i » d'une rangée : dans la ligne de l'intitulé, discret jusqu'au survol. */
+.infoBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 50%;
+    color: var(--text-muted);
+    cursor: pointer;
+    opacity: 0.6;
+    transition:
+        opacity var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.infoBtn:hover,
+.infoBtn:focus-visible {
+    opacity: 1;
+    color: var(--accent);
+}
+
+.infoBtn .icon {
+    width: 14px;
+}
+
+/* « Changer de numéro » : un geste discret, dans l'explication de sa rangée. */
+.inlineLink {
+    margin-left: var(--space-xs);
+    padding: 0;
+    background: none;
+    border: none;
+    color: var(--accent);
+    font: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.inlineLink:hover,
+.inlineLink:focus-visible {
+    color: var(--text-primary);
+}
+
+/* Les navigateurs de confiance : sous leur rangée, sur toute sa largeur, au
+   même retrait. Une ligne par navigateur, sans cadre : la colonne des boutons
+   suffit à les séparer. */
+.browserList {
+    flex-basis: 100%;
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.browserItem {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-xs) var(--space-md);
+    padding: var(--space-xs) 0;
+}
+
+/* Étroit à dessein : sur un téléphone, « Retirer » reste sur la ligne du
+   navigateur, et son nom et sa date s'empilent. */
+.browserText {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 var(--space-sm);
+    flex: 1 1 160px;
+    min-width: 0;
+    font-size: 0.85rem;
+}
+
+.browserLabel {
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+}
+
+.browserMeta {
+    color: var(--text-muted);
+}
+
+/* Le délai en minutes, enregistré seul : le champ, son unité et l'icône d'état. */
+.minutesEditor {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.minutesInput {
+    width: 4em;
+    padding: var(--space-sm);
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 1rem;
+    text-align: center;
+    outline: none;
+    transition: border-color var(--transition-fast);
+    /* Sans les flèches natives : un champ nu, le même partout. */
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
+.minutesInput::-webkit-outer-spin-button,
+.minutesInput::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.minutesInput:focus {
+    border-color: var(--accent);
+}
+
+.minutesUnit {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+/* L'icône d'enregistrement, à largeur fixe : la rangée ne bouge pas quand elle
+   apparaît ou disparaît. */
+.minutesStatus {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+}
+
+.minutesStatus .icon {
+    width: 16px;
+    opacity: 0.9;
+}
+
+/* Enregistré ou échec : une apparition qui se pose, pas un flash. */
+.minutesOk,
+.minutesErr {
+    animation: minutesPop 250ms cubic-bezier(0.34, 1.4, 0.64, 1) both;
+}
+
+.minutesOk {
+    color: var(--success);
+}
+
+.minutesErr {
+    color: var(--danger);
+}
+
+.minutesSpin {
+    color: var(--text-muted);
+    opacity: 0.7;
+    animation: minutesSpin 0.7s linear infinite;
+}
+
+@keyframes minutesPop {
+    from {
+        opacity: 0;
+        transform: scale(0.6);
+    }
+    to {
+        opacity: 0.9;
+        transform: scale(1);
+    }
+}
+
+@keyframes minutesSpin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .minutesOk,
+    .minutesErr {
+        animation: none;
+    }
+    .minutesSpin {
+        animation-duration: 1.4s;
+    }
+}
+
+/* Le dialogue du chiffrement par mot de passe. */
 .form {
     display: flex;
     flex-direction: column;
@@ -128,273 +354,6 @@
     word-break: break-all;
 }
 
-.statusCard {
-    display: flex;
-    align-items: center;
-    gap: var(--space-lg);
-    background: var(--glass-bg-light);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-md);
-    padding: var(--space-lg);
-    flex-wrap: wrap;
-}
-
-.statusIcon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 56px;
-    height: 56px;
-    border-radius: 50%;
-    background: var(--surface-subtle);
-    color: var(--text-muted);
-}
-
-.statusIcon .icon {
-    width: 26px;
-}
-
-.statusIcon.enabled {
-    background: var(--success-bg);
-    color: var(--success);
-}
-
-.statusInfo {
-    flex: 1;
-    min-width: 200px;
-}
-
-.statusInfo h3 {
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin: 0 0 var(--space-xs) 0;
-}
-
-.statusInfo p {
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    margin: 0;
-}
-
-/* La traîne d'une carte : aide, geste secondaire, commande. Chaque emplacement
-   garde sa largeur même vide, pour que les trois cartes alignent leurs colonnes. */
-.statusControls {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-    flex-shrink: 0;
-}
-
-.infoSlot,
-.extraSlot,
-.actionSlot {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-}
-
-.infoSlot {
-    width: 28px;
-}
-
-.extraSlot {
-    width: 36px;
-}
-
-/* Assez large pour « Désactiver » et pour le délai : toutes les commandes de la
-   page y tiennent à la même largeur. */
-.actionSlot {
-    width: 150px;
-}
-
-.actionSlot > * {
-    width: 100%;
-}
-
-.infoBtn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    background: transparent;
-    border: none;
-    border-radius: 50%;
-    color: var(--text-muted);
-    cursor: pointer;
-    opacity: 0.5;
-    flex-shrink: 0;
-    transition:
-        opacity var(--transition-fast),
-        color var(--transition-fast);
-}
-
-.infoBtn:hover {
-    opacity: 1;
-    color: var(--accent);
-}
-
-.infoBtn .icon {
-    width: 16px;
-}
-
-.resetBtn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 36px;
-    height: 36px;
-    background: transparent;
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-sm);
-    color: var(--text-secondary);
-    cursor: pointer;
-    flex-shrink: 0;
-    transition:
-        color var(--transition-fast),
-        border-color var(--transition-fast),
-        background var(--transition-fast);
-}
-
-.resetBtn:hover {
-    color: var(--accent);
-    border-color: var(--accent);
-    background: var(--glass-bg);
-}
-
-.resetBtn .icon {
-    width: 18px;
-}
-
-/* Inline re-auth window editor. */
-.minutesEditor {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-}
-
-.minutesInput {
-    flex: 1;
-    min-width: 0;
-    padding: var(--space-sm);
-    background: var(--glass-bg);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-sm);
-    color: var(--text-primary);
-    font-size: 1rem;
-    text-align: center;
-    outline: none;
-    transition: border-color var(--transition-fast);
-    /* Hide native number spinners for a cleaner, consistent look. */
-    -moz-appearance: textfield;
-    appearance: textfield;
-}
-
-.minutesInput::-webkit-outer-spin-button,
-.minutesInput::-webkit-inner-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
-}
-
-.minutesInput:focus {
-    border-color: var(--accent);
-}
-
-.minutesInput:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-}
-
-.minutesUnit {
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-}
-
-/* Un réglage sans objet (délai sans chiffrement, pilotage sans 2FA) : un mot
-   plutôt qu'un champ grisé, qui laisserait croire qu'il gouverne encore quelque
-   chose. Mêmes métriques que `Button` pour aligner les cartes, sans `:hover`. */
-.rowOff {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: var(--space-sm) var(--space-md);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-sm);
-    background: var(--glass-bg);
-    color: var(--text-muted);
-    font-size: 0.9rem;
-    font-weight: 600;
-    line-height: 1.2;
-    white-space: nowrap;
-    flex-shrink: 0;
-}
-
-/* Transient autosave indicator next to the re-auth input. Fixed width so the
-   editor row doesn't shift when the icon appears/disappears. */
-.minutesStatus {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 18px;
-    height: 18px;
-}
-
-.minutesStatus .icon {
-    width: 16px;
-    opacity: 0.9;
-}
-
-/* Saved / error icons fade-and-settle in: a subtle pop that feels like a gentle
-   confirmation rather than a flash. */
-.minutesOk,
-.minutesErr {
-    animation: minutesPop 250ms cubic-bezier(0.34, 1.4, 0.64, 1) both;
-}
-
-.minutesOk {
-    color: var(--success);
-}
-
-.minutesErr {
-    color: var(--danger);
-}
-
-/* Spinner: thin, low-contrast, smooth continuous rotation. */
-.minutesSpin {
-    color: var(--text-muted);
-    opacity: 0.7;
-    animation: minutesSpin 0.7s linear infinite;
-}
-
-@keyframes minutesPop {
-    from {
-        opacity: 0;
-        transform: scale(0.6);
-    }
-    to {
-        opacity: 0.9;
-        transform: scale(1);
-    }
-}
-
-@keyframes minutesSpin {
-    to {
-        transform: rotate(360deg);
-    }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .minutesOk,
-    .minutesErr {
-        animation: none;
-    }
-    .minutesSpin {
-        animation-duration: 1.4s;
-    }
-}
-
 .error {
     padding: var(--space-sm) var(--space-md);
     background: var(--danger-bg);
@@ -404,7 +363,7 @@
     font-size: 0.85rem;
 }
 
-/* 2FA setup steps, inside the setup dialog. */
+/* Les deux étapes de l'enrôlement de l'application, dans leur dialogue. */
 .steps {
     display: flex;
     flex-direction: column;
@@ -531,45 +490,6 @@
     text-align: center;
 }
 
-/* Les navigateurs de confiance : sous l'en-tête de leur carte, sur toute sa largeur. */
-.browserList {
-    flex-basis: 100%;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-xs);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-}
-
-.browserItem {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-md);
-    padding: var(--space-sm) var(--space-md);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-sm);
-    background: var(--glass-bg);
-}
-
-.browserText {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-}
-
-.browserLabel {
-    color: var(--text-primary);
-    font-weight: 600;
-    overflow-wrap: anywhere;
-}
-
-.browserMeta {
-    color: var(--text-secondary);
-    font-size: 0.8rem;
-}
-
 .phoneForm {
     display: flex;
     flex-direction: column;
@@ -581,21 +501,4 @@
     flex-direction: column;
     align-items: center;
     gap: var(--space-sm);
-}
-
-/* « Changer de numéro » : un geste discret, dans le texte de sa carte. */
-.inlineLink {
-    margin-left: var(--space-xs);
-    padding: 0;
-    background: none;
-    border: none;
-    color: var(--accent);
-    font: inherit;
-    text-decoration: underline;
-    cursor: pointer;
-}
-
-.inlineLink:hover,
-.inlineLink:focus-visible {
-    color: var(--text-primary);
 }

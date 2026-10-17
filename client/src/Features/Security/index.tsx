@@ -7,7 +7,7 @@ import { openInfo } from '@/Components/InfoPopup';
 import Button from '@/Components/Button';
 import CopyButton from '@/Components/CopyButton';
 import StickyHeader from '@/Components/StickyHeader';
-import Term from '@/Components/Term';
+import Switch from '@/Components/Switch';
 import { useAuth } from '@/auth/AuthProvider';
 import { copyText } from '@/copyText';
 import { refreshSecrecyStatus } from '@/stores/secrecy';
@@ -20,8 +20,9 @@ import {
     type TwoFactorStatus
 } from '@deveye/types';
 import type { FeatureProps } from '../types';
-import { EmailCheckRow, SmsCheckRow, TrustedBrowsersCard } from './LoginChecks';
+import { EmailCheckRow, SmsCheckRow, TrustedBrowsersRow } from './LoginChecks';
 import { MinutesEditor } from './MinutesEditor';
+import { Row, Section } from './Row';
 import { SecurityDialog } from './SecurityDialog';
 import styles from './Security.module.css';
 
@@ -156,14 +157,15 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
     const [setupLoading, setSetupLoading] = useState(false);
     const [verifyCode, setVerifyCode] = useState('');
     const [verifying, setVerifying] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    // L'échec de la vérification du premier code, affiché dans le dialogue où il a été saisi.
+    const [verifyError, setVerifyError] = useState<string | null>(null);
     const [showBackupCodes, setShowBackupCodes] = useState(false);
     const [backupCodes, setBackupCodes] = useState<string[]>([]);
     const [showDisableConfirm, setShowDisableConfirm] = useState(false);
     const [disableCode, setDisableCode] = useState('');
     const [disableRecovery, setDisableRecovery] = useState(false);
-    // Disable-dialog error (e.g. wrong code) lives here, not in the page-level
-    // `error`, so it shows inside the dialog where the code was entered.
+    // L'erreur du dialogue de désactivation (code faux) s'affiche là où le code
+    // a été saisi.
     const [disableError, setDisableError] = useState<string | null>(null);
     const [showRegenConfirm, setShowRegenConfirm] = useState(false);
     const [regenCode, setRegenCode] = useState('');
@@ -241,7 +243,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
     }, [status, secrecy, checks, updateUser]);
 
     const startSetup = () => {
-        setError(null);
+        setVerifyError(null);
         setSetupData(null);
         setVerifyCode('');
         setSetupPassword('');
@@ -283,7 +285,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
     const verifyAndEnable = async () => {
         if (!verifyCode.trim()) return;
         setVerifying(true);
-        setError(null);
+        setVerifyError(null);
         try {
             await ws.send('twofa.enable', { code: verifyCode.trim() });
             // Surface the backup codes minted during setup, shown only once.
@@ -296,7 +298,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                 setShowBackupCodes(true);
             }
         } catch {
-            setError('Code invalide. Vérifiez et réessayez.');
+            setVerifyError('Code invalide. Vérifiez et réessayez.');
         } finally {
             setVerifying(false);
         }
@@ -361,31 +363,19 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
         setStepUp(res.status);
     }, []);
 
-    // The re-auth window only makes sense once password encryption is ON: it
-    // governs how often that password is re-checked. Disabled otherwise.
+    // Le délai de validation ne gouverne rien sans le chiffrement par mot de
+    // passe : sa rangée reste visible, pour dire ce qu'elle apporte, mais sans
+    // commande.
     const encryptionEnabled = secrecy?.enabled ?? false;
-    /**
-     * Le geste secondaire d'une carte. Tant qu'aucune n'en a, l'emplacement
-     * n'existe chez personne : l'aide vient alors coller aux commandes.
-     */
-    const extraColumn = status?.enabled === true;
-    // Current persisted window in minutes (null = server default of 1 min).
+    // La fenêtre enregistrée, en minutes (null : la minute du serveur par défaut).
     const currentReAuthMinutes = Math.round((secrecy?.reAuthInterval ?? 60) / 60);
-    // Strict enough to count as a protection: 5 min or less, 0 ("always
-    // re-prompt") being the strongest.
-    const reAuthStrict = encryptionEnabled && currentReAuthMinutes <= 5;
-    const reAuthTitle = !encryptionEnabled
-        ? 'Validation du mot de passe'
+    const reAuthHint = !encryptionEnabled
+        ? 'Dépend du chiffrement par mot de passe.'
         : currentReAuthMinutes === 0
-          ? 'Validation du mot de passe : à chaque action'
-          : `Validation du mot de passe : toutes les ${currentReAuthMinutes} min`;
-    const reAuthDescription = !encryptionEnabled
-        ? 'Dépend du chiffrement par mot de passe : activez-le pour définir ce délai.'
-        : currentReAuthMinutes === 0
-          ? 'Sécurité maximale : votre mot de passe est redemandé à chaque action chiffrée.'
-          : reAuthStrict
-            ? `Bon niveau : votre mot de passe reste valide ${currentReAuthMinutes} min avant d’être redemandé.`
-            : `Confort privilégié : votre mot de passe reste valide ${currentReAuthMinutes} min avant d’être redemandé. Réduisez à 5 min ou moins pour renforcer la sécurité.`;
+          ? 'Sécurité maximale : votre mot de passe est redemandé à chaque action.'
+          : currentReAuthMinutes <= 5
+            ? 'Après ce délai sans action, votre mot de passe est redemandé.'
+            : 'Après ce délai sans action, votre mot de passe est redemandé. Cinq minutes ou moins renforcent la sécurité.';
 
     const saveReAuth = useCallback(async (minutes: number) => {
         const res = await ws.send('secrecy.setReauth', { seconds: minutes * 60 });
@@ -395,6 +385,14 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
         void refreshSecrecyStatus();
     }, []);
 
+    const twoFactorOn = status?.enabled === true;
+    const backupCodesRemaining = status?.backupCodesRemaining ?? 0;
+    const backupCodesHint =
+        backupCodesRemaining === 0
+            ? 'Plus aucun code : régénérez-en avant d’en avoir besoin.'
+            : backupCodesRemaining === 1
+              ? 'Un seul code restant, pour entrer sans votre téléphone.'
+              : `${backupCodesRemaining} codes restants, pour entrer sans votre téléphone.`;
     const stepUpMinutes = stepUp?.minutes ?? 15;
     const stepUpReady = stepUp?.twoFactor === true;
 
@@ -402,203 +400,107 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
         <div className={styles.container}>
             <StickyHeader>
                 <h2 className={styles.title}>Sécurité</h2>
-                <p className={styles.subtitle}>
-                    Protégez votre compte et vos données avec des couches de sécurité supplémentaires
-                </p>
+                <p className={styles.subtitle}>Les protections de votre compte et de vos données.</p>
             </StickyHeader>
 
             {loading ? (
                 <div className={styles.loader}>Chargement...</div>
             ) : (
                 <div className={styles.content}>
-                    {checks?.email.available && (
-                        <EmailCheckRow checks={checks} onChange={setChecks} extraColumn={extraColumn} />
+                    {checks && (checks.email.available || checks.sms.available) && (
+                        <Section label='Connexion'>
+                            {checks.email.available && <EmailCheckRow checks={checks} onChange={setChecks} />}
+                            {checks.sms.available && <SmsCheckRow checks={checks} onChange={setChecks} />}
+                            <TrustedBrowsersRow checks={checks} onChange={setChecks} />
+                        </Section>
                     )}
-                    {checks?.sms.available && (
-                        <SmsCheckRow checks={checks} onChange={setChecks} extraColumn={extraColumn} />
-                    )}
 
-                    <div className={styles.statusCard}>
-                        <div className={`${styles.statusIcon} ${status?.enabled ? styles.enabled : ''}`}>
-                            <span className='icon icon-shield' />
-                        </div>
-                        <div className={styles.statusInfo}>
-                            <h3>{status?.enabled ? '2FA Activé' : '2FA Désactivé'}</h3>
-                            <p>
-                                {status?.enabled ? (
-                                    `${status.backupCodesRemaining} codes de secours restants`
-                                ) : (
-                                    <>
-                                        Activez la <Term id='twoFactor'>2FA</Term> pour sécuriser votre compte
-                                    </>
-                                )}
-                            </p>
-                        </div>
-                        <div className={styles.statusControls}>
-                            <div className={styles.infoSlot}>
-                                <button
-                                    className={styles.infoBtn}
-                                    onClick={showTwoFactorInfo}
-                                    title='Comment ça fonctionne ?'
-                                >
-                                    <span className='icon icon-info' />
-                                </button>
-                            </div>
-                            {extraColumn && (
-                                <div className={styles.extraSlot}>
-                                    <button
-                                        className={styles.resetBtn}
-                                        onClick={openRegenConfirm}
-                                        title='Régénérer les codes de secours'
-                                    >
-                                        <span className='icon icon-refresh' />
-                                    </button>
-                                </div>
-                            )}
-                            <div className={styles.actionSlot}>
-                                {!status?.enabled ? (
-                                    <Button onClick={startSetup}>Activer</Button>
-                                ) : (
-                                    <Button variant='danger' onClick={openDisableConfirm}>
-                                        Désactiver
-                                    </Button>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className={styles.statusCard}>
-                        <div className={`${styles.statusIcon} ${stepUpReady ? styles.enabled : ''}`}>
-                            <span className='icon icon-shield' />
-                        </div>
-                        <div className={styles.statusInfo}>
-                            <h3>
-                                {stepUpReady
-                                    ? `Pilotage des machines : code redemandé après ${stepUpMinutes} min`
-                                    : 'Pilotage des machines'}
-                            </h3>
-                            <p>
-                                {stepUpReady
-                                    ? 'Le code de votre application est demandé avant d’agir sur une machine, puis après ce délai sans y toucher.'
-                                    : 'Activez la 2FA : piloter une machine (terminal, fichiers, mises à jour) demande le code de votre application.'}
-                            </p>
-                        </div>
-                        <div className={styles.statusControls}>
-                            <div className={styles.infoSlot}>
-                                <button
-                                    className={styles.infoBtn}
-                                    onClick={showStepUpInfo}
-                                    title='Comment ça fonctionne ?'
-                                >
-                                    <span className='icon icon-info' />
-                                </button>
-                            </div>
-                            {extraColumn && <div className={styles.extraSlot} />}
-                            <div className={styles.actionSlot}>
-                                {!stepUpReady ? (
-                                    <span className={styles.rowOff}>Sans 2FA</span>
-                                ) : (
-                                    <MinutesEditor
-                                        value={stepUpMinutes}
-                                        min={STEP_UP_MINUTES_MIN}
-                                        max={STEP_UP_MINUTES_MAX}
-                                        onSave={saveStepUpMinutes}
-                                        aria-label='Délai avant de redemander le code, en minutes'
-                                    />
-                                )}
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className={styles.statusCard}>
-                        <div className={`${styles.statusIcon} ${secrecy?.enabled ? styles.enabled : ''}`}>
-                            <span className='icon icon-shield' />
-                        </div>
-                        <div className={styles.statusInfo}>
-                            <h3>
-                                {secrecy?.enabled
-                                    ? 'Chiffrement par mot de passe activé'
-                                    : 'Chiffrement par mot de passe désactivé'}
-                            </h3>
-                            <p>
-                                {secrecy?.enabled
-                                    ? 'Vos données chiffrées sont verrouillées par votre mot de passe.'
-                                    : 'Verrouillez vos données chiffrées avec votre mot de passe.'}
-                            </p>
-                        </div>
-                        <div className={styles.statusControls}>
-                            <div className={styles.infoSlot}>
-                                <button
-                                    className={styles.infoBtn}
-                                    onClick={showEncryptionInfo}
-                                    title='Comment ça fonctionne ?'
-                                >
-                                    <span className='icon icon-info' />
-                                </button>
-                            </div>
-                            {extraColumn && <div className={styles.extraSlot} />}
-                            <div className={styles.actionSlot}>
-                                <Button
-                                    variant={secrecy?.enabled ? 'danger' : 'primary'}
-                                    onClick={() => setSecurityOpen(true)}
-                                >
-                                    {secrecy?.enabled ? 'Désactiver' : 'Activer'}
+                    <Section label='Double authentification'>
+                        <Row
+                            label='Application d’authentification'
+                            onInfo={showTwoFactorInfo}
+                            hint={
+                                twoFactorOn
+                                    ? 'Après le mot de passe, le code de votre application confirme chaque connexion.'
+                                    : 'Un code de votre téléphone à chaque connexion, en plus du mot de passe.'
+                            }
+                        >
+                            <Switch
+                                checked={twoFactorOn}
+                                aria-label='Application d’authentification'
+                                onChange={(on) => {
+                                    if (on) startSetup();
+                                    else openDisableConfirm();
+                                }}
+                            />
+                        </Row>
+                        {twoFactorOn && (
+                            <Row sub label='Codes de secours' hint={backupCodesHint}>
+                                <Button variant='secondary' onClick={openRegenConfirm}>
+                                    Régénérer
                                 </Button>
-                            </div>
-                        </div>
-                    </div>
+                            </Row>
+                        )}
+                        <Row
+                            sub
+                            label='Pilotage des machines'
+                            onInfo={showStepUpInfo}
+                            hint={
+                                stepUpReady
+                                    ? 'Le code est demandé avant d’agir sur une machine, puis de nouveau après ce délai sans y toucher.'
+                                    : 'Piloter une machine (terminal, fichiers, mises à jour) demande le code de votre application : activez-la d’abord.'
+                            }
+                        >
+                            {stepUpReady && (
+                                <MinutesEditor
+                                    value={stepUpMinutes}
+                                    min={STEP_UP_MINUTES_MIN}
+                                    max={STEP_UP_MINUTES_MAX}
+                                    onSave={saveStepUpMinutes}
+                                    aria-label='Délai avant de redemander le code, en minutes'
+                                />
+                            )}
+                        </Row>
+                    </Section>
 
-                    <div className={styles.statusCard}>
-                        <div className={`${styles.statusIcon} ${reAuthStrict ? styles.enabled : ''}`}>
-                            <span className='icon icon-shield' />
-                        </div>
-                        <div className={styles.statusInfo}>
-                            <h3>{reAuthTitle}</h3>
-                            <p>{reAuthDescription}</p>
-                        </div>
-                        {/* Sans chiffrement par mot de passe, ce délai ne gouverne rien :
-                            plutôt qu'un champ grisé qu'on peut croire réparable, un mot
-                            qui dit l'état. Le « pourquoi » est déjà dans la description
-                            juste au-dessus, l'aide contextuelle n'a plus rien à ajouter. */}
-                        <div className={styles.statusControls}>
-                            <div className={styles.infoSlot}>
-                                {encryptionEnabled && (
-                                    <button
-                                        className={styles.infoBtn}
-                                        onClick={showReauthInfo}
-                                        title='Comment ça fonctionne ?'
-                                    >
-                                        <span className='icon icon-info' />
-                                    </button>
-                                )}
-                            </div>
-                            {extraColumn && <div className={styles.extraSlot} />}
-                            <div className={styles.actionSlot}>
-                                {!encryptionEnabled ? (
-                                    <span className={styles.rowOff}>Désactivé</span>
-                                ) : (
-                                    <MinutesEditor
-                                        value={currentReAuthMinutes}
-                                        min={0}
-                                        max={1440}
-                                        onSave={saveReAuth}
-                                        aria-label='Délai de validation en minutes'
-                                    />
-                                )}
-                            </div>
-                        </div>
-                    </div>
-
-                    {(checks?.email.available || checks?.sms.available) && (
-                        <TrustedBrowsersCard checks={checks} onChange={setChecks} extraColumn={extraColumn} />
-                    )}
-
-                    {error && <div className={styles.error}>{error}</div>}
+                    <Section label='Chiffrement'>
+                        <Row
+                            label='Chiffrement par mot de passe'
+                            onInfo={showEncryptionInfo}
+                            hint={
+                                encryptionEnabled
+                                    ? 'Vos données chiffrées ne se lisent qu’avec votre mot de passe.'
+                                    : 'Verrouillez vos données chiffrées avec votre mot de passe : sans lui, le serveur lui-même ne peut pas les lire.'
+                            }
+                        >
+                            <Switch
+                                checked={encryptionEnabled}
+                                aria-label='Chiffrement par mot de passe'
+                                onChange={() => setSecurityOpen(true)}
+                            />
+                        </Row>
+                        <Row
+                            sub
+                            label='Validation du mot de passe'
+                            onInfo={encryptionEnabled ? showReauthInfo : undefined}
+                            hint={reAuthHint}
+                        >
+                            {encryptionEnabled && (
+                                <MinutesEditor
+                                    value={currentReAuthMinutes}
+                                    min={0}
+                                    max={1440}
+                                    onSave={saveReAuth}
+                                    aria-label='Délai de validation en minutes'
+                                />
+                            )}
+                        </Row>
+                    </Section>
 
                     <Dialog
                         open={setupOpen}
                         onClose={closeSetup}
-                        title='Configurer la 2FA'
+                        title='Activer l’application d’authentification'
                         width={640}
                         description={
                             setupData ? undefined : 'Pour commencer, saisissez le mot de passe de votre compte.'
@@ -673,6 +575,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                                         <h4>Entrez le code de vérification</h4>
                                         <p>Saisissez le code à 6 chiffres affiché dans votre application.</p>
                                         <CodeInput value={verifyCode} onChange={setVerifyCode} />
+                                        {verifyError && <div className={styles.formError}>{verifyError}</div>}
                                     </div>
                                 </div>
                             </div>
@@ -708,7 +611,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                     <Dialog
                         open={showDisableConfirm}
                         onClose={closeDisableConfirm}
-                        title='Désactiver la 2FA'
+                        title='Désactiver l’application d’authentification'
                         description='⚠️ Votre compte sera moins sécurisé, et vos machines ne pourront plus être pilotées. Entrez un code de votre application pour confirmer.'
                         onSubmit={() => {
                             if (authenticatorCodeReady(disableCode, disableRecovery)) void disable2FA();
