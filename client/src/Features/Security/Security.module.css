@@ -1,6 +1,5 @@
 /* `min-height` et non `height` : l'en-tête colle dans la boîte de la racine,
-   qui doit grandir avec son contenu. La tuile d'une protection fixe aussi le
-   retrait de ses sous-réglages, alignés sur son texte. */
+   qui doit grandir avec son contenu. */
 .container {
     --row-icon: 36px;
 
@@ -147,19 +146,8 @@
     border-top: none;
 }
 
-/* Une tuile plus petite, calée au bord droit de la colonne des tuiles : le
-   texte reste aligné sur celui de la protection qu'elle précise. */
-.sub .rowIcon {
-    width: 28px;
-    height: 28px;
-    margin-left: calc(var(--row-icon) - 28px);
-    color: var(--text-muted);
-}
-
-.sub .rowIcon .icon {
-    width: 15px;
-}
-
+/* La même tuile que sa protection : seul l'intitulé, moins gras, dit qu'elle
+   la précise. */
 .sub .rowLabel {
     font-weight: 500;
 }
@@ -183,10 +171,16 @@
     width: 18px;
 }
 
-/* En place : la tuile prend la couleur de l'interrupteur allumé. */
-.rowIconOn {
+/* En place : la couleur de l'interrupteur allumé. Un délai trop long pour
+   compter : l'orange du bouclier de son groupe. */
+.rowIconAccent {
     background: var(--accent-bg);
     color: var(--accent);
+}
+
+.rowIconWarning {
+    background: var(--warning-bg);
+    color: var(--warning);
 }
 
 /* Assez étroit pour garder sa commande à côté sur un téléphone ; au-delà,

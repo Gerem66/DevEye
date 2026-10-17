@@ -82,15 +82,20 @@ export function Reveal({ open, children }: RevealProps) {
 
 interface RowProps {
     label: string;
-    /** L'icône de la protection (voir icons.css), en tuile devant l'intitulé. */
+    /** L'icône de la rangée (voir icons.css), en tuile devant l'intitulé. */
     icon?: string;
-    /** La protection est en place : sa tuile prend la couleur d'accent. */
-    active?: boolean;
+    /**
+     * La couleur de la tuile dit l'état : accent quand la protection est en
+     * place, orange quand un réglage ne compte pas ; rien pour une rangée
+     * d'action sans état (codes de secours, navigateurs) ou une protection
+     * éteinte.
+     */
+    tone?: 'accent' | 'warning';
     /** Ce que la protection fait dans son état courant, sous l'intitulé. */
     hint?: ReactNode;
     /** Ouvre l'explication détaillée : le « i » à côté de l'intitulé. */
     onInfo?: () => void;
-    /** Une rangée qui précise la protection au-dessus d'elle : tuile plus petite, texte aligné sur le sien. */
+    /** Une rangée qui précise la protection au-dessus d'elle. */
     sub?: boolean;
     /** L'échec du dernier geste, sous l'explication. */
     error?: string | null;
@@ -101,11 +106,12 @@ interface RowProps {
 }
 
 /** Une protection : sa tuile, son intitulé et son état à gauche, sa commande à droite. */
-export function Row({ label, icon, active, hint, onInfo, sub, error, children, below }: RowProps) {
+export function Row({ label, icon, tone, hint, onInfo, sub, error, children, below }: RowProps) {
+    const toneClass = tone === 'accent' ? styles.rowIconAccent : tone === 'warning' ? styles.rowIconWarning : '';
     return (
         <div className={sub ? `${styles.row} ${styles.sub}` : styles.row}>
             {icon && (
-                <span className={active ? `${styles.rowIcon} ${styles.rowIconOn}` : styles.rowIcon} aria-hidden>
+                <span className={`${styles.rowIcon} ${toneClass}`} aria-hidden>
                     <span className={`icon icon-${icon}`} />
                 </span>
             )}

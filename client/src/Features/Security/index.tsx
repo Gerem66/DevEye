@@ -455,7 +455,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                         <Row
                             label='Application d’authentification'
                             icon='shield'
-                            active={twoFactorOn}
+                            tone={twoFactorOn ? 'accent' : undefined}
                             onInfo={showTwoFactorInfo}
                             hint={
                                 twoFactorOn
@@ -483,6 +483,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                             <Row
                                 sub
                                 icon='refresh'
+                                tone={stepUpMinutes <= STEP_UP_STRICT_MINUTES ? 'accent' : 'warning'}
                                 label='Pilotage des machines'
                                 onInfo={showStepUpInfo}
                                 hint={stepUpHint}
@@ -507,7 +508,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                         <Row
                             label='Chiffrement par mot de passe'
                             icon='lock'
-                            active={encryptionEnabled}
+                            tone={encryptionEnabled ? 'accent' : undefined}
                             onInfo={showEncryptionInfo}
                             hint={
                                 encryptionEnabled
@@ -525,6 +526,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                             <Row
                                 sub
                                 icon='refresh'
+                                tone={currentReAuthMinutes <= 5 ? 'accent' : 'warning'}
                                 label='Validation du mot de passe'
                                 onInfo={showReauthInfo}
                                 hint={reAuthHint}
