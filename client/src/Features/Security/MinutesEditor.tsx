@@ -59,21 +59,6 @@ export function MinutesEditor({ value, min, max, onSave, ...rest }: MinutesEdito
 
     return (
         <div className={styles.minutesEditor}>
-            <input
-                type='number'
-                inputMode='numeric'
-                min={min}
-                max={max}
-                step={1}
-                className={styles.minutesInput}
-                value={input}
-                onChange={(e) => setInput(e.target.value.replace(/\D/g, ''))}
-                onKeyDown={(e) => {
-                    if (e.key === 'Enter' && dirty) void save();
-                }}
-                aria-label={rest['aria-label']}
-            />
-            <span className={styles.minutesUnit}>min</span>
             <span className={styles.minutesStatus} aria-live='polite'>
                 {saveState === 'saving' && (
                     <span key='saving' className={`icon icon-spinner ${styles.minutesSpin}`} title='Enregistrement…' />
@@ -89,6 +74,21 @@ export function MinutesEditor({ value, min, max, onSave, ...rest }: MinutesEdito
                     />
                 )}
             </span>
+            <input
+                type='number'
+                inputMode='numeric'
+                min={min}
+                max={max}
+                step={1}
+                className={styles.minutesInput}
+                value={input}
+                onChange={(e) => setInput(e.target.value.replace(/\D/g, ''))}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter' && dirty) void save();
+                }}
+                aria-label={rest['aria-label']}
+            />
+            <span className={styles.minutesUnit}>min</span>
         </div>
     );
 }

@@ -358,8 +358,9 @@
     color: var(--text-secondary);
 }
 
-/* L'icône d'enregistrement, à largeur fixe : la rangée ne bouge pas quand elle
-   apparaît ou disparaît. */
+/* L'icône d'enregistrement, devant le champ pour que l'unité reste au bord
+   droit de la rangée comme les autres commandes, et à largeur fixe pour que
+   rien ne bouge quand elle apparaît ou disparaît. */
 .minutesStatus {
     display: inline-flex;
     align-items: center;

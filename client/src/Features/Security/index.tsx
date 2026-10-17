@@ -472,13 +472,6 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                                 }}
                             />
                         </Row>
-                        <Reveal open={twoFactorOn}>
-                            <Row sub icon='key' label='Codes de secours' hint={backupCodesHint}>
-                                <Button variant='secondary' onClick={openRegenConfirm}>
-                                    Régénérer
-                                </Button>
-                            </Row>
-                        </Reveal>
                         <Reveal open={stepUpReady}>
                             <Row
                                 sub
@@ -495,6 +488,13 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                                     onSave={saveStepUpMinutes}
                                     aria-label='Délai avant de redemander le code, en minutes'
                                 />
+                            </Row>
+                        </Reveal>
+                        <Reveal open={twoFactorOn}>
+                            <Row sub icon='key' label='Codes de secours' hint={backupCodesHint}>
+                                <Button variant='secondary' onClick={openRegenConfirm}>
+                                    Régénérer
+                                </Button>
                             </Row>
                         </Reveal>
                     </Section>
