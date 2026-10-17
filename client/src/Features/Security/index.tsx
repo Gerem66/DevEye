@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ws, WsError } from '@/api/ws';
 import { AuthenticatorCodeField, authenticatorCodeReady, CodeInput } from '@/Components/CodeInput';
 import { Dialog } from '@/Components/Dialog';
@@ -15,10 +15,13 @@ import { refreshSecrecyStatus } from '@/stores/secrecy';
 import {
     STEP_UP_MINUTES_MAX,
     STEP_UP_MINUTES_MIN,
+    STEP_UP_STRICT_MINUTES,
+    TRUSTED_BROWSERS_MAX,
     type LoginChecksStatus,
     type SecrecyStatus,
     type StepUpStatus,
-    type TwoFactorStatus
+    type TwoFactorStatus,
+    type UserSecurity
 } from '@deveye/types';
 import type { FeatureProps } from '../types';
 import { EmailCheckRow, SmsCheckRow, TrustedBrowsersRow } from './LoginChecks';
@@ -148,7 +151,6 @@ interface SetupData {
 export default function Security({ user: _user, workspace: _ws }: FeatureProps) {
     const { updateUser } = useAuth();
     const [status, setStatus] = useState<TwoFactorStatus | null>(null);
-    const [loading, setLoading] = useState(true);
     const [setupData, setSetupData] = useState<SetupData | null>(null);
     const [setupOpen, setSetupOpen] = useState(false);
     // Le mot de passe du compte, demandé avant de produire le secret : une
@@ -183,8 +185,6 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
             setStatus(res.status);
         } catch {
             // ignore
-        } finally {
-            setLoading(false);
         }
     }, []);
 
@@ -222,26 +222,30 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
         void fetchChecks();
     }, [fetchStatus, fetchSecrecy, fetchStepUp, fetchChecks]);
 
-    // Keeps the profile's "Sécurité x / y" counter live. Waits for every status
-    // to avoid flicker, and counts the re-auth window only when it is strict AND
-    // encryption is on.
+    // Le niveau de sécurité, du même compte que le serveur (`loadUserBundle`) :
+    // un délai ne compte qu'avec la protection qu'il précise. `null` tant qu'un
+    // état manque, pour ne pas afficher un compte qui bouge.
+    const security = useMemo<UserSecurity | null>(() => {
+        if (status === null || secrecy === null || checks === null || stepUp === null) return null;
+        const loginAvailable = checks.email.available || checks.sms.available;
+        const loginConfirmation = loginAvailable
+            ? (checks.email.available && checks.email.enabled) || (checks.sms.available && checks.sms.enabled)
+            : null;
+        return {
+            loginConfirmation,
+            trustedBrowsers:
+                loginConfirmation === null ? null : loginConfirmation && checks.browsers.length <= TRUSTED_BROWSERS_MAX,
+            twoFactor: status.enabled,
+            stepUpValidation: status.enabled && stepUp.minutes <= STEP_UP_STRICT_MINUTES,
+            passwordEncryption: secrecy.enabled,
+            reAuthValidation: secrecy.enabled && (secrecy.reAuthInterval ?? 60) <= 300
+        };
+    }, [status, secrecy, checks, stepUp]);
+
+    // Le compteur « Sécurité x / y » du Profil suit la page en direct.
     useEffect(() => {
-        if (status === null || secrecy === null || checks === null) return;
-        const reAuth = secrecy.reAuthInterval ?? 60;
-        const reAuthValidation = secrecy.enabled && reAuth <= 300;
-        updateUser({
-            security: {
-                loginConfirmation:
-                    checks.email.available || checks.sms.available
-                        ? (checks.email.available && checks.email.enabled) ||
-                          (checks.sms.available && checks.sms.enabled)
-                        : null,
-                twoFactor: status.enabled,
-                passwordEncryption: secrecy.enabled,
-                reAuthValidation
-            }
-        });
-    }, [status, secrecy, checks, updateUser]);
+        if (security) updateUser({ security });
+    }, [security, updateUser]);
 
     const startSetup = () => {
         setVerifyError(null);
@@ -392,15 +396,19 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
               : `${backupCodesRemaining} codes restants, pour entrer sans votre téléphone.`;
     const stepUpMinutes = stepUp?.minutes ?? 15;
     const stepUpReady = stepUp?.twoFactor === true;
+    const stepUpHint =
+        stepUpMinutes <= STEP_UP_STRICT_MINUTES
+            ? 'Le code est demandé avant d’agir sur une machine, puis de nouveau après ce délai sans y toucher.'
+            : `Le code est demandé avant d’agir sur une machine, puis de nouveau après ce délai sans y toucher. ${STEP_UP_STRICT_MINUTES} minutes ou moins renforcent la sécurité.`;
 
-    // Le même compte que le score du Profil : la confirmation des connexions
-    // n'entre en jeu que si ce serveur peut envoyer un code.
-    const loginAvailable = checks !== null && (checks.email.available || checks.sms.available);
-    const loginOn = loginAvailable && (checks.email.enabled || checks.sms.enabled);
-    const reAuthStrict = encryptionEnabled && currentReAuthMinutes <= 5;
-    const encryptionCount = (encryptionEnabled ? 1 : 0) + (reAuthStrict ? 1 : 0);
-    const activeCount = (loginOn ? 1 : 0) + (twoFactorOn ? 1 : 0) + encryptionCount;
-    const totalCount = (loginAvailable ? 1 : 0) + 1 + 2;
+    // Chaque groupe compte deux protections : la sienne et le réglage qui la
+    // précise. Sans mail ni SMS, le groupe Connexion n'existe pas.
+    const count = (...flags: (boolean | null)[]) => flags.filter(Boolean).length;
+    const loginCount = security ? count(security.loginConfirmation, security.trustedBrowsers) : 0;
+    const twoFactorCount = security ? count(security.twoFactor, security.stepUpValidation) : 0;
+    const encryptionCount = security ? count(security.passwordEncryption, security.reAuthValidation) : 0;
+    const activeCount = loginCount + twoFactorCount + encryptionCount;
+    const totalCount = security?.loginConfirmation === null ? 4 : 6;
     const allActive = activeCount === totalCount;
 
     return (
@@ -411,7 +419,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                         <h2 className={styles.title}>Sécurité</h2>
                         <p className={styles.subtitle}>Les protections de votre compte et de vos données.</p>
                     </div>
-                    {!loading && (
+                    {security && (
                         <StatusBadge tone={allActive ? 'success' : 'warning'}>
                             {activeCount} protection{activeCount > 1 ? 's' : ''} sur {totalCount}
                         </StatusBadge>
@@ -419,16 +427,16 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                 </div>
             </StickyHeader>
 
-            {loading ? (
+            {security === null || checks === null ? (
                 <div className={styles.loader}>Chargement...</div>
             ) : (
                 <div className={styles.content}>
-                    {checks && loginAvailable && (
+                    {security.loginConfirmation !== null && (
                         <Section
                             title='Connexion'
                             description='Ce qui est vérifié, en plus du mot de passe, quand vous vous connectez depuis un navigateur que DevEye ne connaît pas.'
-                            active={loginOn ? 1 : 0}
-                            total={1}
+                            active={loginCount}
+                            total={2}
                         >
                             {checks.email.available && <EmailCheckRow checks={checks} onChange={setChecks} />}
                             {checks.sms.available && <SmsCheckRow checks={checks} onChange={setChecks} />}
@@ -441,8 +449,8 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                     <Section
                         title='Double authentification'
                         description='Un code généré par une application sur votre téléphone, à chaque connexion et avant de piloter une machine.'
-                        active={twoFactorOn ? 1 : 0}
-                        total={1}
+                        active={twoFactorCount}
+                        total={2}
                     >
                         <Row
                             label='Application d’authentification'
@@ -477,7 +485,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                                 icon='refresh'
                                 label='Pilotage des machines'
                                 onInfo={showStepUpInfo}
-                                hint='Le code est demandé avant d’agir sur une machine, puis de nouveau après ce délai sans y toucher.'
+                                hint={stepUpHint}
                             >
                                 <MinutesEditor
                                     value={stepUpMinutes}

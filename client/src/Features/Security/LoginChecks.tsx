@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
-import { TRUSTED_BROWSER_DAYS, type LoginChecksStatus } from '@deveye/types';
+import { TRUSTED_BROWSER_DAYS, TRUSTED_BROWSERS_MAX, type LoginChecksStatus, type TrustedBrowser } from '@deveye/types';
 
 import { ws, WsError } from '@/api/ws';
 import { humanizeError } from '@/api/useResource';
 import Button from '@/Components/Button';
+import { ConfirmDialog, type ConfirmRequest } from '@/Components/ConfirmDialog';
 import { Dialog } from '@/Components/Dialog';
 import { openInfo } from '@/Components/InfoPopup';
 import Switch from '@/Components/Switch';
@@ -273,10 +274,17 @@ export function SmsCheckRow({ checks, onChange }: RowProps) {
     );
 }
 
-/** Les navigateurs qui sautent les codes, et de quoi leur retirer cette confiance. */
-export function TrustedBrowsersRow({ checks, onChange }: RowProps) {
+interface TrustedBrowsersDialogProps {
+    open: boolean;
+    browsers: TrustedBrowser[];
+    onClose: () => void;
+    onChange: (checks: LoginChecksStatus) => void;
+}
+
+/** La liste des navigateurs qui sautent les codes, et de quoi leur retirer cette confiance, un par un ou tous. */
+function TrustedBrowsersDialog({ open, browsers, onClose, onChange }: TrustedBrowsersDialogProps) {
     const [busy, setBusy] = useState(false);
-    const { browsers } = checks;
+    const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
 
     const run = async (send: () => Promise<{ status: LoginChecksStatus }>) => {
         setBusy(true);
@@ -287,51 +295,92 @@ export function TrustedBrowsersRow({ checks, onChange }: RowProps) {
         }
     };
 
+    // Plus rien à montrer : le dialogue se referme de lui-même.
+    useEffect(() => {
+        if (open && browsers.length === 0) onClose();
+    }, [open, browsers.length, onClose]);
+
+    const forgetOne = (browser: TrustedBrowser) =>
+        setConfirm({
+            title: 'Retirer ce navigateur ?',
+            description: `« ${browser.label} » redemandera un code à sa prochaine connexion.`,
+            confirmLabel: 'Retirer',
+            onConfirm: () => void run(() => ws.send('loginChecks.forgetBrowser', { id: browser.id }))
+        });
+
+    const forgetAll = () =>
+        setConfirm({
+            title: 'Retirer tous les navigateurs ?',
+            description: 'Chacun redemandera un code à sa prochaine connexion, celui-ci compris.',
+            confirmLabel: 'Tout retirer',
+            onConfirm: () => void run(() => ws.send('loginChecks.forgetBrowsers', {}))
+        });
+
     return (
-        <Row
-            sub
-            icon='globe'
-            label='Navigateurs de confiance'
-            hint={
-                browsers.length === 0
-                    ? 'Aucun : chaque connexion depuis un nouveau navigateur demande un code.'
-                    : `Ils entrent sans code pendant ${TRUSTED_BROWSER_DAYS} jours après leur dernière connexion. Retirez ceux que vous ne reconnaissez pas.`
-            }
-            below={
-                browsers.length > 0 && (
-                    <ul className={styles.browserList}>
-                        {browsers.map((browser) => (
-                            <li key={browser.id} className={styles.browserItem}>
-                                <span className={styles.browserText}>
-                                    <span className={styles.browserLabel}>{browser.label}</span>
-                                    <span className={styles.browserMeta}>
-                                        Dernière connexion le {formatDay(browser.lastUsedAt)}
-                                    </span>
+        <>
+            <Dialog
+                open={open}
+                onClose={onClose}
+                title='Navigateurs de confiance'
+                description={`Ils entrent sans code pendant ${TRUSTED_BROWSER_DAYS} jours après leur dernière connexion. Retirez ceux que vous ne reconnaissez pas.`}
+                width={560}
+                footer={
+                    <>
+                        <Button variant='danger' disabled={busy} onClick={forgetAll}>
+                            Tout retirer
+                        </Button>
+                        <Button variant='secondary' onClick={onClose}>
+                            Fermer
+                        </Button>
+                    </>
+                }
+            >
+                <ul className={styles.browserList}>
+                    {browsers.map((browser) => (
+                        <li key={browser.id} className={styles.browserItem}>
+                            <span className={styles.browserText}>
+                                <span className={styles.browserLabel}>{browser.label}</span>
+                                <span className={styles.browserMeta}>
+                                    Dernière connexion le {formatDay(browser.lastUsedAt)}
                                 </span>
-                                <Button
-                                    variant='ghost'
-                                    disabled={busy}
-                                    onClick={() =>
-                                        void run(() => ws.send('loginChecks.forgetBrowser', { id: browser.id }))
-                                    }
-                                >
-                                    Retirer
-                                </Button>
-                            </li>
-                        ))}
-                    </ul>
-                )
-            }
-        >
-            {browsers.length > 1 && (
-                <Button
-                    variant='secondary'
-                    disabled={busy}
-                    onClick={() => void run(() => ws.send('loginChecks.forgetBrowsers', {}))}
-                >
-                    Tout retirer
-                </Button>
-            )}
-        </Row>
+                            </span>
+                            <Button variant='ghost' disabled={busy} onClick={() => forgetOne(browser)}>
+                                Retirer
+                            </Button>
+                        </li>
+                    ))}
+                </ul>
+            </Dialog>
+            <ConfirmDialog request={confirm} busy={busy} onClose={() => setConfirm(null)} />
+        </>
+    );
+}
+
+/** Les navigateurs qui sautent les codes : leur nombre, et le dialogue qui les retire. */
+export function TrustedBrowsersRow({ checks, onChange }: RowProps) {
+    const [open, setOpen] = useState(false);
+    const close = useCallback(() => setOpen(false), []);
+    const { browsers } = checks;
+    const count = browsers.length;
+    const hint =
+        count === 0
+            ? 'Aucun : chaque connexion depuis un nouveau navigateur demande un code.'
+            : count <= TRUSTED_BROWSERS_MAX
+              ? `Ils entrent sans code pendant ${TRUSTED_BROWSER_DAYS} jours après leur dernière connexion.`
+              : `Ils entrent sans code pendant ${TRUSTED_BROWSER_DAYS} jours après leur dernière connexion. Plus de ${TRUSTED_BROWSERS_MAX}, c’est beaucoup : retirez ceux que vous n’utilisez plus.`;
+
+    return (
+        <>
+            <Row sub icon='globe' label='Navigateurs de confiance' hint={hint}>
+                {count > 0 ? (
+                    <Button variant='secondary' onClick={() => setOpen(true)}>
+                        {count} navigateur{count > 1 ? 's' : ''}
+                    </Button>
+                ) : (
+                    <span className={styles.rowNone}>Aucun</span>
+                )}
+            </Row>
+            <TrustedBrowsersDialog open={open} browsers={browsers} onClose={close} onChange={onChange} />
+        </>
     );
 }

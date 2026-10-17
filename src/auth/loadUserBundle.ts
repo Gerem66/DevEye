@@ -1,6 +1,12 @@
 import type { Database } from '@/db';
 import type { HomeLayout, MinimalUser, SessionBundle, ThemeStateDTO, Workspace } from '@deveye/types';
-import { homeLayoutSchema, themeStateSchema } from '@deveye/types';
+import {
+    homeLayoutSchema,
+    STEP_UP_MINUTES_DEFAULT,
+    STEP_UP_STRICT_MINUTES,
+    themeStateSchema,
+    TRUSTED_BROWSERS_MAX
+} from '@deveye/types';
 import { toRemoteInstance } from '@/db/repos/remoteInstances';
 import { roleOf } from '@/db/repos/users';
 import { permissionsFor } from '@/features/_access';
@@ -37,25 +43,36 @@ export async function loadUserBundle(
     // obtient une session.
     if (maintenance.siteDown() && !isAdmin) throw new MaintenanceError(maintenance.message());
 
-    // Security posture surfaced as "Sécurité → x / y" in the profile. The
-    // re-auth window counts when strict — short enough (≤ 5 min) to be a
-    // meaningful protection, 0 being the strongest setting (always re-prompt).
-    // A null interval falls back to the 60s server default, which is strict.
-    const [twoFaRow, secretKeyRow, phoneRow] = await Promise.all([
+    // Le niveau de sécurité, « Sécurité x / y » dans le Profil et les boucliers
+    // de la page Sécurité. Un délai ne compte qu'avec la protection qu'il
+    // précise : la validation du mot de passe (5 min ou moins, 0 le plus fort,
+    // null valant la minute par défaut) avec le chiffrement, le pilotage des
+    // machines avec la double authentification, les navigateurs de confiance
+    // (pas plus de TRUSTED_BROWSERS_MAX) avec la confirmation des connexions.
+    const now = Math.floor(Date.now() / 1000);
+    const [twoFaRow, secretKeyRow, phoneRow, browsers] = await Promise.all([
         db.twoFactor.get(userId),
         db.userSecretKeys.get(userId),
-        db.userPhones.get(userId)
+        db.userPhones.get(userId),
+        db.trustedBrowsers.listByUser(userId, now)
     ]);
     const reAuth = row.re_auth_interval ?? 60;
+    const stepUpMinutes = Math.round((row.step_up_interval ?? STEP_UP_MINUTES_DEFAULT * 60) / 60);
     // Sans mail ni SMS, la confirmation des connexions n'existe pas ici : elle ne compte pas.
     const confirms = serverMail.configured || sms.available;
+    const loginConfirmation = confirms
+        ? (serverMail.configured && row.login_email_check === 1) || (sms.available && phoneRow?.sms_check === 1)
+        : null;
+    const twoFactor = Boolean(twoFaRow?.enabled);
+    const passwordEncryption = secretKeyRow?.wrap_mode === 'password';
     const security = {
-        loginConfirmation: confirms
-            ? (serverMail.configured && row.login_email_check === 1) || (sms.available && phoneRow?.sms_check === 1)
-            : null,
-        twoFactor: Boolean(twoFaRow?.enabled),
-        passwordEncryption: secretKeyRow?.wrap_mode === 'password',
-        reAuthValidation: reAuth <= 300
+        loginConfirmation,
+        trustedBrowsers:
+            loginConfirmation === null ? null : loginConfirmation && browsers.length <= TRUSTED_BROWSERS_MAX,
+        twoFactor,
+        stepUpValidation: twoFactor && stepUpMinutes <= STEP_UP_STRICT_MINUTES,
+        passwordEncryption,
+        reAuthValidation: passwordEncryption && reAuth <= 300
     };
 
     const wsRows = await db.workspaces.findAccessibleByUser(userId);

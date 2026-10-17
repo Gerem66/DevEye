@@ -70,13 +70,18 @@ export default function FeatureProfile({ user }: FeatureProps) {
         );
     }, []);
 
-    const securityScore =
-        (user.security.loginConfirmation ? 1 : 0) +
-        (user.security.twoFactor ? 1 : 0) +
-        (user.security.passwordEncryption ? 1 : 0) +
-        (user.security.reAuthValidation ? 1 : 0);
-    // Sans moyen d'envoyer un code, la confirmation des connexions n'existe pas ici.
-    const securityMax = user.security.loginConfirmation === null ? 3 : 4;
+    const { security } = user;
+    const securityScore = [
+        security.loginConfirmation,
+        security.trustedBrowsers,
+        security.twoFactor,
+        security.stepUpValidation,
+        security.passwordEncryption,
+        security.reAuthValidation
+    ].filter(Boolean).length;
+    // Sans moyen d'envoyer un code, la confirmation des connexions n'existe pas
+    // ici, ni les navigateurs de confiance qui en dépendent.
+    const securityMax = security.loginConfirmation === null ? 4 : 6;
     const securityFull = securityScore >= securityMax;
     const [uploading, setUploading] = useState(false);
     /** L'échec d'une modification, l'image ou un réglage. Gardé à la fermeture :

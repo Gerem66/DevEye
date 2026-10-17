@@ -189,15 +189,14 @@
     color: var(--accent);
 }
 
-/* Assez étroit pour garder sa commande à côté sur un téléphone ; au-delà, la
-   commande file à droite et l'explication reste lisible. */
+/* Assez étroit pour garder sa commande à côté sur un téléphone ; au-delà,
+   l'explication prend toute la place que la commande lui laisse. */
 .rowText {
     display: flex;
     flex-direction: column;
     gap: 2px;
     flex: 1 1 180px;
     min-width: 0;
-    max-width: 72ch;
 }
 
 .rowLabel {
@@ -224,6 +223,13 @@
     justify-content: flex-end;
     gap: var(--space-sm);
     margin-left: auto;
+}
+
+/* Rien à ouvrir : le mot qui dit l'état, à la place de la commande. */
+.rowNone {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-muted);
 }
 
 /* Le « i » d'une rangée : à la suite du dernier mot de l'intitulé, qu'il
@@ -275,13 +281,12 @@
     color: var(--text-primary);
 }
 
-/* Les navigateurs de confiance : un encart sous leur rangée, aligné sur son
-   texte, une ligne par navigateur. */
+/* Les navigateurs de confiance, dans leur dialogue : un encart, une ligne par
+   navigateur. */
 .browserList {
-    flex-basis: calc(100% - var(--row-icon) - var(--space-md));
     display: flex;
     flex-direction: column;
-    margin: var(--space-xs) 0 0 calc(var(--row-icon) + var(--space-md));
+    margin: 0;
     padding: 0 var(--space-md);
     list-style: none;
     background: var(--surface-subtle);
@@ -294,7 +299,7 @@
     align-items: center;
     justify-content: space-between;
     gap: var(--space-xs) var(--space-md);
-    padding: var(--space-xs) 0;
+    padding: var(--space-sm) 0;
     border-top: 1px solid var(--glass-border);
 }
 
@@ -302,12 +307,11 @@
     border-top: none;
 }
 
-/* Étroit à dessein : sur un téléphone, « Retirer » reste sur la ligne du
-   navigateur, et son nom et sa date s'empilent. */
+/* Le nom au-dessus de sa date, pour tous : une liste régulière, et « Retirer »
+   reste sur la ligne du navigateur jusque sur un téléphone. */
 .browserText {
     display: flex;
-    flex-wrap: wrap;
-    gap: 0 var(--space-sm);
+    flex-direction: column;
     flex: 1 1 120px;
     min-width: 0;
     font-size: 0.85rem;
