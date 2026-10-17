@@ -661,17 +661,17 @@ export default function Mail(_props: FeatureViewProps) {
 
     /**
      * La reconnexion depuis le bandeau, là où l'on apprend qu'elle est
-     * nécessaire : les réglages restent le chemin long. Les dossiers sont
-     * relus derrière, la boîte n'ayant rien pu en rendre tant que l'accès
-     * était refusé.
+     * nécessaire : les réglages restent le chemin long. Seule la relève qui
+     * suit dit si l'accès est revenu, et l'état qu'elle écrit n'est pas
+     * diffusé à la session qui l'a lancée : la liste se relit après elle.
      */
     async function reconnect(): Promise<void> {
         if (!selectedAccount) return;
         setReconnecting(true);
         try {
             await reconnectAccount(selectedAccount);
+            await syncNow();
             await reloadAccounts();
-            await loadFolders(selectedAccount.id);
         } catch (e) {
             setError(humanizeError(e, 'Reconnexion impossible.'));
         } finally {
