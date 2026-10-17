@@ -23,7 +23,7 @@ import {
 import type { FeatureProps } from '../types';
 import { EmailCheckRow, SmsCheckRow, TrustedBrowsersRow } from './LoginChecks';
 import { MinutesEditor } from './MinutesEditor';
-import { Row, Section } from './Row';
+import { Reveal, Row, Section } from './Row';
 import { SecurityDialog } from './SecurityDialog';
 import styles from './Security.module.css';
 
@@ -364,19 +364,15 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
         setStepUp(res.status);
     }, []);
 
-    // Le délai de validation ne gouverne rien sans le chiffrement par mot de
-    // passe : sa rangée reste visible, pour dire ce qu'elle apporte, mais sans
-    // commande.
     const encryptionEnabled = secrecy?.enabled ?? false;
     // La fenêtre enregistrée, en minutes (null : la minute du serveur par défaut).
     const currentReAuthMinutes = Math.round((secrecy?.reAuthInterval ?? 60) / 60);
-    const reAuthHint = !encryptionEnabled
-        ? 'Dépend du chiffrement par mot de passe.'
-        : currentReAuthMinutes === 0
-          ? 'Sécurité maximale : votre mot de passe est redemandé à chaque action.'
-          : currentReAuthMinutes <= 5
-            ? 'Après ce délai sans action, votre mot de passe est redemandé.'
-            : 'Après ce délai sans action, votre mot de passe est redemandé. Cinq minutes ou moins renforcent la sécurité.';
+    const reAuthHint =
+        currentReAuthMinutes === 0
+            ? 'Sécurité maximale : votre mot de passe est redemandé à chaque action.'
+            : currentReAuthMinutes <= 5
+              ? 'Après ce délai sans action, votre mot de passe est redemandé.'
+              : 'Après ce délai sans action, votre mot de passe est redemandé. Cinq minutes ou moins renforcent la sécurité.';
 
     const saveReAuth = useCallback(async (minutes: number) => {
         const res = await ws.send('secrecy.setReauth', { seconds: minutes * 60 });
@@ -436,7 +432,9 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                         >
                             {checks.email.available && <EmailCheckRow checks={checks} onChange={setChecks} />}
                             {checks.sms.available && <SmsCheckRow checks={checks} onChange={setChecks} />}
-                            <TrustedBrowsersRow checks={checks} onChange={setChecks} />
+                            <Reveal open={checks.email.enabled || checks.sms.enabled}>
+                                <TrustedBrowsersRow checks={checks} onChange={setChecks} />
+                            </Reveal>
                         </Section>
                     )}
 
@@ -464,24 +462,20 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                                 }}
                             />
                         </Row>
-                        {twoFactorOn && (
+                        <Reveal open={twoFactorOn}>
                             <Row sub label='Codes de secours' hint={backupCodesHint}>
                                 <Button variant='secondary' onClick={openRegenConfirm}>
                                     Régénérer
                                 </Button>
                             </Row>
-                        )}
-                        <Row
-                            sub
-                            label='Pilotage des machines'
-                            onInfo={showStepUpInfo}
-                            hint={
-                                stepUpReady
-                                    ? 'Le code est demandé avant d’agir sur une machine, puis de nouveau après ce délai sans y toucher.'
-                                    : 'Piloter une machine (terminal, fichiers, mises à jour) demande le code de votre application : activez-la d’abord.'
-                            }
-                        >
-                            {stepUpReady && (
+                        </Reveal>
+                        <Reveal open={stepUpReady}>
+                            <Row
+                                sub
+                                label='Pilotage des machines'
+                                onInfo={showStepUpInfo}
+                                hint='Le code est demandé avant d’agir sur une machine, puis de nouveau après ce délai sans y toucher.'
+                            >
                                 <MinutesEditor
                                     value={stepUpMinutes}
                                     min={STEP_UP_MINUTES_MIN}
@@ -489,8 +483,8 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                                     onSave={saveStepUpMinutes}
                                     aria-label='Délai avant de redemander le code, en minutes'
                                 />
-                            )}
-                        </Row>
+                            </Row>
+                        </Reveal>
                     </Section>
 
                     <Section
@@ -514,13 +508,8 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                                 onChange={() => setSecurityOpen(true)}
                             />
                         </Row>
-                        <Row
-                            sub
-                            label='Validation du mot de passe'
-                            onInfo={encryptionEnabled ? showReauthInfo : undefined}
-                            hint={reAuthHint}
-                        >
-                            {encryptionEnabled && (
+                        <Reveal open={encryptionEnabled}>
+                            <Row sub label='Validation du mot de passe' onInfo={showReauthInfo} hint={reAuthHint}>
                                 <MinutesEditor
                                     value={currentReAuthMinutes}
                                     min={0}
@@ -528,8 +517,8 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                                     onSave={saveReAuth}
                                     aria-label='Délai de validation en minutes'
                                 />
-                            )}
-                        </Row>
+                            </Row>
+                        </Reveal>
                     </Section>
 
                     <Dialog

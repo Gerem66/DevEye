@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 
 import styles from './Security.module.css';
 
@@ -9,16 +10,51 @@ interface SectionProps {
     children: ReactNode;
 }
 
-/** Un groupe de protections : son titre et son propos à gauche, ses rangées dans une carte à droite. */
+/** Un groupe de protections : une carte, son titre et son propos en tête, ses rangées dessous. */
 export function Section({ title, description, children }: SectionProps) {
     return (
-        <section className={styles.section}>
-            <div className={styles.sectionHead}>
-                <h3 className={styles.sectionTitle}>{title}</h3>
-                <p className={styles.sectionText}>{description}</p>
-            </div>
-            <div className={styles.card}>{children}</div>
+        <section className={styles.card}>
+            <header className={styles.cardHead}>
+                <h3 className={styles.cardTitle}>{title}</h3>
+                <p className={styles.cardText}>{description}</p>
+            </header>
+            <div className={styles.rows}>{children}</div>
         </section>
+    );
+}
+
+const REVEAL = { duration: 0.25, ease: [0.22, 1, 0.36, 1] } as const;
+
+interface RevealProps {
+    open: boolean;
+    children: ReactNode;
+}
+
+/**
+ * Les rangées qui n'ont de sens que la protection au-dessus en place : elles
+ * se déplient avec elle et se replient quand elle s'éteint. Le débordement
+ * n'est masqué que pendant le geste, pour ne pas rogner le liseré de focus
+ * d'une commande au repos.
+ */
+export function Reveal({ open, children }: RevealProps) {
+    const reduced = useReducedMotion() === true;
+    const [settled, setSettled] = useState(true);
+    return (
+        <AnimatePresence initial={false}>
+            {open && (
+                <motion.div
+                    style={{ overflow: settled ? 'visible' : 'hidden' }}
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={reduced ? { duration: 0 } : REVEAL}
+                    onAnimationStart={() => setSettled(false)}
+                    onAnimationComplete={() => setSettled(true)}
+                >
+                    {children}
+                </motion.div>
+            )}
+        </AnimatePresence>
     );
 }
 

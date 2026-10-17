@@ -41,58 +41,41 @@
 .content {
     display: flex;
     flex-direction: column;
-    gap: var(--space-xl);
+    gap: var(--space-lg);
 }
 
-/* Un groupe de protections : son titre et son propos à gauche, la carte de
-   ses rangées à droite. La colonne de gauche est plafonnée : elle ne porte
-   qu'une phrase. */
-.section {
-    display: grid;
-    grid-template-columns: minmax(200px, 260px) minmax(0, 1fr);
-    gap: var(--space-md) var(--space-xl);
-    align-items: start;
+/* Un groupe de protections : une carte, son titre et son propos en tête sur
+   un bandeau, ses rangées dessous. Les rangées portent leur respiration
+   verticale, la carte ne leur laisse que les côtés. */
+.card {
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
 }
 
-.sectionHead {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-xs);
-    padding-top: var(--space-sm);
+.cardHead {
+    padding: var(--space-md);
+    background: var(--surface-subtle);
+    border-bottom: 1px solid var(--glass-border);
 }
 
-.sectionTitle {
+.cardTitle {
     margin: 0;
     font-size: 1rem;
     font-weight: 600;
     color: var(--text-primary);
 }
 
-.sectionText {
-    margin: 0;
+.cardText {
+    margin: 2px 0 0;
     font-size: 0.85rem;
     line-height: 1.5;
     color: var(--text-secondary);
 }
 
-/* Une colonne : le propos passe au-dessus de sa carte. */
-@media (max-width: 860px) {
-    .section {
-        grid-template-columns: minmax(0, 1fr);
-        gap: var(--space-sm);
-    }
-
-    .sectionHead {
-        padding-top: 0;
-    }
-}
-
-/* Les rangées portent leur respiration verticale : la carte ne garde que les côtés. */
-.card {
+.rows {
     padding: 0 var(--space-md);
-    background: var(--glass-bg-light);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-md);
 }
 
 /* Une rangée : la tuile, l'intitulé et son état à gauche, la commande à
@@ -107,7 +90,7 @@
     border-top: 1px solid var(--glass-border);
 }
 
-.row:first-child {
+.rows > .row:first-child {
     border-top: none;
 }
 
@@ -153,7 +136,7 @@
     gap: 2px;
     flex: 1 1 180px;
     min-width: 0;
-    max-width: 60ch;
+    max-width: 72ch;
 }
 
 .rowLabel {
