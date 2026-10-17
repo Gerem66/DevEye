@@ -167,6 +167,8 @@ export function EmailCheckRow({ checks, onChange }: RowProps) {
         <>
             <Row
                 label='Code par mail'
+                icon='mail'
+                active={email.enabled}
                 onInfo={showEmailCheckInfo}
                 error={error}
                 hint={
@@ -231,6 +233,8 @@ export function SmsCheckRow({ checks, onChange }: RowProps) {
         <>
             <Row
                 label='Code par SMS'
+                icon='phone'
+                active={sms.enabled}
                 onInfo={showSmsCheckInfo}
                 error={error}
                 hint={

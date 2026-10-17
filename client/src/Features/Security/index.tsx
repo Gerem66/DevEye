@@ -6,6 +6,7 @@ import TextInput from '@/Components/TextInput';
 import { openInfo } from '@/Components/InfoPopup';
 import Button from '@/Components/Button';
 import CopyButton from '@/Components/CopyButton';
+import { StatusBadge } from '@/Components/StatusBadge';
 import StickyHeader from '@/Components/StickyHeader';
 import Switch from '@/Components/Switch';
 import { useAuth } from '@/auth/AuthProvider';
@@ -396,28 +397,57 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
     const stepUpMinutes = stepUp?.minutes ?? 15;
     const stepUpReady = stepUp?.twoFactor === true;
 
+    // Le même compte que le score du Profil : la confirmation des connexions
+    // n'entre en jeu que si ce serveur peut envoyer un code.
+    const loginAvailable = checks !== null && (checks.email.available || checks.sms.available);
+    const protections = [
+        ...(loginAvailable ? [checks.email.enabled || checks.sms.enabled] : []),
+        twoFactorOn,
+        encryptionEnabled,
+        encryptionEnabled && currentReAuthMinutes <= 5
+    ];
+    const activeCount = protections.filter(Boolean).length;
+    const allActive = activeCount === protections.length;
+
     return (
         <div className={styles.container}>
             <StickyHeader>
-                <h2 className={styles.title}>Sécurité</h2>
-                <p className={styles.subtitle}>Les protections de votre compte et de vos données.</p>
+                <div className={styles.header}>
+                    <div>
+                        <h2 className={styles.title}>Sécurité</h2>
+                        <p className={styles.subtitle}>Les protections de votre compte et de vos données.</p>
+                    </div>
+                    {!loading && (
+                        <StatusBadge tone={allActive ? 'success' : 'warning'}>
+                            {activeCount} protection{activeCount > 1 ? 's' : ''} sur {protections.length}
+                        </StatusBadge>
+                    )}
+                </div>
             </StickyHeader>
 
             {loading ? (
                 <div className={styles.loader}>Chargement...</div>
             ) : (
                 <div className={styles.content}>
-                    {checks && (checks.email.available || checks.sms.available) && (
-                        <Section label='Connexion'>
+                    {checks && loginAvailable && (
+                        <Section
+                            title='Connexion'
+                            description='Ce qui est vérifié, en plus du mot de passe, quand vous vous connectez depuis un navigateur que DevEye ne connaît pas.'
+                        >
                             {checks.email.available && <EmailCheckRow checks={checks} onChange={setChecks} />}
                             {checks.sms.available && <SmsCheckRow checks={checks} onChange={setChecks} />}
                             <TrustedBrowsersRow checks={checks} onChange={setChecks} />
                         </Section>
                     )}
 
-                    <Section label='Double authentification'>
+                    <Section
+                        title='Double authentification'
+                        description='Un code généré par une application sur votre téléphone, à chaque connexion et avant de piloter une machine.'
+                    >
                         <Row
                             label='Application d’authentification'
+                            icon='shield'
+                            active={twoFactorOn}
                             onInfo={showTwoFactorInfo}
                             hint={
                                 twoFactorOn
@@ -463,9 +493,14 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                         </Row>
                     </Section>
 
-                    <Section label='Chiffrement'>
+                    <Section
+                        title='Chiffrement'
+                        description='Vos données chiffrées, verrouillées par votre mot de passe plutôt que par la clé du serveur.'
+                    >
                         <Row
                             label='Chiffrement par mot de passe'
+                            icon='lock'
+                            active={encryptionEnabled}
                             onInfo={showEncryptionInfo}
                             hint={
                                 encryptionEnabled

@@ -1,10 +1,22 @@
 /* `min-height` et non `height` : l'en-tête colle dans la boîte de la racine,
-   qui doit grandir avec son contenu. */
+   qui doit grandir avec son contenu. La tuile d'une protection fixe aussi le
+   retrait de ses sous-réglages, alignés sur son texte. */
 .container {
+    --row-icon: 36px;
+
     display: flex;
     flex-direction: column;
-    gap: var(--space-lg);
+    gap: var(--space-xl);
     min-height: 100%;
+}
+
+/* Le titre à gauche, le niveau de protection à droite. */
+.header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-md);
+    flex-wrap: wrap;
 }
 
 .title {
@@ -29,24 +41,50 @@
 .content {
     display: flex;
     flex-direction: column;
-    gap: var(--space-lg);
+    gap: var(--space-xl);
 }
 
-/* Un groupe de protections : un intitulé en petites capitales, puis une carte
-   de rangées, à la manière des réglages du Profil. */
+/* Un groupe de protections : son titre et son propos à gauche, la carte de
+   ses rangées à droite. La colonne de gauche est plafonnée : elle ne porte
+   qu'une phrase. */
 .section {
+    display: grid;
+    grid-template-columns: minmax(200px, 260px) minmax(0, 1fr);
+    gap: var(--space-md) var(--space-xl);
+    align-items: start;
+}
+
+.sectionHead {
     display: flex;
     flex-direction: column;
-    gap: var(--space-sm);
-    min-width: 0;
+    gap: var(--space-xs);
+    padding-top: var(--space-sm);
 }
 
-.sectionLabel {
-    font-size: 0.7rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--text-muted);
+.sectionTitle {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.sectionText {
+    margin: 0;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+
+/* Une colonne : le propos passe au-dessus de sa carte. */
+@media (max-width: 860px) {
+    .section {
+        grid-template-columns: minmax(0, 1fr);
+        gap: var(--space-sm);
+    }
+
+    .sectionHead {
+        padding-top: 0;
+    }
 }
 
 /* Les rangées portent leur respiration verticale : la carte ne garde que les côtés. */
@@ -57,14 +95,14 @@
     border-radius: var(--radius-md);
 }
 
-/* Une rangée : l'intitulé et son état à gauche, la commande à droite. Le liseré
-   sépare, il n'encadre pas : la première n'en porte pas. */
+/* Une rangée : la tuile, l'intitulé et son état à gauche, la commande à
+   droite. Le liseré sépare, il n'encadre pas : la première n'en porte pas. */
 .row {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    gap: var(--space-sm) var(--space-lg);
+    gap: var(--space-sm) var(--space-md);
     padding: var(--space-md) 0;
     border-top: 1px solid var(--glass-border);
 }
@@ -73,19 +111,38 @@
     border-top: none;
 }
 
-/* En retrait : la rangée précise la protection au-dessus d'elle. */
+/* Sans tuile, alignée sur le texte de la protection qu'elle précise. */
 .sub {
-    padding-left: var(--space-lg);
-}
-
-@media (max-width: 480px) {
-    .sub {
-        padding-left: var(--space-md);
-    }
+    padding-left: calc(var(--row-icon) + var(--space-md));
 }
 
 .sub .rowLabel {
     font-weight: 500;
+}
+
+.rowIcon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--row-icon);
+    height: var(--row-icon);
+    border-radius: var(--radius-sm);
+    background: var(--surface-subtle);
+    color: var(--text-secondary);
+    flex-shrink: 0;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.rowIcon .icon {
+    width: 18px;
+}
+
+/* En place : la tuile prend la couleur de l'interrupteur allumé. */
+.rowIconOn {
+    background: var(--accent-bg);
+    color: var(--accent);
 }
 
 /* Assez étroit pour garder sa commande à côté sur un téléphone ; au-delà, la
@@ -96,22 +153,20 @@
     gap: 2px;
     flex: 1 1 180px;
     min-width: 0;
-    max-width: 70ch;
+    max-width: 60ch;
 }
 
 .rowLabel {
-    display: flex;
-    align-items: center;
-    gap: var(--space-xs);
     font-size: 0.9rem;
     font-weight: 600;
+    line-height: 1.35;
     color: var(--text-primary);
 }
 
 .rowHint {
-    font-size: 0.8rem;
-    line-height: 1.4;
-    color: var(--text-muted);
+    font-size: 0.82rem;
+    line-height: 1.45;
+    color: var(--text-secondary);
 }
 
 .rowError {
@@ -127,13 +182,16 @@
     margin-left: auto;
 }
 
-/* Le « i » d'une rangée : dans la ligne de l'intitulé, discret jusqu'au survol. */
+/* Le « i » d'une rangée : à la suite du dernier mot de l'intitulé, qu'il
+   suit à la ligne, discret jusqu'au survol. */
 .infoBtn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    vertical-align: -5px;
     width: 20px;
     height: 20px;
+    margin-left: var(--space-xs);
     padding: 0;
     background: transparent;
     border: none;
@@ -173,16 +231,17 @@
     color: var(--text-primary);
 }
 
-/* Les navigateurs de confiance : sous leur rangée, sur toute sa largeur, au
-   même retrait. Une ligne par navigateur, sans cadre : la colonne des boutons
-   suffit à les séparer. */
+/* Les navigateurs de confiance : un encart sous leur rangée, sur toute sa
+   largeur et au même retrait, une ligne par navigateur. */
 .browserList {
     flex-basis: 100%;
     display: flex;
     flex-direction: column;
-    margin: 0;
-    padding: 0;
+    margin: var(--space-xs) 0 0;
+    padding: 0 var(--space-md);
     list-style: none;
+    background: var(--surface-subtle);
+    border-radius: var(--radius-sm);
 }
 
 .browserItem {
@@ -192,6 +251,11 @@
     justify-content: space-between;
     gap: var(--space-xs) var(--space-md);
     padding: var(--space-xs) 0;
+    border-top: 1px solid var(--glass-border);
+}
+
+.browserItem:first-child {
+    border-top: none;
 }
 
 /* Étroit à dessein : sur un téléphone, « Retirer » reste sur la ligne du
@@ -200,7 +264,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0 var(--space-sm);
-    flex: 1 1 160px;
+    flex: 1 1 120px;
     min-width: 0;
     font-size: 0.85rem;
 }

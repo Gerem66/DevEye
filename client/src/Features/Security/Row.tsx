@@ -3,15 +3,20 @@ import type { ReactNode } from 'react';
 import styles from './Security.module.css';
 
 interface SectionProps {
-    label: string;
+    title: string;
+    /** Ce que le groupe couvre, en une phrase, sous son titre. */
+    description: string;
     children: ReactNode;
 }
 
-/** Un groupe de protections : son intitulé, puis ses rangées dans une carte. */
-export function Section({ label, children }: SectionProps) {
+/** Un groupe de protections : son titre et son propos à gauche, ses rangées dans une carte à droite. */
+export function Section({ title, description, children }: SectionProps) {
     return (
         <section className={styles.section}>
-            <span className={styles.sectionLabel}>{label}</span>
+            <div className={styles.sectionHead}>
+                <h3 className={styles.sectionTitle}>{title}</h3>
+                <p className={styles.sectionText}>{description}</p>
+            </div>
             <div className={styles.card}>{children}</div>
         </section>
     );
@@ -19,11 +24,15 @@ export function Section({ label, children }: SectionProps) {
 
 interface RowProps {
     label: string;
+    /** L'icône de la protection (voir icons.css), en tuile devant l'intitulé. */
+    icon?: string;
+    /** La protection est en place : sa tuile prend la couleur d'accent. */
+    active?: boolean;
     /** Ce que la protection fait dans son état courant, sous l'intitulé. */
     hint?: ReactNode;
     /** Ouvre l'explication détaillée : le « i » à côté de l'intitulé. */
     onInfo?: () => void;
-    /** Une rangée qui précise la protection au-dessus d'elle : en retrait. */
+    /** Une rangée qui précise la protection au-dessus d'elle : sans tuile, alignée sur son texte. */
     sub?: boolean;
     /** L'échec du dernier geste, sous l'explication. */
     error?: string | null;
@@ -33,10 +42,15 @@ interface RowProps {
     below?: ReactNode;
 }
 
-/** Une protection : son intitulé et son état à gauche, sa commande à droite. */
-export function Row({ label, hint, onInfo, sub, error, children, below }: RowProps) {
+/** Une protection : sa tuile, son intitulé et son état à gauche, sa commande à droite. */
+export function Row({ label, icon, active, hint, onInfo, sub, error, children, below }: RowProps) {
     return (
         <div className={sub ? `${styles.row} ${styles.sub}` : styles.row}>
+            {icon && (
+                <span className={active ? `${styles.rowIcon} ${styles.rowIconOn}` : styles.rowIcon} aria-hidden>
+                    <span className={`icon icon-${icon}`} />
+                </span>
+            )}
             <div className={styles.rowText}>
                 <span className={styles.rowLabel}>
                     {label}
