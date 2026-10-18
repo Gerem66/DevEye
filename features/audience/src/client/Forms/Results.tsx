@@ -12,7 +12,8 @@ interface ResultsProps {
  *
  * Les comptes sont tenus à la réception : lire cet écran ne déchiffre rien
  * d'autre que les quelques dizaines de libellés affichés, quel que soit le
- * nombre de retours derrière.
+ * nombre de retours derrière. Ils couvrent toute la vie du formulaire : un
+ * retour expiré y laisse ses nombres, pas son contenu.
  *
  * Une question dont les réponses sont des textes n'a rien à répartir : elle
  * annonce son nombre et renvoie au tableau, plutôt que de montrer une liste de
@@ -24,11 +25,17 @@ export function Results({ results }: ResultsProps) {
     }
 
     return (
-        <div className={styles.panels}>
-            {results.fields.map((field) => (
-                <Field key={field.name} field={field} />
-            ))}
-        </div>
+        <>
+            <div className={styles.panels}>
+                {results.fields.map((field) => (
+                    <Field key={field.name} field={field} />
+                ))}
+            </div>
+            <p className={styles.empty}>
+                Depuis la création du formulaire. Les réponses effacées par la durée de conservation restent comptées,
+                sans leur contenu.
+            </p>
+        </>
     );
 }
 

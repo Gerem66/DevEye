@@ -3,7 +3,9 @@ import {
     AUDIENCE_ANSWER_FIELDS_MAX,
     AUDIENCE_ANSWER_VALUES_MAX,
     AUDIENCE_FIELD_NAME_MAX_LENGTH,
-    type AudienceFieldValue
+    type AudienceFieldKind,
+    type AudienceFieldValue,
+    type AudienceFormField
 } from '../contracts/domain';
 import type { SdkCipher } from '@deveye/types/sdk/server';
 
@@ -19,6 +21,21 @@ import type { AudienceFormsRepo } from './repoForms';
  * décisions. Les séparer de fichier serait la meilleure façon de les faire
  * diverger, ce que rien ne signalerait, les compteurs se contentant de dériver.
  */
+
+/**
+ * Le type déclaré d'une question, `null` quand le formulaire ne la déclare pas
+ * (mode `auto`, ou question inconnue du schéma).
+ */
+export type KindOf = (field: string) => AudienceFieldKind | null;
+
+/** Les types dont une valeur est une statistique, jamais une donnée de personne. */
+const STATISTICAL_KINDS: ReadonlySet<AudienceFieldKind> = new Set(['choice', 'boolean', 'number']);
+
+/** Le lecteur de types d'un schéma déclaré ; vide, chaque question est inconnue. */
+export function kindsOf(fields: readonly AudienceFormField[]): KindOf {
+    const kinds = new Map(fields.map((field) => [field.name, field.kind]));
+    return (field) => kinds.get(field) ?? null;
+}
 
 /** Une réponse à ranger : sa question, et sa valeur ou le seau. */
 export interface IndexableAnswer {
@@ -47,9 +64,11 @@ function canonical(value: string | number | boolean): string {
  *
  * Une valeur vide ou plus longue que {@link AUDIENCE_ANSWER_VALUE_MAX_LENGTH}
  * tombe dans le seau : compter les occurrences d'un message de contact ne dirait
- * rien et ferait une ligne de dimension par visiteur.
+ * rien et ferait une ligne de dimension par visiteur. Une question déclarée en
+ * texte ou en e-mail y tombe toujours : un nom, une adresse ne sont pas des
+ * statistiques, et ne doivent pas survivre au retour qui les porte.
  */
-export function indexableAnswers(fields: Record<string, AudienceFieldValue>): IndexableAnswer[] {
+export function indexableAnswers(fields: Record<string, AudienceFieldValue>, kindOf?: KindOf): IndexableAnswer[] {
     const out: IndexableAnswer[] = [];
     for (const [rawName, raw] of Object.entries(fields)) {
         const field = rawName.trim().slice(0, AUDIENCE_FIELD_NAME_MAX_LENGTH);
@@ -63,9 +82,12 @@ export function indexableAnswers(fields: Record<string, AudienceFieldValue>): In
             continue;
         }
 
+        const kind = kindOf?.(field) ?? null;
+        const personal = kind !== null && !STATISTICAL_KINDS.has(kind);
         for (const item of values) {
             const value = canonical(item);
-            out.push({ field, value: value && value.length <= AUDIENCE_ANSWER_VALUE_MAX_LENGTH ? value : null });
+            const indexed = !personal && value && value.length <= AUDIENCE_ANSWER_VALUE_MAX_LENGTH;
+            out.push({ field, value: indexed ? value : null });
         }
     }
     return out;
@@ -79,18 +101,23 @@ export function indexableAnswers(fields: Record<string, AudienceFieldValue>): In
  * construction. Une fonction et non une méthode du service : la suppression
  * d'un retour n'a aucune raison de dépendre d'une file en mémoire, et un
  * service absent ne doit pas laisser passer une ligne effacée sans la décompter.
+ *
+ * `kindOf` ne sert qu'à la réception. La décrémentation suit ce qui a été écrit,
+ * pas le schéma du jour : une valeur gardée se retire, les autres sortent du
+ * seau, et une valeur retombée à zéro part avec son libellé.
  */
 export async function countAnswers(
     repo: AudienceFormsRepo,
     cipher: SdkCipher,
     formId: number,
     fields: Record<string, AudienceFieldValue>,
-    delta: 1 | -1
+    delta: 1 | -1,
+    kindOf?: KindOf
 ): Promise<void> {
     /** Les questions déjà résolues dans ce retour : un choix multiple répète la sienne. */
     const fieldIds = new Map<string, number>();
 
-    for (const answer of indexableAnswers(fields)) {
+    for (const answer of indexableAnswers(fields, delta > 0 ? kindOf : undefined)) {
         let fieldId = fieldIds.get(answer.field);
         if (fieldId === undefined) {
             // En décrémentation on ne crée rien : le libellé d'une question vidée
@@ -126,5 +153,35 @@ export async function countAnswers(
             // libellé, ce qui reproduit la décision prise à la réception.
         }
         await repo.bumpAnswer(formId, fieldId, valueId, delta);
+        if (delta < 0 && valueId !== 0) await repo.dropAnswerIfEmpty(formId, fieldId, valueId);
+    }
+}
+
+/**
+ * Ce qu'un retour expiré laisse aux résultats : les comptes, jamais ce qu'une
+ * personne a écrit. Les valeurs d'une question à choix, oui-non ou nombre
+ * restent comptées, les totaux de chaque question aussi. Une valeur gardée
+ * pour une question non déclarée (un nom tapé dans un formulaire `auto`) passe
+ * au seau « texte libre », et son libellé part quand plus rien ne la cite.
+ */
+export async function expireAnswers(
+    repo: AudienceFormsRepo,
+    formId: number,
+    fields: Record<string, AudienceFieldValue>,
+    kindOf: KindOf
+): Promise<void> {
+    for (const answer of indexableAnswers(fields)) {
+        if (answer.value === null) continue;
+        const kind = kindOf(answer.field);
+        if (kind !== null && STATISTICAL_KINDS.has(kind)) continue;
+        const [fieldId, valueId] = await Promise.all([
+            repo.findFormLabel(formId, 'field', labelRef(answer.field)),
+            repo.findFormLabel(formId, 'value', labelRef(answer.value))
+        ]);
+        // Sans libellé, la réponse a été comptée au seau : elle y reste.
+        if (fieldId === null || valueId === null) continue;
+        await repo.bumpAnswer(formId, fieldId, valueId, -1);
+        await repo.dropAnswerIfEmpty(formId, fieldId, valueId);
+        await repo.bumpAnswer(formId, fieldId, 0, 1);
     }
 }

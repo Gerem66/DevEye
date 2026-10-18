@@ -213,7 +213,7 @@ function fakeRepo(sites: AudienceSiteRow[]): FakeRepo {
                 if (key.startsWith(`${formId}:`)) repo.answers.delete(key);
             }
             const f = repo.forms.find((x) => x.id === formId);
-            if (f) Object.assign(f, { submissions: 0, last_at: null });
+            if (f) Object.assign(f, { submissions: 0, received: 0, last_at: null });
             return before - repo.submissions.length;
         },
         async createForm(input) {
@@ -228,6 +228,7 @@ function fakeRepo(sites: AudienceSiteRow[]): FakeRepo {
                 closed_at: null,
                 closed_reason: null,
                 submissions: 0,
+                received: 0,
                 last_at: null,
                 sort_order: input.sortOrder,
                 content: input.content,
@@ -278,11 +279,21 @@ function fakeRepo(sites: AudienceSiteRow[]): FakeRepo {
         },
         async touchForm(formId, at) {
             const f = repo.forms.find((x) => x.id === formId);
-            if (f) Object.assign(f, { submissions: f.submissions + 1, last_at: Math.max(f.last_at ?? 0, at) });
+            if (f) {
+                Object.assign(f, {
+                    submissions: f.submissions + 1,
+                    received: f.received + 1,
+                    last_at: Math.max(f.last_at ?? 0, at)
+                });
+            }
         },
         async bumpFormSubmissions(formId, delta) {
             const f = repo.forms.find((x) => x.id === formId);
             if (f) f.submissions = Math.max(0, f.submissions + delta);
+        },
+        async bumpFormReceived(formId, delta) {
+            const f = repo.forms.find((x) => x.id === formId);
+            if (f) f.received = Math.max(0, f.received + delta);
         },
         async resolveFormLabel(formId, kind, labelRef, content) {
             const hit = repo.formLabels.find(
@@ -303,6 +314,13 @@ function fakeRepo(sites: AudienceSiteRow[]): FakeRepo {
         async bumpAnswer(formId, fieldId, valueId, delta) {
             const key = `${formId}:${fieldId}:${valueId}`;
             repo.answers.set(key, Math.max(0, (repo.answers.get(key) ?? 0) + delta));
+        },
+        async dropAnswerIfEmpty(formId, fieldId, valueId) {
+            const key = `${formId}:${fieldId}:${valueId}`;
+            if ((repo.answers.get(key) ?? 1) > 0) return;
+            repo.answers.delete(key);
+            const cited = [...repo.answers.keys()].some((k) => k.startsWith(`${formId}:`) && k.endsWith(`:${valueId}`));
+            if (!cited) repo.formLabels = repo.formLabels.filter((l) => !(l.id === valueId && l.kind === 'value'));
         },
         listSubmissions: unused,
         findSubmission: async (id) => repo.submissions.find((b) => b.id === id) ?? null,
@@ -610,6 +628,7 @@ function declared(fields: AudienceFormField[], over: Partial<AudienceFormRow> = 
         closed_at: null,
         closed_reason: null,
         submissions: 0,
+        received: 0,
         last_at: null,
         sort_order: 0,
         content: 'contact',
@@ -711,13 +730,17 @@ describe('AudienceIngest : les retours', () => {
 
         await countAnswers(repo, deps.cipherFor(1), repo.forms[0].id, { recommande: 'oui' }, -1);
 
-        // Un seul des deux comptes bouge, et aucun ne passe sous zéro.
-        assert.deepEqual([...repo.answers.values()].sort(), [0, 1]);
+        // Un seul des deux comptes bouge ; retombé à zéro, il part avec son libellé.
+        assert.deepEqual([...repo.answers.values()], [1]);
+        assert.equal(
+            repo.formLabels.some((l) => l.kind === 'value' && l.content === 'oui'),
+            false
+        );
     });
 });
 
 describe('le ménage des retours', () => {
-    it('efface les retours au-delà de la conservation du site, eux seuls, et défait leurs compteurs', async () => {
+    it('efface les retours au-delà de la conservation, eux seuls, et ne garde de leurs réponses que des comptes', async () => {
         // Aucune mesure reçue : un site sans balise voit quand même ses retours expirer.
         const repo = fakeRepo([autoSite({ submission_retention_days: 30 })]);
         const { ingest, maintain } = ingestWith(repo);
@@ -735,11 +758,52 @@ describe('le ménage des retours', () => {
             ['non', 'non']
         );
         assert.equal(repo.forms[0].submissions, 2);
+        assert.equal(repo.forms[0].received, 3, 'les résultats comptent toute la vie du formulaire');
+        // Une question non déclarée peut porter un nom : sa valeur expirée passe au
+        // seau, et son libellé part avec le dernier compte qui la citait.
         const field = fieldIdOf(repo, 'recommande');
         const valueId = (value: string) => repo.formLabels.find((l) => l.kind === 'value' && l.content === value)?.id;
-        assert.equal(repo.answers.get(`${repo.forms[0].id}:${field}:${valueId('oui')}`), 0);
+        assert.equal(valueId('oui'), undefined);
         assert.equal(repo.answers.get(`${repo.forms[0].id}:${field}:${valueId('non')}`), 2);
+        assert.equal(repo.answers.get(`${repo.forms[0].id}:${field}:0`), 1);
         assert.deepEqual(repo.rollups, [], 'rien à agréger sur un site sans mesure');
+    });
+
+    it('garde les comptes d’une question à choix, jamais un nom ni une adresse', async () => {
+        const repo = fakeRepo([site({ submission_retention_days: 30 })]);
+        repo.forms.push(
+            declared([
+                textField('sujet', { kind: 'choice', choices: ['Devis', 'Support'] }),
+                textField('nom'),
+                textField('email', { kind: 'email' })
+            ])
+        );
+        const { ingest, maintain } = ingestWith(repo);
+        for (const [sujet, nom] of [
+            ['Devis', 'Jean Dupont'],
+            ['Support', 'Ada Lovelace']
+        ]) {
+            const fields = { sujet, nom, email: `${nom.split(' ')[0].toLowerCase()}@exemple.fr` };
+            assert.deepEqual(await ingest.submit(submission({ fields })), { status: 'stored' });
+        }
+        const values = () =>
+            repo.formLabels
+                .filter((l) => l.kind === 'value')
+                .map((l) => l.content)
+                .sort();
+        // Le nom et l'adresse ne sont comptés qu'au seau, dès la réception.
+        assert.deepEqual(values(), ['Devis', 'Support']);
+
+        repo.submissions[0].ts = Math.floor(Date.now() / 1000) - 31 * 86400;
+        await maintain();
+
+        assert.equal(repo.submissions.length, 1);
+        assert.deepEqual(values(), ['Devis', 'Support'], 'le compte de « Devis » survit à son retour');
+        const sujet = fieldIdOf(repo, 'sujet');
+        const devis = repo.formLabels.find((l) => l.content === 'Devis')?.id;
+        assert.equal(repo.answers.get(`10:${sujet}:${devis}`), 1);
+        assert.equal(repo.answers.get(`10:${fieldIdOf(repo, 'nom')}:0`), 2);
+        assert.deepEqual([repo.forms[0].submissions, repo.forms[0].received], [1, 2]);
     });
 
     it('vide un arriéré plus grand qu’un paquet dans le même tour', async () => {

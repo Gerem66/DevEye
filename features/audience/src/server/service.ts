@@ -23,8 +23,8 @@ import {
 } from '@deveye/types/sdk/server';
 
 import { dayBounds, dayKey, labelRef, monthKey, normalizePath, originAllowed, persistentVisitorRef } from './normalize';
-import { countAnswers } from './answers';
-import { forgetSubmission } from './forms';
+import { countAnswers, kindsOf, type KindOf } from './answers';
+import { forgetSubmission, formKinds } from './forms';
 import type { AudienceMaintenanceRow, AudienceRepo, PendingEventRow } from './repo';
 import { validateSubmission, type ValidationReason } from './validate';
 import { nameRef, parseOrigins, readJson } from './_shared';
@@ -447,7 +447,7 @@ export class AudienceIngest {
             // renverrait, et le même message serait stocké deux fois pendant que
             // les compteurs, eux, ne compteraient qu'une fois et demie.
             try {
-                await countAnswers(this.deps.repo, cipher, form.id, fields, 1);
+                await countAnswers(this.deps.repo, cipher, form.id, fields, 1, kindsOf(form.fields));
                 await this.deps.repo.touchForm(form.id, now);
                 form.submissions++;
                 await this.banIfFlooding(site, ip, now);
@@ -978,10 +978,20 @@ export class AudienceIngest {
     private async expireSubmissions(site: AudienceMaintenanceRow, now: number): Promise<void> {
         const before = now - site.submission_retention_days * 86400;
         const scope = { repo: this.deps.repo, cipher: this.deps.cipherFor(site.workspace_id) };
+        // Un schéma relu par formulaire, pas par retour : un lot en compte souvent cent du même.
+        const kinds = new Map<number, Promise<KindOf>>();
+        const kindsFor = (formId: number): Promise<KindOf> => {
+            let known = kinds.get(formId);
+            if (!known) kinds.set(formId, (known = formKinds(scope, formId)));
+            return known;
+        };
         let removed = 0;
         await this.pruneInBatches(async (limit) => {
             const rows = await this.deps.repo.listExpiredSubmissions(site.id, before, limit);
-            for (const row of rows) if (await forgetSubmission(scope, row)) removed++;
+            for (const row of rows) {
+                const kindOf = await kindsFor(Number(row.form_id));
+                if (await forgetSubmission(scope, row, { kindOf })) removed++;
+            }
             return rows.length;
         }, SUBMISSION_PRUNE_BATCH);
         if (removed === 0) return;

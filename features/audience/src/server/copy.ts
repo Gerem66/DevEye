@@ -42,7 +42,7 @@ export const audienceTree: ItemTree = [
         // strict refuse alors tout envoi, sans rien signaler.
         sealed: ['content', 'form_schema'],
         // Ce que le formulaire a reçu reste avec les réponses, là où elles sont.
-        omit: ['submissions', 'last_at', 'created']
+        omit: ['submissions', 'received', 'last_at', 'created']
     },
     // Ce que la collecte a amassé ne se copie pas : la copie est un autre site,
     // qui aura ses propres visiteurs.

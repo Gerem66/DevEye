@@ -24,7 +24,7 @@ import {
 } from '../contracts/domain';
 import { defineSdkFeature, FeatureError, type SdkCipher } from '@deveye/types/sdk/server';
 
-import { countAnswers } from './answers';
+import { countAnswers, expireAnswers, kindsOf, type KindOf } from './answers';
 import {
     ingestOf,
     loadHomeSite,
@@ -295,25 +295,44 @@ export const audienceSubmissionListFeature = defineSdkFeature({
     }
 });
 
+/** Les types déclarés d'un formulaire ; aucun pour un formulaire `auto` ou disparu. */
+export async function formKinds(
+    { repo, cipher }: { repo: AudienceFormsRepo; cipher: SdkCipher },
+    formId: number
+): Promise<KindOf> {
+    const form = await repo.findForm(formId);
+    const stored = form ? await readJson<Partial<StoredSchema>>(cipher, form.form_schema) : null;
+    return kindsOf(stored?.fields ?? []);
+}
+
 /**
- * Efface un retour et défait ce qu'il comptait. Les compteurs de répartition
- * sont tenus à la réception : les défaire demande de relire ce que ce retour
- * portait et de rejouer les mêmes règles, sans quoi la vue Résultats compterait
- * indéfiniment des réponses effacées. Le geste d'un membre et l'expiration
- * passent tous deux par ici. `false` : la ligne était déjà partie.
+ * Efface un retour. Le geste d'un membre défait tout ce qu'il comptait : le
+ * retour n'a jamais existé pour les résultats. L'expiration n'efface que ce
+ * qu'une personne a écrit et laisse les comptes anonymes, que les résultats
+ * gardent sur toute la vie du formulaire (`expireAnswers`). Dans les deux cas,
+ * les compteurs sont tenus à la réception : les défaire demande de relire ce
+ * que ce retour portait. `false` : la ligne était déjà partie.
  */
 export async function forgetSubmission(
-    { repo, cipher }: { repo: AudienceFormsRepo; cipher: SdkCipher },
-    row: Pick<AudienceSubmissionRow, 'id' | 'form_id' | 'content'>
+    scope: { repo: AudienceFormsRepo; cipher: SdkCipher },
+    row: Pick<AudienceSubmissionRow, 'id' | 'form_id' | 'content'>,
+    expired: { kindOf: KindOf } | null = null
 ): Promise<boolean> {
+    const { repo, cipher } = scope;
+    const formId = Number(row.form_id);
     const stored = await readJson<Partial<StoredSubmission>>(cipher, row.content);
     // Deux suppressions du même retour lisent toutes deux sa ligne : sans ce
     // verdict, la seconde ne retire rien et décrémente quand même, et les
     // compteurs partent faux pour toujours (`content` est chiffré, rien ne les
     // recalcule).
     if (!(await repo.removeSubmission(Number(row.id)))) return false;
-    if (stored?.fields) await countAnswers(repo, cipher, Number(row.form_id), stored.fields, -1);
-    await repo.bumpFormSubmissions(Number(row.form_id), -1);
+    if (expired) {
+        if (stored?.fields) await expireAnswers(repo, formId, stored.fields, expired.kindOf);
+    } else {
+        if (stored?.fields) await countAnswers(repo, cipher, formId, stored.fields, -1);
+        await repo.bumpFormReceived(formId, -1);
+    }
+    await repo.bumpFormSubmissions(formId, -1);
     return true;
 }
 
@@ -380,7 +399,7 @@ export const audienceResultsFeature = defineSdkFeature({
             }
         }
 
-        return { total: Number(form.submissions), fields };
+        return { total: Number(form.received), fields };
     }
 });
 

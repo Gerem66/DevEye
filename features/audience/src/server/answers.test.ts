@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { AUDIENCE_ANSWER_VALUE_MAX_LENGTH } from '../contracts/domain';
+import { AUDIENCE_ANSWER_VALUE_MAX_LENGTH, type AudienceFieldKind } from '../contracts/domain';
 
-import { indexableAnswers } from './answers';
+import { indexableAnswers, kindsOf } from './answers';
 
 /**
  * Les règles qui décident ce qu'on compte dans un retour. Elles sont rejouées à
@@ -62,5 +62,36 @@ describe('indexableAnswers', () => {
         assert.deepEqual(indexableAnswers({ '  ': 'perdu', '  ville  ': '  Lyon  ' }), [
             { field: 'ville', value: 'Lyon' }
         ]);
+    });
+
+    it('n’indexe jamais une question déclarée en texte ou en e-mail', () => {
+        const field = (name: string, kind: AudienceFieldKind) => ({
+            name,
+            kind,
+            required: false,
+            choices: [],
+            multiple: false
+        });
+        const kindOf = kindsOf([
+            field('nom', 'text'),
+            field('email', 'email'),
+            field('note', 'number'),
+            field('ok', 'boolean'),
+            field('sujet', 'choice')
+        ]);
+        assert.deepEqual(
+            indexableAnswers(
+                { nom: 'Ada', email: 'ada@exemple.fr', note: 4, ok: true, sujet: 'Devis', ville: 'Lyon' },
+                kindOf
+            ),
+            [
+                { field: 'nom', value: null },
+                { field: 'email', value: null },
+                { field: 'note', value: '4' },
+                { field: 'ok', value: 'true' },
+                { field: 'sujet', value: 'Devis' },
+                { field: 'ville', value: 'Lyon' }
+            ]
+        );
     });
 });

@@ -185,7 +185,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
             repo.formLabels = repo.formLabels.filter((l) => l.form_id !== formId);
             for (const key of [...repo.answers.keys()]) if (key.startsWith(`${formId}:`)) repo.answers.delete(key);
             const f = repo.forms.find((x) => x.id === formId);
-            if (f) Object.assign(f, { submissions: 0, last_at: null });
+            if (f) Object.assign(f, { submissions: 0, received: 0, last_at: null });
             return before - repo.submissions.length;
         },
         async createForm(input) {
@@ -200,6 +200,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
                 closed_at: null,
                 closed_reason: null,
                 submissions: 0,
+                received: 0,
                 last_at: null,
                 sort_order: input.sortOrder,
                 content: input.content,
@@ -218,6 +219,10 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
             const f = repo.forms.find((x) => x.id === formId);
             if (f) f.submissions = Math.max(0, f.submissions + delta);
         },
+        async bumpFormReceived(formId, delta) {
+            const f = repo.forms.find((x) => x.id === formId);
+            if (f) f.received = Math.max(0, f.received + delta);
+        },
         async resolveFormLabel(formId, kind, ref, content) {
             const hit = repo.formLabels.find((l) => l.form_id === formId && l.kind === kind && l.label_ref === ref);
             if (hit) return hit.id;
@@ -234,6 +239,13 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
         async bumpAnswer(formId, fieldId, valueId, delta) {
             const key = `${formId}:${fieldId}:${valueId}`;
             repo.answers.set(key, Math.max(0, (repo.answers.get(key) ?? 0) + delta));
+        },
+        async dropAnswerIfEmpty(formId, fieldId, valueId) {
+            const key = `${formId}:${fieldId}:${valueId}`;
+            if ((repo.answers.get(key) ?? 1) > 0) return;
+            repo.answers.delete(key);
+            const cited = [...repo.answers.keys()].some((k) => k.startsWith(`${formId}:`) && k.endsWith(`:${valueId}`));
+            if (!cited) repo.formLabels = repo.formLabels.filter((l) => !(l.id === valueId && l.kind === 'value'));
         },
         async listSubmissions({ formId, order, cursorTs, cursorId, limit }) {
             const desc = order === 'recent';
@@ -315,6 +327,7 @@ async function seeded(projections: Record<number, number[]> = {}): Promise<FakeR
         closed_at: null,
         closed_reason: null,
         submissions: 2,
+        received: 2,
         last_at: 2000,
         sort_order: 0,
         content: 'contact',

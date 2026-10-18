@@ -881,7 +881,10 @@ export interface AudienceFormRow {
     closed_at: number | null;
     /** 'quota' | 'full', ou `NULL` quand la fermeture est un geste humain. */
     closed_reason: string | null;
+    /** Les retours conservés : ce que l'expiration et la suppression font baisser. */
     submissions: number;
+    /** Les retours reçus depuis la création : les résultats s'y rapportent, l'expiration n'y touche pas. */
+    received: number;
     last_at: number | null;
     sort_order: number;
     /** { name } chiffré, étage ouvert. */

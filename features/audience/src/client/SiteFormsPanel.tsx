@@ -49,9 +49,9 @@ export default function SiteFormsPanel({ scope, canWrite }: SettingsPanelProps) 
                     onChange={(e) => set('submissionRetentionDays', e.target.value)}
                 />
                 <span className={shell.fieldHint}>
-                    Les réponses plus anciennes sont effacées automatiquement, avec ce qu’elles comptaient dans les
-                    résultats. De {AUDIENCE_SUBMISSION_RETENTION_MIN_DAYS} à {AUDIENCE_SUBMISSION_RETENTION_MAX_DAYS}{' '}
-                    jours.
+                    Les réponses plus anciennes sont effacées automatiquement. Les résultats gardent leurs totaux, sans
+                    rien de ce que les visiteurs ont écrit. De {AUDIENCE_SUBMISSION_RETENTION_MIN_DAYS} à{' '}
+                    {AUDIENCE_SUBMISSION_RETENTION_MAX_DAYS} jours.
                 </span>
             </div>
 

@@ -491,14 +491,24 @@ par visiteur : au-delà de 60 caractères (`AUDIENCE_ANSWER_VALUE_MAX_LENGTH`), 
 au-delà de 50 valeurs distinctes pour la même question
 (`AUDIENCE_ANSWER_VALUES_MAX`), la réponse tombe dans le **seau**
 `value_id = 0`, qui ne garde qu'un nombre. L'écran l'annonce (« N réponses en
-texte libre »).
+texte libre »). Une question **déclarée** en texte ou en e-mail y tombe
+toujours : un nom, une adresse ne sont pas des statistiques. Seules les
+questions à choix, oui-non et nombres, et celles qu'un formulaire `auto` ne
+déclare pas, gardent leurs valeurs.
 
-La suppression d'un retour rejoue les mêmes règles sur sa charge utile
-déchiffrée pour décrémenter exactement ce qu'il avait compté. D'où
-`answers.ts`, qui porte les règles pures **et** l'écriture qui les applique
-(`countAnswers`) : la réception et la suppression passent par la même fonction.
-Le geste d'un membre et l'expiration passent tous deux par `forgetSubmission`
-(`forms.ts`). Vider ou supprimer un formulaire efface les compteurs en bloc.
+La suppression d'un retour **à la main** rejoue les mêmes règles sur sa charge
+utile déchiffrée pour décrémenter exactement ce qu'il avait compté, et une
+valeur retombée à zéro part avec son libellé. D'où `answers.ts`, qui porte les
+règles pures **et** l'écriture qui les applique (`countAnswers`) : la réception
+et la suppression passent par la même fonction. Vider ou supprimer un
+formulaire efface les compteurs en bloc.
+
+L'**expiration** ne défait pas les comptes (`expireAnswers`) : les résultats
+couvrent toute la vie du formulaire (`received`, que seule une suppression à
+la main fait baisser), et un retour expiré n'y laisse que des nombres. Une
+valeur gardée pour une question non déclarée, qui peut être un nom, passe au
+seau, et son libellé part avec le dernier compte qui la citait. Les deux voies
+passent par `forgetSubmission` (`forms.ts`).
 
 ### Une conservation propre aux retours, et des quotas
 
@@ -510,9 +520,9 @@ message attend parfois qu'on y réponde. Aucun rôle n'y échappe.
 
 Le ménage horaire efface les retours expirés **un par un**, par paquets de
 cent (`SUBMISSION_PRUNE_BATCH`, vingt paquets par site et par tour) : chacun
-est déchiffré pour défaire ses compteurs de répartition et celui de son
-formulaire, comme une suppression à la main, sans quoi la vue Résultats et le
-total compteraient des réponses parties. L'âge se lit sur `ts`, l'heure de
+est déchiffré pour retirer ce qu'une personne a écrit des compteurs (voir
+plus haut) et décompter les retours conservés de son formulaire, que son
+plafond de 50 000 lit. L'âge se lit sur `ts`, l'heure de
 réception. Un site qui ne pose pas la balise n'a jamais de mesure
 (`last_event_at` reste `NULL`) mais peut recevoir des retours : le ménage le
 visite aussi, pour ses retours seulement.
@@ -665,6 +675,7 @@ migrations/     001_forms.sql : les 4 tables ft_audience_* des retours
                 005_submission_bans.sql : ft_audience_bans, et la fin de la fermeture automatique
                 006_read_indexes.sql : deux index de lecture (entonnoirs, visiteurs des 24 h)
                 007_submission_retention.sql : submission_retention_days, la conservation des retours
+                008_form_received.sql : received, le total des retours reçus que l'expiration épargne
 _shared.ts      Ctx, StoredSite, nameRef, generatePublicKey, packOrigins/parseOrigins, loadSite,
                 loadHomeSite, siteCipher, toSite(…, projectCount), rangeWindow, toMetrics,
                 setIngest/ingestOf (le singleton), projectsProvider/projectCountsOf/projectUsageOf
@@ -913,11 +924,6 @@ ces deux jours sont toujours entiers sur le brut.
   plafond de débit et la liste d'origines le bornent ; le ménage horaire rend
   la place, mais seulement une fois les faits expirés. Il n'y a pas de plafond
   de libellés par site.
-- **Le libellé d'une réponse courte survit à ses retours.** Une réponse de 60
-  caractères au plus est rangée en libellé chiffré pour la répartition
-  (`ft_audience_form_labels`). Quand ses retours expirent ou sont supprimés,
-  son compteur tombe à zéro et l'écran ne la montre plus, mais le libellé
-  reste jusqu'à ce qu'on vide ou supprime le formulaire.
 - **Les compteurs des retours ne se recalculent pas.** La charge utile est
   chiffrée, donc rien ne relit le passé pour les rétablir : les deux voies qui
   les écrivent passent par `countAnswers`, mais aucune transaction ne les lie à

@@ -649,6 +649,7 @@ CREATE TABLE `ft_audience_forms` (
   `closed_at` bigint DEFAULT NULL,
   `closed_reason` varchar(16) COLLATE utf8mb4_general_ci DEFAULT NULL,
   `submissions` int NOT NULL DEFAULT '0',
+  `received` int NOT NULL DEFAULT '0',
   `last_at` bigint DEFAULT NULL,
   `sort_order` int NOT NULL DEFAULT '0',
   `content` text COLLATE utf8mb4_general_ci NOT NULL,

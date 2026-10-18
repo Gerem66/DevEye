@@ -100,10 +100,12 @@ export interface AudienceFormsRepo {
     ban(siteId: number, ipRef: string, until: number): Promise<void>;
     /** Retire les mises à l'écart échues. Rendu : lignes supprimées. */
     pruneBans(now: number): Promise<number>;
-    /** Le compteur dénormalisé et la date du dernier reçu, en une écriture. */
+    /** Les deux compteurs dénormalisés et la date du dernier reçu, en une écriture. */
     touchForm(formId: number, at: number): Promise<void>;
-    /** Corrige le compteur dénormalisé après une suppression à l'unité. */
+    /** Corrige le compteur des retours conservés après une suppression à l'unité. */
     bumpFormSubmissions(formId: number, delta: number): Promise<void>;
+    /** Corrige le total des retours reçus : une suppression à la main seulement, jamais une expiration. */
+    bumpFormReceived(formId: number, delta: number): Promise<void>;
     /**
      * Le libellé d'une question ou d'une réponse, créé au besoin. Jumeau de
      * `resolveLabel`, rattaché au formulaire.
@@ -116,6 +118,8 @@ export interface AudienceFormsRepo {
     /** Combien de questions distinctes ce formulaire indexe déjà. */
     countAnswerFields(formId: number): Promise<number>;
     bumpAnswer(formId: number, fieldId: number, valueId: number, delta: number): Promise<void>;
+    /** Retire un compte retombé à zéro, et son libellé de valeur quand plus rien ne le cite. */
+    dropAnswerIfEmpty(formId: number, fieldId: number, valueId: number): Promise<void>;
 
     // -- lectures -----------------------------------------------------------
     listSubmissions(input: {
@@ -213,7 +217,9 @@ export function createFormsRepo(q: SdkQueryable): AudienceFormsRepo {
             // arithmétique. Les libellés partent avec, plus rien ne les cite.
             await q.execute('DELETE FROM ft_audience_answers WHERE form_id = ?', [formId]);
             await q.execute('DELETE FROM ft_audience_form_labels WHERE form_id = ?', [formId]);
-            await q.execute('UPDATE ft_audience_forms SET submissions = 0, last_at = NULL WHERE id = ?', [formId]);
+            await q.execute('UPDATE ft_audience_forms SET submissions = 0, received = 0, last_at = NULL WHERE id = ?', [
+                formId
+            ]);
             return res.affectedRows;
         },
 
@@ -267,13 +273,20 @@ export function createFormsRepo(q: SdkQueryable): AudienceFormsRepo {
         async touchForm(formId, at) {
             await q.execute(
                 `UPDATE ft_audience_forms
-                    SET submissions = submissions + 1, last_at = GREATEST(COALESCE(last_at, 0), ?)
+                    SET submissions = submissions + 1, received = received + 1,
+                        last_at = GREATEST(COALESCE(last_at, 0), ?)
                   WHERE id = ?`,
                 [at, formId]
             );
         },
         async bumpFormSubmissions(formId, delta) {
             await q.execute('UPDATE ft_audience_forms SET submissions = GREATEST(0, submissions + ?) WHERE id = ?', [
+                delta,
+                formId
+            ]);
+        },
+        async bumpFormReceived(formId, delta) {
+            await q.execute('UPDATE ft_audience_forms SET received = GREATEST(0, received + ?) WHERE id = ?', [
                 delta,
                 formId
             ]);
@@ -326,6 +339,21 @@ export function createFormsRepo(q: SdkQueryable): AudienceFormsRepo {
                  VALUES (?, ?, ?, ?)
                  ON DUPLICATE KEY UPDATE hits = hits + ?`,
                 [formId, fieldId, valueId, delta, delta]
+            );
+        },
+        async dropAnswerIfEmpty(formId, fieldId, valueId) {
+            const res = await q.execute(
+                'DELETE FROM ft_audience_answers WHERE form_id = ? AND field_id = ? AND value_id = ? AND hits <= 0',
+                [formId, fieldId, valueId]
+            );
+            if (res.affectedRows === 0) return;
+            // Une même valeur (« oui ») peut répondre à deux questions : son libellé
+            // ne part qu'avec le dernier compte qui la cite.
+            await q.execute(
+                `DELETE FROM ft_audience_form_labels
+                  WHERE id = ? AND kind = 'value'
+                    AND NOT EXISTS (SELECT 1 FROM ft_audience_answers WHERE form_id = ? AND value_id = ?)`,
+                [valueId, formId, valueId]
             );
         },
 
