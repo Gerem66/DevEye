@@ -64,11 +64,12 @@ de dix, un seul cache, un seul chemin de résolution.
 
 ### 1.4 Ce qui reste en clair
 
-`public_key`, `origins`, `active`, `platform`, `visitor_mode`, les quotas et la
-rétention : exactement les champs dont l'ingestion a besoin pour **router une
-requête sans session ni clé**. La clé et les origines sont de toute façon
-publiques, la balise les expose dans le HTML de chaque page suivie. Le nom, la
-description et les pages de transit sont chiffrés dans `content`.
+`public_key`, `origins`, `active`, `platform`, `visitor_mode`, les quotas et les
+deux durées de conservation : exactement les champs dont l'ingestion et le
+ménage horaire ont besoin pour travailler **sans session ni clé**. La clé et
+les origines sont de toute façon publiques, la balise les expose dans le HTML
+de chaque page suivie. Le nom, la description et les pages de transit sont
+chiffrés dans `content`.
 
 ### 1.5 Le visiteur : anonyme par défaut, persistant sur demande
 
@@ -496,19 +497,30 @@ La suppression d'un retour rejoue les mêmes règles sur sa charge utile
 déchiffrée pour décrémenter exactement ce qu'il avait compté. D'où
 `answers.ts`, qui porte les règles pures **et** l'écriture qui les applique
 (`countAnswers`) : la réception et la suppression passent par la même fonction.
-Vider ou supprimer un formulaire efface les compteurs en bloc.
+Le geste d'un membre et l'expiration passent tous deux par `forgetSubmission`
+(`forms.ts`). Vider ou supprimer un formulaire efface les compteurs en bloc.
 
-### Aucune rétention sur les retours, mais des quotas
+### Une conservation propre aux retours, et des quotas
 
-`retention_days` purge les événements bruts. Il ne touche pas aux retours : un
-événement de mesure est jetable, un message est du contenu que l'utilisateur a
-demandé à collecter, et l'effacer en silence au bout de N jours serait une
-perte de données.
+Un retour porte des données personnelles que des tiers ont écrites (noms,
+adresses, messages). Il expire au bout de `submission_retention_days` (onglet
+Retours, « Conserver les réponses », 365 jours par défaut, de 30 à 1 095), une
+durée à part de celle des événements (`retention_days`) et plus longue : un
+message attend parfois qu'on y réponde. Aucun rôle n'y échappe.
+
+Le ménage horaire efface les retours expirés **un par un**, par paquets de
+cent (`SUBMISSION_PRUNE_BATCH`, vingt paquets par site et par tour) : chacun
+est déchiffré pour défaire ses compteurs de répartition et celui de son
+formulaire, comme une suppression à la main, sans quoi la vue Résultats et le
+total compteraient des réponses parties. L'âge se lit sur `ts`, l'heure de
+réception. Un site qui ne pose pas la balise n'a jamais de mesure
+(`last_event_at` reste `NULL`) mais peut recevoir des retours : le ménage le
+visite aussi, pour ses retours seulement.
 
 Un formulaire plein (`AUDIENCE_FORM_SUBMISSIONS_MAX`, 50 000) se ferme
 (`closed_reason = 'full'`) plutôt que d'écraser le plus ancien. Ce plafond ne
 peut pas être la seule borne : à lui seul, le brûler condamne le formulaire
-jusqu'à ce qu'on le vide à la main. Trois quotas en fenêtre glissante d'une
+jusqu'à ce qu'on le rouvre à la main, l'expiration ne le rouvrant pas. Trois quotas en fenêtre glissante d'une
 heure s'y ajoutent, réglables par site (onglet Retours), sur le motif du
 plafond horaire des signalements du socle (un `COUNT(*)` servi par un index
 composite, sans table de compteurs ni fenêtre à purger) :
@@ -652,6 +664,7 @@ migrations/     001_forms.sql : les 4 tables ft_audience_* des retours
                 004_usage.sql : ft_audience_usage, la consommation mensuelle par espace
                 005_submission_bans.sql : ft_audience_bans, et la fin de la fermeture automatique
                 006_read_indexes.sql : deux index de lecture (entonnoirs, visiteurs des 24 h)
+                007_submission_retention.sql : submission_retention_days, la conservation des retours
 _shared.ts      Ctx, StoredSite, nameRef, generatePublicKey, packOrigins/parseOrigins, loadSite,
                 loadHomeSite, siteCipher, toSite(…, projectCount), rangeWindow, toMetrics,
                 setIngest/ingestOf (le singleton), projectsProvider/projectCountsOf/projectUsageOf
@@ -660,12 +673,13 @@ sites.ts        createSiteRecord : la déclaration d'un site, partagée par site
 stats.ts        overview, breakdown, activity, live, summary (les cartes du sommaire, en un aller-retour)
 funnels.ts      funnelList, funnelAdd, funnelUpdate, funnelRemove
 forms.ts        formList, formAdd, formUpdate, formClear, formRemove, submissionList,
-                submissionRemove, results ; createFormRecord
+                submissionRemove, results ; createFormRecord, forgetSubmission
 validate.ts     un envoi confronté aux questions déclarées, et converti (pur)
 answers.ts      ce qu'on compte dans un retour (pur), et countAnswers qui l'applique
 handlers.ts     l'agrégat des vingt-cinq commandes
-service.ts      AudienceIngest sur FeatureServiceDeps : caches, file, lot, coalescence, ménage horaire,
-                sel dérivé, quotas ; submit() : la réception des retours, synchrone
+service.ts      AudienceIngest sur FeatureServiceDeps : caches, file, lot, coalescence, ménage horaire
+                (agrégat, rétention des événements et des retours), sel dérivé, quotas ;
+                submit() : la réception des retours, synchrone
 routes.ts       publicRoutes sur SdkPublicApp : GET /t.js · POST /api/t/b · POST /api/t/e · POST /api/t/s
 script.ts       le script servi aux pages suivies, et son ETag
 self.ts         AUDIENCE_SELF_PROVIDER : le suivi d'usage de DevEye
@@ -730,7 +744,7 @@ Forms/export.ts     le CSV des retours chargés
 SiteDialog.tsx      déclarer un site (nom, description, plateforme, origines) ; création seulement
 SiteGeneralPanel.tsx  onglet Général : identité, plateforme, origines, collecte, suppression
 SiteTrafficPanel.tsx  onglet Fréquentation : visiteurs, pages de transit, rétention, quota d'événements
-SiteFormsPanel.tsx    onglet Retours : formulaires déclarés, création à la volée, quotas
+SiteFormsPanel.tsx    onglet Retours : création à la volée, conservation des réponses, quotas
 FormEditor.tsx        déclarer un formulaire et ses questions typées ; renommer, fermer, vider, supprimer
 useSiteDraft.ts       le brouillon partagé des trois onglets (siteUpdate prend le site entier)
 InstallDialog.tsx   contextuel (`scope`) : même forme partout (étape 1 le bloc à coller,
@@ -764,7 +778,8 @@ du socle (`src/Utils/Env.ts`, `.env.template`) :
 | `TRUST_PROXY`        | `1`           | combien de proxys précèdent le serveur : le plafond par IP en dépend, sur les deux ports    |
 | `RATE_LIMIT_MAX`     | `200`         | le plafond global du serveur, par minute et par IP ; les routes d'ingestion ont le leur     |
 
-Les défauts d'un site (rétention 90 jours entre 7 et 730, quotas des retours
+Les défauts d'un site (rétention des événements 90 jours entre 7 et 730,
+conservation des retours 365 jours entre 30 et 1 095, quotas des retours
 5/60/200 par heure, 20 000 événements par adresse et par heure) sont des
 constantes de `src/contracts/domain.ts`, réglables site par site.
 
@@ -898,6 +913,11 @@ ces deux jours sont toujours entiers sur le brut.
   plafond de débit et la liste d'origines le bornent ; le ménage horaire rend
   la place, mais seulement une fois les faits expirés. Il n'y a pas de plafond
   de libellés par site.
+- **Le libellé d'une réponse courte survit à ses retours.** Une réponse de 60
+  caractères au plus est rangée en libellé chiffré pour la répartition
+  (`ft_audience_form_labels`). Quand ses retours expirent ou sont supprimés,
+  son compteur tombe à zéro et l'écran ne la montre plus, mais le libellé
+  reste jusqu'à ce qu'on vide ou supprime le formulaire.
 - **Les compteurs des retours ne se recalculent pas.** La charge utile est
   chiffrée, donc rien ne relit le passé pour les rétablir : les deux voies qui
   les écrivent passent par `countAnswers`, mais aucune transaction ne les lie à

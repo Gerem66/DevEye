@@ -2,6 +2,7 @@ import type { DeviceRow } from '@deveye/types';
 import { defineSdkFeature, FeatureError, type SdkFeatureContext } from '@deveye/types/sdk/server';
 
 import {
+    DEVICE_MAX_RETENTION_DAYS,
     devicesCancelDelete,
     devicesConfirm,
     devicesDelete,
@@ -182,6 +183,17 @@ export const devicesSetConfigFeature = defineSdkFeature<
     access: { ...WRITE, item: 'deviceId' },
     handler: async (ctx, input) => {
         const row = await loadHomeDevice(ctx, input.deviceId);
+        // Plus d'un an d'historique est réservé aux administrateurs ; une durée
+        // qu'ils ont posée reste tant qu'on n'y touche pas.
+        const wanted = input.retentionDays;
+        if (
+            !ctx.isAdmin &&
+            typeof wanted === 'number' &&
+            wanted > DEVICE_MAX_RETENTION_DAYS &&
+            wanted !== row.retention_days
+        ) {
+            throw new FeatureError('forbidden', 'Plus d’un an d’historique est réservé aux administrateurs.');
+        }
         const { deviceId: _id, ...patch } = input;
         await ctx.repo.devices.setConfig(row.id, patch);
         const updated = (await ctx.repo.devices.findById(row.id)) ?? row;

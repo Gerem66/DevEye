@@ -38,6 +38,7 @@ export async function createSiteRecord(
         origins: packOrigins(input.origins),
         active: input.active,
         retentionDays: input.retentionDays,
+        submissionRetentionDays: input.submissionRetentionDays,
         formsAuto: input.formsAuto,
         submissionIpQuota: input.submissionIpQuota,
         submissionBanQuota: input.submissionBanQuota,

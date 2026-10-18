@@ -181,6 +181,7 @@ export async function toSite(
         active: Number(row.active) === 1,
         planPaused,
         retentionDays: Number(row.retention_days),
+        submissionRetentionDays: Number(row.submission_retention_days),
         formsAuto: Number(row.forms_auto) === 1,
         submissionIpQuota: Number(row.submission_ip_quota),
         submissionBanQuota: Number(row.submission_ban_quota),

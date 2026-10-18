@@ -87,6 +87,15 @@ export const AUDIENCE_RETENTION_MIN_DAYS = 7;
 export const AUDIENCE_RETENTION_MAX_DAYS = 730;
 export const AUDIENCE_RETENTION_DEFAULT_DAYS = 90;
 
+/**
+ * Conservation des retours, à part de celle des événements : ce sont des
+ * données personnelles que des tiers ont écrites, et aucun rôle ne les garde
+ * au-delà de la borne haute.
+ */
+export const AUDIENCE_SUBMISSION_RETENTION_MIN_DAYS = 30;
+export const AUDIENCE_SUBMISSION_RETENTION_MAX_DAYS = 1095;
+export const AUDIENCE_SUBMISSION_RETENTION_DEFAULT_DAYS = 365;
+
 /** Événements acceptés dans un seul envoi. Borne le coût d'une requête publique. */
 export const AUDIENCE_BATCH_MAX = 20;
 
@@ -217,6 +226,12 @@ export const audienceSiteSchema = z.object({
     planPaused: z.boolean(),
     /** Conservation des événements bruts. L'agrégat journalier, lui, survit. */
     retentionDays: z.number().int().min(AUDIENCE_RETENTION_MIN_DAYS).max(AUDIENCE_RETENTION_MAX_DAYS),
+    /** Conservation des retours. Un retour expiré défait aussi ce qu'il comptait dans les résultats. */
+    submissionRetentionDays: z
+        .number()
+        .int()
+        .min(AUDIENCE_SUBMISSION_RETENTION_MIN_DAYS)
+        .max(AUDIENCE_SUBMISSION_RETENTION_MAX_DAYS),
     /**
      * Accepter un nom de formulaire jamais déclaré, et le créer. Éteint par
      * défaut : allumé, quiconque lit la clé publique dans la page décide de ce
@@ -462,9 +477,9 @@ export const AUDIENCE_ANSWER_VALUE_MAX_LENGTH = 60;
 export const AUDIENCE_ANSWER_VALUES_MAX = 50;
 
 /**
- * Retours conservés par formulaire. Un plafond, jamais une rétention : une
- * visite est jetable, un message ne l'est pas, et l'effacer en silence au bout
- * de N jours perdrait ce que l'utilisateur avait demandé à collecter.
+ * Retours conservés par formulaire, en plus de leur durée de conservation.
+ * Atteint, il cesse d'accepter plutôt que d'effacer le plus ancien : ce que
+ * l'utilisateur a demandé à collecter ne disparaît pas pour faire de la place.
  *
  * Garde de stockage seulement, et surtout pas la seule borne : atteint, il
  * condamne le formulaire jusqu'à ce qu'on le vide. Ce qui arrête une rafale
@@ -745,6 +760,7 @@ export interface AudienceSiteRow {
     origins: string | null;
     active: number;
     retention_days: number;
+    submission_retention_days: number;
     forms_auto: number;
     submission_ip_quota: number;
     submission_ban_quota: number;

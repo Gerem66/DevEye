@@ -235,7 +235,7 @@ export function metricRepo(q: SdkQueryable): MetricRepo {
                 `DELETE m FROM device_metrics m
                  JOIN devices d ON d.id = m.device_id
                  WHERE m.device_id = ? AND m.ts BETWEEN ? AND ?
-                   AND m.pinned = 0 AND d.status <> 'archived'
+                   AND m.pinned = 0
                    AND m.ts < (UNIX_TIMESTAMP() * 1000) - COALESCE(d.retention_days, ?) * 86400000`,
                 [deviceId, from, to, defaultDays]
             );
@@ -246,7 +246,6 @@ export function metricRepo(q: SdkQueryable): MetricRepo {
                 `DELETE m FROM device_metrics m
                  JOIN devices d ON d.id = m.device_id
                  WHERE m.pinned = 0
-                   AND d.status <> 'archived'
                    AND m.ts < (UNIX_TIMESTAMP() * 1000) - COALESCE(d.retention_days, ?) * 86400000`,
                 [defaultDays]
             );

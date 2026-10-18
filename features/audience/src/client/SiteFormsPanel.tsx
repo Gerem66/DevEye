@@ -1,17 +1,18 @@
 import { ErrorNote, ReadOnlyNotice, SaveButton, settingsStyles as shell, Switch, TextInput } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
+import { AUDIENCE_SUBMISSION_RETENTION_MAX_DAYS, AUDIENCE_SUBMISSION_RETENTION_MIN_DAYS } from '../contracts/domain';
 
 import { useSiteDraft } from './useSiteDraft';
 
 /**
- * Ce qui ne règle que les retours : qui a le droit de créer un canal, et à quel
- * débit on les remplit.
+ * Ce qui ne règle que les retours : qui a le droit de créer un canal, combien
+ * de temps on les garde, et à quel débit on les remplit.
  *
  * Les formulaires eux-mêmes se déclarent et se modifient **dans la vue**, sous
  * ceux qui existent déjà, comme un projet relie ses bases et ses dépôts : un
  * formulaire est du contenu qu'on ajoute, pas une case à cocher qu'on va
- * chercher derrière un bouton de réglages. Ne restent ici que les trois
- * décisions qui valent pour le site entier.
+ * chercher derrière un bouton de réglages. Ne restent ici que les décisions
+ * qui valent pour le site entier.
  */
 export default function SiteFormsPanel({ scope, canWrite }: SettingsPanelProps) {
     const { site, draft, busy, error, set, save, dirty } = useSiteDraft(scope);
@@ -36,6 +37,23 @@ export default function SiteFormsPanel({ scope, canWrite }: SettingsPanelProps) 
                 label='Créer les formulaires non déclarés'
                 hint='Éteint, un nom inconnu est ignoré. Allumé, qui lit la clé publique dans la page peut faire apparaître des formulaires et des colonnes : à n’ouvrir que le temps d’une intégration.'
             />
+
+            <div className={shell.field}>
+                <span className={shell.sectionLabel}>Conserver les réponses (jours)</span>
+                <TextInput
+                    type='number'
+                    value={draft.submissionRetentionDays}
+                    min={AUDIENCE_SUBMISSION_RETENTION_MIN_DAYS}
+                    max={AUDIENCE_SUBMISSION_RETENTION_MAX_DAYS}
+                    disabled={!editable}
+                    onChange={(e) => set('submissionRetentionDays', e.target.value)}
+                />
+                <span className={shell.fieldHint}>
+                    Les réponses plus anciennes sont effacées automatiquement, avec ce qu’elles comptaient dans les
+                    résultats. De {AUDIENCE_SUBMISSION_RETENTION_MIN_DAYS} à {AUDIENCE_SUBMISSION_RETENTION_MAX_DAYS}{' '}
+                    jours.
+                </span>
+            </div>
 
             <div className={shell.field}>
                 <span className={shell.sectionLabel}>Retours par visiteur et par heure</span>

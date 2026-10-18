@@ -24,7 +24,8 @@ import {
 
 import { dayBounds, dayKey, labelRef, monthKey, normalizePath, originAllowed, persistentVisitorRef } from './normalize';
 import { countAnswers } from './answers';
-import type { AudienceRepo, PendingEventRow } from './repo';
+import { forgetSubmission } from './forms';
+import type { AudienceMaintenanceRow, AudienceRepo, PendingEventRow } from './repo';
 import { validateSubmission, type ValidationReason } from './validate';
 import { nameRef, parseOrigins, readJson } from './_shared';
 
@@ -194,6 +195,11 @@ const EVENT_COUNT_CACHE_MAX = 50_000;
  */
 const PRUNE_BATCH = 5_000;
 const PRUNE_BATCHES_MAX = 20;
+/**
+ * Plus petit pour les retours : chacun est déchiffré pour défaire ses
+ * compteurs, et sa charge utile peut peser plus de cent kilo-octets.
+ */
+const SUBMISSION_PRUNE_BATCH = 100;
 
 /**
  * Les deux paramètres de la dérivation du sel des visiteurs, fixes : le sel
@@ -906,10 +912,8 @@ export class AudienceIngest {
     }
 
     /**
-     * Le ménage horaire : agrégat, rétention, libellés orphelins. L'agrégat est
-     * refait pour hier et aujourd'hui : aujourd'hui bouge encore, et rien ne
-     * garantit qu'une instance tournait à minuit, alors qu'un jour manquant est
-     * un trou définitif dès que les événements bruts ont expiré.
+     * Le ménage horaire : agrégat, rétention des événements et des retours,
+     * libellés orphelins.
      */
     private async maintain(): Promise<void> {
         // `flush()` a la sienne depuis toujours ; celui-ci n'en avait pas, alors
@@ -922,28 +926,8 @@ export class AudienceIngest {
             const sites = await this.deps.repo.listForMaintenance();
 
             for (const site of sites) {
-                for (const at of [now - 86400, now]) {
-                    const { from, to } = dayBounds(at);
-                    await this.deps.repo.rollupDay(site.id, dayKey(at), from, to);
-                }
-
-                const before = now - site.retention_days * 86400;
-                const events = await this.pruneInBatches((limit) => this.deps.repo.pruneEvents(site.id, before, limit));
-                const sessions = await this.pruneInBatches((limit) =>
-                    this.deps.repo.pruneSessions(site.id, before, limit)
-                );
-                if (events + sessions > 0) {
-                    // Les caches sont vidés AVANT le balayage : entre la suppression
-                    // et l'oubli, toute vidange emploierait des identifiants que la
-                    // base vient de perdre, et le lot entier buterait sur une clé
-                    // étrangère morte.
-                    this.labels.clear();
-                    this.sessions.clear();
-                    // Les libellés ne sont balayés que si quelque chose a réellement
-                    // disparu : la requête parcourt deux tables de faits.
-                    const labels = await this.deps.repo.pruneOrphanLabels(site.id);
-                    this.deps.logger.info({ siteId: site.id, events, sessions, labels }, 'Audience retention sweep');
-                }
+                if (site.last_event_at !== null) await this.sweepTraffic(site, now);
+                await this.expireSubmissions(site, now);
             }
 
             // Les mises à l'écart échues : une ligne par provenance bannie, qui ne
@@ -957,13 +941,62 @@ export class AudienceIngest {
         }
     }
 
+    /**
+     * L'agrégat, refait pour hier et aujourd'hui : aujourd'hui bouge encore, et
+     * rien ne garantit qu'une instance tournait à minuit, alors qu'un jour
+     * manquant est un trou définitif dès que les événements bruts ont expiré.
+     * Puis la rétention des événements et des visites.
+     */
+    private async sweepTraffic(site: AudienceMaintenanceRow, now: number): Promise<void> {
+        for (const at of [now - 86400, now]) {
+            const { from, to } = dayBounds(at);
+            await this.deps.repo.rollupDay(site.id, dayKey(at), from, to);
+        }
+
+        const before = now - site.retention_days * 86400;
+        const events = await this.pruneInBatches((limit) => this.deps.repo.pruneEvents(site.id, before, limit));
+        const sessions = await this.pruneInBatches((limit) => this.deps.repo.pruneSessions(site.id, before, limit));
+        if (events + sessions > 0) {
+            // Les caches sont vidés AVANT le balayage : entre la suppression
+            // et l'oubli, toute vidange emploierait des identifiants que la
+            // base vient de perdre, et le lot entier buterait sur une clé
+            // étrangère morte.
+            this.labels.clear();
+            this.sessions.clear();
+            // Les libellés ne sont balayés que si quelque chose a réellement
+            // disparu : la requête parcourt deux tables de faits.
+            const labels = await this.deps.repo.pruneOrphanLabels(site.id);
+            this.deps.logger.info({ siteId: site.id, events, sessions, labels }, 'Audience retention sweep');
+        }
+    }
+
+    /**
+     * Les retours au-delà de la conservation du site, effacés comme une
+     * suppression à la main : chacun défait ses compteurs de répartition et
+     * celui de son formulaire.
+     */
+    private async expireSubmissions(site: AudienceMaintenanceRow, now: number): Promise<void> {
+        const before = now - site.submission_retention_days * 86400;
+        const scope = { repo: this.deps.repo, cipher: this.deps.cipherFor(site.workspace_id) };
+        let removed = 0;
+        await this.pruneInBatches(async (limit) => {
+            const rows = await this.deps.repo.listExpiredSubmissions(site.id, before, limit);
+            for (const row of rows) if (await forgetSubmission(scope, row)) removed++;
+            return rows.length;
+        }, SUBMISSION_PRUNE_BATCH);
+        if (removed === 0) return;
+        // Le cache tient le compte de chaque formulaire, que borne le plafond de stockage.
+        this.forms.clear();
+        this.deps.logger.info({ siteId: site.id, submissions: removed }, 'Audience: retours expirés effacés');
+    }
+
     /** Efface par paquets jusqu'à épuisement, ou jusqu'au plafond du tour. */
-    private async pruneInBatches(prune: (limit: number) => Promise<number>): Promise<number> {
+    private async pruneInBatches(prune: (limit: number) => Promise<number>, batch = PRUNE_BATCH): Promise<number> {
         let total = 0;
         for (let round = 0; round < PRUNE_BATCHES_MAX; round++) {
-            const gone = await prune(PRUNE_BATCH);
+            const gone = await prune(batch);
             total += gone;
-            if (gone < PRUNE_BATCH) break;
+            if (gone < batch) break;
         }
         return total;
     }

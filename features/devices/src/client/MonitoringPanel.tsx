@@ -28,7 +28,7 @@ import {
     type PresenceEvent,
     type ProcessSample
 } from '@deveye/types';
-import type { DaySummary } from '../contracts/commands';
+import { PIN_MAX_SPAN_MS, type DaySummary } from '../contracts/commands';
 import { AgentPanel } from './AgentPanel';
 import { HardwareInfo } from './HardwareInfo';
 import { Connections } from './Connections';
@@ -561,6 +561,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     }, [focus, snapshotTimes, pinnedSet]);
     // Fully pinned already: the action unpins.
     const allPinned = !!pinTarget && pinTarget.count > 0 && pinTarget.pinnedCount === pinTarget.count;
+    const pinTooWide = !!pinTarget && !allPinned && pinTarget.to - pinTarget.from > PIN_MAX_SPAN_MS;
 
     const refreshSnapshotMarks = useCallback(() => {
         const id = idRef.current;
@@ -1251,11 +1252,13 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                             type='button'
                             className={`${styles.snapshotPinBtn} ${allPinned ? styles.snapshotPinBtnActive : ''}`}
                             onClick={() => void setPinned(!allPinned)}
-                            disabled={pinning}
+                            disabled={pinning || pinTooWide}
                             title={
                                 allPinned
                                     ? 'Lever la conservation : le(s) snapshot(s) pourront de nouveau être nettoyés'
-                                    : 'Conserver indéfiniment : ce(s) snapshot(s) ignore(nt) le nettoyage automatique'
+                                    : pinTooWide
+                                      ? 'Une zone conservée couvre sept jours au plus : resserrez la sélection'
+                                      : 'Conserver indéfiniment : ce(s) snapshot(s) ignore(nt) le nettoyage automatique'
                             }
                         >
                             <span className={`icon ${allPinned ? 'icon-star' : 'icon-star-outline'}`} />

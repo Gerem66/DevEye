@@ -78,6 +78,12 @@ function fakeRepo(): FakeRepo {
             this.lookups.splice(0, this.lookups.length, ...kept);
             return removed;
         },
+        async purgeLookupsBefore(cutoff) {
+            const kept = this.lookups.filter((l) => l.created >= cutoff);
+            const removed = this.lookups.length - kept.length;
+            this.lookups.splice(0, this.lookups.length, ...kept);
+            return removed;
+        },
         async listKeys(workspaceId) {
             return this.keys.filter((k) => k.workspace_id === workspaceId);
         },

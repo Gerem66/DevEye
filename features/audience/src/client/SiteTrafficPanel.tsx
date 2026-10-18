@@ -90,7 +90,8 @@ export default function SiteTrafficPanel({ scope, canWrite }: SettingsPanelProps
                 />
                 <span className={shell.fieldHint}>
                     Le détail expire ; les totaux par jour sont gardés pour toujours. De {AUDIENCE_RETENTION_MIN_DAYS} à{' '}
-                    {AUDIENCE_RETENTION_MAX_DAYS} jours. Les retours, eux, ne sont soumis à aucune conservation.
+                    {AUDIENCE_RETENTION_MAX_DAYS} jours. Les réponses des formulaires ont leur propre durée, dans
+                    l’onglet Retours.
                 </span>
             </div>
 

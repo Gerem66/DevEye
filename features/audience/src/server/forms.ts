@@ -19,7 +19,8 @@ import {
     type AudienceFormMode,
     type AudienceFormRow,
     type AudienceResultField,
-    type AudienceSubmission
+    type AudienceSubmission,
+    type AudienceSubmissionRow
 } from '../contracts/domain';
 import { defineSdkFeature, FeatureError, type SdkCipher } from '@deveye/types/sdk/server';
 
@@ -294,6 +295,28 @@ export const audienceSubmissionListFeature = defineSdkFeature({
     }
 });
 
+/**
+ * Efface un retour et défait ce qu'il comptait. Les compteurs de répartition
+ * sont tenus à la réception : les défaire demande de relire ce que ce retour
+ * portait et de rejouer les mêmes règles, sans quoi la vue Résultats compterait
+ * indéfiniment des réponses effacées. Le geste d'un membre et l'expiration
+ * passent tous deux par ici. `false` : la ligne était déjà partie.
+ */
+export async function forgetSubmission(
+    { repo, cipher }: { repo: AudienceFormsRepo; cipher: SdkCipher },
+    row: Pick<AudienceSubmissionRow, 'id' | 'form_id' | 'content'>
+): Promise<boolean> {
+    const stored = await readJson<Partial<StoredSubmission>>(cipher, row.content);
+    // Deux suppressions du même retour lisent toutes deux sa ligne : sans ce
+    // verdict, la seconde ne retire rien et décrémente quand même, et les
+    // compteurs partent faux pour toujours (`content` est chiffré, rien ne les
+    // recalcule).
+    if (!(await repo.removeSubmission(Number(row.id)))) return false;
+    if (stored?.fields) await countAnswers(repo, cipher, Number(row.form_id), stored.fields, -1);
+    await repo.bumpFormSubmissions(Number(row.form_id), -1);
+    return true;
+}
+
 export const audienceSubmissionRemoveFeature = defineSdkFeature({
     ...audienceSubmissionRemove,
     mutates: true,
@@ -302,23 +325,7 @@ export const audienceSubmissionRemoveFeature = defineSdkFeature({
         const row = await ctx.repo.findSubmission(input.submissionId);
         if (!row) throw new FeatureError('not_found', 'Retour introuvable');
         await loadHomeSite(ctx, Number(row.site_id));
-
-        // Les compteurs de répartition sont tenus à la réception : les défaire ici
-        // demande de relire ce que ce retour portait et de rejouer les mêmes règles.
-        // Sans cela, la vue Résultats compterait indéfiniment des réponses effacées.
-        const cipher = ctx.cipher();
-        const stored = await readJson<Partial<StoredSubmission>>(cipher, row.content);
-        // Deux suppressions du même retour lisent toutes deux sa ligne : sans ce
-        // verdict, la seconde ne retire rien et décrémente quand même, et les
-        // compteurs partent faux pour toujours (`content` est chiffré, rien ne les
-        // recalcule).
-        if (!(await ctx.repo.removeSubmission(input.submissionId))) return { ok: true as const };
-        if (stored?.fields) {
-            await countAnswers(ctx.repo, cipher, Number(row.form_id), stored.fields, -1);
-        }
-        // Le compteur dénormalisé du formulaire suit le même sort.
-        await ctx.repo.bumpFormSubmissions(Number(row.form_id), -1);
-        ingestOf()?.invalidate();
+        if (await forgetSubmission({ repo: ctx.repo, cipher: ctx.cipher() }, row)) ingestOf()?.invalidate();
         return { ok: true as const };
     }
 });

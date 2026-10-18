@@ -65,6 +65,7 @@ function site(over: Partial<AudienceSiteRow> = {}): AudienceSiteRow {
         origins: 'exemple.fr',
         active: 1,
         retention_days: 30,
+        submission_retention_days: 365,
         forms_auto: 0,
         submission_ip_quota: 5,
         submission_ban_quota: 60,
@@ -171,7 +172,13 @@ function fakeRepo(sites: AudienceSiteRow[]): FakeRepo {
             repo.touchedSites.push([siteId, at]);
         },
         listForMaintenance: async () =>
-            sites.map((s) => ({ id: s.id, workspace_id: s.workspace_id, retention_days: s.retention_days })),
+            sites.map((s) => ({
+                id: s.id,
+                workspace_id: s.workspace_id,
+                retention_days: s.retention_days,
+                submission_retention_days: s.submission_retention_days,
+                last_event_at: s.last_event_at
+            })),
         async rollupDay(siteId, day, from, to) {
             repo.rollups.push([siteId, day, from, to]);
         },
@@ -299,7 +306,17 @@ function fakeRepo(sites: AudienceSiteRow[]): FakeRepo {
         },
         listSubmissions: unused,
         findSubmission: async (id) => repo.submissions.find((b) => b.id === id) ?? null,
-        removeSubmission: unused,
+        async removeSubmission(id) {
+            const i = repo.submissions.findIndex((b) => b.id === id);
+            if (i === -1) return false;
+            repo.submissions.splice(i, 1);
+            return true;
+        },
+        listExpiredSubmissions: async (siteId, before, limit) =>
+            repo.submissions
+                .filter((b) => b.site_id === siteId && b.ts < before)
+                .sort((a, b) => a.ts - b.ts)
+                .slice(0, limit),
         readAnswers: unused,
         feedbackStats: unused,
         dailyPoints: unused,
@@ -523,7 +540,7 @@ describe('le cache des sites', () => {
 
 describe('le ménage', () => {
     it('agrège hier et aujourd’hui, élague à la rétention du site, et balaie les libellés orphelins', async () => {
-        const repo = fakeRepo([site({ retention_days: 30 })]);
+        const repo = fakeRepo([site({ retention_days: 30, last_event_at: 1 })]);
         const { maintain } = ingestWith(repo);
         const before = Math.floor(Date.now() / 1000);
         await maintain();
@@ -696,6 +713,56 @@ describe('AudienceIngest : les retours', () => {
 
         // Un seul des deux comptes bouge, et aucun ne passe sous zéro.
         assert.deepEqual([...repo.answers.values()].sort(), [0, 1]);
+    });
+});
+
+describe('le ménage des retours', () => {
+    it('efface les retours au-delà de la conservation du site, eux seuls, et défait leurs compteurs', async () => {
+        // Aucune mesure reçue : un site sans balise voit quand même ses retours expirer.
+        const repo = fakeRepo([autoSite({ submission_retention_days: 30 })]);
+        const { ingest, maintain } = ingestWith(repo);
+        for (const answer of ['oui', 'non', 'non']) {
+            await ingest.submit(submission({ fields: { recommande: answer } }));
+        }
+        const now = Math.floor(Date.now() / 1000);
+        repo.submissions[0].ts = now - 31 * 86400;
+        repo.submissions[1].ts = now - 29 * 86400;
+
+        await maintain();
+
+        assert.deepEqual(
+            repo.submissions.map((b) => JSON.parse(b.content).fields.recommande),
+            ['non', 'non']
+        );
+        assert.equal(repo.forms[0].submissions, 2);
+        const field = fieldIdOf(repo, 'recommande');
+        const valueId = (value: string) => repo.formLabels.find((l) => l.kind === 'value' && l.content === value)?.id;
+        assert.equal(repo.answers.get(`${repo.forms[0].id}:${field}:${valueId('oui')}`), 0);
+        assert.equal(repo.answers.get(`${repo.forms[0].id}:${field}:${valueId('non')}`), 2);
+        assert.deepEqual(repo.rollups, [], 'rien à agréger sur un site sans mesure');
+    });
+
+    it('vide un arriéré plus grand qu’un paquet dans le même tour', async () => {
+        const repo = fakeRepo([site({ submission_retention_days: 30 })]);
+        repo.forms.push(declared([textField('message')], { submissions: 150 }));
+        const old = Math.floor(Date.now() / 1000) - 400 * 86400;
+        for (let i = 0; i < 150; i++) {
+            repo.submissions.push({
+                id: 1000 + i,
+                form_id: 10,
+                site_id: 1,
+                ts: old + i,
+                ip_ref: 'ip',
+                session_id: null,
+                content: JSON.stringify({ fields: { message: 'bonjour' } })
+            });
+        }
+        const { maintain } = ingestWith(repo);
+
+        await maintain();
+
+        assert.equal(repo.submissions.length, 0);
+        assert.equal(repo.forms[0].submissions, 0);
     });
 });
 

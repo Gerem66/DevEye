@@ -238,6 +238,10 @@ garde dans les secrets de la CI, jamais sur le serveur surveillé.
 | `uptime_daily`                 | agrégat par jour UTC        | **jamais**                                                   |
 | `uptime_incidents`             | pannes (début / fin)        | **jamais**                                                   |
 
+Deux ans de détail au plus, sauf pour un administrateur de l'instance, seul à
+pouvoir garder davantage ou tout (`NULL`) : les pings bruts sont ce qui fait
+grossir la base.
+
 C'est ce découpage qui tient la promesse « remonter des mois ou des années » :
 l'agrégat journalier est écrit dans le même souffle que le ping brut
 (`INSERT … ON DUPLICATE KEY UPDATE`, donc toujours en phase, sans job

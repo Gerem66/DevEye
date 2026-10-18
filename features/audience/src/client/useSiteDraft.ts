@@ -6,6 +6,8 @@ import {
     AUDIENCE_QUOTA_MAX,
     AUDIENCE_RETENTION_MAX_DAYS,
     AUDIENCE_RETENTION_MIN_DAYS,
+    AUDIENCE_SUBMISSION_RETENTION_MAX_DAYS,
+    AUDIENCE_SUBMISSION_RETENTION_MIN_DAYS,
     type AudiencePlatform,
     type AudienceSite,
     type AudienceVisitorMode
@@ -41,6 +43,7 @@ export interface Draft {
      * contrat sont vérifiées à l'enregistrement.
      */
     retentionDays: string;
+    submissionRetentionDays: string;
     formsAuto: boolean;
     submissionIpQuota: string;
     submissionBanQuota: string;
@@ -58,6 +61,7 @@ function draftOf(site: AudienceSite): Draft {
         visitorMode: site.visitorMode,
         transitPaths: site.transitPaths.join('\n'),
         retentionDays: String(site.retentionDays),
+        submissionRetentionDays: String(site.submissionRetentionDays),
         formsAuto: site.formsAuto,
         submissionIpQuota: String(site.submissionIpQuota),
         submissionBanQuota: String(site.submissionBanQuota),
@@ -129,6 +133,11 @@ export function useSiteDraft(scope: SdkSettingsScope): SitePanel {
         if (busy || !site || !draft) return;
         const name = draft.name.trim();
         const retentionDays = bounded(draft.retentionDays, AUDIENCE_RETENTION_MIN_DAYS, AUDIENCE_RETENTION_MAX_DAYS);
+        const submissionRetentionDays = bounded(
+            draft.submissionRetentionDays,
+            AUDIENCE_SUBMISSION_RETENTION_MIN_DAYS,
+            AUDIENCE_SUBMISSION_RETENTION_MAX_DAYS
+        );
         const submissionIpQuota = bounded(draft.submissionIpQuota, 0, AUDIENCE_QUOTA_MAX);
         const submissionBanQuota = bounded(draft.submissionBanQuota, 0, AUDIENCE_QUOTA_MAX);
         const formHourlyQuota = bounded(draft.formHourlyQuota, 0, AUDIENCE_QUOTA_MAX);
@@ -139,15 +148,17 @@ export function useSiteDraft(scope: SdkSettingsScope): SitePanel {
             name.length === 0
                 ? 'Donnez un nom à ce site.'
                 : retentionDays === null
-                  ? `La conservation va de ${AUDIENCE_RETENTION_MIN_DAYS} à ${AUDIENCE_RETENTION_MAX_DAYS} jours.`
-                  : submissionIpQuota === null ||
-                      submissionBanQuota === null ||
-                      formHourlyQuota === null ||
-                      eventIpQuota === null
-                    ? `Un quota est un entier, de 0 à ${AUDIENCE_QUOTA_MAX}.`
-                    : transitPaths.length > AUDIENCE_MAX_TRANSIT_PATHS
-                      ? `Au plus ${AUDIENCE_MAX_TRANSIT_PATHS} pages de transit.`
-                      : null;
+                  ? `La conservation des événements va de ${AUDIENCE_RETENTION_MIN_DAYS} à ${AUDIENCE_RETENTION_MAX_DAYS} jours.`
+                  : submissionRetentionDays === null
+                    ? `La conservation des réponses va de ${AUDIENCE_SUBMISSION_RETENTION_MIN_DAYS} à ${AUDIENCE_SUBMISSION_RETENTION_MAX_DAYS} jours.`
+                    : submissionIpQuota === null ||
+                        submissionBanQuota === null ||
+                        formHourlyQuota === null ||
+                        eventIpQuota === null
+                      ? `Un quota est un entier, de 0 à ${AUDIENCE_QUOTA_MAX}.`
+                      : transitPaths.length > AUDIENCE_MAX_TRANSIT_PATHS
+                        ? `Au plus ${AUDIENCE_MAX_TRANSIT_PATHS} pages de transit.`
+                        : null;
         if (problem) {
             setError({ message: problem, code: 'validation' });
             throw new Error(problem);
@@ -166,6 +177,7 @@ export function useSiteDraft(scope: SdkSettingsScope): SitePanel {
                 visitorMode: draft.visitorMode,
                 transitPaths,
                 retentionDays: retentionDays as number,
+                submissionRetentionDays: submissionRetentionDays as number,
                 formsAuto: draft.formsAuto,
                 submissionIpQuota: submissionIpQuota as number,
                 submissionBanQuota: submissionBanQuota as number,

@@ -80,6 +80,9 @@ export interface AudienceMaintenanceRow {
     id: number;
     workspace_id: number;
     retention_days: number;
+    submission_retention_days: number;
+    /** `NULL` : le site n'a jamais reçu de mesure, seulement des retours. */
+    last_event_at: number | null;
 }
 
 /**
@@ -158,6 +161,7 @@ export interface AudienceRepo extends AudienceFormsRepo {
         origins: string | null;
         active: boolean;
         retentionDays: number;
+        submissionRetentionDays: number;
         formsAuto: boolean;
         submissionIpQuota: number;
         submissionBanQuota: number;
@@ -175,6 +179,7 @@ export interface AudienceRepo extends AudienceFormsRepo {
             origins: string | null;
             active: boolean;
             retentionDays: number;
+            submissionRetentionDays: number;
             formsAuto: boolean;
             submissionIpQuota: number;
             submissionBanQuota: number;
@@ -422,9 +427,9 @@ export function createRepo(q: SdkQueryable): AudienceRepo {
             const res = await q.execute(
                 `INSERT INTO audience_sites
                      (workspace_id, public_key, name_ref, platform, visitor_mode, origins, active,
-                      retention_days, forms_auto, submission_ip_quota, submission_ban_quota,
-                      form_hourly_quota, event_ip_quota, sort_order, content)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                      retention_days, submission_retention_days, forms_auto, submission_ip_quota,
+                      submission_ban_quota, form_hourly_quota, event_ip_quota, sort_order, content)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
                     input.workspaceId,
                     input.publicKey,
@@ -434,6 +439,7 @@ export function createRepo(q: SdkQueryable): AudienceRepo {
                     input.origins,
                     input.active ? 1 : 0,
                     input.retentionDays,
+                    input.submissionRetentionDays,
                     input.formsAuto ? 1 : 0,
                     input.submissionIpQuota,
                     input.submissionBanQuota,
@@ -450,8 +456,9 @@ export function createRepo(q: SdkQueryable): AudienceRepo {
             const res = await q.execute(
                 `UPDATE audience_sites
                     SET name_ref = ?, platform = ?, visitor_mode = ?, origins = ?, active = ?,
-                        retention_days = ?, forms_auto = ?, submission_ip_quota = ?,
-                        submission_ban_quota = ?, form_hourly_quota = ?, event_ip_quota = ?, content = ?
+                        retention_days = ?, submission_retention_days = ?, forms_auto = ?,
+                        submission_ip_quota = ?, submission_ban_quota = ?, form_hourly_quota = ?,
+                        event_ip_quota = ?, content = ?
                   WHERE id = ? AND workspace_id = ?`,
                 [
                     input.nameRef,
@@ -460,6 +467,7 @@ export function createRepo(q: SdkQueryable): AudienceRepo {
                     input.origins,
                     input.active ? 1 : 0,
                     input.retentionDays,
+                    input.submissionRetentionDays,
                     input.formsAuto ? 1 : 0,
                     input.submissionIpQuota,
                     input.submissionBanQuota,
@@ -915,14 +923,20 @@ export function createRepo(q: SdkQueryable): AudienceRepo {
         async listForMaintenance() {
             // Un site qui n'a jamais rien reçu n'a ni agrégat à refaire ni ligne à
             // élaguer : l'écarter épargne six requêtes par tour et par site mort.
+            // Un site sans balise peut recevoir des retours, qui expirent aussi.
             const rows = await q.query<AudienceMaintenanceRow>(
-                `SELECT id, workspace_id, retention_days FROM audience_sites
-                  WHERE last_event_at IS NOT NULL ORDER BY id ASC`
+                `SELECT s.id, s.workspace_id, s.retention_days, s.submission_retention_days, s.last_event_at
+                   FROM audience_sites s
+                  WHERE s.last_event_at IS NOT NULL
+                     OR EXISTS (SELECT 1 FROM ft_audience_submissions b WHERE b.site_id = s.id)
+                  ORDER BY s.id ASC`
             );
             return rows.map((row) => ({
                 id: Number(row.id),
                 workspace_id: Number(row.workspace_id),
-                retention_days: Number(row.retention_days)
+                retention_days: Number(row.retention_days),
+                submission_retention_days: Number(row.submission_retention_days),
+                last_event_at: row.last_event_at === null ? null : Number(row.last_event_at)
             }));
         },
         async rollupDay(siteId, day, from, to) {

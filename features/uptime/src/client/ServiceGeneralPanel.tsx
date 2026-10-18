@@ -12,6 +12,7 @@ import {
     SegmentedControl,
     settingsStyles as shell,
     TextInput,
+    useCurrentUser,
     type ConfirmRequest,
     type ErrorNoteInput,
     type SearchSelectOption
@@ -19,6 +20,7 @@ import {
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 import {
     UPTIME_DEFAULT_RETENTION_DAYS,
+    UPTIME_MAX_RETENTION_DAYS,
     UPTIME_THRESHOLD_MAX,
     UPTIME_TIMEOUT_MAX,
     UPTIME_TIMEOUT_MIN,
@@ -44,6 +46,7 @@ const INTERVALS: { value: number; label: string }[] = [
 /**
  * Combien de temps les sondes brutes sont gardées. Le résumé journalier n'est
  * jamais élagué : une rétention courte ne coûte que le détail ping par ping.
+ * Au-delà de deux ans, et tout garder, sont réservés aux administrateurs.
  */
 const RETENTIONS: { value: number | null; label: string }[] = [
     { value: 7, label: '7 jours' },
@@ -54,10 +57,6 @@ const RETENTIONS: { value: number | null; label: string }[] = [
     { value: 1825, label: '5 ans' },
     { value: null, label: 'Tout garder' }
 ];
-const RETENTION_OPTIONS: readonly SearchSelectOption[] = RETENTIONS.map((r) => ({
-    value: r.value === null ? '' : String(r.value),
-    label: r.label
-}));
 
 /** Tout ce qu'`uptime.update` prend : l'identité du service et ses réglages fins. */
 interface ServiceDraft extends ServiceTuning {
@@ -107,6 +106,7 @@ export default function ServiceGeneralPanel({ scope, canWrite, gone }: SettingsP
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
+    const isAdmin = useCurrentUser()?.role === 'admin';
 
     useEffect(() => {
         if (itemId === null) return;
@@ -177,6 +177,11 @@ export default function ServiceGeneralPanel({ scope, canWrite, gone }: SettingsP
 
     const editable = canWrite && !busy;
     const base = draftOf(service);
+    // La durée qu'un administrateur a posée reste affichée, même hors de portée.
+    const retentionOptions: SearchSelectOption[] = RETENTIONS.filter(
+        (r) =>
+            isAdmin || r.value === service.retentionDays || (r.value !== null && r.value <= UPTIME_MAX_RETENTION_DAYS)
+    ).map((r) => ({ value: r.value === null ? '' : String(r.value), label: r.label }));
     const unchanged = (Object.keys(draft) as (keyof ServiceDraft)[]).every((k) => draft[k] === base[k]);
 
     return (
@@ -299,7 +304,7 @@ export default function ServiceGeneralPanel({ scope, canWrite, gone }: SettingsP
                     value={draft.retentionDays === null ? '' : String(draft.retentionDays)}
                     disabled={!editable}
                     onChange={(v) => set('retentionDays', v ? Number(v) : null)}
-                    options={RETENTION_OPTIONS}
+                    options={retentionOptions}
                     aria-label='Conservation de l’historique détaillé'
                 />
                 <span className={shell.fieldHint}>

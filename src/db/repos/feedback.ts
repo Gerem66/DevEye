@@ -39,6 +39,9 @@ export interface FeedbackRepo {
     findById(id: number): Promise<FeedbackEntry | null>;
     setStatus(id: number, status: FeedbackStatus, handledBy: number): Promise<boolean>;
     remove(id: number): Promise<boolean>;
+    /** Ceux d'un compte, à sa suppression : sans clé étrangère, la cascade ne les emporte pas. */
+    removeAllOf(uid: number): Promise<void>;
+    purgeBefore(cutoff: number, batch: number): Promise<number>;
     /** Envois d'un compte depuis cet instant (unix secondes) : borne l'abus. */
     countSince(uid: number, since: number): Promise<number>;
     /** Les signalements encore intacts (`new`) : ce qu'un modérateur n'a pas lu. */
@@ -205,6 +208,15 @@ export function feedbackRepo(pool: Q): FeedbackRepo {
         async remove(id) {
             const res = await pool.query('DELETE FROM feedback WHERE id = ?', [id]);
             return res.rowCount > 0;
+        },
+
+        async removeAllOf(uid) {
+            await pool.query('DELETE FROM feedback WHERE uid = ?', [uid]);
+        },
+
+        async purgeBefore(cutoff, batch) {
+            const res = await pool.query('DELETE FROM feedback WHERE created < ? LIMIT ?', [cutoff, batch]);
+            return res.rowCount;
         },
 
         async countSince(uid, since) {

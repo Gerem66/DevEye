@@ -152,7 +152,7 @@ export function processSampleRepo(q: SdkQueryable): ProcessSampleRepo {
                 `DELETE s FROM device_process_samples s
                  JOIN devices d ON d.id = s.device_id
                  WHERE s.device_id = ? AND s.ts BETWEEN ? AND ?
-                   AND s.pinned = 0 AND d.status <> 'archived'
+                   AND s.pinned = 0
                    AND s.ts < (UNIX_TIMESTAMP() * 1000) - COALESCE(d.retention_days, ?) * 86400000`,
                 [deviceId, from, to, defaultDays]
             );
@@ -165,7 +165,6 @@ export function processSampleRepo(q: SdkQueryable): ProcessSampleRepo {
                 `DELETE s FROM device_process_samples s
                  JOIN devices d ON d.id = s.device_id
                  WHERE s.pinned = 0
-                   AND d.status <> 'archived'
                    AND s.ts < (UNIX_TIMESTAMP() * 1000) - COALESCE(d.retention_days, ?) * 86400000`,
                 [defaultDays]
             );

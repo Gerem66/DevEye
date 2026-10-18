@@ -101,6 +101,13 @@ export const uptimeRetentionSchema = z.number().int().positive().max(3650).nulla
  */
 export const UPTIME_DEFAULT_RETENTION_DAYS = 90;
 
+/**
+ * The longest a non-administrator keeps raw pings, in days. Longer, and
+ * keeping everything, are the instance administrators' choice: the raw rows
+ * are what grows the database.
+ */
+export const UPTIME_MAX_RETENTION_DAYS = 730;
+
 /** Window a chart or a ratio is computed over. */
 export const uptimeRangeSchema = z.enum(['24h', '7d', '30d', '90d', '1y', 'all']);
 export type UptimeRange = z.infer<typeof uptimeRangeSchema>;

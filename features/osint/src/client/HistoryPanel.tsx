@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useDismissLayer } from 'deveye-sdk-client';
-import type { OsintHistoryEntry, OsintTargetKind } from '../contracts/domain';
+import { OSINT_HISTORY_DAYS, type OsintHistoryEntry, type OsintTargetKind } from '../contracts/domain';
 
 import styles from './Osint.module.css';
 
@@ -76,6 +76,9 @@ export function HistoryPanel({
                                 </button>
                             </div>
                         </header>
+                        <p className={styles.muted}>
+                            Les recherches de plus de {OSINT_HISTORY_DAYS} jours s’effacent d’elles-mêmes.
+                        </p>
 
                         {/* Le déverrouillage n'est jamais forcé à l'ouverture de la
                             feature : sonder un domaine n'a pas à réclamer un mot de
@@ -102,10 +105,10 @@ export function HistoryPanel({
                                         className={styles.historyItem}
                                         onClick={() => onReplay(h)}
                                         disabled={!h.query}
-                                        title={h.query ?? 'Entrée chiffrée — déverrouillage requis'}
+                                        title={h.query ?? 'Entrée chiffrée : déverrouillage requis'}
                                     >
                                         <span className={styles.historyKind}>{kindLabels[h.kind]}</span>
-                                        <span className={styles.historyQuery}>{h.query ?? '— chiffré —'}</span>
+                                        <span className={styles.historyQuery}>{h.query ?? '(chiffrée)'}</span>
                                     </button>
                                     <button
                                         type='button'

@@ -29,6 +29,12 @@ absente de `limits` est illimitée.
 - **Rien n'est jamais supprimé.** Après un retour à une offre plus basse, une
   limite de flux refuse l'usage suivant, une limite de stock met l'excédent en
   pause (voir plus bas).
+- **Une durée de conservation n'est pas une limite d'offre.** Elle a un plafond
+  fixe, le même pour tous les comptes que seul un administrateur de l'instance
+  dépasse : deux ans de détail Uptime, un an d'historique d'appareil, un an de
+  points de restauration CloudSync. Le module le vérifie lui-même
+  (`ctx.isAdmin`) ; une durée posée par un administrateur reste tant qu'on n'y
+  touche pas.
 - **Un fournisseur qui lève vaut illimité pour une création**, et l'erreur est
   journalisée : une panne de la facturation ne bloque jamais une création. Les
   pauses, elles, restent en l'état (voir le réconciliateur).

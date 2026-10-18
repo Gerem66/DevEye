@@ -7,11 +7,13 @@ import {
     SearchSelect,
     settingsStyles as shell,
     TextInput,
+    useCurrentUser,
     type ErrorNoteInput,
     type SearchSelectOption
 } from 'deveye-sdk-client';
 import { DEFAULT_PROCESS_CAPTURE, DEFAULT_RETENTION_DAYS, type Device, type ProcessCapture } from '@deveye/types';
 
+import { DEVICE_MAX_RETENTION_DAYS } from '../contracts/commands';
 import { api } from './api';
 import { refreshDevices, useDevices } from './store';
 import styles from './style.module.css';
@@ -79,6 +81,7 @@ export function ConfigPanel({ deviceId, canWrite }: { deviceId: string; canWrite
     const { devices, loading } = useDevices();
     const device = devices.find((d) => d.id === deviceId) ?? null;
     const editable = canWrite && device !== null && device.status !== 'archived';
+    const maxRetention = useCurrentUser()?.role === 'admin' ? 3650 : DEVICE_MAX_RETENTION_DAYS;
 
     // Each numeric field = a select value (preset string or CUSTOM) + custom text.
     const [metricSel, setMetricSel] = useState(PLAN_DEFAULT);
@@ -135,7 +138,11 @@ export function ConfigPanel({ deviceId, canWrite }: { deviceId: string; canWrite
                 deviceId: target.id,
                 metricIntervalSeconds: metricSec === null ? null : clamp(Math.round(metricSec), 5, 3600),
                 processCapture: capture,
-                retentionDays: clamp(Math.round(retentionDays), 1, 3650)
+                // Une durée posée par un administrateur repart telle quelle tant qu'on n'y touche pas.
+                retentionDays:
+                    Math.round(retentionDays) === target.retentionDays
+                        ? target.retentionDays
+                        : clamp(Math.round(retentionDays), 1, maxRetention)
             });
             await refreshDevices();
         } catch (e) {
@@ -159,7 +166,8 @@ export function ConfigPanel({ deviceId, canWrite }: { deviceId: string; canWrite
             </p>
             {device.status === 'archived' && (
                 <p className={shell.notice}>
-                    Appareil archivé : son historique est figé, sa collecte ne se règle plus.
+                    Appareil archivé : sa collecte ne se règle plus, et son historique s’efface au terme de sa
+                    conservation, les instants épinglés exceptés.
                 </p>
             )}
             <div className={styles.configGrid}>

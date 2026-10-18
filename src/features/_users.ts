@@ -36,6 +36,7 @@ export async function deleteUserEverywhere(
     const members = await db.workspaceMembers.listByWorkspaceIds(shared.map((w) => w.id));
     const notes = await notifyModulesAccountDeleted(userId);
 
+    await db.feedback.removeAllOf(userId);
     await db.users.delete(userId);
     invalidateAccess();
     forgetSessionsOf(userId);

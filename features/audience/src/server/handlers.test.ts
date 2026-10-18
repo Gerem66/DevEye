@@ -70,6 +70,7 @@ function site(over: Partial<AudienceSiteRow> & { id: number; workspace_id: numbe
         origins: 'exemple.fr',
         active: 1,
         retention_days: 180,
+        submission_retention_days: 365,
         forms_auto: 0,
         submission_ip_quota: 5,
         submission_ban_quota: 60,
@@ -136,6 +137,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
                 origins: input.origins,
                 active: input.active ? 1 : 0,
                 retention_days: input.retentionDays,
+                submission_retention_days: input.submissionRetentionDays,
                 content: input.content
             });
             sites.push(created);
@@ -151,6 +153,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
                 origins: input.origins,
                 active: input.active ? 1 : 0,
                 retention_days: input.retentionDays,
+                submission_retention_days: input.submissionRetentionDays,
                 content: input.content
             });
             return s;
@@ -271,6 +274,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
         listSubmissions: unused,
         findSubmission: unused,
         removeSubmission: unused,
+        listExpiredSubmissions: unused,
         readAnswers: unused,
         feedbackStats: unused,
         dailyPoints: unused
@@ -328,6 +332,7 @@ const body = {
     origins: ['https://Exemple.fr/', 'www.exemple.fr:443', ''],
     active: true,
     retentionDays: 90,
+    submissionRetentionDays: 365,
     formsAuto: false,
     submissionIpQuota: 5,
     submissionBanQuota: 60,
@@ -546,6 +551,23 @@ describe('audience.siteAdd et audience.siteUpdate', () => {
         assert.deepEqual([out.site.name, out.site.active, out.site.visitorMode], ['Vitrine', false, 'persistent']);
         assert.equal(repo.sites[0].active, 0);
         assert.equal(ingest.invalidated, 1);
+    });
+
+    it('règle la conservation des réponses, de 30 à 1095 jours', async () => {
+        const update = (days: number) =>
+            audienceSiteUpdate.input.safeParse({ siteId: 1, ...body, submissionRetentionDays: days }).success;
+        assert.deepEqual([29, 30, 1095, 1096, 90.5].map(update), [false, true, true, false, false]);
+        assert.equal(audienceSiteAdd.input.safeParse({ ...body, submissionRetentionDays: 29 }).success, false);
+
+        const repo = seed(fakeRepo(), site({ id: 1, workspace_id: 1 }));
+        mountIngest();
+        const out = await handlerFor(audienceSiteUpdate)(createTestContext({ repo }), {
+            siteId: 1,
+            ...body,
+            submissionRetentionDays: 90
+        });
+        assert.equal(out.site.submissionRetentionDays, 90);
+        assert.equal(repo.sites[0].submission_retention_days, 90);
     });
 });
 

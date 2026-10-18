@@ -3,12 +3,24 @@ import { describe, it } from 'node:test';
 
 import type { Database } from '@/db';
 import { LOGIN_HISTORY_DAYS } from '@deveye/types';
-import { LOG_RETENTION_DAYS, purgeExpiredLoginHistory, purgeExpiredLogs } from './logRetention';
+import {
+    FEEDBACK_RETENTION_DAYS,
+    INVITATION_GRACE_DAYS,
+    LOG_RETENTION_DAYS,
+    purgeExpiredFeedback,
+    purgeExpiredInvitations,
+    purgeExpiredLoginHistory,
+    purgeExpiredLogs,
+    purgeExpiredRefreshTokens,
+    REFRESH_TOKEN_GRACE_DAYS
+} from './logRetention';
 
 const DAY = 24 * 3600;
 
+type PurgedRepo = 'logs' | 'loginHistory' | 'refreshTokens' | 'workspaceInvitations' | 'feedback';
+
 /** Une table de dates, et le DELETE … LIMIT que le repo exécute, sous le nom du dépôt voulu. */
-function memoryTable(repo: 'logs' | 'loginHistory', dates: number[]) {
+function memoryTable(repo: PurgedRepo, dates: number[]) {
     let rows = [...dates];
     const calls: number[] = [];
     const purgeBefore = (cutoff: number, batch: number) => {
@@ -17,7 +29,7 @@ function memoryTable(repo: 'logs' | 'loginHistory', dates: number[]) {
         calls.push(old.length);
         return Promise.resolve(old.length);
     };
-    const db = { [repo]: { purgeBefore } } as unknown as Pick<Database, 'logs' | 'loginHistory'>;
+    const db = { [repo]: { purgeBefore } } as unknown as Pick<Database, PurgedRepo>;
     return { db, rows: () => rows, calls };
 }
 
@@ -61,4 +73,23 @@ describe('purgeExpiredLoginHistory', () => {
         assert.equal(removed, 1);
         assert.deepEqual(table.rows(), [now - DAY, edge]);
     });
+});
+
+describe('les autres tables purgées', () => {
+    const now = 1_800_000_000;
+    const cases = [
+        { repo: 'refreshTokens', days: REFRESH_TOKEN_GRACE_DAYS, purge: purgeExpiredRefreshTokens },
+        { repo: 'workspaceInvitations', days: INVITATION_GRACE_DAYS, purge: purgeExpiredInvitations },
+        { repo: 'feedback', days: FEEDBACK_RETENTION_DAYS, purge: purgeExpiredFeedback }
+    ] as const;
+
+    for (const { repo, days, purge } of cases) {
+        it(`${repo} : garde jusqu’à ${days} jours, supprime au-delà`, async () => {
+            const edge = now - days * DAY;
+            const table = memoryTable(repo, [now - DAY, edge, edge - 1]);
+            const removed = await purge(table.db, now * 1000);
+            assert.equal(removed, 1);
+            assert.deepEqual(table.rows(), [now - DAY, edge]);
+        });
+    }
 });

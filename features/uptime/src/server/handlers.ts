@@ -19,6 +19,7 @@ import {
 } from '../contracts/commands';
 import {
     UPTIME_DEFAULT_INTERVAL_SECONDS,
+    UPTIME_MAX_RETENTION_DAYS,
     type UptimeDeploySource,
     type UptimePoint,
     type UptimeRange,
@@ -54,6 +55,20 @@ import {
 import type { UptimeWindowStat } from './repo';
 
 const DAY = 86400;
+
+/**
+ * Tout garder, ou plus de deux ans de détail, est réservé aux administrateurs
+ * de l'instance. Une durée qu'ils ont posée reste tant qu'on n'y touche pas.
+ */
+function assertRetention(ctx: Ctx, wanted: number | null, current?: number | null): void {
+    if (ctx.isAdmin || wanted === current) return;
+    if (wanted === null || wanted > UPTIME_MAX_RETENTION_DAYS) {
+        throw new FeatureError(
+            'forbidden',
+            'Plus de deux ans d’historique détaillé, ou tout garder, est réservé aux administrateurs.'
+        );
+    }
+}
 
 /**
  * Un service visible depuis cet espace : le sien, ou un que l'on y projette.
@@ -220,6 +235,7 @@ export const uptimeHandlers = [
         handler: async (ctx: Ctx, input) => {
             const draft = input.service;
             if (!isAllowedOutboundUrl(draft.url)) throw new FeatureError('validation', OUTBOUND_REFUSED_MESSAGE);
+            assertRetention(ctx, draft.retentionDays);
             await ctx.quota.assert('monitors', async (owned) => (await ctx.repo.services.countInWorkspaces(owned)) + 1);
             const intervalSeconds =
                 draft.intervalSeconds ?? UPTIME_DEFAULT_INTERVAL_SECONDS[(await ctx.quota.paid()) ? 'paid' : 'free'];
@@ -262,6 +278,7 @@ export const uptimeHandlers = [
             const existing = await loadService(ctx, input.id, 'write');
             const draft = input.service;
             if (!isAllowedOutboundUrl(draft.url)) throw new FeatureError('validation', OUTBOUND_REFUSED_MESSAGE);
+            assertRetention(ctx, draft.retentionDays, existing.retention_days);
             // Réécrit sous la clé de son espace d'origine : le chiffrer avec celle
             // d'ici le rendrait illisible chez lui, c'est-à-dire perdu pour tout le
             // monde y compris l'ordonnanceur qui le sonde.

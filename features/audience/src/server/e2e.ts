@@ -5,6 +5,7 @@ import {
     AUDIENCE_RETENTION_DEFAULT_DAYS,
     AUDIENCE_SUBMISSION_BAN_QUOTA_DEFAULT,
     AUDIENCE_SUBMISSION_IP_QUOTA_DEFAULT,
+    AUDIENCE_SUBMISSION_RETENTION_DEFAULT_DAYS,
     type AudienceSite
 } from '../contracts/domain';
 import type { AudienceRepo } from './repo';
@@ -32,6 +33,7 @@ export const audienceE2e: FeatureE2eEntry<AudienceRepo> = {
                             origins: [new URL(ORIGIN).host],
                             active: true,
                             retentionDays: AUDIENCE_RETENTION_DEFAULT_DAYS,
+                            submissionRetentionDays: AUDIENCE_SUBMISSION_RETENTION_DEFAULT_DAYS,
                             formsAuto: false,
                             submissionIpQuota: AUDIENCE_SUBMISSION_IP_QUOTA_DEFAULT,
                             submissionBanQuota: AUDIENCE_SUBMISSION_BAN_QUOTA_DEFAULT,

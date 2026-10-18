@@ -71,6 +71,7 @@ function site(id: number, workspaceId: number): AudienceSiteRow {
         origins: 'exemple.fr',
         active: 1,
         retention_days: 180,
+        submission_retention_days: 365,
         forms_auto: 0,
         submission_ip_quota: 5,
         submission_ban_quota: 60,
@@ -262,6 +263,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
             repo.submissions.splice(i, 1);
             return true;
         },
+        listExpiredSubmissions: unused,
         async readAnswers(formId) {
             const label = (id: number) => repo.formLabels.find((l) => l.id === id);
             return [...repo.answers.entries()]

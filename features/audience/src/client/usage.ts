@@ -509,5 +509,6 @@ Content-Type: application/json
   50 000 retours par formulaire.
 - Un quota par adresse et un quota horaire par formulaire, réglés côté DevEye.
   Le second ferme le formulaire quand il saute.
-- Aucune rétention : un retour reste jusqu'à ce qu'on l'efface.`;
+- Une durée de conservation, réglée côté DevEye : un retour plus ancien est
+  effacé automatiquement.`;
 }

@@ -107,6 +107,7 @@ CREATE TABLE `audience_sites` (
   `origins` text COLLATE utf8mb4_general_ci,
   `active` tinyint NOT NULL DEFAULT '1',
   `retention_days` int NOT NULL DEFAULT '180',
+  `submission_retention_days` int NOT NULL DEFAULT '365',
   `forms_auto` tinyint NOT NULL DEFAULT '0',
   `submission_ip_quota` int NOT NULL DEFAULT '5',
   `submission_ban_quota` int NOT NULL DEFAULT '60',

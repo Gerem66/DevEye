@@ -140,7 +140,8 @@ const SCOPES: { [K in RepoKey]: RepoScope<K> } = {
             listByEmail: { args: ['a@b.c', 0], guard: INVITEE },
             find: { args: [1, 2] },
             upsert: { args: [{ workspaceId: 1, email: 'a@b.c', roleId: null, invitedBy: 2, now: 0, expiresAt: 1 }] },
-            remove: { args: [1, 2] }
+            remove: { args: [1, 2] },
+            purgeBefore: { args: [0, 100], global: 'La purge de rétention balaie toute l’instance.' }
         }
     },
     workspaceSecretKeys: {
@@ -179,7 +180,8 @@ const SCOPES: { [K in RepoKey]: RepoScope<K> } = {
             revokeUser: { args: [1] },
             revokeUserExcept: { args: [1, 's'] },
             countLiveSessionsExcept: { args: [1, 's'] },
-            hasLiveSession: { args: ['s'] }
+            hasLiveSession: { args: ['s'] },
+            purgeBefore: { args: [0, 100], global: 'La purge de rétention balaie toute l’instance.' }
         }
     },
     loginHistory: {
@@ -250,6 +252,8 @@ const SCOPES: { [K in RepoKey]: RepoScope<K> } = {
             findById: { args: [1] },
             setStatus: { args: [1, 'new', 2] },
             remove: { args: [1] },
+            removeAllOf: { args: [1] },
+            purgeBefore: { args: [0, 100] },
             countSince: { args: [1, 0] },
             countPending: { args: [] }
         }

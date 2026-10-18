@@ -14,6 +14,8 @@ import {
     AUDIENCE_SITE_DESCRIPTION_MAX_LENGTH,
     AUDIENCE_SITE_NAME_MAX_LENGTH,
     AUDIENCE_SUBMISSION_PAGE,
+    AUDIENCE_SUBMISSION_RETENTION_MAX_DAYS,
+    AUDIENCE_SUBMISSION_RETENTION_MIN_DAYS,
     audienceActivitySchema,
     audienceBreakdownItemSchema,
     audienceDimensionSchema,
@@ -64,6 +66,11 @@ const siteBody = {
     origins: z.array(z.string().max(AUDIENCE_ORIGIN_MAX_LENGTH)).max(AUDIENCE_MAX_ORIGINS),
     active: z.boolean(),
     retentionDays: z.number().int().min(AUDIENCE_RETENTION_MIN_DAYS).max(AUDIENCE_RETENTION_MAX_DAYS),
+    submissionRetentionDays: z
+        .number()
+        .int()
+        .min(AUDIENCE_SUBMISSION_RETENTION_MIN_DAYS)
+        .max(AUDIENCE_SUBMISSION_RETENTION_MAX_DAYS),
     formsAuto: z.boolean(),
     submissionIpQuota: z.number().int().min(0).max(AUDIENCE_QUOTA_MAX),
     submissionBanQuota: z.number().int().min(0).max(AUDIENCE_QUOTA_MAX),

@@ -37,6 +37,11 @@ export interface RefreshTokensRepo {
     countLiveSessionsExcept(userId: number, keepSessionId: string): Promise<number>;
     /** Cette session a-t-elle encore un jeton vivant ? Vérifié à la poignée de main WebSocket. */
     hasLiveSession(sessionId: string): Promise<boolean>;
+    /**
+     * Les jetons expirés ou révoqués avant `cutoff`. Une ligne absente vaut un
+     * jeton révoqué pour `refreshVerdict` : la purge ne rouvre aucune session.
+     */
+    purgeBefore(cutoff: number, batch: number): Promise<number>;
 }
 
 export function refreshTokensRepo(pool: Q): RefreshTokensRepo {
@@ -109,6 +114,14 @@ export function refreshTokensRepo(pool: Q): RefreshTokensRepo {
                 [sessionId]
             );
             return Number(r.rows[0]?.n ?? 0) > 0;
+        },
+        async purgeBefore(cutoff, batch) {
+            const r = await pool.query('DELETE FROM refresh_tokens WHERE expires_at < ? OR revoked_at < ? LIMIT ?', [
+                cutoff,
+                cutoff,
+                batch
+            ]);
+            return r.rowCount;
         }
     };
 }

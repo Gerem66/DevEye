@@ -41,8 +41,7 @@ export function presenceRepo(q: SdkQueryable): PresenceRepo {
             const r = await q.execute(
                 `DELETE p FROM device_presence p
                  JOIN devices d ON d.id = p.device_id
-                 WHERE d.status <> 'archived'
-                   AND p.ts < (UNIX_TIMESTAMP() * 1000) - COALESCE(d.retention_days, ?) * 86400000`,
+                 WHERE p.ts < (UNIX_TIMESTAMP() * 1000) - COALESCE(d.retention_days, ?) * 86400000`,
                 [defaultDays]
             );
             return r.affectedRows;

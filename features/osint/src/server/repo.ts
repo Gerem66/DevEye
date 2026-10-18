@@ -16,6 +16,8 @@ export interface OsintRepo {
     deleteLookup(id: string, workspaceId: number): Promise<boolean>;
     /** Efface tout l'historique de l'espace ; rend le nombre de lignes retirées. */
     clearLookups(workspaceId: number): Promise<number>;
+    /** Les recherches d'avant `cutoff` (unix secondes), tous espaces confondus. */
+    purgeLookupsBefore(cutoff: number): Promise<number>;
     listKeys(workspaceId: number): Promise<OsintProviderKeyRow[]>;
     getKey(workspaceId: number, provider: OsintProvider): Promise<OsintProviderKeyRow | null>;
     setKey(workspaceId: number, provider: OsintProvider, keyEnc: string): Promise<void>;
@@ -51,6 +53,10 @@ export function createRepo(q: SdkQueryable): OsintRepo {
         },
         async clearLookups(workspaceId) {
             const res = await q.execute('DELETE FROM osint_lookups WHERE workspace_id = ?', [workspaceId]);
+            return res.affectedRows;
+        },
+        async purgeLookupsBefore(cutoff) {
+            const res = await q.execute('DELETE FROM osint_lookups WHERE created < ?', [cutoff]);
             return res.affectedRows;
         },
         async listKeys(workspaceId) {

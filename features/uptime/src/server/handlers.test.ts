@@ -452,6 +452,41 @@ describe('les journaux d’une projection', () => {
     });
 });
 
+describe('la conservation du détail', () => {
+    const forbidden = (e: unknown) => e instanceof FeatureError && e.code === 'forbidden';
+
+    it('réserve aux administrateurs « Tout garder » et plus de deux ans', async () => {
+        setMonitor(null);
+        const ctx = createTestContext({ repo: seed(fakeRepo()) });
+        for (const retentionDays of [null, 1825]) {
+            await assert.rejects(
+                handlerFor(uptimeAdd)(ctx, { service: { ...DRAFT, enabled: false, retentionDays } }),
+                forbidden
+            );
+        }
+        const added = await handlerFor(uptimeAdd)(ctx, { service: { ...DRAFT, enabled: false, retentionDays: 730 } });
+        assert.equal(added.service.retentionDays, 730);
+
+        const admin = createTestContext({ repo: seed(fakeRepo()), isAdmin: true });
+        const kept = await handlerFor(uptimeAdd)(admin, { service: { ...DRAFT, enabled: false, retentionDays: null } });
+        assert.equal(kept.service.retentionDays, null);
+    });
+
+    it('laisse en place une durée posée par un administrateur tant qu’on n’y touche pas', async () => {
+        setMonitor(null);
+        const repo = seed(fakeRepo(), row({ id: 1, workspace_id: 1, retention_days: null }));
+        const ctx = createTestContext({ repo });
+        await handlerFor(uptimeUpdate)(ctx, { id: 1, service: { ...GENERAL, retentionDays: null } });
+        assert.equal(repo.rows[0].retention_days, null);
+        await handlerFor(uptimeUpdate)(ctx, { id: 1, service: { ...GENERAL, retentionDays: 90 } });
+        assert.equal(repo.rows[0].retention_days, 90);
+        await assert.rejects(
+            handlerFor(uptimeUpdate)(ctx, { id: 1, service: { ...GENERAL, retentionDays: null } }),
+            forbidden
+        );
+    });
+});
+
 describe("l'ordonnanceur", () => {
     it('répond `internal` à une sonde manuelle quand le service de fond est absent', async () => {
         setMonitor(null);

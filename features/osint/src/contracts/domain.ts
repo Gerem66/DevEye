@@ -235,6 +235,8 @@ export const osintHistoryEntrySchema = z.object({
 export type OsintHistoryEntry = z.infer<typeof osintHistoryEntrySchema>;
 
 export const OSINT_HISTORY_PAGE_MAX = 100;
+/** Une recherche vise un tiers : passé ce délai, elle s'efface d'elle-même. */
+export const OSINT_HISTORY_DAYS = 90;
 
 /* --------------------------------- L'offre -------------------------------- */
 

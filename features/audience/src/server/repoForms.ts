@@ -127,6 +127,12 @@ export interface AudienceFormsRepo {
     }): Promise<AudienceSubmissionWithContextRow[]>;
     findSubmission(submissionId: number): Promise<AudienceSubmissionRow | null>;
     removeSubmission(submissionId: number): Promise<boolean>;
+    /** Les retours du site reçus avant `before`, les plus anciens d'abord : ce que sa conservation efface. */
+    listExpiredSubmissions(
+        siteId: number,
+        before: number,
+        limit: number
+    ): Promise<Pick<AudienceSubmissionRow, 'id' | 'form_id' | 'content'>[]>;
     readAnswers(formId: number): Promise<AudienceAnswerReadRow[]>;
     /** Les retours d'un site : ce que la carte du sommaire montre. */
     feedbackStats(siteId: number, since: number): Promise<AudienceFeedbackStats>;
@@ -369,6 +375,15 @@ export function createFormsRepo(q: SdkQueryable): AudienceFormsRepo {
         async removeSubmission(submissionId) {
             const res = await q.execute('DELETE FROM ft_audience_submissions WHERE id = ?', [submissionId]);
             return res.affectedRows > 0;
+        },
+        async listExpiredSubmissions(siteId, before, limit) {
+            return q.query<Pick<AudienceSubmissionRow, 'id' | 'form_id' | 'content'>>(
+                `SELECT id, form_id, content FROM ft_audience_submissions
+                  WHERE site_id = ? AND ts < ?
+                  ORDER BY ts ASC
+                  LIMIT ?`,
+                [siteId, before, limit]
+            );
         },
         async readAnswers(formId) {
             // Les questions dans leur ordre d'apparition (les libellés sont créés à la

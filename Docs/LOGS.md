@@ -101,5 +101,13 @@ séparé) couvre la vivacité du processus, pas la base.
 - **Table `logs`** : 365 jours (`LOG_RETENTION_DAYS`,
   `src/Services/logRetention.ts`), purgés au démarrage puis chaque jour, par
   lots.
+- **Le même service, au même rythme** : l'historique des connexions 90 jours
+  (`LOGIN_HISTORY_DAYS`) ; les jetons de rafraîchissement 30 jours après leur
+  expiration ou leur révocation ; les invitations d'espace 30 jours après leur
+  expiration ; les signalements (`feedback`) trois ans, la durée des
+  « Échanges » de la politique de confidentialité, et ceux d'un compte partent
+  avec lui.
+- **Historique OSINT** : 90 jours (`OSINT_HISTORY_DAYS`), purgé par le service
+  du module au démarrage puis chaque jour.
 - **Sortie standard** : la rotation Docker des fichiers compose, 5 fichiers de
   20 Mo par conteneur.

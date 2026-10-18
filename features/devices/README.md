@@ -179,10 +179,12 @@ Rétention : **une seule durée**, `devices.retention_days` (défaut serveur
 `MONITORING_RETENTION_DAYS`, 30 j, lue par le module dans son `env.ts`), qui
 régit les métriques, la présence **et** les processus. Un relevé est un
 _instant_ : les faire expirer séparément produirait des instants à moitié
-lisibles. Balayée chaque heure par le service du module
-(`features/devices/src/server/service.ts`, un passage au démarrage puis un
-ticker du SDK) ; les instants épinglés y échappent, les appareils archivés
-sont figés.
+lisibles. Un an au plus (`DEVICE_MAX_RETENTION_DAYS`), sauf pour un
+administrateur de l'instance (dix ans). Balayée chaque heure par le service du
+module (`features/devices/src/server/service.ts`, un passage au démarrage puis
+un ticker du SDK), appareils archivés compris ; seuls les instants épinglés y
+échappent. Une zone épinglée couvre sept jours au plus (`PIN_MAX_SPAN_MS`) :
+on garde un moment, pas l'historique entier d'une machine.
 
 ### Une seule énumération par tick
 
@@ -375,8 +377,9 @@ Statuts (`devices.status`) : `pending`, `active`, `pending_deletion`,
     - Annulable (`devices.cancelDelete`) tant que l'agent ne s'est pas reconnecté.
 - **Archive** : l'appareil n'est plus gérable mais reste **consultable
   en lecture seule** (voyage temporel), rangé dans le groupe « Archivés » de la
-  liste. Ses données sont **figées** (les balayages de rétention **excluent**
-  `status='archived'`). Pas de config, pas d'approbation. L'agent est refusé
+  liste. Son historique s'efface au terme de sa conservation, comme celui d'un
+  appareil actif, les instants épinglés exceptés. Pas de config, pas
+  d'approbation. L'agent est refusé
   (`1008`) jusqu'à un nouvel appairage. `devices.forceDelete` archive sans
   attendre l'auto-destruction (agent disparu), en coupant la session.
 - **Purge dure** (`devices.delete`, « Effacer l'appareil et son historique »

@@ -22,8 +22,8 @@ const THIN_BATCHES_PER_SWEEP = 100;
  * Le balayage de rétention : efface l'historique passé la conservation de
  * chaque appareil (`devices.retention_days`, à défaut
  * `MONITORING_RETENTION_DAYS`). Une seule échéance pour les trois tables, pour
- * qu'un instant ne soit jamais à moitié expiré ; les instants épinglés y
- * échappent, les appareils archivés sont figés. Puis il réduit au top les
+ * qu'un instant ne soit jamais à moitié expiré ; seuls les instants épinglés y
+ * échappent, appareils archivés compris. Puis il réduit au top les
  * listes de processus de plus de deux jours, instants épinglés exceptés.
  * Global, sans session ; rien à diffuser, une frise se relit d'elle-même.
  */

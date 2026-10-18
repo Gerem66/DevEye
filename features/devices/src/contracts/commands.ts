@@ -76,6 +76,13 @@ export const devicesRename = {
  * `null` resets a field to the server default. Interval or capture changes are
  * pushed live to a connected agent.
  */
+/**
+ * The longest a non-administrator keeps a device's history, in days. Longer is
+ * the instance administrators' choice: a device writes a metric row and a
+ * process list at every interval.
+ */
+export const DEVICE_MAX_RETENTION_DAYS = 365;
+
 export const devicesSetConfig = {
     command: 'devices.setConfig' as const,
     input: z
@@ -252,10 +259,14 @@ export const devicesSnapshots = {
     })
 };
 
+/** The widest span one pin covers, in ms: keeping a moment, not a device's whole history. */
+export const PIN_MAX_SPAN_MS = 7 * 86_400_000;
+
 /**
  * Pin (or unpin) the snapshots within `[from, to]`: process list and metric
  * point survive the device's retention. Unpinning lets them expire again; rows
- * already past their deadline are deleted immediately.
+ * already past their deadline are deleted immediately. A pin spans
+ * {@link PIN_MAX_SPAN_MS} at most; an unpin, any range.
  */
 export const devicesSetSnapshotsPinned = {
     command: 'devices.setSnapshotsPinned' as const,
@@ -266,7 +277,10 @@ export const devicesSetSnapshotsPinned = {
             to: z.number().int().positive(),
             pinned: z.boolean()
         })
-        .refine((v) => v.to >= v.from, { message: 'to must be >= from' }),
+        .refine((v) => v.to >= v.from, { message: 'to must be >= from' })
+        .refine((v) => !v.pinned || v.to - v.from <= PIN_MAX_SPAN_MS, {
+            message: 'A pin spans seven days at most'
+        }),
     output: z.object({
         deviceId,
         /** Snapshot instants whose pin state changed. */

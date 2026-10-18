@@ -9,7 +9,7 @@ export type ReceivedInvitationRow = WorkspaceInvitationRow & {
 
 /**
  * Les invitations ouvertes. Une invitation expirée n'est plus lue nulle part :
- * elle ne part qu'avec son espace, ou quand l'adresse est réinvitée.
+ * elle part avec son espace, quand l'adresse est réinvitée, ou à la purge.
  */
 export interface WorkspaceInvitationsRepo {
     listByWorkspace(workspaceId: number, now: number): Promise<WorkspaceInvitationRow[]>;
@@ -26,6 +26,8 @@ export interface WorkspaceInvitationsRepo {
         expiresAt: number;
     }): Promise<void>;
     remove(id: number, workspaceId: number): Promise<void>;
+    /** Celles expirées avant `cutoff`. */
+    purgeBefore(cutoff: number, batch: number): Promise<number>;
 }
 
 export function workspaceInvitationsRepo(pool: Queryable): WorkspaceInvitationsRepo {
@@ -67,6 +69,13 @@ export function workspaceInvitationsRepo(pool: Queryable): WorkspaceInvitationsR
         },
         async remove(id, workspaceId) {
             await pool.query('DELETE FROM workspace_invitations WHERE id = ? AND workspace_id = ?', [id, workspaceId]);
+        },
+        async purgeBefore(cutoff, batch) {
+            const r = await pool.query('DELETE FROM workspace_invitations WHERE expires_at < ? LIMIT ?', [
+                cutoff,
+                batch
+            ]);
+            return r.rowCount;
         }
     };
 }

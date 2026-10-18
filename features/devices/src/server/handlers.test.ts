@@ -655,6 +655,34 @@ describe('la configuration de collecte et le rangement', () => {
         assert.equal(reset.device.retentionDays, null);
     });
 
+    it('plus d’un an de conservation est réservé aux administrateurs, une durée posée par eux reste', async () => {
+        const repo = fakeRepo([row({ id: DEVICE_A, retention_days: 30 })]);
+        await assert.rejects(
+            handlerFor(devicesSetConfig)(contextFor(repo), { deviceId: DEVICE_A, retentionDays: 366 }),
+            failsWith('forbidden')
+        );
+        await handlerFor(devicesSetConfig)(contextFor(repo), { deviceId: DEVICE_A, retentionDays: 365 });
+        await handlerFor(devicesSetConfig)(contextFor(repo, { isAdmin: true }), {
+            deviceId: DEVICE_A,
+            retentionDays: 3650
+        });
+        assert.equal(repo.deviceRows[0].retention_days, 3650);
+        await handlerFor(devicesSetConfig)(contextFor(repo), {
+            deviceId: DEVICE_A,
+            retentionDays: 3650,
+            metricIntervalSeconds: 60
+        });
+        assert.equal(repo.deviceRows[0].retention_days, 3650);
+    });
+
+    it('une zone se conserve sur sept jours au plus, se libère sur toute durée', () => {
+        const pin = (from: number, to: number, pinned: boolean) =>
+            devicesSetSnapshotsPinned.input.safeParse({ deviceId: DEVICE_A, from, to, pinned }).success;
+        assert.equal(pin(0, 7 * DAY_MS, true), true);
+        assert.equal(pin(0, 7 * DAY_MS + 1, true), false);
+        assert.equal(pin(0, 90 * DAY_MS, false), true);
+    });
+
     it("le rangement vise l'espace actif, dans l'ordre donné", async () => {
         const repo = fakeRepo([row({ id: DEVICE_A }), row({ id: DEVICE_B })]);
         const ctx = contextFor(repo, { workspaceId: 4 });
