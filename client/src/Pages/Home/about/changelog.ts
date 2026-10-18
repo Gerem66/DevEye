@@ -12,6 +12,41 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: readonly ChangelogEntry[] = [
     {
+        version: '0.25.1',
+        date: '2026-10-19',
+        changes: [
+            {
+                kind: 'added',
+                text: 'Sécurité : la page se range en trois groupes, Connexion, Double authentification et Chiffrement, chacun avec son niveau ; les navigateurs de confiance se gèrent dans une fenêtre, et l’historique des connexions des trente derniers jours permet de déconnecter les autres appareils'
+            },
+            {
+                kind: 'added',
+                text: 'Appareils : un appareil hors ligne propose « Reconnecter l’agent », avec les commandes à lancer sur la machine selon son système, et « Télécharger l’agent » donne l’empreinte SHA-256 du fichier pour le vérifier'
+            },
+            {
+                kind: 'added',
+                text: 'Audience : « Conserver les réponses » règle combien de temps les réponses d’un formulaire sont gardées, un an par défaut, de 30 jours à 3 ans ; ensuite seuls les comptes restent, jamais un nom ni une adresse'
+            },
+            {
+                kind: 'improved',
+                text: 'Toutes les fonctionnalités : un échec s’affiche en haut de la vue ou de la fenêtre, propose « Signaler » quand vous n’y pouvez rien, et ne se cache plus derrière une liste vide, un « Chargement… » sans fin ou des réglages par défaut'
+            },
+            {
+                kind: 'improved',
+                text: 'Uptime, Appareils, CloudSync et OSINT : Uptime garde au plus deux ans de détail, Appareils un an et CloudSync 365 jours de points de restauration, au-delà réservé aux administrateurs ; les recherches OSINT s’effacent après 90 jours, et vos signalements perdent au bout de trois ans ce qui vous identifie'
+            },
+            {
+                kind: 'improved',
+                text: 'Serveur mail : un certificat périmé ou au mauvais nom ne remplace plus le bon, l’onglet Général signale son défaut, les administrateurs sont prévenus avant son expiration, et les connexions chiffrées suivent les recommandations actuelles'
+            },
+            {
+                kind: 'improved',
+                text: 'Audit : les alertes situent le dépôt, le fichier et l’avis, avec la version qui corrige'
+            },
+            { kind: 'fixed', text: 'Mail : le bandeau d’une boîte reconnectée disparaît sans rouvrir Mail' }
+        ]
+    },
+    {
         version: '0.25.0',
         date: '2026-10-12',
         changes: [
