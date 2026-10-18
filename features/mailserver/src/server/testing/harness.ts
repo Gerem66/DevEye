@@ -101,7 +101,7 @@ export function selfSigned(): { cert: string; key: string } {
 }
 
 export function testTlsStore(): TlsStore {
-    const certificates = new TlsStore();
+    const certificates = new TlsStore('localhost');
     certificates.set(selfSigned(), 'file');
     return certificates;
 }

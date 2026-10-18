@@ -117,6 +117,10 @@ La réputation de l'IP est commune à tous les espaces.
 - La file refuse de remettre à une adresse privée : un MX ne fait pas sonder le
   réseau du serveur. Seul `MAILSERVER_ALLOW_PRIVATE_MX`, réservé aux tests,
   lève cette garde.
+- La remise passe en STARTTLS dès que le serveur d'en face le propose, sans
+  exiger un certificat valable (l'usage entre serveurs mail) ; à défaut, elle
+  part en clair. Le journal de la boîte dit, pour chaque envoi, s'il est parti
+  chiffré ou en clair.
 - Une remise qui échoue est réessayée à intervalles croissants, de cinq
   minutes à un jour, onze fois (`smtp/outbound.ts`) ; un refus définitif ou la
   série épuisée rend un avis de non-remise à l'expéditeur (`smtp/dsn.ts`,
@@ -135,6 +139,15 @@ le proxy. Une paire PEM fournie par l'installation
 proxy qui garde le défi pour lui ; elle est relue quand les fichiers changent.
 Le certificat est poussé aux écouteurs sans refermer leurs ports ; sans lui,
 seul le 25 écoute, sans chiffrement, et l'onglet Général le dit.
+
+Chaque certificat est contrôlé avant d'être servi (`engine/tls.ts`) : date de
+fin, nom `MAILSERVER_HOSTNAME` couvert, chaîne présente (`fullchain.pem`, pas
+`cert.pem`). Un certificat défectueux ne remplace jamais un bon ; faute de
+mieux il est servi, et l'onglet Général dit son défaut. Les administrateurs
+sont prévenus sur les canaux de la cible Système : à chaque certificat
+défectueux, à 14 puis 3 jours de la fin de validité, à l'expiration, et quand
+Let's Encrypt ne délivre rien. Avec une paire fournie, c'est l'installation qui
+la renouvelle (certbot) : le module ne fait que la relire.
 
 ## 7. Carte du code
 

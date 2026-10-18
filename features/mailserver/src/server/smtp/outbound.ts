@@ -56,6 +56,31 @@ export interface Outbound {
 
 class PermanentFailure extends Error {}
 
+/**
+ * nodemailer ne dit qu'à son journal si la session est passée en STARTTLS :
+ * un journal par envoi, qui ne guette que ce message.
+ */
+function encryptionWatch(): {
+    logger: Record<'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal', (...args: unknown[]) => void>;
+    encrypted(): boolean;
+} {
+    let upgraded = false;
+    const ignore = (): void => undefined;
+    return {
+        logger: {
+            trace: ignore,
+            debug: ignore,
+            info: (_entry, message) => {
+                if (message === 'Connection upgraded with STARTTLS') upgraded = true;
+            },
+            warn: ignore,
+            error: ignore,
+            fatal: ignore
+        },
+        encrypted: () => upgraded
+    };
+}
+
 const orEmpty = async <T>(lookup: Promise<T[]>): Promise<T[]> => {
     try {
         return await lookup;
@@ -112,6 +137,7 @@ export function createOutbound(deps: OutboundDeps, seam: OutboundSeam = {}): Out
 
         let lastError: Error = new Error('4.4.1 Aucun serveur joignable');
         for (const target of await targetsOf(domain)) {
+            const watch = encryptionWatch();
             const transport = nodemailer.createTransport({
                 host: target.ip,
                 port: seam.port ?? 25,
@@ -123,11 +149,13 @@ export function createOutbound(deps: OutboundDeps, seam: OutboundSeam = {}): Out
                 connectionTimeout: 30_000,
                 greetingTimeout: 30_000,
                 socketTimeout: 120_000,
-                dkim: privateKey ? { domainName: senderHost, keySelector: key.selector, privateKey } : undefined
+                dkim: privateKey ? { domainName: senderHost, keySelector: key.selector, privateKey } : undefined,
+                logger: watch.logger
             });
             try {
                 const info = await transport.sendMail({ envelope: { from, to: [rcpt] }, raw });
-                return `${target.host} : ${String(info.response ?? '').slice(0, 200)}`;
+                const channel = watch.encrypted() ? 'chiffré' : 'en clair';
+                return `${target.host}, ${channel} : ${String(info.response ?? '').slice(0, 200)}`;
             } catch (error) {
                 const code = (error as { responseCode?: number }).responseCode;
                 if (typeof code === 'number' && code >= 500) {

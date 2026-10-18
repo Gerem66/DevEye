@@ -19,7 +19,7 @@ import { createEventRecorder } from './events';
 import { listenersHealth } from './health';
 import { createMailStore } from './mailstore';
 import { Notifier } from './notifier';
-import { TlsStore } from './tls';
+import { certificateDate, type Pem, TlsStore } from './tls';
 
 /**
  * Le moteur : il assemble le stockage, l'authentification, la remise, et ouvre
@@ -58,7 +58,7 @@ export function createEngine(deps: FeatureServiceDeps<MailserverRepo>): Engine {
     });
     const auth = createAuthenticator({ repo, events, pauses: deps.pauses });
     const delivery = createDelivery({ repo, domains: deps.domains, pauses: deps.pauses, store, events });
-    const certificates = new TlsStore();
+    const certificates = new TlsStore(hostname);
     const usesFiles = env.MAILSERVER_TLS_CERT_FILE !== '' && env.MAILSERVER_TLS_KEY_FILE !== '';
     const acme = createAcme({
         hostname,
@@ -174,25 +174,98 @@ export function createEngine(deps: FeatureServiceDeps<MailserverRepo>): Engine {
         await openInbound();
     }
 
+    /** Un défaut de certificat regarde l'instance : journal et alerte aux administrateurs. */
+    function certificateTrouble(key: 'flaw' | 'expiry', title: string, detail: string, critical = false): void {
+        deps.logger.warn({ hostname, err: detail }, `Serveur mail : ${title}`);
+        deps.alertInstance({
+            key: `certificate-${key}`,
+            level: critical ? 'critical' : 'error',
+            title: `Serveur mail : ${title} (${hostname})`,
+            detail
+        });
+    }
+
     /** La paire PEM de l'opérateur, relue quand ses fichiers changent. */
     async function loadFiles(): Promise<void> {
+        let stamp: string;
+        let pem: Pem;
         try {
             const [certStat, keyStat] = await Promise.all([
                 fs.stat(env.MAILSERVER_TLS_CERT_FILE),
                 fs.stat(env.MAILSERVER_TLS_KEY_FILE)
             ]);
-            const stamp = `${certStat.mtimeMs}|${keyStat.mtimeMs}`;
+            stamp = `${certStat.mtimeMs}|${keyStat.mtimeMs}`;
             if (stamp === fileStamp) return;
             const [cert, key] = await Promise.all([
                 fs.readFile(env.MAILSERVER_TLS_CERT_FILE, 'utf8'),
                 fs.readFile(env.MAILSERVER_TLS_KEY_FILE, 'utf8')
             ]);
-            certificates.set({ cert, key }, 'file');
-            fileStamp = stamp;
+            pem = { cert, key };
+        } catch (error) {
+            const message = (error as Error).message.slice(0, 300);
+            // Relu chaque minute : seule une erreur nouvelle prévient les administrateurs.
+            if (message !== certificates.lastError) certificateTrouble('flaw', 'certificat illisible', message);
+            certificates.lastError = message;
+            return;
+        }
+        // Une paire refusée ne se relit qu'à son prochain changement : l'alerte est partie une fois.
+        fileStamp = stamp;
+        try {
+            certificates.set(pem, 'file');
         } catch (error) {
             certificates.lastError = (error as Error).message.slice(0, 300);
-            deps.logger.warn({ err: certificates.lastError }, 'Serveur mail : certificat illisible');
         }
+        if (certificates.lastError !== '') {
+            certificateTrouble(
+                'flaw',
+                'certificat défectueux',
+                `${certificates.lastError}\n${env.MAILSERVER_TLS_CERT_FILE}`
+            );
+        }
+    }
+
+    async function renew(): Promise<void> {
+        await acme.ensure();
+        if (certificates.current() === null && certificates.lastError !== '') {
+            certificateTrouble('flaw', 'aucun certificat obtenu de Let’s Encrypt', certificates.lastError, true);
+        }
+    }
+
+    /** Le palier d'expiration déjà signalé, pour ne prévenir qu'une fois par palier : 14 jours, 3 jours, expiré. */
+    let expiryStage: number | null = null;
+    function watchExpiry(): void {
+        const info = certificates.info();
+        if (!info) return;
+        const left = Math.floor((info.notAfter - now()) / 86_400);
+        const stage = left < 0 ? 0 : left < 3 ? 3 : left < 14 ? 14 : null;
+        if (stage === null) {
+            if (expiryStage !== null) {
+                deps.alertInstance({
+                    key: 'certificate-expiry',
+                    level: 'resolved',
+                    title: `Serveur mail : certificat renouvelé (${hostname})`,
+                    detail: `Fin de validité : ${certificateDate(info.notAfter)}`
+                });
+            }
+            expiryStage = null;
+            return;
+        }
+        if (stage === expiryStage) return;
+        expiryStage = stage;
+        const lines = [
+            `Fin de validité : ${certificateDate(info.notAfter)}`,
+            info.source === 'file'
+                ? `Fichier ${env.MAILSERVER_TLS_CERT_FILE}, à renouveler par l’installation (certbot).`
+                : 'Let’s Encrypt, renouvelé par le module.'
+        ];
+        if (certificates.lastError !== '') lines.push(certificates.lastError);
+        const title =
+            stage === 0
+                ? 'certificat expiré'
+                : left === 0
+                  ? 'certificat expirant dans moins d’un jour'
+                  : `certificat expirant dans ${left} jour${left > 1 ? 's' : ''}`;
+        certificateTrouble('expiry', title, lines.join('\n'), stage === 0);
     }
 
     const every = (ms: number, task: () => Promise<void>): void => {
@@ -247,21 +320,25 @@ export function createEngine(deps: FeatureServiceDeps<MailserverRepo>): Engine {
             for (const name of ['submissions', 'submission', 'imaps'] as const) {
                 states[name] = { ...states[name], reason: NEEDS_CERTIFICATE };
             }
-            unsubscribe = certificates.subscribe(() => void openSecured());
+            unsubscribe = certificates.subscribe(() => {
+                void openSecured();
+                watchExpiry();
+            });
 
             if (usesFiles) {
                 await loadFiles();
                 every(FILE_TICK_MS, loadFiles);
             } else {
                 // Sans attendre : le démarrage de l'app ne dépend pas de la disponibilité de Let's Encrypt.
-                void acme.ensure();
-                every(ACME_TICK_MS, () => acme.ensure());
+                void renew();
+                every(ACME_TICK_MS, renew);
             }
             if (certificates.current() === null) await openInbound();
             else await openSecured();
 
             outbound.start();
             every(SWEEP_TICK_MS, async () => {
+                watchExpiry();
                 await repo.purgeEvents(now() - env.MAILSERVER_EVENTS_RETENTION_DAYS * 86_400);
             });
         },

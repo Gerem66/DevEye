@@ -32,7 +32,7 @@ function listening(port: number): Promise<boolean> {
     });
 }
 
-test('le moteur ouvre ses quatre ports sur un certificat fourni, s’arrête sans attendre un client muet, et redémarre', async () => {
+test('le moteur ouvre ses quatre ports sur un certificat fourni, prévient de sa fin proche, s’arrête sans attendre un client muet, et redémarre', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mailserver-engine-'));
     const pem = selfSigned();
     fs.writeFileSync(path.join(dir, 'cert.pem'), pem.cert);
@@ -50,7 +50,8 @@ test('le moteur ouvre ses quatre ports sur un certificat fourni, s’arrête san
         MAILSERVER_PORT_IMAPS: String(ports[3])
     });
     const { createEngine } = await import('./engine');
-    const engine = createEngine(createTestServiceDeps({ repo: memoryRepo() }));
+    const deps = createTestServiceDeps({ repo: memoryRepo() });
+    const engine = createEngine(deps);
     try {
         await engine.start();
         const status = await engine.handle.status();
@@ -65,6 +66,16 @@ test('le moteur ouvre ses quatre ports sur un certificat fourni, s’arrête san
             ]
         );
         assert.equal(status.certificate?.source, 'file');
+        assert.equal(status.certificateError, '');
+        // Le certificat de test vit deux jours : le palier des trois jours prévient les administrateurs.
+        assert.deepEqual(
+            deps.recorded.instanceAlerts.map((a) => [a.key, a.level]),
+            [['certificate-expiry', 'error']]
+        );
+        assert.match(
+            deps.recorded.instanceAlerts[0].title,
+            /^Serveur mail : certificat expirant dans [12] jours? \(localhost\)$/
+        );
         assert.deepEqual(engine.handle.connection(), {
             host: 'localhost',
             imapPort: 993,
@@ -91,6 +102,7 @@ test('le moteur ouvre ses quatre ports sur un certificat fourni, s’arrête san
         await engine.start();
         assert.deepEqual(await Promise.all(ports.map(listening)), [true, true, true, true]);
         assert.ok((await engine.handle.status()).listeners.every((l) => l.up));
+        assert.equal(deps.recorded.instanceAlerts.length, 1, 'un palier ne prévient qu’une fois');
     } finally {
         await engine.stop();
         fs.rmSync(dir, { recursive: true, force: true });

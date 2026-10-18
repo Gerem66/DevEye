@@ -68,6 +68,8 @@ Ce qui déclenche une alerte (`src/Services/systemAlerts.ts`) :
 - une commande qui lève, qui refuse en `internal`, ou dont la réponse ne
   respecte pas son contrat ;
 - une tâche de fond de module qui échoue ;
+- un module qui signale un défaut de l'instance par `deps.alertInstance` (le
+  certificat du Serveur mail défectueux ou proche de sa fin) ;
 - un plantage du processus, avant sa sortie ;
 - un arrêt propre qui n'aboutit pas ;
 - chaque démarrage : un redémarrage que personne n'a demandé trahit un plantage.

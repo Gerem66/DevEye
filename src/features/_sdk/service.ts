@@ -328,6 +328,9 @@ export function createServiceDeps(
             return objectStoreFor(manifest.id, localDir);
         },
         providers,
+        alertInstance: (alert) => {
+            systemAlerts.report({ ...alert, key: `${manifest.id}:${alert.key}` });
+        },
         createTicker: ({ intervalMs, tick }): FeatureService => {
             // setInterval + garde de réentrance + unref ; stop() attend le tour en vol,
             // pour qu'un start() rapproché ne croise pas ses restes.

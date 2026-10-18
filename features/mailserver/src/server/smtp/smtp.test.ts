@@ -7,7 +7,7 @@ import nodemailer from 'nodemailer';
 import SMTPConnection from 'nodemailer/lib/smtp-connection';
 import { SMTPServer } from 'smtp-server';
 
-import { queueContentSchema, unseal } from '../_shared';
+import { queueContentSchema, toEvent, unseal } from '../_shared';
 import { dkimRecordName, dkimRecordValue } from '../dkim';
 import type { Verdicts } from '../engine/delivery';
 import { createTestEngine, selfSigned, testTlsStore } from '../testing/harness';
@@ -365,7 +365,7 @@ describe('la file d’envoi', () => {
     let sink: SMTPServer;
     let sinkPort = 0;
 
-    const outbound = () =>
+    const outbound = (port = sinkPort) =>
         createOutbound(
             {
                 hostname: 'mx.exemple.test',
@@ -387,7 +387,7 @@ describe('la file d’envoi', () => {
                             : [{ exchange: 'mx.puits.test', priority: 10 }]
                     ),
                 resolveHost: () => Promise.resolve(['127.0.0.1']),
-                port: sinkPort
+                port
             }
         );
 
@@ -468,6 +468,40 @@ describe('la file d’envoi', () => {
         assert.match(notice, /Final-Recipient: rfc822; lent@ailleurs\.test/);
         assert.match(notice, /Subject: A reporter/);
         assert.ok(engine.repo.events.some((e) => e.kind === 'bounced'));
+    });
+
+    it('note au journal si la remise est partie chiffrée ou en clair', async () => {
+        const tlsSink = new SMTPServer({
+            authOptional: true,
+            disabledCommands: ['AUTH'],
+            logger: false,
+            ...selfSigned(),
+            onData(stream, _session, done) {
+                stream.on('end', () => done());
+                stream.resume();
+            }
+        });
+        await new Promise<void>((resolve) => tlsSink.listen(0, resolve));
+        const address = tlsSink.server.address();
+        try {
+            const bob = { user: 'bob@exemple.test', pass: 'secret-de-bob' };
+            await send(submissionPort, { from: 'bob@exemple.test', to: 'secret@ailleurs.test', subject: 'TLS' }, bob);
+            await outbound(typeof address === 'object' && address ? address.port : 0).runOnce();
+            await send(submissionPort, { from: 'bob@exemple.test', to: 'clair@ailleurs.test', subject: 'Clair' }, bob);
+            await outbound().runOnce();
+        } finally {
+            await new Promise<void>((resolve) => tlsSink.close(() => resolve()));
+        }
+        const mailbox = await engine.repo.findByAddress('bob@exemple.test');
+        assert.ok(mailbox);
+        const sent = await Promise.all(
+            engine.repo.events
+                .filter((e) => e.mailbox_id === mailbox.id && e.kind === 'sent')
+                .map((e) => toEvent(engine.deps.cipherFor(mailbox.workspace_id), e))
+        );
+        const detailOf = (peer: string): string => sent.find((e) => e.peer === peer)?.detail ?? '';
+        assert.match(detailOf('secret@ailleurs.test'), /^mx\.puits\.test, chiffré : 250/);
+        assert.match(detailOf('clair@ailleurs.test'), /^mx\.puits\.test, en clair : 250/);
     });
 
     it('un domaine qui ne reçoit pas de courrier est rendu tout de suite, une boîte d’ici est servie sans réseau', async () => {
