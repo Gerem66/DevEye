@@ -1,8 +1,8 @@
-import { Button, formatBytesFr, StatusBadge } from 'deveye-sdk-client';
+import { Button, ErrorNote, formatBytesFr, StatusBadge } from 'deveye-sdk-client';
 
 import { CATALOGUE } from '../contracts/catalogue';
 import type { ConvertJob, ConvertProgress } from '../contracts/domain';
-import { ERROR_LABELS, formatDuration, formatRemaining, PHASE_LABELS } from './format';
+import { formatDuration, formatRemaining, jobFailure, PHASE_LABELS } from './format';
 import { ProgressBar } from './ProgressBar';
 import styles from './style.module.css';
 
@@ -61,11 +61,7 @@ export function JobRow({ job, live, canWrite, onDownload, onCancel, onRemove }: 
                     ratio={job.phase === 'running' && progress > 0 ? progress : null}
                 />
             )}
-            {job.phase === 'error' && (
-                <p className={styles.jobError}>
-                    {job.errorMessage ?? (job.errorCode ? ERROR_LABELS[job.errorCode] : ERROR_LABELS.engine_failed)}
-                </p>
-            )}
+            {job.phase === 'error' && <ErrorNote note={jobFailure(job)} inline />}
             <div className={styles.jobActions}>
                 {job.phase === 'done' && (
                     <Button variant='primary' icon='download' onClick={() => onDownload(job)}>

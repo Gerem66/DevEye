@@ -236,7 +236,7 @@ function Patch({ patch }: { patch: string | null }) {
     const lines = useMemo(() => (patch === null ? [] : patch.split('\n')), [patch]);
 
     if (patch === null) {
-        return <p className={styles.diffNone}>Diff indisponible — fichier binaire ou trop volumineux.</p>;
+        return <p className={styles.diffNone}>Diff indisponible : fichier binaire ou trop volumineux.</p>;
     }
 
     return (

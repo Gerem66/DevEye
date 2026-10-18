@@ -62,9 +62,11 @@ async function present(ctx: Ctx, id: number) {
     return toConnection(row, await readConnection(ctx, row), paused(ctx, row.id));
 }
 
-/** Un refus de la banque dit en clair, plutôt qu'une erreur interne. */
+/** Un refus de la banque dit en clair ; celui qui vise le serveur reste une panne, à signaler. */
 function refused(error: unknown): never {
-    if (error instanceof BankError) throw new FeatureError('validation', error.message);
+    if (error instanceof BankError) {
+        throw new FeatureError(error.kind === 'instance' ? 'internal' : 'validation', error.message);
+    }
     throw error;
 }
 

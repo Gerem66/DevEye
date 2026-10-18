@@ -229,7 +229,7 @@ export function ExportDialog({ open, databaseId, tables, table, onClose }: Expor
                 {done && (
                     <p className={done.truncated ? styles.warn : styles.ok}>
                         {formatCount(done.rowCount)} lignes sur {done.tableCount} table
-                        {done.tableCount > 1 ? 's' : ''} — fichier téléchargé.
+                        {done.tableCount > 1 ? 's' : ''}, fichier téléchargé.
                         {done.truncated &&
                             ' Le garde-fou mémoire du serveur a été atteint : la suite manque. Passez par mysqldump ou pg_dump pour un volume pareil.'}
                     </p>

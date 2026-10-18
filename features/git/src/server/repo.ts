@@ -9,7 +9,7 @@ import type {
 } from '../contracts/domain';
 import type { SdkQueryable, SdkStockItem } from '@deveye/types/sdk/server';
 
-/** Un point du graphe, tel que SQL le rend — sans rien déchiffrer. */
+/** Un point du graphe, tel que SQL le rend, sans rien déchiffrer. */
 export interface CommitPointRow {
     sha: string;
     committed_at: number;

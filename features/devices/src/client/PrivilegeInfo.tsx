@@ -37,7 +37,7 @@ export function PrivilegeInfo({ agent, platform }: { agent: AgentInfo | null; pl
                                 <b>Pare-feu</b> : sans privilèges, l&apos;état est déduit du service systemd (
                                 <code>ufw</code>/<code>firewalld</code>/<code>nftables</code>). En root, lecture directe
                                 des règles (<code>ufw status</code>, <code>nft list ruleset</code>) même si le pare-feu
-                                n&apos;est pas géré par systemd — donc plus de cas « Inconnu ».
+                                n&apos;est pas géré par systemd, donc plus de cas « Inconnu ».
                             </li>
                             <li>
                                 <b>Ports ouverts</b> : la liste des ports est complète sans privilèges ; root
@@ -63,7 +63,7 @@ export function PrivilegeInfo({ agent, platform }: { agent: AgentInfo | null; pl
                             <li>
                                 <b>Chiffrement disque (BitLocker)</b> : <code>manage-bde -status</code> exige un
                                 terminal
-                                <b> élevé</b> — sans cela l&apos;état reste « Inconnu ».
+                                <b> élevé</b> : sans cela l&apos;état reste « Inconnu ».
                             </li>
                             <li>Pare-feu et ports sont lisibles sans élévation.</li>
                         </ul>

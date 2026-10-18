@@ -81,7 +81,7 @@ describe('renderMessage', () => {
         ];
         assert.equal(
             renderMessage('Déjà {erreurs} erreurs, {lenteurs} lenteurs, {inconnu} ?', conditions, outcomes),
-            'Déjà 42 erreurs, \u2014 lenteurs, {inconnu} ?'
+            'Déjà 42 erreurs, \u2013 lenteurs, {inconnu} ?'
         );
     });
 });

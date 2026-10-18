@@ -95,8 +95,8 @@ const ZOOM_PRESETS: { label: string; ms: number }[] = [
 /**
  * What the panel is currently showing:
  * - `live`: the timeline window (rolling 24h or a chosen day), latest values;
- * - `range`: a dragged zone — graphs over it, KPIs averaged, processes at its end;
- * - `snapshot`: a single instant — exact KPIs/processes, graphs over the cadence
+ * - `range`: a dragged zone: graphs over it, KPIs averaged, processes at its end;
+ * - `snapshot`: a single instant: exact KPIs/processes, graphs over the cadence
  *   around it (fine resolution).
  */
 type Focus = { kind: 'live' } | { kind: 'range'; start: number; end: number } | { kind: 'snapshot'; at: number };
@@ -779,7 +779,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                   { label: 'Minimum', value: fmt(s.min) },
                   { label: 'Maximum', value: fmt(s.max) }
               ]
-            : [{ label: 'Aucune donnée', value: '—' }];
+            : [{ label: 'Aucune donnée', value: '–' }];
     const pctRows = (s: S, used?: number, total?: number): DetailRow[] => {
         const rows = unitRows(s, fmtPct1);
         if (used != null && total != null && total > 0) {
@@ -790,9 +790,9 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     const rateRows = (label: string, s: S): DetailRow[] =>
         s
             ? [
-                  { label: `${label} — actuel`, value: formatRate(s.cur) },
-                  { label: `${label} — moyenne`, value: formatRate(s.avg) },
-                  { label: `${label} — maximum`, value: formatRate(s.max) }
+                  { label: `${label} (actuel)`, value: formatRate(s.cur) },
+                  { label: `${label} (moyenne)`, value: formatRate(s.avg) },
+                  { label: `${label} (maximum)`, value: formatRate(s.max) }
               ]
             : [];
 
@@ -979,7 +979,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     const showHardwareInfo = () =>
         selected &&
         void openInfo({
-            title: `Matériel — ${selected.name}`,
+            title: `Matériel de ${selected.name}`,
             body: <HardwareInfo report={report} device={selected} />,
             width: 560
         });
@@ -1006,7 +1006,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
     /**
      * La liste ne varie jamais : chaque fonction y figure, et ce qui l'empêche
      * se lit sur elle. Le rôle d'abord, l'état de la machine ensuite (voir
-     * `availability.ts`) — un appareil rallumé ne rendra pas une permission.
+     * `availability.ts`) : un appareil rallumé ne rendra pas une permission.
      */
     const reach = agentReach(selected);
     /**
@@ -1299,7 +1299,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                 <p className={styles.waitingMsg}>
                     Aucun relevé sur cette période
                     {focus.kind === 'range' || focus.kind === 'snapshot'
-                        ? ' — sélectionnez une autre plage ou revenez au direct.'
+                        ? ' : sélectionnez une autre plage ou revenez au direct.'
                         : '.'}
                 </p>
             ) : null}
@@ -1357,7 +1357,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                         />
                         <InfoCard
                             label={procView.averaged ? 'Processus (moy.)' : 'Processus'}
-                            value={procView.count == null ? '—' : `${procStale ? '~' : ''}${procView.count}`}
+                            value={procView.count == null ? '–' : `${procStale ? '~' : ''}${procView.count}`}
                             muted={valuesMuted}
                             hint={
                                 procView.count == null
@@ -1372,7 +1372,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                                 label={averaged ? 'Connexions (moy.)' : 'Connexions'}
                                 value={String(display.activeConnections)}
                                 muted={valuesMuted}
-                                hint='Connexions TCP établies — cliquer pour le détail'
+                                hint='Connexions TCP établies : cliquer pour le détail'
                                 onClick={report?.connections ? showConnections : undefined}
                             />
                         )}
@@ -1409,7 +1409,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                                 type='button'
                                 className={`${styles.secChip} ${styles.secChipBtn} ${report.agent.privileged ? styles.secGood : styles.secUnknown}`}
                                 onClick={showPrivilegeInfo}
-                                title={`Agent exécuté sous « ${report.agent.user || 'inconnu'} » — pourquoi certaines mesures sont limitées`}
+                                title={`Agent exécuté sous « ${report.agent.user || 'inconnu'} » : pourquoi certaines mesures sont limitées`}
                             >
                                 <span className={styles.secLabel}>Privilèges agent</span>
                                 <span className={styles.secVal}>
@@ -1452,7 +1452,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                     {procSample && (
                         <span
                             className={styles.sectionMeta}
-                            title={`Relevé du ${new Date(procSample.ts).toLocaleString('fr-FR')} — le même instant que les graphes`}
+                            title={`Relevé du ${new Date(procSample.ts).toLocaleString('fr-FR')}, le même instant que les graphes`}
                         >
                             {procSample.kind === 'all' ? 'Relevé complet' : 'Top 20'} · {procSample.processes.length}{' '}
                             processus · relevé {ageLabel(procSample.ts)} (
@@ -1523,14 +1523,14 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                                             {procCols.disk && (
                                                 <td className={styles.procNum}>
                                                     {p.diskReadBytes === null || p.diskWriteBytes === null
-                                                        ? '—'
+                                                        ? '–'
                                                         : `${formatBytes(p.diskReadBytes)} / ${formatBytes(p.diskWriteBytes)}`}
                                                 </td>
                                             )}
                                             {procCols.conn && (
                                                 <td className={styles.procNum}>
                                                     {p.connIn === null && p.connOut === null
-                                                        ? '—'
+                                                        ? '–'
                                                         : `${p.connIn ?? 0} ↓ / ${p.connOut ?? 0} ↑`}
                                                 </td>
                                             )}
@@ -1541,7 +1541,7 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                                                         p.listenPorts.length > 0 ? p.listenPorts.join(', ') : undefined
                                                     }
                                                 >
-                                                    {p.listenPorts.length > 0 ? p.listenPorts.join(', ') : '—'}
+                                                    {p.listenPorts.length > 0 ? p.listenPorts.join(', ') : '–'}
                                                 </td>
                                             )}
                                         </tr>

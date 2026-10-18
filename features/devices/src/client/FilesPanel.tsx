@@ -550,7 +550,7 @@ export function FilesPanel({ deviceId, writable = true }: { deviceId: string; wr
                 />
                 <span className={styles.filesUsageState}>
                     {uploading
-                        ? `Téléversement ${uploading.name} — ${uploading.pct}%`
+                        ? `Téléversement de ${uploading.name} : ${uploading.pct}%`
                         : downloading
                           ? `Téléchargement ${downloading}…`
                           : analyzing
@@ -597,7 +597,7 @@ export function FilesPanel({ deviceId, writable = true }: { deviceId: string; wr
                     {rows.withSize.length === 0 && !loading ? (
                         <p className={styles.logHint}>
                             {rows.hiddenCount > 0
-                                ? `${rows.hiddenCount} élément${rows.hiddenCount > 1 ? 's' : ''} caché${rows.hiddenCount > 1 ? 's' : ''} — activez « Cachés » pour les afficher.`
+                                ? `${rows.hiddenCount} élément${rows.hiddenCount > 1 ? 's' : ''} caché${rows.hiddenCount > 1 ? 's' : ''} : activez « Cachés » pour les afficher.`
                                 : 'Dossier vide.'}
                         </p>
                     ) : (

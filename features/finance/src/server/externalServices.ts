@@ -39,7 +39,7 @@ async function enableBanking(repo: FinanceRepo): Promise<SdkExternalService> {
             ...base,
             state: 'down',
             summary:
-                e instanceof BankError && e.kind === 'auth'
+                e instanceof BankError && e.kind === 'instance'
                     ? 'Enable Banking refuse la clé de l’application.'
                     : 'Enable Banking ne répond pas.',
             facts

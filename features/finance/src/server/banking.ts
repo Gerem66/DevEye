@@ -96,7 +96,7 @@ export function connectorOf(stored: StoredConnection): BankConnector {
     const app = enableBankingApp();
     if (app === null) {
         throw new BankError(
-            'auth',
+            'instance',
             'Ce serveur ne relie plus d’autres banques que Qonto : prévenez son administrateur.'
         );
     }

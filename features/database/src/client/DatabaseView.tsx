@@ -71,7 +71,7 @@ export function DatabaseView({
                         <Stat label='Temps de réponse' value={formatMs(database.lastElapsedMs)} />
                         <Stat label='Taille' value={formatBytes(database.sizeBytes)} />
                         <Stat label='Tables' value={formatCount(database.tableCount)} />
-                        <Stat label='Version' value={database.serverVersion ?? '—'} />
+                        <Stat label='Version' value={database.serverVersion ?? '–'} />
                     </section>
 
                     {database.lastCheckAt === null && (
@@ -118,8 +118,8 @@ export function DatabaseView({
 
                     {alerts.length === 0 && (
                         <p className={styles.hint}>
-                            Aucune alerte. Une alerte compare le résultat de requêtes à des seuils — nombre d’erreurs de
-                            la dernière heure, utilisateurs actifs, lignes en attente — et prévient sur les canaux de
+                            Aucune alerte. Une alerte compare le résultat de requêtes à des seuils (nombre d’erreurs de
+                            la dernière heure, utilisateurs actifs, lignes en attente) et prévient sur les canaux de
                             l’espace.
                             {canWrite && ' « Gérer les alertes » en écrit une.'}
                         </p>
@@ -139,7 +139,7 @@ export function DatabaseView({
                                         {alert.combinator === 'and' ? 'toutes' : 'au moins une'}
                                         {alert.lastCheckAt !== null && ` · évaluée ${formatAgo(alert.lastCheckAt)}`}
                                         {alert.lastValues.length > 0 &&
-                                            ` · ${alert.lastValues.map((v) => (v === null ? '—' : v)).join(' / ')}`}
+                                            ` · ${alert.lastValues.map((v) => (v === null ? '–' : v)).join(' / ')}`}
                                     </span>
                                     {alert.lastError && <span className={styles.error}>{alert.lastError}</span>}
                                 </div>

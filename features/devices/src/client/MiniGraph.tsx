@@ -62,7 +62,7 @@ export function MiniGraph({ title, series, yMax, stat, onClick, tall, format }: 
 
     let body: ReactNode;
     if (!hasData) {
-        body = <div className={styles.graphEmpty}>—</div>;
+        body = <div className={styles.graphEmpty}>–</div>;
     } else {
         const dataMax = maxOf(all, (p) => p.v);
         const yTop = yMax ?? Math.max(1, dataMax * 1.15);

@@ -90,7 +90,7 @@ const EMPTY: DockerInventory = { engines: [], containers: [], images: [], volume
  */
 const NO_ENGINE_HINT =
     'Aucun moteur de conteneurs joignable. L’agent les interroge avec « docker » / « podman » : il lui faut ' +
-    'donc accès au démon — service installé en root, ou son utilisateur dans le groupe « docker ».';
+    'donc accès au démon : service installé en root, ou son utilisateur dans le groupe « docker ».';
 
 /** Une action en cours ou terminée, telle que l'écran la suit. */
 interface OpState {
@@ -335,7 +335,7 @@ export function DockerPanel({ deviceId, actionable }: { deviceId: string; action
                                     className={`icon ${op.done ? (op.ok ? 'icon-check-circle' : 'icon-x-circle') : `icon-spinner ${styles.spinning}`}`}
                                 />
                                 {op.action}
-                                {op.done && (op.ok ? ' — terminé' : ` — échec : ${op.error ?? 'raison inconnue'}`)}
+                                {op.done && (op.ok ? ' : terminé' : ` : échec, ${op.error ?? 'raison inconnue'}`)}
                             </span>
                             {op.lines.length > 0 && (
                                 <LogOutput
@@ -603,10 +603,10 @@ function ContainersTable({
                                         </StatusBadge>
                                     </td>
                                     <td className={styles.dockerNum}>
-                                        {stat?.cpuPercent != null ? `${stat.cpuPercent.toFixed(1)} %` : '—'}
+                                        {stat?.cpuPercent != null ? `${stat.cpuPercent.toFixed(1)} %` : '–'}
                                     </td>
                                     <td className={styles.dockerNum}>
-                                        {stat?.memUsedBytes != null ? formatBytesFr(stat.memUsedBytes) : '—'}
+                                        {stat?.memUsedBytes != null ? formatBytesFr(stat.memUsedBytes) : '–'}
                                     </td>
                                     <td>
                                         <div className={styles.dockerRowActions}>
@@ -713,7 +713,7 @@ function ContainersTable({
                                                             stat={
                                                                 stat?.cpuPercent != null
                                                                     ? `${stat.cpuPercent.toFixed(1)} %`
-                                                                    : '—'
+                                                                    : '–'
                                                             }
                                                             format={(v) => `${v.toFixed(1)} %`}
                                                         />
@@ -723,7 +723,7 @@ function ContainersTable({
                                                             stat={
                                                                 stat?.memUsedBytes != null
                                                                     ? formatBytesFr(stat.memUsedBytes)
-                                                                    : '—'
+                                                                    : '–'
                                                             }
                                                             format={formatBytesFr}
                                                         />

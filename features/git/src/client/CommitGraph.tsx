@@ -150,7 +150,7 @@ export function CommitGraph({
         const index = new Map<string, number>();
 
         authors.forEach((author, i) => {
-            // Sans regroupement, chaque auteur git garde son entrée — mais il
+            // Sans regroupement, chaque auteur git garde son entrée, mais il
             // porte déjà la couleur de son compte quand il en a un.
             const memberId = groupByMember ? author.userId : null;
             const key = memberId === null ? author.authorRef : `u:${memberId}`;

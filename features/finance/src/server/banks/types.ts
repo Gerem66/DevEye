@@ -18,11 +18,12 @@ export interface BankConnector {
  * Un refus de la banque, rangé par ce qu'il demande à la personne. `auth` : les
  * accès sont refusés, il faut les corriger. `expired` : le consentement a pris
  * fin, il faut se reconnecter. `unavailable` : la banque ne répond pas, la
- * relève suivante réessaiera.
+ * relève suivante réessaiera. `instance` : la configuration du serveur bloque,
+ * seul son administrateur la corrige.
  */
 export class BankError extends Error {
     constructor(
-        readonly kind: 'auth' | 'expired' | 'unavailable',
+        readonly kind: 'auth' | 'expired' | 'unavailable' | 'instance',
         message: string
     ) {
         super(message);

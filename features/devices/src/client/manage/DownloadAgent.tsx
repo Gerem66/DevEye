@@ -22,7 +22,7 @@ import styles from './style.module.css';
 
 /** OS families in picker order, with their display label + tagline. */
 const OS_GROUPS: { os: AgentOs; label: string; hint: string }[] = [
-    { os: 'macos', label: 'Apple', hint: 'macOS — Intel & Silicon' },
+    { os: 'macos', label: 'Apple', hint: 'macOS, Intel & Silicon' },
     { os: 'linux', label: 'Linux', hint: 'x64, ARM64, Raspberry Pi' },
     { os: 'windows', label: 'Windows', hint: 'x64, x86, ARM64' }
 ];
@@ -117,7 +117,7 @@ export function DownloadAgent({ open, onClose }: { open: boolean; onClose: () =>
     const servedStale = versionGap < 0;
     const versionMismatch = versionGap !== 0;
 
-    const title = os ? `Agent — ${OS_GROUPS.find((g) => g.os === os)?.label}` : "Télécharger l'agent";
+    const title = os ? `Agent pour ${OS_GROUPS.find((g) => g.os === os)?.label}` : "Télécharger l'agent";
 
     return (
         <Dialog
@@ -151,13 +151,13 @@ export function DownloadAgent({ open, onClose }: { open: boolean; onClose: () =>
                         <span className='icon icon-info' />
                         {servedStale ? (
                             <>
-                                Agent v{agentVersion} — en retard sur l’interface (v{APP_VERSION}). Les binaires
-                                proposés ici sont périmés : vérifiez la synchronisation des agents (AGENT_REPO / jeton
-                                de téléchargement).
+                                Agent v{agentVersion}, en retard sur l’interface (v{APP_VERSION}). Les binaires proposés
+                                ici sont périmés : vérifiez la synchronisation des agents (AGENT_REPO / jeton de
+                                téléchargement).
                             </>
                         ) : (
                             <>
-                                Agent v{agentVersion} — différent de l’interface (v{APP_VERSION}). Une nouvelle version
+                                Agent v{agentVersion}, différent de l’interface (v{APP_VERSION}). Une nouvelle version
                                 est peut-être en cours de déploiement.
                             </>
                         )}

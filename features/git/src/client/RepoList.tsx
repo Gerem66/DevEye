@@ -14,7 +14,7 @@ interface RepoListProps {
     onOpen: (repoId: number) => void;
     /** L'ordre complet après un dépôt. */
     onReorder: (ids: number[]) => void;
-    /** Un glissé commence ou finit — l'appelant suspend ses relectures. */
+    /** Un glissé commence ou finit : l'appelant suspend ses relectures. */
     onDragStateChange: (dragging: boolean) => void;
 }
 
@@ -64,7 +64,7 @@ interface RepoCardProps {
     /** L'avancement de sa synchronisation, ou `null` si elle ne tourne pas. */
     sync: GitRepoSyncState | null;
     outline: ReturnType<ReturnType<typeof useLiveOutlines>>;
-    /** Carte en cours de déplacement — estompée, jamais restylée autrement. */
+    /** Carte en cours de déplacement : estompée, jamais restylée autrement. */
     dragging: boolean;
     onOpen: () => void;
     /** Absent en lecture seule : pas de poignée, pas de réorganisation. */

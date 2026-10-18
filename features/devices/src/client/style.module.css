@@ -1654,7 +1654,7 @@
 
 /* Une fonction qui ne s'ouvre pas : montrée pour dire ce que la machine sait
    faire, inerte, et le glyphe de droite dit pourquoi (droit, archive, hors
-   ligne — voir `availability.ts`). */
+   ligne : voir `availability.ts`). */
 .actionsMenuItemLocked {
     color: var(--text-muted);
     cursor: not-allowed;

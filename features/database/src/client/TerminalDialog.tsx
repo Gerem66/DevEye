@@ -85,7 +85,7 @@ export function TerminalDialog({ open, databaseId, databaseName, onClose, onWrot
             <Dialog
                 open={open && confirm === null}
                 onClose={onClose}
-                title={`Terminal — ${databaseName}`}
+                title={`Terminal de ${databaseName}`}
                 description='Une instruction à la fois. Les écritures sont possibles et demandent confirmation.'
                 width={860}
                 footer={

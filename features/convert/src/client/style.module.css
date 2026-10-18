@@ -998,12 +998,6 @@
     color: var(--text-muted);
 }
 
-.jobError {
-    margin: 0;
-    font-size: 0.85rem;
-    color: var(--danger);
-}
-
 .jobActions {
     display: flex;
     flex-wrap: wrap;

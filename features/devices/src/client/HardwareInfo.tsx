@@ -71,7 +71,7 @@ function Connectivity({ interfaces, bluetooth }: { interfaces: NetInterface[]; b
             <dl className={styles.hwRows}>
                 {shown.length > 0 ? (
                     shown.map((n) => (
-                        <Row key={n.name} label={`${NET_KIND[n.kind].label} · ${n.name}`} value={n.mac ?? '—'} />
+                        <Row key={n.name} label={`${NET_KIND[n.kind].label} · ${n.name}`} value={n.mac ?? '–'} />
                     ))
                 ) : (
                     <Row label='Interfaces réseau' value='Aucune détectée' />

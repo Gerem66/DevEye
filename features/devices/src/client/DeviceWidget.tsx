@@ -21,7 +21,7 @@ const LEVEL_CLASS: Record<Activity, string> = {
 function Metric({ label, value }: { label: string; value: number | null }) {
     return (
         <span className={styles.metric}>
-            <strong className={styles.metricValue}>{value == null ? '—' : `${value}%`}</strong>
+            <strong className={styles.metricValue}>{value == null ? '–' : `${value}%`}</strong>
             <span className={styles.metricLabel}>{label}</span>
         </span>
     );

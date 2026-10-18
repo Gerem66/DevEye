@@ -49,6 +49,12 @@ export default function GeneralPanel({ canWrite }: SettingsPanelProps) {
         }
     };
 
+    // Sans les réglages lus, le formulaire montrerait les valeurs par défaut,
+    // et les enregistrer écraserait les vraies.
+    if (stored.data === null) {
+        return stored.error ? <ErrorNote note={stored.error} /> : <p className={shell.empty}>Chargement…</p>;
+    }
+
     return (
         <div className={shell.section}>
             <span className={shell.sectionLabel}>Devise de référence</span>
@@ -63,6 +69,7 @@ export default function GeneralPanel({ canWrite }: SettingsPanelProps) {
                 options={codes.map(currencyOption)}
                 onChange={(baseCurrency) => setDraft({ ...draft, baseCurrency })}
             />
+            <ErrorNote note={rates.error} />
 
             <span className={shell.sectionLabel}>Avis de fin de conversion</span>
             <p className={shell.sectionHint}>

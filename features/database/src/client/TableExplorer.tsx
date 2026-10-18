@@ -752,7 +752,7 @@ export function TableExplorer({ databaseId, databaseName, autoLoad, expanded, on
             >
                 <p className={styles.hint}>
                     Ces lignes sont supprimées de <strong>{table?.name}</strong>, sur le serveur, immédiatement. DevEye
-                    ne sait pas revenir en arrière — seule une sauvegarde du serveur le permettrait.
+                    ne sait pas revenir en arrière : seule une sauvegarde du serveur le permettrait.
                 </p>
             </Dialog>
         </motion.section>

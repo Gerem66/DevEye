@@ -22,7 +22,7 @@ function explainInspect() {
                 </p>
                 <ul>
                     <li>
-                        il lit l’<strong>inventaire</strong> — version du serveur, taille totale de la base, nombre de
+                        il lit l’<strong>inventaire</strong> : version du serveur, taille totale de la base, nombre de
                         tables ;
                     </li>
                     <li>
@@ -32,7 +32,7 @@ function explainInspect() {
                     </li>
                     <li>
                         il <strong>évalue les alertes</strong> de cette base et envoie les notifications si l’une
-                        bascule — exactement comme le fait le relevé périodique, puisque c’est le même code.
+                        bascule, exactement comme le fait le relevé périodique, puisque c’est le même code.
                     </li>
                 </ul>
                 <p>

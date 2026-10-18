@@ -89,7 +89,7 @@ export default function DatabaseAlertsPanel({ scope, canWrite }: SettingsPanelPr
                                 {alert.combinator === 'and' ? 'toutes' : 'au moins une'}
                                 {alert.lastCheckAt !== null && ` · évaluée ${formatAgo(alert.lastCheckAt)}`}
                                 {alert.lastValues.length > 0 &&
-                                    ` · ${alert.lastValues.map((v) => (v === null ? '—' : v)).join(' / ')}`}
+                                    ` · ${alert.lastValues.map((v) => (v === null ? '–' : v)).join(' / ')}`}
                             </span>
                             {alert.lastError && <span className={shell.errorText}>{alert.lastError}</span>}
                         </span>

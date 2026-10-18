@@ -65,7 +65,8 @@ propriétaire est un admin actif.
 Ce qui déclenche une alerte (`src/Services/systemAlerts.ts`) :
 
 - une erreur 5xx, sur le port privé ou sur la surface publique ;
-- une commande qui lève, ou dont la réponse ne respecte pas son contrat ;
+- une commande qui lève, qui refuse en `internal`, ou dont la réponse ne
+  respecte pas son contrat ;
 - une tâche de fond de module qui échoue ;
 - un plantage du processus, avant sa sortie ;
 - un arrêt propre qui n'aboutit pas ;

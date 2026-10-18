@@ -72,6 +72,6 @@ export function renderMessage(message: string, conditions: DatabaseCondition[], 
         const i = conditions.findIndex((c) => c.label === label);
         if (i === -1) return whole;
         const value = outcomes[i]?.value;
-        return value === null || value === undefined ? '—' : String(value);
+        return value === null || value === undefined ? '–' : String(value);
     });
 }

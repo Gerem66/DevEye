@@ -30,7 +30,7 @@ export function buildNotice(notice: DatabaseNotice): Record<string, unknown>[] {
 
     return [
         {
-            title: notice.firing ? `🔴 ${trim(notice.alert)}` : `🟢 ${trim(notice.alert)} — rentré dans l’ordre`,
+            title: notice.firing ? `🔴 ${trim(notice.alert)}` : `🟢 ${trim(notice.alert)} : rentré dans l’ordre`,
             description: notice.firing
                 ? `Un seuil est franchi sur **${trim(notice.database)}**.`
                 : `La base **${trim(notice.database)}** est repassée sous son seuil.`,

@@ -475,29 +475,24 @@ export async function registerWS(
                 tracker.failed(command, e);
                 // Le duck-typing double l'instanceof exprès : un module et l'app
                 // peuvent résoudre deux instances distinctes de @deveye/types.
-                if (!(e instanceof FeatureError) && e instanceof Error && e.name === 'FeatureError' && 'code' in e) {
-                    const dup = e as Error & { code: string; details?: unknown };
-                    reqLogger.info({ command, code: dup.code, reason: dup.message }, 'Command rejected');
-                    send(socket, {
-                        requestId: replyId,
-                        command,
-                        payload: err(dup.code as Parameters<typeof err>[0], dup.message, dup.details)
-                    });
-                    return;
-                }
+                const refusal =
+                    e instanceof FeatureError || (e instanceof Error && e.name === 'FeatureError' && 'code' in e)
+                        ? (e as Error & { code: Parameters<typeof err>[0]; details?: unknown })
+                        : null;
                 // Un refus ordinaire (introuvable, quota, droit) : ni `err` ni le
                 // mot « error », qui le feraient passer pour une panne à la lecture.
-                if (e instanceof FeatureError) {
-                    reqLogger.info({ command, code: e.code, reason: e.message }, 'Command rejected');
+                if (refusal && refusal.code !== 'internal') {
+                    reqLogger.info({ command, code: refusal.code, reason: refusal.message }, 'Command rejected');
                     send(socket, {
                         requestId: replyId,
                         command,
-                        payload: err(e.code, e.message, e.details)
+                        payload: err(refusal.code, refusal.message, refusal.details)
                     });
                     return;
                 }
-                // L'objet entier, pas son message : pino sérialise la pile et la
-                // chaîne des `cause` sous la clé `err`.
+                // Une panne, levée telle quelle ou dite `internal` par la
+                // fonctionnalité. L'objet entier, pas son message : pino sérialise
+                // la pile et la chaîne des `cause` sous la clé `err`.
                 reqLogger.error({ command, err: e }, 'Feature handler threw');
                 if (def.access?.feature) featureHealth.commandFailed(def.access.feature);
                 systemAlerts.report({
@@ -509,7 +504,9 @@ export async function registerWS(
                 send(socket, {
                     requestId: replyId,
                     command,
-                    payload: err('internal', 'Internal server error')
+                    payload: refusal
+                        ? err('internal', refusal.message, refusal.details)
+                        : err('internal', 'Internal server error')
                 });
             } finally {
                 progress?.close();

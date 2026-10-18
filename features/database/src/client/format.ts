@@ -63,7 +63,7 @@ export const STATUS_META: Record<DatabaseStatus, { label: string; tone: 'neutral
 
 /** « 4,2 Go », « 812 Mo ». */
 export function formatBytes(bytes: number | null): string {
-    if (bytes === null) return '—';
+    if (bytes === null) return '–';
     const units = ['o', 'ko', 'Mo', 'Go', 'To'];
     let value = bytes;
     let unit = 0;
@@ -76,7 +76,7 @@ export function formatBytes(bytes: number | null): string {
 
 /** « 1 284 ». */
 export function formatCount(value: number | null): string {
-    return value === null ? '—' : value.toLocaleString('fr-FR');
+    return value === null ? '–' : value.toLocaleString('fr-FR');
 }
 
 /** « il y a 4 min ». */
@@ -93,7 +93,7 @@ export function formatAgo(epochSeconds: number | null): string {
 
 /** « 42 ms », « 1,8 s ». */
 export function formatMs(ms: number | null): string {
-    if (ms === null) return '—';
+    if (ms === null) return '–';
     if (ms < 1000) return `${ms} ms`;
     return `${(ms / 1000).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} s`;
 }

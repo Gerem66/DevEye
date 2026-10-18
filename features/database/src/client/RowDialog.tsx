@@ -116,7 +116,7 @@ export function RowDialog({ open, databaseId, structure, row, onClose, onSaved }
             open={open}
             onClose={onClose}
             title={editing ? 'Modifier la ligne' : 'Ajouter une ligne'}
-            description={`${structure.table} — ${editable.length} colonne${editable.length > 1 ? 's' : ''} modifiable${editable.length > 1 ? 's' : ''}`}
+            description={`${structure.table} : ${editable.length} colonne${editable.length > 1 ? 's' : ''} modifiable${editable.length > 1 ? 's' : ''}`}
             width={640}
             onSubmit={submit}
             footer={
@@ -162,7 +162,7 @@ export function RowDialog({ open, databaseId, structure, row, onClose, onSaved }
                                         onClick={() => set(column.name, { auto: false })}
                                     >
                                         <span className='icon icon-lock' aria-hidden='true' />
-                                        Défini automatiquement — cliquer pour saisir une valeur
+                                        Défini automatiquement : cliquer pour saisir une valeur
                                     </button>
                                 ) : isLongText(column) ? (
                                     <textarea

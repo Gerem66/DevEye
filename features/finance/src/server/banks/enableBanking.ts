@@ -102,7 +102,10 @@ async function call<T>(
     if (res.ok) return (res.status === 204 ? {} : await res.json()) as T;
     const detail = await res.text().catch(() => '');
     if (res.status === 401) {
-        throw new BankError('auth', 'Enable Banking refuse l’application de ce serveur : prévenez son administrateur.');
+        throw new BankError(
+            'instance',
+            'Enable Banking refuse l’application de ce serveur : prévenez son administrateur.'
+        );
     }
     if (res.status === 403 || /EXPIRED|REVOKED|ACCESS_DENIED|CLOSED/i.test(detail)) {
         throw new BankError('expired', 'Le consentement donné à la banque a pris fin : reconnectez-la.');

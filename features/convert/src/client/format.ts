@@ -1,5 +1,7 @@
+import type { ErrorNoteInput } from 'deveye-sdk-client';
+
 import type { ConvertKind } from '../contracts/catalogue';
-import type { ConvertErrorCode, ConvertPhase } from '../contracts/domain';
+import type { ConvertErrorCode, ConvertJob, ConvertPhase } from '../contracts/domain';
 
 export const PHASE_LABELS: Record<ConvertPhase, string> = {
     awaiting_upload: 'En attente du fichier',
@@ -29,6 +31,18 @@ export const ERROR_LABELS: Record<ConvertErrorCode, string> = {
     file_lost: 'Le fichier n’est plus sur le serveur. Relancer la conversion.',
     engine_failed: 'La conversion a échoué.'
 };
+
+/** Les échecs qui tiennent au serveur : personne ne les répare du côté de l'utilisateur. */
+const INSTANCE_FAILURES: readonly ConvertErrorCode[] = ['engine_missing', 'disk_full', 'engine_failed'];
+
+/** L'échec d'un travail, tel que le bandeau le montre : signalable quand il tient au serveur. */
+export function jobFailure(job: ConvertJob): ErrorNoteInput {
+    const code = job.errorCode ?? 'engine_failed';
+    return {
+        message: job.errorMessage ?? ERROR_LABELS[code],
+        code: INSTANCE_FAILURES.includes(code) ? 'internal' : 'validation'
+    };
+}
 
 export const KIND_NOUNS: Record<ConvertKind, string> = {
     video: 'une vidéo',

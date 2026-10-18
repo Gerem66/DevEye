@@ -81,10 +81,10 @@ export const devicesSetConfig = {
     input: z
         .object({
             deviceId,
-            /** Collection interval in seconds — metrics *and* processes (5s–1h). */
+            /** Collection interval in seconds, for metrics *and* processes (5s–1h). */
             metricIntervalSeconds: z.number().int().min(5).max(3600).nullable().optional(),
             processCapture: processCaptureSchema.nullable().optional(),
-            /** Conservation de l'historique — métriques, présence et processus. */
+            /** Conservation de l'historique : métriques, présence et processus. */
             retentionDays: z.number().int().positive().max(3650).nullable().optional(),
             /** Compte d'ouverture des sessions ; `null` : celui de l'agent. */
             terminalDefaultUser: terminalUser.nullable().optional(),
@@ -286,7 +286,7 @@ export const devicesStorage = {
         snapshots: z.number().int().nonnegative(),
         /** Total process entries recorded across those instants. */
         processes: z.number().int().nonnegative(),
-        /** Bytes the compressed process blobs occupy — measured, not estimated. */
+        /** Bytes the compressed process blobs occupy (measured, not estimated). */
         bytes: z.number().int().nonnegative()
     })
 };

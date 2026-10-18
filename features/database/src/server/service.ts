@@ -243,8 +243,8 @@ export class DatabaseMonitor {
         await this.deps.deveyeFor(workspaceId).notify.send(
             {
                 subject: alert.firing
-                    ? `[DevEye] Alerte ${alert.databaseName} — ${alert.alertName}`
-                    : `[DevEye] Retour à la normale ${alert.databaseName} — ${alert.alertName}`,
+                    ? `[DevEye] Alerte ${alert.databaseName} : ${alert.alertName}`
+                    : `[DevEye] Retour à la normale ${alert.databaseName} : ${alert.alertName}`,
                 body: alert.body,
                 payload: {
                     event: alert.firing ? 'database_alert' : 'database_recovered',

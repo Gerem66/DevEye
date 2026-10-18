@@ -4,7 +4,7 @@ import type { SourceFormat, TargetFormat } from '../../contracts/catalogue';
 import { outputName } from '../../contracts/catalogue';
 import type { ConvertJob, ConvertProgress } from '../../contracts/domain';
 import type { SizeEstimate } from '../../contracts/estimate';
-import { ERROR_LABELS, formatDuration, formatRemaining, formatTtl } from '../format';
+import { formatDuration, formatRemaining, formatTtl, jobFailure } from '../format';
 import { ProgressBar } from '../ProgressBar';
 import { SizeSummary } from '../SizeSummary';
 import styles from '../style.module.css';
@@ -65,13 +65,7 @@ function Status({ sending, tracked }: Pick<ExportStepProps, 'sending' | 'tracked
     if (gone)
         return <p className={styles.note}>Cette conversion n’est plus sur le serveur : son résultat a été retiré.</p>;
     if (job.phase === 'canceled') return <p className={styles.note}>Conversion annulée.</p>;
-    if (job.phase === 'error') {
-        return (
-            <p className={styles.problem} role='alert'>
-                {job.errorMessage ?? (job.errorCode ? ERROR_LABELS[job.errorCode] : ERROR_LABELS.engine_failed)}
-            </p>
-        );
-    }
+    if (job.phase === 'error') return <ErrorNote note={jobFailure(job)} inline />;
     if (job.phase === 'done') {
         return (
             <p className={styles.success}>

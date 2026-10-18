@@ -274,7 +274,7 @@ export class GitSync {
 
                 // Appel direct plutôt que `forced` + `tick()` : la reprise ne
                 // doit dépendre ni de la garde de ré-entrance d'un tour en
-                // cours, ni de la place du dépôt dans `listDue` — il vient
+                // cours, ni de la place du dépôt dans `listDue` : il vient
                 // justement d'être synchronisé, donc il y trie en dernier. Une
                 // tranche perdue laisserait l'historique incomplet **et**, depuis
                 // que l'avancement survit ci-dessus, une barre qui n'avance plus.
@@ -360,7 +360,7 @@ export class GitSync {
 
             // La tête. Sautée au tout premier tour : sans commit connu, il n'y a
             // pas de « depuis », et la passe de backfill ci-dessous part elle
-            // aussi de HEAD — les deux liraient exactement la même chose.
+            // aussi de HEAD : les deux liraient exactement la même chose.
             if (newest !== null) {
                 const head = await this.github.fetchCommits(
                     target.owner,
@@ -392,8 +392,8 @@ export class GitSync {
 
                 const oldest = tail.commits.length > 0 ? Math.min(...tail.commits.map((c) => c.committedAt)) : null;
                 // Trois façons d'avoir fini. Le distant n'a plus rien
-                // (`exhausted`), la tranche est vide, ou la borne n'a pas reculé
-                // — ce dernier cas protège d'une boucle sans fin quand plus de
+                // (`exhausted`), la tranche est vide, ou la borne n'a pas reculé ;
+                // ce dernier cas protège d'une boucle sans fin quand plus de
                 // `BACKFILL_PAGES` pages partagent la même seconde.
                 if (tail.exhausted || oldest === null || (bound !== undefined && oldest >= bound)) {
                     next.backfillDone = true;
@@ -529,7 +529,7 @@ export class GitSync {
     /**
      * Enregistre un lot de commits et leurs auteurs.
      *
-     * Rend `true` si le lot n'était pas vide — c'est ce qui décide de réveiller
+     * Rend `true` si le lot n'était pas vide : c'est ce qui décide de réveiller
      * l'espace. `INSERT IGNORE` côté SQL : relire un commit déjà connu est le
      * cas **normal** ici, pas une erreur. Les deux passes (tête et queue) se
      * recouvrent d'ailleurs volontiers, la borne `until` du fournisseur étant
@@ -575,7 +575,7 @@ export class GitSync {
      * Une branche dont la tête est **déjà connue** est sautée sans le moindre
      * appel : si on a son sommet, on a tout ce qu'elle porte. C'est ce qui rend
      * cette passe gratuite en régime établi et coûteuse seulement quand quelque
-     * chose a bougé — ou au premier import, où elle est précisément ce qu'on
+     * chose a bougé, ou au premier import, où elle est précisément ce qu'on
      * veut.
      *
      * Deux pages par branche : une divergence ordinaire tient largement dedans,
@@ -633,7 +633,7 @@ export class GitSync {
      *
      * Un échec sur une branche n'interrompt pas les autres : une branche
      * comparée reste plus utile qu'un tour entier abandonné. Le cas courant est
-     * d'ailleurs banal — une branche partant d'un historique sans ancêtre commun
+     * d'ailleurs banal : une branche partant d'un historique sans ancêtre commun
      * fait répondre 404 au fournisseur.
      *
      * Rend `true` si au moins une comparaison a changé quelque chose.

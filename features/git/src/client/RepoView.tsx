@@ -420,7 +420,7 @@ interface PanelProps {
     count: number;
     /** La page correspondante chez le fournisseur. */
     href: string;
-    /** Ouvre la liste complète — depuis le titre comme depuis le pied. */
+    /** Ouvre la liste complète, depuis le titre comme depuis le pied. */
     onSeeAll: () => void;
     /** La liste est-elle tronquée ? Sinon, « Voir tout » n'aurait rien à montrer. */
     hasMore: boolean;

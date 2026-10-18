@@ -209,7 +209,7 @@ export function TerminalPanel({ deviceId, onClose }: { deviceId: string; onClose
                 <div className={styles.terminalExit}>
                     <span>
                         {exited.error
-                            ? `Session terminée — ${exited.error}`
+                            ? `Session terminée : ${exited.error}`
                             : `Session terminée${exited.code != null ? ` (code ${exited.code})` : ''}.`}
                     </span>
                     <div className={styles.terminalExitActions}>{endActions}</div>

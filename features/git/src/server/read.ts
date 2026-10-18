@@ -17,7 +17,7 @@ import { fromGitHub, loadHomeRepo, loadRepo, readJson, repoCipher, type Ctx, typ
 /**
  * Lecture du cache alimenté par le service de fond.
  *
- * Tout ce qui s'affiche vient d'ici — l'ouverture d'un dépôt est donc
+ * Tout ce qui s'affiche vient d'ici : l'ouverture d'un dépôt est donc
  * instantanée et ne consomme aucun quota. Une seule exception, délibérée : le
  * diff d'un commit (`gitCommitDetail`), lu chez le fournisseur à la demande.
  */

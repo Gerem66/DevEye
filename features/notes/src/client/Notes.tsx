@@ -50,6 +50,7 @@ function Notes() {
     const [notes, setNotes] = useState<NoteSummary[]>([]);
     const [folders, setFolders] = useState<NoteFolder[]>([]);
     const [actionError, setActionError] = useState<ErrorNoteInput | null>(null);
+    const [loadError, setLoadError] = useState<ErrorNoteInput | null>(null);
     /** La note ouverte dans l'éditeur : c'est le niveau profond des Notes. */
     const [openNoteId, setOpenNoteId] = useState<number | null>(null);
     useLiveSegment('l1', openNoteId === null ? null : String(openNoteId));
@@ -68,9 +69,10 @@ function Notes() {
                 ]);
                 setNotes(notesRes.notes);
                 setFolders(foldersRes.folders);
-            } catch {
-                setNotes([]);
-                setFolders([]);
+                setLoadError(null);
+            } catch (e) {
+                // Ce qui était à l'écran y reste : un échec de relecture ne vide pas la liste.
+                setLoadError(errorNote(e, 'Les notes n’ont pas pu être chargées.'));
             } finally {
                 setLoaded(true);
             }
@@ -88,6 +90,7 @@ function Notes() {
         setNotes([]);
         setFolders([]);
         setActionError(null);
+        setLoadError(null);
         void reload();
     }, [reload]);
 
@@ -452,6 +455,7 @@ function Notes() {
                 </button>
             </div>
 
+            <ErrorNote note={loadError} />
             <ErrorNote note={actionError} />
 
             {!loaded && (

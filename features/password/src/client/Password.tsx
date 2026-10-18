@@ -34,6 +34,7 @@ function Password({ closeFeature }: FeatureViewProps) {
     const [search, setSearch] = useState('');
     const [allPasswords, setAllPasswords] = useState<RowPassword[]>([]);
     const [actionError, setActionError] = useState<ErrorNoteInput | null>(null);
+    const [loadError, setLoadError] = useState<ErrorNoteInput | null>(null);
     /** L'entrée ouverte dans le formulaire : le niveau profond du coffre. */
     const [openEntryId, setOpenEntryId] = useState<number | null>(null);
     useLiveSegment('l1', openEntryId === null ? null : String(openEntryId));
@@ -48,11 +49,12 @@ function Password({ closeFeature }: FeatureViewProps) {
             try {
                 const res = await withSecrecy(() => api.send('password.list', {}));
                 setAllPasswords(res.entries);
+                setLoadError(null);
             } catch (e) {
-                setAllPasswords([]);
                 // L'invite refermée sans mot de passe (`UnlockCancelledError`) :
                 // rien à montrer, on ferme plutôt que de laisser une vue vide.
                 if (e instanceof UnlockCancelledError) closeFeatureRef.current();
+                else setLoadError(errorNote(e, 'Les mots de passe n’ont pas pu être chargés.'));
             } finally {
                 setLoaded(true);
             }
@@ -69,6 +71,7 @@ function Password({ closeFeature }: FeatureViewProps) {
         setLoaded(false);
         setAllPasswords([]);
         setActionError(null);
+        setLoadError(null);
         void reload();
     }, [reload]);
 
@@ -93,7 +96,8 @@ function Password({ closeFeature }: FeatureViewProps) {
     /**
      * Sans `withSecrecy`, délibérément : relire la liste sur une session
      * reverrouillée renverrait `locked`, et une invite déclenchée par le geste
-     * de quelqu'un d'autre n'a pas de sens. On garde ce qui est à l'écran.
+     * de quelqu'un d'autre n'a pas de sens. On garde ce qui est à l'écran, et
+     * seule une vraie panne se dit.
      */
     const listVersion = useResourceVersion('password.list');
     useEffect(() => {
@@ -104,7 +108,10 @@ function Password({ closeFeature }: FeatureViewProps) {
             .then((res) => {
                 if (!cancelled) setAllPasswords(res.entries);
             })
-            .catch(() => {});
+            .catch((e: unknown) => {
+                const note = errorNote(e, 'Les mots de passe n’ont pas pu être relus.');
+                if (!cancelled && note.code !== 'locked') setLoadError(note);
+            });
         return () => {
             cancelled = true;
         };
@@ -268,6 +275,7 @@ function Password({ closeFeature }: FeatureViewProps) {
                 />
             </div>
 
+            <ErrorNote note={loadError} />
             <ErrorNote note={actionError} />
 
             {!loaded && <LoadingTable />}

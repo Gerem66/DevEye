@@ -24,20 +24,21 @@ export const agentUpdateFeature: FeatureDefinition<
         const row = await authorizeReachableDevice(ctx, input.deviceId, { control: true });
         // Pre-flight: the agent must have told us its build target, and we must
         // hold a NEWER, SIGNED binary for it. Each gate maps to a clear French
-        // error so the UI can explain why the button did nothing.
+        // error so the UI can explain why the button did nothing; a missing or
+        // unsigned binary is the instance's to fix, hence `internal`.
         if (!row.agent_target) {
             throw new FeatureError('conflict', "L'agent ne supporte pas encore la mise à jour automatique");
         }
         const manifest = await readServedManifestCached(agentDistDir());
         const target = manifest?.targets.find((t) => t.id === row.agent_target);
         if (!manifest || !target) {
-            throw new FeatureError('conflict', 'Aucun binaire disponible pour cette plateforme');
+            throw new FeatureError('internal', 'Aucun binaire disponible pour cette plateforme');
         }
         if (!target.signature) {
-            throw new FeatureError('conflict', 'Binaire non signé : mise à jour refusée');
+            throw new FeatureError('internal', 'Binaire non signé : mise à jour refusée');
         }
         // Only ever push an upgrade: refuse when the served version isn't strictly
-        // newer than what's running (already up to date, or — after a rollback — older).
+        // newer than what's running (already up to date, or older after a rollback).
         if (!row.agent_version || !isNewerVersion(manifest.version, row.agent_version)) {
             throw new FeatureError('conflict', "L'agent est déjà à jour");
         }

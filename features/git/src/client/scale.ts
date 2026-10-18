@@ -24,7 +24,7 @@ interface Step {
     unit: TickUnit;
     /** Nombre d'unités entre deux graduations. Toujours 1 sauf pour l'année. */
     every: number;
-    /** Durée la plus courte du pas, en jours — sert à l'élagage seulement. */
+    /** Durée la plus courte du pas, en jours : sert à l'élagage seulement. */
     minDays: number;
 }
 
@@ -110,7 +110,7 @@ function advance(d: Date, step: Step): void {
     }
 }
 
-/** La graduation ouvre-t-elle une année ? — la première du pas à y tomber. */
+/** La graduation ouvre-t-elle une année ? La première du pas à y tomber. */
 function opensYear(d: Date, unit: TickUnit): boolean {
     if (unit === 'day') return d.getMonth() === 0 && d.getDate() === 1;
     // Aucun lundi ne tombe un 1er janvier chaque année : c'est le premier de
@@ -183,7 +183,7 @@ function fits(ticks: Tick[], dayWidth: number): boolean {
     return true;
 }
 
-/** Nul pas ne tient en moins que la plus courte des étiquettes — « mai ». */
+/** Nul pas ne tient en moins que la plus courte des étiquettes, « mai ». */
 const MIN_STEP_PX = 3 * CHAR_W + LABEL_GAP;
 
 /**

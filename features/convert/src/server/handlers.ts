@@ -69,15 +69,16 @@ export const convertHandlers = [
             if (!source || !target) throw new FeatureError('validation', 'Cette conversion n’existe pas.');
 
             const family = engineFamilies().find((f) => f.kind === input.kind);
+            // Un outil qui manque au serveur se corrige chez lui : `internal`, signalable.
             if (!family?.available) {
                 throw new FeatureError(
-                    'conflict',
+                    'internal',
                     family?.reason ?? 'Cette conversion n’est pas disponible sur ce serveur.'
                 );
             }
             if (family.missingSources.includes(source.id) || family.missingTargets.includes(target.id)) {
                 throw new FeatureError(
-                    'conflict',
+                    'internal',
                     'Ce format n’est pas pris en charge par les outils installés sur ce serveur.'
                 );
             }
@@ -103,7 +104,7 @@ export const convertHandlers = [
                 );
             }
             if ((await freeBytes()) < input.declaredBytes * DISK_MARGIN + env.CONVERT_DISK_FLOOR_BYTES) {
-                throw new FeatureError('conflict', 'Le serveur manque de place pour ce fichier. Réessayer plus tard.');
+                throw new FeatureError('internal', 'Le serveur manque de place pour ce fichier. Réessayer plus tard.');
             }
 
             const id = await ctx.repo.insert({

@@ -52,7 +52,7 @@ export const gitCrudFeatures = [
     defineSdkFeature({
         ...gitCount,
         handler: async (ctx: Ctx) => {
-            // Les mêmes lignes que la liste — projetées comprises, restrictions
+            // Les mêmes lignes que la liste, projetées comprises, restrictions
             // déduites : la carte doit compter ce que la liste montre.
             const rows = await ctx.repo.listVisibleRepos(ctx.workspaceId);
             const hidden = await ctx.items.restrictions();

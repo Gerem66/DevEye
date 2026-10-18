@@ -175,7 +175,7 @@ export function AlertDialog({ open, databaseId, alert, monitorEnabled, onClose, 
                 <div className={styles.section}>
                     <span className={styles.sectionTitle}>Conditions</span>
                     <span className={styles.hint}>
-                        Chaque requête doit rendre <strong>un seul nombre</strong> — une ligne, une colonne. C’est ce
+                        Chaque requête doit rendre <strong>un seul nombre</strong> : une ligne, une colonne. C’est ce
                         qui permet de la comparer à un seuil et de la citer dans le message.
                     </span>
 

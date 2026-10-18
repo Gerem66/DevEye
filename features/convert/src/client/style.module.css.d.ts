@@ -48,7 +48,6 @@ declare const styles: {
     readonly header: string;
     readonly job: string;
     readonly jobActions: string;
-    readonly jobError: string;
     readonly jobHead: string;
     readonly jobList: string;
     readonly jobMeta: string;

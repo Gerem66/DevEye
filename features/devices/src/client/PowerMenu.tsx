@@ -21,7 +21,7 @@ const ACTIONS: PowerActionDef[] = [
     {
         action: 'lock',
         label: 'Verrouiller',
-        desc: 'Verrouille la session — la machine continue de tourner.',
+        desc: 'Verrouille la session : la machine continue de tourner.',
         icon: 'icon-lock',
         confirm: false
     },
@@ -152,7 +152,7 @@ export function PowerMenu({ deviceId }: { deviceId: string }) {
                 <p className={result.ok ? styles.powerOk : styles.powerErr}>
                     {result.ok
                         ? `Commande « ${labelOf(result.action)} » exécutée sur l’appareil.`
-                        : `Échec — ${result.error ?? 'erreur inconnue'}`}
+                        : `Échec : ${result.error ?? 'erreur inconnue'}`}
                 </p>
             )}
             <ErrorNote note={failure} />

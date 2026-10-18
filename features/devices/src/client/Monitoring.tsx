@@ -81,7 +81,7 @@ function MonitoringTitle({
                         className={styles.iconHeaderBtn}
                         onClick={() =>
                             void openInfo({
-                                title: 'Monitoring — comment ça marche',
+                                title: 'Monitoring : comment ça marche',
                                 body: <MonitoringInfo />,
                                 width: 560
                             })

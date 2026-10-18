@@ -123,7 +123,7 @@ export function StructureDialog({ open, structure, onClose, onOpenTable }: Struc
                                             {column.nullable ? 'oui' : 'non'}
                                         </td>
                                         <td className={column.default === null ? styles.nullCell : ''}>
-                                            {column.default ?? '—'}
+                                            {column.default ?? '–'}
                                         </td>
                                         <td>
                                             {column.primaryKey && <span className={styles.tag}>primaire</span>}

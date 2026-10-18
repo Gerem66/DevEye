@@ -14,7 +14,7 @@ export function MonitoringInfo() {
                         Un relevé (par défaut chaque minute sur une offre payante, toutes les 5 min sur l&apos;offre
                         gratuite)
                     </b>{' '}
-                    : chaque tick de l&apos;agent produit un <b>instant</b> — les mesures (CPU, RAM, disque, réseau,
+                    : chaque tick de l&apos;agent produit un <b>instant</b>, soit les mesures (CPU, RAM, disque, réseau,
                     charge, température, GPU, utilisateurs, connexions) <i>et</i> la liste des processus, sous un seul
                     et même horodatage. Ce sont les repères cliquables de la frise.
                 </li>
@@ -53,7 +53,7 @@ export function MonitoringInfo() {
                 </li>
                 <li>
                     <b>Conserver</b> : épingle un instant (ou une zone) pour le garder au-delà de la durée de
-                    conservation habituelle — ses repères passent en doré sur la frise. « Ne plus conserver » lève le
+                    conservation habituelle, et ses repères passent en doré sur la frise. « Ne plus conserver » lève le
                     verrou : l&apos;instant expirera de nouveau (supprimé aussitôt s&apos;il a déjà dépassé sa date
                     limite).
                 </li>
