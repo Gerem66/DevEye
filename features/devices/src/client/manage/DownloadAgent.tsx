@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
     APP_VERSION,
     Button,
+    CopyButton,
     Dialog,
     errorNote,
     ErrorNote,
@@ -26,6 +27,13 @@ const OS_GROUPS: { os: AgentOs; label: string; hint: string }[] = [
     { os: 'linux', label: 'Linux', hint: 'x64, ARM64, Raspberry Pi' },
     { os: 'windows', label: 'Windows', hint: 'x64, x86, ARM64' }
 ];
+
+/** La commande qui calcule l'empreinte d'un fichier, sur le système de l'appareil. */
+const HASH_COMMAND: Record<AgentOs, (filename: string) => string> = {
+    linux: (f) => `sha256sum ${f}`,
+    macos: (f) => `shasum -a 256 ${f}`,
+    windows: (f) => `Get-FileHash ${f}`
+};
 
 /** Human-readable file size (binaries are a few MB). */
 function formatSize(bytes: number | null): string {
@@ -52,11 +60,14 @@ export function DownloadAgent({ open, onClose }: { open: boolean; onClose: () =>
     const [error, setError] = useState<ErrorNoteInput | null>(null);
     /** Cible en cours de téléchargement (un seul à la fois). */
     const [downloading, setDownloading] = useState<string | null>(null);
+    /** Le dernier binaire enregistré, dont l'empreinte se compare avant de le lancer. */
+    const [saved, setSaved] = useState<{ os: AgentOs; filename: string; sha256: string } | null>(null);
 
     // Back to the OS step and reload availability each time the dialog opens.
     useEffect(() => {
         if (!open) return;
         setOs(null);
+        setSaved(null);
         setError(null);
         setLoading(true);
         httpGet(`/api/agent/targets?workspace=${workspaceId ?? ''}`, agentTargetsResponseSchema)
@@ -77,8 +88,9 @@ export function DownloadAgent({ open, onClose }: { open: boolean; onClose: () =>
      * enregistrerait l'enveloppe JSON du 401 sous le nom du binaire. L'ancre ne
      * sert qu'à déclencher l'enregistrement du blob.
      */
-    const download = async (id: string, filename: string) => {
+    const download = async (id: AgentTargetStatus['id'], os: AgentOs, filename: string) => {
         setError(null);
+        setSaved(null);
         setDownloading(id);
         try {
             const res = await httpFetch(`/api/agent/download/${id}?workspace=${workspaceId ?? ''}`);
@@ -103,6 +115,8 @@ export function DownloadAgent({ open, onClose }: { open: boolean; onClose: () =>
             // Révoqué au tour suivant : révoquer tout de suite couperait
             // l'enregistrement que le clic vient à peine de lancer.
             setTimeout(() => URL.revokeObjectURL(url), 0);
+            const sha256 = statusById.get(id)?.sha256;
+            if (sha256) setSaved({ os, filename, sha256 });
         } catch (e) {
             setError(errorNote(e, 'Téléchargement impossible.'));
         } finally {
@@ -187,7 +201,7 @@ export function DownloadAgent({ open, onClose }: { open: boolean; onClose: () =>
                                 type='button'
                                 className={`${styles.archRow} ${available ? '' : styles.archRowDisabled}`}
                                 disabled={!available || downloading !== null}
-                                onClick={() => void download(t.id, t.filename)}
+                                onClick={() => void download(t.id, t.os, t.filename)}
                             >
                                 <span className={styles.archLabel}>{t.label}</span>
                                 {downloading === t.id ? (
@@ -202,6 +216,20 @@ export function DownloadAgent({ open, onClose }: { open: boolean; onClose: () =>
                             </button>
                         );
                     })}
+                </div>
+            )}
+
+            {saved && saved.os === os && (
+                <div className={styles.checksum}>
+                    <span className={styles.checksumTitle}>Empreinte SHA-256 de {saved.filename}</span>
+                    <div className={styles.checksumRow}>
+                        <code className={styles.checksumValue}>{saved.sha256}</code>
+                        <CopyButton value={saved.sha256} label='Copier l’empreinte' />
+                    </div>
+                    <span className={styles.checksumHint}>
+                        À comparer, avant de lancer le binaire, à ce que donne{' '}
+                        <code>{HASH_COMMAND[saved.os](saved.filename)}</code>
+                    </span>
                 </div>
             )}
         </Dialog>

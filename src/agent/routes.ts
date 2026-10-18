@@ -176,6 +176,8 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, live, audit }
     app.get('/api/agent/targets', async (req, reply) => {
         if (!(await requirePairing(req, reply))) return;
 
+        // Version of the synced set (local manifest read — no GitHub at runtime).
+        const manifest = await readSyncedManifest(AGENT_DIST_DIR);
         const targets = await Promise.all(
             AGENT_TARGETS.map(async (t) => {
                 let sizeBytes: number | null = null;
@@ -185,11 +187,12 @@ export async function agentRoutes(app: FastifyInstance, { db, hub, live, audit }
                 } catch {
                     // Missing/unreadable → unavailable.
                 }
-                return { id: t.id, os: t.os, label: t.label, available: sizeBytes !== null, sizeBytes };
+                // La synchronisation n'écrit un binaire qu'à l'empreinte de son manifeste.
+                const sha256 =
+                    sizeBytes === null ? null : (manifest?.targets.find((m) => m.id === t.id)?.sha256 ?? null);
+                return { id: t.id, os: t.os, label: t.label, available: sizeBytes !== null, sizeBytes, sha256 };
             })
         );
-        // Version of the synced set (local manifest read — no GitHub at runtime).
-        const manifest = await readSyncedManifest(AGENT_DIST_DIR);
         return reply.send(ok(agentTargetsResponseSchema.parse({ agentVersion: manifest?.version ?? null, targets })));
     });
 

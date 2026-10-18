@@ -21,7 +21,7 @@ interface GithubAgentSourceOptions {
     repo: string;
     /** Release tag holding the rolling agent build (e.g. `agent-latest`), or `latest`. */
     tag: string;
-    /** Token with `contents:read` on the repo (private). */
+    /** Token with `contents:read` on the repo. */
     token: string;
     /** Optional override of the GitHub API base (tests). */
     apiBase?: string;

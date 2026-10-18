@@ -12,6 +12,11 @@ declare const styles: {
     readonly archMeta: string;
     readonly archRow: string;
     readonly archRowDisabled: string;
+    readonly checksum: string;
+    readonly checksumHint: string;
+    readonly checksumRow: string;
+    readonly checksumTitle: string;
+    readonly checksumValue: string;
     readonly 'clients-spin': string;
     readonly codeCell: string;
     readonly codePick: string;

@@ -389,8 +389,16 @@ serveur contrôle les machines**, à ceci près.
 - **L'auto-mise à jour** ne dépend pas du serveur : sha256 du binaire et
   signature Ed25519 de la CI, clé publique gravée à la compilation, échec fermé
   sans clé, et seule la cible de ce binaire se télécharge. Un serveur compromis
-  ne pousse pas de binaire, ni une version plus ancienne que celle en marche,
-  qui ignorerait les interrupteurs ajoutés depuis.
+  ne pousse pas de binaire, ni une version qui ne soit pas plus récente que
+  celle en marche : une plus ancienne ignorerait les interrupteurs ajoutés
+  depuis, et une même version se construit plusieurs fois. Le serveur vérifie
+  aussi la signature de chaque binaire avant de le garder ou de le pousser
+  (`src/agent/signing.ts`) : une release altérée sur GitHub n'arrive pas
+  jusqu'aux agents.
+- **Les binaires ne portent aucune signature Windows ni Apple** : un
+  téléchargement par le navigateur peut buter sur SmartScreen ou Gatekeeper.
+  La fenêtre « Télécharger l'agent » donne l'empreinte SHA-256 du binaire
+  enregistré, à comparer avant de le lancer.
 - **Ce qui remonte.** Tout seul : métriques, programmes (nom, chemin, compte,
   jamais la ligne de commande ni l'environnement), ports et connexions, posture,
   matériel, et pour Sentinelle des empreintes et des issues d'authentification

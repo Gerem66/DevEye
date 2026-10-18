@@ -184,3 +184,29 @@ Un module qui dérive une clé par `keys.derive` pour chiffrer ou condenser
 lui-même n'a rien à déclarer dans `sealed`, et la rotation ne re-chiffre rien
 pour lui : il ajoute sa ligne au tableau des dérivations, avec ce qu'une
 rotation lui fait.
+
+## Une autre clé : la signature des mises à jour de l'agent
+
+Sans rapport avec la clé serveur, mais elle se change aussi avec méthode. Sa
+moitié privée est le secret `AGENT_UPDATE_SIGNING_KEY` du dépôt GitHub, qui
+signe l'empreinte de chaque binaire publié (`agent-build.yml`, `deveye-sign`).
+Sa moitié publique est `agent/update-signing.pub` : l'agent grave sa première
+ligne à la compilation (`agent/build.rs`) et n'accepte de mise à jour que
+signée par elle ; le serveur lit toutes ses lignes et refuse de garder ou de
+pousser un binaire qu'aucune ne valide (`src/agent/signing.ts`).
+
+Un agent ne connaît que la clé de sa propre compilation : la rotation passe
+donc par une version de transition.
+
+1. `cargo run --features signer --bin deveye-sign -- keygen` dans `agent/`.
+2. Mettre la nouvelle clé publique en première ligne de
+   `agent/update-signing.pub`, l'ancienne en seconde, sans toucher au secret :
+   cette version, signée par l'ancienne clé, est acceptée par les agents en
+   place et grave la nouvelle.
+3. Une fois les agents passés à cette version, remplacer le secret par la
+   nouvelle clé privée ; les versions suivantes sont signées par elle.
+4. Retirer l'ancienne ligne du fichier quand plus aucun agent ne l'attend.
+
+Une clé privée qui a fuité ne se rattrape pas ainsi : les agents en place font
+confiance à quiconque la détient, y compris pour la version de transition.
+Chaque machine se réinstalle alors à la main, depuis un binaire vérifié.

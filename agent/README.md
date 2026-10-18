@@ -130,6 +130,19 @@ machine where that matters, take the released binary and run `link` yourself;
 self-updates, on the other hand, only ever install a binary signed by the
 release CI (see [update.rs](src/update.rs)).
 
+To check a binary before running it, compare its SHA-256 (`sha256sum` on Linux,
+`shasum -a 256` on macOS, `Get-FileHash` on Windows) with the one the
+**Télécharger l’agent** dialog shows after the download, or with the
+`manifest.json` of the `agent-latest` release on GitHub, which also carries the
+CI's Ed25519 signature of that hash. The server checks that signature itself
+before it keeps or pushes a binary.
+
+The binaries carry no Windows (Authenticode) or Apple (Developer ID)
+signature: a browser download may meet SmartScreen (“unknown publisher”) or
+Gatekeeper. Once the hash matches, unblock it (`Unblock-File` in PowerShell,
+`xattr -d com.apple.quarantine deveye-agent-macos-*` on macOS). The install
+scripts download with `curl` or `Invoke-WebRequest` and meet neither.
+
 ## Commands
 
 | Command                                                                                                                             | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
@@ -516,18 +529,23 @@ which restarts the agent so it applies.
 `all` stands for every key. Monitoring (metrics, reports, the Docker inventory)
 is never refused: it is what the agent is for. Nor can the server install an
 older agent to get around a key it does not know: a self-update to a version
-older than the running one is refused.
+that is not newer than the running one is refused (the same version is built
+more than once, so an equal number could bring back an earlier build).
 
 Whatever the policy, the explorer never writes into the agent's own directory:
 that is where the policy lives. Be honest about the limit: a machine that allows
 the terminal to a root agent has allowed everything else with it.
 
-**Signed orders.** Thirteen orders must carry the server's Ed25519 signature
+**Signed orders.** Twenty-one orders must carry the server's Ed25519 signature
 (`ORDER_SIGNING_KEY` on the server) over the exact payload, a nonce and a
-timestamp: `term.open`, `files.mutate`, `files.upload`, `files.download`,
-`files.archive`, `sync.config`, `agent.service`, `agent.power`,
-`agent.destroy`, `pkg.upgrade`, `agent.lifecycle`, `docker.action` and
-`tunnel.open` (`SIGNED_COMMANDS` in `src/protocol.rs`). Listing and searching
+timestamp: `term.open`, the file orders (`files.mutate`, `files.upload`,
+`files.download`, `files.archive`), the CloudSync orders (`sync.config`,
+`sync.scan`, `sync.push`, `sync.applyStart`, `sync.applyDir`,
+`sync.applyLocal`, `sync.move`, `sync.delete`), `agent.service`,
+`agent.power`, `agent.destroy`, `pkg.upgrade`, `agent.lifecycle`,
+`docker.action`, `tunnel.open` and `agent.tokenRotate` (`SIGNED_COMMANDS` in
+`src/protocol.rs`). `agent.update` is not, so that an older agent can still
+be updated: the binary it fetches carries the CI's signature instead. Listing and searching
 files and the Docker inventory are bound by the policy only. The agent pins the public key at `link` (`order_key`), refuses
 an unsigned or replayed order (nonces are remembered across reconnects), and
 refuses one whose timestamp is more than five minutes off (keep the clock

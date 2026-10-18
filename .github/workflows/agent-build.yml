@@ -174,9 +174,9 @@ jobs:
             echo "→ building $triple → $out"
             rustup target add "$triple" || true
             if [ "${{ matrix.builder }}" = "zigbuild" ]; then
-              cargo zigbuild --release --target "$triple"
+              cargo zigbuild --release --locked --target "$triple"
             else
-              cargo build --release --target "$triple"
+              cargo build --release --locked --target "$triple"
             fi
             case "$out" in
               *.exe) bin="deveye-agent.exe" ;;
@@ -211,12 +211,18 @@ jobs:
       # Build the offline signer (gated `signer` feature). Only when the signing
       # key is configured — a fork without the secret still publishes, unsigned
       # (those targets simply can't drive a self-update; manual download is fine).
-      - name: Build update signer
-        if: ${{ env.AGENT_UPDATE_SIGNING_KEY != '' }}
+      # The build itself never sees the key: every build script and proc-macro
+      # of the dependencies runs in that step.
+      - name: Check update signing key
+        id: signing
         env:
           AGENT_UPDATE_SIGNING_KEY: ${{ secrets.AGENT_UPDATE_SIGNING_KEY }}
+        run: echo "enabled=$([ -n "$AGENT_UPDATE_SIGNING_KEY" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - name: Build update signer
+        if: steps.signing.outputs.enabled == 'true'
         working-directory: agent
-        run: cargo build --release --features signer --bin deveye-sign
+        run: cargo build --release --locked --features signer --bin deveye-sign
 
       # Flatten artifacts and generate manifest.json — the contract the server's
       # reconciler diffs against (version + per-target sha256 + size + signature).
@@ -251,7 +257,7 @@ jobs:
             sha="$(sha256sum "$f" | awk '{print $1}')"
             size="$(stat -c%s "$f")"
             if [ -n "${AGENT_UPDATE_SIGNING_KEY:-}" ] && [ -x "$SIGNER" ]; then
-              sig="$("$SIGNER" sign "$AGENT_UPDATE_SIGNING_KEY" "$sha")"
+              sig="$("$SIGNER" sign "$sha")"
               targets="$(jq --arg id "$id" --arg fn "$name" --arg sha "$sha" --argjson size "$size" --arg sig "$sig" \
                 '. + [{id:$id, filename:$fn, sha256:$sha, size:$size, signature:$sig}]' <<<"$targets")"
             else

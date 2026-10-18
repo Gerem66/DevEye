@@ -91,7 +91,7 @@ pub async fn apply(
 
     let exe = std::env::current_exe().context("locating current executable")?;
     let staged = stage(&exe, &bytes)?;
-    if let Err(e) = ensure_not_older(&staged) {
+    if let Err(e) = ensure_newer(&staged) {
         let _ = std::fs::remove_file(&staged);
         return Err(e);
     }
@@ -148,9 +148,11 @@ fn stage(exe: &Path, bytes: &[u8]) -> Result<PathBuf> {
     Ok(tmp)
 }
 
-/// Refuse a binary older than this one. It is signed, so what it says of its
-/// version can be believed; one that cannot say is refused too.
-fn ensure_not_older(staged: &Path) -> Result<()> {
+/// Refuse a binary that is not newer than this one: the same version is built
+/// more than once, so an equal number could bring back an earlier signed build.
+/// It is signed, so what it says of its version can be believed; one that
+/// cannot say is refused too.
+fn ensure_newer(staged: &Path) -> Result<()> {
     let out = Command::new(staged)
         .arg("--version")
         .output()
@@ -161,14 +163,19 @@ fn ensure_not_older(staged: &Path) -> Result<()> {
         .last()
         .and_then(parse_version)
         .context("update refused: the new binary reports no version")?;
-    match parse_version(env!("DEVEYE_VERSION")) {
-        Some(ours) if theirs < ours => bail!(
-            "update refused: {} is older than this agent ({})",
+    if !is_upgrade(theirs, parse_version(env!("DEVEYE_VERSION"))) {
+        bail!(
+            "update refused: {} is not newer than this agent ({})",
             text.trim(),
             env!("DEVEYE_VERSION")
-        ),
-        _ => Ok(()),
+        );
     }
+    Ok(())
+}
+
+/// A build that cannot say its own version takes any signed update.
+fn is_upgrade(theirs: (u64, u64, u64), ours: Option<(u64, u64, u64)>) -> bool {
+    ours.is_none_or(|ours| theirs > ours)
 }
 
 /// `major.minor.patch`, a pre-release or build suffix ignored.
@@ -302,6 +309,14 @@ mod tests {
         assert!(parse_version("0.21.0") > parse_version("0.20.12"));
         assert_eq!(parse_version("deveye-agent"), None);
         assert_eq!(parse_version("1.2"), None);
+    }
+
+    #[test]
+    fn only_a_newer_version_is_an_upgrade() {
+        assert!(is_upgrade((0, 26, 0), Some((0, 25, 0))));
+        assert!(!is_upgrade((0, 25, 0), Some((0, 25, 0))));
+        assert!(!is_upgrade((0, 24, 9), Some((0, 25, 0))));
+        assert!(is_upgrade((0, 1, 0), None));
     }
 
     #[test]

@@ -1,5 +1,6 @@
 import { agentUpdate, isNewerVersion } from '@deveye/types';
 
+import { signatureHolds, updateSigningKeys } from '@/agent/signing';
 import { agentDistDir, readServedManifestCached } from '@/agent/sync';
 import { authorizeReachableDevice, toDevice } from '@/agent/authorize';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
@@ -34,8 +35,9 @@ export const agentUpdateFeature: FeatureDefinition<
         if (!manifest || !target) {
             throw new FeatureError('internal', 'Aucun binaire disponible pour cette plateforme');
         }
-        if (!target.signature) {
-            throw new FeatureError('internal', 'Binaire non signé : mise à jour refusée');
+        const keys = updateSigningKeys();
+        if (!target.signature || (keys.length > 0 && !signatureHolds(keys, target.sha256, target.signature))) {
+            throw new FeatureError('internal', 'Binaire non signé ou mal signé : mise à jour refusée');
         }
         // Only ever push an upgrade: refuse when the served version isn't strictly
         // newer than what's running (already up to date, or older after a rollback).

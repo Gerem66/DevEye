@@ -6,8 +6,11 @@
 //! whose signature doesn't verify.
 //!
 //!   deveye-sign keygen                              # print a fresh private+public pair
-//!   deveye-sign sign <priv_b64> <hex_sha256>        # print the base64 signature
+//!   deveye-sign sign <hex_sha256>                   # print the base64 signature
 //!   deveye-sign verify <pub_b64> <hex_sha256> <sig> # exit 0 iff it verifies
+//!
+//! `sign` reads the private key from `AGENT_UPDATE_SIGNING_KEY`, never from its
+//! arguments: a command line shows in the process list of the runner.
 //!
 //! `verify` uses the same `verify_strict` as the agent, so it doubles as a check
 //! that a signed manifest will be accepted on-device.
@@ -47,12 +50,11 @@ fn main() {
             println!("public {}", STANDARD.encode(vk.to_bytes()));
         }
         Some("sign") => {
-            let priv_b64 = args
-                .get(2)
-                .unwrap_or_else(|| die("usage: deveye-sign sign <priv_b64> <hex_sha256>"));
+            let priv_b64 = std::env::var("AGENT_UPDATE_SIGNING_KEY")
+                .unwrap_or_else(|_| die("AGENT_UPDATE_SIGNING_KEY is not set"));
             let hex = args
-                .get(3)
-                .unwrap_or_else(|| die("usage: deveye-sign sign <priv_b64> <hex_sha256>"));
+                .get(2)
+                .unwrap_or_else(|| die("usage: deveye-sign sign <hex_sha256>"));
             let sk_bytes: [u8; 32] = STANDARD
                 .decode(priv_b64.trim())
                 .unwrap_or_else(|_| die("private key is not valid base64"))
@@ -82,6 +84,6 @@ fn main() {
                 Err(_) => die("FAIL: signature does not verify"),
             }
         }
-        _ => die("usage: deveye-sign keygen | sign <priv_b64> <hex_sha256> | verify <pub_b64> <hex_sha256> <sig_b64>"),
+        _ => die("usage: deveye-sign keygen | sign <hex_sha256> | verify <pub_b64> <hex_sha256> <sig_b64>"),
     }
 }

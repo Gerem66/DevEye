@@ -8,6 +8,7 @@ import { env } from '@/Utils/Env';
 import { logger } from '@/logger';
 import { status } from '@/status';
 import { appVersion } from '@/version';
+import { signatureHolds, updateSigningKeys } from './signing';
 import { createGithubAgentSource, type AgentSource } from './source';
 
 const TASK_ID = 'agent-sync';
@@ -75,12 +76,21 @@ export async function readServedManifestCached(distDir: string, ttlMs = 5000): P
     return value;
 }
 
-/** Download every target whose on-disk sha differs from the manifest (verified + atomic). */
+/**
+ * Download every target whose on-disk sha differs from the manifest (verified + atomic).
+ * Une signature qui ne tient pas compte comme une erreur : le manifeste n'est alors pas
+ * retenu, et le jeu servi reste le précédent.
+ */
 async function downloadDiffs(source: AgentSource, manifest: AgentManifest, distDir: string): Promise<string[]> {
     const errors: string[] = [];
     const total = manifest.targets.length;
+    const keys = updateSigningKeys();
     let synced = 0;
     for (const t of manifest.targets) {
+        if (keys.length > 0 && !signatureHolds(keys, t.sha256, t.signature)) {
+            errors.push(`${t.filename}: signature invalide`);
+            continue;
+        }
         const dest = join(distDir, t.filename);
         if ((await sha256OfFile(dest)) === t.sha256) {
             synced++;

@@ -49,10 +49,18 @@ fn main() {
     // The update-signing public key (base64), embedded so the agent can verify a
     // pushed binary before swapping it in. Empty when the key file is absent (e.g.
     // a dev build that predates `deveye-sign keygen`) — self-update then refuses.
+    // Only the first line: a second one, the previous key during a rotation, is
+    // for the server alone (`src/agent/signing.ts`).
     let pubkey_path = Path::new(&manifest_dir).join("update-signing.pub");
     println!("cargo:rerun-if-changed={}", pubkey_path.display());
     let pubkey = std::fs::read_to_string(&pubkey_path)
-        .map(|s| s.trim().to_string())
+        .ok()
+        .and_then(|s| {
+            s.lines()
+                .map(str::trim)
+                .find(|l| !l.is_empty())
+                .map(str::to_string)
+        })
         .unwrap_or_default();
     println!("cargo:rustc-env=DEVEYE_UPDATE_PUBKEY={pubkey}");
 }
