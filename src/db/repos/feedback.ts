@@ -39,9 +39,10 @@ export interface FeedbackRepo {
     findById(id: number): Promise<FeedbackEntry | null>;
     setStatus(id: number, status: FeedbackStatus, handledBy: number): Promise<boolean>;
     remove(id: number): Promise<boolean>;
-    /** Ceux d'un compte, à sa suppression : sans clé étrangère, la cascade ne les emporte pas. */
-    removeAllOf(uid: number): Promise<void>;
-    purgeBefore(cutoff: number, batch: number): Promise<number>;
+    /** Ceux d'un compte, à sa suppression : sans clé étrangère, rien ne les rattrape sinon. */
+    anonymizeAllOf(uid: number, at: number): Promise<void>;
+    /** Ceux envoyés avant `cutoff` et encore intacts, par lot. Rendu : lignes anonymisées. */
+    anonymizeBefore(cutoff: number, at: number, batch: number): Promise<number>;
     /** Envois d'un compte depuis cet instant (unix secondes) : borne l'abus. */
     countSince(uid: number, since: number): Promise<number>;
     /** Les signalements encore intacts (`new`) : ce qu'un modérateur n'a pas lu. */
@@ -64,6 +65,7 @@ interface FeedbackJoinRow {
     handled_at: number | null;
     handled_by: number | null;
     handled_by_name: string | null;
+    anonymized_at: number | null;
 }
 
 /**
@@ -101,7 +103,8 @@ function toEntry(r: FeedbackJoinRow): FeedbackEntry {
         snapshot: parseSnapshot(r.snapshot),
         handledAt: r.handled_at === null ? null : Number(r.handled_at),
         handledBy: r.handled_by,
-        handledByName: r.handled_by_name ?? null
+        handledByName: r.handled_by_name ?? null,
+        anonymizedAt: r.anonymized_at === null ? null : Number(r.anonymized_at)
     };
 }
 
@@ -119,8 +122,22 @@ const SELECT_COLUMNS = selectColumns<FeedbackJoinRow>('f', {
     app_version: true,
     handled_at: true,
     handled_by: true,
-    handled_by_name: 'h.username'
+    handled_by_name: 'h.username',
+    anonymized_at: true
 });
+
+/**
+ * Ce qu'un signalement garde une fois anonymisé : sa partie technique. Partent
+ * le message, l'auteur, l'adresse, l'espace, et ce que le navigateur dit de la
+ * personne (user-agent, langue, fuseau, matériel). Les champs du rapport sont
+ * vidés plutôt que retirés : il reste lisible par `feedbackSnapshotSchema`.
+ */
+const ANONYMIZED = `uid = 0, workspace_id = NULL, message = '', ip = '', handled_by = NULL,
+    snapshot = IF(snapshot IS NULL, NULL, JSON_SET(snapshot,
+        '$.browser.userAgent', '', '$.browser.language', '', '$.browser.timezone', '',
+        '$.browser.cores', NULL, '$.browser.memoryGb', NULL,
+        '$.app.workspaceId', NULL, '$.app.path', '')),
+    anonymized_at = ?`;
 
 const FROM_JOINED = `FROM feedback f
                      LEFT JOIN users u ON u.id = f.uid
@@ -210,12 +227,15 @@ export function feedbackRepo(pool: Q): FeedbackRepo {
             return res.rowCount > 0;
         },
 
-        async removeAllOf(uid) {
-            await pool.query('DELETE FROM feedback WHERE uid = ?', [uid]);
+        async anonymizeAllOf(uid, at) {
+            await pool.query(`UPDATE feedback SET ${ANONYMIZED} WHERE uid = ? AND anonymized_at IS NULL`, [at, uid]);
         },
 
-        async purgeBefore(cutoff, batch) {
-            const res = await pool.query('DELETE FROM feedback WHERE created < ? LIMIT ?', [cutoff, batch]);
+        async anonymizeBefore(cutoff, at, batch) {
+            const res = await pool.query(
+                `UPDATE feedback SET ${ANONYMIZED} WHERE created < ? AND anonymized_at IS NULL LIMIT ?`,
+                [at, cutoff, batch]
+            );
             return res.rowCount;
         },
 

@@ -24,7 +24,9 @@ function yesNo(value: boolean | null): string {
     return value ? 'oui' : 'non';
 }
 
+/** Un champ vidé à l'anonymisation ne s'affiche pas. */
 function Field({ label, value }: { label: string; value: string }) {
+    if (value === '') return null;
     return (
         <div className={styles.field}>
             <span className={styles.fieldLabel}>{label}</span>
@@ -82,7 +84,7 @@ export function SnapshotView({ snapshot, serverVersion }: SnapshotViewProps) {
                     <Field label='Mémoire' value={browser.memoryGb === null ? 'inconnue' : `${browser.memoryGb} Gio`} />
                     <Field label='En ligne' value={yesNo(browser.online)} />
                 </div>
-                <p className={styles.userAgent}>{browser.userAgent}</p>
+                {browser.userAgent !== '' && <p className={styles.userAgent}>{browser.userAgent}</p>}
             </section>
 
             <section className={styles.section}>

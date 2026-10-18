@@ -36,7 +36,8 @@ export async function deleteUserEverywhere(
     const members = await db.workspaceMembers.listByWorkspaceIds(shared.map((w) => w.id));
     const notes = await notifyModulesAccountDeleted(userId);
 
-    await db.feedback.removeAllOf(userId);
+    // Ses signalements perdent ce qui le désigne ; leur partie technique reste.
+    await db.feedback.anonymizeAllOf(userId, Math.floor(Date.now() / 1000));
     await db.users.delete(userId);
     invalidateAccess();
     forgetSessionsOf(userId);

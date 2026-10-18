@@ -7,7 +7,7 @@ import {
     FEEDBACK_RETENTION_DAYS,
     INVITATION_GRACE_DAYS,
     LOG_RETENTION_DAYS,
-    purgeExpiredFeedback,
+    anonymizeExpiredFeedback,
     purgeExpiredInvitations,
     purgeExpiredLoginHistory,
     purgeExpiredLogs,
@@ -17,7 +17,7 @@ import {
 
 const DAY = 24 * 3600;
 
-type PurgedRepo = 'logs' | 'loginHistory' | 'refreshTokens' | 'workspaceInvitations' | 'feedback';
+type PurgedRepo = 'logs' | 'loginHistory' | 'refreshTokens' | 'workspaceInvitations';
 
 /** Une table de dates, et le DELETE … LIMIT que le repo exécute, sous le nom du dépôt voulu. */
 function memoryTable(repo: PurgedRepo, dates: number[]) {
@@ -79,8 +79,7 @@ describe('les autres tables purgées', () => {
     const now = 1_800_000_000;
     const cases = [
         { repo: 'refreshTokens', days: REFRESH_TOKEN_GRACE_DAYS, purge: purgeExpiredRefreshTokens },
-        { repo: 'workspaceInvitations', days: INVITATION_GRACE_DAYS, purge: purgeExpiredInvitations },
-        { repo: 'feedback', days: FEEDBACK_RETENTION_DAYS, purge: purgeExpiredFeedback }
+        { repo: 'workspaceInvitations', days: INVITATION_GRACE_DAYS, purge: purgeExpiredInvitations }
     ] as const;
 
     for (const { repo, days, purge } of cases) {
@@ -92,4 +91,30 @@ describe('les autres tables purgées', () => {
             assert.deepEqual(table.rows(), [now - DAY, edge]);
         });
     }
+});
+
+describe('anonymizeExpiredFeedback', () => {
+    const now = 1_800_000_000;
+
+    it('anonymise au-delà de trois ans, à la date du passage, sans rien supprimer', async () => {
+        const edge = now - FEEDBACK_RETENTION_DAYS * DAY;
+        const rows = [now - DAY, edge, edge - 1, edge - 2].map((created) => ({
+            created,
+            anonymizedAt: null as number | null
+        }));
+        const feedback = {
+            anonymizeBefore(cutoff: number, at: number, batch: number) {
+                const due = rows.filter((r) => r.created < cutoff && r.anonymizedAt === null).slice(0, batch);
+                for (const r of due) r.anonymizedAt = at;
+                return Promise.resolve(due.length);
+            }
+        };
+        const db = { feedback } as unknown as Pick<Database, 'feedback'>;
+        assert.equal(await anonymizeExpiredFeedback(db, now * 1000), 2);
+        assert.deepEqual(
+            rows.map((r) => r.anonymizedAt),
+            [null, null, now, now]
+        );
+        assert.equal(await anonymizeExpiredFeedback(db, now * 1000), 0, 'une ligne ne s’anonymise qu’une fois');
+    });
 });

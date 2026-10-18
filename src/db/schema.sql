@@ -493,6 +493,7 @@ CREATE TABLE `feedback` (
   `created` bigint NOT NULL DEFAULT (unix_timestamp()),
   `handled_at` bigint DEFAULT NULL,
   `handled_by` int DEFAULT NULL,
+  `anonymized_at` bigint DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_feedback_created` (`created`),
   KEY `idx_feedback_uid_created` (`uid`,`created`)

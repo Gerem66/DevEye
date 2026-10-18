@@ -252,8 +252,8 @@ const SCOPES: { [K in RepoKey]: RepoScope<K> } = {
             findById: { args: [1] },
             setStatus: { args: [1, 'new', 2] },
             remove: { args: [1] },
-            removeAllOf: { args: [1] },
-            purgeBefore: { args: [0, 100] },
+            anonymizeAllOf: { args: [1, 0] },
+            anonymizeBefore: { args: [0, 0, 100] },
             countSince: { args: [1, 0] },
             countPending: { args: [] }
         }

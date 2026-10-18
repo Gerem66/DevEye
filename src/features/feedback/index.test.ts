@@ -22,7 +22,8 @@ const ENTRY: FeedbackEntry = {
     snapshot: null,
     handledAt: null,
     handledBy: null,
-    handledByName: null
+    handledByName: null,
+    anonymizedAt: null
 };
 
 function ctxAs(isAdmin: boolean): FeatureContext {

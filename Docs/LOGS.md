@@ -104,9 +104,11 @@ séparé) couvre la vivacité du processus, pas la base.
 - **Le même service, au même rythme** : l'historique des connexions 90 jours
   (`LOGIN_HISTORY_DAYS`) ; les jetons de rafraîchissement 30 jours après leur
   expiration ou leur révocation ; les invitations d'espace 30 jours après leur
-  expiration ; les signalements (`feedback`) trois ans, la durée des
-  « Échanges » de la politique de confidentialité, et ceux d'un compte partent
-  avec lui.
+  expiration ; les signalements (`feedback`) sont **anonymisés** au bout de
+  trois ans, ou à la suppression de leur compte : le message, l'auteur,
+  l'adresse, l'espace et ce que le navigateur dit de la personne partent, la
+  partie technique reste (`anonymized_at`), pour suivre les problèmes sur des
+  années.
 - **Historique OSINT** : 90 jours (`OSINT_HISTORY_DAYS`), purgé par le service
   du module au démarrage puis chaque jour.
 - **Sortie standard** : la rotation Docker des fichiers compose, 5 fichiers de

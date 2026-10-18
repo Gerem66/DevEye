@@ -14,7 +14,10 @@ export const LOG_RETENTION_DAYS = 365;
 export const REFRESH_TOKEN_GRACE_DAYS = 30;
 /** Après l'expiration d'une invitation d'espace. */
 export const INVITATION_GRACE_DAYS = 30;
-/** La durée des « Échanges » de la politique de confidentialité, dont les signalements font partie. */
+/**
+ * La durée des signalements dans la politique de confidentialité, au bout de
+ * laquelle ils sont anonymisés : leur partie technique reste.
+ */
 export const FEEDBACK_RETENTION_DAYS = 3 * 365;
 
 const DAY_MS = 24 * 3600 * 1000;
@@ -56,17 +59,23 @@ export function purgeExpiredInvitations(db: Pick<Database, 'workspaceInvitations
     return inBatches((batch) => db.workspaceInvitations.purgeBefore(cutoff, batch));
 }
 
-export function purgeExpiredFeedback(db: Pick<Database, 'feedback'>, now: number): Promise<number> {
+export function anonymizeExpiredFeedback(db: Pick<Database, 'feedback'>, now: number): Promise<number> {
     const cutoff = cutoffOf(now, FEEDBACK_RETENTION_DAYS);
-    return inBatches((batch) => db.feedback.purgeBefore(cutoff, batch));
+    return inBatches((batch) => db.feedback.anonymizeBefore(cutoff, Math.floor(now / 1000), batch));
 }
 
-const PURGES: readonly { table: string; days: number; purge: (db: Database, now: number) => Promise<number> }[] = [
+const PURGES: readonly {
+    table: string;
+    days: number;
+    purge: (db: Database, now: number) => Promise<number>;
+    /** Les lignes restent, privées de ce qui désigne une personne. */
+    anonymizes?: true;
+}[] = [
     { table: 'logs', days: LOG_RETENTION_DAYS, purge: purgeExpiredLogs },
     { table: 'login_history', days: LOGIN_HISTORY_DAYS, purge: purgeExpiredLoginHistory },
     { table: 'refresh_tokens', days: REFRESH_TOKEN_GRACE_DAYS, purge: purgeExpiredRefreshTokens },
     { table: 'workspace_invitations', days: INVITATION_GRACE_DAYS, purge: purgeExpiredInvitations },
-    { table: 'feedback', days: FEEDBACK_RETENTION_DAYS, purge: purgeExpiredFeedback }
+    { table: 'feedback', days: FEEDBACK_RETENTION_DAYS, purge: anonymizeExpiredFeedback, anonymizes: true }
 ];
 
 /** Une passe au démarrage, puis une par jour. */
@@ -79,10 +88,15 @@ export function createLogRetention(host: { db: Database; logger: Logger }): Feat
         running = true;
         try {
             // Une table en échec ne prive pas les suivantes de leur purge.
-            for (const { table, days, purge } of PURGES) {
+            for (const { table, days, purge, anonymizes } of PURGES) {
                 try {
                     const removed = await purge(host.db, Date.now());
-                    if (removed > 0) host.logger.info({ table, removed, days }, 'Expired rows purged');
+                    if (removed > 0) {
+                        host.logger.info(
+                            { table, rows: removed, days },
+                            anonymizes ? 'Expired rows anonymized' : 'Expired rows purged'
+                        );
+                    }
                 } catch (e) {
                     host.logger.error({ err: e, table }, 'Retention purge failed');
                 }

@@ -80,6 +80,7 @@ function formatDate(unixSeconds: number): string {
 }
 
 function authorLabel(entry: FeedbackEntry): string {
+    if (entry.anonymizedAt !== null) return 'Anonymisé';
     return entry.username ?? `#${entry.uid}`;
 }
 
@@ -266,14 +267,21 @@ export default function FeatureFeedback() {
                                 <span className={styles.author}>{authorLabel(entry)}</span>
                                 <span className={styles.date}>{formatDate(entry.created)}</span>
                                 <span className={`${styles.excerpt} ${isOpen ? styles.excerptOpen : ''}`}>
-                                    {entry.message}
+                                    {entry.anonymizedAt !== null ? 'Message effacé' : entry.message}
                                 </span>
                                 <span className={`icon icon-chevron-down ${isOpen ? styles.chevronOpen : ''}`} />
                             </button>
 
                             {isOpen && (
                                 <div className={styles.cardBody}>
-                                    <p className={styles.message}>{entry.message}</p>
+                                    {entry.anonymizedAt !== null ? (
+                                        <p className={styles.none}>
+                                            Anonymisé le {formatDate(entry.anonymizedAt)} : le message et ce qui reliait
+                                            ce retour à son auteur ont été effacés, seule sa partie technique reste.
+                                        </p>
+                                    ) : (
+                                        <p className={styles.message}>{entry.message}</p>
+                                    )}
 
                                     {entry.snapshot ? (
                                         <SnapshotView snapshot={entry.snapshot} serverVersion={entry.appVersion} />
