@@ -1,7 +1,7 @@
 import type { Socket } from 'node:net';
 import tls from 'node:tls';
 
-import { TLS_MIN_VERSION, type TlsStore } from '../engine/tls';
+import { TLS_POLICY, type TlsStore } from '../engine/tls';
 import { ImapSession, type ImapContext } from './session';
 
 /** L'écouteur IMAP : TLS implicite seulement, aucune session ne commence en clair. */
@@ -22,7 +22,7 @@ export function createImapServer(ctx: ImapContext, certificates: TlsStore): Imap
     const pem = certificates.current();
     if (!pem) throw new Error('IMAP : aucun certificat, le port reste fermé');
 
-    const server = tls.createServer({ ...pem, minVersion: TLS_MIN_VERSION }, (socket) => {
+    const server = tls.createServer({ ...pem, ...TLS_POLICY }, (socket) => {
         const ip = socket.remoteAddress ?? '';
         const held = perIp.get(ip) ?? 0;
         if (open.size >= MAX_CONNECTIONS || held >= MAX_PER_IP) {
@@ -38,9 +38,7 @@ export function createImapServer(ctx: ImapContext, certificates: TlsStore): Imap
             else perIp.set(ip, left);
         });
     });
-    const unsubscribe = certificates.subscribe((next) =>
-        server.setSecureContext({ ...next, minVersion: TLS_MIN_VERSION })
-    );
+    const unsubscribe = certificates.subscribe((next) => server.setSecureContext({ ...next, ...TLS_POLICY }));
     // Une poignée de main ratée (balayage de ports, client en clair) n'est pas une panne du serveur.
     server.on('tlsClientError', () => undefined);
 

@@ -92,4 +92,44 @@ export class TlsStore {
     }
 }
 
-export const TLS_MIN_VERSION = 'TLSv1.2' as const;
+/**
+ * Ce que les écouteurs négocient, d'après les recommandations TLS du NCSC-NL
+ * que suit internet.nl : échange de clés éphémère et chiffrement authentifié
+ * d'abord, dans l'ordre du serveur, et aucune signature en SHA-1 ni SHA-224.
+ * TLS 1.3 n'existe que si ses suites figurent dans la liste.
+ */
+export const TLS_POLICY = {
+    minVersion: 'TLSv1.2',
+    ciphers: [
+        'TLS_AES_256_GCM_SHA384',
+        'TLS_CHACHA20_POLY1305_SHA256',
+        'TLS_AES_128_GCM_SHA256',
+        'ECDHE-ECDSA-AES256-GCM-SHA384',
+        'ECDHE-RSA-AES256-GCM-SHA384',
+        'ECDHE-ECDSA-CHACHA20-POLY1305',
+        'ECDHE-RSA-CHACHA20-POLY1305',
+        'ECDHE-ECDSA-AES128-GCM-SHA256',
+        'ECDHE-RSA-AES128-GCM-SHA256',
+        'ECDHE-ECDSA-AES256-SHA384',
+        'ECDHE-RSA-AES256-SHA384',
+        'ECDHE-ECDSA-AES128-SHA256',
+        'ECDHE-RSA-AES128-SHA256'
+    ].join(':'),
+    honorCipherOrder: true,
+    sigalgs: [
+        'ECDSA+SHA256',
+        'ECDSA+SHA384',
+        'ECDSA+SHA512',
+        'ed25519',
+        'ed448',
+        'rsa_pss_rsae_sha256',
+        'rsa_pss_rsae_sha384',
+        'rsa_pss_rsae_sha512',
+        'rsa_pss_pss_sha256',
+        'rsa_pss_pss_sha384',
+        'rsa_pss_pss_sha512',
+        'RSA+SHA256',
+        'RSA+SHA384',
+        'RSA+SHA512'
+    ].join(':')
+} as const;

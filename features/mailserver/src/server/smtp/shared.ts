@@ -2,7 +2,7 @@ import type { Readable } from 'node:stream';
 
 import type { SMTPServer } from 'smtp-server';
 
-import { TLS_MIN_VERSION, type TlsStore } from '../engine/tls';
+import { TLS_POLICY, type TlsStore } from '../engine/tls';
 
 /** Une réponse SMTP de refus, que `smtp-server` lit sur l'erreur qu'on lui rend. */
 export function smtpError(responseCode: number, message: string): Error {
@@ -38,19 +38,13 @@ export function close(server: SMTPServer): Promise<void> {
 }
 
 /** Les options TLS d'un écouteur, et l'abonnement qui lui pousse un certificat renouvelé. */
-export function tlsOptions(certificates: TlsStore): {
-    key?: string;
-    cert?: string;
-    minVersion: typeof TLS_MIN_VERSION;
-} {
+export function tlsOptions(certificates: TlsStore): typeof TLS_POLICY & { key?: string; cert?: string } {
     const pem = certificates.current();
-    return pem ? { key: pem.key, cert: pem.cert, minVersion: TLS_MIN_VERSION } : { minVersion: TLS_MIN_VERSION };
+    return pem ? { key: pem.key, cert: pem.cert, ...TLS_POLICY } : { ...TLS_POLICY };
 }
 
 export function followCertificate(server: SMTPServer, certificates: TlsStore): () => void {
-    return certificates.subscribe((pem) =>
-        server.updateSecureContext({ key: pem.key, cert: pem.cert, minVersion: TLS_MIN_VERSION })
-    );
+    return certificates.subscribe((pem) => server.updateSecureContext({ key: pem.key, cert: pem.cert, ...TLS_POLICY }));
 }
 
 /** `Received:` tel que les MTA l'écrivent, sur des lignes repliées. */

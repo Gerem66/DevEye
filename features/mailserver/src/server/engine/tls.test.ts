@@ -3,10 +3,11 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { describe, it } from 'node:test';
+import { after, before, describe, it } from 'node:test';
+import tls from 'node:tls';
 
 import { selfSigned } from '../testing/harness';
-import { certificateFlaws, TlsStore } from './tls';
+import { certificateFlaws, TLS_POLICY, TlsStore } from './tls';
 
 const now = Math.floor(Date.now() / 1000);
 const DAY = 86_400;
@@ -126,5 +127,47 @@ describe('TlsStore', () => {
         const store = new TlsStore('localhost');
         assert.throws(() => store.set({ cert: selfSigned().cert, key: caSigned().key }, 'file'));
         assert.equal(store.current(), null);
+    });
+});
+
+describe('TLS_POLICY', () => {
+    let server: tls.Server;
+    let port = 0;
+
+    before(async () => {
+        server = tls.createServer({ ...selfSigned(), ...TLS_POLICY }, (socket) => socket.end());
+        server.on('tlsClientError', () => undefined);
+        await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+        const address = server.address();
+        port = typeof address === 'object' && address ? address.port : 0;
+    });
+
+    after(() => new Promise<void>((resolve) => server.close(() => resolve())));
+
+    /** La suite négociée par un client réglé ainsi, ou `null` s'il n'y a pas d'accord. */
+    const negotiate = (options: tls.ConnectionOptions): Promise<{ protocol: string; cipher: string } | null> =>
+        new Promise((resolve) => {
+            const socket = tls.connect({ host: '127.0.0.1', port, rejectUnauthorized: false, ...options }, () => {
+                resolve({ protocol: socket.getProtocol() ?? '', cipher: socket.getCipher().standardName });
+                socket.destroy();
+            });
+            socket.on('error', () => resolve(null));
+        });
+
+    it('passe en TLS 1.3 avec un client à jour', async () => {
+        assert.equal((await negotiate({}))?.protocol, 'TLSv1.3');
+    });
+
+    it('impose son ordre en TLS 1.2 : le chiffrement authentifié avant le CBC', async () => {
+        const chosen = await negotiate({
+            maxVersion: 'TLSv1.2',
+            ciphers: 'ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-GCM-SHA384'
+        });
+        assert.equal(chosen?.cipher, 'TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384');
+    });
+
+    it('refuse un échange de clés non éphémère et une signature en SHA-224', async () => {
+        assert.equal(await negotiate({ maxVersion: 'TLSv1.2', ciphers: 'AES128-GCM-SHA256' }), null);
+        assert.equal(await negotiate({ maxVersion: 'TLSv1.2', sigalgs: 'RSA+SHA224' }), null);
     });
 });
