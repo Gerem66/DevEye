@@ -24,6 +24,7 @@ import type {
 import { api } from './api';
 import { formatDuration, formatEvery, formatMs, formatRatio } from '../contracts/format';
 import { formatAgo, formatMoment, rangeWindow, RANGES } from './format';
+import DetailDialog, { type Detail } from './DetailDialog';
 import IntegrityJournal from './IntegrityJournal';
 import MeasuresBrowser from './MeasuresBrowser';
 import Pane from './Pane';
@@ -35,6 +36,15 @@ import styles from './style.module.css';
 const CHECKS_PREVIEW = 8;
 /** Outages listed under the chart. */
 const INCIDENTS_MAX = 20;
+
+/** L'erreur d'un incident en une ligne : un écart d'intégrité fait suivre son résumé des fichiers. */
+function summary(error: string | null): string | null {
+    return error?.split('\n')[0] ?? null;
+}
+
+function driftLines(error: string | null): string[] {
+    return error?.split('\n').slice(1) ?? [];
+}
 
 interface ServiceDetailProps {
     service: UptimeService;
@@ -67,6 +77,7 @@ export function ServiceDetail({ service, actionError, onBack, onCheckNow, onAcce
     const [busyIncidents, setBusyIncidents] = useState(true);
     const [busyChecks, setBusyChecks] = useState(true);
     const [journalOpen, setJournalOpen] = useState(false);
+    const [detail, setDetail] = useState<Detail | null>(null);
     useSubView(journalOpen ? 'service/journal' : 'service');
     // A failed refresh must never masquerade as "there is nothing here": the last
     // good data stays on screen and this says so. Cleared when a cycle starts.
@@ -301,22 +312,23 @@ export function ServiceDetail({ service, actionError, onBack, onCheckNow, onAcce
                                             : formatDuration(incident.endedAt - incident.startedAt)}
                                     </StatusBadge>
                                     <span className={styles.incidentWhen}>{formatMoment(incident.startedAt)}</span>
-                                    {/* Un incident d'intégrité nomme ses fichiers, un par ligne, sous le résumé. */}
-                                    <span className={styles.incidentBody}>
-                                        <span className={styles.incidentError}>
-                                            {incident.error?.split('\n')[0] ?? '–'}
-                                        </span>
-                                        {(incident.error?.includes('\n') ?? false) && (
-                                            <ul className={styles.driftLines}>
-                                                {incident
-                                                    .error!.split('\n')
-                                                    .slice(1)
-                                                    .map((line, i) => (
-                                                        <li key={i}>{line}</li>
-                                                    ))}
-                                            </ul>
-                                        )}
-                                    </span>
+                                    <span className={styles.incidentError}>{summary(incident.error) ?? '–'}</span>
+                                    {/* Un incident d'intégrité nomme ses fichiers après son résumé. */}
+                                    {driftLines(incident.error).length > 0 && (
+                                        <button
+                                            type='button'
+                                            className={styles.detailLink}
+                                            onClick={() =>
+                                                setDetail({
+                                                    title: `Incident du ${formatMoment(incident.startedAt)}`,
+                                                    description: summary(incident.error) ?? '',
+                                                    lines: driftLines(incident.error)
+                                                })
+                                            }
+                                        >
+                                            Détails
+                                        </button>
+                                    )}
                                 </li>
                             ))}
                         </ul>
@@ -357,6 +369,7 @@ export function ServiceDetail({ service, actionError, onBack, onCheckNow, onAcce
             </div>
 
             <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
+            <DetailDialog detail={detail} onClose={() => setDetail(null)} />
 
             <p className={styles.detailFoot}>
                 Dernière mesure {formatAgo(service.lastCheckedAt)} · relevé {formatEvery(service.intervalSeconds)} ·

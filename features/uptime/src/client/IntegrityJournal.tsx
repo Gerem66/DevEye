@@ -5,6 +5,7 @@ import type { UptimeIntegrityOutcome, UptimeIntegrityReading } from '../contract
 
 import { api } from './api';
 import { formatMs } from '../contracts/format';
+import DetailDialog, { type Detail } from './DetailDialog';
 import { formatMoment } from './format';
 import Pane from './Pane';
 import styles from './style.module.css';
@@ -42,6 +43,7 @@ export function IntegrityJournal({ serviceId, stamp }: IntegrityJournalProps) {
     const [more, setMore] = useState(false);
     const [busy, setBusy] = useState(true);
     const [error, setError] = useState<ErrorNoteInput | null>(null);
+    const [detail, setDetail] = useState<Detail | null>(null);
 
     useEffect(() => {
         let cancelled = false;
@@ -95,20 +97,26 @@ export function IntegrityJournal({ serviceId, stamp }: IntegrityJournalProps) {
                 ) : (
                     <ul className={styles.list}>
                         {readings.map((reading, i) => (
-                            <li key={`${reading.at}-${i}`} className={`${styles.checkRow} ${styles.readingRow}`}>
+                            <li key={`${reading.at}-${i}`} className={styles.checkRow}>
                                 <span className={`${styles.dot} ${OUTCOMES[reading.outcome].dot}`} aria-hidden='true' />
                                 <span className={styles.checkWhen}>{formatMoment(reading.at)}</span>
                                 <span className={styles.readingOutcome}>{OUTCOMES[reading.outcome].label}</span>
                                 <span className={styles.readingText}>{describe(reading)}</span>
-                                {reading.lines.length > 0 && (
-                                    <details className={styles.readingLines}>
-                                        <summary>Voir les fichiers</summary>
-                                        <ul className={styles.driftLines}>
-                                            {reading.lines.map((line, j) => (
-                                                <li key={j}>{line}</li>
-                                            ))}
-                                        </ul>
-                                    </details>
+                                {/* Ses fichiers, ou ce qui explique le constat : plus que la ligne n'en montre. */}
+                                {(reading.lines.length > 0 || reading.error !== null) && (
+                                    <button
+                                        type='button'
+                                        className={styles.detailLink}
+                                        onClick={() =>
+                                            setDetail({
+                                                title: `${OUTCOMES[reading.outcome].label} du ${formatMoment(reading.at)}`,
+                                                description: describe(reading),
+                                                lines: reading.lines
+                                            })
+                                        }
+                                    >
+                                        Détails
+                                    </button>
                                 )}
                             </li>
                         ))}
@@ -120,6 +128,7 @@ export function IntegrityJournal({ serviceId, stamp }: IntegrityJournalProps) {
                     Charger plus
                 </Button>
             )}
+            <DetailDialog detail={detail} onClose={() => setDetail(null)} />
         </section>
     );
 }

@@ -44,6 +44,7 @@ declare const styles: {
     readonly detailActions: string;
     readonly detailFoot: string;
     readonly detailHead: string;
+    readonly detailLink: string;
     readonly detailName: string;
     readonly detailTitle: string;
     readonly detailUrl: string;
@@ -66,7 +67,6 @@ declare const styles: {
     readonly hookRow: string;
     readonly hookUrl: string;
     readonly incident: string;
-    readonly incidentBody: string;
     readonly incidentError: string;
     readonly incidentWhen: string;
     readonly journal: string;
@@ -95,9 +95,7 @@ declare const styles: {
     readonly ratioLabel: string;
     readonly ratioValue: string;
     readonly ratiosCompact: string;
-    readonly readingLines: string;
     readonly readingOutcome: string;
-    readonly readingRow: string;
     readonly readingText: string;
     readonly reference: string;
     readonly section: string;

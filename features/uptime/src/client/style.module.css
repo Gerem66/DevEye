@@ -711,13 +711,30 @@
 }
 
 .incidentError,
-.checkError {
+.checkError,
+.readingText {
     flex: 1 1 auto;
     min-width: 0;
     color: var(--text-muted);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* Ce qu'une ligne ne montre pas s'ouvre dans un dialogue. */
+.detailLink {
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color var(--transition-fast);
+}
+
+.detailLink:hover {
+    color: var(--accent);
 }
 
 .checkStatus,
@@ -758,37 +775,9 @@
     align-self: stretch;
 }
 
-/* Une lecture se lit en entier : son texte passe à la ligne plutôt que d'être
-   coupé, et le détail d'un écart s'ouvre dessous. */
-.readingRow {
-    flex-wrap: wrap;
-}
-
 .readingOutcome {
     white-space: nowrap;
     color: var(--text-primary);
-}
-
-.readingText {
-    flex: 1 1 8em;
-    min-width: 0;
-    color: var(--text-muted);
-    overflow-wrap: anywhere;
-}
-
-.readingLines {
-    flex-basis: 100%;
-    padding-left: calc(8px + var(--space-sm));
-    font-size: 0.78rem;
-}
-
-.readingLines > summary {
-    cursor: pointer;
-    color: var(--text-secondary);
-}
-
-.readingLines > summary:hover {
-    color: var(--accent);
 }
 
 /* The browser fills the popup exactly, so the journal (not the page) owns the
@@ -992,10 +981,6 @@
         grid-template-columns: minmax(0, 1fr);
     }
 
-    .readingText {
-        flex-basis: 100%;
-    }
-
     .checkStatus,
     .checkMs {
         min-width: 0;
@@ -1004,7 +989,8 @@
     /* Wraps onto its own line below the timestamp instead of being ellipsized
        down to a few characters between the fixed columns. */
     .incidentError,
-    .checkError {
+    .checkError,
+    .readingText {
         flex-basis: 100%;
         white-space: normal;
         overflow: visible;
@@ -1041,22 +1027,15 @@
     font-size: 0.85rem;
 }
 
-/* Le détail d'un incident d'intégrité, fichier par fichier, sous sa ligne. */
-.incidentBody {
-    display: flex;
-    flex: 1 1 auto;
-    min-width: 0;
-    flex-direction: column;
-    gap: 2px;
-}
-
+/* Le détail d'un écart, fichier par fichier : un chemin long passe à la ligne. */
 .driftLines {
     margin: 0;
     padding: 0;
     list-style: none;
     font-family: var(--font-mono);
-    font-size: 0.75rem;
-    color: var(--text-muted);
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    overflow-wrap: anywhere;
 }
 
 /* Le pictogramme d'une source de déploiement dans son sélecteur. */
