@@ -96,6 +96,7 @@ function service(id: number, over: Partial<UptimeServiceRow> = {}): UptimeStatus
         last_error: null,
         created: 1,
         page_label: id === 1 ? 'API publique' : null,
+        integrity_open: 0,
         ...over
     };
 }
@@ -111,6 +112,7 @@ function mount(pages: UptimePageRow[], domains: readonly SdkDomain[] = [], pause
             started_at: now - 600,
             ended_at: null,
             http_status: null,
+            integrity_down: 0,
             error: 'connect ECONNREFUSED 10.0.0.5:443',
             notified: 1
         }

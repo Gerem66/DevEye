@@ -1,46 +1,27 @@
 import { useEffect, useState } from 'react';
 
 import { Button, ErrorNote, errorNote, type ErrorNoteInput } from 'deveye-sdk-client';
-import type { UptimeIntegrityOutcome, UptimeIntegrityReading } from '../contracts/domain';
+import type { UptimeIntegrityReading } from '../contracts/domain';
 
 import { api } from './api';
-import { formatMs } from '../contracts/format';
 import DetailDialog, { type Detail } from './DetailDialog';
-import { formatMoment } from './format';
 import Pane from './Pane';
+import ReadingRow from './ReadingRow';
 import styles from './style.module.css';
 
-/** Lectures chargées d'abord, puis à chaque « Charger plus ». */
-const PAGE = 8;
-
-const OUTCOMES: Record<UptimeIntegrityOutcome, { label: string; dot: string }> = {
-    learned: { label: 'Référence apprise', dot: styles.dotInfo },
-    conform: { label: 'Conforme', dot: styles.dotUp },
-    drift: { label: 'Écart', dot: styles.dotDown },
-    failed: { label: 'Lecture ratée', dot: styles.dotWarn },
-    accepted: { label: 'Acceptée', dot: styles.dotInfo },
-    pending: { label: 'En attente d’un déploiement', dot: styles.dotWarn }
-};
-
-/** Ce que dit une lecture après son constat : ses fichiers, ou ce qui ne va pas. */
-function describe(reading: UptimeIntegrityReading): string {
-    if (reading.error !== null) return reading.error;
-    const parts: string[] = [];
-    if (reading.fileCount !== null) parts.push(`${reading.fileCount} fichier${reading.fileCount > 1 ? 's' : ''}`);
-    if (reading.slowestMs !== null) parts.push(`le plus lent en ${formatMs(reading.slowestMs)}`);
-    return parts.join(', ');
-}
+/** Lectures montrées dans la fiche ; le journal complet vit dans {@link ReadingsBrowser}. */
+const READINGS_PREVIEW = 8;
 
 interface IntegrityJournalProps {
     serviceId: number;
     /** `integrityCheckedAt` : il bouge à chaque lecture, ce qui relit le journal. */
     stamp: number | null;
+    onOpenAll: () => void;
 }
 
-/** Chaque lecture des fichiers d'un service, la plus récente en tête. */
-export function IntegrityJournal({ serviceId, stamp }: IntegrityJournalProps) {
+/** Les dernières lectures des fichiers d'un service, la plus récente en tête. */
+export function IntegrityJournal({ serviceId, stamp, onOpenAll }: IntegrityJournalProps) {
     const [readings, setReadings] = useState<UptimeIntegrityReading[]>([]);
-    const [more, setMore] = useState(false);
     const [busy, setBusy] = useState(true);
     const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [detail, setDetail] = useState<Detail | null>(null);
@@ -49,11 +30,13 @@ export function IntegrityJournal({ serviceId, stamp }: IntegrityJournalProps) {
         let cancelled = false;
         setBusy(true);
         setError(null);
-        api.send('uptime.integrityReadings', { id: serviceId, limit: PAGE })
+        api.send('uptime.integrityReadings', {
+            id: serviceId,
+            limit: READINGS_PREVIEW,
+            filter: { since: null, failuresOnly: false }
+        })
             .then((res) => {
-                if (cancelled) return;
-                setReadings(res.readings);
-                setMore(res.readings.length === PAGE);
+                if (!cancelled) setReadings(res.readings);
             })
             .catch((e: unknown) => {
                 if (!cancelled) setError(errorNote(e, 'Journal des intégrités indisponible.'));
@@ -65,22 +48,6 @@ export function IntegrityJournal({ serviceId, stamp }: IntegrityJournalProps) {
             cancelled = true;
         };
     }, [serviceId, stamp]);
-
-    async function loadMore(): Promise<void> {
-        const before = readings[readings.length - 1]?.at;
-        if (before === undefined) return;
-        setBusy(true);
-        setError(null);
-        try {
-            const page = await api.send('uptime.integrityReadings', { id: serviceId, limit: PAGE, before });
-            setReadings((prev) => [...prev, ...page.readings]);
-            setMore(page.readings.length === PAGE);
-        } catch (e) {
-            setError(errorNote(e, 'Journal des intégrités indisponible.'));
-        } finally {
-            setBusy(false);
-        }
-    }
 
     return (
         <section className={styles.journalPanel}>
@@ -97,38 +64,15 @@ export function IntegrityJournal({ serviceId, stamp }: IntegrityJournalProps) {
                 ) : (
                     <ul className={styles.list}>
                         {readings.map((reading, i) => (
-                            <li key={`${reading.at}-${i}`} className={styles.checkRow}>
-                                <span className={`${styles.dot} ${OUTCOMES[reading.outcome].dot}`} aria-hidden='true' />
-                                <span className={styles.checkWhen}>{formatMoment(reading.at)}</span>
-                                <span className={styles.readingOutcome}>{OUTCOMES[reading.outcome].label}</span>
-                                <span className={styles.readingText}>{describe(reading)}</span>
-                                {/* Ses fichiers, ou ce qui explique le constat : plus que la ligne n'en montre. */}
-                                {(reading.lines.length > 0 || reading.error !== null) && (
-                                    <button
-                                        type='button'
-                                        className={styles.detailLink}
-                                        onClick={() =>
-                                            setDetail({
-                                                title: `${OUTCOMES[reading.outcome].label} du ${formatMoment(reading.at)}`,
-                                                description: describe(reading),
-                                                lines: reading.lines
-                                            })
-                                        }
-                                    >
-                                        Détails
-                                    </button>
-                                )}
-                            </li>
+                            <ReadingRow key={`${reading.at}-${i}`} reading={reading} onDetail={setDetail} />
                         ))}
                     </ul>
                 )}
             </Pane>
-            {more && (
-                <Button variant='ghost' disabled={busy} onClick={() => void loadMore()}>
-                    Charger plus
-                </Button>
-            )}
-            <DetailDialog detail={detail} onClose={() => setDetail(null)} />
+            <Button variant='ghost' icon='list' onClick={onOpenAll}>
+                Voir toutes les lectures
+            </Button>
+            <DetailDialog serviceId={serviceId} detail={detail} onClose={() => setDetail(null)} />
         </section>
     );
 }

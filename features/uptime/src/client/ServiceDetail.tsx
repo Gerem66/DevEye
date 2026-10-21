@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
     Button,
-    ConfirmDialog,
     ErrorNote,
     errorNote,
     FeatureSettingsButton,
@@ -9,7 +8,6 @@ import {
     StatusBadge,
     StickyHeader,
     useSubView,
-    type ConfirmRequest,
     type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type {
@@ -24,10 +22,12 @@ import type {
 import { api } from './api';
 import { formatDuration, formatEvery, formatMs, formatRatio } from '../contracts/format';
 import { formatAgo, formatMoment, rangeWindow, RANGES } from './format';
+import AcceptDialog from './AcceptDialog';
 import DetailDialog, { type Detail } from './DetailDialog';
 import IntegrityJournal from './IntegrityJournal';
 import MeasuresBrowser from './MeasuresBrowser';
 import Pane from './Pane';
+import ReadingsBrowser from './ReadingsBrowser';
 import StatusBars from './StatusBars';
 import UptimeChart from './UptimeChart';
 import styles from './style.module.css';
@@ -52,8 +52,8 @@ interface ServiceDetailProps {
     actionError: ErrorNoteInput | null;
     onBack: () => void;
     onCheckNow: () => void;
-    /** Intégrité : prendre ce que le site sert maintenant comme référence. */
-    onAcceptBaseline: () => void;
+    /** Intégrité : prendre ce que le site sert maintenant comme référence ; `repaint` pour une mise à jour voulue. */
+    onAcceptBaseline: (repaint: boolean) => void;
 }
 
 /**
@@ -66,7 +66,7 @@ interface ServiceDetailProps {
  */
 export function ServiceDetail({ service, actionError, onBack, onCheckNow, onAcceptBaseline }: ServiceDetailProps) {
     const [range, setRange] = useState<UptimeRange>('24h');
-    const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
+    const [acceptOpen, setAcceptOpen] = useState(false);
     const [points, setPoints] = useState<UptimePoint[]>([]);
     const [resolution, setResolution] = useState<UptimeResolution>('raw');
     const [incidents, setIncidents] = useState<UptimeIncident[]>([]);
@@ -77,8 +77,9 @@ export function ServiceDetail({ service, actionError, onBack, onCheckNow, onAcce
     const [busyIncidents, setBusyIncidents] = useState(true);
     const [busyChecks, setBusyChecks] = useState(true);
     const [journalOpen, setJournalOpen] = useState(false);
+    const [readingsOpen, setReadingsOpen] = useState(false);
     const [detail, setDetail] = useState<Detail | null>(null);
-    useSubView(journalOpen ? 'service/journal' : 'service');
+    useSubView(journalOpen ? 'service/journal' : readingsOpen ? 'service/integrity' : 'service');
     // A failed refresh must never masquerade as "there is nothing here": the last
     // good data stays on screen and this says so. Cleared when a cycle starts.
     const [staleError, setStaleError] = useState<ErrorNoteInput | null>(null);
@@ -161,6 +162,9 @@ export function ServiceDetail({ service, actionError, onBack, onCheckNow, onAcce
     if (journalOpen) {
         return <MeasuresBrowser service={service} onBack={() => setJournalOpen(false)} />;
     }
+    if (readingsOpen) {
+        return <ReadingsBrowser service={service} onBack={() => setReadingsOpen(false)} />;
+    }
 
     return (
         <div className={styles.detail}>
@@ -180,27 +184,12 @@ export function ServiceDetail({ service, actionError, onBack, onCheckNow, onAcce
                             Tester
                         </Button>
                         {/* Un écart constaté, ou pas encore de référence : ce que le site
-                            sert maintenant devient la référence. Confirmé, parce que c'est
-                            valider ce qu'un attaquant aurait pu y mettre. */}
+                            sert maintenant devient la référence. Dans un dialogue, parce que
+                            c'est valider ce qu'un attaquant aurait pu y mettre, et que le
+                            sort des mesures en échec dépend de ce que l'écart était. */}
                         {service.integrityIntervalSeconds !== null &&
                             (service.integrityDrift || service.baseline === null) && (
-                                <Button
-                                    variant='secondary'
-                                    icon='shield'
-                                    onClick={() =>
-                                        setConfirm({
-                                            title: 'Accepter la version actuelle ?',
-                                            confirmLabel: 'Accepter',
-                                            tone: 'primary',
-                                            description:
-                                                'Les fichiers que le site sert à cet instant deviennent la référence, et l’écart en cours est clos. À ne faire que pour un déploiement que vous reconnaissez.',
-                                            onConfirm: () => {
-                                                setConfirm(null);
-                                                onAcceptBaseline();
-                                            }
-                                        })
-                                    }
-                                >
+                                <Button variant='secondary' icon='shield' onClick={() => setAcceptOpen(true)}>
                                     Accepter la version actuelle
                                 </Button>
                             )}
@@ -364,12 +353,21 @@ export function ServiceDetail({ service, actionError, onBack, onCheckNow, onAcce
                     </Button>
                 </section>
                 {service.integrityIntervalSeconds !== null && (
-                    <IntegrityJournal serviceId={service.id} stamp={service.integrityCheckedAt} />
+                    <IntegrityJournal
+                        serviceId={service.id}
+                        stamp={service.integrityCheckedAt}
+                        onOpenAll={() => setReadingsOpen(true)}
+                    />
                 )}
             </div>
 
-            <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
-            <DetailDialog detail={detail} onClose={() => setDetail(null)} />
+            <AcceptDialog
+                open={acceptOpen}
+                drift={service.integrityDrift}
+                onClose={() => setAcceptOpen(false)}
+                onAccept={onAcceptBaseline}
+            />
+            <DetailDialog serviceId={service.id} detail={detail} onClose={() => setDetail(null)} />
 
             <p className={styles.detailFoot}>
                 Dernière mesure {formatAgo(service.lastCheckedAt)} · relevé {formatEvery(service.intervalSeconds)} ·

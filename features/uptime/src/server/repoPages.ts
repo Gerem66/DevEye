@@ -46,6 +46,8 @@ export interface UptimePageEntry {
 /** Un service tel que la page publique le lit : sa ligne, et son nom public scellé. */
 export interface UptimeStatusServiceRow extends UptimeServiceRow {
     page_label: string | null;
+    /** 1 : sa panne en cours, les seuls fichiers l'ont ouverte ; le public le voit en ligne. */
+    integrity_open: number;
 }
 
 /** Le temps de réponse d'une heure, avant moyenne. */
@@ -84,7 +86,11 @@ export interface UptimeStatusRepo {
     servicesOf(pageId: number, workspaceId: number): Promise<UptimeStatusServiceRow[]>;
     /** Le cumul journalier de ces services, du jour `sinceDay` (minuit UTC) à aujourd'hui. */
     dailyOf(serviceIds: readonly number[], sinceDay: number): Promise<UptimeDayRow[]>;
-    /** Leurs pannes en cours, et celles terminées depuis `since`, les plus récentes d'abord. */
+    /**
+     * Leurs pannes en cours, et celles terminées depuis `since`, les plus
+     * récentes d'abord. Jamais celles que les fichiers ont ouvertes : le
+     * public n'en sait rien.
+     */
     incidentsOf(serviceIds: readonly number[], since: number, limit: number): Promise<UptimeIncidentRow[]>;
     /** Leur temps de réponse heure par heure depuis `since`. */
     hourlyLatencyOf(serviceIds: readonly number[], since: number): Promise<UptimeHourLatencyRow[]>;
@@ -210,7 +216,10 @@ export function createStatusRepo(q: SdkQueryable): UptimeStatusRepo {
             // page ne montre jamais le service d'un autre espace, quoi que
             // contienne sa liste.
             q.query<UptimeStatusServiceRow>(
-                `SELECT s.*, ps.label AS page_label
+                `SELECT s.*, ps.label AS page_label,
+                        EXISTS (SELECT 1 FROM uptime_incidents i
+                                 WHERE i.service_id = s.id AND i.ended_at IS NULL AND i.integrity_down = 1)
+                            AS integrity_open
                  FROM ft_uptime_page_services ps
                  JOIN ft_uptime_pages p ON p.id = ps.page_id
                  JOIN uptime_services s ON s.id = ps.service_id AND s.workspace_id = p.workspace_id
@@ -229,7 +238,7 @@ export function createStatusRepo(q: SdkQueryable): UptimeStatusRepo {
             if (serviceIds.length === 0) return [];
             return q.query<UptimeIncidentRow>(
                 `SELECT * FROM uptime_incidents
-                 WHERE service_id IN (?) AND (ended_at IS NULL OR ended_at >= ?)
+                 WHERE service_id IN (?) AND integrity_down = 0 AND (ended_at IS NULL OR ended_at >= ?)
                  ORDER BY started_at DESC LIMIT ?`,
                 [[...serviceIds], since, limit]
             );

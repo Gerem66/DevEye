@@ -10,6 +10,7 @@ import {
     uptimeCount,
     uptimeDeployHook,
     uptimeDeploySources,
+    uptimeFileContent,
     uptimeIncidents,
     uptimeIntegrityReadings,
     uptimeList,
@@ -27,6 +28,7 @@ import { setMonitor } from './_shared';
 import { uptimeHandlers } from './handlers';
 import type { UptimeRepo } from './repo';
 import type { UptimePagesRepo, UptimeStatusRepo } from './repoPages';
+import type { UptimeMonitor } from './service';
 
 /**
  * Ce qui se vérifie ici ne lève nulle part ailleurs : les restrictions par
@@ -228,6 +230,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
             addReading: async () => undefined,
             listReadings: async () => [],
             lastConformAt: async () => null,
+            clearIntegrityDown: async () => undefined,
             pruneByRetention: async () => ({ checks: 0, readings: 0 })
         },
         // Les pages de statut ont leurs propres tests (`pages.test.ts`).
@@ -410,7 +413,16 @@ describe('les journaux d’une projection', () => {
     it('s’ouvrent sous la clé de l’espace d’origine, pas sous celle d’ici', async () => {
         const repo = seed(fakeRepo({ 7: [1] }), row({ id: 7, workspace_id: 42 }));
         repo.history.listChecks = async () => [
-            { id: 1, service_id: 7, checked_at: 10, up: 0, http_status: 502, response_ms: 40, error: 'chez:Statut 502' }
+            {
+                id: 1,
+                service_id: 7,
+                checked_at: 10,
+                up: 0,
+                integrity_down: 0,
+                http_status: 502,
+                response_ms: 40,
+                error: 'chez:Statut 502'
+            }
         ];
         repo.history.listIncidents = async () => [
             {
@@ -419,6 +431,7 @@ describe('les journaux d’une projection', () => {
                 started_at: 10,
                 ended_at: null,
                 http_status: 502,
+                integrity_down: 0,
                 error: 'chez:Statut 502',
                 notified: 0
             }
@@ -447,7 +460,7 @@ describe('les journaux d’une projection', () => {
         assert.equal(checks[0].error, 'Statut 502');
         const { incidents } = await handlerFor(uptimeIncidents)(ctx, { id: 7, limit: 10 });
         assert.equal(incidents[0].error, 'Statut 502');
-        const { readings } = await handlerFor(uptimeIntegrityReadings)(ctx, { id: 7, limit: 10 });
+        const { readings } = await handlerFor(uptimeIntegrityReadings)(ctx, { id: 7, limit: 10, filter });
         assert.equal(readings[0].error, 'Statut HTTP 404 sur /t.js');
     });
 });
@@ -599,9 +612,42 @@ describe('l’option d’intégrité', () => {
         setMonitor(null);
         const repo = seed(fakeRepo(), row({ id: 1, workspace_id: 1 }));
         await assert.rejects(
-            handlerFor(uptimeAcceptBaseline)(createTestContext({ repo }), { id: 1 }),
+            handlerFor(uptimeAcceptBaseline)(createTestContext({ repo }), { id: 1, repaint: false }),
             (e: unknown) => e instanceof FeatureError && e.code === 'validation'
         );
+    });
+
+    it('remet au vert les mesures de l’écart pour une mise à jour, jamais pour un site réparé', async () => {
+        setMonitor({ runOne: async () => undefined } as unknown as UptimeMonitor);
+        const repo = seed(fakeRepo(), watched());
+        const cleared: [number, number][] = [];
+        // La dernière lecture conforme se lit avant que la référence ne s'oublie.
+        repo.history.lastConformAt = async () => (repo.rows[0].baseline_enc === null ? 9999 : 1000);
+        repo.history.clearIntegrityDown = async (id, since) => {
+            cleared.push([id, since]);
+        };
+        const ctx = createTestContext({ repo });
+
+        await handlerFor(uptimeAcceptBaseline)(ctx, { id: 1, repaint: false });
+        assert.deepEqual(cleared, []);
+        assert.equal(repo.rows[0].baseline_enc, null);
+
+        repo.rows[0].baseline_enc = 'référence';
+        await handlerFor(uptimeAcceptBaseline)(ctx, { id: 1, repaint: true });
+        assert.deepEqual(cleared, [[1, 1000]]);
+        setMonitor(null);
+    });
+
+    it('ne lit un fichier que sur le site surveillé, jamais ailleurs', async () => {
+        const repo = seed(fakeRepo(), watched());
+        const ctx = createTestContext({ repo });
+        for (const path of ['//pirate.example/app.js', 'assets/app.js', 'https://pirate.example/app.js']) {
+            await assert.rejects(
+                handlerFor(uptimeFileContent)(ctx, { id: 1, path }),
+                (e: unknown) => e instanceof FeatureError && e.code === 'validation',
+                path
+            );
+        }
     });
 });
 

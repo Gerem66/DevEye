@@ -100,7 +100,8 @@ export function createStatusPages(deps: FeatureServiceDeps<UptimeRepo>): StatusP
                 return {
                     row: service,
                     name: name || 'Service',
-                    planPaused: deps.pauses.isPaused('monitors', String(service.id))
+                    planPaused: deps.pauses.isPaused('monitors', String(service.id)),
+                    integrityOpen: Number(service.integrity_open) === 1
                 };
             })
         );

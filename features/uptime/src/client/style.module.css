@@ -749,6 +749,12 @@
     width: 100%;
 }
 
+/* Les incidents occupent toute la largeur : leur bouton « Détails » se range
+   à droite, comme dans les journaux. */
+.section > .pane {
+    align-self: stretch;
+}
+
 /* Les journaux de la fiche, une moitié chacun : seul, celui des mesures garde
    sa moitié gauche plutôt que de s'étirer sur toute la largeur. */
 .journals {
@@ -995,6 +1001,16 @@
         white-space: normal;
         overflow: visible;
     }
+
+    /* Deux colonnes : le bouton passe sous le chemin plutôt que de l'écraser. */
+    .driftLines {
+        grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .driftLines > li > .detailLink {
+        grid-column: 2;
+        justify-self: start;
+    }
 }
 
 /* La zone « un chemin par ligne » d'un contrôle d'intégrité. */
@@ -1027,14 +1043,71 @@
     font-size: 0.85rem;
 }
 
-/* Le détail d'un écart, fichier par fichier : un chemin long passe à la ligne. */
+/* Le détail d'un écart, fichier par fichier : trois colonnes, l'étiquette, le
+   chemin (qui passe à la ligne, sa partie après « ? » en retrait) et de quoi
+   regarder un fichier que le site sert encore. */
 .driftLines {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    column-gap: var(--space-md);
     margin: 0;
     padding: 0;
     list-style: none;
     font-family: var(--font-mono);
     font-size: 0.8rem;
     color: var(--text-secondary);
+}
+
+.driftLines > li {
+    display: grid;
+    grid-template-columns: subgrid;
+    grid-column: 1 / -1;
+    align-items: start;
+    padding: 3px 0;
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.driftLines > li:last-child {
+    border-bottom: none;
+}
+
+.driftLabel {
+    white-space: nowrap;
+    color: var(--text-muted);
+}
+
+.driftPath {
+    min-width: 0;
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+}
+
+.driftQuery {
+    color: var(--text-muted);
+}
+
+/* Une ligne sans chemin (politique de contenu, « … et N autres ») court sur les trois colonnes. */
+.driftFree {
+    grid-column: 1 / -1;
+    overflow-wrap: anywhere;
+}
+
+/* Un fichier tel que le site le sert, en texte brut, dans une boîte de
+   terminal : un script minifié tient sur une ligne, il se replie. */
+.fileText {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    margin: 0;
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    line-height: 1.5;
+    color: var(--text-primary);
+    white-space: pre-wrap;
     overflow-wrap: anywhere;
 }
 

@@ -143,11 +143,19 @@ export interface UptimeHistoryRepo {
         serviceId: number;
         checkedAt: number;
         up: boolean;
+        /** The files alone failed this ping: a validation may turn it green. */
+        integrityDown: boolean;
         httpStatus: number | null;
         responseMs: number | null;
         /** Encrypted error message. */
         error: string | null;
     }): Promise<void>;
+    /**
+     * Les mesures que les seuls fichiers tenaient en échec depuis `since`
+     * redeviennent réussies, leur cumul journalier compris : ce qu'une mise à
+     * jour validée fait d'un écart.
+     */
+    clearIntegrityDown(serviceId: number, since: number): Promise<void>;
     /** Raw pings matching `filter` before `before` (exclusive), most recent first. */
     listChecks(serviceId: number, filter: UptimeCheckFilter, limit: number, before?: number): Promise<UptimeCheckRow[]>;
     /** Aggregates over the whole filtered selection, not one page of it. */
@@ -177,11 +185,12 @@ export interface UptimeHistoryRepo {
     openIncident(serviceId: number): Promise<UptimeIncidentRow | null>;
     /** Every ongoing outage across one user's services (at most one per service). */
     listOpenIncidents(workspaceId: number): Promise<UptimeIncidentRow[]>;
-    /** Open an outage; `error` is already encrypted. */
+    /** Open an outage; `error` is already encrypted. `integrityDown`: the files alone opened it. */
     openIncidentAt(input: {
         serviceId: number;
         startedAt: number;
         httpStatus: number | null;
+        integrityDown: boolean;
         error: string | null;
     }): Promise<UptimeIncidentRow>;
     /** Mark the "service is down" alert as delivered for this incident. */
@@ -199,8 +208,13 @@ export interface UptimeHistoryRepo {
         /** `{ error, lines }` chiffré. */
         detail: string | null;
     }): Promise<void>;
-    /** Les lectures avant `before` (exclu), la plus récente d'abord. */
-    listReadings(serviceId: number, limit: number, before?: number): Promise<UptimeIntegrityReadingRow[]>;
+    /** Les lectures qui passent `filter` avant `before` (exclu), la plus récente d'abord. */
+    listReadings(
+        serviceId: number,
+        filter: UptimeCheckFilter,
+        limit: number,
+        before?: number
+    ): Promise<UptimeIntegrityReadingRow[]>;
     /** La dernière lecture qui a retrouvé la référence ou l'a apprise, `null` sans aucune. */
     lastConformAt(serviceId: number): Promise<number | null>;
     /**
@@ -504,11 +518,11 @@ function servicesRepo(q: SdkQueryable): UptimeServicesRepo {
 
 function historyRepo(q: SdkQueryable): UptimeHistoryRepo {
     return {
-        async addCheck({ serviceId, checkedAt, up, httpStatus, responseMs, error }) {
+        async addCheck({ serviceId, checkedAt, up, integrityDown, httpStatus, responseMs, error }) {
             await q.execute(
-                `INSERT INTO uptime_checks (service_id, checked_at, up, http_status, response_ms, error)
-                 VALUES (?, ?, ?, ?, ?, ?)`,
-                [serviceId, checkedAt, up ? 1 : 0, httpStatus, responseMs, error]
+                `INSERT INTO uptime_checks (service_id, checked_at, up, integrity_down, http_status, response_ms, error)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                [serviceId, checkedAt, up ? 1 : 0, integrityDown ? 1 : 0, httpStatus, responseMs, error]
             );
             // Fold into the day's rollup in the same breath, so the long-range
             // series stays exact even once the raw rows are pruned. LEAST/GREATEST
@@ -516,16 +530,38 @@ function historyRepo(q: SdkQueryable): UptimeHistoryRepo {
             const day = Math.floor(checkedAt / 86400) * 86400;
             const ms = responseMs;
             await q.execute(
-                `INSERT INTO uptime_daily (service_id, day, checks, up_checks, total_ms, ms_samples, min_ms, max_ms)
-                 VALUES (?, ?, 1, ?, ?, ?, ?, ?)
+                `INSERT INTO uptime_daily
+                     (service_id, day, checks, up_checks, integrity_down, total_ms, ms_samples, min_ms, max_ms)
+                 VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?)
                  ON DUPLICATE KEY UPDATE
-                     checks     = checks + 1,
-                     up_checks  = up_checks + VALUES(up_checks),
-                     total_ms   = total_ms + VALUES(total_ms),
-                     ms_samples = ms_samples + VALUES(ms_samples),
-                     min_ms     = LEAST(COALESCE(min_ms, VALUES(min_ms)), COALESCE(VALUES(min_ms), min_ms)),
-                     max_ms     = GREATEST(COALESCE(max_ms, VALUES(max_ms)), COALESCE(VALUES(max_ms), max_ms))`,
-                [serviceId, day, up ? 1 : 0, ms ?? 0, ms === null ? 0 : 1, ms, ms]
+                     checks         = checks + 1,
+                     up_checks      = up_checks + VALUES(up_checks),
+                     integrity_down = integrity_down + VALUES(integrity_down),
+                     total_ms       = total_ms + VALUES(total_ms),
+                     ms_samples     = ms_samples + VALUES(ms_samples),
+                     min_ms         = LEAST(COALESCE(min_ms, VALUES(min_ms)), COALESCE(VALUES(min_ms), min_ms)),
+                     max_ms         = GREATEST(COALESCE(max_ms, VALUES(max_ms)), COALESCE(VALUES(max_ms), max_ms))`,
+                [serviceId, day, up ? 1 : 0, integrityDown ? 1 : 0, ms ?? 0, ms === null ? 0 : 1, ms, ms]
+            );
+        },
+        async clearIntegrityDown(serviceId, since) {
+            // Le cumul d'abord, tant que les mesures disent encore lesquelles
+            // il compte ; un arrêt entre les deux laisse des mesures marquées,
+            // que la validation suivante rattrape.
+            await q.execute(
+                `UPDATE uptime_daily d
+                 JOIN (SELECT (checked_at DIV 86400) * 86400 AS day, COUNT(*) AS n
+                         FROM uptime_checks
+                        WHERE service_id = ? AND checked_at >= ? AND integrity_down = 1
+                        GROUP BY day) c ON c.day = d.day
+                 SET d.up_checks = d.up_checks + c.n, d.integrity_down = d.integrity_down - c.n
+                 WHERE d.service_id = ?`,
+                [serviceId, since, serviceId]
+            );
+            await q.execute(
+                `UPDATE uptime_checks SET up = 1, integrity_down = 0
+                 WHERE service_id = ? AND checked_at >= ? AND integrity_down = 1`,
+                [serviceId, since]
             );
         },
         async listChecks(serviceId, filter, limit, before) {
@@ -658,10 +694,11 @@ function historyRepo(q: SdkQueryable): UptimeHistoryRepo {
                 [workspaceId]
             );
         },
-        async openIncidentAt({ serviceId, startedAt, httpStatus, error }) {
+        async openIncidentAt({ serviceId, startedAt, httpStatus, integrityDown, error }) {
             const res = await q.execute(
-                'INSERT INTO uptime_incidents (service_id, started_at, http_status, error) VALUES (?, ?, ?, ?)',
-                [serviceId, startedAt, httpStatus, error]
+                `INSERT INTO uptime_incidents (service_id, started_at, http_status, integrity_down, error)
+                 VALUES (?, ?, ?, ?, ?)`,
+                [serviceId, startedAt, httpStatus, integrityDown ? 1 : 0, error]
             );
             const rows = await q.query<UptimeIncidentRow>('SELECT * FROM uptime_incidents WHERE id = ?', [
                 res.insertId
@@ -690,13 +727,24 @@ function historyRepo(q: SdkQueryable): UptimeHistoryRepo {
                 [serviceId, checkedAt, outcome, fileCount, slowestMs, detail]
             );
         },
-        async listReadings(serviceId, limit, before) {
+        async listReadings(serviceId, filter, limit, before) {
+            const where = ['service_id = ?'];
+            const params: unknown[] = [serviceId];
+            if (filter.since !== null) {
+                where.push('checked_at >= ?');
+                params.push(filter.since);
+            }
+            // Ce qui fait un écart : un fichier qui a changé, ou qui ne se lit plus.
+            if (filter.failuresOnly) where.push("outcome IN ('drift', 'failed')");
+            if (before !== undefined) {
+                where.push('checked_at < ?');
+                params.push(before);
+            }
             return q.query<UptimeIntegrityReadingRow>(
-                `SELECT * FROM ft_uptime_integrity_readings
-                 WHERE service_id = ? ${before === undefined ? '' : 'AND checked_at < ?'}
+                `SELECT * FROM ft_uptime_integrity_readings WHERE ${where.join(' AND ')}
                  ORDER BY checked_at DESC, id DESC
                  LIMIT ?`,
-                before === undefined ? [serviceId, limit] : [serviceId, before, limit]
+                [...params, limit]
             );
         },
         async lastConformAt(serviceId) {

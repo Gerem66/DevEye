@@ -53,13 +53,18 @@ declare const styles: {
     readonly dotInfo: string;
     readonly dotUp: string;
     readonly dotWarn: string;
+    readonly driftFree: string;
+    readonly driftLabel: string;
     readonly driftLines: string;
+    readonly driftPath: string;
+    readonly driftQuery: string;
     readonly dropBar: string;
     readonly empty: string;
     readonly feature: string;
     readonly field: string;
     readonly fieldHint: string;
     readonly fieldLabel: string;
+    readonly fileText: string;
     readonly form: string;
     readonly formRow: string;
     readonly grip: string;

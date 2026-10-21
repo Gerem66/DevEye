@@ -1,5 +1,22 @@
 /** Les formats partagés par l'écran et la page de statut publique : une seule règle pour les deux. */
 
+/** Les étiquettes des lignes d'un écart, telles que la sonde les écrit et que l'écran les relit. */
+export const DRIFT_LABELS = { changed: 'Modifié :', added: 'Ajouté :', removed: 'Retiré :' } as const;
+
+/**
+ * Une ligne d'écart décomposée : son étiquette, son chemin, et si le site le
+ * sert encore (modifié ou ajouté). `null` pour une ligne sans chemin (la
+ * politique de contenu, « … et N autres »).
+ */
+export function parseDriftLine(line: string): { label: string; path: string; served: boolean } | null {
+    for (const [kind, label] of Object.entries(DRIFT_LABELS)) {
+        if (line.startsWith(`${label} `)) {
+            return { label, path: line.slice(label.length + 1), served: kind !== 'removed' };
+        }
+    }
+    return null;
+}
+
 /** "99,95 %" : a ratio in 0→1, or "—" when there is no data yet. */
 export function formatRatio(ratio: number | null): string {
     if (ratio === null) return '—';

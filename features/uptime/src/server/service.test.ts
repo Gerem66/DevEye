@@ -154,16 +154,24 @@ function fakeRepo(over: Partial<UptimeServiceRow> = {}): FakeRepo {
             }
         },
         history: {
-            addCheck: async ({ serviceId, checkedAt, up, httpStatus, responseMs, error }) => {
+            addCheck: async ({ serviceId, checkedAt, up, integrityDown, httpStatus, responseMs, error }) => {
                 checks.push({
                     id: checks.length + 1,
                     service_id: serviceId,
                     checked_at: checkedAt,
                     up: up ? 1 : 0,
+                    integrity_down: integrityDown ? 1 : 0,
                     http_status: httpStatus,
                     response_ms: responseMs,
                     error
                 });
+            },
+            clearIntegrityDown: async (serviceId, since) => {
+                for (const c of checks) {
+                    if (c.service_id !== serviceId || c.checked_at < since || c.integrity_down !== 1) continue;
+                    c.up = 1;
+                    c.integrity_down = 0;
+                }
             },
             listChecks: unused,
             checkStats: unused,
@@ -175,13 +183,14 @@ function fakeRepo(over: Partial<UptimeServiceRow> = {}): FakeRepo {
             openIncident: async (serviceId) =>
                 incidents.find((i) => i.service_id === serviceId && i.ended_at === null) ?? null,
             listOpenIncidents: unused,
-            openIncidentAt: async ({ serviceId, startedAt, httpStatus, error }) => {
+            openIncidentAt: async ({ serviceId, startedAt, httpStatus, integrityDown, error }) => {
                 const incident: UptimeIncidentRow = {
                     id: ++incidentSeq,
                     service_id: serviceId,
                     started_at: startedAt,
                     ended_at: null,
                     http_status: httpStatus,
+                    integrity_down: integrityDown ? 1 : 0,
                     error,
                     notified: 0
                 };
@@ -424,13 +433,17 @@ describe('l’option d’intégrité', () => {
         assert.equal(repo.rows[0].consecutive_failures, 1);
         assert.equal(repo.rows[0].last_response_ms, 90);
         assert.ok(repo.rows[0].integrity_verdict);
+        // Les seuls fichiers ont fait échouer la mesure : une validation peut la remettre au vert.
+        assert.equal(repo.checks[0].integrity_down, 1);
 
         // La sonde suivante ne relit pas les fichiers et la page répond : la
         // mesure échoue quand même, et le seuil fait la panne.
         await probe(UP);
         assert.equal(repo.checks[1].up, 0);
+        assert.equal(repo.checks[1].integrity_down, 1);
         assert.equal(repo.rows[0].status, 'down');
         assert.equal(repo.incidents.length, 1);
+        assert.equal(repo.incidents[0].integrity_down, 1);
         // Le résumé sur la ligne du service, le détail fichier par fichier sur l'incident.
         assert.equal(repo.rows[0].last_error, 'Intégrité : 1 fichier modifié');
         assert.equal(repo.incidents[0].error, 'Intégrité : 1 fichier modifié\nModifié : /assets/app.js');
@@ -472,6 +485,7 @@ describe('l’option d’intégrité', () => {
 
         await probe(UNREADABLE);
         assert.equal(repo.checks[0].up, 0);
+        assert.equal(repo.checks[0].integrity_down, 1);
         assert.equal(repo.rows[0].last_error, 'Fichiers : Statut HTTP 404 sur /assets/app.js');
         assert.equal(repo.rows[0].integrity_failures, 1);
         assert.equal(repo.rows[0].integrity_verdict, null);
@@ -500,6 +514,8 @@ describe('l’option d’intégrité', () => {
         assert.equal(repo.rows[0].integrity_checked_at, null);
         assert.equal(repo.rows[0].last_error, DOWN.error);
         assert.equal(repo.readings.length, 0);
+        // Une vraie panne n'est pas le fait des fichiers : aucune validation ne la repeint.
+        assert.equal(repo.checks[0].integrity_down, 0);
     });
 
     it('inscrit chaque lecture au journal des intégrités, et elle seule', async () => {
@@ -663,6 +679,51 @@ describe('l’acceptation après un déploiement', () => {
         assert.ok(!deps.recorded.notifications[0].body.includes('n’a pas abouti'));
         const detail = JSON.parse(repo.readings[0].detail!) as { lines: string[] };
         assert.ok(detail.lines.includes('Le déploiement « app » n’a pas abouti en 30 min'));
+    });
+
+    it('un déploiement reconnu après coup remet au vert les mesures prises depuis sa fin', async () => {
+        let deployed: number | null = null;
+        const { repo, probe } = setup(() => ({
+            succeeded: deployed === null ? null : { at: deployed, what: 'le déploiement « app »' },
+            inFlight: null,
+            error: null
+        }));
+        await probe(DRIFT);
+        assert.equal(repo.rows[0].status, 'down');
+        assert.equal(repo.checks[0].integrity_down, 1);
+
+        // Le fournisseur annonce en retard un déploiement fini avant l'écart.
+        deployed = repo.checks[0].checked_at - 30;
+        repo.rows[0].integrity_checked_at! -= 900;
+        await probe(DRIFT);
+        assert.equal(repo.readings[1].outcome, 'accepted');
+        assert.equal(repo.rows[0].status, 'up');
+        assert.deepEqual(
+            repo.checks.map((c) => [c.up, c.integrity_down]),
+            [
+                [1, 0],
+                [1, 0]
+            ]
+        );
+    });
+
+    it('un redéploiement qui répare une attaque ne repeint pas l’attaque', async () => {
+        let deployed: number | null = null;
+        const { repo, probe } = setup(() => ({
+            succeeded: deployed === null ? null : { at: deployed, what: 'le déploiement « app »' },
+            inFlight: null,
+            error: null
+        }));
+        await probe(DRIFT);
+        assert.equal(repo.checks[0].integrity_down, 1);
+
+        // Fini après la mesure de l'écart : il n'explique que ce qui le suit.
+        deployed = repo.checks[0].checked_at + 1;
+        repo.rows[0].integrity_checked_at! -= 900;
+        await probe(DRIFT);
+        assert.equal(repo.readings[1].outcome, 'accepted');
+        assert.equal(repo.checks[0].up, 0);
+        assert.equal(repo.checks[0].integrity_down, 1);
     });
 
     it('un déploiement terminé avant la dernière lecture conforme n’explique rien', async () => {

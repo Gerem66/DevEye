@@ -124,8 +124,13 @@ function fieldsOf(notice: UptimeNotice): Record<string, unknown>[] {
             { name: '📅 Constaté', value: moment(notice.at, 'R'), inline: true },
             { name: '📄 Écart', value: block(notice.lines.join('\n')), inline: false },
             {
-                name: '✅ Déploiement voulu ?',
-                value: 'Acceptez la version actuelle depuis la fiche du service.',
+                name: '✅ Une mise à jour de votre part ?',
+                value: 'Validez-la depuis la fiche du service : Accepter la version actuelle, puis C’est une mise à jour.',
+                inline: false
+            },
+            {
+                name: '🚨 Sinon',
+                value: 'Le site est peut-être compromis : regardez les fichiers depuis la fiche, remettez le site en état, puis validez Le site a été réparé.',
                 inline: false
             }
         ];

@@ -88,18 +88,25 @@ export interface StatusViewInput {
     /**
      * Dans l'ordre de la page, chacun sous son nom public. `planPaused` : l'offre
      * de son propriétaire le tient en pause, il se montre comme une pause choisie.
+     * `integrityOpen` : sa panne en cours, les seuls fichiers l'ont ouverte ; le
+     * public le voit en ligne, l'intégrité ne lui est jamais montrée.
      */
-    services: readonly { row: UptimeServiceRow; name: string; planPaused?: boolean }[];
+    services: readonly { row: UptimeServiceRow; name: string; planPaused?: boolean; integrityOpen?: boolean }[];
     daily: readonly UptimeDayRow[];
     /** `error` déchiffré seulement quand la page montre la nature des pannes. */
     incidents: readonly { row: UptimeIncidentRow; error: string | null }[];
     latency: readonly UptimeHourLatencyRow[];
 }
 
-function stateOf(row: UptimeServiceRow, planPaused: boolean): ServiceState {
+function stateOf(row: UptimeServiceRow, planPaused: boolean, integrityOpen: boolean): ServiceState {
     if (row.enabled !== 1 || planPaused) return 'paused';
-    if (row.status === 'down') return 'down';
+    if (row.status === 'down') return integrityOpen ? 'up' : 'down';
     return row.status === 'up' ? 'up' : 'pending';
+}
+
+/** Les sondes que le public compte réussies : celles que les seuls fichiers ont fait échouer en sont. */
+function publicUp(row: UptimeDayRow): number {
+    return Number(row.up_checks) + Number(row.integrity_down);
 }
 
 /** Ce qu'une panne recouvre de `[from, to)`, en secondes. */
@@ -118,7 +125,7 @@ function barsOf(
         const day = firstDay + i * DAY;
         const row = days.get(day);
         const checks = Number(row?.checks ?? 0);
-        const upChecks = Number(row?.up_checks ?? 0);
+        const upChecks = row ? publicUp(row) : 0;
         const downSeconds = incidents.reduce((total, incident) => total + overlap(incident, day, day + DAY, now), 0);
         const tone: BarTone = downSeconds > 0 ? 'down' : checks === 0 ? 'empty' : upChecks < checks ? 'degraded' : 'up';
         return { day, tone, ratio: checks > 0 ? upChecks / checks : null, downSeconds };
@@ -155,27 +162,31 @@ export function buildStatusView(input: StatusViewInput): StatusPageView {
     const firstHour = Math.floor(input.now / HOUR) * HOUR - (LATENCY_HOURS - 1) * HOUR;
     const names = new Map(input.services.map(({ row, name }) => [row.id, name]));
 
-    const services = input.services.map(({ row, name, planPaused = false }): StatusServiceView => {
-        const days = new Map(input.daily.filter((d) => Number(d.service_id) === row.id).map((d) => [Number(d.day), d]));
-        const incidents = input.incidents.filter((i) => i.row.service_id === row.id).map((i) => i.row);
-        const inWindow = [...days.values()].filter((d) => Number(d.day) >= firstDay);
-        const checks = inWindow.reduce((total, d) => total + Number(d.checks), 0);
-        const upChecks = inWindow.reduce((total, d) => total + Number(d.up_checks), 0);
-        const state = stateOf(row, planPaused);
-        return {
-            name,
-            state,
-            intervalSeconds: state === 'paused' ? null : Number(row.interval_seconds),
-            bars: barsOf(days, incidents, firstDay, input.now),
-            ratio: checks > 0 ? upChecks / checks : null,
-            latency: input.showLatency
-                ? latencyOf(
-                      input.latency.filter((l) => Number(l.service_id) === row.id),
-                      firstHour
-                  )
-                : null
-        };
-    });
+    const services = input.services.map(
+        ({ row, name, planPaused = false, integrityOpen = false }): StatusServiceView => {
+            const days = new Map(
+                input.daily.filter((d) => Number(d.service_id) === row.id).map((d) => [Number(d.day), d])
+            );
+            const incidents = input.incidents.filter((i) => i.row.service_id === row.id).map((i) => i.row);
+            const inWindow = [...days.values()].filter((d) => Number(d.day) >= firstDay);
+            const checks = inWindow.reduce((total, d) => total + Number(d.checks), 0);
+            const upChecks = inWindow.reduce((total, d) => total + publicUp(d), 0);
+            const state = stateOf(row, planPaused, integrityOpen);
+            return {
+                name,
+                state,
+                intervalSeconds: state === 'paused' ? null : Number(row.interval_seconds),
+                bars: barsOf(days, incidents, firstDay, input.now),
+                ratio: checks > 0 ? upChecks / checks : null,
+                latency: input.showLatency
+                    ? latencyOf(
+                          input.latency.filter((l) => Number(l.service_id) === row.id),
+                          firstHour
+                      )
+                    : null
+            };
+        }
+    );
 
     const incidentView = ({ row, error }: StatusViewInput['incidents'][number]): StatusIncidentView => ({
         service: names.get(row.service_id) ?? '',

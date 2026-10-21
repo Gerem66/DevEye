@@ -47,12 +47,13 @@ function service(id: number, over: Partial<UptimeServiceRow> = {}): UptimeServic
     };
 }
 
-function day(serviceId: number, daysAgo: number, checks: number, upChecks: number): UptimeDayRow {
+function day(serviceId: number, daysAgo: number, checks: number, upChecks: number, integrityDown = 0): UptimeDayRow {
     return {
         service_id: serviceId,
         day: TODAY - daysAgo * DAY,
         checks,
         up_checks: upChecks,
+        integrity_down: integrityDown,
         total_ms: checks * 100,
         ms_samples: checks,
         min_ms: 80,
@@ -72,6 +73,7 @@ function incident(
         started_at: startedAt,
         ended_at: endedAt,
         http_status: httpStatus,
+        integrity_down: 0,
         error: null,
         notified: 1
     };
@@ -202,30 +204,38 @@ describe('les pannes', () => {
                         row: incident(1, NOW - 8000, NOW - 7000, 200),
                         error: 'Mot-clé « jeton-interne » absent de la réponse'
                     },
-                    { row: incident(1, NOW - 9000, NOW - 8500, 503), error: 'Statut HTTP 503 (attendu 2xx/3xx)' },
-                    // La page répond 200 : c'est le fichier qui dit la panne.
-                    {
-                        row: incident(1, NOW - 10_000, NOW - 9500, 200),
-                        error: 'Intégrité : 1 fichier modifié\nModifié : /assets/app.js'
-                    },
-                    {
-                        row: incident(1, NOW - 11_000, NOW - 10_500, 200),
-                        error: 'Fichiers : Statut HTTP 404 sur /assets/app.js'
-                    }
+                    { row: incident(1, NOW - 9000, NOW - 8500, 503), error: 'Statut HTTP 503 (attendu 2xx/3xx)' }
                 ]
             })
         );
         assert.deepEqual(
             view.history.map((i) => i.reason),
-            [
-                'Connexion impossible',
-                'Délai de réponse dépassé',
-                'Contenu inattendu',
-                'Réponse HTTP 503',
-                'Intégrité des fichiers compromise',
-                'Fichiers du site indisponibles'
-            ]
+            ['Connexion impossible', 'Délai de réponse dépassé', 'Contenu inattendu', 'Réponse HTTP 503']
         );
+    });
+});
+
+describe('l’intégrité des fichiers', () => {
+    it('ne se montre pas : le service reste en ligne, ses mesures comptent réussies', async () => {
+        const view = buildStatusView(
+            input({
+                services: [{ row: service(1, { status: 'down' }), name: 'API', integrityOpen: true }],
+                // Dix sondes, trois que les seuls fichiers ont fait échouer.
+                daily: [day(1, 0, 10, 7, 3)]
+            })
+        );
+        assert.equal(view.services[0].state, 'up');
+        assert.equal(view.banner.tone, 'up');
+        assert.equal(view.services[0].bars[89].tone, 'up');
+        assert.equal(view.services[0].bars[89].ratio, 1);
+        assert.equal(view.services[0].ratio, 1);
+    });
+
+    it('une vraie panne pendant un écart reste une panne', async () => {
+        const view = buildStatusView(
+            input({ services: [{ row: service(1, { status: 'down' }), name: 'API', integrityOpen: false }] })
+        );
+        assert.equal(view.services[0].state, 'down');
     });
 });
 

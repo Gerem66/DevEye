@@ -264,7 +264,9 @@ export const uptimeIntegrityReadings = {
     input: z.object({
         id: serviceId,
         limit: z.number().int().min(1).max(100),
-        before: z.number().int().nonnegative().optional()
+        before: z.number().int().nonnegative().optional(),
+        /** Same shape as the pings' filter; `failuresOnly` keeps drifts and failed readings. */
+        filter: checkFilterSchema
     }),
     output: z.object({ readings: z.array(uptimeIntegrityReadingSchema) })
 };
@@ -327,6 +329,22 @@ export const uptimePageRemove = {
 };
 
 /**
+ * What the site serves at one path a drift names, read by the server and shown
+ * as plain text: never a link, a compromised site would choose what the
+ * browser runs. 64 KiB at most.
+ */
+export const uptimeFileContent = {
+    command: 'uptime.fileContent' as const,
+    input: z.object({ id: serviceId, path: z.string().min(1).max(UPTIME_URL_MAX_LENGTH) }),
+    output: z.object({
+        status: z.number().int(),
+        contentType: z.string().nullable(),
+        text: z.string(),
+        truncated: z.boolean()
+    })
+};
+
+/**
  * Integrity: take what the site serves NOW as the reference (after a deployment
  * one made, say). Closes the incident the drift had opened. The files are
  * refetched first: what is accepted is what a visitor gets at that moment.
@@ -334,7 +352,11 @@ export const uptimePageRemove = {
  */
 export const uptimeAcceptBaseline = {
     command: 'uptime.acceptBaseline' as const,
-    input: z.object({ id: serviceId }),
+    input: z.object({
+        id: serviceId,
+        /** A wanted update: the probes the drift held in failure turn green. A repaired site keeps them red. */
+        repaint: z.boolean()
+    }),
     output: z.object({ service: uptimeServiceSchema })
 };
 
@@ -356,6 +378,7 @@ export const uptimeCommands = [
     uptimeCheckStats,
     uptimeIncidents,
     uptimeIntegrityReadings,
+    uptimeFileContent,
     uptimePageList,
     uptimePageAdd,
     uptimePageUpdate,

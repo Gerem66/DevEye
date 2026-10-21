@@ -5,21 +5,11 @@ import type { UptimeCheck, UptimeCheckStats, UptimeService } from '../contracts/
 
 import { api } from './api';
 import { formatMs } from '../contracts/format';
-import { formatMoment } from './format';
+import { formatMoment, PERIODS } from './format';
 import Pane from './Pane';
 import styles from './style.module.css';
 
 const PAGE = 100;
-
-const DAY = 86400;
-
-/** Period filters, as an offset from now (`null` = the whole history). */
-const PERIODS: { label: string; seconds: number | null }[] = [
-    { label: 'Tout', seconds: null },
-    { label: '24 h', seconds: DAY },
-    { label: '7 j', seconds: 7 * DAY },
-    { label: '30 j', seconds: 30 * DAY }
-];
 
 const EMPTY_STATS: UptimeCheckStats = {
     count: 0,

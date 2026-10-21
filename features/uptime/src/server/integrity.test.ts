@@ -7,9 +7,11 @@ import {
     describeDrift,
     detailDrift,
     diffCapture,
+    FILE_PREVIEW_MAX_BYTES,
     filesOfPage,
     hasDrift,
     INTEGRITY_FILES_MAX,
+    previewFile,
     type FetchedFile,
     type FetchFn
 } from './integrity';
@@ -197,5 +199,31 @@ describe('diffCapture', () => {
         const lines = detailDrift(diff, 20);
         assert.equal(lines.length, 21);
         assert.match(lines[20], /5 autre/);
+    });
+});
+
+describe('previewFile', () => {
+    type PreviewFetch = NonNullable<Parameters<typeof previewFile>[2]>;
+    const served = (body: string, headers: Record<string, string> = {}): PreviewFetch =>
+        (async () => new Response(body, { status: 200, headers })) as unknown as PreviewFetch;
+
+    it('rend le texte tel que servi, avec le statut et le type annoncé', async () => {
+        const preview = await previewFile(
+            `${ORIGIN}/app.js`,
+            1000,
+            served('console.log(1)', { 'content-type': 'text/javascript' })
+        );
+        assert.deepEqual(preview, {
+            status: 200,
+            contentType: 'text/javascript',
+            text: 'console.log(1)',
+            truncated: false
+        });
+    });
+
+    it('s’arrête à la borne et le dit', async () => {
+        const preview = await previewFile(`${ORIGIN}/app.js`, 1000, served('a'.repeat(FILE_PREVIEW_MAX_BYTES + 10)));
+        assert.equal(preview.text.length, FILE_PREVIEW_MAX_BYTES);
+        assert.equal(preview.truncated, true);
     });
 });

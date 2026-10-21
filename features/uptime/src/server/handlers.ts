@@ -7,6 +7,7 @@ import {
     uptimeCount,
     uptimeDeployHook,
     uptimeDeploySources,
+    uptimeFileContent,
     uptimeHistory,
     uptimeIncidents,
     uptimeIntegrityReadings,
@@ -52,7 +53,9 @@ import {
     deployHookUrl,
     newDeployHook
 } from './deploySources';
+import { previewFile } from './integrity';
 import type { UptimeWindowStat } from './repo';
+import { failureMessage } from './service';
 
 const DAY = 86400;
 
@@ -495,6 +498,14 @@ export const uptimeHandlers = [
                 throw new FeatureError('validation', 'Ce service ne vérifie pas l’intégrité de ses fichiers.');
             }
             await ctx.quota.assertActive('monitors', String(row.id));
+            // Une mise à jour validée remet au vert les mesures que l'écart
+            // tenait en échec, depuis la dernière lecture conforme : lue avant
+            // que la sonde n'en inscrive une « apprise ». Un site réparé garde
+            // son rouge.
+            if (input.repaint) {
+                const since = await ctx.repo.history.lastConformAt(row.id);
+                await ctx.repo.history.clearIntegrityDown(row.id, since ?? 0);
+            }
             // Oublier la référence et l'écart, puis sonder : la sonde apprend ce
             // que le site sert à cet instant, et l'incident se referme par le
             // chemin ordinaire, « rétabli » compris, une seule fois. Un site
@@ -504,8 +515,10 @@ export const uptimeHandlers = [
             ctx.audit({
                 action: 'uptime.baselineAccepted',
                 level: 'warning',
-                description: 'Version actuelle acceptée comme référence d’intégrité',
-                metadata: { serviceId: row.id }
+                description: input.repaint
+                    ? 'Version actuelle acceptée comme mise à jour, mesures de l’écart remises au vert'
+                    : 'Version actuelle acceptée comme référence d’intégrité, site réparé',
+                metadata: { serviceId: row.id, repaint: input.repaint }
             });
             await monitor().runOne({
                 ...row,
@@ -567,11 +580,30 @@ export const uptimeHandlers = [
         }
     }),
     defineSdkFeature({
+        ...uptimeFileContent,
+        handler: async (ctx: Ctx, input) => {
+            const row = await loadService(ctx, input.id);
+            const cipher = await homeCipher(ctx, input.id);
+            const target = await decryptService(cipher, row.content);
+            // Un chemin du site surveillé, et de lui seul : `//autre.site` est refusé.
+            const origin = target.url ? new URL(target.url).origin : null;
+            const url = origin === null ? null : new URL(input.path, origin);
+            if (origin === null || url === null || !input.path.startsWith('/') || url.origin !== origin) {
+                throw new FeatureError('validation', 'Le chemin doit être celui d’un fichier du site surveillé.');
+            }
+            try {
+                return await previewFile(url.href, row.timeout_seconds * 1000);
+            } catch (e) {
+                throw new FeatureError('conflict', `Le site n’a pas répondu : ${failureMessage(e, row)}`);
+            }
+        }
+    }),
+    defineSdkFeature({
         ...uptimeIntegrityReadings,
         handler: async (ctx: Ctx, input) => {
             await loadService(ctx, input.id);
             const cipher = await homeCipher(ctx, input.id);
-            const rows = await ctx.repo.history.listReadings(input.id, input.limit, input.before);
+            const rows = await ctx.repo.history.listReadings(input.id, input.filter, input.limit, input.before);
             return {
                 readings: await Promise.all(
                     rows.map(async (row) => {

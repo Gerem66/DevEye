@@ -388,6 +388,8 @@ export interface UptimeCheckRow {
     service_id: number;
     checked_at: number;
     up: number;
+    /** 1: the files alone failed this probe (a drift, or an unreadable file) while the page answered. */
+    integrity_down: number;
     http_status: number | null;
     response_ms: number | null;
     /** Encrypted error string (open tier). */
@@ -410,6 +412,8 @@ export interface UptimeDayRow {
     day: number;
     checks: number;
     up_checks: number;
+    /** How many of the day's failures the files alone caused. */
+    integrity_down: number;
     total_ms: number;
     ms_samples: number;
     min_ms: number | null;
@@ -422,6 +426,8 @@ export interface UptimeIncidentRow {
     started_at: number;
     ended_at: number | null;
     http_status: number | null;
+    /** 1: the files alone opened this outage. Never shown to the public. */
+    integrity_down: number;
     /** Encrypted error string (open tier). */
     error: string | null;
     notified: number;

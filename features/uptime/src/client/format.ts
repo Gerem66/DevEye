@@ -14,6 +14,14 @@ export const RANGES: { value: UptimeRange; label: string }[] = [
 ];
 
 /** Seconds a range covers; `null` for "Tout", which the data itself bounds. */
+/** Les périodes d'un journal complet, en recul depuis maintenant (`null` : tout l'historique). */
+export const PERIODS: { label: string; seconds: number | null }[] = [
+    { label: 'Tout', seconds: null },
+    { label: '24 h', seconds: DAY },
+    { label: '7 j', seconds: 7 * DAY },
+    { label: '30 j', seconds: 30 * DAY }
+];
+
 const RANGE_SECONDS: Record<UptimeRange, number | null> = {
     '24h': DAY,
     '7d': 7 * DAY,

@@ -39,7 +39,9 @@ intégrités, `004_integrity_readings.sql`, et les sources de déploiement,
 `005_deploy_accept.sql`). Les migrations `002_integrity.sql`,
 `003_integrity_option.sql` et `005_deploy_accept.sql` du module ajoutent à
 `uptime_services` les colonnes de l'option d'intégrité, de l'attente d'un
-déploiement et de l'adresse d'appel.
+déploiement et de l'adresse d'appel ; `007_integrity_down.sql` marque dans
+`uptime_checks`, `uptime_daily` et `uptime_incidents` ce que les seuls fichiers
+ont fait échouer.
 
 ## Le principe
 
@@ -133,6 +135,36 @@ reconnaît la mise en ligne ; sinon, « Accepter la version actuelle »
 que le site sert à cet instant devient la référence, et l'incident se referme
 par le chemin ordinaire, « rétabli » compris. Allumer ou éteindre l'option,
 changer l'adresse ou la liste des chemins fait de même (`resetIntegrity`).
+
+Une mesure que les seuls fichiers ont fait échouer, la page répondant, est
+**marquée** (`integrity_down`, sur la mesure, son cumul journalier et
+l'incident qu'elle ouvre) : la plupart des écarts sont des mises à jour que
+personne n'a reconnues, et une disponibilité qui en garderait la trace
+mentirait à la baisse. Face à un écart, la validation demande ce qu'il était :
+
+- **« C'est une mise à jour »** (`repaint`) : les mesures marquées depuis la
+  dernière lecture conforme ou apprise repassent au vert
+  (`clearIntegrityDown`), cumul journalier compris ; la disponibilité ne garde
+  pas trace de l'écart. L'incident, lui, reste dans la liste, fermé.
+- **« Le site a été réparé »** : la version devient la référence, les mesures
+  en échec restent rouges ; la disponibilité garde la trace de l'attaque.
+
+L'acceptation automatique repeint, elle, les mesures prises **depuis la fin du
+déploiement** qui l'explique : un fournisseur qui l'annonce en retard repeint
+tout l'écart qu'il a causé, un redéploiement fait pour réparer une attaque ne
+repeint pas l'attaque. Les mesures et les incidents d'avant la migration `007`
+ne sont pas marqués : rien ne les classe, leur message est chiffré. Un ancien
+incident d'intégrité reste donc visible de la page publique, en « Réponse
+HTTP 200 », jusqu'à sortir de ses trente jours.
+
+Pour juger un écart, chaque fichier modifié ou ajouté se **regarde depuis la
+fiche** (« Voir le contenu », `uptime.fileContent`) : le serveur le relit
+(`previewFile`, 64 Kio au plus, sur l'origine du service et elle seule) et
+l'écran le montre en texte brut. Jamais un lien : un serveur compromis choisit
+ce qu'il renvoie, et un « app.js » servi comme une page s'exécuterait dans le
+navigateur de qui l'ouvre, sur le domaine du site. DevEye ne garde que des
+empreintes, pas le contenu d'avant : l'aperçu dit ce que le site sert
+maintenant, pas ce qui a changé.
 Éteinte, l'option garde ses chemins, ses sources et son adresse d'appel : l'onglet
 les montre grisés, et ils reprennent quand on la rallume.
 
@@ -270,11 +302,14 @@ un incident, pas à une sonde.
 
 - **Hors ligne** (`down`) → alerte avec l'heure de bascule et l'erreur ;
   l'incident est marqué `notified` si un canal l'a acceptée.
-- **Fichiers modifiés** (`integrity`) → alerte qui nomme les fichiers, avec le
-  rappel d'« Accepter la version actuelle » si c'est un déploiement voulu ;
-  aucune quand une source de déploiement explique l'écart. Des
-  fichiers illisibles au seuil partent en « hors ligne », leur erreur à
-  l'appui.
+- **Fichiers modifiés** (`integrity`) → alerte qui nomme les fichiers, et dit
+  quoi faire dans les deux cas : une mise à jour de votre part se valide
+  depuis la fiche (« C'est une mise à jour ») ; sinon le site est peut-être
+  compromis, et il faut regarder les fichiers depuis la fiche, le remettre en
+  état (version saine redéployée, secrets du serveur changés), puis valider
+  « Le site a été réparé ». Aucune alerte quand une source de déploiement
+  explique l'écart. Des fichiers illisibles au seuil partent en « hors
+  ligne », leur erreur à l'appui.
 - **Retour en ligne** (`recovered`) → alerte avec la durée de la panne et sa
   cause initiale, **seulement si** la bascule avait bien été notifiée (sinon on
   enverrait un « c'est revenu » sans contexte).
@@ -377,17 +412,20 @@ enterrerait les graphiques. Le détail n'en montre donc que les **8 dernières**
 (`CHECKS_PREVIEW`) et les 20 derniers incidents. Les mesures tiennent dans un
 panneau qui occupe la moitié gauche de la fiche ; avec l'option d'intégrité, le
 journal des intégrités (`IntegrityJournal`, `uptime.integrityReadings`) prend
-la moitié droite, 8 lectures à la fois et « Charger plus » pour remonter. Sur
-un téléphone, les deux panneaux s'empilent. « Voir toutes les mesures » mène à
-l'étage du dessous, qui offre des filtres (période, échecs seulement), des agrégats
+la moitié droite, ses 8 dernières lectures. Sur un téléphone, les deux
+panneaux s'empilent. « Voir toutes les mesures » mène à l'étage du dessous,
+qui offre des filtres (période, échecs seulement), des agrégats
 (`uptime.checkStats`, calculés sur toute la sélection et pas sur la page
 chargée) et une liste qui défile **dans sa propre boîte** : le panneau autour
-ne s'allonge jamais.
+ne s'allonge jamais. « Voir toutes les lectures » mène au même étage pour les
+lectures des fichiers (`ReadingsBrowser`) : période, « écarts seulement »
+(écarts et lectures ratées), la même boîte qui défile, sans agrégats.
 
-`uptime.checks` et `uptime.checkStats` partagent le même schéma de filtre, pour
-qu'une page et ses agrégats décrivent toujours exactement la même sélection. Les
-agrégats sont une commande à part et non un champ de sortie : ils balayent toute
-la plage filtrée, et l'aperçu du détail n'a pas à payer ce coût.
+`uptime.checks`, `uptime.checkStats` et `uptime.integrityReadings` partagent le
+même schéma de filtre, pour qu'une page et ses agrégats décrivent toujours
+exactement la même sélection. Les agrégats sont une commande à part et non un
+champ de sortie : ils balayent toute la plage filtrée, et l'aperçu du détail
+n'a pas à payer ce coût.
 
 ## Rafraîchissement sans à-coup
 
@@ -442,9 +480,14 @@ réglages de la feature (`StatusPagesPanel`, `StatusPageDialog`), et vit dans
   d'un service peut être remplacé par un nom public. La nature d'une panne ne
   se montre que si la page le demande (`showErrors`), et seulement en catégorie
   (`publicReason` : « Réponse HTTP n », « Délai de réponse dépassé »,
-  « Contenu inattendu », « Intégrité des fichiers compromise », « Fichiers du
-  site indisponibles », « Connexion impossible »), jamais le message de la sonde, qui trahirait le réseau
-  interne.
+  « Contenu inattendu », « Connexion impossible »), jamais le message de la
+  sonde, qui trahirait le réseau interne. **Rien de l'intégrité** : un écart
+  renseignerait un attaquant et n'explique rien au public. Une panne que les
+  fichiers ont ouverte ne se liste pas, un service qu'elle tient hors ligne se
+  montre en ligne (`integrity_open`), et ses mesures marquées comptent
+  réussies. La limite : une vraie panne HTTP survenue pendant cet incident le
+  garde (un seul incident ouvert par service), et le public voit alors le
+  service en ligne, ses mesures en échec en jaune.
 - **Les services de son espace seulement.** Un service projeté d'ailleurs
   n'est pas le sien à exposer ; déplacé dans un autre espace, un service
   quitte les pages de celui qu'il quitte (`move.ts` le déclare dans ses
@@ -495,10 +538,10 @@ n'agrège que des nombres.
 `uptime.updateIntegrity` · `uptime.setEnabled` · `uptime.remove` · `uptime.reorder` · `uptime.checkNow` ·
 `uptime.acceptBaseline` · `uptime.deploySources` · `uptime.deployHook` ·
 `uptime.history` · `uptime.checks` · `uptime.checkStats` · `uptime.incidents` ·
-`uptime.integrityReadings` · `uptime.pageList` · `uptime.pageAdd` ·
-`uptime.pageUpdate` · `uptime.pageRemove`
+`uptime.integrityReadings` · `uptime.fileContent` · `uptime.pageList` ·
+`uptime.pageAdd` · `uptime.pageUpdate` · `uptime.pageRemove`
 
-Vingt et une commandes, déclarées par `src/contracts/commands.ts` et enregistrées
+Vingt-deux commandes, déclarées par `src/contracts/commands.ts` et enregistrées
 au démarrage comme celles de tout module. `uptime.checkNow` emprunte le chemin
 de l'ordonnanceur (`monitor().runOne`), donc un test manuel compte dans
 l'historique, l'agrégat et les incidents exactement comme une sonde
@@ -514,8 +557,8 @@ src/index.ts                         manifest + contrats (l'entrée isomorphe)
 src/manifest.ts                      featureDescriptor('uptime') étalé ; resources, topics, quotas, domains,
                                      topbarWidget, settings (pages, domains ; item general, integrity)
 src/contracts/domain.ts              service, contrôle, incident, point, page de statut, lignes SQL, bornes
-src/contracts/commands.ts            les vingt et une commandes
-src/contracts/format.ts              mise en forme partagée client / serveur
+src/contracts/commands.ts            les vingt-deux commandes
+src/contracts/format.ts              mise en forme partagée client / serveur, étiquettes des lignes d'un écart
 ```
 
 `@deveye/types` ne garde que l'identité (id, descripteur, sujet live, émetteur
@@ -540,11 +583,12 @@ _shared.ts        Ctx, le singleton de l'ordonnanceur et des pages, le chiffreme
 service.ts        UptimeMonitor : tick, pool, sonde HTTP, lecture des fichiers (integrityDue, applyIntegrity),
                   enregistrement, incidents, alertes, élagage horaire, fermeture des pannes d'un service mis
                   en pause
-integrity.ts      captureSite, diffCapture, describeDrift : la lecture des fichiers, pure, réseau injecté
+integrity.ts      captureSite, diffCapture, describeDrift : la lecture des fichiers, pure, réseau injecté ;
+                  previewFile, l'aperçu borné d'un fichier
 deployEvidence.ts la fenêtre d'un déploiement et la question posée aux sources (findDeployEvidence)
 deploySources.ts  le sélecteur et ses droits, le jeton et la route de l'adresse d'appel
 notice.ts         la mise en page Discord d'une alerte (down, recovered, integrity)
-handlers.ts       les dix-sept commandes des services
+handlers.ts       les dix-huit commandes des services
 pages.ts          les quatre commandes des pages de statut
 domains.ts        la vérification d'un domaine (jeton sous /.well-known/deveye-uptime), onRemoved
 statusPage/       routes.ts (cache, débit, domainRoot), view.ts (le modèle de la page), render.ts, html.ts,
@@ -556,7 +600,8 @@ e2e.ts            les scénarios de bout en bout : surveiller ce serveur même, 
                   appeler son adresse d'appel et voir les fichiers relus
 uninstall.sql     démonte les quatre tables ft_uptime_*
 migrations/       001_status_pages.sql, 002_integrity.sql, 003_integrity_option.sql,
-                  004_integrity_readings.sql, 005_deploy_accept.sql
+                  004_integrity_readings.sql, 005_deploy_accept.sql, 006_retention_cap.sql,
+                  007_integrity_down.sql
 *.test.ts         handlers, service, integrity, deployEvidence, deploySources, notice, pages, repo, move,
                   accountExport, statusPage/routes, statusPage/view
 ```
@@ -569,8 +614,13 @@ Uptime.tsx             la vue complète : liste, fiche, journal
 ServiceList.tsx        la liste et le glisser-déposer (useDragReorder)
 ServiceCard.tsx        une ligne : état, bande 24 h, taux ; toute la ligne ouvre la fiche
 ServiceDetail.tsx      la fiche : graphiques, référence d'intégrité, incidents, aperçu du journal, « Tester »
+AcceptDialog.tsx       accepter la version actuelle : une mise à jour (mesures remises au vert) ou un site réparé
+DetailDialog.tsx       le détail d'un incident ou d'une lecture, fichier par fichier
+FileContentDialog.tsx  un fichier tel que le site le sert, relu par le serveur et montré en texte brut
 IntegrityJournal.tsx   le journal des intégrités, à droite des mesures quand l'option est cochée
-MeasuresBrowser.tsx    le journal complet : filtres, agrégats, défilement dans sa boîte
+ReadingRow.tsx         une lecture des fichiers sur une ligne, commune à l'aperçu et au journal complet
+ReadingsBrowser.tsx    le journal complet des lectures : filtres, défilement dans sa boîte
+MeasuresBrowser.tsx    le journal complet des mesures : filtres, agrégats, défilement dans sa boîte
 StatusBars.tsx         la bande d'état (full / inline, trailing), le seuil « lent »
 UptimeChart.tsx        la courbe de latence, créneaux en échec ombrés
 Ratios.tsx             les trois taux, toujours les trois et dans cet ordre

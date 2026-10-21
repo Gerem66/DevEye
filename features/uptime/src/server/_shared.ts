@@ -277,14 +277,12 @@ export function forgetStatusPage(pageId: number): void {
 /**
  * Ce qu'une panne dit d'elle-même en public : une catégorie, jamais le message
  * de la sonde, qui trahirait une adresse du réseau interne ou le mot-clé
- * attendu. Les préfixes sont ceux de `probeService`.
+ * attendu. Les préfixes sont ceux de `probeService` ; une panne ouverte par
+ * les fichiers n'arrive jamais ici.
  */
 export function publicReason(httpStatus: number | null, error: string | null): string {
     if (error?.startsWith('Délai dépassé')) return 'Délai de réponse dépassé';
     if (error?.startsWith('Mot-clé')) return 'Contenu inattendu';
-    // Avant le statut : un écart ou un fichier illisible arrive avec une page en 200.
-    if (error?.startsWith('Intégrité')) return 'Intégrité des fichiers compromise';
-    if (error?.startsWith('Fichiers')) return 'Fichiers du site indisponibles';
     if (httpStatus !== null) return `Réponse HTTP ${httpStatus}`;
     return 'Connexion impossible';
 }

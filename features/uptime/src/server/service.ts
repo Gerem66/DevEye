@@ -219,6 +219,8 @@ export function applyDeployEvidence(
 /** Une mesure telle qu'elle s'enregistre, la lecture des fichiers appliquée. */
 export interface Measure {
     up: boolean;
+    /** Les seuls fichiers l'ont fait échouer, la page répondait : une mise à jour validée la rend réussie. */
+    integrityDown: boolean;
     httpStatus: number | null;
     responseMs: number | null;
     error: string | null;
@@ -265,6 +267,7 @@ export function applyIntegrity(
 ): { measure: Measure; reading: ReadingState | null } {
     const http: Measure = {
         up: probe.up,
+        integrityDown: false,
         httpStatus: probe.httpStatus,
         responseMs: probe.responseMs,
         error: probe.error
@@ -272,6 +275,7 @@ export function applyIntegrity(
     const failWith = (verdict: IntegrityVerdict, error = verdict.error, responseMs = http.responseMs): Measure => ({
         ...http,
         up: false,
+        integrityDown: true,
         responseMs,
         error,
         ...(verdict.lines.length > 0 ? { driftLines: verdict.lines } : {})
@@ -316,7 +320,6 @@ export function applyIntegrity(
                 }
             };
         case 'drift': {
-            // Le préfixe est ce que `publicReason` reconnaît d'un écart.
             const verdict = { error: `Intégrité : ${reading.summary}`, lines: reading.lines };
             return {
                 measure: failWith(verdict, verdict.error, slowest(reading.slowestMs)),
@@ -382,7 +385,7 @@ export function applyIntegrity(
                       ? { error, lines: [] }
                       : null;
             return {
-                measure: verdict ? failWith(verdict, error) : { ...http, up: false, error },
+                measure: verdict ? failWith(verdict, error) : { ...http, up: false, integrityDown: true, error },
                 reading: {
                     failures,
                     verdict,
@@ -401,7 +404,7 @@ export function applyIntegrity(
 }
 
 /** Ce qu'une lecture qui a échoué dit d'elle-même, sans le « fetch failed » générique de Node. */
-function failureMessage(e: unknown, row: UptimeServiceRow): string {
+export function failureMessage(e: unknown, row: Pick<UptimeServiceRow, 'timeout_seconds'>): string {
     if (e instanceof UnsafeTargetError) return e.message;
     // AbortSignal.timeout rejects with a TimeoutError; everything else is a
     // connection-level failure (DNS, refused, TLS...), whose `cause` carries
@@ -681,6 +684,9 @@ export class UptimeMonitor {
                 detail: await encryptVerdict(cipher, reading.entry.detail)
             });
             if (reading.accepted) {
+                // Un déploiement n'explique que ce qui suit sa fin : un
+                // redéploiement qui répare une attaque ne repeint pas l'attaque.
+                await repo.history.clearIntegrityDown(row.id, reading.accepted.at);
                 this.deps.audit({
                     level: 'warning',
                     action: 'uptime.baselineAccepted',
@@ -697,6 +703,7 @@ export class UptimeMonitor {
             serviceId: row.id,
             checkedAt: at,
             up: outcome.up,
+            integrityDown: outcome.integrityDown,
             httpStatus: outcome.httpStatus,
             responseMs: outcome.responseMs,
             error: encryptedError
@@ -752,6 +759,7 @@ export class UptimeMonitor {
                 serviceId: row.id,
                 startedAt: probe.at,
                 httpStatus: probe.httpStatus,
+                integrityDown: probe.integrityDown,
                 error: probe.encryptedError
             });
             const drift = probe.driftLines ?? null;
@@ -779,7 +787,8 @@ export class UptimeMonitor {
                           '',
                           ...drift,
                           '',
-                          'Si c’est un déploiement voulu, acceptez la version actuelle depuis la fiche du service.'
+                          'Si c’est une mise à jour de votre part, validez-la depuis la fiche du service : Accepter la version actuelle, puis C’est une mise à jour.',
+                          'Sinon, le site est peut-être compromis : regardez les fichiers depuis la fiche, remettez le site en état (une version saine redéployée, les secrets du serveur changés), puis validez Le site a été réparé.'
                       ].join('\n'),
                       notice: { event: 'integrity', service: target.name, url: target.url, at: probe.at, lines: drift }
                   })

@@ -6,6 +6,7 @@ import { BUILD_MANIFEST_PATH, buildManifestSchema } from '@deveye/types';
 // adresse qu'un membre a saisie, et relit chaque fichier que le site sert.
 import { BROWSER_UA, safeFetch } from '@/Services/netFetch';
 
+import { DRIFT_LABELS } from '../contracts/format';
 import type { IntegrityBaseline } from './_shared';
 
 /**
@@ -91,6 +92,50 @@ export const fetchFile: FetchFn = async (url, timeoutMs) => {
         text
     };
 };
+
+/** Au-delà, un aperçu ne montre plus rien d'utile : le texte s'arrête là. */
+export const FILE_PREVIEW_MAX_BYTES = 64 * 1024;
+
+export interface FilePreview {
+    status: number;
+    contentType: string | null;
+    text: string;
+    truncated: boolean;
+}
+
+/**
+ * Ce que le site sert à une adresse, en texte brut et borné : de quoi regarder
+ * un fichier qu'un écart nomme sans l'ouvrir dans un navigateur, où un serveur
+ * compromis choisirait ce qui s'exécute.
+ */
+export async function previewFile(url: string, timeoutMs: number, fetch = safeFetch): Promise<FilePreview> {
+    const response = await fetch(url, {
+        signal: AbortSignal.timeout(timeoutMs),
+        headers: { 'user-agent': BROWSER_UA, accept: '*/*' }
+    });
+    const chunks: Buffer[] = [];
+    let size = 0;
+    let truncated = false;
+    if (response.body) {
+        // Quitter la boucle relâche le corps : rien de plus n'est lu.
+        for await (const chunk of response.body) {
+            const buf = Buffer.from(chunk);
+            if (size + buf.length > FILE_PREVIEW_MAX_BYTES) {
+                chunks.push(buf.subarray(0, FILE_PREVIEW_MAX_BYTES - size));
+                truncated = true;
+                break;
+            }
+            chunks.push(buf);
+            size += buf.length;
+        }
+    }
+    return {
+        status: response.status,
+        contentType: response.headers.get('content-type'),
+        text: Buffer.concat(chunks).toString('utf8'),
+        truncated
+    };
+}
 
 /** Le chemin d'un fichier tel que la référence le nomme : depuis la racine du site, barre en tête. */
 function keyOf(origin: string, url: URL): string | null {
@@ -250,9 +295,9 @@ export function detailDrift(diff: IntegrityDiff, max = 20): string[] {
         for (const key of keys.slice(0, max)) lines.push(`${label} ${key}`);
         if (keys.length > max) lines.push(`… et ${keys.length - max} autre(s) ${label.toLowerCase()}`);
     };
-    list('Modifié :', diff.changed);
-    list('Ajouté :', diff.added);
-    list('Retiré :', diff.removed);
+    list(DRIFT_LABELS.changed, diff.changed);
+    list(DRIFT_LABELS.added, diff.added);
+    list(DRIFT_LABELS.removed, diff.removed);
     if (diff.cspChanged) lines.push('Politique de contenu (CSP) modifiée');
     return lines;
 }
