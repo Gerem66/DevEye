@@ -45,6 +45,8 @@ import { manifest as manifest18 } from 'deveye-feature-invoicing';
 import { serverEntry as server18 } from 'deveye-feature-invoicing/server';
 import { manifest as manifest19 } from 'deveye-feature-shortlinks';
 import { serverEntry as server19 } from 'deveye-feature-shortlinks/server';
+import { manifest as manifest20 } from 'deveye-feature-moderation';
+import { serverEntry as server20 } from 'deveye-feature-moderation/server';
 
 export const INSTALLED_MODULES: readonly InstalledFeatureModule[] = [
     { manifest: { ...manifest0, icon: 'cloud' }, server: server0 },
@@ -67,5 +69,6 @@ export const INSTALLED_MODULES: readonly InstalledFeatureModule[] = [
     { manifest: { ...manifest17, icon: 'convert' }, server: server17 },
     { manifest: { ...manifest18, icon: 'invoicing' }, server: server18 },
     { manifest: { ...manifest19, icon: 'shortlinks' }, server: server19 },
+    { manifest: { ...manifest20, icon: 'shield' }, server: server20 },
     ...LOCAL_MODULES
 ];

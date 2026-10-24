@@ -60,6 +60,9 @@
     },
     {
       "package": "deveye-feature-shortlinks"
+    },
+    {
+      "package": "deveye-feature-moderation"
     }
   ]
 }

@@ -46,6 +46,8 @@ import { manifest as manifest18 } from 'deveye-feature-invoicing';
 import { clientEntry as client18 } from 'deveye-feature-invoicing/client';
 import { manifest as manifest19 } from 'deveye-feature-shortlinks';
 import { clientEntry as client19 } from 'deveye-feature-shortlinks/client';
+import { manifest as manifest20 } from 'deveye-feature-moderation';
+import { clientEntry as client20 } from 'deveye-feature-moderation/client';
 
 export const INSTALLED_CLIENT_FEATURES: readonly InstalledClientFeature[] = [
     { manifest: { ...manifest0, icon: 'cloud' }, client: client0 },
@@ -68,5 +70,6 @@ export const INSTALLED_CLIENT_FEATURES: readonly InstalledClientFeature[] = [
     { manifest: { ...manifest17, icon: 'convert' }, client: client17 },
     { manifest: { ...manifest18, icon: 'invoicing' }, client: client18 },
     { manifest: { ...manifest19, icon: 'shortlinks' }, client: client19 },
+    { manifest: { ...manifest20, icon: 'shield' }, client: client20 },
     ...LOCAL_CLIENT_FEATURES
 ];

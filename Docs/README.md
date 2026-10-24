@@ -37,21 +37,22 @@ lancement sont dans le [README de la racine](../README.md#quick-start).
 
 ## Features
 
-| Doc                                                | Quoi                                                                                |
-| -------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| [Appareils](../features/devices/README.md)         | la supervision des machines enrôlées                                                |
-| [Audience](../features/audience/README.md)         | le suivi d'usage des sites livrés                                                   |
-| [Bases de données](../features/database/README.md) | l'inventaire des bases et leurs alertes                                             |
-| [Convertisseur](../features/convert/README.md)     | la conversion de vidéos, de sons, d'images et de documents, côté serveur            |
-| [Déploiements](../features/deploy/README.md)       | les mises en production via Dokploy ou GitHub Actions                               |
-| [Facturation](../features/invoicing/README.md)     | les devis et les factures d'un espace, le carnet de clients, le suivi du dû         |
-| [Finances](../features/finance/README.md)          | la trésorerie de l'activité : comptes, opérations, échéances, TVA                   |
-| [Git](../features/git/README.md)                   | les dépôts de l'espace et leur cache                                                |
-| [Liens courts](../features/shortlinks/README.md)   | des adresses courtes qui redirigent, leurs visites, leurs signalements              |
-| [Mail](../features/mail/README.md)                 | les boîtes mail de l'espace, leurs deux paliers, les alertes                        |
-| [Notes](../features/notes/README.md)               | les notes et leurs dossiers, la note privée, la note projetée                       |
-| [Projets](../features/projects/README.md)          | le pilotage du travail, et ses liaisons vers les objets d'espace                    |
-| [Sauvegardes](../features/backup/README.md)        | les sauvegardes : sources, destinations, chiffrement des archives                   |
-| [Sentinelle](../features/sentinel/README.md)       | la posture de sécurité des machines                                                 |
-| [Serveur mail](../features/mailserver/README.md)   | des boîtes mail sur les domaines de l'espace, servies par DevEye : SMTP, IMAP, DKIM |
-| [Uptime](../features/uptime/README.md)             | la disponibilité des services externes                                              |
+| Doc                                                        | Quoi                                                                                 |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| [Appareils](../features/devices/README.md)                 | la supervision des machines enrôlées                                                 |
+| [Audience](../features/audience/README.md)                 | le suivi d'usage des sites livrés                                                    |
+| [Bases de données](../features/database/README.md)         | l'inventaire des bases et leurs alertes                                              |
+| [Convertisseur](../features/convert/README.md)             | la conversion de vidéos, de sons, d'images et de documents, côté serveur             |
+| [Déploiements](../features/deploy/README.md)               | les mises en production via Dokploy ou GitHub Actions                                |
+| [Facturation](../features/invoicing/README.md)             | les devis et les factures d'un espace, le carnet de clients, le suivi du dû          |
+| [Finances](../features/finance/README.md)                  | la trésorerie de l'activité : comptes, opérations, échéances, TVA                    |
+| [Git](../features/git/README.md)                           | les dépôts de l'espace et leur cache                                                 |
+| [Liens courts](../features/shortlinks/README.md)           | des adresses courtes qui redirigent, leurs visites, leurs signalements               |
+| [Modération automatique](../features/moderation/README.md) | les empreintes et noms de fichiers interdits, consultés par Hébergement et CloudSync |
+| [Mail](../features/mail/README.md)                         | les boîtes mail de l'espace, leurs deux paliers, les alertes                         |
+| [Notes](../features/notes/README.md)                       | les notes et leurs dossiers, la note privée, la note projetée                        |
+| [Projets](../features/projects/README.md)                  | le pilotage du travail, et ses liaisons vers les objets d'espace                     |
+| [Sauvegardes](../features/backup/README.md)                | les sauvegardes : sources, destinations, chiffrement des archives                    |
+| [Sentinelle](../features/sentinel/README.md)               | la posture de sécurité des machines                                                  |
+| [Serveur mail](../features/mailserver/README.md)           | des boîtes mail sur les domaines de l'espace, servies par DevEye : SMTP, IMAP, DKIM  |
+| [Uptime](../features/uptime/README.md)                     | la disponibilité des services externes                                               |

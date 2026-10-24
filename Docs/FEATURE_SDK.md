@@ -172,7 +172,11 @@ eux : Projets lit les contrats d'éléments (`UPTIME_ITEMS_PROVIDER`,
 Uptime lit `DEPLOY_ITEMS_PROVIDER`, `GIT_ITEMS_PROVIDER` et
 `PROJECTS_USAGE_PROVIDER` pour ses sources de déploiement (`list`,
 `authorize`, `activity`, `linkedItems`) ; le module de facturation des
-comptes offre `ACCOUNT_PLAN_PROVIDER`.
+comptes offre `ACCOUNT_PLAN_PROVIDER` ; le module de modération automatique
+offre `MODERATION_PROVIDER` (`check` d'un fichier qui arrive, par son SHA-256
+et son nom, et `ban` d'empreintes après un retrait), qu'Hébergement consulte à
+l'envoi et au renommage, et CloudSync avant chaque transfert
+([features/moderation/README.md](../features/moderation/README.md)).
 
 Côté client, `FeatureClient.providers` est le jumeau : les écrans lisent par
 `moduleClientProvider(clé)` (`client/src/sdk/registry.ts`). Les onglets d'un
@@ -608,7 +612,8 @@ accorde la feature ; l'hôte l'enveloppe dans un bouton qui ouvre la feature,
 rien d'interactif dedans (Appareils, Uptime, Rendez-vous). `accountEntry` ouvre
 `AccountView` depuis le menu du compte, `accountOnly` retire carte et ligne de
 rôle et impose `access.scope: 'account'` à toutes les commandes (facturation des
-comptes) ; [QUOTAS.md](./QUOTAS.md) les détaille. `adminTabs` ajoute des
+comptes) ; sans `accountEntry`, un module `accountOnly` n'existe que par ses
+`adminTabs`, dans la popup « Modération » (modération automatique) ; [QUOTAS.md](./QUOTAS.md) les détaille. `adminTabs` ajoute des
 onglets à la popup « Modération » (§ L'administration
 d'une fonctionnalité). `extraPermissions` (dix au plus) et `access.extras` :
 [PERMISSIONS.md](./PERMISSIONS.md). `settings` et `settingsPanels` :
@@ -670,7 +675,10 @@ qu'un import de privilège atteint). Pas de `references` : elles exigeraient
 Le smoke E2E : `npm run smoke:feature -- <id> <label>` démarre un serveur sur
 le bundle construit et vérifie ce qu'aucune autre sentinelle ne voit : la
 feature au marché d'ajout, la tuile posée, un aller-retour de commande sur le
-fil, zéro exception JS. `npm run ci:smoke` (`scripts/smoke-all.ts`) construit
+fil, zéro exception JS. Un module de compte (`--account`) s'ouvre par son
+entrée du menu du profil ; un module de la seule popup « Modération »
+(`--moderation=<onglet>`, posé par `ci:smoke` d'après le manifest) par cette
+popup et son premier onglet. `npm run ci:smoke` (`scripts/smoke-all.ts`) construit
 le client dans `.smoke/client`, démarre un serveur à lui (`SMOKE_PORT`, 3999
 par défaut), sonde chaque module de `features.config.json` et de
 `features.local.json`, et éteint tout.

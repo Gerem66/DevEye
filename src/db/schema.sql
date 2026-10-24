@@ -1202,6 +1202,56 @@ CREATE TABLE `ft_mailserver_tls` (
   UNIQUE KEY `uniq_ft_mailserver_tls` (`hostname`,`kind`,`directory`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+CREATE TABLE `ft_moderation_hits` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `feature` varchar(32) COLLATE utf8mb4_general_ci NOT NULL,
+  `rule_id` int DEFAULT NULL,
+  `kind` varchar(12) COLLATE utf8mb4_general_ci NOT NULL,
+  `reason` varchar(16) COLLATE utf8mb4_general_ci NOT NULL,
+  `label` varchar(200) COLLATE utf8mb4_general_ci NOT NULL,
+  `content` text COLLATE utf8mb4_general_ci NOT NULL,
+  `sha256` char(64) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `size` bigint DEFAULT NULL,
+  `workspace_id` int DEFAULT NULL,
+  `user_id` int DEFAULT NULL,
+  `dedupe_key` char(64) COLLATE utf8mb4_general_ci NOT NULL,
+  `count` int NOT NULL DEFAULT '1',
+  `first_seen` bigint NOT NULL DEFAULT (unix_timestamp()),
+  `last_seen` bigint NOT NULL DEFAULT (unix_timestamp()),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_ft_moderation_hit` (`dedupe_key`),
+  KEY `idx_ft_moderation_hits_seen` (`last_seen`),
+  KEY `idx_ft_moderation_hits_ws` (`workspace_id`),
+  KEY `fk_ft_moderation_hit_rule` (`rule_id`),
+  KEY `fk_ft_moderation_hit_user` (`user_id`),
+  CONSTRAINT `fk_ft_moderation_hit_rule` FOREIGN KEY (`rule_id`) REFERENCES `ft_moderation_rules` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_ft_moderation_hit_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_ft_moderation_hit_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_moderation_meta` (
+  `k` varchar(64) COLLATE utf8mb4_general_ci NOT NULL,
+  `v` text COLLATE utf8mb4_general_ci NOT NULL,
+  PRIMARY KEY (`k`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_moderation_rules` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `kind` varchar(12) COLLATE utf8mb4_general_ci NOT NULL,
+  `pattern` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
+  `reason` varchar(16) COLLATE utf8mb4_general_ci NOT NULL,
+  `label` varchar(200) COLLATE utf8mb4_general_ci NOT NULL,
+  `exposure` varchar(12) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'everywhere',
+  `source` varchar(12) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'manual',
+  `created_by` int DEFAULT NULL,
+  `hits` int NOT NULL DEFAULT '0',
+  `last_hit` bigint DEFAULT NULL,
+  `created` bigint NOT NULL DEFAULT (unix_timestamp()),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_ft_moderation_rule` (`kind`,`pattern`),
+  KEY `idx_ft_moderation_rules_source` (`source`,`created`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 CREATE TABLE `ft_osint_usage` (
   `workspace_id` int NOT NULL,
   `month` int NOT NULL,

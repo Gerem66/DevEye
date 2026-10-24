@@ -34,14 +34,22 @@ function fail(message: string): never {
     process.exit(1);
 }
 
-/** L'identité d'un module installé (id + libellé), lue dans son manifest : même résolution que gen-features. */
-async function moduleIdentity(entry: FeatureConfigEntry): Promise<{ id: string; label: string; accountOnly: boolean }> {
+/**
+ * L'identité d'un module installé (id + libellé), lue dans son manifest : même
+ * résolution que gen-features. `moderationTab` : un module de compte sans
+ * entrée de menu ne vit que dans la popup « Modération », par ses onglets.
+ */
+async function moduleIdentity(
+    entry: FeatureConfigEntry
+): Promise<{ id: string; label: string; accountOnly: boolean; moderationTab: string | null }> {
     const manifest = await importManifest(ROOT, entry);
     if (!manifest) fail(`${entry.package}: l'entrée racine n'exporte pas « manifest »`);
+    const popupOnly = manifest.accountOnly === true && !manifest.accountEntry;
     return {
         id: manifest.id,
         label: manifest.accountEntry?.label ?? manifest.label,
-        accountOnly: manifest.accountOnly === true
+        accountOnly: manifest.accountOnly === true && !popupOnly,
+        moderationTab: popupOnly ? (manifest.adminTabs?.[0]?.label ?? null) : null
     };
 }
 
@@ -162,7 +170,8 @@ async function main(): Promise<void> {
             m.id,
             m.label,
             `--url=${BASE_URL}`,
-            ...(m.accountOnly ? ['--account'] : [])
+            ...(m.accountOnly ? ['--account'] : []),
+            ...(m.moderationTab !== null ? [`--moderation=${m.moderationTab}`] : [])
         ]);
         if (!ok) {
             failed.push(m.id);

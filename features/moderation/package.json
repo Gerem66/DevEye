@@ -1,0 +1,21 @@
+{
+  "name": "deveye-feature-moderation",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "description": "Modération automatique : les empreintes et les noms de fichiers interdits sur l'instance, consultés par les fonctionnalités qui hébergent ou synchronisent des fichiers, et le journal de ce qu'ils ont arrêté.",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./server": "./src/server/index.ts",
+    "./client": "./src/client/index.tsx",
+    "./package.json": "./package.json"
+  },
+  "peerDependencies": {
+    "@deveye/types": ">=0.25.1",
+    "react": "^19.0.0",
+    "zod": "^4.0.0"
+  }
+}

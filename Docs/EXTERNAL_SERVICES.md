@@ -57,12 +57,13 @@ s'affiche, la licence exige la mention « IP Geolocation by DB-IP » et son lien
 
 ## Les cartes des modules
 
-| Module                  | Carte             | Ce qui est vérifié                                                                                                                                                                                                              |
-| ----------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Facturation des comptes | Stripe            | la clé principale (argent réel ou test) et la clé de test, par la lecture des tarifs de Pro ; les offres sur mesure proposées ; les abonnements payants en cours, et tous ceux qui ont payé un jour ; le dernier événement reçu |
-| Météo                   | Open-Meteo        | inactif sans `OPEN_METEO_API_KEY` (palier gratuit, non commercial) ; sinon un appel minimal avec la clé                                                                                                                         |
-| Mail                    | Google, Microsoft | les identifiants OAuth de l'application, par un jeton de rafraîchissement inventé ; les boîtes reliées et les comptes qui les ont reliées                                                                                       |
-| Finances                | Enable Banking    | l'application de l'instance (nom, environnement, active) ; les connexions bancaires, et celles en échec                                                                                                                         |
+| Module                  | Carte                      | Ce qui est vérifié                                                                                                                                                                                                              |
+| ----------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Facturation des comptes | Stripe                     | la clé principale (argent réel ou test) et la clé de test, par la lecture des tarifs de Pro ; les offres sur mesure proposées ; les abonnements payants en cours, et tous ceux qui ont payé un jour ; le dernier événement reçu |
+| Météo                   | Open-Meteo                 | inactif sans `OPEN_METEO_API_KEY` (palier gratuit, non commercial) ; sinon un appel minimal avec la clé                                                                                                                         |
+| Mail                    | Google, Microsoft          | les identifiants OAuth de l'application, par un jeton de rafraîchissement inventé ; les boîtes reliées et les comptes qui les ont reliées                                                                                       |
+| Finances                | Enable Banking             | l'application de l'instance (nom, environnement, active) ; les connexions bancaires, et celles en échec                                                                                                                         |
+| Modération automatique  | Liste d'empreintes externe | inactif sans `MODERATION_FEED_URL` ; sinon la source, les empreintes importées, la dernière relecture (toutes les heures) et sa dernière erreur ; « Revérifier » relit la liste                                                 |
 
 Les modules gardent leur mesure 10 minutes : un appel de plus compterait dans
 un quota d'API, et compter les abonnements payés relit toutes les factures

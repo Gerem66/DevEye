@@ -1,0 +1,24 @@
+declare const styles: {
+    readonly card: string;
+    readonly cardHead: string;
+    readonly cardMeta: string;
+    readonly cardText: string;
+    readonly cardTitle: string;
+    readonly empty: string;
+    readonly feed: string;
+    readonly feedError: string;
+    readonly feedTitle: string;
+    readonly field: string;
+    readonly fieldHint: string;
+    readonly fieldLabel: string;
+    readonly headActions: string;
+    readonly inlineActions: string;
+    readonly lead: string;
+    readonly list: string;
+    readonly mono: string;
+    readonly pattern: string;
+    readonly sectionHead: string;
+    readonly sectionTitle: string;
+    readonly tab: string;
+};
+export = styles;

@@ -12,7 +12,7 @@
  * (`SEED_DEV=true`, dev / devdevdev par défaut).
  *
  * Usage :
- *   npm run smoke:feature -- <featureId> <label> [--url=http://localhost:3000] [--headed]
+ *   npm run smoke:feature -- <featureId> <label> [--url=http://localhost:3000] [--headed] [--account] [--moderation=<onglet>]
  *
  * Env : SMOKE_USERNAME / SMOKE_PASSWORD (défaut : le seed dev),
  *       SMOKE_BROWSER (défaut : chromium-browser).
@@ -42,13 +42,17 @@ const flags = new Map(
 const FEATURE = positional[0];
 const LABEL = positional[1];
 if (!FEATURE || !LABEL) {
-    console.error('Usage: npm run smoke:feature -- <featureId> <label> [--url=...] [--headed] [--account]');
+    console.error(
+        'Usage: npm run smoke:feature -- <featureId> <label> [--url=...] [--headed] [--account] [--moderation=<onglet>]'
+    );
     process.exit(2);
 }
 const BASE_URL = flags.get('url') ?? 'http://localhost:3000';
 const HEADED = flags.has('headed');
 /** Un module de compte (`manifest.accountOnly`) : ni marché ni tuile, une entrée du menu du profil. */
 const ACCOUNT_ONLY = flags.has('account');
+/** Un module de la seule popup « Modération » : ni marché, ni tuile, ni entrée du profil ; l'onglet à ouvrir. */
+const MODERATION_TAB = flags.get('moderation') ?? null;
 const USERNAME = process.env.SMOKE_USERNAME ?? 'dev';
 const PASSWORD = process.env.SMOKE_PASSWORD ?? 'devdevdev';
 const BROWSER = process.env.SMOKE_BROWSER ?? 'chromium-browser';
@@ -501,6 +505,24 @@ async function openAccountView(page: Page, watch: Watch): Promise<void> {
     console.log(`  ✓ vue de compte: ${watch.roundTrips.join(', ')}`);
 }
 
+/**
+ * Le parcours d'un module de la popup « Modération » : l'entrée du menu du
+ * profil ouvre la popup, le module s'y choisit par son nom, et son onglet parle
+ * au serveur (la vue d'ensemble, elle, est à l'hôte).
+ */
+async function openModerationTab(page: Page, watch: Watch, tab: string): Promise<void> {
+    await page.evaluate(`document.querySelector('[class*="profileBtn"]')?.click()`);
+    await waitFor("l'entrée « Modération » du menu du profil", 5_000, () => page.clickByText('Modération'));
+    await waitFor(`le module « ${LABEL} » dans la popup`, 8_000, () => page.clickByText(LABEL));
+    await waitFor(`l'onglet « ${tab} »`, 8_000, () => page.clickByText(tab));
+    await waitFor(
+        `un aller-retour « ${PREFIX}* » depuis l'onglet « ${tab} »`,
+        20_000,
+        async () => watch.roundTrips.length > 0
+    );
+    console.log(`  ✓ onglet de modération: ${watch.roundTrips.join(', ')}`);
+}
+
 /** Le verdict : un refus local ou une exception JS est un échec, un console.error un avertissement. */
 function verdict(watch: Watch): void {
     if (watch.refusedLocally > 0) {
@@ -529,7 +551,9 @@ async function main(): Promise<void> {
 
     console.log(`Smoke « ${FEATURE} » (${LABEL}) sur ${BASE_URL}`);
     await login(page);
-    if (ACCOUNT_ONLY) {
+    if (MODERATION_TAB !== null) {
+        await openModerationTab(page, watch, MODERATION_TAB);
+    } else if (ACCOUNT_ONLY) {
         await openAccountView(page, watch);
     } else {
         await checkCatalogue(page);
