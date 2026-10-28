@@ -12,6 +12,28 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: readonly ChangelogEntry[] = [
     {
+        version: '0.25.2',
+        date: '2026-10-28',
+        changes: [
+            {
+                kind: 'added',
+                text: 'Modération : les modérateurs interdisent des fichiers par empreinte et par motif de nom'
+            },
+            {
+                kind: 'added',
+                text: 'CloudSync : une exclusion ajoutée pendant une synchronisation s’applique sans attendre sa fin, les dossiers connus présents dans le partage (node_modules, .git…) se proposent avec leur poids et s’excluent en libérant l’espace, et « Afficher les erreurs pendant le transfert », désactivé par défaut, garde la carte calme tant qu’une synchronisation tourne'
+            },
+            {
+                kind: 'improved',
+                text: 'Uptime : un écart d’intégrité ne rend plus un site indisponible, ni pour vous ni sur la page de statut ; « Accepter la version actuelle » demande s’il s’agit d’une mise à jour ou d’un site réparé, chaque fichier d’un écart se lit depuis la fiche, et le détail d’un incident ou d’une lecture s’ouvre dans une fenêtre'
+            },
+            {
+                kind: 'fixed',
+                text: 'CloudSync : l’estimation du temps restant se lisse sur trente secondes et s’arrondit, au lieu de changer du tout au tout à chaque seconde'
+            }
+        ]
+    },
+    {
         version: '0.25.1',
         date: '2026-10-19',
         changes: [
