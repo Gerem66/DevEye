@@ -104,3 +104,7 @@
 .suggestChip :global(.icon) {
     width: 12px;
 }
+
+.suggestDetail {
+    color: var(--text-muted);
+}

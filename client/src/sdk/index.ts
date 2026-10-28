@@ -69,7 +69,7 @@ export { DeviceFolderField } from '@/Components/DeviceFolderField';
 /** Le choix d'un appareil par lequel joindre un service (`relayDeviceOptions` côté serveur). */
 export { DeviceRelayField, useDeviceRelayOptions } from '@/Components/DeviceRelayField';
 export { PathExclusionsEditor } from '@/Components/PathExclusionsEditor';
-export type { PathExclusionItem } from '@/Components/PathExclusionsEditor';
+export type { PathExclusionFound, PathExclusionItem } from '@/Components/PathExclusionsEditor';
 /**
  * Les appareils de l'espace actif, tels que le module Appareils les offre à l'app
  * (`DEVICES_CLIENT_PROVIDER`). Vide, chargée et sans erreur quand le module n'est

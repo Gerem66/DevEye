@@ -12,6 +12,12 @@ export interface PathExclusionItem {
     pattern: string;
 }
 
+/** Un nom trouvé dans le dossier parcouru, et ce qu'il y pèse, prêt à afficher (« 2,1 Go, 3 dossiers »). */
+export interface PathExclusionFound {
+    name: string;
+    detail: string;
+}
+
 export interface PathExclusionsEditorProps {
     items: readonly PathExclusionItem[];
     /**
@@ -24,6 +30,12 @@ export interface PathExclusionsEditorProps {
     /** Où s'appliquent les suggestions, en fin de phrase : « le partage », « le dossier ». */
     scope: string;
     disabled?: boolean;
+    /**
+     * Noms trouvés dans le dossier, en tête des suggestions avec leur poids ;
+     * `onAddFound` reçoit leur clic (à défaut, `onAdd` en règle de nom).
+     */
+    found?: readonly PathExclusionFound[];
+    onAddFound?: (name: string) => boolean | Promise<boolean>;
 }
 
 const KIND_LABELS: Record<PathExclusionKind, string> = {
@@ -45,22 +57,36 @@ const PLACEHOLDERS: Record<PathExclusionKind, string> = {
  * façon partout, et se valide comme l'agent l'exécutera. Les exclusions ne
  * tiennent pas compte de la casse.
  */
-export function PathExclusionsEditor({ items, onAdd, onRemove, canWrite, scope, disabled }: PathExclusionsEditorProps) {
+export function PathExclusionsEditor({
+    items,
+    onAdd,
+    onRemove,
+    canWrite,
+    scope,
+    disabled,
+    found = [],
+    onAddFound
+}: PathExclusionsEditorProps) {
     const [kind, setKind] = useState<PathExclusionKind>('name');
     const [pattern, setPattern] = useState('');
     const [problem, setProblem] = useState<string | null>(null);
 
     /** Voie d'ajout unique, partagée par le formulaire et les suggestions. */
-    const submit = async (nextKind: PathExclusionKind, nextPattern: string): Promise<boolean> => {
+    const submit = async (
+        nextKind: PathExclusionKind,
+        nextPattern: string,
+        add: () => boolean | Promise<boolean> = () => onAdd(nextKind, nextPattern)
+    ): Promise<boolean> => {
         const refused = pathExclusionProblem(nextKind, nextPattern);
         setProblem(refused);
         if (refused) return false;
         try {
-            return await onAdd(nextKind, nextPattern);
+            return await add();
         } catch {
             return false;
         }
     };
+    const addFound = onAddFound ?? ((name: string) => onAdd('name', name));
 
     const add = async (): Promise<void> => {
         const trimmed = pattern.trim();
@@ -69,7 +95,10 @@ export function PathExclusionsEditor({ items, onAdd, onRemove, canWrite, scope, 
     };
 
     const named = new Set(items.filter((x) => x.kind === 'name').map((x) => x.pattern));
-    const suggestions = PATH_EXCLUSION_SUGGESTIONS.filter((s) => !named.has(s));
+    // Un nom déjà en règle ne se propose plus ; un nom trouvé remplace sa suggestion fixe.
+    const foundChips = found.filter((f) => !named.has(f.name));
+    const foundNames = new Set(foundChips.map((f) => f.name));
+    const suggestions = PATH_EXCLUSION_SUGGESTIONS.filter((s) => !named.has(s) && !foundNames.has(s));
 
     return (
         <div className={styles.editor}>
@@ -136,9 +165,23 @@ export function PathExclusionsEditor({ items, onAdd, onRemove, canWrite, scope, 
                         </Button>
                     </div>
                     {problem && <p className={styles.problem}>{problem}</p>}
-                    {suggestions.length > 0 && (
+                    {(foundChips.length > 0 || suggestions.length > 0) && (
                         <div className={styles.suggestRow}>
                             <span className={styles.suggestLabel}>Suggestions</span>
+                            {foundChips.map((f) => (
+                                <button
+                                    key={f.name}
+                                    type='button'
+                                    className={styles.suggestChip}
+                                    title={`Exclure « ${f.name} » partout dans ${scope} : ${f.detail}`}
+                                    disabled={disabled}
+                                    onClick={() => void submit('name', f.name, () => addFound(f.name))}
+                                >
+                                    <span className='icon icon-add' aria-hidden='true' />
+                                    {f.name}
+                                    <span className={styles.suggestDetail}>{f.detail}</span>
+                                </button>
+                            ))}
                             {suggestions.map((s) => (
                                 <button
                                     key={s}
