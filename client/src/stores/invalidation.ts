@@ -26,6 +26,7 @@ export type ResourceKey =
     | 'password.list'
     | 'cloudSync.listShares'
     | 'cloudSync.planUsage'
+    | 'cloudSync.settings'
     | 'mail.accountCount'
     | 'mail.accountList'
     | 'mail.getSettings'
