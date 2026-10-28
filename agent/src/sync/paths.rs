@@ -158,11 +158,36 @@ pub fn safe_join(root: &Path, rel_path: &str) -> Result<PathBuf> {
         bail!("chemin relatif refusé : {problem}");
     }
     let normalized = nfc(rel_path);
+    let direct = root.join(&normalized);
+    if direct.symlink_metadata().is_ok() {
+        return Ok(direct);
+    }
     let mut out = root.to_path_buf();
     for seg in normalized.split('/') {
-        out.push(seg);
+        out = entry_on_disk(out, seg);
     }
     Ok(out)
+}
+
+/// `dir/name`, under the spelling the disk actually holds. The wire path is
+/// NFC, but a byte-exact filesystem (Linux) may store the NFD name a macOS
+/// copy left behind: opening the NFC form would fail with ENOENT forever.
+/// The server never indexes two names that are equal once normalized.
+fn entry_on_disk(dir: PathBuf, name: &str) -> PathBuf {
+    let direct = dir.join(name);
+    if direct.symlink_metadata().is_ok() {
+        return direct;
+    }
+    let found = std::fs::read_dir(&dir).ok().and_then(|entries| {
+        entries
+            .flatten()
+            .map(|entry| entry.file_name())
+            .find(|os| os.to_str().is_some_and(|s| nfc(s) == name))
+    });
+    match found {
+        Some(os) => dir.join(os),
+        None => direct,
+    }
 }
 
 /// `\\?\C:\dir` → `C:\dir`, `\\?\UNC\srv\share` → `\\srv\share`.
@@ -673,6 +698,27 @@ mod tests {
         let abs = root.join("docs").join("rapport.pdf");
         assert_eq!(rel_path_of(root, &abs).unwrap(), "docs/rapport.pdf");
         assert!(rel_path_of(root, Path::new("/elsewhere/x")).is_none());
+    }
+
+    #[test]
+    fn safe_join_finds_a_name_stored_in_nfd() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let nfd_dir = "Activite\u{301}";
+        let nfd_file = "Ame\u{301}lie.pdf";
+        std::fs::create_dir(root.join(nfd_dir)).unwrap();
+        std::fs::write(root.join(nfd_dir).join(nfd_file), b"x").unwrap();
+
+        let joined = safe_join(root, "Activit\u{e9}/Am\u{e9}lie.pdf").unwrap();
+        assert_eq!(std::fs::read(&joined).unwrap(), b"x");
+        assert_eq!(
+            safe_join(root, "Activit\u{e9}/nouveau.txt").unwrap(),
+            root.join(nfd_dir).join("nouveau.txt")
+        );
+        assert_eq!(
+            safe_join(root, "absent/\u{e9}.txt").unwrap(),
+            root.join("absent").join("\u{e9}.txt")
+        );
     }
 
     /// Runs on every platform (the Windows branch is `cfg!`, not `#[cfg]`).
