@@ -258,16 +258,15 @@ fn fingerprint(
         return None;
     }
     let size = meta.len();
-    if size > MAX_FILE_BYTES {
-        return None;
-    }
     let linked = std::fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink());
     // A link into `/usr` points at a file the package manager rewrites on every
     // update: what the link says is where it points, not what the target holds.
+    // Nothing is read then, so the size cap does not apply.
     let digest = match linked.then(|| std::fs::canonicalize(path).ok()).flatten() {
         Some(target) if target.starts_with("/usr/") => {
             Sha256::digest(format!("→{}", target.to_string_lossy()).as_bytes())
         }
+        _ if size > MAX_FILE_BYTES => return None,
         _ => Sha256::digest(std::fs::read(path).ok()?),
     };
 

@@ -1988,7 +1988,9 @@ mod tests {
 
         let dir = std::env::temp_dir().join(format!("deveye-exe-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        let bin = dir.join("kdevtmpfsi");
+        // Le nom reste `sleep` : les coreutils multi-appels (uutils) choisissent
+        // l'outil d'après le nom du binaire, et quittent sur un nom inconnu.
+        let bin = dir.join("sleep");
 
         // Un shell script ne convient pas : `/proc/<pid>/exe` pointerait vers
         // l'interpréteur. Il faut un vrai exécutable.
@@ -2054,7 +2056,9 @@ mod tests {
 
         let dir = std::env::temp_dir().join(format!("deveye-repl-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        let bin = dir.join("prog");
+        // Le nom reste `sleep` : les coreutils multi-appels (uutils) choisissent
+        // l'outil d'après le nom du binaire, et quittent sur un nom inconnu.
+        let bin = dir.join("sleep");
         let Ok(src) = std::fs::read("/bin/sleep") else {
             eprintln!("/bin/sleep absent — vérification sautée");
             return;
