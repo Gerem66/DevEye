@@ -207,7 +207,8 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
             upsert: unused,
             updateCounts: unused,
             reorder: unused,
-            updateNameEnc: unused
+            updateNameEnc: unused,
+            deleteMissing: unused
         },
         messages: {
             countByFolder: unused,

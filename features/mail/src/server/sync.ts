@@ -74,7 +74,12 @@ export async function refreshFolderCounts(repo: MailRepo, folder: MailFolderRow)
     });
 }
 
-/** Refresh the folder list from IMAP and upsert it into `mail_folders`. */
+/**
+ * Refresh the folder list from IMAP and upsert it into `mail_folders`. Un
+ * dossier que le serveur ne liste plus quitte le cache avec ses messages : le
+ * garder ferait buter chaque relève sur un SELECT impossible. Une liste vide,
+ * elle, ne vide rien : ce n'est pas une réponse sur laquelle jeter un cache.
+ */
 export async function syncAccountFolders(
     session: MailSession,
     repo: MailRepo,
@@ -91,6 +96,10 @@ export async function syncAccountFolders(
             uidValidity: null
         });
     }
+    await repo.folders.deleteMissing(
+        accountId,
+        remote.map((folder) => folder.imapPath)
+    );
     return repo.folders.listByAccount(accountId);
 }
 

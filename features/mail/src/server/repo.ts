@@ -122,6 +122,8 @@ export interface MailFoldersRepo {
     reorder(accountId: number, ids: number[]): Promise<void>;
     /** Re-key a folder's encrypted name, for a tier switch. */
     updateNameEnc(id: number, nameEnc: string): Promise<void>;
+    /** Retire les dossiers du compte absents de `keptPaths` ; leurs messages suivent par la clé étrangère. */
+    deleteMissing(accountId: number, keptPaths: readonly string[]): Promise<number>;
 }
 
 export interface MailMessageEnvelopeInput {
@@ -458,6 +460,14 @@ function foldersRepo(q: SdkQueryable): MailFoldersRepo {
         },
         async updateNameEnc(id, nameEnc) {
             await q.execute('UPDATE mail_folders SET name_enc = ? WHERE id = ?', [nameEnc, id]);
+        },
+        async deleteMissing(accountId, keptPaths) {
+            if (keptPaths.length === 0) return 0;
+            const res = await q.execute('DELETE FROM mail_folders WHERE account_id = ? AND imap_path NOT IN (?)', [
+                accountId,
+                [...keptPaths]
+            ]);
+            return res.affectedRows;
         }
     };
 }

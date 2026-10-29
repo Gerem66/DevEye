@@ -196,7 +196,8 @@ function fakeRepo(accountRows: MailAccountRow[], projections: Record<number, num
             upsert: unused,
             updateCounts: unused,
             reorder: unused,
-            updateNameEnc: unused
+            updateNameEnc: unused,
+            deleteMissing: unused
         },
         messages: {
             countByFolder: unused,

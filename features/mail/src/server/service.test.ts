@@ -172,7 +172,17 @@ function fakeRepo(accountRows: MailAccountRow[], projections: Record<number, num
                 row.total_count = input.totalCount;
             },
             reorder: unused,
-            updateNameEnc: unused
+            updateNameEnc: unused,
+            async deleteMissing(accountId, keptPaths) {
+                const gone = folderRows.filter((f) => f.account_id === accountId && !keptPaths.includes(f.imap_path));
+                for (const folder of gone) {
+                    folderRows.splice(folderRows.indexOf(folder), 1);
+                    for (let i = messageRows.length - 1; i >= 0; i--) {
+                        if (messageRows[i].folder_id === folder.id) messageRows.splice(i, 1);
+                    }
+                }
+                return gone.length;
+            }
         },
         messages: {
             countByFolder: async (folderId) => {
@@ -317,6 +327,49 @@ describe('la relève de fond', () => {
         assert.equal(repo.accountRows[0].last_sync_status, 'ok');
     });
 
+    it('un dossier que le serveur ne liste plus quitte le cache avec ses messages, et la passe continue', async () => {
+        const repo = fakeRepo([account({ id: 1 })]);
+        // Un dossier supprimé côté serveur, encore en cache : chaque relève
+        // butait sur lui, et abandonnait là.
+        repo.folderRows.push({
+            id: 99,
+            account_id: 1,
+            imap_path: '[Gmail]/Corbeille/NAS',
+            name_enc: 'NAS',
+            special_use: 'other',
+            sort_order: 0,
+            uid_validity: 1,
+            last_seen_uid: 3,
+            first_seen_uid: 1,
+            unread_count: 0,
+            total_count: 1
+        });
+        repo.messageRows.push({
+            id: 100,
+            folder_id: 99,
+            uid: 3,
+            envelope_enc: '{"subject":"fantôme"}',
+            date: 1,
+            seen: 1,
+            flagged: 0,
+            answered: 0,
+            has_attachments: 0
+        });
+        const deps = createTestServiceDeps({ repo });
+        const sync = new MailSync(deps, { mailClient: fakeClient([envelope(1)]) });
+        await sync.syncOne(1);
+
+        assert.deepEqual(
+            repo.folderRows.map((f) => f.imap_path),
+            ['INBOX']
+        );
+        assert.deepEqual(
+            repo.messageRows.map((m) => m.uid),
+            [1]
+        );
+        assert.deepEqual(repo.synced, [{ id: 1, status: 'ok', error: null }]);
+    });
+
     it('un tour sans arrivée ne prévient personne ; une arrivée oui', async () => {
         const repo = fakeRepo([account({ id: 1 })]);
         const deps = createTestServiceDeps({ repo });
@@ -453,6 +506,19 @@ describe('la lecture d’un échec', () => {
 
     it('ce qu’on ne reconnaît pas reste une erreur, sans conduite à tenir inventée', () => {
         assert.equal(classifyMailError(new Error('quelque chose d’inattendu')), 'error');
+    });
+
+    it('le suffixe que Gmail met à un dossier introuvable ne vaut pas un refus d’identité', () => {
+        // Lu « auth », ce SELECT raté affichait « reconnexion requise » sur une
+        // boîte OAuth dont l'accès allait très bien.
+        assert.equal(
+            classifyMailError(
+                new Error(
+                    'Command failed : Unknown Mailbox: [Gmail]/Corbeille/NAS (now in authenticated state) (Failure)'
+                )
+            ),
+            'error'
+        );
     });
 });
 

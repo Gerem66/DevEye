@@ -239,6 +239,13 @@ export default function Mail(_props: FeatureViewProps) {
         if (!accounts.some((a) => a.id === selectedAccountId)) setSelectedAccountId(null);
     }, [accounts, accountsLoading, selectedAccountId]);
 
+    // De même pour un dossier que le serveur de mail ne liste plus : la relève
+    // l'a retiré de l'arbre, ses messages ne sont plus à montrer.
+    useEffect(() => {
+        if (foldersLoading || selectedFolderId === null) return;
+        if (!folders.some((f) => f.id === selectedFolderId)) setSelectedFolderId(null);
+    }, [folders, foldersLoading, selectedFolderId]);
+
     useEffect(() => {
         // Driven only by the id actually changing, not by every render, so the
         // manual back-arrow toggle (same id, `showAccountList` flipped locally) is

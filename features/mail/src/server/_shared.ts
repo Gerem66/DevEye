@@ -99,7 +99,9 @@ export function classifyMailError(error: unknown): Exclude<MailAccountStatus, 'o
         // Formulation de Google quand le consentement a été retiré ou a expiré.
         /token has been expired or revoked|invalid[_ ]token|unauthorized|permission denied/.test(m) ||
         // Gmail et Outlook renvoient ceci quand l'accès IMAP est simplement coupé.
-        /application-specific password|imap access|authenticate/.test(m)
+        // Pas « authenticate » : Gmail suffixe tout SELECT refusé de « (now in
+        // authenticated state) », et un LOGIN refusé arrive déjà typé.
+        /application-specific password|imap access/.test(m)
     ) {
         return 'auth';
     }
