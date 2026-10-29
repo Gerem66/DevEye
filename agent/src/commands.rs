@@ -671,6 +671,7 @@ where
             scanned,
             fingerprint,
             encrypted,
+            delta,
             error,
         } => ClientMessage::SyncIndex {
             device_id: device_id.to_string(),
@@ -680,6 +681,7 @@ where
             done,
             scanned,
             encrypted,
+            delta,
             fingerprint,
             error,
         },
@@ -852,6 +854,7 @@ pub(crate) async fn refuse_order<S>(
                     scanned: false,
                     fingerprint: None,
                     encrypted: false,
+                    delta: false,
                     error,
                 },
             )

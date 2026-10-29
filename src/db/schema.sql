@@ -2233,6 +2233,8 @@ CREATE TABLE `sync_files` (
   KEY `idx_sync_files_hash` (`share_id`,`hash`),
   KEY `fk_sync_file_device` (`source_device_id`),
   KEY `idx_sync_files_stats` (`share_id`,`state`,`size`),
+  KEY `idx_sync_files_updated` (`share_id`,`updated`),
+  KEY `idx_sync_files_path` (`share_id`,`rel_path`(255)),
   CONSTRAINT `fk_sync_file_device` FOREIGN KEY (`source_device_id`) REFERENCES `devices` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_sync_file_share` FOREIGN KEY (`share_id`) REFERENCES `sync_shares` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
@@ -2269,6 +2271,8 @@ CREATE TABLE `sync_share_devices` (
   `local_path` varchar(1024) COLLATE utf8mb4_general_ci NOT NULL,
   `status` varchar(16) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'active',
   `last_sync_at` bigint DEFAULT NULL,
+  `baseline_fingerprint` varchar(128) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `planned_at` bigint DEFAULT NULL,
   `created` bigint NOT NULL DEFAULT (unix_timestamp()),
   PRIMARY KEY (`id`),
   UNIQUE KEY `uniq_sync_share_device` (`share_id`,`device_id`),

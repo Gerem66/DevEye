@@ -1,10 +1,13 @@
-//! Scan complet d'un partage : parcours itératif, exclusions, hashing SHA-256
-//! incrémental (cache size+mtime), lots d'index streamés vers la boucle.
-//! La correction de TOUTE la synchro repose sur ce scan, sans raccourci : seuls
-//! les fichiers réguliers sont indexés, et tout ce qui ne peut pas l'être
-//! (illisible, nom non portable, lien, fichier spécial, nom non UTF-8) est
-//! déclaré écarté, jamais tu : le serveur n'en déduit pas une suppression.
+//! Scan d'un partage : parcours itératif, exclusions, hashing SHA-256
+//! incrémental (cache size+mtime), lots d'index envoyés à la boucle. Complet,
+//! il décrit tout le dossier ; partiel (`delta_scan`), il ne relit que les
+//! dossiers où le watcher a vu bouger quelque chose et n'envoie que la
+//! différence, avec l'empreinte de l'ensemble pour que le serveur la recoupe.
+//! Seuls les fichiers réguliers sont indexés, et tout ce qui ne peut pas
+//! l'être (illisible, nom non portable, lien, fichier spécial, nom non UTF-8)
+//! est déclaré écarté, jamais tu : le serveur n'en déduit pas une suppression.
 
+use std::collections::HashSet;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -24,6 +27,7 @@ use crate::sync::paths::{
     is_reserved_top, rel_path_lossy, rel_path_of, rel_path_problem, REL_PATH_MAX_BYTES,
 };
 use crate::sync::transfer::{sweep_partials, sweep_trash, PARTIAL_KEEP_DAYS};
+use crate::sync::watcher::Touched;
 use crate::sync::{CleanMark, Keepalive, SyncEvent};
 
 /// Taille des lots `sync.index` (miroir de `SYNC_INDEX_BATCH_MAX`).
@@ -95,13 +99,28 @@ pub fn hash_file(
     Ok(hasher.finish())
 }
 
+/// Ce que `SyncManager::start_scan` demande au scan.
+pub struct ScanRequest {
+    /// `false` : le serveur accepte un scan partiel (mode `delta`).
+    pub full: bool,
+    /// L'empreinte que le serveur tient pour cet appareil : un parcours complet
+    /// qui la retrouve n'envoie aucune entrée.
+    pub expected: Option<String>,
+    /// Ce que le watcher a vu bouger, `None` sans watcher prêt.
+    pub touched: Option<Arc<Mutex<Touched>>>,
+}
+
+/// Au-delà, les dossiers à relister coûteraient plus que tout parcourir.
+const DELTA_MAX_PATHS: usize = 2_000;
+
 /// Lance le scan sur un thread dédié (I/O + hashing intensifs, hors runtime).
 ///
 /// `clean` est la marque de propreté du partage : le scan la POSE en fin de
 /// course, avec l'empreinte de ce qu'il vient de produire et l'époque du
 /// compteur d'événements relevée AVANT le parcours. Prendre l'époque avant, et
 /// vérifier après qu'elle n'a pas bougé, est ce qui interdit de marquer propre un
-/// partage modifié pendant le scan.
+/// partage modifié pendant le scan. La liste des chemins touchés suit la même
+/// règle : prise entière avant le parcours, ce qui bouge pendant reste noté.
 pub fn spawn_scan(
     session_id: String,
     assignment: SyncShareAssignment,
@@ -109,12 +128,33 @@ pub fn spawn_scan(
     tx: Sender<SyncEvent>,
     events: Option<Arc<AtomicU64>>,
     clean: Arc<Mutex<CleanMark>>,
+    request: ScanRequest,
 ) {
     std::thread::spawn(move || {
         let _busy = crate::live_status::begin(crate::live_status::Task::SyncScan);
         let share_id = assignment.share_id;
         let epoch = events.as_ref().map(|e| e.load(Ordering::Relaxed));
-        match scan(&session_id, &assignment, keys.as_deref(), &tx) {
+        let snapshot = request
+            .touched
+            .as_ref()
+            .map(|t| std::mem::take(&mut *t.lock().expect("touched lock")));
+        let partial = snapshot.as_ref().filter(|t| !request.full && t.complete);
+        let result = match partial {
+            Some(touched) => delta_scan(&session_id, &assignment, keys.as_deref(), touched, &tx),
+            None => scan(
+                &session_id,
+                &assignment,
+                keys.as_deref(),
+                request.expected.as_deref(),
+                &tx,
+            ),
+        };
+        if let Some(t) = &request.touched {
+            // Réussi, le cache décrit le disque au relevé près : la liste vaut
+            // pour le prochain scan partiel. Échoué, elle ne vaut rien.
+            t.lock().expect("touched lock").complete = result.is_ok();
+        }
+        match result {
             Ok(fingerprint) => {
                 // Propre seulement si RIEN n'a bougé pendant le parcours, et
                 // jamais sans watcher (`events` à `None`) : rien ne pourrait
@@ -137,6 +177,7 @@ pub fn spawn_scan(
                     scanned: true,
                     fingerprint: None,
                     encrypted: keys.is_some(),
+                    delta: false,
                     error: Some(crate::sync::error_text(&e)),
                 });
             }
@@ -157,6 +198,8 @@ impl Out<'_> {
         &self,
         entries: Vec<SyncIndexEntry>,
         done: bool,
+        scanned: bool,
+        delta: bool,
         fingerprint: Option<String>,
     ) -> Result<()> {
         self.tx
@@ -165,31 +208,56 @@ impl Out<'_> {
                 share_id: self.share_id,
                 entries,
                 done,
-                scanned: true,
+                scanned,
                 fingerprint,
                 encrypted: self.encrypted,
+                delta,
                 error: None,
             })
             .map_err(|_| anyhow::anyhow!("session terminée"))
     }
-}
 
-/// Envoie le lot dès qu'il atteint `BATCH` : au-delà, la trame dépasserait
-/// `SYNC_INDEX_BATCH_MAX` et le serveur la refuserait.
-fn flush_if_full(batch: &mut Vec<SyncIndexEntry>, out: &Out) -> Result<()> {
-    if batch.len() < BATCH {
-        return Ok(());
+    /// Sends `lines` in batches of at most `BATCH` (past that, a frame would
+    /// exceed `SYNC_INDEX_BATCH_MAX` and the server would refuse it), the last
+    /// one carrying `done` and the fingerprint. `scanned`: the whole disk was
+    /// walked; `delta`: the lines are a difference, not the index.
+    fn send_all(
+        &self,
+        lines: impl IntoIterator<Item = SyncIndexEntry>,
+        scanned: bool,
+        delta: bool,
+        fingerprint: String,
+    ) -> Result<()> {
+        let mut batch = Vec::with_capacity(BATCH);
+        for line in lines {
+            batch.push(line);
+            if batch.len() == BATCH {
+                let full = std::mem::replace(&mut batch, Vec::with_capacity(BATCH));
+                self.send(full, false, scanned, delta, None)?;
+            }
+        }
+        self.send(batch, true, scanned, delta, Some(fingerprint))
     }
-    let full = std::mem::replace(batch, Vec::with_capacity(BATCH));
-    out.send(full, false, None)
 }
 
-fn scan(
-    session_id: &str,
+fn entry_line(rel_path: &str, e: &CacheEntry) -> SyncIndexEntry {
+    SyncIndexEntry {
+        rel_path: rel_path.to_string(),
+        kind: e.kind.clone(),
+        hash: e.hash.clone(),
+        size: e.size,
+        mtime: e.mtime,
+        mode: e.mode,
+        reason: None,
+    }
+}
+
+/// Opens a share for a walk: its cache (emptied when hashed under another
+/// naming key), and its root, which must be there.
+fn open(
     assignment: &SyncShareAssignment,
     keys: Option<&ShareKeys>,
-    tx: &Sender<SyncEvent>,
-) -> Result<String> {
+) -> Result<(PathBuf, IndexCache)> {
     let root = PathBuf::from(&assignment.local_path);
     let mut cache = IndexCache::load(assignment.share_id);
     ensure_root(&root, &cache)?;
@@ -198,6 +266,18 @@ fn scan(
     if cache.scheme != scheme {
         cache.entries.clear();
     }
+    cache.scheme = scheme;
+    Ok((root, cache))
+}
+
+fn scan(
+    session_id: &str,
+    assignment: &SyncShareAssignment,
+    keys: Option<&ShareKeys>,
+    expected: Option<&str>,
+    tx: &Sender<SyncEvent>,
+) -> Result<String> {
+    let (root, cache) = open(assignment, keys)?;
 
     // Entretien opportuniste : la corbeille locale est balayée ici, selon la
     // rétention réglée sur le partage (30 jours par défaut), et avec elle les
@@ -205,7 +285,7 @@ fn scan(
     sweep_trash(&root, assignment.trash_keep_days);
     sweep_partials(&root, PARTIAL_KEEP_DAYS);
 
-    let (fingerprint, fresh) = walk(session_id, assignment, keys, &root, &cache, tx)?;
+    let (fingerprint, fresh) = walk(session_id, assignment, keys, &root, &cache, expected, tx)?;
     fresh.save(assignment.share_id);
     Ok(fingerprint)
 }
@@ -238,25 +318,22 @@ fn truncate_rel_path(mut rel: String) -> String {
 
 /// Declares a path the scan could not index: the server treats it, and
 /// anything under it, as unknown, never as deleted.
-fn skip(
-    batch: &mut Vec<SyncIndexEntry>,
-    out: &Out,
-    rel: String,
-    reason: SyncSkipReason,
-) -> Result<()> {
+fn skip(lines: &mut Vec<SyncIndexEntry>, rel: String, reason: SyncSkipReason) {
     debug!(rel_path = %rel, ?reason, "sync scan: path skipped");
-    batch.push(SyncIndexEntry::skipped(truncate_rel_path(rel), reason));
-    flush_if_full(batch, out)
+    lines.push(SyncIndexEntry::skipped(truncate_rel_path(rel), reason));
 }
 
 /// The walk itself. Everything the share holds goes out, indexed or skipped,
-/// and the fresh cache describes exactly what was emitted.
+/// and the fresh cache describes exactly what was emitted. With `expected`
+/// equal to the fingerprint found, nothing but the skipped paths goes out:
+/// the server holds the rest.
 fn walk(
     session_id: &str,
     assignment: &SyncShareAssignment,
     keys: Option<&ShareKeys>,
     root: &Path,
     cache: &IndexCache,
+    expected: Option<&str>,
     tx: &Sender<SyncEvent>,
 ) -> Result<(String, IndexCache)> {
     let out = Out {
@@ -265,215 +342,389 @@ fn walk(
         share_id: assignment.share_id,
         encrypted: keys.is_some(),
     };
-    // A large new file hashes for minutes: the server must hear from the scan meanwhile.
     let mut keepalive = Keepalive::new(tx.clone(), session_id);
     let excluded = CompiledExclusions::compile(&assignment.exclusions);
     let mut fresh = IndexCache {
         root: root.to_string_lossy().into_owned(),
-        scheme: keys.map(ShareKeys::scheme).unwrap_or_default(),
+        scheme: cache.scheme.clone(),
         ..IndexCache::default()
     };
-    // Written within RECENT_MS: emitted and fingerprinted, but kept out of the
-    // saved cache so that the next scan rehashes them (see RECENT_MS).
-    let mut recent_paths: Vec<String> = Vec::new();
+    let mut lines = Vec::new();
+    let mut walker = Walker::new(root, cache, keys, &excluded, &mut keepalive, &|_| true);
+    walker.walk(root.to_path_buf(), &mut fresh, &mut lines)?;
 
-    let mut batch: Vec<SyncIndexEntry> = Vec::with_capacity(BATCH);
-    let mut walked = 0usize;
-    let mut stack = vec![root.to_path_buf()];
-    let now_ms = std::time::SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0);
+    // L'empreinte se calcule sur `fresh`, c'est-à-dire sur EXACTEMENT ce que ce
+    // scan décrit au serveur. La calculer ailleurs (sur le cache chargé, sur le
+    // disque relu) la ferait décrire autre chose que ce qu'il a reçu.
+    let fingerprint = fingerprint_of(&fresh);
+    if expected == Some(fingerprint.as_str()) {
+        out.send_all(lines, true, true, fingerprint.clone())?;
+    } else {
+        let entries = fresh.entries.iter().map(|(rel, e)| entry_line(rel, e));
+        out.send_all(entries.chain(lines), true, false, fingerprint.clone())?;
+    }
+    Ok((fingerprint, fresh))
+}
 
-    while let Some(dir) = stack.pop() {
-        let entries = match std::fs::read_dir(&dir) {
-            Ok(e) => e,
-            Err(e) => {
-                if dir.as_path() == root {
-                    bail!("dossier du partage illisible : {e}");
-                }
-                // Its whole subtree is unknown: declared, never read as deleted.
-                if let Some(rel) = rel_path_lossy(root, &dir) {
-                    skip(&mut batch, &out, rel, SyncSkipReason::Unreadable)?;
-                }
-                continue;
-            }
+/// Le dossier parent d'un chemin relatif, `""` pour la racine du partage.
+fn parent_rel(rel: &str) -> &str {
+    rel.rsplit_once('/').map(|(parent, _)| parent).unwrap_or("")
+}
+
+/// Les dossiers qui mènent à `rel` (`a/b/c` → `a`, `a/b`), sans `rel` ni la racine.
+fn ancestors(rel: &str) -> impl Iterator<Item = &str> {
+    rel.match_indices('/').map(move |(at, _)| &rel[..at])
+}
+
+/// Un parcours partiel : seuls les dossiers où le watcher a vu bouger quelque
+/// chose sont relus, le reste du cache est tenu pour vrai. Ce qui en sort est
+/// la différence avec le cache (entrées changées, chemins `gone`) et
+/// l'empreinte de l'index entier, que le serveur recoupe avant d'y croire.
+///
+/// Relire un dossier entier, et non le seul chemin touché, est ce qui tient
+/// la règle des dossiers vides (un fichier de plus ou de moins change le
+/// statut du parent) et rattrape un sous-dossier apparu sans événement : un
+/// sous-dossier que le cache ne connaît pas est parcouru, un sous-dossier
+/// connu garde ses entrées tant qu'un chemin touché ne le désigne pas.
+fn delta_scan(
+    session_id: &str,
+    assignment: &SyncShareAssignment,
+    keys: Option<&ShareKeys>,
+    touched: &Touched,
+    tx: &Sender<SyncEvent>,
+) -> Result<String> {
+    let (root, cache) = open(assignment, keys)?;
+    if cache.entries.is_empty() || touched.paths.len() > DELTA_MAX_PATHS {
+        return scan(session_id, assignment, keys, None, tx);
+    }
+    let (fingerprint, fresh) =
+        delta_walk(session_id, assignment, keys, &root, &cache, touched, tx)?;
+    fresh.save(assignment.share_id);
+    Ok(fingerprint)
+}
+
+/// The partial walk itself: `cache` is the last walk's, the fresh cache is
+/// what the share holds now.
+fn delta_walk(
+    session_id: &str,
+    assignment: &SyncShareAssignment,
+    keys: Option<&ShareKeys>,
+    root: &Path,
+    cache: &IndexCache,
+    touched: &Touched,
+    tx: &Sender<SyncEvent>,
+) -> Result<(String, IndexCache)> {
+    let out = Out {
+        tx,
+        session_id,
+        share_id: assignment.share_id,
+        encrypted: keys.is_some(),
+    };
+    let mut keepalive = Keepalive::new(tx.clone(), session_id);
+    let excluded = CompiledExclusions::compile(&assignment.exclusions);
+
+    // Les dossiers qui ont des entrées en cache : on n'y redescend pas depuis
+    // un parent relu, leurs propres changements arrivent par leurs chemins.
+    let mut known: HashSet<&str> = HashSet::new();
+    for rel in cache.entries.keys() {
+        known.extend(ancestors(rel));
+    }
+    let descend = |rel: &str| !known.contains(rel);
+
+    let mut sub = IndexCache {
+        root: root.to_string_lossy().into_owned(),
+        scheme: cache.scheme.clone(),
+        ..IndexCache::default()
+    };
+    let mut lines = Vec::new();
+    let mut walker = Walker::new(root, cache, keys, &excluded, &mut keepalive, &descend);
+    // Les sous-dossiers connus qu'un dossier relu ne contient plus : leur
+    // arbre entier a disparu, même sans événement sur chacun de ses fichiers.
+    let mut vanished: HashSet<String> = HashSet::new();
+    let mut queue: Vec<String> = touched
+        .paths
+        .iter()
+        .map(|rel| parent_rel(rel).to_string())
+        .collect();
+    while let Some(rel) = queue.pop() {
+        if walker.listed.contains(&rel) {
+            continue;
+        }
+        let dir = if rel.is_empty() {
+            root.to_path_buf()
+        } else {
+            root.join(&rel)
         };
-        // Un dossier n'est indexé que s'il est VIDE une fois les exclusions
-        // appliquées : un dossier peuplé est implicite (ses fichiers le
-        // recréent partout). On compte donc ce qui survit au filtrage, chemins
-        // écartés compris : un dossier qui n'en contient que ça n'est pas vide.
-        let mut kept = 0usize;
-        let mut unlisted = false;
-        for entry in entries {
-            let entry = match entry {
-                Ok(e) => e,
-                Err(_) => {
-                    unlisted = true;
-                    continue;
-                }
-            };
-            walked += 1;
-            if walked > SCAN_BUDGET {
-                bail!("scan abandonné : plus de {SCAN_BUDGET} entrées");
-            }
-            let path = entry.path();
-            let Some(rel) = rel_path_of(root, &path) else {
-                // Not valid UTF-8: named lossily, never indexed.
-                if let Some(lossy) = rel_path_lossy(root, &path) {
-                    skip(&mut batch, &out, lossy, SyncSkipReason::NonUtf8)?;
-                    kept += 1;
-                }
-                continue;
-            };
-            // `DirEntry::metadata` ne suit pas les liens : jamais (boucles, évasions).
-            let meta = match entry.metadata() {
-                Ok(m) => m,
-                Err(_) => {
-                    skip(&mut batch, &out, rel, SyncSkipReason::Unreadable)?;
-                    kept += 1;
-                    continue;
-                }
-            };
-            if meta.is_symlink() {
-                skip(&mut batch, &out, rel, SyncSkipReason::Symlink)?;
-                kept += 1;
-                continue;
-            }
-            if meta.is_dir() {
-                let top = rel.split('/').next().unwrap_or("");
-                if is_reserved_top(top) || excluded.matches(&rel) {
-                    continue; // Excluded on purpose: silent.
-                }
-                if rel_path_problem(&rel).is_some() {
-                    // Nothing under it is walked: the whole subtree stays unknown.
-                    skip(&mut batch, &out, rel, SyncSkipReason::Unportable)?;
-                    kept += 1;
-                    continue;
-                }
-                kept += 1;
-                stack.push(path);
-                continue;
-            }
-            if excluded.matches(&rel) {
-                continue;
-            }
-            if !meta.is_file() {
-                skip(&mut batch, &out, rel, SyncSkipReason::Special)?;
-                kept += 1;
-                continue;
-            }
-            // Filtrage à la source : un nom que Windows ne sait pas écrire
-            // n'entre jamais dans le partage ; le serveur revalide (défense en
-            // profondeur) et journalise ce qu'on lui déclare.
-            if rel_path_problem(&rel).is_some() {
-                skip(&mut batch, &out, rel, SyncSkipReason::Unportable)?;
-                kept += 1;
-                continue;
-            }
+        let is_dir = std::fs::symlink_metadata(&dir).is_ok_and(|m| m.is_dir());
+        if is_dir {
+            walker.walk(dir, &mut sub, &mut lines)?;
+        } else if rel.is_empty() {
+            bail!("dossier du partage introuvable : volume débranché ou dossier déplacé ?");
+        } else {
+            // Le dossier n'est plus là : son parent est relu à sa place, pour
+            // que son absence (et un parent devenu vide) entre dans le cache.
+            vanished.insert(rel.clone());
+            queue.push(parent_rel(&rel).to_string());
+        }
+    }
+    for dir in &known {
+        if walker.listed.contains(parent_rel(dir)) && !walker.seen_dirs.contains(*dir) {
+            vanished.insert((*dir).to_string());
+        }
+    }
 
-            let size = meta.len();
-            let mtime = mtime_millis(&meta);
-            // `now_ms - mtime` : un mtime dans le futur (dérive d'horloge)
-            // donne un écart négatif, donc un re-hash. C'est le bon sens.
-            let recent = now_ms - mtime <= RECENT_MS;
-            let hash = match cache.entries.get(&rel) {
-                Some(c) if c.size == size && c.mtime == mtime && !recent => c.hash.clone(),
-                _ => match hash_file(&path, keys, Some(&mut keepalive)) {
-                    Ok(h) => h,
-                    Err(e) => {
-                        debug!(path = %path.display(), error = %e, "sync scan: unreadable file");
-                        skip(&mut batch, &out, rel, SyncSkipReason::Unreadable)?;
+    let mut fresh = cache.clone();
+    let listed = &walker.listed;
+    let mut removed = Vec::new();
+    fresh.entries.retain(|rel, _| {
+        let stale = listed.contains(parent_rel(rel))
+            || listed.contains(rel.as_str())
+            || vanished.contains(rel.as_str())
+            || ancestors(rel).any(|dir| vanished.contains(dir));
+        if stale {
+            removed.push(rel.clone());
+        }
+        !stale
+    });
+    for (rel, e) in sub.entries {
+        if !cache.entries.get(&rel).is_some_and(|c| c.same(&e)) {
+            lines.push(entry_line(&rel, &e));
+        }
+        fresh.entries.insert(rel, e);
+    }
+    for rel in removed {
+        if !fresh.entries.contains_key(&rel) {
+            lines.push(SyncIndexEntry::gone(rel));
+        }
+    }
+    let fingerprint = fingerprint_of(&fresh);
+    // `scanned: false` : le disque n'a pas été lu en entier, le serveur ne
+    // tient pas les chemins écartés pour complets.
+    out.send_all(lines, false, true, fingerprint.clone())?;
+    Ok((fingerprint, fresh))
+}
+
+/// Lists directories, one subtree at a time, filling a cache with what it
+/// indexes and a list of lines with what it skips. Hashes are reused from
+/// `cache` when size and mtime match.
+struct Walker<'a> {
+    root: &'a Path,
+    cache: &'a IndexCache,
+    keys: Option<&'a ShareKeys>,
+    excluded: &'a CompiledExclusions,
+    keepalive: &'a mut Keepalive,
+    /// Whether to list a subdirectory met on the way (relative path).
+    descend: &'a dyn Fn(&str) -> bool,
+    now_ms: i64,
+    walked: usize,
+    /// Every directory listed, as relative paths (`""` for the root).
+    listed: HashSet<String>,
+    /// Every directory met in a listing, descended into or not.
+    seen_dirs: HashSet<String>,
+}
+
+impl<'a> Walker<'a> {
+    fn new(
+        root: &'a Path,
+        cache: &'a IndexCache,
+        keys: Option<&'a ShareKeys>,
+        excluded: &'a CompiledExclusions,
+        keepalive: &'a mut Keepalive,
+        descend: &'a dyn Fn(&str) -> bool,
+    ) -> Self {
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0);
+        Self {
+            root,
+            cache,
+            keys,
+            excluded,
+            keepalive,
+            descend,
+            now_ms,
+            walked: 0,
+            listed: HashSet::new(),
+            seen_dirs: HashSet::new(),
+        }
+    }
+
+    /// Walks `start` (the root or a directory under it) and what `descend`
+    /// allows beneath it.
+    fn walk(
+        &mut self,
+        start: PathBuf,
+        fresh: &mut IndexCache,
+        lines: &mut Vec<SyncIndexEntry>,
+    ) -> Result<()> {
+        let root = self.root;
+        let mut stack = vec![start];
+        while let Some(dir) = stack.pop() {
+            // Un parcours long sans rien envoyer doit rester audible du serveur.
+            self.keepalive.tick()?;
+            let rel_dir = rel_path_of(root, &dir).unwrap_or_default();
+            self.listed.insert(rel_dir.clone());
+            let entries = match std::fs::read_dir(&dir) {
+                Ok(e) => e,
+                Err(e) => {
+                    if dir.as_path() == root {
+                        bail!("dossier du partage illisible : {e}");
+                    }
+                    // Its whole subtree is unknown: declared, never read as deleted.
+                    if let Some(rel) = rel_path_lossy(root, &dir) {
+                        skip(lines, rel, SyncSkipReason::Unreadable);
+                    }
+                    continue;
+                }
+            };
+            // Un dossier n'est indexé que s'il est VIDE une fois les exclusions
+            // appliquées : un dossier peuplé est implicite (ses fichiers le
+            // recréent partout). On compte donc ce qui survit au filtrage, chemins
+            // écartés compris : un dossier qui n'en contient que ça n'est pas vide.
+            let mut kept = 0usize;
+            let mut unlisted = false;
+            for entry in entries {
+                let entry = match entry {
+                    Ok(e) => e,
+                    Err(_) => {
+                        unlisted = true;
+                        continue;
+                    }
+                };
+                self.walked += 1;
+                if self.walked > SCAN_BUDGET {
+                    bail!("scan abandonné : plus de {SCAN_BUDGET} entrées");
+                }
+                let path = entry.path();
+                let Some(rel) = rel_path_of(root, &path) else {
+                    // Not valid UTF-8: named lossily, never indexed.
+                    if let Some(lossy) = rel_path_lossy(root, &path) {
+                        skip(lines, lossy, SyncSkipReason::NonUtf8);
+                        kept += 1;
+                    }
+                    continue;
+                };
+                // `DirEntry::metadata` ne suit pas les liens : jamais (boucles, évasions).
+                let meta = match entry.metadata() {
+                    Ok(m) => m,
+                    Err(_) => {
+                        skip(lines, rel, SyncSkipReason::Unreadable);
                         kept += 1;
                         continue;
                     }
-                },
-            };
-            kept += 1;
-            let mode = unix_mode(&meta);
-            if recent {
-                recent_paths.push(rel.clone());
-            }
-            fresh.entries.insert(
-                rel.clone(),
-                CacheEntry {
+                };
+                if meta.is_symlink() {
+                    skip(lines, rel, SyncSkipReason::Symlink);
+                    kept += 1;
+                    continue;
+                }
+                if meta.is_dir() {
+                    let top = rel.split('/').next().unwrap_or("");
+                    if is_reserved_top(top) || self.excluded.matches(&rel) {
+                        continue; // Excluded on purpose: silent.
+                    }
+                    if rel_path_problem(&rel).is_some() {
+                        // Nothing under it is walked: the whole subtree stays unknown.
+                        skip(lines, rel, SyncSkipReason::Unportable);
+                        kept += 1;
+                        continue;
+                    }
+                    kept += 1;
+                    if (self.descend)(&rel) {
+                        stack.push(path);
+                    }
+                    self.seen_dirs.insert(rel);
+                    continue;
+                }
+                if self.excluded.matches(&rel) {
+                    continue;
+                }
+                if !meta.is_file() {
+                    skip(lines, rel, SyncSkipReason::Special);
+                    kept += 1;
+                    continue;
+                }
+                // Filtrage à la source : un nom que Windows ne sait pas écrire
+                // n'entre jamais dans le partage ; le serveur revalide (défense en
+                // profondeur) et journalise ce qu'on lui déclare.
+                if rel_path_problem(&rel).is_some() {
+                    skip(lines, rel, SyncSkipReason::Unportable);
+                    kept += 1;
+                    continue;
+                }
+
+                let size = meta.len();
+                let mtime = mtime_millis(&meta);
+                // `now_ms - mtime` : un mtime dans le futur (dérive d'horloge)
+                // donne un écart négatif, donc un re-hash. C'est le bon sens.
+                let recent = self.now_ms - mtime <= RECENT_MS;
+                let hash = match self.cache.entries.get(&rel) {
+                    Some(c) if c.size == size && c.mtime == mtime && !recent && !c.rehash => {
+                        c.hash.clone()
+                    }
+                    _ => match hash_file(&path, self.keys, Some(self.keepalive)) {
+                        Ok(h) => h,
+                        Err(e) => {
+                            debug!(path = %path.display(), error = %e, "sync scan: unreadable file");
+                            skip(lines, rel, SyncSkipReason::Unreadable);
+                            kept += 1;
+                            continue;
+                        }
+                    },
+                };
+                kept += 1;
+                let fresh_entry = CacheEntry {
                     size,
                     mtime,
-                    hash: hash.clone(),
+                    hash,
                     kind: "file".to_string(),
-                    mode,
-                },
-            );
-            batch.push(SyncIndexEntry {
-                rel_path: rel,
-                kind: "file".to_string(),
-                hash,
-                size,
-                mtime,
-                mode,
-                reason: None,
-            });
-            flush_if_full(&mut batch, &out)?;
-        }
-        if unlisted {
-            // Entries we could not even list: the directory as a whole is unknown.
-            if dir.as_path() == root {
-                bail!("dossier du partage partiellement illisible");
-            }
-            if let Some(rel) = rel_path_lossy(root, &dir) {
-                skip(&mut batch, &out, rel, SyncSkipReason::Unreadable)?;
-            }
-            continue;
-        }
-
-        // Rien n'a survécu au filtrage : ce dossier est vide, il mérite sa
-        // propre entrée d'index pour exister aussi chez les autres appareils.
-        // La racine du partage, elle, n'est pas une entrée (elle existe toujours).
-        if kept == 0 {
-            if let Some(rel) = rel_path_of(root, &dir) {
-                if rel_path_problem(&rel).is_none() {
-                    let meta = std::fs::symlink_metadata(&dir).ok();
-                    let mtime = meta.as_ref().map(mtime_millis).unwrap_or(0);
-                    let mode = meta.as_ref().and_then(unix_mode);
-                    // Les dossiers vides entrent dans le cache comme les
-                    // fichiers : l'empreinte se calcule à partir de `fresh`, et
-                    // un dossier vidé de son dernier fichier doit la déplacer.
-                    fresh.entries.insert(
-                        rel.clone(),
-                        CacheEntry {
-                            size: 0,
-                            mtime,
-                            hash: SYNC_DIR_HASH.to_string(),
-                            kind: "dir".to_string(),
-                            mode,
-                        },
-                    );
-                    batch.push(SyncIndexEntry {
-                        rel_path: rel,
-                        kind: "dir".to_string(),
-                        hash: SYNC_DIR_HASH.to_string(),
-                        size: 0,
-                        mtime,
-                        mode,
-                        reason: None,
-                    });
-                    // Vidange comme pour un fichier : une arborescence de nombreux
-                    // dossiers vides dépasserait sinon `SYNC_INDEX_BATCH_MAX`.
-                    flush_if_full(&mut batch, &out)?;
+                    mode: unix_mode(&meta),
+                    rehash: recent,
+                };
+                // Deux fichiers distincts qui se normalisent pareil (« café » en
+                // NFC et en NFD) : les deux partent, le serveur les écarte tous
+                // deux, comme il le ferait de deux lignes de même chemin.
+                if let Some(previous) = fresh.entries.insert(rel.clone(), fresh_entry) {
+                    lines.push(entry_line(&rel, &previous));
                 }
             }
-        }
-    }
+            if unlisted {
+                // Entries we could not even list: the directory as a whole is unknown.
+                if dir.as_path() == root {
+                    bail!("dossier du partage partiellement illisible");
+                }
+                if let Some(rel) = rel_path_lossy(root, &dir) {
+                    skip(lines, rel, SyncSkipReason::Unreadable);
+                }
+                continue;
+            }
 
-    // L'empreinte se calcule sur `fresh`, c'est-à-dire sur EXACTEMENT ce que ce
-    // scan vient d'émettre. La calculer ailleurs (sur le cache chargé, sur le
-    // disque relu) la ferait décrire autre chose que ce que le serveur a reçu.
-    let fingerprint = fingerprint_of(&fresh);
-    for rel in &recent_paths {
-        fresh.entries.remove(rel);
+            // Rien n'a survécu au filtrage : ce dossier est vide, il mérite sa
+            // propre entrée d'index pour exister aussi chez les autres appareils.
+            // La racine du partage, elle, n'est pas une entrée (elle existe toujours).
+            if kept == 0 && !rel_dir.is_empty() && rel_path_problem(&rel_dir).is_none() {
+                let meta = std::fs::symlink_metadata(&dir).ok();
+                let mtime = meta.as_ref().map(mtime_millis).unwrap_or(0);
+                let mode = meta.as_ref().and_then(unix_mode);
+                // Les dossiers vides entrent dans le cache comme les fichiers :
+                // l'empreinte se calcule à partir du cache, et un dossier vidé
+                // de son dernier fichier doit la déplacer.
+                fresh.entries.insert(
+                    rel_dir,
+                    CacheEntry {
+                        size: 0,
+                        mtime,
+                        hash: SYNC_DIR_HASH.to_string(),
+                        kind: "dir".to_string(),
+                        mode,
+                        rehash: false,
+                    },
+                );
+            }
+        }
+        Ok(())
     }
-    out.send(batch, true, Some(fingerprint.clone()))?;
-    Ok((fingerprint, fresh))
 }
 
 /// Empreinte d'un cache d'index, dans la forme partagée avec le serveur.
@@ -515,7 +766,7 @@ mod tests {
     fn run_walk(root: &Path, cache: &IndexCache) -> (Vec<SyncIndexEntry>, String, IndexCache) {
         let (tx, mut rx) = tokio::sync::mpsc::channel(64);
         let (fingerprint, fresh) =
-            walk("scan-1", &assignment(root), None, root, cache, &tx).expect("walk");
+            walk("scan-1", &assignment(root), None, root, cache, None, &tx).expect("walk");
         drop(tx);
         let mut entries = Vec::new();
         while let Ok(ev) = rx.try_recv() {
@@ -637,6 +888,7 @@ mod tests {
                 hash: "h".to_string(),
                 kind: "file".to_string(),
                 mode: None,
+                rehash: false,
             },
         );
         let err = ensure_root(&missing, &populated).unwrap_err();
@@ -648,7 +900,7 @@ mod tests {
     }
 
     #[test]
-    fn a_recent_file_is_emitted_but_not_cached() {
+    fn a_recent_file_is_cached_for_a_rehash() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("fresh.txt"), b"now").unwrap();
         let (entries, fingerprint, fresh) = run_walk(dir.path(), &IndexCache::default());
@@ -656,10 +908,136 @@ mod tests {
             .iter()
             .any(|e| e.rel_path == "fresh.txt" && e.kind == "file"));
         assert!(fingerprint.starts_with("1."), "{fingerprint}");
-        assert!(
-            !fresh.entries.contains_key("fresh.txt"),
-            "rehashed next time"
+        assert!(fresh.entries["fresh.txt"].rehash, "rehashed next time");
+    }
+
+    /// Every line a scan sent, whether it was flagged as a delta, and whether the whole disk was walked.
+    fn drain(rx: &mut tokio::sync::mpsc::Receiver<SyncEvent>) -> (Vec<SyncIndexEntry>, bool, bool) {
+        let mut entries = Vec::new();
+        let mut delta = false;
+        let mut scanned = true;
+        while let Ok(ev) = rx.try_recv() {
+            if let SyncEvent::Index {
+                entries: batch,
+                delta: d,
+                scanned: s,
+                ..
+            } = ev
+            {
+                entries.extend(batch);
+                delta |= d;
+                scanned &= s;
+            }
+        }
+        (entries, delta, scanned)
+    }
+
+    fn run_delta(
+        root: &Path,
+        cache: &IndexCache,
+        touched: &[&str],
+    ) -> (Vec<SyncIndexEntry>, String, IndexCache) {
+        let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+        let touched = Touched {
+            paths: touched.iter().map(|p| p.to_string()).collect(),
+            complete: true,
+        };
+        let (fingerprint, fresh) = delta_walk(
+            "scan-2",
+            &assignment(root),
+            None,
+            root,
+            cache,
+            &touched,
+            &tx,
+        )
+        .expect("delta");
+        drop(tx);
+        let (entries, delta, scanned) = drain(&mut rx);
+        assert!(delta, "a delta walk flags its reply");
+        assert!(!scanned, "a delta walk never claims the whole disk");
+        (entries, fingerprint, fresh)
+    }
+
+    fn names(entries: &[SyncIndexEntry], kind: &str) -> Vec<String> {
+        let mut out: Vec<String> = entries
+            .iter()
+            .filter(|e| e.kind == kind)
+            .map(|e| e.rel_path.clone())
+            .collect();
+        out.sort();
+        out
+    }
+
+    #[test]
+    fn a_delta_relists_only_the_touched_folders() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join("a/b")).unwrap();
+        std::fs::create_dir_all(root.join("d")).unwrap();
+        std::fs::write(root.join("a/x.txt"), b"x").unwrap();
+        std::fs::write(root.join("a/b/y.txt"), b"y").unwrap();
+        std::fs::write(root.join("c.txt"), b"c").unwrap();
+        std::fs::write(root.join("d/z.txt"), b"z").unwrap();
+        let (_, _, cache) = run_walk(root, &IndexCache::default());
+
+        std::fs::write(root.join("c.txt"), b"changed").unwrap();
+        std::fs::write(root.join("a/n.txt"), b"new").unwrap();
+        std::fs::remove_dir_all(root.join("a/b")).unwrap();
+        std::fs::create_dir(root.join("e")).unwrap();
+        let (lines, fingerprint, fresh) =
+            run_delta(root, &cache, &["c.txt", "a/n.txt", "a/b", "e"]);
+
+        assert_eq!(names(&lines, "file"), vec!["a/n.txt", "c.txt"]);
+        assert_eq!(names(&lines, "dir"), vec!["e"]);
+        assert_eq!(names(&lines, "gone"), vec!["a/b/y.txt"]);
+        let (_, full_fingerprint, full) = run_walk(root, &IndexCache::default());
+        assert_eq!(
+            fingerprint, full_fingerprint,
+            "the delta describes the whole folder"
         );
+        let mut keys: Vec<&String> = fresh.entries.keys().collect();
+        let mut full_keys: Vec<&String> = full.entries.keys().collect();
+        keys.sort();
+        full_keys.sort();
+        assert_eq!(keys, full_keys);
+    }
+
+    #[test]
+    fn a_delta_without_touched_paths_sends_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join("a")).unwrap();
+        std::fs::write(root.join("a/x.txt"), b"x").unwrap();
+        let (_, full_fingerprint, cache) = run_walk(root, &IndexCache::default());
+        let (lines, fingerprint, _) = run_delta(root, &cache, &[]);
+        assert!(lines.is_empty());
+        assert_eq!(fingerprint, full_fingerprint);
+    }
+
+    #[test]
+    fn a_full_walk_that_finds_the_expected_fingerprint_sends_only_skips() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::write(root.join("x.txt"), b"x").unwrap();
+        let (_, fingerprint, cache) = run_walk(root, &IndexCache::default());
+        let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+        let (again, _) = walk(
+            "scan-3",
+            &assignment(root),
+            None,
+            root,
+            &cache,
+            Some(fingerprint.as_str()),
+            &tx,
+        )
+        .expect("walk");
+        drop(tx);
+        let (entries, delta, scanned) = drain(&mut rx);
+        assert_eq!(again, fingerprint);
+        assert!(entries.is_empty());
+        assert!(delta, "the server keeps its baseline as the device index");
+        assert!(scanned, "the whole disk was still walked");
     }
 
     #[test]

@@ -1931,6 +1931,7 @@ mod tests {
                     hash: String::new(),
                     kind: "file".to_string(),
                     mode: None,
+                    rehash: false,
                 },
             );
         }

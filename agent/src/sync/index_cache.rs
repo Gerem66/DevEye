@@ -29,9 +29,26 @@ pub struct CacheEntry {
     pub kind: String,
     /// Bits de permission Unix ; `None` sous Windows, qui n'en a pas.
     pub mode: Option<u32>,
+    /// Haché pendant qu'il s'écrivait peut-être encore (voir `RECENT_MS`) :
+    /// le prochain parcours qui le croise le relit, quels que soient sa
+    /// taille et son mtime. L'entrée reste dans le cache pour l'empreinte,
+    /// qu'un scan partiel calcule sans le revoir.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub rehash: bool,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+impl CacheEntry {
+    /// Même entrée d'index, le drapeau de relecture mis à part.
+    pub fn same(&self, other: &CacheEntry) -> bool {
+        self.size == other.size
+            && self.mtime == other.mtime
+            && self.hash == other.hash
+            && self.kind == other.kind
+            && self.mode == other.mode
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct IndexCache {
     /// Le dossier local du partage au dernier scan. Ne sert pas au scan (qui
     /// reçoit sa racine du serveur) mais au retrait : `uninstall` tourne hors

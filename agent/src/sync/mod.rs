@@ -48,6 +48,8 @@ pub enum SyncEvent {
         fingerprint: Option<String>,
         /// Keyed hashes: the share is end-to-end encrypted.
         encrypted: bool,
+        /// Only what changed since the last walk (see `scanner::delta_scan`).
+        delta: bool,
         error: Option<String>,
     },
     /// Un chunk d'upload (`data` brut, encodé base64 à l'envoi).
@@ -209,6 +211,14 @@ impl ShareState {
     fn events(&self) -> Option<Arc<AtomicU64>> {
         match &self.watcher {
             WatcherSlot::Ready(w) => Some(w.events()),
+            _ => None,
+        }
+    }
+
+    /// Les chemins que le watcher a vus bouger, `None` tant qu'il n'est pas prêt.
+    fn touched(&self) -> Option<Arc<Mutex<watcher::Touched>>> {
+        match &self.watcher {
+            WatcherSlot::Ready(w) => Some(w.touched()),
             _ => None,
         }
     }
@@ -497,8 +507,14 @@ impl SyncManager {
     ///
     /// `&mut` : le scan réécrit le cache d'index sur disque, donc la copie
     /// mémorisée pour les installations doit être oubliée.
-    pub fn start_scan(&mut self, session_id: String, share_id: i64, mode: Option<String>) {
-        let full = mode.as_deref() != Some("auto");
+    pub fn start_scan(
+        &mut self,
+        session_id: String,
+        share_id: i64,
+        mode: Option<String>,
+        expected: Option<String>,
+    ) {
+        let full = mode.as_deref() != Some("delta");
         let keys = self.shares.get(&share_id).map(|s| s.crypto.keys());
         let encrypted = matches!(keys, Some(Ok(Some(_))));
         // La réponse rapide ne touche pas au cache d'index : les installations
@@ -513,6 +529,7 @@ impl SyncManager {
                     scanned: false,
                     fingerprint: Some(fp),
                     encrypted,
+                    delta: false,
                     error: None,
                 });
                 return;
@@ -528,6 +545,11 @@ impl SyncManager {
                     self.tx.clone(),
                     s.events(),
                     Arc::clone(&s.clean),
+                    scanner::ScanRequest {
+                        full,
+                        expected,
+                        touched: s.touched(),
+                    },
                 );
                 return;
             }
@@ -545,6 +567,7 @@ impl SyncManager {
             scanned: true,
             fingerprint: None,
             encrypted,
+            delta: false,
             error: Some(refusal),
         });
     }

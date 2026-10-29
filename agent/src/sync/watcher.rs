@@ -1,9 +1,12 @@
 //! Watcher temps réel d'un partage (crate `notify` : inotify / FSEvents /
-//! ReadDirectoryChangesW), débouncé. Il ne PORTE aucune vérité : il se
-//! contente d'émettre `SyncEvent::Changed`, et le serveur déclenche alors une
-//! session basée sur un scan complet. Rater un événement n'est donc jamais
-//! grave (le scan périodique rattrape) ; en émettre trop non plus (coalescé).
+//! ReadDirectoryChangesW), débouncé. Il ne PORTE aucune vérité : il émet
+//! `SyncEvent::Changed`, et le serveur déclenche alors une session. Il note
+//! aussi QUELS chemins ont bougé, pour qu'un scan partiel ne relise que
+//! leurs dossiers ; le serveur recoupe ce scan par son empreinte, et le
+//! parcours complet horaire relit tout. Rater un événement n'est donc jamais
+//! grave ; en émettre trop non plus (coalescé).
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -37,6 +40,33 @@ const QUIET: Duration = Duration::from_millis(750);
 const MAX_WAIT: Duration = Duration::from_secs(30);
 /// Cadence de la boucle de debounce.
 const POLL: Duration = Duration::from_millis(250);
+/// Au-delà, la liste des chemins touchés ne vaut plus un parcours complet.
+const TOUCHED_MAX: usize = 5_000;
+
+/// Ce qui a bougé depuis le dernier parcours complet. `complete: false` : la
+/// liste ne décrit pas tout (aucun parcours complet sous ce watcher, trop de
+/// chemins, événements perdus, chemin illisible) et le prochain scan relit
+/// tout. Le scan la prend entière et la remet à zéro.
+#[derive(Default)]
+pub struct Touched {
+    pub paths: HashSet<String>,
+    pub complete: bool,
+}
+
+impl Touched {
+    /// Un chemin relatif vu bouger, `None` quand il n'a pas pu être nommé.
+    fn note(&mut self, rel: Option<String>) {
+        match rel {
+            Some(rel) if self.paths.len() < TOUCHED_MAX => {
+                self.paths.insert(rel);
+            }
+            _ => {
+                self.paths.clear();
+                self.complete = false;
+            }
+        }
+    }
+}
 
 #[derive(Default)]
 struct Pending {
@@ -50,6 +80,7 @@ pub struct ShareWatcher {
     stop: Arc<AtomicBool>,
     thread: Option<std::thread::JoinHandle<()>>,
     events: Arc<AtomicU64>,
+    touched: Arc<Mutex<Touched>>,
 }
 
 impl ShareWatcher {
@@ -61,6 +92,11 @@ impl ShareWatcher {
     /// il ne dit pas quoi, et c'est délibéré (voir l'en-tête du module).
     pub fn events(&self) -> Arc<AtomicU64> {
         Arc::clone(&self.events)
+    }
+
+    /// Les chemins vus bouger depuis le dernier parcours complet.
+    pub fn touched(&self) -> Arc<Mutex<Touched>> {
+        Arc::clone(&self.touched)
     }
 }
 
@@ -137,8 +173,10 @@ fn start(
 
     let pending = Arc::new(Mutex::new(Pending::default()));
     let events = Arc::new(AtomicU64::new(0));
+    let touched = Arc::new(Mutex::new(Touched::default()));
     let handler_pending = Arc::clone(&pending);
     let handler_events = Arc::clone(&events);
+    let handler_touched = Arc::clone(&touched);
     let handler_root = root.clone();
     let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
         // Une erreur du backend (débordement de la file inotify, typiquement)
@@ -160,6 +198,21 @@ fn start(
         // Incrémenté avant le débounce et sans lui : le débounce limite les
         // sessions, le compteur dit si le disque a pu bouger pendant un scan.
         handler_events.fetch_add(1, Ordering::Relaxed);
+        {
+            let mut t = handler_touched.lock().expect("touched lock");
+            match &res {
+                Ok(event) if !event.paths.is_empty() => {
+                    for path in event
+                        .paths
+                        .iter()
+                        .filter(|p| relevant(&handler_root, p, &excluded))
+                    {
+                        t.note(rel_path_of(&handler_root, path));
+                    }
+                }
+                _ => t.note(None),
+            }
+        }
         let mut p = handler_pending.lock().expect("pending lock");
         let now = Instant::now();
         p.first.get_or_insert(now);
@@ -203,6 +256,7 @@ fn start(
         stop,
         thread: Some(thread),
         events,
+        touched,
     })
 }
 

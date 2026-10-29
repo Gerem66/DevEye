@@ -630,6 +630,19 @@ pub struct SyncIndexEntry {
 }
 
 impl SyncIndexEntry {
+    /// A path the last walk held and this delta no longer finds.
+    pub fn gone(rel_path: String) -> Self {
+        Self {
+            rel_path,
+            kind: "gone".to_string(),
+            hash: String::new(),
+            size: 0,
+            mtime: 0,
+            mode: None,
+            reason: None,
+        }
+    }
+
     pub fn skipped(rel_path: String, reason: SyncSkipReason) -> Self {
         Self {
             rel_path,
@@ -910,13 +923,17 @@ pub enum ClientMessage {
         share_id: i64,
         entries: Vec<SyncIndexEntry>,
         done: bool,
-        /// Le disque a-t-il réellement été parcouru ? Toujours sérialisé : un
+        /// Le disque a-t-il été parcouru en entier ? Toujours sérialisé : un
         /// serveur récent en a besoin pour distinguer « rien à signaler » d'un
-        /// scan complet qui n'a rien trouvé.
+        /// scan complet qui n'a rien trouvé, et un parcours partiel d'un
+        /// parcours complet qui a retrouvé l'empreinte attendue.
         scanned: bool,
         /// Keyed hashes (encrypted share). Always serialized: the server
         /// refuses an encrypted share's index without it.
         encrypted: bool,
+        /// The entries are only what changed since the last walk (`gone` lines
+        /// for what disappeared); `fingerprint` describes the whole index.
+        delta: bool,
         #[serde(skip_serializing_if = "Option::is_none")]
         fingerprint: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -1277,11 +1294,16 @@ pub enum ServerMessage {
         session_id: String,
         #[serde(rename = "shareId")]
         share_id: i64,
-        /// `auto` autorise la réponse rapide, `full` impose le parcours complet.
-        /// Champ absent = scan complet : la dissymétrie de version dégrade vers
-        /// « on parcourt », jamais vers « on saute ».
+        /// `delta` autorise la réponse rapide et le parcours partiel, `full`
+        /// impose le parcours complet. Champ absent = scan complet : la
+        /// dissymétrie de version dégrade vers « on parcourt », jamais vers
+        /// « on saute ».
         #[serde(default)]
         mode: Option<String>,
+        /// The baseline fingerprint the server holds for this device: a full
+        /// walk that finds it again sends no entries.
+        #[serde(default)]
+        expected: Option<String>,
     },
     /// CloudSync: upload one local file (streams `sync.chunk`).
     #[serde(rename = "sync.push")]

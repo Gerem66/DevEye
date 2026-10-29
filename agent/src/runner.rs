@@ -1010,8 +1010,8 @@ async fn stream_session(
                                 sync_mgr.apply_config(shares);
                             }
                             // CloudSync: scan the share's folder (off-loop; streams via sync_rx).
-                            ServerMessage::SyncScan { session_id, share_id, mode } => {
-                                sync_mgr.start_scan(session_id, share_id, mode);
+                            ServerMessage::SyncScan { session_id, share_id, mode, expected } => {
+                                sync_mgr.start_scan(session_id, share_id, mode, expected);
                             }
                             // CloudSync: upload one file (off-loop; streams via sync_rx).
                             ServerMessage::SyncPush { op_id, share_id, rel_path, start_offset, window, hash, resume } => {
