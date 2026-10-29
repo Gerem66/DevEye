@@ -2232,6 +2232,7 @@ CREATE TABLE `sync_files` (
   UNIQUE KEY `uniq_sync_file` (`share_id`,`rel_path_hash`),
   KEY `idx_sync_files_hash` (`share_id`,`hash`),
   KEY `fk_sync_file_device` (`source_device_id`),
+  KEY `idx_sync_files_stats` (`share_id`,`state`,`size`),
   CONSTRAINT `fk_sync_file_device` FOREIGN KEY (`source_device_id`) REFERENCES `devices` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_sync_file_share` FOREIGN KEY (`share_id`) REFERENCES `sync_shares` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
@@ -2345,6 +2346,7 @@ CREATE TABLE `sync_versions` (
   KEY `idx_sync_versions_share` (`share_id`,`created`),
   KEY `idx_sync_versions_hash` (`share_id`,`hash`),
   KEY `fk_sync_version_device` (`source_device_id`),
+  KEY `idx_sync_versions_size` (`share_id`,`size`),
   CONSTRAINT `fk_sync_version_device` FOREIGN KEY (`source_device_id`) REFERENCES `devices` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_sync_version_share` FOREIGN KEY (`share_id`) REFERENCES `sync_shares` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
