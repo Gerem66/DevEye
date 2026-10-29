@@ -176,14 +176,18 @@ export const mailMessageGetFeature = defineSdkFeature<
         const { message, folder, account } = await loadMessageChain(ctx, input.messageId);
         await assertMailUnlocked(ctx, account.security_tier);
         const cipher = await accountCipher(ctx, account);
-        const { credentials, refresh, raw } = await imapFor(ctx, account, async (creds) => {
-            const refreshCb = refreshCallback(ctx, account, creds, cipher);
-            return {
-                credentials: creds,
-                refresh: refreshCb,
-                raw: await mailClient.fetchMessageRaw(creds, folder.imap_path, message.uid, refreshCb)
-            };
-        });
+        // Ouvrir un message le marque lu, sur le serveur comme dans le cache,
+        // dans la même connexion que la lecture du corps.
+        const raw = await imapFor(ctx, account, (credentials) =>
+            mailClient.fetchMessageRaw(
+                credentials,
+                folder.imap_path,
+                message.uid,
+                { markSeen: message.seen !== 1 },
+                refreshCallback(ctx, account, credentials, cipher)
+            )
+        );
+        if (message.seen !== 1) await ctx.repo.messages.setFlags(message.id, { seen: true });
         const settings = await ctx.repo.settings.get(ctx.workspaceId);
         const bodyRenderMode = settings?.body_render_mode ?? 'embedded';
         const allowRemoteImages = input.allowRemoteImages || account.allow_remote_images === 1;
@@ -193,16 +197,6 @@ export const mailMessageGetFeature = defineSdkFeature<
             trustedDomains,
             preserveStyling: bodyRenderMode === 'raw'
         });
-
-        // Opening a message marks it read, both on the server and in our cache —
-        // regardless of whether the IMAP fetch itself already flipped \Seen.
-        if (message.seen !== 1) {
-            // Par `imapFor` aussi : un serveur qui flanche ici est celui de la boîte, pas une panne d'ici.
-            await imapFor(ctx, account, () =>
-                mailClient.setFlags(credentials, folder.imap_path, message.uid, { seen: true }, refresh)
-            );
-            await ctx.repo.messages.setFlags(message.id, { seen: true });
-        }
 
         const summary = await toMessageSummaryDTO(cipher, { ...message, seen: 1 }, account.id);
         return {

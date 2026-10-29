@@ -628,17 +628,23 @@ export async function fetchEnvelopesByUids(
     });
 }
 
-/** Raw RFC822 source of one message, for MIME parsing by the caller. */
+/**
+ * Raw RFC822 source of one message, for MIME parsing by the caller. La lecture
+ * seule ne pose aucun drapeau (BODY.PEEK) ; `markSeen` ajoute `\Seen` sur la
+ * même connexion, l'ouverture d'un message n'en payant ainsi qu'une.
+ */
 export async function fetchMessageRaw(
     credentials: MailCredentials,
     imapPath: string,
     uid: number,
+    { markSeen }: { markSeen: boolean },
     onTokenRefreshed?: TokenRefreshCallback
 ): Promise<Buffer> {
     const auth = await resolveAuth(credentials, onTokenRefreshed);
     return withMailbox(auth, imapPath, async (client) => {
         const msg = await client.fetchOne(String(uid), { source: true }, { uid: true });
         if (!msg || !msg.source) throw new Error('Message introuvable');
+        if (markSeen) await client.messageFlagsAdd(String(uid), ['\\Seen'], { uid: true });
         return msg.source;
     });
 }

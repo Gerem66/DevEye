@@ -174,7 +174,13 @@ export function mailRoutes(app: SdkPublicApp, deps: MailRouteDeps, seam: MailRou
         try {
             const credentials = await decryptCredentials(cipher, account.credentials_enc);
             const refresh = persistRefreshedToken(deps.repo, account.id, credentials, cipher);
-            const raw = await client.fetchMessageRaw(credentials, folder.imap_path, message.uid, refresh);
+            const raw = await client.fetchMessageRaw(
+                credentials,
+                folder.imap_path,
+                message.uid,
+                { markSeen: false },
+                refresh
+            );
             const attachment = await findAttachmentBytes(raw, claims.data.attachmentId);
             if (!attachment) return reply.code(404).send({ error: 'not_found' });
 
