@@ -23,6 +23,9 @@ export const mailAccountExport: FeatureAccountExport<MailRepo> = {
         },
         mail_messages: {
             skip: 'Les messages restent sur le serveur de messagerie de chaque boîte : DevEye n’en garde qu’un aperçu, que la relève reconstruit.'
+        },
+        ft_mail_bodies: {
+            skip: 'Un cache de sept jours des derniers corps lus, que la relève reconstruit depuis le serveur de messagerie.'
         }
     }
 };
