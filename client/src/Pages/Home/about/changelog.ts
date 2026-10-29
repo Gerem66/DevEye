@@ -12,6 +12,28 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: readonly ChangelogEntry[] = [
     {
+        version: '0.25.3',
+        date: '2026-10-29',
+        changes: [
+            {
+                kind: 'added',
+                text: 'Mail : des cases sur les messages et une barre d’actions pour marquer une sélection ou tout un dossier d’un coup, les dossiers se créent, se renomment et se suppriment depuis le menu ⋯ de l’arbre'
+            },
+            {
+                kind: 'improved',
+                text: 'Mail : les messages récents d’un dossier se gardent sept jours et s’ouvrent sans attendre le serveur, ouvrir un message plus ancien n’ouvre plus qu’une connexion, et lu/non lu bascule sans délai'
+            },
+            {
+                kind: 'improved',
+                text: 'CloudSync : une synchronisation ne relit que ce qui a bougé depuis la précédente, sur l’appareil comme sur le serveur, et les dossiers à exclure proposés par le panneau ne se recalculent plus à chaque instant'
+            },
+            {
+                kind: 'fixed',
+                text: 'Mail : un dossier supprimé sur le serveur disparaît de la liste, au lieu de bloquer la relève et d’afficher « reconnexion requise » sur une boîte qui va bien'
+            }
+        ]
+    },
+    {
         version: '0.25.2',
         date: '2026-10-28',
         changes: [
