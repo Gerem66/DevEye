@@ -2,12 +2,14 @@ import { MAIL_CLIENT_PROVIDER } from '@deveye/types/sdk';
 import type { FeatureClient } from '@deveye/types/sdk/client';
 
 import Mail from './Mail';
+import MailAccessPanel from './MailAccessPanel';
 import MailAccountSettingsPanel from './MailAccountSettingsPanel';
 import MailAdvancedPanel from './MailAdvancedPanel';
 import MailContentPanel from './MailContentPanel';
 import MailEncryptionPanel from './MailEncryptionPanel';
 import MailSyncPanel from './MailSyncPanel';
 import MailWidget from './MailWidget';
+import { hostedMailboxOf } from './mailserverLink';
 import { clientProvider } from './provider';
 
 export const clientEntry: FeatureClient = {
@@ -21,11 +23,15 @@ export const clientEntry: FeatureClient = {
      */
     settingsPanels: {
         general: MailAccountSettingsPanel,
+        access: MailAccessPanel,
         content: MailContentPanel,
         sync: MailSyncPanel,
         advanced: MailAdvancedPanel,
         encryption: MailEncryptionPanel
     },
+    /** L'onglet Accès ne vaut que pour une boîte que le Serveur mail héberge. */
+    settingsTabApplies: async (tabId, scope) =>
+        tabId !== 'access' || (scope.kind === 'item' && (await hostedMailboxOf(Number(scope.itemId))) !== null),
     // Unmounted as soon as it closes: folders and messages are fetched live and
     // would go stale sitting in a cached instance.
     cacheDurationMinutes: 0,

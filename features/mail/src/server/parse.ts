@@ -37,22 +37,21 @@ function attachmentId(attachment: { cid?: string }, index: number): string {
     return attachment.cid ?? `att-${index}`;
 }
 
-/** Parse raw RFC822 bytes and run the security pipeline on the HTML body. */
-export async function parseAndSanitize(raw: Buffer, sanitizeOpts: SanitizeOptions): Promise<ParsedMailBody> {
+/**
+ * Un message analysé, avant tout assainissement : ce que le cache des corps
+ * garde (chiffré), parce que l'assainissement dépend des réglages du lecteur et
+ * se refait à chaque lecture. Les octets des pièces jointes n'y sont pas.
+ */
+export interface ParsedMail {
+    headers: MailHeader[];
+    html: string | null;
+    text: string | null;
+    attachments: MailAttachment[];
+}
+
+/** Parse raw RFC822 bytes: headers, bodies and the attachment list. */
+export async function parseMail(raw: Buffer): Promise<ParsedMail> {
     const parsed = await simpleParser(raw, { skipHtmlToText: true });
-
-    let bodyHtml: string | null = null;
-    let remoteImagesBlocked = false;
-    let blockedImageSources: string[] = [];
-    let suspiciousLinks: MailSuspiciousLink[] = [];
-    if (typeof parsed.html === 'string') {
-        const sanitized = sanitizeMailHtml(parsed.html, sanitizeOpts);
-        bodyHtml = sanitized.html;
-        remoteImagesBlocked = sanitized.remoteImagesBlocked;
-        blockedImageSources = sanitized.blockedSources;
-        suspiciousLinks = findSuspiciousLinks(sanitized.html);
-    }
-
     const attachments: MailAttachment[] = parsed.attachments
         // Index over the *unparsed* list, the way `findAttachmentBytes` re-derives
         // ids: filtering first would renumber everything after an inline image and
@@ -67,12 +66,32 @@ export async function parseAndSanitize(raw: Buffer, sanitizeOpts: SanitizeOption
             mimeType: attachment.contentType,
             size: attachment.size
         }));
-
     return {
         headers: toHeaders(parsed.headerLines),
+        html: typeof parsed.html === 'string' ? parsed.html : null,
+        text: parsed.text ?? null,
+        attachments
+    };
+}
+
+/** Run the security pipeline on a parsed message's HTML body. */
+export function sanitizeParsed(parsed: ParsedMail, sanitizeOpts: SanitizeOptions): ParsedMailBody {
+    let bodyHtml: string | null = null;
+    let remoteImagesBlocked = false;
+    let blockedImageSources: string[] = [];
+    let suspiciousLinks: MailSuspiciousLink[] = [];
+    if (parsed.html !== null) {
+        const sanitized = sanitizeMailHtml(parsed.html, sanitizeOpts);
+        bodyHtml = sanitized.html;
+        remoteImagesBlocked = sanitized.remoteImagesBlocked;
+        blockedImageSources = sanitized.blockedSources;
+        suspiciousLinks = findSuspiciousLinks(sanitized.html);
+    }
+    return {
+        headers: parsed.headers,
         bodyHtml,
-        bodyText: parsed.text ?? null,
-        attachments,
+        bodyText: parsed.text,
+        attachments: parsed.attachments,
         remoteImagesBlocked,
         blockedImageSources,
         suspiciousLinks

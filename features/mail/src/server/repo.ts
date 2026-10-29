@@ -22,6 +22,7 @@ export interface MailRepo {
     accounts: MailAccountsRepo;
     folders: MailFoldersRepo;
     messages: MailMessagesRepo;
+    bodies: MailBodiesRepo;
     settings: MailSettingsRepo;
 }
 
@@ -122,6 +123,8 @@ export interface MailFoldersRepo {
     reorder(accountId: number, ids: number[]): Promise<void>;
     /** Re-key a folder's encrypted name, for a tier switch. */
     updateNameEnc(id: number, nameEnc: string): Promise<void>;
+    /** Le dossier renommé sur le serveur : son chemin et son nom changent, son cache reste. */
+    rename(id: number, imapPath: string, nameEnc: string): Promise<void>;
     /** Retire les dossiers du compte absents de `keptPaths` ; leurs messages suivent par la clé étrangère. */
     deleteMissing(accountId: number, keptPaths: readonly string[]): Promise<number>;
 }
@@ -185,6 +188,14 @@ export interface MailMessagesRepo {
         id: number,
         flags: Partial<{ seen: boolean; flagged: boolean; answered: boolean }>
     ): Promise<MailMessageRow | null>;
+    /** Les UID, parmi `ids`, des lignes qui sont bien dans ce dossier : ce qu'un STORE en lot peut viser. */
+    listUidsByIds(folderId: number, ids: readonly number[]): Promise<number[]>;
+    /** Le même patch sur un lot d'UID, ou sur tout le dossier (`null`). Rend le nombre de lignes touchées. */
+    setFlagsMany(
+        folderId: number,
+        uids: readonly number[] | null,
+        flags: Partial<{ seen: boolean; flagged: boolean; answered: boolean }>
+    ): Promise<number>;
     /**
      * Écrit les trois drapeaux d'un coup, sans relire la ligne, contrairement à
      * {@link setFlags} : la réconciliation connaît déjà l'état qu'elle pose et
@@ -197,6 +208,26 @@ export interface MailMessagesRepo {
     deleteByFolder(folderId: number): Promise<void>;
     /** Supprime les lignes dont l'UID a disparu côté serveur. Rend le nombre effacé. */
     deleteByFolderUids(folderId: number, uids: number[]): Promise<number>;
+}
+
+/** Une ligne de `ft_mail_bodies` : le corps analysé d'un message, chiffré sous le codec de son compte. */
+export interface MailBodyRow {
+    message_id: number;
+    body_enc: string;
+    size_bytes: number;
+    fetched_at: number;
+}
+
+export interface MailBodiesRepo {
+    find(messageId: number): Promise<MailBodyRow | null>;
+    /** Parmi `ids`, ceux dont le corps est en cache. */
+    listCachedIds(ids: readonly number[]): Promise<number[]>;
+    upsert(input: { messageId: number; bodyEnc: string; sizeBytes: number; fetchedAt: number }): Promise<void>;
+    /** Les corps du dossier hors de `keptIds` : la fenêtre a glissé. */
+    deleteOutside(folderId: number, keptIds: readonly number[]): Promise<number>;
+    /** Les corps du compte relevés avant `before` (secondes epoch). */
+    deleteOlderThan(accountId: number, before: number): Promise<number>;
+    deleteByAccount(accountId: number): Promise<void>;
 }
 
 export interface MailSettingsRepo {
@@ -461,6 +492,13 @@ function foldersRepo(q: SdkQueryable): MailFoldersRepo {
         async updateNameEnc(id, nameEnc) {
             await q.execute('UPDATE mail_folders SET name_enc = ? WHERE id = ?', [nameEnc, id]);
         },
+        async rename(id, imapPath, nameEnc) {
+            await q.execute('UPDATE mail_folders SET imap_path = ?, name_enc = ? WHERE id = ?', [
+                imapPath,
+                nameEnc,
+                id
+            ]);
+        },
         async deleteMissing(accountId, keptPaths) {
             if (keptPaths.length === 0) return 0;
             const res = await q.execute('DELETE FROM mail_folders WHERE account_id = ? AND imap_path NOT IN (?)', [
@@ -470,6 +508,28 @@ function foldersRepo(q: SdkQueryable): MailFoldersRepo {
             return res.affectedRows;
         }
     };
+}
+
+/** Les colonnes de drapeaux qu'un patch pose, et leurs valeurs, dans le même ordre. */
+function flagSets(flags: Partial<{ seen: boolean; flagged: boolean; answered: boolean }>): {
+    sets: string[];
+    params: number[];
+} {
+    const sets: string[] = [];
+    const params: number[] = [];
+    if (flags.seen !== undefined) {
+        sets.push('seen = ?');
+        params.push(flags.seen ? 1 : 0);
+    }
+    if (flags.flagged !== undefined) {
+        sets.push('flagged = ?');
+        params.push(flags.flagged ? 1 : 0);
+    }
+    if (flags.answered !== undefined) {
+        sets.push('answered = ?');
+        params.push(flags.answered ? 1 : 0);
+    }
+    return { sets, params };
 }
 
 function messagesRepo(q: SdkQueryable): MailMessagesRepo {
@@ -562,24 +622,33 @@ function messagesRepo(q: SdkQueryable): MailMessagesRepo {
             return rows[0];
         },
         async setFlags(id, flags) {
-            const sets: string[] = [];
-            const params: unknown[] = [];
-            if (flags.seen !== undefined) {
-                sets.push('seen = ?');
-                params.push(flags.seen ? 1 : 0);
-            }
-            if (flags.flagged !== undefined) {
-                sets.push('flagged = ?');
-                params.push(flags.flagged ? 1 : 0);
-            }
-            if (flags.answered !== undefined) {
-                sets.push('answered = ?');
-                params.push(flags.answered ? 1 : 0);
-            }
+            const { sets, params } = flagSets(flags);
             if (sets.length === 0) return this.findById(id);
-            params.push(id);
-            await q.execute(`UPDATE mail_messages SET ${sets.join(', ')} WHERE id = ?`, params);
+            await q.execute(`UPDATE mail_messages SET ${sets.join(', ')} WHERE id = ?`, [...params, id]);
             return this.findById(id);
+        },
+        async listUidsByIds(folderId, ids) {
+            if (ids.length === 0) return [];
+            const rows = await q.query<{ uid: number }>(
+                'SELECT uid FROM mail_messages WHERE folder_id = ? AND id IN (?)',
+                [folderId, [...ids]]
+            );
+            return rows.map((row) => Number(row.uid));
+        },
+        async setFlagsMany(folderId, uids, flags) {
+            const { sets, params } = flagSets(flags);
+            if (sets.length === 0 || (uids !== null && uids.length === 0)) return 0;
+            const res =
+                uids === null
+                    ? await q.execute(`UPDATE mail_messages SET ${sets.join(', ')} WHERE folder_id = ?`, [
+                          ...params,
+                          folderId
+                      ])
+                    : await q.execute(
+                          `UPDATE mail_messages SET ${sets.join(', ')} WHERE folder_id = ? AND uid IN (?)`,
+                          [...params, folderId, [...uids]]
+                      );
+            return res.affectedRows;
         },
         async updateFlags(id, { seen, flagged, answered }) {
             await q.execute('UPDATE mail_messages SET seen = ?, flagged = ?, answered = ? WHERE id = ?', [
@@ -606,6 +675,57 @@ function messagesRepo(q: SdkQueryable): MailMessagesRepo {
                 [folderId, ...uids]
             );
             return res.affectedRows;
+        }
+    };
+}
+
+/** Les corps joints à leur compte par le dossier de leur message : la portée de toute purge. */
+const BODIES_OF_ACCOUNT = `DELETE b FROM ft_mail_bodies b
+    JOIN mail_messages m ON m.id = b.message_id
+    JOIN mail_folders f ON f.id = m.folder_id
+    WHERE f.account_id = ?`;
+
+function bodiesRepo(q: SdkQueryable): MailBodiesRepo {
+    return {
+        async find(messageId) {
+            const rows = await q.query<MailBodyRow>('SELECT * FROM ft_mail_bodies WHERE message_id = ?', [messageId]);
+            return rows[0] ?? null;
+        },
+        async listCachedIds(ids) {
+            if (ids.length === 0) return [];
+            const rows = await q.query<{ message_id: number }>(
+                'SELECT message_id FROM ft_mail_bodies WHERE message_id IN (?)',
+                [[...ids]]
+            );
+            return rows.map((row) => Number(row.message_id));
+        },
+        async upsert({ messageId, bodyEnc, sizeBytes, fetchedAt }) {
+            await q.execute(
+                `INSERT INTO ft_mail_bodies (message_id, body_enc, size_bytes, fetched_at)
+                 VALUES (?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE
+                     body_enc   = VALUES(body_enc),
+                     size_bytes = VALUES(size_bytes),
+                     fetched_at = VALUES(fetched_at)`,
+                [messageId, bodyEnc, sizeBytes, fetchedAt]
+            );
+        },
+        async deleteOutside(folderId, keptIds) {
+            const kept = keptIds.length > 0;
+            const res = await q.execute(
+                `DELETE b FROM ft_mail_bodies b
+                 JOIN mail_messages m ON m.id = b.message_id
+                 WHERE m.folder_id = ? ${kept ? 'AND b.message_id NOT IN (?)' : ''}`,
+                kept ? [folderId, [...keptIds]] : [folderId]
+            );
+            return res.affectedRows;
+        },
+        async deleteOlderThan(accountId, before) {
+            const res = await q.execute(`${BODIES_OF_ACCOUNT} AND b.fetched_at < ?`, [accountId, before]);
+            return res.affectedRows;
+        },
+        async deleteByAccount(accountId) {
+            await q.execute(BODIES_OF_ACCOUNT, [accountId]);
         }
     };
 }
@@ -642,5 +762,11 @@ function settingsRepo(q: SdkQueryable): MailSettingsRepo {
 }
 
 export function createRepo(q: SdkQueryable): MailRepo {
-    return { accounts: accountsRepo(q), folders: foldersRepo(q), messages: messagesRepo(q), settings: settingsRepo(q) };
+    return {
+        accounts: accountsRepo(q),
+        folders: foldersRepo(q),
+        messages: messagesRepo(q),
+        bodies: bodiesRepo(q),
+        settings: settingsRepo(q)
+    };
 }

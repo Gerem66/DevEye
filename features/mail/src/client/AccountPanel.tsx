@@ -1,7 +1,7 @@
-import { PlanPausedBadge, StatusBadge } from 'deveye-sdk-client';
+import { Button, PlanPausedBadge, StatusBadge } from 'deveye-sdk-client';
 
 import AccountList from './AccountList';
-import FolderTree from './FolderTree';
+import FolderTree, { type FolderAction } from './FolderTree';
 import SyncProgressBar from './SyncProgressBar';
 import styles from './style.module.css';
 
@@ -24,6 +24,10 @@ interface AccountPanelProps {
     viewState: MailViewState;
     selectedFolderId: number | null;
     onSelectFolder: (folder: MailFolder) => void;
+    /** Un geste du menu ⋯ d'un dossier. */
+    onFolderAction: (folder: MailFolder, action: FolderAction) => void;
+    /** Un dossier de plus, à la racine de la boîte. */
+    onAddFolder: () => void;
     /** Which slide shows — controlled by the host, which also sizes the column around it. */
     showList: boolean;
     onShowList: () => void;
@@ -54,6 +58,8 @@ export function AccountPanel({
     viewState,
     selectedFolderId,
     onSelectFolder,
+    onFolderAction,
+    onAddFolder,
     showList,
     onShowList
 }: AccountPanelProps) {
@@ -112,11 +118,22 @@ export function AccountPanel({
                                 {folders.length === 0 ? (
                                     <p className={styles.empty}>{describeEmptyState(viewState)?.title}</p>
                                 ) : (
-                                    <FolderTree
-                                        folders={folders}
-                                        selectedId={selectedFolderId}
-                                        onSelect={onSelectFolder}
-                                    />
+                                    <>
+                                        <FolderTree
+                                            folders={folders}
+                                            selectedId={selectedFolderId}
+                                            onSelect={onSelectFolder}
+                                            onAction={onFolderAction}
+                                        />
+                                        <Button
+                                            variant='ghost'
+                                            icon='plus'
+                                            className={styles.folderAdd}
+                                            onClick={onAddFolder}
+                                        >
+                                            Nouveau dossier
+                                        </Button>
+                                    </>
                                 )}
                             </div>
                         </>

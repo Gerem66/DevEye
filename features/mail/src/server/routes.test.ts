@@ -197,6 +197,7 @@ function fakeRepo(accountRows: MailAccountRow[], projections: Record<number, num
             updateCounts: unused,
             reorder: unused,
             updateNameEnc: unused,
+            rename: unused,
             deleteMissing: unused
         },
         messages: {
@@ -211,11 +212,21 @@ function fakeRepo(accountRows: MailAccountRow[], projections: Record<number, num
             updateEnvelopeEnc: unused,
             upsertEnvelope: unused,
             setFlags: unused,
+            listUidsByIds: unused,
+            setFlagsMany: unused,
             updateFlags: unused,
             moveFolder: unused,
             delete: unused,
             deleteByFolder: unused,
             deleteByFolderUids: unused
+        },
+        bodies: {
+            find: async () => null,
+            listCachedIds: unused,
+            upsert: unused,
+            deleteOutside: unused,
+            deleteOlderThan: unused,
+            deleteByAccount: unused
         },
         settings: { get: unused, set: unused }
     };

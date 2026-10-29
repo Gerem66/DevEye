@@ -623,6 +623,8 @@ export async function rekeyTier(
         await ctx.repo.accounts.updateSyncError(previous.id, error === null ? null : await to.encrypt(error));
     }
     await reencryptAccountTree(ctx.repo, from, to, previous.id);
+    // Les corps en cache ne se rechiffrent pas : ils se jettent, la relève les refait.
+    await ctx.repo.bodies.deleteByAccount(previous.id);
     // Une boîte gardée ne se lit que chez son auteur : ses projections n'ont
     // plus d'objet, et sans ce ménage une ligne `item_shares` dormante
     // remontrerait la boîte le jour où elle rouvre.

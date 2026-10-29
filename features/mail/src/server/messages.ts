@@ -7,18 +7,20 @@ import {
     mailMessageMove,
     mailMessageSearch,
     mailMessageSetFlags,
+    mailMessageSetFlagsMany,
     mailSend
 } from '../contracts/commands';
 import type { MailAddress, MailMessageSummary } from '../contracts/domain';
 import { defineSdkFeature, FeatureError, logFailure } from '@deveye/types/sdk/server';
 
 import * as mailClient from './client';
-import { parseAndSanitize } from './parse';
+import { parseMail, sanitizeParsed, type ParsedMail } from './parse';
 import { imageSourcesFor } from './sanitize';
 import type { MailRepo } from './repo';
 import { cacheEnvelopes, refreshFolderCounts } from './sync';
 import {
     accountCipher,
+    accountOfFolder,
     accountOfMessage,
     assertMailUnlocked,
     imapFor,
@@ -176,29 +178,46 @@ export const mailMessageGetFeature = defineSdkFeature<
         const { message, folder, account } = await loadMessageChain(ctx, input.messageId);
         await assertMailUnlocked(ctx, account.security_tier);
         const cipher = await accountCipher(ctx, account);
-        // Ouvrir un message le marque lu, sur le serveur comme dans le cache,
-        // dans la même connexion que la lecture du corps.
-        const raw = await imapFor(ctx, account, (credentials) =>
-            mailClient.fetchMessageRaw(
-                credentials,
-                folder.imap_path,
-                message.uid,
-                { markSeen: message.seen !== 1 },
-                refreshCallback(ctx, account, credentials, cipher)
-            )
-        );
-        if (message.seen !== 1) await ctx.repo.messages.setFlags(message.id, { seen: true });
+        // Un corps en cache se rend tel quel, sans toucher IMAP ni au drapeau :
+        // l'écran, voyant le message rendu encore non lu, le marque par une
+        // commande à part. Hors cache, une seule connexion lit le corps et pose
+        // \Seen, sur le serveur comme dans le cache.
+        const cached = await ctx.repo.bodies.find(message.id);
+        const cachedPlain = cached ? await cipher.tryDecrypt(cached.body_enc) : null;
+        let parsed: ParsedMail;
+        let sizeBytes: number;
+        let seen = message.seen === 1;
+        if (cached && cachedPlain !== null) {
+            parsed = JSON.parse(cachedPlain) as ParsedMail;
+            sizeBytes = cached.size_bytes;
+        } else {
+            const raw = await imapFor(ctx, account, (credentials) =>
+                mailClient.fetchMessageRaw(
+                    credentials,
+                    folder.imap_path,
+                    message.uid,
+                    { markSeen: !seen },
+                    refreshCallback(ctx, account, credentials, cipher)
+                )
+            );
+            if (!seen) {
+                await ctx.repo.messages.setFlags(message.id, { seen: true });
+                seen = true;
+            }
+            parsed = await parseMail(raw);
+            sizeBytes = raw.length;
+        }
         const settings = await ctx.repo.settings.get(ctx.workspaceId);
         const bodyRenderMode = settings?.body_render_mode ?? 'embedded';
         const allowRemoteImages = input.allowRemoteImages || account.allow_remote_images === 1;
         const trustedDomains = parseTrustedImageDomains(settings?.trusted_image_domains ?? null);
-        const body = await parseAndSanitize(raw, {
+        const body = sanitizeParsed(parsed, {
             allowRemoteImages,
             trustedDomains,
             preserveStyling: bodyRenderMode === 'raw'
         });
 
-        const summary = await toMessageSummaryDTO(cipher, { ...message, seen: 1 }, account.id);
+        const summary = await toMessageSummaryDTO(cipher, { ...message, seen: seen ? 1 : 0 }, account.id);
         return {
             message: {
                 ...summary,
@@ -209,7 +228,7 @@ export const mailMessageGetFeature = defineSdkFeature<
                 blockedImageSources: body.blockedImageSources,
                 suspiciousLinks: body.suspiciousLinks,
                 headers: body.headers,
-                sizeBytes: raw.length,
+                sizeBytes,
                 folderPath: folder.imap_path,
                 bodyRenderMode,
                 imageSources: imageSourcesFor(allowRemoteImages, trustedDomains)
@@ -243,6 +262,39 @@ export const mailMessageSetFlagsFeature = defineSdkFeature<
         const row = await ctx.repo.messages.setFlags(message.id, input.flags);
         if (!row) throw new FeatureError('not_found', 'Message introuvable');
         return { message: await toMessageSummaryDTO(cipher, row, account.id) };
+    }
+});
+
+export const mailMessageSetFlagsManyFeature = defineSdkFeature<
+    MailRepo,
+    typeof mailMessageSetFlagsMany.command,
+    typeof mailMessageSetFlagsMany.input,
+    typeof mailMessageSetFlagsMany.output
+>({
+    ...mailMessageSetFlagsMany,
+    access: { ...WRITE, item: accountOfFolder },
+    mutates: true,
+    handler: async (ctx, input) => {
+        const { folder, account } = await loadFolderWithAccount(ctx, input.folderId, 'write');
+        await assertMailUnlocked(ctx, account.security_tier);
+        const cipher = await accountCipher(ctx, account);
+        // Les identifiants d'un autre dossier sont ignorés plutôt que refusés :
+        // la sélection de l'écran peut survivre à un message déplacé entre-temps.
+        const uids =
+            input.messageIds === null ? null : await ctx.repo.messages.listUidsByIds(folder.id, input.messageIds);
+        if (uids !== null && uids.length === 0) return { count: 0 };
+        await imapFor(ctx, account, (credentials) =>
+            mailClient.setFlagsMany(
+                credentials,
+                folder.imap_path,
+                uids,
+                input.flags,
+                refreshCallback(ctx, account, credentials, cipher)
+            )
+        );
+        const count = await ctx.repo.messages.setFlagsMany(folder.id, uids, input.flags);
+        if (input.flags.seen !== undefined) await refreshFolderCounts(ctx.repo, folder);
+        return { count };
     }
 });
 

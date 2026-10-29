@@ -261,6 +261,16 @@ export interface MailSession {
     listFolders(): Promise<RemoteFolder[]>;
     syncFolder(options: SyncFolderOptions): Promise<FolderSyncResult>;
     fetchOlderMessages(imapPath: string, beforeUid: number | null, limit: number): Promise<OlderMessagesResult>;
+    /**
+     * La source des messages `uids` dont la taille ne dépasse pas `maxBytes`,
+     * lue par BODY.PEEK : aucun drapeau n'est posé. Les plus gros sont omis.
+     */
+    fetchBodies(imapPath: string, uids: number[], maxBytes: number): Promise<RawMessage[]>;
+    /** Crée le dossier (`[chemin du parent, nom]` pour un sous-dossier) et rend son chemin. */
+    createFolder(path: string | [string, string]): Promise<string>;
+    /** Renomme le dossier à la même place dans l'arborescence et rend son nouveau chemin. */
+    renameFolder(imapPath: string, name: string): Promise<string>;
+    deleteFolder(imapPath: string): Promise<void>;
 }
 
 /**
@@ -279,9 +289,58 @@ export async function withSession<T>(
         fn({
             listFolders: () => listFoldersOn(client),
             syncFolder: (options) => syncFolderOn(client, options),
-            fetchOlderMessages: (imapPath, beforeUid, limit) => fetchOlderMessagesOn(client, imapPath, beforeUid, limit)
+            fetchOlderMessages: (imapPath, beforeUid, limit) =>
+                fetchOlderMessagesOn(client, imapPath, beforeUid, limit),
+            fetchBodies: (imapPath, uids, maxBytes) => fetchBodiesOn(client, imapPath, uids, maxBytes),
+            createFolder: async (path) => (await client.mailboxCreate(path)).path,
+            renameFolder: (imapPath, name) => renameFolderOn(client, imapPath, name),
+            deleteFolder: async (imapPath) => {
+                await client.mailboxDelete(imapPath);
+            }
         })
     );
+}
+
+export interface RawMessage {
+    uid: number;
+    raw: Buffer;
+}
+
+/**
+ * Les tailles d'abord, pour ne télécharger que ce qui tient sous le plafond :
+ * un message lourd l'est par ses pièces jointes, que le cache ne garde pas.
+ */
+async function fetchBodiesOn(
+    client: ImapFlow,
+    imapPath: string,
+    uids: number[],
+    maxBytes: number
+): Promise<RawMessage[]> {
+    if (uids.length === 0) return [];
+    return onMailbox(client, imapPath, async (client) => {
+        const wanted: number[] = [];
+        for await (const msg of client.fetch(uids.join(','), { uid: true, size: true }, { uid: true })) {
+            if ((msg.size ?? Infinity) <= maxBytes) wanted.push(msg.uid);
+        }
+        const bodies: RawMessage[] = [];
+        if (wanted.length === 0) return bodies;
+        for await (const msg of client.fetch(wanted.join(','), { uid: true, source: true }, { uid: true })) {
+            if (msg.source) bodies.push({ uid: msg.uid, raw: msg.source });
+        }
+        return bodies;
+    });
+}
+
+/**
+ * Le nouveau chemin se compose avec le délimiteur et le parent que le serveur
+ * annonce pour ce dossier : ni l'un ni l'autre ne se devinent d'un chemin.
+ */
+async function renameFolderOn(client: ImapFlow, imapPath: string, name: string): Promise<string> {
+    const entry = (await client.list()).find((f) => f.path === imapPath);
+    if (!entry) throw new Error('Dossier introuvable');
+    const newPath = entry.parentPath ? `${entry.parentPath}${entry.delimiter}${name}` : name;
+    await client.mailboxRename(imapPath, newPath);
+    return newPath;
 }
 
 /** The open mailbox's state, or a clear error when the path doesn't resolve to one. */
@@ -649,13 +708,31 @@ export async function fetchMessageRaw(
     });
 }
 
+export type FlagsPatch = { seen?: boolean; flagged?: boolean; answered?: boolean };
+
 export async function setFlags(
     credentials: MailCredentials,
     imapPath: string,
     uid: number,
-    flags: { seen?: boolean; flagged?: boolean; answered?: boolean },
+    flags: FlagsPatch,
     onTokenRefreshed?: TokenRefreshCallback
 ): Promise<void> {
+    await setFlagsMany(credentials, imapPath, [uid], flags, onTokenRefreshed);
+}
+
+/**
+ * Les mêmes drapeaux sur un lot d'UID, ou sur tout le dossier (`null`, soit la
+ * plage UID `1:*`) : un STORE par sens, quel que soit le nombre de messages.
+ */
+export async function setFlagsMany(
+    credentials: MailCredentials,
+    imapPath: string,
+    uids: number[] | null,
+    flags: FlagsPatch,
+    onTokenRefreshed?: TokenRefreshCallback
+): Promise<void> {
+    if (uids !== null && uids.length === 0) return;
+    const range = uids === null ? '1:*' : uids.join(',');
     const auth = await resolveAuth(credentials, onTokenRefreshed);
     await withMailbox(auth, imapPath, async (client) => {
         const add: string[] = [];
@@ -663,8 +740,8 @@ export async function setFlags(
         if (flags.seen !== undefined) (flags.seen ? add : remove).push('\\Seen');
         if (flags.flagged !== undefined) (flags.flagged ? add : remove).push('\\Flagged');
         if (flags.answered !== undefined) (flags.answered ? add : remove).push('\\Answered');
-        if (add.length > 0) await client.messageFlagsAdd(String(uid), add, { uid: true });
-        if (remove.length > 0) await client.messageFlagsRemove(String(uid), remove, { uid: true });
+        if (add.length > 0) await client.messageFlagsAdd(range, add, { uid: true });
+        if (remove.length > 0) await client.messageFlagsRemove(range, remove, { uid: true });
     });
 }
 

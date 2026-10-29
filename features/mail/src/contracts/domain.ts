@@ -9,8 +9,9 @@ import { z } from 'zod';
  * envelopes) is encrypted, but which cipher is picked per account by
  * `securityTier`, not fixed per feature: an "open" account can be synced and
  * sent in the background, a "guarded" one only ever decrypts during a live,
- * unlocked session. Message bodies and attachments are never persisted, only
- * envelopes are cached; the body is fetched live from IMAP on open.
+ * unlocked session. Envelopes are cached, and so are the parsed bodies of a
+ * folder's most recent messages (`ft_mail_bodies`, rolling, encrypted like the
+ * envelopes); attachment bytes never are. Older bodies are fetched live on open.
  */
 
 export const MAIL_DISPLAY_NAME_MAX_LENGTH = 80;
@@ -18,6 +19,7 @@ export const MAIL_EMAIL_MAX_LENGTH = 320;
 export const MAIL_HOST_MAX_LENGTH = 255;
 export const MAIL_SUBJECT_MAX_LENGTH = 998; // RFC 5322 line-length ceiling
 export const MAIL_SNIPPET_MAX_LENGTH = 280;
+export const MAIL_FOLDER_NAME_MAX_LENGTH = 100;
 
 /** Upper bound on a `mail.messageSearch` query — a needle, not a document. */
 export const MAIL_SEARCH_QUERY_MAX_LENGTH = 128;
@@ -285,9 +287,10 @@ export const mailBodyRenderModeSchema = z.enum(['embedded', 'raw']);
 export type MailBodyRenderMode = z.infer<typeof mailBodyRenderModeSchema>;
 
 /**
- * Full message. Fetched live from IMAP on `mail.messageGet` — never cached —
- * with `bodyHtml` already sanitized server-side (scripts/handlers/tracking CSS
- * stripped, remote images blocked unless `allowRemoteImages` was requested).
+ * Full message, as `mail.messageGet` renders it: from the encrypted cache of
+ * recent bodies or live from IMAP, `bodyHtml` sanitized server-side either way
+ * (scripts/handlers/tracking CSS stripped, remote images blocked unless
+ * `allowRemoteImages` was requested).
  */
 export const mailMessageSchema = mailMessageSummarySchema.extend({
     bodyHtml: z.string().nullable(),

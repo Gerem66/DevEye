@@ -9,6 +9,7 @@ import {
     onSocketOpen,
     OpenPopup,
     PlanPausedNotice,
+    Reveal,
     TextInput,
     useLiveItemTarget,
     useLiveSegment,
@@ -21,6 +22,8 @@ import type { FeatureViewProps } from '@deveye/types/sdk/client';
 import AccountPanel from './AccountPanel';
 import AccountPopup, { ACCOUNT_POPUP, type AccountPopupResult } from './AccountPopup';
 import EmptyState from './EmptyState';
+import FolderNamePopup, { FOLDER_NAME_POPUP, type FolderNameInput, type FolderNameResult } from './FolderNamePopup';
+import type { FolderAction } from './FolderTree';
 import { mailViewState } from './viewState';
 import ComposePopup, { COMPOSE_POPUP, type ComposeInput } from './ComposePopup';
 import ConfirmPopup, { MAIL_CONFIRM_POPUP } from './ConfirmPopup';
@@ -117,6 +120,8 @@ export default function Mail(_props: FeatureViewProps) {
     const syncRunRef = useRef<number | null>(null);
 
     const [messages, setMessages] = useState<MailMessageSummary[]>([]);
+    /** Les lignes cochées pour un geste en masse ; vidées avec le dossier et avec la recherche. */
+    const [checkedIds, setCheckedIds] = useState<ReadonlySet<number>>(new Set());
     const [nextCursor, setNextCursor] = useState<MailMessageCursor | null>(null);
     /** The folder has no older mail left on the server: the scroll can stop. */
     const [reachedFolderStart, setReachedFolderStart] = useState(false);
@@ -483,6 +488,9 @@ export default function Mail(_props: FeatureViewProps) {
      * newer one and overwrite fresher results with staler ones.
      */
     useEffect(() => {
+        // Une sélection appartient à la liste où elle a été faite, et la
+        // recherche en montre une autre.
+        setCheckedIds(new Set());
         const query = search.trim();
         if (query === '' || selectedFolderId === null) {
             setSearchResults(null);
@@ -580,6 +588,17 @@ export default function Mail(_props: FeatureViewProps) {
             const loaded = await loadMessages(folderId, null);
             if (!loaded || folderRunRef.current !== run || selectedPausedRef.current) return;
             await syncNow();
+            // Puis les corps récents, par lots courts, tant qu'on est sur ce
+            // dossier : c'est un confort, pas une lecture demandée, donc un
+            // échec s'arrête là sans bruit et le prochain passage reprendra.
+            try {
+                let remaining = 1;
+                while (remaining > 0 && folderRunRef.current === run) {
+                    remaining = (await api.send('mail.folderPrefetch', { folderId })).remaining;
+                }
+            } catch {
+                // Voir ci-dessus.
+            }
         },
         [loadMessages, syncNow]
     );
@@ -590,6 +609,7 @@ export default function Mail(_props: FeatureViewProps) {
         folderRunRef.current += 1;
         closeMessage();
         setReachedFolderStart(false);
+        setCheckedIds(new Set());
         // A query only ever means something for the folder it was typed in.
         setSearch('');
         if (selectedFolderId !== null) void openFolder(selectedFolderId);
@@ -616,6 +636,133 @@ export default function Mail(_props: FeatureViewProps) {
         setSearchResults((prev) => (prev ? apply(prev) : prev));
     }, []);
 
+    /** Le même patch de drapeaux sur plusieurs lignes, ou sur toutes (`null`). */
+    const patchMessages = useCallback(
+        (ids: ReadonlySet<number> | null, patch: Partial<MailMessageSummary['flags']>) => {
+            const apply = (list: MailMessageSummary[]) =>
+                list.map((m) => (ids === null || ids.has(m.id) ? { ...m, flags: { ...m.flags, ...patch } } : m));
+            setMessages(apply);
+            setSearchResults((prev) => (prev ? apply(prev) : prev));
+        },
+        []
+    );
+
+    const toggleChecked = useCallback((message: MailMessageSummary) => {
+        setCheckedIds((prev) => {
+            const next = new Set(prev);
+            if (!next.delete(message.id)) next.add(message.id);
+            return next;
+        });
+    }, []);
+
+    /**
+     * Les drapeaux des lignes cochées, en un seul aller-retour : le serveur
+     * pose un STORE sur le lot, et la liste se corrige ici sans relecture.
+     */
+    async function markChecked(seen: boolean): Promise<void> {
+        const folderId = selectedFolderIdRef.current;
+        if (folderId === null || checkedIds.size === 0) return;
+        // Optimiste aussi ; sur refus, la tête de liste se relit, le cache
+        // n'ayant pas bougé.
+        const ids = checkedIds;
+        patchMessages(ids, { seen });
+        setCheckedIds(new Set());
+        try {
+            await withSecrecy(() =>
+                api.send('mail.messageSetFlagsMany', { folderId, messageIds: [...ids], flags: { seen } })
+            );
+            void refreshFolders();
+        } catch (e) {
+            void refreshMessageHead();
+            setError(errorNote(e, 'Action impossible.'));
+        }
+    }
+
+    /** Tout le dossier côté serveur, messages jamais relevés compris : d'où la confirmation. */
+    async function markFolderRead(folder: MailFolder): Promise<void> {
+        const confirmed = await OpenPopup<boolean>(MAIL_CONFIRM_POPUP, {
+            title: 'Tout marquer comme lu ?',
+            message: `Tous les messages de « ${folder.name} » seront marqués lus sur le serveur de mail, y compris ceux qui n’ont pas encore été relevés ici.`,
+            confirmLabel: 'Marquer lus'
+        });
+        if (!confirmed) return;
+        try {
+            await withSecrecy(() =>
+                api.send('mail.messageSetFlagsMany', { folderId: folder.id, messageIds: null, flags: { seen: true } })
+            );
+            if (selectedFolderIdRef.current === folder.id) patchMessages(null, { seen: true });
+            void refreshFolders();
+        } catch (e) {
+            setError(errorNote(e, 'Action impossible.'));
+        }
+    }
+
+    /** Un dossier de plus, sous `parent` ou à la racine, ouvert aussitôt. */
+    async function createFolder(parent: MailFolder | null): Promise<void> {
+        const accountId = selectedAccountIdRef.current;
+        if (accountId === null) return;
+        const input: FolderNameInput = {
+            title: parent ? `Nouveau sous-dossier de « ${parent.name} »` : 'Nouveau dossier',
+            name: '',
+            confirmLabel: 'Créer'
+        };
+        const name = await OpenPopup<FolderNameResult>(FOLDER_NAME_POPUP, input);
+        if (name === null) return;
+        try {
+            const res = await withSecrecy(() =>
+                api.send('mail.folderCreate', { accountId, parentId: parent?.id ?? null, name })
+            );
+            await refreshFolders();
+            setSelectedFolderId(res.folder.id);
+        } catch (e) {
+            setError(errorNote(e, 'Création du dossier impossible.'));
+        }
+    }
+
+    async function renameFolder(folder: MailFolder): Promise<void> {
+        const input: FolderNameInput = { title: 'Renommer le dossier', name: folder.name, confirmLabel: 'Renommer' };
+        const name = await OpenPopup<FolderNameResult>(FOLDER_NAME_POPUP, input);
+        if (name === null || name === folder.name) return;
+        try {
+            await withSecrecy(() => api.send('mail.folderRename', { folderId: folder.id, name }));
+            await refreshFolders();
+        } catch (e) {
+            setError(errorNote(e, 'Renommage du dossier impossible.'));
+        }
+    }
+
+    async function deleteFolder(folder: MailFolder): Promise<void> {
+        const confirmed = await OpenPopup<boolean>(MAIL_CONFIRM_POPUP, {
+            title: 'Supprimer ce dossier ?',
+            message: `« ${folder.name} » sera supprimé sur le serveur de mail. Selon le serveur, ses messages partent avec lui ou perdent seulement ce libellé.`,
+            confirmLabel: 'Supprimer'
+        });
+        if (!confirmed) return;
+        try {
+            await withSecrecy(() => api.send('mail.folderDelete', { folderId: folder.id }));
+            await refreshFolders();
+        } catch (e) {
+            setError(errorNote(e, 'Suppression du dossier impossible.'));
+        }
+    }
+
+    function handleFolderAction(folder: MailFolder, action: FolderAction): void {
+        switch (action) {
+            case 'markAllRead':
+                void markFolderRead(folder);
+                return;
+            case 'addChild':
+                void createFolder(folder);
+                return;
+            case 'rename':
+                void renameFolder(folder);
+                return;
+            case 'delete':
+                void deleteFolder(folder);
+                return;
+        }
+    }
+
     /**
      * Ouvre un message par son identifiant, et non par sa ligne : la
      * téléportation en vise un sans forcément tenir la ligne qui le porte, et
@@ -632,12 +779,18 @@ export default function Mail(_props: FeatureViewProps) {
             setSelectedMessage((prev) => (prev && prev.id === messageId ? prev : null));
             try {
                 const res = await withSecrecy(() => api.send('mail.messageGet', { messageId, allowRemoteImages }));
-                setSelectedMessage(res.message);
+                setSelectedMessage({ ...res.message, flags: { ...res.message.flags, seen: true } });
                 // Reflect the read state in the list without a full reload.
                 patchMessage(messageId, { seen: true });
-                // L'émetteur n'est pas prévenu de sa propre écriture : le badge
-                // du dossier se relit ici.
-                void refreshFolders();
+                // Servi par le cache des corps, le message n'a pas été marqué lu
+                // par le serveur : c'est un geste à part, après l'affichage. Puis
+                // le badge du dossier se relit : l'émetteur n'est pas prévenu de
+                // sa propre écriture.
+                void (res.message.flags.seen
+                    ? refreshFolders()
+                    : withSecrecy(() => api.send('mail.messageSetFlags', { messageId, flags: { seen: true } }))
+                          .then(() => refreshFolders())
+                          .catch((e: unknown) => setError(errorNote(e, 'Impossible de marquer le message lu.'))));
             } catch (e) {
                 setError(errorNote(e, 'Ouverture du message impossible.'));
                 invalidate('mail.accountList');
@@ -755,17 +908,28 @@ export default function Mail(_props: FeatureViewProps) {
      * repaint every row on each refresh.
      */
 
-    /** Applies a flag change to a message, keeping the list row and (if open) the popup in sync. */
+    /**
+     * Applies a flag change to a message, keeping the list row and (if open) the
+     * popup in sync. Optimiste : la ligne change sous le doigt, le serveur de
+     * mail répond une seconde plus tard, et un refus la remet comme avant.
+     */
     const setMessageFlag = useCallback(
         async (message: MailMessageSummary, patch: Partial<{ seen: boolean; flagged: boolean }>): Promise<void> => {
+            const apply = (flags: typeof patch) => {
+                patchMessage(message.id, flags);
+                setSelectedMessage((prev) =>
+                    prev && prev.id === message.id ? { ...prev, flags: { ...prev.flags, ...flags } } : prev
+                );
+            };
+            const previous: typeof patch = {};
+            if (patch.seen !== undefined) previous.seen = message.flags.seen;
+            if (patch.flagged !== undefined) previous.flagged = message.flags.flagged;
+            apply(patch);
             try {
                 await withSecrecy(() => api.send('mail.messageSetFlags', { messageId: message.id, flags: patch }));
-                patchMessage(message.id, patch);
-                setSelectedMessage((prev) =>
-                    prev && prev.id === message.id ? { ...prev, flags: { ...prev.flags, ...patch } } : prev
-                );
                 if (patch.seen !== undefined) void refreshFolders();
             } catch (e) {
+                apply(previous);
                 setError(errorNote(e, 'Action impossible.'));
             }
         },
@@ -872,6 +1036,7 @@ export default function Mail(_props: FeatureViewProps) {
      * the unfiltered folder on screen with nothing saying a search is running.
      */
     const searchMode = search.trim() !== '';
+    const shownMessages = searchMode ? (searchResults ?? []) : messages;
 
     /**
      * One line under the search box while searching: how many matched, and whether
@@ -1050,6 +1215,8 @@ export default function Mail(_props: FeatureViewProps) {
                                 setSelectedFolderId(f.id);
                                 setMobileView('messages');
                             }}
+                            onFolderAction={handleFolderAction}
+                            onAddFolder={() => void createFolder(null)}
                             showList={showAccountList}
                             onShowList={() => setShowAccountList(true)}
                         />
@@ -1087,7 +1254,52 @@ export default function Mail(_props: FeatureViewProps) {
                         </div>
                     )}
 
-                    {searchStatus && <p className={styles.searchStatus}>{searchStatus}</p>}
+                    {searchStatus && (
+                        <p className={styles.searchStatus}>
+                            {searchStatus}
+                            {/* Les résultats, d'un coup : c'est la liste qu'on
+                                veut traiter en masse sans la dérouler. */}
+                            {shownMessages.length > 0 && checkedIds.size < shownMessages.length && (
+                                <Button
+                                    variant='ghost'
+                                    onClick={() => setCheckedIds(new Set(shownMessages.map((m) => m.id)))}
+                                >
+                                    Tout sélectionner
+                                </Button>
+                            )}
+                        </p>
+                    )}
+
+                    <Reveal open={checkedIds.size > 0}>
+                        <div className={styles.selectionBar} role='toolbar' aria-label='Messages sélectionnés'>
+                            <span className={styles.selectionCount}>
+                                {checkedIds.size} sélectionné{checkedIds.size > 1 ? 's' : ''}
+                            </span>
+                            {checkedIds.size < shownMessages.length && (
+                                <Button
+                                    variant='ghost'
+                                    onClick={() => setCheckedIds(new Set(shownMessages.map((m) => m.id)))}
+                                >
+                                    Tout sélectionner
+                                </Button>
+                            )}
+                            <Button variant='ghost' icon='eye-open' onClick={() => void markChecked(true)}>
+                                Marquer lus
+                            </Button>
+                            <Button variant='ghost' icon='eye-close' onClick={() => void markChecked(false)}>
+                                Marquer non lus
+                            </Button>
+                            <button
+                                type='button'
+                                className={styles.iconBtn}
+                                title='Annuler la sélection'
+                                aria-label='Annuler la sélection'
+                                onClick={() => setCheckedIds(new Set())}
+                            >
+                                <span className='icon icon-x' />
+                            </button>
+                        </div>
+                    </Reveal>
 
                     {/* Repère de la voile : `.messageColumn` défile, une voile
                         posée dedans partirait avec le contenu. */}
@@ -1101,8 +1313,10 @@ export default function Mail(_props: FeatureViewProps) {
                                     // While a new query is in flight the previous
                                     // results stay up, so the list doesn't blink
                                     // empty on every keystroke.
-                                    messages={searchMode ? (searchResults ?? []) : messages}
+                                    messages={shownMessages}
                                     selectedId={openMessageId}
+                                    checkedIds={checkedIds}
+                                    onToggleChecked={toggleChecked}
                                     onSelect={handleSelectMessage}
                                     onToggleSeen={toggleSeen}
                                     onToggleFlagged={toggleFlagged}
@@ -1137,6 +1351,7 @@ export default function Mail(_props: FeatureViewProps) {
             <AccountPopup />
             <ComposePopup />
             <ConfirmPopup />
+            <FolderNamePopup />
             <MessageInfoPopup />
             <MessagePopup
                 open={messagePopupOpen}

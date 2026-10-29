@@ -7,6 +7,7 @@ import {
     ConfirmDialog,
     ErrorNote,
     invalidate,
+    openFeature,
     SegmentedControl,
     settingsStyles as shell,
     Term,
@@ -18,6 +19,7 @@ import {
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 
 import { api, errorNote } from './api';
+import { hostedMailboxOf, type HostedMailbox } from './mailserverLink';
 import { ProviderCard } from './ProviderCard';
 import { reconnectAccount } from './oauthWindow';
 import styles from './style.module.css';
@@ -40,6 +42,18 @@ import type { MailAccount, MailAccountDraft, MailAccountEdit, MailProxy } from '
 export default function MailAccountSettingsPanel({ scope, canWrite, gone }: SettingsPanelProps) {
     const accountId = scope.kind === 'item' ? Number(scope.itemId) : null;
     const version = useResourceVersion('mail.accountList');
+    /** La boîte du Serveur mail qui héberge cette adresse, s'il y en a une. */
+    const [hosted, setHosted] = useState<HostedMailbox | null>(null);
+    useEffect(() => {
+        if (accountId === null) return;
+        let live = true;
+        void hostedMailboxOf(accountId).then((found) => {
+            if (live) setHosted(found);
+        });
+        return () => {
+            live = false;
+        };
+    }, [accountId, version]);
     const [account, setAccount] = useState<MailAccount | null>(null);
     const [draft, setDraft] = useState<MailAccountDraft | null>(null);
     const [proxyEnabled, setProxyEnabled] = useState(false);
@@ -413,6 +427,21 @@ export default function MailAccountSettingsPanel({ scope, canWrite, gone }: Sett
 
             {status && <p className={shell.notice}>{status}</p>}
             <ErrorNote note={error} />
+
+            {hosted && (
+                <div className={shell.field}>
+                    <span className={shell.sectionLabel}>Serveur mail</span>
+                    <span className={shell.fieldHint}>
+                        Cette adresse est hébergée par le Serveur mail de DevEye : ses mots de passe d’application sont
+                        dans l’onglet Accès.
+                    </span>
+                    <div className={shell.sectionActions}>
+                        <Button variant='secondary' icon='mail' onClick={() => openFeature('mailserver', hosted.id)}>
+                            Ouvrir dans Serveur mail
+                        </Button>
+                    </div>
+                </div>
+            )}
 
             {!readOnly && (
                 <div className={shell.field}>

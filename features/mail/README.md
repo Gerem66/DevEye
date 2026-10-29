@@ -54,13 +54,21 @@ qui resterait sous l'ancien codec se lirait « (verrouillé) » pour toujours.
   (`listSyncDue` filtre en SQL, `syncOne` revérifie). Une boîte gardée se
   relève à l'ouverture (`mail.folderList`, `mail.messageList`) et au bouton
   (`mail.folderSync`).
-- **Corps et pièces jointes ne sont jamais persistés.** Seules les enveloppes
-  (objet, expéditeur, destinataires, date, drapeaux) sont en cache ; le corps
-  est relu d'IMAP à l'ouverture, assaini côté serveur (`sanitize.ts` : ni
-  script, ni gestionnaire, ni style hors mode `raw`, images distantes
-  neutralisées sauf permission, domaine approuvé ou boîte qui les autorise
-  toutes), et les liens douteux
-  signalés (`linkHeuristics.ts`), sans rien bloquer.
+- **Les pièces jointes ne sont jamais persistées, les corps seulement les
+  récents.** Les enveloppes (objet, expéditeur, destinataires, date, drapeaux)
+  sont en cache ; le corps analysé des 25 messages les plus récents d'un
+  dossier (`ft_mail_bodies`, sous le codec du compte, source d'au plus 1 Mio,
+  oublié après 7 jours ou dès qu'il sort de la fenêtre) l'est aussi, lu par
+  `BODY.PEEK` donc jamais marqué lu par la relève : la boîte de réception par la
+  relève de fond, tout dossier à son ouverture (`mail.folderPrefetch`, par
+  lots courts que l'écran enchaîne en fond). Un corps
+  plus ancien est relu d'IMAP à l'ouverture. Dans les deux cas il est assaini à
+  la lecture, avec les réglages du lecteur (`sanitize.ts` : ni script, ni
+  gestionnaire, ni style hors mode `raw`, images distantes neutralisées sauf
+  permission, domaine approuvé ou boîte qui les autorise toutes), et les liens
+  douteux signalés (`linkHeuristics.ts`), sans rien bloquer. Servi par le
+  cache, un message n'est pas marqué lu par `mail.messageGet` : l'écran le fait
+  par `mail.messageSetFlags`, après l'affichage.
 - **L'état d'une boîte s'écrit sur tous les chemins** (`runWithAccountStatus`)
   : qu'on l'ouvre, qu'on la relève à la main ou qu'on la laisse tourner, un
   accès qui tombe se voit tout de suite, et un accès qui revient efface la
@@ -135,7 +143,7 @@ réglages (Contenu à l'échelle de la feature ; Général, Contenu,
 Synchronisation, Avancé et Chiffrement à celle d'un compte, Partage et
 Permissions venant de la coquille), et les commandes.
 
-`src/contracts/{domain,commands}.ts` : les schémas, et les vingt-sept
+`src/contracts/{domain,commands}.ts` : les schémas, et les trente-quatre
 commandes sous le préfixe `mail.`. `@deveye/types` ne garde que l'identité de
 la feature et les deux contrats de couplage (`MAIL_TRANSPORT_PROVIDER`,
 `MAIL_CLIENT_PROVIDER`).
@@ -154,13 +162,16 @@ Côté serveur (`src/server/`) :
   `persistRefreshedToken`, `reencryptAccountTree`, les DTO, la chaîne message
   → dossier → compte (`loadAccount` sur `findVisible`, avec
   `ctx.items.assert`), `imapFor` ;
-- `accounts.ts`, `folders.ts`, `messages.ts`, `settings.ts`, agrégés par
-  `handlers.ts` : les vingt-sept commandes ;
+- `accounts.ts`, `folders.ts` (dont créer, renommer et supprimer un dossier sur
+  le serveur, et la liste qui retire du cache ce que le serveur ne liste plus),
+  `messages.ts` (dont `mail.messageSetFlagsMany` : les mêmes drapeaux sur une
+  sélection ou sur tout un dossier, en un STORE), `settings.ts`, agrégés par
+  `handlers.ts` : les trente-quatre commandes ;
 - `sync.ts` (la relève d'un dossier, la réconciliation de la fenêtre récente,
-  le rattrapage vers le passé, la remise à zéro ; une première relève se borne
-  aux 200 messages les plus récents d'un dossier, `INITIAL_SYNC_LIMIT` ; le
-  client IMAP en paramètre, `SyncClient`) et `syncStatus.ts` (l'avancement en
-  mémoire, pour la barre) ;
+  le rattrapage vers le passé, la remise à zéro, le cache des corps récents et
+  sa purge ; une première relève se borne aux 200 messages les plus récents
+  d'un dossier, `INITIAL_SYNC_LIMIT` ; le client IMAP en paramètre,
+  `SyncClient`) et `syncStatus.ts` (l'avancement en mémoire, pour la barre) ;
 - `service.ts` (`MailSync` : un ticker du SDK, `deps.cipherFor`,
   `deps.live.changed` aux transitions, `deps.live.publish` pour l'avancement,
   l'échéance par compte ; couture de test `{ mailClient, accountTimeoutMs }`) ;
@@ -168,7 +179,8 @@ Côté serveur (`src/server/`) :
   couture `{ client, oauth }`), `client.ts` (IMAP/SMTP), `oauth.ts`
   (`redirect_uri` sur `origins.app`, `OAuthTokenError` qui sépare un refus
   définitif d'un incident passager, renouvellements coalescés par jeton),
-  `parse.ts`, `sanitize.ts`, `linkHeuristics.ts` ;
+  `parse.ts` (`parseMail`, ce que le cache garde, et `sanitizeParsed`, à la
+  lecture), `sanitize.ts`, `linkHeuristics.ts` ;
 - `copy.ts` : l'arbre d'un compte (`mailTree` : le compte, ses dossiers, ses
   enveloppes), que le déplacement rescelle et que la copie emporte ;
   `move.ts` : le changement d'espace (un canal d'alerte de l'espace quitté qui
@@ -198,7 +210,14 @@ Côté client (`src/client/`) :
   `SyncProgressBar`, `accountStatus.ts` (comment se dit l'état d'une boîte,
   pastille et bandeau), `oauthWindow.ts` (l'attente de la fenêtre de
   consentement, partagée par l'ajout et la reconnexion) ;
-- l'arbre des dossiers (`FolderTree`), les messages (`MessageList`,
+- `mailserverLink.ts` et `MailAccessPanel` : l'onglet Accès d'une boîte que le
+  Serveur mail héberge (le panneau du Serveur mail, monté sur sa boîte, par
+  son contrat client `MAILSERVER_CLIENT_PROVIDER`), proposé par
+  `settingsTabApplies` pour ces seuls comptes, et la section « Serveur mail »
+  de l'onglet Général qui y mène ;
+- l'arbre des dossiers (`FolderTree`, avec le menu ⋯ de chaque dossier :
+  tout marquer lu, sous-dossier, renommer, supprimer ; `FolderNamePopup`), les
+  messages (`MessageList`, dont la case de chaque ligne pour un geste en masse,
   `MessagePane`, `MessagePopup`, `MessageInfoPopup`, `ImageSourcesPopup`,
   `ComposePopup`, `ConfirmPopup`) ;
 - les panneaux : `MailAccountSettingsPanel` (Général d'un compte : son nom,
@@ -213,7 +232,9 @@ Côté client (`src/client/`) :
   `viewState.test.ts`.
 
 Les quatre tables `mail_*` datent du socle et sont en allowlist
-(`deveye-feature.json`) : aucune migration du module, aucun `uninstall.sql`.
+(`deveye-feature.json`). Le module porte sa propre séquence
+(`src/server/migrations/`) pour `ft_mail_bodies`, le cache des corps, que
+`src/server/uninstall.sql` démonte.
 
 ## 6. Le partage : un compte, des fenêtres
 
@@ -353,6 +374,11 @@ account.security_tier)` sur un compte projeté le lirait sous la clé d'ici,
   ticket du harnais (`ticket:{...}`, `unlocked` compris) ; en production le
   ticket est un JWT signé et l'étage gardé n'est tendu que si la session l'est
   encore. Ne jamais faire passer un identifiant de session par la charge.
+- **Le cache des corps est un cache : il se jette, il ne se rechiffre pas.**
+  Un changement de palier (`rekeyTier`) et un déplacement d'espace (`move.ts`)
+  le vident, et la relève le refait sous la bonne clé ; l'arbre de `copy.ts` ne
+  le connaît pas. Une colonne de plus dans `ft_mail_bodies` n'a donc jamais à
+  entrer dans `mailTree`.
 - **Un expéditeur d'alerte est un compte ouvert ET actif.** Mettre une boîte
   en pause la retire des expéditeurs, et le canal e-mail qui la visait se dit
   « non prêt » : c'est voulu, une boîte en pause ne part pas toute seule.

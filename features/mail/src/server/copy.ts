@@ -31,7 +31,9 @@ function withoutSecrets(plain: string): string {
  * y figurer (`sealed`), sinon un déplacement la laisse sous l'ancienne clé, où
  * elle devient illisible, et une copie l'emporte sous une clé que la destination
  * n'a pas. Rien ne peut le détecter, un blob chiffré est indistinguable d'un
- * autre.
+ * autre. Les corps en cache (`ft_mail_bodies`) n'y figurent pas à dessein : le
+ * déplacement les jette (`move.ts`) et la relève les refait, une copie n'en a
+ * pas besoin.
  */
 export const mailTree: ItemTree = [
     {

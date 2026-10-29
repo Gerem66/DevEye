@@ -1,15 +1,27 @@
 import {
     mailFolderBackfill,
+    mailFolderCreate,
+    mailFolderDelete,
     mailFolderList,
+    mailFolderPrefetch,
+    mailFolderRename,
     mailFolderReorder,
     mailFolderReset,
     mailFolderSync
 } from '../contracts/commands';
 import type { MailAccountRow, MailFolderRow } from '../contracts/domain';
-import { defineSdkFeature, logFailure, type SdkCipher } from '@deveye/types/sdk/server';
+import { defineSdkFeature, FeatureError, logFailure, type SdkCipher } from '@deveye/types/sdk/server';
 
 import type { MailRepo } from './repo';
-import { backfillFolder, resetFolder, syncAccountFolders, syncOneFolder } from './sync';
+import {
+    backfillFolder,
+    MAIL_BODY_PREFETCH_BATCH,
+    prefetchFolderBodies,
+    purgeStaleBodies,
+    resetFolder,
+    syncAccountFolders,
+    syncOneFolder
+} from './sync';
 import {
     accountCipher,
     accountOfFolder,
@@ -100,6 +112,91 @@ export const mailFolderListFeature = defineSdkFeature<
     }
 });
 
+/** Un dossier que les clients repèrent à son rôle : le serveur refuserait souvent, et l'écran ne le propose pas. */
+function assertPlainFolder(folder: MailFolderRow, gesture: string): void {
+    if (folder.special_use === 'other') return;
+    throw new FeatureError('validation', `Ce dossier a un rôle pour le serveur de mail : ${gesture} impossible.`);
+}
+
+export const mailFolderCreateFeature = defineSdkFeature<
+    MailRepo,
+    typeof mailFolderCreate.command,
+    typeof mailFolderCreate.input,
+    typeof mailFolderCreate.output
+>({
+    ...mailFolderCreate,
+    access: { ...WRITE, item: 'accountId' },
+    mutates: true,
+    handler: async (ctx, input) => {
+        const account = await loadAccount(ctx, input.accountId, 'write');
+        const parent = input.parentId === null ? null : await ctx.repo.folders.findById(input.parentId);
+        if (input.parentId !== null && (!parent || parent.account_id !== account.id)) {
+            throw new FeatureError('not_found', 'Dossier parent introuvable');
+        }
+        await assertMailUnlocked(ctx, account.security_tier);
+        const cipher = await accountCipher(ctx, account);
+        const path = await sessionFor(ctx, account, cipher, async (session) => {
+            const created = await session.createFolder(parent ? [parent.imap_path, input.name] : input.name);
+            await syncAccountFolders(session, ctx.repo, cipher, account.id);
+            return created;
+        });
+        const folder = await ctx.repo.folders.findByImapPath(account.id, path);
+        if (!folder) throw new FeatureError('not_found', 'Le dossier créé n’apparaît pas dans la liste du serveur');
+        return { folder: await toFolderDTO(cipher, folder) };
+    }
+});
+
+export const mailFolderRenameFeature = defineSdkFeature<
+    MailRepo,
+    typeof mailFolderRename.command,
+    typeof mailFolderRename.input,
+    typeof mailFolderRename.output
+>({
+    ...mailFolderRename,
+    access: { ...WRITE, item: accountOfFolder },
+    mutates: true,
+    handler: async (ctx, input) => {
+        const { folder, account } = await loadFolderWithAccount(ctx, input.folderId, 'write');
+        assertPlainFolder(folder, 'le renommer est');
+        await assertMailUnlocked(ctx, account.security_tier);
+        const cipher = await accountCipher(ctx, account);
+        await sessionFor(ctx, account, cipher, async (session) => {
+            const path = await session.renameFolder(folder.imap_path, input.name);
+            // En place d'abord, pour que la relecture le retrouve sous son
+            // nouveau chemin et garde son cache ; ses sous-dossiers, eux, sont
+            // recréés par la relecture.
+            await ctx.repo.folders.rename(folder.id, path, await cipher.encrypt(input.name));
+            await syncAccountFolders(session, ctx.repo, cipher, account.id);
+        });
+        const renamed = await ctx.repo.folders.findById(folder.id);
+        if (!renamed) throw new FeatureError('not_found', 'Dossier introuvable');
+        return { folder: await toFolderDTO(cipher, renamed) };
+    }
+});
+
+export const mailFolderDeleteFeature = defineSdkFeature<
+    MailRepo,
+    typeof mailFolderDelete.command,
+    typeof mailFolderDelete.input,
+    typeof mailFolderDelete.output
+>({
+    ...mailFolderDelete,
+    access: { ...WRITE, item: accountOfFolder },
+    mutates: true,
+    handler: async (ctx, input) => {
+        const { folder, account } = await loadFolderWithAccount(ctx, input.folderId, 'write');
+        assertPlainFolder(folder, 'le supprimer est');
+        await assertMailUnlocked(ctx, account.security_tier);
+        const cipher = await accountCipher(ctx, account);
+        await sessionFor(ctx, account, cipher, async (session) => {
+            await session.deleteFolder(folder.imap_path);
+            // La relecture le retire du cache, avec ses messages.
+            await syncAccountFolders(session, ctx.repo, cipher, account.id);
+        });
+        return { id: folder.id };
+    }
+});
+
 export const mailFolderReorderFeature = defineSdkFeature<
     MailRepo,
     typeof mailFolderReorder.command,
@@ -133,6 +230,27 @@ export const mailFolderSyncFeature = defineSdkFeature<
             syncOneFolder(session, ctx.repo, cipher, folder)
         );
         return { ok: true, ...outcome };
+    }
+});
+
+export const mailFolderPrefetchFeature = defineSdkFeature<
+    MailRepo,
+    typeof mailFolderPrefetch.command,
+    typeof mailFolderPrefetch.input,
+    typeof mailFolderPrefetch.output
+>({
+    ...mailFolderPrefetch,
+    handler: async (ctx, input) => {
+        const { folder, account } = await loadFolderWithAccount(ctx, input.folderId);
+        await assertMailUnlocked(ctx, account.security_tier);
+        const cipher = await accountCipher(ctx, account);
+        // Un lot court par appel : la commande doit répondre bien avant le délai
+        // du client, et c'est l'écran qui enchaîne.
+        const outcome = await sessionFor(ctx, account, cipher, (session) =>
+            prefetchFolderBodies(session, ctx.repo, cipher, folder, MAIL_BODY_PREFETCH_BATCH)
+        );
+        await purgeStaleBodies(ctx.repo, account.id);
+        return outcome;
     }
 });
 

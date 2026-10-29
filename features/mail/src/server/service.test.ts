@@ -29,6 +29,8 @@ interface FakeRepo extends MailRepo {
     accountRows: MailAccountRow[];
     folderRows: MailFolderRow[];
     messageRows: MailMessageRow[];
+    /** Les corps en cache, par identifiant de message : leur texte en clair (le harnais chiffre à l'identité). */
+    bodyRows: Map<number, string>;
     synced: { id: number; status: string; error: string | null }[];
 }
 
@@ -75,6 +77,7 @@ function fakeRepo(accountRows: MailAccountRow[], projections: Record<number, num
     let seq = 0;
     const folderRows: MailFolderRow[] = [];
     const messageRows: MailMessageRow[] = [];
+    const bodyRows = new Map<number, string>();
     const synced: FakeRepo['synced'] = [];
     const visible = (a: MailAccountRow, ws: number) =>
         a.workspace_id === ws || (a.security_tier === 'open' && (projections[a.id] ?? []).includes(ws));
@@ -82,6 +85,7 @@ function fakeRepo(accountRows: MailAccountRow[], projections: Record<number, num
         accountRows,
         folderRows,
         messageRows,
+        bodyRows,
         synced,
         accounts: {
             // Des copies, comme une lecture SQL : la ligne que le service tient
@@ -173,6 +177,7 @@ function fakeRepo(accountRows: MailAccountRow[], projections: Record<number, num
             },
             reorder: unused,
             updateNameEnc: unused,
+            rename: unused,
             async deleteMissing(accountId, keptPaths) {
                 const gone = folderRows.filter((f) => f.account_id === accountId && !keptPaths.includes(f.imap_path));
                 for (const folder of gone) {
@@ -222,6 +227,8 @@ function fakeRepo(accountRows: MailAccountRow[], projections: Record<number, num
                 return row;
             },
             setFlags: unused,
+            listUidsByIds: unused,
+            setFlagsMany: unused,
             async updateFlags(id, flags) {
                 const row = messageRows.find((m) => m.id === id);
                 if (!row) return;
@@ -241,6 +248,26 @@ function fakeRepo(accountRows: MailAccountRow[], projections: Record<number, num
                 }
                 return before - messageRows.length;
             }
+        },
+        bodies: {
+            find: unused,
+            listCachedIds: async (ids) => ids.filter((id) => bodyRows.has(id)),
+            async upsert({ messageId, bodyEnc }) {
+                bodyRows.set(messageId, bodyEnc);
+            },
+            async deleteOutside(folderId, keptIds) {
+                let gone = 0;
+                for (const id of [...bodyRows.keys()]) {
+                    const row = messageRows.find((m) => m.id === id);
+                    if ((!row || row.folder_id === folderId) && !keptIds.includes(id)) {
+                        bodyRows.delete(id);
+                        gone++;
+                    }
+                }
+                return gone;
+            },
+            deleteOlderThan: async () => 0,
+            deleteByAccount: unused
         },
         settings: { get: unused, set: unused }
     };
@@ -283,7 +310,14 @@ function fakeClient(arrivals: RemoteEnvelope[]): SyncClient & { calls: string[] 
         fetchOlderMessages: async () => {
             calls.push('fetchOlderMessages');
             return { messages: [], reachedStart: true };
-        }
+        },
+        fetchBodies: async (_imapPath, uids) => {
+            calls.push(`fetchBodies:${uids.join(',')}`);
+            return uids.map((uid) => ({ uid, raw: Buffer.from(`Subject: Message ${uid}\r\n\r\nCorps ${uid}\r\n`) }));
+        },
+        createFolder: unused,
+        renameFolder: unused,
+        deleteFolder: unused
     };
     // Une passe entière tient sur la même session : c'est ce que la relève fait.
     return { calls, withSession: (_credentials, _onTokenRefreshed, fn) => fn(session) };
@@ -310,7 +344,7 @@ describe('la relève de fond', () => {
 
         // Le seul compte dû : le premier. Ses dossiers et ses enveloppes sont
         // en cache, la relève est consignée, et l'espace prévenu.
-        assert.deepEqual(client.calls, ['listFolders', 'syncFolder:first']);
+        assert.deepEqual(client.calls, ['listFolders', 'syncFolder:first', 'fetchBodies:2,1']);
         assert.deepEqual(
             repo.folderRows.map((f) => [f.account_id, f.imap_path, f.name_enc, f.last_seen_uid, f.total_count]),
             [[1, 'INBOX', 'Boîte de réception', 2, 2]]
@@ -368,6 +402,35 @@ describe('la relève de fond', () => {
             [1]
         );
         assert.deepEqual(repo.synced, [{ id: 1, status: 'ok', error: null }]);
+    });
+
+    it('met en cache le corps des derniers messages de la boîte de réception, et oublie ceux qui sortent de la fenêtre', async () => {
+        const repo = fakeRepo([account({ id: 1 })]);
+        const deps = createTestServiceDeps({ repo });
+        const arrivals = Array.from({ length: 27 }, (_, i) => envelope(i + 1));
+        const client = fakeClient(arrivals);
+        const sync = new MailSync(deps, { mailClient: client });
+        await sync.syncOne(1);
+
+        // Les 25 plus récents, analysés, chiffrés (ici à l'identité) ; les deux
+        // plus anciens n'ont pas de corps.
+        const cachedUids = repo.messageRows.filter((m) => repo.bodyRows.has(m.id)).map((m) => m.uid);
+        assert.deepEqual(cachedUids, arrivals.map((m) => m.uid).slice(2));
+        const body = repo.bodyRows.get(repo.messageRows.find((m) => m.uid === 27)!.id);
+        assert.equal(JSON.parse(body!).text, 'Corps 27\n');
+
+        // Un tour sans arrivée ne redemande aucun corps.
+        await sync.syncOne(1);
+        assert.deepEqual(
+            client.calls.filter((c) => c.startsWith('fetchBodies')),
+            [
+                `fetchBodies:${arrivals
+                    .map((m) => m.uid)
+                    .slice(2)
+                    .reverse()
+                    .join(',')}`
+            ]
+        );
     });
 
     it('un tour sans arrivée ne prévient personne ; une arrivée oui', async () => {
@@ -444,7 +507,11 @@ describe('la relève de fond', () => {
                 fn({
                     listFolders: () => new Promise((resolve) => setTimeout(() => resolve([]), 200)),
                     syncFolder: unused,
-                    fetchOlderMessages: unused
+                    fetchOlderMessages: unused,
+                    fetchBodies: unused,
+                    createFolder: unused,
+                    renameFolder: unused,
+                    deleteFolder: unused
                 })
         };
         const sync = new MailSync(deps, { mailClient: client, accountTimeoutMs: 20 });

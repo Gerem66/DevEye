@@ -45,6 +45,9 @@ declare const styles: {
     readonly feature: string;
     readonly fieldHint: string;
     readonly fillRow: string;
+    readonly folderAdd: string;
+    readonly folderItem: string;
+    readonly folderMenu: string;
     readonly folderName: string;
     readonly folderRow: string;
     readonly folderRowSelected: string;
@@ -89,6 +92,7 @@ declare const styles: {
     readonly messageDate: string;
     readonly messageFrom: string;
     readonly messageList: string;
+    readonly messageListChecking: string;
     readonly messageListSentinel: string;
     readonly messageMeta: string;
     readonly messagePane: string;
@@ -98,6 +102,7 @@ declare const styles: {
     readonly messageRow: string;
     readonly messageRowActions: string;
     readonly messageRowBody: string;
+    readonly messageRowCheck: string;
     readonly messageRowHead: string;
     readonly messageRowMain: string;
     readonly messageRowSelected: string;
@@ -125,6 +130,8 @@ declare const styles: {
     readonly selectedAccountEmail: string;
     readonly selectedAccountName: string;
     readonly selectedAccountText: string;
+    readonly selectionBar: string;
+    readonly selectionCount: string;
     readonly settingsResetBtn: string;
     readonly sidebar: string;
     readonly sidebarSubhead: string;

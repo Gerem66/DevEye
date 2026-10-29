@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
     MAIL_DISPLAY_NAME_MAX_LENGTH,
+    MAIL_FOLDER_NAME_MAX_LENGTH,
     MAIL_SEARCH_QUERY_MAX_LENGTH,
     MAIL_SUBJECT_MAX_LENGTH,
     MAIL_SYNC_INTERVAL_MAX_MINUTES,
@@ -171,6 +172,39 @@ export const mailFolderList = {
     output: z.object({ folders: z.array(mailFolderSchema) })
 };
 
+const folderName = z.string().trim().min(1).max(MAIL_FOLDER_NAME_MAX_LENGTH);
+
+/**
+ * Un dossier créé sur le serveur de mail, à la racine ou sous `parentId`, puis
+ * la liste des dossiers relue : le nouveau est rendu tel que le cache le voit.
+ */
+export const mailFolderCreate = {
+    command: 'mail.folderCreate' as const,
+    input: z.object({ accountId, parentId: folderId.nullable(), name: folderName }),
+    output: z.object({ folder: mailFolderSchema })
+};
+
+/**
+ * Renommé sur le serveur, à la même place dans l'arborescence ; le cache de ses
+ * messages survit. Un dossier spécial (réception, envoyés, corbeille…) ne se
+ * renomme ni ne se supprime : les clients le repèrent à son rôle.
+ */
+export const mailFolderRename = {
+    command: 'mail.folderRename' as const,
+    input: z.object({ folderId, name: folderName }),
+    output: z.object({ folder: mailFolderSchema })
+};
+
+/**
+ * Supprimé sur le serveur de mail. Ce qu'il advient de ses messages est
+ * l'affaire du serveur (Gmail retire un libellé, un IMAP classique les efface).
+ */
+export const mailFolderDelete = {
+    command: 'mail.folderDelete' as const,
+    input: z.object({ folderId }),
+    output: z.object({ id: folderId })
+};
+
 export const mailFolderReorder = {
     command: 'mail.folderReorder' as const,
     input: z.object({ accountId, ids: z.array(folderId).min(1) }),
@@ -194,6 +228,18 @@ export const mailFolderSync = {
         /** Lignes retirées du cache parce que le serveur ne les a plus. */
         removedCount: z.number().int().nonnegative()
     })
+};
+
+/**
+ * Rapatrie, par lots courts, le corps des derniers messages du dossier dans le
+ * cache chiffré (`ft_mail_bodies`), sans rien marquer lu. L'écran enchaîne les
+ * appels tant que `remaining` n'est pas nul, en fond, après avoir ouvert un
+ * dossier ; la relève de fond fait de même pour la boîte de réception.
+ */
+export const mailFolderPrefetch = {
+    command: 'mail.folderPrefetch' as const,
+    input: z.object({ folderId }),
+    output: z.object({ fetched: z.number().int().nonnegative(), remaining: z.number().int().nonnegative() })
 };
 
 /**
@@ -275,10 +321,13 @@ export const mailMessageSearch = {
 };
 
 /**
- * Fetches the body live from IMAP, never from cache, and runs the
- * sanitize/remote-image-block/suspicious-link pipeline server-side.
- * `allowRemoteImages` unblocks images for this single response only; nothing is
- * persisted about the choice. A mailbox with `allowRemoteImages` set never blocks them.
+ * The body, from the cache of recent bodies when it holds it (then the message
+ * is NOT marked read: the client does it with `mail.messageSetFlags`, and the
+ * returned `flags.seen` says so), live from IMAP otherwise (marked read on the
+ * same connection). Either way the sanitize/remote-image-block/suspicious-link
+ * pipeline runs server-side on this response: `allowRemoteImages` unblocks
+ * images for this single response only, nothing is persisted about the choice,
+ * and a mailbox with `allowRemoteImages` set never blocks them.
  */
 export const mailMessageGet = {
     command: 'mail.messageGet' as const,
@@ -286,17 +335,32 @@ export const mailMessageGet = {
     output: z.object({ message: mailMessageSchema })
 };
 
+const mailFlagsPatchSchema = z.object({
+    seen: z.boolean().optional(),
+    flagged: z.boolean().optional(),
+    answered: z.boolean().optional()
+});
+
 export const mailMessageSetFlags = {
     command: 'mail.messageSetFlags' as const,
-    input: z.object({
-        messageId,
-        flags: z.object({
-            seen: z.boolean().optional(),
-            flagged: z.boolean().optional(),
-            answered: z.boolean().optional()
-        })
-    }),
+    input: z.object({ messageId, flags: mailFlagsPatchSchema }),
     output: z.object({ message: mailMessageSummarySchema })
+};
+
+/**
+ * Les mêmes drapeaux, posés d'un coup sur plusieurs messages d'un dossier : la
+ * sélection de l'écran (`messageIds`, réduits à ceux du dossier), ou le dossier
+ * entier côté serveur (`null`), messages jamais relevés compris. Un seul STORE
+ * IMAP ; `count` est le nombre de lignes du cache touchées.
+ */
+export const mailMessageSetFlagsMany = {
+    command: 'mail.messageSetFlagsMany' as const,
+    input: z.object({
+        folderId,
+        messageIds: z.array(messageId).min(1).max(500).nullable(),
+        flags: mailFlagsPatchSchema
+    }),
+    output: z.object({ count: z.number().int().nonnegative() })
 };
 
 export const mailMessageMove = {
@@ -390,14 +454,19 @@ export const mailCommands = [
     mailOAuthFinish,
     mailOAuthProviders,
     mailFolderList,
+    mailFolderCreate,
+    mailFolderRename,
+    mailFolderDelete,
     mailFolderReorder,
     mailFolderSync,
+    mailFolderPrefetch,
     mailFolderBackfill,
     mailFolderReset,
     mailMessageList,
     mailMessageSearch,
     mailMessageGet,
     mailMessageSetFlags,
+    mailMessageSetFlagsMany,
     mailMessageMove,
     mailMessageDelete,
     mailAttachmentDownload,

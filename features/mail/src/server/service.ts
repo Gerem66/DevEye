@@ -4,7 +4,7 @@ import * as mailClient from './client';
 import { MAIL_SYNC_PROGRESS_EVENT, type MailSyncProgress } from '../contracts/domain';
 import { env } from './env';
 import type { MailRepo } from './repo';
-import { syncAccountFolders, syncOneFolder, type SyncClient } from './sync';
+import { prefetchFolderBodies, purgeStaleBodies, syncAccountFolders, syncOneFolder, type SyncClient } from './sync';
 import {
     beginAccountSync,
     endAccountSync,
@@ -164,9 +164,20 @@ export class MailSync {
                                     `Relève interrompue : le dossier « ${folder.imap_path} » n'a pas répondu à temps`
                                 );
                                 count += outcome.newCount + outcome.changedCount + outcome.removedCount;
+                                // Les corps récents de la seule boîte de réception :
+                                // c'est là qu'on ouvre ce qui vient d'arriver. Les
+                                // autres dossiers se préchargent quand on les ouvre.
+                                if (folder.special_use === 'inbox') {
+                                    await withDeadline(
+                                        prefetchFolderBodies(session, this.deps.repo, cipher, folder),
+                                        deadline,
+                                        `Relève interrompue : les corps de « ${folder.imap_path} » n'ont pas répondu à temps`
+                                    );
+                                }
                                 markFolderSynced(accountId);
                                 publish(false);
                             }
+                            await purgeStaleBodies(this.deps.repo, row.id);
                         } finally {
                             // Hors cadence : la trame terminale est la seule que
                             // personne ne peut déduire, et la barre reste posée

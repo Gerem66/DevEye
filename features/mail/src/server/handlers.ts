@@ -19,7 +19,11 @@ import {
 } from './accounts';
 import {
     mailFolderBackfillFeature,
+    mailFolderCreateFeature,
+    mailFolderDeleteFeature,
     mailFolderListFeature,
+    mailFolderPrefetchFeature,
+    mailFolderRenameFeature,
     mailFolderReorderFeature,
     mailFolderResetFeature,
     mailFolderSyncFeature
@@ -33,6 +37,7 @@ import {
     mailMessageMoveFeature,
     mailMessageSearchFeature,
     mailMessageSetFlagsFeature,
+    mailMessageSetFlagsManyFeature,
     mailSendFeature
 } from './messages';
 import type { MailRepo } from './repo';
@@ -57,14 +62,19 @@ export const mailHandlers: readonly SdkFeatureDefinition<MailRepo, string, ZodTy
     mailOAuthStartFeature,
     mailOAuthFinishFeature(),
     mailFolderListFeature,
+    mailFolderCreateFeature,
+    mailFolderRenameFeature,
+    mailFolderDeleteFeature,
     mailFolderReorderFeature,
     mailFolderSyncFeature,
+    mailFolderPrefetchFeature,
     mailFolderBackfillFeature,
     mailFolderResetFeature,
     mailMessageListFeature,
     mailMessageSearchFeature,
     mailMessageGetFeature,
     mailMessageSetFlagsFeature,
+    mailMessageSetFlagsManyFeature,
     mailMessageMoveFeature,
     mailMessageDeleteFeature,
     mailAttachmentDownloadFeature,

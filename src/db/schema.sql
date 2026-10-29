@@ -1048,6 +1048,16 @@ CREATE TABLE `ft_invoicing_settings` (
   CONSTRAINT `fk_ft_invoicing_settings_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+CREATE TABLE `ft_mail_bodies` (
+  `message_id` bigint NOT NULL,
+  `body_enc` mediumtext COLLATE utf8mb4_general_ci NOT NULL,
+  `size_bytes` int NOT NULL,
+  `fetched_at` bigint NOT NULL,
+  PRIMARY KEY (`message_id`),
+  KEY `idx_ft_mail_bodies_fetched` (`fetched_at`),
+  CONSTRAINT `fk_ft_mail_bodies_message` FOREIGN KEY (`message_id`) REFERENCES `mail_messages` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 CREATE TABLE `ft_mailserver_blobs` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `mailbox_id` int NOT NULL,

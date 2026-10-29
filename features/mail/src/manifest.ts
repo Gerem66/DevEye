@@ -47,6 +47,8 @@ export const manifest = {
         feature: [{ id: 'content', label: 'Contenu', icon: 'eye-open' }],
         item: [
             'general',
+            // Seulement sur une boîte que le Serveur mail héberge (`settingsTabApplies`).
+            { id: 'access', label: 'Accès', icon: 'key' },
             { id: 'content', label: 'Contenu', icon: 'eye-open' },
             'sync',
             { id: 'advanced', label: 'Avancé', icon: 'details', requiresWrite: true },

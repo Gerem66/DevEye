@@ -2,6 +2,7 @@ import { MAIL_MESSAGE_PAGE_SIZE, type MailFolderRow } from '../contracts/domain'
 import type { SdkCipher } from '@deveye/types/sdk/server';
 
 import type { MailSession, RemoteEnvelope } from './client';
+import { parseMail } from './parse';
 import type { MailRepo } from './repo';
 import { encryptEnvelope } from './_shared';
 
@@ -18,6 +19,12 @@ export type SyncClient = Pick<typeof import('./client'), 'withSession'>;
 
 /** First-sync cap: how many of a folder's most recent messages to backfill. */
 export const INITIAL_SYNC_LIMIT = 200;
+
+/** Combien de corps récents un dossier garde en cache, et jusqu'à quel poids de source. */
+export const MAIL_BODY_CACHE_PER_FOLDER = 25;
+export const MAIL_BODY_CACHE_MAX_BYTES = 1_048_576;
+/** Au-delà, un corps en cache est oublié même s'il est encore dans la fenêtre : rien de sensible ne traîne. */
+export const MAIL_BODY_CACHE_MAX_AGE_SECONDS = 7 * 86_400;
 
 /**
  * Ce qu'une relève a appris d'un dossier ; la somme des trois décide si le
@@ -208,6 +215,64 @@ export async function syncOneFolder(
     });
 
     return { newCount: result.messages.length, changedCount, removedCount };
+}
+
+/** Combien de corps un appel de `mail.folderPrefetch` rapatrie : assez court pour une commande, le reste suit. */
+export const MAIL_BODY_PREFETCH_BATCH = 8;
+
+export interface PrefetchOutcome {
+    fetched: number;
+    /** Ce qui manque encore dans la fenêtre, au-delà de ce lot. */
+    remaining: number;
+}
+
+/**
+ * Met en cache le corps analysé des `MAIL_BODY_CACHE_PER_FOLDER` messages les
+ * plus récents du dossier (ceux qui manquent, `limit` au plus par appel), et
+ * oublie ceux qui sont sortis de cette fenêtre. Lu par BODY.PEEK : rien n'est
+ * marqué lu. Après la relève du dossier, pour que les arrivées y soient. Un
+ * corps au-delà du plafond de taille est tenté puis omis : il ne compte pas
+ * dans `remaining`, sans quoi l'appelant ne finirait jamais.
+ */
+export async function prefetchFolderBodies(
+    session: MailSession,
+    repo: MailRepo,
+    cipher: SdkCipher,
+    folder: MailFolderRow,
+    limit = MAIL_BODY_CACHE_PER_FOLDER
+): Promise<PrefetchOutcome> {
+    const window = await repo.messages.listFlagsWindow(folder.id, MAIL_BODY_CACHE_PER_FOLDER);
+    await repo.bodies.deleteOutside(
+        folder.id,
+        window.map((row) => row.id)
+    );
+    const cached = new Set(await repo.bodies.listCachedIds(window.map((row) => row.id)));
+    const missing = window.filter((row) => !cached.has(row.id));
+    const batch = missing.slice(0, limit);
+    if (batch.length === 0) return { fetched: 0, remaining: 0 };
+    const bodies = await session.fetchBodies(
+        folder.imap_path,
+        batch.map((row) => row.uid),
+        MAIL_BODY_CACHE_MAX_BYTES
+    );
+    const idByUid = new Map(batch.map((row) => [row.uid, row.id]));
+    const now = Math.floor(Date.now() / 1000);
+    for (const { uid, raw } of bodies) {
+        const messageId = idByUid.get(uid);
+        if (messageId === undefined) continue;
+        await repo.bodies.upsert({
+            messageId,
+            bodyEnc: await cipher.encrypt(JSON.stringify(await parseMail(raw))),
+            sizeBytes: raw.length,
+            fetchedAt: now
+        });
+    }
+    return { fetched: bodies.length, remaining: missing.length - batch.length };
+}
+
+/** Le roulement dans le temps : les corps d'un compte relevés il y a plus de `MAIL_BODY_CACHE_MAX_AGE_SECONDS`. */
+export async function purgeStaleBodies(repo: MailRepo, accountId: number): Promise<number> {
+    return repo.bodies.deleteOlderThan(accountId, Math.floor(Date.now() / 1000) - MAIL_BODY_CACHE_MAX_AGE_SECONDS);
 }
 
 /**

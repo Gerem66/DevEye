@@ -1,3 +1,6 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { MAIL_TRANSPORT_PROVIDER } from '@deveye/types/sdk';
 import type { FeatureServer } from '@deveye/types/sdk/server';
 
@@ -22,12 +25,13 @@ import { mailExternalServices } from './externalServices';
  * `shareTier: 'perItem'` l'exige, et le boot refuse un module qui déclare sans
  * l'offrir.
  *
- * Pas de `migrationsDir` : les tables du module datent du socle et sont dans
- * l'allowlist de `deveye-feature.json` ; une nouvelle table inaugurerait
- * `src/server/migrations/` avec le préfixe `ft_mail_`.
+ * `migrationsDir` : les quatre tables historiques datent du socle et sont dans
+ * l'allowlist de `deveye-feature.json` ; la séquence du module ne porte que les
+ * siennes, au préfixe `ft_mail_` (le cache des corps).
  */
 export const serverEntry: FeatureServer<MailRepo> = {
     env: MAIL_ENV,
+    migrationsDir: path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations'),
     createRepo,
     features: mailHandlers,
     externalServices: mailExternalServices,

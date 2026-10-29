@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef } from 'react';
-import { Button, useLiveOutlines, type LiveOutlineProps } from 'deveye-sdk-client';
+import { Button, Checkbox, useLiveOutlines, type LiveOutlineProps } from 'deveye-sdk-client';
 
 import styles from './style.module.css';
 
@@ -8,6 +8,9 @@ import type { MailMessageSummary } from '../contracts/domain';
 interface MessageListProps {
     messages: MailMessageSummary[];
     selectedId: number | null;
+    /** Les lignes cochées, pour un geste en masse. */
+    checkedIds: ReadonlySet<number>;
+    onToggleChecked: (message: MailMessageSummary) => void;
     onSelect: (message: MailMessageSummary) => void;
     onToggleSeen: (message: MailMessageSummary) => void;
     onToggleFlagged: (message: MailMessageSummary) => void;
@@ -35,6 +38,8 @@ function formatDate(epochSeconds: number): string {
 interface MessageRowProps {
     message: MailMessageSummary;
     selected: boolean;
+    checked: boolean;
+    onToggleChecked: (message: MailMessageSummary) => void;
     /** Quelqu'un lit ce message : sa couleur autour de la ligne. Mémorisé par
      *  `useLiveOutlines`, donc stable tant que personne ne bouge. */
     outline: LiveOutlineProps;
@@ -53,6 +58,8 @@ interface MessageRowProps {
 const MessageRow = memo(function MessageRow({
     message,
     selected,
+    checked,
+    onToggleChecked,
     outline,
     onSelect,
     onToggleSeen,
@@ -80,6 +87,19 @@ const MessageRow = memo(function MessageRow({
             }}
             {...outline}
         >
+            {/* Cocher ne doit ni ouvrir le message (clic) ni le faire par la
+                barre d'espace, que la ligne écoute aussi. */}
+            <span
+                className={styles.messageRowCheck}
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+            >
+                <Checkbox
+                    checked={checked}
+                    onChange={() => onToggleChecked(message)}
+                    aria-label={checked ? 'Retirer de la sélection' : 'Sélectionner'}
+                />
+            </span>
             <div className={styles.messageRowMain}>
                 <div className={styles.messageRowHead}>
                     <span className={styles.messageFrom}>
@@ -134,6 +154,8 @@ const MessageRow = memo(function MessageRow({
 function MessageListImpl({
     messages,
     selectedId,
+    checkedIds,
+    onToggleChecked,
     onSelect,
     onToggleSeen,
     onToggleFlagged,
@@ -175,12 +197,14 @@ function MessageListImpl({
     }
 
     return (
-        <div className={styles.messageList}>
+        <div className={`${styles.messageList} ${checkedIds.size > 0 ? styles.messageListChecking : ''}`}>
             {messages.map((message) => (
                 <MessageRow
                     key={message.id}
                     message={message}
                     selected={selectedId === message.id}
+                    checked={checkedIds.has(message.id)}
+                    onToggleChecked={onToggleChecked}
                     outline={outlineOf(String(message.id))}
                     onSelect={onSelect}
                     onToggleSeen={onToggleSeen}

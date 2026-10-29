@@ -6,7 +6,7 @@ import {
     type FeatureItemsMove
 } from '@deveye/types/sdk/server';
 
-import type { MailRepo } from './repo';
+import { createRepo, type MailRepo } from './repo';
 import { mailTree } from './copy';
 
 /**
@@ -43,6 +43,9 @@ export const mailMove: FeatureItemsMove<MailRepo> = {
     async apply({ q, itemId, fromWorkspaceId, toWorkspaceId, ciphers }) {
         const accountId = Number(itemId);
         await resealCells(q, CELLS, accountId, ciphers);
+        // Les corps en cache ne se rescellent pas : ils se jettent, la relève
+        // les refait sous la clé du nouvel espace.
+        await createRepo(q).bodies.deleteByAccount(accountId);
         // Dossiers et messages ne portent pas d'espace : ils suivent leur compte
         // sans une écriture de plus.
         const next = await q.query<{ next: number }>(

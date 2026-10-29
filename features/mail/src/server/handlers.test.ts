@@ -12,10 +12,12 @@ import {
     mailAccountUpdate,
     mailAttachmentDownload,
     mailFolderList,
+    mailFolderPrefetch,
     mailFolderSync,
     mailGetSettings,
     mailMessageGet,
     mailMessageList,
+    mailMessageSetFlagsMany,
     mailOAuthFinish,
     mailOAuthProviders,
     mailOAuthStart,
@@ -208,6 +210,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
             updateCounts: unused,
             reorder: unused,
             updateNameEnc: unused,
+            rename: unused,
             deleteMissing: unused
         },
         messages: {
@@ -226,11 +229,23 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
             updateEnvelopeEnc: unused,
             upsertEnvelope: unused,
             setFlags: unused,
+            listUidsByIds: async (folderId, ids) =>
+                messageRows.filter((m) => m.folder_id === folderId && ids.includes(m.id)).map((m) => m.uid),
+            setFlagsMany: unused,
             updateFlags: unused,
             moveFolder: unused,
             delete: unused,
             deleteByFolder: unused,
             deleteByFolderUids: unused
+        },
+        bodies: {
+            find: async () => null,
+            listCachedIds: unused,
+            upsert: unused,
+            deleteOutside: unused,
+            deleteOlderThan: unused,
+            // Un changement de palier jette le cache des corps : rien à vérifier ici.
+            deleteByAccount: async () => undefined
         },
         settings: {
             get: async () => settings,
@@ -594,6 +609,23 @@ function folderRow(id: number, accountId: number): MailFolderRow {
     };
 }
 
+describe('mail.messageSetFlagsMany', () => {
+    it('une sélection sans aucun message du dossier ne touche pas le serveur de mail', async () => {
+        // Le compte est en pause : la moindre connexion serait refusée, ce qui
+        // prouve que rien n'est tenté quand la sélection ne vise rien d'ici.
+        const repo = fakeRepo();
+        repo.accountRows.push(row({ id: 8, workspace_id: 1 }));
+        repo.folderRows.push(folderRow(10, 8));
+        const ctx = createTestContext({ repo, pausedItems: { accounts: ['8'] } });
+        const result = await handlerFor(mailMessageSetFlagsMany)(ctx, {
+            folderId: 10,
+            messageIds: [999],
+            flags: { seen: true }
+        });
+        assert.deepEqual(result, { count: 0 });
+    });
+});
+
 describe('la pause d’offre', () => {
     const isPausedRefusal = (e: unknown): boolean =>
         e instanceof FeatureError &&
@@ -652,12 +684,17 @@ describe('la pause d’offre', () => {
         );
         assert.equal(reached, false);
         await assert.rejects(handlerFor(mailFolderSync)(ctx, { folderId: 10 }), isPausedRefusal);
+        await assert.rejects(handlerFor(mailFolderPrefetch)(ctx, { folderId: 10 }), isPausedRefusal);
         await assert.rejects(
             handlerFor(mailMessageGet)(ctx, { messageId: 20, allowRemoteImages: false }),
             isPausedRefusal
         );
         await assert.rejects(
             handlerFor(mailAttachmentDownload)(ctx, { messageId: 20, attachmentId: 'att-0' }),
+            isPausedRefusal
+        );
+        await assert.rejects(
+            handlerFor(mailMessageSetFlagsMany)(ctx, { folderId: 10, messageIds: null, flags: { seen: true } }),
             isPausedRefusal
         );
         await assert.rejects(
