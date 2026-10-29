@@ -1,5 +1,4 @@
-import { useState, type ReactNode } from 'react';
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import type { ReactNode } from 'react';
 
 import ErrorNote, { type ErrorNoteInput } from '@/Components/ErrorNote';
 
@@ -44,41 +43,6 @@ export function Section({ title, description, active, total, children }: Section
             </header>
             <div className={styles.rows}>{children}</div>
         </section>
-    );
-}
-
-const REVEAL = { duration: 0.25, ease: [0.22, 1, 0.36, 1] } as const;
-
-interface RevealProps {
-    open: boolean;
-    children: ReactNode;
-}
-
-/**
- * Les rangées qui n'ont de sens que la protection au-dessus en place : elles
- * se déplient avec elle et se replient quand elle s'éteint. Le débordement
- * n'est masqué que pendant le geste, pour ne pas rogner le liseré de focus
- * d'une commande au repos.
- */
-export function Reveal({ open, children }: RevealProps) {
-    const reduced = useReducedMotion() === true;
-    const [settled, setSettled] = useState(true);
-    return (
-        <AnimatePresence initial={false}>
-            {open && (
-                <motion.div
-                    style={{ overflow: settled ? 'visible' : 'hidden' }}
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={reduced ? { duration: 0 } : REVEAL}
-                    onAnimationStart={() => setSettled(false)}
-                    onAnimationComplete={() => setSettled(true)}
-                >
-                    {children}
-                </motion.div>
-            )}
-        </AnimatePresence>
     );
 }
 

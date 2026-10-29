@@ -28,7 +28,8 @@ import {
 import type { FeatureProps } from '../types';
 import { EmailCheckRow, LoginHistoryRow, SmsCheckRow, TrustedBrowsersRow } from './LoginChecks';
 import { MinutesEditor } from './MinutesEditor';
-import { Reveal, Row, Section } from './Row';
+import Reveal from '@/Components/Reveal';
+import { Row, Section } from './Row';
 import { SecurityDialog } from './SecurityDialog';
 import styles from './Security.module.css';
 

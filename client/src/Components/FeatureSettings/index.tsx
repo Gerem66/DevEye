@@ -20,6 +20,7 @@ import { flashKey, onFlash } from './flash';
 import { SettingsFooterContext } from './footer';
 import SideNav, { type SideNavItem } from './SideNav';
 import { isModuleShareWired, moduleClient, moduleManifest } from '@/sdk/registry';
+import type { SdkSettingsScope } from '@deveye/types/sdk/client';
 import {
     isSystemScope,
     liveSettingsValue,
@@ -61,6 +62,15 @@ export function useSettingsSections(shellScope: ShellScope): SectionDef[] {
 
 const SYSTEM_SECTIONS: SectionDef[] = [{ id: 'notifications', label: 'Notifications', icon: 'mail' }];
 
+const NO_TABS: ReadonlySet<string> = new Set();
+
+/** La portée telle qu'un module la reçoit, sans `feature` ni `shareable`, qui sont l'affaire de la coquille. */
+function sdkScopeOf(scope: SettingsScope): SdkSettingsScope {
+    if (scope.kind === 'feature') return { kind: 'feature' };
+    if (scope.kind === 'record') return { kind: 'record', recordId: scope.recordId, recordLabel: scope.recordLabel };
+    return { kind: 'item', itemId: scope.itemId, itemLabel: scope.itemLabel };
+}
+
 /** Les sections d'une fonctionnalité ou d'un élément ; aucune sans portée. */
 function useFeatureSections(scope: SettingsScope | null): SectionDef[] {
     const permissions = useWorkspacePermissions();
@@ -75,6 +85,34 @@ function useFeatureSections(scope: SettingsScope | null): SectionDef[] {
         permissions.canFeature(feature, 'write', scope?.kind === 'item' ? scope.itemId : undefined);
     const canRestrict = feature !== undefined && permissions.canManageItemGrants(feature);
     const isShared = active?.kind === 'shared';
+
+    // Un onglet qui ne vaut que pour certains éléments (`settingsTabApplies`) :
+    // caché tant que le module n'a pas répondu, et s'il répond non.
+    const decide = feature !== undefined ? moduleClient(feature)?.settingsTabApplies : undefined;
+    const scopeId = scope?.kind === 'item' ? scope.itemId : scope?.kind === 'record' ? scope.recordId : null;
+    const [hiddenTabs, setHiddenTabs] = useState<ReadonlySet<string>>(NO_TABS);
+    useEffect(() => {
+        const custom = scope
+            ? (moduleManifest(scope.feature)?.settings?.[scope.kind] ?? []).flatMap((tab) =>
+                  typeof tab === 'object' ? [tab.id] : []
+              )
+            : [];
+        if (!decide || !scope || custom.length === 0) {
+            setHiddenTabs(NO_TABS);
+            return;
+        }
+        setHiddenTabs(new Set(custom));
+        let live = true;
+        const sdkScope = sdkScopeOf(scope);
+        void Promise.all(custom.map(async (id) => [id, await decide(id, sdkScope).catch(() => false)] as const)).then(
+            (answers) => {
+                if (live) setHiddenTabs(new Set(answers.filter(([, applies]) => !applies).map(([id]) => id)));
+            }
+        );
+        return () => {
+            live = false;
+        };
+    }, [decide, scope?.feature, scope?.kind, scopeId]);
 
     return useMemo(() => {
         if (!scope || !canRead) return [];
@@ -131,7 +169,7 @@ function useFeatureSections(scope: SettingsScope | null): SectionDef[] {
         if (scope.kind === 'record') {
             for (const tab of manifest?.settings?.record ?? []) {
                 if (tab === 'general') sections.push({ id: 'general', label: 'Général', icon: 'settings' });
-                else if (!(tab.requiresWrite && !canWrite)) {
+                else if (!(tab.requiresWrite && !canWrite) && !hiddenTabs.has(tab.id)) {
                     sections.push({ id: tab.id, label: tab.label, icon: tab.icon ?? 'settings' });
                 }
             }
@@ -162,6 +200,7 @@ function useFeatureSections(scope: SettingsScope | null): SectionDef[] {
                     // montre des valeurs reste, en lecture seule : elles valent
                     // d'être lues.
                     if (tab.requiresWrite && !canWrite) continue;
+                    if (hiddenTabs.has(tab.id)) continue;
                     sections.push({ id: tab.id, label: tab.label, icon: tab.icon ?? 'settings' });
                 }
             }
@@ -189,7 +228,7 @@ function useFeatureSections(scope: SettingsScope | null): SectionDef[] {
         pushProjectsSection(sections);
         pushSharingSections(sections);
         return sections;
-    }, [scope?.feature, scope?.kind, canRead, canWrite, canRestrict, isShared, permissions]);
+    }, [scope?.feature, scope?.kind, canRead, canWrite, canRestrict, isShared, permissions, hiddenTabs]);
 }
 
 /** Les sections que la coquille rend elle-même, native ou module. */

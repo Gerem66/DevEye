@@ -45,6 +45,8 @@ export { default as ActionMenu } from '@/Components/ActionMenu';
 export type { ActionMenuItem, ActionMenuProps } from '@/Components/ActionMenu';
 export { default as CopyButton } from '@/Components/CopyButton';
 export type { CopyButtonProps } from '@/Components/CopyButton';
+/** Un bloc qui se déplie et se replie avec l'état qui lui donne un sens. */
+export { default as Reveal } from '@/Components/Reveal';
 export { default as Slider } from '@/Components/Slider';
 export { StatusBadge } from '@/Components/StatusBadge';
 export { default as Switch } from '@/Components/Switch';
