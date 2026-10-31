@@ -2,17 +2,18 @@
 
 Une page d'administration (menu du compte, réservée à l'administrateur du
 site) pour vérifier ce serveur tel qu'il tourne, production comprise, sans rien
-y laisser. Cinq sections : les parcours complets (essais de bout en bout), les
-mesures, le testeur de mails, le suivi d'usage de DevEye dans Audience, et la
-galerie des composants.
+y laisser. Six sections : les parcours complets (essais de bout en bout), les
+mesures, la montée en charge, le testeur de mails, le suivi d'usage de DevEye
+dans Audience, et la galerie des composants.
 
 Le code : les commandes `debug.*` dans `src/features/debug/` ne font que
 valider, déléguer et auditer ; tout vit dans `src/Services/debug/`, un
-sous-dossier par section (`e2e`, `bench`, `mail`, `selfTracking`), qui ne
-s'importent pas entre eux. Seul `runs.ts` est partagé : un essai à la fois sur
-ce serveur, bout en bout et mesures confondus, lancé hors de la commande (qui
-rend son identifiant aussitôt) et relu chaque seconde par la page. Le client
-est dans `client/src/Features/Debug/`.
+sous-dossier par section (`e2e`, `bench`, `load`, `mail`, `selfTracking`), qui
+ne s'importent pas entre eux, sauf `load`, bâti sur le harnais des parcours
+(comptes jetables, client, porte, balayage). `runs.ts` est partagé : un essai à
+la fois sur ce serveur, toutes sortes confondues, lancé hors de la commande
+(qui rend son identifiant aussitôt) et relu chaque seconde par la page. Le
+client est dans `client/src/Features/Debug/`.
 
 ## 1. Les parcours complets
 
@@ -93,7 +94,70 @@ Argon2 occupe le pool de threads : une ou trois fois seulement.
 Ajouter une sonde : une entrée de `PROBES` (`bench/probes.ts`). Elle doit être
 bornée, et ne rien laisser (l'écriture se fait dans une transaction annulée).
 
-## 3. Le testeur de mails
+## 3. La montée en charge
+
+Combien d'utilisateurs simultanés ce serveur tient, en ordre de grandeur : des
+utilisateurs simulés arrivent petit à petit jusqu'au nombre visé (10 à 500), sur
+la durée choisie (1 à 30 min), puis tiennent 30 s de palier. La page en tire le
+moment où les temps de réponse se dégradent, celui où le serveur sature, et ce
+qui l'occupe à chaque instant.
+
+### Un utilisateur simulé
+
+Un compte jetable, ouvert comme ceux des parcours (`users.e2e_run`, domaine
+`.invalid`), qui fait ce que fait une page : la vraie route de connexion,
+`/api/auth/me`, la socket, puis l'accueil (les lectures de session et la tuile
+de chaque fonctionnalité). Ensuite, toutes les 2 à 8 s, il ouvre une vue au
+hasard, ou une fois sur cinq écrit une note (ajout, modification, archive,
+suppression, comme le scénario de Notes). Sans Notes, il ne fait que lire.
+
+Les lectures se trouvent seules dans le registre des commandes
+(`load/actions.ts`) : un `*.count` (une tuile) ou un `*.list` (une vue), sans
+`mutates`, hors administration, dont l'entrée accepte `{}`. Un module nouveau
+est couvert sans rien déclarer.
+
+Un seul hachage Argon2 pour tous les comptes de l'essai : la connexion vérifie
+toujours le mot de passe, mais un hachage par compte pèserait sur la mesure sans
+rien représenter. Quatre arrivées en vol au plus, pour la même raison.
+
+### Ce qui se mesure
+
+Par seau de 5 s (10 s au-delà de 5 min de montée) : utilisateurs connectés,
+sockets du serveur, commandes, refus, erreurs, médiane et p95 des temps de
+réponse vus par les utilisateurs, arrivées, et le relevé du serveur des mesures
+(`systemWatch` : CPU, boucle, mémoire).
+
+Le temps par fonctionnalité vient de `Services/featureLoad.ts`, inerte tant que
+la montée ne l'écoute pas. Il est branché à deux endroits : autour du handler
+dans le dispatcheur (la fonctionnalité de la commande, sinon son préfixe) et
+autour de chaque tour d'un `createTicker` (les tâches de fond des modules). Il
+compte tout le serveur, vrais utilisateurs compris. C'est du temps écoulé,
+attente de la base comprise, pas du CPU : il dit ce qui occupe le serveur, pas
+ce qui chauffe le processeur.
+
+- **Référence** : la médiane des p95 des trois premiers seaux mesurés.
+- **Dégradation** : le premier de deux seaux de suite où le p95 dépasse le
+  double de la référence, et 100 ms de plus au moins.
+- **Saturation** : deux seaux de suite au-delà d'un p95 de 3 s, de 5 %
+  d'erreurs ou d'1 s de retard de boucle. La montée s'arrête là : c'est un
+  résultat, l'essai ne passe pas en échec pour autant.
+
+Limite à connaître : les utilisateurs simulés tournent dans le processus du
+serveur. Leur coût est faible devant celui des commandes, mais le vrai seuil
+est un peu plus haut que celui mesuré.
+
+### Rien ne reste
+
+Comme pour les parcours : la montée balaie avant de commencer, ferme les
+sockets à la fin, puis `sweepTestResidue` supprime chaque compte par le vrai
+chemin (notes et espaces compris), ses journaux et ce que les modules gardent
+ailleurs. `residueAfter` doit valoir zéro, sinon l'essai est en échec. Un arrêt
+en pleine montée laisse le balayage du démarrage finir le travail. Les bornes
+viennent de là : 500 comptes au plus (le motif des adresses d'essai a trois
+chiffres) et 30 min de montée au plus (un compte d'essai de plus d'une heure
+est balayé par tout serveur de la base).
+
+## 4. Le testeur de mails
 
 Tous les mails que ce serveur sait envoyer, construits par la même fonction
 qu'en vrai sur des données d'exemple, envoyés à une adresse saisie depuis leur
@@ -109,7 +173,7 @@ règle. Un mail du serveur rend un `SdkAccountMailMessage` (la mise en page est
 celle de `accountMail.send`, `renderAccountMail`), un mail d'espace le message
 du transport Mail.
 
-## 4. Le suivi d'usage
+## 5. Le suivi d'usage
 
 L'usage de DevEye lui-même, dans un site Audience de l'instance : les pages
 ouvertes, les actions faites (chaque commande qui écrit, depuis le
@@ -157,7 +221,7 @@ les oublie avec le reste.
   tous requis), déclaré strict : c'est ce que sa fenêtre « Écris-moi » envoie,
   et les messages se lisent dans les retours du site, dans Audience.
 
-## 5. La galerie
+## 6. La galerie
 
 Tous les composants de l'interface, en vrai et manipulables, dans chaque mode
 de rendu et désactivés. Les jetons du thème et les icônes sont lus dans les

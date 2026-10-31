@@ -7,7 +7,7 @@ import type { AuditLog } from '@/Services/AuditLog';
 import { maintenance } from '@/Services/maintenance';
 import { env } from '@/Utils/Env';
 import type { Launcher, RunRegistry } from '../runs';
-import type { Remover } from './accounts';
+import { removerOf, type Remover } from './accounts';
 import { runGate } from './gate';
 import { newRunId, testIdentity } from './identity';
 import { pendingReport, runScenario } from './runner';
@@ -23,6 +23,12 @@ const PRIORITY_ON =
 /** Ce qui empêche tout essai sur ce serveur, dit tel quel dans la page. */
 const blockedBy = (): string | null =>
     maintenance.siteDown() ? SITE_DOWN : maintenance.priority() ? PRIORITY_ON : null;
+
+/** Avant d'ouvrir des comptes d'essai, ici ou dans la montée en charge. */
+export function assertRunnable(): void {
+    const blocked = blockedBy();
+    if (blocked) throw new FeatureError(maintenance.siteDown() ? 'maintenance' : 'validation', blocked);
+}
 
 export interface E2eServiceDeps extends E2eDeps {
     runs: RunRegistry;
@@ -43,11 +49,6 @@ export function createE2e(deps: E2eServiceDeps) {
         )
     ];
 
-    const removerOf = async (launcher: Launcher): Promise<Remover> => {
-        const row = await deps.db.users.findById(launcher.id);
-        return { userId: launcher.id, workspaceId: row?.personal_workspace_id ?? 0 };
-    };
-
     return {
         async catalog(): Promise<{ scenarios: DebugE2eScenario[]; residue: number; blocked: string | null }> {
             const list = await Promise.all(
@@ -66,13 +67,12 @@ export function createE2e(deps: E2eServiceDeps) {
         },
 
         async start(launcher: Launcher, ids: readonly string[]): Promise<number> {
-            const blocked = blockedBy();
-            if (blocked) throw new FeatureError(maintenance.siteDown() ? 'maintenance' : 'validation', blocked);
+            assertRunnable();
             const all = scenarios();
             const selected = all.filter((sc) => ids.includes(sc.id));
             const unknown = ids.filter((id) => !all.some((sc) => sc.id === id));
             if (unknown.length > 0) throw new FeatureError('validation', `Scénario inconnu : ${unknown.join(', ')}`);
-            const by = await removerOf(launcher);
+            const by = await removerOf(deps.db, launcher);
             const report: DebugE2eReport = {
                 kind: 'e2e',
                 scenarios: selected.map(pendingReport),
@@ -130,7 +130,7 @@ export function createE2e(deps: E2eServiceDeps) {
 
         /** Le ménage à la demande : jamais pendant un essai. */
         async sweep(launcher: Launcher): Promise<number> {
-            const by = await removerOf(launcher);
+            const by = await removerOf(deps.db, launcher);
             return deps.runs.withLock(async () => (await sweepTestResidue(deps, by)).removed);
         },
 

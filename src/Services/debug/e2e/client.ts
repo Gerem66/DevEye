@@ -188,6 +188,11 @@ export function createTestClient({
             });
         },
 
+        /** La socket est ouverte : sans elle, la page n'a plus de session. */
+        connected(): boolean {
+            return socket?.readyState === WebSocket.OPEN;
+        },
+
         close(): void {
             failAll('Socket fermée');
             if (socket && socket.readyState <= WebSocket.OPEN) socket.close();

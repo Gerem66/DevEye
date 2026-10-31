@@ -14,15 +14,18 @@ import { appVersion } from '@/version';
 import { createBench, type Bench } from './bench';
 import { createE2e, type E2e } from './e2e';
 import { mailbox } from './e2e/mailbox';
+import { createLoad, type Load } from './load';
+import type { CommandSpec } from './load/actions';
 import { createMailTester, type MailTester } from './mail';
 import { createRunRegistry, type RunRegistry } from './runs';
 import { selfTracking } from './selfTracking';
 
 /**
- * La page « Tests et débogage » : essais de bout en bout, mesures, testeur de
- * mails et suivi d'usage. Les commandes (`features/debug`) ne font que
- * valider et déléguer ici ; chaque sous-dossier est indépendant des autres,
- * sauf `runs`, que les essais et les mesures partagent.
+ * La page « Tests et débogage » : essais de bout en bout, mesures, montée en
+ * charge, testeur de mails et suivi d'usage. Les commandes (`features/debug`)
+ * ne font que valider et déléguer ici ; chaque sous-dossier est indépendant
+ * des autres, sauf `runs`, que tous les essais partagent, et `load`, qui
+ * s'appuie sur le harnais des parcours (`e2e`).
  */
 
 export interface DebugDeps {
@@ -35,6 +38,8 @@ export interface DebugDeps {
     /** L'expéditeur du serveur, derrière la boîte des essais. */
     mailer: Mailer;
     signupOpen(): Promise<boolean>;
+    /** Les commandes du dispatcheur, passées ici : le registre importe cette page. */
+    commands: readonly CommandSpec[];
 }
 
 export interface DebugHost {
@@ -42,6 +47,7 @@ export interface DebugHost {
     runs: RunRegistry;
     bench: Bench;
     e2e: E2e;
+    load: Load;
     mail: MailTester;
     instance(): { origin: string; environment: 'dev' | 'test' | 'prod'; version: string; startedAt: number };
 }
@@ -81,6 +87,17 @@ export function createDebugService(deps: DebugDeps): FeatureService {
             agentsOnline: () => deps.hub.onlineCount()
         }),
         e2e,
+        load: createLoad({
+            db: deps.db,
+            live: deps.live,
+            logger: deps.logger,
+            audit: deps.audit,
+            runs,
+            origins: ORIGINS,
+            commands: deps.commands,
+            wsSockets: () => deps.live.socketCount(),
+            agentsOnline: () => deps.hub.onlineCount()
+        }),
         mail: createMailTester({ db: deps.db, mailer: deps.mailer }),
         instance: () => ({ origin: ORIGINS.app, environment: env.ENVIRONMENT, version: appVersion(), startedAt })
     };

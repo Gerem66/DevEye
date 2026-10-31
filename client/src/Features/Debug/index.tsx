@@ -9,16 +9,18 @@ import { useResourceVersion } from '@/stores/invalidation';
 import Gallery from './Gallery/Gallery';
 import BenchSection from './sections/BenchSection';
 import E2eSection from './sections/E2eSection';
+import LoadSection from './sections/LoadSection';
 import MailSection from './sections/MailSection';
 import TrackingSection from './sections/TrackingSection';
 import styles from './Debug.module.css';
 
-type SectionId = 'e2e' | 'bench' | 'mail' | 'tracking' | 'gallery';
+type SectionId = 'e2e' | 'bench' | 'load' | 'mail' | 'tracking' | 'gallery';
 type Overview = CommandOutput<'debug.overview'>;
 
 const SECTIONS: SideNavItem<SectionId>[] = [
     { id: 'e2e', label: 'Parcours complets', icon: 'play' },
     { id: 'bench', label: 'Mesures', icon: 'clock' },
+    { id: 'load', label: 'Montée en charge', icon: 'users' },
     { id: 'mail', label: 'Mails', icon: 'mail' },
     { id: 'tracking', label: 'Suivi d’usage', icon: 'activity' },
     { id: 'gallery', label: 'Composants', icon: 'appearance' }
@@ -107,6 +109,12 @@ export default function FeatureDebug() {
                 <div className={styles.panel}>
                     {section === 'e2e' && <E2eSection activeRunId={active?.kind === 'e2e' ? active.id : null} />}
                     {section === 'bench' && <BenchSection activeRunId={active?.kind === 'bench' ? active.id : null} />}
+                    {section === 'load' && (
+                        <LoadSection
+                            activeRunId={active?.kind === 'load' ? active.id : null}
+                            production={overview?.instance.environment === 'prod'}
+                        />
+                    )}
                     {section === 'mail' && <MailSection />}
                     {section === 'tracking' && <TrackingSection />}
                     {section === 'gallery' && <Gallery />}

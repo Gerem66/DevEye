@@ -1,6 +1,7 @@
 import type { FeatureDefinition } from '../_define';
 import { debugBenchCatalogFeature, debugBenchStartFeature, debugPingFeature } from './bench';
 import { debugE2eCatalogFeature, debugE2eStartFeature, debugE2eSweepFeature } from './e2e';
+import { debugLoadStartFeature } from './load';
 import { debugMailCatalogFeature, debugMailPreviewFeature, debugMailSendFeature } from './mail';
 import {
     debugTrackingClearFeature,
@@ -23,6 +24,7 @@ export const debugFeatures: FeatureDefinition<string, any, any>[] = [
     debugBenchCatalogFeature,
     debugBenchStartFeature,
     debugPingFeature,
+    debugLoadStartFeature,
     debugMailCatalogFeature,
     debugMailPreviewFeature,
     debugMailSendFeature,

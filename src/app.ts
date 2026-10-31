@@ -403,7 +403,8 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
             audit,
             logger,
             mailer,
-            signupOpen: () => signup.isOpen()
+            signupOpen: () => signup.isOpen(),
+            commands: featureHandlers
         })
     ];
     // Lue avant tout démarrage : un service en arrêt complet ne démarre pas, et

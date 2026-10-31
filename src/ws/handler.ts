@@ -47,6 +47,7 @@ import { admission } from '@/Services/admission';
 import { selfTracking } from '@/Services/debug/selfTracking';
 import { enterSessionCommand, exitSessionCommand, forgetSessionDek } from '@/Services/SecureStore';
 import { featureHealth } from '@/Services/featureHealth';
+import { featureLoad } from '@/Services/featureLoad';
 import { maintenance } from '@/Services/maintenance';
 import { describeError, systemAlerts } from '@/Services/systemAlerts';
 import { env, isDev } from '@/Utils/Env';
@@ -426,7 +427,9 @@ export async function registerWS(
                 }
                 for (const c of def.access?.capabilities ?? []) assertCan(c);
 
-                const result = await def.handler(ctx, inputParse.data);
+                const result = await featureLoad.time(def.access?.feature ?? defaultCategory, () =>
+                    def.handler(ctx, inputParse.data)
+                );
                 progress.close();
                 const outputParse = def.output.safeParse(result);
                 if (!outputParse.success) {

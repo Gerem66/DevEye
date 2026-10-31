@@ -33,3 +33,9 @@ export function median(values: readonly number[]): number | null {
     const mid = Math.floor(sorted.length / 2);
     return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
 }
+
+/** « 2:05 » : les secondes écoulées depuis le début d'un essai. */
+export function formatClock(seconds: number): string {
+    const s = Math.round(seconds);
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}

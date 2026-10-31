@@ -237,7 +237,7 @@ CREATE TABLE `database_connections` (
 CREATE TABLE `debug_runs` (
   `id` int NOT NULL AUTO_INCREMENT,
   `origin` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
-  `kind` enum('e2e','bench') COLLATE utf8mb4_general_ci NOT NULL,
+  `kind` enum('e2e','bench','load') COLLATE utf8mb4_general_ci NOT NULL,
   `status` enum('running','passed','failed','aborted') COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'running',
   `started` bigint NOT NULL,
   `finished` bigint DEFAULT NULL,

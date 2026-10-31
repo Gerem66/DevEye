@@ -3,6 +3,7 @@ import {
     debugRunSchema,
     type DebugBenchReport,
     type DebugE2eReport,
+    type DebugLoadReport,
     type DebugRun,
     type DebugRunKind
 } from '@deveye/types';
@@ -11,7 +12,7 @@ import type { Database } from '@/db';
 import type { DebugRunRow, DebugRunStatus } from '@/db/repos/debug';
 import { FeatureError } from '@/features/_define';
 
-export type RunReport = DebugE2eReport | DebugBenchReport;
+export type RunReport = DebugE2eReport | DebugBenchReport | DebugLoadReport;
 
 export interface Launcher {
     id: number;
@@ -70,7 +71,7 @@ export interface RunRegistryDeps {
 }
 
 /**
- * Un seul essai à la fois sur ce serveur, bout en bout et mesures confondus :
+ * Un seul essai à la fois sur ce serveur, toutes sortes confondues :
  * deux essais mêlés fausseraient les chiffres de l'un et les balayages de
  * l'autre. L'essai tourne hors de la commande qui le lance, et son rapport
  * s'écrit en base à la fin, quoi qu'il arrive.

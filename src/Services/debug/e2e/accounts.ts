@@ -18,17 +18,28 @@ export interface Remover {
     workspaceId: number;
 }
 
-/** Un compte jetable, créé par le même chemin qu'une inscription. */
+/** Qui supprime au nom d'un administrateur : lui, depuis son espace personnel. */
+export async function removerOf(db: Database, launcher: { id: number }): Promise<Remover> {
+    const row = await db.users.findById(launcher.id);
+    return { userId: launcher.id, workspaceId: row?.personal_workspace_id ?? 0 };
+}
+
+/**
+ * Un compte jetable, créé par le même chemin qu'une inscription. `passwordHash`
+ * : le hachage du mot de passe de l'identité, quand plusieurs comptes le
+ * partagent (un hachage Argon2 par compte pèserait sur la mesure).
+ */
 export async function openTestAccount(
     db: Database,
-    identity: TestIdentity
+    identity: TestIdentity,
+    passwordHash?: string
 ): Promise<{ userId: number; workspaceId: number }> {
-    const passwordHash = await hashPassword(identity.password);
+    const hash = passwordHash ?? (await hashPassword(identity.password));
     const { user, personalWorkspaceId } = await db.transaction((tx) =>
         openAccount(tx, {
             email: identity.email,
             username: identity.username,
-            passwordHash,
+            passwordHash: hash,
             role: 'user',
             termsAcceptedAt: null
         })

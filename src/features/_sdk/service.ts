@@ -23,6 +23,7 @@ import { renderAccountMail } from '@/Services/mailLayout';
 import { verifyModuleTicket } from '@/auth/jwt';
 import { maintenance } from '@/Services/maintenance';
 import { featureHealth } from '@/Services/featureHealth';
+import { featureLoad } from '@/Services/featureLoad';
 import { adminPending } from '@/Services/adminPending';
 import { describeError, systemAlerts } from '@/Services/systemAlerts';
 import type { Logger } from 'pino';
@@ -339,7 +340,7 @@ export function createServiceDeps(
             const health = featureHealth.ticker(manifest.id);
             const run = async (): Promise<void> => {
                 try {
-                    await tick();
+                    await featureLoad.time(manifest.id, tick);
                     health.succeeded();
                 } catch (e) {
                     health.failed();
