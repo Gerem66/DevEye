@@ -850,6 +850,12 @@ export function Timeline({
                                         }}
                                     >
                                         {card.title || 'Sans titre'}
+                                        <MemberStack
+                                            userId={card.assigneeUserId}
+                                            others={card.checklist.map((i) => i.assigneeUserId)}
+                                            size={16}
+                                            max={3}
+                                        />
                                     </button>
                                 </li>
                             );
