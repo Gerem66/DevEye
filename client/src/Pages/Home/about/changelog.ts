@@ -12,6 +12,25 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: readonly ChangelogEntry[] = [
     {
+        version: '0.25.4',
+        date: '2026-11-01',
+        changes: [
+            {
+                kind: 'added',
+                text: 'CloudSync : un fichier refusé à cause de son nom se renomme depuis le Journal, avec un nom compatible déjà proposé, et « Supprimer le fichier » fonctionne désormais sur ces noms'
+            },
+            {
+                kind: 'improved',
+                text: 'CloudSync : les petits fichiers se transfèrent bien plus vite, un fichier en erreur ne relance plus une analyse complète à chaque synchronisation, et la suppression d’un grand partage montre son avancement au lieu d’échouer'
+            },
+            {
+                kind: 'improved',
+                text: 'Projets : sur la frise, un jalon posé se déplace à la souris et les cartes sans date se rangent par jalon avec leurs responsables ; la page publique occupe toute la largeur de l’écran'
+            },
+            { kind: 'improved', text: 'Mots de passe : la recherche est prête à la saisie dès l’ouverture du coffre' }
+        ]
+    },
+    {
         version: '0.25.3',
         date: '2026-10-29',
         changes: [
