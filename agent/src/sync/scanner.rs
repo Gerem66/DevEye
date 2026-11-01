@@ -24,7 +24,8 @@ use crate::sync::e2e::{ContentHasher, ShareKeys};
 use crate::sync::fingerprint::{Fingerprint, FingerprintEntry};
 use crate::sync::index_cache::{CacheEntry, IndexCache};
 use crate::sync::paths::{
-    is_reserved_top, rel_path_lossy, rel_path_of, rel_path_problem, REL_PATH_MAX_BYTES,
+    confined_join, is_reserved_top, rel_path_lossy, rel_path_of, rel_path_problem,
+    REL_PATH_MAX_BYTES,
 };
 use crate::sync::transfer::{sweep_partials, sweep_trash, PARTIAL_KEEP_DAYS};
 use crate::sync::watcher::Touched;
@@ -108,6 +109,9 @@ pub struct ScanRequest {
     pub expected: Option<String>,
     /// Ce que le watcher a vu bouger, `None` sans watcher prêt.
     pub touched: Option<Arc<Mutex<Touched>>>,
+    /// Paths the server holds in error: the reply restates them even when
+    /// unchanged, and `expected` leaves their lines out.
+    pub paths: Vec<String>,
 }
 
 /// Au-delà, les dossiers à relister coûteraient plus que tout parcourir.
@@ -140,12 +144,20 @@ pub fn spawn_scan(
             .map(|t| std::mem::take(&mut *t.lock().expect("touched lock")));
         let partial = snapshot.as_ref().filter(|t| !request.full && t.complete);
         let result = match partial {
-            Some(touched) => delta_scan(&session_id, &assignment, keys.as_deref(), touched, &tx),
+            Some(touched) => delta_scan(
+                &session_id,
+                &assignment,
+                keys.as_deref(),
+                touched,
+                &request.paths,
+                &tx,
+            ),
             None => scan(
                 &session_id,
                 &assignment,
                 keys.as_deref(),
                 request.expected.as_deref(),
+                &request.paths,
                 &tx,
             ),
         };
@@ -275,6 +287,7 @@ fn scan(
     assignment: &SyncShareAssignment,
     keys: Option<&ShareKeys>,
     expected: Option<&str>,
+    asked: &[String],
     tx: &Sender<SyncEvent>,
 ) -> Result<String> {
     let (root, cache) = open(assignment, keys)?;
@@ -285,7 +298,9 @@ fn scan(
     sweep_trash(&root, assignment.trash_keep_days);
     sweep_partials(&root, PARTIAL_KEEP_DAYS);
 
-    let (fingerprint, fresh) = walk(session_id, assignment, keys, &root, &cache, expected, tx)?;
+    let (fingerprint, fresh) = walk(
+        session_id, assignment, keys, &root, &cache, expected, asked, tx,
+    )?;
     fresh.save(assignment.share_id);
     Ok(fingerprint)
 }
@@ -325,8 +340,9 @@ fn skip(lines: &mut Vec<SyncIndexEntry>, rel: String, reason: SyncSkipReason) {
 
 /// The walk itself. Everything the share holds goes out, indexed or skipped,
 /// and the fresh cache describes exactly what was emitted. With `expected`
-/// equal to the fingerprint found, nothing but the skipped paths goes out:
-/// the server holds the rest.
+/// equal to the fingerprint found outside the `asked` paths, nothing but the
+/// skipped paths and those asked goes out: the server holds the rest.
+#[allow(clippy::too_many_arguments)]
 fn walk(
     session_id: &str,
     assignment: &SyncShareAssignment,
@@ -334,6 +350,7 @@ fn walk(
     root: &Path,
     cache: &IndexCache,
     expected: Option<&str>,
+    asked: &[String],
     tx: &Sender<SyncEvent>,
 ) -> Result<(String, IndexCache)> {
     let out = Out {
@@ -357,8 +374,20 @@ fn walk(
     // scan décrit au serveur. La calculer ailleurs (sur le cache chargé, sur le
     // disque relu) la ferait décrire autre chose que ce qu'il a reçu.
     let fingerprint = fingerprint_of(&fresh);
-    if expected == Some(fingerprint.as_str()) {
-        out.send_all(lines, true, true, fingerprint.clone())?;
+    let asked = askable(root, &excluded, asked);
+    let held = if asked.is_empty() {
+        fingerprint.clone()
+    } else {
+        fingerprint_outside(&fresh, &asked)
+    };
+    if expected == Some(held.as_str()) {
+        let restating = restated(&asked, &fresh, &lines);
+        out.send_all(
+            lines.into_iter().chain(restating),
+            true,
+            true,
+            fingerprint.clone(),
+        )?;
     } else {
         let entries = fresh.entries.iter().map(|(rel, e)| entry_line(rel, e));
         out.send_all(entries.chain(lines), true, false, fingerprint.clone())?;
@@ -391,20 +420,24 @@ fn delta_scan(
     assignment: &SyncShareAssignment,
     keys: Option<&ShareKeys>,
     touched: &Touched,
+    asked: &[String],
     tx: &Sender<SyncEvent>,
 ) -> Result<String> {
     let (root, cache) = open(assignment, keys)?;
     if cache.entries.is_empty() || touched.paths.len() > DELTA_MAX_PATHS {
-        return scan(session_id, assignment, keys, None, tx);
+        return scan(session_id, assignment, keys, None, &[], tx);
     }
-    let (fingerprint, fresh) =
-        delta_walk(session_id, assignment, keys, &root, &cache, touched, tx)?;
+    let (fingerprint, fresh) = delta_walk(
+        session_id, assignment, keys, &root, &cache, touched, asked, tx,
+    )?;
     fresh.save(assignment.share_id);
     Ok(fingerprint)
 }
 
 /// The partial walk itself: `cache` is the last walk's, the fresh cache is
-/// what the share holds now.
+/// what the share holds now. The `asked` paths are listed like touched ones,
+/// a directory among them included, and restated even when unchanged.
+#[allow(clippy::too_many_arguments)]
 fn delta_walk(
     session_id: &str,
     assignment: &SyncShareAssignment,
@@ -412,6 +445,7 @@ fn delta_walk(
     root: &Path,
     cache: &IndexCache,
     touched: &Touched,
+    asked: &[String],
     tx: &Sender<SyncEvent>,
 ) -> Result<(String, IndexCache)> {
     let out = Out {
@@ -441,11 +475,20 @@ fn delta_walk(
     // Les sous-dossiers connus qu'un dossier relu ne contient plus : leur
     // arbre entier a disparu, même sans événement sur chacun de ses fichiers.
     let mut vanished: HashSet<String> = HashSet::new();
+    let asked = askable(root, &excluded, asked);
     let mut queue: Vec<String> = touched
         .paths
         .iter()
+        .chain(&asked)
         .map(|rel| parent_rel(rel).to_string())
         .collect();
+    // An asked directory is listed itself: unreadable, it says so again.
+    queue.extend(
+        asked
+            .iter()
+            .filter(|rel| std::fs::symlink_metadata(root.join(rel)).is_ok_and(|m| m.is_dir()))
+            .cloned(),
+    );
     while let Some(rel) = queue.pop() {
         if walker.listed.contains(&rel) {
             continue;
@@ -497,6 +540,8 @@ fn delta_walk(
             lines.push(SyncIndexEntry::gone(rel));
         }
     }
+    let restating = restated(&asked, &fresh, &lines);
+    lines.extend(restating);
     let fingerprint = fingerprint_of(&fresh);
     // `scanned: false` : le disque n'a pas été lu en entier, le serveur ne
     // tient pas les chemins écartés pour complets.
@@ -727,10 +772,55 @@ impl<'a> Walker<'a> {
     }
 }
 
+/// The asked paths a walk may look at: confined to the share (a server path
+/// under a symlink would list a directory elsewhere) and not excluded, since a
+/// walk that lists a directory indexes what it holds.
+fn askable(root: &Path, excluded: &CompiledExclusions, asked: &[String]) -> Vec<String> {
+    let mut seen = HashSet::new();
+    asked
+        .iter()
+        .filter(|rel| seen.insert(rel.as_str()))
+        .filter(|rel| !excluded.matches(rel) && !ancestors(rel).any(|dir| excluded.matches(dir)))
+        .filter(|rel| confined_join(root, rel).is_ok())
+        .cloned()
+        .collect()
+}
+
+/// The lines restating `asked` paths the reply does not mention yet: the
+/// fresh entry, or `gone`. A path skipped by the walk, or under a skipped one,
+/// was already declared and stays unknown.
+fn restated(asked: &[String], fresh: &IndexCache, lines: &[SyncIndexEntry]) -> Vec<SyncIndexEntry> {
+    let said: HashSet<&str> = lines.iter().map(|l| l.rel_path.as_str()).collect();
+    let skipped: HashSet<&str> = lines
+        .iter()
+        .filter(|l| l.kind == "skipped")
+        .map(|l| l.rel_path.as_str())
+        .collect();
+    asked
+        .iter()
+        .filter(|rel| !said.contains(rel.as_str()))
+        .filter(|rel| !ancestors(rel).any(|dir| skipped.contains(dir)))
+        .map(|rel| match fresh.entries.get(rel) {
+            Some(e) => entry_line(rel, e),
+            None => SyncIndexEntry::gone(rel.clone()),
+        })
+        .collect()
+}
+
 /// Empreinte d'un cache d'index, dans la forme partagée avec le serveur.
 pub fn fingerprint_of(cache: &IndexCache) -> String {
+    fingerprint_outside(cache, &[])
+}
+
+/// The fingerprint of `cache` without the lines of `paths`: what a server that
+/// asked about them expects, once their baseline lines are left out.
+fn fingerprint_outside(cache: &IndexCache, paths: &[String]) -> String {
+    let left_out: HashSet<&str> = paths.iter().map(String::as_str).collect();
     let mut fp = Fingerprint::default();
     for (rel_path, e) in &cache.entries {
+        if left_out.contains(rel_path.as_str()) {
+            continue;
+        }
         fp.push(&FingerprintEntry {
             rel_path,
             kind: &e.kind,
@@ -765,8 +855,17 @@ mod tests {
     /// Walks `root` against `cache`: the entries sent, the fingerprint, the fresh cache.
     fn run_walk(root: &Path, cache: &IndexCache) -> (Vec<SyncIndexEntry>, String, IndexCache) {
         let (tx, mut rx) = tokio::sync::mpsc::channel(64);
-        let (fingerprint, fresh) =
-            walk("scan-1", &assignment(root), None, root, cache, None, &tx).expect("walk");
+        let (fingerprint, fresh) = walk(
+            "scan-1",
+            &assignment(root),
+            None,
+            root,
+            cache,
+            None,
+            &[],
+            &tx,
+        )
+        .expect("walk");
         drop(tx);
         let mut entries = Vec::new();
         while let Ok(ev) = rx.try_recv() {
@@ -936,6 +1035,7 @@ mod tests {
         root: &Path,
         cache: &IndexCache,
         touched: &[&str],
+        asked: &[String],
     ) -> (Vec<SyncIndexEntry>, String, IndexCache) {
         let (tx, mut rx) = tokio::sync::mpsc::channel(64);
         let touched = Touched {
@@ -949,6 +1049,7 @@ mod tests {
             root,
             cache,
             &touched,
+            asked,
             &tx,
         )
         .expect("delta");
@@ -986,7 +1087,7 @@ mod tests {
         std::fs::remove_dir_all(root.join("a/b")).unwrap();
         std::fs::create_dir(root.join("e")).unwrap();
         let (lines, fingerprint, fresh) =
-            run_delta(root, &cache, &["c.txt", "a/n.txt", "a/b", "e"]);
+            run_delta(root, &cache, &["c.txt", "a/n.txt", "a/b", "e"], &[]);
 
         assert_eq!(names(&lines, "file"), vec!["a/n.txt", "c.txt"]);
         assert_eq!(names(&lines, "dir"), vec!["e"]);
@@ -1010,7 +1111,7 @@ mod tests {
         std::fs::create_dir_all(root.join("a")).unwrap();
         std::fs::write(root.join("a/x.txt"), b"x").unwrap();
         let (_, full_fingerprint, cache) = run_walk(root, &IndexCache::default());
-        let (lines, fingerprint, _) = run_delta(root, &cache, &[]);
+        let (lines, fingerprint, _) = run_delta(root, &cache, &[], &[]);
         assert!(lines.is_empty());
         assert_eq!(fingerprint, full_fingerprint);
     }
@@ -1029,6 +1130,7 @@ mod tests {
             root,
             &cache,
             Some(fingerprint.as_str()),
+            &[],
             &tx,
         )
         .expect("walk");
@@ -1038,6 +1140,116 @@ mod tests {
         assert!(entries.is_empty());
         assert!(delta, "the server keeps its baseline as the device index");
         assert!(scanned, "the whole disk was still walked");
+    }
+
+    fn asked(paths: &[&str]) -> Vec<String> {
+        paths.iter().map(|p| p.to_string()).collect()
+    }
+
+    #[test]
+    fn a_delta_restates_the_asked_paths_even_unchanged() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join("b")).unwrap();
+        std::fs::write(root.join("a.txt"), b"a").unwrap();
+        std::fs::write(root.join("b/c.txt"), b"c").unwrap();
+        std::fs::write(root.join("b/d.txt"), b"d").unwrap();
+        let (_, full_fingerprint, cache) = run_walk(root, &IndexCache::default());
+
+        let (lines, fingerprint, _) = run_delta(root, &cache, &[], &asked(&["a.txt", "b/c.txt"]));
+        assert_eq!(names(&lines, "file"), vec!["a.txt", "b/c.txt"]);
+        assert_eq!(lines.len(), 2, "the unchanged sibling is not restated");
+        assert_eq!(fingerprint, full_fingerprint);
+    }
+
+    #[test]
+    fn a_delta_says_gone_for_an_asked_path_no_longer_there() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::write(root.join("x.txt"), b"x").unwrap();
+        std::fs::write(root.join("y.txt"), b"y").unwrap();
+        let (_, _, cache) = run_walk(root, &IndexCache::default());
+        std::fs::remove_file(root.join("x.txt")).unwrap();
+
+        let (lines, _, _) = run_delta(root, &cache, &[], &asked(&["x.txt", "nulle/part.txt"]));
+        assert_eq!(names(&lines, "gone"), vec!["nulle/part.txt", "x.txt"]);
+        assert_eq!(lines.len(), 2, "each path said once");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_unreadable_asked_file_is_only_declared_skipped() {
+        use std::os::unix::fs::PermissionsExt;
+        if is_root() {
+            return;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let secret = root.join("secret.txt");
+        std::fs::write(&secret, b"x").unwrap();
+        let (_, _, cache) = run_walk(root, &IndexCache::default());
+        std::fs::set_permissions(&secret, std::fs::Permissions::from_mode(0o000)).unwrap();
+
+        let (lines, _, _) = run_delta(root, &cache, &[], &asked(&["secret.txt"]));
+        assert_eq!(
+            skipped(&lines, "secret.txt").reason,
+            Some(SyncSkipReason::Unreadable)
+        );
+        // The cache diff says it left the index; restating adds nothing on top.
+        assert!(names(&lines, "file").is_empty());
+        assert_eq!(names(&lines, "gone"), vec!["secret.txt"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_asked_path_through_a_symlink_is_never_listed() {
+        let outside = tempfile::tempdir().unwrap();
+        std::fs::write(outside.path().join("secret.txt"), b"s").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::write(root.join("a.txt"), b"a").unwrap();
+        std::os::unix::fs::symlink(outside.path(), root.join("lien")).unwrap();
+        let (_, _, cache) = run_walk(root, &IndexCache::default());
+
+        let (lines, _, fresh) = run_delta(root, &cache, &[], &asked(&["lien/secret.txt"]));
+        assert!(lines.iter().all(|l| !l.rel_path.starts_with("lien/")));
+        assert!(fresh.entries.keys().all(|k| !k.starts_with("lien/")));
+    }
+
+    #[test]
+    fn a_full_walk_matching_outside_the_asked_paths_sends_only_them() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::write(root.join("x.txt"), b"x").unwrap();
+        std::fs::write(root.join("y.txt"), b"y").unwrap();
+        let (_, fingerprint, cache) = run_walk(root, &IndexCache::default());
+        let ask = asked(&["y.txt"]);
+        let outside = fingerprint_outside(&cache, &ask);
+
+        let full_walk = |expected: &str| {
+            let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+            let (again, _) = walk(
+                "scan-4",
+                &assignment(root),
+                None,
+                root,
+                &cache,
+                Some(expected),
+                &ask,
+                &tx,
+            )
+            .expect("walk");
+            drop(tx);
+            assert_eq!(again, fingerprint, "the whole index is still announced");
+            drain(&mut rx)
+        };
+        let (entries, delta, scanned) = full_walk(&outside);
+        assert_eq!(names(&entries, "file"), vec!["y.txt"]);
+        assert!(delta && scanned);
+
+        let (entries, delta, _) = full_walk(&fingerprint);
+        assert_eq!(names(&entries, "file"), vec!["x.txt", "y.txt"]);
+        assert!(!delta, "a mismatch sends the whole index");
     }
 
     #[test]

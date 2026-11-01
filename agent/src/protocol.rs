@@ -1301,9 +1301,15 @@ pub enum ServerMessage {
         #[serde(default)]
         mode: Option<String>,
         /// The baseline fingerprint the server holds for this device: a full
-        /// walk that finds it again sends no entries.
+        /// walk that finds it again sends no entries. With `paths`, it leaves
+        /// their lines out.
         #[serde(default)]
         expected: Option<String>,
+        /// Paths the reply restates even when unchanged (the ones the server
+        /// holds in error): an entry, `gone`, or a `skipped` line. Not empty:
+        /// no fast reply.
+        #[serde(default)]
+        paths: Vec<String>,
     },
     /// CloudSync: upload one local file (streams `sync.chunk`).
     #[serde(rename = "sync.push")]

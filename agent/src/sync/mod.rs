@@ -496,30 +496,32 @@ impl SyncManager {
         ))
     }
 
-    /// Scan d'un partage ; partage inconnu/en pause → lot d'erreur.
+    /// Scans a share; an unknown or paused share gets an error batch.
     ///
-    /// `mode` vient du serveur. En `auto`, un partage que le watcher sait intact
-    /// depuis son dernier scan répond immédiatement par la seule empreinte de ce
-    /// qu'il détient ; le serveur la compare à sa baseline, et une réponse rapide
-    /// fausse coûte au pire un scan complet de plus. En `full` (filet de sécurité
-    /// horaire), le parcours est obligatoire : un événement de watcher raté ne
-    /// peut jamais laisser deux appareils divergents indéfiniment.
+    /// `mode` comes from the server. In `delta`, a share the watcher knows
+    /// untouched since its last scan replies at once with the mere fingerprint
+    /// of what it holds; the server checks it against its baseline, and a wrong
+    /// fast reply costs at worst one more full scan. In `full` (the hourly
+    /// safety net), the walk is mandatory: a missed watcher event can never
+    /// leave two devices apart for good. `paths` (the server's paths in error)
+    /// rules out the fast reply: their present state has to be read.
     ///
-    /// `&mut` : le scan réécrit le cache d'index sur disque, donc la copie
-    /// mémorisée pour les installations doit être oubliée.
+    /// `&mut`: the scan rewrites the index cache on disk, so the copy kept for
+    /// installs must be forgotten.
     pub fn start_scan(
         &mut self,
         session_id: String,
         share_id: i64,
         mode: Option<String>,
         expected: Option<String>,
+        paths: Vec<String>,
     ) {
         let full = mode.as_deref() != Some("delta");
         let keys = self.shares.get(&share_id).map(|s| s.crypto.keys());
         let encrypted = matches!(keys, Some(Ok(Some(_))));
         // La réponse rapide ne touche pas au cache d'index : les installations
         // peuvent garder le leur, puisque rien ne sera réécrit.
-        if !full {
+        if !full && paths.is_empty() {
             if let Some(fp) = self.clean_fingerprint(share_id) {
                 let _ = self.tx.try_send(SyncEvent::Index {
                     session_id,
@@ -549,6 +551,7 @@ impl SyncManager {
                         full,
                         expected,
                         touched: s.touched(),
+                        paths,
                     },
                 );
                 return;
