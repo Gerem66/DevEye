@@ -74,6 +74,7 @@ setSdkHost(
         requestSyncApplyLocal: outbound('requestSyncApplyLocal'),
         requestSyncMove: outbound('requestSyncMove'),
         requestSyncDelete: outbound('requestSyncDelete'),
+        requestSyncRename: outbound('requestSyncRename'),
         publishSyncProgress: fanout('publishSyncProgress'),
         publishSyncState: fanout('publishSyncState')
     } as unknown as MonitorHub,
@@ -90,7 +91,8 @@ const OUTBOUND = [
     'requestSyncApplyDir',
     'requestSyncApplyLocal',
     'requestSyncMove',
-    'requestSyncDelete'
+    'requestSyncDelete',
+    'requestSyncRename'
 ] as const;
 const FANOUT = ['publishSyncProgress', 'publishSyncState'] as const;
 

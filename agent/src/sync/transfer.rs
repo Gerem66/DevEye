@@ -36,7 +36,7 @@ use crate::ownership::adopt_owner;
 use crate::protocol::SyncPushResume;
 use crate::sync::e2e::{self, ContentHasher, ShareKeys, TagDigest, Unsealer, BLOCK, NONCE_LEN};
 use crate::sync::index_cache::IndexCache;
-use crate::sync::paths::{confined_join, writable_join};
+use crate::sync::paths::{confined_join, local_join, writable_join};
 use crate::sync::scanner::hash_file;
 use crate::sync::{error_text, Keepalive, SyncEvent};
 
@@ -1225,7 +1225,12 @@ pub fn delete_to_trash(
     rel_path: &str,
     force: bool,
 ) -> Result<()> {
-    let src = confined_join(root, rel_path)?;
+    // Asked for by the user, the path may be one the scan skipped for its name.
+    let src = if force {
+        local_join(root, rel_path)?
+    } else {
+        confined_join(root, rel_path)?
+    };
     let Ok(meta) = std::fs::symlink_metadata(&src) else {
         return Ok(()); // Already gone locally: the deletion is idempotent.
     };
@@ -1255,6 +1260,31 @@ pub fn delete_to_trash(
     rename_with_retry(&src, &dest).context("mise à la corbeille")?;
     prune_empty_parents(root, &src);
     Ok(())
+}
+
+/// Renames, in its folder, a path whose name keeps it out of the share: the
+/// fix the user picked in the Journal. The source is joined with
+/// [`local_join`] (its name is by definition not portable); the target must
+/// be portable, writable and absent.
+pub fn rename_in_place(root: &Path, from_rel_path: &str, rel_path: &str) -> Result<()> {
+    let folder = |rel: &str| {
+        rel.rsplit_once('/')
+            .map_or("", |(parent, _)| parent)
+            .to_string()
+    };
+    if folder(from_rel_path) != folder(rel_path) {
+        bail!("renommage hors de son dossier refusé");
+    }
+    let src = local_join(root, from_rel_path)?;
+    let meta = std::fs::symlink_metadata(&src).context("introuvable sur l'appareil")?;
+    if !meta.is_file() && !meta.is_dir() {
+        bail!("ni un fichier ni un dossier : renommage refusé");
+    }
+    let dest = writable_join(root, rel_path)?;
+    if std::fs::symlink_metadata(&dest).is_ok() {
+        bail!("un fichier porte déjà ce nom sur l'appareil");
+    }
+    rename_with_retry(&src, &dest).context("renommage")
 }
 
 /// Retire les dossiers devenus vides en remontant vers la racine du partage,
@@ -1994,6 +2024,48 @@ mod tests {
         std::fs::create_dir(dir.path().join("empty")).unwrap();
         delete_to_trash(dir.path(), CACHE_SHARE, &caches, "empty", false).unwrap();
         assert!(!dir.path().join("empty").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn delete_to_trash_forced_takes_a_name_windows_refuses() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a:b.txt"), b"x").unwrap();
+        delete_to_trash(dir.path(), CACHE_SHARE, &caches_with(None), "a:b.txt", true).unwrap();
+        assert!(!dir.path().join("a:b.txt").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rename_in_place_fixes_a_name_windows_refuses() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir(root.join("docs")).unwrap();
+        std::fs::write(root.join("docs/a:b.txt"), b"x").unwrap();
+        rename_in_place(root, "docs/a:b.txt", "docs/a-b.txt").unwrap();
+        assert_eq!(std::fs::read(root.join("docs/a-b.txt")).unwrap(), b"x");
+        assert!(!root.join("docs/a:b.txt").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rename_in_place_only_renames_within_its_folder_to_a_free_portable_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir(root.join("docs")).unwrap();
+        std::fs::write(root.join("docs/a:b.txt"), b"x").unwrap();
+        std::fs::write(root.join("docs/pris.txt"), b"y").unwrap();
+        for (to, why) in [
+            ("ailleurs.txt", "hors de son dossier"),
+            ("docs/pris.txt", "déjà"),
+            ("docs/c?d.txt", "refusé"),
+        ] {
+            let err = rename_in_place(root, "docs/a:b.txt", to).unwrap_err();
+            assert!(error_text(&err).contains(why), "{to}: {err}");
+        }
+        assert!(rename_in_place(root, "docs/absent:x.txt", "docs/x.txt").is_err());
+        assert!(root.join("docs/a:b.txt").exists());
+        assert_eq!(std::fs::read(root.join("docs/pris.txt")).unwrap(), b"y");
     }
 
     #[test]

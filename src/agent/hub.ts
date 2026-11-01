@@ -32,6 +32,7 @@ import {
     AGENT_SYNC_MOVE,
     AGENT_SYNC_PUSH,
     AGENT_SYNC_PUSH_ACK,
+    AGENT_SYNC_RENAME,
     AGENT_SYNC_SCAN,
     AGENT_TERM_CLOSE,
     AGENT_TERM_INPUT,
@@ -90,6 +91,7 @@ import {
     type AgentSyncMovePayload,
     type AgentSyncPushPayload,
     type AgentSyncPushAckPayload,
+    type AgentSyncRenamePayload,
     type AgentSyncScanPayload,
     type AgentTermClosePayload,
     type AgentTermInputPayload,
@@ -1059,6 +1061,11 @@ export class MonitorHub {
     /** Propagate a deletion (local recycle) to a connected agent. No-op if offline. */
     requestSyncDelete(deviceId: string, payload: AgentSyncDeletePayload): boolean {
         return this.sendToAgent(deviceId, AGENT_SYNC_DELETE, payload);
+    }
+
+    /** Rename in place, on a connected agent, a path its name keeps out of the share. No-op if offline. */
+    requestSyncRename(deviceId: string, payload: AgentSyncRenamePayload): boolean {
+        return this.sendToAgent(deviceId, AGENT_SYNC_RENAME, payload);
     }
 
     /** Fan out CloudSync session progress to the share's subscribers. */

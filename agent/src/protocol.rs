@@ -1453,6 +1453,20 @@ pub enum ServerMessage {
         #[serde(default)]
         force: bool,
     },
+    /// CloudSync: rename in place, in its folder, a path its name keeps out of
+    /// the share (the user picked the new name in the Journal).
+    #[serde(rename = "sync.rename")]
+    SyncRename {
+        #[serde(rename = "opId")]
+        op_id: String,
+        #[serde(rename = "shareId")]
+        share_id: i64,
+        /// The current, non-portable path.
+        #[serde(rename = "fromRelPath")]
+        from_rel_path: String,
+        #[serde(rename = "relPath")]
+        rel_path: String,
+    },
     /// List the update tools present (replies `pkg.listResult`), then count
     /// each managed one's pending updates (one `pkg.count` each).
     #[serde(rename = "pkg.list")]
@@ -1514,7 +1528,7 @@ pub enum ServerMessage {
 /// would exhaust the nonce window) but only lands in a transfer a signed
 /// `sync.applyStart` opened; `agent.update` is not signed so an agent that
 /// predates this format can still be updated.
-pub const SIGNED_COMMANDS: [&str; 21] = [
+pub const SIGNED_COMMANDS: [&str; 22] = [
     "term.open",
     "files.mutate",
     "files.upload",
@@ -1528,6 +1542,7 @@ pub const SIGNED_COMMANDS: [&str; 21] = [
     "sync.applyLocal",
     "sync.move",
     "sync.delete",
+    "sync.rename",
     "agent.service",
     "agent.power",
     "agent.destroy",

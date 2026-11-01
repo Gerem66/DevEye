@@ -460,7 +460,47 @@ pub fn writable_join(root: &Path, rel_path: &str) -> Result<PathBuf> {
 /// posé dans le partage (`lien -> /etc`) l'en ferait sortir. Le premier ancêtre
 /// existant est résolu et doit rester sous la racine résolue.
 pub fn confined_join(root: &Path, rel_path: &str) -> Result<PathBuf> {
-    let joined = safe_join(root, rel_path)?;
+    confine(root, safe_join(root, rel_path)?)
+}
+
+/// Joins a path the disk holds but the portability rules refuse (a name
+/// Windows cannot carry, which the scan reported as skipped): only what could
+/// leave the root is refused, then it is confined like [`confined_join`].
+pub fn local_join(root: &Path, rel_path: &str) -> Result<PathBuf> {
+    if let Some(problem) = escape_problem(rel_path) {
+        bail!("chemin relatif refusé : {problem}");
+    }
+    let mut out = root.to_path_buf();
+    for seg in rel_path.split('/') {
+        out = entry_on_disk(out, &nfc(seg));
+    }
+    confine(root, out)
+}
+
+/// What, in a relative path, could name something outside the share.
+fn escape_problem(rel_path: &str) -> Option<&'static str> {
+    if rel_path.contains('\0') {
+        return Some("caractère nul");
+    }
+    // Under Windows a backslash separates, and a colon names a drive or a stream.
+    if cfg!(windows) && (rel_path.contains('\\') || rel_path.contains(':')) {
+        return Some("séparateur ou flux Windows dans un nom");
+    }
+    if rel_path
+        .split('/')
+        .any(|seg| seg.is_empty() || seg == "." || seg == "..")
+    {
+        return Some("segment de chemin vide ou relatif");
+    }
+    if rel_path.split('/').next().is_some_and(is_reserved_top) {
+        return Some("dossier réservé à l'agent");
+    }
+    None
+}
+
+/// The guarantee of [`confined_join`]: the first existing ancestor of
+/// `joined` resolves under the resolved root.
+fn confine(root: &Path, joined: PathBuf) -> Result<PathBuf> {
     let real_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
     let mut probe = joined.clone();
     loop {
@@ -773,5 +813,34 @@ mod tests {
         assert!(rel_path_of(root, &abs).is_none());
         assert_eq!(rel_path_lossy(root, &abs).unwrap(), "caf\u{FFFD}.txt");
         assert!(rel_path_lossy(root, root).is_none());
+    }
+
+    #[test]
+    fn local_join_never_leaves_the_root() {
+        let dir = tempfile::tempdir().unwrap();
+        for bad in [
+            "",
+            "/etc/passwd",
+            "../x",
+            "a/../../x",
+            "a//b",
+            "./a",
+            ".deveye-trash/x",
+            "a\0b",
+        ] {
+            assert!(local_join(dir.path(), bad).is_err(), "{bad:?}");
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn local_join_takes_a_name_windows_refuses_but_not_through_a_link() {
+        let outside = tempfile::tempdir().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::write(root.join("a:b.txt"), b"x").unwrap();
+        assert_eq!(local_join(root, "a:b.txt").unwrap(), root.join("a:b.txt"));
+        std::os::unix::fs::symlink(outside.path(), root.join("lien")).unwrap();
+        assert!(local_join(root, "lien/c:d.txt").is_err());
     }
 }

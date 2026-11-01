@@ -1069,6 +1069,10 @@ async fn stream_session(
                             ServerMessage::SyncDelete { op_id, share_id, rel_path, force } => {
                                 sync_mgr.delete(&op_id, share_id, &rel_path, force);
                             }
+                            // CloudSync: rename a non-portable name in place (off-loop as above).
+                            ServerMessage::SyncRename { op_id, share_id, from_rel_path, rel_path } => {
+                                sync_mgr.rename(&op_id, share_id, &from_rel_path, &rel_path);
+                            }
                             // Update tools, then their counts (off-loop; replies via pkg_rx).
                             ServerMessage::PkgList {} => {
                                 tokio::spawn(crate::packages::run_list(pkg_tx.clone()));

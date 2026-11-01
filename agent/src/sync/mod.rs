@@ -893,6 +893,18 @@ impl SyncManager {
             transfer::delete_to_trash(&root, share_id, &caches, &rel_path, force)
         });
     }
+
+    /// Renames in place a path its name keeps out of the share.
+    pub fn rename(&self, op_id: &str, share_id: i64, from_rel_path: &str, rel_path: &str) {
+        let root = match self.served(share_id) {
+            Ok((root, _)) => root,
+            Err(reason) => return self.refuse(op_id, "rename", reason),
+        };
+        let (from, to) = (from_rel_path.to_string(), rel_path.to_string());
+        transfer::spawn_local_op(op_id.to_string(), "rename", self.tx.clone(), move |_| {
+            transfer::rename_in_place(&root, &from, &to)
+        });
+    }
 }
 
 /// The `apply` outcome of a frame refused before any worker took it.

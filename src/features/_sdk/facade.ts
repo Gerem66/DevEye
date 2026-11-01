@@ -337,6 +337,7 @@ export function agentsFacade(gate: () => void): AgentsFacade {
         requestSyncApplyLocal: (deviceId, payload) => (gate(), sdkHub().requestSyncApplyLocal(deviceId, payload)),
         requestSyncMove: (deviceId, payload) => (gate(), sdkHub().requestSyncMove(deviceId, payload)),
         requestSyncDelete: (deviceId, payload) => (gate(), sdkHub().requestSyncDelete(deviceId, payload)),
+        requestSyncRename: (deviceId, payload) => (gate(), sdkHub().requestSyncRename(deviceId, payload)),
         publishSyncProgress: (payload) => (gate(), sdkHub().publishSyncProgress(payload)),
         publishSyncState: (payload) => (gate(), sdkHub().publishSyncState(payload)),
         // Les ordres de fichiers de l'explorateur : ce qui fait d'une machine
