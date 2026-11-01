@@ -54,6 +54,8 @@ declare const styles: {
     readonly chatScroll: string;
     readonly chatTab: string;
     readonly checkAdd: string;
+    readonly checkAddCount: string;
+    readonly checkAddField: string;
     readonly checkCount: string;
     readonly checkDone: string;
     readonly checkDropBar: string;

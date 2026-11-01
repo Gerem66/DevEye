@@ -1631,6 +1631,27 @@
     gap: var(--space-sm);
 }
 
+.checkAddField {
+    display: grid;
+    flex: 1;
+    gap: 2px;
+    min-width: 0;
+}
+
+/* La limite du champ d'ajout, sous son bord droit. Sa ligne est tenue même vide :
+   le compte qui paraît à la première lettre ne fait pas grandir la popup. */
+.checkAddCount {
+    justify-self: end;
+    font-size: 0.7rem;
+    line-height: 1.2;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.checkAddCount[data-empty] {
+    visibility: hidden;
+}
+
 /*
  * L'onglet qui n'est pas au premier plan : hors de la mise en page, mais toujours
  * monté. `display: none` et non un démontage, pour que la discussion garde ses

@@ -268,26 +268,31 @@ export function Subtasks({
             <ErrorNote note={refused} />
 
             <div className={styles.checkAdd}>
-                <div className={styles.grow} data-value={label}>
-                    <textarea
-                        ref={addRef}
-                        className={styles.textarea}
-                        data-autofocus={autoFocus ? '' : undefined}
-                        value={label}
-                        rows={1}
-                        maxLength={PROJECT_CHECKLIST_LABEL_MAX_LENGTH}
-                        placeholder='Ajouter une sous-tâche'
-                        aria-label='Ajouter une sous-tâche'
-                        onChange={(e) => setLabel(e.target.value)}
-                        onKeyDown={(e) => {
-                            // Entrée ajoute, Maj+Entrée passe à la ligne : le Dialog
-                            // ignore les textarea, la popup ne se valide pas.
-                            if (e.key === 'Enter' && !e.shiftKey) {
-                                e.preventDefault();
-                                add();
-                            }
-                        }}
-                    />
+                <div className={styles.checkAddField}>
+                    <div className={styles.grow} data-value={label}>
+                        <textarea
+                            ref={addRef}
+                            className={styles.textarea}
+                            data-autofocus={autoFocus ? '' : undefined}
+                            value={label}
+                            rows={1}
+                            maxLength={PROJECT_CHECKLIST_LABEL_MAX_LENGTH}
+                            placeholder='Ajouter une sous-tâche'
+                            aria-label='Ajouter une sous-tâche'
+                            onChange={(e) => setLabel(e.target.value)}
+                            onKeyDown={(e) => {
+                                // Entrée ajoute, Maj+Entrée passe à la ligne : le Dialog
+                                // ignore les textarea, la popup ne se valide pas.
+                                if (e.key === 'Enter' && !e.shiftKey) {
+                                    e.preventDefault();
+                                    add();
+                                }
+                            }}
+                        />
+                    </div>
+                    <span className={styles.checkAddCount} data-empty={label ? undefined : ''}>
+                        {label.length} / {PROJECT_CHECKLIST_LABEL_MAX_LENGTH}
+                    </span>
                 </div>
                 <Button variant='secondary' onClick={add} disabled={!label.trim()}>
                     Ajouter
