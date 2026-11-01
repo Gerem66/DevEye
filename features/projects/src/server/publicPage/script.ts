@@ -41,9 +41,13 @@ export const BOARD_SCRIPT = `(function () {
                 var current = document.getElementById('board');
                 if (!next || !current) return;
                 localize(next);
-                // Le défilement horizontal et les cartes dépliées survivent à la relecture.
+                // Le défilement, du tableau et de chaque colonne, et les cartes
+                // dépliées survivent à la relecture.
                 var scroller = current.querySelector('.board');
                 var left = scroller ? scroller.scrollLeft : 0;
+                var lists = current.querySelectorAll('.cards');
+                var tops = [];
+                for (var t = 0; t < lists.length; t++) tops.push(lists[t].scrollTop);
                 var open = {};
                 var opened = current.querySelectorAll('details[open][data-card]');
                 for (var i = 0; i < opened.length; i++) open[opened[i].getAttribute('data-card')] = true;
@@ -54,6 +58,8 @@ export const BOARD_SCRIPT = `(function () {
                 current.replaceWith(next);
                 var after = next.querySelector('.board');
                 if (after) after.scrollLeft = left;
+                var nextLists = next.querySelectorAll('.cards');
+                for (var u = 0; u < nextLists.length && u < tops.length; u++) nextLists[u].scrollTop = tops[u];
             })
             .catch(function () {});
     }

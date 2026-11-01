@@ -70,7 +70,7 @@ body {
     color: var(--ink);
     font: 15px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
-.page { flex: 1 0 auto; display: flex; flex-direction: column; width: 100%; max-width: 1320px; margin: 0 auto; padding: 40px 20px 28px; }
+.page { flex: 1 0 auto; display: flex; flex-direction: column; width: 100%; padding: 40px clamp(20px, 3vw, 48px) 28px; }
 .sr {
     position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
     overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
@@ -156,6 +156,17 @@ ${Object.keys(PAGE_ACCENTS)
 
 @media (prefers-reduced-motion: reduce) {
     .chevron svg { transition: none; }
+}
+/* En largeur, la page tient dans la fenêtre : le tableau prend la hauteur qui
+   reste, chaque colonne défile en elle-même, et la barre horizontale reste à
+   l'écran. Une fenêtre trop basse rend la main au défilement de la page. */
+@media (min-width: 641px) {
+    body { height: 100vh; height: 100dvh; }
+    .page { flex: 1 1 auto; min-height: 0; }
+    #board { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+    .board { flex: 1 1 auto; min-height: 320px; grid-template-rows: minmax(0, 1fr); }
+    .column { display: flex; flex-direction: column; max-height: 100%; min-height: 0; }
+    .cards { min-height: 0; overflow-y: auto; padding: 2px; margin: -2px; }
 }
 @media (max-width: 640px) {
     .page { padding-top: 24px; }
