@@ -413,9 +413,10 @@ export default function BlockEditor({
     const addBlock = useCallback(
         (block: NoteBlock) => {
             setAddMenuOpen(false);
-            commit([...blocks, block], { index: blocks.length, offset: 0 });
+            const at = active === null ? blocks.length : Math.min(active + 1, blocks.length);
+            commit([...blocks.slice(0, at), block, ...blocks.slice(at)], { index: at, offset: 0 });
         },
-        [blocks, commit]
+        [active, blocks, commit]
     );
 
     const onKeyDown = useCallback(
