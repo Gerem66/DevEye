@@ -64,6 +64,9 @@ export function useTimelinePan(scrollRef: RefObject<HTMLElement | null>, enabled
         // Bouton principal d'une souris : le doigt défile déjà tout seul, et le
         // bouton du milieu appartient au navigateur.
         if (event.pointerType !== 'mouse' || event.button !== 0) return;
+        // Le contenu couvre la boîte : seules ses barres de défilement la rendent
+        // cible, et les saisir est leur geste. Les deux ensemble se contrediraient.
+        if (event.target === el) return;
         if (event.target instanceof Element && event.target.closest(OWN_GESTURE)) return;
 
         from.current = { x: event.clientX, scrollLeft: el.scrollLeft };
