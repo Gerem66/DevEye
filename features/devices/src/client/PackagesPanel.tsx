@@ -500,10 +500,12 @@ export function PackagesPanel({ deviceId, privileged }: { deviceId: string; priv
                 <Button variant='secondary' icon='refresh' onClick={requestList} disabled={counting || busy}>
                     Actualiser
                 </Button>
-                <Button onClick={updateChosen} disabled={busy || chosen.length === 0}>
+                {/* Les comptes d'abord : une ligne qui tourne compte comme cochée, et
+                    passera peut-être à zéro. */}
+                <Button onClick={updateChosen} disabled={busy || counting || chosen.length === 0}>
                     {queue
                         ? `En cours (${queue.total - queue.ids.length + 1}/${queue.total})…`
-                        : chosen.length > 0
+                        : !counting && chosen.length > 0
                           ? `Mettre à jour ${plural(chosen.length, 'outil', 'outils')}`
                           : 'Mettre à jour'}
                 </Button>
