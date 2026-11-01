@@ -6,16 +6,16 @@ import {
     type PointerEvent as ReactPointerEvent,
     type RefObject
 } from 'react';
-import type { ProjectCard } from '../../contracts/domain';
+import type { ProjectCard, ProjectMilestone } from '../../contracts/domain';
 import { startOfDay } from './scale';
 
 /**
- * Poser les dates d'une carte à la souris. Trois gestes, un seul mécanisme :
+ * Poser les dates d'une carte à la souris. Quatre gestes, un seul mécanisme :
  * une barre déjà sur la frise se déplace ou s'étire, et se ramène dans la zone
  * des cartes sans date pour perdre les siennes ; une pastille de cette zone se
  * dépose sur un jour, qui devient à la fois son début et son échéance ; le « + »
  * de la barre d'outils se dépose de même, pour une tâche ou un jalon qui
- * n'existent pas encore.
+ * n'existent pas encore ; un jalon posé se déplace d'un jour libre à l'autre.
  *
  * Rien n'est persisté avant le relâchement, seul un aperçu local bouge : écrire
  * à chaque pixel enverrait cinquante commandes par déplacement, et la carte
@@ -31,6 +31,9 @@ export type DragMode = 'start' | 'due' | 'move';
 /** Ce qu'un « + » de la barre d'outils fera naître au dépôt. */
 export type CreateKind = 'card' | 'milestone';
 
+/** Ce qu'un geste a tenu : son clic de relâchement est à avaler, et à lui seul. */
+export type HeldKey = 'create' | `card:${number}` | `milestone:${number}`;
+
 /** Les dates telles qu'elles seront si on relâche maintenant. */
 export interface DatePreview {
     startDate: number | null;
@@ -39,8 +42,10 @@ export interface DatePreview {
 
 /** Le geste en cours, tel que la frise le peint. */
 export interface DragView {
-    /** `null` : un élément à créer, tenu depuis un « + » de la barre d'outils. */
+    /** `null` : un jalon déplacé, ou un élément à créer tenu depuis un « + » de la barre d'outils. */
     card: ProjectCard | null;
+    /** Le jalon déplacé ; son aperçu est l'échéance de `next`. */
+    milestone: ProjectMilestone | null;
     /** Ce que le dépôt créera ; `null` quand c'est une carte existante qu'on tient. */
     create: CreateKind | null;
     /** Une pastille en vol, par opposition à une barre déjà posée. */
@@ -68,9 +73,11 @@ interface Options {
     onCreate: (startDate: number, dueDate: number) => void;
     /** Ouvre la création d'un jalon à la date du dépôt. */
     onCreateMilestone: (dueDate: number) => void;
+    /** Persiste l'échéance d'un jalon déplacé, au relâchement. */
+    onMoveMilestone: (milestone: ProjectMilestone, dueDate: number) => void;
     /**
-     * Les dates déjà tenues par un jalon, en secondes : un jalon déposé les
-     * enjambe, deux traits au même jour se cacheraient l'un l'autre.
+     * Les dates déjà tenues par un jalon, en secondes : un jalon déposé ou déplacé
+     * les enjambe, deux traits au même jour se cacheraient l'un l'autre.
      */
     takenMilestoneDates: ReadonlySet<number>;
 }
@@ -172,6 +179,7 @@ export function useDateDrag({
     onCommit,
     onCreate,
     onCreateMilestone,
+    onMoveMilestone,
     takenMilestoneDates
 }: Options) {
     const [view, setView] = useState<DragView | null>(null);
@@ -179,6 +187,7 @@ export function useDateDrag({
     /** Le geste en cours. Un `ref` : les écouteurs le lisent hors du rendu. */
     const press = useRef<{
         card: ProjectCard | null;
+        milestone: ProjectMilestone | null;
         /** Ce que le dépôt créera, quand `card` est nul. */
         create: CreateKind | null;
         /** Absent : une pastille ou le « + » qu'on dépose, sans bord à saisir. */
@@ -190,12 +199,11 @@ export function useDateDrag({
     /** Le seuil a été franchi : le relâchement ne doit plus ouvrir la carte. */
     const moved = useRef(false);
     /**
-     * La carte dont le prochain clic est à avaler, `null` valant le « + ». Nommée,
-     * et non un simple booléen : une pastille déposée quitte la liste avant que son
-     * clic n'arrive, et le drapeau resté levé aurait mangé le clic suivant, sur une
-     * tout autre carte.
+     * Ce dont le prochain clic est à avaler. Nommé, et non un simple booléen : une
+     * pastille déposée quitte la liste avant que son clic n'arrive, et le drapeau
+     * resté levé aurait mangé le clic suivant, sur une tout autre carte.
      */
-    const handled = useRef<{ id: number | null; at: number } | null>(null);
+    const handled = useRef<{ key: HeldKey; at: number } | null>(null);
     /** L'aperçu courant, pour que le relâchement le persiste sans re-rendu. */
     const latest = useRef<DragView | null>(null);
 
@@ -210,6 +218,7 @@ export function useDateDrag({
         onCommit,
         onCreate,
         onCreateMilestone,
+        onMoveMilestone,
         takenMilestoneDates
     });
     opts.current = {
@@ -221,6 +230,7 @@ export function useDateDrag({
         onCommit,
         onCreate,
         onCreateMilestone,
+        onMoveMilestone,
         takenMilestoneDates
     };
 
@@ -268,10 +278,17 @@ export function useDateDrag({
                     document.body.style.userSelect = 'none';
                 }
 
-                const overDrop = inside(drop.current, e.clientX, e.clientY);
+                // Un jalon a toujours une date : la zone des cartes sans date ne lui
+                // retire rien.
+                const overDrop = p.milestone === null && inside(drop.current, e.clientX, e.clientY);
                 const el = box.current;
                 let next: DatePreview | null = null;
-                if (p.card !== null && p.mode !== null) {
+                if (p.milestone !== null) {
+                    const own = p.milestone.dueDate;
+                    const taken = new Set([...opts.current.takenMilestoneDates].filter((d) => d !== own));
+                    const at = freeDay(own, Math.round(dx / width), taken);
+                    if (at !== null) next = { startDate: null, dueDate: at };
+                } else if (p.card !== null && p.mode !== null) {
                     next = overDrop
                         ? { startDate: null, dueDate: null }
                         : applyDrag(p.card, p.mode, Math.round(dx / width));
@@ -298,7 +315,14 @@ export function useDateDrag({
 
                 const held = latest.current;
                 if (held && held.overDrop === overDrop && samePreview(held.next, next)) return;
-                const shown: DragView = { card: p.card, create: p.create, placing: p.mode === null, next, overDrop };
+                const shown: DragView = {
+                    card: p.card,
+                    milestone: p.milestone,
+                    create: p.create,
+                    placing: p.mode === null,
+                    next,
+                    overDrop
+                };
                 latest.current = shown;
                 setView(shown);
             },
@@ -306,12 +330,22 @@ export function useDateDrag({
                 const p = press.current;
                 if (!p || e.pointerId !== p.pointerId) return;
                 const result = moved.current ? latest.current : null;
-                const card = p.card;
-                if (moved.current) handled.current = { id: card?.id ?? null, at: performance.now() };
+                const { card, milestone } = p;
+                if (moved.current) {
+                    const key: HeldKey =
+                        milestone !== null ? `milestone:${milestone.id}` : card !== null ? `card:${card.id}` : 'create';
+                    handled.current = { key, at: performance.now() };
+                }
                 endRef.current();
                 // Rien n'a bougé d'un jour entier, ou le lâcher tombe hors de
                 // la frise : inutile de réécrire les mêmes dates.
                 if (!result?.next) return;
+                if (milestone !== null) {
+                    const { dueDate } = result.next;
+                    if (dueDate !== null && dueDate !== milestone.dueDate)
+                        opts.current.onMoveMilestone(milestone, dueDate);
+                    return;
+                }
                 if (card === null) {
                     // Ce qui n'existe pas encore se pose sur un jour, et sur rien
                     // d'autre : ses deux bords y sont donnés ensemble ou pas du tout.
@@ -341,13 +375,19 @@ export function useDateDrag({
     useEffect(() => () => endRef.current(), []);
 
     const start = useCallback(
-        (e: ReactPointerEvent, card: ProjectCard | null, mode: DragMode | null, create: CreateKind | null = null) => {
+        (
+            e: ReactPointerEvent,
+            card: ProjectCard | null,
+            mode: DragMode | null,
+            create: CreateKind | null = null,
+            milestone: ProjectMilestone | null = null
+        ) => {
             if (e.button !== 0) return;
             const h = handlers.current;
             if (!h) return;
             moved.current = false;
             handled.current = null;
-            press.current = { card, create, mode, pointerId: e.pointerId, x: e.clientX, y: e.clientY };
+            press.current = { card, milestone, create, mode, pointerId: e.pointerId, x: e.clientX, y: e.clientY };
             window.addEventListener('pointermove', h.move);
             window.addEventListener('pointerup', h.up);
             window.addEventListener('pointercancel', h.cancel);
@@ -366,16 +406,20 @@ export function useDateDrag({
         (e: ReactPointerEvent, kind: CreateKind) => start(e, null, null, kind),
         [start]
     );
+    const onMilestonePointerDown = useCallback(
+        (e: ReactPointerEvent, milestone: ProjectMilestone) => start(e, null, 'move', null, milestone),
+        [start]
+    );
 
-    /** Le clic qui suit un glissé n'est pas un clic : il n'ouvre ni la carte ni la création. */
-    const consumeClick = useCallback((cardId: number | null) => {
+    /** Le clic qui suit un glissé n'est pas un clic : il n'ouvre ni la carte, ni le jalon, ni la création. */
+    const consumeClick = useCallback((key: HeldKey) => {
         const last = handled.current;
         handled.current = null;
         // Périssable : la barre change de ligne pendant le geste, le relâchement
         // peut donc tomber à côté d'elle et ne produire aucun clic à consommer.
         // Sans cette limite, c'est le clic suivant, un vrai, qui serait avalé.
-        return last !== null && last.id === cardId && performance.now() - last.at < CLICK_AFTER_DRAG_MS;
+        return last !== null && last.key === key && performance.now() - last.at < CLICK_AFTER_DRAG_MS;
     }, []);
 
-    return { view, onBarPointerDown, onTagPointerDown, onCreatePointerDown, consumeClick };
+    return { view, onBarPointerDown, onTagPointerDown, onCreatePointerDown, onMilestonePointerDown, consumeClick };
 }

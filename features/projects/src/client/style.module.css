@@ -1866,6 +1866,12 @@ button.tlAddCard {
     color: var(--success);
 }
 
+/* Attrapable : il se déplace d'un jour libre à l'autre (voir `dateDrag.ts`). */
+.milestoneDraggable {
+    cursor: grab;
+    touch-action: none;
+}
+
 /* Le jalon qu'on tient, tel qu'il se posera. En tirets comme la pastille d'une
    tâche à créer : rien n'est encore écrit. */
 .milestoneGhost {

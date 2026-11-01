@@ -148,6 +148,8 @@ interface TimelineProps {
     /** `dueDate` quand le jalon naît d'un dépôt sur un jour de la frise. */
     onMilestoneCreate: (dueDate?: number) => void;
     onMilestoneOpen: (milestone: ProjectMilestone) => void;
+    /** Repose l'échéance d'un jalon après un glissé sur la frise. */
+    onMilestoneDate: (milestone: ProjectMilestone, dueDate: number) => void;
 }
 
 /**
@@ -174,7 +176,8 @@ export function Timeline({
     onCardDates,
     onCardCreate,
     onMilestoneCreate,
-    onMilestoneOpen
+    onMilestoneOpen,
+    onMilestoneDate
 }: TimelineProps) {
     // Le réglage du projet donne l'échelle d'ouverture ; la barre la change pour
     // le temps de la visite, sans la réécrire.
@@ -302,6 +305,7 @@ export function Timeline({
         onBarPointerDown,
         onTagPointerDown,
         onCreatePointerDown,
+        onMilestonePointerDown,
         consumeClick
     } = useDateDrag({
         dayWidth,
@@ -312,6 +316,7 @@ export function Timeline({
         onCommit: onCardDates,
         onCreate: (startDate, dueDate) => onCardCreate({ startDate, dueDate }),
         onCreateMilestone: (dueDate) => onMilestoneCreate(dueDate),
+        onMoveMilestone: onMilestoneDate,
         takenMilestoneDates: milestoneDates
     });
     // Saisir le fond de la frise la fait défiler, tant qu'aucun autre geste ne
@@ -326,6 +331,12 @@ export function Timeline({
     const creating = drag?.create === 'card' ? placingAt : null;
     /** Le « + Jalon » en vol : il se pose dans la bande d'en-tête, comme ses pairs. */
     const creatingMilestone = drag?.create === 'milestone' ? placingAt : null;
+    /** Une barre tenue : la zone des cartes sans date devient la cible qui retire ses dates. */
+    const holdingBar = drag !== null && drag.card !== null && !drag.placing;
+
+    /** L'échéance d'un jalon telle qu'affichée : la sienne, ou l'aperçu du glissé qui le tient. */
+    const dueOf = (m: ProjectMilestone) =>
+        drag?.milestone?.id === m.id && drag.next?.dueDate != null ? drag.next.dueDate : m.dueDate;
 
     /** Rangée dans une colonne qui vaut « terminé ». */
     const isDone = (card: ProjectCard) => card.columnId !== null && doneColumnIds.has(card.columnId);
@@ -466,7 +477,7 @@ export function Timeline({
                             title='Ajouter une tâche, ou glissez ce bouton sur un jour pour la dater'
                             onPointerDown={(e) => onCreatePointerDown(e, 'card')}
                             onClick={() => {
-                                if (!consumeClick(null)) onCardCreate();
+                                if (!consumeClick('create')) onCardCreate();
                             }}
                         >
                             Tâche
@@ -480,7 +491,7 @@ export function Timeline({
                             title='Ajouter un jalon, ou glissez ce bouton sur un jour pour le dater'
                             onPointerDown={(e) => onCreatePointerDown(e, 'milestone')}
                             onClick={() => {
-                                if (!consumeClick(null)) onMilestoneCreate();
+                                if (!consumeClick('create')) onMilestoneCreate();
                             }}
                         >
                             Jalon
@@ -535,13 +546,18 @@ export function Timeline({
                             <button
                                 key={m.id}
                                 type='button'
-                                className={m.reachedAt !== null ? styles.milestoneDone : styles.milestone}
+                                className={`${m.reachedAt !== null ? styles.milestoneDone : styles.milestone} ${
+                                    canPlan ? styles.milestoneDraggable : ''
+                                }`}
                                 // La teinte du jalon l'emporte sur celle de son état :
                                 // elle est ce qui le rend reconnaissable d'un bout à
                                 // l'autre de la frise.
-                                style={{ left: x(m.dueDate * 1000), ...tint(m.color) }}
-                                title={`${m.name || 'Jalon'} : ${new Date(m.dueDate * 1000).toLocaleDateString('fr-FR')}`}
-                                onClick={() => onMilestoneOpen(m)}
+                                style={{ left: x(dueOf(m) * 1000), ...tint(m.color) }}
+                                title={`${m.name || 'Jalon'} : ${new Date(dueOf(m) * 1000).toLocaleDateString('fr-FR')}`}
+                                onPointerDown={canPlan ? (e) => onMilestonePointerDown(e, m) : undefined}
+                                onClick={() => {
+                                    if (!consumeClick(`milestone:${m.id}`)) onMilestoneOpen(m);
+                                }}
                             >
                                 <span className={`icon icon-star ${styles.milestoneIcon}`} />
                                 <span className={styles.milestoneLabel}>{m.name || 'Jalon'}</span>
@@ -717,7 +733,7 @@ export function Timeline({
                                             // la carte : on vient de poser des dates,
                                             // pas de demander à les lire.
                                             onClick={() => {
-                                                if (!consumeClick(card.id)) onCardOpen(card);
+                                                if (!consumeClick(`card:${card.id}`)) onCardOpen(card);
                                             }}
                                             title={[
                                                 period
@@ -814,7 +830,7 @@ export function Timeline({
             {/* La zone reste rendue pendant qu'on tient une barre, même vide :
                 c'est la cible du geste de retour, elle doit exister avant qu'on
                 y arrive. */}
-            {(undated.length > 0 || (drag !== null && !drag.placing)) && (
+            {(undated.length > 0 || holdingBar) && (
                 <details
                     ref={dropRef}
                     className={`${styles.undated} ${drag?.overDrop ? styles.undatedOver : ''}`}
@@ -823,7 +839,7 @@ export function Timeline({
                     open
                 >
                     <summary>
-                        {drag !== null && !drag.placing
+                        {holdingBar
                             ? 'Déposer ici pour retirer les dates'
                             : undated.length === 1
                               ? '1 carte sans date : glissez-la sur la frise pour la dater'
@@ -846,7 +862,7 @@ export function Timeline({
                                         }
                                         onPointerDown={movable ? (e) => onTagPointerDown(e, card) : undefined}
                                         onClick={() => {
-                                            if (!consumeClick(card.id)) onCardOpen(card);
+                                            if (!consumeClick(`card:${card.id}`)) onCardOpen(card);
                                         }}
                                     >
                                         {card.title || 'Sans titre'}

@@ -456,6 +456,29 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
         }
     };
 
+    /** Optimiste, comme les dates d'une carte : le jalon reste où on l'a lâché pendant l'aller-retour. */
+    const moveMilestone = async (milestone: ProjectMilestone, dueDate: number) => {
+        setActionError(null);
+        setMilestones((prev) => prev.map((m) => (m.id === milestone.id ? { ...m, dueDate } : m)));
+        try {
+            await withSecrecy(() =>
+                api.send('projects.milestoneUpdate', {
+                    milestoneId: milestone.id,
+                    milestone: {
+                        name: milestone.name,
+                        description: milestone.description,
+                        color: milestone.color,
+                        dueDate
+                    }
+                })
+            );
+            invalidate('projects.board');
+        } catch (e) {
+            setActionError(errorNote(e, 'Le déplacement du jalon a échoué.'));
+            void reload();
+        }
+    };
+
     const setMilestoneReached = async (reached: boolean) => {
         if (!milestoneDialog?.milestone) return;
         try {
@@ -660,6 +683,7 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
                         setDialogError(null);
                         setMilestoneDialog({ milestone });
                     }}
+                    onMilestoneDate={(milestone, dueDate) => void moveMilestone(milestone, dueDate)}
                 />
             )}
 

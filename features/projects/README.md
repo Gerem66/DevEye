@@ -277,8 +277,10 @@ sans date sont des pastilles, dans un repli. Le geste va dans les deux sens :
 **une pastille se tire sur un jour** et y prend début et échéance le même, soit
 une barre d'un jour aussitôt étirable ; **une barre se ramène sur la zone des
 pastilles** et y perd ses dates. Le « + » de la barre d'outils se dépose de
-même, pour une tâche ou un jalon qui n'existent pas encore. Rien ne part avant
-le relâchement : pendant le geste, seul un aperçu local bouge.
+même, pour une tâche ou un jalon qui n'existent pas encore, et un jalon posé se
+déplace sous le droit `plan`, vers le jour libre le plus proche de celui visé
+(un jalon par jour). Rien ne part avant le relâchement : pendant le geste, seul
+un aperçu local bouge.
 
 **Le fond, lui, fait défiler** (`Timeline/pan.ts`) : on saisit la frise et elle
 suit le pointeur au pixel, comme une carte. Le geste ne part que du vide, c'est-à-dire

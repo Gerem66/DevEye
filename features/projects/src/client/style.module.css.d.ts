@@ -188,6 +188,7 @@ declare const styles: {
     readonly milestoneDone: string;
     readonly milestoneDot: string;
     readonly milestoneDotNone: string;
+    readonly milestoneDraggable: string;
     readonly milestoneGhost: string;
     readonly milestoneIcon: string;
     readonly milestoneLabel: string;
