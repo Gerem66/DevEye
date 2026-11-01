@@ -31,6 +31,7 @@ import styles from './style.module.css';
 
 /** Nom et rôle de chaque outil, dans l'ordre du tableau : le système d'abord, les applications ensuite. */
 const MANAGERS: Record<PackageManagerId, { label: string; desc: string }> = {
+    'rpm-ostree': { label: 'rpm-ostree', desc: 'Image du système (Fedora Atomic)' },
     apt: { label: 'APT', desc: 'Paquets du système (Debian, Ubuntu)' },
     dnf: { label: 'DNF', desc: 'Paquets du système (Fedora, RHEL)' },
     pacman: { label: 'Pacman', desc: 'Paquets du système (Arch)' },
@@ -45,7 +46,6 @@ const MANAGERS: Record<PackageManagerId, { label: string; desc: string }> = {
 };
 
 const UNMANAGED: Record<UnmanagedUpdaterId, { label: string; desc: string }> = {
-    'rpm-ostree': { label: 'rpm-ostree', desc: 'Image du système (Fedora Atomic)' },
     bootc: { label: 'bootc', desc: 'Image du système' },
     fwupd: { label: 'fwupd', desc: 'Micrologiciels de la machine' },
     nix: { label: 'Nix', desc: 'Paquets Nix' },

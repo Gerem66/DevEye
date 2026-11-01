@@ -7,7 +7,7 @@
 //! Applying updates needs root for most system managers: if the agent isn't
 //! privileged we refuse with a clear message (elevate it first, see the
 //! service/privilege flow). Per-user managers (brew, flatpak --user) apply
-//! directly. Update tooling DevEye does not drive (rpm-ostree, fwupd, nix…) is
+//! directly. Update tooling DevEye does not drive (bootc, fwupd, nix…) is
 //! listed too, without a count, so the device's table says what else keeps it
 //! up to date.
 
@@ -114,6 +114,40 @@ fn flatpak_pending() -> Option<u32> {
     (!counts.is_empty()).then(|| counts.iter().sum())
 }
 
+/// Packages that `rpm-ostree upgrade --preview` would change. Each one is a row
+/// of its `Upgraded`, `Downgraded`, `Removed` or `Added` key, the first on the
+/// key's line, the others under it with a blank key. An image announced
+/// without a package diff (a container origin) counts as one update. `None`
+/// when the preview failed: only « No updates available. » means zero.
+#[cfg(any(target_os = "linux", test))]
+fn count_ostree_preview(success: bool, s: &str) -> Option<u32> {
+    let Some((_, update)) = s.split_once("AvailableUpdate:") else {
+        return s.contains("No updates available").then_some(0);
+    };
+    if !success {
+        return None;
+    }
+    let mut in_diff = false;
+    let mut rows = 0;
+    for line in update.lines() {
+        let t = line.trim_start();
+        if t.is_empty() {
+            continue;
+        }
+        // Une clé : des lettres et des espaces jusqu'au deux-points (« Total
+        // layers: »). Un paquet n'en a pas : l'époque est suivie d'un chiffre.
+        if let Some((key, _)) = t.split_once(": ") {
+            if key.chars().all(|c| c.is_ascii_alphabetic() || c == ' ') {
+                in_diff = matches!(key, "Upgraded" | "Downgraded" | "Removed" | "Added");
+            }
+        }
+        if in_diff {
+            rows += 1;
+        }
+    }
+    Some(rows.max(1))
+}
+
 fn mgr(id: &'static str, needs_root: bool) -> PackageManagerInfo {
     PackageManagerInfo {
         id,
@@ -165,11 +199,8 @@ fn unmanaged() -> Vec<&'static str> {
 
     #[cfg(target_os = "linux")]
     {
-        // Une image atomique (Silverblue, Kinoite, CoreOS) : rpm-ostree la
-        // tient, bootc n'en est que l'autre porte.
-        if installed("rpm-ostree", &[]) {
-            ids.push("rpm-ostree");
-        } else if installed("bootc", &[]) {
+        // Là où rpm-ostree tient l'image, bootc n'en est que l'autre porte.
+        if !installed("rpm-ostree", &[]) && installed("bootc", &[]) {
             ids.push("bootc");
         }
         if installed("fwupdmgr", &[]) {
@@ -241,13 +272,16 @@ fn privileged() -> bool {
         .unwrap_or(false)
 }
 
-fn reboot_required(_id: &str) -> bool {
+fn reboot_required(id: &str) -> bool {
     #[cfg(target_os = "linux")]
     {
-        std::path::Path::new("/var/run/reboot-required").exists()
+        let exists = |path: &str| std::path::Path::new(path).exists();
+        exists("/var/run/reboot-required")
+            || (id == "rpm-ostree" && exists("/run/ostree/staged-deployment"))
     }
     #[cfg(not(target_os = "linux"))]
     {
+        let _ = id;
         false
     }
 }
@@ -269,6 +303,10 @@ pub fn present() -> Vec<PackageManagerInfo> {
 
     #[cfg(target_os = "linux")]
     {
+        // Une image atomique (Silverblue, Kinoite, CoreOS).
+        if installed("rpm-ostree", &[]) {
+            out.push(mgr("rpm-ostree", true));
+        }
         if installed("apt-get", &[]) {
             out.push(mgr("apt", true));
         }
@@ -322,6 +360,9 @@ pub fn pending(manager: &str) -> Option<u32> {
                 .filter(|l| l.contains("* Label:") || l.trim_start().starts_with("* "))
                 .count() as u32
         }),
+        #[cfg(target_os = "linux")]
+        "rpm-ostree" => probe("rpm-ostree", &["upgrade", "--preview"])
+            .and_then(|(ok, s)| count_ostree_preview(ok, &s)),
         #[cfg(target_os = "linux")]
         "apt" => probe("apt-get", &["-s", "upgrade"])
             .map(|(_, s)| s.lines().filter(|l| l.starts_with("Inst ")).count() as u32),
@@ -449,6 +490,8 @@ fn upgrade_command(manager: &str) -> Result<UpgradeSpec> {
             needs_root: true,
             session_bus: false,
         },
+        // Prépare le déploiement suivant, que seul un redémarrage active.
+        "rpm-ostree" => one("rpm-ostree", vec!["upgrade"], true),
         "dnf" => one("dnf", vec!["-y", "upgrade"], true),
         "pacman" => one("pacman", vec!["-Syu", "--noconfirm"], true),
         "pamac" => one("pamac", vec!["upgrade", "--no-confirm"], false),
@@ -808,6 +851,34 @@ Proceed with these changes to the system installation? [Y/n]: n\n";
     }
 
     #[test]
+    fn ostree_preview_counts_the_diff_rows() {
+        let preview = "AvailableUpdate:\n\
+        Version: 44.20261101.0 (2026-11-01T00:50:18Z)\n\
+         Commit: 746b8d55dbab193d66a173fe84d9e291f74d1e015632317bc49dd4643cc0cefa\n\
+   GPGSignature: 1 signature\n\
+                 Signature made Sat 01 Nov 2026 using RSA key ID DBFCF71C6D9F90A6\n\
+  SecAdvisories: FEDORA-2026-1a2b3c  Important  kernel-6.17.4-300.fc44.x86_64\n\
+                   CVE-2026-1234 kernel: use-after-free\n\
+                   https://bugzilla.redhat.com/show_bug.cgi?id=1\n\
+       Upgraded: kernel 6.17.3-300.fc44 -> 6.17.4-300.fc44\n\
+                 grub2-tools 1:2.12-9.fc44 -> 1:2.12-10.fc44\n\
+     Downgraded: mesa-libGL 25.2.1-1.fc44 -> 25.2.0-1.fc44\n\
+        Removed: libfoo-1.0-1.fc44.x86_64\n\
+          Added: libbar-2.0-1.fc44.x86_64\n\
+                 libbaz-3.0-1.fc44.x86_64\n";
+        assert_eq!(count_ostree_preview(true, preview), Some(6));
+        let image_only = "AvailableUpdate:\n\
+        Version: 44.20261101.0 (2026-11-01T00:50:18Z)\n\
+         Commit: 746b8d55\n";
+        assert_eq!(count_ostree_preview(true, image_only), Some(1));
+        assert_eq!(
+            count_ostree_preview(false, "No updates available.\n"),
+            Some(0)
+        );
+        assert_eq!(count_ostree_preview(false, ""), None);
+    }
+
+    #[test]
     fn dnf_rows_skip_obsoletes_and_notices() {
         let out = "\n\
 code.x86_64                1.139.1-1790309585.el8        code\n\
@@ -860,7 +931,7 @@ grub2-tools.x86_64         1:2.12-10.fc41                updates\n\
         assert!(spec.steps[1]
             .args
             .contains(&"Dpkg::Options::=--force-confold"));
-        assert!(upgrade_command("rpm-ostree").is_err());
+        assert!(upgrade_command("fwupd").is_err());
     }
 
     #[test]

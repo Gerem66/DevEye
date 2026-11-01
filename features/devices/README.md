@@ -408,7 +408,7 @@ Statuts (`devices.status`) : `pending`, `active`, `pending_deletion`,
 - **« Mises à jour système »** (`PackagesPanel.tsx`) : le total, puis un
   tableau sans en-tête des outils que DevEye pilote, système puis
   applications, avec leur compte et une case à cocher. Ceux qu'il reconnaît
-  sans les piloter (rpm-ostree, fwupd, nix…) restent repliés sous un bouton
+  sans les piloter (bootc, fwupd, nix…) restent repliés sous un bouton
   « Autres ». L'agent répond en deux temps : les outils présents aussitôt
   (une vérification de fichiers, `pkg.listResult`), puis le compte de chacun à
   mesure que sa sonde finit (`pkg.count`), et une ligne tourne tant que le
@@ -417,7 +417,10 @@ Statuts (`devices.status`) : `pending`, `active`, `pending_deletion`,
   du tableau, tant que la fenêtre reste ouverte. Le compte Flatpak vient du
   plan de `flatpak update` lui-même, installation par installation :
   `remote-ls --updates` compare des identifiants de commit qu'un dépôt OCI ne
-  fait pas correspondre.
+  fait pas correspondre. Sur une image atomique, rpm-ostree compte les paquets
+  que changerait `upgrade --preview` et applique par `upgrade`, qui prépare un
+  déploiement : le redémarrage reste requis tant qu'il attend
+  (`/run/ostree/staged-deployment`).
 - **« Agent »** (`AgentPanel.tsx`) : l'état (version, compte, privilèges,
   service, démarrage automatique, transport, politique locale), le démarrage
   automatique, armé ou désarmé quels que soient les privilèges, l'élévation en
