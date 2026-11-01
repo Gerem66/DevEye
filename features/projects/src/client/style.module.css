@@ -2097,6 +2097,14 @@ button.tlAddCard {
     cursor: grab;
 }
 
+/* Le survol détache la barre du fond, qui se saisit du même curseur. Un voile de
+   la couleur du texte : il vaut pour tous les états de la barre, et éclaircit en
+   thème sombre ce qu'il fonce en thème clair. */
+.barDraggable:hover {
+    --veil: color-mix(in srgb, var(--text-primary) 8%, transparent);
+    background-image: linear-gradient(var(--veil), var(--veil));
+}
+
 /*
  * Les deux lisières d'étirement, purement visuelles : elles ne portent aucun
  * gestionnaire, c'est la position du pointeur dans la barre qui décide du mode.
