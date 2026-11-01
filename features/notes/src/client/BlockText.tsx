@@ -28,7 +28,9 @@ const MARK_CLASSES: MarkClasses = {
  */
 export default function BlockText({ value, className, placeholder }: BlockTextProps) {
     const elRef = useRef<HTMLDivElement>(null);
-    const html = useMemo(() => inlineToEditorHtml(value, MARK_CLASSES), [value]);
+    // An empty element offers the browser no caret position, so the arrow keys
+    // would skip the line: the `<br>` gives it one, and no text.
+    const html = useMemo(() => inlineToEditorHtml(value, MARK_CLASSES) || '<br>', [value]);
 
     useLayoutEffect(() => {
         const el = elRef.current;
