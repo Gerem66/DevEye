@@ -571,13 +571,16 @@ the share, and the system directories: on Linux `/etc`, `/usr`, `/bin`, `/sbin`,
 "/home/lea/Sync"]` narrows it to the directories you name (and opens a system
 one if you name it).
 
-Within a share, the agent never installs from the server what would open the
-machine: anything under `.ssh`, `.config/autostart`, `.config/systemd`,
-`.config/fish`, `Library/LaunchAgents`, the Windows `Start Menu/Programs/Startup`
-folder or a PowerShell profile folder, nor a shell startup file (`.bashrc`,
-`.profile`, `.zshrc`…) right inside a home folder. Such a file still goes up from
-this machine; coming down, it is refused and shows in the share's journal. A
-share rooted in one of these folders is refused like a system directory.
+Within a share, the agent installs from the server what would open the machine
+only if the share allows it, which it does not by default: anything under
+`.ssh`, `.config/autostart`, `.config/systemd`, `.config/fish`,
+`Library/LaunchAgents`, the Windows `Start Menu/Programs/Startup` folder or a
+PowerShell profile folder, and a shell startup file (`.bashrc`, `.profile`,
+`.zshrc`…) right inside a home folder. Refused, such a file still goes up from
+this machine; coming down, it is refused and shows in the share's journal.
+Allowed by the share, it is still refused under `allow_terminal = false`: such a
+write gives a terminal. A share rooted in one of these folders is refused like a
+system directory, unless the share allows them.
 
 **Tunnel targets.** A tunnel is a TCP connection this machine opens for the
 server, so that a DevEye module reaches a service only this machine sees: the

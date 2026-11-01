@@ -28,6 +28,7 @@ use tracing::{debug, info, warn};
 use crate::exclusions::CompiledExclusions;
 use crate::protocol::{SyncIndexEntry, SyncPushResume, SyncShareAssignment};
 use e2e::{DeviceKey, ShareKeys, SECRET_LEN};
+use paths::SensitiveWrites;
 pub use transfer::ApplyFrame;
 use transfer::{PushCredits, PushWindow, SealedPush, SharedCaches, PUSH_ACK_TIMEOUT};
 use watcher::ShareWatcher;
@@ -241,6 +242,9 @@ pub struct SyncManager {
     caches: SharedCaches,
     /// `sync_roots` de la config locale : où cette machine accepte un partage.
     sync_roots: Vec<String>,
+    /// `allow_terminal` of the local policy: a share that opens its sensitive
+    /// folders opens them here only if the terminal is allowed.
+    terminal_allowed: bool,
     /// Les partages dont la racine a été refusée, et pourquoi : le serveur
     /// l'apprend par la réponse à sa première opération.
     refused: HashMap<i64, String>,
@@ -257,6 +261,7 @@ impl SyncManager {
     pub fn new(
         tx: Sender<SyncEvent>,
         sync_roots: Vec<String>,
+        terminal_allowed: bool,
         device_key_path: Option<PathBuf>,
     ) -> Self {
         Self {
@@ -266,6 +271,7 @@ impl SyncManager {
             announced: HashMap::new(),
             caches: SharedCaches::default(),
             sync_roots,
+            terminal_allowed,
             refused: HashMap::new(),
             push_credits: PushCredits::default(),
             generations: 0,
@@ -344,16 +350,21 @@ impl SyncManager {
             // ici qu'un dossier système, un dossier hors de `sync_roots` ou le
             // dossier d'un autre partage se refuse.
             let root = paths::plain_canonical(Path::new(assignment.local_path.trim()));
-            let problem =
-                paths::root_problem(&assignment.local_path, &self.sync_roots, own_dir.as_deref())
-                    .or_else(|| {
-                        // Deux partages emboîtés synchroniseraient chacun la corbeille et
-                        // les copies de conflit de l'autre.
-                        roots
-                            .iter()
-                            .find(|(other, _)| paths::overlaps(other, &root))
-                            .map(|(_, other)| format!("chevauche le partage « {other} »"))
-                    });
+            let writes = SensitiveWrites::of(assignment.sensitive_writes, self.terminal_allowed);
+            let problem = paths::root_problem(
+                &assignment.local_path,
+                &self.sync_roots,
+                own_dir.as_deref(),
+                writes,
+            )
+            .or_else(|| {
+                // Deux partages emboîtés synchroniseraient chacun la corbeille et
+                // les copies de conflit de l'autre.
+                roots
+                    .iter()
+                    .find(|(other, _)| paths::overlaps(other, &root))
+                    .map(|(_, other)| format!("chevauche le partage « {other} »"))
+            });
             if let Some(reason) = problem {
                 tracing::error!(share_id, path = %assignment.local_path, %reason, "sync: share root refused");
                 self.shares.remove(&share_id);
@@ -485,6 +496,15 @@ impl SyncManager {
     }
 
     /// The share's root and keys, or why this machine cannot serve it.
+    /// What the server may write in this share's sensitive folders here.
+    fn writes(&self, share_id: i64) -> SensitiveWrites {
+        let allows = self
+            .shares
+            .get(&share_id)
+            .is_some_and(|s| s.assignment.sensitive_writes);
+        SensitiveWrites::of(allows, self.terminal_allowed)
+    }
+
     fn served(&self, share_id: i64) -> Result<(PathBuf, Option<Arc<ShareKeys>>), String> {
         let state = self
             .shares
@@ -700,6 +720,7 @@ impl SyncManager {
                 frame.op_id.clone(),
                 share_id,
                 root,
+                self.writes(share_id),
                 Arc::clone(&self.caches),
                 keys,
                 frames,
@@ -782,8 +803,9 @@ impl SyncManager {
         kind: &str,
         mode: Option<u32>,
     ) -> SyncEvent {
+        let writes = self.writes(share_id);
         let outcome = self.served(share_id).and_then(|(root, _)| {
-            transfer::apply_dir(&root, rel_path, kind, mode).map_err(|e| error_text(&e))
+            transfer::apply_dir(&root, writes, rel_path, kind, mode).map_err(|e| error_text(&e))
         });
         SyncEvent::OpResult {
             op_id: op_id.to_string(),
@@ -814,6 +836,7 @@ impl SyncManager {
             Ok(served) => served,
             Err(reason) => return self.refuse(op_id, "applyLocal", reason),
         };
+        let writes = self.writes(share_id);
         let caches = Arc::clone(&self.caches);
         let (rel_path, source_rel_path, hash) = (
             rel_path.to_string(),
@@ -827,6 +850,7 @@ impl SyncManager {
             move |keepalive| {
                 transfer::apply_local(
                     &root,
+                    writes,
                     share_id,
                     &caches,
                     &rel_path,
@@ -858,6 +882,7 @@ impl SyncManager {
             Ok(served) => served,
             Err(reason) => return self.refuse(op_id, "move", reason),
         };
+        let writes = self.writes(share_id);
         let (from_rel_path, rel_path, hash) = (
             from_rel_path.to_string(),
             rel_path.to_string(),
@@ -870,6 +895,7 @@ impl SyncManager {
             move |keepalive| {
                 transfer::move_file(
                     &root,
+                    writes,
                     &from_rel_path,
                     &rel_path,
                     (&hash, size, keys.as_deref()),
@@ -900,9 +926,10 @@ impl SyncManager {
             Ok((root, _)) => root,
             Err(reason) => return self.refuse(op_id, "rename", reason),
         };
+        let writes = self.writes(share_id);
         let (from, to) = (from_rel_path.to_string(), rel_path.to_string());
         transfer::spawn_local_op(op_id.to_string(), "rename", self.tx.clone(), move |_| {
-            transfer::rename_in_place(&root, &from, &to)
+            transfer::rename_in_place(&root, writes, &from, &to)
         });
     }
 }
@@ -942,7 +969,7 @@ mod tests {
 
     fn manager() -> (SyncManager, tokio::sync::mpsc::Receiver<SyncEvent>) {
         let (tx, rx) = tokio::sync::mpsc::channel(8);
-        (SyncManager::new(tx, Vec::new(), None), rx)
+        (SyncManager::new(tx, Vec::new(), true, None), rx)
     }
 
     fn frame(seq: u64) -> ApplyFrame {
@@ -1008,6 +1035,7 @@ mod tests {
             rate_up_bps: None,
             trash_keep_days: 30,
             encryption: None,
+            sensitive_writes: false,
         }
     }
 

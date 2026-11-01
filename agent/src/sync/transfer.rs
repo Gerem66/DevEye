@@ -36,7 +36,7 @@ use crate::ownership::adopt_owner;
 use crate::protocol::SyncPushResume;
 use crate::sync::e2e::{self, ContentHasher, ShareKeys, TagDigest, Unsealer, BLOCK, NONCE_LEN};
 use crate::sync::index_cache::IndexCache;
-use crate::sync::paths::{confined_join, local_join, writable_join};
+use crate::sync::paths::{confined_join, local_join, writable_join, SensitiveWrites};
 use crate::sync::scanner::hash_file;
 use crate::sync::{error_text, Keepalive, SyncEvent};
 
@@ -725,10 +725,12 @@ impl ApplyFailure {
 /// order, acks and the outcome leave through `tx`. The worker ends with the
 /// final frame, on a failure, or when the loop drops its sender (end of
 /// session). The partial stays in every case but wrong content.
+#[allow(clippy::too_many_arguments)]
 pub fn spawn_apply(
     op_id: String,
     share_id: i64,
     root: PathBuf,
+    writes: SensitiveWrites,
     caches: SharedCaches,
     keys: Option<Arc<ShareKeys>>,
     mut frames: Receiver<ApplyFrame>,
@@ -743,6 +745,7 @@ pub fn spawn_apply(
             let target = ApplyTarget {
                 share_id,
                 root: &root,
+                writes,
                 caches: &caches,
                 keys: keys.as_ref(),
             };
@@ -788,6 +791,7 @@ fn apply_result(op_id: &str, error: Option<String>) -> SyncEvent {
 struct ApplyTarget<'a> {
     share_id: i64,
     root: &'a Path,
+    writes: SensitiveWrites,
     caches: &'a SharedCaches,
     keys: Option<&'a Arc<ShareKeys>>,
 }
@@ -823,7 +827,7 @@ fn apply_inner(
                 frame.seq
             )));
         }
-        *state = Some(open_partial(target.root, frame, target.keys, keepalive)?);
+        *state = Some(open_partial(target, frame, keepalive)?);
     }
     let st = state.as_mut().expect("opened above");
     if frame.seq != st.next_seq {
@@ -873,13 +877,7 @@ fn apply_inner(
     }
     // Closed before the rename: Windows refuses to rename an open file.
     st.file = None;
-    install(
-        target.root,
-        target.share_id,
-        target.caches,
-        &st.tmp_path,
-        frame,
-    )?;
+    install(target, &st.tmp_path, frame)?;
     *state = None;
     Ok(true)
 }
@@ -888,13 +886,13 @@ fn apply_inner(
 /// (`resume_from`): obeying it rather than our own size keeps both sides
 /// counting the same bytes, and the partial is trimmed accordingly.
 fn open_partial(
-    root: &Path,
+    target: &ApplyTarget,
     frame: &ApplyFrame,
-    keys: Option<&Arc<ShareKeys>>,
     keepalive: &mut Keepalive,
 ) -> Result<ApplyState, ApplyFailure> {
+    let (root, keys) = (target.root, target.keys);
     // Refused before a single byte: the install would refuse it anyway.
-    writable_join(root, &frame.rel_path).map_err(ApplyFailure::corrupt)?;
+    writable_join(root, &frame.rel_path, target.writes).map_err(ApplyFailure::corrupt)?;
     // Named by HASH, not by `opId`: that is what lets the next cycle find it.
     let tmp_path = partial_path(root, &frame.expected_hash).map_err(ApplyFailure::retry)?;
     let held = resumable_prefix(&tmp_path, frame.resume_from, keys.map(|k| &**k), keepalive)
@@ -944,14 +942,9 @@ fn open_partial(
 
 /// The verified partial becomes the target: freshness guard, parents, mtime,
 /// mode, owner, then the atomic rename.
-fn install(
-    root: &Path,
-    share_id: i64,
-    caches: &SharedCaches,
-    tmp_path: &Path,
-    frame: &ApplyFrame,
-) -> Result<(), ApplyFailure> {
-    let dest = writable_join(root, &frame.rel_path).map_err(ApplyFailure::retry)?;
+fn install(target: &ApplyTarget, tmp_path: &Path, frame: &ApplyFrame) -> Result<(), ApplyFailure> {
+    let (root, share_id, caches) = (target.root, target.share_id, target.caches);
+    let dest = writable_join(root, &frame.rel_path, target.writes).map_err(ApplyFailure::retry)?;
 
     // Overwrite guard: a target that changed since the scan behind this
     // download holds an unsynced local edit. Refuse the install; the next scan
@@ -1081,8 +1074,14 @@ fn create_parents_owned(root: &Path, dest: &Path) -> Result<()> {
 ///
 /// Si le chemin existe, on ne touche QUE le mode, quelle que soit sa nature ;
 /// un fichier absent arrive toujours par `applyChunk` ou `applyLocal`.
-pub fn apply_dir(root: &Path, rel_path: &str, kind: &str, mode: Option<u32>) -> Result<()> {
-    let dest = writable_join(root, rel_path)?;
+pub fn apply_dir(
+    root: &Path,
+    writes: SensitiveWrites,
+    rel_path: &str,
+    kind: &str,
+    mode: Option<u32>,
+) -> Result<()> {
+    let dest = writable_join(root, rel_path, writes)?;
     if std::fs::symlink_metadata(&dest).is_err() {
         // Un `chmod` sur un FICHIER momentanément absent ne doit pas faire
         // naître un dossier à sa place : le planner écarterait ensuite ce chemin
@@ -1130,6 +1129,7 @@ fn verified_source(
 #[allow(clippy::too_many_arguments)]
 pub fn apply_local(
     root: &Path,
+    writes: SensitiveWrites,
     share_id: i64,
     caches: &SharedCaches,
     rel_path: &str,
@@ -1142,7 +1142,7 @@ pub fn apply_local(
     let (hash, size, keys) = content;
     let src = verified_source(root, source_rel_path, hash, size, keys, keepalive)?;
 
-    let dest = writable_join(root, rel_path)?;
+    let dest = writable_join(root, rel_path, writes)?;
     // Same overwrite guard as a download: a local edit since the scan is not ours to erase.
     if let Ok(meta) = std::fs::symlink_metadata(&dest) {
         if meta.is_file() && !unchanged_since_scan(caches, share_id, rel_path, &meta) {
@@ -1186,6 +1186,7 @@ fn uuid_like(rel_path: &str, mtime: i64) -> String {
 #[allow(clippy::too_many_arguments)]
 pub fn move_file(
     root: &Path,
+    writes: SensitiveWrites,
     from_rel_path: &str,
     rel_path: &str,
     content: (&str, u64, Option<&ShareKeys>),
@@ -1196,7 +1197,7 @@ pub fn move_file(
     let (hash, size, keys) = content;
     let src = verified_source(root, from_rel_path, hash, size, keys, keepalive)?;
 
-    let dest = writable_join(root, rel_path)?;
+    let dest = writable_join(root, rel_path, writes)?;
     if std::fs::symlink_metadata(&dest).is_ok() {
         bail!("la cible existe déjà");
     }
@@ -1266,7 +1267,12 @@ pub fn delete_to_trash(
 /// fix the user picked in the Journal. The source is joined with
 /// [`local_join`] (its name is by definition not portable); the target must
 /// be portable, writable and absent.
-pub fn rename_in_place(root: &Path, from_rel_path: &str, rel_path: &str) -> Result<()> {
+pub fn rename_in_place(
+    root: &Path,
+    writes: SensitiveWrites,
+    from_rel_path: &str,
+    rel_path: &str,
+) -> Result<()> {
     let folder = |rel: &str| {
         rel.rsplit_once('/')
             .map_or("", |(parent, _)| parent)
@@ -1280,7 +1286,7 @@ pub fn rename_in_place(root: &Path, from_rel_path: &str, rel_path: &str) -> Resu
     if !meta.is_file() && !meta.is_dir() {
         bail!("ni un fichier ni un dossier : renommage refusé");
     }
-    let dest = writable_join(root, rel_path)?;
+    let dest = writable_join(root, rel_path, writes)?;
     if std::fs::symlink_metadata(&dest).is_ok() {
         bail!("un fichier porte déjà ce nom sur l'appareil");
     }
@@ -1463,13 +1469,20 @@ mod tests {
         let root = std::env::temp_dir().join(format!("deveye-applydir-{}", std::process::id()));
         std::fs::create_dir_all(&root).unwrap();
 
-        apply_dir(&root, "absent.txt", "file", Some(0o644)).unwrap();
+        apply_dir(
+            &root,
+            SensitiveWrites::Refused,
+            "absent.txt",
+            "file",
+            Some(0o644),
+        )
+        .unwrap();
         assert!(
             !root.join("absent.txt").exists(),
             "aucun chemin ne doit être créé"
         );
 
-        apply_dir(&root, "vide", "dir", None).unwrap();
+        apply_dir(&root, SensitiveWrites::Refused, "vide", "dir", None).unwrap();
         assert!(
             root.join("vide").is_dir(),
             "un dossier vide, lui, doit être créé"
@@ -1743,12 +1756,24 @@ mod tests {
         tokio::sync::mpsc::Sender<ApplyFrame>,
         tokio::sync::mpsc::Receiver<SyncEvent>,
     ) {
+        worker_writing(root, op, SensitiveWrites::Refused)
+    }
+
+    fn worker_writing(
+        root: &Path,
+        op: &str,
+        writes: SensitiveWrites,
+    ) -> (
+        tokio::sync::mpsc::Sender<ApplyFrame>,
+        tokio::sync::mpsc::Receiver<SyncEvent>,
+    ) {
         let (frames_tx, frames_rx) = tokio::sync::mpsc::channel(APPLY_QUEUE);
         let (tx, rx) = tokio::sync::mpsc::channel(64);
         spawn_apply(
             op.into(),
             1,
             root.to_path_buf(),
+            writes,
             SharedCaches::default(),
             None,
             frames_rx,
@@ -1804,6 +1829,32 @@ mod tests {
         let content: Vec<u8> = (0..300u32).map(|i| i as u8).collect();
         let hash = sha(&content);
         (content, hash)
+    }
+
+    #[test]
+    fn a_download_into_a_sensitive_folder_waits_for_the_share_to_allow_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let (content, hash) = sample();
+        let into_ssh = || ApplyFrame {
+            rel_path: ".ssh/id_ed25519".into(),
+            ..apply_frame_for("op", 0, &content, true, &hash, 300)
+        };
+
+        let (frames, mut rx) = worker(dir.path(), "op");
+        frames.blocking_send(into_ssh()).unwrap();
+        let (ok, error) = expect_result(&mut rx);
+        assert!(!ok);
+        assert!(error.unwrap().contains("dossiers sensibles"));
+        assert!(!dir.path().join(".ssh").exists());
+
+        let (frames, mut rx) = worker_writing(dir.path(), "op", SensitiveWrites::Allowed);
+        frames.blocking_send(into_ssh()).unwrap();
+        expect_ack(&mut rx, 0);
+        assert!(expect_result(&mut rx).0);
+        assert_eq!(
+            std::fs::read(dir.path().join(".ssh/id_ed25519")).unwrap(),
+            content
+        );
     }
 
     #[test]
@@ -2042,7 +2093,13 @@ mod tests {
         let root = dir.path();
         std::fs::create_dir(root.join("docs")).unwrap();
         std::fs::write(root.join("docs/a:b.txt"), b"x").unwrap();
-        rename_in_place(root, "docs/a:b.txt", "docs/a-b.txt").unwrap();
+        rename_in_place(
+            root,
+            SensitiveWrites::Refused,
+            "docs/a:b.txt",
+            "docs/a-b.txt",
+        )
+        .unwrap();
         assert_eq!(std::fs::read(root.join("docs/a-b.txt")).unwrap(), b"x");
         assert!(!root.join("docs/a:b.txt").exists());
     }
@@ -2060,10 +2117,17 @@ mod tests {
             ("docs/pris.txt", "déjà"),
             ("docs/c?d.txt", "refusé"),
         ] {
-            let err = rename_in_place(root, "docs/a:b.txt", to).unwrap_err();
+            let err =
+                rename_in_place(root, SensitiveWrites::Refused, "docs/a:b.txt", to).unwrap_err();
             assert!(error_text(&err).contains(why), "{to}: {err}");
         }
-        assert!(rename_in_place(root, "docs/absent:x.txt", "docs/x.txt").is_err());
+        assert!(rename_in_place(
+            root,
+            SensitiveWrites::Refused,
+            "docs/absent:x.txt",
+            "docs/x.txt"
+        )
+        .is_err());
         assert!(root.join("docs/a:b.txt").exists());
         assert_eq!(std::fs::read(root.join("docs/pris.txt")).unwrap(), b"y");
     }
@@ -2175,6 +2239,7 @@ mod tests {
             "op".into(),
             1,
             dest.path().to_path_buf(),
+            SensitiveWrites::Refused,
             SharedCaches::default(),
             Some(Arc::clone(&keys)),
             frames_rx,
@@ -2282,6 +2347,7 @@ mod tests {
             "op".into(),
             1,
             dest.path().to_path_buf(),
+            SensitiveWrites::Refused,
             SharedCaches::default(),
             Some(keys),
             frames_rx,

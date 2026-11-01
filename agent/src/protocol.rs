@@ -567,6 +567,10 @@ pub struct SyncShareAssignment {
     /// Set on an end-to-end encrypted share (see `sync::e2e`).
     #[serde(default)]
     pub encryption: Option<SyncEncryption>,
+    /// The share lets the server write into its sensitive folders (see
+    /// `sync::paths::SensitiveWrites`).
+    #[serde(rename = "sensitiveWrites", default)]
+    pub sensitive_writes: bool,
 }
 
 /// The encryption of a share as the server pushes it to this device.
@@ -1647,11 +1651,13 @@ mod tests {
         let config = r#"{"command":"sync.config","payload":{"shares":[
             {"shareId":1,"localPath":"/a","status":"active","exclusions":[]},
             {"shareId":2,"localPath":"/b","status":"active","exclusions":[],"encryption":{"wrappedKey":null}},
-            {"shareId":3,"localPath":"/c","status":"active","exclusions":[],"encryption":{"wrappedKey":"k"}}
+            {"shareId":3,"localPath":"/c","status":"active","exclusions":[],"encryption":{"wrappedKey":"k"},"sensitiveWrites":true}
         ]}}"#;
         let Ok(ServerMessage::SyncConfig { shares }) = serde_json::from_str(config) else {
             panic!("sync.config");
         };
+        let sensitive: Vec<_> = shares.iter().map(|s| s.sensitive_writes).collect();
+        assert_eq!(sensitive, vec![false, false, true]);
         let encryption: Vec<_> = shares.iter().map(|s| s.encryption.clone()).collect();
         assert_eq!(
             encryption,

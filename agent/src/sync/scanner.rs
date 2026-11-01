@@ -849,6 +849,7 @@ mod tests {
             rate_up_bps: None,
             trash_keep_days: 30,
             encryption: None,
+            sensitive_writes: false,
         }
     }
 

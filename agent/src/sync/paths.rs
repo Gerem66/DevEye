@@ -312,11 +312,13 @@ const REMOVABLE_MOUNTS: &[&str] = &["/run/media", "/run/mount"];
 /// tout dossier non système convient ; sinon la racine doit être l'une des
 /// entrées, ou dessous, et ce choix écrit sur la machine l'emporte sur la liste
 /// des dossiers système (l'opérateur sait ce qu'il ouvre, le serveur non).
-/// `own_dir` est le dossier de l'agent, jamais partageable.
+/// `own_dir` est le dossier de l'agent, jamais partageable. Un dossier
+/// sensible ne passe que si `writes` l'autorise.
 pub fn root_problem(
     local_path: &str,
     allowlist: &[String],
     own_dir: Option<&Path>,
+    writes: SensitiveWrites,
 ) -> Option<String> {
     let trimmed = local_path.trim();
     let path = Path::new(trimmed);
@@ -360,9 +362,9 @@ pub fn root_problem(
             ));
         }
     }
-    sensitive_dir(&real).map(|dir| {
-        format!("« {dir} » ouvre la machine, refusé comme partage (pour l'ouvrir quand même : `sync_roots` dans agent.toml)")
-    })
+    let why = writes.refusal()?;
+    sensitive_dir(&real)
+        .map(|dir| format!("« {dir} » ouvre la machine, refusé comme partage : {why}"))
 }
 
 /// Where a write from the server would become access to the machine or code run
@@ -370,7 +372,8 @@ pub fn root_problem(
 /// autostart, `Library/LaunchAgents`, the Windows Startup folder, a PowerShell
 /// profile) or by the account's service manager (`.config/systemd`). Anywhere
 /// in the path, share root included: a share may hold and send these, the
-/// machine never installs them from the server.
+/// machine installs them from the server only where [`SensitiveWrites`]
+/// allows it.
 const SENSITIVE_DIRS: &[&[&str]] = &[
     &[".ssh"],
     &[".config", "autostart"],
@@ -425,13 +428,44 @@ fn sensitive_dir(path: &Path) -> Option<String> {
     None
 }
 
+/// Whether the server may write, in a share, what [`write_problem`] guards.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SensitiveWrites {
+    /// The share keeps them out, its default.
+    Refused,
+    /// The share lets them in, but this machine's policy refuses the terminal,
+    /// which such a write would amount to.
+    NoTerminal,
+    Allowed,
+}
+
+impl SensitiveWrites {
+    pub fn of(share_allows: bool, terminal_allowed: bool) -> Self {
+        match (share_allows, terminal_allowed) {
+            (false, _) => Self::Refused,
+            (true, false) => Self::NoTerminal,
+            (true, true) => Self::Allowed,
+        }
+    }
+
+    /// Why such a write is refused, `None` when it is not.
+    fn refusal(self) -> Option<&'static str> {
+        match self {
+            Self::Refused => Some("le partage n'autorise pas les dossiers sensibles"),
+            Self::NoTerminal => Some(
+                "cette machine refuse le terminal (`allow_terminal`), et y écrire en ouvrirait un",
+            ),
+            Self::Allowed => None,
+        }
+    }
+}
+
 /// Why the server may not write at `dest`, `None` when it may (see
 /// [`SENSITIVE_DIRS`] and [`SHELL_STARTUP_FILES`]).
-pub fn write_problem(dest: &Path) -> Option<String> {
+pub fn write_problem(dest: &Path, writes: SensitiveWrites) -> Option<String> {
+    let why = writes.refusal()?;
     if let Some(dir) = sensitive_dir(dest) {
-        return Some(format!(
-            "« {dir} » : cette machine n'y écrit jamais ce qui vient du serveur"
-        ));
+        return Some(format!("« {dir} » : {why}"));
     }
     let file = dest.file_name()?.to_string_lossy();
     let in_home = dest.parent().is_some_and(|parent| {
@@ -440,16 +474,15 @@ pub fn write_problem(dest: &Path) -> Option<String> {
                 .parent()
                 .is_some_and(|above| HOME_PARENTS.iter().any(|h| above == Path::new(h)))
     });
-    (in_home && SHELL_STARTUP_FILES.contains(&file.as_ref())).then(|| {
-        format!("« {file} » se lance avec le shell : cette machine ne le reçoit jamais du serveur")
-    })
+    (in_home && SHELL_STARTUP_FILES.contains(&file.as_ref()))
+        .then(|| format!("« {file} » se lance avec le shell : {why}"))
 }
 
 /// [`confined_join`] for a path the server is about to write: what
 /// [`write_problem`] refuses never reaches the disk.
-pub fn writable_join(root: &Path, rel_path: &str) -> Result<PathBuf> {
+pub fn writable_join(root: &Path, rel_path: &str, writes: SensitiveWrites) -> Result<PathBuf> {
     let joined = confined_join(root, rel_path)?;
-    if let Some(problem) = write_problem(&joined) {
+    if let Some(problem) = write_problem(&joined, writes) {
         bail!("écriture refusée : {problem}");
     }
     Ok(joined)
@@ -533,7 +566,19 @@ mod tests {
             "/var/home/u/.profile",
             "/root/.zshrc",
         ] {
-            assert!(write_problem(Path::new(refused)).is_some(), "{refused}");
+            let refused = Path::new(refused);
+            assert!(
+                write_problem(refused, SensitiveWrites::Refused).is_some(),
+                "{refused:?}"
+            );
+            assert!(
+                write_problem(refused, SensitiveWrites::NoTerminal).is_some(),
+                "{refused:?}"
+            );
+            assert!(
+                write_problem(refused, SensitiveWrites::Allowed).is_none(),
+                "{refused:?}"
+            );
         }
         for fine in [
             "/home/u/Docs/.bashrc",
@@ -541,17 +586,41 @@ mod tests {
             "/home/u/.config/app/settings.json",
             "/home/u/sshfiles/key.pub",
         ] {
-            assert!(write_problem(Path::new(fine)).is_none(), "{fine}");
+            assert!(
+                write_problem(Path::new(fine), SensitiveWrites::Refused).is_none(),
+                "{fine}"
+            );
         }
 
         let share = tempfile::tempdir().unwrap();
-        assert!(writable_join(share.path(), ".ssh/authorized_keys").is_err());
-        assert!(writable_join(share.path(), "docs/a.txt").is_ok());
+        let refused = writable_join(
+            share.path(),
+            ".ssh/authorized_keys",
+            SensitiveWrites::Refused,
+        );
+        assert!(refused.unwrap_err().to_string().contains("n'autorise pas"));
+        let no_terminal = writable_join(
+            share.path(),
+            ".ssh/authorized_keys",
+            SensitiveWrites::NoTerminal,
+        );
+        assert!(no_terminal
+            .unwrap_err()
+            .to_string()
+            .contains("allow_terminal"));
+        assert!(writable_join(
+            share.path(),
+            ".ssh/authorized_keys",
+            SensitiveWrites::Allowed
+        )
+        .is_ok());
+        assert!(writable_join(share.path(), "docs/a.txt", SensitiveWrites::Refused).is_ok());
     }
 
     #[cfg(all(unix, not(target_os = "macos")))]
     #[test]
     fn root_problem_denies_system_dirs() {
+        const REFUSED: SensitiveWrites = SensitiveWrites::Refused;
         for denied in [
             "/",
             "/etc",
@@ -563,17 +632,17 @@ mod tests {
             "",
         ] {
             assert!(
-                root_problem(denied, &[], None).is_some(),
+                root_problem(denied, &[], None, REFUSED).is_some(),
                 "{denied} doit être refusé"
             );
         }
         for fine in ["/home/u/Docs", "/data/share", "/etcetera", "/srv/sync"] {
             assert!(
-                root_problem(fine, &[], None).is_none(),
+                root_problem(fine, &[], None, REFUSED).is_none(),
                 "{fine} doit passer"
             );
         }
-        assert!(root_problem("/data/../etc", &[], None).is_some());
+        assert!(root_problem("/data/../etc", &[], None, REFUSED).is_some());
         for denied in [
             "/root",
             "/root/Documents",
@@ -582,35 +651,46 @@ mod tests {
             "/var",
             "/home/u/.ssh",
         ] {
-            assert!(root_problem(denied, &[], None).is_some(), "{denied}");
+            assert!(
+                root_problem(denied, &[], None, REFUSED).is_some(),
+                "{denied}"
+            );
         }
 
         assert!(
-            root_problem("/run/media/u/USB", &[], None).is_none(),
+            root_problem("/run/media/u/USB", &[], None, REFUSED).is_none(),
             "un disque amovible"
         );
-        assert!(root_problem("/run/user/1000", &[], None).is_some());
+        assert!(root_problem("/run/user/1000", &[], None, REFUSED).is_some());
         // Ce que l'opérateur écrit dans sa config l'emporte sur la liste système.
         let opened = vec!["/var/lib/myapp".to_string()];
-        assert!(root_problem("/var/lib/myapp/data", &opened, None).is_none());
-        assert!(root_problem("/var/lib/other", &opened, None).is_some());
+        assert!(root_problem("/var/lib/myapp/data", &opened, None, REFUSED).is_none());
+        assert!(root_problem("/var/lib/other", &opened, None, REFUSED).is_some());
 
         let only_data = vec!["/data".to_string()];
-        assert!(root_problem("/data/x", &only_data, None).is_none());
-        assert!(root_problem("/data", &only_data, None).is_none());
-        assert!(root_problem("/home/u", &only_data, None).is_some());
+        assert!(root_problem("/data/x", &only_data, None, REFUSED).is_none());
+        assert!(root_problem("/data", &only_data, None, REFUSED).is_none());
+        assert!(root_problem("/home/u", &only_data, None, REFUSED).is_some());
         assert!(
-            root_problem("/database", &only_data, None).is_some(),
+            root_problem("/database", &only_data, None, REFUSED).is_some(),
             "préfixe de nom, pas de chemin"
         );
 
         let own = Path::new("/home/u/.config/deveye");
-        assert!(root_problem("/home/u/.config/deveye", &[], Some(own)).is_some());
+        assert!(root_problem("/home/u/.config/deveye", &[], Some(own), REFUSED).is_some());
         assert!(
-            root_problem("/home/u/.config", &[], Some(own)).is_some(),
+            root_problem("/home/u/.config", &[], Some(own), REFUSED).is_some(),
             "un partage qui contient l'agent"
         );
-        assert!(root_problem("/home/u/Docs", &[], Some(own)).is_none());
+        assert!(root_problem("/home/u/Docs", &[], Some(own), REFUSED).is_none());
+
+        let allowed = SensitiveWrites::Allowed;
+        assert!(root_problem("/home/u/.ssh", &[], None, allowed).is_none());
+        assert!(root_problem("/home/u/.ssh", &[], None, SensitiveWrites::NoTerminal).is_some());
+        assert!(
+            root_problem("/etc/ssh", &[], None, allowed).is_some(),
+            "toujours un dossier système"
+        );
     }
 
     #[cfg(unix)]

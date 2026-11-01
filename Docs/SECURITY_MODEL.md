@@ -412,10 +412,14 @@ serveur contrôle les machines**, à ceci près.
   qui n'est pas celui du terminal. L'agent refuse un dossier système (`/root` et
   `/var/spool` compris), la racine, son propre dossier, un chemin qu'un lien
   symbolique ferait sortir du partage, et, si `sync_roots` est renseigné sur la
-  machine, tout ce qui n'y figure pas. Dans un partage, il n'installe jamais ce
-  qui ouvrirait la machine : `.ssh`, les dossiers de démarrage de session ou de
+  machine, tout ce qui n'y figure pas. Dans un partage, il n'installe ce qui
+  ouvrirait la machine (`.ssh`, les dossiers de démarrage de session ou de
   services de l'utilisateur, un fichier de démarrage du shell posé dans un
-  foyer. Sans cette règle, écrire dans un partage vaudrait un terminal.
+  foyer) que si le partage l'autorise, ce qu'il ne fait pas par défaut. Sans
+  cette règle, écrire dans un partage vaudrait un terminal : l'autoriser exige
+  donc le droit « Terminal distant » sur chaque appareil du partage et une
+  confirmation récente, et un agent dont la politique refuse le terminal les
+  refuse toujours. L'accord vaut pour quiconque écrit dans le partage.
 - **Tunnels** : une connexion TCP que la machine ouvre pour un module (une base
   de données sur sa boucle locale), sous un droit d'Appareils qui n'est pas
   celui du terminal (« Accès au réseau de l'appareil »). L'agent ne joint que sa
