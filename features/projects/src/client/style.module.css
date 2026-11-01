@@ -2222,6 +2222,16 @@ button.tlAddCard {
     color: var(--text-muted);
 }
 
+/* Le jalon d'un groupe de cartes sans date, au-dessus de ses pastilles. */
+.undatedGroupHead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    margin-top: var(--space-sm);
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
 .undatedList {
     display: flex;
     flex-wrap: wrap;
@@ -2231,6 +2241,12 @@ button.tlAddCard {
     list-style: none;
 }
 
+.undatedGroupHead + .undatedList {
+    margin-top: var(--space-xs);
+}
+
+/* `--hue` : la teinte du jalon, posée en ligne quand il en a une. Sans elle, le
+   mélange rend le fond de la pastille tel quel. */
 .undatedList button {
     --stack-ring: 1px;
 
@@ -2239,8 +2255,8 @@ button.tlAddCard {
     gap: var(--space-xs);
     padding: 2px 10px;
     border-radius: var(--radius-pill);
-    border: 1px solid var(--glass-border);
-    background: var(--surface-widget);
+    border: 1px solid var(--hue, var(--glass-border));
+    background: color-mix(in srgb, var(--hue, var(--surface-widget)) 14%, var(--surface-widget));
     color: var(--text-secondary);
     font: inherit;
     font-size: 0.75rem;

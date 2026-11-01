@@ -273,7 +273,9 @@ auteur, « X est en train d'écrire… », badge de non-lus sur le kanban et la 
 ### La frise se pose et se dépose à la souris
 
 Une barre se déplace et s'étire par ses deux lisières ; sous elle, les cartes
-sans date sont des pastilles, dans un repli. Le geste va dans les deux sens :
+sans date sont des pastilles, dans un repli, groupées par jalon (dans l'ordre
+de leurs dates, puis celles qui n'en ont pas) et rangées dans chaque groupe
+comme au tableau. Le geste va dans les deux sens :
 **une pastille se tire sur un jour** et y prend début et échéance le même, soit
 une barre d'un jour aussitôt étirable ; **une barre se ramène sur la zone des
 pastilles** et y perd ses dates. Le « + » de la barre d'outils se dépose de

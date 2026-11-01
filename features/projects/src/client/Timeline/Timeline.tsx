@@ -1,7 +1,13 @@
 import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Button, useLiveOutlines, useRequestPopupWidth } from 'deveye-sdk-client';
 import { formatDate } from '../api';
-import type { ProjectCard, ProjectCardDep, ProjectMilestone, ProjectMilestoneColor } from '../../contracts/domain';
+import type {
+    ProjectCard,
+    ProjectCardDep,
+    ProjectColumn,
+    ProjectMilestone,
+    ProjectMilestoneColor
+} from '../../contracts/domain';
 import { MilestoneDot, milestoneColorVar, milestoneOf } from '../Milestone';
 import { MemberStack } from '../Member';
 import {
@@ -133,8 +139,11 @@ interface TimelineProps {
     canPlan: boolean;
     /** Créer une tâche : le droit de les tenir, et une colonne où la poser. */
     canTasks: boolean;
-    /** Les colonnes qui valent « terminé » : leurs tâches se lisent en vert. */
-    doneColumnIds: ReadonlySet<number>;
+    /**
+     * Les colonnes du tableau, dans son ordre : il range les cartes sans date, et
+     * les tâches de celles qui valent « terminé » se lisent en vert.
+     */
+    columns: ProjectColumn[];
     /** Poser ou retirer les dates de CETTE carte : le droit de planifier, ou elle est sienne. */
     canDate: (card: ProjectCard) => boolean;
     onCardOpen: (card: ProjectCard) => void;
@@ -170,7 +179,7 @@ export function Timeline({
     deps,
     canPlan,
     canTasks,
-    doneColumnIds,
+    columns,
     canDate,
     onCardOpen,
     onCardDates,
@@ -338,8 +347,29 @@ export function Timeline({
     const dueOf = (m: ProjectMilestone) =>
         drag?.milestone?.id === m.id && drag.next?.dueDate != null ? drag.next.dueDate : m.dueDate;
 
+    const doneColumnIds = useMemo(() => new Set(columns.filter((c) => c.countsAsDone).map((c) => c.id)), [columns]);
     /** Rangée dans une colonne qui vaut « terminé ». */
     const isDone = (card: ProjectCard) => card.columnId !== null && doneColumnIds.has(card.columnId);
+
+    /**
+     * Les cartes sans date par jalon : ce qui doit tomber ensemble se lit ensemble.
+     * Les jalons dans l'ordre de leurs dates, puis les cartes qui n'en ont pas ;
+     * dans un groupe, l'ordre du tableau, colonne puis rang.
+     */
+    const undatedGroups = useMemo(() => {
+        const rank = new Map(columns.map((c, i) => [c.id, i]));
+        const rankOf = (card: ProjectCard) => (card.columnId === null ? 0 : (rank.get(card.columnId) ?? 0));
+        const byBoard = [...undated].sort((a, b) => rankOf(a) - rankOf(b) || a.sortOrder - b.sortOrder || a.id - b.id);
+        const byDate = [...milestones].sort((a, b) => a.dueDate - b.dueDate || a.id - b.id);
+        return [...byDate, null]
+            .map((milestone) => ({
+                milestone,
+                cards: byBoard.filter((c) => milestoneOf(milestones, c.milestoneId) === milestone)
+            }))
+            .filter((group) => group.cards.length > 0);
+    }, [undated, milestones, columns]);
+    /** Sans aucun jalon parmi elles, un seul groupe « Sans jalon » n'apprendrait rien. */
+    const undatedTitled = undatedGroups.length > 1 || undatedGroups[0]?.milestone != null;
 
     /** La barre tenue est au-dessus de la zone sans date : elle va les perdre. */
     const unplanning = (card: ProjectCard) =>
@@ -845,38 +875,51 @@ export function Timeline({
                               ? '1 carte sans date : glissez-la sur la frise pour la dater'
                               : `${undated.length} cartes sans date : glissez-en une sur la frise pour la dater`}
                     </summary>
-                    <ul className={styles.undatedList}>
-                        {undated.map((card) => {
-                            const movable = canDate(card);
-                            return (
-                                <li key={card.id}>
-                                    <button
-                                        type='button'
-                                        className={`${movable ? styles.tagDraggable : ''} ${
-                                            isDone(card) ? styles.tagDone : ''
-                                        } ${placing?.card?.id === card.id ? styles.tagDragging : ''}`}
-                                        title={
-                                            movable
-                                                ? `${card.title || 'Sans titre'} : glissez-la sur la frise pour la dater`
-                                                : card.title || 'Sans titre'
-                                        }
-                                        onPointerDown={movable ? (e) => onTagPointerDown(e, card) : undefined}
-                                        onClick={() => {
-                                            if (!consumeClick(`card:${card.id}`)) onCardOpen(card);
-                                        }}
-                                    >
-                                        {card.title || 'Sans titre'}
-                                        <MemberStack
-                                            userId={card.assigneeUserId}
-                                            others={card.checklist.map((i) => i.assigneeUserId)}
-                                            size={16}
-                                            max={3}
-                                        />
-                                    </button>
-                                </li>
-                            );
-                        })}
-                    </ul>
+                    {undatedGroups.map(({ milestone, cards: group }) => (
+                        <div key={milestone?.id ?? 'none'}>
+                            {undatedTitled && (
+                                <span className={styles.undatedGroupHead}>
+                                    <MilestoneDot color={milestone?.color ?? null} />
+                                    {milestone === null ? 'Sans jalon' : milestone.name || 'Sans nom'}
+                                </span>
+                            )}
+                            <ul className={styles.undatedList}>
+                                {group.map((card) => {
+                                    const movable = canDate(card);
+                                    return (
+                                        <li key={card.id}>
+                                            <button
+                                                type='button'
+                                                className={`${movable ? styles.tagDraggable : ''} ${
+                                                    isDone(card) ? styles.tagDone : ''
+                                                } ${placing?.card?.id === card.id ? styles.tagDragging : ''}`}
+                                                // La teinte de son jalon, celle que sa barre
+                                                // prendra une fois datée.
+                                                style={tint(milestone?.color ?? null)}
+                                                title={
+                                                    movable
+                                                        ? `${card.title || 'Sans titre'} : glissez-la sur la frise pour la dater`
+                                                        : card.title || 'Sans titre'
+                                                }
+                                                onPointerDown={movable ? (e) => onTagPointerDown(e, card) : undefined}
+                                                onClick={() => {
+                                                    if (!consumeClick(`card:${card.id}`)) onCardOpen(card);
+                                                }}
+                                            >
+                                                {card.title || 'Sans titre'}
+                                                <MemberStack
+                                                    userId={card.assigneeUserId}
+                                                    others={card.checklist.map((i) => i.assigneeUserId)}
+                                                    size={16}
+                                                    max={3}
+                                                />
+                                            </button>
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+                        </div>
+                    ))}
                 </details>
             )}
         </div>

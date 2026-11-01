@@ -130,7 +130,7 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
     const [busy, setBusy] = useState(false);
     const [dialogError, setDialogError] = useState<ErrorNoteInput | null>(null);
 
-    /** Les colonnes qui valent « terminé » : la frise y lit ses tâches en vert. */
+    /** Les colonnes qui valent « terminé » : une sous-tâche obligatoire ne s'y rouvre pas. */
     const doneColumnIds = useMemo(() => new Set(columns.filter((c) => c.countsAsDone).map((c) => c.id)), [columns]);
 
     /** Les dates des jalons, sauf celui qu'on édite : un jour n'en porte qu'un. */
@@ -656,7 +656,7 @@ export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDet
                     cards={cards}
                     milestones={milestones}
                     deps={deps}
-                    doneColumnIds={doneColumnIds}
+                    columns={columns}
                     canPlan={rights.canPlan}
                     canTasks={rights.canTasks && columns.length > 0}
                     canDate={rights.canDate}

@@ -286,6 +286,7 @@ declare const styles: {
     readonly today: string;
     readonly typing: string;
     readonly undated: string;
+    readonly undatedGroupHead: string;
     readonly undatedList: string;
     readonly undatedOver: string;
     readonly uptimeDot: string;
