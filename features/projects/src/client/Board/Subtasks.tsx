@@ -62,6 +62,18 @@ export function Subtasks({
     /** Gardé à part : la popup s'efface en fondu, et y lire un nom vide serait pire que rien. */
     const [removingLabel, setRemovingLabel] = useState('');
     const addRef = useRef<HTMLTextAreaElement>(null);
+    const scrollRef = useRef<HTMLDivElement>(null);
+    /** La sous-tâche qu'on vient d'ajouter : la liste défile jusqu'à elle dès qu'elle y paraît. */
+    const added = useRef<string | null>(null);
+
+    useEffect(() => {
+        const box = scrollRef.current;
+        if (added.current === null || !box || !items.some((i) => i.id === added.current)) return;
+        added.current = null;
+        const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+        // Elle ferme la liste : le bas de la boîte, c'est elle.
+        box.scrollTo({ top: box.scrollHeight, behavior });
+    }, [items]);
 
     const drag = useDragReorder<HTMLUListElement, HTMLLIElement>({
         ids: items.map((i) => i.id),
@@ -76,10 +88,12 @@ export function Subtasks({
     const add = () => {
         const text = label.trim();
         if (!text || items.length >= PROJECT_MAX_CHECKLIST_ITEMS) return;
+        const id = newItemId();
+        added.current = id;
         onChange([
             ...items,
             {
-                id: newItemId(),
+                id,
                 label: text,
                 done: false,
                 assigneeUserId: null,
@@ -138,7 +152,7 @@ export function Subtasks({
             </div>
 
             {items.length > 0 && (
-                <div className={styles.checkScroll}>
+                <div ref={scrollRef} className={styles.checkScroll}>
                     <ul ref={drag.listRef} className={styles.checklist}>
                         {items.map((item) => (
                             <li
