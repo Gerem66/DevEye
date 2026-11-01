@@ -12,6 +12,28 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: readonly ChangelogEntry[] = [
     {
+        version: '0.25.5',
+        date: '2026-11-01',
+        changes: [
+            {
+                kind: 'added',
+                text: 'CloudSync : un partage peut envoyer à ses appareils les dossiers sensibles (.ssh, dossiers de démarrage, fichiers du shell) en décochant une case de l’onglet Général, après confirmation et avec le Terminal distant autorisé sur chaque appareil ; le Journal propose « Synchroniser » sur un fichier ainsi retenu'
+            },
+            {
+                kind: 'added',
+                text: 'Appareils : les mises à jour du système se font aussi sur Fedora Atomic, avec l’avis de redémarrage tant qu’une mise à jour attend, et « Mettre à jour » patiente jusqu’à ce que chaque outil ait fini de compter'
+            },
+            {
+                kind: 'improved',
+                text: 'Projets : sur la frise, une barre déplaçable se détache du fond au survol, pour ne plus la confondre avec la frise qu’on fait défiler'
+            },
+            {
+                kind: 'fixed',
+                text: 'Notes : un bloc ajouté par « + » se place sous le bloc sélectionné au lieu de la fin de la note, les flèches haut et bas s’arrêtent sur une ligne vide avec le curseur en début de ligne, et la poubelle d’un titre s’aligne sur sa poignée'
+            }
+        ]
+    },
+    {
         version: '0.25.4',
         date: '2026-11-01',
         changes: [
