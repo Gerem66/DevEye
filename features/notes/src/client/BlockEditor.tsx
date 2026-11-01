@@ -611,7 +611,9 @@ export default function BlockEditor({
         <div
             key={index}
             data-block={index}
-            className={`${styles.block} ${drag?.from === index ? styles.blockHidden : ''}`}
+            className={`${styles.block} ${block.type === 'heading' ? styles.blockHeading : ''} ${
+                drag?.from === index ? styles.blockHidden : ''
+            }`}
         >
             <button
                 type='button'

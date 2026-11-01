@@ -950,6 +950,13 @@ html[data-theme='light'] {
     opacity: 1;
 }
 
+/* A heading's line is taller than the offset above is tuned for: its bin centres
+   on the row, like the grip. */
+.blockHeading .blockRemove {
+    align-self: center;
+    margin-top: 0;
+}
+
 .blockRemove:hover {
     color: var(--danger);
 }

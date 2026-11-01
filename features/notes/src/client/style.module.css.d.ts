@@ -21,6 +21,7 @@ declare const styles: {
     readonly blockGhost: string;
     readonly blockGrip: string;
     readonly blockGripHidden: string;
+    readonly blockHeading: string;
     readonly blockHidden: string;
     readonly blockNumber: string;
     readonly blockRemove: string;
