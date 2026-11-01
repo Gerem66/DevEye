@@ -39,6 +39,7 @@ function Password({ closeFeature }: FeatureViewProps) {
     const [openEntryId, setOpenEntryId] = useState<number | null>(null);
     useLiveSegment('l1', openEntryId === null ? null : String(openEntryId));
     const reloadRef = useRef<Promise<void> | null>(null);
+    const searchRef = useRef<HTMLInputElement>(null);
     // Read at call time so the load effect never depends on this changing prop.
     const closeFeatureRef = useRef(closeFeature);
     closeFeatureRef.current = closeFeature;
@@ -74,6 +75,12 @@ function Password({ closeFeature }: FeatureViewProps) {
         setLoadError(null);
         void reload();
     }, [reload]);
+
+    // La liste chargée, donc le coffre déverrouillé : la recherche se tape d'emblée.
+    // Pas sur écran tactile, où le focus ouvrirait le clavier virtuel.
+    useEffect(() => {
+        if (loaded && !window.matchMedia('(pointer: coarse)').matches) searchRef.current?.focus();
+    }, [loaded]);
 
     /**
      * Le coffre qui se referme (délai écoulé, verrouillé ailleurs, connexion
@@ -269,6 +276,7 @@ function Password({ closeFeature }: FeatureViewProps) {
 
             <div className={styles.searchBar}>
                 <TextInput
+                    ref={searchRef}
                     placeholder='Rechercher un service, un email, une catégorie…'
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
