@@ -2312,6 +2312,7 @@ CREATE TABLE `sync_shares` (
   `trash_keep_days` int NOT NULL DEFAULT '7',
   `integrity_scan_enabled` tinyint NOT NULL DEFAULT '1',
   `sensitive_writes` tinyint NOT NULL DEFAULT '0',
+  `sensitive_report` tinyint NOT NULL DEFAULT '1',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uniq_sync_shares_storage_key` (`storage_key`),
   KEY `idx_sync_shares_user` (`user_id`),
