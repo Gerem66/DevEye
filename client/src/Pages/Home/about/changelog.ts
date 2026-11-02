@@ -12,6 +12,20 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: readonly ChangelogEntry[] = [
     {
+        version: '0.25.6',
+        date: '2026-11-02',
+        changes: [
+            {
+                kind: 'improved',
+                text: 'CloudSync : exclure un gros dossier, comme un .git, ne bloque plus le partage pendant des heures, et un dossier tout juste créé n’est plus signalé à tort'
+            },
+            {
+                kind: 'added',
+                text: 'CloudSync : le Journal montre le dossier complet de chaque fichier, renomme en un clic deux fichiers au même nom à l’accent près, et « Ne pas synchroniser » écarte d’un coup les dossiers sensibles'
+            }
+        ]
+    },
+    {
         version: '0.25.5',
         date: '2026-11-01',
         changes: [
