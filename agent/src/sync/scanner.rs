@@ -490,9 +490,6 @@ fn delta_walk(
             .cloned(),
     );
     while let Some(rel) = queue.pop() {
-        if walker.listed.contains(&rel) {
-            continue;
-        }
         let dir = if rel.is_empty() {
             root.to_path_buf()
         } else {
@@ -609,7 +606,12 @@ impl<'a> Walker<'a> {
             // Un parcours long sans rien envoyer doit rester audible du serveur.
             self.keepalive.tick()?;
             let rel_dir = rel_path_of(root, &dir).unwrap_or_default();
-            self.listed.insert(rel_dir.clone());
+            // A partial walk can reach a folder twice (from its queue, then from
+            // a parent relisted after it): listed twice, each of its files would
+            // go out as two lines of one path, which the server reads as twins.
+            if !self.listed.insert(rel_dir.clone()) {
+                continue;
+            }
             let entries = match std::fs::read_dir(&dir) {
                 Ok(e) => e,
                 Err(e) => {
@@ -1103,6 +1105,30 @@ mod tests {
         keys.sort();
         full_keys.sort();
         assert_eq!(keys, full_keys);
+    }
+
+    #[test]
+    fn a_folder_reached_twice_is_listed_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir(root.join("new")).unwrap();
+        std::fs::write(root.join("new/a.txt"), b"a").unwrap();
+        let (tx, _rx) = tokio::sync::mpsc::channel(64);
+        let mut keepalive = Keepalive::new(tx, "scan-3");
+        let cache = IndexCache::default();
+        let excluded = CompiledExclusions::compile(&[]);
+        let descend = |_: &str| true;
+        let mut walker = Walker::new(root, &cache, None, &excluded, &mut keepalive, &descend);
+        let (mut sub, mut lines) = (IndexCache::default(), Vec::new());
+
+        // The new folder popped first, then its parent from the same queue.
+        walker.walk(root.join("new"), &mut sub, &mut lines).unwrap();
+        walker
+            .walk(root.to_path_buf(), &mut sub, &mut lines)
+            .unwrap();
+
+        assert!(lines.is_empty(), "no line twice: {lines:?}");
+        assert!(sub.entries.contains_key("new/a.txt"));
     }
 
     #[test]
