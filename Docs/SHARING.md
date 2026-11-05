@@ -98,6 +98,7 @@ gestes :
 | Serveur mail     | lire : l'adresse et son activité                                                                                                                                                          | tout réglage et la suppression : une fenêtre projetée lit, elle ne règle pas              |
 | Hébergement      | parcourir, déposer (compté sur l'offre du domicile), renommer, déplacer, supprimer et télécharger des fichiers                                                                            | adresses, domaines, mot de passe, allure, nom et suppression du dossier                   |
 | Projets          | tout l'arbre (colonnes, cartes, assignation parmi les membres d'ici, jalons, dépendances, discussion, historique), profil, statut, archivage, version manuelle ; liaisons lues et nommées | changer de palier, version suivie d'une release, relier / délier, classer le portefeuille |
+| Tableau blanc    | dessiner en direct avec les participants des deux espaces, coller des images (comptées sur l'offre du domicile), renommer, dupliquer ici                                                  | supprimer                                                                                 |
 
 Le critère n'est pas le goût : un geste reste au domicile quand il **référence
 d'autres objets de l'espace d'origine** (une clé d'API, une destination, les
@@ -336,18 +337,19 @@ déplacement : retirer une projection (`share.set`) ou supprimer l'élément
 
 ### Qui sait se déplacer, et pourquoi
 
-|                  | Ce que le déplacement emporte                       | Ce qu'il laisse                                   |
-| ---------------- | --------------------------------------------------- | ------------------------------------------------- |
-| Uptime           | le service, ses relevés, ses incidents              | rien                                              |
-| Notes            | la note                                             | son dossier, qui appartient à l'espace quitté     |
-| Bases de données | la fiche, ses secrets, ses alertes                  | rien                                              |
-| Déploiements     | la cible et son historique                          | son accès : elle arrive indéployable              |
-| Git              | le dépôt et tout son cache                          | son jeton : la synchronisation s'arrête           |
-| Audience         | le site, ses entonnoirs, ses libellés, son audience | rien (la clé publique ne bouge pas)               |
-| Appareils        | la ligne ; relevés et constats la suivent           | les exemptions Sentinelle, réglées par espace     |
-| Mail             | le compte, ses dossiers, ses enveloppes             | un canal d'alerte d'ici qui expédiait par lui     |
-| Projets          | tout l'arbre                                        | ses liaisons, dont les cibles restent             |
-| Hébergement      | le dossier, ses fichiers et ses adresses            | leur domaine : elles reviennent à celle de DevEye |
+|                  | Ce que le déplacement emporte                        | Ce qu'il laisse                                   |
+| ---------------- | ---------------------------------------------------- | ------------------------------------------------- |
+| Uptime           | le service, ses relevés, ses incidents               | rien                                              |
+| Notes            | la note                                              | son dossier, qui appartient à l'espace quitté     |
+| Bases de données | la fiche, ses secrets, ses alertes                   | rien                                              |
+| Déploiements     | la cible et son historique                           | son accès : elle arrive indéployable              |
+| Git              | le dépôt et tout son cache                           | son jeton : la synchronisation s'arrête           |
+| Audience         | le site, ses entonnoirs, ses libellés, son audience  | rien (la clé publique ne bouge pas)               |
+| Appareils        | la ligne ; relevés et constats la suivent            | les exemptions Sentinelle, réglées par espace     |
+| Mail             | le compte, ses dossiers, ses enveloppes              | un canal d'alerte d'ici qui expédiait par lui     |
+| Projets          | tout l'arbre                                         | ses liaisons, dont les cibles restent             |
+| Hébergement      | le dossier, ses fichiers et ses adresses             | leur domaine : elles reviennent à celle de DevEye |
+| Tableau blanc    | la scène, l'aperçu, les images (sans les rechiffrer) | la séance en cours, dont les participants sortent |
 
 Un accès ou un jeton mis à `NULL` n'est pas une avarie : les deux features
 savent dire « sans accès », et en rattacher un est un geste du propriétaire, pas
@@ -462,10 +464,13 @@ liront la copie.
 
 ### Qui se copie
 
-Huit des modules qui se déplacent se copient aussi : Audience, Bases de données,
-Déploiements, Git, Mail, Notes, Projets, Uptime. **Pas les Appareils** : un
-appareil est une machine reliée par le jeton de son agent, qui ne parle qu'à un
-serveur ; il se partage déjà entre espaces. **Pas Hébergement** (§9).
+Neuf des modules qui se déplacent se copient aussi : Audience, Bases de données,
+Déploiements, Git, Mail, Notes, Projets, Tableau blanc, Uptime. **Pas les
+Appareils** : un appareil est une machine reliée par le jeton de son agent, qui
+ne parle qu'à un serveur ; il se partage déjà entre espaces. **Pas
+Hébergement** (§9). Le Tableau blanc copie ses images objet par objet, bornées
+à 256 Mo : vers une autre instance, où ses objets n'existent pas, la copie d'un
+tableau illustré est refusée et renvoie vers l'export `.excalidraw`.
 
 Ce que la copie n'emporte jamais : projections, permissions par rôle, route
 d'alertes, liaisons de projets. Une copie arrive nue, comme un élément déplacé,

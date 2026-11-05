@@ -548,6 +548,32 @@ doit donc pouvoir les lire, et ils ne passent pas par l'étage gardé.
   colonne (`sealed`) : une rotation de la clé serveur les ré-emballe
   ([KEY_ROTATION.md](./KEY_ROTATION.md)).
 
+## Tableau blanc : l'étage ouvert, et les images sous la clé du module
+
+Un tableau se dessine à plusieurs : le serveur fusionne les éléments reçus et
+écrit la scène sans session, donc à l'étage ouvert (`shareTier: 'open'`).
+
+- Le titre, la scène (compressée avant scellement) et l'aperçu sont scellés à
+  l'étage ouvert de l'espace d'origine du tableau, même quand on le dessine
+  depuis un espace où il est projeté. Le déplacement les rescelle sous la clé
+  de l'espace d'arrivée. Pendant une séance, la scène est en clair dans la
+  mémoire du serveur.
+- Les images vivent dans le magasin d'objets, scellées au conteneur `DEVB` v2
+  par une clé dérivée d'une racine tirée au sort au premier démarrage, scellée
+  par la clé serveur dans `ft_whiteboard_key` (déclarée `sealed` : une rotation
+  la ré-emballe, perdre `CRYPT_KEY_A/B` rend toutes les images illisibles). Ce
+  niveau vaut l'étage ouvert, lisible sans mot de passe, mais avec deux écarts
+  à connaître : les images ne sont pas séparées par la clé d'un espace, seulement
+  par l'accès aux lignes qui les nomment (comme Hébergement), et une image
+  retirée reste lisible jusqu'au balayage qui l'efface.
+- La clé d'objet d'une image est tirée au sort et ne figure que dans sa ligne :
+  elle ne se devine pas depuis l'identifiant du tableau, et une copie en reçoit
+  une neuve. Copier et déplacer ne rechiffrent jamais une image.
+- Les trames d'une séance ne vont qu'aux comptes qui y participent, sous la
+  garde du droit de lecture de la salle. Un membre dont l'accès tombe pendant
+  une séance peut encore recevoir des traits une vingtaine de secondes, le
+  temps que son pointeur, refusé, cesse de le tenir pour présent.
+
 ## Uptime : l'étage ouvert appliqué à une tâche de fond
 
 La feature Uptime (module `features/uptime/`, `src/server/service.ts` et

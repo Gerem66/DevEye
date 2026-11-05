@@ -1,0 +1,32 @@
+/*
+ * Excalidraw aux couleurs de DevEye : son accent, ses surfaces et ses rayons,
+ * lus sur les jetons du thème. Le dessin lui-même garde ses couleurs : elles
+ * font partie de la scène. Chargée avec l'éditeur seulement.
+ */
+.excalidraw,
+.excalidraw.theme--dark {
+    --color-primary: var(--accent);
+    --color-primary-darker: var(--accent-strong);
+    --color-primary-darkest: var(--accent-strong);
+    --color-primary-hover: var(--accent-hover);
+    --color-primary-light: var(--accent-bg);
+    --color-primary-light-darker: var(--accent-bg);
+    --color-brand-hover: var(--accent-hover);
+    --color-surface-primary-container: var(--accent-bg);
+    --color-on-primary-container: var(--accent);
+    --island-bg-color: var(--surface-popup-solid);
+    --popup-bg-color: var(--surface-popup-solid);
+    --border-radius-md: var(--radius-sm);
+    --border-radius-lg: var(--radius-md);
+}
+
+/* Les portes vers les services d'Excalidraw : la bibliothèque publique et les liens de l'aide. */
+.excalidraw .library-menu-browse-button,
+.excalidraw .HelpDialog__header {
+    display: none;
+}
+
+/* Ses fenêtres s'ouvrent sur le corps de la page : au-dessus de la popup qui le porte. */
+.excalidraw-modal-container {
+    z-index: var(--z-modal);
+}

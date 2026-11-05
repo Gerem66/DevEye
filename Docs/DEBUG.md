@@ -72,7 +72,9 @@ dans les tables du module part avec le compte ; seul ce qui vit ailleurs
 (un planificateur en mémoire, un objet chez un tiers) demande un `defer`, et un
 `sweep` s'il peut survivre à un plantage. Exemples : `features/notes`,
 `features/uptime`, `features/audience`, `features/shortlinks` (une redirection
-lue par `headers.location`) ; pour un objet chez un tiers (un client
+lue par `headers.location`), `features/whiteboard` (des images dans le magasin
+d'objets, que le `defer` retire avec leur tableau, y compris après un
+déplacement vers un second espace) ; pour un objet chez un tiers (un client
 Stripe), le module de facturation des comptes déclare un `sweep`.
 
 Dans le socle : `src/Services/debug/e2e/scenarios/`, même forme, avec

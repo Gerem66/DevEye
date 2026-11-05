@@ -1487,6 +1487,48 @@ CREATE TABLE `ft_uptime_pages` (
   CONSTRAINT `fk_ft_uptime_pages_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+CREATE TABLE `ft_whiteboard_boards` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `workspace_id` int NOT NULL,
+  `user_id` int DEFAULT NULL,
+  `updated_by` int DEFAULT NULL,
+  `content` text COLLATE utf8mb4_general_ci NOT NULL,
+  `scene` mediumtext COLLATE utf8mb4_general_ci NOT NULL,
+  `scene_bytes` int unsigned NOT NULL DEFAULT '0',
+  `version` int unsigned NOT NULL DEFAULT '0',
+  `preview` mediumtext COLLATE utf8mb4_general_ci,
+  `preview_bytes` int unsigned NOT NULL DEFAULT '0',
+  `preview_version` int unsigned NOT NULL DEFAULT '0',
+  `created` bigint NOT NULL DEFAULT (unix_timestamp()),
+  `updated` bigint NOT NULL DEFAULT (unix_timestamp()),
+  PRIMARY KEY (`id`),
+  KEY `idx_ft_whiteboard_boards_ws` (`workspace_id`,`updated`),
+  CONSTRAINT `fk_ft_whiteboard_boards_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_whiteboard_files` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `board_id` int NOT NULL,
+  `file_id` varchar(64) COLLATE utf8mb4_bin NOT NULL,
+  `mime` varchar(32) COLLATE utf8mb4_general_ci NOT NULL,
+  `bytes` int unsigned NOT NULL,
+  `object_key` varchar(48) COLLATE utf8mb4_bin NOT NULL,
+  `created` bigint NOT NULL DEFAULT (unix_timestamp()),
+  `orphaned_at` bigint DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_ft_whiteboard_files_board` (`board_id`,`file_id`),
+  UNIQUE KEY `uniq_ft_whiteboard_files_object` (`object_key`),
+  KEY `idx_ft_whiteboard_files_orphan` (`orphaned_at`),
+  CONSTRAINT `fk_ft_whiteboard_files_board` FOREIGN KEY (`board_id`) REFERENCES `ft_whiteboard_boards` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_whiteboard_key` (
+  `id` tinyint NOT NULL DEFAULT '1',
+  `sealed` text COLLATE utf8mb4_general_ci NOT NULL,
+  PRIMARY KEY (`id`),
+  CONSTRAINT `chk_ft_whiteboard_key_single` CHECK ((`id` = 1))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 CREATE TABLE `git_branches` (
   `id` int NOT NULL AUTO_INCREMENT,
   `repo_id` int NOT NULL,

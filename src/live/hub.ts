@@ -590,11 +590,21 @@ export class LiveHub {
      * Sans plancher de débit, contrairement à `changed` : une trame porte le
      * changement lui-même, l'étouffer le perdrait au lieu de le retarder. Ce
      * qui borne le débit est la cadence de la commande qui l'émet.
+     *
+     * `userIds` restreint la trame aux connexions de ces comptes : les
+     * participants d'un élément que le rôle d'un autre membre lui masque.
      */
-    publishFeature(workspaceId: number, feature: FeatureId, event: string, payload: unknown): void {
+    publishFeature(
+        workspaceId: number,
+        feature: FeatureId,
+        event: string,
+        payload: unknown,
+        userIds?: readonly number[]
+    ): void {
         const room = this.byWorkspace.get(workspaceId);
         if (!room) return;
         for (const conn of room) {
+            if (userIds && !userIds.includes(conn.userId)) continue;
             if (this.canRead(conn, workspaceId, feature)) this.send(conn, event, payload);
         }
     }

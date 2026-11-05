@@ -6,7 +6,7 @@ import type { FeatureManifest, NativeCapability } from '@deveye/types/sdk';
 
 import type { FeatureAuditEntry, FeatureContext } from '@/features/_define';
 import { setSdkHost } from './host';
-import { createSdkContext } from './context';
+import { createSdkContext, publishFrame } from './context';
 import type { LiveHub } from '@/live/hub';
 import type { MonitorHub } from '@/agent/hub';
 import type { Database } from '@/db';
@@ -298,13 +298,29 @@ describe('createSdkContext : transport', () => {
 });
 
 describe('createSdkContext : la voie de poussée', () => {
-    const published: { workspaceId: number; feature: string; event: string; payload: unknown }[] = [];
+    const published: {
+        workspaceId: number;
+        feature: string;
+        event: string;
+        payload: unknown;
+        userIds?: readonly number[];
+    }[] = [];
     setSdkHost(
         {} as unknown as MonitorHub,
         {} as Database,
         {
-            publishFeature: (workspaceId: number, feature: string, event: string, payload: unknown) => {
-                published.push({ workspaceId, feature, event, payload });
+            publishFeature: (
+                workspaceId: number,
+                feature: string,
+                event: string,
+                payload: unknown,
+                userIds?: readonly number[]
+            ) => {
+                published.push(
+                    userIds
+                        ? { workspaceId, feature, event, payload, userIds }
+                        : { workspaceId, feature, event, payload }
+                );
             }
         } as unknown as LiveHub
     );
@@ -329,5 +345,21 @@ describe('createSdkContext : la voie de poussée', () => {
         assert.deepEqual(published, [
             { workspaceId: 3, feature: 'x-contexttest', event: 'x-contexttest.frame', payload: { cells: [1, 2] } }
         ]);
+    });
+
+    it('les destinataires nommés passent au hub, sous les mêmes gardes', () => {
+        published.length = 0;
+        const m = manifest({ caps: ['live.publish'] });
+        publishFrame(m, 7, 'x-contexttest.frame', { a: 1 }, [4, 5]);
+        assert.deepEqual(published, [
+            {
+                workspaceId: 7,
+                feature: 'x-contexttest',
+                event: 'x-contexttest.frame',
+                payload: { a: 1 },
+                userIds: [4, 5]
+            }
+        ]);
+        assert.throws(() => publishFrame(manifest(), 7, 'x-contexttest.frame', {}, [4]), forbidden);
     });
 });

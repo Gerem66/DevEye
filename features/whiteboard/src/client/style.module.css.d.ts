@@ -1,0 +1,27 @@
+declare const styles: {
+    readonly actions: string;
+    readonly canvas: string;
+    readonly card: string;
+    readonly cardMenu: string;
+    readonly cardMeta: string;
+    readonly cardOpen: string;
+    readonly cardTitle: string;
+    readonly editor: string;
+    readonly editorActions: string;
+    readonly editorHeader: string;
+    readonly editorTitle: string;
+    readonly emptyState: string;
+    readonly emptyText: string;
+    readonly emptyTitle: string;
+    readonly grid: string;
+    readonly header: string;
+    readonly heading: string;
+    readonly preview: string;
+    readonly previewIcon: string;
+    readonly previewImage: string;
+    readonly root: string;
+    readonly status: string;
+    readonly subheading: string;
+    readonly titleInput: string;
+};
+export = styles;

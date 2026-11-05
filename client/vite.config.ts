@@ -1,7 +1,15 @@
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import { defineConfig, type Plugin } from 'vite';
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { defineConfig, type Plugin, type Rollup } from 'vite';
+import {
+    createReadStream,
+    existsSync,
+    mkdirSync,
+    readdirSync,
+    readFileSync,
+    realpathSync,
+    writeFileSync
+} from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { promisify } from 'node:util';
@@ -197,6 +205,113 @@ function buildManifest(): Plugin {
     };
 }
 
+/** Le repli d'Excalidraw vers un CDN, que le paquet ajoute à chaque police après le chemin local. */
+const EXCALIDRAW_CDN_FALLBACK = /"ASSETS_FALLBACK_URL",`https:\/\/esm\.sh\/[\s\S]*?\/dist\/prod\/`/;
+
+/**
+ * Les polices d'Excalidraw (Tableau blanc), servies par DevEye : le paquet les
+ * chercherait sinon sur un CDN. Le dossier porte la version du paquet, ce qui
+ * rend sûr le cache immuable de `/assets/` alors que certains noms de fichiers
+ * ne changent pas d'une version à l'autre. En dev, lues dans `node_modules` ;
+ * au build, copiées telles quelles (déjà compressées), et le repli vers le CDN
+ * remplacé par ce même dossier : sans lui, un SVG exporté pourrait encore
+ * nommer le CDN. Le build échoue si le paquet change la forme de ce repli.
+ */
+function excalidrawFonts(): Plugin & { assetPath: string | null } {
+    const pkgDir = path.resolve(__dirname, '../node_modules/@excalidraw/excalidraw');
+    const pkgFile = path.join(pkgDir, 'package.json');
+    if (!existsSync(pkgFile)) return { name: 'deveye:excalidraw-fonts', assetPath: null };
+    const { version } = JSON.parse(readFileSync(pkgFile, 'utf-8')) as { version: string };
+    const fontsDir = path.join(pkgDir, 'dist', 'prod', 'fonts');
+    const base = `assets/excalidraw-${version}/`;
+    let fallbackReplaced = false;
+    let bundled = false;
+    return {
+        name: 'deveye:excalidraw-fonts',
+        assetPath: `/${base}`,
+        transform(code, id) {
+            if (!id.includes('/@excalidraw/excalidraw/dist/prod/')) return null;
+            bundled = true;
+            if (!code.includes('"ASSETS_FALLBACK_URL"')) return null;
+            if (!EXCALIDRAW_CDN_FALLBACK.test(code)) {
+                this.error('Excalidraw : la forme du repli vers le CDN a changé, à revoir dans vite.config.ts');
+            }
+            fallbackReplaced = true;
+            return {
+                code: code.replace(
+                    EXCALIDRAW_CDN_FALLBACK,
+                    `"ASSETS_FALLBACK_URL",new URL(${JSON.stringify(`/${base}`)},window.location.origin).href`
+                ),
+                map: null
+            };
+        },
+        configureServer(server) {
+            server.middlewares.use(`/${base}fonts/`, (req, res, next) => {
+                const rel = decodeURIComponent((req.url ?? '').split('?')[0]).replace(/^\/+/, '');
+                const file = path.resolve(fontsDir, rel);
+                if (!file.startsWith(fontsDir + path.sep) || !existsSync(file)) return next();
+                res.setHeader('Content-Type', 'font/woff2');
+                createReadStream(file).pipe(res);
+            });
+        },
+        generateBundle() {
+            if (bundled && !fallbackReplaced) {
+                this.error('Excalidraw : le repli vers le CDN n’a pas été trouvé, à revoir dans vite.config.ts');
+            }
+            const files = readdirSync(fontsDir, { recursive: true, encoding: 'utf8' }).filter((rel) =>
+                rel.endsWith('.woff2')
+            );
+            for (const rel of files) {
+                this.emitFile({
+                    type: 'asset',
+                    fileName: `${base}fonts/${rel.split(path.sep).join('/')}`,
+                    source: readFileSync(path.join(fontsDir, rel))
+                });
+            }
+        }
+    };
+}
+
+/**
+ * Atteint par un import statique depuis une entrée ? Sinon, seuls des `import()`
+ * y mènent : le module est chargé à la demande et doit garder un chunk à lui.
+ * Rangé dans celui de sa feature ou dans `vendor`, il serait préchargé avec eux
+ * dès la première peinture (l'éditeur du Tableau blanc, le terminal des
+ * appareils).
+ */
+function staticReach(): (id: string, getModuleInfo: Rollup.GetModuleInfo) => boolean {
+    const known = new Map<string, boolean>();
+    return (id, getModuleInfo) => {
+        const cached = known.get(id);
+        if (cached !== undefined) return cached;
+        const seen = new Set<string>([id]);
+        const stack = [id];
+        let reached = false;
+        while (stack.length > 0 && !reached) {
+            const current = stack.pop() as string;
+            const verdict = known.get(current);
+            if (verdict === true) reached = true;
+            if (verdict !== undefined) continue;
+            const info = getModuleInfo(current);
+            if (info === null) continue;
+            if (info.isEntry) {
+                reached = true;
+                break;
+            }
+            for (const importer of info.importers) {
+                if (!seen.has(importer)) {
+                    seen.add(importer);
+                    stack.push(importer);
+                }
+            }
+        }
+        // Sans entrée au-dessus, aucun des modules visités n'en a : tous le sont à la demande.
+        if (reached) known.set(id, true);
+        else for (const visited of seen) known.set(visited, false);
+        return reached;
+    };
+}
+
 const COMPRESSIBLE = /\.(js|css|html|json|svg|ttf|txt)$/;
 
 /**
@@ -247,12 +362,15 @@ function precompress(): Plugin {
 export default defineConfig(({ command }) => {
     const featureRoots = featureChunkRoots();
     const useTypesSource = command === 'serve' && existsSync(TYPES_SOURCE_ENTRY);
+    const fonts = excalidrawFonts();
+    const reachable = staticReach();
 
     return {
         define: {
-            __APP_VERSION__: JSON.stringify(appVersion)
+            __APP_VERSION__: JSON.stringify(appVersion),
+            ...(fonts.assetPath ? { __EXCALIDRAW_ASSET_PATH__: JSON.stringify(fonts.assetPath) } : {})
         },
-        plugins: [react(), inlineIcons(), buildManifest(), precompress()],
+        plugins: [react(), inlineIcons(), fonts, buildManifest(), precompress()],
         optimizeDeps: {
             // `@deveye/types` ships TypeScript source and is the one dependency that
             // changes in step with the app. Vite's dep pre-bundling keys its cache on
@@ -299,7 +417,8 @@ export default defineConfig(({ command }) => {
                 output: {
                     // Split heavy third-party libs into their own long-lived chunks so the
                     // app bundle stays small and vendor code is cached across deploys.
-                    manualChunks(id) {
+                    manualChunks(id, { getModuleInfo }) {
+                        if (!reachable(id, getModuleInfo)) return undefined;
                         // Chaque module de feature dans son propre chunk : son code ne
                         // pèse pas sur la première peinture, et se met en cache seul.
                         // Deux formes de chemin selon la provenance (package installé,
@@ -320,9 +439,6 @@ export default defineConfig(({ command }) => {
                         if (byRoot) return `feature-${byRoot[1]}`;
                         if (!id.includes('node_modules')) return undefined;
                         if (id.includes('framer-motion')) return 'framer-motion';
-                        // xterm is only pulled in by the lazily-loaded terminal panel; keep
-                        // it in its own chunk so it loads on demand, not on first paint.
-                        if (id.includes('@xterm')) return 'xterm';
                         if (id.includes('/react') || id.includes('/scheduler')) return 'react-vendor';
                         return 'vendor';
                     }

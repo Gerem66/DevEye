@@ -55,4 +55,5 @@ lancement sont dans le [README de la racine](../README.md#quick-start).
 | [Sauvegardes](../features/backup/README.md)                | les sauvegardes : sources, destinations, chiffrement des archives                    |
 | [Sentinelle](../features/sentinel/README.md)               | la posture de sécurité des machines                                                  |
 | [Serveur mail](../features/mailserver/README.md)           | des boîtes mail sur les domaines de l'espace, servies par DevEye : SMTP, IMAP, DKIM  |
+| [Tableau blanc](../features/whiteboard/README.md)          | des schémas Excalidraw dessinés à plusieurs en direct, leurs images, leur partage    |
 | [Uptime](../features/uptime/README.md)                     | la disponibilité des services externes                                               |

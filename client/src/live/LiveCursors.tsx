@@ -9,6 +9,7 @@ import { useActiveWorkspace } from '@/stores/workspace';
 import { CURSOR_GLYPHS } from './cursorGlyphs';
 import { useSays } from './cursorChat';
 import { useHideLiveCursors } from './hideCursors';
+import { useLiveCursorsSuppressed } from './cursorSuppression';
 import { useLiveSurface } from './LiveProvider';
 import styles from './LiveCursors.module.css';
 
@@ -64,7 +65,9 @@ export function LiveCursors() {
     const workspace = useActiveWorkspace();
     const surface = useLiveSurface();
     const geometry = useSurfaceGeometry(surface);
-    const hidden = useHideLiveCursors();
+    const hiddenByAccount = useHideLiveCursors();
+    const suppressed = useLiveCursorsSuppressed();
+    const hidden = hiddenByAccount || suppressed;
 
     // Un espace personnel est une salle d'une personne : rien à afficher. La sortie
     // est ici, après les hooks, que React n'admet pas conditionnels.

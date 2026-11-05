@@ -129,6 +129,8 @@ export type ResourceKey =
     | 'shortlinks.stats'
     /** Les signalements, lus par l'administration du service. */
     | 'shortlinks.reports'
+    | 'whiteboard.count'
+    | 'whiteboard.list'
     /** Les clés d'un module externe (`<id>.<nom>`), déclarées par son manifest. */
     | ExternalResourceKey;
 

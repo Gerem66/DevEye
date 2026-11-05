@@ -6,6 +6,7 @@ import { refreshLive } from '@/stores/live';
 import { closeCursorChat, openCursorChat, rememberPointer } from './cursorChat';
 import { cursorKindAt } from './cursorKind';
 import { useHideLiveCursors } from './hideCursors';
+import { useLiveCursorsSuppressed } from './cursorSuppression';
 import { useActiveWorkspace, useWorkspaceState } from '@/stores/workspace';
 
 /**
@@ -38,7 +39,10 @@ const OPEN_KEY = '/';
 
 export function LiveProvider({ surface, children }: { surface: HTMLElement | null; children: ReactNode }) {
     const { epoch } = useWorkspaceState();
-    const hidden = useHideLiveCursors();
+    // Le réglage du compte, ou une vue qui dessine ses propres pointeurs.
+    const hiddenByAccount = useHideLiveCursors();
+    const suppressed = useLiveCursorsSuppressed();
+    const hidden = hiddenByAccount || suppressed;
     const workspace = useActiveWorkspace();
 
     useEffect(() => {

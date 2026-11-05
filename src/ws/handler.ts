@@ -74,6 +74,8 @@ interface Session {
 }
 
 function send(socket: WebSocket, msg: ServerMessage): void {
+    // Une commande postée (`ws.post`, requestId `-`) n'attend aucune réponse.
+    if (msg.requestId === '-') return;
     socket.send(JSON.stringify(msg));
 }
 

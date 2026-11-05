@@ -115,19 +115,19 @@ l'envers.
 
 ### Ce que chaque feature déclare
 
-| Fonctionnalité                                                                               | Niveaux                                                                              | Valeur `l1`                         |
-| -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ----------------------------------- |
-| Mail                                                                                         | boîte, `l2` dossier, `l3` message ouvert                                             | l'id                                |
-| Projets                                                                                      | projet, `l2` onglet (`tab:<onglet>`), `l3` carte (`card:<id>`), `l4` onglet de carte | l'id                                |
-| Audience                                                                                     | site, `l2` section de la fiche                                                       | l'id                                |
-| Facturation                                                                                  | section ouverte, `l2` onglet d'un document                                           | le nom de la section                |
-| Finances                                                                                     | compte ouvert, sinon la vue                                                          | l'id du compte, ou le nom de la vue |
-| Uptime, Git, Déploiements, Bases de données, Sauvegardes, Serveur mail, Notes, Mots de passe | l'élément ouvert                                                                     | l'id                                |
-| Appareils, Sentinelle                                                                        | l'appareil sélectionné                                                               | l'uuid                              |
-| Météo                                                                                        | la ville consultée                                                                   | l'id                                |
-| Veille CVE                                                                                   | l'entrée sélectionnée                                                                | son identifiant                     |
-| CloudSync, Rendez-vous, Hébergement                                                          | le partage, le type, le dossier ouvert                                               | l'id                                |
-| Convertisseur, OSINT, Audit, Jeu de la vie, Abonnement, Journaux, Utilisateurs…              | aucun                                                                                | (la vue suffit)                     |
+| Fonctionnalité                                                                                              | Niveaux                                                                              | Valeur `l1`                         |
+| ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ----------------------------------- |
+| Mail                                                                                                        | boîte, `l2` dossier, `l3` message ouvert                                             | l'id                                |
+| Projets                                                                                                     | projet, `l2` onglet (`tab:<onglet>`), `l3` carte (`card:<id>`), `l4` onglet de carte | l'id                                |
+| Audience                                                                                                    | site, `l2` section de la fiche                                                       | l'id                                |
+| Facturation                                                                                                 | section ouverte, `l2` onglet d'un document                                           | le nom de la section                |
+| Finances                                                                                                    | compte ouvert, sinon la vue                                                          | l'id du compte, ou le nom de la vue |
+| Uptime, Git, Déploiements, Bases de données, Sauvegardes, Serveur mail, Notes, Mots de passe, Tableau blanc | l'élément ouvert                                                                     | l'id                                |
+| Appareils, Sentinelle                                                                                       | l'appareil sélectionné                                                               | l'uuid                              |
+| Météo                                                                                                       | la ville consultée                                                                   | l'id                                |
+| Veille CVE                                                                                                  | l'entrée sélectionnée                                                                | son identifiant                     |
+| CloudSync, Rendez-vous, Hébergement                                                                         | le partage, le type, le dossier ouvert                                               | l'id                                |
+| Convertisseur, OSINT, Audit, Jeu de la vie, Abonnement, Journaux, Utilisateurs…                             | aucun                                                                                | (la vue suffit)                     |
 
 La valeur `l1` d'un élément est son identifiant nu : le préfixe `view:<feature>`
 du chemin dit déjà de quelle sorte d'élément il s'agit, et
@@ -313,6 +313,20 @@ fait autorité sur l'état et sur l'instant, chaque navigateur recalcule les
 générations avec le même moteur, et il ne circule que les gestes des joueurs,
 estampillés du tour auquel les appliquer.
 
+`publishTo(workspaceId, userIds, …)` (service) restreint la trame aux
+connexions de ces comptes, toujours sous la garde du droit de lecture : c'est
+la forme qu'il faut quand ce qui bouge est un **élément** et non la feature
+entière, qu'un rôle peut masquer à un membre de la salle. Le Tableau blanc s'en
+sert pour ses séances : une trame par salle des participants, numérotée, et un
+numéro qui saute fait rentrer le client dans la séance. Un tableau partagé
+suivi depuis un autre espace reçoit ainsi les siennes, puisque la voie de
+poussée ne traverse pas la projection.
+
+Une commande qu'on renvoie plusieurs fois par seconde sans attendre de réponse
+(un pointeur) part par `featureApi(m).post` : le client n'ouvre ni promesse ni
+délai, et le serveur, qui la valide et l'autorise comme toute commande, ne
+répond pas à une enveloppe dont le `requestId` vaut `-`.
+
 ---
 
 ## 5. Les curseurs
@@ -398,6 +412,18 @@ barre du haut, les contours de pair (`useLiveOutline`) et « en train d'écrire 
 restent actifs : ils disent où l'on est, pas où l'on pointe, et c'est la seconde
 information qui pèse sur l'attention. La bulle, elle, est dessinée _dans_ le
 curseur : la couper avec lui n'est pas un choix, c'est la même chose.
+
+### Une vue qui dessine les siens
+
+Un canevas qu'on déplace et qu'on zoome (le Tableau blanc) n'a pas de repère
+commun avec la popup : un point rapporté à sa largeur ne désigne rien chez un
+pair qui regarde ailleurs dans la scène. Une telle vue appelle
+`useSuppressLiveCursors()` (SDK client) et dessine ses propres pointeurs, dans
+les coordonnées de la scène. Tant qu'elle est montée, `LiveProvider` n'émet
+plus et `LiveCursors` n'affiche plus, comme sous le réglage du compte, bulle
+comprise ; le roster, les contours et « en train d'écrire » restent. Un
+compteur (`live/cursorSuppression.ts`) : deux vues montées à la fois ne se
+rallument pas l'une l'autre en se démontant.
 
 ### Les tranches du magasin, et pourquoi elles existent
 

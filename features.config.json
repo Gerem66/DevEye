@@ -63,6 +63,9 @@
     },
     {
       "package": "deveye-feature-moderation"
+    },
+    {
+      "package": "deveye-feature-whiteboard"
     }
   ]
 }

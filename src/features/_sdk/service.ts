@@ -222,6 +222,8 @@ export function createServiceDeps(
             changed: (workspaceId, topics) =>
                 host.live.changed(workspaceId, (topics ?? [manifest.id]) as LiveTopic[], null),
             publish: (workspaceId, event, payload) => publishFrame(manifest, workspaceId, event, payload),
+            publishTo: (workspaceId, userIds, event, payload) =>
+                publishFrame(manifest, workspaceId, event, payload, userIds),
             accountChanged: (userId) => accountChanged(host.db, manifest, userId),
             pendingChanged: () => adminPending.changed()
         },

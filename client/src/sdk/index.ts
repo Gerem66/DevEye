@@ -169,6 +169,7 @@ export { useFeatureLifecycle } from '@/Features/useFeatureLifecycle';
  * appelant est monté (`null` = rien demander).
  */
 export { useRequestPopupWidth } from '@/stores/popupWidth';
+export { useSuppressLiveCursors } from '@/live/cursorSuppression';
 /** La pastille d'identité d'un membre, commune à toute feature qui nomme quelqu'un. */
 export { Avatar } from '@/Components/Avatar/Avatar';
 /** La variable CSS d'une couleur de compte, celle dont la présence en direct peint chacun. */
@@ -254,6 +255,16 @@ export function featureApi<const M extends FeatureManifest>(manifest: M) {
             opts?: SendOptions
         ): Promise<z.output<Extract<Commands, { command: N }>['output'] & ZodType>> {
             return ws.send(name as never, input as never, opts) as never;
+        },
+        /**
+         * Sans réponse ni délai ni trace : une position qu'on renvoie plusieurs
+         * fois par seconde. Perdue en silence si la socket est fermée ou en retard.
+         */
+        post<N extends Commands['command']>(
+            name: N,
+            input: z.input<Extract<Commands, { command: N }>['input'] & ZodType>
+        ): void {
+            ws.post(name, input);
         }
     };
 }

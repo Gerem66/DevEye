@@ -231,14 +231,20 @@ export function createSdkContext(
  * structurelle que ses commandes et ses sujets. La charge n'est pas relue :
  * elle traverse telle quelle, comme celle d'une réponse de commande.
  */
-export function publishFrame(manifest: FeatureManifest, workspaceId: number, event: string, payload: unknown): void {
+export function publishFrame(
+    manifest: FeatureManifest,
+    workspaceId: number,
+    event: string,
+    payload: unknown,
+    userIds?: readonly number[]
+): void {
     if (!(manifest.nativeCapabilities ?? []).includes('live.publish')) {
         throw new FeatureError('forbidden', `Module « ${manifest.id} » : declare 'live.publish' in nativeCapabilities`);
     }
     if (!event.startsWith(`${manifest.id}.`)) {
         throw new FeatureError('validation', `Event « ${event} » must start with « ${manifest.id}. »`);
     }
-    sdkLive().publishFeature(workspaceId, manifest.id, event, payload);
+    sdkLive().publishFeature(workspaceId, manifest.id, event, payload, userIds);
 }
 
 /**

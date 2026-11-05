@@ -18,6 +18,7 @@ export const CREDITS: readonly CreditGroup[] = [
             { name: 'Framer Motion', license: 'MIT', purpose: 'Les animations' },
             { name: 'dnd kit', license: 'MIT', purpose: 'Le glisser-déposer des tuiles' },
             { name: 'xterm.js', license: 'MIT', purpose: 'Le terminal des appareils' },
+            { name: 'Excalidraw', license: 'MIT', purpose: 'Le tableau blanc' },
             { name: 'Zod', license: 'MIT', purpose: 'La vérification des données échangées' }
         ]
     },
@@ -60,7 +61,13 @@ export const CREDITS: readonly CreditGroup[] = [
         title: 'Polices',
         items: [
             { name: 'Open Sans', license: 'SIL OFL 1.1', purpose: 'Le texte de l’interface' },
-            { name: 'Meslo LG et symboles Powerline', license: 'Apache-2.0, MIT', purpose: 'Le terminal' }
+            { name: 'Meslo LG et symboles Powerline', license: 'Apache-2.0, MIT', purpose: 'Le terminal' },
+            {
+                name: 'Excalifont, Virgil, Assistant, Nunito, Lilita One, Cascadia Code, Liberation Sans et Xiaolai',
+                license: 'SIL OFL 1.1',
+                purpose: 'Les écritures du tableau blanc'
+            },
+            { name: 'Comic Shanns', license: 'MIT', purpose: 'Une écriture du tableau blanc' }
         ]
     }
 ];
