@@ -380,7 +380,10 @@ export default defineConfig(({ command }) => {
             // exist on disk, with no hint as to why. Excluding it from pre-bundling
             // routes it through the normal transform pipeline, where edits are picked
             // up like any other source file.
-            exclude: ['@deveye/types', ...installedFeaturePackages()]
+            exclude: ['@deveye/types', ...installedFeaturePackages()],
+            // Le scan ne traverse pas les modules exclus : sans cette ligne, Excalidraw
+            // est découvert à l'ouverture d'un tableau, et Vite recharge toute la page.
+            include: fonts.assetPath ? ['@excalidraw/excalidraw'] : []
         },
         server: {
             port: 5173,
