@@ -60,6 +60,8 @@ const PUSH_MS = 100;
 /** Bien sous les 20 s au bout desquelles le serveur oublie un participant muet. */
 const HEARTBEAT_MS = 8_000;
 const REJOIN_FLOOR_MS = 2_000;
+/** Temps sans envoi avant d'afficher « Enregistré » : l'état ne clignote pas au fil d'un geste. */
+const QUIET_MS = 1_000;
 
 /**
  * Un tableau ouvert, côté navigateur : l'entrée dans la séance, l'envoi de ce
@@ -89,6 +91,7 @@ export class BoardSession {
     private joining: Promise<void> | null = null;
     private lastJoinAt = 0;
     private collaboratorsFrame: number | null = null;
+    private settleTimer: ReturnType<typeof setTimeout> | null = null;
     private pointerState: { pointer: WhiteboardPointer | null; button: 'up' | 'down'; selectedIds: string[] } = {
         pointer: null,
         button: 'up',
@@ -168,6 +171,7 @@ export class BoardSession {
         this.pointers.cancel();
         this.pushes.cancel();
         if (this.collaboratorsFrame !== null) cancelAnimationFrame(this.collaboratorsFrame);
+        if (this.settleTimer !== null) clearTimeout(this.settleTimer);
         void this.pump().finally(() => {
             api.send('whiteboard.leave', { boardId: this.boardId, clientId: this.clientId }).catch(() => undefined);
         });
@@ -309,7 +313,9 @@ export class BoardSession {
     private onSaved(failure: 'tooLarge' | 'error' | null): void {
         if (failure === 'tooLarge') this.set({ status: 'tooLarge' });
         else if (failure === 'error') this.set({ status: 'saveFailed' });
-        else if (this.view.status !== 'quota') this.set({ status: this.pushing ? 'sending' : 'synced' });
+        else if (this.view.status === 'tooLarge' || this.view.status === 'saveFailed') {
+            this.set({ status: this.pending() ? 'sending' : 'synced' });
+        }
     }
 
     private onFile(fileId: string): void {
@@ -358,7 +364,10 @@ export class BoardSession {
             );
             this.tracker.sent(batch);
             if (res.refused !== null) this.set({ status: res.refused });
-            else if (this.view.status === 'sending' || this.view.status === 'offline') this.set({ status: 'synced' });
+            else {
+                if (this.view.status === 'offline') this.set({ status: 'sending' });
+                if (this.view.status === 'sending') this.settleLater();
+            }
         } catch (e) {
             this.tracker.failed(batch);
             if ((e as { code?: string }).code === 'conflict') void this.join();
@@ -368,6 +377,14 @@ export class BoardSession {
         }
         if (this.tracker.diff(bridge.elements(), 1).length > 0) this.pushes.schedule();
         await this.uploadFiles();
+    }
+
+    private settleLater(): void {
+        if (this.settleTimer !== null) clearTimeout(this.settleTimer);
+        this.settleTimer = setTimeout(() => {
+            this.settleTimer = null;
+            if (this.view.status === 'sending' && !this.pending()) this.set({ status: 'synced' });
+        }, QUIET_MS);
     }
 
     /** Les images de la scène que le serveur n'a pas encore, une à la fois. */

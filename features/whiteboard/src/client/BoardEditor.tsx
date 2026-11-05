@@ -33,7 +33,8 @@ const PREVIEW_EVERY_MS = 2 * 60_000;
 const STATUS: Record<SessionStatus, { label: string; tone: 'ok' | 'busy' | 'warn' }> = {
     joining: { label: 'Connexion…', tone: 'busy' },
     synced: { label: 'Enregistré', tone: 'ok' },
-    sending: { label: 'Envoi…', tone: 'busy' },
+    // Rien pendant qu'on dessine : « Enregistré » revient une fois au calme.
+    sending: { label: '', tone: 'busy' },
     offline: { label: 'Hors ligne : reprise au retour du réseau', tone: 'warn' },
     quota: { label: 'Limite de stockage atteinte : les ajouts ne sont plus enregistrés', tone: 'warn' },
     tooLarge: { label: 'Tableau trop volumineux : les ajouts ne sont plus enregistrés', tone: 'warn' },
