@@ -12,7 +12,7 @@ import {
     SCENE_MAX_BYTES,
     sceneElementSchema
 } from '../contracts/domain';
-import { OBJECT_KEY_PATTERN, whiteboard } from './_shared';
+import { appearanceOf, OBJECT_KEY_PATTERN, whiteboard } from './_shared';
 import { copyObject } from './files';
 import type { WhiteboardRepo } from './repo';
 
@@ -94,6 +94,7 @@ export const whiteboardCopy: FeatureItemsCopy<WhiteboardRepo> = {
         const board = rows.ft_whiteboard_boards?.[0];
         if (!board) throw new FeatureError('validation', 'La copie doit porter exactement un tableau.');
         board.scene_bytes = await sceneBytesOf(board.scene);
+        Object.assign(board, appearanceOf({ background: board.background, theme: board.theme }));
         const preview = board.preview;
         if (preview !== null && preview !== undefined && preview !== '') {
             if (

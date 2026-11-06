@@ -1,10 +1,19 @@
-import { SCENE_MAX_ELEMENTS, fileMimeSchema, type SceneElement, type WhiteboardFileMime } from '../contracts/domain';
+import {
+    backgroundSchema,
+    boardThemeSchema,
+    SCENE_MAX_ELEMENTS,
+    fileMimeSchema,
+    type BoardAppearance,
+    type SceneElement,
+    type WhiteboardFileMime
+} from '../contracts/domain';
 
 export interface ImportedBoard {
     title: string;
     elements: SceneElement[];
     files: { id: string; mimeType: WhiteboardFileMime; dataURL: string }[];
     filesBytes: number;
+    appearance: BoardAppearance;
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
@@ -57,5 +66,17 @@ export function parseExcalidraw(name: string, text: string): ImportedBoard {
             filesBytes += Math.floor((file.dataURL.length * 3) / 4);
         }
     }
-    return { title: name.replace(/\.(excalidraw|json)$/i, '').trim(), elements, files, filesBytes };
+    const appState = isRecord(data.appState) ? data.appState : {};
+    const background = backgroundSchema.safeParse(appState.viewBackgroundColor);
+    const theme = boardThemeSchema.safeParse(appState.theme);
+    return {
+        title: name.replace(/\.(excalidraw|json)$/i, '').trim(),
+        elements,
+        files,
+        filesBytes,
+        appearance: {
+            background: background.success ? background.data : null,
+            theme: theme.success ? theme.data : null
+        }
+    };
 }

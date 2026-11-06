@@ -1,5 +1,7 @@
 import type { SdkQueryable } from '@deveye/types/sdk/server';
 
+import type { BoardAppearance } from '../contracts/domain';
+
 /** Une ligne de liste : tout sauf la scène et l'aperçu, qui pèsent. */
 export interface BoardRow {
     id: number;
@@ -13,6 +15,8 @@ export interface BoardRow {
     preview_version: number;
     has_preview: number;
     files_bytes: number;
+    background: string | null;
+    theme: string | null;
     created: number;
     updated: number;
 }
@@ -38,7 +42,7 @@ export interface FileRow {
 const OF_BOARD = `b.id, b.workspace_id, b.user_id, b.updated_by, b.content, b.scene_bytes, b.version,
     b.preview_bytes, b.preview_version, (b.preview IS NOT NULL) AS has_preview,
     (SELECT COALESCE(SUM(f.bytes), 0) FROM ft_whiteboard_files f WHERE f.board_id = b.id) AS files_bytes,
-    b.created, b.updated`;
+    b.background, b.theme, b.created, b.updated`;
 
 const FILE_COLUMNS = 'id, board_id, file_id, mime, bytes, object_key, created, orphaned_at';
 
@@ -64,6 +68,7 @@ export interface WhiteboardRepo {
             content: string;
             scene: string;
             sceneBytes: number;
+            appearance: BoardAppearance;
             at: number;
         }): Promise<number>;
         rename(id: number, workspaceId: number, content: string, userId: number, at: number): Promise<boolean>;
@@ -78,6 +83,14 @@ export interface WhiteboardRepo {
             userId: number | null;
             at: number;
         }): Promise<boolean>;
+        /** Un champ absent garde sa valeur. */
+        setAppearance(
+            id: number,
+            workspaceId: number,
+            appearance: Partial<BoardAppearance>,
+            userId: number,
+            at: number
+        ): Promise<boolean>;
         setPreview(id: number, workspaceId: number, preview: string, bytes: number): Promise<boolean>;
         previews(ids: readonly number[]): Promise<{ id: number; workspace_id: number; preview: string }[]>;
         remove(id: number, workspaceId: number): Promise<boolean>;
@@ -162,8 +175,9 @@ export function createRepo(q: SdkQueryable): WhiteboardRepo {
             async create(input) {
                 const res = await q.execute(
                     `INSERT INTO ft_whiteboard_boards
-                        (workspace_id, user_id, updated_by, content, scene, scene_bytes, version, created, updated)
-                     VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+                        (workspace_id, user_id, updated_by, content, scene, scene_bytes, version, background, theme,
+                         created, updated)
+                     VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`,
                     [
                         input.workspaceId,
                         input.userId,
@@ -171,6 +185,8 @@ export function createRepo(q: SdkQueryable): WhiteboardRepo {
                         input.content,
                         input.scene,
                         input.sceneBytes,
+                        input.appearance.background,
+                        input.appearance.theme,
                         input.at,
                         input.at
                     ]
@@ -205,6 +221,24 @@ export function createRepo(q: SdkQueryable): WhiteboardRepo {
                         input.id,
                         input.workspaceId,
                         input.baseVersion
+                    ]
+                );
+                return res.affectedRows === 1;
+            },
+            async setAppearance(id, workspaceId, appearance, userId, at) {
+                const res = await q.execute(
+                    `UPDATE ft_whiteboard_boards
+                        SET background = IF(?, ?, background), theme = IF(?, ?, theme), updated_by = ?, updated = ?
+                      WHERE id = ? AND workspace_id = ?`,
+                    [
+                        appearance.background !== undefined,
+                        appearance.background ?? null,
+                        appearance.theme !== undefined,
+                        appearance.theme ?? null,
+                        userId,
+                        at,
+                        id,
+                        workspaceId
                     ]
                 );
                 return res.affectedRows === 1;

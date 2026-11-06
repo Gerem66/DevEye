@@ -558,7 +558,9 @@ nommée sous le préfixe du module aux connexions qui ont `read` sur la feature,
 que le client lit par `onServerEvent` (Convertisseur, Mail, Jeu de la vie).
 `deps.live.publishTo(workspaceId, userIds, …)` restreint la trame aux comptes
 nommés : les participants d'un élément que le rôle d'un autre membre lui
-masque (les séances du Tableau blanc).
+masque (les séances du Tableau blanc). `ctx.live.joinCursors(clé)` assied
+l'appelant dans le canal de curseurs du module, celui d'une vue qui a sa propre
+surface, et `leaveCursors(clé)` l'en sort.
 `accountChanged(userId)` fait relire l'offre d'un compte et réappliquer ses
 pauses ; `pendingChanged()` (commande ou service) fait recompter
 `adminPending` et rallume les badges des comptes qui modèrent.
@@ -653,8 +655,9 @@ se range de lui-même en haut de son cadre, sur toute sa largeur : sous le
 `invalidate(clé)` et `useResourceVersion` relient une
 mutation aux widgets qui la lisent, `onServerEvent` écoute la voie de poussée,
 `openFeature` ouvre une autre feature sur un élément, `useDomains(feature)` lit
-les domaines, `useSuppressLiveCursors()` éteint les curseurs de DevEye le temps
-qu'une vue dessine les siens (un canevas qu'on déplace et qu'on zoome). Le reste du barrel (composants, dialogues,
+les domaines, `useLiveCursorSurface(surface)` place les curseurs de DevEye sur
+la surface d'une vue (un canevas qu'on déplace et qu'on zoome) et
+`onLiveCursors(canal, cb)` en livre les positions brutes. Le reste du barrel (composants, dialogues,
 `FeatureSettingsButton`, `SaveButton`, `ReadOnlyNotice`, `useLiveSegment`,
 `DeviceRelayField`...) est décrit par le portrait `client-ambient.d.ts` et la
 REFERENCE du template.
@@ -747,7 +750,8 @@ Par requête (`SdkFeatureContext`, construit dans `_sdk/context.ts`) :
   `accounts.me`, `usage` (`of`, `ofMany`), `telemetry` (`snapshot`,
   `pinInstant`), `agents` (la façade de la flotte, décrite plus haut) ;
 - `transport` (le socket appelant, `agents`) ;
-- `live.publish(event, payload)` (capacité `live.publish`),
+- `live.publish(event, payload)`, `live.joinCursors(key)` et
+  `live.leaveCursors(key)` (capacité `live.publish`),
   `live.accountChanged(userId)` et `live.pendingChanged()` ;
 - `secrecy.isUnlocked()` et `secrecy.ticket(payload, { ttlSeconds })` ;
 - `items` (`restrictions`, `assert`, `canExtra`, `forget`) ;

@@ -41,6 +41,17 @@ export const sceneElementSchema = z.looseObject({
 });
 export type SceneElement = z.infer<typeof sceneElementSchema>;
 
+/** Un fond tel que le sélecteur d'Excalidraw l'écrit : hexadécimal, ou un nom de couleur. */
+export const backgroundSchema = z.string().regex(/^(#[0-9a-fA-F]{3,8}|[a-zA-Z]{3,20})$/);
+export const boardThemeSchema = z.enum(['light', 'dark']);
+
+/** Commune à tous les participants. `null` : le fond d'Excalidraw, le thème du profil de chacun. */
+export const appearanceSchema = z.object({
+    background: backgroundSchema.nullable(),
+    theme: boardThemeSchema.nullable()
+});
+export type BoardAppearance = z.infer<typeof appearanceSchema>;
+
 export const boardSummarySchema = z.object({
     id: z.number().int(),
     title: z.string(),
@@ -53,7 +64,9 @@ export const boardSummarySchema = z.object({
     /** Change à chaque aperçu enregistré : la grille ne relit que ceux qui ont bougé. */
     previewVersion: z.number().int().nonnegative(),
     /** Projeté depuis un autre espace. */
-    foreign: z.boolean()
+    foreign: z.boolean(),
+    /** L'aperçu se renverse comme le canevas : selon ce thème, sinon celui de DevEye. */
+    theme: boardThemeSchema.nullable()
 });
 export type BoardSummary = z.infer<typeof boardSummarySchema>;
 
@@ -61,6 +74,8 @@ export const whiteboardUsageSchema = z.object({ used: z.number(), limit: z.numbe
 
 export const peerSchema = z.object({
     clientId: clientIdSchema,
+    /** La connexion dont DevEye dessine le curseur ; `null` hors socket (un test). */
+    connId: z.string().min(1).nullable(),
     userId: z.number().int(),
     name: z.string(),
     color: userColorSchema,
@@ -68,15 +83,15 @@ export const peerSchema = z.object({
 });
 export type WhiteboardPeer = z.infer<typeof peerSchema>;
 
-/** Une position dans les coordonnées de la scène, pas de l'écran. */
-export const pointerSchema = z.object({
-    x: z.number(),
-    y: z.number(),
-    tool: z.enum(['pointer', 'laser'])
+/**
+ * Ce qu'un participant montre aux autres en plus de son curseur, que DevEye
+ * transporte et dessine : ce qu'il a sélectionné, et son laser allumé.
+ */
+export const presenceSchema = z.object({
+    selectedIds: z.array(z.string().max(64)).max(PUSH_MAX_ELEMENTS),
+    laser: z.boolean()
 });
-export type WhiteboardPointer = z.infer<typeof pointerSchema>;
-
-export const pointerButtonSchema = z.enum(['up', 'down']);
+export type WhiteboardPresence = z.infer<typeof presenceSchema>;
 
 export const boardFileSchema = z.object({
     id: fileIdSchema,
@@ -89,11 +104,12 @@ export type BoardFile = z.infer<typeof boardFileSchema>;
 // ── Les trames poussées aux participants d'une séance ─────────────────────
 
 export const WHITEBOARD_ELEMENTS_EVENT = 'whiteboard.elements';
-export const WHITEBOARD_POINTERS_EVENT = 'whiteboard.pointers';
+export const WHITEBOARD_PRESENCE_EVENT = 'whiteboard.presence';
 export const WHITEBOARD_PEERS_EVENT = 'whiteboard.peers';
 export const WHITEBOARD_SAVED_EVENT = 'whiteboard.saved';
 export const WHITEBOARD_FILE_EVENT = 'whiteboard.fileAdded';
 export const WHITEBOARD_CLOSED_EVENT = 'whiteboard.closed';
+export const WHITEBOARD_APPEARANCE_EVENT = 'whiteboard.appearance';
 
 /** L'émetteur d'éléments venus de la base (un autre serveur) plutôt que d'un participant. */
 export const SERVER_ORIGIN = '00000000-0000-4000-8000-000000000000';
@@ -106,13 +122,7 @@ export const elementsFrameSchema = z.object({
     elements: z.array(sceneElementSchema)
 });
 
-export const pointersFrameSchema = z.object({
-    boardId: boardIdSchema,
-    clientId: clientIdSchema,
-    pointer: pointerSchema.nullable(),
-    button: pointerButtonSchema,
-    selectedIds: z.array(z.string())
-});
+export const presenceFrameSchema = presenceSchema.extend({ boardId: boardIdSchema, clientId: clientIdSchema });
 
 export const peersFrameSchema = z.object({ boardId: boardIdSchema, peers: z.array(peerSchema) });
 
@@ -124,6 +134,8 @@ export const savedFrameSchema = z.object({
 });
 
 export const fileFrameSchema = z.object({ boardId: boardIdSchema, fileId: fileIdSchema });
+
+export const appearanceFrameSchema = appearanceSchema.extend({ boardId: boardIdSchema });
 
 export const closedFrameSchema = z.object({
     boardId: boardIdSchema,

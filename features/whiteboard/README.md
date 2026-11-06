@@ -2,7 +2,7 @@
 
 Des schémas à main levée, dans l'éditeur [Excalidraw](https://excalidraw.com)
 (MIT), dessinés à plusieurs en même temps : chacun voit les traits et le
-pointeur des autres au fil du geste. Un tableau appartient à un espace, se
+curseur des autres au fil du geste. Un tableau appartient à un espace, se
 partage vers un autre, se copie et se déplace comme un élément de Notes. C'est
 une feature de grille (carte d'accueil + panneau).
 
@@ -26,10 +26,15 @@ au magasin d'objets. Une image qu'aucun élément ne montre plus est marquée
 orpheline et retirée au bout d'un jour, ce qui laisse à une annulation le temps
 de la faire revenir.
 
+Le **fond** et le **thème** d'un tableau sont communs à tous ses
+participants. Un membre qui peut écrire les choisit dans le menu d'Excalidraw ;
+ils s'enregistrent aussitôt et changent en direct chez les autres. Sans choix,
+le fond est celui d'Excalidraw et le thème celui du profil de chacun.
+
 Un **aperçu** (une vignette WebP de quelques dizaines de kilo-octets) est
 produit par le navigateur d'un auteur quand il quitte le tableau, et toutes les
-deux minutes pendant qu'il dessine. La grille le montre, renversé en thème
-sombre comme le canevas d'Excalidraw.
+deux minutes pendant qu'il dessine. La grille le montre renversé quand le
+tableau s'affiche en sombre, comme le canevas d'Excalidraw.
 
 ## Dessiner à plusieurs
 
@@ -49,11 +54,19 @@ rediffuse ce qui l'a emporté.
   **trame numérotée**. Un numéro qui saute dit qu'une trame s'est perdue (une
   socket en retard en perd sans prévenir) : le client rentre dans la séance et
   refusionne.
-- Le **pointeur** part en commande postée, sans réponse attendue, au plus douze
-  fois par seconde ; il vaut aussi signe de vie toutes les huit secondes. Un
-  participant muet vingt secondes est retiré de la séance. Les pointeurs sont
-  dessinés par Excalidraw dans les coordonnées de la scène : les curseurs de
-  DevEye, rapportés à la popup, sont éteints pendant qu'un tableau est ouvert.
+- Les **curseurs** sont ceux de DevEye, avec leur cadence, leur glissement,
+  leur bulle et le réglage « Curseurs des autres » : la scène leur sert de
+  surface (`useLiveCursorSurface`), si bien qu'un point désigne le même dessin
+  chez chacun, quel que soit son déplacement ou son zoom. Ils circulent dans le
+  canal du tableau, où `whiteboard.join` assied la connexion
+  (`ctx.live.joinCursors`) : un participant venu d'un autre espace y voit les
+  autres.
+- La **sélection** et le **laser** allumé partent en commande postée, sans
+  réponse attendue, à chaque changement ; elle vaut aussi signe de vie toutes
+  les huit secondes. Un participant muet vingt secondes est retiré de la
+  séance. Le cadre de ce qu'un participant a sélectionné et sa traînée laser
+  prennent la couleur de son compte, comme son curseur et son avatar dans
+  l'en-tête du tableau.
 - La scène s'écrit en base deux secondes après la dernière modification, au
   moins toutes les quinze secondes pendant qu'on dessine, au départ du dernier
   participant et à l'arrêt du serveur. L'écriture compare la version en base :
@@ -64,7 +77,7 @@ rediffuse ce qui l'a emporté.
   son rôle masque le tableau ne reçoit rien.
 
 Un membre en lecture seule entre dans la séance, voit tout en direct et montre
-son pointeur ; Excalidraw s'ouvre en mode vue, et ses poussées seraient
+son curseur ; Excalidraw s'ouvre en mode vue, et ses poussées seraient
 refusées.
 
 Les séances vivent dans le processus : deux serveurs sur la même base ne
@@ -148,6 +161,7 @@ jamais supprimé. La grille ne montre l'usage qu'à partir de 80 % de la limite.
 
 Le titre, la scène (compressée avant scellement) et l'aperçu sont scellés à
 l'étage ouvert de l'espace d'origine, lisibles par la séance sans session.
+Le fond et le thème restent en clair : ils ne disent rien du dessin.
 Les images sont scellées (conteneur `DEVB`) par une clé du module, tirée au sort
 au premier démarrage et scellée par la clé du serveur (`ft_whiteboard_key`) :
 elles ne dépendent d'aucun espace, si bien que copie et déplacement ne les
@@ -156,8 +170,10 @@ rechiffrent pas. Voir [SECURITY_MODEL.md](../../Docs/SECURITY_MODEL.md).
 ## Export
 
 L'export des données d'un compte écrit chaque tableau en
-`<titre>.excalidraw`, que l'application d'origine rouvre telle quelle, images
-comprises quand le titulaire les garde, plus `tableaux.json` qui les liste.
+`<titre>.excalidraw`, que l'application d'origine rouvre telle quelle, avec son
+fond et son thème, images comprises quand le titulaire les garde, plus
+`tableaux.json` qui les liste. L'import relit le fond et le thème d'un tel
+fichier.
 
 ## Exploitation
 
@@ -176,33 +192,35 @@ effacer à la main.
 
 ## Commandes
 
-| Commande                | Rôle                                                |
-| ----------------------- | --------------------------------------------------- |
-| `whiteboard.list`       | Les tableaux visibles et l'usage de l'offre         |
-| `whiteboard.count`      | Leur nombre, pour la carte d'accueil                |
-| `whiteboard.add`        | Un tableau neuf, vide ou importé d'un `.excalidraw` |
-| `whiteboard.rename`     | Changer son titre                                   |
-| `whiteboard.duplicate`  | Le copier dans l'espace actif, images comprises     |
-| `whiteboard.remove`     | Le supprimer, depuis son espace d'origine           |
-| `whiteboard.previews`   | Les aperçus de la grille                            |
-| `whiteboard.setPreview` | Enregistrer un aperçu                               |
-| `whiteboard.fileAdd`    | Envoyer une image                                   |
-| `whiteboard.files`      | Relire des images                                   |
-| `whiteboard.join`       | Entrer dans la séance                               |
-| `whiteboard.leave`      | La quitter                                          |
-| `whiteboard.push`       | Envoyer les éléments changés                        |
-| `whiteboard.pointer`    | Le pointeur et la sélection (posté, sans réponse)   |
+| Commande                   | Rôle                                                |
+| -------------------------- | --------------------------------------------------- |
+| `whiteboard.list`          | Les tableaux visibles et l'usage de l'offre         |
+| `whiteboard.count`         | Leur nombre, pour la carte d'accueil                |
+| `whiteboard.add`           | Un tableau neuf, vide ou importé d'un `.excalidraw` |
+| `whiteboard.rename`        | Changer son titre                                   |
+| `whiteboard.duplicate`     | Le copier dans l'espace actif, images comprises     |
+| `whiteboard.remove`        | Le supprimer, depuis son espace d'origine           |
+| `whiteboard.previews`      | Les aperçus de la grille                            |
+| `whiteboard.setPreview`    | Enregistrer un aperçu                               |
+| `whiteboard.setAppearance` | Changer le fond ou le thème, pour tous              |
+| `whiteboard.fileAdd`       | Envoyer une image                                   |
+| `whiteboard.files`         | Relire des images                                   |
+| `whiteboard.join`          | Entrer dans la séance                               |
+| `whiteboard.leave`         | La quitter                                          |
+| `whiteboard.push`          | Envoyer les éléments changés                        |
+| `whiteboard.presence`      | La sélection et le laser (posté, sans réponse)      |
 
-Trames : `whiteboard.elements`, `whiteboard.pointers`, `whiteboard.peers`,
-`whiteboard.saved`, `whiteboard.fileAdded`, `whiteboard.closed`.
+Trames : `whiteboard.elements`, `whiteboard.presence`, `whiteboard.peers`,
+`whiteboard.saved`, `whiteboard.fileAdded`, `whiteboard.appearance`,
+`whiteboard.closed`.
 
 ## Tables
 
-| Table                  | Contenu                                                    |
-| ---------------------- | ---------------------------------------------------------- |
-| `ft_whiteboard_boards` | Le tableau : titre, scène et aperçu scellés, tailles       |
-| `ft_whiteboard_files`  | Ses images : clé d'objet tirée au sort, taille, orphelinat |
-| `ft_whiteboard_key`    | La racine des clés du module, scellée par le serveur       |
+| Table                  | Contenu                                                             |
+| ---------------------- | ------------------------------------------------------------------- |
+| `ft_whiteboard_boards` | Le tableau : titre, scène et aperçu scellés, tailles, fond et thème |
+| `ft_whiteboard_files`  | Ses images : clé d'objet tirée au sort, taille, orphelinat          |
+| `ft_whiteboard_key`    | La racine des clés du module, scellée par le serveur                |
 
 ## Tests
 
@@ -210,5 +228,5 @@ Les tests node couvrent la fusion, la séance (chargement unique, numérotation,
 diffusion par salle, écritures, fusion d'une version écrite ailleurs, offre
 pleine), la lecture des images et des `.excalidraw`, et les briques de
 synchronisation du client. La page Tests et débogage joue trois scénarios :
-créer, coller une image et supprimer ; dessiner à deux ; partager, copier et
-déplacer.
+créer, coller une image et supprimer ; dessiner à deux, fond et thème compris ;
+partager, copier et déplacer.

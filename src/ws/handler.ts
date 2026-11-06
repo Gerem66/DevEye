@@ -209,7 +209,7 @@ export async function registerWS(
             // passé lui par tout le pipeline, fait foi.
             if (command === LIVE_CURSOR_COMMAND) {
                 const frame = liveCursorFrameSchema.safeParse(payload);
-                if (frame.success) liveHub.cursor(socket, frame.data.cursor);
+                if (frame.success) liveHub.cursor(socket, frame.data);
                 return;
             }
 

@@ -50,6 +50,7 @@ function harness(initial: StoredScene | null = { workspaceId: 1, version: 1, ele
             boardId: 7,
             home: 1,
             clientId,
+            connId: null,
             userId,
             workspaceId,
             name: `u${userId}`,
@@ -110,13 +111,13 @@ describe('Sessions', () => {
         assert.deepEqual(again, { seq: 1, accepted: 0, refused: null });
     });
 
-    it('relaie un pointeur sans écrire, et refuse un participant inconnu', async () => {
+    it('relaie une sélection sans écrire, et refuse un participant inconnu', async () => {
         const h = harness();
         await h.join(A, 1);
         await h.join(B, 2);
         h.frames.length = 0;
-        h.sessions.pointer(7, A, 1, { pointer: { x: 1, y: 2, tool: 'pointer' }, button: 'up', selectedIds: [] });
-        assert.equal(h.frames.filter((f) => f.event === 'whiteboard.pointers').length, 1);
+        h.sessions.presence(7, A, 1, { selectedIds: ['x'], laser: false });
+        assert.equal(h.frames.filter((f) => f.event === 'whiteboard.presence').length, 1);
         assert.throws(() => h.sessions.push(7, A, 99, [el('x')]), { code: 'conflict' });
     });
 

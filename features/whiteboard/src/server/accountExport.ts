@@ -1,6 +1,7 @@
 import type { FeatureAccountExport } from '@deveye/types/sdk/server';
 
-import { openScene, openTitle, untitled } from './_shared';
+import type { BoardAppearance } from '../contracts/domain';
+import { appearanceOf, openScene, openTitle, untitled } from './_shared';
 import { readFileBytes } from './files';
 import type { FileRow, WhiteboardRepo } from './repo';
 
@@ -20,12 +21,17 @@ function safeName(title: string): string {
  */
 async function* excalidrawFile(
     elementsJson: string,
+    appearance: BoardAppearance,
     files: readonly FileRow[],
     withImages: boolean,
     signal: AbortSignal
 ): AsyncGenerator<Uint8Array> {
+    const appState = {
+        ...(appearance.background !== null ? { viewBackgroundColor: appearance.background } : {}),
+        ...(appearance.theme !== null ? { theme: appearance.theme } : {})
+    };
     yield encoder.encode(
-        `{"type":"excalidraw","version":2,"source":"DevEye","elements":${elementsJson},"appState":{},"files":{`
+        `{"type":"excalidraw","version":2,"source":"DevEye","elements":${elementsJson},"appState":${JSON.stringify(appState)},"files":{`
     );
     let first = true;
     for (const file of withImages ? files : []) {
@@ -75,11 +81,14 @@ export const whiteboardAccountExport: FeatureAccountExport<WhiteboardRepo> = {
             id: number;
             content: string;
             scene: string;
+            background: string | null;
+            theme: string | null;
             created: number;
             updated: number;
-        }>('SELECT id, content, scene, created, updated FROM ft_whiteboard_boards WHERE workspace_id = ? ORDER BY id', [
-            ctx.workspace.id
-        ]);
+        }>(
+            'SELECT id, content, scene, background, theme, created, updated FROM ft_whiteboard_boards WHERE workspace_id = ? ORDER BY id',
+            [ctx.workspace.id]
+        );
         if (boards.length === 0) return;
         const cipher = ctx.cipher();
         const withImages = ctx.includes('images');
@@ -101,9 +110,13 @@ export const whiteboardAccountExport: FeatureAccountExport<WhiteboardRepo> = {
             }
             const files = (await ctx.repo.files.listOf(board.id)).filter((f) => f.orphaned_at === null);
             try {
-                await ctx.out.file(file, excalidrawFile(JSON.stringify(elements), files, withImages, ctx.signal), {
-                    mtime: Number(board.updated)
-                });
+                await ctx.out.file(
+                    file,
+                    excalidrawFile(JSON.stringify(elements), appearanceOf(board), files, withImages, ctx.signal),
+                    {
+                        mtime: Number(board.updated)
+                    }
+                );
             } catch (error) {
                 if (ctx.signal.aborted) throw error;
                 unreadable++;

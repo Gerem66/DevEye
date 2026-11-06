@@ -1,26 +1,37 @@
-import { errorNote, onServerEvent, onSocketOpen, randomUuid, type ErrorNoteInput } from 'deveye-sdk-client';
+import {
+    errorNote,
+    invalidate,
+    onLiveCursors,
+    onServerEvent,
+    onSocketOpen,
+    randomUuid,
+    type ErrorNoteInput
+} from 'deveye-sdk-client';
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
 
 import {
+    appearanceFrameSchema,
     closedFrameSchema,
     elementsFrameSchema,
     ELEMENT_MAX_CHARS,
     fileFrameSchema,
     peersFrameSchema,
-    pointersFrameSchema,
+    presenceFrameSchema,
     PUSH_MAX_ELEMENTS,
     savedFrameSchema,
+    WHITEBOARD_APPEARANCE_EVENT,
     WHITEBOARD_CLOSED_EVENT,
     WHITEBOARD_ELEMENTS_EVENT,
     WHITEBOARD_FILE_EVENT,
     WHITEBOARD_PEERS_EVENT,
-    WHITEBOARD_POINTERS_EVENT,
+    WHITEBOARD_PRESENCE_EVENT,
     WHITEBOARD_SAVED_EVENT,
+    type BoardAppearance,
     type BoardFile,
     type SceneElement,
     type WhiteboardFileMime,
     type WhiteboardPeer,
-    type WhiteboardPointer
+    type WhiteboardPresence
 } from '../contracts/domain';
 import { api } from './api';
 import { DeltaTracker } from './sync/delta';
@@ -38,10 +49,9 @@ export interface SceneBridge {
     addFiles(files: readonly BoardFile[]): void;
 }
 
-export interface RemotePeer extends WhiteboardPeer {
-    pointer: WhiteboardPointer | null;
-    button: 'up' | 'down';
-    selectedIds: readonly string[];
+export interface RemotePeer extends WhiteboardPeer, WhiteboardPresence {
+    /** Sa dernière position dans la scène, celle de son curseur DevEye. */
+    pointer: { x: number; y: number } | null;
 }
 
 export type SessionStatus = 'joining' | 'synced' | 'sending' | 'offline' | 'quota' | 'tooLarge' | 'saveFailed';
@@ -51,11 +61,16 @@ export interface SessionView {
     /** La scène de la première entrée : l'éditeur s'ouvre dessus. */
     initial: { elements: SceneElement[]; title: string } | null;
     canWrite: boolean;
+    appearance: BoardAppearance;
+    /** Le canal des curseurs, une fois la séance rejointe sur cette socket. */
+    channel: string | null;
+    /** Les autres participants. */
+    peers: readonly WhiteboardPeer[];
     closed: 'removed' | 'moved' | null;
     error: ErrorNoteInput | null;
 }
 
-const POINTER_MS = 80;
+const PRESENCE_MS = 100;
 const PUSH_MS = 100;
 /** Bien sous les 20 s au bout desquelles le serveur oublie un participant muet. */
 const HEARTBEAT_MS = 8_000;
@@ -74,6 +89,9 @@ export class BoardSession {
         status: 'joining',
         initial: null,
         canWrite: false,
+        appearance: { background: null, theme: null },
+        channel: null,
+        peers: [],
         closed: null,
         error: null
     };
@@ -86,19 +104,18 @@ export class BoardSession {
     private readonly fetching = new Set<string>();
     private readonly uploading = new Set<string>();
     private readonly unsent = new Set<string>();
-    private readonly remote = new Map<string, RemotePeer>();
+    private readonly remote = new Map<string, WhiteboardPeer & WhiteboardPresence>();
+    /** Les positions reçues du canal, par connexion. */
+    private readonly positions = new Map<string, { x: number; y: number }>();
+    private stopCursors: (() => void) | null = null;
     private pushing = false;
     private joining: Promise<void> | null = null;
     private lastJoinAt = 0;
     private collaboratorsFrame: number | null = null;
     private settleTimer: ReturnType<typeof setTimeout> | null = null;
-    private pointerState: { pointer: WhiteboardPointer | null; button: 'up' | 'down'; selectedIds: string[] } = {
-        pointer: null,
-        button: 'up',
-        selectedIds: []
-    };
+    private presence: WhiteboardPresence = { selectedIds: [], laser: false };
     private readonly pushes = throttle(() => void this.pump(), PUSH_MS);
-    private readonly pointers = throttle(() => this.sendPointer(), POINTER_MS);
+    private readonly presences = throttle(() => this.sendPresence(), PRESENCE_MS);
     private stops: (() => void)[] = [];
 
     constructor(readonly boardId: number) {}
@@ -117,7 +134,7 @@ export class BoardSession {
             (frame: T) => {
                 if (frame.boardId === this.boardId) cb(frame);
             };
-        const heartbeat = setInterval(() => this.sendPointer(), HEARTBEAT_MS);
+        const heartbeat = setInterval(() => this.sendPresence(), HEARTBEAT_MS);
         const onBeforeUnload = (e: BeforeUnloadEvent) => {
             if (this.pending()) e.preventDefault();
         };
@@ -133,9 +150,9 @@ export class BoardSession {
                 mine((f) => this.onElements(f))
             ),
             onServerEvent(
-                WHITEBOARD_POINTERS_EVENT,
-                pointersFrameSchema,
-                mine((f) => this.onPointer(f))
+                WHITEBOARD_PRESENCE_EVENT,
+                presenceFrameSchema,
+                mine((f) => this.onPresence(f))
             ),
             onServerEvent(
                 WHITEBOARD_PEERS_EVENT,
@@ -153,11 +170,20 @@ export class BoardSession {
                 mine((f) => this.onFile(f.fileId))
             ),
             onServerEvent(
+                WHITEBOARD_APPEARANCE_EVENT,
+                appearanceFrameSchema,
+                mine((f) => this.set({ appearance: { background: f.background, theme: f.theme } }))
+            ),
+            onServerEvent(
                 WHITEBOARD_CLOSED_EVENT,
                 closedFrameSchema,
                 mine((f) => this.set({ closed: f.reason }))
             ),
-            onSocketOpen(() => void this.join()),
+            onSocketOpen(() => {
+                // Le siège dans le canal tenait à l'ancienne socket : la surface attend la nouvelle entrée.
+                this.set({ channel: null });
+                void this.join();
+            }),
             () => clearInterval(heartbeat),
             () => window.removeEventListener('beforeunload', onBeforeUnload),
             () => document.removeEventListener('visibilitychange', onVisible)
@@ -168,7 +194,9 @@ export class BoardSession {
     stop(): void {
         for (const stop of this.stops) stop();
         this.stops = [];
-        this.pointers.cancel();
+        this.stopCursors?.();
+        this.stopCursors = null;
+        this.presences.cancel();
         this.pushes.cancel();
         if (this.collaboratorsFrame !== null) cancelAnimationFrame(this.collaboratorsFrame);
         if (this.settleTimer !== null) clearTimeout(this.settleTimer);
@@ -194,15 +222,31 @@ export class BoardSession {
         if (this.view.canWrite) this.pushes.schedule();
     }
 
-    pointer(pointer: WhiteboardPointer, button: 'up' | 'down'): void {
-        this.pointerState = { ...this.pointerState, pointer, button };
-        this.pointers.schedule();
+    selection(ids: string[]): void {
+        if (ids.join() === this.presence.selectedIds.join()) return;
+        this.presence = { ...this.presence, selectedIds: ids };
+        this.presences.schedule();
     }
 
-    selection(ids: string[]): void {
-        if (ids.join() === this.pointerState.selectedIds.join()) return;
-        this.pointerState = { ...this.pointerState, selectedIds: ids };
-        this.pointers.schedule();
+    laser(on: boolean): void {
+        if (on === this.presence.laser) return;
+        this.presence = { ...this.presence, laser: on };
+        this.presences.schedule();
+    }
+
+    /** Le fond ou le thème change ici : appliqué tout de suite, défait sur refus. */
+    setAppearance(patch: Partial<BoardAppearance>): void {
+        if (!this.view.canWrite) return;
+        const before = this.view.appearance;
+        this.set({ appearance: { ...before, ...patch } });
+        api.send('whiteboard.setAppearance', { boardId: this.boardId, ...patch })
+            .then(() => invalidate('whiteboard.list'))
+            .catch((e: unknown) =>
+                this.set({
+                    appearance: before,
+                    error: errorNote(e, 'L’apparence du tableau n’a pas pu être enregistrée.')
+                })
+            );
     }
 
     /** Quelque chose attend de partir : quitter la page le perdrait. */
@@ -238,10 +282,13 @@ export class BoardSession {
                 else if (this.view.initial !== null) this.pendingRemote = res.elements;
                 this.tracker.reset(res.elements);
                 this.onPeers(res.peers);
+                this.watchCursors(res.channel);
                 this.set({
                     status: res.overQuota ? 'quota' : 'synced',
                     initial: this.view.initial ?? { elements: res.elements, title: res.title },
                     canWrite: res.canWrite,
+                    appearance: res.appearance,
+                    channel: res.channel,
                     error: null
                 });
                 // Ce qui a été dessiné hors ligne part maintenant.
@@ -276,37 +323,41 @@ export class BoardSession {
         } else this.pendingRemote.push(...frame.elements);
     }
 
-    private onPointer(frame: {
-        clientId: string;
-        pointer: WhiteboardPointer | null;
-        button: 'up' | 'down';
-        selectedIds: string[];
-    }): void {
+    private onPresence(frame: { clientId: string } & WhiteboardPresence): void {
         const known = this.remote.get(frame.clientId);
         if (!known) return;
-        this.remote.set(frame.clientId, {
-            ...known,
-            pointer: frame.pointer,
-            button: frame.button,
-            selectedIds: frame.selectedIds
-        });
+        this.remote.set(frame.clientId, { ...known, selectedIds: frame.selectedIds, laser: frame.laser });
         this.publishPeers();
+    }
+
+    /** Les positions du canal ne passent à l'éditeur que pendant un laser : il n'en dessine que la traînée. */
+    private watchCursors(channel: string | null): void {
+        this.stopCursors?.();
+        this.stopCursors =
+            channel === null
+                ? null
+                : onLiveCursors(channel, (cursors) => {
+                      this.positions.clear();
+                      for (const { connId, cursor } of cursors)
+                          this.positions.set(connId, { x: cursor.x, y: cursor.y });
+                      if ([...this.remote.values()].some((peer) => peer.laser)) this.publishPeers();
+                  });
     }
 
     private onPeers(peers: readonly WhiteboardPeer[]): void {
         const others = peers.filter((p) => p.clientId !== this.clientId);
-        const next = new Map<string, RemotePeer>();
+        const next = new Map<string, WhiteboardPeer & WhiteboardPresence>();
         for (const peer of others) {
             const known = this.remote.get(peer.clientId);
             next.set(peer.clientId, {
                 ...peer,
-                pointer: known?.pointer ?? null,
-                button: known?.button ?? 'up',
-                selectedIds: known?.selectedIds ?? []
+                selectedIds: known?.selectedIds ?? [],
+                laser: known?.laser ?? false
             });
         }
         this.remote.clear();
         for (const [id, peer] of next) this.remote.set(id, peer);
+        this.set({ peers: others });
         this.publishPeers();
     }
 
@@ -328,18 +379,22 @@ export class BoardSession {
         if (this.collaboratorsFrame !== null || this.bridge === null) return;
         this.collaboratorsFrame = requestAnimationFrame(() => {
             this.collaboratorsFrame = null;
-            this.bridge?.peers([...this.remote.values()]);
+            this.bridge?.peers(
+                [...this.remote.values()].map((peer) => ({
+                    ...peer,
+                    pointer: peer.connId === null ? null : (this.positions.get(peer.connId) ?? null)
+                }))
+            );
         });
     }
 
-    private sendPointer(): void {
+    private sendPresence(): void {
         if (this.view.initial === null || this.view.closed !== null) return;
-        api.post('whiteboard.pointer', {
+        api.post('whiteboard.presence', {
             boardId: this.boardId,
             clientId: this.clientId,
-            pointer: this.pointerState.pointer,
-            button: this.pointerState.button,
-            selectedIds: this.pointerState.selectedIds.slice(0, PUSH_MAX_ELEMENTS)
+            selectedIds: this.presence.selectedIds.slice(0, PUSH_MAX_ELEMENTS),
+            laser: this.presence.laser
         });
     }
 

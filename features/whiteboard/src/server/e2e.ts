@@ -219,6 +219,22 @@ export const whiteboardE2e: FeatureE2eEntry<WhiteboardRepo> = {
                     }
                 },
                 {
+                    label: 'Le fond de l’un et le thème de l’autre, gardés tous deux',
+                    run: async (ctx) => {
+                        const boardId = boardOf(ctx).id;
+                        await ctx.send('whiteboard.setAppearance', { boardId, background: '#fffce8' });
+                        await ctx.send('whiteboard.setAppearance', { boardId, theme: 'dark' });
+                        const joined = await ctx.send<{
+                            appearance: { background: string | null; theme: string | null };
+                        }>('whiteboard.join', { boardId, clientId: ctx.state.get('b') });
+                        if (joined.appearance.background !== '#fffce8' || joined.appearance.theme !== 'dark')
+                            throw new Error(`Apparence relue : ${JSON.stringify(joined.appearance)}`);
+                        const { boards } = await ctx.send<{ boards: BoardSummary[] }>('whiteboard.list', {});
+                        if (boards.find((b) => b.id === boardId)?.theme !== 'dark')
+                            throw new Error('La liste ne porte pas le thème du tableau');
+                    }
+                },
+                {
                     label: 'Quitter : la scène est écrite',
                     run: async (ctx) => {
                         const boardId = boardOf(ctx).id;

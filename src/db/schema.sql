@@ -1499,6 +1499,8 @@ CREATE TABLE `ft_whiteboard_boards` (
   `preview` mediumtext COLLATE utf8mb4_general_ci,
   `preview_bytes` int unsigned NOT NULL DEFAULT '0',
   `preview_version` int unsigned NOT NULL DEFAULT '0',
+  `background` varchar(32) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `theme` varchar(5) COLLATE utf8mb4_general_ci DEFAULT NULL,
   `created` bigint NOT NULL DEFAULT (unix_timestamp()),
   `updated` bigint NOT NULL DEFAULT (unix_timestamp()),
   PRIMARY KEY (`id`),

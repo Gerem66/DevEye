@@ -2,6 +2,7 @@ import './excalidraw/assetPath';
 
 import {
     ActionMenu,
+    Avatar,
     Button,
     ErrorNote,
     errorNote,
@@ -11,14 +12,16 @@ import {
     StickyHeader,
     TextInput,
     useColorScheme,
+    useCurrentUser,
     useDismissLayer,
     useRequestPopupWidth,
-    useSuppressLiveCursors,
+    useWorkspaceMembers,
+    userColorVar,
     type ErrorNoteInput
 } from 'deveye-sdk-client';
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 
-import type { BoardSummary } from '../contracts/domain';
+import type { BoardSummary, WhiteboardPeer } from '../contracts/domain';
 import { api } from './api';
 import type { HostTools } from './excalidraw/Host';
 import { useBoardSession, type SceneBridge, type SessionStatus } from './session';
@@ -67,7 +70,8 @@ export default function BoardEditor({
     onBack(): void;
 }) {
     const [view, session] = useBoardSession(boardId);
-    const theme = useColorScheme();
+    const scheme = useColorScheme();
+    const theme = view.appearance.theme ?? scheme;
     const canWrite = view.canWrite && canWriteRole;
     const title = board ? displayTitle(board) : (view.initial?.title.trim() ?? '') || 'Sans titre';
     const [draft, setDraft] = useState<string | null>(null);
@@ -77,7 +81,6 @@ export default function BoardEditor({
     const canWriteRef = useRef(canWrite);
     canWriteRef.current = canWrite;
 
-    useSuppressLiveCursors();
     useRequestPopupWidth(1600);
     // Échap sert à Excalidraw (désélectionner, quitter un outil) : il ne ferme pas la vue.
     useDismissLayer(true, null);
@@ -172,6 +175,7 @@ export default function BoardEditor({
                         {status.label}
                     </span>
                     <span className={styles.editorActions}>
+                        <Participants peers={view.peers} />
                         <FeatureSettingsButton
                             variant='ghost'
                             scope={{ kind: 'item', feature: 'whiteboard', itemId: String(boardId), itemLabel: title }}
@@ -209,17 +213,52 @@ export default function BoardEditor({
                             title={title}
                             canWrite={canWrite}
                             theme={theme}
+                            appearance={view.appearance}
+                            channel={view.channel}
                             onReady={onReady}
                             onSceneChange={() => {
                                 drawnSincePreview.current = true;
                                 session.changed();
                             }}
+                            onAppearance={(patch) => {
+                                drawnSincePreview.current = true;
+                                session.setAppearance(patch);
+                            }}
                             onSelection={(ids) => session.selection(ids)}
-                            onPointer={(pointer, button) => session.pointer(pointer, button)}
+                            onLaser={(on) => session.laser(on)}
                         />
                     </Suspense>
                 )}
             </div>
         </div>
+    );
+}
+
+/**
+ * Les autres participants, une bulle par compte bordée de sa couleur, comme la
+ * présence de la barre du haut : un tableau partagé réunit aussi des membres
+ * d'autres espaces, qu'elle ne montre pas.
+ */
+function Participants({ peers }: { peers: readonly WhiteboardPeer[] }) {
+    const me = useCurrentUser();
+    const members = useWorkspaceMembers();
+    const people = [...new Map(peers.filter((p) => p.userId !== me?.id).map((p) => [p.userId, p])).values()];
+    if (people.length === 0) return null;
+    return (
+        <span className={styles.participants}>
+            {people.map((peer) => (
+                <span
+                    key={peer.userId}
+                    className={styles.participant}
+                    style={{ '--peer': userColorVar(peer.color) } as CSSProperties}
+                >
+                    <Avatar
+                        user={members.find((m) => m.id === peer.userId)}
+                        size={24}
+                        title={peer.canWrite ? peer.name : `${peer.name} (lecture seule)`}
+                    />
+                </span>
+            ))}
+        </span>
     );
 }

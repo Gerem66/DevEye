@@ -6,15 +6,17 @@ import {
     SCENE_MAX_BYTES,
     SCENE_MAX_ELEMENTS,
     SERVER_ORIGIN,
+    WHITEBOARD_APPEARANCE_EVENT,
     WHITEBOARD_CLOSED_EVENT,
     WHITEBOARD_ELEMENTS_EVENT,
     WHITEBOARD_FILE_EVENT,
     WHITEBOARD_PEERS_EVENT,
-    WHITEBOARD_POINTERS_EVENT,
+    WHITEBOARD_PRESENCE_EVENT,
     WHITEBOARD_SAVED_EVENT,
+    type BoardAppearance,
     type SceneElement,
     type WhiteboardPeer,
-    type WhiteboardPointer
+    type WhiteboardPresence
 } from '../../contracts/domain';
 import { ordered, pruneTombstones, sizeOf, wins } from './merge';
 
@@ -95,6 +97,7 @@ export interface JoinInput {
     boardId: number;
     home: number;
     clientId: string;
+    connId: string | null;
     userId: number;
     workspaceId: number;
     name: string;
@@ -144,6 +147,7 @@ export class Sessions {
         const at = this.now();
         session.peers.set(input.clientId, {
             clientId: input.clientId,
+            connId: input.connId,
             userId: input.userId,
             workspaceId: input.workspaceId,
             name: input.name,
@@ -225,12 +229,7 @@ export class Sessions {
         return { seq: session.seq, accepted: winners.length, refused: null };
     }
 
-    pointer(
-        boardId: number,
-        clientId: string,
-        userId: number,
-        frame: { pointer: WhiteboardPointer | null; button: 'up' | 'down'; selectedIds: readonly string[] }
-    ): void {
+    presence(boardId: number, clientId: string, userId: number, presence: WhiteboardPresence): void {
         const session = this.sessions.get(boardId);
         const peer = session?.peers.get(clientId);
         if (!session || !peer || peer.userId !== userId) {
@@ -238,13 +237,19 @@ export class Sessions {
         }
         peer.seenAt = this.now();
         if (session.peers.size < 2) return;
-        this.broadcast(session, WHITEBOARD_POINTERS_EVENT, { boardId, clientId, ...frame });
+        this.broadcast(session, WHITEBOARD_PRESENCE_EVENT, { boardId, clientId, ...presence });
     }
 
     /** Une image vient d'arriver : les autres participants la demandent. */
     notifyFile(boardId: number, fileId: string): void {
         const session = this.sessions.get(boardId);
         if (session) this.broadcast(session, WHITEBOARD_FILE_EVENT, { boardId, fileId });
+    }
+
+    /** Le fond ou le thème a changé : tous les participants l'appliquent, l'auteur compris. */
+    notifyAppearance(boardId: number, appearance: BoardAppearance): void {
+        const session = this.sessions.get(boardId);
+        if (session) this.broadcast(session, WHITEBOARD_APPEARANCE_EVENT, { boardId, ...appearance });
     }
 
     /** Avant une copie : la base porte tout ce que la séance tient. */
@@ -471,8 +476,9 @@ export class Sessions {
     }
 
     private peersOf(session: Session): WhiteboardPeer[] {
-        return [...session.peers.values()].map(({ clientId, userId, name, color, canWrite }) => ({
+        return [...session.peers.values()].map(({ clientId, connId, userId, name, color, canWrite }) => ({
             clientId,
+            connId,
             userId,
             name,
             color,

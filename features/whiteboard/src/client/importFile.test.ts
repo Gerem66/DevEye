@@ -10,6 +10,7 @@ describe('parseExcalidraw', () => {
             JSON.stringify({
                 type: 'excalidraw',
                 version: 2,
+                appState: { viewBackgroundColor: '#fffce8', theme: 'sombre' },
                 elements: [
                     { id: 'a', type: 'rectangle', version: 3, versionNonce: 7 },
                     { id: 'b', type: 'image', fileId: 'f1' },
@@ -33,6 +34,7 @@ describe('parseExcalidraw', () => {
             board.files.map((f) => f.id),
             ['f1']
         );
+        assert.deepEqual(board.appearance, { background: '#fffce8', theme: null });
     });
 
     it('refuse ce qui n’est pas un dessin', () => {

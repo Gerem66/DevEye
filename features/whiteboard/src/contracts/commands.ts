@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import {
+    appearanceSchema,
     boardFileSchema,
     boardIdSchema,
     boardSummarySchema,
@@ -8,8 +9,7 @@ import {
     fileIdSchema,
     fileMimeSchema,
     peerSchema,
-    pointerButtonSchema,
-    pointerSchema,
+    presenceSchema,
     PREVIEW_MAX_CHARS,
     PUSH_MAX_ELEMENTS,
     SCENE_MAX_ELEMENTS,
@@ -42,7 +42,8 @@ export const whiteboardAdd = {
     input: z.object({
         title,
         elements: z.array(sceneElementSchema).max(SCENE_MAX_ELEMENTS).optional(),
-        filesBytes: z.number().int().nonnegative().optional()
+        filesBytes: z.number().int().nonnegative().optional(),
+        appearance: appearanceSchema.optional()
     }),
     output: z.object({ board: boardSummarySchema })
 };
@@ -81,6 +82,13 @@ export const whiteboardSetPreview = {
             .max(PREVIEW_MAX_CHARS)
             .regex(/^data:image\/(png|webp);base64,[A-Za-z0-9+/]+=*$/)
     }),
+    output: z.object({ boardId: boardIdSchema })
+};
+
+/** Ce qui est absent reste tel quel : deux participants qui changent l'un le fond, l'autre le thème, ne s'écrasent pas. */
+export const whiteboardSetAppearance = {
+    command: 'whiteboard.setAppearance' as const,
+    input: appearanceSchema.partial().extend({ boardId: boardIdSchema }),
     output: z.object({ boardId: boardIdSchema })
 };
 
@@ -123,8 +131,11 @@ export const whiteboardJoin = {
         fileIds: z.array(fileIdSchema),
         peers: z.array(peerSchema),
         canWrite: z.boolean(),
+        appearance: appearanceSchema,
         /** L'offre du propriétaire est pleine : seules les poussées qui n'agrandissent pas passent. */
-        overQuota: z.boolean()
+        overQuota: z.boolean(),
+        /** Le canal où DevEye fait circuler les curseurs de ce tableau ; `null` hors socket. */
+        channel: z.string().nullable()
     })
 };
 
@@ -150,16 +161,10 @@ export const whiteboardPush = {
     })
 };
 
-/** Posté sans réponse attendue ; vaut aussi signe de vie toutes les quelques secondes. */
-export const whiteboardPointer = {
-    command: 'whiteboard.pointer' as const,
-    input: z.object({
-        boardId: boardIdSchema,
-        clientId: clientIdSchema,
-        pointer: pointerSchema.nullable(),
-        button: pointerButtonSchema,
-        selectedIds: z.array(z.string().max(64)).max(PUSH_MAX_ELEMENTS)
-    }),
+/** Posté sans réponse attendue, à chaque changement ; vaut aussi signe de vie toutes les quelques secondes. */
+export const whiteboardPresence = {
+    command: 'whiteboard.presence' as const,
+    input: presenceSchema.extend({ boardId: boardIdSchema, clientId: clientIdSchema }),
     output: z.object({})
 };
 
@@ -172,10 +177,11 @@ export const whiteboardCommands = [
     whiteboardRemove,
     whiteboardPreviews,
     whiteboardSetPreview,
+    whiteboardSetAppearance,
     whiteboardFileAdd,
     whiteboardFiles,
     whiteboardJoin,
     whiteboardLeave,
     whiteboardPush,
-    whiteboardPointer
+    whiteboardPresence
 ] as const;

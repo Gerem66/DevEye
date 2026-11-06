@@ -1,10 +1,12 @@
 /*
  * Excalidraw aux couleurs de DevEye : son accent, ses surfaces et ses rayons,
  * lus sur les jetons du thème. Le dessin lui-même garde ses couleurs : elles
- * font partie de la scène. Chargée avec l'éditeur seulement.
+ * font partie de la scène. Chargée avec l'éditeur seulement. Un tableau dont le
+ * thème diffère de celui de DevEye garde les couleurs d'Excalidraw : celles de
+ * DevEye seraient illisibles sur ses surfaces.
  */
-.excalidraw,
-.excalidraw.theme--dark {
+:root:not([data-theme='light']) .excalidraw.theme--dark,
+:root[data-theme='light'] .excalidraw:not(.theme--dark) {
     --color-primary: var(--accent);
     --color-primary-darker: var(--accent-strong);
     --color-primary-darkest: var(--accent-strong);
@@ -26,7 +28,57 @@
     display: none;
 }
 
+/* Les participants sont dans l'en-tête du tableau, à la couleur de leur compte. */
+.excalidraw .UserList__wrapper {
+    display: none;
+}
+
 /* Ses fenêtres s'ouvrent sur le corps de la page : au-dessus de la popup qui le porte. */
 .excalidraw-modal-container {
     z-index: var(--z-modal);
+}
+
+/* Le sélecteur de thème du module porte des mots, pas les icônes d'Excalidraw. */
+.excalidraw .whiteboard-theme .RadioGroup__choice {
+    width: auto;
+    padding: 0 var(--space-sm);
+}
+
+/* Le sélecteur du système s'ouvre près du carré de droite, sans se montrer lui-même. */
+.excalidraw .whiteboard-background {
+    position: relative;
+}
+
+.excalidraw .whiteboard-background > input[type='color'] {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 1.35rem;
+    height: 1.35rem;
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Les cadres de sélection des autres, par-dessus le canevas, sans jamais prendre un clic. */
+.whiteboard-host {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+/* Au niveau où Excalidraw dessine le laser : sur ses canevas, sous ses barres d'outils. */
+.whiteboard-selections {
+    position: absolute;
+    z-index: var(--zIndex-svgLayer);
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.whiteboard-selections rect {
+    fill: none;
+    stroke-width: 1.5;
+    stroke-dasharray: 6 4;
 }

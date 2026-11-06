@@ -106,7 +106,12 @@ export default function BoardGrid({
             const parsed = parseExcalidraw(picked.file.name, await picked.file.text());
             const { board } = await api.send(
                 'whiteboard.add',
-                { title: parsed.title, elements: parsed.elements, filesBytes: parsed.filesBytes },
+                {
+                    title: parsed.title,
+                    elements: parsed.elements,
+                    filesBytes: parsed.filesBytes,
+                    appearance: parsed.appearance
+                },
                 { timeoutMs: 60_000 }
             );
             for (const file of parsed.files) {
@@ -188,7 +193,12 @@ export default function BoardGrid({
                                 <button type='button' className={styles.cardOpen} onClick={() => onOpen(board.id)}>
                                     <span className={styles.preview}>
                                         {preview ? (
-                                            <img src={preview} alt='' className={styles.previewImage} />
+                                            <img
+                                                src={preview}
+                                                alt=''
+                                                className={styles.previewImage}
+                                                data-theme={board.theme ?? undefined}
+                                            />
                                         ) : (
                                             <span
                                                 className={`icon icon-whiteboard ${styles.previewIcon}`}

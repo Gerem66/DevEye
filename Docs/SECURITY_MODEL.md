@@ -557,7 +557,8 @@ Un tableau se dessine à plusieurs : le serveur fusionne les éléments reçus e
   l'étage ouvert de l'espace d'origine du tableau, même quand on le dessine
   depuis un espace où il est projeté. Le déplacement les rescelle sous la clé
   de l'espace d'arrivée. Pendant une séance, la scène est en clair dans la
-  mémoire du serveur.
+  mémoire du serveur. Le fond et le thème du tableau restent en clair : une
+  couleur et un choix clair ou sombre, qui ne disent rien du dessin.
 - Les images vivent dans le magasin d'objets, scellées au conteneur `DEVB` v2
   par une clé dérivée d'une racine tirée au sort au premier démarrage, scellée
   par la clé serveur dans `ft_whiteboard_key` (déclarée `sealed` : une rotation
@@ -572,7 +573,11 @@ Un tableau se dessine à plusieurs : le serveur fusionne les éléments reçus e
 - Les trames d'une séance ne vont qu'aux comptes qui y participent, sous la
   garde du droit de lecture de la salle. Un membre dont l'accès tombe pendant
   une séance peut encore recevoir des traits une vingtaine de secondes, le
-  temps que son pointeur, refusé, cesse de le tenir pour présent.
+  temps que sa présence, refusée, cesse de le tenir pour présent. Les curseurs,
+  eux, ne circulent qu'entre les connexions que `whiteboard.join` a assises
+  dans le canal du tableau, après les mêmes vérifications ; le hub les en sort
+  quand elles quittent l'espace de leur siège ou perdent la lecture de la
+  feature (`Docs/LIVE.md`).
 
 ## Uptime : l'étage ouvert appliqué à une tâche de fond
 

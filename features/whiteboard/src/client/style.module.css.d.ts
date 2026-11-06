@@ -16,6 +16,8 @@ declare const styles: {
     readonly grid: string;
     readonly header: string;
     readonly heading: string;
+    readonly participant: string;
+    readonly participants: string;
     readonly preview: string;
     readonly previewIcon: string;
     readonly previewImage: string;

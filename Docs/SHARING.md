@@ -98,7 +98,7 @@ gestes :
 | Serveur mail     | lire : l'adresse et son activité                                                                                                                                                          | tout réglage et la suppression : une fenêtre projetée lit, elle ne règle pas              |
 | Hébergement      | parcourir, déposer (compté sur l'offre du domicile), renommer, déplacer, supprimer et télécharger des fichiers                                                                            | adresses, domaines, mot de passe, allure, nom et suppression du dossier                   |
 | Projets          | tout l'arbre (colonnes, cartes, assignation parmi les membres d'ici, jalons, dépendances, discussion, historique), profil, statut, archivage, version manuelle ; liaisons lues et nommées | changer de palier, version suivie d'une release, relier / délier, classer le portefeuille |
-| Tableau blanc    | dessiner en direct avec les participants des deux espaces, coller des images (comptées sur l'offre du domicile), renommer, dupliquer ici                                                  | supprimer                                                                                 |
+| Tableau blanc    | dessiner en direct avec les participants des deux espaces, coller des images (comptées sur l'offre du domicile), changer le fond et le thème, renommer, dupliquer ici                     | supprimer                                                                                 |
 
 Le critère n'est pas le goût : un geste reste au domicile quand il **référence
 d'autres objets de l'espace d'origine** (une clé d'API, une destination, les

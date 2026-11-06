@@ -123,6 +123,15 @@
     filter: none;
 }
 
+/* Un tableau au thème choisi s'affiche ainsi quel que soit celui de DevEye. */
+.previewImage[data-theme='light'] {
+    filter: none;
+}
+
+:global(html) .previewImage[data-theme='dark'] {
+    filter: invert(93%) hue-rotate(180deg);
+}
+
 .previewIcon {
     width: 40px;
     height: 40px;
@@ -207,6 +216,18 @@
     align-items: center;
     gap: var(--space-xs);
     margin-left: auto;
+}
+
+.participants {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+.participant {
+    display: inline-flex;
+    border-radius: 50%;
+    box-shadow: 0 0 0 2px var(--peer);
 }
 
 .canvas {

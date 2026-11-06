@@ -169,7 +169,8 @@ export { useFeatureLifecycle } from '@/Features/useFeatureLifecycle';
  * appelant est monté (`null` = rien demander).
  */
 export { useRequestPopupWidth } from '@/stores/popupWidth';
-export { useSuppressLiveCursors } from '@/live/cursorSuppression';
+export { useLiveCursorSurface, type LiveCursorSurface } from '@/live/cursorSurface';
+export { onLiveCursors } from '@/stores/live';
 /** La pastille d'identité d'un membre, commune à toute feature qui nomme quelqu'un. */
 export { Avatar } from '@/Components/Avatar/Avatar';
 /** La variable CSS d'une couleur de compte, celle dont la présence en direct peint chacun. */

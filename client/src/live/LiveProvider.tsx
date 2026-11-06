@@ -1,33 +1,30 @@
-import { LIVE_CURSOR_COMMAND, type LiveCursor } from '@deveye/types';
-import { createContext, useContext, useEffect, useRef, type ReactNode } from 'react';
+import { LIVE_CURSOR_COMMAND, liveCursorSchema, type LiveCursor } from '@deveye/types';
+import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react';
 
 import { ws } from '@/api/ws';
-import { refreshLive } from '@/stores/live';
+import { refreshLive, resetLiveCursors } from '@/stores/live';
 import { closeCursorChat, openCursorChat, rememberPointer } from './cursorChat';
 import { cursorKindAt } from './cursorKind';
+import { popupSurface, useDeclaredSurface, type CursorSurface } from './cursorSurface';
 import { useHideLiveCursors } from './hideCursors';
-import { useLiveCursorsSuppressed } from './cursorSuppression';
 import { useActiveWorkspace, useWorkspaceState } from '@/stores/workspace';
 
 /**
  * Le cycle de vie de la présence, et la surface à laquelle les coordonnées d'un
- * curseur se rapportent.
+ * curseur se rapportent : celle que déclare la vue ouverte, sinon la popup.
  *
- * Cette surface ne peut pas être un nœud appartenant à une feature :
+ * Celle de la popup ne peut pas être un nœud appartenant à une feature :
  * `FeatureKeepAlive` déplace son conteneur entre le corps de la popup et un
  * support caché, et `WidgetPopup` recrée son élément de défilement à chaque
  * ouverture. C'est donc le corps de la popup, ou la zone de contenu de l'accueil
  * quand rien n'est ouvert ; deux pairs n'échangeant de curseurs qu'au même
  * chemin, ils ont forcément la même.
- *
- * `x` est relatif à la largeur, `y` en pixels absolus du contenu : voir
- * `liveCursorSchema` dans @deveye/types.
  */
 
-const SurfaceContext = createContext<HTMLElement | null>(null);
+const SurfaceContext = createContext<CursorSurface | null>(null);
 
 /** La surface courante, pour replacer les curseurs reçus. */
-export function useLiveSurface(): HTMLElement | null {
+export function useLiveSurface(): CursorSurface | null {
     return useContext(SurfaceContext);
 }
 
@@ -37,13 +34,22 @@ const EMIT_FLOOR_MS = 50;
 /** La touche qui ouvre la bulle, hors de tout champ de saisie. */
 const OPEN_KEY = '/';
 
-export function LiveProvider({ surface, children }: { surface: HTMLElement | null; children: ReactNode }) {
+export function LiveProvider({
+    container,
+    view,
+    children
+}: {
+    container: HTMLElement | null;
+    /** La vue ouverte : seule la sienne compte parmi les surfaces déclarées. */
+    view: string | null;
+    children: ReactNode;
+}) {
     const { epoch } = useWorkspaceState();
-    // Le réglage du compte, ou une vue qui dessine ses propres pointeurs.
-    const hiddenByAccount = useHideLiveCursors();
-    const suppressed = useLiveCursorsSuppressed();
-    const hidden = hiddenByAccount || suppressed;
+    const hidden = useHideLiveCursors();
     const workspace = useActiveWorkspace();
+    const declared = useDeclaredSurface(view);
+    const popup = useMemo(() => (container ? popupSurface(container) : null), [container]);
+    const surface: CursorSurface | null = declared ?? popup;
 
     useEffect(() => {
         // Le store prend en charge la reconnexion ; ce qu'il ne peut pas voir sans
@@ -73,21 +79,17 @@ export function LiveProvider({ surface, children }: { surface: HTMLElement | nul
 
             const point = lastPoint.current;
             let cursor: LiveCursor | null = null;
-            if (point) {
-                const rect = surface.getBoundingClientRect();
-                if (rect.width > 0 && rect.height > 0) {
-                    // Les coordonnées peuvent sortir de la surface (marges de la
-                    // popup, bords de l'écran) et c'est voulu : on est toujours sur
-                    // la même page, le curseur doit continuer d'exister.
-                    cursor = {
-                        x: (point.x - rect.left) / rect.width,
-                        y: point.y - rect.top + surface.scrollTop,
-                        kind: cursorKindAt(point.x, point.y, (point.buttons & 1) !== 0)
-                    };
-                }
+            // Les coordonnées peuvent sortir de la popup (ses marges, les bords de
+            // l'écran) et c'est voulu : on est toujours sur la même page, le
+            // curseur doit continuer d'exister.
+            const at = point ? surface.fromScreen(point.x, point.y) : null;
+            if (point && at) {
+                const candidate = { ...at, kind: cursorKindAt(point.x, point.y, (point.buttons & 1) !== 0) };
+                // Hors des bornes, le serveur jetterait la trame : autant être parti.
+                if (liveCursorSchema.safeParse(candidate).success) cursor = candidate;
             }
             hadCursor.current = cursor !== null;
-            ws.post(LIVE_CURSOR_COMMAND, { cursor });
+            ws.post(LIVE_CURSOR_COMMAND, { cursor, channel: surface.channel });
         };
 
         const schedule = (): void => {
@@ -111,6 +113,11 @@ export function LiveProvider({ surface, children }: { surface: HTMLElement | nul
             schedule();
         };
 
+        // Une surface s'annonce dès qu'elle prend effet : sans attendre un geste,
+        // ses pairs nous comptent parmi eux, et nous recevons les leurs.
+        resetLiveCursors(surface.channel);
+        schedule();
+
         window.addEventListener('pointermove', onMove, { passive: true });
         // Effacé quand le pointeur quitte la fenêtre, jamais la surface : sur la
         // surface, un pair dans la marge de la popup semblerait avoir disparu.
@@ -124,13 +131,17 @@ export function LiveProvider({ surface, children }: { surface: HTMLElement | nul
             document.removeEventListener('visibilitychange', clear);
             if (frame.current !== null) clearTimeout(frame.current);
             frame.current = null;
-            if (hadCursor.current) ws.post(LIVE_CURSOR_COMMAND, { cursor: null });
+            if (hadCursor.current) {
+                ws.post(LIVE_CURSOR_COMMAND, { cursor: null, channel: surface.channel });
+                lastSentAt.current = Date.now();
+            }
             hadCursor.current = false;
         };
     }, [surface, hidden]);
 
     // Un espace personnel est une salle d'une personne : personne à qui parler.
-    const alone = !workspace || workspace.kind === 'personal';
+    // Un canal, lui, réunit aussi des pairs venus d'autres espaces.
+    const alone = !surface?.channel && (!workspace || workspace.kind === 'personal');
 
     // La touche qui ouvre la bulle. Premier raccourci à une touche du client :
     // il vit ici, seul endroit qui a déjà les écouteurs de fenêtre, la surface et

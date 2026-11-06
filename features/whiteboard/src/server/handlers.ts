@@ -10,15 +10,17 @@ import {
     whiteboardJoin,
     whiteboardLeave,
     whiteboardList,
-    whiteboardPointer,
+    whiteboardPresence,
     whiteboardPreviews,
     whiteboardPush,
     whiteboardRemove,
     whiteboardRename,
+    whiteboardSetAppearance,
     whiteboardSetPreview
 } from '../contracts/commands';
 import { SCENE_MAX_BYTES, type SceneElement } from '../contracts/domain';
 import {
+    appearanceOf,
     fileIdsOf,
     now,
     openScene,
@@ -112,6 +114,7 @@ export const whiteboardHandlers = [
                 content: await sealTitle(cipher, input.title),
                 scene: scene.sealed,
                 sceneBytes: scene.bytes,
+                appearance: input.appearance ?? { background: null, theme: null },
                 at: now()
             });
             ctx.audit({ action: 'whiteboard.add', description: 'Tableau blanc créé', metadata: { boardId: id } });
@@ -172,6 +175,7 @@ export const whiteboardHandlers = [
                 content: await sealTitle(cipher, `${untitled(title)} (copie)`),
                 scene: scene.sealed,
                 sceneBytes: scene.bytes,
+                appearance: appearanceOf(source),
                 at
             });
             const copied: string[] = [];
@@ -260,6 +264,20 @@ export const whiteboardHandlers = [
     }),
 
     defineSdkFeature({
+        ...whiteboardSetAppearance,
+        access: { level: 'write', item: 'boardId' },
+        mutates: true,
+        handler: async (ctx: Ctx, { boardId, ...appearance }) => {
+            const row = await loadBoard(ctx, boardId);
+            await ctx.repo.boards.setAppearance(row.id, row.workspace_id, appearance, ctx.userId, now());
+            // Relue : un autre participant a pu changer l'autre champ entre-temps.
+            const saved = await ctx.repo.boards.findById(row.id);
+            if (saved) whiteboard().sessions.notifyAppearance(row.id, appearanceOf(saved));
+            return { boardId: row.id };
+        }
+    }),
+
+    defineSdkFeature({
         ...whiteboardFileAdd,
         access: { level: 'write', item: 'boardId' },
         mutates: true,
@@ -302,21 +320,31 @@ export const whiteboardHandlers = [
                 ctx.repo.files.listOf(row.id)
             ]);
             const me = members.find((m) => m.userId === ctx.userId);
-            const joined = await whiteboard().sessions.join({
-                boardId: row.id,
-                home: row.workspace_id,
-                clientId: input.clientId,
-                userId: ctx.userId,
-                workspaceId: ctx.workspaceId,
-                name: me?.name ?? 'Membre',
-                color: me?.color ?? defaultUserColor(ctx.userId),
-                canWrite
-            });
+            const key = String(row.id);
+            const seat = await ctx.live.joinCursors(key);
+            const joined = await whiteboard()
+                .sessions.join({
+                    boardId: row.id,
+                    home: row.workspace_id,
+                    clientId: input.clientId,
+                    connId: seat?.connId ?? null,
+                    userId: ctx.userId,
+                    workspaceId: ctx.workspaceId,
+                    name: me?.name ?? 'Membre',
+                    color: me?.color ?? defaultUserColor(ctx.userId),
+                    canWrite
+                })
+                .catch((error: unknown) => {
+                    ctx.live.leaveCursors(key);
+                    throw error;
+                });
             return {
                 ...joined,
+                channel: seat?.channel ?? null,
                 title: await openTitle(await scope.cipherFor(String(row.id)), row.content),
                 fileIds: fileRows.map((f) => f.file_id),
-                canWrite
+                canWrite,
+                appearance: appearanceOf(row)
             };
         }
     }),
@@ -325,6 +353,7 @@ export const whiteboardHandlers = [
         ...whiteboardLeave,
         access: { item: 'boardId' },
         handler: async (ctx: Ctx, input) => {
+            ctx.live.leaveCursors(String(input.boardId));
             await whiteboard().sessions.leave(input.boardId, input.clientId, ctx.userId);
             return {};
         }
@@ -338,13 +367,12 @@ export const whiteboardHandlers = [
     }),
 
     defineSdkFeature({
-        ...whiteboardPointer,
+        ...whiteboardPresence,
         access: { item: 'boardId' },
         handler: (ctx: Ctx, input) => {
-            whiteboard().sessions.pointer(input.boardId, input.clientId, ctx.userId, {
-                pointer: input.pointer,
-                button: input.button,
-                selectedIds: input.selectedIds
+            whiteboard().sessions.presence(input.boardId, input.clientId, ctx.userId, {
+                selectedIds: input.selectedIds,
+                laser: input.laser
             });
             return Promise.resolve({});
         }

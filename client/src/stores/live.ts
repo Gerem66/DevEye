@@ -3,7 +3,7 @@ import {
     LIVE_PEERS_EVENT,
     livePeersPushSchema,
     liveCursorsPushSchema,
-    type LiveCursor,
+    type LiveCursorsPush,
     type LivePeer
 } from '@deveye/types';
 import { useSyncExternalStore } from 'react';
@@ -41,17 +41,15 @@ export type LiveSegmentKind = (typeof LIVE_SEGMENT_ORDER)[number];
  */
 export type LiveOutlineKind = LiveSegmentKind | 'settings';
 
-export interface LiveCursorEntry {
-    connId: string;
-    userId: number;
-    cursor: LiveCursor;
-}
+export type LiveCursorEntry = LiveCursorsPush['cursors'][number];
 
 interface LiveState {
     /** Les pairs de ma salle, moi compris. Vide hors espace partagé peuplé. */
     peers: LivePeer[];
-    /** Les curseurs des pairs situés exactement là où je suis. */
+    /** Les curseurs des pairs qui partagent ma surface. */
     cursors: LiveCursorEntry[];
+    /** Leur surface : le canal, `null` pour la popup. */
+    cursorChannel: string | null;
     /** Mon propre chemin publié, pour comparer les chemins des pairs. */
     path: string[];
     /** Où une téléportation en cours veut nous emmener, ou `null`. */
@@ -68,7 +66,7 @@ export interface LiveTeleport {
     reached: ReadonlySet<LiveSegmentKind>;
 }
 
-const EMPTY: LiveState = { peers: [], cursors: [], path: [], teleport: null };
+const EMPTY: LiveState = { peers: [], cursors: [], cursorChannel: null, path: [], teleport: null };
 
 let state: LiveState = EMPTY;
 const listeners = new Set<() => void>();
@@ -349,6 +347,26 @@ export function segmentTarget(
     return value === current ? null : { value };
 }
 
+/**
+ * Mon curseur change de surface : les positions reçues de l'ancienne ne
+ * valent plus, et celles d'une surface déjà visitée seraient périmées.
+ */
+export function resetLiveCursors(channel: string | null): void {
+    if (state.cursorChannel === channel && state.cursors.length === 0) return;
+    state = { ...state, cursors: [], cursorChannel: channel };
+    emit();
+}
+
+const cursorListeners = new Set<{ channel: string; cb: (cursors: readonly LiveCursorEntry[]) => void }>();
+
+/** Les positions brutes d'un canal, à leur arrivée, pour ce qu'une vue dessine avec. */
+export function onLiveCursors(channel: string, cb: (cursors: readonly LiveCursorEntry[]) => void): () => void {
+    ensureWired();
+    const listener = { channel, cb };
+    cursorListeners.add(listener);
+    return () => cursorListeners.delete(listener);
+}
+
 /** Purge à la déconnexion : la session suivante ne doit pas hériter du roster et du chemin. */
 export function resetLive(): void {
     clearTeleport();
@@ -384,8 +402,10 @@ function ensureWired(): void {
         if (msg.command === LIVE_CURSORS_EVENT) {
             const push = liveCursorsPushSchema.safeParse(msg.payload.data);
             if (!push.success || push.data.workspaceId !== getActiveWorkspaceId()) return;
-            state = { ...state, cursors: push.data.cursors };
+            const { channel, cursors } = push.data;
+            state = { ...state, cursors, cursorChannel: channel };
             emit();
+            for (const listener of cursorListeners) if (listener.channel === channel) listener.cb(cursors);
         }
     });
 

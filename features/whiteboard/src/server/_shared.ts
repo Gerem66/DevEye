@@ -12,7 +12,14 @@ import {
 } from '@deveye/types/sdk/server';
 import { z } from 'zod';
 
-import { sceneElementSchema, type BoardSummary, type SceneElement } from '../contracts/domain';
+import {
+    backgroundSchema,
+    boardThemeSchema,
+    sceneElementSchema,
+    type BoardAppearance,
+    type BoardSummary,
+    type SceneElement
+} from '../contracts/domain';
 import type { BoardRow, WhiteboardRepo } from './repo';
 import type { Sessions } from './session/sessions';
 
@@ -40,6 +47,13 @@ export async function openTitle(cipher: SdkCipher, blob: string): Promise<string
     }
 }
 
+/** Ce que la base porte, relu sans y croire : une valeur hors du contrat vaut celle par défaut. */
+export function appearanceOf(row: { background: unknown; theme: unknown }): BoardAppearance {
+    const background = backgroundSchema.safeParse(row.background);
+    const theme = boardThemeSchema.safeParse(row.theme);
+    return { background: background.success ? background.data : null, theme: theme.success ? theme.data : null };
+}
+
 export function summaryOf(row: BoardRow, title: string, foreign: boolean): BoardSummary {
     return {
         id: row.id,
@@ -50,7 +64,8 @@ export function summaryOf(row: BoardRow, title: string, foreign: boolean): Board
         byteSize: Number(row.scene_bytes) + Number(row.preview_bytes) + Number(row.files_bytes),
         hasPreview: Number(row.has_preview) === 1,
         previewVersion: Number(row.preview_version),
-        foreign
+        foreign,
+        theme: appearanceOf(row).theme
     };
 }
 

@@ -173,6 +173,10 @@ L'appartenance reste la frontière, et la présence ne la contourne pas.
   `featureBehind` côté client rend `null` pour elles parce qu'elles ont leurs
   propres gardes ; ici `null` voudrait dire « visible par tous ». D'où un
   troisième cas, plutôt qu'une réutilisation.
+- **Un canal de curseurs ne s'ouvre que par un module.** Le hub ne vérifie
+  que le siège : c'est la commande du module qui l'accorde, après sa propre
+  garde sur l'élément (`whiteboard.join`). Une trame qui nomme un canal sans
+  siège est jetée.
 - **La voie rapide des curseurs ignore l'espace de l'enveloppe.** Il est contrôlé
   par le client et n'est validé que dans `access.forWorkspace()`, que cette voie
   court-circuite. Seul `conn.workspaceId`, posé par un `live.here` passé par le
@@ -322,14 +326,18 @@ numéro qui saute fait rentrer le client dans la séance. Un tableau partagé
 suivi depuis un autre espace reçoit ainsi les siennes, puisque la voie de
 poussée ne traverse pas la projection.
 
-Une commande qu'on renvoie plusieurs fois par seconde sans attendre de réponse
-(un pointeur) part par `featureApi(m).post` : le client n'ouvre ni promesse ni
+Une commande qu'on renvoie souvent sans attendre de réponse (une sélection, un
+signe de vie) part par `featureApi(m).post` : le client n'ouvre ni promesse ni
 délai, et le serveur, qui la valide et l'autorise comme toute commande, ne
 répond pas à une enveloppe dont le `requestId` vaut `-`.
 
 ---
 
 ## 5. Les curseurs
+
+Un curseur se rapporte à une **surface** : celle de la popup, ou celle qu'une
+vue déclare (plus bas). Ce qui suit vaut pour les deux, sauf le repère et les
+pairs.
 
 ### La surface
 
@@ -413,17 +421,41 @@ restent actifs : ils disent où l'on est, pas où l'on pointe, et c'est la secon
 information qui pèse sur l'attention. La bulle, elle, est dessinée _dans_ le
 curseur : la couper avec lui n'est pas un choix, c'est la même chose.
 
-### Une vue qui dessine les siens
+### Une vue qui a sa propre surface
 
 Un canevas qu'on déplace et qu'on zoome (le Tableau blanc) n'a pas de repère
 commun avec la popup : un point rapporté à sa largeur ne désigne rien chez un
-pair qui regarde ailleurs dans la scène. Une telle vue appelle
-`useSuppressLiveCursors()` (SDK client) et dessine ses propres pointeurs, dans
-les coordonnées de la scène. Tant qu'elle est montée, `LiveProvider` n'émet
-plus et `LiveCursors` n'affiche plus, comme sous le réglage du compte, bulle
-comprise ; le roster, les contours et « en train d'écrire » restent. Un
-compteur (`live/cursorSuppression.ts`) : deux vues montées à la fois ne se
-rallument pas l'une l'autre en se démontant.
+pair qui regarde ailleurs dans la scène. Une telle vue déclare sa surface
+(`useLiveCursorSurface`, SDK client) : de l'écran vers ses coordonnées et
+retour, et un signal quand la seconde conversion change (un déplacement, un
+zoom). Le reste est le mécanisme commun : la même émission, les mêmes formes,
+le même glissement, la même bulle, le même réglage du compte.
+
+Le glissement se calcule dans les coordonnées de la surface, puis se projette
+à l'écran (`LiveCursors`) : un défilement ou un zoom emporte le curseur d'un
+bloc avec ce qu'il désigne, seul son propre mouvement glisse. La popup en
+profite aussi.
+
+Les pairs ne sont plus ceux du même chemin mais ceux d'un **canal**,
+`feature:clé`, d'où que vienne leur connexion : un élément projeté réunit des
+membres de plusieurs espaces. Seul le serveur du module y assied une connexion
+(`ctx.live.joinCursors`), après avoir vérifié qu'elle voit l'élément. Chaque
+trame nomme sa surface (`channel`, `null` pour la popup), ce qui rend sans
+ambiguïté le passage de l'une à l'autre. Le siège tombe avec `leaveCursors`, la
+sortie de l'espace qui l'a donné, la perte de la lecture de la feature
+(`resync`), une expulsion ou la fermeture de la socket. Une trame de canal
+porte le pseudo et la couleur de chacun, qu'un pair d'un autre espace ne
+trouverait ni dans le roster ni parmi les membres ; le roster, lui, ne montre
+jamais une position de canal.
+
+Les surfaces se rangent par vue, et seule celle de la vue ouverte vaut
+(`live/cursorSurface.ts`) : une vue gardée montée derrière une popup fermée
+(`FeatureKeepAlive`) ne retient pas les curseurs sur un canevas que personne ne
+voit. Une surface s'annonce dès qu'elle prend effet, sans attendre un geste :
+sans cela, on ne recevrait ceux des autres qu'au premier mouvement de souris.
+
+Ce que la vue dessine d'autre avec les positions de ses pairs (la traînée laser
+du Tableau blanc) se lit par `onLiveCursors(canal, cb)`.
 
 ### Les tranches du magasin, et pourquoi elles existent
 

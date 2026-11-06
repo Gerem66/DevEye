@@ -15,7 +15,7 @@ import {
     type FeatureManifest,
     type ProjectsUsageProvider
 } from '@deveye/types/sdk';
-import type { NotificationFeature } from '@deveye/types';
+import { liveCursorChannelSchema, type NotificationFeature } from '@deveye/types';
 
 import type { FeatureContext } from '@/features/_define';
 import { accountUsages } from '@/features/_quota';
@@ -140,6 +140,8 @@ export function createSdkContext(
         keys: serverKeysOf(ctx.crypt, manifest.id),
         live: {
             publish: (event, payload) => publishFrame(manifest, ctx.workspaceId, event, payload),
+            joinCursors: (key) => joinCursors(ctx, manifest, key),
+            leaveCursors: (key) => ctx.live?.unseatCursors(cursorChannelOf(manifest, key)),
             accountChanged: (userId) => accountChanged(ctx.db, manifest, userId),
             pendingChanged: () => adminPending.changed()
         },
@@ -238,13 +240,44 @@ export function publishFrame(
     payload: unknown,
     userIds?: readonly number[]
 ): void {
-    if (!(manifest.nativeCapabilities ?? []).includes('live.publish')) {
-        throw new FeatureError('forbidden', `Module « ${manifest.id} » : declare 'live.publish' in nativeCapabilities`);
-    }
+    assertLivePublish(manifest);
     if (!event.startsWith(`${manifest.id}.`)) {
         throw new FeatureError('validation', `Event « ${event} » must start with « ${manifest.id}. »`);
     }
     sdkLive().publishFeature(workspaceId, manifest.id, event, payload, userIds);
+}
+
+function assertLivePublish(manifest: FeatureManifest): void {
+    if (!(manifest.nativeCapabilities ?? []).includes('live.publish')) {
+        throw new FeatureError('forbidden', `Module « ${manifest.id} » : declare 'live.publish' in nativeCapabilities`);
+    }
+}
+
+/** Sous le préfixe du module, comme ses événements : aucun module n'entre dans le canal d'un autre. */
+function cursorChannelOf(manifest: FeatureManifest, key: string): string {
+    assertLivePublish(manifest);
+    const channel = `${manifest.id}:${key}`;
+    if (!liveCursorChannelSchema.safeParse(channel).success) {
+        throw new FeatureError('validation', `Cursor channel key « ${key} » : 1 to 64 of A-Z a-z 0-9 _ . -`);
+    }
+    return channel;
+}
+
+/** Le pseudo et la couleur voyagent avec le curseur : un pair d'un autre espace ne les connaît pas. */
+async function joinCursors(
+    ctx: FeatureContext,
+    manifest: FeatureManifest,
+    key: string
+): Promise<{ channel: string; connId: string } | null> {
+    const channel = cursorChannelOf(manifest, key);
+    if (!ctx.live) return null;
+    const account = await ctx.db.users.findById(ctx.userId);
+    if (!account) return null;
+    const connId = ctx.live.seatCursors(
+        { channel, feature: manifest.id, workspaceId: ctx.workspaceId, name: account.username },
+        account.color
+    );
+    return connId === null ? null : { channel, connId };
 }
 
 /**
