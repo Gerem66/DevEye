@@ -126,6 +126,7 @@ export default function Host(props: HostProps) {
     const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
     const [selections, setSelections] = useState<readonly PeerSelection[]>([]);
     const probe = useRef<HTMLSpanElement | null>(null);
+    const host = useRef<HTMLDivElement | null>(null);
     const lastVersion = useRef<number | null>(null);
     const lastSelection = useRef('');
     const lastBackground = useRef<string | null>(null);
@@ -145,6 +146,26 @@ export default function Host(props: HostProps) {
         [api, props.channel]
     );
     useLiveCursorSurface(surface);
+
+    // Excalidraw trace le laser en coordonnées de la fenêtre, dans un calque en
+    // `position: fixed` ; le verre de la popup (`backdrop-filter`) en fait le
+    // repère de ce calque, qu'on ramène à l'origine de la fenêtre chaque fois
+    // qu'Excalidraw remesure sa place.
+    useEffect(() => {
+        if (api === null) return;
+        const shift = { x: 0, y: 0 };
+        const align = (): void => {
+            const layer = host.current?.querySelector<HTMLElement>('.SVGLayer');
+            if (!layer) return;
+            const at = layer.getBoundingClientRect();
+            if (Math.abs(at.left) < 0.5 && Math.abs(at.top) < 0.5) return;
+            shift.x -= at.left;
+            shift.y -= at.top;
+            layer.style.transform = `translate(${shift.x}px, ${shift.y}px)`;
+        };
+        align();
+        return api.onChange(align);
+    }, [api]);
 
     const ready = (api: ExcalidrawImperativeAPI): void => {
         apiRef.current = api;
@@ -237,7 +258,7 @@ export default function Host(props: HostProps) {
     };
 
     return (
-        <div className='whiteboard-host'>
+        <div ref={host} className='whiteboard-host'>
             <Excalidraw
                 excalidrawAPI={ready}
                 initialData={{
