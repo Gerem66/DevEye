@@ -39,9 +39,14 @@ orpheline et retirée au bout d'un jour, ce qui laisse à une annulation le temp
 de la faire revenir.
 
 Le **fond** et le **thème** d'un tableau sont communs à tous ses
-participants. Un membre qui peut écrire les choisit dans le menu d'Excalidraw ;
-ils s'enregistrent aussitôt et changent en direct chez les autres. Sans choix,
-le fond est celui d'Excalidraw et le thème celui du profil de chacun.
+participants. Un membre qui peut écrire les choisit dans le menu d'Excalidraw
+ou dans l'onglet Général des réglages du tableau ; ils s'enregistrent et
+changent en direct chez les autres. Sans choix, le fond est celui d'Excalidraw
+et le thème celui du profil de chacun.
+
+L'onglet **Général** des réglages, en tête de leur navigation, porte aussi le
+titre, la copie (« Dupliquer », qui ouvre la copie) et la suppression : l'en-tête
+de l'éditeur n'a pas d'autre geste que le bouton Réglages et le titre en place.
 
 Un **aperçu** (une vignette WebP de quelques dizaines de kilo-octets) est
 produit par le navigateur d'un auteur quand il quitte le tableau, et toutes les

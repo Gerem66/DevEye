@@ -24,5 +24,7 @@ export const manifest = {
      * l'usage du tableau comme stockage, pas un argument d'offre.
      */
     quotas: [{ key: 'storage', label: 'de tableaux blancs', unit: 'bytes' }],
+    /** Général en tête des réglages d'un tableau : titre, thème, fond, copie, suppression. */
+    settings: { item: ['general'] },
     commands: whiteboardCommands
 } satisfies FeatureManifest;

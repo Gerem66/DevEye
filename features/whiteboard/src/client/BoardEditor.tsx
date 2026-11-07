@@ -1,7 +1,6 @@
 import './excalidraw/assetPath';
 
 import {
-    ActionMenu,
     Avatar,
     Button,
     ErrorNote,
@@ -26,7 +25,7 @@ import { api } from './api';
 import type { HostTools } from './excalidraw/Host';
 import { useBoardSession, type SceneBridge, type SessionStatus } from './session';
 import styles from './style.module.css';
-import { displayTitle, type BoardActions } from './Whiteboard';
+import { displayTitle } from './Whiteboard';
 
 /** Excalidraw et ses dépendances ne se chargent qu'à l'ouverture d'un tableau. */
 const Host = lazy(() => import('./excalidraw/Host'));
@@ -58,15 +57,11 @@ export default function BoardEditor({
     boardId,
     board,
     canWriteRole,
-    actions,
-    actionError,
     onBack
 }: {
     boardId: number;
     board: BoardSummary | undefined;
     canWriteRole: boolean;
-    actions: BoardActions;
-    actionError: ErrorNoteInput | null;
     onBack(): void;
 }) {
     const [view, session] = useBoardSession(boardId);
@@ -181,28 +176,10 @@ export default function BoardEditor({
                             scope={{ kind: 'item', feature: 'whiteboard', itemId: String(boardId), itemLabel: title }}
                             onGone={onBack}
                         />
-                        {canWrite && board && (
-                            <ActionMenu
-                                label='Actions sur ce tableau'
-                                items={[
-                                    { label: 'Dupliquer', icon: 'copy', onSelect: () => actions.duplicate(board) },
-                                    ...(board.foreign
-                                        ? []
-                                        : [
-                                              {
-                                                  label: 'Supprimer',
-                                                  icon: 'trash',
-                                                  danger: true,
-                                                  onSelect: () => actions.remove(board, onBack)
-                                              }
-                                          ])
-                                ]}
-                            />
-                        )}
                     </span>
                 </header>
             </StickyHeader>
-            <ErrorNote note={renameError ?? actionError ?? view.error} />
+            <ErrorNote note={renameError ?? view.error} />
             <div className={styles.canvas}>
                 {view.initial === null ? (
                     <LoadingVeil label='Ouverture du tableau…' />

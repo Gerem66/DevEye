@@ -28,7 +28,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { PREVIEW_MAX_CHARS, type BoardAppearance, type SceneElement } from '../../contracts/domain';
 import type { RemotePeer, SceneBridge } from '../session';
-import { EXCALIDRAW_SOURCE } from '../format';
+import { EXCALIDRAW_SOURCE, THEME_CHOICES } from '../format';
 import { RemoteSelections, type PeerSelection } from './RemoteSelections';
 
 /** Ce que l'en-tête demande à l'éditeur, hors de la séance. */
@@ -56,13 +56,6 @@ export interface HostProps {
 }
 
 const asOrdered = (elements: readonly SceneElement[]) => elements as unknown as readonly OrderedExcalidrawElement[];
-
-/** Le sélecteur de thème d'Excalidraw n'a pas de libellé français : celui-ci en reprend la forme. */
-const THEME_CHOICES: readonly { value: BoardAppearance['theme']; label: string; title: string }[] = [
-    { value: null, label: 'Profil', title: 'Celui du profil de chaque participant' },
-    { value: 'light', label: 'Clair', title: 'Clair pour tous' },
-    { value: 'dark', label: 'Sombre', title: 'Sombre pour tous' }
-];
 
 /**
  * La scène comme surface des curseurs de DevEye : chacun s'y déplace et zoome à

@@ -21,7 +21,7 @@ import BoardGrid from './BoardGrid';
 
 export interface BoardActions {
     duplicate(board: BoardSummary): void;
-    remove(board: BoardSummary, then?: () => void): void;
+    remove(board: BoardSummary): void;
 }
 
 export const displayTitle = (board: { title: string }): string => board.title.trim() || 'Sans titre';
@@ -66,7 +66,7 @@ export default function Whiteboard(_props: FeatureViewProps) {
                 })
                 .catch((e: unknown) => setActionError(errorNote(e, 'Le tableau n’a pas pu être dupliqué.')));
         },
-        remove(board, then) {
+        remove(board) {
             setConfirm({
                 title: `Supprimer « ${displayTitle(board)} » ?`,
                 description: 'Le dessin et ses images sont effacés pour tous les membres. Cette action est définitive.',
@@ -74,10 +74,7 @@ export default function Whiteboard(_props: FeatureViewProps) {
                 onConfirm: () => {
                     setActionError(null);
                     api.send('whiteboard.remove', { boardId: board.id })
-                        .then(() => {
-                            invalidate('whiteboard.list', 'whiteboard.count');
-                            then?.();
-                        })
+                        .then(() => invalidate('whiteboard.list', 'whiteboard.count'))
                         .catch((e: unknown) => setActionError(errorNote(e, 'Le tableau n’a pas pu être supprimé.')));
                 }
             });
@@ -93,8 +90,6 @@ export default function Whiteboard(_props: FeatureViewProps) {
                     boardId={openedId}
                     board={opened}
                     canWriteRole={permissions.canFeature('whiteboard', 'write', String(openedId))}
-                    actions={actions}
-                    actionError={actionError}
                     onBack={() => setOpenedId(null)}
                 />
             ) : (

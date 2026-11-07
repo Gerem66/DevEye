@@ -177,6 +177,22 @@
     color: var(--accent);
 }
 
+/* Le fond d'un tableau, dans l'onglet Général de ses réglages. */
+.colorInput {
+    width: 56px;
+    height: 32px;
+    padding: 2px;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-subtle);
+    cursor: pointer;
+}
+
+.colorInput:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
 /* ------------------------------------------------------- dans un projet */
 
 .linkedBoard {

@@ -66,7 +66,8 @@ export const boardSummarySchema = z.object({
     /** Projeté depuis un autre espace. */
     foreign: z.boolean(),
     /** L'aperçu se renverse comme le canevas : selon ce thème, sinon celui de DevEye. */
-    theme: boardThemeSchema.nullable()
+    theme: boardThemeSchema.nullable(),
+    background: backgroundSchema.nullable()
 });
 export type BoardSummary = z.infer<typeof boardSummarySchema>;
 

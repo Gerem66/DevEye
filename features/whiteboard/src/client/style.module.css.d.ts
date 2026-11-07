@@ -6,6 +6,7 @@ declare const styles: {
     readonly cardMeta: string;
     readonly cardOpen: string;
     readonly cardTitle: string;
+    readonly colorInput: string;
     readonly credit: string;
     readonly creditLink: string;
     readonly editor: string;

@@ -65,7 +65,7 @@ export function summaryOf(row: BoardRow, title: string, foreign: boolean): Board
         hasPreview: Number(row.has_preview) === 1,
         previewVersion: Number(row.preview_version),
         foreign,
-        theme: appearanceOf(row).theme
+        ...appearanceOf(row)
     };
 }
 
