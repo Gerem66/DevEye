@@ -17,7 +17,7 @@
     "@excalidraw/excalidraw": "0.18.1"
   },
   "peerDependencies": {
-    "@deveye/types": ">=0.25.5",
+    "@deveye/types": ">=0.25.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "zod": "^4.0.0"
