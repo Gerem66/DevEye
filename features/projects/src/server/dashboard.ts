@@ -106,14 +106,15 @@ export const projectDashboardFeature = defineSdkFeature({
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId);
         const home = project.workspace_id;
-        const [tiles, git, database, audience, deploy, uptime, hosting] = await Promise.all([
+        const [tiles, git, database, audience, deploy, uptime, hosting, whiteboard] = await Promise.all([
             projectCipher(ctx, project).then((cipher) => tilesOf(ctx, input.projectId, home, cipher)),
             ctx.repo.links.listRepoIds(input.projectId, home),
             ctx.repo.links.listDatabaseIds(input.projectId, home),
             ctx.repo.links.listSiteIds(input.projectId, home),
             ctx.repo.links.listDeployTargetIds(input.projectId, home),
             ctx.repo.links.listServiceIds(input.projectId, home),
-            ctx.repo.links.listPackIds(input.projectId, home)
+            ctx.repo.links.listPackIds(input.projectId, home),
+            ctx.repo.links.listBoardIds(input.projectId, home)
         ]);
         return {
             tiles,
@@ -123,9 +124,10 @@ export const projectDashboardFeature = defineSdkFeature({
                 audience: audience.length,
                 deploy: deploy.length,
                 uptime: uptime.length,
-                'x-hosting': hosting.length
+                'x-hosting': hosting.length,
+                whiteboard: whiteboard.length
             },
-            links: { git, database, audience, deploy, uptime, 'x-hosting': hosting }
+            links: { git, database, audience, deploy, uptime, 'x-hosting': hosting, whiteboard }
         };
     }
 });

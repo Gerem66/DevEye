@@ -15,20 +15,13 @@ import { useEffect, useState, type ReactNode } from 'react';
 
 import type { BoardSummary } from '../contracts/domain';
 import { api } from './api';
+import { EXCALIDRAW_SOURCE, updatedLabel } from './format';
 import { parseExcalidraw } from './importFile';
 import styles from './style.module.css';
 import { displayTitle, type BoardActions } from './Whiteboard';
 
 /** À partir d'où l'usage se montre : avant, le quota n'a rien à dire. */
 const SHOW_USAGE_AT = 0.8;
-
-function updatedLabel(seconds: number): string {
-    const elapsed = Math.max(0, Math.floor(Date.now() / 1000) - seconds);
-    if (elapsed < 60) return 'Modifié à l’instant';
-    if (elapsed < 3600) return `Modifié il y a ${Math.floor(elapsed / 60)} min`;
-    if (elapsed < 86_400) return `Modifié il y a ${Math.floor(elapsed / 3600)} h`;
-    return `Modifié le ${new Date(seconds * 1000).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}`;
-}
 
 /** Les aperçus, relus seulement quand leur version a changé. */
 function usePreviews(boards: readonly BoardSummary[]): ReadonlyMap<number, string> {
@@ -241,6 +234,14 @@ export default function BoardGrid({
                     })}
                 </ul>
             )}
+
+            <p className={styles.credit}>
+                L’éditeur est{' '}
+                <a href={EXCALIDRAW_SOURCE} target='_blank' rel='noopener noreferrer' className={styles.creditLink}>
+                    Excalidraw
+                </a>
+                , un logiciel libre sous licence MIT.
+            </p>
         </div>
     );
 }

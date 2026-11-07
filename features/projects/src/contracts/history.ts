@@ -29,6 +29,7 @@ export const projectEventKindSchema = z.enum([
     'projects.databaseUnlink',
     'projects.audienceUnlink',
     'projects.hostingUnlink',
+    'projects.whiteboardUnlink',
     'projects.deployLink',
     'projects.deployUnlink',
     'card.archived',

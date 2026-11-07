@@ -46,7 +46,8 @@ export const projectLinkCountsSchema = z.object({
     audience: z.number().int().nonnegative(),
     deploy: z.number().int().nonnegative(),
     uptime: z.number().int().nonnegative(),
-    'x-hosting': z.number().int().nonnegative()
+    'x-hosting': z.number().int().nonnegative(),
+    whiteboard: z.number().int().nonnegative()
 });
 export type ProjectLinkCounts = z.infer<typeof projectLinkCountsSchema>;
 
@@ -99,6 +100,14 @@ export interface ProjectAudienceLinkRow {
 export interface ProjectHostingLinkRow {
     project_id: number;
     pack_id: number;
+    workspace_id: number;
+    created: number;
+}
+
+/** Ligne SQL (serveur uniquement) : la liaison projet → tableau blanc. */
+export interface ProjectWhiteboardLinkRow {
+    project_id: number;
+    board_id: number;
     workspace_id: number;
     created: number;
 }

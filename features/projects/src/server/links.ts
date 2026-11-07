@@ -85,16 +85,17 @@ export const projectLinkCountsFeature = defineSdkFeature({
     handler: async (ctx: Ctx, input) => {
         const project = await loadProject(ctx, input.projectId);
         const home = project.workspace_id;
-        // Les listes plutôt que six `COUNT(*)` : des poignées d'identifiants, et
+        // Les listes plutôt que sept `COUNT(*)` : des poignées d'identifiants, et
         // les requêtes que les onglets appellent déjà. Une seconde famille pour
         // rendre le même fait ne se paierait qu'en occasions de diverger.
-        const [repos, databases, sites, targets, services, packs] = await Promise.all([
+        const [repos, databases, sites, targets, services, packs, boards] = await Promise.all([
             ctx.repo.links.listRepoIds(input.projectId, home),
             ctx.repo.links.listDatabaseIds(input.projectId, home),
             ctx.repo.links.listSiteIds(input.projectId, home),
             ctx.repo.links.listDeployTargetIds(input.projectId, home),
             ctx.repo.links.listServiceIds(input.projectId, home),
-            ctx.repo.links.listPackIds(input.projectId, home)
+            ctx.repo.links.listPackIds(input.projectId, home),
+            ctx.repo.links.listBoardIds(input.projectId, home)
         ]);
         return {
             counts: {
@@ -103,7 +104,8 @@ export const projectLinkCountsFeature = defineSdkFeature({
                 audience: sites.length,
                 deploy: targets.length,
                 uptime: services.length,
-                'x-hosting': packs.length
+                'x-hosting': packs.length,
+                whiteboard: boards.length
             }
         };
     }

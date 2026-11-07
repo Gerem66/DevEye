@@ -18,7 +18,11 @@ export const CREDITS: readonly CreditGroup[] = [
             { name: 'Framer Motion', license: 'MIT', purpose: 'Les animations' },
             { name: 'dnd kit', license: 'MIT', purpose: 'Le glisser-déposer des tuiles' },
             { name: 'xterm.js', license: 'MIT', purpose: 'Le terminal des appareils' },
-            { name: 'Excalidraw', license: 'MIT', purpose: 'Le tableau blanc' },
+            {
+                name: 'Excalidraw',
+                license: 'MIT',
+                purpose: 'L’éditeur du tableau blanc, celui du projet libre excalidraw.com'
+            },
             { name: 'Zod', license: 'MIT', purpose: 'La vérification des données échangées' }
         ]
     },

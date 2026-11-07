@@ -85,6 +85,15 @@ const LINKS: Record<
             await repo.links.unlinkPack(projectId, workspaceId, itemId);
         }
     },
+    whiteboard: {
+        usage: (repo, itemId, workspaceId) => repo.links.listBoardUsage(itemId, workspaceId),
+        counts: (repo, workspaceId) => repo.links.countBoardLinks(workspaceId),
+        detach: (repo, itemId, workspaceId) => repo.links.detachBoard(itemId, workspaceId),
+        link: (repo, projectId, itemId, workspaceId) => repo.links.linkBoard(projectId, workspaceId, itemId),
+        unlink: async (repo, projectId, itemId, workspaceId) => {
+            await repo.links.unlinkBoard(projectId, workspaceId, itemId);
+        }
+    },
     uptime: {
         usage: (repo, itemId, workspaceId) => repo.links.listServiceUsage(itemId, workspaceId),
         counts: (repo, workspaceId) => repo.links.countServiceLinks(workspaceId),

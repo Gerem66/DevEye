@@ -116,6 +116,12 @@ export const projectsAccountExport: FeatureAccountExport<ProjectsRepo> = {
             key: ['project_id', 'pack_id'],
             dates: { created: 's' }
         },
+        ft_projects_whiteboard_links: {
+            file: 'liens-tableaux-blancs.json',
+            where: 'workspace_id = ?',
+            key: ['project_id', 'board_id'],
+            dates: { created: 's' }
+        },
         project_uptime_links: {
             file: 'liens-uptime.json',
             where: 'workspace_id = ?',

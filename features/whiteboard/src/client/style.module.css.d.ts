@@ -6,6 +6,8 @@ declare const styles: {
     readonly cardMeta: string;
     readonly cardOpen: string;
     readonly cardTitle: string;
+    readonly credit: string;
+    readonly creditLink: string;
     readonly editor: string;
     readonly editorActions: string;
     readonly editorHeader: string;
@@ -13,9 +15,17 @@ declare const styles: {
     readonly emptyState: string;
     readonly emptyText: string;
     readonly emptyTitle: string;
+    readonly field: string;
+    readonly fieldLabel: string;
+    readonly form: string;
     readonly grid: string;
     readonly header: string;
     readonly heading: string;
+    readonly linkedBoard: string;
+    readonly linkedHead: string;
+    readonly linkedPreview: string;
+    readonly linkedText: string;
+    readonly linkedTitle: string;
     readonly participant: string;
     readonly participants: string;
     readonly preview: string;

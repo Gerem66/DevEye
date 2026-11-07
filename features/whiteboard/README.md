@@ -3,14 +3,26 @@
 Des schémas à main levée, dans l'éditeur [Excalidraw](https://excalidraw.com)
 (MIT), dessinés à plusieurs en même temps : chacun voit les traits et le
 curseur des autres au fil du geste. Un tableau appartient à un espace, se
-partage vers un autre, se copie et se déplace comme un élément de Notes. C'est
-une feature de grille (carte d'accueil + panneau).
+partage vers un autre, se copie, se déplace comme un élément de Notes, et se
+relie à des projets. C'est une feature de grille (carte d'accueil + panneau).
 
 Documents voisins : [Docs/LIVE.md](../../Docs/LIVE.md) (la voie de poussée et
 ses destinataires), [Docs/SHARING.md](../../Docs/SHARING.md),
 [Docs/QUOTAS.md](../../Docs/QUOTAS.md),
 [Docs/SECURITY_MODEL.md](../../Docs/SECURITY_MODEL.md),
 [Docs/DEBUG.md](../../Docs/DEBUG.md).
+
+## D'où vient l'éditeur
+
+L'éditeur est celui d'[Excalidraw](https://github.com/excalidraw/excalidraw),
+un logiciel libre sous licence MIT, installé depuis son paquet npm
+`@excalidraw/excalidraw` (0.18.1). Seul son repli vers un CDN de polices est
+remplacé au build (voir « Aucune requête vers un tiers »). Le module y ajoute
+ce qu'Excalidraw laisse à l'application qui l'intègre : la séance partagée et sa
+fusion, l'enregistrement scellé, les images au magasin d'objets, le partage
+entre espaces et la liaison aux projets. La grille le dit sous les tableaux, le
+menu de l'éditeur porte un lien « À propos d'Excalidraw » vers son dépôt, et
+l'onglet Crédits de l'« À propos » de DevEye le cite avec sa licence.
 
 ## Le modèle
 
@@ -140,6 +152,22 @@ espace d'origine.
   propriétaire d'arrivée n'a plus la place.
 - **Dupliquer**, dans la vue, copie le tableau dans l'espace actif.
 
+## Projets
+
+Un tableau se relie à un ou plusieurs projets, comme un dépôt ou un dossier :
+Projets tient la liaison (`ft_projects_whiteboard_links`) et le tableau n'en
+sait rien. Elle se pose dans les deux sens : depuis l'onglet « Tableaux blancs »
+d'un projet (choisir un tableau de l'espace, ou en créer un), ou depuis la
+section « Projets » des réglages du tableau, qui liste les projets de chaque
+espace où il est visible. Un projet confidentiel n'en relie aucun.
+
+Le module offre à Projets deux contrats : `WHITEBOARD_ITEMS_PROVIDER`
+(`exists` avant de relier, `labelOf` pour nommer un tableau relié) et
+`WHITEBOARD_CLIENT_PROVIDER` (la liste des tableaux, le bloc d'un tableau relié
+avec son aperçu et le chemin vers l'éditeur, la tuile de la vue d'ensemble, le
+dialogue de création). Supprimer un tableau, ou le déplacer vers un autre
+espace, retire ses liaisons (`ctx.items.forget` et le déplacement de l'app).
+
 ## Taille et offre
 
 | Ce qui est borné      | Pour toutes les offres                   |
@@ -227,6 +255,7 @@ Trames : `whiteboard.elements`, `whiteboard.presence`, `whiteboard.peers`,
 Les tests node couvrent la fusion, la séance (chargement unique, numérotation,
 diffusion par salle, écritures, fusion d'une version écrite ailleurs, offre
 pleine), la lecture des images et des `.excalidraw`, et les briques de
-synchronisation du client. La page Tests et débogage joue trois scénarios :
+synchronisation du client. La page Tests et débogage joue quatre scénarios :
 créer, coller une image et supprimer ; dessiner à deux, fond et thème compris ;
-partager, copier et déplacer.
+partager, copier et déplacer ; relier à un projet, depuis le projet puis depuis
+les réglages du tableau, et voir la liaison tomber avec le tableau.

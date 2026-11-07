@@ -32,6 +32,39 @@ function element(id: string, over: Partial<SceneElement> = {}): SceneElement {
 
 const boardOf = (ctx: Ctx) => ctx.state.get('board') as BoardSummary;
 
+const NO_PROJECTS = 'Le module Projets n’est pas installé : rien à relier.';
+
+const PROJECT_DRAFT = {
+    title: 'Essai tableau blanc',
+    icon: '',
+    description: '',
+    tags: [],
+    status: 'active',
+    showOverview: false,
+    showTimeline: true,
+    timelineZoom: 'month',
+    startDate: null,
+    dueDate: null
+};
+
+/** Le projet et l'espace d'essai du scénario `projects`, `null` quand Projets manque. */
+function linkTarget(ctx: Ctx): { projectId: number; opts: { workspaceId: number } } | null {
+    const projectId = ctx.state.get('project') as number | undefined;
+    if (projectId === undefined) return null;
+    return { projectId, opts: { workspaceId: ctx.state.get('ws') as number } };
+}
+
+async function linkedFromSettings(ctx: Ctx, projectId: number, workspaceId: number): Promise<boolean> {
+    const state = await ctx.send<{
+        groups: { workspaceId: number; projects: { projectId: number; linked: boolean }[] }[];
+    }>('links.projectsGet', { feature: 'whiteboard', itemId: String(boardOf(ctx).id) }, { workspaceId });
+    const target = state.groups
+        .find((g) => g.workspaceId === workspaceId)
+        ?.projects.find((p) => p.projectId === projectId);
+    if (!target) throw new Error('Les réglages du tableau ne proposent pas le projet');
+    return target.linked;
+}
+
 async function addBoard(ctx: Ctx, title: string, elements: SceneElement[]): Promise<BoardSummary> {
     const { board } = await ctx.send<{ board: BoardSummary }>('whiteboard.add', { title, elements });
     ctx.defer(`Supprimer « ${title} »`, async () => {
@@ -54,8 +87,9 @@ async function storedElements(ctx: Ctx, boardId: number): Promise<SceneElement[]
 
 /**
  * Un tableau de bout en bout : création, image, aperçu, chiffrement au repos et
- * suppression ; une séance à deux onglets ; puis le partage, la copie et le
- * déplacement vers un autre espace.
+ * suppression ; une séance à deux onglets ; le partage, la copie et le
+ * déplacement vers un autre espace ; puis la liaison à un projet, dans un
+ * espace d'essai que sa suppression emporte avec le projet.
  */
 export const whiteboardE2e: FeatureE2eEntry<WhiteboardRepo> = {
     scenarios: [
@@ -374,6 +408,98 @@ export const whiteboardE2e: FeatureE2eEntry<WhiteboardRepo> = {
                         if (before.join() !== after.join()) throw new Error('Les clés des images ont changé');
                         if ((await storedElements(ctx, boardId)).length !== 1)
                             throw new Error('La scène ne se relit pas');
+                    }
+                }
+            ]
+        },
+        {
+            id: 'projects',
+            label: 'Relier un tableau à un projet',
+            steps: [
+                {
+                    label: 'Un tableau et un projet, dans un espace d’essai',
+                    run: async (ctx) => {
+                        const { workspace } = await ctx.send<{ workspace: { id: number } }>('workspace.add', {
+                            name: 'Essai tableau blanc et projet'
+                        });
+                        ctx.state.set('ws', workspace.id);
+                        ctx.defer('Supprimer l’espace d’essai', async () => {
+                            await ctx.send('workspace.delete', { workspaceId: workspace.id });
+                        });
+                        const opts = { workspaceId: workspace.id };
+                        const { board } = await ctx.send<{ board: BoardSummary }>(
+                            'whiteboard.add',
+                            { title: 'Essai relié', elements: [element('e2e-linked')] },
+                            opts
+                        );
+                        ctx.state.set('board', board);
+                        try {
+                            const { project } = await ctx.send<{ project: { id: number } }>(
+                                'projects.add',
+                                { project: PROJECT_DRAFT, securityTier: 'open' },
+                                opts
+                            );
+                            ctx.state.set('project', project.id);
+                        } catch (e) {
+                            if (!String((e as Error).message).startsWith('Unknown command')) throw e;
+                            return NO_PROJECTS;
+                        }
+                    }
+                },
+                {
+                    label: 'Le relier depuis l’onglet du projet',
+                    run: async (ctx) => {
+                        const target = linkTarget(ctx);
+                        if (target === null) return NO_PROJECTS;
+                        const { projectId, opts } = target;
+                        await ctx.send('projects.whiteboardLink', { projectId, boardId: boardOf(ctx).id }, opts);
+                        const { labels } = await ctx.send<{ labels: { label: string | null }[] }>(
+                            'projects.whiteboardList',
+                            { projectId },
+                            opts
+                        );
+                        if (labels.length !== 1 || labels[0].label !== 'Essai relié')
+                            throw new Error('Le projet ne nomme pas le tableau relié');
+                        const { counts } = await ctx.send<{ counts: { whiteboard: number } }>(
+                            'projects.linkCounts',
+                            { projectId },
+                            opts
+                        );
+                        if (counts.whiteboard !== 1)
+                            throw new Error('L’onglet Tableaux blancs ne compte pas le tableau');
+                    }
+                },
+                {
+                    label: 'Le retirer puis le remettre depuis les réglages du tableau',
+                    run: async (ctx) => {
+                        const target = linkTarget(ctx);
+                        if (target === null) return NO_PROJECTS;
+                        const { projectId, opts } = target;
+                        const itemId = String(boardOf(ctx).id);
+                        if (!(await linkedFromSettings(ctx, projectId, opts.workspaceId)))
+                            throw new Error('Les réglages du tableau ne voient pas la liaison');
+                        const base = { feature: 'whiteboard', itemId, workspaceId: opts.workspaceId, projectId };
+                        await ctx.send('links.projectsSet', { ...base, linked: false }, opts);
+                        if (await linkedFromSettings(ctx, projectId, opts.workspaceId))
+                            throw new Error('La liaison n’a pas été retirée');
+                        await ctx.send('links.projectsSet', { ...base, linked: true }, opts);
+                        if (!(await linkedFromSettings(ctx, projectId, opts.workspaceId)))
+                            throw new Error('La liaison n’a pas été remise');
+                    }
+                },
+                {
+                    label: 'Supprimer le tableau retire la liaison',
+                    run: async (ctx) => {
+                        const target = linkTarget(ctx);
+                        if (target === null) return NO_PROJECTS;
+                        const { projectId, opts } = target;
+                        await ctx.send('whiteboard.remove', { boardId: boardOf(ctx).id }, opts);
+                        const { counts } = await ctx.send<{ counts: { whiteboard: number } }>(
+                            'projects.linkCounts',
+                            { projectId },
+                            opts
+                        );
+                        if (counts.whiteboard !== 0) throw new Error('Le projet relie encore le tableau supprimé');
                     }
                 }
             ]

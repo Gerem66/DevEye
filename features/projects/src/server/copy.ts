@@ -79,14 +79,15 @@ export const projectsTree: ItemTree = [
     { table: 'project_events', idColumn: 'id', ownerColumn: 'project_id', sealed: ['content'], cache: true }
 ];
 
-/** Les six familles de liaison : ce que le projet relie ne le suit pas. */
+/** Les sept familles de liaison : ce que le projet relie ne le suit pas. */
 const LINK_TABLES = [
     'project_uptime_links',
     'project_database_links',
     'project_deploy_links',
     'project_repo_links',
     'project_audience_links',
-    'ft_projects_hosting_links'
+    'ft_projects_hosting_links',
+    'ft_projects_whiteboard_links'
 ];
 
 async function linked(q: SdkQueryable, projectId: number): Promise<number> {

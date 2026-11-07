@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { WHITEBOARD_ITEMS_PROVIDER, type WhiteboardItemsProvider } from '@deveye/types/sdk';
 import { mapLimit, type FeatureServer, type SdkObjectStore } from '@deveye/types/sdk/server';
 
 import { KEY_CONTEXT, loadWhiteboardKeys, now, openTitle, setRuntime } from './_shared';
@@ -124,6 +125,18 @@ export const serverEntry: FeatureServer<WhiteboardRepo> = {
             }
         });
 
+        // Projets ne stocke que des identifiants : `exists` refuse de relier un
+        // tableau invisible d'ici, et `labelOf` le nomme sous le codec de son
+        // espace d'origine, seul à savoir l'ouvrir.
+        const items: WhiteboardItemsProvider = {
+            exists: async (boardId, workspaceId) => (await deps.repo.boards.findVisible(boardId, workspaceId)) !== null,
+            labelOf: async (boardId, workspaceId) => {
+                const row = await deps.repo.boards.findVisible(boardId, workspaceId);
+                if (row === null) return null;
+                return (await openTitle(deps.cipherFor(row.workspace_id), row.content)) || 'Sans titre';
+            }
+        };
+
         return {
             async start() {
                 const keys = await loadWhiteboardKeys(deps.repo, deps.keys);
@@ -142,7 +155,8 @@ export const serverEntry: FeatureServer<WhiteboardRepo> = {
                 await ticker.stop();
                 await live.stop();
                 setRuntime(null);
-            }
+            },
+            providers: { [WHITEBOARD_ITEMS_PROVIDER]: items }
         };
     }
 };

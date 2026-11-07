@@ -532,6 +532,32 @@ export const projectHostingUnlink = {
     output: z.object({ packIds: z.array(z.number().int().positive()) })
 };
 
+// ---------------------------------------------------------- tableau blanc
+
+/** Les tableaux blancs rattachés au projet, dans l'ordre des liaisons, et leur titre. */
+export const projectWhiteboardList = {
+    command: 'projects.whiteboardList' as const,
+    input: z.object({ projectId }),
+    output: z.object({
+        boardIds: z.array(z.number().int().positive()),
+        labels: z.array(projectLinkLabelSchema)
+    })
+};
+
+/** Rattache un tableau au projet. Idempotente, refusée sur un projet confidentiel. Domicile seulement. */
+export const projectWhiteboardLink = {
+    command: 'projects.whiteboardLink' as const,
+    input: z.object({ projectId, boardId: z.number().int().positive() }),
+    output: z.object({ boardIds: z.array(z.number().int().positive()) })
+};
+
+/** Retire la liaison, domicile seulement. Le tableau, lui, n'est pas touché. */
+export const projectWhiteboardUnlink = {
+    command: 'projects.whiteboardUnlink' as const,
+    input: z.object({ projectId, boardId: z.number().int().positive() }),
+    output: z.object({ boardIds: z.array(z.number().int().positive()) })
+};
+
 // ---------------------------------------------------------- déploiement
 
 /**
@@ -672,7 +698,8 @@ export const projectDashboard = {
             audience: z.array(z.number().int().positive()),
             deploy: z.array(z.number().int().positive()),
             uptime: z.array(z.number().int().positive()),
-            'x-hosting': z.array(z.number().int().positive())
+            'x-hosting': z.array(z.number().int().positive()),
+            whiteboard: z.array(z.number().int().positive())
         })
     })
 };
@@ -812,6 +839,9 @@ export const projectCommands = [
     projectHostingList,
     projectHostingLink,
     projectHostingUnlink,
+    projectWhiteboardList,
+    projectWhiteboardLink,
+    projectWhiteboardUnlink,
     projectDashboard,
     projectDashboardArrange,
     projectDashboardKpiSave,

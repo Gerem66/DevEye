@@ -5,6 +5,7 @@ import { LinkSiteDialog } from './Audience/LinkSiteDialog';
 import { LinkTargetDialog } from './Deploy/LinkTargetDialog';
 import { LinkUptimeDialog } from './Uptime/LinkUptimeDialog';
 import { LinkPackDialog } from './Hosting/LinkPackDialog';
+import { LinkBoardDialog } from './Whiteboard/LinkBoardDialog';
 import type { ProjectFeatureTabId, ProjectTabAddKey } from './tabs';
 
 /**
@@ -94,6 +95,17 @@ export function AddFeatureDialog({ projectId, pending, onClose, onAdded }: AddFe
                 onSaved={() => {
                     invalidate('projects.board', 'x-hosting.list', 'x-hosting.count');
                     onAdded('x-hosting');
+                }}
+            />
+
+            <LinkBoardDialog
+                open={pending === 'whiteboard'}
+                projectId={projectId}
+                linkedIds={NOTHING_LINKED}
+                onClose={onClose}
+                onSaved={() => {
+                    invalidate('projects.board', 'whiteboard.list', 'whiteboard.count');
+                    onAdded('whiteboard');
                 }}
             />
         </>

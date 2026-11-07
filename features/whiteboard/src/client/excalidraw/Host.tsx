@@ -28,6 +28,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { PREVIEW_MAX_CHARS, type BoardAppearance, type SceneElement } from '../../contracts/domain';
 import type { RemotePeer, SceneBridge } from '../session';
+import { EXCALIDRAW_SOURCE } from '../format';
 import { RemoteSelections, type PeerSelection } from './RemoteSelections';
 
 /** Ce que l'en-tête demande à l'éditeur, hors de la séance. */
@@ -330,6 +331,9 @@ export default function Host(props: HostProps) {
                     <MainMenu.DefaultItems.SearchMenu />
                     {props.canWrite && <MainMenu.DefaultItems.ClearCanvas />}
                     <MainMenu.DefaultItems.Help />
+                    <MainMenu.ItemLink href={EXCALIDRAW_SOURCE} target='_blank' rel='noopener noreferrer'>
+                        À propos d’Excalidraw
+                    </MainMenu.ItemLink>
                     {props.canWrite && (
                         <>
                             <MainMenu.Separator />

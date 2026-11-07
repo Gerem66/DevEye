@@ -1,5 +1,7 @@
+import { WHITEBOARD_CLIENT_PROVIDER } from '@deveye/types/sdk';
 import type { FeatureClient } from '@deveye/types/sdk/client';
 
+import { clientProvider } from './provider';
 import Whiteboard from './Whiteboard';
 import WhiteboardWidget from './WhiteboardWidget';
 
@@ -10,5 +12,6 @@ import WhiteboardWidget from './WhiteboardWidget';
 export const clientEntry: FeatureClient = {
     Widget: WhiteboardWidget,
     Full: Whiteboard,
-    cacheDurationMinutes: 0
+    cacheDurationMinutes: 0,
+    providers: { [WHITEBOARD_CLIENT_PROVIDER]: clientProvider }
 };

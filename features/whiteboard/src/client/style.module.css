@@ -158,6 +158,101 @@
     right: var(--space-xs);
 }
 
+/* Au pied de la grille : d'où vient l'éditeur. */
+.credit {
+    margin: auto 0 0;
+    padding-top: var(--space-md);
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    text-align: center;
+}
+
+.creditLink {
+    color: var(--text-secondary);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.creditLink:hover {
+    color: var(--accent);
+}
+
+/* ------------------------------------------------------- dans un projet */
+
+.linkedBoard {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-sm);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle);
+}
+
+.linkedPreview {
+    composes: preview;
+    flex: 0 0 160px;
+    padding: 0;
+    border: 0;
+    cursor: pointer;
+}
+
+.linkedHead {
+    display: flex;
+    flex: 1 1 auto;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.linkedText {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    min-width: 0;
+}
+
+.linkedTitle {
+    margin: 0;
+    overflow: hidden;
+    color: var(--text-primary);
+    font-size: 1rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Sur un téléphone, l'aperçu passe au-dessus. */
+@media (max-width: 560px) {
+    .linkedBoard {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .linkedPreview {
+        flex-basis: auto;
+    }
+}
+
+.form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.fieldLabel {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
 /* ------------------------------------------------------------ l'éditeur */
 
 /*

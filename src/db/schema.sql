@@ -1322,6 +1322,18 @@ CREATE TABLE `ft_projects_public` (
   CONSTRAINT `fk_ft_projects_public_project` FOREIGN KEY (`project_id`) REFERENCES `projects` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+CREATE TABLE `ft_projects_whiteboard_links` (
+  `project_id` int NOT NULL,
+  `board_id` int NOT NULL,
+  `workspace_id` int NOT NULL,
+  `created` bigint NOT NULL DEFAULT (unix_timestamp()),
+  PRIMARY KEY (`project_id`,`board_id`),
+  KEY `idx_ft_projects_whiteboard_links_board` (`board_id`),
+  KEY `fk_ft_projects_whiteboard_links_workspace` (`workspace_id`),
+  CONSTRAINT `fk_ft_projects_whiteboard_links_project` FOREIGN KEY (`project_id`) REFERENCES `projects` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_ft_projects_whiteboard_links_workspace` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 CREATE TABLE `ft_sentinel_device_config` (
   `device_id` char(36) COLLATE utf8mb4_general_ci NOT NULL,
   `enabled` tinyint NOT NULL DEFAULT '0',
