@@ -12,8 +12,10 @@ import {
     LOCAL_POLICY,
     NO_WRITE,
     OLD_AGENT,
+    PAUSED_UNREACHABLE,
     type Unavailable
 } from './availability';
+import { pauseEnd } from './utils';
 import type { DeviceActions } from './manage/useDeviceActions';
 import { POLICY_KEYS, POLICY_LABEL } from './policy';
 import type { useAgentUpdate } from './useAgentUpdate';
@@ -103,8 +105,8 @@ export interface AgentPanelProps {
  * La popup « Agent » d'un appareil : ce que l'agent est (version, compte,
  * privilèges, démarrage, transport, politique locale), et tout ce qui se fait
  * sur lui : démarrage automatique, élévation, mise à jour, redémarrage,
- * reconnexion depuis la machine, interruption, approbation d'un réappairage,
- * révocation de son accès. Le
+ * reconnexion depuis la machine, mise en pause et reprise, approbation d'un
+ * réappairage, révocation de son accès. Le
  * démarrage automatique, l'élévation et la mise à jour relèvent de
  * l'administrateur global (`access.admin` côté serveur).
  */
@@ -122,6 +124,7 @@ export function AgentPanel({
     const target = { id: device.id, name: device.name };
     const scope = agent?.serviceScope ?? 'none';
     const busy = actions.serviceBusy?.id === device.id ? actions.serviceBusy.kind : null;
+    const lifecycleBusy = actions.lifecycleBusy?.id === device.id ? actions.lifecycleBusy.action : null;
     const note = actions.deviceNote?.id === device.id ? actions.deviceNote : null;
 
     const reach = agentReach(device);
@@ -192,9 +195,9 @@ export function AgentPanel({
             icon: 'icon-restart',
             label: 'Redémarrer l’agent',
             desc: 'Il se relance proprement : l’appareil est hors ligne quelques secondes.',
-            onClick: () => void actions.restartAgent(device.id),
+            onClick: () => void actions.lifecycle(device.id, 'restart'),
             unavailable: firstReason(fleet, reach),
-            busy: actions.restartingId === device.id
+            busy: lifecycleBusy === 'restart'
         },
         // Le geste qui reste quand l'agent ne répond plus : il se fait sur la machine.
         {
@@ -204,16 +207,30 @@ export function AgentPanel({
             desc: 'Les commandes à lancer sur la machine pour relancer l’agent, avec ou sans root, avec ou sans démarrage automatique.',
             onClick: onReconnect
         },
-        {
-            key: 'stop',
-            icon: 'icon-power',
-            label: 'Interrompre l’agent',
-            desc: agent?.managed
-                ? 'Il se ferme, puis son service le relance.'
-                : 'Il se ferme, et l’appareil reste hors ligne jusqu’à un relancement sur la machine.',
-            onClick: () => actions.setStopTarget(target),
-            unavailable: firstReason(fleet, reach)
-        },
+        // Pas de confirmation : le geste se défait d'un clic, ici ou sur la machine.
+        device.pause
+            ? {
+                  key: 'resume',
+                  icon: 'icon-play',
+                  label: 'Reprendre l’agent',
+                  desc: `En pause ${pauseEnd(device.pause.until)}. Il reprend la surveillance et les ordres tout de suite.`,
+                  onClick: () => void actions.lifecycle(device.id, 'resume'),
+                  unavailable: firstReason(fleet, !device.pause.reachable && PAUSED_UNREACHABLE),
+                  busy: lifecycleBusy === 'resume'
+              }
+            : {
+                  key: 'pause',
+                  icon: 'icon-pause',
+                  label: 'Mettre l’agent en pause',
+                  desc: 'Il reste joignable mais ne mesure plus rien et ne prend plus d’ordre, jusqu’à ce que vous le repreniez ici ou depuis l’icône DevEye de la machine. La pause survit à un redémarrage.',
+                  onClick: () => void actions.lifecycle(device.id, 'pause'),
+                  unavailable: firstReason(
+                      fleet,
+                      reach,
+                      agent !== null && !(agent.probes?.includes('pause') ?? false) && OLD_AGENT
+                  ),
+                  busy: lifecycleBusy === 'pause'
+              },
         {
             key: 'revoke',
             icon: 'icon-x-circle',

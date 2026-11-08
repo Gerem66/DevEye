@@ -293,6 +293,8 @@ const SCOPES: { [K in RepoKey]: RepoScope<K> } = {
             setTokenHashes: { args: ['d', 'c', null] },
             clearPreviousTokenHash: { args: ['d'] },
             touchSeen: { args: ['d', 0] },
+            setPause: { args: ['d', 0, null] },
+            clearPause: { args: ['d'] },
             setAgentVersion: { args: ['d', '1'] },
             setAgentTarget: { args: ['d', 't'] },
             setReport: { args: ['d', '{}'] },

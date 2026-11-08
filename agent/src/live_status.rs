@@ -39,6 +39,11 @@ pub enum Conn {
     Offline {
         retry_at: u64,
     },
+    /// Paused (`deveye-agent pause`, the icon or the app): a control session
+    /// only, until `until` (unix seconds) or a resume.
+    Paused {
+        until: Option<u64>,
+    },
 }
 
 /// Long-running work in progress, by kind.
@@ -439,6 +444,13 @@ mod tests {
         let json = serde_json::to_string(&status).unwrap();
         assert!(json.contains(r#""conn":{"state":"offline","retryAt":1012}"#));
         assert_eq!(serde_json::from_str::<LiveStatus>(&json).unwrap(), status);
+        let paused = LiveStatus {
+            conn: Conn::Paused { until: None },
+            ..status
+        };
+        let json = serde_json::to_string(&paused).unwrap();
+        assert!(json.contains(r#""conn":{"state":"paused","until":null}"#));
+        assert_eq!(serde_json::from_str::<LiveStatus>(&json).unwrap(), paused);
     }
 
     #[test]

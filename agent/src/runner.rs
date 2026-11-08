@@ -22,6 +22,7 @@ use anyhow::{Context, Result};
 use base64::Engine as _;
 use futures_util::{SinkExt, StreamExt};
 use tokio::time::{interval_at, Instant, MissedTickBehavior};
+use tokio_tungstenite::tungstenite::http::HeaderValue;
 use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{debug, info, warn};
@@ -30,6 +31,7 @@ use crate::commands;
 use crate::config::Config;
 use crate::live_status::{self, Conn, Task};
 use crate::metrics::Collector;
+use crate::pause::Pause;
 use crate::protocol::{ClientMessage, DeviceReport, MetricSnapshot, ServerMessage};
 use crate::report;
 use crate::sockets::{self, SocketMap};
@@ -78,6 +80,13 @@ const CLOSE_PENDING_APPROVAL: u16 = 4001;
 /// Retry delay while the device waits for approval: short and fixed, so an
 /// approval in DevEye takes effect within half a minute.
 const PENDING_RETRY: Duration = Duration::from_secs(30);
+/// Request headers of a control session (`paused_session`). Mirror
+/// `AGENT_PAUSED_HEADER` and `AGENT_PAUSED_UNTIL_HEADER` in `@deveye/types`.
+const PAUSED_HEADER: &str = "x-deveye-paused";
+const PAUSED_UNTIL_HEADER: &str = "x-deveye-paused-until";
+/// Between the close of a working session and its control session: the server
+/// must see the first one gone before the second one presents itself.
+const PAUSE_RECONNECT_DELAY: Duration = Duration::from_millis(500);
 /// How often to send the OS/security report.
 const REPORT_INTERVAL: Duration = Duration::from_secs(60 * 60);
 /// Default used until the server pushes `agent.config` (≈immediately on
@@ -224,17 +233,24 @@ pub async fn run(mut config: Config, opts: RunOptions) -> Result<()> {
     info!(device_id = %device_id, metric_interval_secs = opts.interval.as_secs(), "DevEye agent starting");
 
     loop {
-        match stream_session(
-            &mut config,
-            &mut guard,
-            &device_id,
-            opts.interval,
-            &mut collector,
-            &mut queue,
-            &mut marks,
-        )
-        .await
-        {
+        // A pause in force opens the control session instead of the working
+        // one, at startup as well as after a pause.
+        let outcome = match crate::pause::current() {
+            Some(pause) => paused_session(&mut config, &mut guard, &device_id, pause).await,
+            None => {
+                stream_session(
+                    &mut config,
+                    &mut guard,
+                    &device_id,
+                    opts.interval,
+                    &mut collector,
+                    &mut queue,
+                    &mut marks,
+                )
+                .await
+            }
+        };
+        match outcome {
             Ok(SessionOutcome::Established) => {
                 let delay = jittered(RECONNECT_DELAY_MIN, RECONNECT_DELAY_MAX);
                 offline_until(delay);
@@ -279,8 +295,19 @@ pub async fn run(mut config: Config, opts: RunOptions) -> Result<()> {
                 );
                 tokio::time::sleep(delay).await;
             }
+            Ok(SessionOutcome::Paused) => {
+                info!("paused: reconnecting for control only");
+                backoff = MIN_BACKOFF;
+                rejected_streak = 0;
+                tokio::time::sleep(PAUSE_RECONNECT_DELAY).await;
+            }
+            Ok(SessionOutcome::Resumed) => {
+                info!("resumed: reconnecting for work");
+                backoff = MIN_BACKOFF;
+                rejected_streak = 0;
+            }
             Ok(SessionOutcome::Stop) => {
-                info!("stop ordered by server; exiting (the service manager relaunches a supervised install)");
+                info!("stopping on the system's signal (the service manager relaunches a supervised install)");
                 return Ok(());
             }
             Ok(SessionOutcome::Restart) => {
@@ -324,7 +351,13 @@ enum SessionOutcome {
     /// La machine sort de veille : la socket est presque certainement morte, et
     /// on le sait sans attendre le prochain ping → reconnexion immédiate.
     Woke,
-    /// The server ordered `agent.lifecycle stop` → exit the process. A supervised
+    /// A pause was asked (on the machine or by the server): the working session
+    /// is closed, a control session follows.
+    Paused,
+    /// The pause ended (resumed on the machine or by the server, or its
+    /// deadline passed): a working session follows at once.
+    Resumed,
+    /// The process was told to stop (the system's signal) → exit. A supervised
     /// install comes back through its service manager; standalone stays down.
     Stop,
     /// The server ordered `agent.lifecycle restart` → exit and come back
@@ -650,12 +683,18 @@ async fn stream_session(
             _ = shutdown_signal() => {
                 // Fermeture propre pour que le serveur enregistre le départ tout
                 // de suite, plutôt qu'à l'expiration.
-                info!("shutdown signal — closing the session");
-                let _ = sink.send(Message::Close(None)).await;
-                let _ = sink.flush().await;
+                info!("shutdown signal: closing the session");
+                send_close(&mut sink).await;
                 return Ok(SessionOutcome::Stop);
             }
             _ = wake_ticker.tick() => {
+                // A pause asked on the machine (`deveye-agent pause`, the icon)
+                // ends the working session: the next one is for control only.
+                if crate::pause::current().is_some() {
+                    info!("pause asked on this machine: closing the working session");
+                    send_close(&mut sink).await;
+                    return Ok(SessionOutcome::Paused);
+                }
                 // Contrôle de silence, logé dans le ticker du réveil : il n'émet
                 // rien, donc pas besoin d'une cadence à lui.
                 if last_seen.elapsed() > SERVER_SILENCE_LIMIT {
@@ -816,34 +855,31 @@ async fn stream_session(
                                 // Only reached if the update was refused/failed → keep
                                 // running on the current binary.
                             }
-                            // Stop / clean restart of this process (from the UI).
+                            // Clean restart or pause of this process (from the UI).
                             ServerMessage::Lifecycle { action } => match action.as_str() {
-                                "stop" => {
-                                    info!("lifecycle: stop ordered by server");
-                                    return Ok(SessionOutcome::Stop);
-                                }
                                 "restart" => {
                                     info!("lifecycle: restart ordered by server");
                                     return Ok(SessionOutcome::Restart);
                                 }
+                                "pause" => {
+                                    info!("lifecycle: pause ordered by server");
+                                    // Unrecorded, the pause would end at the next
+                                    // session: better not to start it.
+                                    match crate::pause::set(None) {
+                                        Ok(_) => {
+                                            send_close(&mut sink).await;
+                                            return Ok(SessionOutcome::Paused);
+                                        }
+                                        Err(e) => warn!(error = %e, "cannot record the pause; staying in service"),
+                                    }
+                                }
+                                // Not paused: nothing to resume, but a stale marker goes.
+                                "resume" => {
+                                    crate::pause::clear();
+                                }
                                 other => warn!(action = %other, "unknown lifecycle action ignored"),
                             },
-                            // The server replaced the token before it expires. Kept
-                            // in memory even if the save fails: the server still
-                            // accepts the old one until the new one has been used.
-                            ServerMessage::TokenRotate { token } => {
-                                // A token naming another device would re-enroll this
-                                // machine as that one, whose orders it would then obey.
-                                if Config::token_subject(&token).as_deref() != Some(device_id) {
-                                    warn!("rotated token names another device: refused");
-                                } else {
-                                    match Config::persist_rotated_token(device_id, &token) {
-                                        Ok(()) => info!("device token rotated"),
-                                        Err(e) => warn!(error = %e, "rotated token could not be saved"),
-                                    }
-                                    config.device_token = Some(token);
-                                }
-                            }
+                            ServerMessage::TokenRotate { token } => take_rotated_token(config, device_id, token),
                             // Persistence/privilege change (install autostart, elevate…).
                             ServerMessage::Service { action } => {
                                 commands::handle_service(&mut sink, device_id, &action).await;
@@ -1167,6 +1203,149 @@ async fn stream_session(
 /// `Skip` est ce qui rend la sortie de veille supportable : les horloges de
 /// tokio n'avancent pas pendant la suspension, et avec `Burst` chaque ticker
 /// rattraperait tout son arriéré au réveil (~3600 tics pour une heure).
+/// The session of a paused agent: a hello, the pings, and the few orders that
+/// still apply (resume, restart, destroy, token rotation). Nothing is
+/// collected, nothing else is obeyed. The headers tell the server to keep this
+/// machine out of the online fleet and to push it no work.
+async fn paused_session(
+    config: &mut Config,
+    guard: &mut crate::orders::OrderGuard,
+    device_id: &str,
+    pause: Pause,
+) -> Result<SessionOutcome> {
+    live_status::set_conn(Conn::Paused { until: pause.until });
+    let mut request = config.ws_request()?;
+    request
+        .headers_mut()
+        .insert(PAUSED_HEADER, HeaderValue::from_static("1"));
+    if let Some(until) = pause.until {
+        request.headers_mut().insert(
+            PAUSED_UNTIL_HEADER,
+            HeaderValue::from_str(&until.to_string()).context("pause deadline header")?,
+        );
+    }
+    let (ws_stream, _) = tokio_tungstenite::connect_async(request)
+        .await
+        .context("connecting to agent WebSocket (paused)")?;
+    info!(until = ?pause.until, "connected, paused");
+    let (mut sink, mut stream) = ws_stream.split();
+    send_hello(&mut sink).await?;
+
+    let mut last_seen = Instant::now();
+    // The second ticker of the working session, for the same two checks, plus
+    // the marker: resumed on the machine, or past its deadline.
+    let mut ticker = new_ticker(WAKE_CHECK_INTERVAL);
+    let mut last_mono = Instant::now();
+    let mut last_wall = std::time::SystemTime::now();
+    loop {
+        tokio::select! {
+            _ = shutdown_signal() => {
+                info!("shutdown signal: closing the paused session");
+                send_close(&mut sink).await;
+                return Ok(SessionOutcome::Stop);
+            }
+            _ = ticker.tick() => {
+                if crate::pause::current().is_none() {
+                    info!("pause ended on this machine");
+                    send_close(&mut sink).await;
+                    return Ok(SessionOutcome::Resumed);
+                }
+                if last_seen.elapsed() > SERVER_SILENCE_LIMIT {
+                    warn!(silent_secs = last_seen.elapsed().as_secs(), "server silent for too long: reconnecting");
+                    return Ok(SessionOutcome::Established);
+                }
+                let now_mono = Instant::now();
+                let now_wall = std::time::SystemTime::now();
+                let mono = now_mono.saturating_duration_since(last_mono);
+                let wall = now_wall.duration_since(last_wall).unwrap_or(mono);
+                last_mono = now_mono;
+                last_wall = now_wall;
+                if wall > mono + WAKE_SKEW_THRESHOLD {
+                    warn!(slept_secs = (wall - mono).as_secs(), "wake from sleep detected");
+                    return Ok(SessionOutcome::Woke);
+                }
+            }
+            incoming = stream.next() => {
+                if matches!(incoming, Some(Ok(_))) {
+                    last_seen = Instant::now();
+                }
+                match incoming {
+                    Some(Ok(Message::Text(txt))) => {
+                        let message = match crate::orders::admit(&txt, guard, &config.policy, now_ms()) {
+                            crate::orders::Admission::Refused { command, payload, reason } => {
+                                commands::refuse_order(&mut sink, device_id, &command, &payload, &reason).await;
+                                continue;
+                            }
+                            crate::orders::Admission::Ignore => continue,
+                            crate::orders::Admission::Dispatch(message) => message,
+                        };
+                        match message {
+                            ServerMessage::Lifecycle { action } => match action.as_str() {
+                                "resume" => {
+                                    info!("lifecycle: resume ordered by server");
+                                    crate::pause::clear();
+                                    send_close(&mut sink).await;
+                                    return Ok(SessionOutcome::Resumed);
+                                }
+                                "restart" => {
+                                    info!("lifecycle: restart ordered by server");
+                                    return Ok(SessionOutcome::Restart);
+                                }
+                                "pause" => {}
+                                other => warn!(action = %other, "unknown lifecycle action ignored"),
+                            },
+                            ServerMessage::Destroy {} => {
+                                commands::handle_destroy(&mut sink, device_id).await;
+                                // Only reached if self-destruct failed → end the session.
+                                return Ok(SessionOutcome::Established);
+                            }
+                            ServerMessage::TokenRotate { token } => take_rotated_token(config, device_id, token),
+                            _ => debug!("server frame ignored while paused"),
+                        }
+                    }
+                    Some(Ok(Message::Ping(payload))) => {
+                        sink.send(Message::Pong(payload)).await.ok();
+                    }
+                    Some(Ok(Message::Close(frame))) => {
+                        let code = frame.map(|f| f.code);
+                        info!(?code, "server closed the paused session");
+                        return Ok(outcome_of_close(code));
+                    }
+                    Some(Ok(_)) => {}
+                    Some(Err(e)) => return Err(e).context("WebSocket stream error"),
+                    None => return Ok(SessionOutcome::Established),
+                }
+            }
+        }
+    }
+}
+
+/// A clean close, so the server records the departure at once rather than at
+/// the heartbeat.
+async fn send_close<S>(sink: &mut S)
+where
+    S: SinkExt<Message> + Unpin,
+{
+    let _ = sink.send(Message::Close(None)).await;
+    let _ = sink.flush().await;
+}
+
+/// The server replaced the token before it expires. Kept in memory even if the
+/// save fails: the server still accepts the old one until the new one has been
+/// used. A token naming another device would re-enroll this machine as that
+/// one, whose orders it would then obey.
+fn take_rotated_token(config: &mut Config, device_id: &str, token: String) {
+    if Config::token_subject(&token).as_deref() != Some(device_id) {
+        warn!("rotated token names another device: refused");
+        return;
+    }
+    match Config::persist_rotated_token(device_id, &token) {
+        Ok(()) => info!("device token rotated"),
+        Err(e) => warn!(error = %e, "rotated token could not be saved"),
+    }
+    config.device_token = Some(token);
+}
+
 fn new_ticker(period: Duration) -> tokio::time::Interval {
     let mut t = interval_at(Instant::now() + period, period);
     t.set_missed_tick_behavior(MissedTickBehavior::Skip);

@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 
 use anyhow::{Context, Result};
-use ksni::menu::StandardItem;
+use ksni::menu::{StandardItem, SubMenu};
 use ksni::{Category, MenuItem, ToolTip, TrayMethods};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 use tracing::warn;
@@ -127,6 +127,24 @@ impl ksni::Tray for Sni {
         items.push(MenuItem::Separator);
         for (index, (text, _)) in self.view.opens.iter().enumerate() {
             items.push(entry(text, Action::Open(index)));
+        }
+        if self.view.pausable {
+            items.push(
+                SubMenu {
+                    label: label(self.labels.pause),
+                    submenu: self
+                        .labels
+                        .durations
+                        .iter()
+                        .map(|&(text, secs)| entry(text, Action::Pause(secs)))
+                        .collect(),
+                    ..Default::default()
+                }
+                .into(),
+            );
+        }
+        if self.view.resumable {
+            items.push(entry(self.labels.resume, Action::Resume));
         }
         items.extend([
             entry(self.labels.hide, Action::Hide),

@@ -425,6 +425,8 @@ CREATE TABLE `devices` (
   `process_capture` enum('off','top','all') COLLATE utf8mb4_general_ci DEFAULT NULL,
   `status_before_delete` varchar(20) COLLATE utf8mb4_general_ci DEFAULT NULL,
   `delete_error` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `paused_at` bigint DEFAULT NULL,
+  `paused_until` bigint DEFAULT NULL,
   `agent_version` varchar(64) COLLATE utf8mb4_general_ci DEFAULT NULL,
   `agent_target` varchar(32) COLLATE utf8mb4_general_ci DEFAULT NULL,
   `sort_order` int NOT NULL DEFAULT '0',

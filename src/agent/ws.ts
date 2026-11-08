@@ -26,6 +26,8 @@ import {
     AGENT_AUTH_EVENTS,
     AGENT_INTEGRITY,
     AGENT_METRICS_BATCH,
+    AGENT_PAUSED_HEADER,
+    AGENT_PAUSED_UNTIL_HEADER,
     AGENT_PKG_COUNT,
     AGENT_PKG_DONE,
     AGENT_PKG_LIST_RESULT,
@@ -55,6 +57,7 @@ import { signDeviceToken, type DeviceClaims } from '@/auth/jwt';
 import { sha256hex } from '@/Utils/hash';
 import { logger } from '@/logger';
 import { isPlanPaused } from '@/Services/planPauses';
+import { formatMoment } from '@/Services/alertCore';
 import {
     handleAuthEvents,
     handleDestroyed,
@@ -327,6 +330,71 @@ export async function registerAgentWS(
             );
         }
 
+        const session: AgentSession = {
+            socket,
+            db,
+            hub,
+            hooks,
+            audit,
+            logger: reqLogger,
+            ownerId: claims.oid,
+            ip: req.ip,
+            device
+        };
+
+        // Un agent en pause ne garde qu'une session de contrôle : hors de la
+        // flotte en ligne, sans hooks ni présence (sa session de travail a déjà
+        // enregistré son départ), seul son `agent.hello` est lu.
+        if (device.status === 'active' && req.headers[AGENT_PAUSED_HEADER] === '1') {
+            const untilRaw = req.headers[AGENT_PAUSED_UNTIL_HEADER];
+            const until = typeof untilRaw === 'string' && /^\d{1,12}$/.test(untilRaw) ? Number(untilRaw) : null;
+            reqLogger.info({ until }, 'Agent connected paused');
+            hub.agentPaused(deviceId, socket);
+            onMessage = (raw) => {
+                let parsed;
+                try {
+                    parsed = agentClientMessageSchema.safeParse(JSON.parse(raw.toString()));
+                } catch {
+                    return;
+                }
+                if (!parsed.success || parsed.data.command !== AGENT_HELLO) {
+                    reqLogger.debug('Frame of a paused agent ignored');
+                    return;
+                }
+                void handleHello(session, parsed.data.payload).catch((err: unknown) => {
+                    reqLogger.warn({ err }, 'Hello of a paused agent failed');
+                });
+            };
+            for (const raw of earlyFrames.splice(0)) onMessage(raw);
+            const now = Math.floor(Date.now() / 1000);
+            try {
+                await db.devices.setPause(deviceId, now, until);
+                await db.devices.touchSeen(deviceId, now);
+            } catch (err) {
+                reqLogger.warn({ err }, 'Pause bookkeeping failed (socket kept open)');
+            }
+            await rotateTokenIfDue(db, socket, device, claims, presented, reqLogger);
+            await notifyDeviceWorkspaces(db, live, deviceId);
+            if (device.paused_at === null) {
+                audit.record({
+                    source: 'agent',
+                    category: 'device',
+                    action: 'agent.pause',
+                    level: 'info',
+                    uid: claims.oid,
+                    ip: req.ip,
+                    description: `Agent en pause${until === null ? '' : ` jusqu'au ${formatMoment(until)}`} : appareil « ${device.name} »`,
+                    metadata: { deviceId, until }
+                });
+            }
+            socket.on('close', () => {
+                hub.pausedGone(deviceId, socket);
+                void notifyDeviceWorkspaces(db, live, deviceId).catch(() => {});
+                reqLogger.info('Paused agent disconnected');
+            });
+            return;
+        }
+
         // A device marked for deletion is accepted just long enough to be told to
         // self-destruct; we send the destroy signal and wait for its reply
         // (handled below). No config, no persistence, no normal presence.
@@ -350,6 +418,19 @@ export async function registerAgentWS(
             // accept-then-close reconnect storm.
             try {
                 await db.devices.touchSeen(deviceId, Math.floor(Date.now() / 1000));
+                if (device.paused_at !== null) {
+                    await db.devices.clearPause(deviceId);
+                    audit.record({
+                        source: 'agent',
+                        category: 'device',
+                        action: 'agent.resume',
+                        level: 'info',
+                        uid: claims.oid,
+                        ip: req.ip,
+                        description: `Agent repris : appareil « ${device.name} »`,
+                        metadata: { deviceId }
+                    });
+                }
                 await recordAgentOnline(db, device, wasOnlineInHub);
             } catch (err) {
                 reqLogger.warn({ err }, 'Connect-time presence bookkeeping failed (socket kept open)');
@@ -368,18 +449,6 @@ export async function registerAgentWS(
                 metadata: { deviceId, status: device.status }
             });
         }
-
-        const session: AgentSession = {
-            socket,
-            db,
-            hub,
-            hooks,
-            audit,
-            logger: reqLogger,
-            ownerId: claims.oid,
-            ip: req.ip,
-            device
-        };
 
         const handleMessage = async (raw: Buffer): Promise<void> => {
             let parsed;

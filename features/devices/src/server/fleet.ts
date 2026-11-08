@@ -48,7 +48,8 @@ export const devicesListFeature = defineSdkFeature<
                     ctx.deveye.devices.isOnline(r.id),
                     computeAgentUpdate(r, manifest),
                     r.workspace_id !== ctx.workspaceId,
-                    ctx.quota.isPaused('agents', r.id)
+                    ctx.quota.isPaused('agents', r.id),
+                    ctx.deveye.devices.isPaused(r.id)
                 )
             )
         };

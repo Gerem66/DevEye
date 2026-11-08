@@ -1,5 +1,10 @@
 import { useRef, useState } from 'react';
-import { DEVICE_SERVICE_EVENT, deviceServicePushSchema, type DeviceServicePush } from '@deveye/types';
+import {
+    DEVICE_SERVICE_EVENT,
+    deviceServicePushSchema,
+    type AgentLifecycleAction,
+    type DeviceServicePush
+} from '@deveye/types';
 import {
     acquireMetrics,
     errorNote,
@@ -25,6 +30,12 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
  * « l'agent n'a pas répondu » est une réponse.
  */
 const SERVICE_RESULT_TIMEOUT = 20_000;
+
+const LIFECYCLE_FAILED: Record<AgentLifecycleAction, string> = {
+    restart: 'Redémarrage impossible.',
+    pause: 'Mise en pause impossible.',
+    resume: 'Reprise impossible.'
+};
 
 /**
  * Attend le résultat que l'agent renvoie pour l'action en cours, ou `null` au
@@ -100,11 +111,8 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
     const [renameTarget, setRenameTarget] = useState<Target>(null);
     const [renameValue, setRenameValue] = useState('');
     const [renaming, setRenaming] = useState(false);
-    // Stopping goes through a confirmation dialog (the consequences depend on
-    // autostart); restarting runs directly.
-    const [stopTarget, setStopTarget] = useState<Target>(null);
-    const [stopping, setStopping] = useState(false);
-    const [restartingId, setRestartingId] = useState<string | null>(null);
+    // Redémarrer, mettre en pause, reprendre : un geste à la fois sur un appareil.
+    const [lifecycleBusy, setLifecycleBusy] = useState<{ id: string; action: AgentLifecycleAction } | null>(null);
 
     // Approuver, révoquer, effacer : des gestes qui engagent, confirmés par le
     // dialogue commun, qui dit en deux phrases ce qu'ils font.
@@ -257,35 +265,20 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
             error: 'Rétrogradation impossible.'
         });
 
-    /** Stop the agent process (confirmed via the explanatory dialog). */
-    const confirmStopAgent = async () => {
-        if (!stopTarget) return;
+    /**
+     * Redémarrer, mettre en pause ou reprendre l'agent. Le spinner tient le
+     * temps que la présence et la liste rapportent le nouvel état.
+     */
+    const lifecycle = async (id: string, action: AgentLifecycleAction) => {
         setActionError(null);
-        setStopping(true);
+        setLifecycleBusy({ id, action });
         try {
-            await agent.send('agent.lifecycle', { deviceId: stopTarget.id, action: 'stop' });
-            setStopTarget(null);
-            // Presence pushes flip the card; refresh for the rest.
-            await settle(2000);
+            await agent.send('agent.lifecycle', { deviceId: id, action });
+            await settle(action === 'restart' ? 4000 : 2000);
         } catch (e) {
-            setActionError(errorNote(e, 'Interruption impossible.'));
+            setActionError(errorNote(e, LIFECYCLE_FAILED[action]));
         } finally {
-            setStopping(false);
-        }
-    };
-
-    /** Cleanly restart the agent process (offline for a few seconds, then back). */
-    const restartAgent = async (id: string) => {
-        setActionError(null);
-        setRestartingId(id);
-        try {
-            await agent.send('agent.lifecycle', { deviceId: id, action: 'restart' });
-            // Keep the spinner through the offline→online round trip.
-            await settle(4000);
-        } catch (e) {
-            setActionError(errorNote(e, 'Redémarrage impossible.'));
-        } finally {
-            setRestartingId(null);
+            setLifecycleBusy(null);
         }
     };
 
@@ -373,12 +366,8 @@ export function useDeviceActions(refresh: () => Promise<void> | void) {
         renameValue,
         setRenameValue,
         renaming,
-        stopTarget,
-        setStopTarget,
-        stopping,
-        confirmStopAgent,
-        restartAgent,
-        restartingId,
+        lifecycle,
+        lifecycleBusy,
         confirmRequest,
         closeConfirm: () => setConfirmRequest(null),
         askApprove,

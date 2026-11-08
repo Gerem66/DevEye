@@ -5,16 +5,12 @@ import type { DeviceActions } from './useDeviceActions';
 import styles from './style.module.css';
 
 /**
- * Les dialogues de confirmation des gestes qui engagent : renommer, interrompre
- * l'agent, supprimer, et le dialogue commun qui confirme l'approbation, la
- * révocation et l'effacement. Montés par la fiche d'un appareil, à côté de son
- * menu d'actions et de sa popup « Agent » qui les ouvrent.
+ * Les dialogues de confirmation des gestes qui engagent : renommer, supprimer,
+ * et le dialogue commun qui confirme l'approbation, la révocation et
+ * l'effacement. Montés par la fiche d'un appareil, à côté de son menu
+ * d'actions et de sa popup « Agent » qui les ouvrent.
  */
 export function DeviceDialogs({ actions, device }: { actions: DeviceActions; device: Device }) {
-    // Les conséquences d'un arrêt : un service le relance, et seul un service
-    // armé le ramène après un redémarrage.
-    const stopAgent = device.report?.agent;
-
     return (
         <>
             <Dialog
@@ -116,36 +112,6 @@ export function DeviceDialogs({ actions, device }: { actions: DeviceActions; dev
                 <p className={styles.deleteExplainNote}>
                     L’agent ne sera pas auto-détruit. À utiliser s’il n’existe plus, ou si peu importe qu’il se nettoie.
                     Ses relevés restent consultables.
-                </p>
-            </Dialog>
-
-            <Dialog
-                open={actions.stopTarget !== null}
-                onClose={() => actions.setStopTarget(null)}
-                title={actions.stopTarget ? `Interrompre l’agent de « ${actions.stopTarget.name} » ?` : 'Interrompre'}
-                description='L’agent se ferme proprement et l’appareil passe hors ligne.'
-                onSubmit={() => void actions.confirmStopAgent()}
-                footer={
-                    <>
-                        <Button
-                            variant='secondary'
-                            onClick={() => actions.setStopTarget(null)}
-                            disabled={actions.stopping}
-                        >
-                            Annuler
-                        </Button>
-                        <Button variant='danger' onClick={actions.confirmStopAgent} disabled={actions.stopping}>
-                            {actions.stopping ? 'Interruption…' : 'Interrompre l’agent'}
-                        </Button>
-                    </>
-                }
-            >
-                <p className={styles.deleteExplainNote}>
-                    {stopAgent?.managed
-                        ? stopAgent.autostart === false
-                            ? 'Son service relancera l’agent dans quelques secondes, mais plus après un redémarrage de l’appareil : le démarrage automatique est désactivé.'
-                            : 'Démarrage auto actif : l’agent sera relancé automatiquement dans quelques secondes, et à chaque démarrage de l’appareil.'
-                        : 'Démarrage auto inactif : l’appareil restera hors ligne et ne pourra plus être administré à distance (configuration, mises à jour, terminal, fichiers…) jusqu’à un relancement manuel de l’agent sur la machine.'}
                 </p>
             </Dialog>
 

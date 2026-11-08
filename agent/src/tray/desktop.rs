@@ -3,7 +3,7 @@
 
 use anyhow::{Context, Result};
 use tracing::warn;
-use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
+use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 use tray_icon::{Icon, MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 
 use super::icon::{self, Look};
@@ -17,13 +17,16 @@ struct Ui {
     size: u32,
 }
 
-/// The menu and its entries, built again when the view gains or loses lines
-/// (an agent of another instance starts or stops).
+/// The menu and its entries, built again when the view gains or loses entries
+/// (an agent of another instance starts or stops, a pause begins or ends).
 struct Items {
     menu: Menu,
     lines: Vec<MenuItem>,
     activity: Option<MenuItem>,
     opens: Vec<MenuItem>,
+    /// The "Pause" submenu's entries, in the order of `Labels::durations`.
+    pause: Option<Vec<MenuItem>>,
+    resume: Option<MenuItem>,
     hide: MenuItem,
     quit: MenuItem,
 }
@@ -40,6 +43,16 @@ impl Items {
                 .iter()
                 .map(|(label, _)| MenuItem::new(label, true, None))
                 .collect(),
+            pause: view.pausable.then(|| {
+                labels
+                    .durations
+                    .iter()
+                    .map(|(text, _)| MenuItem::new(text, true, None))
+                    .collect()
+            }),
+            resume: view
+                .resumable
+                .then(|| MenuItem::new(labels.resume, true, None)),
             hide: MenuItem::new(labels.hide, true, None),
             quit: MenuItem::new(labels.quit, true, None),
         };
@@ -53,6 +66,16 @@ impl Items {
         for open in &items.opens {
             items.menu.append(open).context("building the menu")?;
         }
+        if let Some(durations) = &items.pause {
+            let submenu = Submenu::new(labels.pause, true);
+            for duration in durations {
+                submenu.append(duration).context("building the menu")?;
+            }
+            items.menu.append(&submenu).context("building the menu")?;
+        }
+        if let Some(resume) = &items.resume {
+            items.menu.append(resume).context("building the menu")?;
+        }
         items
             .menu
             .append_items(&[&items.hide, &PredefinedMenuItem::separator(), &items.quit])
@@ -65,6 +88,8 @@ impl Items {
         self.lines.len() == view.lines.len()
             && self.activity.is_some() == view.activity.is_some()
             && self.opens.len() == view.opens.len()
+            && self.pause.is_some() == view.pausable
+            && self.resume.is_some() == view.resumable
     }
 
     fn set_texts(&self, view: &TrayView) {
@@ -132,8 +157,22 @@ impl Ui {
     fn actions(&self) -> Vec<Action> {
         let mut actions = Vec::new();
         while let Ok(event) = MenuEvent::receiver().try_recv() {
+            let pause = self
+                .items
+                .pause
+                .as_ref()
+                .and_then(|items| items.iter().position(|p| event.id == *p.id()));
             if let Some(index) = self.items.opens.iter().position(|o| event.id == *o.id()) {
                 actions.push(Action::Open(index));
+            } else if let Some(index) = pause {
+                actions.push(Action::Pause(self.labels.durations[index].1));
+            } else if self
+                .items
+                .resume
+                .as_ref()
+                .is_some_and(|r| event.id == *r.id())
+            {
+                actions.push(Action::Resume);
             } else if event.id == *self.items.hide.id() {
                 actions.push(Action::Hide);
             } else if event.id == *self.items.quit.id() {

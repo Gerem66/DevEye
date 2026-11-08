@@ -36,6 +36,14 @@ export interface DevicesRepo {
     /** L'agent s'est authentifié avec le jeton courant : l'ancien peut tomber. */
     clearPreviousTokenHash(id: string): Promise<void>;
     touchSeen(id: string, lastSeen: number): Promise<void>;
+    /**
+     * L'agent s'est connecté en pause : `since` ne s'écrit qu'à la première
+     * fois (une reconnexion pendant la pause garde son origine), `until` suit
+     * ce que l'agent annonce.
+     */
+    setPause(id: string, since: number, until: number | null): Promise<void>;
+    /** L'agent s'est connecté en service : la pause est finie. */
+    clearPause(id: string): Promise<void>;
     /** Store the agent version reported on connect (`agent.hello`). */
     setAgentVersion(id: string, version: string): Promise<void>;
     /** Store the build target reported on connect (`agent.hello`), for self-update. */
@@ -131,6 +139,19 @@ export function devicesRepo(pool: Q): DevicesRepo {
         },
         async touchSeen(id, lastSeen) {
             await pool.query('UPDATE devices SET last_seen = ? WHERE id = ?', [lastSeen, id]);
+        },
+        async setPause(id, since, until) {
+            await pool.query('UPDATE devices SET paused_at = COALESCE(paused_at, ?), paused_until = ? WHERE id = ?', [
+                since,
+                until,
+                id
+            ]);
+        },
+        async clearPause(id) {
+            await pool.query(
+                'UPDATE devices SET paused_at = NULL, paused_until = NULL WHERE id = ? AND paused_at IS NOT NULL',
+                [id]
+            );
         },
         async setAgentVersion(id, version) {
             await pool.query('UPDATE devices SET agent_version = ? WHERE id = ?', [version.slice(0, 64), id]);

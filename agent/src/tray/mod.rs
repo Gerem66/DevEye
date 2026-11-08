@@ -1,5 +1,6 @@
 //! The DevEye icon in the desktop's notification area: the agent's state at a
-//! glance, and a menu to open DevEye, hide the icon or stop the agent.
+//! glance, and a menu to open DevEye, pause or resume the agent, hide the icon
+//! or stop the agent.
 //!
 //! The icon is its own process, one per desktop session (`deveye-agent tray
 //! run`, started at login by [`autostart`]): the agent often runs as root or
@@ -25,7 +26,7 @@ use std::time::Duration;
 use anyhow::{bail, Context, Result};
 use tracing::{info, warn};
 
-use crate::live_status::{self, LiveStatus};
+use crate::live_status::{self, Conn, LiveStatus};
 use icon::{Look, FRAMES};
 use view::{Lang, Mood, TrayView};
 
@@ -41,6 +42,10 @@ const RESPAWNED_FOR: &str = "DEVEYE_TRAY_RESPAWNED_FOR";
 pub enum Action {
     /// The server of this "Open" entry (`TrayView::opens`).
     Open(usize),
+    /// Pause every agent in service, for this many seconds or until "Resume".
+    Pause(Option<u64>),
+    /// Resume every paused agent.
+    Resume,
     Hide,
     Quit,
 }
@@ -358,6 +363,18 @@ impl Controller {
                 }
                 Step::default()
             }
+            // The state comes back through the published status; a password
+            // prompt (privileged agent) must not freeze the icon meanwhile.
+            Action::Pause(secs) => {
+                let statuses = self.statuses.clone();
+                std::thread::spawn(move || pause_agents(&statuses, secs));
+                Step::default()
+            }
+            Action::Resume => {
+                let statuses = self.statuses.clone();
+                std::thread::spawn(move || resume_agents(&statuses));
+                Step::default()
+            }
             Action::Hide => match set_hidden(true) {
                 Ok(()) => Step {
                     exit: true,
@@ -420,16 +437,40 @@ impl Controller {
 fn stop_agents(statuses: &[LiveStatus]) -> bool {
     let mut all = true;
     for status in statuses {
-        all &= stop_agent(status);
+        all &= agent_command(status, &["stop"]);
     }
     all
 }
 
-/// Stop an agent the way `deveye-agent stop` does, asking for elevation when
-/// it runs with more rights than this session.
-fn stop_agent(status: &LiveStatus) -> bool {
+/// Pause every agent in service (`deveye-agent pause [--for <secs>s]`).
+fn pause_agents(statuses: &[LiveStatus], secs: Option<u64>) {
+    let duration = secs.map(|s| format!("{s}s"));
+    let mut args = vec!["pause"];
+    if let Some(duration) = &duration {
+        args.extend(["--for", duration.as_str()]);
+    }
+    for status in statuses {
+        if !matches!(status.conn, Conn::Paused { .. }) {
+            agent_command(status, &args);
+        }
+    }
+}
+
+/// Resume every paused agent (`deveye-agent resume`).
+fn resume_agents(statuses: &[LiveStatus]) {
+    for status in statuses {
+        if matches!(status.conn, Conn::Paused { .. }) {
+            agent_command(status, &["resume"]);
+        }
+    }
+}
+
+/// Run a command of this executable against the agent `status` describes
+/// (`deveye-agent [--instance <name>] <args>`), asking for elevation when the
+/// agent runs with more rights than this session. `true` when it succeeded.
+fn agent_command(status: &LiveStatus, command: &[&str]) -> bool {
     let mut args = crate::instance::args_of(status.instance.as_deref());
-    args.push("stop".into());
+    args.extend(command.iter().map(|a| a.to_string()));
     let args: Vec<&str> = args.iter().map(String::as_str).collect();
     let result = if status.privileged && !crate::report::is_privileged() {
         crate::elevate::run_elevated(&args)
@@ -440,9 +481,9 @@ fn stop_agent(status: &LiveStatus) -> bool {
                 let mut cmd = Command::new(exe);
                 cmd.args(&args).stdin(Stdio::null()).stdout(Stdio::null());
                 hide_window(&mut cmd);
-                let status = cmd.status().context("running stop")?;
+                let status = cmd.status().context("running the command")?;
                 if !status.success() {
-                    bail!("stop exited with {status}");
+                    bail!("exited with {status}");
                 }
                 Ok(())
             })
@@ -450,7 +491,7 @@ fn stop_agent(status: &LiveStatus) -> bool {
     match result {
         Ok(()) => true,
         Err(e) => {
-            warn!(error = %e, "the agent was not stopped");
+            warn!(error = %e, command = command.join(" "), "the agent command failed");
             false
         }
     }

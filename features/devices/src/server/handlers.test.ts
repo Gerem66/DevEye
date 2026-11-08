@@ -98,6 +98,8 @@ function row(over: Partial<DeviceRow> & { id: string }): DeviceRow {
         terminal_close_on_exit: 1,
         status_before_delete: null,
         delete_error: null,
+        paused_at: null,
+        paused_until: null,
         sort_order: 0,
         ...over
     };
@@ -461,6 +463,25 @@ describe('devices.list', () => {
         // La fiche relue après un geste le dit aussi.
         const renamed = await handlerFor(devicesRename)(ctx, { deviceId: DEVICE_B, name: 'Toujours là' });
         assert.equal(renamed.device.planPaused, true);
+    });
+
+    it("un agent mis en pause le dit, jusqu'à l'échéance de sa pause", async () => {
+        const now = Math.floor(Date.now() / 1000);
+        const repo = fakeRepo([
+            row({ id: DEVICE_A, paused_at: now - 60, paused_until: null }),
+            row({ id: DEVICE_B, paused_at: now - 3600, paused_until: now + 1800 }),
+            row({ id: DEVICE_C, paused_at: now - 7200, paused_until: now - 60 })
+        ]);
+        const out = await handlerFor(devicesList)(contextFor(repo), {});
+        devicesList.output.parse(out);
+        assert.deepEqual(
+            out.devices.map((d) => [d.id, d.pause]),
+            [
+                [DEVICE_A, { since: now - 60, until: null, reachable: false }],
+                [DEVICE_B, { since: now - 3600, until: now + 1800, reachable: false }],
+                [DEVICE_C, null]
+            ]
+        );
     });
 
     it("un appareil projeté figure dans la liste, marqué comme venant d'ailleurs", async () => {

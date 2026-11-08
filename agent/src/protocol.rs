@@ -1495,8 +1495,8 @@ pub enum ServerMessage {
         action: String,
         target: Option<String>,
     },
-    /// Stop (`stop`) or cleanly restart (`restart`) this agent *process* — not
-    /// the machine. No reply frame: the process exits (and possibly comes back).
+    /// Act on this agent *process*, not the machine: `restart`, `pause` (a
+    /// control session only, see `crate::pause`) or `resume`. No reply frame.
     #[serde(rename = "agent.lifecycle")]
     Lifecycle { action: String },
     /// Per-device collection config (one cadence + capture mode), pushed by the

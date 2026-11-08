@@ -58,7 +58,8 @@ export function deviceRowToDevice(
     effectiveMetricIntervalSeconds: number,
     online: boolean,
     update: AgentUpdateInfo = { latest: null, available: false },
-    foreign = false
+    foreign = false,
+    pauseReachable = false
 ): Device {
     return {
         id: row.id,
@@ -81,6 +82,19 @@ export function deviceRowToDevice(
         terminalDefaultUser: row.terminal_default_user ?? null,
         terminalCloseOnExit: row.terminal_close_on_exit !== 0,
         foreign,
-        deleteError: row.delete_error ?? null
+        deleteError: row.delete_error ?? null,
+        pause: pauseOf(row, pauseReachable)
     };
+}
+
+/**
+ * La pause d'une ligne, telle que l'interface la montre : aucune quand
+ * l'échéance est passée (l'agent reprend de lui-même, le serveur l'apprend à sa
+ * connexion), `reachable` quand sa session de contrôle est là.
+ */
+export function pauseOf(row: Pick<DeviceRow, 'paused_at' | 'paused_until'>, reachable: boolean): Device['pause'] {
+    if (row.paused_at === null) return null;
+    const until = row.paused_until === null ? null : Number(row.paused_until);
+    if (until !== null && until <= Math.floor(Date.now() / 1000)) return null;
+    return { since: Number(row.paused_at), until, reachable };
 }

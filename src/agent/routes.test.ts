@@ -54,6 +54,8 @@ function device(over: Partial<DeviceRow>): DeviceRow {
         terminal_close_on_exit: 1,
         status_before_delete: null,
         delete_error: null,
+        paused_at: null,
+        paused_until: null,
         sort_order: 0,
         ...over
     };

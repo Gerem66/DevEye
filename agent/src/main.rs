@@ -20,6 +20,7 @@ mod metrics;
 mod orders;
 mod ownership;
 mod packages;
+mod pause;
 mod policy_cmd;
 mod power;
 mod protocol;
@@ -147,6 +148,16 @@ enum Command {
     /// Stop the running agent: the installed service until the next boot or
     /// login, or a backgrounded one (`run --detach`).
     Stop,
+    /// Pause the agent: it keeps a control session with the server but
+    /// monitors nothing and takes no order until `resume` or the end of
+    /// `--for`. A pause survives a restart of the agent and of the machine.
+    Pause {
+        /// How long: `30m`, `1h`, `4h`, `24h`, `2d`. Without it, until `resume`.
+        #[arg(long = "for", value_name = "DURATION")]
+        duration: Option<String>,
+    },
+    /// End a pause: the agent resumes monitoring at once.
+    Resume,
     /// Print local enrollment and running status.
     Status,
     /// Manage the autostart service (persistence across reboots).
@@ -284,6 +295,8 @@ async fn dispatch(command: Command) -> Result<()> {
             policy_cmd::run(policy_cmd::Change { allow, deny })
         }
         Command::Stop => stop(),
+        Command::Pause { duration } => pause_cmd(duration.as_deref()),
+        Command::Resume => resume_cmd(),
         Command::Status => {
             status();
             Ok(())
@@ -660,6 +673,9 @@ fn status() {
     println!();
     status_section("Status");
     status_row("Running", &running_text);
+    if let Some(pause) = pause::current() {
+        status_row("Paused", &pause_text(&pause));
+    }
     status_row("Autostart", &autostart);
 
     // Only what this machine refuses: an all-default policy says nothing.
@@ -709,6 +725,58 @@ fn instances_section() {
 /// the enrollment is root's alone.
 pub(crate) fn system_service_only() -> bool {
     !config::privileged() && system_dir::held()
+}
+
+/// The enrollment this process acts for must be reachable: a system service's
+/// is root's alone.
+fn require_enrollment(command: &str) -> Result<()> {
+    if Config::exists() {
+        return Ok(());
+    }
+    if system_service_only() {
+        anyhow::bail!(
+            "the agent runs as a system service, enrolled for root alone. Run: {}",
+            system_dir::elevated(command)
+        );
+    }
+    anyhow::bail!("not enrolled. Run: deveye-agent link <code>");
+}
+
+fn pause_cmd(duration: Option<&str>) -> Result<()> {
+    let duration = duration.map(pause::parse_duration).transpose()?;
+    require_enrollment(&match duration {
+        Some(_) => format!("pause --for {}", duration_arg(duration)),
+        None => "pause".to_string(),
+    })?;
+    let pause = pause::set(duration)?;
+    println!("✓ Agent paused, {}.", pause_text(&pause));
+    if state::read_running().is_none() {
+        println!("  No agent is running: it starts paused.");
+    }
+    Ok(())
+}
+
+fn resume_cmd() -> Result<()> {
+    require_enrollment("resume")?;
+    if pause::clear() {
+        println!("✓ Agent resumed: it monitors again within a few seconds.");
+    } else {
+        println!("The agent was not paused.");
+    }
+    Ok(())
+}
+
+/// `status` and `pause`: what the pause is, in a few words.
+fn pause_text(pause: &pause::Pause) -> String {
+    match pause.remaining(live_status::now_secs()) {
+        Some(left) => format!("resumes in {}", pause::describe(left)),
+        None => "until `deveye-agent resume`".to_string(),
+    }
+}
+
+/// The `--for` value as the user typed it, back from seconds.
+fn duration_arg(duration: Option<std::time::Duration>) -> String {
+    duration.map_or_else(String::new, |d| format!("{}s", d.as_secs()))
 }
 
 /// A `status` section header.

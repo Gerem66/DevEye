@@ -27,7 +27,7 @@ pub const CONFIG_FILE: &str = "agent.toml";
 /// retrait (`uninstall`) doit les balayer dans un dossier qui n'est pas
 /// forcément le sien (celui de l'utilisateur derrière un `sudo`), où
 /// `Config::pid_path()` et consorts ne pointent pas.
-pub const SIBLING_FILES: [&str; 3] = ["agent.pid", "agent.log", "agent.state"];
+pub const SIBLING_FILES: [&str; 4] = ["agent.pid", "agent.log", "agent.state", "agent.pause"];
 /// Encadrement du nom d'un cache de scan CloudSync : `sync-<shareId>.index.json`.
 /// Un partage par fichier, donc un balayage par motif et non par nom.
 pub const SYNC_INDEX_PREFIX: &str = "sync-";
@@ -424,6 +424,11 @@ impl Config {
     /// so out-of-process commands like `status` report *its* facts. Alongside config.
     pub fn state_path() -> PathBuf {
         Self::sibling(SIBLING_FILES[2])
+    }
+
+    /// The pause marker (`crate::pause`). Alongside config.
+    pub fn pause_path() -> PathBuf {
+        Self::sibling(SIBLING_FILES[3])
     }
 
     /// CloudSync per-share scan cache (relPath → size/mtime/hash), so unchanged

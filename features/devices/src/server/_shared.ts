@@ -104,7 +104,8 @@ export function rowToDevice(
     online: boolean,
     update: AgentUpdateInfo,
     foreign: boolean,
-    planPaused: boolean
+    planPaused: boolean,
+    pauseReachable: boolean
 ): FleetDevice {
     return {
         id: row.id,
@@ -128,11 +129,24 @@ export function rowToDevice(
         terminalCloseOnExit: row.terminal_close_on_exit !== 0,
         foreign,
         deleteError: row.delete_error ?? null,
-        planPaused
+        planPaused,
+        pause: pauseOf(row, pauseReachable)
     };
 }
 
-/** Une ligne, avec sa présence en direct, son état de mise à jour, son origine et sa pause d'offre. */
+/**
+ * La pause de l'agent telle que l'interface la montre : aucune quand l'échéance
+ * est passée (l'agent reprend de lui-même), `reachable` quand sa session de
+ * contrôle est là.
+ */
+function pauseOf(row: DeviceRow, reachable: boolean): FleetDevice['pause'] {
+    if (row.paused_at === null) return null;
+    const until = row.paused_until === null ? null : Number(row.paused_until);
+    if (until !== null && until <= Math.floor(Date.now() / 1000)) return null;
+    return { since: Number(row.paused_at), until, reachable };
+}
+
+/** Une ligne, avec sa présence en direct, son état de mise à jour, son origine et ses pauses. */
 export async function toDevice(ctx: DevicesContext, row: DeviceRow): Promise<FleetDevice> {
     const manifest = await ctx.deveye.agents.servedManifest();
     const intervals = await ctx.deveye.agents.metricIntervals([row]);
@@ -142,6 +156,7 @@ export async function toDevice(ctx: DevicesContext, row: DeviceRow): Promise<Fle
         ctx.deveye.devices.isOnline(row.id),
         computeAgentUpdate(row, manifest),
         row.workspace_id !== ctx.workspaceId,
-        ctx.quota.isPaused('agents', row.id)
+        ctx.quota.isPaused('agents', row.id),
+        ctx.deveye.devices.isPaused(row.id)
     );
 }

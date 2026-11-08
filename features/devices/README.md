@@ -125,8 +125,8 @@ deviceUsage.ts, agentUpdates.ts, agentVersion.ts, useAgentUpdate.tsx,
 utils.ts                    les stores et utilitaires du client
 availability.ts             pourquoi une entrée du menu est inerte, et dans quel ordre
 AgentPanel.tsx              la popup « Agent » : état de l'agent, démarrage auto,
-                            privilèges, mise à jour, redémarrage, interruption,
-                            approbation d'un réappairage, révocation
+                            privilèges, mise à jour, redémarrage, mise en pause
+                            et reprise, approbation d'un réappairage, révocation
 Connections.tsx, DeviceActionsMenu.tsx, GraphDetail.tsx, HardwareInfo.tsx, MiniGraph.tsx,
 MonitoringInfo.tsx, MonthPicker.tsx, OpenPorts.tsx, PrivilegeInfo.tsx, Timeline.tsx, ports.ts
                             les composants du panneau
@@ -165,7 +165,7 @@ sans les processus qui l'expliquent.
 | ------------ | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
 | **Collecte** | 60 s (offre payante) / 300 s (gratuite) | CPU/RAM/disque/réseau/charge/temp/GPU/batterie/users/connexions + `process_count` + E/S disque + **liste des processus** (`all`/`top`/`off`). Chaque point est cliquable sur la frise. | `device_metrics` + `device_process_samples` |
 | **Report**   | 1 h (+ connexion)                       | OS + posture sécurité + par-disque (`disks[]`) + ports en écoute + connexions. Dernier état seulement.                                                                                 | `devices.report_json`                       |
-| **Presence** | sur transition                          | online/offline de l'agent (frise de disponibilité).                                                                                                                                    | `device_presence`                           |
+| **Presence** | sur transition                          | online/offline de l'agent (frise de disponibilité) ; une pause compte hors ligne.                                                                                                      | `device_presence`                           |
 
 Défauts serveur dans `@deveye/types` (`domain/device.ts`) :
 `DEFAULT_METRIC_INTERVAL_SECONDS = { paid: 60, free: 300 }`,
@@ -360,6 +360,20 @@ Statuts (`devices.status`) : `pending`, `active`, `pending_deletion`,
   immédiate. L'appareil est archivé (jeton effacé), la session coupée
   (`agents.disconnectAgent`). Seul un nouvel appairage le fait revenir, en
   attente. L'agent reste installé sur la machine.
+- **Pause** (`agent.lifecycle pause | resume`, popup « Agent » ; ou
+  `deveye-agent pause`, ou l'icône de la machine) : l'agent ferme sa session de
+  travail et se reconnecte avec l'en-tête `x-deveye-paused: 1` (et
+  `x-deveye-paused-until`, l'échéance en secondes, s'il en a une). Cette
+  session de contrôle vit dans `hub.paused`, jamais dans `hub.agents` :
+  `isOnline` reste faux, les modules le voient hors ligne et rien ne lui est
+  poussé ; seuls `resume`, `restart`, `destroy` et la rotation du jeton la
+  joignent (`hub.requestLifecycle` route selon l'action). Le serveur écrit
+  `devices.paused_at` / `paused_until` à cette connexion et les efface à la
+  première connexion de travail ; l'interface lit `pause` (`since`, `until`,
+  `reachable` = session de contrôle présente). La présence compte une pause
+  comme hors ligne : rien n'est mesuré. Le marqueur est sur la machine
+  (`agent.pause`) et survit à un redémarrage ; un agent sans `pause` dans ses
+  `probes` ne sait pas le faire, l'entrée le dit.
 - **Suppression gérée** (`devices.requestDelete`, menu « Fonctions ») : passe
   en `pending_deletion` en mémorisant le statut précédent
   (`status_before_delete`).
@@ -424,8 +438,9 @@ Statuts (`devices.status`) : `pending`, `active`, `pending_deletion`,
 - **« Agent »** (`AgentPanel.tsx`) : l'état (version, compte, privilèges,
   service, démarrage automatique, transport, politique locale), le démarrage
   automatique, armé ou désarmé quels que soient les privilèges, l'élévation en
-  service système ou la rétrogradation, la mise à jour, le redémarrage,
-  l'interruption, l'approbation d'un réappairage et la révocation. Démarrage
+  service système ou la rétrogradation, la mise à jour, le redémarrage, la
+  mise en pause et la reprise, l'approbation d'un réappairage et la
+  révocation. Démarrage
   auto, élévation, rétrogradation et mise à jour relèvent de l'administrateur
   global (`access.admin` des commandes `agent.*`) ; l'entrée le dit. Approuver,
   révoquer et effacer passent par le dialogue de confirmation commun, qui dit

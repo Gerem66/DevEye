@@ -37,6 +37,10 @@ pub struct TrayView {
     pub mood: Mood,
     /// The "Open" entries: a label and the server it opens.
     pub opens: Vec<(String, String)>,
+    /// An agent runs that is not paused: the "Pause" submenu applies.
+    pub pausable: bool,
+    /// An agent is paused: the "Resume" entry applies.
+    pub resumable: bool,
 }
 
 impl TrayView {
@@ -53,19 +57,42 @@ impl TrayView {
 /// The fixed menu entries.
 pub struct Labels {
     pub open: &'static str,
+    pub pause: &'static str,
+    /// The "Pause" submenu: a label and the pause length in seconds, `None`
+    /// for a pause that waits for "Resume".
+    pub durations: [(&'static str, Option<u64>); 4],
+    pub resume: &'static str,
     pub hide: &'static str,
     pub quit: &'static str,
 }
+
+const HOUR: u64 = 3600;
 
 pub fn labels(lang: Lang) -> Labels {
     match lang {
         Lang::Fr => Labels {
             open: "Ouvrir DevEye",
+            pause: "Mettre en pause",
+            durations: [
+                ("1 heure", Some(HOUR)),
+                ("4 heures", Some(4 * HOUR)),
+                ("24 heures", Some(24 * HOUR)),
+                ("Jusqu'à la reprise", None),
+            ],
+            resume: "Reprendre",
             hide: "Masquer l'icône",
             quit: "Quitter DevEye",
         },
         Lang::En => Labels {
             open: "Open DevEye",
+            pause: "Pause",
+            durations: [
+                ("1 hour", Some(HOUR)),
+                ("4 hours", Some(4 * HOUR)),
+                ("24 hours", Some(24 * HOUR)),
+                ("Until resumed", None),
+            ],
+            resume: "Resume",
             hide: "Hide icon",
             quit: "Quit DevEye",
         },
@@ -99,6 +126,8 @@ pub fn view(statuses: &[LiveStatus], last_server: &str, now: u64, lang: Lang) ->
             activity: None,
             mood: Mood::Off,
             opens: vec![(open.to_string(), last_server.to_string())],
+            pausable: false,
+            resumable: false,
         };
     }
     let several = statuses.len() > 1;
@@ -130,11 +159,14 @@ pub fn view(statuses: &[LiveStatus], last_server: &str, now: u64, lang: Lang) ->
     } else {
         Mood::Idle
     };
+    let is_paused = |s: &LiveStatus| matches!(s.conn, Conn::Paused { .. });
     TrayView {
         lines,
         activity: activity(&work, fr),
         mood,
         opens,
+        pausable: !statuses.iter().all(is_paused),
+        resumable: statuses.iter().any(is_paused),
     }
 }
 
@@ -173,6 +205,14 @@ fn state(status: &LiveStatus, now: u64, fr: bool) -> (String, Mood) {
                 Some(secs) if fr => format!("Hors ligne, nouvel essai dans {}", delay(secs)),
                 Some(secs) => format!("Offline, retrying in {}", delay(secs)),
                 None => pick(fr, "Hors ligne, nouvel essai…", "Offline, retrying…"),
+            };
+            (text, Mood::Off)
+        }
+        Conn::Paused { until } => {
+            let text = match until.map(|u| u.saturating_sub(now)) {
+                Some(secs) if fr => format!("En pause, reprise dans {}", delay(secs)),
+                Some(secs) => format!("Paused, resuming in {}", delay(secs)),
+                None => pick(fr, "En pause", "Paused"),
             };
             (text, Mood::Off)
         }
@@ -412,6 +452,30 @@ mod tests {
             ..nas
         };
         assert_eq!(view(&[prod, both_up], LAST, 100, Lang::En).mood, Mood::Busy);
+    }
+
+    #[test]
+    fn a_paused_agent_counts_down_and_offers_resume() {
+        let open = status(Conn::Paused { until: None }, Work::default());
+        let v = view(std::slice::from_ref(&open), LAST, 100, Lang::Fr);
+        assert_eq!(v.lines, ["En pause"]);
+        assert_eq!(v.mood, Mood::Off);
+        assert!(v.resumable && !v.pausable, "paused alone: resume only");
+        let timed = status(
+            Conn::Paused {
+                until: Some(100 + 3600),
+            },
+            Work::default(),
+        );
+        assert_eq!(
+            view(std::slice::from_ref(&timed), LAST, 100, Lang::En).lines,
+            ["Paused, resuming in 60 min"]
+        );
+        let working = status(Conn::Connected, Work::default());
+        let v = view(&[working.clone(), open], LAST, 100, Lang::Fr);
+        assert!(v.pausable && v.resumable, "mixed: both entries");
+        let v = view(&[working], LAST, 100, Lang::Fr);
+        assert!(v.pausable && !v.resumable, "in service: pause only");
     }
 
     #[test]

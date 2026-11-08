@@ -155,6 +155,8 @@ the default enrollment.
 | `run [--once] [--interval <secs>] [--detach] [--managed] [--config <path>]`                                                                  | Run the monitoring loop. Not linked yet, it enrolls first with `DEVEYE_LINK_CODE` and the `link` options ([fleets](#linking-a-fleet)). `--once`: collect+send a single cycle then exit (handy to test). `--interval`: seconds between samples before the server's config arrives (default 30). `--detach`: background + PID file. `--managed` / `--config`: **internal**, injected by the installed service (see [Supervision](#supervision---managed)); never pass them by hand.                                                                                                                                                                                                         |
 | `policy [--allow <list>] [--deny <list>] [--monitor-only] [--config <path>]`                                                                 | Show what this machine lets the server order, or change it, then restart the agent so it applies.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `stop`                                                                                                                                       | Stop the running agent: the installed service until the next boot or login (`systemctl stop`, `launchctl bootout`, `schtasks /End`), else a backgrounded one (PID file, SIGTERM).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `pause [--for <duration>]`                                                                                                                   | Pause the agent: it keeps a control session with the server but monitors nothing and takes no order until `resume` or the end of `--for` (`30m`, `1h`, `4h`, `24h`, `2d`). A pause survives a restart of the agent and of the machine. See [Pausing](#pausing-the-agent).                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `resume`                                                                                                                                     | End a pause: the agent monitors again within a few seconds.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `status`                                                                                                                                     | Print platform, server, enrollment and running state.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `service install [--system \| --user] [--no-autostart] [--config <path>] \| enable \| disable \| uninstall \| status`                        | Manage the autostart service (launchd / systemd / Task Scheduler). Per-user by default (`--user` says so explicitly), `--system` needs root. `--no-autostart` installs and starts it without arming it for the next boot. `enable` / `disable` arm or disarm the installed service (see [Start at boot](#start-at-boot)). `--config` bakes a config path into the service definition (see [System scope](#system-scope)). Also driven from the UI.                                                                                                                                                                                                                                        |
 | `tray show \| hide`                                                                                                                          | Show or hide the DevEye icon in the notification area, for this user. See [Notification-area icon](#notification-area-icon-tray).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
@@ -295,7 +297,8 @@ and caches. A name is 1 to 32 lowercase letters, digits and dashes, other than
   them. A server reached at a new address (an IP, then a domain) takes `--move`
   too: the address is all the agent can compare.
 - The [icon](#notification-area-icon-tray) stays single: a line and an "Open"
-  entry per server, grey as soon as one is cut off. "Quit" stops every agent.
+  entry per server, grey as soon as one is cut off. "Quit" stops every agent,
+  "Pause" and "Resume" act on every agent too (each keeps its own marker).
 - The server of one instance cannot reach the folder of another through the
   file browser or CloudSync: the whole `deveye` folder is out of reach.
 - Deleting the device on one server wipes that instance only; the binary and
@@ -397,8 +400,9 @@ this order:
 4. the [notification-area icon](#notification-area-icon-tray): its processes,
    its login entries and the status published for it;
 5. the config directory (`agent.toml`, `agent.pid`, `agent.log`, `agent.state`,
-   `sync-device.key`, `sync-*.index.json`, `status.json`, `tray-hidden`,
-   `tray.lock`), then the directory itself when it is empty and named `deveye`.
+   `agent.pause`, `sync-device.key`, `sync-*.index.json`, `status.json`,
+   `tray-hidden`, `tray.lock`), then the directory itself when it is empty and
+   named `deveye`.
    Run elevated, it sweeps the caller's directory too (the one `sudo` hides
    behind root's `$HOME`), where the real enrollment lives;
 6. the `.deveye-tmp` scratch directory of every CloudSync share;
@@ -471,12 +475,13 @@ information it encodes.
 
 On a machine with a desktop, the DevEye eye sits in the notification area (the
 menu bar on macOS). Its menu shows the agent's state (connected, connecting,
-waiting for approval, offline, stopped) and what it is doing (CloudSync
+waiting for approval, offline, paused, stopped) and what it is doing (CloudSync
 transfers, a self-update, a deployment, package upgrades), then an entry that
-opens DevEye (the server this machine is linked to), one that hides the icon
+opens DevEye (the server this machine is linked to), a "Pause" submenu (1 hour,
+4 hours, 24 hours, until resumed) or a "Resume" entry, one that hides the icon
 and one that quits DevEye; the labels follow the desktop's language (French or
 English). While the agent works, the eye's highlight circles the pupil; when it
-is not connected, the eye turns grey.
+is not connected or paused, the eye turns grey.
 
 ```sh
 deveye-agent tray show   # show the icon again, now and at every login
@@ -510,11 +515,41 @@ deveye-agent tray hide   # hide it for this user; the agent keeps running
 - **Quit stops the agent** until the next boot (next login for a per-user
   service), as `deveye-agent stop` does. For a system service it asks for the
   administrator password (polkit, the macOS dialog, UAC).
+- **Pause and Resume** run `deveye-agent pause --for …` and `deveye-agent
+resume` on every agent of the machine, with the same password prompt for a
+  system service (see [Pausing](#pausing-the-agent)).
 - **Linux** speaks StatusNotifierItem over D-Bus: KDE and most panels show it
   natively, **GNOME** only with the "AppIndicator and KStatusNotifierItem
   Support" extension (on by default on Ubuntu).
 - **Windows**: the agent is a console program; started at login, its console
   window may show for an instant before the icon detaches from it.
+
+## Pausing the agent
+
+```sh
+deveye-agent pause            # until `resume`
+deveye-agent pause --for 4h   # 30m, 1h, 4h, 24h, 2d
+deveye-agent resume
+```
+
+Paused, the agent closes its working session (metrics, reports, Sentinel scans,
+CloudSync, terminals and tunnels all end with it) and reconnects for control
+only: it answers the server's pings and takes four orders, resume, restart,
+destroy and a token rotation; everything else is ignored. The server keeps the
+machine out of the online fleet (modules see it offline, nothing is pushed to
+it) and shows it "paused", with the time it resumes on its own when there is
+one; DevEye's "Resume" reaches it through that control session. DevEye's "Pause"
+asks the same of a running agent.
+
+The pause is a marker, `agent.pause`, next to the config (JSON: `since`,
+`until`), read by the running loop every second and swept once past its
+deadline. It outlives the process: a paused agent restarts paused, a machine
+rebooted while paused comes back paused, until `resume` or the deadline. For a
+system service the marker is root's, so `pause` and `resume` run elevated
+(`sudo`, an administrator PowerShell), as `stop` does; without a running agent
+they still write the marker, and the next start honours it. Each
+[instance](#several-deveye-servers---instance) has its own marker; the icon
+pauses and resumes them all.
 
 ## Configuration & files
 
@@ -532,7 +567,8 @@ A system service keeps it in its own folder instead (see
 `instances/<name>/` under either folder.
 
 Alongside it, when running: `agent.pid` (for `stop`/`status`), `agent.state`
-(the runtime facts `status` reports), `sync-<shareId>.index.json` (CloudSync
+(the runtime facts `status` reports), `agent.pause` (while
+[paused](#pausing-the-agent)), `sync-<shareId>.index.json` (CloudSync
 scan caches), `sync-device.key` (this machine's X25519 private key, which opens
 the key of an end-to-end encrypted CloudSync share and never leaves the
 machine), for a per-user agent `status.json` (`status-<name>.json` for a named

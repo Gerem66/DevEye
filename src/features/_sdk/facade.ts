@@ -257,6 +257,10 @@ export function createFacade(deps: FacadeDeps): DevEyeFacade {
             isOnline(deviceId) {
                 gate('devices.read');
                 return sdkHub().isOnline(deviceId);
+            },
+            isPaused(deviceId) {
+                gate('devices.read');
+                return sdkHub().isPaused(deviceId);
             }
         },
         telemetry: createTelemetry(deps.db, () => gate('telemetry.read')),
@@ -320,6 +324,7 @@ export function createTelemetry(db: Database, gate: () => void): SdkTelemetry {
 export function agentsFacade(gate: () => void): AgentsFacade {
     return {
         isOnline: (deviceId) => (gate(), sdkHub().isOnline(deviceId)),
+        isPaused: (deviceId) => (gate(), sdkHub().isPaused(deviceId)),
         requestScan: (deviceId) => (gate(), sdkHub().requestScan(deviceId)),
         pushConfig: (deviceId) => (gate(), pushAgentConfig(deviceId)),
         metricIntervals: (devices) => (gate(), metricIntervalsOf(sdkDb(), devices)),

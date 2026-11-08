@@ -318,7 +318,7 @@ describe('createServiceDeps : devicesFor', () => {
         assert.equal(devices.isOnline('dev-2'), false);
     });
 
-    it("n'expose que list et isOnline : authorize reste à la requête", () => {
+    it("n'expose que list, isOnline et isPaused : authorize reste à la requête", () => {
         const { host } = fakeHost();
         const devices = createServiceDeps(
             host,
@@ -327,7 +327,7 @@ describe('createServiceDeps : devicesFor', () => {
             NO_PROVIDERS,
             undefined
         ).devicesFor(1);
-        assert.deepEqual(Object.keys(devices).sort(), ['isOnline', 'list']);
+        assert.deepEqual(Object.keys(devices).sort(), ['isOnline', 'isPaused', 'list']);
     });
 });
 

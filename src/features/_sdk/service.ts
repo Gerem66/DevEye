@@ -188,8 +188,8 @@ export function createServiceDeps(
             }
         },
         devicesFor: (workspaceId) => {
-            const { list, isOnline } = facadeFor(workspaceId).devices;
-            return { list, isOnline };
+            const { list, isOnline, isPaused } = facadeFor(workspaceId).devices;
+            return { list, isOnline, isPaused };
         },
         // La façade mémoïsée ignore le propriétaire, qui n'a pas toujours de ligne de membre.
         membersFor: (workspaceId) => ({
@@ -208,7 +208,8 @@ export function createServiceDeps(
                 const row = await host.db.devices.findById(deviceId);
                 return row ? toSdkDevice(row, await metricIntervalOf(host.db, row)) : null;
             },
-            isOnline: (deviceId) => (gateDevices(), sdkHub().isOnline(deviceId))
+            isOnline: (deviceId) => (gateDevices(), sdkHub().isOnline(deviceId)),
+            isPaused: (deviceId) => (gateDevices(), sdkHub().isPaused(deviceId))
         },
         telemetry: createTelemetry(host.db, gate('telemetry.read')),
         geo: {
