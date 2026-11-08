@@ -84,7 +84,7 @@ impl ksni::Tray for Sni {
     }
 
     fn tool_tip(&self) -> ToolTip {
-        let mut description = markup_escape(&self.view.status);
+        let mut description = markup_escape(&self.view.lines.join("\n"));
         if let Some(activity) = &self.view.activity {
             description.push('\n');
             description.push_str(&markup_escape(activity));
@@ -98,7 +98,7 @@ impl ksni::Tray for Sni {
     }
 
     fn activate(&mut self, _x: i32, _y: i32) {
-        let _ = self.actions.send(Action::Open);
+        let _ = self.actions.send(Action::Open(0));
     }
 
     fn menu(&self) -> Vec<MenuItem<Self>> {
@@ -120,13 +120,15 @@ impl ksni::Tray for Sni {
             }
             .into()
         };
-        let mut items = vec![info(&self.view.status)];
+        let mut items: Vec<MenuItem<Self>> = self.view.lines.iter().map(|l| info(l)).collect();
         if let Some(activity) = &self.view.activity {
             items.push(info(activity));
         }
+        items.push(MenuItem::Separator);
+        for (index, (text, _)) in self.view.opens.iter().enumerate() {
+            items.push(entry(text, Action::Open(index)));
+        }
         items.extend([
-            MenuItem::Separator,
-            entry(self.labels.open, Action::Open),
             entry(self.labels.hide, Action::Hide),
             MenuItem::Separator,
             entry(self.labels.quit, Action::Quit),

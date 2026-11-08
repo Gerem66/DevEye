@@ -4,7 +4,9 @@
 //! The icon is its own process, one per desktop session (`deveye-agent tray
 //! run`, started at login by [`autostart`]): the agent often runs as root or
 //! SYSTEM, outside any session, where no icon can be shown. It learns the
-//! agent's state from what the agent publishes (`crate::live_status`).
+//! agent's state from what the agent publishes (`crate::live_status`). A
+//! machine linked to several servers (`crate::instance`) keeps one icon, with
+//! a line and an "Open" entry per server.
 
 pub mod autostart;
 mod icon;
@@ -37,7 +39,8 @@ const RESPAWNED_FOR: &str = "DEVEYE_TRAY_RESPAWNED_FOR";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
-    Open,
+    /// The server of this "Open" entry (`TrayView::opens`).
+    Open(usize),
     Hide,
     Quit,
 }
@@ -243,8 +246,8 @@ pub struct Controller {
     view: TrayView,
     frame: usize,
     ticks: u32,
-    /// The freshest live status, `None` when no agent runs.
-    status: Option<LiveStatus>,
+    /// The live statuses, one per running agent, the default instance first.
+    statuses: Vec<LiveStatus>,
     /// The last server any status named: still what "Open" opens once the
     /// agent has stopped.
     server: String,
@@ -260,10 +263,10 @@ impl Controller {
             .unwrap_or_else(|_| crate::config::DEFAULT_SERVER.to_string());
         let mut controller = Controller {
             lang,
-            view: view::view(None, 0, lang),
+            view: view::view(&[], &server, 0, lang),
             frame: 0,
             ticks: 0,
-            status: None,
+            statuses: Vec::new(),
             server,
             quitting: None,
             lock: Some(lock),
@@ -295,11 +298,10 @@ impl Controller {
         if let Some(latest) = all.iter().max_by_key(|s| s.updated_at) {
             self.server = latest.server.clone();
         }
-        self.status = all
-            .into_iter()
-            .filter(|s| s.is_fresh(now))
-            .max_by_key(|s| s.updated_at);
-        self.view = view::view(self.status.as_ref(), now, self.lang);
+        let mut statuses: Vec<LiveStatus> = all.into_iter().filter(|s| s.is_fresh(now)).collect();
+        statuses.sort_by(|a, b| a.instance.cmp(&b.instance));
+        self.statuses = statuses;
+        self.view = view::view(&self.statuses, &self.server, now, self.lang);
     }
 
     pub fn tick(&mut self) -> Step {
@@ -350,8 +352,10 @@ impl Controller {
 
     pub fn act(&mut self, action: Action) -> Step {
         match action {
-            Action::Open => {
-                open_url(&self.server);
+            Action::Open(index) => {
+                if let Some((_, server)) = self.view.opens.get(index) {
+                    open_url(server);
+                }
                 Step::default()
             }
             Action::Hide => match set_hidden(true) {
@@ -367,11 +371,11 @@ impl Controller {
             },
             Action::Quit => {
                 if self.quitting.is_none() {
-                    let status = self.status.clone();
+                    let statuses = self.statuses.clone();
                     let (tx, rx) = mpsc::channel();
                     // The stop may wait on a password prompt: the icon stays responsive.
                     std::thread::spawn(move || {
-                        let _ = tx.send(stop_agent(status.as_ref()));
+                        let _ = tx.send(stop_agents(&statuses));
                     });
                     self.quitting = Some(rx);
                 }
@@ -382,7 +386,7 @@ impl Controller {
 
     /// The agent was updated under us: hand over to a tray of its version.
     fn respawn_if_updated(&mut self) -> bool {
-        let Some(status) = &self.status else {
+        let Some(status) = self.statuses.iter().max_by_key(|s| s.updated_at) else {
             return false;
         };
         if status.version == env!("DEVEYE_VERSION")
@@ -411,21 +415,30 @@ impl Controller {
     }
 }
 
-/// Stop the agent the way `deveye-agent stop` does, asking for elevation when
-/// it runs with more rights than this session. `true` once stopped (or when
-/// nothing was running).
-fn stop_agent(status: Option<&LiveStatus>) -> bool {
-    let Some(status) = status else {
-        return true;
-    };
+/// Stop every running agent; `true` once all are stopped (or when nothing
+/// was running).
+fn stop_agents(statuses: &[LiveStatus]) -> bool {
+    let mut all = true;
+    for status in statuses {
+        all &= stop_agent(status);
+    }
+    all
+}
+
+/// Stop an agent the way `deveye-agent stop` does, asking for elevation when
+/// it runs with more rights than this session.
+fn stop_agent(status: &LiveStatus) -> bool {
+    let mut args = crate::instance::args_of(status.instance.as_deref());
+    args.push("stop".into());
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
     let result = if status.privileged && !crate::report::is_privileged() {
-        crate::elevate::run_elevated(&["stop"])
+        crate::elevate::run_elevated(&args)
     } else {
         std::env::current_exe()
             .context("locating executable")
             .and_then(|exe| {
                 let mut cmd = Command::new(exe);
-                cmd.arg("stop").stdin(Stdio::null()).stdout(Stdio::null());
+                cmd.args(&args).stdin(Stdio::null()).stdout(Stdio::null());
                 hide_window(&mut cmd);
                 let status = cmd.status().context("running stop")?;
                 if !status.success() {
@@ -518,10 +531,10 @@ mod tests {
     fn controller() -> Controller {
         Controller {
             lang: Lang::En,
-            view: view::view(None, 0, Lang::En),
+            view: view::view(&[], "https://app.deveye.fr", 0, Lang::En),
             frame: 0,
             ticks: 0,
-            status: None,
+            statuses: Vec::new(),
             server: "https://app.deveye.fr".into(),
             quitting: None,
             lock: None,
@@ -558,6 +571,6 @@ mod tests {
 
     #[test]
     fn quitting_with_no_agent_just_closes_the_icon() {
-        assert!(stop_agent(None));
+        assert!(stop_agents(&[]));
     }
 }

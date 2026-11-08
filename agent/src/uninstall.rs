@@ -1,4 +1,5 @@
-//! `deveye-agent uninstall` : le retrait complet, en une commande.
+//! `deveye-agent uninstall` : le retrait complet, en une commande, de toutes
+//! les instances (`crate::instance`).
 //!
 //! Le désinstalleur vit dans l'agent parce que lui seul sait où il a écrit : le
 //! service peut être dans deux foyers, la config ailleurs (`DEVEYE_CONFIG`), le
@@ -61,11 +62,21 @@ impl Report {
 }
 
 pub fn run(opts: Options) -> Result<()> {
-    let scope = service::installed_scope();
+    let roots = roots();
+    let dirs = config_dirs(&roots);
+    let instances = instances(&dirs);
+    let scopes: Vec<(Option<String>, ServiceScope)> = instances
+        .iter()
+        .map(|name| {
+            let scope = crate::instance::scoped(name.as_deref(), service::installed_scope);
+            (name.clone(), scope)
+        })
+        .collect();
 
     // Un service système ne se retire pas sans droits, et le retrait partiel est
     // pire que pas de retrait du tout : on refuse avant d'avoir touché quoi que ce soit.
-    if scope == ServiceScope::System && !crate::report::is_privileged() {
+    let any_system = scopes.iter().any(|(_, s)| *s == ServiceScope::System);
+    if any_system && !crate::report::is_privileged() {
         bail!(
             "un service système est installé : relancez avec les droits root\n  \
              sudo {} uninstall",
@@ -75,14 +86,13 @@ pub fn run(opts: Options) -> Result<()> {
         );
     }
 
-    let dirs = config_dirs();
     let shares = share_roots(&dirs);
 
     if !opts.yes {
         if !std::io::stdin().is_terminal() {
             bail!("confirmation impossible hors d'un terminal : relancez avec « --yes »");
         }
-        if !confirm(&dirs, &shares, scope, &opts)? {
+        if !confirm(&dirs, &shares, &scopes, &opts)? {
             println!("Annulé. Rien n'a été touché.");
             return Ok(());
         }
@@ -92,16 +102,19 @@ pub fn run(opts: Options) -> Result<()> {
     println!("\nRetrait :");
 
     // Le démarrage automatique d'abord (voir l'en-tête du module).
-    match service::uninstall() {
-        Ok(()) if scope == ServiceScope::None => {
-            report.skip("aucun démarrage automatique installé")
+    for (name, scope) in &scopes {
+        let what = describe_service(name.as_deref(), *scope);
+        match crate::instance::scoped(name.as_deref(), service::uninstall) {
+            Ok(()) if *scope == ServiceScope::None => {
+                report.skip(format!("{what} : aucun démarrage automatique installé"))
+            }
+            Ok(()) => report.done(format!("{what} retiré")),
+            Err(e) => report.warn(format!("{what} non retiré : {e}")),
         }
-        Ok(()) => report.done(format!("service ({}) retiré", scope.as_wire())),
-        Err(e) => report.warn(format!("service non retiré : {e}")),
     }
 
     // Le « linger » ne nous revient que si nous avions posé un service utilisateur.
-    if scope == ServiceScope::User {
+    if scopes.iter().any(|(_, s)| *s == ServiceScope::User) {
         match service::disable_linger() {
             Ok(true) => report.done("« linger » désactivé"),
             Ok(false) => {}
@@ -120,8 +133,17 @@ pub fn run(opts: Options) -> Result<()> {
     crate::live_status::remove_all();
     report.done("icône de la zone de notification retirée");
 
+    // Les instances avant le dossier qui les contient, que `remove_dir` ne
+    // retire que vide.
     for dir in &dirs {
         wipe_config_dir(dir, &mut report);
+        if roots.contains(dir) {
+            continue;
+        }
+        let parent = dir.parent().filter(|p| p.ends_with(crate::instance::DIR));
+        if let Some(instances) = parent {
+            let _ = std::fs::remove_dir(instances);
+        }
     }
 
     for root in &shares {
@@ -136,16 +158,33 @@ pub fn run(opts: Options) -> Result<()> {
     Ok(())
 }
 
+/// « service (user) », « service de l'instance nas (system) ».
+fn describe_service(name: Option<&str>, scope: ServiceScope) -> String {
+    match name {
+        Some(name) => format!("service de l'instance {name} ({})", scope.as_wire()),
+        None => format!("service ({})", scope.as_wire()),
+    }
+}
+
 fn confirm(
     dirs: &[PathBuf],
     shares: &[PathBuf],
-    scope: ServiceScope,
+    scopes: &[(Option<String>, ServiceScope)],
     opts: &Options,
 ) -> Result<bool> {
     println!("Retrait complet de l'agent DevEye sur cette machine :");
-    match scope {
-        ServiceScope::None => println!("  · aucun démarrage automatique installé"),
-        s => println!("  · démarrage automatique ({})", s.as_wire()),
+    let installed: Vec<_> = scopes
+        .iter()
+        .filter(|(_, s)| *s != ServiceScope::None)
+        .collect();
+    if installed.is_empty() {
+        println!("  · aucun démarrage automatique installé");
+    }
+    for (name, scope) in installed {
+        println!(
+            "  · démarrage automatique : {}",
+            describe_service(name.as_deref(), *scope)
+        );
     }
     for dir in dirs {
         println!("  · {} (config, jeton, journal, caches)", dir.display());
@@ -187,24 +226,56 @@ pub(crate) const CONFIG_SUBPATH: &str = ".config/deveye";
 #[cfg(target_os = "macos")]
 pub(crate) const CONFIG_SUBPATH: &str = "Library/Application Support/deveye";
 
-/// Tous les dossiers de config à balayer : deux quand le retrait tourne élevé,
+/// Tous les dossiers `deveye` à balayer : deux quand le retrait tourne élevé,
 /// `dirs::config_dir()` suivant `$HOME`, que `sudo` et `pkexec` réécrivent en
 /// celui de root. Ne regarder que le nôtre laisserait le vrai enrôlement intact.
-fn config_dirs() -> Vec<PathBuf> {
-    let mut candidates: Vec<PathBuf> = Vec::new();
+/// S'y ajoute le dossier d'un `DEVEYE_CONFIG` posé ailleurs.
+fn roots() -> Vec<PathBuf> {
+    let mut candidates: Vec<PathBuf> = vec![Config::user_root()];
     if let Some(dir) = Config::path().parent() {
-        candidates.push(dir.to_path_buf());
+        candidates.push(crate::instance::root_of(dir).to_path_buf());
     }
     #[cfg(unix)]
     if let Some(home) = service::invoking_home() {
         candidates.push(home.join(CONFIG_SUBPATH));
     }
     if crate::config::privileged() {
-        candidates.push(crate::system_dir::dir());
+        candidates.push(crate::system_dir::root());
     }
+    dedupe(candidates)
+}
 
-    // Dédoublonnage par chemin résolu : sur un système ostree `/home` est un
-    // lien vers `/var/home`, et le même dossier se présenterait deux fois.
+/// Les dossiers d'enrôlement sous ces racines : ceux des instances nommées
+/// d'abord, chaque racine ensuite.
+fn config_dirs(roots: &[PathBuf]) -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    for root in roots {
+        dirs.extend(
+            crate::instance::named_dirs(root)
+                .into_iter()
+                .map(|(_, dir)| dir),
+        );
+        dirs.push(root.clone());
+    }
+    dedupe(dirs)
+}
+
+/// Les instances dont un dossier a été trouvé, celle par défaut en tête : la
+/// sienne a pu ne laisser qu'un service.
+fn instances(dirs: &[PathBuf]) -> Vec<Option<String>> {
+    let mut names: Vec<Option<String>> = vec![None];
+    for dir in dirs {
+        let name = crate::instance::of_config(&dir.join(CONFIG_FILE));
+        if name.is_some() && !names.contains(&name) {
+            names.push(name);
+        }
+    }
+    names
+}
+
+/// Dédoublonnage par chemin résolu : sur un système ostree `/home` est un lien
+/// vers `/var/home`, et le même dossier se présenterait deux fois.
+fn dedupe(candidates: Vec<PathBuf>) -> Vec<PathBuf> {
     let mut seen: Vec<PathBuf> = Vec::new();
     let mut out: Vec<PathBuf> = Vec::new();
     for dir in candidates {
@@ -283,7 +354,7 @@ fn stop_agent(dir: &Path, report: &mut Report) {
 ///
 /// Par nom, jamais en récursif : `DEVEYE_CONFIG` peut désigner un fichier posé
 /// dans un dossier partagé avec autre chose. Le dossier n'est retiré que s'il
-/// s'appelle `deveye` et qu'il est vide (`remove_dir` échoue sinon).
+/// est à nous ([`is_own_dir`]) et vide (`remove_dir` échoue sinon).
 fn wipe_config_dir(dir: &Path, report: &mut Report) {
     let removed = own_files(dir)
         .iter()
@@ -324,7 +395,6 @@ pub(crate) fn own_files(dir: &Path) -> Vec<PathBuf> {
     names.extend(SIBLING_FILES.iter().map(|n| n.to_string()));
     names.push(SYNC_DEVICE_KEY_FILE.to_string());
     names.extend(crate::tray::USER_FILES.iter().map(|n| n.to_string()));
-    names.push(crate::live_status::USER_FILE.to_string());
     // Le fichier de config peut porter un autre nom (`DEVEYE_CONFIG`).
     if let Some(actual) = Config::path().file_name().and_then(|n| n.to_str()) {
         if !names.iter().any(|n| n == actual) && Config::path().parent() == Some(dir) {
@@ -337,12 +407,35 @@ pub(crate) fn own_files(dir: &Path) -> Vec<PathBuf> {
         .filter(|path| path.exists())
         .collect();
     paths.extend(sync_index_files(dir));
+    paths.extend(status_files(dir));
     paths
 }
 
-/// Seul un dossier à notre nom se retire, et seulement vide (`remove_dir`).
+/// Les statuts publiés pour l'icône, un par instance (`live_status`).
+fn status_files(dir: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .filter(|e| {
+            e.file_name()
+                .to_str()
+                .is_some_and(crate::live_status::is_status_file)
+        })
+        .map(|e| e.path())
+        .collect()
+}
+
+/// Seul un dossier à notre nom se retire, et seulement vide (`remove_dir`) :
+/// un dossier `deveye`, ou celui d'une instance dans le sien.
 pub(crate) fn is_own_dir(dir: &Path) -> bool {
-    dir.file_name().and_then(|n| n.to_str()) == Some("deveye")
+    let named = |p: &Path| p.file_name().and_then(|n| n.to_str()) == Some("deveye");
+    if named(dir) {
+        return true;
+    }
+    crate::instance::of_config(&dir.join(CONFIG_FILE)).is_some()
+        && named(crate::instance::root_of(dir))
 }
 
 /// Ce qu'il reste dans un dossier, au plus cinq noms.
@@ -475,6 +568,16 @@ mod tests {
         );
         assert!(dir.is_dir(), "le dossier ne s'appelle pas « deveye »");
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// Une instance vidée part aussi, le dossier `deveye` d'un autre logiciel non.
+    #[test]
+    fn an_instance_folder_is_ours_inside_ours_only() {
+        let root = Path::new("/home/lea/.config/deveye");
+        assert!(is_own_dir(root));
+        assert!(is_own_dir(&crate::instance::dir_under(root, Some("nas"))));
+        assert!(!is_own_dir(Path::new("/srv/x/instances/nas")));
+        assert!(!is_own_dir(Path::new("/home/lea/.config/deveye/instances")));
     }
 
     /// Un dossier `deveye` vidé de nos fichiers disparaît, lui.

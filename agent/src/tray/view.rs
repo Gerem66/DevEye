@@ -31,17 +31,21 @@ impl Mood {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrayView {
-    pub status: String,
+    /// One line per running agent, each naming its server when several run.
+    pub lines: Vec<String>,
     pub activity: Option<String>,
     pub mood: Mood,
+    /// The "Open" entries: a label and the server it opens.
+    pub opens: Vec<(String, String)>,
 }
 
 impl TrayView {
     #[cfg(any(windows, target_os = "macos"))]
     pub fn tooltip(&self) -> String {
+        let lines = self.lines.join("\n");
         match &self.activity {
-            Some(activity) => format!("DevEye\n{}\n{activity}", self.status),
-            None => format!("DevEye\n{}", self.status),
+            Some(activity) => format!("DevEye\n{lines}\n{activity}"),
+            None => format!("DevEye\n{lines}"),
         }
     }
 }
@@ -83,17 +87,60 @@ pub fn hidden_notice(lang: Lang) -> (&'static str, &'static str) {
     }
 }
 
-/// `status` is the freshest live status, `None` when no agent runs.
-pub fn view(status: Option<&LiveStatus>, now: u64, lang: Lang) -> TrayView {
+/// `statuses` are the live ones, one per running agent (an instance each);
+/// `last_server` is what "Open" opens once none runs. The eye shows the worst
+/// of them: grey as soon as one is cut off, turning while one works.
+pub fn view(statuses: &[LiveStatus], last_server: &str, now: u64, lang: Lang) -> TrayView {
     let fr = lang == Lang::Fr;
-    let Some(status) = status else {
+    let open = labels(lang).open;
+    if statuses.is_empty() {
         return TrayView {
-            status: pick(fr, "Agent arrêté", "Agent stopped"),
+            lines: vec![pick(fr, "Agent arrêté", "Agent stopped")],
             activity: None,
             mood: Mood::Off,
+            opens: vec![(open.to_string(), last_server.to_string())],
         };
+    }
+    let several = statuses.len() > 1;
+    let mut lines = Vec::new();
+    let mut moods = Vec::new();
+    let mut opens = Vec::new();
+    let mut work = Work::default();
+    for status in statuses {
+        let (text, mood) = state(status, now, fr);
+        let host = host_of(&status.server);
+        lines.push(match status.conn {
+            Conn::Connected => text,
+            _ if several => format!("{text} ({host})"),
+            _ => text,
+        });
+        moods.push(mood);
+        let label = match (several, fr) {
+            (false, _) => open.to_string(),
+            (true, true) => format!("Ouvrir {host}"),
+            (true, false) => format!("Open {host}"),
+        };
+        opens.push((label, status.server.clone()));
+        work.add(&status.work);
+    }
+    let mood = if moods.contains(&Mood::Off) {
+        Mood::Off
+    } else if moods.contains(&Mood::Busy) {
+        Mood::Busy
+    } else {
+        Mood::Idle
     };
-    let (text, mood) = match status.conn {
+    TrayView {
+        lines,
+        activity: activity(&work, fr),
+        mood,
+        opens,
+    }
+}
+
+/// One agent's line and mood.
+fn state(status: &LiveStatus, now: u64, fr: bool) -> (String, Mood) {
+    match status.conn {
         Conn::Connecting => (pick(fr, "Connexion en cours…", "Connecting…"), Mood::Busy),
         Conn::Connected => {
             let host = host_of(&status.server);
@@ -129,11 +176,6 @@ pub fn view(status: Option<&LiveStatus>, now: u64, lang: Lang) -> TrayView {
             };
             (text, Mood::Off)
         }
-    };
-    TrayView {
-        status: text,
-        activity: activity(&status.work, fr),
-        mood,
     }
 }
 
@@ -222,8 +264,11 @@ fn locale_is_french() -> bool {
 mod tests {
     use super::*;
 
+    const LAST: &str = "https://last.example";
+
     fn status(conn: Conn, work: Work) -> LiveStatus {
         LiveStatus {
+            instance: None,
             version: "1".into(),
             pid: 1,
             exe: String::new(),
@@ -237,21 +282,23 @@ mod tests {
 
     #[test]
     fn no_agent_is_stopped_and_grey() {
-        let v = view(None, 100, Lang::Fr);
-        assert_eq!(v.status, "Agent arrêté");
+        let v = view(&[], LAST, 100, Lang::Fr);
+        assert_eq!(v.lines, ["Agent arrêté"]);
         assert_eq!(v.mood, Mood::Off);
+        assert_eq!(v.opens, [("Ouvrir DevEye".to_string(), LAST.to_string())]);
     }
 
     #[test]
     fn connected_names_the_host_and_rests() {
         let s = status(Conn::Connected, Work::default());
-        let v = view(Some(&s), 100, Lang::Fr);
-        assert_eq!(v.status, "Connecté à app.deveye.fr");
+        let v = view(std::slice::from_ref(&s), LAST, 100, Lang::Fr);
+        assert_eq!(v.lines, ["Connecté à app.deveye.fr"]);
         assert_eq!(v.activity, None);
         assert_eq!(v.mood, Mood::Idle);
+        assert_eq!(v.opens[0].1, s.server);
         assert_eq!(
-            view(Some(&s), 100, Lang::En).status,
-            "Connected to app.deveye.fr"
+            view(&[s], LAST, 100, Lang::En).lines,
+            ["Connected to app.deveye.fr"]
         );
     }
 
@@ -262,7 +309,7 @@ mod tests {
             deploy: 1,
             ..Work::default()
         };
-        let v = view(Some(&status(Conn::Connected, work)), 100, Lang::Fr);
+        let v = view(&[status(Conn::Connected, work)], LAST, 100, Lang::Fr);
         assert_eq!(v.mood, Mood::Busy);
         assert_eq!(
             v.activity.as_deref(),
@@ -273,7 +320,7 @@ mod tests {
             sync_scans: 2,
             ..Work::default()
         };
-        let v = view(Some(&status(Conn::Connected, one)), 100, Lang::En);
+        let v = view(&[status(Conn::Connected, one)], LAST, 100, Lang::En);
         assert_eq!(
             v.activity.as_deref(),
             Some("CloudSync: 1 transfer in progress")
@@ -283,12 +330,13 @@ mod tests {
     #[test]
     fn connecting_animates_and_the_rest_is_grey() {
         let v = view(
-            Some(&status(Conn::Connecting, Work::default())),
+            &[status(Conn::Connecting, Work::default())],
+            LAST,
             100,
             Lang::Fr,
         );
         assert_eq!(
-            (v.status.as_str(), v.mood),
+            (v.lines[0].as_str(), v.mood),
             ("Connexion en cours…", Mood::Busy)
         );
         for conn in [
@@ -296,19 +344,19 @@ mod tests {
             Conn::Rejected,
             Conn::Offline { retry_at: 0 },
         ] {
-            let v = view(Some(&status(conn, Work::default())), 100, Lang::Fr);
+            let v = view(&[status(conn, Work::default())], LAST, 100, Lang::Fr);
             assert_eq!(v.mood, Mood::Off, "{conn:?}");
         }
     }
 
     #[test]
     fn offline_counts_down_to_the_next_attempt() {
-        let s = status(Conn::Offline { retry_at: 112 }, Work::default());
+        let s = [status(Conn::Offline { retry_at: 112 }, Work::default())];
         assert_eq!(
-            view(Some(&s), 100, Lang::Fr).status,
-            "Hors ligne, nouvel essai dans 12 s"
+            view(&s, LAST, 100, Lang::Fr).lines,
+            ["Hors ligne, nouvel essai dans 12 s"]
         );
-        assert_eq!(view(Some(&s), 112, Lang::En).status, "Offline, retrying…");
+        assert_eq!(view(&s, LAST, 112, Lang::En).lines, ["Offline, retrying…"]);
         let far = status(
             Conn::Offline {
                 retry_at: 100 + 610,
@@ -316,9 +364,54 @@ mod tests {
             Work::default(),
         );
         assert_eq!(
-            view(Some(&far), 100, Lang::Fr).status,
-            "Hors ligne, nouvel essai dans 11 min"
+            view(&[far], LAST, 100, Lang::Fr).lines,
+            ["Hors ligne, nouvel essai dans 11 min"]
         );
+    }
+
+    #[test]
+    fn several_agents_each_name_their_server_and_the_worst_shows() {
+        let prod = status(
+            Conn::Connected,
+            Work {
+                sync_transfers: 1,
+                ..Work::default()
+            },
+        );
+        let nas = LiveStatus {
+            instance: Some("nas".into()),
+            server: "https://nas.lan".into(),
+            work: Work {
+                sync_transfers: 2,
+                ..Work::default()
+            },
+            ..status(Conn::Offline { retry_at: 0 }, Work::default())
+        };
+        let v = view(&[prod.clone(), nas.clone()], LAST, 100, Lang::Fr);
+        assert_eq!(
+            v.lines,
+            [
+                "Connecté à app.deveye.fr",
+                "Hors ligne, nouvel essai… (nas.lan)"
+            ]
+        );
+        assert_eq!(v.mood, Mood::Off, "one cut off greys the eye");
+        assert_eq!(
+            v.activity.as_deref(),
+            Some("CloudSync : 3 transferts en cours")
+        );
+        assert_eq!(
+            v.opens,
+            [
+                ("Ouvrir app.deveye.fr".to_string(), prod.server.clone()),
+                ("Ouvrir nas.lan".to_string(), nas.server.clone()),
+            ]
+        );
+        let both_up = LiveStatus {
+            conn: Conn::Connected,
+            ..nas
+        };
+        assert_eq!(view(&[prod, both_up], LAST, 100, Lang::En).mood, Mood::Busy);
     }
 
     #[test]

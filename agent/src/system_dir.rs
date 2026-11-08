@@ -16,8 +16,15 @@ use crate::config::{
 };
 use crate::service::{self, ServiceScope};
 
-/// Where a system service keeps its enrollment.
+/// Where a system service keeps its enrollment, for the instance this process
+/// acts for.
 pub fn dir() -> PathBuf {
+    crate::instance::dir_under(&root(), crate::instance::current().as_deref())
+}
+
+/// The system `deveye` folder: the default instance's enrollment, and the
+/// folder of the named ones.
+pub fn root() -> PathBuf {
     #[cfg(target_os = "linux")]
     {
         PathBuf::from("/var/lib/deveye")
@@ -41,14 +48,18 @@ pub fn config_path() -> PathBuf {
 
 /// A system service holds this machine's enrollment, as far as this process
 /// can tell. An ordinary account is denied the folder: a refusal counts as
-/// held, since only an enrollment would have made the folder root's.
+/// held, since only an enrollment would have made the folder root's. Not for a
+/// named instance: the refusal comes from the system folder above it, which
+/// another instance may have made root's.
 pub fn held() -> bool {
     if service::installed_scope() == ServiceScope::System {
         return true;
     }
     match std::fs::metadata(config_path()) {
         Ok(_) => true,
-        Err(e) => e.kind() == std::io::ErrorKind::PermissionDenied,
+        Err(e) => {
+            e.kind() == std::io::ErrorKind::PermissionDenied && crate::instance::current().is_none()
+        }
     }
 }
 
@@ -122,9 +133,11 @@ pub fn untrusted(path: &Path) -> Option<String> {
 /// same check as a config file.
 fn secure_dir() -> Result<PathBuf> {
     let dir = dir();
+    private_dir(&root()).with_context(|| format!("creating {}", root().display()))?;
     private_dir(&dir).with_context(|| format!("creating {}", dir.display()))?;
+    // The rights of the root go down to every instance (`/T`).
     #[cfg(windows)]
-    restrict_acl(&dir)?;
+    restrict_acl(&root())?;
     #[cfg(unix)]
     if let Some(why) = untrusted(&dir) {
         bail!("{} cannot hold the enrollment: {why}", dir.display());
@@ -270,20 +283,27 @@ pub fn release() -> Result<Option<PathBuf>> {
     for path in crate::uninstall::own_files(&dir) {
         let _ = std::fs::remove_file(path);
     }
-    let _ = std::fs::remove_dir(&dir);
+    crate::instance::remove_empty_dirs(&dir);
     Ok(Some(dest_dir.join(CONFIG_FILE)))
 }
 
-/// The config folder of the account behind `sudo` or `pkexec`.
-#[cfg(unix)]
+/// The enrollment folder of the account behind `sudo` or `pkexec`.
 fn invoking_config_dir() -> Option<PathBuf> {
+    Some(crate::instance::dir_under(
+        &invoking_root()?,
+        crate::instance::current().as_deref(),
+    ))
+}
+
+#[cfg(unix)]
+fn invoking_root() -> Option<PathBuf> {
     Some(service::invoking_home()?.join(crate::uninstall::CONFIG_SUBPATH))
 }
 
 /// UAC elevation keeps the user's profile, and its `%APPDATA%`.
 #[cfg(windows)]
-fn invoking_config_dir() -> Option<PathBuf> {
-    Some(dirs::config_dir()?.join("deveye"))
+fn invoking_root() -> Option<PathBuf> {
+    Some(Config::user_root())
 }
 
 /// A privileged agent only runs on an enrollment root alone can write. One

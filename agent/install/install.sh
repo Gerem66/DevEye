@@ -5,7 +5,8 @@
 #   curl -fsSL <server>/install.sh | sh -s -- <CODE> [link options]
 #
 # The options after the code go to `deveye-agent link` (see its --help):
-# --autostart, --deny terminal,power, --monitor-only, --shuffle-id, --name.
+# --autostart, --deny terminal,power, --monitor-only, --shuffle-id, --name,
+# --move, --instance <name>.
 # Without a code, DEVEYE_LINK_CODE is used. As root, the agent goes to
 # /usr/local/bin and a system service; otherwise to ~/.local/bin.
 #

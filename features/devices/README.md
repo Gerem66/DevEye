@@ -511,3 +511,8 @@ Après ajout ou retrait d'une classe dans un `*.module.css` du module, depuis
   dans `src/db/repos/` ; une colonne dans une migration du socle. Le test du
   module tourne sur un dépôt en mémoire : une requête SQL se vérifie sur une
   base.
+- **Une machine peut porter plusieurs agents**, un par serveur DevEye
+  (`deveye-agent --instance <nom>`, voir `agent/README.md`). Chaque serveur ne
+  voit que le sien, mais les commandes que la fiche affiche (élévation,
+  reconnexion, service) visent l'enrôlement par défaut : l'appareil ne dit pas
+  encore au serveur de quelle instance il est.
