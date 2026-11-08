@@ -12,6 +12,8 @@ import { startTeleport, type LiveSegmentKind } from '@/stores/live';
 import { getActiveWorkspaceId, useActiveWorkspace, useWorkspacesHere } from '@/stores/workspace';
 import type { MinimalUser, Workspace } from '@deveye/types';
 
+import { connectionTo } from './remoteTargets';
+
 export type { LiveSegmentKind };
 /** The change event of a text input, for handlers typed by hand. */
 export type InputChange = ChangeEvent<HTMLInputElement>;
@@ -211,6 +213,10 @@ export function useWorkspaces(): readonly Workspace[] {
     return useWorkspacesHere();
 }
 
+// Les instances distantes du compte et leurs espaces : les cibles de `sendTo`.
+export { useRemoteTargets } from './remoteTargets';
+export type { RemoteInstanceSummary, RemoteTargets, RemoteWorkspaceTarget } from './remoteTargets';
+
 /**
  * Ouvrir une autre feature de l'espace actif, sur l'un de ses éléments quand
  * `itemId` est donné, par la téléportation de l'hôte. La garde d'accès reste
@@ -256,6 +262,22 @@ export function featureApi<const M extends FeatureManifest>(manifest: M) {
             opts?: SendOptions
         ): Promise<z.output<Extract<Commands, { command: N }>['output'] & ZodType>> {
             return ws.send(name as never, input as never, opts) as never;
+        },
+        /**
+         * La même commande, vers un espace précis d'une instance du compte :
+         * `instanceId: null` pour celle-ci, sinon une instance distante où une
+         * session est ouverte (`useRemoteTargets`). Le serveur visé juge les
+         * droits, et l'invite du code d'application, s'il la réclame, est celle
+         * de ce compte-là. `closed` sans session là-bas.
+         */
+        async sendTo<N extends Commands['command']>(
+            target: { instanceId: number | null; workspaceId: number },
+            name: N,
+            input: z.input<Extract<Commands, { command: N }>['input'] & ZodType>,
+            opts?: Omit<SendOptions, 'workspaceId'>
+        ): Promise<z.output<Extract<Commands, { command: N }>['output'] & ZodType>> {
+            const conn = await connectionTo(target.instanceId);
+            return conn.send(name as never, input as never, { ...opts, workspaceId: target.workspaceId }) as never;
         },
         /**
          * Sans réponse ni délai ni trace : une position qu'on renvoie plusieurs

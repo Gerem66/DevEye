@@ -467,7 +467,9 @@ liront la copie.
 Neuf des modules qui se déplacent se copient aussi : Audience, Bases de données,
 Déploiements, Git, Mail, Notes, Projets, Tableau blanc, Uptime. **Pas les
 Appareils** : un appareil est une machine reliée par le jeton de son agent, qui
-ne parle qu'à un serveur ; il se partage déjà entre espaces. **Pas
+ne parle qu'à un serveur ; il se partage déjà entre espaces, et vers une autre
+instance il s'enrôle en plus, par une instance nommée de son agent
+([FEDERATION.md](./FEDERATION.md) §6). **Pas
 Hébergement** (§9). Le Tableau blanc copie ses images objet par objet, bornées
 à 256 Mo : vers une autre instance, où ses objets n'existent pas, la copie d'un
 tableau illustré est refusée et renvoie vers l'export `.excalidraw`.

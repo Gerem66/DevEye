@@ -187,6 +187,10 @@ Trois mécanismes font qu'aucun réglage n'est un mur :
    ajoute `requiresWrite: true` ; sinon, le panneau rend `ReadOnlyNotice` quand
    `canWrite` est faux. Le Général d'un élément porte sa modification et sa
    suppression (`gone()`) ; le dialogue de création ne fait que créer.
+   L'onglet Partage reste celui de la coquille, mais un panneau
+   `settingsPanels.sharing` s'y ajoute sous ses gestes, pour ce qui prolonge le
+   partage sans en être (Appareils : enrôler la machine auprès d'une instance
+   distante).
 3. Si la feature a des fiches d'élément rejoignables, elle déclare son segment
    de présence `l1` avec l'identifiant nu de l'élément
    (`useLiveSegment('l1', String(id))`) : c'est ce que `goToHome.ts` écrit pour

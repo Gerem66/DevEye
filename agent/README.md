@@ -278,6 +278,10 @@ deveye-agent status                                                         # li
 deveye-agent --instance nas policy --deny terminal
 ```
 
+The second command is what DevEye composes for you: on a device's settings,
+under its sharing, "Enrôler vers un autre espace" asks the remote instance for
+a link code and shows the line to paste on the machine.
+
 Each instance is a process of its own, with its own config (and so its own
 token, order key and `[policy]`), service (`deveye-agent-nas.service`, the
 launchd job `com.deveye.agent.nas`, the scheduled task `DevEyeAgent-nas`), lock

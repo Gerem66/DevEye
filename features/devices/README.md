@@ -476,7 +476,14 @@ Statuts (`devices.status`) : `pending`, `active`, `pending_deletion`,
 - **Partage** : `shareTier: 'open'` dans le registre publié ; un appareil se
   projette vers un autre espace par la coquille commune (`item_shares`), qui le
   lit et pilote son agent selon ses permissions sans le gérer (voir
-  [Docs/SHARING.md](../../Docs/SHARING.md)).
+  [Docs/SHARING.md](../../Docs/SHARING.md)). Sous le partage, le module ajoute
+  « Enrôler vers un autre espace » (`settingsPanels.sharing`,
+  `src/client/manage/EnrollElsewhere.tsx`), visible dès que le compte a une
+  instance distante et depuis le domicile de l'appareil seulement : le
+  navigateur demande un code d'appairage à l'espace distant choisi
+  (`devices.linkCodeCreate` par `api.sendTo`) et compose la commande
+  `deveye-agent --instance <nom> link …`, avec les refus de la politique
+  actuelle. L'appareil d'ici ne bouge pas.
 - **Notifications** : aucune (`notifies: false`).
 - **Export de compte** (`src/server/accountExport.ts`) : les tables de l'espace,
   les listes de processus décompressées appareil par appareil dans l'ordre du
@@ -512,7 +519,8 @@ Après ajout ou retrait d'une classe dans un `*.module.css` du module, depuis
   module tourne sur un dépôt en mémoire : une requête SQL se vérifie sur une
   base.
 - **Une machine peut porter plusieurs agents**, un par serveur DevEye
-  (`deveye-agent --instance <nom>`, voir `agent/README.md`). Chaque serveur ne
-  voit que le sien, mais les commandes que la fiche affiche (élévation,
-  reconnexion, service) visent l'enrôlement par défaut : l'appareil ne dit pas
-  encore au serveur de quelle instance il est.
+  (`deveye-agent --instance <nom>`, voir `agent/README.md` ; c'est ce que fait
+  « Enrôler vers un autre espace »). Chaque serveur ne voit que le sien, mais
+  les commandes que la fiche affiche (élévation, reconnexion, service) visent
+  l'enrôlement par défaut : l'appareil ne dit pas encore au serveur de quelle
+  instance il est.
