@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 
 /**
  * Un fichier qu'une fonctionnalité confie à une autre : le PDF assemblé dans
- * l'atelier qui part se faire alléger par le Convertisseur, le PDF déposé dans
+ * l'atelier dont le Convertisseur doit reconnaître le texte, le PDF déposé dans
  * le Convertisseur qu'on veut signer. Le colis attend en mémoire que la vue
  * destinataire le ramasse ; une seule fois, et jamais au-delà de la page.
  */

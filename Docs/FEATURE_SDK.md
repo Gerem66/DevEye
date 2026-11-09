@@ -656,9 +656,9 @@ se range de lui-même en haut de son cadre, sur toute sa largeur : sous le
 mutation aux widgets qui la lisent, `onServerEvent` écoute la voie de poussée,
 `openFeature` ouvre une autre feature sur un élément, `handFileTo(feature,
 file, purpose?)` lui confie un fichier en l'ouvrant et `useHandedFile(feature,
-cb)` le ramasse chez elle (le PDF assemblé qui part se faire alléger par le
-Convertisseur, le PDF déposé dans le Convertisseur qu'on veut signer : les deux
-modules ne s'importent jamais), `useDomains(feature)` lit
+cb)` le ramasse chez elle (le PDF assemblé dont le Convertisseur doit
+reconnaître le texte, le PDF déposé dans le Convertisseur qu'on veut signer :
+les deux modules ne s'importent jamais), `useDomains(feature)` lit
 les domaines, `useLiveCursorSurface(surface)` place les curseurs de DevEye sur
 la surface d'une vue (un canevas qu'on déplace et qu'on zoome) et
 `onLiveCursors(canal, cb)` en livre les positions brutes. Le reste du barrel (composants, dialogues,
