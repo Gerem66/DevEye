@@ -22,43 +22,57 @@ export function FormatStep({ wizard, family, fileProblem }: FormatStepProps) {
         : [];
     const detected = kind.sources.find((s) => s.id === state.detectedSourceId);
     const overridden = detected !== undefined && state.sourceId !== null && state.sourceId !== detected.id;
+    // Ce serveur n'a pas l'outil : le dire, plutôt que deux listes vides.
+    const unavailable = family !== undefined && !family.available;
+    const cannot = unavailable
+        ? (family.reason ?? 'Ce serveur ne sait pas convertir ce type de fichier.')
+        : detected && family?.missingSources.includes(detected.id)
+          ? `Ce serveur ne sait rien faire d’un fichier ${detected.label} : il lui manque l’outil qui le lit.`
+          : null;
 
     return (
         <div className={styles.stepBody}>
-            <div className={styles.formats}>
-                <label className={styles.formatField}>
-                    <span className={styles.fieldLabel}>Format du fichier</span>
-                    <SearchSelect
-                        aria-label='Format du fichier'
-                        value={state.sourceId ?? ''}
-                        placeholder='Choisir…'
-                        onChange={wizard.setSource}
-                        options={sources.map((s) => ({
-                            value: s.id,
-                            label: s.label,
-                            ...(s.id === detected?.id ? { detail: 'détecté' } : {})
-                        }))}
-                    />
-                </label>
-                <span className={styles.formatArrow} aria-hidden='true'>
-                    →
-                </span>
-                <label className={styles.formatField}>
-                    <span className={styles.fieldLabel}>Format voulu</span>
-                    <SearchSelect
-                        aria-label='Format voulu'
-                        value={state.targetId ?? ''}
-                        disabled={!state.sourceId}
-                        placeholder={state.sourceId ? 'Choisir…' : 'Choisissez d’abord le format du fichier'}
-                        onChange={wizard.setTarget}
-                        options={targets.map((t) => ({
-                            value: t.id,
-                            label: t.label,
-                            ...(t.id === state.sourceId ? { detail: 'compresser' } : {})
-                        }))}
-                    />
-                </label>
-            </div>
+            {cannot && (
+                <p className={styles.problem} role='alert'>
+                    {cannot}
+                </p>
+            )}
+            {!unavailable && (
+                <div className={styles.formats}>
+                    <label className={styles.formatField}>
+                        <span className={styles.fieldLabel}>Format du fichier</span>
+                        <SearchSelect
+                            aria-label='Format du fichier'
+                            value={state.sourceId ?? ''}
+                            placeholder='Choisir…'
+                            onChange={wizard.setSource}
+                            options={sources.map((s) => ({
+                                value: s.id,
+                                label: s.label,
+                                ...(s.id === detected?.id ? { detail: 'détecté' } : {})
+                            }))}
+                        />
+                    </label>
+                    <span className={styles.formatArrow} aria-hidden='true'>
+                        →
+                    </span>
+                    <label className={styles.formatField}>
+                        <span className={styles.fieldLabel}>Format voulu</span>
+                        <SearchSelect
+                            aria-label='Format voulu'
+                            value={state.targetId ?? ''}
+                            disabled={!state.sourceId}
+                            placeholder={state.sourceId ? 'Choisir…' : 'Choisissez d’abord le format du fichier'}
+                            onChange={wizard.setTarget}
+                            options={targets.map((t) => ({
+                                value: t.id,
+                                label: t.label,
+                                ...(t.id === state.sourceId ? { detail: 'compresser' } : {})
+                            }))}
+                        />
+                    </label>
+                </div>
+            )}
 
             {overridden && (
                 <p className={styles.warning}>
