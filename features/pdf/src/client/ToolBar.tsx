@@ -1,9 +1,7 @@
-import type { CSSProperties } from 'react';
-
 import { Picto } from './icons';
-import { INK, type InkColor } from './elements';
+import type { Ink } from './elements';
+import { InkPicker, type InkSlots } from './InkPicker';
 import styles from './pdf.module.css';
-import { inkCss } from './Stage';
 import { TOOLS, type Tool } from './tools';
 
 interface ToolBarProps {
@@ -12,12 +10,13 @@ interface ToolBarProps {
     onGo: (index: number) => void;
     tool: Tool;
     onTool: (tool: Tool) => void;
-    color: InkColor;
-    onColor: (color: InkColor) => void;
+    color: Ink;
+    onColor: (color: Ink) => void;
+    inks: InkSlots;
 }
 
 /** La page en cours, les outils, et l'encre des prochains éléments. */
-export function ToolBar({ index, count, onGo, tool, onTool, color, onColor }: ToolBarProps) {
+export function ToolBar({ index, count, onGo, tool, onTool, color, onColor, inks }: ToolBarProps) {
     return (
         <div className={styles.toolbar}>
             <div className={styles.pageNav}>
@@ -60,20 +59,8 @@ export function ToolBar({ index, count, onGo, tool, onTool, color, onColor }: To
                     </button>
                 ))}
             </div>
-            <div className={styles.colorDots} role='radiogroup' aria-label='Encre'>
-                {(Object.keys(INK) as InkColor[]).map((c) => (
-                    <button
-                        key={c}
-                        type='button'
-                        role='radio'
-                        aria-checked={c === color}
-                        aria-label={INK[c].label}
-                        title={INK[c].label}
-                        className={`${styles.colorDot} ${c === color ? styles.colorDotActive : ''}`}
-                        style={{ '--ink': inkCss(c) } as CSSProperties}
-                        onClick={() => onColor(c)}
-                    />
-                ))}
+            <div className={styles.toolbarInk}>
+                <InkPicker value={color} onChange={onColor} {...inks} />
             </div>
         </div>
     );

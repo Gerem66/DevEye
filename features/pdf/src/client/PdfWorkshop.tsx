@@ -21,32 +21,29 @@ import {
 import { Picto } from './icons';
 import { addImage, buildInputOf, forgetAll, openSource } from './documents';
 import { EditTab } from './EditTab';
-import { ExportsTab, type ImageDpi, type ImageFormat } from './ExportsTab';
 import { FinishTab } from './FinishTab';
 import type { Finishing } from './finishing';
 import { buildFonts } from './fonts';
 import { FormTab } from './FormTab';
 import {
+    downloadName,
     isImageFile,
     isPdfFile,
     outputName,
     summarize,
     WORKSHOP_ACCEPT,
-    type PlanPage,
     type SourceInfo,
     type WorkshopIntent
 } from './model';
 import { PagesTab } from './PagesTab';
 import { PasswordDialog, type PasswordRequest } from './PasswordDialog';
 import styles from './pdf.module.css';
-import { openDocument, NeedsPassword, renderPage } from './pdfjs';
+import { NeedsPassword } from './pdfjs';
 import { redactedPages } from './raster';
-import { splitParts, type SplitMode } from './split';
 import { TextTab } from './TextTab';
 import { clearThumbnails } from './thumbnails';
 import { useBuild } from './useBuild';
 import { usePdfWorkshop, type OpenedFile } from './usePdfWorkshop';
-import { zipFiles } from './zip';
 
 const POPUP_WIDTH = 1280;
 /** Un assemblage plus court que ça n'a pas besoin d'un dialogue d'avancement. */
@@ -54,15 +51,14 @@ const PROGRESS_DELAY_MS = 400;
 /** Le temps laissé au navigateur pour lire une adresse `blob:` avant qu'elle ne soit rendue. */
 const BLOB_URL_TTL_MS = 60_000;
 
-type Tab = 'pages' | 'edit' | 'form' | 'finish' | 'text' | 'exports';
-/** `apart` : l'onglet ne change pas le document, il le lit ou le sort. Il se tient à l'écart des autres. */
+type Tab = 'pages' | 'edit' | 'form' | 'finish' | 'text';
+/** `apart` : l'onglet ne change pas le document, il le lit. Il se tient à l'écart des autres. */
 const TABS: readonly { id: Tab; label: string; icon: string; apart?: boolean }[] = [
     { id: 'pages', label: 'Pages', icon: 'file' },
     { id: 'edit', label: 'Signer et annoter', icon: 'edit' },
     { id: 'form', label: 'Formulaire', icon: 'square-check' },
     { id: 'finish', label: 'Finitions', icon: 'format' },
-    { id: 'text', label: 'Texte', icon: 'notes', apart: true },
-    { id: 'exports', label: 'Exports', icon: 'download', apart: true }
+    { id: 'text', label: 'Texte', icon: 'notes', apart: true }
 ];
 
 const TAB_OF_INTENT: Partial<Record<WorkshopIntent, Tab>> = {
@@ -71,12 +67,6 @@ const TAB_OF_INTENT: Partial<Record<WorkshopIntent, Tab>> = {
     text: 'text',
     protect: 'finish'
 };
-
-const stem = (name: string): string => name.replace(/\.pdf$/i, '');
-const JPEG_QUALITY = 0.9;
-
-/** Les cibles du Convertisseur qu'on atteint depuis l'atelier : il dit lui-même ce que son serveur sait faire. */
-export type ServerTarget = 'pdf-light' | 'pdf-ocr';
 
 interface PdfWorkshopProps {
     initialFiles: readonly File[];
@@ -94,8 +84,7 @@ export default function PdfWorkshop({ initialFiles, intent, onLeave }: PdfWorksh
     const workshop = usePdfWorkshop();
     const { plan, elements, fields, flatten, finishing, act } = workshop;
     const [fileName, setFileName] = useState<string | null>(null);
-    const [exporting, setExporting] = useState<{ step: string; done: number; total: number } | null>(null);
-    const name = fileName ?? outputName(plan);
+    const name = downloadName(fileName, plan);
     const [tab, setTab] = useState<Tab>(TAB_OF_INTENT[intent] ?? 'pages');
     // L'onglet Formulaire n'existe que s'il y a des champs à remplir.
     const hasForm = plan.sources.some((s) => s.hasForm);
@@ -212,32 +201,21 @@ export default function PdfWorkshop({ initialFiles, intent, onLeave }: PdfWorksh
         };
     }, [plan, finishing]);
 
-    /** Le document, ou une partie : les pages données, avec tout ce qui s'y rapporte. */
-    const buildPart = useCallback(
-        async (
-            pages: readonly PlanPage[],
-            numbering?: { offset: number; total: number }
-        ): Promise<Uint8Array<ArrayBuffer>> => {
-            const kept = new Set(pages.map((p) => p.id));
-            const fonts = await buildFonts();
-            const redactions = await redactedPages(
-                { ...plan, pages },
-                elements.filter((e) => kept.has(e.pageId))
-            );
-            return build({
-                ...buildInputOf(plan),
-                pages,
-                elements,
-                fonts,
-                redactions,
-                fields,
-                flatten,
-                finishing: effectiveFinishing(),
-                numbering
-            });
-        },
-        [build, plan, elements, fields, flatten, effectiveFinishing]
-    );
+    /** Le document entier, avec tout ce qui s'y rapporte. */
+    const buildDocument = useCallback(async (): Promise<Uint8Array<ArrayBuffer>> => {
+        const fonts = await buildFonts();
+        const redactions = await redactedPages(plan, elements);
+        return build({
+            ...buildInputOf(plan),
+            pages: plan.pages,
+            elements,
+            fonts,
+            redactions,
+            fields,
+            flatten,
+            finishing: effectiveFinishing()
+        });
+    }, [build, plan, elements, fields, flatten, effectiveFinishing]);
 
     const save = (bytes: Uint8Array<ArrayBuffer>, type: string, fileName: string): void => {
         const url = URL.createObjectURL(new Blob([bytes], { type }));
@@ -249,83 +227,21 @@ export default function PdfWorkshop({ initialFiles, intent, onLeave }: PdfWorksh
         if (plan.pages.length === 0) return;
         setError(null);
         try {
-            save(await buildPart(plan.pages), 'application/pdf', name);
+            save(await buildDocument(), 'application/pdf', name);
         } catch (e) {
             setError(errorNote(e, 'Le document n’a pas pu être assemblé.'));
         }
     };
 
-    const exportSplit = async (mode: SplitMode): Promise<void> => {
-        const parts = splitParts(plan, mode);
-        if (!parts) return;
-        setError(null);
-        setExporting({ step: 'Partie 1', done: 0, total: parts.length });
-        try {
-            const entries: { name: string; bytes: Uint8Array }[] = [];
-            for (const [i, part] of parts.entries()) {
-                setExporting({ step: `Partie ${i + 1} : ${part.label}`, done: i, total: parts.length });
-                entries.push({
-                    name: `${stem(name)} - ${part.label}.pdf`,
-                    bytes: await buildPart(part.pages, { offset: part.offset, total: plan.pages.length })
-                });
-            }
-            save(zipFiles(entries), 'application/zip', `${stem(name)}.zip`);
-        } catch (e) {
-            setError(errorNote(e, 'Le découpage n’a pas pu être fait.'));
-        } finally {
-            setExporting(null);
-        }
-    };
-
-    /** Le document, tel qu'il sortirait, confié au Convertisseur : l'allègement et la reconnaissance se font sur son serveur. */
-    const handoff = async (target: ServerTarget): Promise<void> => {
+    /** Le document, tel qu'il sortirait, confié au Convertisseur : la reconnaissance du texte se fait sur son serveur. */
+    const ocr = async (): Promise<void> => {
         if (plan.pages.length === 0) return;
         setError(null);
-        setExporting({ step: 'Assemblage du document', done: 0, total: plan.pages.length });
         try {
-            const bytes = await buildPart(plan.pages);
-            handFileTo('convert', new File([bytes], name, { type: 'application/pdf' }), target);
+            const bytes = await buildDocument();
+            handFileTo('convert', new File([bytes], name, { type: 'application/pdf' }), 'pdf-ocr');
         } catch (e) {
             setError(errorNote(e, 'Le document n’a pas pu être assemblé.'));
-        } finally {
-            setExporting(null);
-        }
-    };
-
-    const exportImages = async (format: ImageFormat, dpi: ImageDpi): Promise<void> => {
-        if (plan.pages.length === 0) return;
-        setError(null);
-        setExporting({ step: 'Assemblage du document', done: 0, total: plan.pages.length });
-        try {
-            // Les images sont celles du document produit, ce qui est posé dessus compris.
-            const bytes = await buildPart(plan.pages);
-            const doc = await openDocument(bytes, finishing.password);
-            const entries: { name: string; bytes: Uint8Array }[] = [];
-            const mime = format === 'png' ? 'image/png' : 'image/jpeg';
-            try {
-                for (let i = 1; i <= doc.numPages; i++) {
-                    setExporting({ step: `Page ${i} sur ${doc.numPages}`, done: i - 1, total: doc.numPages });
-                    const page = await doc.getPage(i);
-                    const canvas = document.createElement('canvas');
-                    const width = page.getViewport({ scale: 1 }).width * (dpi / 72);
-                    await renderPage(page, canvas, Math.round(width), page.rotate);
-                    const blob = await new Promise<Blob | null>((resolve) =>
-                        canvas.toBlob(resolve, mime, JPEG_QUALITY)
-                    );
-                    if (!blob) throw new Error('La page n’a pas pu être dessinée.');
-                    entries.push({
-                        name: `${stem(name)} - page ${i}.${format === 'png' ? 'png' : 'jpg'}`,
-                        bytes: new Uint8Array(await blob.arrayBuffer())
-                    });
-                }
-            } finally {
-                void doc.loadingTask.destroy().catch(() => undefined);
-            }
-            save(zipFiles(entries), 'application/zip', `${stem(name)} - images.zip`);
-        } catch (e) {
-            setError(errorNote(e, 'Les images n’ont pas pu être produites.'));
-        } finally {
-            setExporting(null);
         }
     };
 
@@ -425,21 +341,18 @@ export default function PdfWorkshop({ initialFiles, intent, onLeave }: PdfWorksh
                 ) : shown === 'form' ? (
                     <FormTab workshop={workshop} />
                 ) : shown === 'text' ? (
-                    <TextTab workshop={workshop} onOcr={() => void handoff('pdf-ocr')} />
+                    <TextTab workshop={workshop} onOcr={() => void ocr()} />
                 ) : shown === 'finish' ? (
                     <FinishTab workshop={workshop} />
-                ) : shown === 'exports' ? (
-                    <ExportsTab
-                        plan={plan}
-                        fileName={name}
-                        onFileName={(next) => setFileName(next.endsWith('.pdf') ? next : `${next}.pdf`)}
-                        busy={exporting !== null || building}
-                        onSplit={(mode) => void exportSplit(mode)}
-                        onImages={(format, dpi) => void exportImages(format, dpi)}
-                        onServer={(target) => void handoff(target)}
-                    />
                 ) : (
-                    <PagesTab workshop={workshop} onAddFiles={(files) => void addFiles(files)} onImport={pick} />
+                    <PagesTab
+                        workshop={workshop}
+                        fileName={fileName ?? outputName(plan)}
+                        onFileName={setFileName}
+                        onAddFiles={(files) => void addFiles(files)}
+                        onAdd={pick}
+                        onEdit={() => setTab('edit')}
+                    />
                 )}
                 {opening > 0 && <LoadingVeil label='Lecture des fichiers…' delayed />}
             </div>
@@ -458,23 +371,11 @@ export default function PdfWorkshop({ initialFiles, intent, onLeave }: PdfWorksh
 
             <PasswordDialog request={password} onDone={() => setPassword(null)} />
             <ProgressDialog
-                open={exporting !== null || (slow && progress !== null)}
-                title={exporting ? 'Export en cours' : 'Assemblage du document'}
-                description={
-                    exporting
-                        ? 'Chaque partie est assemblée sur cet appareil, puis rangée dans un zip.'
-                        : 'Les pages sont copiées dans un PDF neuf, sur cet appareil.'
-                }
-                value={
-                    exporting
-                        ? exporting.total > 0
-                            ? exporting.done / exporting.total
-                            : undefined
-                        : progress && progress.total > 0
-                          ? progress.done / progress.total
-                          : undefined
-                }
-                step={exporting ? exporting.step : progress ? `Page ${progress.done} sur ${progress.total}` : undefined}
+                open={slow && progress !== null}
+                title='Assemblage du document'
+                description='Les pages sont copiées dans un PDF neuf, sur cet appareil.'
+                value={progress && progress.total > 0 ? progress.done / progress.total : undefined}
+                step={progress ? `Page ${progress.done} sur ${progress.total}` : undefined}
             />
             <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
         </div>

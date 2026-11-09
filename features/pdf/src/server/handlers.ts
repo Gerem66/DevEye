@@ -1,6 +1,7 @@
 import { defineSdkFeature, FeatureError, type SdkFeatureContext } from '@deveye/types/sdk/server';
 
-import { pdfSignatureRemove, pdfSignatures, pdfSignatureSave } from '../contracts/commands';
+import { pdfPrefs, pdfPrefsSet, pdfSignatureRemove, pdfSignatures, pdfSignatureSave } from '../contracts/commands';
+import { DEFAULT_PREFS, prefsSchema } from '../contracts/prefs';
 import { SIGNATURES_MAX, storedSignatureSchema, type SavedSignature } from '../contracts/signatures';
 import type { PdfRepo } from './repo';
 
@@ -10,6 +11,9 @@ type Ctx = SdkFeatureContext<PdfRepo>;
 const ACCOUNT = { scope: 'account' } as const;
 
 const now = (): number => Math.floor(Date.now() / 1000);
+
+/** La clé des réglages dans le magasin de l'espace personnel. */
+const PREFS_KEY = 'prefs';
 
 /** Les signatures lisibles d'un compte ; une ligne qui ne se déchiffre plus (clé changée) est passée. */
 async function savedSignatures(ctx: Ctx): Promise<SavedSignature[]> {
@@ -64,5 +68,19 @@ export const pdfHandlers = [
         access: ACCOUNT,
         mutates: true,
         handler: async (ctx: Ctx, input) => ({ removed: await ctx.repo.removeSignature(input.id, ctx.userId) })
+    }),
+    defineSdkFeature({
+        ...pdfPrefs,
+        access: ACCOUNT,
+        handler: async (ctx: Ctx) => ({ prefs: (await ctx.store.getJson(PREFS_KEY, prefsSchema)) ?? DEFAULT_PREFS })
+    }),
+    defineSdkFeature({
+        ...pdfPrefsSet,
+        access: ACCOUNT,
+        mutates: true,
+        handler: async (ctx: Ctx, input) => {
+            await ctx.store.putJson(PREFS_KEY, prefsSchema, input.prefs);
+            return { prefs: input.prefs };
+        }
     })
 ];

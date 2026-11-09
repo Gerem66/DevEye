@@ -13,6 +13,6 @@ const descriptor = featureDescriptor('pdf');
 export const manifest = {
     ...descriptor,
     category: 'daily',
-    resources: ['pdf.signatures'],
+    resources: ['pdf.signatures', 'pdf.prefs'],
     commands: pdfCommands
 } satisfies FeatureManifest;

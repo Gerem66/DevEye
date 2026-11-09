@@ -25,7 +25,6 @@ export const CREDITS: readonly CreditGroup[] = [
             },
             { name: 'pdf.js', license: 'Apache-2.0', purpose: 'L’affichage des PDF dans l’atelier, celui de Firefox' },
             { name: 'pdf-lib (fork de Cantoo)', license: 'MIT', purpose: 'L’assemblage des PDF de l’atelier' },
-            { name: 'fflate', license: 'MIT', purpose: 'Les archives zip de l’atelier PDF' },
             { name: 'Zod', license: 'MIT', purpose: 'La vérification des données échangées' }
         ]
     },

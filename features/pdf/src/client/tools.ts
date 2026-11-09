@@ -18,7 +18,7 @@ export type Tool =
 export const TOOLS: readonly { id: Tool; label: string; picto: PictoId; title: string }[] = [
     { id: 'select', label: 'Sélection', picto: 'select', title: 'Déplacer et redimensionner ce qui est posé' },
     { id: 'signature', label: 'Signature', picto: 'signature', title: 'Poser votre signature' },
-    { id: 'initials', label: 'Paraphe', picto: 'initials', title: 'Poser vos initiales, sur toutes les pages' },
+    { id: 'initials', label: 'Paraphe', picto: 'initials', title: 'Poser vos initiales' },
     { id: 'text', label: 'Texte', picto: 'text', title: 'Écrire un texte' },
     { id: 'date', label: 'Date', picto: 'date', title: 'Poser la date du jour' },
     { id: 'check', label: 'Coche', picto: 'check', title: 'Cocher une case' },

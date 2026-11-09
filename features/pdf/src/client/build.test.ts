@@ -184,6 +184,8 @@ describe('assemblage du PDF', () => {
                 id: 'e2',
                 pageId: p1.id,
                 kind: 'signature',
+                role: 'signature',
+                savedId: null,
                 color: 'black',
                 y: 80,
                 height: 60,
@@ -194,6 +196,8 @@ describe('assemblage du PDF', () => {
                 id: 'e3',
                 pageId: p1.id,
                 kind: 'signature',
+                role: 'signature',
+                savedId: null,
                 color: 'black',
                 y: 160,
                 height: 40,
@@ -223,7 +227,7 @@ describe('assemblage du PDF', () => {
                 width: 100,
                 height: 30
             },
-            { ...base, id: 'e6', pageId: p2.id, kind: 'box', fill: 'white', border: 'red' },
+            { ...base, id: 'e6', pageId: p2.id, kind: 'box', fill: 'white', border: 'red', stroke: 1.2 },
             {
                 ...base,
                 id: 'e7',
@@ -391,14 +395,18 @@ describe('assemblage du PDF', () => {
         assert.match(await text(3), /2 \/ 2/);
         await task.destroy();
 
-        // Un découpage continue la numérotation, et une page tournée se numérote droit.
+        // Une page tournée se numérote droit.
         const part = await buildPdf({
             sources: [src('a', a)],
             images: [],
             pages: [page('a', 2, 90)],
             fonts,
-            finishing: { ...finishing, password: null, watermark: DEFAULT_FINISHING.watermark },
-            numbering: { offset: 2, total: 3 }
+            finishing: {
+                ...finishing,
+                numbers: { ...finishing.numbers, skipFirst: false },
+                password: null,
+                watermark: DEFAULT_FINISHING.watermark
+            }
         });
         const partTask = pdfjs.getDocument({
             data: part.slice(),
@@ -409,7 +417,7 @@ describe('assemblage du PDF', () => {
         const partText = (await (await partDoc.getPage(1)).getTextContent()).items
             .map((i) => ('str' in i ? i.str : ''))
             .join(' ');
-        assert.match(partText, /2 \/ 2/);
+        assert.match(partText, /1 \/ 1/);
         await partTask.destroy();
 
         // Sans information : rien ne reste, même pas le producteur.

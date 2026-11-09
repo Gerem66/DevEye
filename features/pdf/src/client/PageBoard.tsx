@@ -1,13 +1,25 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { useDragReorder, useFileDrop } from 'deveye-sdk-client';
 
+import type { ThumbSize } from '../contracts/prefs';
 import { sourceColorVar } from './colors';
 import { displayedSize, moveTogether, sourceOf, totalRotation, type Plan, type PlanPage } from './model';
 import styles from './pdf.module.css';
 import { thumbnail } from './thumbnails';
 
-/** La largeur de rendu d'une vignette, en pixels CSS : celle d'une carte sur un grand écran. */
-const THUMB_WIDTH = 180;
+/**
+ * Par taille d'aperçu : la largeur minimale d'une carte, la hauteur de la
+ * vignette sur grand écran puis au téléphone, les colonnes du téléphone, et la
+ * largeur de rendu de la vignette en pixels CSS.
+ */
+const THUMBS: Record<
+    ThumbSize,
+    { min: number; height: number; mobileHeight: number; mobileCols: number; render: number }
+> = {
+    small: { min: 150, height: 190, mobileHeight: 150, mobileCols: 2, render: 180 },
+    medium: { min: 240, height: 320, mobileHeight: 220, mobileCols: 2, render: 320 },
+    large: { min: 400, height: 560, mobileHeight: 480, mobileCols: 1, render: 520 }
+};
 
 /** Ce qu'un clic apporte de modificateurs : la sélection s'en sert, quelle que soit la touche ou la souris. */
 export interface SelectGesture {
@@ -20,9 +32,12 @@ interface PageBoardProps {
     plan: Plan;
     selection: readonly string[];
     onSelect: (gesture: SelectGesture, id: string) => void;
+    /** Un double clic : la page s'ouvre dans Signer et annoter. */
+    onOpen: (id: string) => void;
     onReorder: (order: string[]) => void;
     onRemove: (id: string) => void;
     onFiles: (files: File[]) => void;
+    thumbs: ThumbSize;
 }
 
 interface PageCardProps {
@@ -33,7 +48,9 @@ interface PageCardProps {
     dragging: boolean;
     onPointerDown: (e: ReactPointerEvent, id: string) => void;
     onSelect: (gesture: SelectGesture, id: string) => void;
+    onOpen: (id: string) => void;
     onRemove: (id: string) => void;
+    thumbWidth: number;
 }
 
 function originOf(page: PlanPage, plan: Plan): { label: string; color: string } {
@@ -55,7 +72,8 @@ function originOf(page: PlanPage, plan: Plan): { label: string; color: string } 
     }
 }
 
-function PageCard({ page, plan, index, selected, dragging, onPointerDown, onSelect, onRemove }: PageCardProps) {
+function PageCard(props: PageCardProps) {
+    const { page, plan, index, selected, dragging, onPointerDown, onSelect, onOpen, onRemove, thumbWidth } = props;
     const ref = useRef<HTMLLIElement>(null);
     const [url, setUrl] = useState<string | null>(null);
     const planRef = useRef(plan);
@@ -73,7 +91,7 @@ function PageCard({ page, plan, index, selected, dragging, onPointerDown, onSele
             (entries) => {
                 if (!entries.some((entry) => entry.isIntersecting)) return;
                 observer.disconnect();
-                thumbnail(page, planRef.current, THUMB_WIDTH)
+                thumbnail(page, planRef.current, thumbWidth)
                     .then((u) => {
                         if (!cancelled) setUrl(u);
                     })
@@ -86,7 +104,7 @@ function PageCard({ page, plan, index, selected, dragging, onPointerDown, onSele
             cancelled = true;
             observer.disconnect();
         };
-    }, [page, rotation]);
+    }, [page, rotation, thumbWidth]);
 
     return (
         <li
@@ -100,6 +118,7 @@ function PageCard({ page, plan, index, selected, dragging, onPointerDown, onSele
             style={{ '--source-color': origin.color, '--ratio': size.width / size.height } as CSSProperties}
             onPointerDown={(e) => onPointerDown(e, page.id)}
             onClick={(e) => onSelect(e, page.id)}
+            onDoubleClick={() => onOpen(page.id)}
             onKeyDown={(e) => {
                 if (e.key === ' ' || e.key === 'Enter') {
                     e.preventDefault();
@@ -150,7 +169,8 @@ function PageCard({ page, plan, index, selected, dragging, onPointerDown, onSele
  * Ctrl ajoute ; un glissé déplace la page, et toute la sélection avec elle
  * quand elle en fait partie. Des fichiers déposés dessus s'ajoutent à la fin.
  */
-export function PageBoard({ plan, selection, onSelect, onReorder, onRemove, onFiles }: PageBoardProps) {
+export function PageBoard({ plan, selection, onSelect, onOpen, onReorder, onRemove, onFiles, thumbs }: PageBoardProps) {
+    const size = THUMBS[thumbs];
     const order = plan.pages.map((p) => p.id);
     const pressed = useRef<string | null>(null);
     /** Un glissé vient de finir : le clic qui le suit n'est pas une sélection. */
@@ -187,6 +207,14 @@ export function PageBoard({ plan, selection, onSelect, onReorder, onRemove, onFi
             role='listbox'
             aria-multiselectable='true'
             aria-label='Pages du document'
+            style={
+                {
+                    '--card-min': `${size.min}px`,
+                    '--thumb-height': `${size.height}px`,
+                    '--thumb-height-mobile': `${size.mobileHeight}px`,
+                    '--mobile-cols': size.mobileCols
+                } as CSSProperties
+            }
             {...drop.props}
         >
             {plan.pages.map((page, index) => (
@@ -199,7 +227,9 @@ export function PageBoard({ plan, selection, onSelect, onReorder, onRemove, onFi
                     dragging={drag.draggingId === page.id}
                     onPointerDown={onPointerDown}
                     onSelect={select}
+                    onOpen={onOpen}
                     onRemove={onRemove}
+                    thumbWidth={size.render}
                 />
             ))}
             <li ref={drag.barRef} className={styles.dropBar} aria-hidden='true' />

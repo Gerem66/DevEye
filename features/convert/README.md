@@ -114,8 +114,8 @@ reste silencieuse : on est encore devant l'écran.
   le module `pdf`, dans le navigateur. Les deux se passent le fichier par
   `handFileTo` du SDK : la colonne du fichier propose « Ouvrir dans PDF » pour
   un PDF déposé, et `Convert.tsx` ramasse par `useHandedFile` le document que
-  l'atelier lui confie, cible choisie (`pdf-light`, `pdf-ocr`), à l'étape des
-  options.
+  l'atelier lui confie pour la reconnaissance de texte (cible `pdf-ocr`), à
+  l'étape des options.
 - **Ce qu'un fichier peut peser** : le mur du serveur (`CONVERT_MAX_FILE_BYTES`),
   l'offre du propriétaire de l'espace (`convert.fileBytes`), et la place libre.
 - **Ce qu'une offre borne en plus** ([`Docs/QUOTAS.md`](../../Docs/QUOTAS.md)),

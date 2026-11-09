@@ -9,15 +9,13 @@ import {
     EMPTY_PLAN,
     imagePageSize,
     insertBlank,
-    keepPages,
     moveTogether,
+    downloadName,
     outputName,
     pagesBetween,
     pagesByParity,
     removePages,
-    removeSource,
     reorderPages,
-    reorderSources,
     rotateBy,
     rotatePages,
     routesToWorkshop,
@@ -50,25 +48,6 @@ describe('plan des pages', () => {
         assert.equal(summarize(plan), '2 fichiers · 3 pages');
     });
 
-    it('retire un fichier avec ses pages, garde les autres', () => {
-        let plan = addSource(addSource(EMPTY_PLAN, source('a', 2)), source('b', 2));
-        plan = removeSource(plan, 'a');
-        assert.deepEqual(origins(plan), ['b:0', 'b:1']);
-        assert.equal(plan.sources.length, 1);
-    });
-
-    it('réordonne les fichiers en emportant leurs pages, les pages libres suivant leur voisine', () => {
-        let plan = addSource(addSource(EMPTY_PLAN, source('a', 2)), source('b', 1));
-        plan = insertBlank(plan, plan.pages[0].id).plan;
-        assert.deepEqual(origins(plan), ['a:0', 'blank', 'a:1', 'b:0']);
-        plan = reorderSources(plan, ['b', 'a']);
-        assert.deepEqual(origins(plan), ['b:0', 'a:0', 'blank', 'a:1']);
-        assert.deepEqual(
-            plan.sources.map((s) => s.id),
-            ['b', 'a']
-        );
-    });
-
     it('réordonne les pages, et refuse un ordre incomplet', () => {
         const plan = addSource(EMPTY_PLAN, source('a', 3));
         const [p0, p1, p2] = ids(plan);
@@ -86,11 +65,10 @@ describe('plan des pages', () => {
         assert.deepEqual(moveTogether(before, ['a', 'b', 'd', 'c'], 'd', ['b', 'd']), ['a', 'b', 'd', 'c']);
     });
 
-    it('retire, garde, pivote et duplique', () => {
+    it('retire, pivote et duplique', () => {
         let plan = addSource(EMPTY_PLAN, source('a', 3));
         const [p0, p1, p2] = ids(plan);
         assert.deepEqual(origins(removePages(plan, [p1])), ['a:0', 'a:2']);
-        assert.deepEqual(origins(keepPages(plan, [p2])), ['a:2']);
         plan = rotatePages(plan, [p0], 90);
         assert.equal(plan.pages[0].rotation, 90);
         assert.equal(rotatePages(plan, [p0], -90).pages[0].rotation, 0);
@@ -153,6 +131,13 @@ describe('plan des pages', () => {
         const two = addSource(addSource(EMPTY_PLAN, { ...source('a', 1), name: 'Devis.pdf' }), source('b', 1));
         assert.equal(outputName(two), 'Devis et 1 autre.pdf');
         assert.equal(outputName(addSource(two, source('c', 1))), 'Devis et 2 autres.pdf');
+    });
+
+    it('le nom tapé prend le pas et finit toujours en .pdf', () => {
+        assert.equal(downloadName(null, EMPTY_PLAN), 'document.pdf');
+        assert.equal(downloadName('  ', EMPTY_PLAN), 'document.pdf');
+        assert.equal(downloadName('devis signé', EMPTY_PLAN), 'devis signé.pdf');
+        assert.equal(downloadName('devis.PDF', EMPTY_PLAN), 'devis.PDF');
     });
 
     it('aiguille vers l’atelier un PDF, ou plusieurs images, jamais une vidéo', () => {

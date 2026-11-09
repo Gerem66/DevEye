@@ -26,13 +26,13 @@ import {
 import {
     HIGHLIGHT,
     HIGHLIGHT_OPACITY,
-    INK,
+    inkRgb,
     MARK_BOX,
     MARK_PATHS,
     rectOf,
     replicate,
     TEXT_LINE_HEIGHT,
-    type InkColor,
+    type Ink,
     type PdfElement
 } from './elements';
 import { numberBox, pageNumberLabel, WATERMARK_ANGLE, type Finishing } from './finishing';
@@ -98,12 +98,6 @@ export interface BuildInput {
     /** Les champs deviennent du contenu : plus rien ne se remplit dans le document produit. */
     flatten?: boolean;
     finishing?: Finishing;
-    /**
-     * Quand le document produit n'est qu'une partie du plan (un découpage) :
-     * le rang de sa première page dans l'ensemble, et le nombre total de pages,
-     * pour que les numéros continuent d'une partie à l'autre.
-     */
-    numbering?: { offset: number; total: number };
 }
 
 /** Ce qu'un champ de formulaire vaut : une case ou un bouton radio, ou un texte (un choix se donne par sa valeur). */
@@ -313,7 +307,7 @@ class Drawing {
     }
 }
 
-const ink = (color: InkColor) => rgb(...INK[color].rgb);
+const ink = (color: Ink) => rgb(...inkRgb(color));
 
 /** Helvetica n'écrit que le Latin-1 : le reste devient un point d'interrogation plutôt qu'une erreur. */
 const latin1 = (text: string): string => text.replace(/[^\u0000-ÿ]/g, '?');
@@ -324,7 +318,7 @@ async function drawText(
     rect: Rect,
     text: string,
     size: number,
-    color: InkColor,
+    color: Ink,
     hand: boolean,
     drawing: Drawing
 ): Promise<void> {
@@ -349,7 +343,7 @@ function drawPath(
     rect: Rect,
     path: string,
     natural: { width: number; height: number },
-    color: InkColor,
+    color: Ink,
     stroke: number
 ): void {
     const scale = rect.width / Math.max(natural.width, 0.01);
@@ -435,7 +429,7 @@ async function drawElement(out: Output, rect: Rect, el: PdfElement, drawing: Dra
                 ...userRect(frame, rect),
                 color: el.fill === 'white' ? rgb(1, 1, 1) : undefined,
                 borderColor: el.border ? ink(el.border) : undefined,
-                borderWidth: el.border ? 1.2 : 0
+                borderWidth: el.border ? el.stroke : 0
             });
             break;
         case 'ink':
@@ -487,7 +481,6 @@ async function applyFinishing(
     dst: PDFDocument,
     outputs: readonly Output[],
     finishing: Finishing,
-    numbering: { offset: number; total: number },
     drawing: Drawing
 ): Promise<void> {
     const { numbers, watermark, metadata } = finishing;
@@ -495,7 +488,7 @@ async function applyFinishing(
         const { font } = await drawing.font(false);
         for (const [i, out] of outputs.entries()) {
             const page = frameSize(out.frame);
-            const label = pageNumberLabel(numbers, numbering.offset + i, numbering.total);
+            const label = pageNumberLabel(numbers, i, outputs.length);
             if (label !== null) {
                 const width = font.widthOfTextAtSize(label, 10);
                 const box = numberBox(numbers.position, page, width);
@@ -656,13 +649,7 @@ export async function buildPdf(input: BuildInput, onProgress: BuildProgress = ()
     }
 
     if (input.finishing) {
-        await applyFinishing(
-            dst,
-            outputs,
-            input.finishing,
-            input.numbering ?? { offset: 0, total: outputs.length },
-            drawing
-        );
+        await applyFinishing(dst, outputs, input.finishing, drawing);
     }
 
     return dst.save();

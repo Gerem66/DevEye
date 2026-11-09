@@ -80,12 +80,6 @@
     filter: opacity(0.45);
 }
 
-.iconButtonDanger:hover:not(:disabled),
-.iconButtonDanger:focus-visible {
-    border-color: var(--danger);
-    color: var(--danger);
-}
-
 .iconButton :global(.icon) {
     width: 16px;
 }
@@ -165,99 +159,24 @@
     line-height: 1.5;
 }
 
-/* ---- Les fichiers, en pastilles ---- */
-.strip {
-    position: relative;
+/* ---- L'en-tête de l'onglet Pages : le nom du document, la taille des aperçus ---- */
+.pagesHead {
     display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--space-md);
     flex-wrap: wrap;
-    gap: var(--space-sm);
-    margin: 0;
-    padding: 0;
-    list-style: none;
 }
 
-.chip {
-    display: inline-flex;
-    align-items: center;
+.headField {
+    display: flex;
+    flex-direction: column;
     gap: var(--space-xs);
-    max-width: 320px;
-    padding: 0 var(--space-xs) 0 var(--space-sm);
-    height: 32px;
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-pill);
-    background: var(--surface-widget);
-    font-size: 0.82rem;
-    color: var(--text-secondary);
 }
 
-.chipDragging {
-    filter: opacity(0.45);
-}
-
-.chipDot {
-    flex-shrink: 0;
-    width: 10px;
-    height: 10px;
-    border-radius: var(--radius-pill);
-    background: var(--source-color);
-}
-
-.chipGrip {
-    display: grid;
-    place-items: center;
-    width: 18px;
-    height: 100%;
-    color: var(--text-muted);
-    cursor: grab;
-    touch-action: none;
-}
-
-.chipGrip :global(.icon) {
-    width: 12px;
-}
-
-.chipName {
-    overflow: hidden;
-    color: var(--text-primary);
-    font-weight: 600;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-}
-
-.chipMeta {
-    flex-shrink: 0;
-    color: var(--text-muted);
-    font-variant-numeric: tabular-nums;
-}
-
-.chipLock {
-    display: inline-grid;
-    place-items: center;
-    width: 12px;
-    color: var(--text-muted);
-}
-
-.chipRemove {
-    padding: 0;
-    display: grid;
-    place-items: center;
-    width: 24px;
-    height: 24px;
-    border: none;
-    border-radius: var(--radius-pill);
-    background: none;
-    color: var(--text-muted);
-    cursor: pointer;
-}
-
-.chipRemove:hover,
-.chipRemove:focus-visible {
-    background: var(--danger-bg);
-    color: var(--danger);
-}
-
-.chipRemove :global(.icon) {
-    width: 12px;
+.nameField {
+    flex: 1;
+    max-width: 420px;
 }
 
 /* ---- La barre de la sélection, collée sous l'en-tête ---- */
@@ -268,10 +187,17 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: var(--space-md);
+    gap: var(--space-sm);
     flex-wrap: wrap;
     padding: var(--space-sm) 0;
     background: var(--surface-popup-solid);
+}
+
+/* Le compte et le menu « Sélectionner », en bout de ligne. */
+.barSelection {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
 }
 
 .barCount {
@@ -280,17 +206,16 @@
     font-variant-numeric: tabular-nums;
 }
 
+/* Six gestes et leur libellé : serrés, pour tenir sur une ligne avec le compte à 1280 px. */
 .barActions {
     display: flex;
     align-items: center;
-    gap: var(--space-sm);
+    gap: var(--space-xs);
     flex-wrap: wrap;
 }
 
-.barGroup {
-    display: flex;
-    align-items: center;
-    gap: var(--space-xs);
+.barLabel {
+    white-space: nowrap;
 }
 
 /* Le déclencheur du menu « Sélectionner » : l'allure d'un bouton secondaire. */
@@ -322,7 +247,7 @@
 .board {
     position: relative;
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(var(--card-min), 1fr));
     gap: var(--space-md);
     margin: 0;
     padding: var(--space-xs);
@@ -344,19 +269,6 @@
     left: 0;
     width: 3px;
     height: 100px;
-    border-radius: 2px;
-    background: var(--accent);
-    box-shadow: 0 0 6px var(--accent-glow);
-    opacity: 0;
-    pointer-events: none;
-}
-
-.dropBarRow {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 3px;
-    height: 32px;
     border-radius: 2px;
     background: var(--accent);
     box-shadow: 0 0 6px var(--accent-glow);
@@ -397,11 +309,11 @@
     filter: opacity(0.4);
 }
 
-/* La vignette : une hauteur fixe, la page dedans à ses proportions. */
+/* La vignette : une hauteur fixée par la taille d'aperçu choisie, la page dedans à ses proportions. */
 .thumbBox {
     display: grid;
     place-items: center;
-    height: 190px;
+    height: var(--thumb-height);
     border-radius: var(--radius-sm);
     overflow: hidden;
 }
@@ -415,7 +327,7 @@
 
 /* Avant la vignette : une feuille vide aux bonnes proportions, qui ne saute pas à l'arrivée de l'image. */
 .thumbPending {
-    width: min(100%, calc(190px * var(--ratio)));
+    width: min(100%, calc(var(--thumb-height) * var(--ratio)));
     aspect-ratio: var(--ratio);
     max-height: 100%;
     border-radius: 2px;
@@ -607,15 +519,20 @@
     }
 
     .board {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: repeat(var(--mobile-cols), minmax(0, 1fr));
     }
 
     .thumbBox {
-        height: 150px;
+        height: var(--thumb-height-mobile);
     }
 
     .thumbPending {
-        width: min(100%, calc(150px * var(--ratio)));
+        width: min(100%, calc(var(--thumb-height-mobile) * var(--ratio)));
+    }
+
+    /* Les gestes de la barre gardent leur picto seul. */
+    .barLabel {
+        display: none;
     }
 
     .footer {
@@ -707,12 +624,49 @@
     white-space: nowrap;
 }
 
-.colorDots {
-    display: flex;
-    gap: var(--space-xs);
+/* L'encre dans la barre d'outils : à part des outils. */
+.toolbarInk {
     flex-shrink: 0;
     padding-left: var(--space-sm);
     border-left: 1px solid var(--glass-border);
+}
+
+/* Deux groupes de pastilles, chacun sous son mot : les encres du document, les encres libres. */
+.inkPicker {
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.inkGroup {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.inkCaption {
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.colorDots {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+/* Le sélecteur natif, ouvert par le bouton : invisible, mais dans la page pour que `click()` l'ouvre. */
+.colorInput {
+    position: absolute;
+    width: 0;
+    height: 0;
+    opacity: 0;
+    pointer-events: none;
 }
 
 /* La pastille porte l'encre du document (`--ink`), une couleur d'impression. */
@@ -729,6 +683,13 @@
 
 .colorDotActive {
     border-color: var(--accent);
+}
+
+/* Un emplacement libre sans couleur encore : vide, en pointillé. */
+.colorDotEmpty {
+    border: 2px dashed var(--glass-border-strong);
+    background: none;
+    box-shadow: none;
 }
 
 .editBody {
@@ -810,6 +771,32 @@
     overflow: hidden;
     white-space: pre-wrap;
     word-break: break-word;
+}
+
+/* Le texte choisi s'édite sur place ; le cadre autour sert à le déplacer. */
+.elFrame {
+    position: absolute;
+    inset: -6px;
+    cursor: move;
+}
+
+.elTextEdit {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    border: none;
+    outline: none;
+    background: transparent;
+    font: inherit;
+    white-space: pre-wrap;
+    word-break: break-word;
+    resize: none;
+    overflow: hidden;
+    user-select: text;
+    cursor: text;
 }
 
 .elHand {
@@ -987,6 +974,19 @@
 .savedPick:hover,
 .savedPick:focus-visible {
     border-color: var(--accent);
+}
+
+/* Celle en main. */
+.savedPickActive {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+}
+
+/* La bibliothèque dans l'inspecteur. */
+.library {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
 }
 
 .savedSvg {
@@ -1248,36 +1248,6 @@
     pointer-events: none;
 }
 
-/* ---- Autres exports ---- */
-/* ---- Exports : une colonne de lecture ---- */
-.exportsTab {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-md);
-    max-width: 720px;
-}
-
-.exportSection {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-md);
-    padding-top: var(--space-md);
-    border-top: 1px solid var(--glass-border);
-}
-
-.exportRow {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-md);
-}
-
-.exportPair {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: var(--space-md);
-}
-
 @media (max-width: 760px) {
     .finishTab {
         grid-template-columns: minmax(0, 1fr);
@@ -1287,8 +1257,7 @@
         position: static;
     }
 
-    .finishPair,
-    .exportPair {
+    .finishPair {
         grid-template-columns: minmax(0, 1fr);
     }
 }

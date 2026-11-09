@@ -1,15 +1,10 @@
 import { Button, SegmentedControl, Slider, Switch, TextArea } from 'deveye-sdk-client';
 
-import {
-    CAN_REPEAT,
-    ELEMENT_LABELS,
-    HIGHLIGHT,
-    INK,
-    textHeight,
-    type HighlightColor,
-    type InkColor,
-    type PdfElement
-} from './elements';
+import { SignatureLibrary, type LibraryProps } from './SignatureLibrary';
+
+import type { SavedSignature } from '../contracts/signatures';
+import { CAN_REPEAT, ELEMENT_LABELS, HIGHLIGHT, textHeight, type HighlightColor, type PdfElement } from './elements';
+import { InkPicker, type InkSlots } from './InkPicker';
 import styles from './pdf.module.css';
 import type { Tool } from './tools';
 
@@ -18,11 +13,13 @@ interface InspectorProps {
     tool: Tool;
     onChange: (patch: Partial<PdfElement>) => void;
     onRemove: () => void;
-    /** Rouvrir le dialogue d'une signature ou d'un paraphe déjà choisis. */
-    onChangeSignature: (role: 'signature' | 'initials') => void;
+    /** Les signatures gardées, montrées avec l'outil Signature ou Paraphe, et sur une signature choisie. */
+    library: LibraryProps;
+    /** Une signature choisie en reproduit une autre du compte. */
+    onSwapSignature: (saved: SavedSignature) => void;
+    inks: InkSlots;
 }
 
-const INK_OPTIONS = (Object.keys(INK) as InkColor[]).map((value) => ({ value, label: INK[value].label }));
 const HIGHLIGHT_OPTIONS = (Object.keys(HIGHLIGHT) as HighlightColor[]).map((value) => ({
     value,
     label: HIGHLIGHT[value].label
@@ -31,7 +28,7 @@ const HIGHLIGHT_OPTIONS = (Object.keys(HIGHLIGHT) as HighlightColor[]).map((valu
 const HINTS: Record<Tool, string> = {
     select: 'Cliquez un élément pour le modifier, glissez-le pour le déplacer, tirez un coin pour le redimensionner.',
     signature: 'Cliquez sur la page là où la signature doit se poser.',
-    initials: 'Cliquez sur la page : le paraphe se pose au même endroit sur toutes les pages.',
+    initials: 'Cliquez sur la page là où le paraphe doit se poser.',
     text: 'Cliquez sur la page pour y écrire.',
     date: 'Cliquez sur la page pour y poser la date du jour.',
     check: 'Cliquez sur la case à cocher.',
@@ -53,23 +50,21 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 }
 
 /** Les réglages de l'élément choisi, ou ce que l'outil attend. */
-export function Inspector({ element, tool, onChange, onRemove, onChangeSignature }: InspectorProps) {
+export function Inspector({ element, tool, onChange, onRemove, library, onSwapSignature, inks }: InspectorProps) {
     if (!element) {
         return (
             <aside className={styles.inspector}>
                 <p className={styles.inspectorHint}>{HINTS[tool]}</p>
-                {(tool === 'signature' || tool === 'initials') && (
-                    <Button variant='secondary' onClick={() => onChangeSignature(tool)}>
-                        {tool === 'signature' ? 'Changer de signature' : 'Changer de paraphe'}
-                    </Button>
-                )}
+                {(tool === 'signature' || tool === 'initials') && <SignatureLibrary role={tool} {...library} />}
             </aside>
         );
     }
 
     return (
         <aside className={styles.inspector} key={element.id}>
-            <h3 className={styles.inspectorTitle}>{ELEMENT_LABELS[element.kind]}</h3>
+            <h3 className={styles.inspectorTitle}>
+                {element.kind === 'signature' && element.role === 'initials' ? 'Paraphe' : ELEMENT_LABELS[element.kind]}
+            </h3>
 
             {element.kind === 'text' && (
                 <>
@@ -77,7 +72,6 @@ export function Inspector({ element, tool, onChange, onRemove, onChangeSignature
                         <TextArea
                             value={element.text}
                             autoGrow
-                            autoFocus
                             aria-label='Texte'
                             onChange={(e) =>
                                 onChange({ text: e.target.value, height: textHeight(e.target.value, element.size) })
@@ -85,22 +79,15 @@ export function Inspector({ element, tool, onChange, onRemove, onChangeSignature
                         />
                     </Row>
                     <Slider
-                        label='Taille'
+                        label='Taille (pt)'
                         min={6}
                         max={48}
                         step={1}
                         value={element.size}
-                        valueLabel={`${element.size} pt`}
+                        editable
                         onChange={(size) => onChange({ size, height: textHeight(element.text, size) })}
                     />
-                    <Row label='Encre'>
-                        <SegmentedControl
-                            value={element.color}
-                            options={INK_OPTIONS}
-                            onChange={(color) => onChange({ color })}
-                            fullWidth
-                        />
-                    </Row>
+                    <InkPicker value={element.color} onChange={(color) => onChange({ color })} {...inks} />
                     <Switch
                         label='Écriture manuscrite'
                         checked={element.hand}
@@ -110,14 +97,15 @@ export function Inspector({ element, tool, onChange, onRemove, onChangeSignature
             )}
 
             {element.kind === 'signature' && (
-                <Row label='Encre'>
-                    <SegmentedControl
-                        value={element.color}
-                        options={INK_OPTIONS}
-                        onChange={(color) => onChange({ color })}
-                        fullWidth
+                <>
+                    <InkPicker value={element.color} onChange={(color) => onChange({ color })} {...inks} />
+                    <SignatureLibrary
+                        role={element.role}
+                        {...library}
+                        current={{ ...library.current, [element.role]: element.savedId }}
+                        onPick={(_role, saved) => onSwapSignature(saved)}
                     />
-                </Row>
+                </>
             )}
 
             {element.kind === 'mark' && (
@@ -133,14 +121,7 @@ export function Inspector({ element, tool, onChange, onRemove, onChangeSignature
                             fullWidth
                         />
                     </Row>
-                    <Row label='Encre'>
-                        <SegmentedControl
-                            value={element.color}
-                            options={INK_OPTIONS}
-                            onChange={(color) => onChange({ color })}
-                            fullWidth
-                        />
-                    </Row>
+                    <InkPicker value={element.color} onChange={(color) => onChange({ color })} {...inks} />
                 </>
             )}
 
@@ -168,34 +149,38 @@ export function Inspector({ element, tool, onChange, onRemove, onChangeSignature
                             fullWidth
                         />
                     </Row>
-                    <Row label='Bordure'>
-                        <SegmentedControl
-                            value={element.border ?? 'none'}
-                            options={[{ value: 'none', label: 'Aucune' }, ...INK_OPTIONS]}
-                            onChange={(border) => onChange({ border: border === 'none' ? null : border })}
-                            fullWidth
-                        />
-                    </Row>
+                    <Switch
+                        label='Bordure'
+                        checked={element.border !== null}
+                        onChange={(on) => onChange({ border: on ? 'black' : null })}
+                    />
+                    {element.border !== null && (
+                        <>
+                            <InkPicker value={element.border} onChange={(border) => onChange({ border })} {...inks} />
+                            <Slider
+                                label='Épaisseur (pt)'
+                                min={0.5}
+                                max={8}
+                                step={0.5}
+                                value={element.stroke}
+                                editable
+                                onChange={(stroke) => onChange({ stroke })}
+                            />
+                        </>
+                    )}
                 </>
             )}
 
             {element.kind === 'ink' && (
                 <>
-                    <Row label='Encre'>
-                        <SegmentedControl
-                            value={element.color}
-                            options={INK_OPTIONS}
-                            onChange={(color) => onChange({ color })}
-                            fullWidth
-                        />
-                    </Row>
+                    <InkPicker value={element.color} onChange={(color) => onChange({ color })} {...inks} />
                     <Slider
-                        label='Épaisseur'
+                        label='Épaisseur (pt)'
                         min={1}
                         max={8}
                         step={0.5}
                         value={element.stroke}
-                        valueLabel={`${element.stroke} pt`}
+                        editable
                         onChange={(stroke) => onChange({ stroke })}
                     />
                 </>

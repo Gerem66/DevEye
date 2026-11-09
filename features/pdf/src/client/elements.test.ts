@@ -4,7 +4,10 @@ import { describe, it } from 'node:test';
 import {
     centredBox,
     clampToPage,
+    INK,
     inkPath,
+    inkRgb,
+    smoothPoints,
     rectBetween,
     replicate,
     rotateRect,
@@ -15,6 +18,12 @@ import {
 
 describe('éléments posés sur une page', () => {
     const a4 = { width: 595, height: 842 };
+
+    it('lit une encre du document ou une couleur choisie', () => {
+        assert.equal(inkRgb('blue'), INK.blue.rgb);
+        assert.deepEqual(inkRgb('#ff8000'), [1, 128 / 255, 0]);
+        assert.deepEqual(inkRgb('#ffffff'), [1, 1, 1]);
+    });
 
     it('ramène une boîte dans la page', () => {
         assert.deepEqual(clampToPage({ x: -10, y: 900, width: 100, height: 50 }, a4), {
@@ -84,6 +93,33 @@ describe('éléments posés sur une page', () => {
             0
         );
         assert.equal(strokes?.path, 'M 0 0 L 4 0 M 0 4');
+    });
+
+    it('moyenne les voisins d’un point, les bouts restant en place', () => {
+        const jagged = [
+            { x: 0, y: 0 },
+            { x: 10, y: 6 },
+            { x: 20, y: 0 },
+            { x: 30, y: 6 },
+            { x: 40, y: 0 }
+        ];
+        assert.deepEqual(smoothPoints(jagged, 0), jagged);
+        const smooth = smoothPoints(jagged, 1);
+        assert.deepEqual(smooth[0], jagged[0]);
+        assert.deepEqual(smooth[4], jagged[4]);
+        assert.deepEqual(smooth[2], { x: 20, y: 4 });
+    });
+
+    it('lisse un trait de trois points et plus', () => {
+        const ink = inkPath(
+            [
+                { x: 0, y: 0 },
+                { x: 10, y: 0 },
+                { x: 20, y: 10 }
+            ],
+            0
+        );
+        assert.equal(ink?.path, 'M 0 0 Q 10 0 15 5 L 20 10');
     });
 
     it('mesure un texte et date le jour', () => {

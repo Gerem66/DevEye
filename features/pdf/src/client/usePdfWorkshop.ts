@@ -10,13 +10,10 @@ import {
     duplicatePages,
     EMPTY_PLAN,
     insertBlank,
-    keepPages,
     newId,
     pagesBetween,
     removePages,
-    removeSource,
     reorderPages,
-    reorderSources,
     rotatePages,
     type ImageInfo,
     type Plan,
@@ -55,11 +52,8 @@ export type OpenedFile = { kind: 'source'; source: SourceInfo } | { kind: 'image
 
 type Action =
     | { type: 'addFiles'; files: readonly OpenedFile[]; at?: number }
-    | { type: 'removeSource'; id: string }
-    | { type: 'reorderSources'; order: readonly string[] }
     | { type: 'reorder'; order: readonly string[] }
     | { type: 'remove'; ids: readonly string[] }
-    | { type: 'keep'; ids: readonly string[] }
     | { type: 'rotate'; ids: readonly string[]; delta: 90 | -90 | 180 }
     | { type: 'duplicate'; ids: readonly string[] }
     | { type: 'blank'; afterId: string | null }
@@ -150,16 +144,10 @@ function reduce(state: State, action: Action): State {
             }
             return commit(state, { plan });
         }
-        case 'removeSource':
-            return commit(state, { plan: removeSource(state.plan, action.id) });
-        case 'reorderSources':
-            return commit(state, { plan: reorderSources(state.plan, action.order) });
         case 'reorder':
             return commit(state, { plan: reorderPages(state.plan, action.order) });
         case 'remove':
             return commit(state, { plan: removePages(state.plan, action.ids) }, []);
-        case 'keep':
-            return commit(state, { plan: keepPages(state.plan, action.ids) });
         case 'rotate': {
             // Ce qui est posé sur une page qui tourne la suit, et se lit toujours droit.
             const chosen = new Set(action.ids);

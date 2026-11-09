@@ -132,32 +132,6 @@ function pruneImages(plan: Plan): Plan {
     return images.length === plan.images.length ? plan : { ...plan, images };
 }
 
-export function removeSource(plan: Plan, sourceId: string): Plan {
-    return {
-        ...plan,
-        sources: plan.sources.filter((s) => s.id !== sourceId),
-        pages: plan.pages.filter((p) => p.kind !== 'source' || p.sourceId !== sourceId)
-    };
-}
-
-/**
- * Les fichiers dans un nouvel ordre : chaque fichier emporte ses pages, dans
- * leur ordre actuel. Une page blanche ou une image suit la page qui la précède.
- */
-export function reorderSources(plan: Plan, order: readonly string[]): Plan {
-    const groups = new Map<string, PlanPage[]>(order.map((id) => [id, []]));
-    let current: string | null = order[0] ?? null;
-    const loose: PlanPage[] = [];
-    for (const page of plan.pages) {
-        if (page.kind === 'source' && groups.has(page.sourceId)) current = page.sourceId;
-        const group = current === null ? null : groups.get(current);
-        if (group) group.push(page);
-        else loose.push(page);
-    }
-    const sources = order.flatMap((id) => plan.sources.filter((s) => s.id === id));
-    return { ...plan, sources, pages: [...loose, ...order.flatMap((id) => groups.get(id) ?? [])] };
-}
-
 export function reorderPages(plan: Plan, order: readonly string[]): Plan {
     const byId = new Map(plan.pages.map((p) => [p.id, p]));
     const pages = order.flatMap((id) => {
@@ -189,11 +163,6 @@ export function moveTogether(
 export function removePages(plan: Plan, ids: readonly string[]): Plan {
     const gone = new Set(ids);
     return pruneImages({ ...plan, pages: plan.pages.filter((p) => !gone.has(p.id)) });
-}
-
-export function keepPages(plan: Plan, ids: readonly string[]): Plan {
-    const kept = new Set(ids);
-    return pruneImages({ ...plan, pages: plan.pages.filter((p) => kept.has(p.id)) });
 }
 
 export function rotatePages(plan: Plan, ids: readonly string[], delta: 90 | -90 | 180): Plan {
@@ -240,9 +209,6 @@ export function pagesBetween(plan: Plan, a: string, b: string): string[] {
     return plan.pages.slice(lo, hi + 1).map((p) => p.id);
 }
 
-export const pagesUsing = (plan: Plan, sourceId: string): number =>
-    plan.pages.filter((p) => p.kind === 'source' && p.sourceId === sourceId).length;
-
 const plural = (count: number, one: string, many: string): string => `${count} ${count > 1 ? many : one}`;
 
 /** « 3 fichiers · 24 pages », pour l'en-tête et le bandeau du bas. */
@@ -263,6 +229,13 @@ export function outputName(plan: Plan): string {
     if (names.length === 0) return 'document.pdf';
     if (names.length === 1) return `${stem(names[0])}.pdf`;
     return `${stem(names[0])} et ${plural(names.length - 1, 'autre', 'autres')}.pdf`;
+}
+
+/** Le nom sous lequel le document se télécharge : celui tapé, sinon `outputName`, toujours en `.pdf`. */
+export function downloadName(typed: string | null, plan: Plan): string {
+    const name = typed?.trim() ?? '';
+    if (name === '') return outputName(plan);
+    return /\.pdf$/i.test(name) ? name : `${name}.pdf`;
 }
 
 /** Par quelle porte on entre dans l'atelier : une tuile de l'accueil, ou un dépôt de fichiers. */

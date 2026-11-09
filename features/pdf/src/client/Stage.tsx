@@ -13,7 +13,7 @@ import {
     clampToPage,
     HIGHLIGHT,
     HIGHLIGHT_OPACITY,
-    INK,
+    inkRgb,
     KEEPS_ASPECT,
     MARK_BOX,
     MARK_PATHS,
@@ -22,7 +22,7 @@ import {
     rectOf,
     strokesPath,
     TEXT_LINE_HEIGHT,
-    type InkColor,
+    type Ink,
     type PdfElement
 } from './elements';
 import { HAND_FONT_FAMILY } from './fonts';
@@ -57,6 +57,8 @@ interface StageProps {
     ghosts: readonly PdfElement[];
     selectedId: string | null;
     tool: Tool;
+    /** L'encre choisie : celle du trait en train d'être tracé. */
+    ink: Ink;
     onSelect: (id: string | null) => void;
     /** Un clic avec un outil qui pose (signature, texte, coche…) : où. */
     onStamp: (at: Point) => void;
@@ -64,16 +66,57 @@ interface StageProps {
     onDraw: (tool: 'highlight' | 'box' | 'redact', rect: Rect) => void;
     onInk: (path: string, box: Rect) => void;
     onUpdate: (id: string, rect: Rect) => void;
+    /** Le texte d'un élément, tapé sur la page même. */
+    onEditText: (id: string, text: string) => void;
     onRemove: (id: string) => void;
 }
 
 const css = (rgb: readonly [number, number, number], alpha = 1): string =>
     `rgba(${Math.round(rgb[0] * 255)}, ${Math.round(rgb[1] * 255)}, ${Math.round(rgb[2] * 255)}, ${alpha})`;
-export const inkCss = (color: InkColor): string => css(INK[color].rgb);
+export const inkCss = (ink: Ink): string => css(inkRgb(ink));
+
+/** Le texte choisi, édité sur place : le champ prend le clavier dès qu'il paraît, quoi que le clic ait visé. */
+function TextEditor({
+    el,
+    scale,
+    onEditText
+}: {
+    el: Extract<PdfElement, { kind: 'text' }>;
+    scale: number;
+    onEditText: (id: string, text: string) => void;
+}) {
+    const ref = useRef<HTMLTextAreaElement>(null);
+    useEffect(() => {
+        // Tout le texte choisi d'emblée : taper remplace le mot posé par défaut.
+        ref.current?.focus({ preventScroll: true });
+        ref.current?.select();
+    }, []);
+    return (
+        <textarea
+            ref={ref}
+            className={styles.elTextEdit}
+            value={el.text}
+            aria-label='Texte'
+            spellCheck={false}
+            style={{
+                fontSize: `${el.size * scale}px`,
+                lineHeight: TEXT_LINE_HEIGHT,
+                color: inkCss(el.color),
+                fontFamily: el.hand ? `'${HAND_FONT_FAMILY}', cursive` : undefined
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === 'Escape') e.currentTarget.blur();
+            }}
+            onChange={(e) => onEditText(el.id, e.target.value)}
+        />
+    );
+}
 
 /** Le dessin d'un élément, dans sa boîte à l'écran. */
 function Content({ el, rect, scale }: { el: PdfElement; rect: Rect; scale: number }) {
-    const path = (d: string, box: Size, color: InkColor, stroke: number) => (
+    const path = (d: string, box: Size, color: Ink, stroke: number) => (
         <svg className={styles.elSvg} viewBox={`0 0 ${box.width} ${box.height}`} preserveAspectRatio='none'>
             <path
                 d={d}
@@ -140,7 +183,7 @@ function Content({ el, rect, scale }: { el: PdfElement; rect: Rect; scale: numbe
                     className={styles.elBox}
                     style={{
                         background: el.fill === 'white' ? '#ffffff' : 'transparent',
-                        border: el.border ? `${Math.max(1, 1.2 * scale)}px solid ${inkCss(el.border)}` : 'none'
+                        border: el.border ? `${Math.max(1, el.stroke * scale)}px solid ${inkCss(el.border)}` : 'none'
                     }}
                 />
             );
@@ -158,8 +201,22 @@ function Content({ el, rect, scale }: { el: PdfElement; rect: Rect; scale: numbe
  * ici aussi. Les positions se comptent en points de la page, à `scale` près.
  */
 export function Stage(props: StageProps) {
-    const { page, plan, elements, ghosts, selectedId, tool, onSelect, onStamp, onDraw, onInk, onUpdate, onRemove } =
-        props;
+    const {
+        ink,
+        page,
+        plan,
+        elements,
+        ghosts,
+        selectedId,
+        tool,
+        onSelect,
+        onStamp,
+        onDraw,
+        onInk,
+        onUpdate,
+        onEditText,
+        onRemove
+    } = props;
     const wrap = useRef<HTMLDivElement>(null);
     const overlay = useRef<HTMLDivElement>(null);
     const [stageWidth, setStageWidth] = useState(0);
@@ -250,6 +307,8 @@ export function Stage(props: StageProps) {
         } else if (tool === 'ink') {
             g = { kind: 'ink', points: [p] };
         } else {
+            // Sans ça, le `mousedown` qui suit rendrait le clavier à la scène, pas au texte qui vient d'être posé.
+            e.preventDefault();
             onStamp(p);
             return;
         }
@@ -357,19 +416,19 @@ export function Stage(props: StageProps) {
     if (live?.kind === 'rect' && live.id === null) {
         preview = <div className={`${styles.el} ${styles.elDrawing}`} style={place(live.rect)} />;
     } else if (live?.kind === 'ink') {
-        const ink = strokesPath([live.points], INK_STROKE);
-        if (ink) {
+        const traced = strokesPath([live.points], INK_STROKE);
+        if (traced) {
             preview = (
-                <div className={styles.el} style={place(ink.box)}>
+                <div className={styles.el} style={place(traced.box)}>
                     <svg
                         className={styles.elSvg}
-                        viewBox={`0 0 ${ink.box.width} ${ink.box.height}`}
+                        viewBox={`0 0 ${traced.box.width} ${traced.box.height}`}
                         preserveAspectRatio='none'
                     >
                         <path
-                            d={ink.path}
+                            d={traced.path}
                             fill='none'
-                            stroke='currentColor'
+                            stroke={inkCss(ink)}
                             strokeWidth={INK_STROKE}
                             strokeLinecap='round'
                             strokeLinejoin='round'
@@ -409,6 +468,8 @@ export function Stage(props: StageProps) {
                     {elements.map((el) => {
                         const rect = rectFor(el);
                         const selected = el.id === selectedId;
+                        // Un texte choisi s'édite sur place ; on l'attrape par son cadre, comme dans tout éditeur.
+                        const editing = selected && tool === 'select' && el.kind === 'text';
                         return (
                             <div
                                 key={el.id}
@@ -416,7 +477,14 @@ export function Stage(props: StageProps) {
                                 className={`${styles.el} ${selected ? styles.elSelected : ''} ${tool === 'select' ? styles.elGrab : ''}`}
                                 style={place(rect)}
                             >
-                                <Content el={el} rect={rect} scale={scale} />
+                                {editing ? (
+                                    <>
+                                        <span className={styles.elFrame} aria-hidden='true' />
+                                        <TextEditor el={el} scale={scale} onEditText={onEditText} />
+                                    </>
+                                ) : (
+                                    <Content el={el} rect={rect} scale={scale} />
+                                )}
                                 {selected &&
                                     (['nw', 'ne', 'sw', 'se'] as const).map((corner) => (
                                         <span

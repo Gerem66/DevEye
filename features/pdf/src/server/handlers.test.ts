@@ -5,7 +5,8 @@ import type { z, ZodType } from 'zod';
 import { FeatureError, type SdkFeatureContext } from '@deveye/types/sdk/server';
 import { createTestContext, type TestContextOverrides } from '@deveye/types/sdk/testing';
 
-import { pdfSignatureRemove, pdfSignatures, pdfSignatureSave } from '../contracts/commands';
+import { pdfPrefs, pdfPrefsSet, pdfSignatureRemove, pdfSignatures, pdfSignatureSave } from '../contracts/commands';
+import { DEFAULT_PREFS, type Prefs } from '../contracts/prefs';
 import { SIGNATURES_MAX } from '../contracts/signatures';
 import { pdfHandlers } from './handlers';
 import type { PdfRepo } from './repo';
@@ -52,5 +53,15 @@ describe('signatures gardées', () => {
             handlerFor(pdfSignatureSave)(ctx, drawn),
             (e: unknown) => e instanceof FeatureError && e.code === 'conflict'
         );
+    });
+});
+
+describe('réglages du compte', () => {
+    it('vaut les défauts tant que rien n’est écrit, puis ce qui a été écrit', async () => {
+        const ctx = context(memoryRepo());
+        assert.deepEqual(await handlerFor(pdfPrefs)(ctx, {}), { prefs: DEFAULT_PREFS });
+        const prefs: Prefs = { inks: ['#ff8000', null, '#123456'], signature: 4, initials: null, thumbs: 'large' };
+        await handlerFor(pdfPrefsSet)(ctx, { prefs });
+        assert.deepEqual(await handlerFor(pdfPrefs)(ctx, {}), { prefs });
     });
 });
