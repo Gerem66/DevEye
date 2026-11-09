@@ -56,6 +56,9 @@
       "package": "deveye-feature-convert"
     },
     {
+      "package": "deveye-feature-pdf"
+    },
+    {
       "package": "deveye-feature-invoicing"
     },
     {
@@ -63,6 +66,9 @@
     },
     {
       "package": "deveye-feature-moderation"
+    },
+    {
+      "package": "deveye-feature-whiteboard"
     }
   ]
 }

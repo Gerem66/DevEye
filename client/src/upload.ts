@@ -79,12 +79,13 @@ export function uploadFile(url: string, file: File, onProgress: (ratio: number) 
 /**
  * Déclenche le téléchargement d'une adresse servie en pièce jointe, sans quitter la page.
  * Sans `download`, le clic est une navigation, et Firefox coupe la socket dès
- * qu'elle commence. L'attribut ne vaut que sur l'origine de l'app : un chemin.
+ * qu'elle commence. L'attribut ne vaut que sur l'origine de l'app : un chemin,
+ * ou une adresse `blob:` fabriquée ici, qui n'a pas de nom sans `name`.
  */
-export function saveFrom(url: string): void {
+export function saveFrom(url: string, name = ''): void {
     const link = document.createElement('a');
     link.href = url;
-    link.download = '';
+    link.download = name;
     link.rel = 'noopener';
     document.body.appendChild(link);
     link.click();

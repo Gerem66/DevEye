@@ -145,18 +145,24 @@ scripts download with `curl` or `Invoke-WebRequest` and meet neither.
 
 ## Commands
 
-| Command                                                                                                                             | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| ----------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `link <code> [--server <url>] [--name <name>] [--deny <list>] [--monitor-only] [--shuffle-id] [--insecure-plaintext] [--autostart]` | Enroll with a link code. The server defaults to the one saved by a previous link, else the build's default. `--deny` and `--monitor-only` refuse kinds of orders ([the policy](#what-the-server-can-do-here-and-how-to-limit-it)); on a re-link they only add refusals. `--shuffle-id`: see [cloned machines](#cloned-machines). `--insecure-plaintext`: accept a plain `http://` server that is not this machine. `--autostart`: then install and start the service, system-wide as root. Re-linking keeps the machine identity. |
-| `run [--once] [--interval <secs>] [--detach] [--managed] [--config <path>]`                                                         | Run the monitoring loop. Not linked yet, it enrolls first with `DEVEYE_LINK_CODE` and the `link` options ([fleets](#linking-a-fleet)). `--once`: collect+send a single cycle then exit (handy to test). `--interval`: seconds between samples before the server's config arrives (default 30). `--detach`: background + PID file. `--managed` / `--config`: **internal**, injected by the installed service (see [Supervision](#supervision---managed)); never pass them by hand.                                                 |
-| `policy [--allow <list>] [--deny <list>] [--monitor-only] [--config <path>]`                                                        | Show what this machine lets the server order, or change it, then restart the agent so it applies.                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `stop`                                                                                                                              | Stop the running agent: the installed service until the next boot or login (`systemctl stop`, `launchctl bootout`, `schtasks /End`), else a backgrounded one (PID file, SIGTERM).                                                                                                                                                                                                                                                                                                                                                 |
-| `status`                                                                                                                            | Print platform, server, enrollment and running state.                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `service install [--system \| --user] [--no-autostart] [--config <path>] \| enable \| disable \| uninstall \| status`               | Manage the autostart service (launchd / systemd / Task Scheduler). Per-user by default (`--user` says so explicitly), `--system` needs root. `--no-autostart` installs and starts it without arming it for the next boot. `enable` / `disable` arm or disarm the installed service (see [Start at boot](#start-at-boot)). `--config` bakes a config path into the service definition (see [System scope](#system-scope)). Also driven from the UI.                                                                                |
-| `tray show \| hide`                                                                                                                 | Show or hide the DevEye icon in the notification area, for this user. See [Notification-area icon](#notification-area-icon-tray).                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `packages`                                                                                                                          | List the package managers found on this machine and their pending updates (diagnostic).                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| `unlink`                                                                                                                            | Forget the local enrollment (deletes the config + token).                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `uninstall [--yes] [--purge-shares]`                                                                                                | Remove the agent from the machine entirely: autostart service, linger, running process, config, token, log, caches, binary. See [Full removal](#full-removal-uninstall).                                                                                                                                                                                                                                                                                                                                                          |
+Every command takes `--instance <name>` (or `DEVEYE_INSTANCE`), before or after
+it, to act on a [named instance](#several-deveye-servers---instance) instead of
+the default enrollment.
+
+| Command                                                                                                                                      | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| -------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `link <code> [--server <url>] [--name <name>] [--deny <list>] [--monitor-only] [--shuffle-id] [--insecure-plaintext] [--autostart] [--move]` | Enroll with a link code. The server defaults to the one saved by a previous link, else the build's default. `--deny` and `--monitor-only` refuse kinds of orders ([the policy](#what-the-server-can-do-here-and-how-to-limit-it)); on a re-link they only add refusals. `--shuffle-id`: see [cloned machines](#cloned-machines). `--insecure-plaintext`: accept a plain `http://` server that is not this machine. `--autostart`: then install and start the service, system-wide as root. Re-linking keeps the machine identity. Linked to another server already, it refuses: `--move` moves the machine, or name an [instance](#several-deveye-servers---instance) to link it to both. |
+| `run [--once] [--interval <secs>] [--detach] [--managed] [--config <path>]`                                                                  | Run the monitoring loop. Not linked yet, it enrolls first with `DEVEYE_LINK_CODE` and the `link` options ([fleets](#linking-a-fleet)). `--once`: collect+send a single cycle then exit (handy to test). `--interval`: seconds between samples before the server's config arrives (default 30). `--detach`: background + PID file. `--managed` / `--config`: **internal**, injected by the installed service (see [Supervision](#supervision---managed)); never pass them by hand.                                                                                                                                                                                                         |
+| `policy [--allow <list>] [--deny <list>] [--monitor-only] [--config <path>]`                                                                 | Show what this machine lets the server order, or change it, then restart the agent so it applies.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `stop`                                                                                                                                       | Stop the running agent: the installed service until the next boot or login (`systemctl stop`, `launchctl bootout`, `schtasks /End`), else a backgrounded one (PID file, SIGTERM).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `pause [--for <duration>]`                                                                                                                   | Pause the agent: it keeps a control session with the server but monitors nothing and takes no order until `resume` or the end of `--for` (`30m`, `1h`, `4h`, `24h`, `2d`). A pause survives a restart of the agent and of the machine. See [Pausing](#pausing-the-agent).                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `resume`                                                                                                                                     | End a pause: the agent monitors again within a few seconds.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `status`                                                                                                                                     | Print platform, server, enrollment and running state.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `service install [--system \| --user] [--no-autostart] [--config <path>] \| enable \| disable \| uninstall \| status`                        | Manage the autostart service (launchd / systemd / Task Scheduler). Per-user by default (`--user` says so explicitly), `--system` needs root. `--no-autostart` installs and starts it without arming it for the next boot. `enable` / `disable` arm or disarm the installed service (see [Start at boot](#start-at-boot)). `--config` bakes a config path into the service definition (see [System scope](#system-scope)). Also driven from the UI.                                                                                                                                                                                                                                        |
+| `tray show \| hide`                                                                                                                          | Show or hide the DevEye icon in the notification area, for this user. See [Notification-area icon](#notification-area-icon-tray).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `packages`                                                                                                                                   | List the package managers found on this machine and their pending updates (diagnostic).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `unlink`                                                                                                                                     | Forget the local enrollment (deletes the config + token).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `uninstall [--yes] [--purge-shares]`                                                                                                         | Remove the agent from the machine entirely: autostart service, linger, running process, config, token, log, caches, binary. See [Full removal](#full-removal-uninstall).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 
 Test a freshly linked device end-to-end:
 
@@ -259,6 +265,50 @@ a clone take over its sibling's record.
   token and knock each other off the server. `deveye-agent unlink` before
   sealing the image.
 
+### Several DevEye servers (`--instance`)
+
+One machine can be followed by several DevEye servers (the hosted app and a
+self-hosted one, say), each through an enrollment of its own: a named
+instance. Nothing changes on the servers: each sees its own device. Without
+`--instance`, the agent uses its default enrollment, as a machine followed by
+one server always has: the `instances` folder only appears with a named one.
+
+```sh
+deveye-agent link ABCD-EFGH --autostart                                     # the default enrollment
+deveye-agent --instance nas link WXYZ-1234 --server https://nas.lan --autostart
+deveye-agent status                                                         # lists every instance
+deveye-agent --instance nas policy --deny terminal
+```
+
+The second command is what DevEye composes for you: on a device's settings,
+under its sharing, "Enrôler vers un autre espace" asks the remote instance for
+a link code and shows the line to paste on the machine.
+
+Each instance is a process of its own, with its own config (and so its own
+token, order key and `[policy]`), service (`deveye-agent-nas.service`, the
+launchd job `com.deveye.agent.nas`, the scheduled task `DevEyeAgent-nas`), lock
+and caches. A name is 1 to 32 lowercase letters, digits and dashes, other than
+`default`, which `status` calls the enrollment without a name.
+
+- `link` refuses to link an enrolled machine to another server: the token would
+  be replaced and the first server would lose the machine. Name an instance for
+  the new one, or add `--move` to move the machine: its identity, `[policy]`,
+  accepted CloudSync roots and tunnel targets stay, where `unlink` would delete
+  them. A server reached at a new address (an IP, then a domain) takes `--move`
+  too: the address is all the agent can compare.
+- The [icon](#notification-area-icon-tray) stays single: a line and an "Open"
+  entry per server, grey as soon as one is cut off. "Quit" stops every agent,
+  "Pause" and "Resume" act on every agent too (each keeps its own marker).
+- The server of one instance cannot reach the folder of another through the
+  file browser or CloudSync: the whole `deveye` folder is out of reach.
+- Deleting the device on one server wipes that instance only; the binary and
+  the icon stay for the others. `uninstall` removes every instance.
+- The instances share the binary, which takes updates signed by the key built
+  into it: a self-hosted server that signs its own builds needs a binary of its
+  own, at its own path.
+- The commands the web UI shows for this device (elevation, reconnection) name
+  the default enrollment: add `--instance <name>` to them.
+
 ### System scope
 
 A system service (`service install --system`, or `link --autostart` as root)
@@ -339,7 +389,8 @@ deveye-agent uninstall --purge-shares   # also the local trash of CloudSync shar
 ```
 
 `unlink` forgets the enrollment. `uninstall` takes **the machine out of the
-equation**, in this order:
+equation**, every [instance](#several-deveye-servers---instance) included, in
+this order:
 
 1. the autostart service (both scopes, plus the `/usr/local/bin/deveye-agent`
    copy), **before anything is erased**;
@@ -349,8 +400,9 @@ equation**, in this order:
 4. the [notification-area icon](#notification-area-icon-tray): its processes,
    its login entries and the status published for it;
 5. the config directory (`agent.toml`, `agent.pid`, `agent.log`, `agent.state`,
-   `sync-device.key`, `sync-*.index.json`, `status.json`, `tray-hidden`,
-   `tray.lock`), then the directory itself when it is empty and named `deveye`.
+   `agent.pause`, `sync-device.key`, `sync-*.index.json`, `status.json`,
+   `tray-hidden`, `tray.lock`), then the directory itself when it is empty and
+   named `deveye`.
    Run elevated, it sweeps the caller's directory too (the one `sudo` hides
    behind root's `$HOME`), where the real enrollment lives;
 6. the `.deveye-tmp` scratch directory of every CloudSync share;
@@ -423,12 +475,13 @@ information it encodes.
 
 On a machine with a desktop, the DevEye eye sits in the notification area (the
 menu bar on macOS). Its menu shows the agent's state (connected, connecting,
-waiting for approval, offline, stopped) and what it is doing (CloudSync
+waiting for approval, offline, paused, stopped) and what it is doing (CloudSync
 transfers, a self-update, a deployment, package upgrades), then an entry that
-opens DevEye (the server this machine is linked to), one that hides the icon
+opens DevEye (the server this machine is linked to), a "Pause" submenu (1 hour,
+4 hours, 24 hours, until resumed) or a "Resume" entry, one that hides the icon
 and one that quits DevEye; the labels follow the desktop's language (French or
 English). While the agent works, the eye's highlight circles the pupil; when it
-is not connected, the eye turns grey.
+is not connected or paused, the eye turns grey.
 
 ```sh
 deveye-agent tray show   # show the icon again, now and at every login
@@ -462,11 +515,41 @@ deveye-agent tray hide   # hide it for this user; the agent keeps running
 - **Quit stops the agent** until the next boot (next login for a per-user
   service), as `deveye-agent stop` does. For a system service it asks for the
   administrator password (polkit, the macOS dialog, UAC).
+- **Pause and Resume** run `deveye-agent pause --for …` and `deveye-agent
+resume` on every agent of the machine, with the same password prompt for a
+  system service (see [Pausing](#pausing-the-agent)).
 - **Linux** speaks StatusNotifierItem over D-Bus: KDE and most panels show it
   natively, **GNOME** only with the "AppIndicator and KStatusNotifierItem
   Support" extension (on by default on Ubuntu).
 - **Windows**: the agent is a console program; started at login, its console
   window may show for an instant before the icon detaches from it.
+
+## Pausing the agent
+
+```sh
+deveye-agent pause            # until `resume`
+deveye-agent pause --for 4h   # 30m, 1h, 4h, 24h, 2d
+deveye-agent resume
+```
+
+Paused, the agent closes its working session (metrics, reports, Sentinel scans,
+CloudSync, terminals and tunnels all end with it) and reconnects for control
+only: it answers the server's pings and takes four orders, resume, restart,
+destroy and a token rotation; everything else is ignored. The server keeps the
+machine out of the online fleet (modules see it offline, nothing is pushed to
+it) and shows it "paused", with the time it resumes on its own when there is
+one; DevEye's "Resume" reaches it through that control session. DevEye's "Pause"
+asks the same of a running agent.
+
+The pause is a marker, `agent.pause`, next to the config (JSON: `since`,
+`until`), read by the running loop every second and swept once past its
+deadline. It outlives the process: a paused agent restarts paused, a machine
+rebooted while paused comes back paused, until `resume` or the deadline. For a
+system service the marker is root's, so `pause` and `resume` run elevated
+(`sudo`, an administrator PowerShell), as `stop` does; without a running agent
+they still write the marker, and the next start honours it. Each
+[instance](#several-deveye-servers---instance) has its own marker; the icon
+pauses and resumes them all.
 
 ## Configuration & files
 
@@ -479,14 +562,18 @@ The agent writes its own config during `link`. Location: `$DEVEYE_CONFIG`, or
 
 A system service keeps it in its own folder instead (see
 [System scope](#system-scope)), which `sudo deveye-agent status` and
-`sudo deveye-agent policy` reach on their own.
+`sudo deveye-agent policy` reach on their own. A
+[named instance](#several-deveye-servers---instance) lives in
+`instances/<name>/` under either folder.
 
 Alongside it, when running: `agent.pid` (for `stop`/`status`), `agent.state`
-(the runtime facts `status` reports), `sync-<shareId>.index.json` (CloudSync
+(the runtime facts `status` reports), `agent.pause` (while
+[paused](#pausing-the-agent)), `sync-<shareId>.index.json` (CloudSync
 scan caches), `sync-device.key` (this machine's X25519 private key, which opens
 the key of an end-to-end encrypted CloudSync share and never leaves the
-machine), for a per-user agent `status.json` (what the
-[tray icon](#notification-area-icon-tray) reads), `tray-hidden` and `tray.lock`,
+machine), for a per-user agent `status.json` (`status-<name>.json` for a named
+instance: what the [tray icon](#notification-area-icon-tray) reads),
+`tray-hidden` and `tray.lock`,
 and, when detached, `agent.log`. See `agent.example.toml` for the file format,
 and [`uninstall`](#full-removal-uninstall) to remove everything.
 

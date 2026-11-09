@@ -64,6 +64,7 @@ services:
       - ${MAILSERVER_STORAGE_ROOT:-./mailserver-data}:/data/mailserver
       - ${CONVERT_STORAGE_ROOT:-./convert-data}:/data/convert
       - ${HOSTING_STORAGE_ROOT:-./hosting-data}:/data/hosting
+      - ${WHITEBOARD_STORAGE_ROOT:-./whiteboard-data}:/data/whiteboard
     ports:
       - '${LISTEN_PORT:-3000}:${LISTEN_PORT:-3000}'
       # Le serveur mail ne passe pas par le proxy HTTP. Pour le mettre en

@@ -15,7 +15,7 @@ import { audioPlan, gifPlan, probeMedia, runFfmpeg, videoPlan } from './ffmpeg';
 import { imageCoders, probeImage, runImage, setImageBinary } from './image';
 import type { EngineJob, InputProbe } from './types';
 
-type Tool = 'ffmpeg' | 'magick' | 'soffice' | 'pdftoppm' | 'gs' | 'pdftotext';
+type Tool = 'ffmpeg' | 'magick' | 'soffice' | 'pdftoppm' | 'gs' | 'pdftotext' | 'ocrmypdf';
 
 const TOOL_OF: Record<Recipe['engine'], Tool> = {
     video: 'ffmpeg',
@@ -25,7 +25,8 @@ const TOOL_OF: Record<Recipe['engine'], Tool> = {
     office: 'soffice',
     pdfImage: 'pdftoppm',
     pdfCompress: 'gs',
-    pdfText: 'pdftotext'
+    pdfText: 'pdftotext',
+    pdfOcr: 'ocrmypdf'
 };
 
 /** Ce que chaque outil apporte, pour la phrase qui dit lequel manque. */
@@ -35,7 +36,8 @@ const TOOL_PURPOSE: Record<Tool, string> = {
     soffice: 'convertir les documents bureautiques (LibreOffice)',
     pdftoppm: 'tirer une image d’un PDF (poppler-utils)',
     gs: 'alléger un PDF (Ghostscript)',
-    pdftotext: 'tirer le texte d’un PDF (poppler-utils)'
+    pdftotext: 'tirer le texte d’un PDF (poppler-utils)',
+    ocrmypdf: 'reconnaître le texte d’un PDF scanné (ocrmypdf)'
 };
 
 const PROBE_TIMEOUT_MS = 30_000;
@@ -98,6 +100,7 @@ export async function probeEngines(storageProblem: string | null, logger: SdkLog
             if (await responds(tool, ['-v'], scratch)) present.add(tool);
         }
         if (await responds('gs', ['--version'], scratch)) present.add('gs');
+        if (await responds('ocrmypdf', ['--version'], scratch)) present.add('ocrmypdf');
 
         const coders = present.has('magick') ? await imageCoders(scratch).catch(() => null) : null;
         families = CATALOGUE.map((kind) => {
@@ -170,6 +173,7 @@ export async function convert(job: EngineJob, maxOutputBytes: number): Promise<v
         case 'pdfImage':
         case 'pdfCompress':
         case 'pdfText':
+        case 'pdfOcr':
             return runDocument(job, maxOutputBytes);
     }
 }

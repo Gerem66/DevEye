@@ -1,5 +1,7 @@
 import { useId, type CSSProperties } from 'react';
 
+import NumberInput from '@/Components/NumberInput';
+
 import styles from './style.module.css';
 
 export interface SliderProps {
@@ -11,6 +13,12 @@ export interface SliderProps {
     label: string;
     /** La valeur telle qu'elle se lit, à droite du libellé (« 24 », « 80 % »). Absente, rien ne s'affiche. */
     valueLabel?: string;
+    /**
+     * Un champ de nombre à la place de `valueLabel` : la valeur exacte se tape,
+     * au même pas. Les bornes du curseur ne sont qu'un conseil : le champ va
+     * de 0 à bien au-delà.
+     */
+    editable?: boolean;
     /** Repères sous la piste, de gauche à droite (« Léger », « Fidèle »). */
     marks?: readonly string[];
     /**
@@ -23,6 +31,9 @@ export interface SliderProps {
     disabled?: boolean;
     className?: string;
 }
+
+/** Ce que le champ accepte au plus : de quoi ne jamais gêner, sans ouvrir à l'absurde. */
+const EDITABLE_MAX = 9999;
 
 /**
  * Un curseur aux couleurs du projet. Le `<input type='range'>` natif est gardé :
@@ -37,6 +48,7 @@ export function Slider({
     step = 1,
     label,
     valueLabel,
+    editable,
     marks,
     indicator,
     hint,
@@ -46,10 +58,24 @@ export function Slider({
     const id = useId();
     return (
         <div className={`${styles.slider} ${className ?? ''}`}>
-            <label className={styles.head} htmlFor={id}>
-                {label}
-                {valueLabel !== undefined && <span className={styles.value}>{valueLabel}</span>}
-            </label>
+            <div className={styles.head}>
+                <label htmlFor={id}>{label}</label>
+                {editable ? (
+                    <NumberInput
+                        className={styles.number}
+                        value={value}
+                        min={0}
+                        max={EDITABLE_MAX}
+                        step={step}
+                        disabled={disabled}
+                        live
+                        aria-label={label}
+                        onChange={(next) => next !== null && onChange(next)}
+                    />
+                ) : (
+                    valueLabel !== undefined && <span className={styles.value}>{valueLabel}</span>
+                )}
+            </div>
             <div className={styles.track}>
                 {indicator !== undefined && indicator >= min && indicator <= max && max > min && (
                     <span

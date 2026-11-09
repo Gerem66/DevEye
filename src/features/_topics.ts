@@ -71,6 +71,7 @@ const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
     share: 'workspace',
     osint: 'osint',
     password: 'password',
+    pdf: 'pdf',
     // Les commandes de discussion nomment `['projectsChat']`, sujet secondaire
     // du manifest : un message ne doit pas faire re-solliciter le tableau entier.
     projects: 'projects',
@@ -82,6 +83,7 @@ const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
     // cadence que la liste d'appareils.
     sentinel: 'sentinel',
     shortlinks: 'shortlinks',
+    whiteboard: 'whiteboard',
     stepup: 'account',
     twofa: 'account',
     uptime: 'uptime',
@@ -162,7 +164,9 @@ const NON_MUTATING = new Set([
     'remote.add',
     'remote.rename',
     'remote.remove',
-    'remote.reorder'
+    'remote.reorder',
+    // Quitte une séance en mémoire ; l'écriture de la scène qui suit prévient d'elle-même.
+    'whiteboard.leave'
 ]);
 
 /** Verbes qui trahissent une écriture, pour le contrôle de démarrage. */

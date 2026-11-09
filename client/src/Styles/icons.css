@@ -277,6 +277,15 @@
     -webkit-mask-image: url(/icons/shortlinks.svg);
     mask-image: url(/icons/shortlinks.svg);
 }
+.icon.icon-whiteboard {
+    -webkit-mask-image: url(/icons/whiteboard.svg);
+    mask-image: url(/icons/whiteboard.svg);
+}
+
+.icon.icon-pdf {
+    -webkit-mask-image: url(/icons/pdf.svg);
+    mask-image: url(/icons/pdf.svg);
+}
 .icon.icon-cloud {
     -webkit-mask-image: url(/icons/cloud.svg);
     mask-image: url(/icons/cloud.svg);

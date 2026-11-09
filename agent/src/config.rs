@@ -3,9 +3,10 @@
 //! Stores the server endpoint, this machine's stable fingerprint, what the
 //! machine's operator allows the server to order (`[policy]`), and, once
 //! enrolled, the device id, the device token and the server's order-signing key.
-//! The file lives at `$DEVEYE_CONFIG` or `<config-dir>/deveye/agent.toml`, and is
-//! read once at start: edit it (or run `deveye-agent policy`), then restart the
-//! agent.
+//! The file lives at `$DEVEYE_CONFIG`, `<config-dir>/deveye/agent.toml`, or
+//! `<config-dir>/deveye/instances/<name>/agent.toml` for a named instance
+//! (`crate::instance`), and is read once at start: edit it (or run
+//! `deveye-agent policy`), then restart the agent.
 
 use base64::Engine;
 use std::net::IpAddr;
@@ -26,7 +27,7 @@ pub const CONFIG_FILE: &str = "agent.toml";
 /// retrait (`uninstall`) doit les balayer dans un dossier qui n'est pas
 /// forcément le sien (celui de l'utilisateur derrière un `sudo`), où
 /// `Config::pid_path()` et consorts ne pointent pas.
-pub const SIBLING_FILES: [&str; 3] = ["agent.pid", "agent.log", "agent.state"];
+pub const SIBLING_FILES: [&str; 4] = ["agent.pid", "agent.log", "agent.state", "agent.pause"];
 /// Encadrement du nom d'un cache de scan CloudSync : `sync-<shareId>.index.json`.
 /// Un partage par fichier, donc un balayage par motif et non par nom.
 pub const SYNC_INDEX_PREFIX: &str = "sync-";
@@ -360,7 +361,8 @@ const SYSTEM_ENROLLMENT_HINT: &str = "in an administrator PowerShell the agent u
 
 impl Config {
     /// `$DEVEYE_CONFIG`, else the system service's enrollment for a privileged
-    /// process (so `sudo deveye-agent policy` reaches it), else this account's.
+    /// process (so `sudo deveye-agent policy` reaches it), else this account's,
+    /// for the instance this process acts for.
     pub fn path() -> PathBuf {
         if let Ok(p) = std::env::var("DEVEYE_CONFIG") {
             return PathBuf::from(p);
@@ -371,17 +373,21 @@ impl Config {
                 return system;
             }
         }
+        crate::instance::dir_under(&Self::user_root(), crate::instance::current().as_deref())
+            .join(CONFIG_FILE)
+    }
+
+    /// `<config-dir>/deveye`: this account's default enrollment, and the
+    /// folder of its named instances.
+    pub fn user_root() -> PathBuf {
         dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("."))
             .join("deveye")
-            .join(CONFIG_FILE)
     }
 
     pub fn load() -> Result<Self> {
         let path = Self::path();
-        let parsed = std::fs::read_to_string(&path)
-            .with_context(|| format!("reading config at {}", path.display()))
-            .and_then(|raw| toml::from_str::<Config>(&raw).context("parsing agent.toml"));
+        let parsed = Self::read(&path);
         // Elevated by habit, one reaches the system service's enrollment
         // without having asked for it: say so, and how to reach one's own.
         let implicit = std::env::var_os("DEVEYE_CONFIG").is_none()
@@ -391,6 +397,13 @@ impl Config {
             return parsed.context(SYSTEM_ENROLLMENT_HINT);
         }
         parsed
+    }
+
+    /// The config at `path`, whichever instance it belongs to.
+    pub fn read(path: &Path) -> Result<Self> {
+        std::fs::read_to_string(path)
+            .with_context(|| format!("reading config at {}", path.display()))
+            .and_then(|raw| toml::from_str::<Config>(&raw).context("parsing agent.toml"))
     }
 
     pub fn exists() -> bool {
@@ -411,6 +424,11 @@ impl Config {
     /// so out-of-process commands like `status` report *its* facts. Alongside config.
     pub fn state_path() -> PathBuf {
         Self::sibling(SIBLING_FILES[2])
+    }
+
+    /// The pause marker (`crate::pause`). Alongside config.
+    pub fn pause_path() -> PathBuf {
+        Self::sibling(SIBLING_FILES[3])
     }
 
     /// CloudSync per-share scan cache (relPath → size/mtime/hash), so unchanged
@@ -471,34 +489,31 @@ impl Config {
     /// Is this path the agent's own directory, inside it, or one of its
     /// parents? The server may read and write files on this machine, never the
     /// file that says what it may do, nor the token it holds: renaming or
-    /// deleting a parent, or archiving one, reaches it just as well.
+    /// deleting a parent, or archiving one, reaches it just as well. The whole
+    /// `deveye` folder counts, with every instance in it: the server of one
+    /// instance must not read the token of another run by the same account.
     pub fn is_own_path(path: &Path) -> bool {
-        let Some(dir) = Self::path().parent().map(Path::to_path_buf) else {
-            return false;
-        };
-        let dir = dir.canonicalize().unwrap_or(dir);
-        // The target may not exist yet: resolve its deepest existing ancestor.
-        let mut probe = path.to_path_buf();
-        loop {
-            if let Ok(real) = probe.canonicalize() {
-                return real.starts_with(&dir) || dir.starts_with(&real);
-            }
-            if !probe.pop() {
-                return path.starts_with(&dir) || dir.starts_with(path);
-            }
+        let mut guarded = vec![Self::user_root()];
+        if let Some(dir) = Self::path().parent() {
+            guarded.push(crate::instance::root_of(dir).to_path_buf());
         }
+        if privileged() {
+            guarded.push(crate::system_dir::root());
+        }
+        guarded.iter().any(|dir| covers(dir, path))
     }
 
-    /// Wipe every local trace of this agent: the config (which holds the device
-    /// token), the files beside it (PID, log, state, CloudSync key and scan
-    /// caches, tray markers), and best-effort the executable. The autostart
-    /// service is the caller's business (`commands::handle_destroy`).
+    /// Wipe every local trace of this enrollment: the config (which holds the
+    /// device token), the files beside it (PID, log, state, CloudSync key and
+    /// scan caches, tray markers), and best-effort the executable, unless
+    /// `keep_binary` (another instance runs on it). The autostart service is the
+    /// caller's business (`commands::handle_destroy`).
     ///
     /// Only the config removal is mandatory: on failure the error is returned so
     /// the server aborts the deletion. On Unix a running process can unlink its
     /// own binary (the inode lives until exit); Windows locks a running
     /// executable, so the binary is left in place there.
-    pub fn self_destruct() -> Result<()> {
+    pub fn self_destruct(keep_binary: bool) -> Result<()> {
         let config = Self::path();
         if config.exists() {
             std::fs::remove_file(&config)
@@ -508,9 +523,10 @@ impl Config {
             for path in crate::uninstall::own_files(dir) {
                 let _ = std::fs::remove_file(path);
             }
-            if crate::uninstall::is_own_dir(dir) {
-                let _ = std::fs::remove_dir(dir);
-            }
+            crate::instance::remove_empty_dirs(dir);
+        }
+        if keep_binary {
+            return Ok(());
         }
         if let Ok(exe) = std::env::current_exe() {
             let _ = std::fs::remove_file(&exe);
@@ -573,6 +589,21 @@ impl Config {
             );
         }
         Ok(transport)
+    }
+}
+
+/// Is `path` the folder `dir`, inside it, or one of its parents? The target
+/// may not exist yet: its deepest existing ancestor is resolved.
+fn covers(dir: &Path, path: &Path) -> bool {
+    let dir = dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf());
+    let mut probe = path.to_path_buf();
+    loop {
+        if let Ok(real) = probe.canonicalize() {
+            return real.starts_with(&dir) || dir.starts_with(&real);
+        }
+        if !probe.pop() {
+            return path.starts_with(&dir) || dir.starts_with(path);
+        }
     }
 }
 
@@ -692,6 +723,26 @@ mod tests {
             assert!(opted_in.check_transport().is_ok());
         }
         assert!(config("ftp://x").transport().is_err());
+    }
+
+    #[test]
+    fn the_guard_covers_every_instance_of_the_folder() {
+        let base = tempfile::tempdir().unwrap();
+        let root = base.path().join("deveye");
+        let nas = crate::instance::dir_under(&root, Some("nas"));
+        std::fs::create_dir_all(&nas).unwrap();
+        std::fs::write(nas.join(CONFIG_FILE), "").unwrap();
+        let guarded = crate::instance::root_of(&nas);
+        assert!(covers(guarded, &nas.join(CONFIG_FILE)));
+        assert!(
+            covers(guarded, &root.join(CONFIG_FILE)),
+            "the default one too"
+        );
+        assert!(covers(guarded, &nas.join("not-yet.txt")));
+        assert!(covers(guarded, base.path()), "a parent reaches it as well");
+        let sibling = base.path().join("deveye-notes");
+        std::fs::create_dir_all(&sibling).unwrap();
+        assert!(!covers(guarded, &sibling));
     }
 
     #[test]

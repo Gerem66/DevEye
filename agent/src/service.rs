@@ -6,6 +6,7 @@
 //! runs `<exe> run --managed --config <path>`, so a system service (which has a
 //! different HOME than the enrolling user) still finds the enrolled config, and
 //! `--managed` tells a self-update to just exit and let the manager relaunch it.
+//! Each instance (`crate::instance`) has its own service, named after it.
 //!
 //! Deux pièges d'une installation système. Elle tourne sous `pkexec`/`sudo`,
 //! donc dans l'environnement de root : le chemin de config calculé là désigne le
@@ -101,10 +102,13 @@ fn invoking_config_path() -> String {
         }
     }
     match invoking_home() {
-        Some(home) => home
-            .join(".config/deveye/agent.toml")
-            .to_string_lossy()
-            .into_owned(),
+        Some(home) => crate::instance::dir_under(
+            &home.join(crate::uninstall::CONFIG_SUBPATH),
+            crate::instance::current().as_deref(),
+        )
+        .join(crate::config::CONFIG_FILE)
+        .to_string_lossy()
+        .into_owned(),
         None => config_path(),
     }
 }
@@ -292,14 +296,20 @@ mod imp {
     use super::*;
     use std::path::PathBuf;
 
-    const LABEL: &str = "com.deveye.agent";
+    /// `com.deveye.agent`, `com.deveye.agent.<instance>` for a named one.
+    fn label() -> String {
+        match crate::instance::current() {
+            Some(name) => format!("com.deveye.agent.{name}"),
+            None => "com.deveye.agent".to_string(),
+        }
+    }
 
     /// Emplacement d'écriture du plist utilisateur : toujours le foyer courant.
     fn user_plist() -> PathBuf {
         dirs::home_dir()
             .unwrap_or_default()
             .join("Library/LaunchAgents")
-            .join(format!("{LABEL}.plist"))
+            .join(format!("{}.plist", label()))
     }
 
     /// Emplacements où un plist utilisateur peut *déjà* exister (cf. `invoking_home`).
@@ -308,30 +318,35 @@ mod imp {
         if let Some(home) = invoking_home() {
             paths.push(
                 home.join("Library/LaunchAgents")
-                    .join(format!("{LABEL}.plist")),
+                    .join(format!("{}.plist", label())),
             );
         }
         paths
     }
     fn system_plist() -> PathBuf {
-        PathBuf::from("/Library/LaunchDaemons").join(format!("{LABEL}.plist"))
+        PathBuf::from("/Library/LaunchDaemons").join(format!("{}.plist", label()))
     }
 
     fn plist_xml(cfg: &str) -> Result<String> {
         let exe = exe()?;
         let log = Config::log_path();
         let log = log.to_string_lossy();
+        let label = label();
+        let instance: String = crate::instance::args()
+            .iter()
+            .map(|arg| format!("\n    <string>{arg}</string>"))
+            .collect();
         Ok(format!(
             r#"<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>Label</key><string>{LABEL}</string>
+  <key>Label</key><string>{label}</string>
   <key>ProgramArguments</key>
   <array>
     <string>{exe}</string>
     <string>run</string>
-    <string>--managed</string>
+    <string>--managed</string>{instance}
     <string>--config</string>
     <string>{cfg}</string>
   </array>
@@ -369,7 +384,7 @@ mod imp {
     }
 
     fn service_target(system: bool) -> String {
-        format!("{}/{LABEL}", domain(system))
+        format!("{}/{}", domain(system), label())
     }
 
     /// Retire le travail du domaine, sans le marquer désactivé.
@@ -419,7 +434,7 @@ mod imp {
 
     pub fn autostart_enabled_impl(system: bool) -> bool {
         crate::report::run("launchctl", &["print-disabled", &domain(system)])
-            .is_some_and(|listing| !launchd_disabled(&listing, LABEL))
+            .is_some_and(|listing| !launchd_disabled(&listing, &label()))
     }
 
     /// `bootstrap` enregistre le travail dans le domaine ; `RunAtLoad` le lance
@@ -540,14 +555,46 @@ mod imp {
     use super::*;
     use std::path::PathBuf;
 
-    const UNIT: &str = "deveye-agent.service";
+    /// `deveye-agent.service`, `deveye-agent-<instance>.service` for a named one.
+    fn unit_name(instance: Option<&str>) -> String {
+        format!(
+            "deveye-agent{}.service",
+            crate::instance::suffix_of(instance)
+        )
+    }
+
+    fn unit() -> String {
+        unit_name(crate::instance::current().as_deref())
+    }
+
+    fn is_agent_unit(name: &str) -> bool {
+        name.strip_prefix("deveye-agent")
+            .and_then(|rest| rest.strip_suffix(".service"))
+            .is_some_and(|mid| {
+                mid.is_empty()
+                    || mid
+                        .strip_prefix('-')
+                        .is_some_and(|n| crate::instance::parse(n).is_ok())
+            })
+    }
+
+    /// Another instance's system unit, which runs the staged executable too.
+    fn other_system_units() -> bool {
+        let own = unit();
+        std::fs::read_dir("/etc/systemd/system").is_ok_and(|entries| {
+            entries.flatten().any(|e| {
+                let name = e.file_name().to_string_lossy().into_owned();
+                name != own && is_agent_unit(&name)
+            })
+        })
+    }
 
     /// Emplacement d'écriture de l'unité utilisateur : toujours le foyer courant.
     fn user_unit() -> PathBuf {
         dirs::config_dir()
             .unwrap_or_default()
             .join("systemd/user")
-            .join(UNIT)
+            .join(unit())
     }
 
     /// Emplacements où une unité utilisateur peut déjà exister : le foyer
@@ -555,12 +602,12 @@ mod imp {
     fn user_units() -> Vec<PathBuf> {
         let mut paths = vec![user_unit()];
         if let Some(home) = invoking_home() {
-            paths.push(home.join(".config/systemd/user").join(UNIT));
+            paths.push(home.join(".config/systemd/user").join(unit()));
         }
         paths
     }
     fn system_unit() -> PathBuf {
-        PathBuf::from("/etc/systemd/system").join(UNIT)
+        PathBuf::from("/etc/systemd/system").join(unit())
     }
 
     /// Où le service **système** garde son exécutable.
@@ -624,21 +671,25 @@ mod imp {
     /// `[policy]`, pas ici.
     const SYSTEM_HARDENING: &str = "RestrictRealtime=yes\nLockPersonality=yes\n";
 
-    fn unit_text(system: bool, exe: &str, cfg: &str) -> String {
+    fn unit_text(system: bool, exe: &str, cfg: &str, instance: Option<&str>) -> String {
         let wanted_by = if system {
             "multi-user.target"
         } else {
             "default.target"
         };
         let hardening = if system { SYSTEM_HARDENING } else { "" };
+        let (description, instance_args) = match instance {
+            Some(name) => (format!(" ({name})"), format!(" --instance {name}")),
+            None => (String::new(), String::new()),
+        };
         format!(
             "[Unit]\n\
-             Description=DevEye monitoring agent\n\
+             Description=DevEye monitoring agent{description}\n\
              After=network-online.target\n\
              Wants=network-online.target\n\
              StartLimitIntervalSec=0\n\n\
              [Service]\n\
-             ExecStart={exe} run --managed --config {cfg}\n\
+             ExecStart={exe} run --managed{instance_args} --config {cfg}\n\
              Restart=always\n\
              RestartSec=2\n\
              KillMode=process\n\
@@ -718,8 +769,12 @@ mod imp {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).ok();
         }
-        std::fs::write(&path, unit_text(system, &target_exe, &cfg))
-            .with_context(|| format!("writing {}", path.display()))?;
+        let instance = crate::instance::current();
+        std::fs::write(
+            &path,
+            unit_text(system, &target_exe, &cfg, instance.as_deref()),
+        )
+        .with_context(|| format!("writing {}", path.display()))?;
         systemctl_bare(system, "daemon-reload")?;
         // `enable` sans `--now` : l'unité est armée pour les amorçages suivants,
         // et c'est le passage de relais qui la démarre, une fois le verrou
@@ -735,7 +790,8 @@ mod imp {
     pub fn rebake_system_config_impl(cfg: &str) -> Result<()> {
         let exe = stage_system_exe()?;
         let path = system_unit();
-        std::fs::write(&path, unit_text(true, &exe, cfg))
+        let instance = crate::instance::current();
+        std::fs::write(&path, unit_text(true, &exe, cfg, instance.as_deref()))
             .with_context(|| format!("writing {}", path.display()))?;
         systemctl_bare(true, "daemon-reload")
     }
@@ -756,7 +812,7 @@ mod imp {
         if !system {
             cmd.arg("--user");
         }
-        cmd.args(["is-enabled", "--quiet", UNIT])
+        cmd.args(["is-enabled", "--quiet", &unit()])
             .output()
             .is_ok_and(|o| o.status.success())
     }
@@ -780,7 +836,7 @@ mod imp {
         if !system {
             cmd.arg("--user");
         }
-        cmd.args([verb, UNIT]);
+        cmd.args([verb, &unit()]);
         run_checked(&mut cmd, &format!("systemctl {verb}"))
     }
 
@@ -818,20 +874,21 @@ mod imp {
     pub fn uninstall_impl() -> Result<()> {
         if system_unit().exists() {
             let _ = Command::new("systemctl")
-                .args(["disable", "--now", UNIT])
+                .args(["disable", "--now", &unit()])
                 .output();
             std::fs::remove_file(system_unit()).ok();
             let _ = Command::new("systemctl").arg("daemon-reload").output();
         }
         // Notre copie part avec le service qu'elle servait, sauf si c'est elle
         // qui tourne : l'arrêt du démarrage automatique passe le relais à une
-        // copie autonome relancée depuis `current_exe()`.
+        // copie autonome relancée depuis `current_exe()`. Le service système
+        // d'une autre instance la garde aussi.
         let staged = PathBuf::from(SYSTEM_EXE);
         let running_here = std::env::current_exe()
             .ok()
             .zip(std::fs::canonicalize(&staged).ok())
             .is_some_and(|(exe, dest)| exe == dest);
-        if staged.exists() && !running_here {
+        if staged.exists() && !running_here && !other_system_units() {
             std::fs::remove_file(&staged).ok();
         }
         uninstall_user_impl()
@@ -864,7 +921,7 @@ mod imp {
             }
             ServiceScope::System => {}
         }
-        let _ = cmd.args(["stop", "--no-block", UNIT]).output();
+        let _ = cmd.args(["stop", "--no-block", &unit()]).output();
     }
 
     /// Retire l'autostart utilisateur, où qu'il soit : après une élévation sous
@@ -879,6 +936,7 @@ mod imp {
             // Arrêter l'unité demande de viser le bus de son utilisateur : en
             // root, `systemctl --user` parle au bus de root, qui ne la connaît
             // pas. Au pire l'arrêt échoue, mais le fichier part.
+            let unit = unit();
             match sudo_user().filter(|_| is_root()) {
                 Some(user) => {
                     let _ = Command::new("runuser")
@@ -890,13 +948,13 @@ mod imp {
                             "--user",
                             "disable",
                             "--now",
-                            UNIT,
+                            &unit,
                         ])
                         .output();
                 }
                 None => {
                     let _ = Command::new("systemctl")
-                        .args(["--user", "disable", "--now", UNIT])
+                        .args(["--user", "disable", "--now", &unit])
                         .output();
                 }
             }
@@ -930,24 +988,48 @@ mod imp {
                 true,
                 "/usr/local/bin/deveye-agent",
                 "/home/lea/.config/x.toml",
+                None,
             );
             assert!(unit.contains(
                 "ExecStart=/usr/local/bin/deveye-agent run --managed --config /home/lea/.config/x.toml"
             ));
             assert!(unit.contains("WantedBy=multi-user.target"));
 
-            let user = unit_text(false, "/tmp/agent", "/tmp/x.toml");
+            let user = unit_text(false, "/tmp/agent", "/tmp/x.toml", None);
             assert!(user.contains("WantedBy=default.target"));
+        }
+
+        /// Une instance nommée a son unité, et la ligne de commande qui la désigne.
+        #[test]
+        fn a_named_instance_has_a_unit_of_its_own() {
+            assert_eq!(unit_name(None), "deveye-agent.service");
+            assert_eq!(unit_name(Some("nas")), "deveye-agent-nas.service");
+            let unit = unit_text(false, "/tmp/agent", "/tmp/x.toml", Some("nas"));
+            assert!(unit.contains("Description=DevEye monitoring agent (nas)\n"));
+            assert!(unit.contains(
+                "ExecStart=/tmp/agent run --managed --instance nas --config /tmp/x.toml\n"
+            ));
+            for name in ["deveye-agent.service", "deveye-agent-nas.service"] {
+                assert!(is_agent_unit(name), "{name}");
+            }
+            for name in [
+                "deveye-agent.timer",
+                "deveye-agentx.service",
+                "deveye-agent-.service",
+                "other.service",
+            ] {
+                assert!(!is_agent_unit(name), "{name}");
+            }
         }
 
         /// Une unité utilisateur n'a aucun privilège à rendre, et plusieurs
         /// directives y exigent des espaces de noms non privilégiés.
         #[test]
         fn only_the_system_unit_is_hardened() {
-            let system = unit_text(true, "/usr/local/bin/deveye-agent", "/x.toml");
+            let system = unit_text(true, "/usr/local/bin/deveye-agent", "/x.toml", None);
             assert!(system.contains("LockPersonality=yes\n\n[Install]"));
             assert!(system.contains("RestrictRealtime=yes"));
-            let user = unit_text(false, "/tmp/agent", "/tmp/x.toml");
+            let user = unit_text(false, "/tmp/agent", "/tmp/x.toml", None);
             assert!(!user.contains("LockPersonality"));
             assert!(user.contains("KillMode=process\n\n[Install]"));
         }
@@ -967,11 +1049,26 @@ mod imp {
 mod imp {
     use super::*;
 
-    const TASK: &str = "DevEyeAgent";
+    /// `DevEyeAgent`, `DevEyeAgent-<instance>` for a named one.
+    fn task() -> String {
+        let instance = crate::instance::current();
+        format!(
+            "DevEyeAgent{}",
+            crate::instance::suffix_of(instance.as_deref())
+        )
+    }
 
     fn task_run(cfg: &str) -> Result<String> {
         // schtasks /TR takes a single string; quote the exe + bake --config.
-        Ok(format!("\"{}\" run --managed --config \"{}\"", exe()?, cfg))
+        let instance: String = crate::instance::args()
+            .iter()
+            .map(|arg| format!(" {arg}"))
+            .collect();
+        Ok(format!(
+            "\"{}\" run --managed{instance} --config \"{}\"",
+            exe()?,
+            cfg
+        ))
     }
 
     pub fn install_impl(system: bool, config: Option<&str>, autostart: bool) -> Result<()> {
@@ -979,7 +1076,7 @@ mod imp {
         let _ = uninstall_impl();
         let tr = task_run(&cfg)?;
         let mut cmd = Command::new("schtasks");
-        cmd.args(["/Create", "/F", "/TN", TASK, "/TR", &tr]);
+        cmd.args(["/Create", "/F", "/TN", &task(), "/TR", &tr]);
         if system {
             // Boot, as SYSTEM (needs elevation). Avoids implementing an SCM service.
             cmd.args(["/SC", "ONSTART", "/RU", "SYSTEM", "/RL", "HIGHEST"]);
@@ -996,7 +1093,7 @@ mod imp {
     pub fn rebake_system_config_impl(cfg: &str) -> Result<()> {
         let tr = task_run(cfg)?;
         run_checked(
-            Command::new("schtasks").args(["/Change", "/TN", TASK, "/RU", "SYSTEM", "/TR", &tr]),
+            Command::new("schtasks").args(["/Change", "/TN", &task(), "/RU", "SYSTEM", "/TR", &tr]),
             "schtasks /Change",
         )
     }
@@ -1006,14 +1103,14 @@ mod imp {
     pub fn set_autostart_impl(_system: bool, on: bool) -> Result<()> {
         let flag = if on { "/ENABLE" } else { "/DISABLE" };
         run_checked(
-            Command::new("schtasks").args(["/Change", "/TN", TASK, flag]),
+            Command::new("schtasks").args(["/Change", "/TN", &task(), flag]),
             &format!("schtasks /Change {flag}"),
         )
     }
 
     pub fn autostart_enabled_impl(_system: bool) -> bool {
         match Command::new("schtasks")
-            .args(["/Query", "/TN", TASK, "/XML"])
+            .args(["/Query", "/TN", &task(), "/XML"])
             .output()
         {
             Ok(o) if o.status.success() => task_xml_enabled(&decode_task_xml(&o.stdout)),
@@ -1030,7 +1127,7 @@ mod imp {
             set_autostart_impl(system, true)?;
         }
         let started = run_checked(
-            Command::new("schtasks").args(["/Run", "/TN", TASK]),
+            Command::new("schtasks").args(["/Run", "/TN", &task()]),
             "schtasks /Run",
         );
         if !armed {
@@ -1041,7 +1138,7 @@ mod imp {
 
     pub fn uninstall_impl() -> Result<()> {
         let _ = Command::new("schtasks")
-            .args(["/Delete", "/F", "/TN", TASK])
+            .args(["/Delete", "/F", "/TN", &task()])
             .output();
         Ok(())
     }
@@ -1052,7 +1149,7 @@ mod imp {
             return Ok(());
         }
         run_checked(
-            Command::new("schtasks").args(["/Delete", "/F", "/TN", TASK]),
+            Command::new("schtasks").args(["/Delete", "/F", "/TN", &task()]),
             "schtasks /Delete",
         )
     }
@@ -1068,7 +1165,7 @@ mod imp {
     /// The task has no restart policy: ended, it waits for its next trigger.
     pub fn stop_impl(_system: bool) -> Result<()> {
         run_checked(
-            Command::new("schtasks").args(["/End", "/TN", TASK]),
+            Command::new("schtasks").args(["/End", "/TN", &task()]),
             "schtasks /End",
         )
     }
@@ -1076,7 +1173,7 @@ mod imp {
     /// `/End` fails when the task is not running: nothing to stop then.
     pub fn restart_impl(system: bool) -> Result<()> {
         let _ = Command::new("schtasks")
-            .args(["/End", "/TN", TASK])
+            .args(["/End", "/TN", &task()])
             .output();
         start_impl(system)
     }
@@ -1094,7 +1191,7 @@ mod imp {
 
     pub fn installed_scope_impl() -> ServiceScope {
         let out = match Command::new("schtasks")
-            .args(["/Query", "/TN", TASK, "/FO", "LIST", "/V"])
+            .args(["/Query", "/TN", &task(), "/FO", "LIST", "/V"])
             .output()
         {
             Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),

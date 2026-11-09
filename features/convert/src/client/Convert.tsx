@@ -12,6 +12,7 @@ import {
     StickyHeader,
     UploadError,
     uploadFile,
+    useHandedFile,
     useResource,
     useSubView,
     useWorkspacePermissions,
@@ -56,6 +57,12 @@ export default function Convert(_props: FeatureViewProps) {
     const { state } = wizard;
     const canWrite = useWorkspacePermissions().canFeature('convert', 'write');
     const [tool, setTool] = useState<Tool | null>(null);
+
+    // Le PDF que l'atelier PDF confie, avec la cible qu'il veut ; une cible inconnue laisse le choix du format.
+    const handoff = wizard.handoff;
+    useHandedFile('convert', ({ file: handed, purpose }) =>
+        handoff(handed, 'document', 'pdf', purpose && targetOf('document', 'pdf', purpose) ? purpose : null)
+    );
 
     const caps = useResource(
         'convert.capabilities',

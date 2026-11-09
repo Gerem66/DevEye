@@ -5,15 +5,16 @@ import { defineFeature, FeatureError, type FeatureDefinition } from '../_define'
 
 /** French label per lifecycle action, for the audit description. */
 const LIFECYCLE_LABELS: Record<AgentLifecycleAction, string> = {
-    stop: 'Interruption',
-    restart: 'Redémarrage'
+    restart: 'Redémarrage',
+    pause: 'Mise en pause',
+    resume: 'Reprise'
 };
 
 /**
- * Stop or cleanly restart the agent *process* on a device. Exige `devices:
- * write` sur l'espace + un agent en ligne. Fire-and-forget: the agent exits
- * (and, supervised or on `restart`, comes back) — there is no reply frame, the
- * outcome is observed through the presence stream.
+ * Redémarrer, mettre en pause ou reprendre l'agent d'un appareil. Exige
+ * `devices: write` sur l'espace et un agent en ligne, ou en pause et joignable
+ * pour la reprise. Sans trame de réponse : l'issue se lit sur la présence et
+ * sur le champ `pause` de l'appareil.
  */
 export const agentLifecycleFeature: FeatureDefinition<
     typeof agentLifecycle.command,
@@ -23,7 +24,10 @@ export const agentLifecycleFeature: FeatureDefinition<
     ...agentLifecycle,
     access: { feature: 'devices', level: 'write', item: 'deviceId' },
     handler: async (ctx, input) => {
-        const row = await authorizeReachableDevice(ctx, input.deviceId, { control: true });
+        const row = await authorizeReachableDevice(ctx, input.deviceId, {
+            control: true,
+            paused: input.action === 'resume'
+        });
         const ok = ctx.monitor?.requestLifecycle(row.id, { action: input.action }) ?? false;
         if (!ok) throw new FeatureError('conflict', 'Agent hors ligne');
         ctx.audit({

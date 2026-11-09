@@ -378,8 +378,17 @@ export function FeatureSettingsDialog({ open, onClose, scope, initialSection, on
                                 <ItemPermissionsSection scope={scope} />
                             )}
                             {current === 'projects' && scope.kind === 'item' && <ProjectsSection scope={scope} />}
+                            {/* Sous le partage de la coquille, le complément d'un
+                            module (`settingsPanels.sharing`) : un geste qui prolonge
+                            le partage sans être un onglet, comme enrôler un appareil
+                            auprès d'une autre instance. */}
                             {current === 'sharing' && !isSystemScope(scope) && (
-                                <SharingSection scope={scope} onGone={gone} />
+                                <>
+                                    <SharingSection scope={scope} onGone={gone} />
+                                    <div className={styles.sharingExtra}>
+                                        <ModulePanel scope={scope} section='sharing' close={onClose} gone={gone} />
+                                    </div>
+                                </>
                             )}
                             {current === 'domains' && scope.kind === 'feature' && !isSystemScope(scope) && (
                                 <DomainsSection scope={scope} />

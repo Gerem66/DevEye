@@ -12,7 +12,15 @@ import {
 } from './tabs';
 
 /** L'état de départ, et celui d'un projet gardé. */
-const NONE: ProjectLinkCounts = { git: 0, database: 0, audience: 0, deploy: 0, uptime: 0, 'x-hosting': 0 };
+const NONE: ProjectLinkCounts = {
+    git: 0,
+    database: 0,
+    audience: 0,
+    deploy: 0,
+    uptime: 0,
+    'x-hosting': 0,
+    whiteboard: 0
+};
 
 /** Une ligne du menu « + » : le geste, et l'onglet qu'il fait naître. */
 export interface ProjectTabAddable {

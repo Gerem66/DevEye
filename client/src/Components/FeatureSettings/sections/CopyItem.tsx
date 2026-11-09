@@ -9,8 +9,8 @@ import ErrorNote, { type ErrorNoteInput } from '@/Components/ErrorNote';
 import { ProgressDialog } from '@/Components/ProgressDialog';
 import SearchSelect from '@/Components/SearchSelect';
 import { moduleManifest } from '@/sdk/registry';
+import { useRemoteTargets } from '@/sdk/remoteTargets';
 import { invalidate, type ResourceKey } from '@/stores/invalidation';
-import { isRemoteUsable, useRemoteInstances, useRemotePing } from '@/stores/remoteInstances';
 import { UnlockCancelledError } from '@/stores/secrecy';
 import { useWorkspaceState, workspaceKey } from '@/stores/workspace';
 
@@ -40,9 +40,8 @@ const STEP_LABEL: Record<CopyStep, string> = {
  * d'ici ou d'une instance distante. Rien ne relie ensuite les deux.
  */
 export default function CopyItem({ feature, itemId }: Props) {
-    const { workspaces, remoteWorkspaces, activeId, activeInstanceId } = useWorkspaceState();
-    const remotes = useRemoteInstances();
-    useRemotePing(true);
+    const { workspaces, activeId, activeInstanceId } = useWorkspaceState();
+    const { workspaces: remote } = useRemoteTargets();
     const [choice, setChoice] = useState('');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<ErrorNoteInput | null>(null);
@@ -60,18 +59,16 @@ export default function CopyItem({ feature, itemId }: Props) {
             name: activeInstanceId === null && w.id === activeId ? `${w.name} (cet espace)` : w.name,
             unavailable: null
         }));
-        const elsewhere = remotes.flatMap((entry) =>
-            (remoteWorkspaces[entry.instance.id] ?? []).map((w) => ({
-                key: workspaceKey({ instanceId: entry.instance.id, id: w.id }),
-                instanceId: entry.instance.id,
-                workspaceId: w.id,
-                instanceLabel: entry.instance.label,
-                name: `${w.name} · ${entry.instance.label}`,
-                unavailable: isRemoteUsable(entry) ? null : 'injoignable'
-            }))
-        );
+        const elsewhere = remote.map((t) => ({
+            key: t.key,
+            instanceId: t.instanceId,
+            workspaceId: t.workspaceId,
+            instanceLabel: t.instanceLabel,
+            name: `${t.workspaceName} · ${t.instanceLabel}`,
+            unavailable: t.unavailable
+        }));
         return [...here, ...elsewhere];
-    }, [workspaces, remoteWorkspaces, remotes, activeId, activeInstanceId]);
+    }, [workspaces, remote, activeId, activeInstanceId]);
 
     const explain = (e: unknown, fallback: string): ErrorNoteInput => {
         if (e instanceof UnlockCancelledError) {

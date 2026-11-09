@@ -532,8 +532,8 @@ oubli. `copy` décrit l'élément par un arbre (`ItemTree`, `movableCellsOf` pou
 tenir une seule liste de cellules) et l'app lit et écrit (`exportItemTree`,
 `importItemTree`), vers cet espace ou une autre instance ; `plan` sur la
 source, `admit` et `settle` dans la transaction de destination. Uptime,
-Audience, Bases de données, Déploiements, Git, Mail, Notes et Projets se
-copient.
+Audience, Bases de données, Déploiements, Git, Mail, Notes, Projets et Tableau
+blanc se copient.
 
 ### Les quotas et les pauses
 
@@ -556,6 +556,11 @@ d'un projet), celui d'une autre feature dont les écrans reflètent la donnée.
 `'live.publish'` : `ctx.live.publish` et `deps.live.publish` envoient une trame
 nommée sous le préfixe du module aux connexions qui ont `read` sur la feature,
 que le client lit par `onServerEvent` (Convertisseur, Mail, Jeu de la vie).
+`deps.live.publishTo(workspaceId, userIds, …)` restreint la trame aux comptes
+nommés : les participants d'un élément que le rôle d'un autre membre lui
+masque (les séances du Tableau blanc). `ctx.live.joinCursors(clé)` assied
+l'appelant dans le canal de curseurs du module, celui d'une vue qui a sa propre
+surface, et `leaveCursors(clé)` l'en sort.
 `accountChanged(userId)` fait relire l'offre d'un compte et réappliquer ses
 pauses ; `pendingChanged()` (commande ou service) fait recompter
 `adminPending` et rallume les badges des comptes qui modèrent.
@@ -626,7 +631,10 @@ et sur sa fiche « À propos » : des enfants SVG colorés aux jetons du thème.
 ### Le client
 
 `featureApi(manifest)` rend `send(name, input, { timeoutMs, workspaceId })` et
-`useResource` typés sur les commandes du module ; `workspaceId` fait exécuter la
+`useResource` typés sur les commandes du module, et `post(name, input)` pour
+ce qui part plusieurs fois par seconde sans réponse attendue (un pointeur) : ni
+délai, ni trace, perdu en silence sur une socket fermée ou en retard, mais
+validé et autorisé par le serveur comme `send` ; `workspaceId` fait exécuter la
 commande dans un autre des espaces de l'appelant (`useWorkspaces()`), sous ses
 droits là-bas : c'est le navigateur qui porte une donnée d'un espace à l'autre,
 comme pour la copie d'un élément ; `commandsApi(commands)` fait de même pour
@@ -646,8 +654,14 @@ se range de lui-même en haut de son cadre, sur toute sa largeur : sous le
 `inline` le garde dans sa rangée.
 `invalidate(clé)` et `useResourceVersion` relient une
 mutation aux widgets qui la lisent, `onServerEvent` écoute la voie de poussée,
-`openFeature` ouvre une autre feature sur un élément, `useDomains(feature)` lit
-les domaines. Le reste du barrel (composants, dialogues,
+`openFeature` ouvre une autre feature sur un élément, `handFileTo(feature,
+file, purpose?)` lui confie un fichier en l'ouvrant et `useHandedFile(feature,
+cb)` le ramasse chez elle (le PDF assemblé dont le Convertisseur doit
+reconnaître le texte, le PDF déposé dans le Convertisseur qu'on veut signer :
+les deux modules ne s'importent jamais), `useDomains(feature)` lit
+les domaines, `useLiveCursorSurface(surface)` place les curseurs de DevEye sur
+la surface d'une vue (un canevas qu'on déplace et qu'on zoome) et
+`onLiveCursors(canal, cb)` en livre les positions brutes. Le reste du barrel (composants, dialogues,
 `FeatureSettingsButton`, `SaveButton`, `ReadOnlyNotice`, `useLiveSegment`,
 `DeviceRelayField`...) est décrit par le portrait `client-ambient.d.ts` et la
 REFERENCE du template.
@@ -740,7 +754,8 @@ Par requête (`SdkFeatureContext`, construit dans `_sdk/context.ts`) :
   `accounts.me`, `usage` (`of`, `ofMany`), `telemetry` (`snapshot`,
   `pinInstant`), `agents` (la façade de la flotte, décrite plus haut) ;
 - `transport` (le socket appelant, `agents`) ;
-- `live.publish(event, payload)` (capacité `live.publish`),
+- `live.publish(event, payload)`, `live.joinCursors(key)` et
+  `live.leaveCursors(key)` (capacité `live.publish`),
   `live.accountChanged(userId)` et `live.pendingChanged()` ;
 - `secrecy.isUnlocked()` et `secrecy.ticket(payload, { ttlSeconds })` ;
 - `items` (`restrictions`, `assert`, `canExtra`, `forget`) ;

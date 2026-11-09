@@ -2,7 +2,7 @@ import { PlanPausedBadge } from 'deveye-sdk-client';
 
 import { useDeviceUsage } from './deviceUsage';
 import { useDevices } from './store';
-import { activityLevel, formatAgo, pct, type Activity } from './utils';
+import { activityLevel, formatAgo, pauseEnd, pct, type Activity } from './utils';
 import styles from './DeviceWidget.module.css';
 
 export interface DeviceWidgetProps {
@@ -58,7 +58,15 @@ export function DeviceWidget({ deviceId, hideStatus }: DeviceWidgetProps) {
     const disk = usage ? Math.round(pct(usage.diskUsedBytes, usage.diskTotalBytes)) : null;
 
     const statusKind = archived ? styles.archived : online ? styles.online : styles.offline;
-    const statusLabel = archived ? 'Archivé' : pending ? 'En attente' : online ? 'En ligne' : 'Hors ligne';
+    const statusLabel = archived
+        ? 'Archivé'
+        : pending
+          ? 'En attente'
+          : device.pause
+            ? 'En pause'
+            : online
+              ? 'En ligne'
+              : 'Hors ligne';
 
     return (
         <div className={styles.widget}>
@@ -90,15 +98,17 @@ export function DeviceWidget({ deviceId, hideStatus }: DeviceWidgetProps) {
                 <span className={styles.hint}>
                     {paused
                         ? 'Reprend dans les minutes qui suivent, dès que l’offre le permet'
-                        : pending
-                          ? 'Approuvez-le dans Appareils pour qu’il reprenne'
-                          : online && !archived
-                            ? 'Mesure en cours…'
-                            : archived
-                              ? 'Historique en lecture seule'
-                              : device.lastSeen
-                                ? `Vu il y a ${formatAgo(device.lastSeen * 1000)}`
-                                : 'Jamais connecté'}
+                        : device.pause && !archived
+                          ? `Agent en pause ${pauseEnd(device.pause.until)}`
+                          : pending
+                            ? 'Approuvez-le dans Appareils pour qu’il reprenne'
+                            : online && !archived
+                              ? 'Mesure en cours…'
+                              : archived
+                                ? 'Historique en lecture seule'
+                                : device.lastSeen
+                                  ? `Vu il y a ${formatAgo(device.lastSeen * 1000)}`
+                                  : 'Jamais connecté'}
                 </span>
             )}
         </div>

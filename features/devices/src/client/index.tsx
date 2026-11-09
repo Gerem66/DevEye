@@ -3,6 +3,7 @@ import type { DevicesClientProvider, FeatureClient } from '@deveye/types/sdk/cli
 
 import Devices from './Devices';
 import DeviceWidget from './DeviceWidget';
+import { DevicesSharingPanel } from './manage/EnrollElsewhere';
 import { MonitoringWidget } from './Monitoring';
 import { DevicesCollectPanel, DevicesTerminalPanel } from './SettingsPanel';
 import { refreshDevices, resetDevices, useDevices } from './store';
@@ -22,8 +23,11 @@ const clientProvider: DevicesClientProvider = {
 export const clientEntry: FeatureClient = {
     Widget: MonitoringWidget,
     Full: Devices,
-    /** Les deux onglets d'un appareil : sa collecte et son terminal. */
-    settingsPanels: { collect: DevicesCollectPanel, terminal: DevicesTerminalPanel },
+    /**
+     * Les deux onglets d'un appareil, sa collecte et son terminal, et sous son
+     * partage, l'enrôlement auprès d'une instance distante.
+     */
+    settingsPanels: { collect: DevicesCollectPanel, terminal: DevicesTerminalPanel, sharing: DevicesSharingPanel },
     TopbarWidget: DevicesTopbarWidget,
     cacheDurationMinutes: 5,
     preload: true,

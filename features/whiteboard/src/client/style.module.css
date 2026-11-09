@@ -1,0 +1,390 @@
+/*
+ * L'apparence du Tableau blanc. Aucune couleur en dur : tout passe par les
+ * jetons du thème, les pastilles des participants comprises (`--user-*`).
+ */
+
+/* ------------------------------------------------------------ la grille */
+
+/* Pas de défilement propre : la popup tient le conteneur qui défile. */
+.root {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+    min-height: 100%;
+}
+
+.header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.heading {
+    margin: 0;
+    font-size: 1.25rem;
+    color: var(--text-primary);
+}
+
+.subheading {
+    margin: var(--space-xs) 0 0;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.emptyState {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-xl) var(--space-md);
+    border: 1px dashed var(--glass-border);
+    border-radius: var(--radius-lg);
+    text-align: center;
+}
+
+.emptyTitle {
+    margin: 0;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.emptyText {
+    margin: 0;
+    max-width: 52ch;
+    color: var(--text-secondary);
+    font-size: 0.88rem;
+    line-height: 1.55;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: var(--space-md);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.card {
+    position: relative;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle);
+    transition: border-color var(--transition-fast);
+}
+
+.card:hover,
+.card:focus-within {
+    border-color: var(--glass-border-strong);
+}
+
+.cardOpen {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    width: 100%;
+    padding: var(--space-sm);
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.preview {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    aspect-ratio: 16 / 10;
+    overflow: hidden;
+    border-radius: var(--radius-sm);
+    background: var(--surface-subtle);
+}
+
+/* Le même renversement qu'Excalidraw pour son canevas sombre : l'aperçu se lit dans les deux thèmes. */
+.previewImage {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    filter: invert(93%) hue-rotate(180deg);
+}
+
+:global(html[data-theme='light']) .previewImage {
+    filter: none;
+}
+
+/* Un tableau au thème choisi s'affiche ainsi quel que soit celui de DevEye. */
+.previewImage[data-theme='light'] {
+    filter: none;
+}
+
+:global(html) .previewImage[data-theme='dark'] {
+    filter: invert(93%) hue-rotate(180deg);
+}
+
+.previewIcon {
+    width: 40px;
+    height: 40px;
+    background: var(--text-muted);
+    opacity: 0.5;
+}
+
+.cardTitle {
+    overflow: hidden;
+    color: var(--text-primary);
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cardMeta {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+}
+
+.cardMenu {
+    position: absolute;
+    top: var(--space-xs);
+    right: var(--space-xs);
+}
+
+/* Au pied de la grille : d'où vient l'éditeur. */
+.credit {
+    margin: auto 0 0;
+    padding-top: var(--space-md);
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    text-align: center;
+}
+
+.creditLink {
+    color: var(--text-secondary);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.creditLink:hover {
+    color: var(--accent);
+}
+
+/* Le fond d'un tableau, dans l'onglet Général de ses réglages. */
+.colorInput {
+    width: 56px;
+    height: 32px;
+    padding: 2px;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-subtle);
+    cursor: pointer;
+}
+
+.colorInput:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+/* ------------------------------------------------------- dans un projet */
+
+.linkedBoard {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-sm);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle);
+}
+
+.linkedPreview {
+    composes: preview;
+    flex: 0 0 160px;
+    padding: 0;
+    border: 0;
+    cursor: pointer;
+}
+
+.linkedHead {
+    display: flex;
+    flex: 1 1 auto;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.linkedText {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    min-width: 0;
+}
+
+.linkedTitle {
+    margin: 0;
+    overflow: hidden;
+    color: var(--text-primary);
+    font-size: 1rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Sur un téléphone, l'aperçu passe au-dessus. */
+@media (max-width: 560px) {
+    .linkedBoard {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .linkedPreview {
+        flex-basis: auto;
+    }
+}
+
+.form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.fieldLabel {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.fieldHint {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    line-height: 1.45;
+}
+
+/* ------------------------------------------------------------- l'export */
+
+/* L'image entière, quelle que soit sa forme : une frise très large comme un schéma en hauteur. */
+.exportPreview {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 160px;
+    padding: var(--space-sm);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle);
+}
+
+.exportPreviewImage {
+    display: block;
+    max-width: 100%;
+    max-height: 260px;
+    object-fit: contain;
+}
+
+.exportDone {
+    margin: 0;
+    color: var(--success);
+    font-size: 0.82rem;
+}
+
+/* ------------------------------------------------------------ l'éditeur */
+
+/*
+ * La hauteur de la popup, comme le Jeu de la vie : un canevas se déplace et se
+ * zoome, il ne défile pas. Le plancher évite une vue écrasée quand la popup ne
+ * donne pas de hauteur.
+ */
+.editor {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    height: 100%;
+    min-height: min(560px, 78vh);
+    max-height: 100%;
+}
+
+.editorHeader {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.titleInput {
+    flex: 1 1 220px;
+    min-width: 0;
+    max-width: 420px;
+}
+
+.editorTitle {
+    flex: 1 1 220px;
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    color: var(--text-primary);
+    font-size: 1.1rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.status {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+.status[data-tone='ok'] {
+    color: var(--success);
+}
+
+.status[data-tone='warn'] {
+    color: var(--warning);
+}
+
+.editorActions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    margin-left: auto;
+}
+
+.participants {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+.participant {
+    display: inline-flex;
+    border-radius: 50%;
+    box-shadow: 0 0 0 2px var(--peer);
+}
+
+.canvas {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+}
+
+@media (max-width: 900px) {
+    .editor {
+        min-height: min(480px, 70dvh);
+    }
+}

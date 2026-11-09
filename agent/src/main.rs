@@ -11,6 +11,7 @@ mod enroll;
 mod exclusions;
 mod files;
 mod identity;
+mod instance;
 mod integrity;
 mod link;
 mod live_status;
@@ -19,6 +20,7 @@ mod metrics;
 mod orders;
 mod ownership;
 mod packages;
+mod pause;
 mod policy_cmd;
 mod power;
 mod protocol;
@@ -38,6 +40,7 @@ mod update;
 mod winreg;
 
 use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 /// Whether this process is supervised by a service manager (systemd/launchd/task),
@@ -75,6 +78,10 @@ use crate::runner::RunOptions;
 #[derive(Parser)]
 #[command(name = "deveye-agent", version = env!("DEVEYE_VERSION"), about = "DevEye monitoring agent")]
 struct Cli {
+    /// Act on a named instance: this machine linked to one more DevEye server,
+    /// beside its default enrollment, with its own config, service and policy.
+    #[arg(long, global = true, env = "DEVEYE_INSTANCE", value_parser = instance::parse)]
+    instance: Option<String>,
     #[command(subcommand)]
     command: Command,
 }
@@ -92,6 +99,11 @@ enum Command {
         /// when run as root, a per-user one otherwise.
         #[arg(long)]
         autostart: bool,
+        /// Linked to another server already: move this machine to this one,
+        /// keeping its identity and local settings (a server reached at a new
+        /// address too).
+        #[arg(long = "move")]
+        moving: bool,
     },
     /// Run the monitoring loop. Foreground by default.
     Run {
@@ -136,6 +148,16 @@ enum Command {
     /// Stop the running agent: the installed service until the next boot or
     /// login, or a backgrounded one (`run --detach`).
     Stop,
+    /// Pause the agent: it keeps a control session with the server but
+    /// monitors nothing and takes no order until `resume` or the end of
+    /// `--for`. A pause survives a restart of the agent and of the machine.
+    Pause {
+        /// How long: `30m`, `1h`, `4h`, `24h`, `2d`. Without it, until `resume`.
+        #[arg(long = "for", value_name = "DURATION")]
+        duration: Option<String>,
+    },
+    /// End a pause: the agent resumes monitoring at once.
+    Resume,
     /// Print local enrollment and running status.
     Status,
     /// Manage the autostart service (persistence across reboots).
@@ -152,7 +174,8 @@ enum Command {
     Packages,
     /// Forget the local enrollment (deletes the config + token).
     Unlink,
-    /// Remove the agent entirely: autostart, config, token, caches, binary.
+    /// Remove the agent entirely, every instance: autostart, config, token,
+    /// caches, binary.
     ///
     /// `unlink` oublie l'enrôlement et laisse tout le reste en place ; celle-ci
     /// retire la machine de l'équation : démarrage automatique, linger, agent en
@@ -221,7 +244,11 @@ fn main() -> Result<()> {
         .with_target(false)
         .init();
 
-    let command = Cli::parse().command;
+    let cli = Cli::parse();
+    if let Some(name) = &cli.instance {
+        std::env::set_var(instance::ENV, name);
+    }
+    let command = cli.command;
     // The icon owns the main thread, which macOS requires of any UI.
     if let Command::Tray {
         action: TrayCmd::Run,
@@ -242,7 +269,8 @@ async fn dispatch(command: Command) -> Result<()> {
             code,
             options,
             autostart,
-        } => link::link(&code, &options, autostart).await,
+            moving,
+        } => link::link(&code, &options, autostart, moving).await,
         Command::Run {
             once,
             interval,
@@ -258,6 +286,7 @@ async fn dispatch(command: Command) -> Result<()> {
             config,
         } => {
             if let Some(path) = config {
+                instance::follow_config(Path::new(&path))?;
                 std::env::set_var("DEVEYE_CONFIG", path);
             }
             if monitor_only {
@@ -266,6 +295,8 @@ async fn dispatch(command: Command) -> Result<()> {
             policy_cmd::run(policy_cmd::Change { allow, deny })
         }
         Command::Stop => stop(),
+        Command::Pause { duration } => pause_cmd(duration.as_deref()),
+        Command::Resume => resume_cmd(),
         Command::Status => {
             status();
             Ok(())
@@ -307,6 +338,9 @@ fn service_cmd(action: ServiceCmd) -> Result<()> {
             no_autostart,
             config,
         } => {
+            if let Some(path) = &config {
+                instance::follow_config(Path::new(path))?;
+            }
             service::install(system, config.as_deref(), !no_autostart)?;
             // En ligne de commande, « installer » veut dire « et démarre-le » :
             // c'est le point d'entrée autonome. Le démarrage reste une étape
@@ -381,7 +415,13 @@ async fn run(
     // A `--config` points Config at a specific file (services bake an absolute
     // path so a system service finds the enrolled config). Set it before loading.
     if let Some(path) = config_path {
+        instance::follow_config(Path::new(&path))?;
         std::env::set_var("DEVEYE_CONFIG", path);
+    }
+    // What this process starts (a detached run, the relaunch after an update)
+    // acts for the same instance, even one only its config path names.
+    if let Some(name) = instance::current() {
+        std::env::set_var(instance::ENV, name);
     }
     // `--managed` (set by the service) or a `DEVEYE_MANAGED` env both mark us as supervised.
     let _ = MANAGED.set(managed || std::env::var_os("DEVEYE_MANAGED").is_some());
@@ -492,7 +532,7 @@ fn stop() -> Result<()> {
     }
     // Killed, the agent cannot withdraw its status: the tray would show it
     // alive until the status goes stale.
-    live_status::remove_all();
+    live_status::remove_own();
     let pid_path = Config::pid_path();
     let pid = match fs::read_to_string(&pid_path) {
         Ok(s) => s.trim().to_string(),
@@ -557,6 +597,7 @@ fn status() {
             return;
         }
         println!("Not enrolled. Run: deveye-agent link <code>");
+        instances_section();
         return;
     }
     let c = match Config::load() {
@@ -632,6 +673,9 @@ fn status() {
     println!();
     status_section("Status");
     status_row("Running", &running_text);
+    if let Some(pause) = pause::current() {
+        status_row("Paused", &pause_text(&pause));
+    }
     status_row("Autostart", &autostart);
 
     // Only what this machine refuses: an all-default policy says nothing.
@@ -641,12 +685,98 @@ fn status() {
         status_section("Local policy");
         status_row("Refused", &refused.join(", "));
     }
+    instances_section();
+}
+
+/// Every enrollment of this account, when there is another than this one.
+fn instances_section() {
+    let current = instance::current();
+    let mut seen: Vec<PathBuf> = Vec::new();
+    let mut all: Vec<(Option<String>, PathBuf)> = Vec::new();
+    for (name, path) in instance::roots()
+        .iter()
+        .flat_map(|r| instance::enrollments(r))
+    {
+        let key = path.canonicalize().unwrap_or_else(|_| path.clone());
+        if !seen.contains(&key) {
+            seen.push(key);
+            all.push((name, path));
+        }
+    }
+    if all.iter().all(|(name, _)| *name == current) {
+        return;
+    }
+    println!();
+    status_section("Instances");
+    for (name, path) in &all {
+        let server = Config::read(path)
+            .map(|c| c.server)
+            .unwrap_or_else(|e| format!("unreadable: {e:#}"));
+        let this = if *name == current { " (this one)" } else { "" };
+        status_row(
+            name.as_deref().unwrap_or(instance::DEFAULT_LABEL),
+            &format!("{server}{this}"),
+        );
+    }
+    println!("Another one: deveye-agent --instance <name> status");
 }
 
 /// An ordinary account asking about an agent enrolled as a system service:
 /// the enrollment is root's alone.
 pub(crate) fn system_service_only() -> bool {
     !config::privileged() && system_dir::held()
+}
+
+/// The enrollment this process acts for must be reachable: a system service's
+/// is root's alone.
+fn require_enrollment(command: &str) -> Result<()> {
+    if Config::exists() {
+        return Ok(());
+    }
+    if system_service_only() {
+        anyhow::bail!(
+            "the agent runs as a system service, enrolled for root alone. Run: {}",
+            system_dir::elevated(command)
+        );
+    }
+    anyhow::bail!("not enrolled. Run: deveye-agent link <code>");
+}
+
+fn pause_cmd(duration: Option<&str>) -> Result<()> {
+    let duration = duration.map(pause::parse_duration).transpose()?;
+    require_enrollment(&match duration {
+        Some(_) => format!("pause --for {}", duration_arg(duration)),
+        None => "pause".to_string(),
+    })?;
+    let pause = pause::set(duration)?;
+    println!("✓ Agent paused, {}.", pause_text(&pause));
+    if state::read_running().is_none() {
+        println!("  No agent is running: it starts paused.");
+    }
+    Ok(())
+}
+
+fn resume_cmd() -> Result<()> {
+    require_enrollment("resume")?;
+    if pause::clear() {
+        println!("✓ Agent resumed: it monitors again within a few seconds.");
+    } else {
+        println!("The agent was not paused.");
+    }
+    Ok(())
+}
+
+/// `status` and `pause`: what the pause is, in a few words.
+fn pause_text(pause: &pause::Pause) -> String {
+    match pause.remaining(live_status::now_secs()) {
+        Some(left) => format!("resumes in {}", pause::describe(left)),
+        None => "until `deveye-agent resume`".to_string(),
+    }
+}
+
+/// The `--for` value as the user typed it, back from seconds.
+fn duration_arg(duration: Option<std::time::Duration>) -> String {
+    duration.map_or_else(String::new, |d| format!("{}s", d.as_secs()))
 }
 
 /// A `status` section header.
@@ -691,6 +821,9 @@ fn unlink() -> Result<()> {
         fs::remove_file(&path).with_context(|| format!("removing {}", path.display()))?;
         let _ = fs::remove_file(Config::pid_path());
         state::clear();
+        if let Some(dir) = path.parent() {
+            instance::remove_empty_dirs(dir);
+        }
         println!("✓ Local enrollment removed. Delete the device in DevEye → Appareils too.");
     } else {
         println!("Nothing to remove (not enrolled).");
@@ -701,6 +834,18 @@ fn unlink() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_instance_comes_before_or_after_the_command() {
+        for args in [
+            &["deveye-agent", "--instance", "nas", "status"][..],
+            &["deveye-agent", "status", "--instance", "nas"][..],
+        ] {
+            let cli = Cli::try_parse_from(args).unwrap();
+            assert_eq!(cli.instance.as_deref(), Some("nas"));
+        }
+        assert!(Cli::try_parse_from(["deveye-agent", "--instance", "../x", "status"]).is_err());
+    }
 
     #[test]
     fn the_link_code_can_come_from_the_environment() {

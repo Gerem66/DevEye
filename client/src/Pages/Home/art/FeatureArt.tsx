@@ -393,6 +393,21 @@ const ART: Record<ArtId, ReactNode> = {
             <circle cx='92' cy='74' r='5' fill={A} />
         </>
     ),
+    // Deux pages l'une sur l'autre, et la signature posée au bas de celle du dessus.
+    pdf: (
+        <>
+            <rect x='42' y='14' width='60' height='70' rx='5' fill={M} opacity='0.08' />
+            <rect x='42' y='14' width='60' height='70' rx='5' stroke={M} opacity='0.5' {...thin} />
+            <rect x='58' y='6' width='64' height='74' rx='5' fill={M} opacity='0.14' />
+            <rect x='58' y='6' width='64' height='74' rx='5' stroke={M} {...thin} />
+            <Line x={68} y={18} w={40} o={0.45} />
+            <Line x={68} y={28} w={30} o={0.3} />
+            <Line x={68} y={38} w={36} o={0.3} />
+            <Line x={68} y={48} w={24} o={0.3} />
+            <path d='M68 68c5-12 9-12 13-1s8 11 13 0 8-10 14 1' stroke={A} {...stroke} />
+            <circle cx='112' cy='68' r='3' fill={A} />
+        </>
+    ),
     // La feuille d'un document : ses lignes, et le total qui les ferme.
     invoicing: (
         <>
@@ -424,6 +439,23 @@ const ART: Record<ArtId, ReactNode> = {
             <Line x={58} y={46.5} w={36} c={A} o={0.85} />
             <path d='M19 76 36 71 53 73 70 66 88 69 105 62 122 64 140 58' stroke={A} {...stroke} />
             <circle cx='140' cy='58' r='3.5' fill={A} />
+        </>
+    ),
+    // Un schéma à main levée, deux formes reliées, et le pointeur d'un autre participant.
+    whiteboard: (
+        <>
+            <rect x='16' y='10' width='128' height='70' rx='6' fill={M} opacity='0.1' />
+            <rect x='16' y='10' width='128' height='70' rx='6' stroke={M} {...thin} />
+            <path
+                d='M30 24c10-1.5 22-1 32 .5.8 7 .6 14-.4 20.5-10 1-21.5.6-31.6-.4-.8-7-.8-13.6 0-20.6z'
+                stroke={A}
+                {...stroke}
+            />
+            <path d='M66 35c9-.5 17 1.5 25 6' stroke={M} {...thin} />
+            <path d='M86 37.5l5.5 3.5-6 3' stroke={M} {...thin} />
+            <ellipse cx='113' cy='50' rx='18' ry='11' stroke={A} {...stroke} />
+            <path d='M44 56v14l4-3.5 3.5 7 2.5-1.2-3.5-6.8h5.5z' fill={A} opacity='0.85' />
+            <rect x='56' y='66' width='28' height='9' rx='4.5' fill={A} opacity='0.18' />
         </>
     ),
 

@@ -11,6 +11,9 @@ import {
     projectHostingLink,
     projectHostingList,
     projectHostingUnlink,
+    projectWhiteboardLink,
+    projectWhiteboardList,
+    projectWhiteboardUnlink,
     projectBoard,
     projectCardAdd,
     projectCardArchive,
@@ -80,7 +83,8 @@ import {
     DEPLOY_ITEMS_PROVIDER,
     GIT_ITEMS_PROVIDER,
     HOSTING_ITEMS_PROVIDER,
-    UPTIME_ITEMS_PROVIDER
+    UPTIME_ITEMS_PROVIDER,
+    WHITEBOARD_ITEMS_PROVIDER
 } from '@deveye/types/sdk';
 import { FeatureError, type SdkCipher, type SdkFeatureContext } from '@deveye/types/sdk/server';
 import { createTestContext, testDomain, type TestContext, type TestContextOverrides } from '@deveye/types/sdk/testing';
@@ -146,7 +150,7 @@ interface FakeRepo extends ProjectsRepo {
         milestones: ProjectMilestoneRow[];
         deps: ProjectCardDepRow[];
         events: ProjectEventRow[];
-        links: Record<'uptime' | 'database' | 'deploy' | 'repo' | 'site' | 'pack', LinkRow[]>;
+        links: Record<'uptime' | 'database' | 'deploy' | 'repo' | 'site' | 'pack' | 'board', LinkRow[]>;
         dashboard: DashboardTileRow[];
     };
 }
@@ -258,7 +262,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
         milestones: [],
         deps: [],
         events: [],
-        links: { uptime: [], database: [], deploy: [], repo: [], site: [], pack: [] },
+        links: { uptime: [], database: [], deploy: [], repo: [], site: [], pack: [], board: [] },
         dashboard: []
     };
     // `locate` rend la ligne vivante, pour les mutations ; `find` en rend une copie,
@@ -743,7 +747,16 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
             },
             listPackUsage: usage('pack', true),
             countPackLinks: counts('pack'),
-            detachPack: detach('pack')
+            detachPack: detach('pack'),
+            listBoardIds: ids('board'),
+            linkBoard: link('board'),
+            unlinkBoard: unlink('board'),
+            unlinkAllBoards: async (projectId, ws) => {
+                await unlinkAll('board')(projectId, ws);
+            },
+            listBoardUsage: usage('board', true),
+            countBoardLinks: counts('board'),
+            detachBoard: detach('board')
         },
         dashboard: {
             list: async (projectId, ws) =>
@@ -958,6 +971,7 @@ describe('le registre des commandes', () => {
             'projects.databaseList',
             'projects.audienceList',
             'projects.hostingList',
+            'projects.whiteboardList',
             'projects.dashboard',
             'projects.publication'
         ]);
@@ -1000,6 +1014,8 @@ describe('le registre des commandes', () => {
         // démarrage d'une instance qui ne l'a pas.
         assert.deepEqual(topicsOf('projects.hostingLink'), ['projects']);
         assert.deepEqual(topicsOf('projects.hostingUnlink'), ['projects']);
+        assert.deepEqual(topicsOf('projects.whiteboardLink'), ['projects']);
+        assert.deepEqual(topicsOf('projects.whiteboardUnlink'), ['projects']);
         assert.equal(topicsOf('projects.cardAdd'), true);
         // Aucune liste ne nomme un sujet que le boot refuserait : les nôtres et ceux
         // des cinq features reliées.
@@ -1222,6 +1238,7 @@ describe('projects.setSecurityTier : la conversion d’étage', () => {
         repo.rows.links.database.push({ project_id: 1, workspace_id: 1, item_id: 6 });
         repo.rows.links.site.push({ project_id: 1, workspace_id: 1, item_id: 7 });
         repo.rows.links.pack.push({ project_id: 1, workspace_id: 1, item_id: 4 });
+        repo.rows.links.board.push({ project_id: 1, workspace_id: 1, item_id: 3 });
         repo.rows.links.deploy.push({ project_id: 1, workspace_id: 1, item_id: 8 });
         repo.rows.links.uptime.push({ project_id: 1, workspace_id: 1, item_id: 9 });
     }
@@ -1257,9 +1274,10 @@ describe('projects.setSecurityTier : la conversion d’étage', () => {
                 repo.rows.links.database,
                 repo.rows.links.site,
                 repo.rows.links.pack,
+                repo.rows.links.board,
                 repo.rows.links.deploy
             ].map((l) => l.length),
-            [0, 0, 0, 0, 0]
+            [0, 0, 0, 0, 0, 0]
         );
         assert.equal(repo.rows.links.uptime.length, 1);
 
@@ -1272,6 +1290,7 @@ describe('projects.setSecurityTier : la conversion d’étage', () => {
             'projects.databaseUnlink',
             'projects.audienceUnlink',
             'projects.hostingUnlink',
+            'projects.whiteboardUnlink',
             'projects.deployUnlink',
             'projects.securityTier'
         ]);
@@ -1826,7 +1845,8 @@ describe('les liaisons par les contrats d’éléments', () => {
             audience: 0,
             deploy: 1,
             uptime: 1,
-            'x-hosting': 0
+            'x-hosting': 0,
+            whiteboard: 0
         });
     });
 
@@ -1854,6 +1874,39 @@ describe('les liaisons par les contrats d’éléments', () => {
         const counted = await handlerFor(projectLinkCounts)(ctx, { projectId: 1 });
         assert.equal(counted.counts['x-hosting'], 1);
         assert.deepEqual((await handlerFor(projectHostingUnlink)(ctx, { projectId: 1, packId: 4 })).packIds, []);
+    });
+
+    it('un tableau blanc se relie par le contrat du module, module absent refusé, et se délie sans y toucher', async () => {
+        const repo = fakeRepo();
+        seedTwoTiers(repo);
+        await assert.rejects(
+            handlerFor(projectWhiteboardLink)(contextWith(repo), { projectId: 1, boardId: 3 }),
+            failsWith('validation')
+        );
+        const providers = {
+            [WHITEBOARD_ITEMS_PROVIDER]: {
+                exists: async (id: number) => id === 3,
+                labelOf: async (id: number) => (id === 3 ? 'Architecture' : null)
+            }
+        };
+        const ctx = contextWith(repo, { providers });
+        await assert.rejects(
+            handlerFor(projectWhiteboardLink)(ctx, { projectId: 1, boardId: 5 }),
+            failsWith('not_found')
+        );
+        await assert.rejects(
+            handlerFor(projectWhiteboardLink)(ctx, { projectId: 2, boardId: 3 }),
+            failsWith('validation')
+        );
+        assert.deepEqual((await handlerFor(projectWhiteboardLink)(ctx, { projectId: 1, boardId: 3 })).boardIds, [3]);
+        assert.deepEqual((await handlerFor(projectWhiteboardLink)(ctx, { projectId: 1, boardId: 3 })).boardIds, [3]);
+        assert.deepEqual(await handlerFor(projectWhiteboardList)(ctx, { projectId: 1 }), {
+            boardIds: [3],
+            labels: [{ id: 3, label: 'Architecture' }]
+        });
+        const counted = await handlerFor(projectLinkCounts)(ctx, { projectId: 1 });
+        assert.equal(counted.counts.whiteboard, 1);
+        assert.deepEqual((await handlerFor(projectWhiteboardUnlink)(ctx, { projectId: 1, boardId: 3 })).boardIds, []);
     });
 });
 
@@ -2229,7 +2282,8 @@ describe('le partage inter-espaces', () => {
             audience: 1,
             deploy: 1,
             uptime: 1,
-            'x-hosting': 0
+            'x-hosting': 0,
+            whiteboard: 0
         });
     });
 
@@ -2376,9 +2430,18 @@ describe('la vue d’ensemble d’un projet', () => {
             audience: [],
             deploy: [],
             uptime: [9],
-            'x-hosting': []
+            'x-hosting': [],
+            whiteboard: []
         });
-        assert.deepEqual(first.counts, { git: 0, database: 1, audience: 0, deploy: 0, uptime: 1, 'x-hosting': 0 });
+        assert.deepEqual(first.counts, {
+            git: 0,
+            database: 1,
+            audience: 0,
+            deploy: 0,
+            uptime: 1,
+            'x-hosting': 0,
+            whiteboard: 0
+        });
 
         // Le projet gardé se lit quand même : rangs et masquages sont en clair.
         const guarded = await handlerFor(projectDashboard)(ctx, { projectId: 2 });

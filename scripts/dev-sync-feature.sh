@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Recopie la source d'un module de feature depuis son checkout frère (à la
 # racine du chantier) vers node_modules, pour le serveur tsx. Le client, lui,
-# n'en a pas besoin en dev : vite.config.ts aliase le checkout directement.
+# n'en a pas besoin en dev : client/vite/features.ts aliase le checkout.
 # Même routine que le miroir @deveye/types. Un module in-repo (features/*) n'en
 # a jamais besoin : le lien de workspace rend ses éditions vivantes.
 #

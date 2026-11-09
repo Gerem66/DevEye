@@ -67,6 +67,7 @@ import {
     formatRate,
     formatUptime,
     nearestBy,
+    pauseEnd,
     pct
 } from './utils';
 import styles from './style.module.css';
@@ -1085,6 +1086,13 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                             <span className={`${styles.onlineBadge} ${styles.archived}`}>Archivé</span>
                         ) : pending ? (
                             <span className={`${styles.onlineBadge} ${styles.awaiting}`}>En attente d’approbation</span>
+                        ) : selected.pause ? (
+                            <span
+                                className={`${styles.onlineBadge} ${styles.awaiting}`}
+                                title={`Agent en pause ${pauseEnd(selected.pause.until)}`}
+                            >
+                                En pause
+                            </span>
                         ) : (
                             <span
                                 className={`${styles.onlineBadge} ${online ? styles.online : styles.offline}`}
@@ -1179,6 +1187,28 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
                             : ''}
                     </div>
                 )
+            ) : selected.pause ? (
+                <div className={styles.warnBanner} role='status'>
+                    <span className='icon icon-pause' aria-hidden='true' />
+                    <div className={styles.bannerText}>
+                        <p className={styles.bannerTitle}>En pause depuis {formatAgo(selected.pause.since * 1000)}</p>
+                        <p>
+                            L’agent a été mis en pause, depuis l’app ou l’icône DevEye de la machine : il ne mesure rien
+                            et ne prend aucun ordre {pauseEnd(selected.pause.until)}.
+                            {selected.pause.reachable ? '' : ' La machine est éteinte, ou son agent ne tourne plus.'}
+                        </p>
+                    </div>
+                    {canWrite && !selected.foreign && selected.pause.reachable && (
+                        <Button
+                            variant='secondary'
+                            icon='play'
+                            onClick={() => void actions.lifecycle(selected.id, 'resume')}
+                            disabled={actions.lifecycleBusy?.id === selected.id}
+                        >
+                            Reprendre
+                        </Button>
+                    )}
+                </div>
             ) : (
                 !online && (
                     <div className={styles.warnBanner} role='status'>

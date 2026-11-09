@@ -8,9 +8,9 @@ use std::ptr::{null, null_mut};
 
 use windows_sys::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_SUCCESS};
 use windows_sys::Win32::System::Registry::{
-    RegCloseKey, RegCreateKeyExW, RegDeleteKeyValueW, RegGetValueW, RegSetValueExW, HKEY,
-    HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_SET_VALUE, REG_OPTION_NON_VOLATILE, REG_SZ,
-    RRF_RT_REG_SZ,
+    RegCloseKey, RegCreateKeyExW, RegDeleteKeyValueW, RegEnumValueW, RegGetValueW, RegOpenKeyExW,
+    RegSetValueExW, HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_QUERY_VALUE, KEY_SET_VALUE,
+    REG_OPTION_NON_VOLATILE, REG_SZ, RRF_RT_REG_SZ,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -105,6 +105,45 @@ pub fn get_string(hive: Hive, subkey: &str, name: &str) -> Option<String> {
         let end = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
         Some(String::from_utf16_lossy(&buf[..end]))
     }
+}
+
+/// The names of the values of `subkey`; none when it is absent or unreadable.
+pub fn value_names(hive: Hive, subkey: &str) -> Vec<String> {
+    // A value name is at most 16 383 characters.
+    const MAX_NAME: usize = 16_384;
+    let subkey = wide(subkey);
+    let mut key: HKEY = null_mut();
+    let mut names = Vec::new();
+    // SAFETY: `subkey` is a live NUL-terminated buffer; each enumeration call
+    // writes at most `len` characters into `buf`, which holds `MAX_NAME`; the
+    // opened key is closed below.
+    unsafe {
+        if RegOpenKeyExW(hive.key(), subkey.as_ptr(), 0, KEY_QUERY_VALUE, &mut key) != ERROR_SUCCESS
+        {
+            return names;
+        }
+        let mut buf = vec![0u16; MAX_NAME];
+        for index in 0.. {
+            let mut len = MAX_NAME as u32;
+            let code = RegEnumValueW(
+                key,
+                index,
+                buf.as_mut_ptr(),
+                &mut len,
+                null(),
+                null_mut(),
+                null_mut(),
+                null_mut(),
+            );
+            // `ERROR_NO_MORE_ITEMS` past the last one.
+            if code != ERROR_SUCCESS {
+                break;
+            }
+            names.push(String::from_utf16_lossy(&buf[..len as usize]));
+        }
+        RegCloseKey(key);
+    }
+    names
 }
 
 /// Remove the `name` value of `subkey`. Already absent is success.

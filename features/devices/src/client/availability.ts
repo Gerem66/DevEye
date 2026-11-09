@@ -1,5 +1,6 @@
 import type { FleetDevice } from '../contracts/commands';
 import { manifest } from '../manifest';
+import { pauseEnd } from './utils';
 
 /** Pourquoi une entrée du menu est inerte : le glyphe qui le dit, la phrase en infobulle. */
 export interface Unavailable {
@@ -71,6 +72,20 @@ export const PLAN_PAUSED: Unavailable = {
     reason: 'Appareil en pause, au-delà de la limite de l’offre : il reprend dans les minutes qui suivent, dès que l’offre le permet'
 };
 
+/** L'agent a été mis en pause (app, `deveye-agent pause` ou icône) : il ne prend aucun ordre d'ici la reprise. */
+export function pausedReason(pause: NonNullable<FleetDevice['pause']>): Unavailable {
+    return {
+        icon: 'icon-pause',
+        reason: `Agent en pause ${pauseEnd(pause.until)} : il ne mesure rien et ne prend aucun ordre`
+    };
+}
+
+/** En pause, mais sa session de contrôle n'est pas là : la reprise ne peut pas lui parvenir. */
+export const PAUSED_UNREACHABLE: Unavailable = {
+    icon: 'icon-x-circle',
+    reason: 'Machine hors ligne : la reprise attend que l’agent se reconnecte (ou deveye-agent resume sur la machine)'
+};
+
 /**
  * Le premier motif qui s'applique, dans l'ordre où ils sont donnés. Cet ordre
  * est la règle : ce que le rôle interdit prime sur ce que l'état de la machine
@@ -86,6 +101,7 @@ export function agentReach(device: FleetDevice): Unavailable | undefined {
         device.status === 'archived' && ARCHIVED,
         device.status === 'pending' && PENDING,
         device.planPaused && PLAN_PAUSED,
+        device.pause !== null && pausedReason(device.pause),
         !device.online && OFFLINE
     );
 }

@@ -6,6 +6,7 @@
 
 .head {
     display: flex;
+    align-items: center;
     justify-content: space-between;
     gap: var(--space-sm);
     font-size: 0.82rem;
@@ -16,6 +17,12 @@
     font-weight: 600;
     color: var(--text-primary);
     font-variant-numeric: tabular-nums;
+}
+
+/* Le champ de nombre, assez étroit pour tenir à droite du libellé. */
+.number {
+    width: 118px;
+    flex-shrink: 0;
 }
 
 /* `isolation` : le repère passe DERRIÈRE la piste sans glisser sous le reste de la page. */

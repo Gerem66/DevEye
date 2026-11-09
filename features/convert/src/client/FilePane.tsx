@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { Button, Dropzone, formatBytesFr } from 'deveye-sdk-client';
+import { Button, Dropzone, formatBytesFr, handFileTo } from 'deveye-sdk-client';
 
 import { kindOf, sourceOf, type TargetFormat } from '../contracts/catalogue';
 import { outputDims } from '../contracts/estimate';
@@ -69,6 +69,7 @@ export function FilePane({ wizard, family, target, values, sample, locked, resul
     // Le passage ne se règle qu'à l'étape des options, et pour une cible qui le permet.
     const trims = state.view === 'options' && target?.options.some((spec) => spec.id === 'trimStart');
     const gifDims = target?.recipe.engine === 'gif' && info ? outputDims(target, values, info) : null;
+    const isPdf = state.sourceId !== null && sourceOf(state.kind, state.sourceId)?.group === 'pdf';
     const facts = [
         formatBytesFr(file.size),
         dims && `${dims.width} × ${dims.height} px`,
@@ -80,7 +81,7 @@ export function FilePane({ wizard, family, target, values, sample, locked, resul
             <Preview
                 file={file}
                 kind={state.kind}
-                isPdf={state.sourceId !== null && sourceOf(state.kind, state.sourceId)?.group === 'pdf'}
+                isPdf={isPdf}
                 info={info}
                 crop={cropOf(values, 'crop')}
                 resize={sizeOf(values, 'resize')}
@@ -124,6 +125,15 @@ export function FilePane({ wizard, family, target, values, sample, locked, resul
                     </div>
                 )}
             </div>
+            {isPdf && !state.handed && !result && !locked && (
+                <div className={styles.fileHint}>
+                    <span className='icon icon-pdf' aria-hidden='true' />
+                    <span className={styles.fileHintText}>Fusionner, trier, signer ou protéger ce PDF ?</span>
+                    <Button variant='ghost' icon='arrow' onClick={() => handFileTo('pdf', file)}>
+                        Ouvrir dans PDF
+                    </Button>
+                </div>
+            )}
             <input
                 ref={input}
                 type='file'

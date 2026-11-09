@@ -9,7 +9,8 @@ import tls from 'node:tls';
 import { selfSigned } from '../testing/harness';
 import { certificateFlaws, TLS_POLICY, TlsStore } from './tls';
 
-const now = Math.floor(Date.now() / 1000);
+/** Lu après la création du certificat : openssl le date de la seconde où il le signe, parfois après celle du test. */
+const now = (): number => Math.floor(Date.now() / 1000);
 const DAY = 86_400;
 
 let signedCache: { leaf: string; fullchain: string; key: string } | null = null;
@@ -82,22 +83,25 @@ function caSigned(): { leaf: string; fullchain: string; key: string } {
 
 describe('certificateFlaws', () => {
     it('ne dit rien d’un certificat valable pour le nom du serveur', () => {
-        assert.deepEqual(certificateFlaws(selfSigned().cert, 'localhost', now), []);
+        const { cert } = selfSigned();
+        assert.deepEqual(certificateFlaws(cert, 'localhost', now()), []);
     });
 
     it('dit l’expiration, le nom non couvert, la date d’entrée en vigueur', () => {
         const { cert } = selfSigned();
-        assert.match(certificateFlaws(cert, 'localhost', now + 3 * DAY).join(), /^expiré depuis le /);
-        assert.match(certificateFlaws(cert, 'localhost', now - DAY).join(), /^valide seulement à partir du /);
-        assert.deepEqual(certificateFlaws(cert, 'mail.exemple.test', now), ['ne couvre pas mail.exemple.test']);
+        const at = now();
+        assert.match(certificateFlaws(cert, 'localhost', at + 3 * DAY).join(), /^expiré depuis le /);
+        assert.match(certificateFlaws(cert, 'localhost', at - DAY).join(), /^valide seulement à partir du /);
+        assert.deepEqual(certificateFlaws(cert, 'mail.exemple.test', at), ['ne couvre pas mail.exemple.test']);
     });
 
     it('réclame la chaîne d’un certificat signé par une autorité', () => {
         const signed = caSigned();
-        assert.deepEqual(certificateFlaws(signed.leaf, 'mail.exemple.test', now), [
+        const at = now();
+        assert.deepEqual(certificateFlaws(signed.leaf, 'mail.exemple.test', at), [
             'chaîne incomplète (fournir fullchain.pem)'
         ]);
-        assert.deepEqual(certificateFlaws(signed.fullchain, 'mail.exemple.test', now), []);
+        assert.deepEqual(certificateFlaws(signed.fullchain, 'mail.exemple.test', at), []);
     });
 });
 

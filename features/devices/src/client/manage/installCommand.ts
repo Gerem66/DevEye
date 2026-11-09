@@ -21,6 +21,16 @@ export interface InstallChoice {
     admin: boolean;
     /** Une identité tirée au hasard, pour les copies d'une même image. */
     shuffleId: boolean;
+    /**
+     * L'instance nommée de l'agent qui porte cet enrôlement, pour une machine
+     * suivie par plusieurs serveurs DevEye ; absente : l'enrôlement par défaut.
+     */
+    instance?: string | null;
+}
+
+/** `--instance <nom>`, que l'agent accepte avant comme après sa commande. */
+function instanceArgs(choice: InstallChoice): string[] {
+    return choice.instance ? ['--instance', choice.instance] : [];
 }
 
 /** Les options de `deveye-agent link`, que le script lui passe telles quelles. */
@@ -39,7 +49,7 @@ const PS_TLS12 = '[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePoin
 
 /** Installe l'agent qui convient à la machine, puis la relie. */
 export function installCommand(choice: InstallChoice): string {
-    const args = [choice.code, ...linkArgs(choice)];
+    const args = [choice.code, ...instanceArgs(choice), ...linkArgs(choice)];
     if (choice.os === 'windows') {
         const script = psArg(`${choice.server}/install.ps1`);
         return `${PS_TLS12}; & ([scriptblock]::Create((irm ${script}))) ${args.map(psArg).join(' ')}`;
@@ -50,10 +60,51 @@ export function installCommand(choice: InstallChoice): string {
 
 /** Relie une machine où l'agent est déjà installé. */
 export function linkCommand(choice: InstallChoice): string {
-    const args = [choice.code, '--server', choice.server, ...linkArgs(choice)];
-    if (choice.os === 'windows') return `deveye-agent.exe link ${args.map(psArg).join(' ')}`;
+    const args = [...instanceArgs(choice), 'link', choice.code, '--server', choice.server, ...linkArgs(choice)];
+    if (choice.os === 'windows') return `deveye-agent.exe ${args.map(psArg).join(' ')}`;
     // `-H` : la config est celle de root, où le service système la cherche.
-    return `${choice.admin ? 'sudo -H ' : ''}deveye-agent link ${args.map(shArg).join(' ')}`;
+    return `${choice.admin ? 'sudo -H ' : ''}deveye-agent ${args.map(shArg).join(' ')}`;
+}
+
+/** Le contrat de `instance::parse` dans l'agent : le nom finit dans des noms de fichier, d'unité et de tâche. */
+const INSTANCE_NAME = /^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/;
+const INSTANCE_NAME_MAX = 32;
+/** Ce que `status` appelle l'enrôlement sans nom : aucune instance ne le prend. */
+const DEFAULT_INSTANCE_LABEL = 'default';
+
+/** Un nom d'instance que l'agent acceptera. */
+export function isInstanceName(name: string): boolean {
+    return INSTANCE_NAME.test(name) && name !== DEFAULT_INSTANCE_LABEL;
+}
+
+/**
+ * Un nom d'instance tiré du libellé de l'instance distante (« NAS maison » :
+ * `nas-maison`), sinon de l'hôte de son adresse, sinon `distant`.
+ */
+export function suggestInstanceName(label: string, origin: string): string {
+    const host = (() => {
+        try {
+            return new URL(origin).hostname;
+        } catch {
+            return '';
+        }
+    })();
+    for (const source of [label, host]) {
+        const slug = slugify(source);
+        if (isInstanceName(slug)) return slug;
+    }
+    return 'distant';
+}
+
+function slugify(text: string): string {
+    return text
+        .normalize('NFD')
+        .replace(/\p{M}/gu, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, INSTANCE_NAME_MAX)
+        .replace(/-+$/, '');
 }
 
 /** Un mot que le shell lit tel quel, sinon entre apostrophes. */

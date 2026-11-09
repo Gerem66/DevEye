@@ -19,7 +19,7 @@ devises et unités.
 | `src/server/service.ts`       | La file (un travail à la fois), l'avancement, l'avis de fin, l'entretien, les taux de change               |
 | `src/server/repo.ts`          | Les travaux et leurs transitions d'état, les taux                                                          |
 | `src/server/spawn.ts`         | Le lanceur d'outils : budget, veille d'arrêt, plafond de sortie                                            |
-| `src/server/engines/`         | Un moteur par outil : ffmpeg, ImageMagick, LibreOffice et les outils PDF                                   |
+| `src/server/engines/`         | Un moteur par outil : ffmpeg, ImageMagick, LibreOffice, les outils PDF et ocrmypdf                         |
 | `src/server/storage.ts`       | Le disque : chemins, place libre, balayage                                                                 |
 | `src/server/env.ts`           | Les variables `CONVERT_*` et leurs défauts                                                                 |
 | `src/server/migrations/`      | `001` : les travaux, les taux de change et leur état de relecture                                          |
@@ -108,6 +108,14 @@ reste silencieuse : on est encore devant l'écran.
   le curseur part dessous, faute de quoi « compresser » alourdirait.
 - **Une conversion est personnelle.** Un membre ne voit que les siennes, même
   dans un espace partagé.
+- **Un PDF se convertit ici, se travaille dans le module PDF.** Alléger, en
+  tirer une image ou son texte, reconnaître le texte d'un scan : c'est ici, sur
+  le serveur, sous les quotas. Fusionner, trier, signer, remplir, protéger : c'est
+  le module `pdf`, dans le navigateur. Les deux se passent le fichier par
+  `handFileTo` du SDK : la colonne du fichier propose « Ouvrir dans PDF » pour
+  un PDF déposé, et `Convert.tsx` ramasse par `useHandedFile` le document que
+  l'atelier lui confie pour la reconnaissance de texte (cible `pdf-ocr`), à
+  l'étape des options.
 - **Ce qu'un fichier peut peser** : le mur du serveur (`CONVERT_MAX_FILE_BYTES`),
   l'offre du propriétaire de l'espace (`convert.fileBytes`), et la place libre.
 - **Ce qu'une offre borne en plus** ([`Docs/QUOTAS.md`](../../Docs/QUOTAS.md)),
@@ -131,8 +139,8 @@ reste silencieuse : on est encore devant l'écran.
 Les variables `CONVERT_*` sont décrites dans `.env.template`, leurs défauts dans
 `src/server/env.ts`. Au démarrage le service sonde ses outils : une absence ne
 l'empêche pas de démarrer, elle retire des formats de l'écran en nommant ce qui
-manque (`convert.capabilities`). L'image se construit sans LibreOffice par
-`--build-arg WITH_DOCUMENTS=0`.
+manque (`convert.capabilities`). L'image se construit sans LibreOffice ni
+ocrmypdf par `--build-arg WITH_DOCUMENTS=0`.
 
 ## Tests
 

@@ -72,8 +72,9 @@ fn resolve_server(named: Option<&str>, saved: Option<&str>) -> (String, bool) {
 
 /// The config a link writes: what this machine already had (its identity, its
 /// policy, its accepted sync roots), with what the options change. The policy
-/// only ever tightens.
-pub fn prepare(options: &LinkOptions) -> Result<Config> {
+/// only ever tightens. `moving`: `link --move`, another server may replace
+/// the one this machine is linked to.
+pub fn prepare(options: &LinkOptions, moving: bool) -> Result<Config> {
     let existing = if Config::exists() {
         Some(Config::load()?)
     } else {
@@ -83,6 +84,15 @@ pub fn prepare(options: &LinkOptions) -> Result<Config> {
         options.server.as_deref(),
         existing.as_ref().map(|c| c.server.as_str()),
     );
+    if let Some(current) = other_server(existing.as_ref(), &server) {
+        if !moving {
+            bail!(refusal(current, &server));
+        }
+        println!(
+            "Moving this machine from {current} to {server}. If that is another server, the \
+             device stays listed there: delete it in its Appareils."
+        );
+    }
     if is_default {
         println!("Server: {server} (default; --server names another)");
     }
@@ -121,8 +131,34 @@ pub fn prepare(options: &LinkOptions) -> Result<Config> {
     Ok(config)
 }
 
+/// The server this machine is linked to, when it is not `server`: a link there
+/// would replace the token, and that server would lose the machine without a
+/// word. The address is all the agent can compare before the link.
+fn other_server<'a>(existing: Option<&'a Config>, server: &str) -> Option<&'a str> {
+    let linked = existing.filter(|c| c.device_token.is_some())?;
+    let current = linked.server.trim_end_matches('/');
+    (!current.eq_ignore_ascii_case(server)).then_some(current)
+}
+
+/// A link to another server takes `--move`, or an instance of its own.
+/// `unlink` would also delete the local settings a move keeps.
+fn refusal(current: &str, server: &str) -> String {
+    let instance: String = crate::instance::args()
+        .iter()
+        .map(|arg| format!(" {arg}"))
+        .collect();
+    format!(
+        "this machine is linked to {current} already, and linking it to {server} would cut it \
+         off from there. To move it (or if this is the same server at a new address), add \
+         --move, which keeps its identity and local settings: \
+         `deveye-agent{instance} link <code> --server {server} --move`. To link it to both, \
+         name an instance for the new one: \
+         `deveye-agent --instance <name> link <code> --server {server}`"
+    )
+}
+
 /// `deveye-agent link`.
-pub async fn link(code: &str, options: &LinkOptions, autostart: bool) -> Result<()> {
+pub async fn link(code: &str, options: &LinkOptions, autostart: bool, moving: bool) -> Result<()> {
     // Relinking the same machine replaces its token: the system service would
     // be cut off without a word.
     if crate::system_service_only() {
@@ -134,7 +170,7 @@ pub async fn link(code: &str, options: &LinkOptions, autostart: bool) -> Result<
             crate::system_dir::elevated("service uninstall")
         );
     }
-    let mut config = prepare(options)?;
+    let mut config = prepare(options, moving)?;
     // Before the link code leaves this machine: enrollment is the exchange that
     // mints the token.
     config.check_transport()?;
@@ -227,7 +263,7 @@ pub async fn ensure_linked(options: &LinkOptions, managed: bool) -> Result<()> {
         bail!("not linked: run `deveye-agent link <code>`, or set DEVEYE_LINK_CODE");
     };
 
-    let mut config = prepare(options)?;
+    let mut config = prepare(options, false)?;
     config.check_transport()?;
     let mut transient_failures = 0u32;
     loop {
@@ -362,6 +398,33 @@ mod tests {
         assert_eq!(
             policy.refused(),
             vec![PolicyKey::Terminal, PolicyKey::Power]
+        );
+    }
+
+    #[test]
+    fn a_link_to_another_server_takes_a_move_or_an_instance() {
+        let linked = |token: Option<&str>| Config {
+            server: "https://app.deveye.fr/".into(),
+            name: "n".into(),
+            fingerprint: "f".into(),
+            device_id: None,
+            device_token: token.map(str::to_string),
+            order_key: None,
+            allow_plaintext: false,
+            sync_roots: Vec::new(),
+            tunnel_targets: Vec::new(),
+            policy: config::Policy::default(),
+        };
+        assert_eq!(other_server(None, "https://nas.lan"), None);
+        assert_eq!(other_server(Some(&linked(None)), "https://nas.lan"), None);
+        let enrolled = linked(Some("t"));
+        assert_eq!(other_server(Some(&enrolled), "https://APP.deveye.fr"), None);
+        let current = other_server(Some(&enrolled), "https://nas.lan");
+        assert_eq!(current, Some("https://app.deveye.fr"));
+        let why = refusal(current.unwrap(), "https://nas.lan");
+        assert!(
+            why.contains("--move") && why.contains("--instance <name>"),
+            "{why}"
         );
     }
 

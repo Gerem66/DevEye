@@ -36,6 +36,8 @@ declare const styles: {
     readonly fields: string;
     readonly fileActions: string;
     readonly fileBar: string;
+    readonly fileHint: string;
+    readonly fileHintText: string;
     readonly fileMeta: string;
     readonly fileName: string;
     readonly filePane: string;
@@ -46,6 +48,7 @@ declare const styles: {
     readonly formats: string;
     readonly headBand: string;
     readonly header: string;
+    readonly icon: string;
     readonly job: string;
     readonly jobActions: string;
     readonly jobHead: string;

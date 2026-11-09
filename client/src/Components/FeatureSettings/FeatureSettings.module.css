@@ -112,6 +112,12 @@
     gap: var(--space-lg);
 }
 
+/* Le complément d'un module sous la section Partage (`settingsPanels.sharing`),
+   à l'écart d'un bloc de la section, comme s'il en faisait partie. */
+.sharingExtra:not(:empty) {
+    margin-top: var(--space-lg);
+}
+
 /* L'intitulé d'un bloc de réglage : le premier enfant d'un `.field`. C'est le
    défaut, et le seul des deux qui marque un début de bloc. */
 .sectionLabel {

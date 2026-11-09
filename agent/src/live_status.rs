@@ -6,7 +6,8 @@
 //! read it but not forge it: next to the user's own config for a per-user agent,
 //! a root-owned runtime directory (Unix) or `HKLM` (Windows) for a privileged
 //! one. It is rewritten on every change and every [`HEARTBEAT`]: a reader tells
-//! a live agent from a crashed one by `updated_at` alone.
+//! a live agent from a crashed one by `updated_at` alone. Each instance
+//! (`crate::instance`) publishes its own, under a name that carries it.
 
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -17,8 +18,6 @@ use tokio::sync::Notify;
 
 /// Rewrite period of an unchanged status.
 pub const HEARTBEAT: Duration = Duration::from_secs(5);
-/// A per-user agent's status, in its `deveye` config directory (Unix).
-pub const USER_FILE: &str = "status.json";
 /// Seconds without a rewrite after which a status describes an agent that is gone.
 pub const STALE_AFTER: u64 = 20;
 /// A burst of changes (CloudSync starts and ends files by the hundred) is
@@ -40,6 +39,11 @@ pub enum Conn {
     Offline {
         retry_at: u64,
     },
+    /// Paused (`deveye-agent pause`, the icon or the app): a control session
+    /// only, until `until` (unix seconds) or a resume.
+    Paused {
+        until: Option<u64>,
+    },
 }
 
 /// Long-running work in progress, by kind.
@@ -54,6 +58,15 @@ pub struct Work {
 }
 
 impl Work {
+    /// Count `other`'s work in too (several instances, one icon).
+    pub fn add(&mut self, other: &Work) {
+        self.sync_transfers += other.sync_transfers;
+        self.sync_scans += other.sync_scans;
+        self.update += other.update;
+        self.deploy += other.deploy;
+        self.packages += other.packages;
+    }
+
     pub fn any(&self) -> bool {
         *self != Work::default()
     }
@@ -62,6 +75,9 @@ impl Work {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LiveStatus {
+    /// The named instance that publishes it, absent for the default one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub instance: Option<String>,
     pub version: String,
     pub pid: u32,
     /// The agent's executable: what a tray relaunches itself from after an update.
@@ -151,9 +167,12 @@ pub async fn publish(server: String) {
     let exe = std::env::current_exe()
         .map(|p| p.to_string_lossy().into_owned())
         .unwrap_or_default();
+    let instance = crate::instance::current();
+    let entry = store::entry(instance.as_deref());
     let mut warned = false;
     loop {
         let status = LiveStatus {
+            instance: instance.clone(),
             version: env!("DEVEYE_VERSION").to_string(),
             pid: std::process::id(),
             exe: exe.clone(),
@@ -165,7 +184,7 @@ pub async fn publish(server: String) {
         };
         let written = serde_json::to_string(&status)
             .map_err(std::io::Error::other)
-            .and_then(|json| store::write(scope, &json));
+            .and_then(|json| store::write(scope, &entry, &json));
         match written {
             Ok(()) => warned = false,
             Err(e) if !warned => {
@@ -184,23 +203,60 @@ pub async fn publish(server: String) {
 /// Remove what [`publish`] wrote (clean exit).
 pub fn withdraw() {
     if let Some(&scope) = PUBLISHED.get() {
-        store::remove(scope);
+        store::remove(scope, &store::entry(crate::instance::current().as_deref()));
+    }
+}
+
+/// Remove this instance's status wherever it was published (a stop, which
+/// kills the agent before it can withdraw it, or a removal).
+pub fn remove_own() {
+    let entry = store::entry(crate::instance::current().as_deref());
+    for scope in [Scope::User, Scope::System] {
+        store::remove(scope, &entry);
     }
 }
 
 /// Remove every published status this process can reach (uninstall).
 pub fn remove_all() {
-    store::remove(Scope::User);
-    store::remove(Scope::System);
+    for scope in [Scope::User, Scope::System] {
+        for entry in store::entries(scope) {
+            store::remove(scope, &entry);
+        }
+    }
 }
 
 /// Every status published on this machine that the current user can trust.
 pub fn read_all() -> Vec<LiveStatus> {
     [Scope::User, Scope::System]
         .into_iter()
-        .filter_map(store::read)
+        .flat_map(|scope| {
+            store::entries(scope)
+                .into_iter()
+                .filter_map(move |entry| store::read(scope, &entry))
+        })
         .filter_map(|raw| serde_json::from_str(&raw).ok())
         .collect()
+}
+
+/// A per-user agent's status file, in the `deveye` folder of its account
+/// (Unix): `status.json`, `status-<instance>.json`.
+const FILE_PREFIX: &str = "status";
+const FILE_SUFFIX: &str = ".json";
+
+/// Is this a status file of some instance?
+pub fn is_status_file(name: &str) -> bool {
+    instance_of(name, FILE_PREFIX, FILE_SUFFIX).is_some()
+}
+
+/// `<prefix><suffix>` names the default instance, `<prefix>-<name><suffix>` a
+/// named one; anything else is no status entry.
+fn instance_of(entry: &str, prefix: &str, suffix: &str) -> Option<Option<String>> {
+    let middle = entry.strip_prefix(prefix)?.strip_suffix(suffix)?;
+    if middle.is_empty() {
+        return Some(None);
+    }
+    let name = middle.strip_prefix('-')?;
+    crate::instance::parse(name).ok().map(Some)
 }
 
 /// Who published: the user's own agent, or a privileged one for the whole machine.
@@ -217,7 +273,14 @@ mod store {
     use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt, PermissionsExt};
     use std::path::PathBuf;
 
-    use super::{Scope, USER_FILE as FILE};
+    use super::{instance_of, Scope, FILE_PREFIX, FILE_SUFFIX};
+
+    pub(super) fn entry(instance: Option<&str>) -> String {
+        format!(
+            "{FILE_PREFIX}{}{FILE_SUFFIX}",
+            crate::instance::suffix_of(instance)
+        )
+    }
 
     #[cfg(target_os = "macos")]
     const SYSTEM_DIR: &str = "/var/run/deveye-agent";
@@ -244,7 +307,7 @@ mod store {
             .unwrap_or(false)
     }
 
-    pub(super) fn write(scope: Scope, json: &str) -> io::Result<()> {
+    pub(super) fn write(scope: Scope, entry: &str, json: &str) -> io::Result<()> {
         let dir = dir(scope).ok_or_else(|| io::Error::other("no config directory"))?;
         // The system status is for every user's tray, a per-user one for its owner's.
         let (dir_mode, file_mode) = match scope {
@@ -265,7 +328,7 @@ mod store {
                 )));
             }
         }
-        let tmp = dir.join(".status.json.tmp");
+        let tmp = dir.join(format!(".{entry}.tmp"));
         let _ = fs::remove_file(&tmp);
         let mut file = fs::OpenOptions::new()
             .write(true)
@@ -275,23 +338,35 @@ mod store {
         file.set_permissions(fs::Permissions::from_mode(file_mode))?;
         file.write_all(json.as_bytes())?;
         drop(file);
-        fs::rename(&tmp, dir.join(FILE))
+        fs::rename(&tmp, dir.join(entry))
     }
 
-    pub(super) fn remove(scope: Scope) {
+    /// The system folder goes with its last status.
+    pub(super) fn remove(scope: Scope, entry: &str) {
         if let Some(dir) = dir(scope) {
-            let _ = fs::remove_file(dir.join(FILE));
+            let _ = fs::remove_file(dir.join(entry));
             if scope == Scope::System {
                 let _ = fs::remove_dir(&dir);
             }
         }
     }
 
+    pub(super) fn entries(scope: Scope) -> Vec<String> {
+        let Some(entries) = dir(scope).and_then(|d| fs::read_dir(d).ok()) else {
+            return Vec::new();
+        };
+        entries
+            .flatten()
+            .filter_map(|e| e.file_name().into_string().ok())
+            .filter(|name| instance_of(name, FILE_PREFIX, FILE_SUFFIX).is_some())
+            .collect()
+    }
+
     /// The system status only counts when root wrote it, in a directory only
     /// root controls: the tray opens the URL it names.
-    pub(super) fn read(scope: Scope) -> Option<String> {
+    pub(super) fn read(scope: Scope, entry: &str) -> Option<String> {
         let dir = dir(scope)?;
-        let path = dir.join(FILE);
+        let path = dir.join(entry);
         let meta = fs::symlink_metadata(&path).ok()?;
         let trusted = match scope {
             Scope::System => is_sound_dir(&dir, 0) && meta.uid() == 0,
@@ -308,11 +383,16 @@ mod store {
 mod store {
     use std::io;
 
-    use super::Scope;
+    use super::{instance_of, Scope};
     use crate::winreg::{self, Hive};
 
     const KEY: &str = r"Software\DevEye";
-    const VALUE: &str = "AgentStatus";
+    /// `AgentStatus`, `AgentStatus-<instance>`.
+    const VALUE_PREFIX: &str = "AgentStatus";
+
+    pub(super) fn entry(instance: Option<&str>) -> String {
+        format!("{VALUE_PREFIX}{}", crate::instance::suffix_of(instance))
+    }
 
     fn hive(scope: Scope) -> Hive {
         match scope {
@@ -321,16 +401,23 @@ mod store {
         }
     }
 
-    pub(super) fn write(scope: Scope, json: &str) -> io::Result<()> {
-        winreg::set_string(hive(scope), KEY, VALUE, json)
+    pub(super) fn write(scope: Scope, entry: &str, json: &str) -> io::Result<()> {
+        winreg::set_string(hive(scope), KEY, entry, json)
     }
 
-    pub(super) fn remove(scope: Scope) {
-        let _ = winreg::delete_value(hive(scope), KEY, VALUE);
+    pub(super) fn remove(scope: Scope, entry: &str) {
+        let _ = winreg::delete_value(hive(scope), KEY, entry);
     }
 
-    pub(super) fn read(scope: Scope) -> Option<String> {
-        winreg::get_string(hive(scope), KEY, VALUE)
+    pub(super) fn entries(scope: Scope) -> Vec<String> {
+        winreg::value_names(hive(scope), KEY)
+            .into_iter()
+            .filter(|name| instance_of(name, VALUE_PREFIX, "").is_some())
+            .collect()
+    }
+
+    pub(super) fn read(scope: Scope, entry: &str) -> Option<String> {
+        winreg::get_string(hive(scope), KEY, entry)
     }
 }
 
@@ -341,6 +428,7 @@ mod tests {
     #[test]
     fn a_status_round_trips_through_json() {
         let status = LiveStatus {
+            instance: Some("nas".into()),
             version: "1.2.3".into(),
             pid: 42,
             exe: "/usr/local/bin/deveye-agent".into(),
@@ -356,6 +444,13 @@ mod tests {
         let json = serde_json::to_string(&status).unwrap();
         assert!(json.contains(r#""conn":{"state":"offline","retryAt":1012}"#));
         assert_eq!(serde_json::from_str::<LiveStatus>(&json).unwrap(), status);
+        let paused = LiveStatus {
+            conn: Conn::Paused { until: None },
+            ..status
+        };
+        let json = serde_json::to_string(&paused).unwrap();
+        assert!(json.contains(r#""conn":{"state":"paused","until":null}"#));
+        assert_eq!(serde_json::from_str::<LiveStatus>(&json).unwrap(), paused);
     }
 
     #[test]
@@ -369,6 +464,30 @@ mod tests {
         assert!(!status.is_fresh(101 + STALE_AFTER));
         status.updated_at = 200;
         assert!(status.is_fresh(150), "a clock step back is not staleness");
+    }
+
+    #[test]
+    fn each_instance_has_its_own_entry() {
+        assert_eq!(instance_of("status.json", "status", ".json"), Some(None));
+        assert_eq!(
+            instance_of("status-nas.json", "status", ".json"),
+            Some(Some("nas".into()))
+        );
+        assert_eq!(
+            instance_of("AgentStatus-nas", "AgentStatus", ""),
+            Some(Some("nas".into()))
+        );
+        for other in [
+            "status.json.tmp",
+            ".status-nas.json.tmp",
+            "status-.json",
+            "status-Nas.json",
+            "statusnas.json",
+            "tray.lock",
+        ] {
+            assert_eq!(instance_of(other, "status", ".json"), None, "{other}");
+        }
+        assert!(is_status_file("status-nas.json") && !is_status_file("agent.toml"));
     }
 
     #[test]

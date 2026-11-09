@@ -213,6 +213,13 @@ export class MonitorHub {
     /** deviceId -> connected agent socket. */
     private readonly agents = new Map<string, WebSocket>();
     /**
+     * deviceId -> la session de contrôle d'un agent en pause. Jamais dans
+     * `agents` : l'appareil reste hors ligne pour tout le monde (rien ne lui
+     * est poussé), seuls `resume`, `restart`, `destroy` et la rotation du
+     * jeton le joignent.
+     */
+    private readonly paused = new Map<string, WebSocket>();
+    /**
      * Attentes de verdict d'une opération de fichier lancée hors socket web
      * (une sauvegarde nocturne, sans abonné) : une promesse par `opId`.
      */
@@ -298,11 +305,48 @@ export class MonitorHub {
         // 1012 = "service restart": the old agent backs off before redialing.
         const prev = this.agents.get(deviceId);
         if (prev && prev !== socket) prev.close(1012, 'Session replaced by a newer agent connection');
+        this.dropPaused(deviceId);
         this.agents.set(deviceId, socket);
         this.agentAlive.set(socket, true);
         socket.on('pong', () => this.agentAlive.set(socket, true));
         this.noteReconnect(deviceId);
         this.publishPresence(deviceId, true);
+    }
+
+    /** Un agent en pause se présente : sa session de travail, s'il en restait une, ne vaut plus. */
+    agentPaused(deviceId: string, socket: WebSocket): void {
+        const prev = this.paused.get(deviceId);
+        if (prev && prev !== socket) prev.close(1012, 'Session replaced by a newer agent connection');
+        const working = this.agents.get(deviceId);
+        if (working) working.close(1012, 'Session replaced by a newer agent connection');
+        this.paused.set(deviceId, socket);
+        this.agentAlive.set(socket, true);
+        socket.on('pong', () => this.agentAlive.set(socket, true));
+    }
+
+    /** La session de contrôle s'est fermée ; une fermeture tardive d'une socket remplacée ne compte pas. */
+    pausedGone(deviceId: string, socket: WebSocket): void {
+        if (this.paused.get(deviceId) !== socket) return;
+        this.paused.delete(deviceId);
+        this.agentAlive.delete(socket);
+    }
+
+    private dropPaused(deviceId: string): void {
+        const socket = this.paused.get(deviceId);
+        if (!socket) return;
+        socket.close(1012, 'Session replaced by a newer agent connection');
+        this.paused.delete(deviceId);
+        this.agentAlive.delete(socket);
+    }
+
+    isPaused(deviceId: string): boolean {
+        return this.paused.has(deviceId);
+    }
+
+    pausedDevices(deviceIds: string[]): Record<string, boolean> {
+        const out: Record<string, boolean> = {};
+        for (const id of deviceIds) out[id] = this.paused.has(id);
+        return out;
     }
 
     /**
@@ -339,26 +383,28 @@ export class MonitorHub {
     }
 
     private sweepAgents(): void {
-        for (const [deviceId, socket] of this.agents) {
-            if (this.agentAlive.get(socket) === false) {
-                // `terminate()` et non `close()` : une pile TCP morte ne verra
-                // jamais la poignée de fermeture. `terminate()` émet malgré tout
-                // `close`, donc la comptabilité de présence s'applique.
-                try {
-                    socket.terminate();
-                } catch {
-                    /* déjà partie */
+        for (const sessions of [this.agents, this.paused]) {
+            for (const [deviceId, socket] of sessions) {
+                if (this.agentAlive.get(socket) === false) {
+                    // `terminate()` et non `close()` : une pile TCP morte ne verra
+                    // jamais la poignée de fermeture. `terminate()` émet malgré tout
+                    // `close`, donc la comptabilité de présence s'applique.
+                    try {
+                        socket.terminate();
+                    } catch {
+                        /* déjà partie */
+                    }
+                    sessions.delete(deviceId);
+                    this.agentAlive.delete(socket);
+                    continue;
                 }
-                this.agents.delete(deviceId);
-                this.agentAlive.delete(socket);
-                continue;
-            }
-            this.agentAlive.set(socket, false);
-            try {
-                socket.ping();
-            } catch {
-                this.agents.delete(deviceId);
-                this.agentAlive.delete(socket);
+                this.agentAlive.set(socket, false);
+                try {
+                    socket.ping();
+                } catch {
+                    sessions.delete(deviceId);
+                    this.agentAlive.delete(socket);
+                }
             }
         }
     }
@@ -415,8 +461,13 @@ export class MonitorHub {
         return this.sendToAgent(deviceId, AGENT_CONFIG, config);
     }
 
-    /** Tell a connected agent to self-destruct now. No-op if offline. */
+    /** Tell a connected or paused agent to self-destruct now. No-op if offline. */
     requestDestroy(deviceId: string): boolean {
+        const paused = this.paused.get(deviceId);
+        if (paused) {
+            paused.send(agentFrame(deviceId, AGENT_DESTROY, {}));
+            return true;
+        }
         return this.sendToAgent(deviceId, AGENT_DESTROY);
     }
 
@@ -427,7 +478,7 @@ export class MonitorHub {
      * violation ») et non 1012 : l'agent ne doit pas se ruer sur une reconnexion.
      */
     disconnectAgent(deviceId: string): boolean {
-        const socket = this.agents.get(deviceId);
+        const socket = this.agents.get(deviceId) ?? this.paused.get(deviceId);
         if (!socket) return false;
         socket.close(1008);
         return true;
@@ -638,8 +689,18 @@ export class MonitorHub {
         return this.sendToAgent(deviceId, AGENT_POWER, payload);
     }
 
-    /** Ask a connected agent to stop/restart its own process. No-op if offline. */
+    /**
+     * Ask an agent to restart, pause or resume its own process. `resume` and
+     * `restart` reach a paused agent by its control session; `pause` only an
+     * online one. No-op (false) when neither is connected.
+     */
     requestLifecycle(deviceId: string, payload: AgentLifecyclePayload): boolean {
+        const paused = this.paused.get(deviceId);
+        if (paused && payload.action !== 'pause') {
+            paused.send(agentFrame(deviceId, AGENT_LIFECYCLE, payload));
+            return true;
+        }
+        if (payload.action === 'resume') return false;
         return this.sendToAgent(deviceId, AGENT_LIFECYCLE, payload);
     }
 
@@ -1319,6 +1380,8 @@ export interface MonitorTransport {
     subscribe(workspaceId: number, deviceIds: string[]): void;
     unsubscribe(deviceIds: string[]): void;
     isOnline(deviceIds: string[]): Record<string, boolean>;
+    /** Paused agents whose control session is connected (never online at the same time). */
+    isPaused(deviceIds: string[]): Record<string, boolean>;
     /** Push the latest snapshot/report for one device straight to this socket. */
     sendInitial(
         deviceId: string,
@@ -1401,6 +1464,7 @@ export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): Moni
         subscribe: (workspaceId, deviceIds) => hub.subscribe(socket, workspaceId, deviceIds),
         unsubscribe: (deviceIds) => hub.unsubscribe(socket, deviceIds),
         isOnline: (deviceIds) => hub.onlineDevices(deviceIds),
+        isPaused: (deviceIds) => hub.pausedDevices(deviceIds),
         sendInitial: (deviceId, point, sample, report) => hub.sendInitial(socket, deviceId, point, sample, report),
         requestCollect: (deviceId) => hub.requestCollect(deviceId),
         requestScan: (deviceId) => hub.requestScan(deviceId),

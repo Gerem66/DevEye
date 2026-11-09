@@ -1476,7 +1476,7 @@ export default function HomePage() {
     };
 
     return (
-        <LiveProvider surface={popupBodyEl ?? contentEl}>
+        <LiveProvider container={popupBodyEl ?? contentEl} view={expandedWidget}>
             <div className={styles.dashboard}>
                 <Wallpaper />
 

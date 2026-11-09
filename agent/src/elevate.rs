@@ -108,7 +108,10 @@ fn applescript_escape(s: &str) -> String {
 /// les privilèges et le démarrage se règlent séparément.
 fn run_elevated_install() -> Result<()> {
     let config = enrolled_config();
-    let mut args = vec!["service", "install", "--system", "--config", &config];
+    // `pkexec` and UAC start the elevated process without our environment.
+    let instance = crate::instance::args();
+    let mut args: Vec<&str> = instance.iter().map(String::as_str).collect();
+    args.extend(["service", "install", "--system", "--config", &config]);
     if !service::autostart_enabled(service::installed_scope()) {
         args.push("--no-autostart");
     }

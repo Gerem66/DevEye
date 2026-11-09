@@ -33,7 +33,10 @@ where
     S::Error: std::error::Error + Send + Sync + 'static,
 {
     use crate::service;
-    match Config::self_destruct() {
+    // Another instance of this machine keeps the binary, the icon and its
+    // login entry: only this enrollment goes.
+    let others = crate::instance::others_remain();
+    match Config::self_destruct(others) {
         Ok(()) => {
             // Left in place, the service would relaunch the erased binary
             // forever. Its definition goes now, its stop comes last: stopping
@@ -42,10 +45,15 @@ where
             if let Err(e) = service::remove_definition(scope) {
                 warn!(error = %e, "self-destruct: autostart service left in place");
             }
-            crate::tray::stop_all();
-            crate::tray::autostart::remove_all();
-            crate::live_status::remove_all();
-            info!("self-destruct requested: local state, binary and autostart wiped, exiting");
+            if !others {
+                crate::tray::stop_all();
+                crate::tray::autostart::remove_all();
+            }
+            crate::live_status::remove_own();
+            info!(
+                other_instances = others,
+                "self-destruct requested: local state and autostart wiped, exiting"
+            );
             let _ = send_destroyed(sink, device_id, true, None).await;
             let _ = sink.flush().await;
             // Let the confirmation reach the server before we drop the socket.

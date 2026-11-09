@@ -12,6 +12,32 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: readonly ChangelogEntry[] = [
     {
+        version: '0.26.0',
+        date: '2026-11-10',
+        changes: [
+            {
+                kind: 'added',
+                text: 'Tableau blanc : une nouvelle fonctionnalité pour dessiner des schémas à plusieurs en direct, avec un fond et un thème par tableau, l’import et l’export Excalidraw et l’export en image (PNG, JPEG, WebP ou SVG) ; les tableaux disposent de 100 Mo en gratuit et de 2 Go en Pro'
+            },
+            {
+                kind: 'added',
+                text: 'PDF : une nouvelle fonctionnalité pour assembler, réordonner et faire pivoter des pages, signer et annoter, extraire le texte, remplir un formulaire, numéroter les pages, ajouter un filigrane ou un mot de passe et lire le texte, sans que le document quitte votre navigateur ; vos signatures et vos encres se gardent sur le compte'
+            },
+            {
+                kind: 'added',
+                text: 'Appareils : l’agent se met en pause depuis le menu Agent ou depuis son icône dans la barre des tâches (ou via le binaire directement, CLI)'
+            },
+            {
+                kind: 'added',
+                text: 'Appareils : une machine peut être reliée à plusieurs serveurs DevEye, et « Enrôler vers un autre espace », sous le Partage d’un appareil, donne la commande qui la relie à un espace d’une autre instance'
+            },
+            {
+                kind: 'fixed',
+                text: 'CloudSync : un fichier modifié pendant son envoi puis revenu à la version du cloud ne reste plus signalé en erreur'
+            }
+        ]
+    },
+    {
         version: '0.25.6',
         date: '2026-11-02',
         changes: [

@@ -4,7 +4,8 @@ import type {
     ProjectDeployLinkRow,
     ProjectHostingLinkRow,
     ProjectRepoLinkRow,
-    ProjectUptimeLinkRow
+    ProjectUptimeLinkRow,
+    ProjectWhiteboardLinkRow
 } from '../../contracts/domain';
 import type { ProjectStatus } from '@deveye/types';
 import type { SdkQueryable } from '@deveye/types/sdk/server';
@@ -19,16 +20,16 @@ export interface ProjectUsageRow {
 
 /**
  * Les objets d'espace rattachés à un projet : services surveillés, bases de données,
- * cibles de déploiement, dépôts git, sites suivis et dossiers d'Hébergement. Seul l'identifiant de la cible
- * est stocké, rien d'identifiant donc rien à chiffrer, et la cible garde ses propres
- * droits : c'est la feature visée qui tranche. Non exclusif dans les deux sens, ce
+ * cibles de déploiement, dépôts git, sites suivis, dossiers d'Hébergement et tableaux
+ * blancs. Seul l'identifiant de la cible est stocké, rien d'identifiant donc rien à
+ * chiffrer, et la cible garde ses propres droits : c'est la feature visée qui tranche. Non exclusif dans les deux sens, ce
  * sont des objets d'espace et non des propriétés d'un projet.
  *
- * Les six tables sont celles de Projets, pas des modules visés : ceux-ci n'en
+ * Les sept tables sont celles de Projets, pas des modules visés : ceux-ci n'en
  * lisent aucune, Projets ne lit les leurs que pour l'ordre d'affichage, et ce qu'ils
  * ont besoin de savoir des projets leur est offert par `PROJECTS_USAGE_PROVIDER`.
  *
- * Une même forme pour les six familles : `list*Ids` rend les identifiants dans
+ * Une même forme pour les sept familles : `list*Ids` rend les identifiants dans
  * l'ordre d'affichage de la feature visée, `list*Usage` les projets qui relient un
  * élément (titre encore chiffré), `count*Links` une entrée par élément relié de
  * l'espace, un élément absent valant zéro, `unlinkAll*` sert la conversion d'un
@@ -89,6 +90,15 @@ export interface ProjectLinksRepo {
     detachPack(packId: number, workspaceId: number): Promise<number>;
     listPackUsage(packId: number, workspaceId: number): Promise<ProjectUsageRow[]>;
     countPackLinks(workspaceId: number): Promise<Map<number, number>>;
+
+    // -- liaison projet → tableau blanc -----------------------------------
+    listBoardIds(projectId: number, workspaceId: number): Promise<number[]>;
+    linkBoard(projectId: number, workspaceId: number, boardId: number): Promise<void>;
+    unlinkBoard(projectId: number, workspaceId: number, boardId: number): Promise<boolean>;
+    unlinkAllBoards(projectId: number, workspaceId: number): Promise<void>;
+    detachBoard(boardId: number, workspaceId: number): Promise<number>;
+    listBoardUsage(boardId: number, workspaceId: number): Promise<ProjectUsageRow[]>;
+    countBoardLinks(workspaceId: number): Promise<Map<number, number>>;
 }
 
 export function projectLinksRepo(q: SdkQueryable): ProjectLinksRepo {
@@ -473,6 +483,67 @@ export function projectLinksRepo(q: SdkQueryable): ProjectLinksRepo {
                 [workspaceId]
             );
             return new Map(rows.map((row) => [Number(row.pack_id), Number(row.n)]));
+        },
+
+        async listBoardIds(projectId, workspaceId) {
+            // Dans l'ordre des liaisons, sans jointure : la table du module peut
+            // manquer s'il est désinstallé.
+            const rows = await q.query<{ board_id: number }>(
+                `SELECT board_id
+                   FROM ft_projects_whiteboard_links
+                  WHERE project_id = ? AND workspace_id = ?
+                  ORDER BY created ASC, board_id ASC`,
+                [projectId, workspaceId]
+            );
+            return rows.map((row) => Number(row.board_id));
+        },
+        async linkBoard(projectId, workspaceId, boardId) {
+            await q.execute(
+                `INSERT INTO ft_projects_whiteboard_links (project_id, board_id, workspace_id)
+                 VALUES (?, ?, ?)
+                 ON DUPLICATE KEY UPDATE workspace_id = VALUES(workspace_id)`,
+                [projectId, boardId, workspaceId]
+            );
+        },
+        async unlinkBoard(projectId, workspaceId, boardId) {
+            const res = await q.execute(
+                'DELETE FROM ft_projects_whiteboard_links WHERE project_id = ? AND workspace_id = ? AND board_id = ?',
+                [projectId, workspaceId, boardId]
+            );
+            return res.affectedRows > 0;
+        },
+        async unlinkAllBoards(projectId, workspaceId) {
+            await q.execute('DELETE FROM ft_projects_whiteboard_links WHERE project_id = ? AND workspace_id = ?', [
+                projectId,
+                workspaceId
+            ]);
+        },
+        async listBoardUsage(boardId, workspaceId) {
+            return q.query<ProjectUsageRow>(
+                `SELECT p.id AS project_id, p.status, p.content
+                   FROM ft_projects_whiteboard_links l
+                   JOIN projects p ON p.id = l.project_id
+                  WHERE l.board_id = ? AND l.workspace_id = ? AND p.security_tier = 'open'
+                  ORDER BY p.sort_order ASC, p.id ASC`,
+                [boardId, workspaceId]
+            );
+        },
+        async detachBoard(boardId, workspaceId) {
+            const res = await q.execute(
+                'DELETE FROM ft_projects_whiteboard_links WHERE board_id = ? AND workspace_id = ?',
+                [boardId, workspaceId]
+            );
+            return res.affectedRows;
+        },
+        async countBoardLinks(workspaceId) {
+            const rows = await q.query<Pick<ProjectWhiteboardLinkRow, 'board_id'> & { n: number }>(
+                `SELECT board_id, COUNT(*) AS n
+                   FROM ft_projects_whiteboard_links
+                  WHERE workspace_id = ?
+                  GROUP BY board_id`,
+                [workspaceId]
+            );
+            return new Map(rows.map((row) => [Number(row.board_id), Number(row.n)]));
         }
     };
 }

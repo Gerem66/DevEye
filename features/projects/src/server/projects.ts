@@ -387,6 +387,15 @@ export const projectSetSecurityTierFeature = defineSdkFeature({
                 });
             }
 
+            const boards = await ctx.repo.links.listBoardIds(input.projectId, home);
+            if (boards.length > 0) {
+                await ctx.repo.links.unlinkAllBoards(input.projectId, home);
+                await recordEvent(ctx, existing, {
+                    kind: 'projects.whiteboardUnlink',
+                    label: `${boards.length} tableau${boards.length > 1 ? 'x' : ''} blanc${boards.length > 1 ? 's' : ''} délié${boards.length > 1 ? 's' : ''} (projet passé en confidentiel)`
+                });
+            }
+
             const targets = await ctx.repo.links.unlinkAllDeployTargets(input.projectId, home);
             if (targets > 0) {
                 await recordEvent(ctx, existing, {

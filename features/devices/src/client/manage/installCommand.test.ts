@@ -2,7 +2,16 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { POLICY_KEYS } from '../policy';
-import { installCommand, linkCommand, osOf, psArg, shArg, type InstallChoice } from './installCommand';
+import {
+    installCommand,
+    isInstanceName,
+    linkCommand,
+    osOf,
+    psArg,
+    shArg,
+    suggestInstanceName,
+    type InstallChoice
+} from './installCommand';
 
 const base: InstallChoice = {
     os: 'linux',
@@ -60,6 +69,38 @@ describe('linkCommand', () => {
             'sudo -H deveye-agent link ABCD-EFGH --server https://app.deveye.fr'
         );
         assert.match(linkCommand({ ...base, os: 'windows' }), /^deveye-agent\.exe link ABCD-EFGH --server /);
+    });
+
+    it("nomme l'instance de l'agent avant la commande, et le script la reçoit après le code", () => {
+        const choice = { ...base, server: 'https://nas.lan', instance: 'nas', admin: true };
+        assert.equal(
+            linkCommand(choice),
+            'sudo -H deveye-agent --instance nas link ABCD-EFGH --server https://nas.lan --autostart'
+        );
+        assert.match(linkCommand({ ...choice, os: 'windows' }), /^deveye-agent\.exe --instance nas link ABCD-EFGH /);
+        assert.equal(
+            installCommand(choice),
+            'curl -fsSL https://nas.lan/install.sh | sudo sh -s -- ABCD-EFGH --instance nas --autostart'
+        );
+        assert.equal(linkCommand({ ...choice, instance: null }), linkCommand({ ...choice, instance: undefined }));
+    });
+});
+
+describe("le nom d'une instance", () => {
+    it("suit le contrat de l'agent", () => {
+        for (const good of ['nas', 'prod-2', 'a', 'x'.repeat(32)]) assert.ok(isInstanceName(good), good);
+        for (const bad of ['', '-nas', 'nas-', 'Nas', 'nas.lan', 'default', 'x'.repeat(33)]) {
+            assert.ok(!isInstanceName(bad), bad);
+        }
+    });
+
+    it("se propose depuis le libellé de l'instance, sinon son hôte, sinon un mot", () => {
+        assert.equal(suggestInstanceName('NAS maison', 'https://nas.lan'), 'nas-maison');
+        assert.equal(suggestInstanceName('Défaut', 'https://nas.lan'), 'defaut');
+        assert.equal(suggestInstanceName('default', 'https://nas.lan:3000'), 'nas-lan');
+        assert.equal(suggestInstanceName('!!!', 'pas une adresse'), 'distant');
+        assert.equal(suggestInstanceName('Un libellé vraiment très long pour une instance distante', 'x').length, 32);
+        assert.ok(isInstanceName(suggestInstanceName('Un libellé vraiment très long pour une instance distante', 'x')));
     });
 });
 

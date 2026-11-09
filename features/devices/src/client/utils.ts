@@ -97,6 +97,15 @@ export function formatAgo(ts: number): string {
     return `${Math.floor(hours / 24)} j`;
 }
 
+/** Quand une pause de l'agent finit : « jusqu'à 15:30 », « jusqu'au 12/11 à 15:30 », « jusqu'à sa reprise ». */
+export function pauseEnd(untilSeconds: number | null): string {
+    if (untilSeconds === null) return 'jusqu’à sa reprise';
+    const date = new Date(untilSeconds * 1000);
+    const time = date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    if (date.toDateString() === new Date().toDateString()) return `jusqu’à ${time}`;
+    return `jusqu’au ${date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })} à ${time}`;
+}
+
 export function pct(used: number, total: number): number {
     return total > 0 ? (used / total) * 100 : 0;
 }

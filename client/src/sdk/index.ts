@@ -9,8 +9,11 @@ import { useEffect, useRef, type ChangeEvent } from 'react';
 import { ws, type SendOptions } from '@/api/ws';
 import { useLiveSegment } from '@/live/useLiveSegment';
 import { startTeleport, type LiveSegmentKind } from '@/stores/live';
+import { putHandedFile } from '@/stores/handoff';
 import { getActiveWorkspaceId, useActiveWorkspace, useWorkspacesHere } from '@/stores/workspace';
 import type { MinimalUser, Workspace } from '@deveye/types';
+
+import { connectionTo } from './remoteTargets';
 
 export type { LiveSegmentKind };
 /** The change event of a text input, for handlers typed by hand. */
@@ -169,6 +172,8 @@ export { useFeatureLifecycle } from '@/Features/useFeatureLifecycle';
  * appelant est monté (`null` = rien demander).
  */
 export { useRequestPopupWidth } from '@/stores/popupWidth';
+export { useLiveCursorSurface, type LiveCursorSurface } from '@/live/cursorSurface';
+export { onLiveCursors } from '@/stores/live';
 /** La pastille d'identité d'un membre, commune à toute feature qui nomme quelqu'un. */
 export { Avatar } from '@/Components/Avatar/Avatar';
 /** La variable CSS d'une couleur de compte, celle dont la présence en direct peint chacun. */
@@ -209,6 +214,10 @@ export function useWorkspaces(): readonly Workspace[] {
     return useWorkspacesHere();
 }
 
+// Les instances distantes du compte et leurs espaces : les cibles de `sendTo`.
+export { useRemoteTargets } from './remoteTargets';
+export type { RemoteInstanceSummary, RemoteTargets, RemoteWorkspaceTarget } from './remoteTargets';
+
 /**
  * Ouvrir une autre feature de l'espace actif, sur l'un de ses éléments quand
  * `itemId` est donné, par la téléportation de l'hôte. La garde d'accès reste
@@ -219,6 +228,17 @@ export function openFeature(feature: string, itemId?: number | string): void {
     if (workspaceId === null) return;
     startTeleport(workspaceId, itemId === undefined ? [`view:${feature}`] : [`view:${feature}`, `l1:${itemId}`]);
 }
+
+/**
+ * Confie un fichier à une autre fonctionnalité et l'ouvre : elle le ramasse
+ * par `useHandedFile`. `purpose` dit ce qu'elle doit en faire, dans ses termes.
+ */
+export function handFileTo(feature: string, file: File, purpose: string | null = null): void {
+    putHandedFile(feature, { file, purpose });
+    openFeature(feature);
+}
+export { useHandedFile } from '@/stores/handoff';
+export type { HandedFile } from '@/stores/handoff';
 
 // ── Le chiffrement par mot de passe ────────────────────────────────────────
 // L'état de verrou de la session, l'invite globale, et le patron « réessaie une
@@ -254,6 +274,32 @@ export function featureApi<const M extends FeatureManifest>(manifest: M) {
             opts?: SendOptions
         ): Promise<z.output<Extract<Commands, { command: N }>['output'] & ZodType>> {
             return ws.send(name as never, input as never, opts) as never;
+        },
+        /**
+         * La même commande, vers un espace précis d'une instance du compte :
+         * `instanceId: null` pour celle-ci, sinon une instance distante où une
+         * session est ouverte (`useRemoteTargets`). Le serveur visé juge les
+         * droits, et l'invite du code d'application, s'il la réclame, est celle
+         * de ce compte-là. `closed` sans session là-bas.
+         */
+        async sendTo<N extends Commands['command']>(
+            target: { instanceId: number | null; workspaceId: number },
+            name: N,
+            input: z.input<Extract<Commands, { command: N }>['input'] & ZodType>,
+            opts?: Omit<SendOptions, 'workspaceId'>
+        ): Promise<z.output<Extract<Commands, { command: N }>['output'] & ZodType>> {
+            const conn = await connectionTo(target.instanceId);
+            return conn.send(name as never, input as never, { ...opts, workspaceId: target.workspaceId }) as never;
+        },
+        /**
+         * Sans réponse ni délai ni trace : une position qu'on renvoie plusieurs
+         * fois par seconde. Perdue en silence si la socket est fermée ou en retard.
+         */
+        post<N extends Commands['command']>(
+            name: N,
+            input: z.input<Extract<Commands, { command: N }>['input'] & ZodType>
+        ): void {
+            ws.post(name, input);
         }
     };
 }

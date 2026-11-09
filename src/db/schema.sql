@@ -425,6 +425,8 @@ CREATE TABLE `devices` (
   `process_capture` enum('off','top','all') COLLATE utf8mb4_general_ci DEFAULT NULL,
   `status_before_delete` varchar(20) COLLATE utf8mb4_general_ci DEFAULT NULL,
   `delete_error` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `paused_at` bigint DEFAULT NULL,
+  `paused_until` bigint DEFAULT NULL,
   `agent_version` varchar(64) COLLATE utf8mb4_general_ci DEFAULT NULL,
   `agent_target` varchar(32) COLLATE utf8mb4_general_ci DEFAULT NULL,
   `sort_order` int NOT NULL DEFAULT '0',
@@ -1270,6 +1272,19 @@ CREATE TABLE `ft_osint_usage` (
   CONSTRAINT `fk_ft_osint_usage_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+CREATE TABLE `ft_pdf_signatures` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `workspace_id` int NOT NULL,
+  `user_id` int NOT NULL,
+  `role` enum('signature','initials') COLLATE utf8mb4_general_ci NOT NULL,
+  `data_enc` mediumtext COLLATE utf8mb4_general_ci NOT NULL,
+  `created` bigint NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_ft_pdf_signatures_user` (`user_id`,`created`),
+  KEY `fk_ft_pdf_signatures_ws` (`workspace_id`),
+  CONSTRAINT `fk_ft_pdf_signatures_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 CREATE TABLE `ft_projects_dashboard_tiles` (
   `id` int NOT NULL AUTO_INCREMENT,
   `project_id` int NOT NULL,
@@ -1320,6 +1335,18 @@ CREATE TABLE `ft_projects_public` (
   UNIQUE KEY `uniq_ft_projects_public_ref` (`public_ref`),
   UNIQUE KEY `uniq_ft_projects_public_slug` (`domain_id`,`slug`),
   CONSTRAINT `fk_ft_projects_public_project` FOREIGN KEY (`project_id`) REFERENCES `projects` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_projects_whiteboard_links` (
+  `project_id` int NOT NULL,
+  `board_id` int NOT NULL,
+  `workspace_id` int NOT NULL,
+  `created` bigint NOT NULL DEFAULT (unix_timestamp()),
+  PRIMARY KEY (`project_id`,`board_id`),
+  KEY `idx_ft_projects_whiteboard_links_board` (`board_id`),
+  KEY `fk_ft_projects_whiteboard_links_workspace` (`workspace_id`),
+  CONSTRAINT `fk_ft_projects_whiteboard_links_project` FOREIGN KEY (`project_id`) REFERENCES `projects` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_ft_projects_whiteboard_links_workspace` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 CREATE TABLE `ft_sentinel_device_config` (
@@ -1485,6 +1512,50 @@ CREATE TABLE `ft_uptime_pages` (
   UNIQUE KEY `uniq_ft_uptime_pages_domain` (`domain_id`),
   KEY `idx_ft_uptime_pages_ws` (`workspace_id`),
   CONSTRAINT `fk_ft_uptime_pages_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_whiteboard_boards` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `workspace_id` int NOT NULL,
+  `user_id` int DEFAULT NULL,
+  `updated_by` int DEFAULT NULL,
+  `content` text COLLATE utf8mb4_general_ci NOT NULL,
+  `scene` mediumtext COLLATE utf8mb4_general_ci NOT NULL,
+  `scene_bytes` int unsigned NOT NULL DEFAULT '0',
+  `version` int unsigned NOT NULL DEFAULT '0',
+  `preview` mediumtext COLLATE utf8mb4_general_ci,
+  `preview_bytes` int unsigned NOT NULL DEFAULT '0',
+  `preview_version` int unsigned NOT NULL DEFAULT '0',
+  `background` varchar(32) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `theme` varchar(5) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `created` bigint NOT NULL DEFAULT (unix_timestamp()),
+  `updated` bigint NOT NULL DEFAULT (unix_timestamp()),
+  PRIMARY KEY (`id`),
+  KEY `idx_ft_whiteboard_boards_ws` (`workspace_id`,`updated`),
+  CONSTRAINT `fk_ft_whiteboard_boards_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_whiteboard_files` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `board_id` int NOT NULL,
+  `file_id` varchar(64) COLLATE utf8mb4_bin NOT NULL,
+  `mime` varchar(32) COLLATE utf8mb4_general_ci NOT NULL,
+  `bytes` int unsigned NOT NULL,
+  `object_key` varchar(48) COLLATE utf8mb4_bin NOT NULL,
+  `created` bigint NOT NULL DEFAULT (unix_timestamp()),
+  `orphaned_at` bigint DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_ft_whiteboard_files_board` (`board_id`,`file_id`),
+  UNIQUE KEY `uniq_ft_whiteboard_files_object` (`object_key`),
+  KEY `idx_ft_whiteboard_files_orphan` (`orphaned_at`),
+  CONSTRAINT `fk_ft_whiteboard_files_board` FOREIGN KEY (`board_id`) REFERENCES `ft_whiteboard_boards` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_whiteboard_key` (
+  `id` tinyint NOT NULL DEFAULT '1',
+  `sealed` text COLLATE utf8mb4_general_ci NOT NULL,
+  PRIMARY KEY (`id`),
+  CONSTRAINT `chk_ft_whiteboard_key_single` CHECK ((`id` = 1))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 CREATE TABLE `git_branches` (

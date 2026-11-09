@@ -3,7 +3,7 @@
 
 use anyhow::{Context, Result};
 use tracing::warn;
-use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
+use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 use tray_icon::{Icon, MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 
 use super::icon::{self, Look};
@@ -12,39 +12,108 @@ use super::{Action, Controller, Step, TICK};
 
 struct Ui {
     tray: TrayIcon,
+    items: Items,
+    labels: view::Labels,
+    size: u32,
+}
+
+/// The menu and its entries, built again when the view gains or loses entries
+/// (an agent of another instance starts or stops, a pause begins or ends).
+struct Items {
     menu: Menu,
-    status: MenuItem,
-    activity: MenuItem,
-    activity_shown: bool,
-    open: MenuItem,
+    lines: Vec<MenuItem>,
+    activity: Option<MenuItem>,
+    opens: Vec<MenuItem>,
+    /// The "Pause" submenu's entries, in the order of `Labels::durations`.
+    pause: Option<Vec<MenuItem>>,
+    resume: Option<MenuItem>,
     hide: MenuItem,
     quit: MenuItem,
-    size: u32,
+}
+
+impl Items {
+    fn build(view: &TrayView, labels: &view::Labels) -> Result<Self> {
+        let info = |text: &str| MenuItem::new(text, false, None);
+        let items = Items {
+            menu: Menu::new(),
+            lines: view.lines.iter().map(|l| info(l)).collect(),
+            activity: view.activity.as_deref().map(info),
+            opens: view
+                .opens
+                .iter()
+                .map(|(label, _)| MenuItem::new(label, true, None))
+                .collect(),
+            pause: view.pausable.then(|| {
+                labels
+                    .durations
+                    .iter()
+                    .map(|(text, _)| MenuItem::new(text, true, None))
+                    .collect()
+            }),
+            resume: view
+                .resumable
+                .then(|| MenuItem::new(labels.resume, true, None)),
+            hide: MenuItem::new(labels.hide, true, None),
+            quit: MenuItem::new(labels.quit, true, None),
+        };
+        for line in items.lines.iter().chain(&items.activity) {
+            items.menu.append(line).context("building the menu")?;
+        }
+        items
+            .menu
+            .append(&PredefinedMenuItem::separator())
+            .context("building the menu")?;
+        for open in &items.opens {
+            items.menu.append(open).context("building the menu")?;
+        }
+        if let Some(durations) = &items.pause {
+            let submenu = Submenu::new(labels.pause, true);
+            for duration in durations {
+                submenu.append(duration).context("building the menu")?;
+            }
+            items.menu.append(&submenu).context("building the menu")?;
+        }
+        if let Some(resume) = &items.resume {
+            items.menu.append(resume).context("building the menu")?;
+        }
+        items
+            .menu
+            .append_items(&[&items.hide, &PredefinedMenuItem::separator(), &items.quit])
+            .context("building the menu")?;
+        Ok(items)
+    }
+
+    /// The view has as many entries of each kind as this menu.
+    fn fits(&self, view: &TrayView) -> bool {
+        self.lines.len() == view.lines.len()
+            && self.activity.is_some() == view.activity.is_some()
+            && self.opens.len() == view.opens.len()
+            && self.pause.is_some() == view.pausable
+            && self.resume.is_some() == view.resumable
+    }
+
+    fn set_texts(&self, view: &TrayView) {
+        for (item, text) in self.lines.iter().zip(&view.lines) {
+            item.set_text(text);
+        }
+        if let (Some(item), Some(text)) = (&self.activity, &view.activity) {
+            item.set_text(text);
+        }
+        for (item, (label, _)) in self.opens.iter().zip(&view.opens) {
+            item.set_text(label);
+        }
+    }
 }
 
 impl Ui {
     fn new(controller: &Controller) -> Result<Self> {
         let labels = view::labels(controller.lang());
         let view = controller.view();
-        let menu = Menu::new();
-        let status = MenuItem::new(&view.status, false, None);
-        let activity = MenuItem::new("", false, None);
-        let open = MenuItem::new(labels.open, true, None);
-        let hide = MenuItem::new(labels.hide, true, None);
-        let quit = MenuItem::new(labels.quit, true, None);
-        menu.append_items(&[
-            &status,
-            &PredefinedMenuItem::separator(),
-            &open,
-            &hide,
-            &PredefinedMenuItem::separator(),
-            &quit,
-        ])
-        .context("building the menu")?;
+        let items = Items::build(view, &labels)?;
         let size = platform::icon_size();
         let builder = TrayIconBuilder::new()
             .with_id("deveye-agent")
-            .with_menu(Box::new(menu.clone()))
+            .with_menu(Box::new(items.menu.clone()))
             .with_tooltip(view.tooltip())
             .with_icon(render(size, controller.look())?);
         // Windows habit: a left click acts, the right one shows the menu. On
@@ -52,36 +121,25 @@ impl Ui {
         #[cfg(windows)]
         let builder = builder.with_menu_on_left_click(false);
         let tray = builder.build().context("creating the tray icon")?;
-        let mut ui = Ui {
+        Ok(Ui {
             tray,
-            menu,
-            status,
-            activity,
-            activity_shown: false,
-            open,
-            hide,
-            quit,
+            items,
+            labels,
             size,
-        };
-        ui.show_view(view);
-        Ok(ui)
+        })
     }
 
     fn show_view(&mut self, view: &TrayView) {
-        self.status.set_text(&view.status);
-        match (&view.activity, self.activity_shown) {
-            (Some(text), shown) => {
-                self.activity.set_text(text);
-                if !shown && self.menu.insert(&self.activity, 1).is_ok() {
-                    self.activity_shown = true;
+        if self.items.fits(view) {
+            self.items.set_texts(view);
+        } else {
+            match Items::build(view, &self.labels) {
+                Ok(items) => {
+                    self.tray.set_menu(Some(Box::new(items.menu.clone())));
+                    self.items = items;
                 }
+                Err(e) => warn!(error = %e, "cannot rebuild the menu"),
             }
-            (None, true) => {
-                if self.menu.remove(&self.activity).is_ok() {
-                    self.activity_shown = false;
-                }
-            }
-            (None, false) => {}
         }
         let _ = self.tray.set_tooltip(Some(view.tooltip()));
     }
@@ -99,11 +157,25 @@ impl Ui {
     fn actions(&self) -> Vec<Action> {
         let mut actions = Vec::new();
         while let Ok(event) = MenuEvent::receiver().try_recv() {
-            if event.id == *self.open.id() {
-                actions.push(Action::Open);
-            } else if event.id == *self.hide.id() {
+            let pause = self
+                .items
+                .pause
+                .as_ref()
+                .and_then(|items| items.iter().position(|p| event.id == *p.id()));
+            if let Some(index) = self.items.opens.iter().position(|o| event.id == *o.id()) {
+                actions.push(Action::Open(index));
+            } else if let Some(index) = pause {
+                actions.push(Action::Pause(self.labels.durations[index].1));
+            } else if self
+                .items
+                .resume
+                .as_ref()
+                .is_some_and(|r| event.id == *r.id())
+            {
+                actions.push(Action::Resume);
+            } else if event.id == *self.items.hide.id() {
                 actions.push(Action::Hide);
-            } else if event.id == *self.quit.id() {
+            } else if event.id == *self.items.quit.id() {
                 actions.push(Action::Quit);
             }
         }
@@ -118,7 +190,7 @@ impl Ui {
                     }
                 )
             {
-                actions.push(Action::Open);
+                actions.push(Action::Open(0));
             }
         }
         actions

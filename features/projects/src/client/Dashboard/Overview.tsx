@@ -5,7 +5,8 @@ import {
     DEPLOY_CLIENT_PROVIDER,
     GIT_CLIENT_PROVIDER,
     HOSTING_CLIENT_PROVIDER,
-    UPTIME_CLIENT_PROVIDER
+    UPTIME_CLIENT_PROVIDER,
+    WHITEBOARD_CLIENT_PROVIDER
 } from '@deveye/types/sdk';
 import type { SdkTileSummary } from '@deveye/types/sdk/client';
 import {
@@ -61,7 +62,8 @@ const FEATURES: { id: TileFeature; token: string; missing: string }[] = [
     { id: 'audience', token: AUDIENCE_CLIENT_PROVIDER, missing: 'Le module Audience n’est pas installé.' },
     { id: 'database', token: DATABASE_CLIENT_PROVIDER, missing: 'Le module Bases de données n’est pas installé.' },
     { id: 'git', token: GIT_CLIENT_PROVIDER, missing: 'Le module Git n’est pas installé.' },
-    { id: 'x-hosting', token: HOSTING_CLIENT_PROVIDER, missing: 'Le module Hébergement n’est pas installé.' }
+    { id: 'x-hosting', token: HOSTING_CLIENT_PROVIDER, missing: 'Le module Hébergement n’est pas installé.' },
+    { id: 'whiteboard', token: WHITEBOARD_CLIENT_PROVIDER, missing: 'Le module Tableau blanc n’est pas installé.' }
 ];
 
 /** Ce que l'hôte attend d'un contrat client, réduit au strict nécessaire. */
@@ -69,7 +71,15 @@ interface Summarizer {
     summarize(ids: readonly number[]): Promise<readonly SdkTileSummary[]>;
 }
 
-const EMPTY_LINKS: DashboardLinks = { git: [], database: [], audience: [], deploy: [], uptime: [], 'x-hosting': [] };
+const EMPTY_LINKS: DashboardLinks = {
+    git: [],
+    database: [],
+    audience: [],
+    deploy: [],
+    uptime: [],
+    'x-hosting': [],
+    whiteboard: []
+};
 
 function formatAgo(at: number | null): string {
     return at === null ? 'jamais mesuré' : `mesuré ${relativeAgo(at)}`;

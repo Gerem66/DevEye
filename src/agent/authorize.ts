@@ -37,6 +37,11 @@ export function online(ctx: FeatureContext, ids: string[]): Record<string, boole
     return ctx.monitor?.isOnline(ids) ?? Object.fromEntries(ids.map((id) => [id, false]));
 }
 
+/** Les agents en pause dont la session de contrôle est connectée. */
+export function paused(ctx: FeatureContext, ids: string[]): Record<string, boolean> {
+    return ctx.monitor?.isPaused(ids) ?? Object.fromEntries(ids.map((id) => [id, false]));
+}
+
 /** Map a row to the client shape, with live presence + computed self-update info. */
 export async function toDevice(ctx: FeatureContext, row: DeviceRow): Promise<Device> {
     const manifest = await readServedManifestCached(agentDistDir());
@@ -45,7 +50,8 @@ export async function toDevice(ctx: FeatureContext, row: DeviceRow): Promise<Dev
         await metricIntervalOf(ctx.db, row),
         online(ctx, [row.id])[row.id] ?? false,
         computeAgentUpdate(row, manifest),
-        row.workspace_id !== ctx.workspaceId
+        row.workspace_id !== ctx.workspaceId,
+        paused(ctx, [row.id])[row.id] ?? false
     );
 }
 
@@ -66,7 +72,7 @@ export async function toDevice(ctx: FeatureContext, row: DeviceRow): Promise<Dev
 export async function authorizeReachableDevice(
     ctx: FeatureContext,
     deviceId: string,
-    options: { control?: boolean } = {}
+    options: { control?: boolean; paused?: boolean } = {}
 ): Promise<DeviceRow> {
     const row = await authorizeDevice(ctx, deviceId);
     const override = (await ctx.itemRestrictions('devices')).get(row.id);
@@ -93,7 +99,11 @@ export async function authorizeReachableDevice(
             paused: true
         });
     }
-    if (!(online(ctx, [row.id])[row.id] ?? false)) {
+    // `paused` : l'ordre vaut aussi pour un agent en pause joignable (la reprise).
+    const reachable =
+        (online(ctx, [row.id])[row.id] ?? false) ||
+        (options.paused === true && (paused(ctx, [row.id])[row.id] ?? false));
+    if (!reachable) {
         throw new FeatureError('conflict', 'Agent hors ligne');
     }
     // En dernier : le code ne se demande que pour un ordre qui partirait.

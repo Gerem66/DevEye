@@ -50,9 +50,11 @@ lancement sont dans le [README de la racine](../README.md#quick-start).
 | [Liens courts](../features/shortlinks/README.md)           | des adresses courtes qui redirigent, leurs visites, leurs signalements               |
 | [Modération automatique](../features/moderation/README.md) | les empreintes et noms de fichiers interdits, consultés par Hébergement et CloudSync |
 | [Mail](../features/mail/README.md)                         | les boîtes mail de l'espace, leurs deux paliers, les alertes                         |
+| [PDF](../features/pdf/README.md)                           | fusionner, trier, signer, remplir et protéger des PDF, dans le navigateur            |
 | [Notes](../features/notes/README.md)                       | les notes et leurs dossiers, la note privée, la note projetée                        |
 | [Projets](../features/projects/README.md)                  | le pilotage du travail, et ses liaisons vers les objets d'espace                     |
 | [Sauvegardes](../features/backup/README.md)                | les sauvegardes : sources, destinations, chiffrement des archives                    |
 | [Sentinelle](../features/sentinel/README.md)               | la posture de sécurité des machines                                                  |
 | [Serveur mail](../features/mailserver/README.md)           | des boîtes mail sur les domaines de l'espace, servies par DevEye : SMTP, IMAP, DKIM  |
+| [Tableau blanc](../features/whiteboard/README.md)          | des schémas Excalidraw dessinés à plusieurs en direct, leurs images, leur partage    |
 | [Uptime](../features/uptime/README.md)                     | la disponibilité des services externes                                               |

@@ -6,6 +6,7 @@ import { resolveOptions, type OptionValues } from '../../contracts/options';
 import { env } from '../env';
 import { ConvertFailure } from '../spawn';
 import { jobPaths } from '../storage';
+import { ocrArgs } from './document';
 import { audioPlan, displayedDims, gifPlan, progressOf, videoPlan } from './ffmpeg';
 import { imageArgs } from './image';
 import type { InputProbe } from './types';
@@ -289,6 +290,25 @@ describe('dimensions affichées', () => {
         assert.deepEqual(displayedDims({ ...coded, side_data_list: [{ rotation: 180 }] }), coded);
         assert.deepEqual(displayedDims({ ...coded, side_data_list: [{}] }), coded);
         assert.equal(displayedDims({}), null);
+    });
+});
+
+describe('arguments de reconnaissance de texte', () => {
+    it('garde les pages qui ont déjà du texte, une langue connue, et redresse sur demande', () => {
+        assert.deepEqual(ocrArgs({ lang: 'fra', deskew: true }, 'in.pdf', 'out.pdf'), [
+            '--skip-text',
+            '--jobs',
+            '1',
+            '--output-type',
+            'pdf',
+            '-l',
+            'fra',
+            '--deskew',
+            'in.pdf',
+            'out.pdf'
+        ]);
+        // Une langue inconnue retombe sur les deux ; sans redressement, rien de plus.
+        assert.deepEqual(ocrArgs({ lang: 'klingon' }, 'in.pdf', 'out.pdf').slice(5, 8), ['-l', 'fra+eng', 'in.pdf']);
     });
 });
 

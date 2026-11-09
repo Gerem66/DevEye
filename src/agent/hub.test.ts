@@ -267,3 +267,50 @@ describe('MonitorHub : une machine ne répond que pour elle-même', () => {
         assert.ok(!hub.ownsTermSession(viewer.socket, 's-1'));
     });
 });
+
+describe('MonitorHub : agent en pause', () => {
+    it('une session de contrôle reste hors ligne et ne reçoit que ce qui la concerne', () => {
+        const hub = new MonitorHub();
+        const control = fakeAgent();
+        hub.agentPaused(DEVICE, control.socket);
+        assert.equal(hub.isOnline(DEVICE), false);
+        assert.equal(hub.isPaused(DEVICE), true);
+        assert.deepEqual(hub.pausedDevices([DEVICE, 'dev-other']), { [DEVICE]: true, 'dev-other': false });
+        assert.equal(hub.requestCollect(DEVICE), false, 'aucun travail ne part vers un agent en pause');
+        assert.equal(hub.requestLifecycle(DEVICE, { action: 'pause' }), false, 'déjà en pause');
+        assert.ok(hub.requestLifecycle(DEVICE, { action: 'resume' }));
+        assert.ok(hub.requestLifecycle(DEVICE, { action: 'restart' }));
+        assert.ok(hub.requestDestroy(DEVICE));
+        assert.deepEqual(
+            control.sent.map((f) => [f.command, f.payload.action]),
+            [
+                ['agent.lifecycle', 'resume'],
+                ['agent.lifecycle', 'restart'],
+                ['agent.destroy', undefined]
+            ]
+        );
+        hub.pausedGone(DEVICE, control.socket);
+        assert.equal(hub.isPaused(DEVICE), false);
+        assert.equal(hub.requestLifecycle(DEVICE, { action: 'resume' }), false, 'plus personne à reprendre');
+    });
+
+    it('une session de travail et une session de contrôle ne coexistent jamais', () => {
+        const hub = new MonitorHub();
+        const closes: string[] = [];
+        const control = fakeAgent();
+        (control.socket as unknown as { close: () => void }).close = () => closes.push('control');
+        hub.agentPaused(DEVICE, control.socket);
+        const working = fakeAgent();
+        (working.socket as unknown as { close: () => void }).close = () => closes.push('working');
+        hub.agentOnline(DEVICE, working.socket);
+        assert.deepEqual(closes, ['control']);
+        assert.ok(hub.isOnline(DEVICE) && !hub.isPaused(DEVICE));
+        // L'agent se met en pause : sa session de travail encore ouverte est fermée.
+        const control2 = fakeAgent();
+        hub.agentPaused(DEVICE, control2.socket);
+        assert.deepEqual(closes, ['control', 'working']);
+        hub.agentOffline(DEVICE, working.socket);
+        assert.ok(!hub.isOnline(DEVICE) && hub.isPaused(DEVICE));
+        assert.equal(hub.disconnectAgent(DEVICE), true, 'révoquer coupe aussi la session de contrôle');
+    });
+});
