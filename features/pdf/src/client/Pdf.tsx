@@ -53,8 +53,8 @@ interface Session {
 export default function Pdf(_props: FeatureViewProps) {
     const [session, setSession] = useState<Session | null>(null);
 
-    // Un PDF que le Convertisseur nous confie : l'atelier s'ouvre dessus.
-    useHandedFile('pdf', ({ file }) => setSession({ files: [file], intent: 'pages' }));
+    // Un PDF que le Convertisseur nous confie ouvre l'atelier dessus ; un atelier déjà ouvert l'ajoute lui-même.
+    useHandedFile('pdf', ({ file }) => setSession((current) => current ?? { files: [file], intent: 'pages' }));
 
     if (session) {
         return (

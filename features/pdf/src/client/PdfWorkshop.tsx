@@ -11,6 +11,7 @@ import {
     ProgressDialog,
     saveFrom,
     StickyHeader,
+    useHandedFile,
     useRequestPopupWidth,
     useSubView,
     type ConfirmRequest,
@@ -183,6 +184,9 @@ export default function PdfWorkshop({ initialFiles, intent, onLeave }: PdfWorksh
         started.current = true;
         void addFiles(initialFiles);
     }, [addFiles, initialFiles]);
+
+    // Un PDF confié par le Convertisseur pendant que l'atelier est ouvert s'ajoute au document.
+    useHandedFile('pdf', ({ file }) => void addFiles([file]));
 
     useEffect(
         () => () => {
