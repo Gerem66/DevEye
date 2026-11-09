@@ -264,7 +264,7 @@ export function outputName(plan: Plan): string {
 }
 
 /** Par quelle porte on entre dans l'atelier : une tuile de l'accueil, ou un dépôt de fichiers. */
-export type WorkshopIntent = 'pages' | 'merge' | 'extract' | 'reorder';
+export type WorkshopIntent = 'pages' | 'merge' | 'extract' | 'reorder' | 'sign';
 
 /** Ce que le sélecteur de fichiers de l'atelier propose. Le dépôt, lui, accepte tout et trie. */
 export const WORKSHOP_ACCEPT = '.pdf,.png,.jpg,.jpeg,.webp,.gif,.bmp,.avif';

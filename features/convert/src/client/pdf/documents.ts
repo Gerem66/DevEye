@@ -1,6 +1,6 @@
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
 
-import type { BuildImage, BuildSource } from './build';
+import type { BuildAsset, BuildImage, BuildSource } from './build';
 import { imageToPage } from './images';
 import { newId, rotateBy, SOURCE_COLORS, type ImageInfo, type PageGeometry, type Plan, type SourceInfo } from './model';
 import { openDocument } from './pdfjs';
@@ -20,6 +20,8 @@ interface OpenedSource {
 
 const sources = new Map<string, OpenedSource>();
 const images = new Map<string, Uint8Array<ArrayBuffer>>();
+/** Les images posées sur les pages (signatures importées, images) : jamais des pages elles-mêmes. */
+const assets = new Map<string, { bytes: Uint8Array<ArrayBuffer>; mime: 'image/png' | 'image/jpeg'; url: string }>();
 
 /** Les pages se décrivent par lots : un document de mille pages ne fait pas mille allers-retours en file indienne. */
 const GEOMETRY_BATCH = 24;
@@ -78,9 +80,19 @@ export async function addImage(file: File): Promise<ImageInfo> {
 
 export const imageBytes = (id: string): Uint8Array<ArrayBuffer> | undefined => images.get(id);
 
+export function addAsset(bytes: Uint8Array<ArrayBuffer>, mime: 'image/png' | 'image/jpeg'): string {
+    const id = newId();
+    assets.set(id, { bytes, mime, url: URL.createObjectURL(new Blob([bytes], { type: mime })) });
+    return id;
+}
+
+/** L'adresse `blob:` d'une image posée, pour l'afficher. */
+export const assetUrl = (id: string): string | undefined => assets.get(id)?.url;
+
 /** Ce que l'assemblage reçoit : les octets des fichiers et des images que le plan cite. */
-export function buildInputOf(plan: Plan): { sources: BuildSource[]; images: BuildImage[] } {
+export function buildInputOf(plan: Plan): { sources: BuildSource[]; images: BuildImage[]; assets: BuildAsset[] } {
     return {
+        assets: [...assets.entries()].map(([id, a]) => ({ id, bytes: a.bytes, mime: a.mime })),
         sources: plan.sources.flatMap((s) => {
             const opened = sources.get(s.id);
             return opened ? [{ id: s.id, bytes: opened.bytes, password: opened.password }] : [];
@@ -95,6 +107,8 @@ export function buildInputOf(plan: Plan): { sources: BuildSource[]; images: Buil
 /** À la fermeture de l'atelier : les documents pdf.js libèrent leur worker. */
 export function forgetAll(): void {
     for (const source of sources.values()) void source.proxy.loadingTask.destroy().catch(() => undefined);
+    for (const asset of assets.values()) URL.revokeObjectURL(asset.url);
     sources.clear();
     images.clear();
+    assets.clear();
 }

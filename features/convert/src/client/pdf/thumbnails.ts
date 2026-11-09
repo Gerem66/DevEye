@@ -59,9 +59,13 @@ function drawRotated(
     ctx.restore();
 }
 
-async function paint(page: PlanPage, plan: Plan, width: number): Promise<string> {
-    const pixelWidth = Math.round(width * Math.min(window.devicePixelRatio || 1, 2));
-    const canvas = document.createElement('canvas');
+/** Dessine la page, tournée comme à l'écran, large de `pixelWidth` pixels. */
+export async function paintPage(
+    canvas: HTMLCanvasElement,
+    page: PlanPage,
+    plan: Plan,
+    pixelWidth: number
+): Promise<void> {
     const rotation = totalRotation(page, plan);
     if (page.kind === 'source') {
         const proxy = await pageOf(page.sourceId, page.index);
@@ -85,6 +89,11 @@ async function paint(page: PlanPage, plan: Plan, width: number): Promise<string>
             }
         }
     }
+}
+
+async function paint(page: PlanPage, plan: Plan, width: number): Promise<string> {
+    const canvas = document.createElement('canvas');
+    await paintPage(canvas, page, plan, Math.round(width * Math.min(window.devicePixelRatio || 1, 2)));
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
     if (!blob) throw new Error('La vignette n’a pas pu être dessinée.');
     return URL.createObjectURL(blob);

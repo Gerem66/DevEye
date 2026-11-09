@@ -33,6 +33,12 @@ const PDF_TOOLS: readonly { id: WorkshopIntent; picto: PictoId; label: string; d
         picto: 'reorder',
         label: 'Réorganiser',
         description: 'Déplacer, faire pivoter, dupliquer ou retirer des pages.'
+    },
+    {
+        id: 'sign',
+        picto: 'signature',
+        label: 'Signer et annoter',
+        description: 'Signature, paraphe, date, texte, surlignage, caviardage.'
     }
 ];
 
@@ -60,8 +66,8 @@ export function KindStep({ families, onKind, onFiles, onWorkshop, onTool }: Kind
                         Atelier PDF
                     </h3>
                     <p className={styles.pdfText}>
-                        Fusionner, extraire, réorganiser, faire pivoter : tout se fait dans votre navigateur, rien n’est
-                        envoyé.
+                        Fusionner, extraire, réorganiser, signer, annoter : tout se fait dans votre navigateur, rien
+                        n’est envoyé.
                     </p>
                     <Dropzone
                         multiple

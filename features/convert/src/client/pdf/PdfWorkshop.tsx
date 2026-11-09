@@ -19,6 +19,8 @@ import {
 
 import { Picto } from '../icons';
 import { addImage, buildInputOf, forgetAll, openSource } from './documents';
+import { EditTab } from './EditTab';
+import { buildFonts } from './fonts';
 import {
     isImageFile,
     isPdfFile,
@@ -32,6 +34,7 @@ import { PagesTab } from './PagesTab';
 import { PasswordDialog, type PasswordRequest } from './PasswordDialog';
 import styles from './pdf.module.css';
 import { NeedsPassword } from './pdfjs';
+import { redactedPages } from './raster';
 import { clearThumbnails } from './thumbnails';
 import { useBuild } from './useBuild';
 import { usePdfWorkshop, type OpenedFile } from './usePdfWorkshop';
@@ -42,8 +45,11 @@ const PROGRESS_DELAY_MS = 400;
 /** Le temps laissé au navigateur pour lire une adresse `blob:` avant qu'elle ne soit rendue. */
 const BLOB_URL_TTL_MS = 60_000;
 
-type Tab = 'pages';
-const TABS: readonly { id: Tab; label: string; icon: string }[] = [{ id: 'pages', label: 'Pages', icon: 'file' }];
+type Tab = 'pages' | 'edit';
+const TABS: readonly { id: Tab; label: string; icon: string }[] = [
+    { id: 'pages', label: 'Pages', icon: 'file' },
+    { id: 'edit', label: 'Signer et annoter', icon: 'edit' }
+];
 
 interface PdfWorkshopProps {
     initialFiles: readonly File[];
@@ -56,12 +62,12 @@ interface PdfWorkshopProps {
  * pdf.js affiche, pdf-lib assemble (dans un worker), et le résultat se
  * télécharge depuis une adresse `blob:`.
  */
-export default function PdfWorkshop({ initialFiles, intent: _intent, onLeave }: PdfWorkshopProps) {
+export default function PdfWorkshop({ initialFiles, intent, onLeave }: PdfWorkshopProps) {
     useSubView('pdf');
     useRequestPopupWidth(POPUP_WIDTH);
     const workshop = usePdfWorkshop();
-    const { plan, selection, act } = workshop;
-    const [tab] = useState<Tab>('pages');
+    const { plan, elements, selection, act } = workshop;
+    const [tab, setTab] = useState<Tab>(intent === 'sign' ? 'edit' : 'pages');
     const [opening, setOpening] = useState(0);
     const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [password, setPassword] = useState<PasswordRequest | null>(null);
@@ -159,7 +165,13 @@ export default function PdfWorkshop({ initialFiles, intent: _intent, onLeave }: 
             if (pages.length === 0) return;
             setError(null);
             try {
-                const bytes = await build({ ...buildInputOf(plan), pages });
+                const kept = new Set(pages.map((p) => p.id));
+                const fonts = await buildFonts();
+                const redactions = await redactedPages(
+                    { ...plan, pages },
+                    elements.filter((e) => kept.has(e.pageId))
+                );
+                const bytes = await build({ ...buildInputOf(plan), pages, elements, fonts, redactions });
                 const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
                 const name = outputName(plan);
                 saveFrom(url, ids ? name.replace(/\.pdf$/, ' (extrait).pdf') : name);
@@ -168,7 +180,7 @@ export default function PdfWorkshop({ initialFiles, intent: _intent, onLeave }: 
                 setError(errorNote(e, 'Le document n’a pas pu être assemblé.'));
             }
         },
-        [build, plan]
+        [build, plan, elements]
     );
 
     const pick = (): void => {
@@ -240,6 +252,8 @@ export default function PdfWorkshop({ initialFiles, intent: _intent, onLeave }: 
                             type='button'
                             className={t.id === tab ? styles.tabActive : styles.tab}
                             aria-current={t.id === tab ? 'page' : undefined}
+                            disabled={t.id !== 'pages' && empty}
+                            onClick={() => setTab(t.id)}
                         >
                             <span className={`icon icon-${t.icon}`} aria-hidden='true' />
                             {t.label}
@@ -260,6 +274,8 @@ export default function PdfWorkshop({ initialFiles, intent: _intent, onLeave }: 
                         accept={WORKSHOP_ACCEPT}
                         onFiles={(picked) => void addFiles(picked.map((p) => p.file))}
                     />
+                ) : tab === 'edit' ? (
+                    <EditTab workshop={workshop} />
                 ) : (
                     <PagesTab
                         workshop={workshop}
