@@ -23,6 +23,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState, type CSSPrope
 import type { BoardSummary, WhiteboardPeer } from '../contracts/domain';
 import { api } from './api';
 import type { HostTools } from './excalidraw/Host';
+import ExportDialog from './ExportDialog';
 import { useBoardSession, type SceneBridge, type SessionStatus } from './session';
 import styles from './style.module.css';
 import { displayTitle } from './Whiteboard';
@@ -72,6 +73,8 @@ export default function BoardEditor({
     const [draft, setDraft] = useState<string | null>(null);
     const [renameError, setRenameError] = useState<ErrorNoteInput | null>(null);
     const tools = useRef<HostTools | null>(null);
+    const [exportTools, setExportTools] = useState<HostTools | null>(null);
+    const [exporting, setExporting] = useState(false);
     const drawnSincePreview = useRef(false);
     const canWriteRef = useRef(canWrite);
     canWriteRef.current = canWrite;
@@ -105,6 +108,7 @@ export default function BoardEditor({
         (bridge: SceneBridge, hostTools: HostTools) => {
             session.bind(bridge);
             tools.current = hostTools;
+            setExportTools(hostTools);
             // La popup s'ouvre par une animation qui fausse la mesure prise au montage.
             setTimeout(() => hostTools.refresh(), 450);
         },
@@ -171,6 +175,14 @@ export default function BoardEditor({
                     </span>
                     <span className={styles.editorActions}>
                         <Participants peers={view.peers} />
+                        <Button
+                            variant='ghost'
+                            icon='download'
+                            disabled={exportTools === null}
+                            onClick={() => setExporting(true)}
+                        >
+                            Exporter
+                        </Button>
                         <FeatureSettingsButton
                             variant='ghost'
                             scope={{ kind: 'item', feature: 'whiteboard', itemId: String(boardId), itemLabel: title }}
@@ -203,10 +215,14 @@ export default function BoardEditor({
                             }}
                             onSelection={(ids) => session.selection(ids)}
                             onLaser={(on) => session.laser(on)}
+                            onExportImage={() => setExporting(true)}
                         />
                     </Suspense>
                 )}
             </div>
+            {exportTools !== null && (
+                <ExportDialog open={exporting} onClose={() => setExporting(false)} tools={exportTools} title={title} />
+            )}
         </div>
     );
 }

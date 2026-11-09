@@ -16,7 +16,11 @@ declare const styles: {
     readonly emptyState: string;
     readonly emptyText: string;
     readonly emptyTitle: string;
+    readonly exportDone: string;
+    readonly exportPreview: string;
+    readonly exportPreviewImage: string;
     readonly field: string;
+    readonly fieldHint: string;
     readonly fieldLabel: string;
     readonly form: string;
     readonly grid: string;

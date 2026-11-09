@@ -46,7 +46,7 @@ et le thème celui du profil de chacun.
 
 L'onglet **Général** des réglages, en tête de leur navigation, porte aussi le
 titre, la copie (« Dupliquer », qui ouvre la copie) et la suppression : l'en-tête
-de l'éditeur n'a pas d'autre geste que le bouton Réglages et le titre en place.
+de l'éditeur ne garde que le titre en place et les boutons Exporter et Réglages.
 
 Un **aperçu** (une vignette WebP de quelques dizaines de kilo-octets) est
 produit par le navigateur d'un auteur quand il quitte le tableau, et toutes les
@@ -199,6 +199,22 @@ Les images sont scellées (conteneur `DEVB`) par une clé du module, tirée au s
 au premier démarrage et scellée par la clé du serveur (`ft_whiteboard_key`) :
 elles ne dépendent d'aucun espace, si bien que copie et déplacement ne les
 rechiffrent pas. Voir [SECURITY_MODEL.md](../../Docs/SECURITY_MODEL.md).
+
+## L'image d'un tableau
+
+Le bouton **Exporter** de l'en-tête ouvre un dialogue qui dessine l'image dans le
+navigateur, sans passer par le serveur : PNG, JPEG, WebP ou SVG, tout le tableau
+ou la sélection, en clair ou en sombre, avec ou sans fond (le JPEG le garde
+toujours), en 1×, 2× ou 3× pour une image en pixels. L'agrandissement se réduit
+quand l'image dépasserait ce qu'un navigateur sait dessiner (16 384 pixels de
+côté, 100 millions de pixels au total). « Copier » met l'image en PNG dans le
+presse-papiers, quand le navigateur le permet.
+
+Le dialogue d'export d'Excalidraw n'est pas rendu (`saveAsImage: false`) : son
+entrée de menu, Ctrl+Maj+E et sa palette de commandes ouvrent celui du module.
+« Enregistrer sous… » reste celui d'Excalidraw et écrit le fichier
+`.excalidraw`. En SVG, la politique de sécurité du contenu empêche Excalidraw de
+réduire ses polices aux seuls caractères employés : la police entière y entre.
 
 ## Export
 

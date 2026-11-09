@@ -5,6 +5,7 @@ import {
     CaptureUpdateAction,
     Excalidraw,
     exportToBlob,
+    exportToSvg,
     hashElementsVersion,
     MainMenu,
     reconcileElements,
@@ -29,7 +30,15 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { PREVIEW_MAX_CHARS, type BoardAppearance, type SceneElement } from '../../contracts/domain';
 import type { RemotePeer, SceneBridge } from '../session';
 import { EXCALIDRAW_SOURCE, THEME_CHOICES } from '../format';
+import { boundedScale, formatOf, selectionForExport, type ImageOptions } from '../imageExport';
 import { RemoteSelections, type PeerSelection } from './RemoteSelections';
+
+/** Une image exportée, et les dimensions de la scène à l'échelle 1, marges comprises. */
+export interface ExportedImage {
+    blob: Blob;
+    width: number;
+    height: number;
+}
 
 /** Ce que l'en-tête demande à l'éditeur, hors de la séance. */
 export interface HostTools {
@@ -37,6 +46,10 @@ export interface HostTools {
     preview(): Promise<string | null>;
     /** Après une animation de la popup : Excalidraw mesure sa place au montage. */
     refresh(): void;
+    /** Ce que l'export peut viser, lu à l'ouverture de son dialogue. */
+    exportScope(): { empty: boolean; selection: boolean };
+    /** `scale` agrandit l'image, bornée par `boundedScale` ; `fit` borne son grand côté (un aperçu en PNG). */
+    image(options: ImageOptions, size: { scale: number } | { fit: number }): Promise<ExportedImage>;
 }
 
 export interface HostProps {
@@ -53,6 +66,8 @@ export interface HostProps {
     onAppearance(patch: Partial<BoardAppearance>): void;
     onSelection(ids: string[]): void;
     onLaser(on: boolean): void;
+    /** L'export en image demandé à Excalidraw (menu, Ctrl+Maj+E, palette) : le dialogue du module s'ouvre à la place du sien. */
+    onExportImage(): void;
 }
 
 const asOrdered = (elements: readonly SceneElement[]) => elements as unknown as readonly OrderedExcalidrawElement[];
@@ -246,7 +261,49 @@ export default function Host(props: HostProps) {
                 }
                 return null;
             },
-            refresh: () => api.refresh()
+            refresh: () => api.refresh(),
+            exportScope() {
+                const elements = api.getSceneElements();
+                const selected = api.getAppState().selectedElementIds;
+                return { empty: elements.length === 0, selection: elements.some((element) => selected[element.id]) };
+            },
+            async image(options, size) {
+                const state = api.getAppState();
+                const all = api.getSceneElements();
+                const elements = options.selectionOnly ? selectionForExport(all, state.selectedElementIds) : all;
+                const appState = {
+                    exportBackground: options.background || options.format === 'jpeg',
+                    exportWithDarkMode: options.dark,
+                    viewBackgroundColor: state.viewBackgroundColor
+                };
+                const files = api.getFiles();
+                if (options.format === 'svg' && 'scale' in size) {
+                    const svg = await exportToSvg({ elements, appState, files });
+                    return {
+                        blob: new Blob([svg.outerHTML], { type: formatOf('svg').mime }),
+                        width: Number(svg.getAttribute('width')),
+                        height: Number(svg.getAttribute('height'))
+                    };
+                }
+                const mime = 'fit' in size ? formatOf('png').mime : formatOf(options.format).mime;
+                let base = { width: 0, height: 0 };
+                const blob = await exportToBlob({
+                    elements,
+                    appState,
+                    files,
+                    mimeType: mime,
+                    ...(mime === formatOf('png').mime ? {} : { quality: 0.92 }),
+                    getDimensions(width: number, height: number) {
+                        base = { width, height };
+                        const scale =
+                            'fit' in size
+                                ? Math.min(1, size.fit / Math.max(width, height))
+                                : boundedScale(width, height, size.scale);
+                        return { width: Math.round(width * scale), height: Math.round(height * scale), scale };
+                    }
+                });
+                return { blob, ...base };
+            }
         };
         propsRef.current.onReady(bridge, tools);
     };
@@ -276,11 +333,19 @@ export default function Host(props: HostProps) {
                         changeViewBackgroundColor: props.canWrite,
                         clearCanvas: props.canWrite,
                         export: { saveFileToDisk: true },
-                        saveAsImage: true
+                        saveAsImage: false
                     },
                     tools: { image: props.canWrite }
                 }}
                 onChange={(elements, appState) => {
+                    // Sans `saveAsImage`, Excalidraw note la demande sans rien afficher.
+                    if (appState.openDialog?.name === 'imageExport') {
+                        apiRef.current?.updateScene({
+                            appState: { openDialog: null },
+                            captureUpdate: CaptureUpdateAction.NEVER
+                        });
+                        propsRef.current.onExportImage();
+                    }
                     const version = hashElementsVersion(elements);
                     if (version !== lastVersion.current) {
                         // La première passe est la scène reçue : rien à renvoyer.

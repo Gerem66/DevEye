@@ -167,8 +167,11 @@
     display: none;
 }
 
+/* Trois boutons dépassent la largeur d'un téléphone : la rangée passe à la ligne
+   plutôt que de pousser le premier hors du dialogue. */
 .footer {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: flex-end;
     gap: var(--space-sm);
