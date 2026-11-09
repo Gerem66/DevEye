@@ -72,10 +72,24 @@ const TAB_OF_INTENT: Partial<Record<WorkshopIntent, Tab>> = {
 const stem = (name: string): string => name.replace(/\.pdf$/i, '');
 const JPEG_QUALITY = 0.9;
 
+/** Ce que le serveur sait faire d'un PDF, d'après ses outils et l'offre. */
+export interface ServerTargets {
+    light: boolean;
+    ocr: boolean;
+}
+
+/** Les cibles de l'assistant qu'on atteint depuis l'atelier. */
+export type ServerTarget = 'pdf-light' | 'pdf-ocr';
+
 interface PdfWorkshopProps {
     initialFiles: readonly File[];
     intent: WorkshopIntent;
+    server: ServerTargets;
+    /** Le membre peut lancer une conversion sur le serveur. */
+    canWrite: boolean;
     onLeave: () => void;
+    /** Le document assemblé, confié à l'assistant pour une conversion sur le serveur. */
+    onHandoff: (file: File, targetId: ServerTarget) => void;
 }
 
 /**
@@ -83,7 +97,7 @@ interface PdfWorkshopProps {
  * pdf.js affiche, pdf-lib assemble (dans un worker), et le résultat se
  * télécharge depuis une adresse `blob:`.
  */
-export default function PdfWorkshop({ initialFiles, intent, onLeave }: PdfWorkshopProps) {
+export default function PdfWorkshop({ initialFiles, intent, server, canWrite, onLeave, onHandoff }: PdfWorkshopProps) {
     useSubView('pdf');
     useRequestPopupWidth(POPUP_WIDTH);
     const workshop = usePdfWorkshop();
@@ -275,6 +289,21 @@ export default function PdfWorkshop({ initialFiles, intent, onLeave }: PdfWorksh
         }
     };
 
+    /** Le document, tel qu'il sortirait, confié à l'assistant : l'allègement et la reconnaissance se font sur le serveur. */
+    const handoff = async (target: ServerTarget): Promise<void> => {
+        if (plan.pages.length === 0) return;
+        setError(null);
+        setExporting({ step: 'Assemblage du document', done: 0, total: plan.pages.length });
+        try {
+            const bytes = await buildPart(plan.pages);
+            onHandoff(new File([bytes], name, { type: 'application/pdf' }), target);
+        } catch (e) {
+            setError(errorNote(e, 'Le document n’a pas pu être assemblé.'));
+        } finally {
+            setExporting(null);
+        }
+    };
+
     const exportImages = async (format: ImageFormat, dpi: ImageDpi): Promise<void> => {
         if (plan.pages.length === 0) return;
         setError(null);
@@ -410,7 +439,10 @@ export default function PdfWorkshop({ initialFiles, intent, onLeave }: PdfWorksh
                 ) : shown === 'form' ? (
                     <FormTab workshop={workshop} />
                 ) : shown === 'text' ? (
-                    <TextTab workshop={workshop} />
+                    <TextTab
+                        workshop={workshop}
+                        onOcr={server.ocr && canWrite ? () => void handoff('pdf-ocr') : null}
+                    />
                 ) : shown === 'finish' ? (
                     <FinishTab workshop={workshop} />
                 ) : (
@@ -450,6 +482,8 @@ export default function PdfWorkshop({ initialFiles, intent, onLeave }: PdfWorksh
                 onClose={() => setExportsOpen(false)}
                 onSplit={(mode) => void exportSplit(mode)}
                 onImages={(format, dpi) => void exportImages(format, dpi)}
+                server={{ light: server.light && canWrite, ocr: server.ocr && canWrite }}
+                onServer={(target) => void handoff(target)}
             />
             <ProgressDialog
                 open={exporting !== null || (slow && progress !== null)}

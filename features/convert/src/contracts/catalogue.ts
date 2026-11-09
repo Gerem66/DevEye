@@ -59,7 +59,9 @@ export type Recipe =
     | { engine: 'office'; filter: string }
     | { engine: 'pdfImage'; device: 'png' | 'jpeg' }
     | { engine: 'pdfCompress' }
-    | { engine: 'pdfText' };
+    | { engine: 'pdfText' }
+    /** ocrmypdf : le texte reconnu posé, invisible, sur l'image de chaque page scannée. */
+    | { engine: 'pdfOcr' };
 
 export interface SourceFormat {
     id: string;
@@ -804,6 +806,37 @@ export const CATALOGUE: readonly KindSpec[] = [
                 from: ['pdf'],
                 options: [],
                 recipe: { engine: 'pdfText' }
+            },
+            {
+                id: 'pdf-ocr',
+                label: 'PDF au texte reconnu',
+                ext: 'pdf',
+                mime: 'application/pdf',
+                from: ['pdf'],
+                options: [
+                    {
+                        kind: 'segments',
+                        id: 'lang',
+                        section: 'quality',
+                        label: 'Langue du texte',
+                        hint: 'Un scan devient un PDF où l’on cherche et copie le texte. Les pages qui en ont déjà sont laissées telles quelles.',
+                        options: [
+                            { value: 'fra', label: 'Français' },
+                            { value: 'eng', label: 'Anglais' },
+                            { value: 'fra+eng', label: 'Les deux' }
+                        ],
+                        default: 'fra+eng'
+                    },
+                    {
+                        kind: 'toggle',
+                        id: 'deskew',
+                        section: 'picture',
+                        label: 'Redresser les pages',
+                        hint: 'Un scan de travers est remis droit avant la lecture.',
+                        default: false
+                    }
+                ],
+                recipe: { engine: 'pdfOcr' }
             }
         ]
     }

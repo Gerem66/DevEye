@@ -32,14 +32,17 @@ function useTexts(plan: Plan): ReadonlyMap<string, string | null> {
 
 interface TextTabProps {
     workshop: Workshop;
+    /** Faire reconnaître le texte des pages scannées par le serveur ; `null` quand il ne le propose pas. */
+    onOcr: (() => void) | null;
 }
 
 /** Le texte du document, page par page, à copier ou à télécharger. */
-export function TextTab({ workshop }: TextTabProps) {
+export function TextTab({ workshop, onOcr }: TextTabProps) {
     const { plan } = workshop;
     const texts = useTexts(plan);
     const read = plan.pages.filter((p) => texts.get(p.id) !== undefined && texts.get(p.id) !== null).length;
     const withText = plan.pages.filter((p) => (texts.get(p.id) ?? '') !== '').length;
+    const scanned = plan.pages.filter((p) => p.kind === 'source' && texts.get(p.id) === '').length;
     const all = plan.pages
         .map((p, i) => `Page ${i + 1}\n\n${texts.get(p.id) ?? ''}`)
         .join('\n\n\n')
@@ -62,6 +65,16 @@ export function TextTab({ workshop }: TextTabProps) {
                           : `${withText} page${withText > 1 ? 's' : ''} avec du texte sur ${plan.pages.length}.`}
                 </span>
                 <div className={styles.toolbarEnd}>
+                    {onOcr && scanned > 0 && read === plan.pages.length && (
+                        <Button
+                            variant='secondary'
+                            icon='upload'
+                            title='Le document part sur le serveur, qui lit les pages scannées'
+                            onClick={onOcr}
+                        >
+                            Reconnaître le texte sur le serveur
+                        </Button>
+                    )}
                     <CopyButton value={all} label='Copier tout le texte' className={styles.iconButton} />
                     <Button variant='secondary' icon='download' disabled={all === ''} onClick={download}>
                         Télécharger en .txt

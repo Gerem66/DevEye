@@ -3,6 +3,7 @@ import { Button, Dialog, NumberInput, SegmentedControl, TextInput } from 'deveye
 
 import type { Plan } from './model';
 import styles from './pdf.module.css';
+import type { ServerTarget, ServerTargets } from './PdfWorkshop';
 import { splitParts, type SplitMode } from './split';
 
 export type ImageFormat = 'png' | 'jpeg';
@@ -17,19 +18,14 @@ interface ExportDialogProps {
     onClose: () => void;
     onSplit: (mode: SplitMode) => void;
     onImages: (format: ImageFormat, dpi: ImageDpi) => void;
+    /** Ce que le serveur propose ; les deux à faux cachent la section. */
+    server: ServerTargets;
+    onServer: (target: ServerTarget) => void;
 }
 
 /** Le nom du fichier produit, et les autres façons de sortir le document : en plusieurs PDF, en images. */
-export function ExportDialog({
-    open,
-    plan,
-    fileName,
-    onFileName,
-    busy,
-    onClose,
-    onSplit,
-    onImages
-}: ExportDialogProps) {
+export function ExportDialog(props: ExportDialogProps) {
+    const { open, plan, fileName, onFileName, busy, onClose, onSplit, onImages, server, onServer } = props;
     const [splitKind, setSplitKind] = useState<SplitMode['kind']>('files');
     const [every, setEvery] = useState<number | null>(1);
     const [ranges, setRanges] = useState('');
@@ -141,6 +137,38 @@ export function ExportDialog({
                         </Button>
                     </div>
                 </section>
+
+                {(server.light || server.ocr) && (
+                    <section className={styles.exportSection}>
+                        <h3 className={styles.inspectorTitle}>Sur le serveur</h3>
+                        <p className={styles.note}>
+                            Ces deux-là demandent des outils que votre navigateur n’a pas : le document assemblé part
+                            sur le serveur, dans les limites de votre offre, et revient par la liste des conversions.
+                        </p>
+                        <div className={styles.exportRow}>
+                            {server.light && (
+                                <Button
+                                    variant='secondary'
+                                    icon='upload'
+                                    disabled={busy || plan.pages.length === 0}
+                                    onClick={() => onServer('pdf-light')}
+                                >
+                                    Alléger le PDF
+                                </Button>
+                            )}
+                            {server.ocr && (
+                                <Button
+                                    variant='secondary'
+                                    icon='upload'
+                                    disabled={busy || plan.pages.length === 0}
+                                    onClick={() => onServer('pdf-ocr')}
+                                >
+                                    Reconnaître le texte d’un scan
+                                </Button>
+                            )}
+                        </div>
+                    </section>
+                )}
             </div>
         </Dialog>
     );

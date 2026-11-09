@@ -169,6 +169,7 @@ export function estimateSize(target: TargetFormat, values: OptionValues, info: M
         case 'office':
         case 'pdfImage':
         case 'pdfText':
+        case 'pdfOcr':
             return null;
     }
 }

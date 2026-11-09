@@ -241,6 +241,10 @@ export default function Convert(_props: FeatureViewProps) {
     };
 
     if (workshop) {
+        // Ce que ce serveur sait faire d'un PDF : alléger, reconnaître le texte.
+        const documents = caps.data?.families.find((f) => f.kind === 'document');
+        const serves = (targetId: string): boolean =>
+            documents !== undefined && documents.available && !documents.missingTargets.includes(targetId);
         return (
             <Suspense
                 fallback={
@@ -249,7 +253,17 @@ export default function Convert(_props: FeatureViewProps) {
                     </div>
                 }
             >
-                <PdfWorkshop initialFiles={workshop.files} intent={workshop.intent} onLeave={() => setWorkshop(null)} />
+                <PdfWorkshop
+                    initialFiles={workshop.files}
+                    intent={workshop.intent}
+                    server={{ light: serves('pdf-light'), ocr: serves('pdf-ocr') }}
+                    canWrite={canWrite}
+                    onLeave={() => setWorkshop(null)}
+                    onHandoff={(file, targetId) => {
+                        setWorkshop(null);
+                        wizard.handoff(file, 'document', 'pdf', targetId);
+                    }}
+                />
             </Suspense>
         );
     }

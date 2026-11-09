@@ -28,6 +28,8 @@ type Action =
     | { type: 'open'; view: WizardView }
     | { type: 'pickKind'; kind: ConvertKind }
     | { type: 'pickFile'; file: File }
+    /** Un fichier qu'un autre écran confie à l'assistant, cible choisie, prêt pour ses options. */
+    | { type: 'handoff'; file: File; kind: ConvertKind; sourceId: string; targetId: string }
     | { type: 'removeFile' }
     | { type: 'info'; info: FileInfo }
     | { type: 'source'; sourceId: string }
@@ -78,6 +80,16 @@ function reduce(state: WizardState, action: Action): WizardState {
                 targetId: sourceId ? keepTarget(kind, sourceId, sameKind ? state.targetId : null) : null
             };
         }
+        case 'handoff':
+            return {
+                ...INITIAL,
+                view: 'options',
+                kind: action.kind,
+                file: action.file,
+                sourceId: action.sourceId,
+                detectedSourceId: action.sourceId,
+                targetId: action.targetId
+            };
         case 'removeFile':
             return { ...INITIAL, view: 'format', kind: state.kind, values: state.values };
         case 'info':
@@ -112,6 +124,11 @@ export function useWizard() {
         open: useCallback((view: WizardView) => dispatch({ type: 'open', view }), []),
         pickKind: useCallback((kind: ConvertKind) => dispatch({ type: 'pickKind', kind }), []),
         pickFile: useCallback((file: File) => dispatch({ type: 'pickFile', file }), []),
+        handoff: useCallback(
+            (file: File, kind: ConvertKind, sourceId: string, targetId: string) =>
+                dispatch({ type: 'handoff', file, kind, sourceId, targetId }),
+            []
+        ),
         removeFile: useCallback(() => dispatch({ type: 'removeFile' }), []),
         setInfo: useCallback((info: FileInfo) => dispatch({ type: 'info', info }), []),
         setSource: useCallback((sourceId: string) => dispatch({ type: 'source', sourceId }), []),

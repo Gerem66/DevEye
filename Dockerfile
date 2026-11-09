@@ -73,8 +73,9 @@ RUN apt-get update \
 # Les outils du Convertisseur. Aucun ne sait faire le travail de l'autre : ffmpeg
 # pour la vidéo et le son, ImageMagick pour les images (il tient l'orientation
 # des photos, les profils de couleur et l'ICO, que ffmpeg perd ou ignore), et
-# pour les documents LibreOffice, poppler (une page de PDF en image, son texte)
-# et Ghostscript (alléger un PDF).
+# pour les documents LibreOffice, poppler (une page de PDF en image, son texte),
+# Ghostscript (alléger un PDF) et ocrmypdf avec tesseract en français et en
+# anglais (le texte d'un PDF scanné).
 #
 # Tous tournent HORS du processus du serveur : un décodeur qui s'effondre sur un
 # fichier hostile n'emporte que lui, et un budget de temps peut le tuer.
@@ -92,7 +93,8 @@ RUN apt-get update \
         apt-get install --no-install-recommends -y \
             libreoffice-core libreoffice-writer libreoffice-calc libreoffice-impress \
             fonts-liberation2 fonts-dejavu-core fonts-noto-core \
-            poppler-utils ghostscript; \
+            poppler-utils ghostscript \
+            ocrmypdf tesseract-ocr-fra tesseract-ocr-eng; \
     fi \
     && rm -rf /var/lib/apt/lists/*
 # Sous les deux noms : le dossier suit la version majeure d'ImageMagick que Debian livre.

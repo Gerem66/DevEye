@@ -3,10 +3,11 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import type { SourceFormat } from '../../contracts/catalogue';
-import { num, str } from '../../contracts/options';
+import { flag, num, str } from '../../contracts/options';
 import { env } from '../env';
 import { captureTool, ConvertFailure, runTool } from '../spawn';
 import { fileSize } from '../storage';
+import type { OptionValues } from '../../contracts/options';
 import type { EngineJob, InputProbe } from './types';
 
 const PDF_MAGIC = '%PDF-';
@@ -183,6 +184,41 @@ async function runPdfText(job: EngineJob, maxOutputBytes: number): Promise<void>
     });
 }
 
+const OCR_LANGS = new Set(['fra', 'eng', 'fra+eng']);
+
+/**
+ * Les arguments d'ocrmypdf. `--skip-text` laisse telles quelles les pages qui
+ * ont déjà du texte ; un seul fil, le serveur n'est pas à lui.
+ */
+export function ocrArgs(options: OptionValues, input: string, output: string): string[] {
+    const lang = str(options, 'lang');
+    return [
+        '--skip-text',
+        '--jobs',
+        '1',
+        '--output-type',
+        'pdf',
+        '-l',
+        lang !== null && OCR_LANGS.has(lang) ? lang : 'fra+eng',
+        ...(flag(options, 'deskew') ? ['--deskew'] : []),
+        input,
+        output
+    ];
+}
+
+async function runPdfOcr(job: EngineJob, maxOutputBytes: number): Promise<void> {
+    const produced = path.join(job.paths.work, 'ocr.pdf');
+    await runTool({
+        bin: 'ocrmypdf',
+        args: ocrArgs(job.options, job.paths.input, produced),
+        ...budget(job, maxOutputBytes, produced),
+        // Rien ne dit l'avancement, et une page scannée se lit en dizaines de secondes.
+        stallMs: undefined,
+        env: { OMP_THREAD_LIMIT: '1' }
+    });
+    await adopt(produced, job);
+}
+
 export async function runDocument(job: EngineJob, maxOutputBytes: number): Promise<void> {
     const recipe = job.target.recipe;
     switch (recipe.engine) {
@@ -197,6 +233,9 @@ export async function runDocument(job: EngineJob, maxOutputBytes: number): Promi
             break;
         case 'pdfText':
             await runPdfText(job, maxOutputBytes);
+            break;
+        case 'pdfOcr':
+            await runPdfOcr(job, maxOutputBytes);
             break;
         default:
             throw new Error('Recette de document attendue');
