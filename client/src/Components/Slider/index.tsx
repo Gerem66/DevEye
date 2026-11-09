@@ -13,7 +13,11 @@ export interface SliderProps {
     label: string;
     /** La valeur telle qu'elle se lit, à droite du libellé (« 24 », « 80 % »). Absente, rien ne s'affiche. */
     valueLabel?: string;
-    /** Un champ de nombre à la place de `valueLabel` : la valeur exacte se tape, aux mêmes bornes et au même pas. */
+    /**
+     * Un champ de nombre à la place de `valueLabel` : la valeur exacte se tape,
+     * au même pas. Les bornes du curseur ne sont qu'un conseil : le champ va
+     * de 0 à bien au-delà.
+     */
     editable?: boolean;
     /** Repères sous la piste, de gauche à droite (« Léger », « Fidèle »). */
     marks?: readonly string[];
@@ -27,6 +31,9 @@ export interface SliderProps {
     disabled?: boolean;
     className?: string;
 }
+
+/** Ce que le champ accepte au plus : de quoi ne jamais gêner, sans ouvrir à l'absurde. */
+const EDITABLE_MAX = 9999;
 
 /**
  * Un curseur aux couleurs du projet. Le `<input type='range'>` natif est gardé :
@@ -57,8 +64,8 @@ export function Slider({
                     <NumberInput
                         className={styles.number}
                         value={value}
-                        min={min}
-                        max={max}
+                        min={0}
+                        max={EDITABLE_MAX}
                         step={step}
                         disabled={disabled}
                         live
