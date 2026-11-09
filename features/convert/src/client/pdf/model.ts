@@ -39,6 +39,8 @@ export interface SourceInfo {
     pureXfa: boolean;
     /** L'index de la couleur qui désigne ce fichier dans l'atelier. */
     color: number;
+    /** Ce que le fichier dit de lui : proposé pour le document produit. */
+    meta: { title: string; author: string; subject: string };
 }
 
 export interface ImageInfo {
@@ -264,7 +266,7 @@ export function outputName(plan: Plan): string {
 }
 
 /** Par quelle porte on entre dans l'atelier : une tuile de l'accueil, ou un dépôt de fichiers. */
-export type WorkshopIntent = 'pages' | 'merge' | 'extract' | 'reorder' | 'sign' | 'form' | 'text';
+export type WorkshopIntent = 'pages' | 'merge' | 'extract' | 'reorder' | 'sign' | 'form' | 'text' | 'protect';
 
 /** Ce que le sélecteur de fichiers de l'atelier propose. Le dépôt, lui, accepte tout et trie. */
 export const WORKSHOP_ACCEPT = '.pdf,.png,.jpg,.jpeg,.webp,.gif,.bmp,.avif';

@@ -35,6 +35,7 @@ import {
     type InkColor,
     type PdfElement
 } from './elements';
+import { numberBox, pageNumberLabel, WATERMARK_ANGLE, type Finishing } from './finishing';
 import { frameSize, toUser, userRect, type Frame, type Rect } from './geometry';
 import { imagePageSize, rotateBy, type PageBox, type PlanPage } from './model';
 
@@ -96,6 +97,13 @@ export interface BuildInput {
     fields?: Readonly<Record<string, Readonly<Record<string, FieldValue>>>>;
     /** Les champs deviennent du contenu : plus rien ne se remplit dans le document produit. */
     flatten?: boolean;
+    finishing?: Finishing;
+    /**
+     * Quand le document produit n'est qu'une partie du plan (un découpage) :
+     * le rang de sa première page dans l'ensemble, et le nombre total de pages,
+     * pour que les numéros continuent d'une partie à l'autre.
+     */
+    numbering?: { offset: number; total: number };
 }
 
 /** Ce qu'un champ de formulaire vaut : une case ou un bouton radio, ou un texte (un choix se donne par sa valeur). */
@@ -440,6 +448,90 @@ async function drawElement(out: Output, rect: Rect, el: PdfElement, drawing: Dra
     }
 }
 
+/** Un texte centré sur la page affichée, tourné de `angle` degrés : un filigrane. */
+async function drawCentredText(
+    out: Output,
+    text: string,
+    size: number,
+    opacity: number,
+    angle: number,
+    drawing: Drawing
+): Promise<void> {
+    const { font } = await drawing.font(false);
+    const page = frameSize(out.frame);
+    const width = font.widthOfTextAtSize(text, size);
+    const height = size * 0.7;
+    // Le texte part de son coin bas-gauche, le long de l'axe tourné : on recule
+    // le centre de la page de la moitié de la largeur et de la hauteur.
+    const rad = (angle * Math.PI) / 180;
+    const along = { x: Math.cos(rad), y: -Math.sin(rad) };
+    const up = { x: -Math.sin(rad), y: -Math.cos(rad) };
+    const anchor = {
+        x: page.width / 2 - (width / 2) * along.x - (height / 2) * up.x,
+        y: page.height / 2 - (width / 2) * along.y - (height / 2) * up.y
+    };
+    const origin = toUser(out.frame, anchor);
+    out.page.drawText(text, {
+        x: origin.x,
+        y: origin.y,
+        size,
+        font,
+        color: rgb(0.35, 0.35, 0.38),
+        opacity,
+        rotate: degrees(out.frame.rotation + angle)
+    });
+}
+
+/** Numéros et filigrane sur chaque page, puis les propriétés et le mot de passe du document. */
+async function applyFinishing(
+    dst: PDFDocument,
+    outputs: readonly Output[],
+    finishing: Finishing,
+    numbering: { offset: number; total: number },
+    drawing: Drawing
+): Promise<void> {
+    const { numbers, watermark, metadata } = finishing;
+    if (numbers.on || (watermark.on && watermark.text.trim() !== '')) {
+        const { font } = await drawing.font(false);
+        for (const [i, out] of outputs.entries()) {
+            const page = frameSize(out.frame);
+            const label = pageNumberLabel(numbers, numbering.offset + i, numbering.total);
+            if (label !== null) {
+                const width = font.widthOfTextAtSize(label, 10);
+                const box = numberBox(numbers.position, page, width);
+                await drawText(out.page, out.frame, box, label, 10, 'black', false, drawing);
+            }
+            if (watermark.on && watermark.text.trim() !== '') {
+                await drawCentredText(
+                    out,
+                    watermark.text.trim(),
+                    watermark.size,
+                    watermark.opacity,
+                    watermark.diagonal ? WATERMARK_ANGLE : 0,
+                    drawing
+                );
+            }
+        }
+    }
+    if (metadata.strip) {
+        dst.setTitle('');
+        dst.setAuthor('');
+        dst.setSubject('');
+        dst.setKeywords([]);
+        dst.setProducer('');
+        dst.setCreator('');
+    } else {
+        dst.setTitle(metadata.title);
+        dst.setAuthor(metadata.author);
+        dst.setSubject(metadata.subject);
+        dst.setProducer('DevEye');
+        dst.setCreator('DevEye');
+    }
+    if (finishing.password !== null && finishing.password !== '') {
+        dst.encrypt({ userPassword: finishing.password, ownerPassword: finishing.password });
+    }
+}
+
 export async function buildPdf(input: BuildInput, onProgress: BuildProgress = () => undefined): Promise<Uint8Array> {
     if (input.pages.length === 0) throw new BuildFailure('empty', 'Aucune page à produire.');
     const dst = await PDFDocument.create();
@@ -542,12 +634,12 @@ export async function buildPdf(input: BuildInput, onProgress: BuildProgress = ()
     if (owner) copyAcroForm(dst, owner);
 
     const elements = input.elements ?? [];
+    const drawing = new Drawing(
+        dst,
+        input.fonts ?? { sans: null, hand: null },
+        new Map((input.assets ?? []).map((a) => [a.id, a]))
+    );
     if (elements.length > 0) {
-        const drawing = new Drawing(
-            dst,
-            input.fonts ?? { sans: null, hand: null },
-            new Map((input.assets ?? []).map((a) => [a.id, a]))
-        );
         const byPage = new Map(outputs.map((o) => [o.plan.id, o]));
         for (const out of outputs) {
             const size = frameSize(out.frame);
@@ -561,6 +653,16 @@ export async function buildPdf(input: BuildInput, onProgress: BuildProgress = ()
                 await drawElement(out, rect, el, drawing);
             }
         }
+    }
+
+    if (input.finishing) {
+        await applyFinishing(
+            dst,
+            outputs,
+            input.finishing,
+            input.numbering ?? { offset: 0, total: outputs.length },
+            drawing
+        );
     }
 
     return dst.save();

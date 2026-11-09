@@ -48,6 +48,19 @@ async function hasFields(proxy: PDFDocumentProxy): Promise<boolean> {
     return (fields instanceof Map ? fields.size : Object.keys(fields as object).length) > 0;
 }
 
+const text = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
+
+/** Titre, auteur et sujet du fichier, vides quand il n'en dit rien. */
+async function metaOf(proxy: PDFDocumentProxy): Promise<SourceInfo['meta']> {
+    try {
+        const { info } = await proxy.getMetadata();
+        const record = info as Record<string, unknown>;
+        return { title: text(record.Title), author: text(record.Author), subject: text(record.Subject) };
+    } catch {
+        return { title: '', author: '', subject: '' };
+    }
+}
+
 /** Ouvre un PDF. Lève `NeedsPassword` quand le fichier en demande un, ou refuse celui donné. */
 export async function openSource(file: File, password: string | null, color: number): Promise<SourceInfo> {
     const bytes = new Uint8Array(await file.arrayBuffer());
@@ -56,6 +69,7 @@ export async function openSource(file: File, password: string | null, color: num
     const id = newId();
     sources.set(id, { bytes, password, proxy });
     return {
+        meta: await metaOf(proxy),
         id,
         name: file.name,
         bytes: bytes.byteLength,

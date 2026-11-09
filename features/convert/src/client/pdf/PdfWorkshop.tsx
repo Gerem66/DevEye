@@ -20,6 +20,9 @@ import {
 import { Picto } from '../icons';
 import { addImage, buildInputOf, forgetAll, openSource } from './documents';
 import { EditTab } from './EditTab';
+import { ExportDialog, type ImageDpi, type ImageFormat } from './ExportDialog';
+import { FinishTab } from './FinishTab';
+import type { Finishing } from './finishing';
 import { buildFonts } from './fonts';
 import { FormTab } from './FormTab';
 import {
@@ -28,18 +31,21 @@ import {
     outputName,
     summarize,
     WORKSHOP_ACCEPT,
+    type PlanPage,
     type SourceInfo,
     type WorkshopIntent
 } from './model';
 import { PagesTab } from './PagesTab';
 import { PasswordDialog, type PasswordRequest } from './PasswordDialog';
 import styles from './pdf.module.css';
-import { NeedsPassword } from './pdfjs';
+import { openDocument, NeedsPassword, renderPage } from './pdfjs';
 import { redactedPages } from './raster';
+import { splitParts, type SplitMode } from './split';
 import { TextTab } from './TextTab';
 import { clearThumbnails } from './thumbnails';
 import { useBuild } from './useBuild';
 import { usePdfWorkshop, type OpenedFile } from './usePdfWorkshop';
+import { zipFiles } from './zip';
 
 const POPUP_WIDTH = 1280;
 /** Un assemblage plus court que ça n'a pas besoin d'un dialogue d'avancement. */
@@ -47,15 +53,24 @@ const PROGRESS_DELAY_MS = 400;
 /** Le temps laissé au navigateur pour lire une adresse `blob:` avant qu'elle ne soit rendue. */
 const BLOB_URL_TTL_MS = 60_000;
 
-type Tab = 'pages' | 'edit' | 'form' | 'text';
+type Tab = 'pages' | 'edit' | 'form' | 'text' | 'finish';
 const TABS: readonly { id: Tab; label: string; icon: string }[] = [
     { id: 'pages', label: 'Pages', icon: 'file' },
     { id: 'edit', label: 'Signer et annoter', icon: 'edit' },
     { id: 'form', label: 'Formulaire', icon: 'square-check' },
-    { id: 'text', label: 'Texte', icon: 'notes' }
+    { id: 'text', label: 'Texte', icon: 'notes' },
+    { id: 'finish', label: 'Finitions', icon: 'format' }
 ];
 
-const TAB_OF_INTENT: Partial<Record<WorkshopIntent, Tab>> = { sign: 'edit', form: 'form', text: 'text' };
+const TAB_OF_INTENT: Partial<Record<WorkshopIntent, Tab>> = {
+    sign: 'edit',
+    form: 'form',
+    text: 'text',
+    protect: 'finish'
+};
+
+const stem = (name: string): string => name.replace(/\.pdf$/i, '');
+const JPEG_QUALITY = 0.9;
 
 interface PdfWorkshopProps {
     initialFiles: readonly File[];
@@ -72,7 +87,11 @@ export default function PdfWorkshop({ initialFiles, intent, onLeave }: PdfWorksh
     useSubView('pdf');
     useRequestPopupWidth(POPUP_WIDTH);
     const workshop = usePdfWorkshop();
-    const { plan, elements, fields, flatten, selection, act } = workshop;
+    const { plan, elements, fields, flatten, finishing, selection, act } = workshop;
+    const [fileName, setFileName] = useState<string | null>(null);
+    const [exportsOpen, setExportsOpen] = useState(false);
+    const [exporting, setExporting] = useState<{ step: string; done: number; total: number } | null>(null);
+    const name = fileName ?? outputName(plan);
     const [tab, setTab] = useState<Tab>(TAB_OF_INTENT[intent] ?? 'pages');
     // L'onglet Formulaire n'existe que s'il y a des champs à remplir.
     const hasForm = plan.sources.some((s) => s.hasForm);
@@ -169,37 +188,130 @@ export default function PdfWorkshop({ initialFiles, intent, onLeave }: PdfWorksh
         []
     );
 
+    /** Un champ de propriété laissé vide garde ce que le premier fichier disait. */
+    const effectiveFinishing = useCallback((): Finishing => {
+        const first = plan.sources[0]?.meta;
+        const { metadata } = finishing;
+        if (metadata.strip || !first) return finishing;
+        return {
+            ...finishing,
+            metadata: {
+                ...metadata,
+                title: metadata.title || first.title,
+                author: metadata.author || first.author,
+                subject: metadata.subject || first.subject
+            }
+        };
+    }, [plan, finishing]);
+
+    /** Le document, ou une partie : les pages données, avec tout ce qui s'y rapporte. */
+    const buildPart = useCallback(
+        async (
+            pages: readonly PlanPage[],
+            numbering?: { offset: number; total: number }
+        ): Promise<Uint8Array<ArrayBuffer>> => {
+            const kept = new Set(pages.map((p) => p.id));
+            const fonts = await buildFonts();
+            const redactions = await redactedPages(
+                { ...plan, pages },
+                elements.filter((e) => kept.has(e.pageId))
+            );
+            return build({
+                ...buildInputOf(plan),
+                pages,
+                elements,
+                fonts,
+                redactions,
+                fields,
+                flatten,
+                finishing: effectiveFinishing(),
+                numbering
+            });
+        },
+        [build, plan, elements, fields, flatten, effectiveFinishing]
+    );
+
+    const save = (bytes: Uint8Array<ArrayBuffer>, type: string, fileName: string): void => {
+        const url = URL.createObjectURL(new Blob([bytes], { type }));
+        saveFrom(url, fileName);
+        window.setTimeout(() => URL.revokeObjectURL(url), BLOB_URL_TTL_MS);
+    };
+
     const download = useCallback(
         async (ids: readonly string[] | null): Promise<void> => {
             const pages = ids ? plan.pages.filter((p) => ids.includes(p.id)) : plan.pages;
             if (pages.length === 0) return;
             setError(null);
             try {
-                const kept = new Set(pages.map((p) => p.id));
-                const fonts = await buildFonts();
-                const redactions = await redactedPages(
-                    { ...plan, pages },
-                    elements.filter((e) => kept.has(e.pageId))
-                );
-                const bytes = await build({
-                    ...buildInputOf(plan),
-                    pages,
-                    elements,
-                    fonts,
-                    redactions,
-                    fields,
-                    flatten
-                });
-                const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
-                const name = outputName(plan);
-                saveFrom(url, ids ? name.replace(/\.pdf$/, ' (extrait).pdf') : name);
-                window.setTimeout(() => URL.revokeObjectURL(url), BLOB_URL_TTL_MS);
+                const bytes = await buildPart(pages);
+                save(bytes, 'application/pdf', ids ? `${stem(name)} (extrait).pdf` : name);
             } catch (e) {
                 setError(errorNote(e, 'Le document n’a pas pu être assemblé.'));
             }
         },
-        [build, plan, elements, fields, flatten]
+        [buildPart, plan, name]
     );
+
+    const exportSplit = async (mode: SplitMode): Promise<void> => {
+        const parts = splitParts(plan, mode);
+        if (!parts) return;
+        setError(null);
+        setExporting({ step: 'Partie 1', done: 0, total: parts.length });
+        try {
+            const entries: { name: string; bytes: Uint8Array }[] = [];
+            for (const [i, part] of parts.entries()) {
+                setExporting({ step: `Partie ${i + 1} : ${part.label}`, done: i, total: parts.length });
+                entries.push({
+                    name: `${stem(name)} - ${part.label}.pdf`,
+                    bytes: await buildPart(part.pages, { offset: part.offset, total: plan.pages.length })
+                });
+            }
+            save(zipFiles(entries), 'application/zip', `${stem(name)}.zip`);
+            setExportsOpen(false);
+        } catch (e) {
+            setError(errorNote(e, 'Le découpage n’a pas pu être fait.'));
+        } finally {
+            setExporting(null);
+        }
+    };
+
+    const exportImages = async (format: ImageFormat, dpi: ImageDpi): Promise<void> => {
+        if (plan.pages.length === 0) return;
+        setError(null);
+        setExporting({ step: 'Assemblage du document', done: 0, total: plan.pages.length });
+        try {
+            // Les images sont celles du document produit, ce qui est posé dessus compris.
+            const bytes = await buildPart(plan.pages);
+            const doc = await openDocument(bytes, finishing.password);
+            const entries: { name: string; bytes: Uint8Array }[] = [];
+            const mime = format === 'png' ? 'image/png' : 'image/jpeg';
+            try {
+                for (let i = 1; i <= doc.numPages; i++) {
+                    setExporting({ step: `Page ${i} sur ${doc.numPages}`, done: i - 1, total: doc.numPages });
+                    const page = await doc.getPage(i);
+                    const canvas = document.createElement('canvas');
+                    const width = page.getViewport({ scale: 1 }).width * (dpi / 72);
+                    await renderPage(page, canvas, Math.round(width), page.rotate);
+                    const blob = await new Promise<Blob | null>((resolve) =>
+                        canvas.toBlob(resolve, mime, JPEG_QUALITY)
+                    );
+                    if (!blob) throw new Error('La page n’a pas pu être dessinée.');
+                    entries.push({
+                        name: `${stem(name)} - page ${i}.${format === 'png' ? 'png' : 'jpg'}`,
+                        bytes: new Uint8Array(await blob.arrayBuffer())
+                    });
+                }
+            } finally {
+                void doc.loadingTask.destroy().catch(() => undefined);
+            }
+            save(zipFiles(entries), 'application/zip', `${stem(name)} - images.zip`);
+            setExportsOpen(false);
+        } catch (e) {
+            setError(errorNote(e, 'Les images n’ont pas pu être produites.'));
+        } finally {
+            setExporting(null);
+        }
+    };
 
     const pick = (): void => {
         void pickFiles({ multiple: true, accept: WORKSHOP_ACCEPT }).then((picked) =>
@@ -271,10 +383,11 @@ export default function PdfWorkshop({ initialFiles, intent, onLeave }: PdfWorksh
                             className={t.id === shown ? styles.tabActive : styles.tab}
                             aria-current={t.id === shown ? 'page' : undefined}
                             disabled={t.id !== 'pages' && empty}
+                            title={t.label}
                             onClick={() => setTab(t.id)}
                         >
                             <span className={`icon icon-${t.icon}`} aria-hidden='true' />
-                            {t.label}
+                            <span className={styles.tabLabel}>{t.label}</span>
                         </button>
                     ))}
                 </nav>
@@ -298,6 +411,8 @@ export default function PdfWorkshop({ initialFiles, intent, onLeave }: PdfWorksh
                     <FormTab workshop={workshop} />
                 ) : shown === 'text' ? (
                     <TextTab workshop={workshop} />
+                ) : shown === 'finish' ? (
+                    <FinishTab workshop={workshop} />
                 ) : (
                     <PagesTab
                         workshop={workshop}
@@ -310,12 +425,15 @@ export default function PdfWorkshop({ initialFiles, intent, onLeave }: PdfWorksh
 
             <footer className={styles.footer}>
                 <div className={styles.footerText}>
-                    <span className={styles.footerName}>{outputName(plan)}</span>
+                    <span className={styles.footerName}>{name}</span>
                     <span className={styles.footerMeta}>
                         {summarize(plan)} · tout se fait sur cet appareil, rien n’est envoyé
                     </span>
                 </div>
                 <div className={styles.footerActions}>
+                    <Button variant='ghost' disabled={empty || building} onClick={() => setExportsOpen(true)}>
+                        Autres exports…
+                    </Button>
                     <Button icon='download' disabled={empty || building} onClick={() => void download(null)}>
                         Télécharger le PDF
                     </Button>
@@ -323,12 +441,34 @@ export default function PdfWorkshop({ initialFiles, intent, onLeave }: PdfWorksh
             </footer>
 
             <PasswordDialog request={password} onDone={() => setPassword(null)} />
+            <ExportDialog
+                open={exportsOpen}
+                plan={plan}
+                fileName={name}
+                onFileName={(next) => setFileName(next.endsWith('.pdf') ? next : `${next}.pdf`)}
+                busy={exporting !== null || building}
+                onClose={() => setExportsOpen(false)}
+                onSplit={(mode) => void exportSplit(mode)}
+                onImages={(format, dpi) => void exportImages(format, dpi)}
+            />
             <ProgressDialog
-                open={slow && progress !== null}
-                title='Assemblage du document'
-                description='Les pages sont copiées dans un PDF neuf, sur cet appareil.'
-                value={progress && progress.total > 0 ? progress.done / progress.total : undefined}
-                step={progress ? `Page ${progress.done} sur ${progress.total}` : undefined}
+                open={exporting !== null || (slow && progress !== null)}
+                title={exporting ? 'Export en cours' : 'Assemblage du document'}
+                description={
+                    exporting
+                        ? 'Chaque partie est assemblée sur cet appareil, puis rangée dans un zip.'
+                        : 'Les pages sont copiées dans un PDF neuf, sur cet appareil.'
+                }
+                value={
+                    exporting
+                        ? exporting.total > 0
+                            ? exporting.done / exporting.total
+                            : undefined
+                        : progress && progress.total > 0
+                          ? progress.done / progress.total
+                          : undefined
+                }
+                step={exporting ? exporting.step : progress ? `Page ${progress.done} sur ${progress.total}` : undefined}
             />
             <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
         </div>

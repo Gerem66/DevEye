@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs';
 
 import { BuildFailure, buildPdf, type BuildInput, type BuildSource } from './build';
 import type { PdfElement } from './elements';
+import { DEFAULT_FINISHING } from './finishing';
 import type { PlanPage } from './model';
 
 interface Spec {
@@ -346,5 +347,80 @@ describe('assemblage du PDF', () => {
             .join(' ');
         assert.match(text, /Gérémy Pérez/);
         await task.destroy();
+    });
+
+    it('numérote, filigrane, renseigne et protège le document produit', async () => {
+        const a = await makePdf([{ text: 'un' }, { text: 'deux' }, { text: 'trois' }]);
+        const fonts = {
+            sans: new Uint8Array(readFileSync('node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf')),
+            hand: null
+        };
+        const pages = [page('a', 0), page('a', 1), page('a', 2)];
+        const finishing = {
+            ...DEFAULT_FINISHING,
+            numbers: {
+                on: true,
+                position: 'bottom-center' as const,
+                format: 'n-total' as const,
+                start: 1,
+                skipFirst: true
+            },
+            watermark: { on: true, text: 'BROUILLON', size: 60, opacity: 0.2, diagonal: true },
+            metadata: { title: 'Mon titre', author: 'Moi', subject: '', strip: false },
+            password: 'secret'
+        };
+        const bytes = await buildPdf({ sources: [src('a', a)], images: [], pages, fonts, finishing });
+        await assert.rejects(PDFDocument.load(bytes), 'le document produit est protégé');
+        assert.equal((await PDFDocument.load(bytes, { password: 'secret' })).getPageCount(), 3);
+        const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+        const task = pdfjs.getDocument({
+            data: bytes.slice(),
+            password: 'secret',
+            useWorkerFetch: false,
+            standardFontDataUrl: 'node_modules/pdfjs-dist/standard_fonts/'
+        });
+        const doc = await task.promise;
+        const text = async (n: number) =>
+            (await (await doc.getPage(n)).getTextContent()).items.map((i) => ('str' in i ? i.str : '')).join(' ');
+        const { info } = await doc.getMetadata();
+        assert.equal((info as Record<string, unknown>).Title, 'Mon titre');
+        assert.equal((info as Record<string, unknown>).Author, 'Moi');
+        assert.doesNotMatch(await text(1), /1 \/ 2/, 'la page de garde ne porte pas de numéro');
+        assert.match(await text(1), /BROUILLON/);
+        assert.match(await text(2), /1 \/ 2/);
+        assert.match(await text(3), /2 \/ 2/);
+        await task.destroy();
+
+        // Un découpage continue la numérotation, et une page tournée se numérote droit.
+        const part = await buildPdf({
+            sources: [src('a', a)],
+            images: [],
+            pages: [page('a', 2, 90)],
+            fonts,
+            finishing: { ...finishing, password: null, watermark: DEFAULT_FINISHING.watermark },
+            numbering: { offset: 2, total: 3 }
+        });
+        const partTask = pdfjs.getDocument({
+            data: part.slice(),
+            useWorkerFetch: false,
+            standardFontDataUrl: 'node_modules/pdfjs-dist/standard_fonts/'
+        });
+        const partDoc = await partTask.promise;
+        const partText = (await (await partDoc.getPage(1)).getTextContent()).items
+            .map((i) => ('str' in i ? i.str : ''))
+            .join(' ');
+        assert.match(partText, /2 \/ 2/);
+        await partTask.destroy();
+
+        // Sans information : rien ne reste, même pas le producteur.
+        const stripped = await buildPdf({
+            sources: [src('a', a)],
+            images: [],
+            pages,
+            finishing: { ...DEFAULT_FINISHING, metadata: { ...DEFAULT_FINISHING.metadata, strip: true } }
+        });
+        const bare = await PDFDocument.load(stripped, { updateMetadata: false });
+        assert.equal(bare.getTitle() ?? '', '');
+        assert.equal(bare.getProducer() ?? '', '');
     });
 });

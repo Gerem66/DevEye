@@ -48,6 +48,9 @@ declare const styles: {
     readonly elSvg: string;
     readonly elText: string;
     readonly emptyDrop: string;
+    readonly exportPair: string;
+    readonly exportRow: string;
+    readonly exportSection: string;
     readonly fieldBox: string;
     readonly fieldCheck: string;
     readonly fieldError: string;
@@ -56,6 +59,13 @@ declare const styles: {
     readonly fieldListCheck: string;
     readonly fieldListInput: string;
     readonly fieldRow: string;
+    readonly finishAside: string;
+    readonly finishFields: string;
+    readonly finishPair: string;
+    readonly finishPreview: string;
+    readonly finishSection: string;
+    readonly finishSections: string;
+    readonly finishTab: string;
     readonly footer: string;
     readonly footerActions: string;
     readonly footerMeta: string;
@@ -86,6 +96,9 @@ declare const styles: {
     readonly overlayTool: string;
     readonly pageNav: string;
     readonly pageNavLabel: string;
+    readonly previewMargin: string;
+    readonly previewNumber: string;
+    readonly previewWatermark: string;
     readonly root: string;
     readonly savedCard: string;
     readonly savedImage: string;
@@ -106,6 +119,7 @@ declare const styles: {
     readonly subheading: string;
     readonly tab: string;
     readonly tabActive: string;
+    readonly tabLabel: string;
     readonly tabs: string;
     readonly textBlock: string;
     readonly textHead: string;

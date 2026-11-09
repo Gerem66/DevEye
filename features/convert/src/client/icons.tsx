@@ -34,7 +34,8 @@ export type PictoId =
     | 'ink'
     | 'redact'
     | 'prev'
-    | 'next';
+    | 'next'
+    | 'lock';
 
 const PATHS: Record<PictoId, ReactElement> = {
     video: (
@@ -185,6 +186,12 @@ const PATHS: Record<PictoId, ReactElement> = {
         <>
             <rect x='3' y='8' width='18' height='8' rx='1.5' />
             <path d='M3 4h8M3 20h12' />
+        </>
+    ),
+    lock: (
+        <>
+            <rect x='4' y='10' width='16' height='11' rx='2' />
+            <path d='M8 10V7a4 4 0 0 1 8 0v3' />
         </>
     ),
     prev: <path d='M15 5l-7 7 7 7' />,

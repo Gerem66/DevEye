@@ -51,6 +51,12 @@ const PDF_TOOLS: readonly { id: WorkshopIntent; picto: PictoId; label: string; d
         picto: 'text',
         label: 'Lire le texte',
         description: 'Le texte d’un PDF, page par page, à copier ou à télécharger.'
+    },
+    {
+        id: 'protect',
+        picto: 'lock',
+        label: 'Protéger et finir',
+        description: 'Mot de passe, numéros de page, filigrane, propriétés.'
     }
 ];
 

@@ -2,6 +2,7 @@ import { useCallback, useMemo, useReducer } from 'react';
 
 import type { FieldValue } from './build';
 import { rotateRect, type PdfElement } from './elements';
+import { DEFAULT_FINISHING, type Finishing } from './finishing';
 import {
     addImage,
     addSource,
@@ -38,6 +39,7 @@ interface Snapshot {
     fields: FieldValues;
     /** Les champs figés à l'export. */
     flatten: boolean;
+    finishing: Finishing;
 }
 
 interface State extends Snapshot {
@@ -69,6 +71,7 @@ type Action =
     | { type: 'removeElement'; id: string }
     | { type: 'setField'; sourceId: string; name: string; value: FieldValue }
     | { type: 'setFlatten'; flatten: boolean }
+    | { type: 'setFinishing'; patch: Partial<Finishing> }
     | { type: 'undo' }
     | { type: 'redo' };
 
@@ -79,6 +82,7 @@ const INITIAL: State = {
     elements: [],
     fields: {},
     flatten: false,
+    finishing: DEFAULT_FINISHING,
     selection: [],
     anchor: null,
     past: [],
@@ -89,7 +93,8 @@ const snapshotOf = (state: State): Snapshot => ({
     plan: state.plan,
     elements: state.elements,
     fields: state.fields,
-    flatten: state.flatten
+    flatten: state.flatten,
+    finishing: state.finishing
 });
 
 const prune = (selection: readonly string[], plan: Plan): string[] => {
@@ -110,7 +115,14 @@ function commit(state: State, next: Partial<Snapshot>, selection: readonly strin
     const elements = onPages(next.elements ?? state.elements, plan);
     const fields = next.fields ?? state.fields;
     const flatten = next.flatten ?? state.flatten;
-    if (plan === state.plan && elements === state.elements && fields === state.fields && flatten === state.flatten) {
+    const finishing = next.finishing ?? state.finishing;
+    if (
+        plan === state.plan &&
+        elements === state.elements &&
+        fields === state.fields &&
+        flatten === state.flatten &&
+        finishing === state.finishing
+    ) {
         return state;
     }
     return {
@@ -118,6 +130,7 @@ function commit(state: State, next: Partial<Snapshot>, selection: readonly strin
         elements,
         fields,
         flatten,
+        finishing,
         selection: prune(selection, plan),
         anchor: state.anchor !== null && plan.pages.some((p) => p.id === state.anchor) ? state.anchor : null,
         past: [...state.past.slice(-(HISTORY_MAX - 1)), snapshotOf(state)],
@@ -210,6 +223,8 @@ function reduce(state: State, action: Action): State {
         }
         case 'setFlatten':
             return commit(state, { flatten: action.flatten });
+        case 'setFinishing':
+            return commit(state, { finishing: { ...state.finishing, ...action.patch } });
         case 'undo': {
             const previous = state.past.at(-1);
             if (!previous) return state;
@@ -249,6 +264,7 @@ export function usePdfWorkshop() {
             elements: state.elements,
             fields: state.fields,
             flatten: state.flatten,
+            finishing: state.finishing,
             selection: state.selection,
             canUndo: state.past.length > 0,
             canRedo: state.future.length > 0,

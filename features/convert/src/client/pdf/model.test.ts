@@ -35,7 +35,8 @@ const source = (id: string, pages: number, rotate: 0 | 90 = 0): SourceInfo => ({
     protectedByPassword: false,
     hasForm: false,
     pureXfa: false,
-    color: 0
+    color: 0,
+    meta: { title: '', author: '', subject: '' }
 });
 
 const ids = (plan: Plan) => plan.pages.map((p) => p.id);
