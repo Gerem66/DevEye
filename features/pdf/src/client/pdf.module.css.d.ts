@@ -130,6 +130,7 @@ declare const styles: {
     readonly tabActive: string;
     readonly tabLabel: string;
     readonly tabs: string;
+    readonly tabsApart: string;
     readonly textBlock: string;
     readonly textHead: string;
     readonly textOrigin: string;

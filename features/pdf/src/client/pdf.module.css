@@ -126,6 +126,15 @@
     color: var(--accent);
 }
 
+/* Les onglets qui lisent le document sans le changer, à l'écart des autres. */
+.tabsApart {
+    display: flex;
+    gap: var(--space-xs);
+    margin-left: auto;
+    padding-left: var(--space-xs);
+    border-left: 1px solid var(--glass-border);
+}
+
 .body {
     position: relative;
     display: flex;
@@ -587,6 +596,10 @@
     /* Cinq onglets ne tiennent pas : seul l'ouvert garde son libellé, les autres leur icône. */
     .tabs {
         justify-content: space-between;
+    }
+
+    .tabsApart {
+        margin-left: 0;
     }
 
     .tab .tabLabel {

@@ -53,13 +53,14 @@ const PROGRESS_DELAY_MS = 400;
 /** Le temps laissé au navigateur pour lire une adresse `blob:` avant qu'elle ne soit rendue. */
 const BLOB_URL_TTL_MS = 60_000;
 
-type Tab = 'pages' | 'edit' | 'form' | 'text' | 'finish';
-const TABS: readonly { id: Tab; label: string; icon: string }[] = [
+type Tab = 'pages' | 'edit' | 'form' | 'finish' | 'text';
+/** `apart` : l'onglet ne change pas le document, il le lit. Il se tient à l'écart des autres. */
+const TABS: readonly { id: Tab; label: string; icon: string; apart?: boolean }[] = [
     { id: 'pages', label: 'Pages', icon: 'file' },
     { id: 'edit', label: 'Signer et annoter', icon: 'edit' },
     { id: 'form', label: 'Formulaire', icon: 'square-check' },
-    { id: 'text', label: 'Texte', icon: 'notes' },
-    { id: 'finish', label: 'Finitions', icon: 'format' }
+    { id: 'finish', label: 'Finitions', icon: 'format' },
+    { id: 'text', label: 'Texte', icon: 'notes', apart: true }
 ];
 
 const TAB_OF_INTENT: Partial<Record<WorkshopIntent, Tab>> = {
@@ -353,6 +354,21 @@ export default function PdfWorkshop({ initialFiles, intent, onLeave }: PdfWorksh
 
     const empty = plan.pages.length === 0;
 
+    const tabButton = (t: (typeof TABS)[number]) => (
+        <button
+            key={t.id}
+            type='button'
+            className={t.id === shown ? styles.tabActive : styles.tab}
+            aria-current={t.id === shown ? 'page' : undefined}
+            disabled={t.id !== 'pages' && empty}
+            title={t.label}
+            onClick={() => setTab(t.id)}
+        >
+            <span className={`icon icon-${t.icon}`} aria-hidden='true' />
+            <span className={styles.tabLabel}>{t.label}</span>
+        </button>
+    );
+
     return (
         <div className={styles.root}>
             <StickyHeader className={styles.headBand}>
@@ -393,20 +409,8 @@ export default function PdfWorkshop({ initialFiles, intent, onLeave }: PdfWorksh
                     </div>
                 </header>
                 <nav className={styles.tabs} aria-label='Parties de l’atelier'>
-                    {tabs.map((t) => (
-                        <button
-                            key={t.id}
-                            type='button'
-                            className={t.id === shown ? styles.tabActive : styles.tab}
-                            aria-current={t.id === shown ? 'page' : undefined}
-                            disabled={t.id !== 'pages' && empty}
-                            title={t.label}
-                            onClick={() => setTab(t.id)}
-                        >
-                            <span className={`icon icon-${t.icon}`} aria-hidden='true' />
-                            <span className={styles.tabLabel}>{t.label}</span>
-                        </button>
-                    ))}
+                    {tabs.filter((t) => !t.apart).map(tabButton)}
+                    <div className={styles.tabsApart}>{tabs.filter((t) => t.apart).map(tabButton)}</div>
                 </nav>
             </StickyHeader>
 
