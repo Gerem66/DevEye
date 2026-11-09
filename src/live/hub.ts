@@ -78,13 +78,13 @@ const SAY_FLOOR_MS = 100;
 const BACKPRESSURE_BYTES = 64 * 1024;
 
 /**
- * La place d'une connexion dans un canal de curseurs, posée par le module qui a
- * vérifié qu'elle voit l'élément (`ctx.live.joinCursors`).
+ * Le laissez-passer d'une connexion pour un canal de curseurs, donné par le
+ * module qui a vérifié qu'elle voit l'élément (`ctx.live.joinCursors`).
  */
-export interface CursorSeat {
+export interface CursorPass {
     channel: string;
     feature: FeatureId;
-    /** L'espace de la commande qui l'a assise : celui qu'affiche son client. */
+    /** L'espace de la commande qui l'a donné : celui qu'affiche son client. */
     workspaceId: number;
     /** Son pseudo, pour les pairs d'un autre espace qui ne le connaissent pas. */
     name: string;
@@ -125,7 +125,7 @@ export interface LiveConn {
     cursor: LiveCursor | null;
     /** La surface de ce curseur : le canal que nomme sa dernière trame, `null` pour la popup. */
     cursorChannel: string | null;
-    cursorSeat: CursorSeat | null;
+    cursorPass: CursorPass | null;
     cursorAt: number;
     cursorStrikes: number;
     /** A reçu des curseurs au dernier envoi : sert à lui livrer la liste vide. */
@@ -160,10 +160,10 @@ export interface LiveTransport {
     colorChanged(color: UserColor): void;
     /** Annonce (ou retire) « en train d'écrire » aux pairs du même lieu. */
     typing(typing: boolean): void;
-    /** Assied cette connexion dans un canal de curseurs ; rend son identifiant, `null` si elle est partie. */
-    seatCursors(seat: CursorSeat, color: UserColor): string | null;
-    /** La relève de ce canal, si elle y est assise. */
-    unseatCursors(channel: string): void;
+    /** Ouvre un canal de curseurs à cette connexion ; rend son identifiant, `null` si elle est partie. */
+    grantCursors(pass: CursorPass, color: UserColor): string | null;
+    /** Lui retire ce canal, si elle y a son laissez-passer. */
+    revokeCursors(channel: string): void;
 
     // -- portée : le moteur entier, après une mutation d'accès -------------
     // À appeler partout où `invalidateAccess()` l'est : celle-ci n'est relue
@@ -261,7 +261,7 @@ export class LiveHub {
             hasTypingPeers: false,
             cursor: null,
             cursorChannel: null,
-            cursorSeat: null,
+            cursorPass: null,
             cursorAt: 0,
             cursorStrikes: 0,
             hasCursorPeers: false,
@@ -282,7 +282,7 @@ export class LiveHub {
         const conn = this.bySocket.get(socket);
         if (!conn) return;
         this.bySocket.delete(socket);
-        this.unseat(conn);
+        this.revokePass(conn);
         this.leaveRoom(conn);
         if (!this.holdsSocket(conn.userId)) this.lastSocketGone?.(conn.userId, conn.seat);
     }
@@ -408,8 +408,8 @@ export class LiveHub {
     private leaveRoom(conn: LiveConn): void {
         const wsId = conn.workspaceId;
         if (wsId === null) return;
-        // Quitter l'espace de son siège, c'est quitter l'élément qui le donnait.
-        if (conn.cursorSeat?.workspaceId === wsId) this.unseat(conn);
+        // Quitter l'espace qui a donné le laissez-passer, c'est quitter l'élément qu'il ouvrait.
+        if (conn.cursorPass?.workspaceId === wsId) this.revokePass(conn);
         const room = this.byWorkspace.get(wsId);
         room?.delete(conn);
         if (room && room.size === 0) this.byWorkspace.delete(wsId);
@@ -429,7 +429,7 @@ export class LiveHub {
      * connexion assise n'émet pas forcément.
      */
     evict(workspaceId: number, userId: number): void {
-        this.unseatWhere((conn) => conn.userId === userId && conn.cursorSeat?.workspaceId === workspaceId);
+        this.revokePassWhere((conn) => conn.userId === userId && conn.cursorPass?.workspaceId === workspaceId);
         const room = this.byWorkspace.get(workspaceId);
         if (!room) return;
         for (const conn of [...room]) {
@@ -444,7 +444,7 @@ export class LiveHub {
 
     /** Le compte est suspendu ou supprimé : il sort de partout. */
     evictEverywhere(userId: number): void {
-        this.unseatWhere((conn) => conn.userId === userId);
+        this.revokePassWhere((conn) => conn.userId === userId);
         for (const conn of [...this.bySocket.values()]) {
             if (conn.userId !== userId || conn.workspaceId === null) continue;
             this.evict(conn.workspaceId, userId);
@@ -473,7 +473,7 @@ export class LiveHub {
 
     /** L'espace a disparu : sa salle avec lui. */
     evictRoom(workspaceId: number): void {
-        this.unseatWhere((conn) => conn.cursorSeat?.workspaceId === workspaceId);
+        this.revokePassWhere((conn) => conn.cursorPass?.workspaceId === workspaceId);
         const room = this.byWorkspace.get(workspaceId);
         if (!room) return;
         for (const conn of [...room]) {
@@ -537,19 +537,19 @@ export class LiveHub {
         const epoch = accessEpochNow();
         await Promise.all(
             [...room].map(async (conn) => {
-                const seat = conn.cursorSeat?.workspaceId === workspaceId ? conn.cursorSeat : null;
+                const pass = conn.cursorPass?.workspaceId === workspaceId ? conn.cursorPass : null;
                 try {
                     const perms = await permissionsFor(db, conn.userId, row);
                     conn.grants.set(workspaceId, {
                         features: new Map(perms.features.map((g) => [g.feature, g.access])),
                         epoch
                     });
-                    if (seat && !perms.features.some((g) => g.feature === seat.feature)) this.unseat(conn);
+                    if (pass && !perms.features.some((g) => g.feature === pass.feature)) this.revokePass(conn);
                 } catch {
                     // Compte devenu illisible (suspendu, supprimé) : on le laisse
                     // sans droits plutôt que de conserver les anciens.
                     conn.grants.delete(workspaceId);
-                    if (seat) this.unseat(conn);
+                    if (pass) this.revokePass(conn);
                 }
             })
         );
@@ -675,12 +675,12 @@ export class LiveHub {
      * L'espace de l'enveloppe est ignoré (il n'est validé que par
      * `access.forWorkspace()`, court-circuité ici) : seul `conn.workspaceId`,
      * posé par un `live.here` passé par le dispatcheur, fait foi. Un canal ne
-     * s'emprunte que là où un module a assis la connexion.
+     * s'emprunte qu'avec le laissez-passer qu'un module a donné à la connexion.
      */
     cursor(socket: WebSocket, frame: LiveCursorFrame): void {
         const conn = this.bySocket.get(socket);
         if (!conn) return;
-        if (frame.channel === null ? conn.workspaceId === null : conn.cursorSeat?.channel !== frame.channel) return;
+        if (frame.channel === null ? conn.workspaceId === null : conn.cursorPass?.channel !== frame.channel) return;
 
         const now = Date.now();
         if (now - conn.cursorAt < CURSOR_FLOOR_MS) {
@@ -704,30 +704,30 @@ export class LiveHub {
         this.markCursorsOf(conn);
     }
 
-    /** Assise par le module, qui a vérifié qu'elle voit l'élément ; son curseur n'y entre qu'en le nommant. */
-    seatCursors(socket: WebSocket, seat: CursorSeat, color: UserColor): string | null {
+    /** Donné par le module, qui a vérifié qu'elle voit l'élément ; son curseur n'y entre qu'en le nommant. */
+    grantCursors(socket: WebSocket, pass: CursorPass, color: UserColor): string | null {
         const conn = this.bySocket.get(socket);
         if (!conn) return null;
-        if (conn.cursorSeat?.channel !== seat.channel) this.unseat(conn);
-        conn.cursorSeat = seat;
-        // Assise avant son premier `live.here` : sa couleur voyage quand même.
+        if (conn.cursorPass?.channel !== pass.channel) this.revokePass(conn);
+        conn.cursorPass = pass;
+        // Donné avant son premier `live.here` : sa couleur voyage quand même.
         conn.color ??= color;
         return conn.connId;
     }
 
-    unseatCursors(socket: WebSocket, channel: string): void {
+    revokeCursors(socket: WebSocket, channel: string): void {
         const conn = this.bySocket.get(socket);
-        if (conn?.cursorSeat?.channel === channel) this.unseat(conn);
+        if (conn?.cursorPass?.channel === channel) this.revokePass(conn);
     }
 
-    private unseat(conn: LiveConn): void {
-        if (conn.cursorSeat === null) return;
-        if (conn.cursorChannel === conn.cursorSeat.channel) this.moveCursor(conn, null);
-        conn.cursorSeat = null;
+    private revokePass(conn: LiveConn): void {
+        if (conn.cursorPass === null) return;
+        if (conn.cursorChannel === conn.cursorPass.channel) this.moveCursor(conn, null);
+        conn.cursorPass = null;
     }
 
-    private unseatWhere(match: (conn: LiveConn) => boolean): void {
-        for (const conn of this.bySocket.values()) if (match(conn)) this.unseat(conn);
+    private revokePassWhere(match: (conn: LiveConn) => boolean): void {
+        for (const conn of this.bySocket.values()) if (match(conn)) this.revokePass(conn);
     }
 
     /**
@@ -978,9 +978,9 @@ export class LiveHub {
         return members ? [[...members]] : [];
     }
 
-    /** L'espace qu'affiche le client de cette connexion : celui de son siège quand son curseur est dans un canal. */
+    /** L'espace qu'affiche le client de cette connexion : celui de son laissez-passer quand son curseur est dans un canal. */
     private shownWorkspace(conn: LiveConn): number | null {
-        return conn.cursorChannel !== null ? (conn.cursorSeat?.workspaceId ?? null) : conn.workspaceId;
+        return conn.cursorChannel !== null ? (conn.cursorPass?.workspaceId ?? null) : conn.workspaceId;
     }
 
     /** Les curseurs ne circulent qu'entre pairs d'une même surface. */
@@ -997,7 +997,7 @@ export class LiveHub {
                                   connId: peer.connId,
                                   userId: peer.userId,
                                   color: peer.color,
-                                  name: channel === null ? null : (peer.cursorSeat?.name ?? null),
+                                  name: channel === null ? null : (peer.cursorPass?.name ?? null),
                                   cursor: peer.cursor
                               }
                           ]
@@ -1081,8 +1081,8 @@ export function createLiveTransport(hub: LiveHub, socket: WebSocket): LiveTransp
         here: (workspaceId, path, color) => hub.here(socket, workspaceId, path, color),
         colorChanged: (color) => hub.colorChanged(socket, color),
         typing: (typing) => hub.typing(socket, typing),
-        seatCursors: (seat, color) => hub.seatCursors(socket, seat, color),
-        unseatCursors: (channel) => hub.unseatCursors(socket, channel),
+        grantCursors: (pass, color) => hub.grantCursors(socket, pass, color),
+        revokeCursors: (channel) => hub.revokeCursors(socket, channel),
         evict: (workspaceId, userId) => hub.evict(workspaceId, userId),
         evictEverywhere: (userId) => hub.evictEverywhere(userId),
         evictRoom: (workspaceId) => hub.evictRoom(workspaceId),

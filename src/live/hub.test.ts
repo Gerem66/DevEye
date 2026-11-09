@@ -4,7 +4,7 @@ import { describe, it, type TestContext } from 'node:test';
 import type { WebSocket } from '@fastify/websocket';
 import { LIVE_CURSORS_EVENT, LIVE_PEERS_EVENT, type LiveCursor } from '@deveye/types';
 
-import { LiveHub, type CursorSeat } from './hub';
+import { LiveHub, type CursorPass } from './hub';
 
 const AT: LiveCursor = { x: 120, y: -40, kind: 'default' };
 const BOARD = ['view:whiteboard', 'l1:7'];
@@ -36,7 +36,7 @@ function harness(t: TestContext) {
         live.here(workspaceId, BOARD, 'blue');
         return { ...s, live };
     };
-    const seat = (workspaceId: number, name: string): CursorSeat => ({
+    const pass = (workspaceId: number, name: string): CursorPass => ({
         channel: CHANNEL,
         feature: 'whiteboard',
         workspaceId,
@@ -45,17 +45,17 @@ function harness(t: TestContext) {
     const tick = () => t.mock.timers.tick(100);
     const cursorsOf = (frames: { command: string; data: Record<string, unknown> }[]) =>
         frames.filter((f) => f.command === LIVE_CURSORS_EVENT).at(-1)?.data;
-    return { hub, join, seat, tick, cursorsOf };
+    return { hub, join, pass, tick, cursorsOf };
 }
 
 describe('LiveHub : curseurs dans un canal', () => {
-    it('relie deux espaces assis dans le même canal, et eux seuls', (t) => {
+    it('relie deux espaces entrés dans le même canal, et eux seuls', (t) => {
         const h = harness(t);
         const alice = h.join(1, 10);
         const bob = h.join(2, 20);
         const carol = h.join(3, 10);
-        const aliceConn = alice.live.seatCursors(h.seat(10, 'alice'), 'red');
-        bob.live.seatCursors(h.seat(20, 'bob'), 'green');
+        const aliceConn = alice.live.grantCursors(h.pass(10, 'alice'), 'red');
+        bob.live.grantCursors(h.pass(20, 'bob'), 'green');
         h.tick();
 
         h.hub.cursor(alice.ws, { cursor: AT, channel: CHANNEL });
@@ -77,11 +77,11 @@ describe('LiveHub : curseurs dans un canal', () => {
         assert.equal(peers.find((p) => p.userId === 1)?.cursor, null);
     });
 
-    it('ignore une trame qui nomme un canal où la connexion n’est pas assise', (t) => {
+    it('ignore une trame qui nomme un canal sans laissez-passer', (t) => {
         const h = harness(t);
         const alice = h.join(1, 10);
         const mallory = h.join(4, 10);
-        alice.live.seatCursors(h.seat(10, 'alice'), 'red');
+        alice.live.grantCursors(h.pass(10, 'alice'), 'red');
         h.hub.cursor(alice.ws, { cursor: null, channel: CHANNEL });
         h.tick();
 
@@ -95,28 +95,28 @@ describe('LiveHub : curseurs dans un canal', () => {
         const h = harness(t);
         const alice = h.join(1, 10);
         const bob = h.join(2, 20);
-        alice.live.seatCursors(h.seat(10, 'alice'), 'red');
-        bob.live.seatCursors(h.seat(20, 'bob'), 'green');
+        alice.live.grantCursors(h.pass(10, 'alice'), 'red');
+        bob.live.grantCursors(h.pass(20, 'bob'), 'green');
         h.hub.cursor(alice.ws, { cursor: AT, channel: CHANNEL });
         h.hub.cursor(bob.ws, { cursor: null, channel: CHANNEL });
         h.tick();
         assert.equal((h.cursorsOf(bob.frames)?.cursors as unknown[]).length, 1);
 
-        alice.live.unseatCursors(CHANNEL);
+        alice.live.revokeCursors(CHANNEL);
         h.tick();
         assert.deepEqual(h.cursorsOf(bob.frames)?.cursors, []);
-        // Plus assise : son curseur n'y rentre plus.
+        // Plus de laissez-passer : son curseur n'y rentre plus.
         h.hub.cursor(alice.ws, { cursor: AT, channel: CHANNEL });
         h.tick();
         assert.deepEqual(h.cursorsOf(bob.frames)?.cursors, []);
     });
 
-    it('désassied qui quitte l’espace de son siège', (t) => {
+    it('retire le canal à qui quitte l’espace qui l’a ouvert', (t) => {
         const h = harness(t);
         const alice = h.join(1, 10);
         const bob = h.join(2, 20);
-        alice.live.seatCursors(h.seat(10, 'alice'), 'red');
-        bob.live.seatCursors(h.seat(20, 'bob'), 'green');
+        alice.live.grantCursors(h.pass(10, 'alice'), 'red');
+        bob.live.grantCursors(h.pass(20, 'bob'), 'green');
         h.hub.cursor(alice.ws, { cursor: null, channel: CHANNEL });
         h.tick();
 

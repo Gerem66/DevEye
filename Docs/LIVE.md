@@ -174,9 +174,9 @@ L'appartenance reste la frontière, et la présence ne la contourne pas.
   propres gardes ; ici `null` voudrait dire « visible par tous ». D'où un
   troisième cas, plutôt qu'une réutilisation.
 - **Un canal de curseurs ne s'ouvre que par un module.** Le hub ne vérifie
-  que le siège : c'est la commande du module qui l'accorde, après sa propre
-  garde sur l'élément (`whiteboard.join`). Une trame qui nomme un canal sans
-  siège est jetée.
+  que le laissez-passer : c'est la commande du module qui le donne, après sa
+  propre garde sur l'élément (`whiteboard.join`). Une trame qui nomme un canal
+  sans laissez-passer est jetée.
 - **La voie rapide des curseurs ignore l'espace de l'enveloppe.** Il est contrôlé
   par le client et n'est validé que dans `access.forWorkspace()`, que cette voie
   court-circuite. Seul `conn.workspaceId`, posé par un `live.here` passé par le
@@ -438,10 +438,10 @@ profite aussi.
 
 Les pairs ne sont plus ceux du même chemin mais ceux d'un **canal**,
 `feature:clé`, d'où que vienne leur connexion : un élément projeté réunit des
-membres de plusieurs espaces. Seul le serveur du module y assied une connexion
-(`ctx.live.joinCursors`), après avoir vérifié qu'elle voit l'élément. Chaque
+membres de plusieurs espaces. Seul le serveur du module y fait entrer une
+connexion (`ctx.live.joinCursors`), après avoir vérifié qu'elle voit l'élément. Chaque
 trame nomme sa surface (`channel`, `null` pour la popup), ce qui rend sans
-ambiguïté le passage de l'une à l'autre. Le siège tombe avec `leaveCursors`, la
+ambiguïté le passage de l'une à l'autre. Le laissez-passer tombe avec `leaveCursors`, la
 sortie de l'espace qui l'a donné, la perte de la lecture de la feature
 (`resync`), une expulsion ou la fermeture de la socket. Une trame de canal
 porte le pseudo et la couleur de chacun, qu'un pair d'un autre espace ne

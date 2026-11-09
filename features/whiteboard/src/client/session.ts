@@ -180,7 +180,7 @@ export class BoardSession {
                 mine((f) => this.set({ closed: f.reason }))
             ),
             onSocketOpen(() => {
-                // Le siège dans le canal tenait à l'ancienne socket : la surface attend la nouvelle entrée.
+                // Le laissez-passer du canal tenait à l'ancienne socket : la surface attend la nouvelle entrée.
                 this.set({ channel: null });
                 void this.join();
             }),

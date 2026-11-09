@@ -141,7 +141,7 @@ export function createSdkContext(
         live: {
             publish: (event, payload) => publishFrame(manifest, ctx.workspaceId, event, payload),
             joinCursors: (key) => joinCursors(ctx, manifest, key),
-            leaveCursors: (key) => ctx.live?.unseatCursors(cursorChannelOf(manifest, key)),
+            leaveCursors: (key) => ctx.live?.revokeCursors(cursorChannelOf(manifest, key)),
             accountChanged: (userId) => accountChanged(ctx.db, manifest, userId),
             pendingChanged: () => adminPending.changed()
         },
@@ -273,7 +273,7 @@ async function joinCursors(
     if (!ctx.live) return null;
     const account = await ctx.db.users.findById(ctx.userId);
     if (!account) return null;
-    const connId = ctx.live.seatCursors(
+    const connId = ctx.live.grantCursors(
         { channel, feature: manifest.id, workspaceId: ctx.workspaceId, name: account.username },
         account.color
     );
