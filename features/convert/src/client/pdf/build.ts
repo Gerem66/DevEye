@@ -5,12 +5,17 @@ import {
     EncryptedPDFError,
     LineCapStyle,
     PDFArray,
+    PDFCheckBox,
     PDFDict,
     PDFDocument,
+    PDFDropdown,
     PDFName,
     PDFObjectCopier,
+    PDFOptionList,
     PDFPage,
+    PDFRadioGroup,
     PDFRef,
+    PDFTextField,
     rgb,
     StandardFonts,
     type PDFFont,
@@ -87,7 +92,14 @@ export interface BuildInput {
     assets?: readonly BuildAsset[];
     fonts?: BuildFonts;
     redactions?: readonly BuildRedaction[];
+    /** Les valeurs saisies, par fichier puis par nom de champ. */
+    fields?: Readonly<Record<string, Readonly<Record<string, FieldValue>>>>;
+    /** Les champs deviennent du contenu : plus rien ne se remplit dans le document produit. */
+    flatten?: boolean;
 }
+
+/** Ce qu'un champ de formulaire vaut : une case ou un bouton radio, ou un texte (un choix se donne par sa valeur). */
+export type FieldValue = string | boolean;
 
 export type BuildProgress = (done: number, total: number) => void;
 
@@ -139,6 +151,43 @@ function flattenForm(doc: PDFDocument): void {
         doc.getForm().flatten({ updateFieldAppearances: false });
     } catch {
         doc.catalog.delete(ACRO_FORM);
+    }
+}
+
+/**
+ * Écrit les valeurs saisies dans les champs du fichier, puis redessine leur
+ * apparence avec une police Unicode : celle de pdf-lib n'écrit que le
+ * Latin-1. Un champ qui n'existe plus, ou d'un autre type, est passé.
+ */
+async function fillForm(
+    doc: PDFDocument,
+    values: Readonly<Record<string, FieldValue>>,
+    fonts: BuildFonts
+): Promise<void> {
+    const form = doc.getForm();
+    for (const [name, value] of Object.entries(values)) {
+        try {
+            const field = form.getField(name);
+            if (field instanceof PDFTextField) {
+                if (typeof value === 'string') field.setText(value === '' ? undefined : value);
+            } else if (field instanceof PDFCheckBox) {
+                if (value === true) field.check();
+                else if (value === false) field.uncheck();
+            } else if (field instanceof PDFRadioGroup) {
+                if (typeof value === 'string' && field.getOptions().includes(value)) field.select(value);
+            } else if (field instanceof PDFDropdown || field instanceof PDFOptionList) {
+                if (typeof value === 'string' && field.getOptions().includes(value)) field.select(value);
+            }
+        } catch {
+            // Un nom que le fichier ne porte plus, ou une valeur qu'il refuse : rien à écrire.
+        }
+    }
+    try {
+        doc.registerFontkit(fontkit);
+        const font = fonts.sans ? await doc.embedFont(fonts.sans, { subset: true }).catch(() => null) : null;
+        form.updateFieldAppearances(font ?? (await doc.embedFont(StandardFonts.Helvetica)));
+    } catch {
+        // Une apparence que pdf-lib ne sait pas dessiner : le lecteur la refera depuis la valeur.
     }
 }
 
@@ -407,8 +456,12 @@ export async function buildPdf(input: BuildInput, onProgress: BuildProgress = ()
     // fondent pas en un (noms de champs, polices) : venus de plusieurs fichiers,
     // ils sont figés en contenu.
     const withForm = [...loaded.entries()].filter(([, l]) => acroFormOf(l.doc) !== undefined);
-    const formOwner = withForm.length === 1 ? withForm[0][0] : null;
+    const formOwner = withForm.length === 1 && !input.flatten ? withForm[0][0] : null;
     for (const [id, l] of withForm) {
+        const values = input.fields?.[id];
+        if (values && Object.keys(values).length > 0) {
+            await fillForm(l.doc, values, input.fonts ?? { sans: null, hand: null });
+        }
         if (id === formOwner) {
             const kept = new Set(
                 input.pages.flatMap((p) => (p.kind === 'source' && p.sourceId === id ? [p.index] : []))

@@ -48,8 +48,14 @@ declare const styles: {
     readonly elSvg: string;
     readonly elText: string;
     readonly emptyDrop: string;
+    readonly fieldBox: string;
+    readonly fieldCheck: string;
     readonly fieldError: string;
+    readonly fieldInput: string;
     readonly fieldLabel: string;
+    readonly fieldListCheck: string;
+    readonly fieldListInput: string;
+    readonly fieldRow: string;
     readonly footer: string;
     readonly footerActions: string;
     readonly footerMeta: string;
@@ -101,6 +107,11 @@ declare const styles: {
     readonly tab: string;
     readonly tabActive: string;
     readonly tabs: string;
+    readonly textBlock: string;
+    readonly textHead: string;
+    readonly textOrigin: string;
+    readonly textPage: string;
+    readonly textPages: string;
     readonly thumb: string;
     readonly thumbBox: string;
     readonly thumbPending: string;
@@ -108,6 +119,9 @@ declare const styles: {
     readonly toolButton: string;
     readonly toolLabel: string;
     readonly toolbar: string;
+    readonly toolbarEnd: string;
+    readonly toolbarText: string;
     readonly tools: string;
+    readonly warning: string;
 };
 export = styles;

@@ -569,8 +569,8 @@
 }
 
 .pdfTools {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
     gap: var(--space-sm);
     margin: 0;
     padding: 0;

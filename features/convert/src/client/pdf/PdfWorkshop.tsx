@@ -21,6 +21,7 @@ import { Picto } from '../icons';
 import { addImage, buildInputOf, forgetAll, openSource } from './documents';
 import { EditTab } from './EditTab';
 import { buildFonts } from './fonts';
+import { FormTab } from './FormTab';
 import {
     isImageFile,
     isPdfFile,
@@ -35,6 +36,7 @@ import { PasswordDialog, type PasswordRequest } from './PasswordDialog';
 import styles from './pdf.module.css';
 import { NeedsPassword } from './pdfjs';
 import { redactedPages } from './raster';
+import { TextTab } from './TextTab';
 import { clearThumbnails } from './thumbnails';
 import { useBuild } from './useBuild';
 import { usePdfWorkshop, type OpenedFile } from './usePdfWorkshop';
@@ -45,11 +47,15 @@ const PROGRESS_DELAY_MS = 400;
 /** Le temps laissé au navigateur pour lire une adresse `blob:` avant qu'elle ne soit rendue. */
 const BLOB_URL_TTL_MS = 60_000;
 
-type Tab = 'pages' | 'edit';
+type Tab = 'pages' | 'edit' | 'form' | 'text';
 const TABS: readonly { id: Tab; label: string; icon: string }[] = [
     { id: 'pages', label: 'Pages', icon: 'file' },
-    { id: 'edit', label: 'Signer et annoter', icon: 'edit' }
+    { id: 'edit', label: 'Signer et annoter', icon: 'edit' },
+    { id: 'form', label: 'Formulaire', icon: 'square-check' },
+    { id: 'text', label: 'Texte', icon: 'notes' }
 ];
+
+const TAB_OF_INTENT: Partial<Record<WorkshopIntent, Tab>> = { sign: 'edit', form: 'form', text: 'text' };
 
 interface PdfWorkshopProps {
     initialFiles: readonly File[];
@@ -66,8 +72,12 @@ export default function PdfWorkshop({ initialFiles, intent, onLeave }: PdfWorksh
     useSubView('pdf');
     useRequestPopupWidth(POPUP_WIDTH);
     const workshop = usePdfWorkshop();
-    const { plan, elements, selection, act } = workshop;
-    const [tab, setTab] = useState<Tab>(intent === 'sign' ? 'edit' : 'pages');
+    const { plan, elements, fields, flatten, selection, act } = workshop;
+    const [tab, setTab] = useState<Tab>(TAB_OF_INTENT[intent] ?? 'pages');
+    // L'onglet Formulaire n'existe que s'il y a des champs à remplir.
+    const hasForm = plan.sources.some((s) => s.hasForm);
+    const tabs = TABS.filter((t) => t.id !== 'form' || hasForm);
+    const shown: Tab = tab === 'form' && !hasForm ? 'pages' : tab;
     const [opening, setOpening] = useState(0);
     const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [password, setPassword] = useState<PasswordRequest | null>(null);
@@ -171,7 +181,15 @@ export default function PdfWorkshop({ initialFiles, intent, onLeave }: PdfWorksh
                     { ...plan, pages },
                     elements.filter((e) => kept.has(e.pageId))
                 );
-                const bytes = await build({ ...buildInputOf(plan), pages, elements, fonts, redactions });
+                const bytes = await build({
+                    ...buildInputOf(plan),
+                    pages,
+                    elements,
+                    fonts,
+                    redactions,
+                    fields,
+                    flatten
+                });
                 const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
                 const name = outputName(plan);
                 saveFrom(url, ids ? name.replace(/\.pdf$/, ' (extrait).pdf') : name);
@@ -180,7 +198,7 @@ export default function PdfWorkshop({ initialFiles, intent, onLeave }: PdfWorksh
                 setError(errorNote(e, 'Le document n’a pas pu être assemblé.'));
             }
         },
-        [build, plan, elements]
+        [build, plan, elements, fields, flatten]
     );
 
     const pick = (): void => {
@@ -246,12 +264,12 @@ export default function PdfWorkshop({ initialFiles, intent, onLeave }: PdfWorksh
                     </div>
                 </header>
                 <nav className={styles.tabs} aria-label='Parties de l’atelier'>
-                    {TABS.map((t) => (
+                    {tabs.map((t) => (
                         <button
                             key={t.id}
                             type='button'
-                            className={t.id === tab ? styles.tabActive : styles.tab}
-                            aria-current={t.id === tab ? 'page' : undefined}
+                            className={t.id === shown ? styles.tabActive : styles.tab}
+                            aria-current={t.id === shown ? 'page' : undefined}
                             disabled={t.id !== 'pages' && empty}
                             onClick={() => setTab(t.id)}
                         >
@@ -274,8 +292,12 @@ export default function PdfWorkshop({ initialFiles, intent, onLeave }: PdfWorksh
                         accept={WORKSHOP_ACCEPT}
                         onFiles={(picked) => void addFiles(picked.map((p) => p.file))}
                     />
-                ) : tab === 'edit' ? (
+                ) : shown === 'edit' ? (
                     <EditTab workshop={workshop} />
+                ) : shown === 'form' ? (
+                    <FormTab workshop={workshop} />
+                ) : shown === 'text' ? (
+                    <TextTab workshop={workshop} />
                 ) : (
                     <PagesTab
                         workshop={workshop}

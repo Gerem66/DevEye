@@ -140,6 +140,16 @@
     color: var(--text-muted);
 }
 
+.warning {
+    margin: 0;
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    background: var(--warning-bg);
+    color: var(--warning);
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
 /* ---- Les fichiers, en pastilles ---- */
 .strip {
     position: relative;
@@ -1015,4 +1025,120 @@
     .inspector {
         position: static;
     }
+}
+
+/* ---- Formulaire ---- */
+.toolbarText {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.toolbarEnd {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-shrink: 0;
+}
+
+.fieldBox {
+    position: absolute;
+    display: flex;
+}
+
+/* Les champs posés sur la page : du papier qui laisse voir le trait du formulaire, et l'accent qui dit qu'on peut écrire. */
+.fieldInput {
+    width: 100%;
+    height: 100%;
+    padding: 0 3px;
+    border: 1px solid var(--accent);
+    border-radius: 2px;
+    background: var(--accent-bg);
+    color: #1a1a1f;
+    font: inherit;
+    line-height: 1.2;
+    resize: none;
+}
+
+.fieldInput:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+    background: var(--paper);
+}
+
+.fieldCheck {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+.fieldRow {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.fieldListInput {
+    width: 100%;
+    padding: var(--space-sm);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-sm);
+    background: var(--input-bg);
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 0.88rem;
+}
+
+.fieldListInput:focus {
+    outline: none;
+    border-color: var(--input-focus);
+}
+
+.fieldListCheck {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    accent-color: var(--accent);
+}
+
+/* ---- Texte ---- */
+.textPages {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+}
+
+.textPage {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.textHead {
+    margin: 0;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.textOrigin {
+    font-weight: 400;
+    color: var(--text-muted);
+}
+
+.textBlock {
+    margin: 0;
+    padding: var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle);
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
 }

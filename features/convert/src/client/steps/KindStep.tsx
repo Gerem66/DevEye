@@ -39,6 +39,18 @@ const PDF_TOOLS: readonly { id: WorkshopIntent; picto: PictoId; label: string; d
         picto: 'signature',
         label: 'Signer et annoter',
         description: 'Signature, paraphe, date, texte, surlignage, caviardage.'
+    },
+    {
+        id: 'form',
+        picto: 'check',
+        label: 'Remplir un formulaire',
+        description: 'Les champs d’un PDF à remplir, puis figés si vous voulez.'
+    },
+    {
+        id: 'text',
+        picto: 'text',
+        label: 'Lire le texte',
+        description: 'Le texte d’un PDF, page par page, à copier ou à télécharger.'
     }
 ];
 

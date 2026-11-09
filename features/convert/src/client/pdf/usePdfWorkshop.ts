@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useReducer } from 'react';
 
+import type { FieldValue } from './build';
 import { rotateRect, type PdfElement } from './elements';
 import {
     addImage,
@@ -22,15 +23,21 @@ import {
 } from './model';
 
 /**
- * L'état de l'atelier : le plan des pages, ce qui est posé dessus, la
- * sélection, et l'historique pour annuler et rétablir. La sélection n'entre
- * pas dans l'historique, elle se taille au document courant.
+ * L'état de l'atelier : le plan des pages, ce qui est posé dessus, les
+ * champs remplis, la sélection, et l'historique pour annuler et rétablir. La
+ * sélection n'entre pas dans l'historique, elle se taille au document courant.
  */
 
-/** Ce que l'historique garde : les pages et ce qui est posé dessus. */
+/** Les valeurs saisies dans les champs, par fichier puis par nom de champ. */
+export type FieldValues = Readonly<Record<string, Readonly<Record<string, FieldValue>>>>;
+
+/** Ce que l'historique garde. */
 interface Snapshot {
     plan: Plan;
     elements: readonly PdfElement[];
+    fields: FieldValues;
+    /** Les champs figés à l'export. */
+    flatten: boolean;
 }
 
 interface State extends Snapshot {
@@ -60,12 +67,30 @@ type Action =
     | { type: 'addElement'; element: PdfElement }
     | { type: 'updateElement'; id: string; patch: Partial<PdfElement> }
     | { type: 'removeElement'; id: string }
+    | { type: 'setField'; sourceId: string; name: string; value: FieldValue }
+    | { type: 'setFlatten'; flatten: boolean }
     | { type: 'undo' }
     | { type: 'redo' };
 
 const HISTORY_MAX = 100;
 
-const INITIAL: State = { plan: EMPTY_PLAN, elements: [], selection: [], anchor: null, past: [], future: [] };
+const INITIAL: State = {
+    plan: EMPTY_PLAN,
+    elements: [],
+    fields: {},
+    flatten: false,
+    selection: [],
+    anchor: null,
+    past: [],
+    future: []
+};
+
+const snapshotOf = (state: State): Snapshot => ({
+    plan: state.plan,
+    elements: state.elements,
+    fields: state.fields,
+    flatten: state.flatten
+});
 
 const prune = (selection: readonly string[], plan: Plan): string[] => {
     const present = new Set(plan.pages.map((p) => p.id));
@@ -80,20 +105,22 @@ const onPages = (elements: readonly PdfElement[], plan: Plan): readonly PdfEleme
 };
 
 /** Un nouveau document entre dans l'historique ; un document identique ne fait rien. */
-function commit(
-    state: State,
-    plan: Plan,
-    elements: readonly PdfElement[] = state.elements,
-    selection: readonly string[] = state.selection
-): State {
-    const next = onPages(elements, plan);
-    if (plan === state.plan && next === state.elements) return state;
+function commit(state: State, next: Partial<Snapshot>, selection: readonly string[] = state.selection): State {
+    const plan = next.plan ?? state.plan;
+    const elements = onPages(next.elements ?? state.elements, plan);
+    const fields = next.fields ?? state.fields;
+    const flatten = next.flatten ?? state.flatten;
+    if (plan === state.plan && elements === state.elements && fields === state.fields && flatten === state.flatten) {
+        return state;
+    }
     return {
         plan,
-        elements: next,
+        elements,
+        fields,
+        flatten,
         selection: prune(selection, plan),
         anchor: state.anchor !== null && plan.pages.some((p) => p.id === state.anchor) ? state.anchor : null,
-        past: [...state.past.slice(-(HISTORY_MAX - 1)), { plan: state.plan, elements: state.elements }],
+        past: [...state.past.slice(-(HISTORY_MAX - 1)), snapshotOf(state)],
         future: []
     };
 }
@@ -108,18 +135,18 @@ function reduce(state: State, action: Action): State {
                 plan = file.kind === 'source' ? addSource(plan, file.source, at) : addImage(plan, file.image, at);
                 if (at !== undefined) at += added;
             }
-            return commit(state, plan);
+            return commit(state, { plan });
         }
         case 'removeSource':
-            return commit(state, removeSource(state.plan, action.id));
+            return commit(state, { plan: removeSource(state.plan, action.id) });
         case 'reorderSources':
-            return commit(state, reorderSources(state.plan, action.order));
+            return commit(state, { plan: reorderSources(state.plan, action.order) });
         case 'reorder':
-            return commit(state, reorderPages(state.plan, action.order));
+            return commit(state, { plan: reorderPages(state.plan, action.order) });
         case 'remove':
-            return commit(state, removePages(state.plan, action.ids), state.elements, []);
+            return commit(state, { plan: removePages(state.plan, action.ids) }, []);
         case 'keep':
-            return commit(state, keepPages(state.plan, action.ids));
+            return commit(state, { plan: keepPages(state.plan, action.ids) });
         case 'rotate': {
             // Ce qui est posé sur une page qui tourne la suit, et se lit toujours droit.
             const chosen = new Set(action.ids);
@@ -128,7 +155,7 @@ function reduce(state: State, action: Action): State {
                 if (!page) return e;
                 return { ...e, ...rotateRect(e, displayedSize(page, state.plan), action.delta) };
             });
-            return commit(state, rotatePages(state.plan, action.ids, action.delta), elements);
+            return commit(state, { plan: rotatePages(state.plan, action.ids, action.delta), elements });
         }
         case 'duplicate': {
             const { plan, created } = duplicatePages(state.plan, action.ids);
@@ -136,11 +163,11 @@ function reduce(state: State, action: Action): State {
             const copies = action.ids.flatMap((id, i) =>
                 state.elements.filter((e) => e.pageId === id).map((e) => ({ ...e, id: newId(), pageId: created[i] }))
             );
-            return commit(state, plan, [...state.elements, ...copies], created);
+            return commit(state, { plan, elements: [...state.elements, ...copies] }, created);
         }
         case 'blank': {
             const { plan, id } = insertBlank(state.plan, action.afterId);
-            return { ...commit(state, plan, state.elements, [id]), anchor: id };
+            return { ...commit(state, { plan }, [id]), anchor: id };
         }
         case 'select':
             return {
@@ -162,19 +189,27 @@ function reduce(state: State, action: Action): State {
             return { ...state, selection: [...new Set([...state.selection, ...range])] };
         }
         case 'addElement':
-            return commit(state, state.plan, [...state.elements, action.element]);
-        case 'updateElement': {
-            const elements = state.elements.map((e) =>
-                e.id === action.id ? ({ ...e, ...action.patch } as PdfElement) : e
-            );
-            return commit(state, state.plan, elements);
-        }
+            return commit(state, { elements: [...state.elements, action.element] });
+        case 'updateElement':
+            return commit(state, {
+                elements: state.elements.map((e) =>
+                    e.id === action.id ? ({ ...e, ...action.patch } as PdfElement) : e
+                )
+            });
         case 'removeElement':
-            return commit(
-                state,
-                state.plan,
-                state.elements.filter((e) => e.id !== action.id)
-            );
+            return commit(state, { elements: state.elements.filter((e) => e.id !== action.id) });
+        case 'setField': {
+            const current = state.fields[action.sourceId]?.[action.name];
+            if (current === action.value) return state;
+            return commit(state, {
+                fields: {
+                    ...state.fields,
+                    [action.sourceId]: { ...state.fields[action.sourceId], [action.name]: action.value }
+                }
+            });
+        }
+        case 'setFlatten':
+            return commit(state, { flatten: action.flatten });
         case 'undo': {
             const previous = state.past.at(-1);
             if (!previous) return state;
@@ -183,7 +218,7 @@ function reduce(state: State, action: Action): State {
                 selection: prune(state.selection, previous.plan),
                 anchor: null,
                 past: state.past.slice(0, -1),
-                future: [{ plan: state.plan, elements: state.elements }, ...state.future]
+                future: [snapshotOf(state), ...state.future]
             };
         }
         case 'redo': {
@@ -193,7 +228,7 @@ function reduce(state: State, action: Action): State {
                 ...next,
                 selection: prune(state.selection, next.plan),
                 anchor: null,
-                past: [...state.past, { plan: state.plan, elements: state.elements }],
+                past: [...state.past, snapshotOf(state)],
                 future: rest
             };
         }
@@ -212,6 +247,8 @@ export function usePdfWorkshop() {
         () => ({
             plan: state.plan,
             elements: state.elements,
+            fields: state.fields,
+            flatten: state.flatten,
             selection: state.selection,
             canUndo: state.past.length > 0,
             canRedo: state.future.length > 0,

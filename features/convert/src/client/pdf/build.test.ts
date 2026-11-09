@@ -310,4 +310,41 @@ describe('assemblage du PDF', () => {
         });
         assert.ok(covered.length > 0);
     });
+
+    it('remplit les champs, les laisse remplissables ou les fige', async () => {
+        const a = await makePdf([{ field: 'nom' }, { field: 'ville' }]);
+        const fonts = {
+            sans: new Uint8Array(readFileSync('node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf')),
+            hand: null
+        };
+        const p1 = page('a', 0);
+        const p2 = page('a', 1);
+        const fields = { a: { nom: 'Gérémy Pérez', ville: 'Lyon' } };
+        const live = await buildPdf({ sources: [src('a', a)], images: [], pages: [p1, p2], fields, fonts });
+        const out = await PDFDocument.load(live);
+        assert.equal(out.getForm().getTextField('nom').getText(), 'Gérémy Pérez');
+        assert.equal(out.getForm().getTextField('ville').getText(), 'Lyon');
+
+        const flat = await buildPdf({
+            sources: [src('a', a)],
+            images: [],
+            pages: [p1, p2],
+            fields,
+            fonts,
+            flatten: true
+        });
+        assert.equal((await PDFDocument.load(flat)).catalog.get(PDFName.of('AcroForm')), undefined);
+        const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+        const task = pdfjs.getDocument({
+            data: flat.slice(),
+            useWorkerFetch: false,
+            standardFontDataUrl: 'node_modules/pdfjs-dist/standard_fonts/'
+        });
+        const doc = await task.promise;
+        const text = (await (await doc.getPage(1)).getTextContent()).items
+            .map((i) => ('str' in i ? i.str : ''))
+            .join(' ');
+        assert.match(text, /Gérémy Pérez/);
+        await task.destroy();
+    });
 });

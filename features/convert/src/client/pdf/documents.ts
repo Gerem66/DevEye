@@ -4,6 +4,7 @@ import type { BuildAsset, BuildImage, BuildSource } from './build';
 import { imageToPage } from './images';
 import { newId, rotateBy, SOURCE_COLORS, type ImageInfo, type PageGeometry, type Plan, type SourceInfo } from './model';
 import { openDocument } from './pdfjs';
+import { linesOf, type TextFragment } from './text';
 
 /**
  * Les fichiers ouverts dans l'atelier, hors de React : leurs octets, pour
@@ -69,6 +70,21 @@ export async function openSource(file: File, password: string | null, color: num
 export async function pageOf(sourceId: string, index: number): Promise<PDFPageProxy | null> {
     const source = sources.get(sourceId);
     return source ? source.proxy.getPage(index + 1) : null;
+}
+
+/** Les annotations d'une page, telles que pdf.js les livre ; `fields.ts` en tire les champs. */
+export async function pageAnnotations(sourceId: string, index: number): Promise<unknown[]> {
+    const page = await pageOf(sourceId, index);
+    return page ? ((await page.getAnnotations()) as unknown[]) : [];
+}
+
+/** Le texte d'une page, remis en lignes. Vide quand la page n'en porte pas (un scan). */
+export async function pageText(sourceId: string, index: number): Promise<string> {
+    const page = await pageOf(sourceId, index);
+    if (!page) return '';
+    const content = await page.getTextContent();
+    // Les items sont des fragments ou des marques de contenu ; seuls les premiers portent du texte.
+    return linesOf(content.items.filter((item) => 'str' in item) as unknown as TextFragment[]);
 }
 
 export async function addImage(file: File): Promise<ImageInfo> {
