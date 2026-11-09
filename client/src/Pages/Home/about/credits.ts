@@ -23,6 +23,9 @@ export const CREDITS: readonly CreditGroup[] = [
                 license: 'MIT',
                 purpose: 'L’éditeur du tableau blanc, celui du projet libre excalidraw.com'
             },
+            { name: 'pdf.js', license: 'Apache-2.0', purpose: 'L’affichage des PDF dans l’atelier, celui de Firefox' },
+            { name: 'pdf-lib (fork de Cantoo)', license: 'MIT', purpose: 'L’assemblage des PDF de l’atelier' },
+            { name: 'fflate', license: 'MIT', purpose: 'Les archives zip de l’atelier PDF' },
             { name: 'Zod', license: 'MIT', purpose: 'La vérification des données échangées' }
         ]
     },
@@ -69,8 +72,9 @@ export const CREDITS: readonly CreditGroup[] = [
             {
                 name: 'Excalifont, Virgil, Assistant, Nunito, Lilita One, Cascadia Code, Liberation Sans et Xiaolai',
                 license: 'SIL OFL 1.1',
-                purpose: 'Les écritures du tableau blanc'
+                purpose: 'Les écritures du tableau blanc ; Liberation Sans écrit aussi les textes de l’atelier PDF'
             },
+            { name: 'Caveat', license: 'SIL OFL 1.1', purpose: 'Une signature écrite dans l’atelier PDF' },
             { name: 'Comic Shanns', license: 'MIT', purpose: 'Une écriture du tableau blanc' }
         ]
     }

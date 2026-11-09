@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "license": "AGPL-3.0-only",
-  "description": "Convertisseur : vidéo, audio, images et documents convertis sur le serveur, avec réglages de compression et taille cible, plus les devises et les unités.",
+  "description": "Convertisseur : vidéo, audio, images et documents convertis sur le serveur, avec réglages de compression et taille cible, les devises et les unités, et un atelier PDF dans le navigateur (fusion, pages, signature, formulaire, texte, finitions).",
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",

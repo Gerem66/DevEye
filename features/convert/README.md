@@ -3,30 +3,33 @@
 Convertir une vidéo, un son, une image ou un document sans confier le fichier à
 un site inconnu ni apprendre les arguments de `ffmpeg`. Un assistant en quatre
 étapes (type, formats, options, export), des réglages aux défauts cohérents,
-la taille finale annoncée avant l'export, et deux convertisseurs directs :
-devises et unités.
+la taille finale annoncée avant l'export, deux convertisseurs directs (devises
+et unités), et un atelier PDF qui travaille dans le navigateur.
 
 ## La carte
 
-| Où                            | Quoi                                                                                                       |
-| ----------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `src/contracts/catalogue.ts`  | **Le** fichier des formats : familles, sources, cibles, réglages, recettes                                 |
-| `src/contracts/options.ts`    | La forme d'un réglage (`slider`, `segments`, `toggle`, `size`, `crop`…)                                    |
-| `src/contracts/estimate.ts`   | La taille avant export, et l'arithmétique de la taille cible                                               |
-| `src/contracts/units.ts`      | Les unités physiques et la parité de deux devises, calcul pur                                              |
-| `src/server/handlers.ts`      | Les neuf commandes `convert.*` : capacités, liste, création, annulation, retrait, descente, taux, réglages |
-| `src/server/routes.ts`        | La montée du fichier en flux et la descente du résultat, à ticket                                          |
-| `src/server/service.ts`       | La file (un travail à la fois), l'avancement, l'avis de fin, l'entretien, les taux de change               |
-| `src/server/repo.ts`          | Les travaux et leurs transitions d'état, les taux                                                          |
-| `src/server/spawn.ts`         | Le lanceur d'outils : budget, veille d'arrêt, plafond de sortie                                            |
-| `src/server/engines/`         | Un moteur par outil : ffmpeg, ImageMagick, LibreOffice et les outils PDF                                   |
-| `src/server/storage.ts`       | Le disque : chemins, place libre, balayage                                                                 |
-| `src/server/env.ts`           | Les variables `CONVERT_*` et leurs défauts                                                                 |
-| `src/server/migrations/`      | `001` : les travaux, les taux de change et leur état de relecture                                          |
-| `src/server/accountExport.ts` | L'export du compte                                                                                         |
-| `src/server/testing.ts`       | Le dépôt en mémoire des tests, qui tient les mêmes gardes que le SQL                                       |
-| `policy/policy.xml`           | La politique ImageMagick, copiée dans l'image par le Dockerfile                                            |
-| `src/client/`                 | L'assistant, la file des travaux, devises, unités, réglages                                                |
+| Où                            | Quoi                                                                                                              |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `src/contracts/catalogue.ts`  | **Le** fichier des formats : familles, sources, cibles, réglages, recettes                                        |
+| `src/contracts/options.ts`    | La forme d'un réglage (`slider`, `segments`, `toggle`, `size`, `crop`…)                                           |
+| `src/contracts/estimate.ts`   | La taille avant export, et l'arithmétique de la taille cible                                                      |
+| `src/contracts/units.ts`      | Les unités physiques et la parité de deux devises, calcul pur                                                     |
+| `src/contracts/signatures.ts` | Une signature gardée sur le compte, telle qu'elle voyage et se stocke                                             |
+| `src/server/handlers.ts`      | Les commandes `convert.*` : capacités, liste, création, annulation, retrait, descente, taux, réglages, signatures |
+| `src/server/routes.ts`        | La montée du fichier en flux et la descente du résultat, à ticket                                                 |
+| `src/server/service.ts`       | La file (un travail à la fois), l'avancement, l'avis de fin, l'entretien, les taux de change                      |
+| `src/server/repo.ts`          | Les travaux et leurs transitions d'état, les taux, les signatures gardées                                         |
+| `src/server/spawn.ts`         | Le lanceur d'outils : budget, veille d'arrêt, plafond de sortie                                                   |
+| `src/server/engines/`         | Un moteur par outil : ffmpeg, ImageMagick, LibreOffice, les outils PDF et ocrmypdf                                |
+| `src/server/storage.ts`       | Le disque : chemins, place libre, balayage                                                                        |
+| `src/server/env.ts`           | Les variables `CONVERT_*` et leurs défauts                                                                        |
+| `src/server/migrations/`      | `001` : les travaux, les taux de change et leur état de relecture ; `002` : les signatures gardées                |
+| `src/server/accountExport.ts` | L'export du compte                                                                                                |
+| `src/server/e2e.ts`           | Le scénario de la page Tests et débogage : une signature gardée, relue, retirée                                   |
+| `src/server/testing.ts`       | Le dépôt en mémoire des tests, qui tient les mêmes gardes que le SQL                                              |
+| `policy/policy.xml`           | La politique ImageMagick, copiée dans l'image par le Dockerfile                                                   |
+| `src/client/`                 | L'assistant, la file des travaux, devises, unités, réglages                                                       |
+| `src/client/pdf/`             | L'atelier PDF : voir ci-dessous                                                                                   |
 
 ## Ajouter un format
 
@@ -68,6 +71,32 @@ tailles et le temps qui reste pour le récupérer. Le seuil se règle dans Régl
 → Général (Toujours, après 1, 5 ou 15 minutes ; une minute par défaut), les
 canaux dans Réglages → Notifications. Une conversion plus courte que le seuil
 reste silencieuse : on est encore devant l'écran.
+
+## L'atelier PDF
+
+Tout se fait dans le navigateur : les fichiers ne montent pas, et rien ne coûte
+au serveur, donc aucun quota. pdf.js affiche les pages, lit le texte et les
+champs ; pdf-lib (le fork maintenu de Cantoo) assemble le document dans un
+worker ; le résultat se télécharge depuis une adresse `blob:`. Le serveur ne
+sert qu'à ce que le navigateur ne sait pas faire, l'allègement (Ghostscript) et
+la reconnaissance du texte d'un scan (ocrmypdf), par le parcours de travaux
+ordinaire : l'atelier assemble le document, puis le confie à l'assistant à
+l'étape des options.
+
+| Où                                       | Quoi                                                                                       |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `model.ts`                               | Le plan des pages (fichiers, images, pages blanches), ses opérations, calcul pur           |
+| `usePdfWorkshop.ts`                      | L'état : plan, éléments posés, champs, finitions, sélection, annuler et rétablir           |
+| `elements.ts`                            | Ce qu'on pose sur une page (signature, texte, coche, image, surlignage, trait, caviardage) |
+| `geometry.ts`                            | Du cadre affiché au repère du fichier, rotation et origine de la boîte comprises           |
+| `build.ts`, `build.worker`               | L'assemblage par pdf-lib : pages, formulaire, éléments, finitions, mot de passe            |
+| `finishing.ts`                           | Numéros de page, filigrane, propriétés, mot de passe                                       |
+| `fields.ts`, `text.ts`                   | Les champs d'un formulaire et le texte d'une page, lus dans ce que pdf.js livre            |
+| `documents.ts`                           | Les fichiers ouverts, hors de React : octets, document pdf.js, images posées               |
+| `pdfjs.ts`, `thumbnails.ts`, `raster.ts` | pdf.js chargé à la demande, les vignettes en file, la page caviardée en image              |
+| `split.ts`, `zip.ts`                     | Le découpage en parties et l'archive                                                       |
+| `savedSignatures.ts`                     | Les signatures gardées sur le compte, avec leur image en base64                            |
+| `*Tab.tsx`, `Stage.tsx`                  | Les cinq onglets : Pages, Signer et annoter, Formulaire, Texte, Finitions                  |
 
 ## Les invariants
 
@@ -125,14 +154,45 @@ reste silencieuse : on est encore devant l'écran.
   XML d'ImageMagick les prend pour un début de chaîne et avale en silence les
   règles qui suivent. `policy.test.ts` le garde ; après une retouche, relire le
   résultat avec `magick -list policy`.
+- **L'atelier PDF ne quitte pas le poste.** Ce qu'il assemble, dessine ou lit se
+  fait dans le navigateur ; le serveur ne voit le document que si l'on demande
+  l'allègement ou la reconnaissance de texte, et alors comme toute conversion.
+- **Le document produit est toujours neuf.** Les pages sont copiées dans un PDF
+  vierge (pdf-lib ne sait pas réordonner les pages d'un fichier ouvert) ; un
+  fichier protégé en sort libre, et seul le mot de passe des finitions le
+  referme. `copyPages` laisse le formulaire derrière : `build.ts` copie le
+  dictionnaire du formulaire avec le même copieur que les pages, pour que les
+  champs d'un seul fichier restent remplissables ; venus de plusieurs fichiers,
+  ils sont figés, deux formulaires ne se fondant pas en un.
+- **Ce qu'on pose se place dans le cadre affiché**, origine en haut à gauche de
+  la page tournée comme à l'écran ; `geometry.ts` le ramène dans le repère du
+  fichier comme pdf.js, rotation et origine de la boîte comprises. Un élément
+  « sur toutes les pages » se reproduit à la même distance des bords les plus
+  proches, pour qu'un paraphe reste dans son coin sur une page paysage.
+- **Un caviardage efface pour de bon.** La page devient une image (150 points
+  par pouce), rectangles noirs peints dedans : un rectangle posé par-dessus
+  laisserait le texte lisible dessous. Ce qui est posé sur cette page se
+  redessine par-dessus l'image, et son texte d'origine ne se copie plus.
+- **La signature est visuelle.** Un tracé, un nom en police manuscrite ou une
+  image posée sur la page, comme la plupart des éditeurs gratuits ; aucun
+  certificat, aucune signature cryptographique.
+- **Les polices que l'atelier écrit** sont celles qu'il montre : Liberation Sans
+  (celle que pdf.js embarque pour les PDF sans police) pour les textes, numéros
+  et filigranes, Caveat pour une signature écrite. Helvetica, sans l'Unicode,
+  n'intervient que si elles manquent.
+- **Une signature gardée sur le compte** l'est scellée sous le codec de l'espace
+  personnel, six au plus par compte, l'image en base64 : une signature dit qui
+  l'on est.
 
 ## L'exploitation
 
 Les variables `CONVERT_*` sont décrites dans `.env.template`, leurs défauts dans
 `src/server/env.ts`. Au démarrage le service sonde ses outils : une absence ne
 l'empêche pas de démarrer, elle retire des formats de l'écran en nommant ce qui
-manque (`convert.capabilities`). L'image se construit sans LibreOffice par
-`--build-arg WITH_DOCUMENTS=0`.
+manque (`convert.capabilities`). L'image se construit sans LibreOffice ni
+ocrmypdf par `--build-arg WITH_DOCUMENTS=0`. Les fichiers de pdf.js (polices
+standard, tables CMap, décodeurs d'images) sont servis par l'app sous
+`/assets/pdfjs-<version>/`, émis au build du client par `client/vite.config.ts`.
 
 ## Tests
 
