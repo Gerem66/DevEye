@@ -21,7 +21,7 @@ import {
 import { Picto } from './icons';
 import { addImage, buildInputOf, forgetAll, openSource } from './documents';
 import { EditTab } from './EditTab';
-import { ExportDialog, type ImageDpi, type ImageFormat } from './ExportDialog';
+import { ExportsTab, type ImageDpi, type ImageFormat } from './ExportsTab';
 import { FinishTab } from './FinishTab';
 import type { Finishing } from './finishing';
 import { buildFonts } from './fonts';
@@ -54,14 +54,15 @@ const PROGRESS_DELAY_MS = 400;
 /** Le temps laissé au navigateur pour lire une adresse `blob:` avant qu'elle ne soit rendue. */
 const BLOB_URL_TTL_MS = 60_000;
 
-type Tab = 'pages' | 'edit' | 'form' | 'finish' | 'text';
-/** `apart` : l'onglet ne change pas le document, il le lit. Il se tient à l'écart des autres. */
+type Tab = 'pages' | 'edit' | 'form' | 'finish' | 'text' | 'exports';
+/** `apart` : l'onglet ne change pas le document, il le lit ou le sort. Il se tient à l'écart des autres. */
 const TABS: readonly { id: Tab; label: string; icon: string; apart?: boolean }[] = [
     { id: 'pages', label: 'Pages', icon: 'file' },
     { id: 'edit', label: 'Signer et annoter', icon: 'edit' },
     { id: 'form', label: 'Formulaire', icon: 'square-check' },
     { id: 'finish', label: 'Finitions', icon: 'format' },
-    { id: 'text', label: 'Texte', icon: 'notes', apart: true }
+    { id: 'text', label: 'Texte', icon: 'notes', apart: true },
+    { id: 'exports', label: 'Exports', icon: 'download', apart: true }
 ];
 
 const TAB_OF_INTENT: Partial<Record<WorkshopIntent, Tab>> = {
@@ -91,9 +92,8 @@ interface PdfWorkshopProps {
 export default function PdfWorkshop({ initialFiles, intent, onLeave }: PdfWorkshopProps) {
     useRequestPopupWidth(POPUP_WIDTH);
     const workshop = usePdfWorkshop();
-    const { plan, elements, fields, flatten, finishing, selection, act } = workshop;
+    const { plan, elements, fields, flatten, finishing, act } = workshop;
     const [fileName, setFileName] = useState<string | null>(null);
-    const [exportsOpen, setExportsOpen] = useState(false);
     const [exporting, setExporting] = useState<{ step: string; done: number; total: number } | null>(null);
     const name = fileName ?? outputName(plan);
     const [tab, setTab] = useState<Tab>(TAB_OF_INTENT[intent] ?? 'pages');
@@ -245,20 +245,15 @@ export default function PdfWorkshop({ initialFiles, intent, onLeave }: PdfWorksh
         window.setTimeout(() => URL.revokeObjectURL(url), BLOB_URL_TTL_MS);
     };
 
-    const download = useCallback(
-        async (ids: readonly string[] | null): Promise<void> => {
-            const pages = ids ? plan.pages.filter((p) => ids.includes(p.id)) : plan.pages;
-            if (pages.length === 0) return;
-            setError(null);
-            try {
-                const bytes = await buildPart(pages);
-                save(bytes, 'application/pdf', ids ? `${stem(name)} (extrait).pdf` : name);
-            } catch (e) {
-                setError(errorNote(e, 'Le document n’a pas pu être assemblé.'));
-            }
-        },
-        [buildPart, plan, name]
-    );
+    const download = async (): Promise<void> => {
+        if (plan.pages.length === 0) return;
+        setError(null);
+        try {
+            save(await buildPart(plan.pages), 'application/pdf', name);
+        } catch (e) {
+            setError(errorNote(e, 'Le document n’a pas pu être assemblé.'));
+        }
+    };
 
     const exportSplit = async (mode: SplitMode): Promise<void> => {
         const parts = splitParts(plan, mode);
@@ -275,7 +270,6 @@ export default function PdfWorkshop({ initialFiles, intent, onLeave }: PdfWorksh
                 });
             }
             save(zipFiles(entries), 'application/zip', `${stem(name)}.zip`);
-            setExportsOpen(false);
         } catch (e) {
             setError(errorNote(e, 'Le découpage n’a pas pu être fait.'));
         } finally {
@@ -328,7 +322,6 @@ export default function PdfWorkshop({ initialFiles, intent, onLeave }: PdfWorksh
                 void doc.loadingTask.destroy().catch(() => undefined);
             }
             save(zipFiles(entries), 'application/zip', `${stem(name)} - images.zip`);
-            setExportsOpen(false);
         } catch (e) {
             setError(errorNote(e, 'Les images n’ont pas pu être produites.'));
         } finally {
@@ -407,9 +400,6 @@ export default function PdfWorkshop({ initialFiles, intent, onLeave }: PdfWorksh
                         >
                             <Picto id='redo' size={16} />
                         </button>
-                        <Button variant='secondary' icon='add' onClick={pick}>
-                            Ajouter des fichiers
-                        </Button>
                     </div>
                 </header>
                 <nav className={styles.tabs} aria-label='Parties de l’atelier'>
@@ -438,12 +428,18 @@ export default function PdfWorkshop({ initialFiles, intent, onLeave }: PdfWorksh
                     <TextTab workshop={workshop} onOcr={() => void handoff('pdf-ocr')} />
                 ) : shown === 'finish' ? (
                     <FinishTab workshop={workshop} />
-                ) : (
-                    <PagesTab
-                        workshop={workshop}
-                        onAddFiles={(files) => void addFiles(files)}
-                        onDownloadSelection={() => void download(selection)}
+                ) : shown === 'exports' ? (
+                    <ExportsTab
+                        plan={plan}
+                        fileName={name}
+                        onFileName={(next) => setFileName(next.endsWith('.pdf') ? next : `${next}.pdf`)}
+                        busy={exporting !== null || building}
+                        onSplit={(mode) => void exportSplit(mode)}
+                        onImages={(format, dpi) => void exportImages(format, dpi)}
+                        onServer={(target) => void handoff(target)}
                     />
+                ) : (
+                    <PagesTab workshop={workshop} onAddFiles={(files) => void addFiles(files)} onImport={pick} />
                 )}
                 {opening > 0 && <LoadingVeil label='Lecture des fichiers…' delayed />}
             </div>
@@ -455,28 +451,12 @@ export default function PdfWorkshop({ initialFiles, intent, onLeave }: PdfWorksh
                         {summarize(plan)} · tout se fait sur cet appareil, rien n’est envoyé
                     </span>
                 </div>
-                <div className={styles.footerActions}>
-                    <Button variant='ghost' disabled={empty || building} onClick={() => setExportsOpen(true)}>
-                        Autres exports…
-                    </Button>
-                    <Button icon='download' disabled={empty || building} onClick={() => void download(null)}>
-                        Télécharger le PDF
-                    </Button>
-                </div>
+                <Button icon='download' disabled={empty || building} onClick={() => void download()}>
+                    Télécharger le PDF
+                </Button>
             </footer>
 
             <PasswordDialog request={password} onDone={() => setPassword(null)} />
-            <ExportDialog
-                open={exportsOpen}
-                plan={plan}
-                fileName={name}
-                onFileName={(next) => setFileName(next.endsWith('.pdf') ? next : `${next}.pdf`)}
-                busy={exporting !== null || building}
-                onClose={() => setExportsOpen(false)}
-                onSplit={(mode) => void exportSplit(mode)}
-                onImages={(format, dpi) => void exportImages(format, dpi)}
-                onServer={(target) => void handoff(target)}
-            />
             <ProgressDialog
                 open={exporting !== null || (slow && progress !== null)}
                 title={exporting ? 'Export en cours' : 'Assemblage du document'}

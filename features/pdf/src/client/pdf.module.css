@@ -593,7 +593,7 @@
         flex-wrap: wrap;
     }
 
-    /* Cinq onglets ne tiennent pas : seul l'ouvert garde son libellé, les autres leur icône. */
+    /* Les onglets ne tiennent pas tous : seul l'ouvert garde son libellé, les autres leur icône. */
     .tabs {
         justify-content: space-between;
     }
@@ -1249,6 +1249,14 @@
 }
 
 /* ---- Autres exports ---- */
+/* ---- Exports : une colonne de lecture ---- */
+.exportsTab {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    max-width: 720px;
+}
+
 .exportSection {
     display: flex;
     flex-direction: column;

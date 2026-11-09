@@ -51,6 +51,7 @@ declare const styles: {
     readonly exportPair: string;
     readonly exportRow: string;
     readonly exportSection: string;
+    readonly exportsTab: string;
     readonly fieldBox: string;
     readonly fieldCheck: string;
     readonly fieldError: string;

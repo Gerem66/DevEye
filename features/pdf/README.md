@@ -32,7 +32,7 @@ les outils et les quotas.
 | `pdfjs.ts`, `thumbnails.ts`, `raster.ts` | pdf.js chargé à la demande, les vignettes en file, la page caviardée en image              |
 | `split.ts`, `zip.ts`                     | Le découpage en parties et l'archive                                                       |
 | `savedSignatures.ts`                     | Les signatures gardées sur le compte, avec leur image en base64                            |
-| `*Tab.tsx`, `Stage.tsx`                  | Les cinq onglets : Pages, Signer et annoter, Formulaire, Texte, Finitions                  |
+| `*Tab.tsx`, `Stage.tsx`                  | Les six onglets : Pages, Signer et annoter, Formulaire, Finitions, puis Texte et Exports   |
 
 ## Les invariants
 

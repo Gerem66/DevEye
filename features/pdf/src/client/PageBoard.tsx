@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { useDragReorder, useFileDrop } from 'deveye-sdk-client';
 
-import { Picto } from './icons';
 import { sourceColorVar } from './colors';
 import { displayedSize, moveTogether, sourceOf, totalRotation, type Plan, type PlanPage } from './model';
 import styles from './pdf.module.css';
@@ -22,7 +21,6 @@ interface PageBoardProps {
     selection: readonly string[];
     onSelect: (gesture: SelectGesture, id: string) => void;
     onReorder: (order: string[]) => void;
-    onRotate: (id: string, delta: 90 | -90) => void;
     onRemove: (id: string) => void;
     onFiles: (files: File[]) => void;
 }
@@ -35,7 +33,6 @@ interface PageCardProps {
     dragging: boolean;
     onPointerDown: (e: ReactPointerEvent, id: string) => void;
     onSelect: (gesture: SelectGesture, id: string) => void;
-    onRotate: (id: string, delta: 90 | -90) => void;
     onRemove: (id: string) => void;
 }
 
@@ -58,17 +55,7 @@ function originOf(page: PlanPage, plan: Plan): { label: string; color: string } 
     }
 }
 
-function PageCard({
-    page,
-    plan,
-    index,
-    selected,
-    dragging,
-    onPointerDown,
-    onSelect,
-    onRotate,
-    onRemove
-}: PageCardProps) {
+function PageCard({ page, plan, index, selected, dragging, onPointerDown, onSelect, onRemove }: PageCardProps) {
     const ref = useRef<HTMLLIElement>(null);
     const [url, setUrl] = useState<string | null>(null);
     const planRef = useRef(plan);
@@ -139,24 +126,6 @@ function PageCard({
             >
                 <button
                     type='button'
-                    className={styles.cardTool}
-                    aria-label='Pivoter cette page vers la gauche'
-                    title='Pivoter vers la gauche'
-                    onClick={() => onRotate(page.id, -90)}
-                >
-                    <Picto id='rotateLeft' size={14} />
-                </button>
-                <button
-                    type='button'
-                    className={styles.cardTool}
-                    aria-label='Pivoter cette page vers la droite'
-                    title='Pivoter vers la droite'
-                    onClick={() => onRotate(page.id, 90)}
-                >
-                    <Picto id='rotateRight' size={14} />
-                </button>
-                <button
-                    type='button'
                     className={`${styles.cardTool} ${styles.cardToolDanger}`}
                     aria-label='Retirer cette page'
                     title='Retirer'
@@ -181,7 +150,7 @@ function PageCard({
  * Ctrl ajoute ; un glissé déplace la page, et toute la sélection avec elle
  * quand elle en fait partie. Des fichiers déposés dessus s'ajoutent à la fin.
  */
-export function PageBoard({ plan, selection, onSelect, onReorder, onRotate, onRemove, onFiles }: PageBoardProps) {
+export function PageBoard({ plan, selection, onSelect, onReorder, onRemove, onFiles }: PageBoardProps) {
     const order = plan.pages.map((p) => p.id);
     const pressed = useRef<string | null>(null);
     /** Un glissé vient de finir : le clic qui le suit n'est pas une sélection. */
@@ -230,7 +199,6 @@ export function PageBoard({ plan, selection, onSelect, onReorder, onRotate, onRe
                     dragging={drag.draggingId === page.id}
                     onPointerDown={onPointerDown}
                     onSelect={select}
-                    onRotate={onRotate}
                     onRemove={onRemove}
                 />
             ))}

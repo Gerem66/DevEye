@@ -8,7 +8,7 @@ import type { Workshop } from './usePdfWorkshop';
 interface SelectionBarProps {
     workshop: Workshop;
     onRange: () => void;
-    onDownloadSelection: () => void;
+    onImport: () => void;
 }
 
 function Tool(props: { picto: PictoId; label: string; disabled: boolean; onClick: () => void }) {
@@ -29,7 +29,7 @@ function Tool(props: { picto: PictoId; label: string; disabled: boolean; onClick
 const plural = (count: number, one: string, many: string): string => `${count} ${count > 1 ? many : one}`;
 
 /** Ce qu'on fait des pages sélectionnées. Toujours là : la grille ne saute pas quand la sélection apparaît. */
-export function SelectionBar({ workshop, onRange, onDownloadSelection }: SelectionBarProps) {
+export function SelectionBar({ workshop, onRange, onImport }: SelectionBarProps) {
     const { plan, selection, act } = workshop;
     const none = selection.length === 0;
     const all = (p: Plan) => p.pages.map((page) => page.id);
@@ -97,8 +97,8 @@ export function SelectionBar({ workshop, onRange, onDownloadSelection }: Selecti
                 <Button variant='ghost' disabled={none} onClick={() => act('keep', { ids: selection })}>
                     Garder seulement
                 </Button>
-                <Button variant='ghost' icon='download' disabled={none} onClick={onDownloadSelection}>
-                    Télécharger la sélection
+                <Button variant='secondary' icon='add' onClick={onImport}>
+                    Importer
                 </Button>
             </div>
         </div>

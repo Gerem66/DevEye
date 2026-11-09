@@ -9,12 +9,14 @@ import type { Workshop } from './usePdfWorkshop';
 
 interface PagesTabProps {
     workshop: Workshop;
+    /** Des fichiers déposés sur la grille. */
     onAddFiles: (files: File[]) => void;
-    onDownloadSelection: () => void;
+    /** Le bouton Importer : choisir des fichiers. */
+    onImport: () => void;
 }
 
 /** Fusionner, extraire, réorganiser : les fichiers, la sélection et la grille des pages. */
-export function PagesTab({ workshop, onAddFiles, onDownloadSelection }: PagesTabProps) {
+export function PagesTab({ workshop, onAddFiles, onImport }: PagesTabProps) {
     const { plan, selection, act } = workshop;
     const [rangeOpen, setRangeOpen] = useState(false);
 
@@ -51,17 +53,12 @@ export function PagesTab({ workshop, onAddFiles, onDownloadSelection }: PagesTab
                 onRemove={(id) => act('removeSource', { id })}
                 onReorder={(order) => act('reorderSources', { order })}
             />
-            <SelectionBar
-                workshop={workshop}
-                onRange={() => setRangeOpen(true)}
-                onDownloadSelection={onDownloadSelection}
-            />
+            <SelectionBar workshop={workshop} onRange={() => setRangeOpen(true)} onImport={onImport} />
             <PageBoard
                 plan={plan}
                 selection={selection}
                 onSelect={select}
                 onReorder={(order) => act('reorder', { order })}
-                onRotate={(id, delta) => act('rotate', { ids: [id], delta })}
                 onRemove={(id) => act('remove', { ids: [id] })}
                 onFiles={onAddFiles}
             />
