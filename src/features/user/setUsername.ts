@@ -6,7 +6,8 @@ import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinitio
  * Renomme le compte. `scope: 'account'` comme les autres réglages de compte : le
  * pseudo suit le compte et non l'espace d'où on le change. La diffusion
  * `mutates` vise donc l'espace personnel de l'appelant, où il est seul : c'est
- * `announce` qui porte le nouveau nom là où les autres le lisent.
+ * `announce` qui porte le nouveau nom là où les autres le lisent, et
+ * `nameChanged` aux pairs de ses canaux de curseurs.
  */
 export const userSetUsernameFeature: FeatureDefinition<
     typeof userSetUsername.command,
@@ -33,6 +34,7 @@ export const userSetUsernameFeature: FeatureDefinition<
         // figerait l'ancien pseudo dans la bascule d'espaces.
         await ctx.db.workspaces.rename(ctx.workspaceId, username);
 
+        ctx.live?.nameChanged(username);
         await announce(ctx);
         ctx.audit({
             action: 'user.setUsername',

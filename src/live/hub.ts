@@ -158,6 +158,8 @@ export interface LiveTransport {
     here(workspaceId: number, path: LivePath, color: UserColor): LivePeer[];
     /** Propage un changement de couleur à toutes les connexions de ce compte. */
     colorChanged(color: UserColor): void;
+    /** Propage un changement de pseudo aux canaux de curseurs où ce compte se trouve. */
+    nameChanged(name: string): void;
     /** Annonce (ou retire) « en train d'écrire » aux pairs du même lieu. */
     typing(typing: boolean): void;
     /** Ouvre un canal de curseurs à cette connexion ; rend son identifiant, `null` si elle est partie. */
@@ -668,6 +670,20 @@ export class LiveHub {
         }
     }
 
+    /**
+     * Un compte vient de changer de pseudo : ses laissez-passer le portent, et les
+     * pairs d'un canal où son curseur se trouve le voient sans attendre qu'il bouge.
+     */
+    nameChanged(socket: WebSocket, name: string): void {
+        const origin = this.bySocket.get(socket);
+        if (!origin) return;
+        for (const conn of this.bySocket.values()) {
+            if (conn.userId !== origin.userId || conn.cursorPass === null) continue;
+            conn.cursorPass = { ...conn.cursorPass, name };
+            if (conn.cursorChannel !== null) this.markCursorsOf(conn);
+        }
+    }
+
     // ---------------------------------------------------------------- curseurs
 
     /**
@@ -1080,6 +1096,7 @@ export function createLiveTransport(hub: LiveHub, socket: WebSocket): LiveTransp
     return {
         here: (workspaceId, path, color) => hub.here(socket, workspaceId, path, color),
         colorChanged: (color) => hub.colorChanged(socket, color),
+        nameChanged: (name) => hub.nameChanged(socket, name),
         typing: (typing) => hub.typing(socket, typing),
         grantCursors: (pass, color) => hub.grantCursors(socket, pass, color),
         revokeCursors: (channel) => hub.revokeCursors(socket, channel),

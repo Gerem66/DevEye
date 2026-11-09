@@ -111,6 +111,25 @@ describe('LiveHub : curseurs dans un canal', () => {
         assert.deepEqual(h.cursorsOf(bob.frames)?.cursors, []);
     });
 
+    it('montre aux pairs du canal le pseudo changé, sans attendre un mouvement', (t) => {
+        const h = harness(t);
+        const alice = h.join(1, 10);
+        const bob = h.join(2, 20);
+        alice.live.grantCursors(h.pass(10, 'alice'), 'red');
+        bob.live.grantCursors(h.pass(20, 'bob'), 'green');
+        h.hub.cursor(alice.ws, { cursor: AT, channel: CHANNEL });
+        h.hub.cursor(bob.ws, { cursor: null, channel: CHANNEL });
+        h.tick();
+
+        alice.live.nameChanged('alicia');
+        h.tick();
+
+        assert.deepEqual(
+            (h.cursorsOf(bob.frames)?.cursors as { name: string }[]).map((c) => c.name),
+            ['alicia']
+        );
+    });
+
     it('retire le canal à qui quitte l’espace qui l’a ouvert', (t) => {
         const h = harness(t);
         const alice = h.join(1, 10);
