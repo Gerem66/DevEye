@@ -12,6 +12,13 @@ export const convertAccountExport: FeatureAccountExport<ConvertRepo> = {
             json: ['options'],
             dates: { created: 's', started_at: 's', finished_at: 's', expires_at: 's' }
         },
+        ft_convert_signatures: {
+            file: 'signatures.json',
+            where: 'workspace_id = ?',
+            key: ['id'],
+            sealed: ['data_enc'],
+            dates: { created: 's' }
+        },
         ft_convert_fx_rates: { skip: 'Les taux de change sont publics et communs à tous les comptes.' },
         ft_convert_fx_state: { skip: 'L’avancée de la lecture des taux de change appartient au serveur.' }
     }

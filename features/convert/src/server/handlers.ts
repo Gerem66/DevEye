@@ -10,9 +10,13 @@ import {
     convertRates,
     convertRemove,
     convertSettingsGet,
-    convertSettingsSet
+    convertSettingsSet,
+    convertSignatureRemove,
+    convertSignatures,
+    convertSignatureSave
 } from '../contracts/commands';
 import { convertSettingsSchema, DEFAULT_SETTINGS } from '../contracts/domain';
+import { SIGNATURES_MAX, storedSignatureSchema, type SavedSignature } from '../contracts/signatures';
 import { resolveOptions } from '../contracts/options';
 import { abortJob, formatBytes, now, SETTINGS_KEY, toJob } from './_shared';
 import { engineFamilies } from './engines';
@@ -40,6 +44,29 @@ async function ownJob(ctx: Ctx, jobId: number): Promise<JobRow> {
     const row = await ctx.repo.find(jobId, ctx.workspaceId);
     if (!row || row.user_id !== ctx.userId) throw new FeatureError('not_found', 'Conversion introuvable.');
     return row;
+}
+
+/** Les commandes du compte : l'espace est le personnel, quoi que le client ait envoyé. */
+const ACCOUNT = { scope: 'account' } as const;
+
+/** Les signatures lisibles d'un compte ; une ligne qui ne se déchiffre plus (clé changée) est passée. */
+async function savedSignatures(ctx: Ctx): Promise<SavedSignature[]> {
+    const cipher = ctx.cipher();
+    const out: SavedSignature[] = [];
+    for (const row of await ctx.repo.signatures(ctx.userId)) {
+        const plain = await cipher.tryDecrypt(row.data_enc);
+        if (plain === null) continue;
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(plain);
+        } catch {
+            continue;
+        }
+        const data = storedSignatureSchema.safeParse(parsed);
+        if (!data.success) continue;
+        out.push({ id: row.id, role: row.role, data: data.data, createdAt: Number(row.created) });
+    }
+    return out;
 }
 
 export const convertHandlers = [
@@ -202,5 +229,38 @@ export const convertHandlers = [
             await ctx.store.putJson(SETTINGS_KEY, convertSettingsSchema, input.settings, { encryption: 'none' });
             return { settings: input.settings };
         }
+    }),
+    defineSdkFeature({
+        ...convertSignatures,
+        access: ACCOUNT,
+        handler: async (ctx: Ctx) => ({ signatures: await savedSignatures(ctx) })
+    }),
+    defineSdkFeature({
+        ...convertSignatureSave,
+        access: ACCOUNT,
+        mutates: true,
+        handler: async (ctx: Ctx, input) => {
+            if ((await ctx.repo.countSignatures(ctx.userId)) >= SIGNATURES_MAX) {
+                throw new FeatureError(
+                    'conflict',
+                    `Vous gardez déjà ${SIGNATURES_MAX} signatures : retirez-en une pour en garder une nouvelle.`
+                );
+            }
+            const at = now();
+            const id = await ctx.repo.insertSignature({
+                workspaceId: ctx.workspaceId,
+                userId: ctx.userId,
+                role: input.role,
+                dataEnc: await ctx.cipher().encrypt(JSON.stringify(input.data)),
+                at
+            });
+            return { signature: { id, role: input.role, data: input.data, createdAt: at } };
+        }
+    }),
+    defineSdkFeature({
+        ...convertSignatureRemove,
+        access: ACCOUNT,
+        mutates: true,
+        handler: async (ctx: Ctx, input) => ({ removed: await ctx.repo.removeSignature(input.id, ctx.userId) })
     })
 ];

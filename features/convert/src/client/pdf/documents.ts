@@ -88,6 +88,7 @@ export function addAsset(bytes: Uint8Array<ArrayBuffer>, mime: 'image/png' | 'im
 
 /** L'adresse `blob:` d'une image posée, pour l'afficher. */
 export const assetUrl = (id: string): string | undefined => assets.get(id)?.url;
+export const assetBytes = (id: string): Uint8Array<ArrayBuffer> | undefined => assets.get(id)?.bytes;
 
 /** Ce que l'assemblage reçoit : les octets des fichiers et des images que le plan cite. */
 export function buildInputOf(plan: Plan): { sources: BuildSource[]; images: BuildImage[]; assets: BuildAsset[] } {

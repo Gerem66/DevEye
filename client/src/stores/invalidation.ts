@@ -60,6 +60,7 @@ export type ResourceKey =
     | 'convert.capabilities'
     | 'convert.rates'
     | 'convert.settings'
+    | 'convert.signatures'
     | 'workspace.roleList'
     /** L'état de l'espace actif tel que `workspace.activate` le rend : droits, apparence, disposition. */
     | 'workspace.activate'

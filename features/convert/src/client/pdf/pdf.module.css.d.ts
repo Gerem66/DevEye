@@ -81,6 +81,13 @@ declare const styles: {
     readonly pageNav: string;
     readonly pageNavLabel: string;
     readonly root: string;
+    readonly savedCard: string;
+    readonly savedImage: string;
+    readonly savedList: string;
+    readonly savedPick: string;
+    readonly savedRemove: string;
+    readonly savedSvg: string;
+    readonly savedText: string;
     readonly sigImported: string;
     readonly sigImportedImage: string;
     readonly sigPad: string;

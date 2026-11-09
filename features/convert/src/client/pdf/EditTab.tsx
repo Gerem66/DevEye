@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { ErrorNote, pickFiles, type ErrorNoteInput } from 'deveye-sdk-client';
+import { ErrorNote, errorNote, invalidate, pickFiles, type ErrorNoteInput } from 'deveye-sdk-client';
 
+import { api } from '../api';
 import { addAsset } from './documents';
 import {
     centredBox,
@@ -20,6 +21,7 @@ import { imageToPage } from './images';
 import { Inspector } from './Inspector';
 import { displayedSize, newId } from './model';
 import styles from './pdf.module.css';
+import { toStored, useSavedSignatures } from './savedSignatures';
 import { handTextAspect } from './signatureImage';
 import { SignatureDialog } from './SignatureDialog';
 import { Stage } from './Stage';
@@ -74,10 +76,33 @@ export function EditTab({ workshop }: EditTabProps) {
     const [dialog, setDialog] = useState<Role | null>(null);
     const [pendingImage, setPendingImage] = useState<{ assetId: string; width: number; height: number } | null>(null);
     const [error, setError] = useState<ErrorNoteInput | null>(null);
+    const saved = useSavedSignatures();
 
     useEffect(() => {
         void loadHandFont();
     }, []);
+
+    const keepOnAccount = async (role: Role, data: SignatureData): Promise<void> => {
+        const stored = toStored(data);
+        if (!stored) return;
+        try {
+            await api.send('convert.signatureSave', { role, data: stored });
+        } catch (e) {
+            setError(errorNote(e, 'La signature n’a pas pu être gardée sur votre compte.'));
+        } finally {
+            invalidate('convert.signatures');
+        }
+    };
+
+    const removeSaved = async (id: number): Promise<void> => {
+        try {
+            await api.send('convert.signatureRemove', { id });
+        } catch (e) {
+            setError(errorNote(e, 'Cette signature n’a pas pu être retirée.'));
+        } finally {
+            invalidate('convert.signatures');
+        }
+    };
 
     const setTool = (next: Tool): void => {
         setError(null);
@@ -233,6 +258,7 @@ export function EditTab({ workshop }: EditTabProps) {
                 onColor={setColor}
             />
             <ErrorNote note={error} inline onDismiss={() => setError(null)} />
+            <ErrorNote note={saved.error} inline />
             <div className={styles.editBody}>
                 <Stage
                     page={page}
@@ -258,11 +284,14 @@ export function EditTab({ workshop }: EditTabProps) {
             </div>
             <SignatureDialog
                 role={dialog}
+                saved={saved.signatures}
                 onClose={() => setDialog(null)}
-                onPick={(data) => {
+                onRemoveSaved={(id) => void removeSaved(id)}
+                onPick={(data, keep) => {
                     if (dialog) {
                         setSignatures((s) => ({ ...s, [dialog]: data }));
                         setToolState(dialog);
+                        if (keep) void keepOnAccount(dialog, data);
                     }
                     setDialog(null);
                 }}
