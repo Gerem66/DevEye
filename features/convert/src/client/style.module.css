@@ -524,6 +524,105 @@
     gap: var(--space-sm);
 }
 
+/* L'atelier PDF, en tête de l'accueil : le dépôt à gauche, les gestes à droite. */
+.pdfBand {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--space-lg);
+    padding: var(--space-lg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    background: var(--surface-widget);
+}
+
+.pdfIntro {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    min-width: 0;
+}
+
+.pdfTitle {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin: 0;
+    font-size: 1.1rem;
+    color: var(--text-primary);
+}
+
+.pdfTitle svg {
+    color: var(--accent);
+}
+
+.pdfText {
+    margin: 0;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+
+.pdfDrop {
+    flex: 1;
+    margin-top: var(--space-xs);
+    min-height: 150px;
+}
+
+.pdfTools {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.pdfTool {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    width: 100%;
+    height: 100%;
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle);
+    color: var(--text-secondary);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color var(--transition-fast);
+}
+
+.pdfTool:hover,
+.pdfTool:focus-visible {
+    border-color: var(--accent);
+}
+
+.pdfToolPicto {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-pill);
+    background: var(--accent-bg);
+    color: var(--accent);
+}
+
+.pdfToolText {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+@media (max-width: 760px) {
+    .pdfBand {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
 /* Cartes de l'étape 1 */
 .cards {
     display: grid;

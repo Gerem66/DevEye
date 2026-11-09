@@ -5,7 +5,23 @@ import type { ReactElement } from 'react';
  * qu'à ce module. Au trait, en `currentColor` : la carte décide de la teinte.
  */
 
-export type PictoId = 'video' | 'audio' | 'image' | 'document' | 'currency' | 'units';
+export type PictoId =
+    | 'video'
+    | 'audio'
+    | 'image'
+    | 'document'
+    | 'currency'
+    | 'units'
+    | 'pdf'
+    | 'merge'
+    | 'extract'
+    | 'reorder'
+    | 'undo'
+    | 'redo'
+    | 'rotateLeft'
+    | 'rotateRight'
+    | 'duplicate'
+    | 'blank';
 
 const PATHS: Record<PictoId, ReactElement> = {
     video: (
@@ -45,6 +61,72 @@ const PATHS: Record<PictoId, ReactElement> = {
         <>
             <path d='M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.4 2.4 0 0 1 0-3.4l2.6-2.6a2.4 2.4 0 0 1 3.4 0z' />
             <path d='M14.5 12.5l2-2M11.5 9.5l2-2M8.5 6.5l2-2M17.5 15.5l2-2' />
+        </>
+    ),
+    pdf: (
+        <>
+            <path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z' />
+            <path d='M14 2v6h6' />
+            <path d='M8 17v-5h1.6a1.5 1.5 0 0 1 0 3H8M12.5 12v5h1a2.5 2.5 0 0 0 0-5zM17 17v-5h2.5M17 14.5h2' />
+        </>
+    ),
+    merge: (
+        <>
+            <rect x='3' y='3' width='8' height='10' rx='1.5' />
+            <rect x='13' y='3' width='8' height='10' rx='1.5' />
+            <path d='M7 13v3a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-3M12 18v3M9.5 20.5L12 23l2.5-2.5' />
+        </>
+    ),
+    extract: (
+        <>
+            <rect x='3' y='3' width='11' height='14' rx='1.5' />
+            <path d='M6 7h5M6 10h5M6 13h3' />
+            <path d='M14 10h7M18 7l3 3-3 3' />
+            <rect x='15' y='15' width='6' height='6' rx='1' />
+        </>
+    ),
+    reorder: (
+        <>
+            <rect x='3' y='3' width='7' height='9' rx='1.5' />
+            <rect x='14' y='12' width='7' height='9' rx='1.5' />
+            <path d='M14 6h4a2 2 0 0 1 2 2v1M10 18H6a2 2 0 0 1-2-2v-1' />
+            <path d='M18 6.5l2 2.5 2-2.5M6 17.5L4 15l-2 2.5' />
+        </>
+    ),
+    undo: (
+        <>
+            <path d='M9 14L4 9l5-5' />
+            <path d='M4 9h10a6 6 0 0 1 0 12h-3' />
+        </>
+    ),
+    redo: (
+        <>
+            <path d='M15 14l5-5-5-5' />
+            <path d='M20 9H10a6 6 0 0 0 0 12h3' />
+        </>
+    ),
+    rotateLeft: (
+        <>
+            <path d='M3 12a9 9 0 1 0 3-6.7' />
+            <path d='M3 4v5h5' />
+        </>
+    ),
+    rotateRight: (
+        <>
+            <path d='M21 12a9 9 0 1 1-3-6.7' />
+            <path d='M21 4v5h-5' />
+        </>
+    ),
+    duplicate: (
+        <>
+            <rect x='8' y='8' width='13' height='13' rx='2' />
+            <path d='M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3' />
+        </>
+    ),
+    blank: (
+        <>
+            <path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z' />
+            <path d='M14 2v6h6M12 11v6M9 14h6' />
         </>
     )
 };

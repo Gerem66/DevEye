@@ -62,6 +62,15 @@ declare const styles: {
     readonly optionSectionQuiet: string;
     readonly optionSectionTitle: string;
     readonly pairField: string;
+    readonly pdfBand: string;
+    readonly pdfDrop: string;
+    readonly pdfIntro: string;
+    readonly pdfText: string;
+    readonly pdfTitle: string;
+    readonly pdfTool: string;
+    readonly pdfToolPicto: string;
+    readonly pdfToolText: string;
+    readonly pdfTools: string;
     readonly playerBar: string;
     readonly playerButton: string;
     readonly playerHidden: string;

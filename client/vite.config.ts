@@ -273,6 +273,54 @@ function excalidrawFonts(): Plugin & { assetPath: string | null } {
 }
 
 /**
+ * Les fichiers que pdf.js va chercher à la demande (polices standard, tables
+ * CMap, décodeurs d'images en JavaScript), servis par DevEye sous un chemin
+ * versionné : le paquet ne connaît aucun CDN, et sans eux un PDF dont les
+ * polices ne sont pas embarquées s'afficherait en carrés. Inactif tant que le
+ * paquet n'est pas installé (un poste sans le module Convertisseur).
+ */
+function pdfjsAssets(): Plugin & { assetPath: string | null } {
+    const pkgDir = path.resolve(__dirname, '../node_modules/pdfjs-dist');
+    const pkgFile = path.join(pkgDir, 'package.json');
+    if (!existsSync(pkgFile)) return { name: 'deveye:pdfjs-assets', assetPath: null };
+    const { version } = JSON.parse(readFileSync(pkgFile, 'utf-8')) as { version: string };
+    const base = `assets/pdfjs-${version}/`;
+    const dirs = ['cmaps', 'standard_fonts', 'wasm'];
+    const types: Record<string, string> = {
+        '.js': 'text/javascript',
+        '.wasm': 'application/wasm',
+        '.ttf': 'font/ttf',
+        '.pfb': 'application/octet-stream',
+        '.bcmap': 'application/octet-stream'
+    };
+    return {
+        name: 'deveye:pdfjs-assets',
+        assetPath: `/${base}`,
+        configureServer(server) {
+            server.middlewares.use(`/${base}`, (req, res, next) => {
+                const rel = decodeURIComponent((req.url ?? '').split('?')[0]).replace(/^\/+/, '');
+                if (!dirs.includes(rel.split('/')[0])) return next();
+                const file = path.resolve(pkgDir, rel);
+                if (!file.startsWith(pkgDir + path.sep) || !existsSync(file)) return next();
+                res.setHeader('Content-Type', types[path.extname(file)] ?? 'application/octet-stream');
+                createReadStream(file).pipe(res);
+            });
+        },
+        generateBundle() {
+            for (const dir of dirs) {
+                const root = path.join(pkgDir, dir);
+                for (const entry of readdirSync(root, { recursive: true, withFileTypes: true })) {
+                    if (!entry.isFile()) continue;
+                    const file = path.join(entry.parentPath, entry.name);
+                    const rel = path.relative(root, file).split(path.sep).join('/');
+                    this.emitFile({ type: 'asset', fileName: `${base}${dir}/${rel}`, source: readFileSync(file) });
+                }
+            }
+        }
+    };
+}
+
+/**
  * Atteint par un import statique depuis une entrée ? Sinon, seuls des `import()`
  * y mènent : le module est chargé à la demande et doit garder un chunk à lui.
  * Rangé dans celui de sa feature ou dans `vendor`, il serait préchargé avec eux
@@ -363,14 +411,16 @@ export default defineConfig(({ command }) => {
     const featureRoots = featureChunkRoots();
     const useTypesSource = command === 'serve' && existsSync(TYPES_SOURCE_ENTRY);
     const fonts = excalidrawFonts();
+    const pdfjs = pdfjsAssets();
     const reachable = staticReach();
 
     return {
         define: {
             __APP_VERSION__: JSON.stringify(appVersion),
-            ...(fonts.assetPath ? { __EXCALIDRAW_ASSET_PATH__: JSON.stringify(fonts.assetPath) } : {})
+            ...(fonts.assetPath ? { __EXCALIDRAW_ASSET_PATH__: JSON.stringify(fonts.assetPath) } : {}),
+            ...(pdfjs.assetPath ? { __PDFJS_ASSET_PATH__: JSON.stringify(pdfjs.assetPath) } : {})
         },
-        plugins: [react(), inlineIcons(), fonts, buildManifest(), precompress()],
+        plugins: [react(), inlineIcons(), fonts, pdfjs, buildManifest(), precompress()],
         optimizeDeps: {
             // `@deveye/types` ships TypeScript source and is the one dependency that
             // changes in step with the app. Vite's dep pre-bundling keys its cache on
@@ -383,7 +433,11 @@ export default defineConfig(({ command }) => {
             exclude: ['@deveye/types', ...installedFeaturePackages()],
             // Le scan ne traverse pas les modules exclus : sans cette ligne, Excalidraw
             // est découvert à l'ouverture d'un tableau, et Vite recharge toute la page.
-            include: fonts.assetPath ? ['@excalidraw/excalidraw'] : []
+            // Même chose pour les bibliothèques de l'atelier PDF du Convertisseur.
+            include: [
+                ...(fonts.assetPath ? ['@excalidraw/excalidraw'] : []),
+                ...(pdfjs.assetPath ? ['pdfjs-dist', '@cantoo/pdf-lib', '@cantoo/fontkit', 'fflate'] : [])
+            ]
         },
         server: {
             port: 5173,

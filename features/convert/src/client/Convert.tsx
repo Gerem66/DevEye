@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Button,
     Dialog,
@@ -7,6 +7,7 @@ import {
     FeatureSettingsButton,
     formatBytesFr,
     invalidate,
+    LoadingVeil,
     onServerEvent,
     saveFrom,
     StickyHeader,
@@ -42,6 +43,7 @@ import { ExportStep, isLocked, type Sending, type Tracked } from './steps/Export
 import { FormatStep } from './steps/FormatStep';
 import { KindStep } from './steps/KindStep';
 import { OptionsStep } from './steps/OptionsStep';
+import { routesToWorkshop, type WorkshopIntent } from './pdf/model';
 import styles from './style.module.css';
 import { Units } from './Units';
 import { useEstimate } from './useEstimate';
@@ -51,11 +53,15 @@ type Tool = 'currency' | 'units';
 const TOOL_TITLES: Record<Tool, string> = { currency: 'Devises', units: 'Unités' };
 const TOOL_DIALOG_WIDTH = 560;
 
+/** L'atelier PDF et ses bibliothèques ne se chargent qu'en y entrant. */
+const PdfWorkshop = lazy(() => import('./pdf/PdfWorkshop'));
+
 export default function Convert(_props: FeatureViewProps) {
     const wizard = useWizard();
     const { state } = wizard;
     const canWrite = useWorkspacePermissions().canFeature('convert', 'write');
     const [tool, setTool] = useState<Tool | null>(null);
+    const [workshop, setWorkshop] = useState<{ files: File[]; intent: WorkshopIntent } | null>(null);
 
     const caps = useResource(
         'convert.capabilities',
@@ -228,6 +234,26 @@ export default function Convert(_props: FeatureViewProps) {
     const atRoot = state.view === 'kinds' || kind === null;
     useSubView(atRoot ? null : state.view);
 
+    // Un PDF, ou plusieurs images, vont à l'atelier ; tout le reste suit l'assistant.
+    const routeFiles = (files: File[]): void => {
+        if (routesToWorkshop(files)) setWorkshop({ files, intent: 'pages' });
+        else if (files[0]) wizard.pickFile(files[0]);
+    };
+
+    if (workshop) {
+        return (
+            <Suspense
+                fallback={
+                    <div className={styles.root}>
+                        <LoadingVeil label='Ouverture de l’atelier…' />
+                    </div>
+                }
+            >
+                <PdfWorkshop initialFiles={workshop.files} intent={workshop.intent} onLeave={() => setWorkshop(null)} />
+            </Suspense>
+        );
+    }
+
     return (
         <div className={styles.root}>
             <StickyHeader className={styles.headBand}>
@@ -258,7 +284,8 @@ export default function Convert(_props: FeatureViewProps) {
                 <KindStep
                     families={caps.data?.families ?? []}
                     onKind={wizard.pickKind}
-                    onFile={wizard.pickFile}
+                    onFiles={routeFiles}
+                    onWorkshop={(files, intent) => setWorkshop({ files, intent })}
                     onTool={setTool}
                 />
             ) : (
