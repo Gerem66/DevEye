@@ -125,7 +125,7 @@ demander ailleurs est coupé :
 
 - les **polices** sont servies par DevEye, sous `/assets/excalidraw-<version>/`,
   copiées du paquet au build ; le repli que le paquet prévoit vers un CDN est
-  remplacé par ce même dossier (`client/vite.config.ts`, le build échoue si sa
+  remplacé par ce même dossier (`client/vite/plugins/excalidrawFonts.ts`, le build échoue si sa
   forme change) ;
 - les **intégrations web** (vidéos, pages tierces) sont refusées
   (`validateEmbeddable={false}`), l'IA et ses dialogues ne sont pas rendus ;

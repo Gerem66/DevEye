@@ -76,7 +76,7 @@ scan (ocrmypdf), est confié au Convertisseur, qui a l'outil et les quotas.
 
 Aucune variable, aucun outil. Les fichiers de pdf.js (polices standard, tables
 CMap, décodeurs d'images) sont servis par l'app sous `/assets/pdfjs-<version>/`,
-émis au build du client par `client/vite.config.ts`. La reconnaissance de texte
+émis au build du client par `client/vite/plugins/pdfjsAssets.ts`. La reconnaissance de texte
 dépend d'un outil du Convertisseur (ocrmypdf), qui dit lui-même ce qui lui
 manque.
 

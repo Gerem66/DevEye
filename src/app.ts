@@ -485,7 +485,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
             // repli ci-dessous hors d'un domaine client.
             index: false,
             allowedPath: (pathName) => !pathName.endsWith('.map'),
-            // Les `.br` et `.gz` du build (`precompress`, vite.config.ts) sortent
+            // Les `.br` et `.gz` du build (`client/vite/plugins/precompress.ts`) sortent
             // sous le nom de leur original, jamais par une route à eux.
             preCompressed: true,
             globIgnore: ['**/*.br', '**/*.gz'],
