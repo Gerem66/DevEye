@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Switch } from 'deveye-sdk-client';
 
-import { Picto } from '../icons';
+import { Picto } from './icons';
 import type { FieldValue } from './build';
 import { pageAnnotations } from './documents';
 import { fieldLabel, fieldsOf, fieldViewRect, type FormField } from './fields';

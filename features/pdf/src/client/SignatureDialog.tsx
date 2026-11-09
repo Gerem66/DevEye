@@ -10,7 +10,7 @@ import {
     type ErrorNoteInput
 } from 'deveye-sdk-client';
 
-import { SIGNATURES_MAX, type SavedSignature } from '../../contracts/signatures';
+import { SIGNATURES_MAX, type SavedSignature } from '../contracts/signatures';
 import { assetUrl } from './documents';
 import { strokesPath, type SignatureData } from './elements';
 import { HAND_FONT_FAMILY } from './fonts';

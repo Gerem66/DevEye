@@ -730,19 +730,6 @@ CREATE TABLE `ft_convert_jobs` (
   CONSTRAINT `fk_ft_convert_jobs_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
-CREATE TABLE `ft_convert_signatures` (
-  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-  `workspace_id` int NOT NULL,
-  `user_id` int NOT NULL,
-  `role` enum('signature','initials') COLLATE utf8mb4_general_ci NOT NULL,
-  `data_enc` mediumtext COLLATE utf8mb4_general_ci NOT NULL,
-  `created` bigint NOT NULL,
-  PRIMARY KEY (`id`),
-  KEY `idx_ft_convert_signatures_user` (`user_id`,`created`),
-  KEY `fk_ft_convert_signatures_ws` (`workspace_id`),
-  CONSTRAINT `fk_ft_convert_signatures_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
 CREATE TABLE `ft_cve_entries` (
   `cve_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL,
   `published` bigint NOT NULL,
@@ -1283,6 +1270,19 @@ CREATE TABLE `ft_osint_usage` (
   `lookups` int NOT NULL DEFAULT '0',
   PRIMARY KEY (`workspace_id`,`month`),
   CONSTRAINT `fk_ft_osint_usage_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_pdf_signatures` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `workspace_id` int NOT NULL,
+  `user_id` int NOT NULL,
+  `role` enum('signature','initials') COLLATE utf8mb4_general_ci NOT NULL,
+  `data_enc` mediumtext COLLATE utf8mb4_general_ci NOT NULL,
+  `created` bigint NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_ft_pdf_signatures_user` (`user_id`,`created`),
+  KEY `fk_ft_pdf_signatures_ws` (`workspace_id`),
+  CONSTRAINT `fk_ft_pdf_signatures_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 CREATE TABLE `ft_projects_dashboard_tiles` (

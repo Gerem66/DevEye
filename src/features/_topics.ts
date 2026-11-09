@@ -71,6 +71,7 @@ const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
     share: 'workspace',
     osint: 'osint',
     password: 'password',
+    pdf: 'pdf',
     // Les commandes de discussion nomment `['projectsChat']`, sujet secondaire
     // du manifest : un message ne doit pas faire re-solliciter le tableau entier.
     projects: 'projects',

@@ -1,4 +1,4 @@
-import type { PictoId } from '../icons';
+import type { PictoId } from './icons';
 
 /** Les outils de l'onglet Signer et annoter. `select` déplace et redimensionne ce qui est posé. */
 export type Tool =

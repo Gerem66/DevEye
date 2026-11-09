@@ -9,7 +9,7 @@ const descriptor = featureDescriptor('convert');
 export const manifest = {
     ...descriptor,
     category: 'daily',
-    resources: ['convert.list', 'convert.capabilities', 'convert.rates', 'convert.settings', 'convert.signatures'],
+    resources: ['convert.list', 'convert.capabilities', 'convert.rates', 'convert.settings'],
     /**
      * Les taux ont leur propre sujet : le service les rafraîchit seul, et un
      * travail qui avance ne doit pas les faire relire à tout l'espace.

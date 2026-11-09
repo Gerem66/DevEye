@@ -1,6 +1,6 @@
 import { ActionMenu, Button } from 'deveye-sdk-client';
 
-import { Picto, type PictoId } from '../icons';
+import { Picto, type PictoId } from './icons';
 import { pagesByParity, type Plan } from './model';
 import styles from './pdf.module.css';
 import type { Workshop } from './usePdfWorkshop';

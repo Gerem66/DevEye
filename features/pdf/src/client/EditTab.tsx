@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ErrorNote, errorNote, invalidate, pickFiles, type ErrorNoteInput } from 'deveye-sdk-client';
 
-import { api } from '../api';
+import { api } from './api';
 import { addAsset } from './documents';
 import {
     centredBox,
@@ -86,21 +86,21 @@ export function EditTab({ workshop }: EditTabProps) {
         const stored = toStored(data);
         if (!stored) return;
         try {
-            await api.send('convert.signatureSave', { role, data: stored });
+            await api.send('pdf.signatureSave', { role, data: stored });
         } catch (e) {
             setError(errorNote(e, 'La signature n’a pas pu être gardée sur votre compte.'));
         } finally {
-            invalidate('convert.signatures');
+            invalidate('pdf.signatures');
         }
     };
 
     const removeSaved = async (id: number): Promise<void> => {
         try {
-            await api.send('convert.signatureRemove', { id });
+            await api.send('pdf.signatureRemove', { id });
         } catch (e) {
             setError(errorNote(e, 'Cette signature n’a pas pu être retirée.'));
         } finally {
-            invalidate('convert.signatures');
+            invalidate('pdf.signatures');
         }
     };
 

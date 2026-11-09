@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Button,
     Dialog,
@@ -7,12 +7,12 @@ import {
     FeatureSettingsButton,
     formatBytesFr,
     invalidate,
-    LoadingVeil,
     onServerEvent,
     saveFrom,
     StickyHeader,
     UploadError,
     uploadFile,
+    useHandedFile,
     useResource,
     useSubView,
     useWorkspacePermissions,
@@ -43,7 +43,6 @@ import { ExportStep, isLocked, type Sending, type Tracked } from './steps/Export
 import { FormatStep } from './steps/FormatStep';
 import { KindStep } from './steps/KindStep';
 import { OptionsStep } from './steps/OptionsStep';
-import { routesToWorkshop, type WorkshopIntent } from './pdf/model';
 import styles from './style.module.css';
 import { Units } from './Units';
 import { useEstimate } from './useEstimate';
@@ -53,15 +52,17 @@ type Tool = 'currency' | 'units';
 const TOOL_TITLES: Record<Tool, string> = { currency: 'Devises', units: 'Unités' };
 const TOOL_DIALOG_WIDTH = 560;
 
-/** L'atelier PDF et ses bibliothèques ne se chargent qu'en y entrant. */
-const PdfWorkshop = lazy(() => import('./pdf/PdfWorkshop'));
-
 export default function Convert(_props: FeatureViewProps) {
     const wizard = useWizard();
     const { state } = wizard;
     const canWrite = useWorkspacePermissions().canFeature('convert', 'write');
     const [tool, setTool] = useState<Tool | null>(null);
-    const [workshop, setWorkshop] = useState<{ files: File[]; intent: WorkshopIntent } | null>(null);
+
+    // Le PDF que l'atelier PDF confie, avec la cible qu'il veut ; une cible inconnue laisse le choix du format.
+    const handoff = wizard.handoff;
+    useHandedFile('convert', ({ file: handed, purpose }) =>
+        handoff(handed, 'document', 'pdf', purpose && targetOf('document', 'pdf', purpose) ? purpose : null)
+    );
 
     const caps = useResource(
         'convert.capabilities',
@@ -234,40 +235,6 @@ export default function Convert(_props: FeatureViewProps) {
     const atRoot = state.view === 'kinds' || kind === null;
     useSubView(atRoot ? null : state.view);
 
-    // Un PDF, ou plusieurs images, vont à l'atelier ; tout le reste suit l'assistant.
-    const routeFiles = (files: File[]): void => {
-        if (routesToWorkshop(files)) setWorkshop({ files, intent: 'pages' });
-        else if (files[0]) wizard.pickFile(files[0]);
-    };
-
-    if (workshop) {
-        // Ce que ce serveur sait faire d'un PDF : alléger, reconnaître le texte.
-        const documents = caps.data?.families.find((f) => f.kind === 'document');
-        const serves = (targetId: string): boolean =>
-            documents !== undefined && documents.available && !documents.missingTargets.includes(targetId);
-        return (
-            <Suspense
-                fallback={
-                    <div className={styles.root}>
-                        <LoadingVeil label='Ouverture de l’atelier…' />
-                    </div>
-                }
-            >
-                <PdfWorkshop
-                    initialFiles={workshop.files}
-                    intent={workshop.intent}
-                    server={{ light: serves('pdf-light'), ocr: serves('pdf-ocr') }}
-                    canWrite={canWrite}
-                    onLeave={() => setWorkshop(null)}
-                    onHandoff={(file, targetId) => {
-                        setWorkshop(null);
-                        wizard.handoff(file, 'document', 'pdf', targetId);
-                    }}
-                />
-            </Suspense>
-        );
-    }
-
     return (
         <div className={styles.root}>
             <StickyHeader className={styles.headBand}>
@@ -298,8 +265,7 @@ export default function Convert(_props: FeatureViewProps) {
                 <KindStep
                     families={caps.data?.families ?? []}
                     onKind={wizard.pickKind}
-                    onFiles={routeFiles}
-                    onWorkshop={(files, intent) => setWorkshop({ files, intent })}
+                    onFile={wizard.pickFile}
                     onTool={setTool}
                 />
             ) : (

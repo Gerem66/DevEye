@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { useDragReorder, useFileDrop } from 'deveye-sdk-client';
 
-import { Picto } from '../icons';
+import { Picto } from './icons';
 import { sourceColorVar } from './colors';
 import { displayedSize, moveTogether, sourceOf, totalRotation, type Plan, type PlanPage } from './model';
 import styles from './pdf.module.css';

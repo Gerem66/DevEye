@@ -1,7 +1,7 @@
 import { useResource } from 'deveye-sdk-client';
 
-import type { SavedSignature, StoredSignature } from '../../contracts/signatures';
-import { api } from '../api';
+import type { SavedSignature, StoredSignature } from '../contracts/signatures';
+import { api } from './api';
 import { addAsset, assetBytes } from './documents';
 import type { SignatureData } from './elements';
 
@@ -56,8 +56,8 @@ export function useSavedSignatures(): {
     error: ReturnType<typeof useResource>['error'];
 } {
     const { data, error } = useResource(
-        'convert.signatures',
-        () => api.send('convert.signatures', {}).then((r) => r.signatures),
+        'pdf.signatures',
+        () => api.send('pdf.signatures', {}).then((r) => r.signatures),
         'Impossible de charger vos signatures gardées.'
     );
     return { signatures: data, error };

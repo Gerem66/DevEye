@@ -1271,3 +1271,103 @@
         grid-template-columns: minmax(0, 1fr);
     }
 }
+
+/* ---- L'accueil du module : le dépôt, puis les gestes ---- */
+.landing {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.landingDrop {
+    min-height: 220px;
+}
+
+.sectionTitle {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.gestures {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: var(--space-sm);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.gesture {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    width: 100%;
+    height: 100%;
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    background: var(--surface-widget);
+    color: var(--text-secondary);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color var(--transition-fast);
+}
+
+.gesture:hover,
+.gesture:focus-visible {
+    border-color: var(--accent);
+}
+
+.gesturePicto {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-pill);
+    background: var(--accent-bg);
+    color: var(--accent);
+}
+
+.gestureText {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.gestureLabel {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.gestureHint {
+    font-size: 0.82rem;
+    line-height: 1.45;
+    color: var(--text-muted);
+}
+
+/* ---- La carte de l'accueil : le texte au pied, comme les autres vignettes ---- */
+.widget {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    height: 100%;
+}
+
+.widgetText {
+    margin: auto 0 0;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    color: var(--text-muted);
+}
+
+.widgetMeta {
+    margin: 0;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}

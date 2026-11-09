@@ -35,11 +35,11 @@ pas être projeté : ce n'est pas une prudence, c'est une impossibilité mécani
 Le registre (`src/domain/featureRegistry.ts` de `@deveye/types`) et le manifest
 de chaque module portent la règle dans `shareTier` :
 
-|                                                                                                                                                                 | Partageable                                                                                                |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `'open'` : Uptime, Bases de données, Déploiements, Git, Audience, Sauvegardes, Appareils, Serveur mail, Hébergement                                             | oui, sans condition                                                                                        |
-| `'perItem'` : Notes, Mail, Projets                                                                                                                              | selon la ligne : note ordinaire oui, note privée non ; compte mail ou projet « open » oui, « guarded » non |
-| `'never'` : Mots de passe, CloudSync, Météo, Finances, Sentinelle, OSINT, Veille CVE, Convertisseur, Facturation, Audit, Rendez-vous, Jeu de la vie, Abonnement | non                                                                                                        |
+|                                                                                                                                                                      | Partageable                                                                                                |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `'open'` : Uptime, Bases de données, Déploiements, Git, Audience, Sauvegardes, Appareils, Serveur mail, Hébergement                                                  | oui, sans condition                                                                                        |
+| `'perItem'` : Notes, Mail, Projets                                                                                                                                   | selon la ligne : note ordinaire oui, note privée non ; compte mail ou projet « open » oui, « guarded » non |
+| `'never'` : Mots de passe, CloudSync, Météo, Finances, Sentinelle, OSINT, Veille CVE, Convertisseur, PDF, Facturation, Audit, Rendez-vous, Jeu de la vie, Abonnement | non                                                                                                        |
 
 Deux `never` méritent leur justification :
 

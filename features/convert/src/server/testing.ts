@@ -1,4 +1,4 @@
-import type { ConvertRepo, JobRow, SignatureRow, StoredRates } from './repo';
+import type { ConvertRepo, JobRow, StoredRates } from './repo';
 
 /**
  * Le dépôt en mémoire des tests. Il tient les mêmes gardes que le SQL : une
@@ -6,7 +6,6 @@ import type { ConvertRepo, JobRow, SignatureRow, StoredRates } from './repo';
  */
 export interface MemoryRepo extends ConvertRepo {
     rows: JobRow[];
-    signatureRows: SignatureRow[];
     stored: StoredRates;
     fx: { lastAttemptAt: number; lastSuccessAt: number };
 }
@@ -16,11 +15,8 @@ export function memoryRepo(): MemoryRepo {
     const byId = (id: number): JobRow | undefined => rows.find((r) => r.id === id);
     const holding = new Set(['awaiting_upload', 'uploading', 'queued', 'running', 'done']);
 
-    const signatureRows: SignatureRow[] = [];
-
     const repo: MemoryRepo = {
         rows,
-        signatureRows,
         stored: { asOf: null, rates: {} },
         fx: { lastAttemptAt: 0, lastSuccessAt: 0 },
 
@@ -187,29 +183,6 @@ export function memoryRepo(): MemoryRepo {
             return Promise.resolve(true);
         },
         purgeOld: () => Promise.resolve(),
-        signatures: (userId) =>
-            Promise.resolve(
-                signatureRows.filter((r) => r.user_id === userId).sort((a, b) => Number(b.created) - Number(a.created))
-            ),
-        countSignatures: (userId) => Promise.resolve(signatureRows.filter((r) => r.user_id === userId).length),
-        insertSignature(row) {
-            const id = signatureRows.length + 1;
-            signatureRows.push({
-                id,
-                workspace_id: row.workspaceId,
-                user_id: row.userId,
-                role: row.role,
-                data_enc: row.dataEnc,
-                created: row.at
-            });
-            return Promise.resolve(id);
-        },
-        removeSignature(id, userId) {
-            const at = signatureRows.findIndex((r) => r.id === id && r.user_id === userId);
-            if (at === -1) return Promise.resolve(false);
-            signatureRows.splice(at, 1);
-            return Promise.resolve(true);
-        },
         rates: () => Promise.resolve(repo.stored),
         saveRates(asOf, rates) {
             repo.stored = { asOf, rates: { ...rates } };

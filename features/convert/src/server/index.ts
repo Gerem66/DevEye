@@ -8,7 +8,6 @@ import { createRepo, type ConvertRepo } from './repo';
 import { createService } from './service';
 import { CONVERT_ENV } from './env';
 import { convertAccountExport } from './accountExport';
-import { convertE2e } from './e2e';
 
 /** Pas d'entrée `items` : `shareTier: 'never'`, une conversion est personnelle et éphémère. */
 export const serverEntry: FeatureServer<ConvertRepo> = {
@@ -16,7 +15,6 @@ export const serverEntry: FeatureServer<ConvertRepo> = {
     createRepo,
     features: convertHandlers,
     accountExport: convertAccountExport,
-    e2e: convertE2e,
     migrationsDir: path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations'),
     quotas: {
         activeJobs: { count: (repo, owned) => repo.openJobs(owned) },

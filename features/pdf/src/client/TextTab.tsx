@@ -32,8 +32,8 @@ function useTexts(plan: Plan): ReadonlyMap<string, string | null> {
 
 interface TextTabProps {
     workshop: Workshop;
-    /** Faire reconnaître le texte des pages scannées par le serveur ; `null` quand il ne le propose pas. */
-    onOcr: (() => void) | null;
+    /** Confier le document au Convertisseur pour qu'il fasse reconnaître le texte des pages scannées. */
+    onOcr: () => void;
 }
 
 /** Le texte du document, page par page, à copier ou à télécharger. */
@@ -65,14 +65,14 @@ export function TextTab({ workshop, onOcr }: TextTabProps) {
                           : `${withText} page${withText > 1 ? 's' : ''} avec du texte sur ${plan.pages.length}.`}
                 </span>
                 <div className={styles.toolbarEnd}>
-                    {onOcr && scanned > 0 && read === plan.pages.length && (
+                    {scanned > 0 && read === plan.pages.length && (
                         <Button
                             variant='secondary'
-                            icon='upload'
-                            title='Le document part sur le serveur, qui lit les pages scannées'
+                            icon='convert'
+                            title='Le document passe au Convertisseur, qui fait lire les pages scannées par le serveur'
                             onClick={onOcr}
                         >
-                            Reconnaître le texte sur le serveur
+                            Reconnaître le texte des scans
                         </Button>
                     )}
                     <CopyButton value={all} label='Copier tout le texte' className={styles.iconButton} />

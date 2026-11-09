@@ -9,6 +9,7 @@ import { useEffect, useRef, type ChangeEvent } from 'react';
 import { ws, type SendOptions } from '@/api/ws';
 import { useLiveSegment } from '@/live/useLiveSegment';
 import { startTeleport, type LiveSegmentKind } from '@/stores/live';
+import { putHandedFile } from '@/stores/handoff';
 import { getActiveWorkspaceId, useActiveWorkspace, useWorkspacesHere } from '@/stores/workspace';
 import type { MinimalUser, Workspace } from '@deveye/types';
 
@@ -227,6 +228,17 @@ export function openFeature(feature: string, itemId?: number | string): void {
     if (workspaceId === null) return;
     startTeleport(workspaceId, itemId === undefined ? [`view:${feature}`] : [`view:${feature}`, `l1:${itemId}`]);
 }
+
+/**
+ * Confie un fichier à une autre fonctionnalité et l'ouvre : elle le ramasse
+ * par `useHandedFile`. `purpose` dit ce qu'elle doit en faire, dans ses termes.
+ */
+export function handFileTo(feature: string, file: File, purpose: string | null = null): void {
+    putHandedFile(feature, { file, purpose });
+    openFeature(feature);
+}
+export { useHandedFile } from '@/stores/handoff';
+export type { HandedFile } from '@/stores/handoff';
 
 // ── Le chiffrement par mot de passe ────────────────────────────────────────
 // L'état de verrou de la session, l'invite globale, et le patron « réessaie une

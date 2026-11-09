@@ -5,7 +5,7 @@ import {
     Dropzone,
     ErrorNote,
     errorNote,
-    FeatureSettingsButton,
+    handFileTo,
     LoadingVeil,
     pickFiles,
     ProgressDialog,
@@ -17,7 +17,7 @@ import {
     type ErrorNoteInput
 } from 'deveye-sdk-client';
 
-import { Picto } from '../icons';
+import { Picto } from './icons';
 import { addImage, buildInputOf, forgetAll, openSource } from './documents';
 import { EditTab } from './EditTab';
 import { ExportDialog, type ImageDpi, type ImageFormat } from './ExportDialog';
@@ -72,24 +72,13 @@ const TAB_OF_INTENT: Partial<Record<WorkshopIntent, Tab>> = {
 const stem = (name: string): string => name.replace(/\.pdf$/i, '');
 const JPEG_QUALITY = 0.9;
 
-/** Ce que le serveur sait faire d'un PDF, d'après ses outils et l'offre. */
-export interface ServerTargets {
-    light: boolean;
-    ocr: boolean;
-}
-
-/** Les cibles de l'assistant qu'on atteint depuis l'atelier. */
+/** Les cibles du Convertisseur qu'on atteint depuis l'atelier : il dit lui-même ce que son serveur sait faire. */
 export type ServerTarget = 'pdf-light' | 'pdf-ocr';
 
 interface PdfWorkshopProps {
     initialFiles: readonly File[];
     intent: WorkshopIntent;
-    server: ServerTargets;
-    /** Le membre peut lancer une conversion sur le serveur. */
-    canWrite: boolean;
     onLeave: () => void;
-    /** Le document assemblé, confié à l'assistant pour une conversion sur le serveur. */
-    onHandoff: (file: File, targetId: ServerTarget) => void;
 }
 
 /**
@@ -97,8 +86,7 @@ interface PdfWorkshopProps {
  * pdf.js affiche, pdf-lib assemble (dans un worker), et le résultat se
  * télécharge depuis une adresse `blob:`.
  */
-export default function PdfWorkshop({ initialFiles, intent, server, canWrite, onLeave, onHandoff }: PdfWorkshopProps) {
-    useSubView('pdf');
+export default function PdfWorkshop({ initialFiles, intent, onLeave }: PdfWorkshopProps) {
     useRequestPopupWidth(POPUP_WIDTH);
     const workshop = usePdfWorkshop();
     const { plan, elements, fields, flatten, finishing, selection, act } = workshop;
@@ -111,6 +99,7 @@ export default function PdfWorkshop({ initialFiles, intent, server, canWrite, on
     const hasForm = plan.sources.some((s) => s.hasForm);
     const tabs = TABS.filter((t) => t.id !== 'form' || hasForm);
     const shown: Tab = tab === 'form' && !hasForm ? 'pages' : tab;
+    useSubView(shown);
     const [opening, setOpening] = useState(0);
     const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [password, setPassword] = useState<PasswordRequest | null>(null);
@@ -289,14 +278,14 @@ export default function PdfWorkshop({ initialFiles, intent, server, canWrite, on
         }
     };
 
-    /** Le document, tel qu'il sortirait, confié à l'assistant : l'allègement et la reconnaissance se font sur le serveur. */
+    /** Le document, tel qu'il sortirait, confié au Convertisseur : l'allègement et la reconnaissance se font sur son serveur. */
     const handoff = async (target: ServerTarget): Promise<void> => {
         if (plan.pages.length === 0) return;
         setError(null);
         setExporting({ step: 'Assemblage du document', done: 0, total: plan.pages.length });
         try {
             const bytes = await buildPart(plan.pages);
-            onHandoff(new File([bytes], name, { type: 'application/pdf' }), target);
+            handFileTo('convert', new File([bytes], name, { type: 'application/pdf' }), target);
         } catch (e) {
             setError(errorNote(e, 'Le document n’a pas pu être assemblé.'));
         } finally {
@@ -370,10 +359,10 @@ export default function PdfWorkshop({ initialFiles, intent, server, canWrite, on
                 <header className={styles.header}>
                     <div className={styles.headLeft}>
                         <Button variant='ghost' icon='arrow-left' onClick={leave}>
-                            Convertisseur
+                            PDF
                         </Button>
                         <div className={styles.headTitle}>
-                            <h2 className={styles.heading}>Atelier PDF</h2>
+                            <h2 className={styles.heading}>Atelier</h2>
                             <p className={styles.subheading}>{summarize(plan)}</p>
                         </div>
                     </div>
@@ -401,7 +390,6 @@ export default function PdfWorkshop({ initialFiles, intent, server, canWrite, on
                         <Button variant='secondary' icon='add' onClick={pick}>
                             Ajouter des fichiers
                         </Button>
-                        <FeatureSettingsButton scope={{ kind: 'feature', feature: 'convert' }} />
                     </div>
                 </header>
                 <nav className={styles.tabs} aria-label='Parties de l’atelier'>
@@ -439,10 +427,7 @@ export default function PdfWorkshop({ initialFiles, intent, server, canWrite, on
                 ) : shown === 'form' ? (
                     <FormTab workshop={workshop} />
                 ) : shown === 'text' ? (
-                    <TextTab
-                        workshop={workshop}
-                        onOcr={server.ocr && canWrite ? () => void handoff('pdf-ocr') : null}
-                    />
+                    <TextTab workshop={workshop} onOcr={() => void handoff('pdf-ocr')} />
                 ) : shown === 'finish' ? (
                     <FinishTab workshop={workshop} />
                 ) : (
@@ -482,7 +467,6 @@ export default function PdfWorkshop({ initialFiles, intent, server, canWrite, on
                 onClose={() => setExportsOpen(false)}
                 onSplit={(mode) => void exportSplit(mode)}
                 onImages={(format, dpi) => void exportImages(format, dpi)}
-                server={{ light: server.light && canWrite, ocr: server.ocr && canWrite }}
                 onServer={(target) => void handoff(target)}
             />
             <ProgressDialog

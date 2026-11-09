@@ -41,14 +41,16 @@ import { manifest as manifest16 } from 'deveye-feature-mailserver';
 import { serverEntry as server16 } from 'deveye-feature-mailserver/server';
 import { manifest as manifest17 } from 'deveye-feature-convert';
 import { serverEntry as server17 } from 'deveye-feature-convert/server';
-import { manifest as manifest18 } from 'deveye-feature-invoicing';
-import { serverEntry as server18 } from 'deveye-feature-invoicing/server';
-import { manifest as manifest19 } from 'deveye-feature-shortlinks';
-import { serverEntry as server19 } from 'deveye-feature-shortlinks/server';
-import { manifest as manifest20 } from 'deveye-feature-moderation';
-import { serverEntry as server20 } from 'deveye-feature-moderation/server';
-import { manifest as manifest21 } from 'deveye-feature-whiteboard';
-import { serverEntry as server21 } from 'deveye-feature-whiteboard/server';
+import { manifest as manifest18 } from 'deveye-feature-pdf';
+import { serverEntry as server18 } from 'deveye-feature-pdf/server';
+import { manifest as manifest19 } from 'deveye-feature-invoicing';
+import { serverEntry as server19 } from 'deveye-feature-invoicing/server';
+import { manifest as manifest20 } from 'deveye-feature-shortlinks';
+import { serverEntry as server20 } from 'deveye-feature-shortlinks/server';
+import { manifest as manifest21 } from 'deveye-feature-moderation';
+import { serverEntry as server21 } from 'deveye-feature-moderation/server';
+import { manifest as manifest22 } from 'deveye-feature-whiteboard';
+import { serverEntry as server22 } from 'deveye-feature-whiteboard/server';
 
 export const INSTALLED_MODULES: readonly InstalledFeatureModule[] = [
     { manifest: { ...manifest0, icon: 'cloud' }, server: server0 },
@@ -69,9 +71,10 @@ export const INSTALLED_MODULES: readonly InstalledFeatureModule[] = [
     { manifest: { ...manifest15, icon: 'bug' }, server: server15 },
     { manifest: { ...manifest16, icon: 'at' }, server: server16 },
     { manifest: { ...manifest17, icon: 'convert' }, server: server17 },
-    { manifest: { ...manifest18, icon: 'invoicing' }, server: server18 },
-    { manifest: { ...manifest19, icon: 'shortlinks' }, server: server19 },
-    { manifest: { ...manifest20, icon: 'shield' }, server: server20 },
-    { manifest: { ...manifest21, icon: 'whiteboard' }, server: server21 },
+    { manifest: { ...manifest18, icon: 'pdf' }, server: server18 },
+    { manifest: { ...manifest19, icon: 'invoicing' }, server: server19 },
+    { manifest: { ...manifest20, icon: 'shortlinks' }, server: server20 },
+    { manifest: { ...manifest21, icon: 'shield' }, server: server21 },
+    { manifest: { ...manifest22, icon: 'whiteboard' }, server: server22 },
     ...LOCAL_MODULES
 ];

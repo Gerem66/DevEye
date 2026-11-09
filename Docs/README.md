@@ -50,6 +50,7 @@ lancement sont dans le [README de la racine](../README.md#quick-start).
 | [Liens courts](../features/shortlinks/README.md)           | des adresses courtes qui redirigent, leurs visites, leurs signalements               |
 | [Modération automatique](../features/moderation/README.md) | les empreintes et noms de fichiers interdits, consultés par Hébergement et CloudSync |
 | [Mail](../features/mail/README.md)                         | les boîtes mail de l'espace, leurs deux paliers, les alertes                         |
+| [PDF](../features/pdf/README.md)                           | fusionner, trier, signer, remplir et protéger des PDF, dans le navigateur            |
 | [Notes](../features/notes/README.md)                       | les notes et leurs dossiers, la note privée, la note projetée                        |
 | [Projets](../features/projects/README.md)                  | le pilotage du travail, et ses liaisons vers les objets d'espace                     |
 | [Sauvegardes](../features/backup/README.md)                | les sauvegardes : sources, destinations, chiffrement des archives                    |

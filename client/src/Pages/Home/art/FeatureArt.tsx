@@ -393,6 +393,21 @@ const ART: Record<ArtId, ReactNode> = {
             <circle cx='92' cy='74' r='5' fill={A} />
         </>
     ),
+    // Deux pages l'une sur l'autre, et la signature posée au bas de celle du dessus.
+    pdf: (
+        <>
+            <rect x='42' y='14' width='60' height='70' rx='5' fill={M} opacity='0.08' />
+            <rect x='42' y='14' width='60' height='70' rx='5' stroke={M} opacity='0.5' {...thin} />
+            <rect x='58' y='6' width='64' height='74' rx='5' fill={M} opacity='0.14' />
+            <rect x='58' y='6' width='64' height='74' rx='5' stroke={M} {...thin} />
+            <Line x={68} y={18} w={40} o={0.45} />
+            <Line x={68} y={28} w={30} o={0.3} />
+            <Line x={68} y={38} w={36} o={0.3} />
+            <Line x={68} y={48} w={24} o={0.3} />
+            <path d='M68 68c5-12 9-12 13-1s8 11 13 0 8-10 14 1' stroke={A} {...stroke} />
+            <circle cx='112' cy='68' r='3' fill={A} />
+        </>
+    ),
     // La feuille d'un document : ses lignes, et le total qui les ferme.
     invoicing: (
         <>

@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 
-import { Picto } from '../icons';
+import { Picto } from './icons';
 import { INK, type InkColor } from './elements';
 import styles from './pdf.module.css';
 import { inkCss } from './Stage';

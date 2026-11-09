@@ -42,14 +42,16 @@ import { manifest as manifest16 } from 'deveye-feature-mailserver';
 import { clientEntry as client16 } from 'deveye-feature-mailserver/client';
 import { manifest as manifest17 } from 'deveye-feature-convert';
 import { clientEntry as client17 } from 'deveye-feature-convert/client';
-import { manifest as manifest18 } from 'deveye-feature-invoicing';
-import { clientEntry as client18 } from 'deveye-feature-invoicing/client';
-import { manifest as manifest19 } from 'deveye-feature-shortlinks';
-import { clientEntry as client19 } from 'deveye-feature-shortlinks/client';
-import { manifest as manifest20 } from 'deveye-feature-moderation';
-import { clientEntry as client20 } from 'deveye-feature-moderation/client';
-import { manifest as manifest21 } from 'deveye-feature-whiteboard';
-import { clientEntry as client21 } from 'deveye-feature-whiteboard/client';
+import { manifest as manifest18 } from 'deveye-feature-pdf';
+import { clientEntry as client18 } from 'deveye-feature-pdf/client';
+import { manifest as manifest19 } from 'deveye-feature-invoicing';
+import { clientEntry as client19 } from 'deveye-feature-invoicing/client';
+import { manifest as manifest20 } from 'deveye-feature-shortlinks';
+import { clientEntry as client20 } from 'deveye-feature-shortlinks/client';
+import { manifest as manifest21 } from 'deveye-feature-moderation';
+import { clientEntry as client21 } from 'deveye-feature-moderation/client';
+import { manifest as manifest22 } from 'deveye-feature-whiteboard';
+import { clientEntry as client22 } from 'deveye-feature-whiteboard/client';
 
 export const INSTALLED_CLIENT_FEATURES: readonly InstalledClientFeature[] = [
     { manifest: { ...manifest0, icon: 'cloud' }, client: client0 },
@@ -70,9 +72,10 @@ export const INSTALLED_CLIENT_FEATURES: readonly InstalledClientFeature[] = [
     { manifest: { ...manifest15, icon: 'bug' }, client: client15 },
     { manifest: { ...manifest16, icon: 'at' }, client: client16 },
     { manifest: { ...manifest17, icon: 'convert' }, client: client17 },
-    { manifest: { ...manifest18, icon: 'invoicing' }, client: client18 },
-    { manifest: { ...manifest19, icon: 'shortlinks' }, client: client19 },
-    { manifest: { ...manifest20, icon: 'shield' }, client: client20 },
-    { manifest: { ...manifest21, icon: 'whiteboard' }, client: client21 },
+    { manifest: { ...manifest18, icon: 'pdf' }, client: client18 },
+    { manifest: { ...manifest19, icon: 'invoicing' }, client: client19 },
+    { manifest: { ...manifest20, icon: 'shortlinks' }, client: client20 },
+    { manifest: { ...manifest21, icon: 'shield' }, client: client21 },
+    { manifest: { ...manifest22, icon: 'whiteboard' }, client: client22 },
     ...LOCAL_CLIENT_FEATURES
 ];

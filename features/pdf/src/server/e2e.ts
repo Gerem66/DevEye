@@ -1,7 +1,7 @@
 import type { FeatureE2eEntry } from '@deveye/types/sdk/server';
 
 import type { SavedSignature } from '../contracts/signatures';
-import type { ConvertRepo } from './repo';
+import type { PdfRepo } from './repo';
 
 function check(condition: unknown, message: string): asserts condition {
     if (!condition) throw new Error(message);
@@ -10,7 +10,7 @@ function check(condition: unknown, message: string): asserts condition {
 const PATH = 'M 0 10 L 40 0 L 80 20';
 
 /** Une signature gardée sur le compte : enregistrée, relue déchiffrée, scellée au repos, retirée. */
-export const convertE2e: FeatureE2eEntry<ConvertRepo> = {
+export const pdfE2e: FeatureE2eEntry<PdfRepo> = {
     scenarios: [
         {
             id: 'savedSignature',
@@ -19,13 +19,13 @@ export const convertE2e: FeatureE2eEntry<ConvertRepo> = {
                 {
                     label: 'Garder une signature dessinée',
                     run: async (ctx) => {
-                        const { signature } = await ctx.send<{ signature: SavedSignature }>('convert.signatureSave', {
+                        const { signature } = await ctx.send<{ signature: SavedSignature }>('pdf.signatureSave', {
                             role: 'signature',
                             data: { kind: 'path', path: PATH, width: 80, height: 20, stroke: 2.5 }
                         });
                         ctx.state.set('signatureId', signature.id);
                         ctx.defer('Retirer la signature', async () => {
-                            await ctx.send('convert.signatureRemove', { id: signature.id });
+                            await ctx.send('pdf.signatureRemove', { id: signature.id });
                         });
                         return `Signature ${signature.id}`;
                     }
@@ -33,10 +33,7 @@ export const convertE2e: FeatureE2eEntry<ConvertRepo> = {
                 {
                     label: 'La relire déchiffrée',
                     run: async (ctx) => {
-                        const { signatures } = await ctx.send<{ signatures: SavedSignature[] }>(
-                            'convert.signatures',
-                            {}
-                        );
+                        const { signatures } = await ctx.send<{ signatures: SavedSignature[] }>('pdf.signatures', {});
                         const mine = signatures.find((s) => s.id === ctx.state.get('signatureId'));
                         check(mine, 'La signature gardée ne revient pas dans la liste');
                         check(
@@ -57,14 +54,11 @@ export const convertE2e: FeatureE2eEntry<ConvertRepo> = {
                 {
                     label: 'La retirer',
                     run: async (ctx) => {
-                        const { removed } = await ctx.send<{ removed: boolean }>('convert.signatureRemove', {
+                        const { removed } = await ctx.send<{ removed: boolean }>('pdf.signatureRemove', {
                             id: ctx.state.get('signatureId')
                         });
                         check(removed, 'Le retrait n’a rien retiré');
-                        const { signatures } = await ctx.send<{ signatures: SavedSignature[] }>(
-                            'convert.signatures',
-                            {}
-                        );
+                        const { signatures } = await ctx.send<{ signatures: SavedSignature[] }>('pdf.signatures', {});
                         check(
                             !signatures.some((s) => s.id === ctx.state.get('signatureId')),
                             'La signature retirée est encore listée'

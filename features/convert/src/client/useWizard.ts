@@ -21,6 +21,8 @@ export interface WizardState {
     /** Ce que le nom du fichier a laissé reconnaître. Le choix reste libre : une extension peut mentir. */
     detectedSourceId: string | null;
     targetId: string | null;
+    /** Le fichier vient du module PDF : lui proposer d'y retourner n'aurait pas de sens. */
+    handed: boolean;
     values: OptionValues;
 }
 
@@ -28,8 +30,8 @@ type Action =
     | { type: 'open'; view: WizardView }
     | { type: 'pickKind'; kind: ConvertKind }
     | { type: 'pickFile'; file: File }
-    /** Un fichier qu'un autre écran confie à l'assistant, cible choisie, prêt pour ses options. */
-    | { type: 'handoff'; file: File; kind: ConvertKind; sourceId: string; targetId: string }
+    /** Un fichier qu'une autre fonctionnalité confie à l'assistant ; cible connue, il va droit à ses options. */
+    | { type: 'handoff'; file: File; kind: ConvertKind; sourceId: string; targetId: string | null }
     | { type: 'removeFile' }
     | { type: 'info'; info: FileInfo }
     | { type: 'source'; sourceId: string }
@@ -46,6 +48,7 @@ const INITIAL: WizardState = {
     sourceId: null,
     detectedSourceId: null,
     targetId: null,
+    handed: false,
     values: {}
 };
 
@@ -75,6 +78,7 @@ function reduce(state: WizardState, action: Action): WizardState {
                 kind,
                 file: action.file,
                 info: null,
+                handed: false,
                 sourceId,
                 detectedSourceId: detected?.source.id ?? null,
                 targetId: sourceId ? keepTarget(kind, sourceId, sameKind ? state.targetId : null) : null
@@ -83,9 +87,10 @@ function reduce(state: WizardState, action: Action): WizardState {
         case 'handoff':
             return {
                 ...INITIAL,
-                view: 'options',
+                view: action.targetId ? 'options' : 'format',
                 kind: action.kind,
                 file: action.file,
+                handed: true,
                 sourceId: action.sourceId,
                 detectedSourceId: action.sourceId,
                 targetId: action.targetId
@@ -125,7 +130,7 @@ export function useWizard() {
         pickKind: useCallback((kind: ConvertKind) => dispatch({ type: 'pickKind', kind }), []),
         pickFile: useCallback((file: File) => dispatch({ type: 'pickFile', file }), []),
         handoff: useCallback(
-            (file: File, kind: ConvertKind, sourceId: string, targetId: string) =>
+            (file: File, kind: ConvertKind, sourceId: string, targetId: string | null) =>
                 dispatch({ type: 'handoff', file, kind, sourceId, targetId }),
             []
         ),

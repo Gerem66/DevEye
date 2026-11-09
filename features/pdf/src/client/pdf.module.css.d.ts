@@ -72,6 +72,12 @@ declare const styles: {
     readonly footerName: string;
     readonly footerText: string;
     readonly form: string;
+    readonly gesture: string;
+    readonly gestureHint: string;
+    readonly gestureLabel: string;
+    readonly gesturePicto: string;
+    readonly gestureText: string;
+    readonly gestures: string;
     readonly handle: string;
     readonly 'handle-ne': string;
     readonly 'handle-nw': string;
@@ -91,6 +97,8 @@ declare const styles: {
     readonly inspectorNote: string;
     readonly inspectorRow: string;
     readonly inspectorTitle: string;
+    readonly landing: string;
+    readonly landingDrop: string;
     readonly note: string;
     readonly overlay: string;
     readonly overlayTool: string;
@@ -107,6 +115,7 @@ declare const styles: {
     readonly savedRemove: string;
     readonly savedSvg: string;
     readonly savedText: string;
+    readonly sectionTitle: string;
     readonly sigImported: string;
     readonly sigImportedImage: string;
     readonly sigPad: string;
@@ -137,5 +146,8 @@ declare const styles: {
     readonly toolbarText: string;
     readonly tools: string;
     readonly warning: string;
+    readonly widget: string;
+    readonly widgetMeta: string;
+    readonly widgetText: string;
 };
 export = styles;

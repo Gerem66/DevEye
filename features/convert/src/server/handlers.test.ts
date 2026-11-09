@@ -8,17 +8,7 @@ import type { z, ZodType } from 'zod';
 import { FeatureError, type SdkFeatureContext } from '@deveye/types/sdk/server';
 import { createTestContext, type TestContextOverrides } from '@deveye/types/sdk/testing';
 
-import {
-    convertCancel,
-    convertCreate,
-    convertDownload,
-    convertList,
-    convertRemove,
-    convertSignatureRemove,
-    convertSignatures,
-    convertSignatureSave
-} from '../contracts/commands';
-import { SIGNATURES_MAX } from '../contracts/signatures';
+import { convertCancel, convertCreate, convertDownload, convertList, convertRemove } from '../contracts/commands';
 import { engineFamilies, probeEngines } from './engines';
 import { env } from './env';
 import { convertHandlers } from './handlers';
@@ -198,38 +188,5 @@ describe('visibilité et cycle de vie', () => {
         );
         assert.equal((await handlerFor(convertCancel)(context(repo), { jobId: id })).job.phase, 'canceled');
         assert.deepEqual(await handlerFor(convertRemove)(context(repo), { jobId: id }), { removed: true });
-    });
-});
-
-describe('signatures gardées', () => {
-    const drawn = {
-        role: 'signature' as const,
-        data: { kind: 'path' as const, path: 'M 0 0 L 10 10', width: 10, height: 10, stroke: 2 }
-    };
-
-    it('garde, relit déchiffré, et ne montre à un compte que les siennes', async () => {
-        const repo = memoryRepo();
-        const mine = context(repo);
-        const { signature } = await handlerFor(convertSignatureSave)(mine, drawn);
-        const listed = await handlerFor(convertSignatures)(mine, {});
-        assert.deepEqual(
-            listed.signatures.map((s) => s.id),
-            [signature.id]
-        );
-        assert.deepEqual(listed.signatures[0].data, drawn.data);
-        const other = context(repo, { userId: 2 });
-        assert.equal((await handlerFor(convertSignatures)(other, {})).signatures.length, 0);
-        assert.deepEqual(await handlerFor(convertSignatureRemove)(other, { id: signature.id }), { removed: false });
-        assert.deepEqual(await handlerFor(convertSignatureRemove)(mine, { id: signature.id }), { removed: true });
-    });
-
-    it('en garde six au plus', async () => {
-        const repo = memoryRepo();
-        const ctx = context(repo);
-        for (let i = 0; i < SIGNATURES_MAX; i++) await handlerFor(convertSignatureSave)(ctx, drawn);
-        await assert.rejects(
-            handlerFor(convertSignatureSave)(ctx, drawn),
-            (e: unknown) => e instanceof FeatureError && e.code === 'conflict'
-        );
     });
 });

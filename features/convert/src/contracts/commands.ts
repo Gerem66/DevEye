@@ -8,7 +8,6 @@ import {
     FILE_NAME_MAX
 } from './domain';
 import { optionValuesSchema } from './options';
-import { savedSignatureSchema, signatureRoleSchema, storedSignatureSchema } from './signatures';
 
 const jobIdInput = z.object({ jobId: z.number().int().positive() });
 
@@ -96,25 +95,6 @@ export const convertSettingsSet = {
     output: z.object({ settings: convertSettingsSchema })
 };
 
-/** Les signatures gardées sur le compte, la plus récente d'abord. */
-export const convertSignatures = {
-    command: 'convert.signatures' as const,
-    input: z.object({}),
-    output: z.object({ signatures: z.array(savedSignatureSchema) })
-};
-
-export const convertSignatureSave = {
-    command: 'convert.signatureSave' as const,
-    input: z.object({ role: signatureRoleSchema, data: storedSignatureSchema }),
-    output: z.object({ signature: savedSignatureSchema })
-};
-
-export const convertSignatureRemove = {
-    command: 'convert.signatureRemove' as const,
-    input: z.object({ id: z.number().int().positive() }),
-    output: z.object({ removed: z.boolean() })
-};
-
 export const convertCommands = [
     convertCapabilities,
     convertList,
@@ -124,8 +104,5 @@ export const convertCommands = [
     convertRemove,
     convertRates,
     convertSettingsGet,
-    convertSettingsSet,
-    convertSignatures,
-    convertSignatureSave,
-    convertSignatureRemove
+    convertSettingsSet
 ] as const;
