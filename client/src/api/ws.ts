@@ -28,6 +28,7 @@ import { setAdmission, type Admission } from '@/stores/admission';
 import { forgetMaintenance, setMaintenance } from '@/stores/maintenance';
 import { ensureStepUp } from '@/stores/stepUp';
 import { randomUuid } from '@/randomUuid';
+import { reloadIfOutdated } from './version';
 
 const BASE_URL: string = (import.meta.env.VITE_SERVER_URL as string | undefined) ?? '';
 
@@ -93,27 +94,6 @@ const MAINTENANCE_RETRY_MS = 60_000;
 
 /** En file d'attente : le serveur oublie qui ne relance pas sa demande dans la minute. */
 const QUEUE_RETRY_MS = 15_000;
-
-const RELOADED_FOR_KEY = 'deveye.reloadedFor';
-
-/**
- * Le serveur a changé de version (un déploiement pendant la coupure) : la page
- * recharge pour prendre le bundle qui va avec. Une seule fois par version
- * serveur : un build servi en retard sur le serveur ferait sinon boucler.
- */
-function reloadIfOutdated(serverVersion: string): void {
-    try {
-        if (serverVersion === __APP_VERSION__) {
-            sessionStorage.removeItem(RELOADED_FOR_KEY);
-            return;
-        }
-        if (sessionStorage.getItem(RELOADED_FOR_KEY) === serverVersion) return;
-        sessionStorage.setItem(RELOADED_FOR_KEY, serverVersion);
-    } catch {
-        return;
-    }
-    window.location.reload();
-}
 
 export class DevEyeWs {
     private socket: WebSocket | null = null;

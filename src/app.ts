@@ -72,6 +72,7 @@ import { createSignupService } from '@/Services/signup';
 import { maintenance, MaintenanceError } from '@/Services/maintenance';
 import { describeError, systemAlerts } from '@/Services/systemAlerts';
 import { status } from '@/status';
+import { APP_VERSION_HEADER, appVersion } from '@/version';
 
 import type { Database } from '@/db';
 import type Encryption from '@/Services/Encryption';
@@ -220,7 +221,12 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
             });
             return;
         }
-        callback(null, { origin: env.PUBLIC_ORIGIN, credentials: true, methods: ['GET', 'POST'] });
+        callback(null, {
+            origin: env.PUBLIC_ORIGIN,
+            credentials: true,
+            methods: ['GET', 'POST'],
+            exposedHeaders: [APP_VERSION_HEADER]
+        });
     });
     // Une instance auto-hébergée vit souvent sur une adresse privée, et la page
     // qui la fédère sur une adresse publique : Chrome fait précéder cet appel
@@ -229,6 +235,9 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         if (req.headers['access-control-request-private-network'] === 'true' && federatedOriginOf(req)) {
             reply.header('Access-Control-Allow-Private-Network', 'true');
         }
+    });
+    app.addHook('onSend', async (req, reply) => {
+        if (req.url.startsWith('/api')) reply.header(APP_VERSION_HEADER, appVersion());
     });
     await app.register(fastifyCookie);
     // Tout ce qui n'est ni l'API ni la socket est le client, document compris :

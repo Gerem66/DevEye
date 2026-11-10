@@ -8,6 +8,13 @@ import { resolve } from 'node:path';
  */
 let cached: string | null = null;
 
+/**
+ * Posé sur chaque réponse de l'API : un onglet resté sur l'ancien bundle se
+ * recharge avant de lire une réponse qu'il ne saurait plus valider. Même nom
+ * côté client (`client/src/api/version.ts`).
+ */
+export const APP_VERSION_HEADER = 'x-deveye-version';
+
 export function appVersion(): string {
     if (cached) return cached;
     cached =

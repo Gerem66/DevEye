@@ -18,6 +18,7 @@ import {
 import { z } from 'zod';
 import { getActiveInstanceId, getActiveWorkspaceId } from '@/stores/workspace';
 import { traceCall } from '@/diagnostics/trace';
+import { APP_VERSION_HEADER, reloadIfOutdated } from './version';
 
 const BASE_URL: string = (import.meta.env.VITE_SERVER_URL as string | undefined) ?? '';
 
@@ -169,6 +170,11 @@ async function runRequest<TOut>(
         if (e instanceof ApiError) throw e;
         throw new ApiError('network', (e as Error).message);
     }
+
+    // Avant toute lecture : un bundle en retard ne sait plus valider ce que le
+    // nouveau serveur répond, et prendrait l'échec pour une panne.
+    const serverVersion = target === null ? res.headers.get(APP_VERSION_HEADER) : null;
+    if (serverVersion && reloadIfOutdated(serverVersion)) return new Promise<never>(() => {});
 
     const json: unknown = await res.json().catch(() => ({}));
     const envelope = resultSchema(outputSchema).safeParse(json);
