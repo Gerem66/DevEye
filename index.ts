@@ -163,7 +163,7 @@ async function main() {
 
     if (publicApp && env.PUBLIC_LISTEN_PORT) {
         await publicApp.listen({ port: env.PUBLIC_LISTEN_PORT, host: '0.0.0.0' });
-        logger.warn(
+        logger.info(
             { port: env.PUBLIC_LISTEN_PORT, origin: env.AUDIENCE_ORIGIN || null },
             'Public surface listening: module public routes only, no session route registered'
         );
