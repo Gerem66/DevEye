@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { assertAccessDeclared } from './_permissions';
-import { buildTopicIndex } from './_topics';
+import { buildTopicIndex, looksMutating } from './_topics';
 import { featureHandlers } from './registry';
 
 /**
@@ -23,5 +23,21 @@ describe('les contrôles de démarrage, sur les features installées', () => {
 
     it('trouve une garde déclarée sur chaque commande', () => {
         assert.doesNotThrow(() => assertAccessDeclared(featureHandlers));
+    });
+});
+
+describe('looksMutating', () => {
+    it('lit le verbe dans le premier mot entier de l’action', () => {
+        assert.equal(looksMutating('cloudSync.updateSettings'), true);
+        assert.equal(looksMutating('notes.set'), true);
+        assert.equal(looksMutating('twofa.regenBackup'), true);
+        assert.equal(looksMutating('secrecy.regenerateRecovery'), true);
+        assert.equal(looksMutating('cloudSync.syncNow'), true);
+    });
+
+    it('ne prend pas un mot qui commence comme un verbe pour ce verbe', () => {
+        assert.equal(looksMutating('cloudSync.settings'), false);
+        assert.equal(looksMutating('convert.settingsGet'), false);
+        assert.equal(looksMutating('mail.attachmentDownload'), false);
     });
 });

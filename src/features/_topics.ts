@@ -132,13 +132,8 @@ const NON_MUTATING = new Set([
     'cloudSync.syncNow',
     // Lecture pure (avancement des synchronisations en cours).
     'git.syncStatuses',
-    // Lecture pure : c'est « settings » qui porte le verbe `set`, pas la commande.
-    'x-rdv.settings',
-    'convert.settingsGet',
     'mail.oauthStart',
     'mail.accountTestConnection',
-    'mail.attachmentScan',
-    'mail.attachmentDownload',
     'workspace.activate',
     // Calcule ce qu'un déplacement ferait, sans rien écrire.
     'share.movePreview',
@@ -169,9 +164,18 @@ const NON_MUTATING = new Set([
     'whiteboard.leave'
 ]);
 
-/** Verbes qui trahissent une écriture, pour le contrôle de démarrage. */
+/**
+ * Verbes qui trahissent une écriture, pour le contrôle de démarrage. Le verbe
+ * est le premier mot entier de l'action : `settings` ne porte pas `set`, ni
+ * `attachmentScan` `attach`.
+ */
 const MUTATION_VERB =
-    /\.(add|set|create|update|edit|delete|remove|rename|reorder|archive|restore|assign|enable|disable|revoke|confirm|move|send|clear|pause|resume|attach|detach|leave|elevate|drop|upgrade|sync|reset|backfill|regen|recover|setup)/i;
+    /\.(add|set|create|update|edit|delete|remove|rename|reorder|archive|restore|assign|enable|disable|revoke|confirm|move|send|clear|pause|resume|attach|detach|leave|elevate|drop|upgrade|sync|reset|backfill|regen|regenerate|recover|setup)(?=[A-Z]|$)/;
+
+/** Le nom de cette commande annonce-t-il une écriture ? */
+export function looksMutating(command: string): boolean {
+    return MUTATION_VERB.test(command);
+}
 
 /**
  * Bâtit la table et signale les oublis. Un `mutates` oublié n'est qu'un
@@ -194,7 +198,7 @@ export function buildTopicIndex(): void {
         }
 
         if (!def.mutates) {
-            if (MUTATION_VERB.test(def.command) && !NON_MUTATING.has(def.command)) {
+            if (looksMutating(def.command) && !NON_MUTATING.has(def.command)) {
                 suspects.push(def.command);
             }
             continue;
