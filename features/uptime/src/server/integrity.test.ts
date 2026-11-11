@@ -9,6 +9,7 @@ import {
     diffCapture,
     FILE_PREVIEW_MAX_BYTES,
     filesOfPage,
+    foldersOf,
     hasDrift,
     INTEGRITY_FILES_MAX,
     previewFile,
@@ -75,7 +76,12 @@ describe('captureSite', () => {
             [`${ORIGIN}/assets/feature-x.js`]: file('h-feature'),
             [`${ORIGIN}/t.js`]: file('h-tracker')
         });
-        const capture = await captureSite(`${ORIGIN}/`, ['/t.js', ' ', 'sans-barre'], 5000, fetch);
+        const capture = await captureSite(
+            `${ORIGIN}/`,
+            { paths: ['/t.js', ' ', 'sans-barre'], excluded: [] },
+            5000,
+            fetch
+        );
         assert.equal(capture.source, 'manifest');
         assert.equal(capture.csp, "default-src 'self'");
         assert.deepEqual(capture.files, {
@@ -95,7 +101,7 @@ describe('captureSite', () => {
             [`${ORIGIN}/assets/index-abc.js`]: file('h-js'),
             [`${ORIGIN}/assets/vendor-def.js`]: file('h-vendor')
         });
-        const capture = await captureSite(`${ORIGIN}/`, [], 5000, fetch);
+        const capture = await captureSite(`${ORIGIN}/`, { paths: [], excluded: [] }, 5000, fetch);
         assert.equal(capture.source, 'page');
         assert.deepEqual(Object.keys(capture.files).sort(), [
             '/',
@@ -107,7 +113,12 @@ describe('captureSite', () => {
 
     it('refuse un document en erreur, et un manifeste malformé retombe sur la page', async () => {
         await assert.rejects(
-            captureSite(`${ORIGIN}/`, [], 5000, siteOf({ [`${ORIGIN}/`]: file('x', { status: 503, text: '' }) })),
+            captureSite(
+                `${ORIGIN}/`,
+                { paths: [], excluded: [] },
+                5000,
+                siteOf({ [`${ORIGIN}/`]: file('x', { status: 503, text: '' }) })
+            ),
             /503/
         );
         const fetch = siteOf({
@@ -115,7 +126,7 @@ describe('captureSite', () => {
             [`${ORIGIN}/.well-known/deveye-build.json`]: file('h', { text: '{"format":1,"files":{"../x":"y"}}' }),
             [`${ORIGIN}/a.js`]: file('h-a')
         });
-        const capture = await captureSite(`${ORIGIN}/`, [], 5000, fetch);
+        const capture = await captureSite(`${ORIGIN}/`, { paths: [], excluded: [] }, 5000, fetch);
         assert.equal(capture.source, 'page');
         assert.deepEqual(Object.keys(capture.files).sort(), ['/', '/a.js']);
     });
@@ -129,7 +140,7 @@ describe('captureSite', () => {
             if (url.endsWith('/a.js')) await new Promise((resolve) => setTimeout(resolve, 60));
             return site(url, timeoutMs);
         };
-        const capture = await captureSite(`${ORIGIN}/`, [], 5000, slowScript);
+        const capture = await captureSite(`${ORIGIN}/`, { paths: [], excluded: [] }, 5000, slowScript);
         assert.ok(capture.slowestMs >= 50, `${capture.slowestMs} ms`);
     });
 
@@ -138,7 +149,35 @@ describe('captureSite', () => {
             [`${ORIGIN}/`]: file('h-index', { text: '<script src="/a.js"></script>' }),
             [`${ORIGIN}/a.js`]: file('h-refus', { status: 429 })
         });
-        await assert.rejects(captureSite(`${ORIGIN}/`, [], 5000, fetch), /429/);
+        await assert.rejects(captureSite(`${ORIGIN}/`, { paths: [], excluded: [] }, 5000, fetch), /429/);
+    });
+
+    it('écarte les dossiers exclus, sauf le document et un chemin ajouté à la main', async () => {
+        const manifest = JSON.stringify({
+            format: 1,
+            version: '1.0.0',
+            files: {
+                'index.html': 'a'.repeat(64),
+                'assets/app.js': 'b'.repeat(64),
+                'assets/fonts/a.woff2': 'c'.repeat(64),
+                'assets/fonts/b.woff2': 'd'.repeat(64)
+            }
+        });
+        const fetch = siteOf({
+            [`${ORIGIN}/`]: file('h-index', { text: PAGE }),
+            [`${ORIGIN}/.well-known/deveye-build.json`]: file('h-manifest', { text: manifest }),
+            [`${ORIGIN}/assets/app.js`]: file('h-app'),
+            [`${ORIGIN}/assets/fonts/b.woff2`]: file('h-b')
+        });
+        const scope = { paths: ['/assets/fonts/b.woff2'], excluded: ['/assets/fonts/'] };
+        const capture = await captureSite(`${ORIGIN}/`, scope, 5000, fetch);
+        assert.deepEqual(Object.keys(capture.files).sort(), [
+            '/',
+            '/.well-known/deveye-build.json',
+            '/assets/app.js',
+            '/assets/fonts/b.woff2'
+        ]);
+        assert.ok(!fetch.asked.includes(`${ORIGIN}/assets/fonts/a.woff2`));
     });
 
     it('refuse une liste au-delà du plafond plutôt que de la vérifier à moitié', async () => {
@@ -151,7 +190,19 @@ describe('captureSite', () => {
                 text: JSON.stringify({ format: 1, version: '1', files })
             })
         });
-        await assert.rejects(captureSite(`${ORIGIN}/`, [], 5000, fetch), /Plus de/);
+        await assert.rejects(captureSite(`${ORIGIN}/`, { paths: [], excluded: [] }, 5000, fetch), /Plus de/);
+    });
+});
+
+describe('foldersOf', () => {
+    it('compte chaque dossier avec ses sous-dossiers, les plus gros d’abord', () => {
+        const keys = ['/', '/t.js', '/assets/a.js', '/assets/b.js?v=1/2', '/assets/fonts/c.woff2', '/img/d.svg'];
+        assert.deepEqual(foldersOf(keys, 1), [
+            { path: '/assets/', files: 3 },
+            { path: '/assets/fonts/', files: 1 },
+            { path: '/img/', files: 1 }
+        ]);
+        assert.deepEqual(foldersOf(keys, 2), [{ path: '/assets/', files: 3 }]);
     });
 });
 

@@ -10,6 +10,7 @@ import {
     uptimeFileContent,
     uptimeHistory,
     uptimeIncidents,
+    uptimeIntegrityFolders,
     uptimeIntegrityReadings,
     uptimeList,
     uptimeRemove,
@@ -20,6 +21,7 @@ import {
 } from '../contracts/commands';
 import {
     UPTIME_DEFAULT_INTERVAL_SECONDS,
+    UPTIME_INTEGRITY_FOLDER_SUGGEST_MIN,
     UPTIME_MAX_RETENTION_DAYS,
     type UptimeDeploySource,
     type UptimePoint,
@@ -53,7 +55,7 @@ import {
     deployHookUrl,
     newDeployHook
 } from './deploySources';
-import { previewFile } from './integrity';
+import { previewFile, siteFolders } from './integrity';
 import type { UptimeWindowStat } from './repo';
 import { failureMessage } from './service';
 
@@ -250,6 +252,7 @@ export const uptimeHandlers = [
                     url: draft.url,
                     keyword: draft.keyword,
                     paths: draft.integrityIntervalSeconds === null ? [] : draft.paths,
+                    excluded: [],
                     deployAccept: false
                 }),
                 integrityIntervalSeconds: draft.integrityIntervalSeconds,
@@ -345,6 +348,7 @@ export const uptimeHandlers = [
                 content: await encryptService(cipher, {
                     ...before,
                     paths: next.paths,
+                    excluded: next.excluded,
                     deployAccept: next.deployAccept
                 }),
                 integrityIntervalSeconds: next.intervalSeconds
@@ -352,7 +356,10 @@ export const uptimeHandlers = [
             if (!row) throw new FeatureError('not_found', 'Uptime service not found');
             // L'option allumée ou éteinte, d'autres fichiers : la référence
             // apprise ne décrit plus ce qu'on surveille.
-            const relearn = wasOn !== on || before.paths.join('\n') !== next.paths.join('\n');
+            const relearn =
+                wasOn !== on ||
+                before.paths.join('\n') !== next.paths.join('\n') ||
+                before.excluded.join('\n') !== next.excluded.join('\n');
             if (relearn) await ctx.repo.services.resetIntegrity(row.id);
 
             // Éteintes, l'option et l'acceptation gardent leurs sources et
@@ -593,6 +600,18 @@ export const uptimeHandlers = [
             }
             try {
                 return await previewFile(url.href, row.timeout_seconds * 1000);
+            } catch (e) {
+                throw new FeatureError('conflict', `Le site n’a pas répondu : ${failureMessage(e, row)}`);
+            }
+        }
+    }),
+    defineSdkFeature({
+        ...uptimeIntegrityFolders,
+        handler: async (ctx: Ctx, input) => {
+            const row = await loadService(ctx, input.id);
+            const target = await decryptService(await homeCipher(ctx, input.id), row.content);
+            try {
+                return await siteFolders(target.url, UPTIME_INTEGRITY_FOLDER_SUGGEST_MIN, row.timeout_seconds * 1000);
             } catch (e) {
                 throw new FeatureError('conflict', `Le site n’a pas répondu : ${failureMessage(e, row)}`);
             }

@@ -140,7 +140,7 @@ async function readFiles(
     baseline: IntegrityBaseline | null
 ): Promise<IntegrityReading> {
     try {
-        const capture = await captureSite(target.url, target.paths, row.timeout_seconds * 1000);
+        const capture = await captureSite(target.url, target, row.timeout_seconds * 1000);
         const slowestMs = capture.slowestMs;
         if (!baseline) return { kind: 'learned', slowestMs, capture };
         const diff = diffCapture(baseline, capture);

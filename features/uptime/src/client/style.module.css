@@ -1032,6 +1032,14 @@
     border-color: var(--input-focus);
 }
 
+/* Les dossiers proposés à l'exclusion, sous leur champ. */
+.folderSuggestions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
 /* La référence d'un contrôle d'intégrité : ce à quoi la sonde compare. */
 .reference {
     display: flex;

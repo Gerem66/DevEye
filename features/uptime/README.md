@@ -101,11 +101,17 @@ réussie. « Tester » et « Accepter la version actuelle » la forcent.
    DevEye : chaque fichier actif de son client, HTML, scripts, styles,
    WebAssembly et SVG, morceaux chargés à la demande compris, sans polices ni
    images), sinon les scripts, feuilles de style et préchargements de même
-   origine trouvés dans la page ; plus les chemins ajoutés à la main (`/t.js`,
-   50 au plus) ;
+   origine trouvés dans la page ; moins ce que contiennent les **dossiers
+   exclus** (`excluded`, 50 au plus, sous-dossiers compris), plus les chemins
+   ajoutés à la main (`/t.js`, 50 au plus), qu'une exclusion ne retire pas ;
 3. relit chaque fichier, empreinte SHA-256 calculée en flux (8 Mo au plus par
    fichier, 400 fichiers au plus, quatre à la fois) ;
 4. compare à la **référence** (`baseline_enc`, chiffrée à l'étage ouvert).
+
+L'onglet Intégrité propose à l'exclusion les dossiers qui tiennent au moins
+`UPTIME_INTEGRITY_FOLDER_SUGGEST_MIN` fichiers (`uptime.integrityFolders`, qui
+lit la page et son manifeste, jamais les fichiers). Changer la liste fait
+réapprendre la référence.
 
 Le manifeste n'est pas la référence : un serveur compromis le réécrirait. La
 référence est **apprise** ici, à la première lecture réussie, manifeste compris.
@@ -406,7 +412,7 @@ canaux, de son partage et de ses permissions :
   l'historique détaillé et sa suppression ;
 - **Intégrité** (`ServiceIntegrityPanel`, `uptime.updateIntegrity`) :
   l'interrupteur de l'option en tête, puis ce qui en dépend, grisé tant qu'il
-  est éteint (rythme de lecture, chemins ajoutés, acceptation après un
+  est éteint (rythme de lecture, chemins ajoutés, dossiers exclus, acceptation après un
   déploiement, ses sources et son adresse d'appel).
 
 Chaque onglet n'écrit que ses champs : enregistrer l'un ne touche pas ce que

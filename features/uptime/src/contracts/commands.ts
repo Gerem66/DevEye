@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
     UPTIME_INTEGRITY_INTERVAL_MIN,
     UPTIME_INTEGRITY_PATH_MAX_LENGTH,
+    UPTIME_INTEGRITY_EXCLUDED_MAX,
     UPTIME_INTEGRITY_PATHS_MAX,
     UPTIME_INTERVAL_MAX,
     UPTIME_INTERVAL_MIN,
@@ -59,6 +60,10 @@ const uptimeDraftFields = z.object({
 /** `null`: the integrity option is off. */
 const integrityIntervalSchema = z.number().int().min(UPTIME_INTEGRITY_INTERVAL_MIN).max(UPTIME_INTERVAL_MAX).nullable();
 const integrityPathsSchema = z.array(integrityPathSchema).max(UPTIME_INTEGRITY_PATHS_MAX);
+/** A folder, slash at both ends: everything under it is left out. */
+const integrityExcludedSchema = z
+    .array(integrityPathSchema.regex(/^\/(?:[^/]+\/)+$/, 'Dossier invalide'))
+    .max(UPTIME_INTEGRITY_EXCLUDED_MAX);
 
 /**
  * A new service may leave its cadence out: the server then applies the owner
@@ -123,6 +128,7 @@ export const uptimeUpdateIntegrity = {
         integrity: z.object({
             intervalSeconds: integrityIntervalSchema,
             paths: integrityPathsSchema,
+            excluded: integrityExcludedSchema,
             deployAccept: z.boolean(),
             deploySources: z
                 .array(uptimeDeploySourceSchema)
@@ -345,6 +351,20 @@ export const uptimeFileContent = {
 };
 
 /**
+ * The folders the site lists that hold enough files to be worth excluding,
+ * biggest first, and how many files it lists in all. Reads the page and its
+ * build manifest, never the files themselves.
+ */
+export const uptimeIntegrityFolders = {
+    command: 'uptime.integrityFolders' as const,
+    input: z.object({ id: serviceId }),
+    output: z.object({
+        folders: z.array(z.object({ path: z.string(), files: z.number().int().positive() })),
+        total: z.number().int().nonnegative()
+    })
+};
+
+/**
  * Integrity: take what the site serves NOW as the reference (after a deployment
  * one made, say). Closes the incident the drift had opened. The files are
  * refetched first: what is accepted is what a visitor gets at that moment.
@@ -379,6 +399,7 @@ export const uptimeCommands = [
     uptimeIncidents,
     uptimeIntegrityReadings,
     uptimeFileContent,
+    uptimeIntegrityFolders,
     uptimePageList,
     uptimePageAdd,
     uptimePageUpdate,

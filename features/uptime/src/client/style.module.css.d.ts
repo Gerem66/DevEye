@@ -65,6 +65,7 @@ declare const styles: {
     readonly fieldHint: string;
     readonly fieldLabel: string;
     readonly fileText: string;
+    readonly folderSuggestions: string;
     readonly form: string;
     readonly formRow: string;
     readonly grip: string;

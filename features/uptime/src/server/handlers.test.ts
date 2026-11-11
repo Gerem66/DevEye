@@ -264,6 +264,7 @@ const DRAFT = { ...GENERAL, integrityIntervalSeconds: null as number | null, pat
 const INTEGRITY = {
     intervalSeconds: 900 as number | null,
     paths: [] as string[],
+    excluded: [] as string[],
     deployAccept: false,
     deploySources: [] as { kind: 'project' | 'deploy' | 'git'; id: number }[],
     deployHook: false

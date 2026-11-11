@@ -45,6 +45,10 @@ export const UPTIME_INTEGRITY_DEFAULT_INTERVAL_SECONDS = 900;
 /** Extra files an integrity check verifies (site-relative paths). */
 export const UPTIME_INTEGRITY_PATHS_MAX = 50;
 export const UPTIME_INTEGRITY_PATH_MAX_LENGTH = 512;
+/** Folders of the site an integrity check leaves out. */
+export const UPTIME_INTEGRITY_EXCLUDED_MAX = 50;
+/** A folder holding at least this many files is offered for exclusion. */
+export const UPTIME_INTEGRITY_FOLDER_SUGGEST_MIN = 50;
 
 /**
  * Accepting a new version after a deployment: what puts a site online, designated
@@ -146,6 +150,8 @@ export const uptimeServiceSchema = z.object({
     integrityIntervalSeconds: z.number().int().positive().nullable(),
     /** Integrity: extra site-relative files to verify (`/t.js`). */
     paths: z.array(z.string()),
+    /** Integrity: folders left out of the check, slash at both ends (`/assets/fonts/`). */
+    excluded: z.array(z.string()),
     /** Integrity: `null` when the option is off, or until the first successful reading. */
     baseline: uptimeBaselineSchema.nullable(),
     /** Integrity: last reading of the files, successful or not. */

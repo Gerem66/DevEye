@@ -187,21 +187,95 @@ function extraPaths(paths: readonly string[]): string[] {
     return paths.map((p) => p.trim()).filter((p) => p.startsWith('/'));
 }
 
+/** Ce qu'un service ajoute à la liste du site, et ce qu'il en écarte. */
+export interface IntegrityScope {
+    paths: readonly string[];
+    /** Des dossiers, barre en tête et en fin : tout ce qu'ils contiennent est écarté. */
+    excluded: readonly string[];
+}
+
+interface SiteListing {
+    document: FetchedFile;
+    documentKey: string;
+    source: IntegrityCapture['source'];
+    /** Les fichiers que le site annonce, avant tout ajout et toute exclusion. */
+    keys: string[];
+}
+
+/** Le document et la liste que le site annonce : son manifeste de build, sinon sa page. */
+async function listSite(pageUrl: string, read: (url: string) => Promise<FetchedFile | null>): Promise<SiteListing> {
+    const page = new URL(pageUrl);
+    const origin = page.origin;
+    const documentKey = page.pathname + page.search;
+    const document = await read(pageUrl);
+    if (!document) throw new Error('Document illisible');
+    if (document.status < 200 || document.status >= 400) {
+        throw new Error(`Statut HTTP ${document.status} sur le document`);
+    }
+
+    const manifest = await read(`${origin}${BUILD_MANIFEST_PATH}`).catch(() => null);
+    const listed = manifest && manifest.status === 200 && manifest.text ? parseManifest(manifest.text) : null;
+    if (listed) {
+        // Le manifeste lui-même en fait partie : le réécrire se voit.
+        const keys = [BUILD_MANIFEST_PATH, ...listed.map((f) => (f === 'index.html' ? '/' : `/${f}`))];
+        return { document, documentKey, source: 'manifest', keys };
+    }
+    return { document, documentKey, source: 'page', keys: filesOfPage(document.text ?? '', pageUrl) };
+}
+
+export interface SiteFolder {
+    path: string;
+    /** Les fichiers qu'il contient, sous-dossiers compris. */
+    files: number;
+}
+
+/** Les dossiers d'une liste qui tiennent au moins `min` fichiers, les plus gros d'abord. */
+export function foldersOf(keys: readonly string[], min: number): SiteFolder[] {
+    const counts = new Map<string, number>();
+    for (const key of keys) {
+        const parts = key.split('?')[0].split('/').slice(1, -1);
+        let folder = '/';
+        for (const part of parts) {
+            folder += `${part}/`;
+            counts.set(folder, (counts.get(folder) ?? 0) + 1);
+        }
+    }
+    return [...counts]
+        .filter(([, files]) => files >= min)
+        .map(([path, files]) => ({ path, files }))
+        .sort((a, b) => b.files - a.files || a.path.localeCompare(b.path));
+}
+
+/**
+ * Les gros dossiers que le site annonce, et le nombre de fichiers de sa liste :
+ * de quoi proposer une exclusion sans relire un seul fichier.
+ */
+export async function siteFolders(
+    pageUrl: string,
+    min: number,
+    timeoutMs: number,
+    fetch: FetchFn = fetchFile
+): Promise<{ folders: SiteFolder[]; total: number }> {
+    const { keys } = await listSite(pageUrl, (url) => fetch(url, timeoutMs));
+    return { folders: foldersOf(keys, min), total: keys.length };
+}
+
 /**
  * Relit le site entier et rend ses empreintes. Le document d'abord (sa
  * politique et, faute de manifeste, sa liste), puis chaque fichier, quatre à la
  * fois. Une seule lecture qui échoue fait échouer la capture : une référence
  * apprise sur un site à moitié lu manquerait des fichiers pour toujours.
+ *
+ * Un dossier exclu retire ce que le site annonce, jamais le document ni un
+ * chemin ajouté à la main.
  */
 export async function captureSite(
     pageUrl: string,
-    paths: readonly string[],
+    scope: IntegrityScope,
     timeoutMs: number,
     fetch: FetchFn = fetchFile
 ): Promise<IntegrityCapture> {
-    const page = new URL(pageUrl);
-    const origin = page.origin;
-    const documentKey = page.pathname + page.search;
+    const origin = new URL(pageUrl).origin;
     let slowestMs = 0;
     const read = async (url: string): Promise<FetchedFile | null> => {
         const started = Date.now();
@@ -212,27 +286,12 @@ export async function captureSite(
         }
     };
 
-    const document = await read(pageUrl);
-    if (!document) throw new Error('Document illisible');
-    if (document.status < 200 || document.status >= 400) {
-        throw new Error(`Statut HTTP ${document.status} sur le document`);
-    }
-
-    let source: IntegrityCapture['source'] = 'page';
-    let keys: string[];
-    const manifest = await read(`${origin}${BUILD_MANIFEST_PATH}`).catch(() => null);
-    const listed = manifest && manifest.status === 200 && manifest.text ? parseManifest(manifest.text) : null;
-    if (listed) {
-        source = 'manifest';
-        // Le manifeste lui-même en fait partie : le réécrire se voit.
-        keys = [BUILD_MANIFEST_PATH, ...listed.map((f) => (f === 'index.html' ? '/' : `/${f}`))];
-    } else {
-        keys = filesOfPage(document.text ?? '', pageUrl);
-    }
-    const all = new Set([documentKey, ...keys, ...extraPaths(paths)]);
+    const { document, documentKey, source, keys } = await listSite(pageUrl, read);
+    const kept = keys.filter((key) => !scope.excluded.some((folder) => key.startsWith(folder)));
+    const all = new Set([documentKey, ...kept, ...extraPaths(scope.paths)]);
     if (all.size > INTEGRITY_FILES_MAX) {
         throw new IntegrityRefusedError(
-            `Plus de ${INTEGRITY_FILES_MAX} fichiers à vérifier : le contrôle ne les relira pas tous`
+            `Plus de ${INTEGRITY_FILES_MAX} fichiers à vérifier : excluez des dossiers dans l’onglet Intégrité`
         );
     }
 

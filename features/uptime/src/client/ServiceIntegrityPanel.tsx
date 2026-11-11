@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import {
+    Button,
     Checkbox,
     ErrorNote,
     errorNote,
@@ -13,7 +14,11 @@ import {
     type SearchSelectOption
 } from 'deveye-sdk-client';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
-import { UPTIME_INTEGRITY_DEFAULT_INTERVAL_SECONDS, type UptimeService } from '../contracts/domain';
+import {
+    UPTIME_INTEGRITY_DEFAULT_INTERVAL_SECONDS,
+    UPTIME_INTEGRITY_FOLDER_SUGGEST_MIN,
+    type UptimeService
+} from '../contracts/domain';
 
 import { api } from './api';
 import DeployHookField from './DeployHookField';
@@ -36,6 +41,8 @@ interface IntegrityDraft {
     intervalSeconds: number;
     /** Un chemin par ligne, tel que saisi. */
     paths: string;
+    /** Un dossier par ligne, tel que saisi. */
+    excluded: string;
     deployAccept: boolean;
     /** Les sources choisies, en valeurs du sélecteur (`deploy:5`, `hook`). */
     deployKeys: string[];
@@ -46,6 +53,7 @@ function draftOf(service: UptimeService): IntegrityDraft {
         on: service.integrityIntervalSeconds !== null,
         intervalSeconds: service.integrityIntervalSeconds ?? UPTIME_INTEGRITY_DEFAULT_INTERVAL_SECONDS,
         paths: service.paths.join('\n'),
+        excluded: service.excluded.join('\n'),
         deployAccept: service.deployAccept,
         deployKeys: deployKeysOf(service.deploySources, service.deployHook)
     };
@@ -56,9 +64,20 @@ function sameDraft(a: IntegrityDraft, b: IntegrityDraft): boolean {
         a.on === b.on &&
         a.intervalSeconds === b.intervalSeconds &&
         a.paths === b.paths &&
+        a.excluded === b.excluded &&
         a.deployAccept === b.deployAccept &&
         a.deployKeys.join() === b.deployKeys.join()
     );
+}
+
+/** Un dossier tel que la liste l'attend : barre en tête et en fin. */
+function folderOf(line: string): string {
+    return `/${line.replace(/^\/+|\/+$/g, '')}/`;
+}
+
+interface SiteFolder {
+    path: string;
+    files: number;
 }
 
 /**
@@ -75,7 +94,7 @@ function Dependent({ off, children }: { off: boolean; children: ReactNode }) {
 
 /**
  * L'onglet Intégrité d'un service : relire les fichiers que sert le site,
- * leur rythme et les chemins ajoutés, et l'acceptation d'une nouvelle version
+ * leur rythme et les chemins ajoutés, les dossiers exclus, et l'acceptation d'une nouvelle version
  * quand un déploiement l'explique, avec ses sources et son adresse d'appel.
  * L'option éteinte garde tout ce qui en dépend, grisé, pour quand elle revient.
  *
@@ -89,6 +108,7 @@ export default function ServiceIntegrityPanel({ scope, canWrite }: SettingsPanel
     const [errorSources, setErrorSources] = useState('');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<ErrorNoteInput | null>(null);
+    const [folders, setFolders] = useState<SiteFolder[]>([]);
 
     useEffect(() => {
         if (itemId === null) return;
@@ -102,6 +122,22 @@ export default function ServiceIntegrityPanel({ scope, canWrite }: SettingsPanel
             })
             .catch((e: unknown) => setError(errorNote(e, 'Les réglages n’ont pas pu être lus.')));
     }, [itemId]);
+
+    // Les gros dossiers du site, à proposer : sans eux le champ reste utilisable.
+    const integrityOn = service !== null && service.integrityIntervalSeconds !== null;
+    useEffect(() => {
+        if (itemId === null || !integrityOn || !canWrite) return;
+        let stale = false;
+        void api
+            .send('uptime.integrityFolders', { id: itemId })
+            .then((res) => {
+                if (!stale) setFolders(res.folders);
+            })
+            .catch(() => undefined);
+        return () => {
+            stale = true;
+        };
+    }, [itemId, integrityOn, canWrite]);
 
     const save = async () => {
         if (!service || !draft) return;
@@ -117,6 +153,7 @@ export default function ServiceIntegrityPanel({ scope, canWrite }: SettingsPanel
                 integrity: {
                     intervalSeconds: draft.on ? draft.intervalSeconds : null,
                     paths: parsePaths(draft.paths),
+                    excluded: parsePaths(draft.excluded).map(folderOf),
                     deployAccept: draft.deployAccept,
                     ...deploySettingsOf(draft.deployKeys)
                 }
@@ -141,6 +178,8 @@ export default function ServiceIntegrityPanel({ scope, canWrite }: SettingsPanel
 
     const editable = canWrite && !busy;
     const hookChosen = draft.deployKeys.includes('hook');
+    const excludedNow = new Set(parsePaths(draft.excluded).map(folderOf));
+    const suggested = folders.filter((folder) => !excludedNow.has(folder.path));
 
     return (
         <div className={shell.section}>
@@ -183,6 +222,42 @@ export default function ServiceIntegrityPanel({ scope, canWrite }: SettingsPanel
                         une instance DevEye annonce tous ses fichiers. Allumer l’option, changer l’adresse ou cette
                         liste fait réapprendre la référence à la prochaine sonde.
                     </span>
+                </div>
+
+                <div className={shell.field}>
+                    <span className={shell.sectionLabel}>Dossiers exclus (un chemin par ligne)</span>
+                    <textarea
+                        className={styles.textarea}
+                        rows={3}
+                        placeholder={'/assets/fonts/'}
+                        value={draft.excluded}
+                        disabled={!editable}
+                        onChange={(e) => set('excluded', e.target.value)}
+                    />
+                    <span className={shell.fieldHint}>
+                        Les fichiers d’un dossier exclu, sous-dossiers compris, ne sont plus relus ni comparés : un
+                        changement n’y sera pas signalé. Le contrôle ne relit pas plus de 400 fichiers.
+                    </span>
+                    {suggested.length > 0 && (
+                        <div className={styles.folderSuggestions}>
+                            <span className={shell.fieldHint}>
+                                Dossiers d’au moins {UPTIME_INTEGRITY_FOLDER_SUGGEST_MIN} fichiers sur ce site :
+                            </span>
+                            {suggested.map((folder) => (
+                                <Button
+                                    key={folder.path}
+                                    variant='secondary'
+                                    icon='plus'
+                                    disabled={!editable}
+                                    onClick={() =>
+                                        set('excluded', [...parsePaths(draft.excluded), folder.path].join('\n'))
+                                    }
+                                >
+                                    {folder.path} ({folder.files} fichiers)
+                                </Button>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
                 <div className={styles.optionGroup}>

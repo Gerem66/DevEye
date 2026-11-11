@@ -253,8 +253,10 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         max: env.RATE_LIMIT_MAX,
         timeWindow: env.RATE_LIMIT_WINDOW,
         // Les requêtes d'un essai en cours, depuis ce serveur même : un essai
-        // relancé atteindrait sinon les plafonds de l'inscription.
-        allowList: (req) => runGate.allows(req.raw)
+        // relancé atteindrait sinon les plafonds de l'inscription. Et les
+        // fichiers de `/assets/`, servis du disque : une page ou un contrôle
+        // d'intégrité en relit deux cents d'un coup.
+        allowList: (req) => runGate.allows(req.raw) || (req.method === 'GET' && req.url.startsWith('/assets/'))
     });
     await app.register(fastifyWebsocket, { options: { maxPayload: WS_MAX_PAYLOAD } });
 
