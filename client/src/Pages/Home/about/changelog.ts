@@ -12,6 +12,24 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: readonly ChangelogEntry[] = [
     {
+        version: '0.26.1',
+        date: '2026-11-10',
+        changes: [
+            {
+                kind: 'fixed',
+                text: 'Veille CVE : le fil des vulnérabilités se met de nouveau à jour'
+            },
+            {
+                kind: 'fixed',
+                text: 'Appareils : « Enrôler vers un autre espace » et « Copier vers » proposent les bons espaces depuis un autre serveur DevEye'
+            },
+            {
+                kind: 'fixed',
+                text: 'Un onglet resté ouvert pendant une mise à jour ne reste plus bloqué'
+            }
+        ]
+    },
+    {
         version: '0.26.0',
         date: '2026-11-10',
         changes: [
