@@ -26,11 +26,12 @@ import styles from './style.module.css';
 const CODE_TTL_SECONDS = 900;
 
 /**
- * Sous le partage d'un appareil : l'enrôler aussi auprès d'une instance
- * distante du compte. Ce navigateur demande un code d'appairage à l'espace
- * choisi, là-bas, et compose la commande qui ajoute à l'agent de la machine une
- * instance nommée pour ce serveur. L'enrôlement d'ici ne bouge pas : les deux
- * serveurs suivent la machine, chacun par son agent.
+ * Sous le partage d'un appareil : l'enrôler aussi auprès d'une autre instance
+ * du compte (une distante, ou celle-ci quand l'appareil vit sur une distante).
+ * Ce navigateur demande un code d'appairage à l'espace choisi, là-bas, et
+ * compose la commande qui ajoute à l'agent de la machine une instance nommée
+ * pour ce serveur. L'enrôlement actuel ne bouge pas : les deux serveurs
+ * suivent la machine, chacun par son agent.
  */
 export function DevicesSharingPanel({ scope }: SettingsPanelProps) {
     const { devices } = useDevices();
@@ -126,7 +127,7 @@ function EnrollElsewhere({ device, workspaces }: { device: Device; workspaces: r
             <span className={shell.fieldLabel}>Enrôler vers un autre espace</span>
             {workspaces.length === 0 ? (
                 <span className={shell.fieldHint}>
-                    Connectez-vous à votre instance distante depuis le menu des espaces : ses espaces apparaîtront ici.
+                    Connectez-vous à vos autres instances depuis le menu des espaces : leurs espaces apparaîtront ici.
                 </span>
             ) : (
                 <>
@@ -135,7 +136,7 @@ function EnrollElsewhere({ device, workspaces }: { device: Device; workspaces: r
                             value={choice}
                             disabled={busy}
                             aria-label='Enrôler cet appareil vers'
-                            placeholder='Choisir un espace distant…'
+                            placeholder='Choisir un espace d’une autre instance…'
                             options={workspaces.map((w) => ({
                                 value: w.key,
                                 label: `${w.workspaceName} · ${w.instanceLabel}`,

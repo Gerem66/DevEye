@@ -494,11 +494,12 @@ Statuts (`devices.status`) : `pending`, `active`, `pending_deletion`,
   [Docs/SHARING.md](../../Docs/SHARING.md)). Sous le partage, le module ajoute
   « Enrôler vers un autre espace » (`settingsPanels.sharing`,
   `src/client/manage/EnrollElsewhere.tsx`), visible dès que le compte a une
-  instance distante et depuis le domicile de l'appareil seulement : le
-  navigateur demande un code d'appairage à l'espace distant choisi
-  (`devices.linkCodeCreate` par `api.sendTo`) et compose la commande
-  `deveye-agent --instance <nom> link …`, avec les refus de la politique
-  actuelle. L'appareil d'ici ne bouge pas.
+  autre instance et depuis le domicile de l'appareil seulement : la liste est
+  celle des autres instances (`useRemoteTargets` ; depuis un espace distant,
+  cette instance en fait partie), le navigateur demande un code d'appairage à
+  l'espace choisi (`devices.linkCodeCreate` par `api.sendTo`) et compose la
+  commande `deveye-agent --instance <nom> link …`, avec les refus de la
+  politique actuelle. L'enrôlement actuel ne bouge pas.
 - **Notifications** : aucune (`notifies: false`).
 - **Export de compte** (`src/server/accountExport.ts`) : les tables de l'espace,
   les listes de processus décompressées appareil par appareil dans l'ordre du

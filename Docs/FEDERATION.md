@@ -152,14 +152,16 @@ toujours pas. Une instance injoignable, ou à une autre version mineure, n'est
 pas proposée comme cible.
 
 Un appareil ne se copie pas : il **s'enrôle en plus**. Sous le partage d'un
-appareil, « Enrôler vers un autre espace » demande un code d'appairage à
-l'espace distant choisi, par la socket de cette instance, et compose la commande
-qui ajoute à l'agent de la machine une instance nommée pour ce serveur
-(`deveye-agent --instance <nom> link …`, voir `agent/README.md`). Chaque serveur
-voit alors son propre appareil, par son propre agent, et celui d'ici ne bouge
-pas. Pour un module, c'est `useRemoteTargets` et `featureApi().sendTo` du SDK
-client : la cible `{ instanceId, workspaceId }`, et le serveur visé juge les
-droits.
+appareil, « Enrôler vers un autre espace » propose les espaces des autres
+instances du compte (depuis un espace distant, ceux d'ici en font partie),
+demande un code d'appairage à l'espace choisi, par la socket de son instance,
+et compose la commande qui ajoute à l'agent de la machine une instance nommée
+pour ce serveur (`deveye-agent --instance <nom> link …`, voir
+`agent/README.md`). Chaque serveur voit alors son propre appareil, par son
+propre agent, et l'enrôlement actuel ne bouge pas. Pour un module, c'est
+`useRemoteTargets` et `featureApi().sendTo` du SDK client : la cible
+`{ instanceId, workspaceId }`, `instanceId` nul pour cette instance, et le
+serveur visé juge les droits.
 
 ## 7. Ce que ça protège, et ce que ça ne protège pas
 

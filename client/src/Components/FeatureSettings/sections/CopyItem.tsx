@@ -12,7 +12,7 @@ import { moduleManifest } from '@/sdk/registry';
 import { useRemoteTargets } from '@/sdk/remoteTargets';
 import { invalidate, type ResourceKey } from '@/stores/invalidation';
 import { UnlockCancelledError } from '@/stores/secrecy';
-import { useWorkspaceState, workspaceKey } from '@/stores/workspace';
+import { useWorkspacesHere, useWorkspaceState, workspaceKey } from '@/stores/workspace';
 
 import { copyItem, previewCopy, type CopyDestination, type CopyStep } from '../copyItem';
 import styles from '../FeatureSettings.module.css';
@@ -40,7 +40,9 @@ const STEP_LABEL: Record<CopyStep, string> = {
  * d'ici ou d'une instance distante. Rien ne relie ensuite les deux.
  */
 export default function CopyItem({ feature, itemId }: Props) {
-    const { workspaces, activeId, activeInstanceId } = useWorkspaceState();
+    const { activeId, activeInstanceId } = useWorkspaceState();
+    // Les espaces de l'instance de l'élément, puis ceux des autres instances.
+    const workspaces = useWorkspacesHere();
     const { workspaces: remote } = useRemoteTargets();
     const [choice, setChoice] = useState('');
     const [busy, setBusy] = useState(false);
@@ -52,11 +54,11 @@ export default function CopyItem({ feature, itemId }: Props) {
 
     const targets = useMemo<Target[]>(() => {
         const here = workspaces.map((w) => ({
-            key: workspaceKey({ instanceId: null, id: w.id }),
-            instanceId: null,
+            key: workspaceKey({ instanceId: activeInstanceId, id: w.id }),
+            instanceId: activeInstanceId,
             workspaceId: w.id,
             instanceLabel: 'cette instance',
-            name: activeInstanceId === null && w.id === activeId ? `${w.name} (cet espace)` : w.name,
+            name: w.id === activeId ? `${w.name} (cet espace)` : w.name,
             unavailable: null
         }));
         const elsewhere = remote.map((t) => ({
