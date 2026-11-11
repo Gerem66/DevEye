@@ -39,6 +39,14 @@ export type UptimeNotice =
           at: number;
           /** Le détail, fichier par fichier, déjà borné. */
           lines: string[];
+      }
+    | {
+          event: 'unchecked';
+          service: string;
+          url: string;
+          /** L'instant du premier contrôle refusé. */
+          at: number;
+          reason: string;
       };
 
 /**
@@ -95,6 +103,13 @@ function headline(notice: UptimeNotice): { title: string; description: string; c
             color: COLOR_WARNING
         };
     }
+    if (notice.event === 'unchecked') {
+        return {
+            title: '🟠 Intégrité : fichiers non vérifiés',
+            description: `**${trim(notice.service)}** répond, mais ses fichiers ne sont plus relus.`,
+            color: COLOR_WARNING
+        };
+    }
     return {
         title: '🟢 Service rétabli',
         description: `**${trim(notice.service)}** répond de nouveau.`,
@@ -131,6 +146,18 @@ function fieldsOf(notice: UptimeNotice): Record<string, unknown>[] {
             {
                 name: '🚨 Sinon',
                 value: 'Le site est peut-être compromis : regardez les fichiers depuis la fiche, remettez le site en état, puis validez Le site a été réparé.',
+                inline: false
+            }
+        ];
+    }
+    if (notice.event === 'unchecked') {
+        return [
+            { name: '🌐 Adresse', value: address(notice.url), inline: true },
+            { name: '📅 Constaté', value: moment(notice.at, 'R'), inline: true },
+            { name: '🔎 Raison', value: block(notice.reason), inline: false },
+            {
+                name: '🚨 Rien changé au site ?',
+                value: 'Regardez ce qu’il sert : une liste de fichiers gonflée peut servir à masquer une modification.',
                 inline: false
             }
         ];

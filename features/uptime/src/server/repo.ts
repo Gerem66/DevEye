@@ -215,6 +215,8 @@ export interface UptimeHistoryRepo {
         limit: number,
         before?: number
     ): Promise<UptimeIntegrityReadingRow[]>;
+    /** Le constat de la lecture la plus récente, `null` sans aucune. */
+    lastOutcome(serviceId: number): Promise<UptimeIntegrityOutcome | null>;
     /** La dernière lecture qui a retrouvé la référence ou l'a apprise, `null` sans aucune. */
     lastConformAt(serviceId: number): Promise<number | null>;
     /**
@@ -734,8 +736,8 @@ function historyRepo(q: SdkQueryable): UptimeHistoryRepo {
                 where.push('checked_at >= ?');
                 params.push(filter.since);
             }
-            // Ce qui fait un écart : un fichier qui a changé, ou qui ne se lit plus.
-            if (filter.failuresOnly) where.push("outcome IN ('drift', 'failed')");
+            // Ce qui fait un écart : un fichier qui a changé, qui ne se lit plus, ou un contrôle refusé.
+            if (filter.failuresOnly) where.push("outcome IN ('drift', 'failed', 'refused')");
             if (before !== undefined) {
                 where.push('checked_at < ?');
                 params.push(before);
@@ -746,6 +748,14 @@ function historyRepo(q: SdkQueryable): UptimeHistoryRepo {
                  LIMIT ?`,
                 [...params, limit]
             );
+        },
+        async lastOutcome(serviceId) {
+            const rows = await q.query<{ outcome: UptimeIntegrityOutcome }>(
+                `SELECT outcome FROM ft_uptime_integrity_readings
+                 WHERE service_id = ? ORDER BY checked_at DESC, id DESC LIMIT 1`,
+                [serviceId]
+            );
+            return rows[0]?.outcome ?? null;
         },
         async lastConformAt(serviceId) {
             const rows = await q.query<{ at: number | null }>(

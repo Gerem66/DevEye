@@ -120,12 +120,18 @@ fichiers influencent (`applyIntegrity` dans `src/server/service.ts`, pure) :
   sonde suivante, verte, refermerait la panne. `failure_threshold` s'applique
   comme à toute panne : l'incident s'ouvre à la sonde qui suit l'écart, nomme
   les fichiers et part en alerte `integrity`.
-- **Une lecture ratée** (statut d'un fichier, délai, `429`, liste trop longue)
+- **Une lecture ratée** (statut d'un fichier, délai, `429`)
   fait échouer sa mesure, avec une erreur qui commence par « Fichiers : », et
   se retente cinq minutes plus tard plutôt qu'au rythme choisi. Au bout de
   `failure_threshold` lectures ratées d'affilée (`integrity_failures`), elle
   devient verdict à son tour : un `429` isolé ne laisse qu'une barre jaune, un
   script durablement absent met le service en panne.
+- **Un contrôle impossible** (plus de 400 fichiers, un fichier de plus de
+  8 Mo) est une limite du contrôle, pas une faute du site : la mesure reste
+  celle de la page, aucun incident ne s'ouvre, et le rythme choisi tient. La
+  lecture s'inscrit au journal et le premier refus d'une série part en alerte
+  `unchecked`, pour qu'une liste gonflée ne suffise pas à aveugler le contrôle.
+  Un écart déjà constaté reste posé.
 - **La latence** d'une mesure avec lecture est la plus longue entre la requête
   principale et le fichier le plus lent : un site sain n'y voit rien, un script
   qui traîne fait monter la courbe.
@@ -171,7 +177,7 @@ les montre grisés, et ils reprennent quand on la rallume.
 
 Chaque lecture s'inscrit au **journal des intégrités**
 (`ft_uptime_integrity_readings`) avec son constat : référence apprise,
-conforme, écart, lecture ratée, acceptée après un déploiement ou en attente
+conforme, écart, lecture ratée, contrôle impossible, acceptée après un déploiement ou en attente
 d'un déploiement, le nombre de fichiers comparés et le plus lent. Le détail d'un écart (fichier par fichier) ou la raison d'une lecture
 ratée y est chiffré à l'étage ouvert (`detail`). Une sonde qui ne relit pas les
 fichiers n'y laisse rien.
@@ -311,6 +317,8 @@ un incident, pas à une sonde.
   « Le site a été réparé ». Aucune alerte quand une source de déploiement
   explique l'écart. Des fichiers illisibles au seuil partent en « hors
   ligne », leur erreur à l'appui.
+- **Fichiers non vérifiés** (`unchecked`) → alerte au premier contrôle
+  impossible d'une série, hors de tout incident : le service reste en ligne.
 - **Retour en ligne** (`recovered`) → alerte avec la durée de la panne et sa
   cause initiale, **seulement si** la bascule avait bien été notifiée (sinon on
   enverrait un « c'est revenu » sans contexte).
@@ -327,7 +335,7 @@ complet) ; ce qui compte ici :
   doit être un compte Mail de l'espace (le manifest déclare le lien
   `links: [{ to: 'mail' }]`) ;
 - **webhook** : POST JSON `{ content, text, event, service, url, at }`, où
-  `event` vaut `down`, `recovered` ou `integrity` (l'essai d'un canal passe par
+  `event` vaut `down`, `recovered`, `integrity` ou `unchecked` (l'essai d'un canal passe par
   `notify.channelTest`, avec son propre corps, commun à tous les émetteurs). Le
   message lisible est porté **deux fois**, et c'est voulu : Discord rejette
   tout corps sans `content` / `embeds` / `file` et Slack lit `text`. Chacun
@@ -342,7 +350,7 @@ enregistrée. L'écran de réglage est `Components/FeatureSettings/` de l'app,
 partagé par toutes les fonctionnalités qui notifient et par leurs éléments.
 
 Chaque bascule est aussi journalisée dans les logs d'audit (`uptime.down`,
-`uptime.integrity`, `uptime.recovered`), comme chaque réglage (`uptime.add`,
+`uptime.integrity`, `uptime.unchecked`, `uptime.recovered`), comme chaque réglage (`uptime.add`,
 `uptime.update`, `uptime.remove`, `uptime.baselineAccepted`, à la main ou
 après un déploiement, `uptime.deployHookRegenerated`), donc consultable
 dans la page Journaux.
@@ -588,7 +596,7 @@ integrity.ts      captureSite, diffCapture, describeDrift : la lecture des fichi
                   previewFile, l'aperçu borné d'un fichier
 deployEvidence.ts la fenêtre d'un déploiement et la question posée aux sources (findDeployEvidence)
 deploySources.ts  le sélecteur et ses droits, le jeton et la route de l'adresse d'appel
-notice.ts         la mise en page Discord d'une alerte (down, recovered, integrity)
+notice.ts         la mise en page Discord d'une alerte (down, recovered, integrity, unchecked)
 handlers.ts       les dix-huit commandes des services
 pages.ts          les quatre commandes des pages de statut
 domains.ts        la vérification d'un domaine (jeton sous /.well-known/deveye-uptime), onRemoved

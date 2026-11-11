@@ -236,10 +236,19 @@ export type UptimeCheckStats = z.infer<typeof uptimeCheckStatsSchema>;
 /**
  * What one reading of the files found: the reference learned (first reading,
  * or after the user accepted the current version), the files as referenced, a
- * drift, a file that could not be read, a drift a deployment explained and
- * accepted, or a drift waiting for a deployment still under way.
+ * drift, a file that could not be read, a check declined at one of its own
+ * limits, a drift a deployment explained and accepted, or a drift waiting for
+ * a deployment still under way.
  */
-export const uptimeIntegrityOutcomeSchema = z.enum(['learned', 'conform', 'drift', 'failed', 'accepted', 'pending']);
+export const uptimeIntegrityOutcomeSchema = z.enum([
+    'learned',
+    'conform',
+    'drift',
+    'failed',
+    'refused',
+    'accepted',
+    'pending'
+]);
 export type UptimeIntegrityOutcome = z.infer<typeof uptimeIntegrityOutcomeSchema>;
 
 /**

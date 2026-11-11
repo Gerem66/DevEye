@@ -229,6 +229,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
             listIncidents: async () => [],
             addReading: async () => undefined,
             listReadings: async () => [],
+            lastOutcome: async () => null,
             lastConformAt: async () => null,
             clearIntegrityDown: async () => undefined,
             pruneByRetention: async () => ({ checks: 0, readings: 0 })

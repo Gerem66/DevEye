@@ -10,6 +10,7 @@ const OUTCOMES: Record<UptimeIntegrityOutcome, { label: string; dot: string }> =
     conform: { label: 'Conforme', dot: styles.dotUp },
     drift: { label: 'Écart', dot: styles.dotDown },
     failed: { label: 'Lecture ratée', dot: styles.dotWarn },
+    refused: { label: 'Contrôle impossible', dot: styles.dotWarn },
     accepted: { label: 'Acceptée', dot: styles.dotInfo },
     pending: { label: 'En attente d’un déploiement', dot: styles.dotWarn }
 };

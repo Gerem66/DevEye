@@ -218,6 +218,8 @@ function fakeRepo(over: Partial<UptimeServiceRow> = {}): FakeRepo {
                 });
             },
             listReadings: unused,
+            lastOutcome: async (serviceId) =>
+                readings.filter((r) => r.service_id === serviceId).at(-1)?.outcome ?? null,
             lastConformAt: async (serviceId) => {
                 const ats = readings
                     .filter((r) => r.service_id === serviceId && (r.outcome === 'learned' || r.outcome === 'conform'))
@@ -505,6 +507,43 @@ describe('l’option d’intégrité', () => {
         assert.ok(deps.recorded.notifications[0].subject.includes('hors ligne'));
         assert.ok(deps.recorded.notifications[0].body.includes('Fichiers : Statut HTTP 404'));
         assert.deepEqual(asked, ['compare', 'sans lecture', 'compare', 'sans lecture']);
+    });
+
+    it('un contrôle refusé laisse le service en ligne et n’alerte qu’une fois', async () => {
+        const repo = fakeRepo({ integrity_interval_seconds: 900, baseline_enc: BASELINE, failure_threshold: 1 });
+        const { deps, probe, age } = integrityMonitor(repo);
+        const REFUSED = read({ kind: 'refused', error: 'Plus de 400 fichiers à vérifier' });
+
+        await probe(REFUSED);
+        age(900);
+        await probe(REFUSED);
+        assert.deepEqual(
+            repo.checks.map((c) => [c.up, c.integrity_down]),
+            [
+                [1, 0],
+                [1, 0]
+            ]
+        );
+        assert.equal(repo.rows[0].status, 'up');
+        assert.equal(repo.rows[0].integrity_failures, 0);
+        assert.equal(repo.incidents.length, 0);
+        assert.deepEqual(
+            repo.readings.map((r) => r.outcome),
+            ['refused', 'refused']
+        );
+        assert.equal(deps.recorded.notifications.length, 1);
+        assert.ok(deps.recorded.notifications[0].subject.includes('non vérifiés'));
+        assert.ok(deps.recorded.notifications[0].body.includes('Plus de 400 fichiers'));
+    });
+
+    it('un contrôle refusé ne referme pas un écart en cours', async () => {
+        const repo = fakeRepo({ integrity_interval_seconds: 900, baseline_enc: BASELINE, failure_threshold: 1 });
+        const { probe, age } = integrityMonitor(repo);
+        await probe(DRIFT);
+        age(900);
+        await probe(read({ kind: 'refused', error: 'Plus de 400 fichiers à vérifier' }));
+        assert.equal(repo.rows[0].status, 'down');
+        assert.ok(repo.rows[0].integrity_verdict);
     });
 
     it('une page qui ne répond pas ne consomme pas la lecture due', async () => {

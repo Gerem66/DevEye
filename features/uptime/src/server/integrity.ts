@@ -47,6 +47,12 @@ export interface IntegrityDiff {
     cspChanged: boolean;
 }
 
+/**
+ * Le contrôle se refuse de lui-même, à une de ses limites : le site n'a rien
+ * servi de travers, sa mesure ne doit pas en pâtir.
+ */
+export class IntegrityRefusedError extends Error {}
+
 /** Au-delà, ce n'est plus une page qu'on vérifie : la liste est refusée. */
 export const INTEGRITY_FILES_MAX = 400;
 /** Un fichier plus gros ne se lit pas en entier : son empreinte serait celle d'un tronçon. */
@@ -75,7 +81,9 @@ export const fetchFile: FetchFn = async (url, timeoutMs) => {
             size += buf.length;
             if (size > INTEGRITY_FILE_MAX_BYTES) {
                 await response.body.cancel().catch(() => undefined);
-                throw new Error(`Fichier trop volumineux (plus de ${INTEGRITY_FILE_MAX_BYTES / 1024 / 1024} Mo)`);
+                throw new IntegrityRefusedError(
+                    `Fichier trop volumineux (plus de ${INTEGRITY_FILE_MAX_BYTES / 1024 / 1024} Mo)`
+                );
             }
             hash.update(buf);
             if (kept < DOCUMENT_TEXT_MAX_BYTES) {
@@ -223,7 +231,9 @@ export async function captureSite(
     }
     const all = new Set([documentKey, ...keys, ...extraPaths(paths)]);
     if (all.size > INTEGRITY_FILES_MAX) {
-        throw new Error(`Plus de ${INTEGRITY_FILES_MAX} fichiers à vérifier : le contrôle ne les relira pas tous`);
+        throw new IntegrityRefusedError(
+            `Plus de ${INTEGRITY_FILES_MAX} fichiers à vérifier : le contrôle ne les relira pas tous`
+        );
     }
 
     const files: Record<string, string> = { [documentKey]: document.sha256 };

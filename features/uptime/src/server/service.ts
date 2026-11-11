@@ -25,7 +25,15 @@ import {
     type ServicePayload
 } from './_shared';
 import { env } from './env';
-import { captureSite, describeDrift, detailDrift, diffCapture, hasDrift, type IntegrityCapture } from './integrity';
+import {
+    captureSite,
+    describeDrift,
+    detailDrift,
+    diffCapture,
+    hasDrift,
+    IntegrityRefusedError,
+    type IntegrityCapture
+} from './integrity';
 import {
     DEPLOY_PENDING_MAX_SECONDS,
     DEPLOY_PENDING_RETRY_SECONDS,
@@ -69,8 +77,10 @@ export type IntegrityReading =
           /** Pourquoi aucune source de déploiement n'a suffi, pour le journal seul. */
           notes?: string[];
       }
-    /** A file could not be read (status, timeout, rate limit, too many files). */
+    /** A file could not be read (status, timeout, rate limit). */
     | { kind: 'failed'; error: string }
+    /** The check declined to read (too many files, a file too large): its own limit, not the site's fault. */
+    | { kind: 'refused'; error: string }
     /** A drift a deployment of the service's sources explains: the capture becomes the reference. */
     | {
           kind: 'accepted';
@@ -138,6 +148,7 @@ async function readFiles(
         if (!hasDrift(diff)) return { kind: 'conform', slowestMs, fileCount };
         return { kind: 'drift', slowestMs, fileCount, summary: describeDrift(diff), lines: detailDrift(diff), capture };
     } catch (e) {
+        if (e instanceof IntegrityRefusedError) return { kind: 'refused', error: e.message };
         return { kind: 'failed', error: failureMessage(e, row) };
     }
 }
@@ -258,6 +269,8 @@ export interface ReadingState {
  *   quoi la sonde suivante, verte, refermerait la panne ;
  * - une lecture ratée ne fait échouer que sa mesure, jusqu'à `failure_threshold`
  *   lectures ratées d'affilée, où elle devient verdict à son tour ;
+ * - un contrôle refusé à une de ses limites laisse la mesure à la page : le
+ *   site répond, c'est le contrôle qui ne dit plus rien ;
  * - le fichier le plus lent pèse sur la latence.
  */
 export function applyIntegrity(
@@ -374,6 +387,25 @@ export function applyIntegrity(
                     }
                 }
             };
+        case 'refused': {
+            // Un écart en cours le reste : ne plus pouvoir lire ne dit pas que les fichiers sont revenus.
+            const verdict = stored && stored.lines.length > 0 ? stored : null;
+            return {
+                measure: verdict ? failWith(verdict) : http,
+                reading: {
+                    failures: 0,
+                    verdict,
+                    learned: null,
+                    pendingSince: null,
+                    entry: {
+                        outcome: 'refused',
+                        fileCount: null,
+                        slowestMs: null,
+                        detail: { error: reading.error, lines: [] }
+                    }
+                }
+            };
+        }
         case 'failed': {
             const error = `Fichiers : ${reading.error}`;
             const failures = row.integrity_failures + 1;
@@ -461,7 +493,7 @@ async function probeHttp(target: ServicePayload, row: UptimeServiceRow): Promise
  * sans analyser du texte : ce que ni le corps ni l'embed ne disent.
  */
 function webhookPayload(alert: {
-    event: 'down' | 'recovered' | 'integrity';
+    event: UptimeNotice['event'];
     service: string;
     url: string;
     at: number;
@@ -675,6 +707,10 @@ export class UptimeMonitor {
                       })
                     : null
             });
+            // Avant d'inscrire la lecture : l'alerte ne part qu'au premier refus d'une série.
+            if (reading.entry.outcome === 'refused' && (await repo.history.lastOutcome(row.id)) !== 'refused') {
+                await this.alertUnchecked(row, target, reading.entry.detail?.error ?? 'inconnue', at);
+            }
             await repo.history.addReading({
                 serviceId: row.id,
                 checkedAt: at,
@@ -738,6 +774,38 @@ export class UptimeMonitor {
                 ? await encryptError(cipher, [outcome.error, ...outcome.driftLines].join('\n'))
                 : encryptedError;
         await this.reconcileIncident(row, target, { ...outcome, at, status, encryptedError: incidentError }, cipher);
+    }
+
+    /**
+     * Un contrôle qui se tait doit se voir : sans cette alerte, gonfler la
+     * liste des fichiers suffirait à l'aveugler. Le service, lui, reste en ligne.
+     */
+    private async alertUnchecked(
+        row: UptimeServiceRow,
+        target: ServicePayload,
+        reason: string,
+        at: number
+    ): Promise<void> {
+        this.deps.audit({
+            level: 'warning',
+            action: 'uptime.unchecked',
+            userId: row.user_id,
+            description: `Fichiers de « ${target.name} » non vérifiés : ${reason}`,
+            metadata: { serviceId: row.id }
+        });
+        await this.notify(row, target, {
+            subject: `🛡️ ${target.name} : fichiers non vérifiés`,
+            body: [
+                `Le contrôle d’intégrité de « ${target.name} » ne peut plus relire ses fichiers. Le service répond, mais une modification ne serait pas vue.`,
+                '',
+                `URL : ${target.url}`,
+                `Constaté : ${formatMoment(at)}`,
+                `Raison : ${reason}`,
+                '',
+                'Si vous n’avez rien changé au site, regardez ce qu’il sert : une liste de fichiers gonflée peut servir à masquer une modification.'
+            ].join('\n'),
+            notice: { event: 'unchecked', service: target.name, url: target.url, at, reason }
+        });
     }
 
     /**
