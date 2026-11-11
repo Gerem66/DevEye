@@ -15,7 +15,7 @@ export function taskKicker(task: Pick<TaskRecord, 'feature' | 'subject'>): strin
 const ENDING: Record<Exclude<TaskRecord['state'], 'running'>, string> = {
     done: 'terminé',
     failed: 'échec',
-    lost: 'connexion coupée'
+    lost: 'interrompue'
 };
 
 /** Ce qu'un lecteur d'écran doit apprendre d'un changement que l'œil voit dans la barre. */

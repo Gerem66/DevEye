@@ -656,10 +656,12 @@ se range de lui-même en haut de son cadre, sur toute sa largeur : sous le
 `inline` le garde dans sa rangée.
 Un geste qui dure passe par `runTask(options, run)` : un dialogue qui se
 réduit, puis la zone des opérations de la barre, qui porte l'avancement et le
-résultat quand l'écran n'est plus là. `useTasks` dit à un écran ce qui tourne
-chez lui, `TaskProgress` y dessine l'avancement en place, et une coupure ou un
-silence rejette une `TaskError` dont `errorNote` garde la phrase
-([TASKS.md](./TASKS.md)).
+résultat quand l'écran n'est plus là. Le serveur suit la commande de
+l'opération : elle survit à une coupure comme à un rechargement, et les autres
+onglets du compte la voient. `useTasks` dit à un écran ce qui tourne chez lui,
+`TaskProgress` y dessine l'avancement en place, et quand le serveur ne garde
+plus trace de l'opération la promesse rejette une `TaskError` dont `errorNote`
+garde la phrase ([TASKS.md](./TASKS.md)).
 `invalidate(clé)` et `useResourceVersion` relient une
 mutation aux widgets qui la lisent, `onServerEvent` écoute la voie de poussée,
 `openFeature` ouvre une autre feature sur un élément, `handFileTo(feature,
@@ -768,7 +770,8 @@ Par requête (`SdkFeatureContext`, construit dans `_sdk/context.ts`) :
 - `progress({ done, total, step })` : l'avancement de la commande, vers son
   seul appelant, quatre trames par seconde au plus. Chaque trame relance le
   délai de l'appelant, et alimente son opération longue quand il en a ouvert
-  une ([TASKS.md](./TASKS.md)) ;
+  une, que les autres onglets de son compte suivent alors aussi
+  ([TASKS.md](./TASKS.md)) ;
 - `secrecy.isUnlocked()` et `secrecy.ticket(payload, { ttlSeconds })` ;
 - `items` (`restrictions`, `assert`, `canExtra`, `forget`) ;
 - `quota` (`limit`, `assert`, `usage`, `assertActive`, `paid`, `isPaused`,

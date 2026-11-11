@@ -22,20 +22,23 @@ export interface TaskRowProps {
 export function TaskRow({ task, feature, workspaceName, onShow, onCancel, onOpen, onDismiss }: TaskRowProps) {
     const origin = [feature?.label, workspaceName].filter(Boolean).join(' · ');
     const settled = task.state === 'done' || task.state === 'lost';
+    // Lancée ailleurs : rien d'ici ne l'attend, on peut cesser de la suivre sans l'arrêter.
+    const followed = task.state === 'running' && !task.owned;
     const tone = task.state === 'done' ? styles.done : task.state === 'lost' ? styles.lost : '';
+    const dismissLabel = followed ? 'Ne plus suivre' : 'Retirer de la liste';
 
     return (
         <div className={`${styles.row} ${tone}`}>
-            {(origin !== '' || settled) && (
+            {(origin !== '' || settled || followed) && (
                 <div className={styles.rowHead}>
                     {feature && <span className={`icon icon-${feature.icon} ${styles.glyph}`} />}
                     <span className={styles.rowOrigin}>{origin}</span>
-                    {settled && (
+                    {(settled || followed) && (
                         <button
                             type='button'
                             className={styles.rowDismiss}
-                            title='Retirer de la liste'
-                            aria-label='Retirer de la liste'
+                            title={dismissLabel}
+                            aria-label={dismissLabel}
                             onClick={onDismiss}
                         >
                             <span className={`icon icon-x ${styles.glyph}`} />
@@ -50,16 +53,18 @@ export function TaskRow({ task, feature, workspaceName, onShow, onCancel, onOpen
                 <>
                     <ProgressBar value={task.value} label={task.title} />
                     <span className={styles.rowStep}>{task.step ?? 'En cours…'}</span>
-                    <div className={styles.rowActions}>
-                        {task.cancellable && (
-                            <button type='button' className={styles.rowAction} onClick={onCancel}>
-                                Annuler
+                    {task.owned && (
+                        <div className={styles.rowActions}>
+                            {task.cancellable && (
+                                <button type='button' className={styles.rowAction} onClick={onCancel}>
+                                    Annuler
+                                </button>
+                            )}
+                            <button type='button' className={styles.rowAction} onClick={onShow}>
+                                Afficher
                             </button>
-                        )}
-                        <button type='button' className={styles.rowAction} onClick={onShow}>
-                            Afficher
-                        </button>
-                    </div>
+                        </div>
+                    )}
                 </>
             )}
 

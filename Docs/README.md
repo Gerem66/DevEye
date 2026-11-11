@@ -25,7 +25,7 @@ lancement sont dans le [README de la racine](../README.md#quick-start).
 | [FEDERATION.md](./FEDERATION.md)               | les instances distantes : les espaces d'un autre serveur DevEye dans la même interface                     |
 | [LIVE.md](./LIVE.md)                           | la présence en direct : qui est là, où, et ce qui vient de changer                                         |
 | [SETTINGS.md](./SETTINGS.md)                   | la coquille de réglages unique et son bouton commun                                                        |
-| [TASKS.md](./TASKS.md)                         | les opérations longues : le dialogue qui se réduit, la zone de la barre, ce que l'écran en sait            |
+| [TASKS.md](./TASKS.md)                         | les opérations longues : le dialogue qui se réduit, la zone de la barre, ce que le serveur suit            |
 | [QUOTAS.md](./QUOTAS.md)                       | offres et quotas : ce que le cœur sait d'une offre, illimité sans module de facturation                    |
 | [ACCOUNT_EXPORT.md](./ACCOUNT_EXPORT.md)       | l'export des données d'un compte : l'archive, le sort de chaque table                                      |
 | [SOURCES.md](./SOURCES.md)                     | les sources d'une feature : des réglages d'espace réutilisables, désignés par les éléments                 |

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import type { AdminFeatureFact, AdminFeatureStats } from '@deveye/types';
 import type { AdminTabSpec } from '@deveye/types/sdk';
 
-import { humanizeError } from '@/api/useResource';
+import { humanizeError } from '@/api/humanizeError';
 import { ws } from '@/api/ws';
 import Button from '@/Components/Button';
 import { CountBadge } from '@/Components/CountBadge';

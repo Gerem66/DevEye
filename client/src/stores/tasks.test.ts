@@ -1,11 +1,18 @@
 import assert from 'node:assert/strict';
 import { beforeEach, describe, it } from 'node:test';
 
+import type { TaskSnapshot } from '@deveye/types';
+
 import {
+    applyTaskRemoved,
+    applyTaskRoster,
+    applyTaskUpdate,
     cancelTask,
     chipOf,
     clearFinished,
     dismissTask,
+    forgetInstanceTasks,
+    FORGOTTEN_NOTE,
     foregroundOf,
     getTaskRecords,
     hasLocalWork,
@@ -16,7 +23,9 @@ import {
     PROGRESS_GAP_MS,
     raiseTask,
     resetTasks,
+    RESTART_NOTE,
     setPanelOpen,
+    setTaskDismisser,
     SILENT_NOTE,
     startTask,
     stepOf,
@@ -69,7 +78,35 @@ const coded = (code: string): Error => Object.assign(new Error(code), { code });
 /** Le temps qu'un avancement retenu soit publié. */
 const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, PROGRESS_GAP_MS + 30));
 
-beforeEach(() => resetTasks());
+/** Ce que le magasin demande au serveur de retirer, par instance. */
+let dismissed: { instanceId: number | null; ids: readonly string[] }[] = [];
+
+beforeEach(() => {
+    resetTasks();
+    dismissed = [];
+    setTaskDismisser((instanceId, ids) => dismissed.push({ instanceId, ids }));
+});
+
+/** L'instantané qu'un serveur pousse d'une opération lancée ailleurs. */
+function snapshot(over: Partial<TaskSnapshot> = {}): TaskSnapshot {
+    return {
+        id: 'remote-0001',
+        state: 'running',
+        title: 'Restauration',
+        subject: 'Documents',
+        feature: 'demo',
+        itemId: '4',
+        key: 'restore',
+        workspaceId: 1,
+        startedAt: 1_000,
+        endedAt: null,
+        progress: null,
+        done: null,
+        failed: null,
+        error: null,
+        ...over
+    };
+}
 
 describe('startTask', () => {
     it('rend le résultat et le rejet du travail tels quels', async () => {
@@ -223,13 +260,73 @@ describe('startTask', () => {
         await assert.rejects(cancelled);
     });
 
-    it('vise l’espace d’origine et tolère un long silence', () => {
+    it('vise l’espace d’origine et laisse à la commande le temps de partir', () => {
         const task = launch({ origin: { instanceId: null, workspaceId: 7 } });
         assert.equal(task.context.sendOptions.workspaceId, 7);
         assert.equal(task.context.sendOptions.timeoutMs, 120_000);
     });
 
-    it('dit « perdue » quand la socket d’une commande tombe', async () => {
+    it('étiquette la commande pour que le serveur la suive, dans les bornes de l’enveloppe', () => {
+        const task = launch({
+            title: `  ${'x'.repeat(200)}  `,
+            subject: 'Documents',
+            itemId: '4',
+            key: 'delete',
+            done: 'Supprimé.',
+            failed: 'Suppression impossible.'
+        });
+        assert.deepEqual(task.context.sendOptions.task, {
+            id: task.id,
+            title: 'x'.repeat(120),
+            subject: 'Documents',
+            feature: 'demo',
+            itemId: '4',
+            key: 'delete',
+            done: 'Supprimé.',
+            failed: 'Suppression impossible.'
+        });
+        assert.equal(getTaskRecords()[0].tracked, true);
+
+        const computed = launch({ done: () => 'Trois fichiers.', itemId: 'y'.repeat(65) });
+        assert.equal(computed.context.sendOptions.task?.done, undefined);
+        assert.equal(computed.context.sendOptions.task?.itemId, undefined);
+    });
+
+    it('ne fait pas suivre par le serveur un travail de l’onglet', async () => {
+        const task = launch({ local: true });
+        assert.equal(task.context.sendOptions.task, undefined);
+        task.work.resolve(null);
+        await task.done;
+        assert.deepEqual(dismissed, []);
+    });
+
+    it('retire du serveur l’opération finie sans avoir quitté son dialogue', async () => {
+        const task = launch();
+        task.work.resolve(null);
+        await task.done;
+        assert.deepEqual(dismissed, [{ instanceId: null, ids: [task.id] }]);
+    });
+
+    it('retire du serveur ce que la zone retire : la croix, « Tout effacer », le panneau refermé', async () => {
+        const [crossed, cleared, seen] = [0, 1, 2].map(() => launch({ dialog: false }));
+        for (const task of [crossed, cleared, seen]) task.work.resolve(null);
+        await Promise.all([crossed.done, cleared.done, seen.done]);
+
+        dismissTask(crossed.id);
+        assert.deepEqual(dismissed.at(-1), { instanceId: null, ids: [crossed.id] });
+        setPanelOpen(true);
+        setPanelOpen(false);
+        assert.deepEqual(dismissed.at(-1), { instanceId: null, ids: [cleared.id, seen.id] });
+
+        const failed = launch({ dialog: false });
+        failed.work.reject(new Error('panne'));
+        await assert.rejects(failed.done);
+        clearFinished();
+        assert.deepEqual(dismissed.at(-1), { instanceId: null, ids: [failed.id] });
+        assert.equal(getTaskRecords().length, 0);
+    });
+
+    it('dit « perdue » quand la commande n’a pas pu partir', async () => {
         const task = launch();
         minimizeTask(task.id);
         task.work.reject(coded('closed'));
@@ -324,6 +421,184 @@ describe('startTask', () => {
             await task.done;
         }
         assert.equal(getTaskRecords().length, 30);
+        assert.equal(dismissed.length, 2);
+    });
+});
+
+describe('opérations suivies par le serveur', () => {
+    it('montre dans la zone une opération lancée ailleurs, puis son résultat', () => {
+        applyTaskUpdate(null, snapshot({ progress: { done: 2, total: 8, step: 'Copie' } }));
+        const [running] = getTaskRecords();
+        assert.deepEqual(
+            {
+                owned: running.owned,
+                detached: running.detached,
+                foreground: running.foreground,
+                value: running.value,
+                step: running.step,
+                origin: running.origin
+            },
+            {
+                owned: false,
+                detached: true,
+                foreground: false,
+                value: 0.25,
+                step: 'Copie : 2 sur 8',
+                origin: { instanceId: null, workspaceId: 1 }
+            }
+        );
+        assert.equal(matchRunning(getTaskRecords(), { feature: 'demo', itemId: 4, key: 'restore' }, HERE).length, 1);
+
+        applyTaskUpdate(null, snapshot({ state: 'done', endedAt: 2_000, done: 'Dossier restauré.' }));
+        const [done] = getTaskRecords();
+        assert.deepEqual(
+            { state: done.state, note: done.note, value: done.value, seen: done.seen },
+            { state: 'done', note: 'Dossier restauré.', value: undefined, seen: false }
+        );
+        assert.equal(chipOf(getTaskRecords())?.tone, 'done');
+    });
+
+    it('écrit l’échec d’ailleurs avec la phrase du refus, ou le repli de l’appelant', () => {
+        applyTaskUpdate(
+            null,
+            snapshot({
+                state: 'failed',
+                failed: 'Restauration impossible.',
+                error: { code: 'conflict', message: 'Déjà en cours.' }
+            })
+        );
+        assert.deepEqual(getTaskRecords()[0].error, { message: 'Déjà en cours.', code: 'conflict' });
+
+        applyTaskUpdate(
+            null,
+            snapshot({
+                state: 'failed',
+                failed: 'Restauration impossible.',
+                error: { code: 'internal', message: 'boom' }
+            })
+        );
+        assert.deepEqual(getTaskRecords()[0].error, { message: 'Restauration impossible.', code: 'internal' });
+    });
+
+    it('ne ramène pas devant et n’annule pas une opération lancée ailleurs, mais cesse de la suivre', () => {
+        applyTaskUpdate(null, snapshot());
+        raiseTask('remote-0001');
+        cancelTask('remote-0001');
+        assert.equal(foregroundOf(getTaskRecords()), null);
+
+        dismissTask('remote-0001');
+        assert.equal(getTaskRecords().length, 0);
+        assert.deepEqual(dismissed, [{ instanceId: null, ids: ['remote-0001'] }]);
+    });
+
+    it('garde en cours l’opération que cette page attend, qu’on la retire ailleurs ou non', () => {
+        const task = launch({ dialog: false });
+        dismissTask(task.id);
+        applyTaskRemoved(null, [task.id]);
+        assert.equal(getTaskRecords()[0].state, 'running');
+    });
+
+    it('refuse une opération de même clé qu’une autre lancée ailleurs', async () => {
+        applyTaskUpdate(null, snapshot());
+        await assert.rejects(
+            startTask(spec({ key: 'restore', itemId: '4' }), () => Promise.resolve(null)),
+            (e) => e instanceof TaskError && e.code === 'conflict'
+        );
+    });
+
+    it('laisse la requête de la page décider, et s’en remet au serveur si elle se perd', async () => {
+        const task = launch({ dialog: false, done: () => 'Trois fichiers.' });
+        applyTaskUpdate(null, snapshot({ id: task.id, state: 'done', endedAt: 2_000, done: 'Fini.' }));
+        assert.equal(getTaskRecords()[0].state, 'running');
+
+        task.work.reject(coded('lost'));
+        await assert.rejects(task.done, (e) => e instanceof TaskError && e.code === 'lost');
+        const [record] = getTaskRecords();
+        assert.deepEqual({ state: record.state, note: record.note }, { state: 'done', note: 'Fini.' });
+    });
+
+    it('dit interrompue une opération dont le serveur ne garde plus trace', async () => {
+        applyTaskRoster(null, { epoch: 'a', list: [] });
+        const forgotten = launch({ dialog: false });
+        forgotten.work.reject(coded('lost'));
+        await assert.rejects(forgotten.done, (e) => e instanceof TaskError && e.message === FORGOTTEN_NOTE);
+        assert.deepEqual(getTaskRecords()[0].error, { message: FORGOTTEN_NOTE, code: 'lost' });
+        clearFinished();
+        // Le serveur ne la connaît plus : rien à lui faire retirer.
+        assert.deepEqual(dismissed, []);
+
+        const restarted = launch({ dialog: false });
+        applyTaskRoster(null, { epoch: 'b', list: [] });
+        assert.equal(getTaskRecords()[0].state, 'running');
+        restarted.work.reject(coded('lost'));
+        await assert.rejects(restarted.done, (e) => e instanceof TaskError && e.message === RESTART_NOTE);
+        assert.equal(getTaskRecords()[0].state, 'lost');
+    });
+
+    it('relit la liste d’ouverture : apparues, retirées ailleurs pendant la coupure', () => {
+        applyTaskRoster(null, {
+            epoch: 'a',
+            list: [snapshot(), snapshot({ id: 'remote-0002', state: 'done', endedAt: 2 })]
+        });
+        assert.equal(getTaskRecords().length, 2);
+
+        applyTaskRoster(null, { epoch: 'a', list: [snapshot({ progress: { step: 'Suite' } })] });
+        assert.deepEqual(
+            getTaskRecords().map((r) => [r.id, r.step]),
+            [['remote-0001', 'Suite']]
+        );
+        // L'autre instance n'a rien dit : ses lignes ne bougent pas.
+        applyTaskRoster(3, { epoch: 'z', list: [] });
+        assert.equal(getTaskRecords().length, 1);
+    });
+
+    it('après un redémarrage du serveur, interrompt ce qui tournait et garde les résultats', () => {
+        applyTaskRoster(null, {
+            epoch: 'a',
+            list: [snapshot(), snapshot({ id: 'remote-0002', state: 'done', endedAt: 2 })]
+        });
+        applyTaskRoster(null, { epoch: 'b', list: [] });
+        const [running, done] = getTaskRecords();
+        assert.deepEqual(
+            { state: running.state, error: running.error, tracked: running.tracked },
+            { state: 'lost', error: { message: RESTART_NOTE, code: 'lost' }, tracked: false }
+        );
+        assert.deepEqual({ state: done.state, tracked: done.tracked }, { state: 'done', tracked: false });
+        assert.equal(chipOf(getTaskRecords())?.tone, 'lost');
+    });
+
+    it('retire ce qu’un autre onglet a retiré, résultats de cette page compris', async () => {
+        const mine = launch({ dialog: false });
+        mine.work.resolve(null);
+        await mine.done;
+        applyTaskUpdate(null, snapshot());
+        applyTaskUpdate(2, snapshot({ id: 'remote-0002' }));
+
+        applyTaskRemoved(null, [mine.id, 'remote-0001', 'remote-0002']);
+        assert.deepEqual(
+            getTaskRecords().map((r) => r.id),
+            ['remote-0002']
+        );
+        assert.deepEqual(dismissed, []);
+    });
+
+    it('oublie ce qu’on suivait sur une instance dont la session se ferme', () => {
+        applyTaskUpdate(2, snapshot());
+        applyTaskUpdate(null, snapshot({ id: 'remote-0002' }));
+        forgetInstanceTasks(2);
+        assert.deepEqual(
+            getTaskRecords().map((r) => r.id),
+            ['remote-0002']
+        );
+    });
+
+    it('tient pour vu le succès arrivé panneau ouvert', () => {
+        applyTaskUpdate(null, snapshot());
+        setPanelOpen(true);
+        applyTaskUpdate(null, snapshot({ state: 'done', endedAt: 2 }));
+        setPanelOpen(false);
+        assert.equal(getTaskRecords().length, 0);
+        assert.deepEqual(dismissed, [{ instanceId: null, ids: ['remote-0001'] }]);
     });
 });
 

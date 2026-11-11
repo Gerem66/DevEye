@@ -22,16 +22,14 @@ export function chipLabel(chip: ChipView): string {
     if (chip.tone === 'running') {
         const running = chip.count > 1 ? `${chip.count} opérations en cours` : 'Une opération en cours';
         if (chip.alert === 'failed') return `${running}, un échec à voir`;
-        if (chip.alert === 'lost') return `${running}, une connexion coupée à voir`;
+        if (chip.alert === 'lost') return `${running}, une interruption à voir`;
         return running;
     }
     if (chip.tone === 'failed') {
         return chip.count > 1 ? `${chip.count} opérations ont échoué` : 'Une opération a échoué';
     }
     if (chip.tone === 'lost') {
-        return chip.count > 1
-            ? `La connexion a été coupée pendant ${chip.count} opérations`
-            : 'La connexion a été coupée pendant une opération';
+        return chip.count > 1 ? `${chip.count} opérations interrompues` : 'Une opération interrompue';
     }
     return chip.count > 1 ? `${chip.count} opérations terminées` : 'Une opération terminée';
 }

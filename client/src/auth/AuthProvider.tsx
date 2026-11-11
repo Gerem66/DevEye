@@ -158,6 +158,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const setAnonymous = useCallback(() => {
         cancelRetry();
+        // Une requête qu'une coupure a laissée en vol attendrait sinon une socket qui ne reviendra pas.
+        ws.close();
         setUnlocked(false);
         // The next sign-in must wait for the home's first data again rather than
         // inherit this session's "ready" flag.
@@ -271,7 +273,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
             await apiLogout();
         } finally {
-            ws.close();
             setAnonymous();
         }
     }, [setAnonymous]);

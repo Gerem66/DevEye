@@ -371,8 +371,8 @@ en erreur SQL au milieu du geste.
 
 À l'écran, le geste dure : tout l'arbre est relu et rescellé. C'est une opération
 longue (`runTask` dans `Components/FeatureSettings/sections/SharingSection.tsx`,
-voir [TASKS.md](./TASKS.md)) : son dialogue se réduit, et la commande tolère deux
-minutes de silence au lieu des quinze secondes ordinaires. La coquille de
+voir [TASKS.md](./TASKS.md)) : son dialogue se réduit, et le serveur suit la
+commande, qui n'expire pas et survit à une coupure. La coquille de
 réglages se referme et la fiche s'en va (`onGone`, voir
 [SETTINGS.md](./SETTINGS.md)) dès que le dialogue est réduit, sinon à la fin :
 l'élément n'est plus ici, il n'y a plus rien à en montrer.

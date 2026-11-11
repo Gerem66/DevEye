@@ -11,6 +11,7 @@ import {
     debugTrackingUseFeature
 } from './tracking';
 import { debugOverviewFeature, debugRunAbortFeature, debugRunGetFeature, debugRunListFeature } from './runs';
+import { debugTaskSampleFeature } from './taskSample';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const debugFeatures: FeatureDefinition<string, any, any>[] = [
@@ -21,6 +22,7 @@ export const debugFeatures: FeatureDefinition<string, any, any>[] = [
     debugE2eCatalogFeature,
     debugE2eStartFeature,
     debugE2eSweepFeature,
+    debugTaskSampleFeature,
     debugBenchCatalogFeature,
     debugBenchStartFeature,
     debugPingFeature,

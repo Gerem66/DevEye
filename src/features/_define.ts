@@ -4,6 +4,7 @@ import type { SecureStore } from '@/Services/SecureStore';
 import type { SecretKeyService } from '@/Services/SecretKeyService';
 import type { MonitorTransport } from '@/agent/hub';
 import type { LiveTransport } from '@/live/hub';
+import type { TaskTransport } from '@/Services/tasks';
 import type { LiveTopic, LogLevelName } from '@deveye/types';
 import type { Logger } from 'pino';
 import type { CommandProgress } from '@deveye/types/sdk/server';
@@ -146,6 +147,8 @@ export interface FeatureContext {
      * un espace où il écrit sans y être assis.
      */
     live?: LiveTransport;
+    /** Les opérations suivies du compte, liées à cette connexion. Absent hors socket (tests). */
+    tasks?: TaskTransport;
 }
 
 /**

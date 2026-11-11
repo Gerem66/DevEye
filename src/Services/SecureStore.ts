@@ -642,9 +642,13 @@ export class SecureStore implements Cipher {
      * le mot de passe, sinon selon `probe` (le déverrouillage de session).
      */
     private async unlockedBy(probe: (sessionId: string) => boolean): Promise<boolean> {
-        if (this.scope.kind === 'shared') return true;
-        const row = await this.row();
-        return !this.keys.isPasswordWrapped(row) || probe(this.sessionId);
+        return !(await this.isPasswordGated()) || probe(this.sessionId);
+    }
+
+    /** L'étage gardé attend-il le mot de passe du compte ? Jamais dans un espace partagé. */
+    async isPasswordGated(): Promise<boolean> {
+        if (this.scope.kind === 'shared') return false;
+        return this.keys.isPasswordWrapped(await this.row());
     }
 
     /**

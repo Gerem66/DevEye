@@ -52,6 +52,7 @@ import { setSdkHost } from '@/features/_sdk/host';
 import { createPlanPausesService } from '@/features/_planPauses';
 import { adminPending } from '@/Services/adminPending';
 import { admission } from '@/Services/admission';
+import { tasks } from '@/Services/tasks';
 import { planOf } from '@/Services/quota';
 import { createAuditLog } from '@/Services/AuditLog';
 import { startAttemptSweeper } from '@/Services/attempts';
@@ -442,6 +443,8 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         origin: env.PUBLIC_ORIGIN.replace(/\/+$/, ''),
         planOf: (userId) => planOf({ get: <T>(key: string) => moduleProvider<T>(key) }, userId, logger)
     });
+    tasks.init({ live });
+    live.onSessionsRevoked((gone) => tasks.revoke(gone));
     // Avant les modules : leur premier tour lit déjà ce que l'offre tient en pause.
     const planPauses = createPlanPausesService({ db: deps.db, logger, live });
     await planPauses.start();
@@ -450,6 +453,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     const stopServices = async (): Promise<PromiseSettledResult<void>[]> => {
         await maintenance.close();
         admission.close();
+        tasks.close();
         adminPending.close();
         const [modules, host] = await Promise.all([
             stopModuleServices(),

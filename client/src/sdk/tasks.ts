@@ -63,6 +63,7 @@ export function runTask<T>(options: TaskOptions<T>, run: (task: TaskContext) => 
             local: options.local ?? false,
             done: options.done,
             failure: typeof failed === 'function' ? failed : (error) => errorNote(error, failed),
+            failed: typeof failed === 'string' ? failed : undefined,
             cancel: options.cancel,
             onDetach: options.onDetach
         },

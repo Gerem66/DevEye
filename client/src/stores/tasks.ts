@@ -1,8 +1,10 @@
 import { useSyncExternalStore } from 'react';
+import { TASK_TEXT_MAX, TASK_TITLE_MAX, type CommandTask, type TaskRoster, type TaskSnapshot } from '@deveye/types';
 
 import type { SendOptions } from '@/api/ws';
 import type { ErrorNoteInput } from '@/Components/ErrorNote';
 
+import { humanizeError } from '../api/humanizeError';
 import { randomUuid } from '../randomUuid';
 
 /**
@@ -13,23 +15,28 @@ import { randomUuid } from '../randomUuid';
  * de Vite au chargement, et ce magasin se teste sous Node.
  */
 
-/** Le silence toléré de la commande d'une opération : chaque avancement relance le compte. */
+/** Le délai laissé à la commande d'une opération pour partir, quand la socket se fait attendre. */
 const SILENCE_MS = 120_000;
 /** Au-delà, les opérations finies les plus anciennes cèdent la place. */
 const FINISHED_MAX = 30;
 /** L'écart minimal entre deux avancements publiés d'une même opération. */
 export const PROGRESS_GAP_MS = 100;
 
-export const LOST_NOTE =
-    'La connexion a été coupée pendant l’opération. Elle se poursuit sans doute sur le serveur : vérifiez son résultat avant de la relancer.';
+export const LOST_NOTE = 'La connexion a été coupée pendant l’opération. Vérifiez son résultat avant de la relancer.';
 export const SILENT_NOTE =
     'Le serveur ne donne plus de nouvelles. L’opération se poursuit peut-être : vérifiez son résultat avant de la relancer.';
+export const RESTART_NOTE =
+    'Le serveur a redémarré pendant l’opération : elle a pu s’interrompre. Vérifiez son résultat avant de la relancer.';
+export const FORGOTTEN_NOTE =
+    'Le serveur ne garde plus trace de cette opération. Vérifiez son résultat avant de la relancer.';
+const ENDED_OFFLINE_NOTE = 'L’opération s’est terminée pendant que cette page était déconnectée.';
+const FAILED_NOTE = 'L’opération a échoué.';
 const CONFLICT_NOTE = 'Cette opération est déjà en cours.';
 const CANCELLED_NOTE = 'Opération annulée.';
 const CANCELLING_STEP = 'Annulation…';
 const DONE_NOTE = 'Terminé.';
 
-/** `lost` : la socket est tombée, le serveur a sans doute fini sans pouvoir le dire. */
+/** `lost` : personne ne sait comment elle a fini (serveur redémarré, connexion coupée avant l'envoi). */
 export type TaskState = 'running' | 'done' | 'failed' | 'lost';
 
 /** L'espace où l'opération a été lancée : `instanceId` à `null` pour cette instance. */
@@ -72,6 +79,10 @@ export interface TaskRecord extends Task {
     raisedAt: number;
     /** Un succès que le panneau a déjà montré : il part à sa fermeture. */
     seen: boolean;
+    /** Cette page l'a lancée : elle en attend la réponse et en tient le dialogue. */
+    owned: boolean;
+    /** Le serveur la suit : la retirer d'ici la retire de tous les onglets du compte. */
+    tracked: boolean;
 }
 
 /** Les options d'une opération, l'origine et la note d'échec déjà résolues par `sdk/tasks`. */
@@ -88,12 +99,14 @@ export interface TaskSpec<T> {
     local: boolean;
     done?: string | ((result: T) => string);
     failure: (error: unknown) => ErrorNoteInput;
+    /** Le repli de la phrase d'échec, pour un onglet qui n'a pas lancé l'opération. */
+    failed?: string;
     cancel?: () => void;
     onDetach?: () => void;
 }
 
 export interface TaskContext {
-    /** À passer à LA commande de l'opération : silence toléré, avancement branché, espace d'origine. */
+    /** À passer à LA commande de l'opération : c'est elle que le serveur suit, avancement et espace d'origine compris. */
     sendOptions: SendOptions;
     /** L'avancement d'un travail fait dans l'onglet ; `null` efface la valeur. */
     report(update: { value?: number | null; step?: string | null }): void;
@@ -102,7 +115,7 @@ export interface TaskContext {
     origin: TaskOrigin;
 }
 
-export type TaskErrorCode = 'closed' | 'timeout' | 'conflict' | 'cancelled';
+export type TaskErrorCode = 'closed' | 'timeout' | 'lost' | 'conflict' | 'cancelled';
 
 /** Le rejet qu'une opération écrit elle-même : sa phrase est déjà la bonne. */
 export class TaskError extends Error {
@@ -123,13 +136,27 @@ interface Handle {
     progressAt: number;
     pending: Partial<TaskRecord> | null;
     timer: ReturnType<typeof setTimeout> | null;
+    /** Ce que le serveur dit de l'opération quand il en parle à cette page malgré sa requête en vol. */
+    snapshot: TaskSnapshot | null;
+    /** L'époque du serveur au lancement : autre à la fin, il a redémarré entre-temps. */
+    epoch: string | undefined;
 }
+
+type Dismisser = (instanceId: number | null, ids: readonly string[]) => void;
 
 let records: readonly TaskRecord[] = [];
 const handles = new Map<string, Handle>();
 const listeners = new Set<() => void>();
+/** L'époque du registre de chaque instance, telle que sa dernière liste d'ouverture l'a dite. */
+const epochs = new Map<number | null, string>();
+let dismisser: Dismisser | null = null;
 let panelOpen = false;
 let raiseSeq = 0;
+
+/** Branché par le transport : retire des opérations de la zone du compte, sur le serveur d'une instance. */
+export function setTaskDismisser(fn: Dismisser | null): void {
+    dismisser = fn;
+}
 
 function publish(next: readonly TaskRecord[]): void {
     records = next;
@@ -152,9 +179,20 @@ function release(id: string): void {
     handles.delete(id);
 }
 
-function remove(id: string): void {
-    release(id);
-    if (find(id)) publish(records.filter((r) => r.id !== id));
+/** Retire des opérations d'ici et, pour celles que le serveur suit, de tous les onglets du compte. */
+function discard(gone: readonly TaskRecord[]): void {
+    if (gone.length === 0) return;
+    const ids = new Set(gone.map((r) => r.id));
+    for (const id of ids) release(id);
+    publish(records.filter((r) => !ids.has(r.id)));
+    const byInstance = new Map<number | null, string[]>();
+    for (const record of gone) {
+        if (!record.tracked) continue;
+        const list = byInstance.get(record.origin.instanceId);
+        if (list) list.push(record.id);
+        else byInstance.set(record.origin.instanceId, [record.id]);
+    }
+    for (const [instanceId, list] of byInstance) dismisser?.(instanceId, list);
 }
 
 /**
@@ -218,13 +256,11 @@ function finish(id: string, change: Partial<TaskRecord>): void {
         r.id === id ? { ...r, ...change, endedAt: Date.now(), foreground: false, seen: panelOpen } : r
     );
     const finished = settled.filter((r) => r.state !== 'running');
-    const surplus = new Set(
-        [...finished]
-            .sort((a, b) => (a.endedAt ?? 0) - (b.endedAt ?? 0))
-            .slice(0, Math.max(0, finished.length - FINISHED_MAX))
-            .map((r) => r.id)
-    );
-    publish(surplus.size > 0 ? settled.filter((r) => !surplus.has(r.id)) : settled);
+    const surplus = [...finished]
+        .sort((a, b) => (a.endedAt ?? 0) - (b.endedAt ?? 0))
+        .slice(0, Math.max(0, finished.length - FINISHED_MAX));
+    publish(settled);
+    discard(surplus);
 }
 
 function succeed<T>(id: string, spec: TaskSpec<T>, result: T): void {
@@ -232,7 +268,7 @@ function succeed<T>(id: string, spec: TaskSpec<T>, result: T): void {
     release(id);
     if (!record) return;
     if (!record.detached) {
-        remove(id);
+        discard([record]);
         return;
     }
     let note = DONE_NOTE;
@@ -250,40 +286,78 @@ function succeed<T>(id: string, spec: TaskSpec<T>, result: T): void {
 /** Solde un échec, et rend ce que la promesse de l'appelant doit rejeter. */
 function fail<T>(id: string, spec: TaskSpec<T>, error: unknown): unknown {
     const record = find(id);
-    const cancelled = handles.get(id)?.cancelRequested === true;
+    const handle = handles.get(id);
     release(id);
     if (!record) return error;
-    if (cancelled) {
-        remove(id);
+    if (handle?.cancelRequested) {
+        discard([record]);
         return new TaskError('cancelled', CANCELLED_NOTE);
     }
 
     const code = codeOf(error);
     let thrown: unknown = error;
-    let state: TaskState = 'failed';
-    let note: ErrorNoteInput;
-    // Une commande dont la socket tombe n'a pas échoué : le serveur va au bout.
-    // Un travail local, lui, s'arrête vraiment avec sa connexion.
-    if (!record.local && code === 'closed') {
-        state = 'lost';
+    let change: Partial<TaskRecord>;
+    if (!record.local && code === 'lost') {
+        // Le serveur ne rendra plus la réponse. S'il a dit la fin de
+        // l'opération entre-temps, elle fait foi ; sinon personne ne la connaît.
+        const told = handle?.snapshot;
+        if (told?.state === 'done') {
+            thrown = new TaskError('lost', ENDED_OFFLINE_NOTE);
+            change = { state: 'done', note: typeof spec.done === 'string' ? spec.done : (told.done ?? DONE_NOTE) };
+        } else if (told?.state === 'failed') {
+            const note = failureOf(told);
+            thrown = new TaskError('lost', note.message);
+            change = { state: 'failed', error: note };
+        } else {
+            const message = handle?.epoch === epochs.get(record.origin.instanceId) ? FORGOTTEN_NOTE : RESTART_NOTE;
+            thrown = new TaskError('lost', message);
+            change = { state: 'lost', error: { message, code: 'lost' }, tracked: false };
+        }
+    } else if (!record.local && code === 'closed') {
+        // Coupée avant que la commande parte : une commande suivie survit à sa socket.
         thrown = new TaskError('closed', LOST_NOTE);
-        note = { message: LOST_NOTE, code: 'closed' };
+        change = { state: 'lost', error: { message: LOST_NOTE, code: 'closed' } };
     } else if (!record.local && code === 'timeout') {
         thrown = new TaskError('timeout', SILENT_NOTE);
-        note = { message: SILENT_NOTE, code: 'timeout' };
+        change = { state: 'failed', error: { message: SILENT_NOTE, code: 'timeout' } };
     } else {
-        note = spec.failure(error);
+        change = { state: 'failed', error: spec.failure(error) };
     }
 
-    if (!record.detached) remove(id);
-    else finish(id, { state, error: note });
+    if (!record.detached) discard([record]);
+    else finish(id, change);
     return thrown;
+}
+
+function clip(text: string | undefined, max: number): string | undefined {
+    const clipped = text?.trim().slice(0, max);
+    return clipped ? clipped : undefined;
+}
+
+function short(value: string | undefined): string | undefined {
+    return value !== undefined && value !== '' && value.length <= 64 ? value : undefined;
+}
+
+/** Ce que la commande dit de l'opération au serveur, dans les bornes de l'enveloppe. */
+function tagOf<T>(id: string, spec: TaskSpec<T>): CommandTask | undefined {
+    const title = clip(spec.title, TASK_TITLE_MAX);
+    if (spec.local || title === undefined) return undefined;
+    return {
+        id,
+        title,
+        subject: clip(spec.subject, TASK_TEXT_MAX),
+        feature: short(spec.feature),
+        itemId: short(spec.itemId),
+        key: short(spec.key),
+        done: typeof spec.done === 'string' ? clip(spec.done, TASK_TEXT_MAX) : undefined,
+        failed: clip(spec.failed, TASK_TEXT_MAX)
+    };
 }
 
 /**
  * Lance une opération et la suit. La promesse se résout et rejette comme `run`,
- * sauf pour une coupure ou un silence de la commande, où elle rejette une
- * `TaskError` qui porte la bonne phrase.
+ * sauf quand la commande n'a pas pu partir ou que le serveur n'en garde plus
+ * trace, où elle rejette une `TaskError` qui porte la bonne phrase.
  */
 export function startTask<T>(spec: TaskSpec<T>, run: (task: TaskContext) => Promise<T>): Promise<T> {
     if (spec.key !== undefined && records.some((r) => r.state === 'running' && sameTarget(r, spec))) {
@@ -291,13 +365,16 @@ export function startTask<T>(spec: TaskSpec<T>, run: (task: TaskContext) => Prom
     }
 
     const id = randomUuid();
+    const tag = tagOf(id, spec);
     handles.set(id, {
         cancel: spec.cancel,
         onDetach: spec.onDetach,
         cancelRequested: false,
         progressAt: 0,
         pending: null,
-        timer: null
+        timer: null,
+        snapshot: null,
+        epoch: epochs.get(spec.origin.instanceId)
     });
     publish([
         ...records,
@@ -318,7 +395,9 @@ export function startTask<T>(spec: TaskSpec<T>, run: (task: TaskContext) => Prom
             foreground: spec.dialog,
             detached: !spec.dialog,
             raisedAt: ++raiseSeq,
-            seen: false
+            seen: false,
+            owned: true,
+            tracked: tag !== undefined
         }
     ]);
 
@@ -331,7 +410,8 @@ export function startTask<T>(spec: TaskSpec<T>, run: (task: TaskContext) => Prom
                     value: total !== undefined && total > 0 ? Math.min(1, (done ?? 0) / total) : undefined,
                     step: stepOf(step, done, total)
                 }),
-            ...(spec.origin.workspaceId !== null ? { workspaceId: spec.origin.workspaceId } : {})
+            ...(spec.origin.workspaceId !== null ? { workspaceId: spec.origin.workspaceId } : {}),
+            ...(tag ? { task: tag } : {})
         },
         report: ({ value, step }) => {
             const change: Partial<TaskRecord> = {};
@@ -368,10 +448,10 @@ export function minimizeTask(id: string): void {
     if (first) handles.get(id)?.onDetach?.();
 }
 
-/** Ramène le dialogue d'une opération en cours devant. */
+/** Ramène devant le dialogue d'une opération en cours que cette page a lancée. */
 export function raiseTask(id: string): void {
     const record = find(id);
-    if (!record || record.state !== 'running') return;
+    if (!record || record.state !== 'running' || !record.owned) return;
     patch(id, { foreground: true, raisedAt: ++raiseSeq });
 }
 
@@ -386,15 +466,18 @@ export function cancelTask(id: string): void {
     handle.cancel();
 }
 
-/** Retire une opération finie de la zone. */
+/**
+ * Retire une opération de la zone : un résultat, ou une opération en cours que
+ * cette page n'a pas lancée et qu'elle cesse de suivre.
+ */
 export function dismissTask(id: string): void {
     const record = find(id);
-    if (!record || record.state === 'running') return;
-    remove(id);
+    if (!record || (record.state === 'running' && record.owned)) return;
+    discard([record]);
 }
 
 export function clearFinished(): void {
-    if (records.some((r) => r.state !== 'running')) publish(records.filter((r) => r.state === 'running'));
+    discard(records.filter((r) => r.state !== 'running'));
 }
 
 /**
@@ -408,8 +491,8 @@ export function setPanelOpen(open: boolean): void {
         if (records.some((r) => r.state === 'done' && !r.seen)) {
             publish(records.map((r) => (r.state === 'done' ? { ...r, seen: true } : r)));
         }
-    } else if (records.some((r) => r.state === 'done' && r.seen)) {
-        publish(records.filter((r) => !(r.state === 'done' && r.seen)));
+    } else {
+        discard(records.filter((r) => r.state === 'done' && r.seen));
     }
 }
 
@@ -419,8 +502,123 @@ export function resetTasks(): void {
         if (record.state === 'running' && record.local) handles.get(record.id)?.cancel?.();
     }
     for (const id of [...handles.keys()]) release(id);
+    epochs.clear();
     panelOpen = false;
     if (records.length > 0) publish([]);
+}
+
+/** La session d'une instance distante se ferme : ce qu'on y suivait n'a plus de source. */
+export function forgetInstanceTasks(instanceId: number | null): void {
+    epochs.delete(instanceId);
+    const next = records.filter((r) => r.owned || r.origin.instanceId !== instanceId);
+    if (next.length !== records.length) publish(next);
+}
+
+// ── Ce que le serveur dit des opérations du compte ─────────────────────────
+
+function failureOf(snapshot: TaskSnapshot): ErrorNoteInput {
+    return {
+        message: humanizeError(snapshot.error, snapshot.failed ?? FAILED_NOTE),
+        code: snapshot.error?.code ?? null
+    };
+}
+
+/** La ligne d'une opération que cette page n'a pas lancée, telle que le serveur la décrit. */
+function followed(instanceId: number | null, snapshot: TaskSnapshot, previous: TaskRecord | undefined): TaskRecord {
+    const running = snapshot.state === 'running';
+    const { done, total, step } = snapshot.progress ?? {};
+    return {
+        id: snapshot.id,
+        feature: snapshot.feature ?? '',
+        itemId: snapshot.itemId ?? undefined,
+        key: snapshot.key ?? undefined,
+        title: snapshot.title,
+        subject: snapshot.subject ?? undefined,
+        origin: { instanceId, workspaceId: snapshot.workspaceId },
+        startedAt: snapshot.startedAt,
+        state: snapshot.state,
+        endedAt: snapshot.endedAt ?? undefined,
+        value: running && total !== undefined && total > 0 ? Math.min(1, (done ?? 0) / total) : undefined,
+        step: running ? stepOf(step, done, total) : undefined,
+        note: snapshot.state === 'done' ? (snapshot.done ?? DONE_NOTE) : undefined,
+        error: snapshot.state === 'failed' ? failureOf(snapshot) : undefined,
+        local: false,
+        minimizable: false,
+        cancellable: false,
+        foreground: false,
+        detached: true,
+        raisedAt: 0,
+        seen: previous !== undefined && previous.state !== 'running' ? previous.seen : !running && panelOpen,
+        owned: false,
+        tracked: true
+    };
+}
+
+function merge(list: readonly TaskRecord[], instanceId: number | null, snapshot: TaskSnapshot): readonly TaskRecord[] {
+    // La requête en vol de cette page décidera : ce que dit le serveur est gardé pour le cas où elle se perd.
+    const handle = handles.get(snapshot.id);
+    if (handle) {
+        handle.snapshot = snapshot;
+        return list;
+    }
+    const previous = list.find((r) => r.id === snapshot.id);
+    // Le résultat qu'une page a vu arriver fait foi, sauf quand elle l'a perdu.
+    if (previous?.owned && previous.state !== 'lost') return list;
+    const next = followed(instanceId, snapshot, previous);
+    return previous ? list.map((r) => (r === previous ? next : r)) : [...list, next];
+}
+
+/** Une opération du compte est apparue, a avancé ou s'est terminée ailleurs. */
+export function applyTaskUpdate(instanceId: number | null, snapshot: TaskSnapshot): void {
+    const next = merge(records, instanceId, snapshot);
+    if (next !== records) publish(next);
+}
+
+/** Des opérations ont été retirées de la zone du compte ; celles que cette page attend encore y restent. */
+export function applyTaskRemoved(instanceId: number | null, ids: readonly string[]): void {
+    const gone = new Set(ids);
+    const next = records.filter((r) => !gone.has(r.id) || r.origin.instanceId !== instanceId || handles.has(r.id));
+    if (next.length !== records.length) publish(next);
+}
+
+/**
+ * La liste que le serveur d'une instance donne à l'ouverture de sa socket. Une
+ * opération suivie qu'elle ne cite plus a été retirée ailleurs pendant la
+ * coupure ; si l'époque a changé, le serveur a redémarré et ne sait plus rien.
+ */
+export function applyTaskRoster(instanceId: number | null, roster: TaskRoster): void {
+    const before = epochs.get(instanceId);
+    epochs.set(instanceId, roster.epoch);
+    const restarted = before !== undefined && before !== roster.epoch;
+    const listed = new Set(roster.list.map((snapshot) => snapshot.id));
+
+    let changed = false;
+    let next: readonly TaskRecord[] = records.flatMap((record): TaskRecord[] => {
+        const stale =
+            record.origin.instanceId === instanceId &&
+            record.tracked &&
+            !listed.has(record.id) &&
+            !handles.has(record.id);
+        if (!stale || (record.owned && !restarted)) return [record];
+        changed = true;
+        if (!restarted) return [];
+        if (record.state !== 'running') return [{ ...record, tracked: false }];
+        return [
+            {
+                ...record,
+                state: 'lost',
+                endedAt: Date.now(),
+                value: undefined,
+                step: undefined,
+                error: { message: RESTART_NOTE, code: 'lost' },
+                seen: false,
+                tracked: false
+            }
+        ];
+    });
+    if (!changed) next = records;
+    for (const snapshot of roster.list) next = merge(next, instanceId, snapshot);
+    if (next !== records) publish(next);
 }
 
 // ── Lectures ───────────────────────────────────────────────────────────────

@@ -1,9 +1,10 @@
+import { ws } from '@/api/ws';
 import Button from '@/Components/Button';
 import { TaskProgress } from '@/Components/TaskDialog';
 import { TaskChip } from '@/Components/TopNavbar/TaskChip';
 import { TaskRow } from '@/Components/TopNavbar/TaskRow';
 import { runTask, useTasks } from '@/sdk/tasks';
-import { LOST_NOTE, type ChipView, type TaskContext, type TaskRecord } from '@/stores/tasks';
+import { RESTART_NOTE, type ChipView, type TaskContext, type TaskRecord } from '@/stores/tasks';
 
 import { Specimen, Variant } from '../Specimen';
 import styles from '../Gallery.module.css';
@@ -37,7 +38,7 @@ const CHIPS: readonly { label: string; chip: ChipView }[] = [
     { label: 'une en cours, mesurée', chip: { tone: 'running', count: 1, value: 0.4, alert: null } },
     { label: 'plusieurs, un échec attend', chip: { tone: 'running', count: 3, alert: 'failed' } },
     { label: 'échec', chip: { tone: 'failed', count: 1, alert: null } },
-    { label: 'connexion coupée', chip: { tone: 'lost', count: 1, alert: null } },
+    { label: 'interrompue', chip: { tone: 'lost', count: 1, alert: null } },
     { label: 'succès non vus', chip: { tone: 'done', count: 2, alert: null } }
 ];
 
@@ -55,11 +56,14 @@ const BASE: TaskRecord = {
     foreground: false,
     detached: true,
     raisedAt: 0,
-    seen: false
+    seen: false,
+    owned: true,
+    tracked: true
 };
 
 const ROWS: readonly TaskRecord[] = [
     { ...BASE, id: 'running', value: 0.35, step: 'Libération de l’espace : 7 sur 20', cancellable: true },
+    { ...BASE, id: 'followed', value: 0.6, step: 'Libération de l’espace : 12 sur 20', owned: false },
     { ...BASE, id: 'done', state: 'done', note: 'Point de restauration supprimé.' },
     {
         ...BASE,
@@ -67,7 +71,7 @@ const ROWS: readonly TaskRecord[] = [
         state: 'failed',
         error: { message: 'Suppression impossible.', code: 'internal' }
     },
-    { ...BASE, id: 'lost', state: 'lost', error: { message: LOST_NOTE, code: 'closed' } }
+    { ...BASE, id: 'lost', state: 'lost', error: { message: RESTART_NOTE, code: 'lost' } }
 ];
 
 const noop = (): void => undefined;
@@ -96,6 +100,24 @@ function start(title: string, seconds: number, sample: Sample = {}): void {
                 ...(sample.cancellable ? { local: true, cancel: () => abort.abort() } : {})
             },
             (task) => sampleWork(seconds, task, { fails: sample.fails, signal: abort.signal })
+        )
+    );
+}
+
+/** Une commande lente du serveur : il la suit, elle survit à un rechargement et se voit des autres onglets. */
+function startFollowed(title: string, seconds: number, sample: { fail?: boolean; quiet?: boolean } = {}): void {
+    launch(
+        runTask(
+            {
+                feature: FEATURE,
+                title,
+                subject: 'Galerie',
+                description:
+                    'Une commande factice que le serveur suit : rechargez la page ou ouvrez un autre onglet, elle y est encore.',
+                done: 'L’essai est allé au bout.',
+                failed: 'L’essai a échoué, comme prévu.'
+            },
+            (task) => ws.send('debug.taskSample', { seconds, ...sample }, task.sendOptions)
         )
     );
 }
@@ -140,6 +162,25 @@ export function OperationsSpecimen({ disabled }: { disabled: boolean }) {
                     onClick={() => start('Essai sans dialogue', 12, { dialog: false })}
                 >
                     Sans dialogue
+                </Button>
+            </Variant>
+            <Variant label='essais suivis par le serveur' wide>
+                <Button variant='secondary' disabled={disabled} onClick={() => startFollowed('Essai suivi', 30)}>
+                    Suivie
+                </Button>
+                <Button
+                    variant='secondary'
+                    disabled={disabled}
+                    onClick={() => startFollowed('Essai suivi qui échoue', 8, { fail: true })}
+                >
+                    Suivie, qui échoue
+                </Button>
+                <Button
+                    variant='secondary'
+                    disabled={disabled}
+                    onClick={() => startFollowed('Essai suivi sans avancement', 45, { quiet: true })}
+                >
+                    Suivie, muette
                 </Button>
             </Variant>
             <Variant label='TaskProgress, en place' wide fill>

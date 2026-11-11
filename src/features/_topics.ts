@@ -85,6 +85,8 @@ const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
     shortlinks: 'shortlinks',
     whiteboard: 'whiteboard',
     stepup: 'account',
+    // Les opérations d'un compte ne regardent que lui : le registre pousse ses propres trames.
+    task: null,
     twofa: 'account',
     uptime: 'uptime',
     user: 'account',
@@ -118,6 +120,7 @@ function knownTopic(topic: string, modules: ReadonlySet<string>): boolean {
 const NON_MUTATING = new Set([
     // Un état de la session, en mémoire : rien d'écrit.
     'stepup.confirm',
+    'task.attach',
     'secrecy.unlock',
     'secrecy.hold',
     'secrecy.touch',

@@ -12,6 +12,7 @@ import { sharingFeatures } from './sharing';
 import { secrecyFeatures } from './secrecy';
 import { loginChecksFeatures } from './loginChecks';
 import { stepUpFeatures } from './stepup';
+import { taskFeatures } from './task';
 import { twoFactorFeatures } from './twofa';
 import { userDeleteAccountFeature } from './user/deleteAccount';
 import { userExportPrepareFeature } from './user/exportPrepare';
@@ -91,6 +92,7 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     ...agentFeatures,
     ...twoFactorFeatures,
     ...stepUpFeatures,
+    ...taskFeatures,
     ...loginChecksFeatures,
     ...secrecyFeatures,
     ...logsFeatures,

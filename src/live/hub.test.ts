@@ -23,7 +23,13 @@ function socket() {
         ping: () => undefined,
         terminate: () => undefined
     };
-    return { ws: fake as unknown as WebSocket, frames };
+    return {
+        ws: fake as unknown as WebSocket,
+        frames,
+        clog: () => {
+            fake.bufferedAmount = 1024 * 1024;
+        }
+    };
 }
 
 function harness(t: TestContext) {
@@ -144,5 +150,50 @@ describe('LiveHub : curseurs dans un canal', () => {
         h.tick();
 
         assert.equal(h.cursorsOf(alice.frames), undefined);
+    });
+});
+
+describe('LiveHub : trames d’un compte', () => {
+    const names = (frames: { command: string }[]) => frames.map((f) => f.command);
+
+    it('atteint toutes les sockets du compte, ou toutes sauf une', () => {
+        const hub = new LiveHub();
+        const [tab, phone, stranger] = [socket(), socket(), socket()];
+        hub.register(tab.ws, 1, 'session-a');
+        hub.register(phone.ws, 1, 'session-b');
+        hub.register(stranger.ws, 2, 'session-c');
+
+        hub.toUser(1, 'task.update', { id: 'x' });
+        hub.toUser(1, 'task.removed', { ids: ['x'] }, { except: tab.ws });
+
+        assert.deepEqual(names(tab.frames), ['task.update']);
+        assert.deepEqual(names(phone.frames), ['task.update', 'task.removed']);
+        assert.deepEqual(names(stranger.frames), []);
+    });
+
+    it('ne retient pas derrière la contre-pression une trame qui clôt un état', () => {
+        const hub = new LiveHub();
+        const slow = socket();
+        hub.register(slow.ws, 1, 'session-a');
+        slow.clog();
+
+        hub.toUser(1, 'task.update', { state: 'running' });
+        hub.toUser(1, 'task.update', { state: 'done' }, { must: true });
+
+        assert.deepEqual(
+            slow.frames.map((f) => f.data.state),
+            ['done']
+        );
+    });
+
+    it('signale les sessions qu’une révocation ferme', () => {
+        const hub = new LiveHub();
+        const gone: unknown[] = [];
+        hub.onSessionsRevoked((sessions) => gone.push(sessions));
+
+        hub.closeSession('session-a');
+        hub.closeSessionsOf(1, 'session-b');
+
+        assert.deepEqual(gone, [{ sessionId: 'session-a' }, { userId: 1, keepSessionId: 'session-b' }]);
     });
 });

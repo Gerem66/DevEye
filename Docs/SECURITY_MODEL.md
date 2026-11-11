@@ -174,6 +174,26 @@ sur le modèle de la DEK en attente du 2FA :
 - `forgetSessionsOf` (changement de mot de passe, suspension, suppression) la
   révoque même en cours d'export : le codec lève `locked` et l'archive s'arrête.
 
+## Ce que le registre des opérations garde en mémoire
+
+Une opération longue que le serveur suit ([TASKS.md](./TASKS.md)) laisse dans
+sa mémoire, jamais en base, deux choses : ses libellés (titre, ce sur quoi elle
+porte, étape, phrases de fin), 24 h au plus, et la réponse de sa commande, dix
+minutes au plus, pour la page qu'une coupure en a séparée.
+
+- **Jamais à quelqu'un d'autre.** Les libellés ne partent que vers les sockets
+  du compte qui a lancé l'opération. La réponse ne se rend qu'à la session qui
+  l'a lancée, sur présentation du `requestId` de la requête, qui n'est jamais
+  diffusé. Une session révoquée perd les réponses qu'elle attendait.
+- **Rien quand le mot de passe garde l'espace.** Dans un espace personnel dont
+  l'étage gardé attend le mot de passe (`SecureStore.isPasswordGated`), un
+  libellé ou une réponse peut citer ce que cet étage protège : le registre ne
+  les montre à aucun autre onglet et ne les retient pas au-delà de la commande.
+  Il ne sait, tant qu'elle tourne, que la socket à qui répondre. Rien de
+  déchiffré ne survit donc à la DEK de la session.
+- **L'entrée d'une commande n'est jamais retenue**, et l'échec montré aux
+  autres onglets ne porte que le code et la phrase du refus, pas ses `details`.
+
 ## Notes privées
 
 Application directe des deux étages ci-dessus (`features/notes/src/server/handlers.ts`) :

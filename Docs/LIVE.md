@@ -197,6 +197,12 @@ L'appartenance reste la frontière, et la présence ne la contourne pas.
   un compte **hors de sa salle** : gagner ou perdre un espace se décide depuis
   cet espace pendant que l'intéressé est assis ailleurs, et sans cette voie sa
   liste d'espaces resterait figée jusqu'au rechargement.
+- **Les opérations longues visent un compte, jamais une salle.** Leurs trames
+  (`task.update`, `task.removed`) partent par `LiveHub.toUser` vers toutes les
+  sockets du compte qui a lancé l'opération, où qu'elles soient assises : aucun
+  droit de feature à éprouver, puisqu'elles ne reviennent qu'à leur auteur.
+  Une trame qui clôt un état (la fin, un retrait) passe outre la
+  contre-pression, les avancements non ([TASKS.md](./TASKS.md)).
 
 ---
 

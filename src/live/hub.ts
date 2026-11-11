@@ -96,6 +96,9 @@ interface Grants {
     epoch: number;
 }
 
+/** Les sessions qu'une révocation vient de fermer : une seule, ou toutes celles d'un compte sauf la gardée. */
+export type RevokedSessions = { sessionId: string } | { userId: number; keepSessionId?: string };
+
 export interface LiveConn {
     /** Identité de la socket : deux onglets sont deux connexions, un seul `sessionId`. */
     readonly connId: string;
@@ -291,6 +294,13 @@ export class LiveHub {
 
     private lastSocketGone: ((userId: number, seat: Seat | null) => void) | null = null;
 
+    private sessionsRevoked: ((gone: RevokedSessions) => void) | null = null;
+
+    /** Des sessions sont révoquées : ce que la mémoire leur réservait ne doit pas leur survivre. */
+    onSessionsRevoked(fn: (gone: RevokedSessions) => void): void {
+        this.sessionsRevoked = fn;
+    }
+
     /** La dernière socket d'un compte vient de partir : l'admission lui garde sa place un moment. */
     onLastSocketGone(fn: (userId: number, seat: Seat | null) => void): void {
         this.lastSocketGone = fn;
@@ -454,6 +464,7 @@ export class LiveHub {
     }
 
     closeSessionsOf(userId: number, keepSessionId?: string): void {
+        this.sessionsRevoked?.({ userId, keepSessionId });
         for (const conn of [...this.bySocket.values()]) {
             if (conn.userId !== userId || conn.sessionId === keepSessionId) continue;
             conn.socket.close(4401, 'session revoked');
@@ -467,7 +478,24 @@ export class LiveHub {
         }
     }
 
+    /**
+     * Toutes les connexions d'un compte, salle ou pas, sauf celle qu'on écarte.
+     * `must` : la trame clôt un état, la contre-pression ne la retient pas.
+     */
+    toUser(
+        userId: number,
+        command: string,
+        data: unknown,
+        options: { except?: WebSocket | null; must?: boolean } = {}
+    ): void {
+        for (const conn of this.bySocket.values()) {
+            if (conn.userId !== userId || conn.socket === options.except) continue;
+            this.send(conn, command, data, options.must);
+        }
+    }
+
     closeSession(sessionId: string): void {
+        this.sessionsRevoked?.({ sessionId });
         for (const conn of [...this.bySocket.values()]) {
             if (conn.sessionId === sessionId) conn.socket.close(4401, 'session revoked');
         }
@@ -1081,9 +1109,9 @@ export class LiveHub {
      * Un envoi ne doit jamais lever : le dispatcheur diffuse depuis le `try`
      * d'une commande déjà répondue.
      */
-    private send(conn: LiveConn, command: string, data: unknown): void {
+    private send(conn: LiveConn, command: string, data: unknown, must = false): void {
         try {
-            if (conn.socket.bufferedAmount > BACKPRESSURE_BYTES) return;
+            if (!must && conn.socket.bufferedAmount > BACKPRESSURE_BYTES) return;
             const msg: ServerMessage = { command, payload: ok(data) };
             conn.socket.send(JSON.stringify(msg));
         } catch {

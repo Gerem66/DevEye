@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { FEEDBACK_MESSAGE_MAX, type FeedbackKind, type FeedbackSnapshot } from '@deveye/types';
 
 import { ws } from '@/api/ws';
-import { humanizeError } from '@/api/useResource';
+import { humanizeError } from '@/api/humanizeError';
 import Button from '@/Components/Button';
 import { Dialog } from '@/Components/Dialog';
 import SegmentedControl from '@/Components/SegmentedControl';

@@ -50,6 +50,7 @@ import { featureHealth } from '@/Services/featureHealth';
 import { featureLoad } from '@/Services/featureLoad';
 import { maintenance } from '@/Services/maintenance';
 import { describeError, systemAlerts } from '@/Services/systemAlerts';
+import { tasks, type TrackedTask } from '@/Services/tasks';
 import { env, isDev } from '@/Utils/Env';
 import { logger } from '@/logger';
 import { appVersion } from '@/version';
@@ -165,7 +166,8 @@ export async function registerWS(
         const opening: SessionFrame = {
             userId: session.userId,
             version: appVersion(),
-            maintenance: maintenance.clientState()
+            maintenance: maintenance.clientState(),
+            tasks: tasks.roster(session.userId)
         };
         send(socket, { command: 'session', payload: ok(opening) });
 
@@ -192,7 +194,7 @@ export async function registerWS(
                 return;
             }
 
-            const { command, payload, requestId: clientReqId, workspaceId } = parsed.data;
+            const { command, payload, requestId: clientReqId, workspaceId, task: tag } = parsed.data;
             const replyId = clientReqId ?? requestId;
 
             // La personne vient de se servir de la page : sa place n'est pas inactive,
@@ -271,6 +273,13 @@ export async function registerWS(
             // any concurrent siblings unlocked alongside it — finish.
             const dekTicket = enterSessionCommand(session!.sessionId);
             let progress: ProgressLane | null = null;
+            let tracked: TrackedTask | null = null;
+            // La réponse d'une opération suivie passe par le registre : la socket
+            // qui l'attend n'est plus forcément celle-ci.
+            const reply = (msg: ServerMessage): void => {
+                if (tracked) tracked.settle(msg);
+                else send(socket, msg);
+            };
             try {
                 // Une commande de compte ignore l'espace annoncé par l'enveloppe
                 // et vise toujours l'espace personnel de l'appelant.
@@ -381,7 +390,7 @@ export async function registerWS(
                     throw new FeatureError('maintenance', maintenance.message());
                 }
 
-                progress = progressLane(replyId, (msg) => send(socket, msg));
+                const lane = (progress = progressLane(replyId, (msg) => send(socket, msg)));
                 const ctx: FeatureContext = {
                     db,
                     crypt,
@@ -409,10 +418,11 @@ export async function registerWS(
                     ip,
                     logger: reqLogger.child({ command, requestId: replyId }),
                     requestId: replyId,
-                    progress: progress.report,
+                    progress: (update) => (tracked ?? lane).report(update),
                     audit: recordAudit,
                     monitor,
-                    live
+                    live,
+                    tasks: tasks.transport(socket, session!.userId, session!.sessionId)
                 };
 
                 // Declared authorization (see `FeatureAccessSpec`), enforced here
@@ -429,6 +439,20 @@ export async function registerWS(
                 }
                 for (const c of def.access?.capabilities ?? []) assertCan(c);
 
+                // Après les gardes : un droit refusé n'est pas une opération en
+                // échec. Une commande postée n'attend rien, donc ne se suit pas.
+                if (tag && replyId !== '-') {
+                    tracked = tasks.open({
+                        userId: session!.userId,
+                        sessionId: session!.sessionId,
+                        socket,
+                        requestId: replyId,
+                        workspaceId: scope.workspace.id,
+                        tag,
+                        guarded: await scope.secure.isPasswordGated()
+                    });
+                }
+
                 const result = await featureLoad.time(def.access?.feature ?? defaultCategory, () =>
                     def.handler(ctx, inputParse.data)
                 );
@@ -443,14 +467,14 @@ export async function registerWS(
                         title: 'Réponse invalide d’une commande',
                         detail: `${command}\n${JSON.stringify(outputParse.error.flatten()).slice(0, 800)}`
                     });
-                    send(socket, {
+                    reply({
                         requestId: replyId,
                         command,
                         payload: err('internal', 'Internal output validation failure')
                     });
                     return;
                 }
-                send(socket, { requestId: replyId, command, payload: ok(outputParse.data) });
+                reply({ requestId: replyId, command, payload: ok(outputParse.data) });
 
                 // La commande a écrit : l'espace en est averti. Dans le `try` et
                 // non dans le `finally` : une commande qui a échoué n'invalide
@@ -488,7 +512,7 @@ export async function registerWS(
                 // mot « error », qui le feraient passer pour une panne à la lecture.
                 if (refusal && refusal.code !== 'internal') {
                     reqLogger.info({ command, code: refusal.code, reason: refusal.message }, 'Command rejected');
-                    send(socket, {
+                    reply({
                         requestId: replyId,
                         command,
                         payload: err(refusal.code, refusal.message, refusal.details)
@@ -506,7 +530,7 @@ export async function registerWS(
                     title: 'Erreur serveur sur une commande',
                     detail: `${command}\n${describeError(e)}`
                 });
-                send(socket, {
+                reply({
                     requestId: replyId,
                     command,
                     payload: refusal
@@ -522,6 +546,7 @@ export async function registerWS(
         socket.on('close', () => {
             hub.dropSubscriber(socket);
             liveHub.drop(socket);
+            tasks.dropSocket(session!.userId, socket);
             forgetSessionDek(session!.sessionId);
             reqLogger.info('WS closed');
         });

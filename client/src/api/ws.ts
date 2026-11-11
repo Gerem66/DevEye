@@ -11,15 +11,22 @@ import {
     requestProgressSchema,
     serverMessageSchema,
     sessionFrameSchema,
+    TASK_REMOVED_EVENT,
+    TASK_UPDATE_EVENT,
+    taskRemovedSchema,
+    taskSchema,
     type ClientMessage,
     type CommandInput,
     type CommandOutput,
+    type CommandTask,
     type ConnectionState,
     type ErrorCode,
     type FeatureCommandName,
     type MaintenanceState,
     type RequestProgress,
-    type ServerMessage
+    type ServerMessage,
+    type TaskRoster,
+    type TaskSnapshot
 } from '@deveye/types';
 import { getActiveInstanceId, getActiveWorkspaceId, onWorkspaceChange } from '../stores/workspace';
 import { traceCall } from '../diagnostics/trace';
@@ -27,6 +34,13 @@ import { notifyQuotaExceeded } from '@/stores/quotaPrompt';
 import { setAdmission, type Admission } from '@/stores/admission';
 import { forgetMaintenance, setMaintenance } from '@/stores/maintenance';
 import { ensureStepUp } from '@/stores/stepUp';
+import {
+    applyTaskRemoved,
+    applyTaskRoster,
+    applyTaskUpdate,
+    forgetInstanceTasks,
+    setTaskDismisser
+} from '@/stores/tasks';
 import { randomUuid } from '@/randomUuid';
 import { reloadIfOutdated } from './version';
 
@@ -60,9 +74,10 @@ const LOCAL_TARGET: WsTarget = {
     url: () => Promise.resolve(wsUrlOf(BASE_URL || window.location.origin))
 };
 
+/** `lost` : le serveur ne connaît plus l'opération dont la requête attendait la réponse. */
 export class WsError extends Error {
     constructor(
-        public readonly code: ErrorCode | 'closed' | 'timeout' | 'protocol',
+        public readonly code: ErrorCode | 'closed' | 'timeout' | 'protocol' | 'lost',
         message: string,
         public readonly details?: unknown
     ) {
@@ -74,17 +89,39 @@ export class WsError extends Error {
 type Pending = {
     resolve: (value: unknown) => void;
     reject: (err: Error) => void;
-    timer: ReturnType<typeof setTimeout>;
+    timer: ReturnType<typeof setTimeout> | null;
     /** Une trame d'avancement relance le délai : il borne le silence, pas la durée. */
     rearm: () => void;
     onProgress?: (update: ProgressUpdate) => void;
+    /** L'opération que le serveur suit pour cette requête (`SendOptions.task`). */
+    taskId?: string;
+    /** Partie sur une socket : le serveur tient son opération, une coupure ne la rejette plus. */
+    posted: boolean;
+    /** Sa socket est tombée : à réclamer à la réouverture. */
+    suspended: boolean;
 };
 
 export type ProgressUpdate = Omit<RequestProgress, 'requestId'>;
 
+/** Ce qu'un serveur dit des opérations du compte : sa liste à l'ouverture, puis chaque changement. */
+export type TaskEvent =
+    | { kind: 'roster'; roster: TaskRoster }
+    | { kind: 'update'; task: TaskSnapshot }
+    | { kind: 'removed'; ids: string[] };
+
 type EventListener = (msg: ServerMessage) => void;
 
 const DEFAULT_TIMEOUT_MS = 15_000;
+
+/**
+ * Le silence après lequel une opération suivie fait vérifier que le serveur la
+ * tient encore : elle ne périme pas, mais une socket morte sans le dire la
+ * laisserait attendre pour rien.
+ */
+const TASK_PROBE_MS = 30_000;
+
+/** La borne de `task.attach` et de `task.dismiss`. */
+const TASK_BATCH = 50;
 
 /** Au-delà, la socket est en retard : une trame `post` n'est pas assez importante. */
 const POST_BACKPRESSURE_BYTES = 64 * 1024;
@@ -109,6 +146,7 @@ export class DevEyeWs {
     private readonly maintenanceListeners = new Set<(state: MaintenanceState) => void>();
     private readonly admissionListeners = new Set<(admission: Admission) => void>();
     private readonly versionListeners = new Set<(version: string) => void>();
+    private readonly taskListeners = new Set<(event: TaskEvent) => void>();
     /** Une ouverture en cours : l'adresse d'une instance distante s'obtient avant la socket. */
     private opening: Promise<void> | null = null;
     /** Ce qui attend la trame `session` de la socket en cours d'ouverture. */
@@ -173,6 +211,16 @@ export class DevEyeWs {
 
     private emitAdmission(admission: Admission): void {
         for (const fn of this.admissionListeners) fn(admission);
+    }
+
+    /** Les opérations du compte sur ce serveur. */
+    onTask(fn: (event: TaskEvent) => void): () => void {
+        this.taskListeners.add(fn);
+        return () => this.taskListeners.delete(fn);
+    }
+
+    private emitTask(event: TaskEvent): void {
+        for (const fn of this.taskListeners) fn(event);
     }
 
     /** La version du serveur, à chaque ouverture. */
@@ -245,6 +293,7 @@ export class DevEyeWs {
             this.onSession = () => {
                 this._hasConnected = true;
                 this.setState('open');
+                this.reclaim();
                 resolve();
             };
 
@@ -259,7 +308,11 @@ export class DevEyeWs {
                 // Fermée avant d'avoir servi (session refusée) : `connect()` doit le savoir.
                 if (this._state === 'connecting') reject(new WsError('closed', `WS closed (${ev.code})`));
                 this.setState('closed');
-                this.failAllPending(new WsError('closed', `WS closed (${ev.code})`));
+                // Révoquée ou fermée exprès : plus rien ne sera réclamé.
+                this.failPending(
+                    new WsError('closed', `WS closed (${ev.code})`),
+                    this.intentionallyClosed || ev.code === 4401
+                );
                 if (ev.code === 4401) {
                     this.refuse();
                     return;
@@ -295,6 +348,8 @@ export class DevEyeWs {
         this.socket?.close();
         this.socket = null;
         this.setState('closed');
+        // Une requête suspendue n'a plus de socket pour apprendre cette fermeture.
+        this.failPending(new WsError('closed', 'WS closed'), true);
     }
 
     /**
@@ -344,6 +399,8 @@ export class DevEyeWs {
             this.emitAdmission(null);
             const frame = sessionFrameSchema.safeParse(msg.payload.data);
             if (frame.success && frame.data.maintenance) this.emitMaintenance(frame.data.maintenance);
+            // Avant l'ouverture : les réclamations qui la suivent se lisent contre cette liste.
+            if (frame.success && frame.data.tasks) this.emitTask({ kind: 'roster', roster: frame.data.tasks });
             if (frame.success && frame.data.version) {
                 for (const fn of this.versionListeners) fn(frame.data.version);
             }
@@ -369,6 +426,18 @@ export class DevEyeWs {
             return;
         }
 
+        if (msg.command === TASK_UPDATE_EVENT && msg.payload.ok) {
+            const task = taskSchema.safeParse(msg.payload.data);
+            if (task.success) this.emitTask({ kind: 'update', task: task.data });
+            return;
+        }
+
+        if (msg.command === TASK_REMOVED_EVENT && msg.payload.ok) {
+            const removed = taskRemovedSchema.safeParse(msg.payload.data);
+            if (removed.success) this.emitTask({ kind: 'removed', ids: removed.data.ids });
+            return;
+        }
+
         if (msg.command === REQUEST_PROGRESS_EVENT && msg.payload.ok) {
             const update = requestProgressSchema.safeParse(msg.payload.data);
             const pending = update.success ? this.pending.get(update.data.requestId) : undefined;
@@ -383,7 +452,7 @@ export class DevEyeWs {
         if (msg.requestId) {
             const pending = this.pending.get(msg.requestId);
             if (pending) {
-                clearTimeout(pending.timer);
+                if (pending.timer) clearTimeout(pending.timer);
                 this.pending.delete(msg.requestId);
                 if (msg.payload.ok) pending.resolve(msg.payload.data);
                 else {
@@ -407,15 +476,75 @@ export class DevEyeWs {
         for (const fn of this.listeners) fn(msg);
     }
 
-    private failAllPending(err: Error): void {
-        for (const [, p] of this.pending) {
-            clearTimeout(p.timer);
+    /**
+     * La socket est tombée. Une requête dont le serveur suit l'opération reste en
+     * vol : il en garde la réponse, et la réouverture la réclamera. `final` : la
+     * socket ne reviendra pas, tout est rejeté.
+     */
+    private failPending(err: Error, final: boolean): void {
+        for (const [requestId, p] of this.pending) {
+            if (p.timer) clearTimeout(p.timer);
+            p.timer = null;
+            if (!final && p.taskId !== undefined && p.posted) {
+                p.suspended = true;
+                continue;
+            }
+            this.pending.delete(requestId);
             p.reject(err);
         }
-        this.pending.clear();
         // Ces requêtes viennent d'être rejetées : les garder ne servirait qu'à
         // poster, à la reconnexion, des messages sans destinataire.
         this.outbox = [];
+    }
+
+    /** La socket est revenue : les opérations dont une requête attend encore la réponse se réclament. */
+    private reclaim(): void {
+        const suspended = [...this.pending].filter(([, p]) => p.suspended).map(([requestId]) => requestId);
+        if (suspended.length > 0) this.claim(suspended);
+    }
+
+    /**
+     * Demande au serveur s'il tient encore les opérations de ces requêtes. Celles
+     * qu'il suit répondront à cette socket, une réponse retenue arrive aussitôt,
+     * et celles qu'il ne connaît plus sont rejetées `lost`.
+     */
+    private claim(requestIds: readonly string[]): void {
+        const claims = requestIds.flatMap((requestId) => {
+            const id = this.pending.get(requestId)?.taskId;
+            return id === undefined ? [] : [{ id, requestId }];
+        });
+        for (let from = 0; from < claims.length; from += TASK_BATCH) {
+            const batch = claims.slice(from, from + TASK_BATCH);
+            this.sendOnce('task.attach', { claims: batch }).then(
+                ({ lost }) => this.settleClaims(batch, new Set(lost)),
+                (e: unknown) => {
+                    const code = e instanceof WsError ? e.code : null;
+                    // Retombée entre-temps : la prochaine ouverture réclamera.
+                    if (code === 'closed') return;
+                    // Ouverte mais muette : la refermer force une reconnexion, qui réclamera.
+                    if (code === 'timeout') this.socket?.close();
+                    // Un serveur qui ne suit pas les opérations n'en rendra aucune.
+                    else if (code === 'not_found') this.settleClaims(batch, new Set(batch.map((c) => c.id)));
+                    else for (const { requestId } of batch) this.pending.get(requestId)?.rearm();
+                }
+            );
+        }
+    }
+
+    private settleClaims(batch: readonly { id: string; requestId: string }[], lost: ReadonlySet<string>): void {
+        for (const { id, requestId } of batch) {
+            // Absente : sa réponse retenue est arrivée avant celle de la réclamation.
+            const p = this.pending.get(requestId);
+            if (!p) continue;
+            if (lost.has(id)) {
+                if (p.timer) clearTimeout(p.timer);
+                this.pending.delete(requestId);
+                p.reject(new WsError('lost', 'Operation no longer followed by the server'));
+            } else {
+                p.suspended = false;
+                p.rearm();
+            }
+        }
     }
 
     private nextRequestId(): string {
@@ -511,10 +640,18 @@ export class DevEyeWs {
                 reject,
                 timer: setTimeout(expire, wait),
                 rearm: () => {
-                    clearTimeout(entry.timer);
-                    entry.timer = setTimeout(expire, wait);
+                    if (entry.timer) clearTimeout(entry.timer);
+                    // Une fois partie, une opération suivie ne périme plus : son
+                    // silence fait seulement vérifier que le serveur la tient.
+                    entry.timer =
+                        entry.taskId !== undefined && entry.posted
+                            ? setTimeout(() => this.claim([requestId]), TASK_PROBE_MS)
+                            : setTimeout(expire, wait);
                 },
-                onProgress: opts.onProgress
+                onProgress: opts.onProgress,
+                taskId: opts.task?.id,
+                posted: false,
+                suspended: false
             };
             this.pending.set(requestId, entry);
 
@@ -524,7 +661,7 @@ export class DevEyeWs {
                 if (!this.pending.has(requestId)) return;
                 if (!this.socket || this._state !== 'open') {
                     this.pending.delete(requestId);
-                    clearTimeout(entry.timer);
+                    if (entry.timer) clearTimeout(entry.timer);
                     reject(new WsError('closed', 'WS not open'));
                     return;
                 }
@@ -537,16 +674,19 @@ export class DevEyeWs {
                     requestId,
                     command,
                     ...(workspaceId !== null ? { workspaceId } : {}),
+                    ...(opts.task ? { task: opts.task } : {}),
                     payload: parsedInput.data
                 };
                 const clientParsed = clientMessageSchema.safeParse(envelope);
                 if (!clientParsed.success) {
                     this.pending.delete(requestId);
-                    clearTimeout(entry.timer);
+                    if (entry.timer) clearTimeout(entry.timer);
                     reject(new WsError('protocol', 'Failed to encode envelope'));
                     return;
                 }
                 this.socket.send(JSON.stringify(clientParsed.data));
+                entry.posted = true;
+                if (entry.taskId !== undefined) entry.rearm();
             };
 
             if (this._state === 'open') post();
@@ -566,6 +706,13 @@ export type SendOptions = {
     onProgress?: (update: ProgressUpdate) => void;
     /** Viser un espace précis de cette instance plutôt que l'actif (une copie vers ailleurs). */
     workspaceId?: number;
+    /**
+     * Fait de la commande une opération que le serveur suit : il garde sa
+     * réponse pendant une coupure et montre son avancement aux autres onglets
+     * du compte. Posé par `runTask` ; `timeoutMs` ne borne alors que l'attente
+     * du départ.
+     */
+    task?: CommandTask;
 };
 
 /**
@@ -614,12 +761,20 @@ class WsRouter {
         // Seul ce serveur-ci livre le bundle : une instance distante à une autre
         // version est `incompatible` (remoteInstances), pas une raison de recharger.
         const offVersion = instanceId === null ? conn.onServerVersion(reloadIfOutdated) : () => undefined;
+        // Hors du filtre aussi : la zone des opérations est celle du compte, sur
+        // chacune de ses instances.
+        const offTask = conn.onTask((event) => {
+            if (event.kind === 'roster') applyTaskRoster(instanceId, event.roster);
+            else if (event.kind === 'update') applyTaskUpdate(instanceId, event.task);
+            else applyTaskRemoved(instanceId, event.ids);
+        });
         return () => {
             offMessage();
             offState();
             offMaintenance();
             offAdmission();
             offVersion();
+            offTask();
         };
     }
 
@@ -656,6 +811,7 @@ class WsRouter {
         entry.conn.close();
         this.remotes.delete(instanceId);
         forgetMaintenance(instanceId);
+        forgetInstanceTasks(instanceId);
     }
 
     get state(): ConnectionState {
@@ -717,3 +873,12 @@ class WsRouter {
 }
 
 export const ws = new WsRouter();
+
+// Sans attendre de réponse : la zone a déjà retiré ces lignes, et un serveur
+// qu'on ne joint pas les laissera périmer seul.
+setTaskDismisser((instanceId, ids) => {
+    const conn = ws.connectionFor(instanceId);
+    for (let from = 0; from < ids.length; from += TASK_BATCH) {
+        void conn?.send('task.dismiss', { ids: ids.slice(from, from + TASK_BATCH) }).catch(() => undefined);
+    }
+});
