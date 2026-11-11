@@ -168,8 +168,8 @@ serveur visé juge les droits.
 **Surveiller le JavaScript de la plateforme depuis son instance.** Le risque
 ci-dessous est celui d'un frontend modifié. Un service Uptime posé sur
 l'instance privée, option d'intégrité cochée (`features/uptime/README.md`,
-« L'option d'intégrité »), relit à chaque lecture chaque fichier que l'instance
-hébergée sert, manifeste de build compris (`/.well-known/deveye-build.json`),
+« L'option d'intégrité »), relit à chaque lecture chaque script, feuille de style
+et document que l'instance hébergée sert, manifeste de build compris (`/.well-known/deveye-build.json`),
 et alerte au moindre écart. Il ne vaut que parce qu'il tourne ailleurs que sur
 ce qu'il surveille.
 

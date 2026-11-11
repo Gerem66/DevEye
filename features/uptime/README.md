@@ -98,8 +98,9 @@ réussie. « Tester » et « Accepter la version actuelle » la forcent.
 1. lit le document (statut, et son en-tête `Content-Security-Policy`) ;
 2. établit la liste des fichiers : le **manifeste de build** du site s'il en
    publie un (`/.well-known/deveye-build.json`, ce que fait toute instance
-   DevEye : chaque fichier de son client, morceaux chargés à la demande
-   compris), sinon les scripts, feuilles de style et préchargements de même
+   DevEye : chaque fichier actif de son client, HTML, scripts, styles,
+   WebAssembly et SVG, morceaux chargés à la demande compris, sans polices ni
+   images), sinon les scripts, feuilles de style et préchargements de même
    origine trouvés dans la page ; plus les chemins ajoutés à la main (`/t.js`,
    50 au plus) ;
 3. relit chaque fichier, empreinte SHA-256 calculée en flux (8 Mo au plus par

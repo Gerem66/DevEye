@@ -606,7 +606,8 @@ vivant compromis. Le choix est ici structurel : un moniteur qui exigerait le mot
 de passe ne pourrait tout simplement pas sonder.
 
 Le client bâti publie aussi `/.well-known/deveye-build.json`, l'empreinte
-SHA-256 de chacun de ses fichiers. Ce n'est pas une preuve (le serveur qui le
+SHA-256 de chacun de ses fichiers actifs (HTML, scripts, styles, WebAssembly,
+SVG ; ni polices ni images). Ce n'est pas une preuve (le serveur qui le
 sert pourrait le réécrire) mais la liste de ce qu'un contrôle d'intégrité tenu
 par une **autre** instance doit relire ; la référence, elle, est apprise et
 gardée là-bas. Voir [le README d'Uptime](../features/uptime/README.md).

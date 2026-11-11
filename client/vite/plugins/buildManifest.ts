@@ -4,12 +4,17 @@ import path from 'path';
 import type { Plugin } from 'vite';
 
 /**
- * `.well-known/deveye-build.json` : chaque fichier du build et son SHA-256.
- * Ce n'est pas une référence de confiance (un serveur compromis le réécrirait
- * avec le reste) mais la LISTE de ce qu'un contrôle d'intégrité tenu par une
- * autre instance doit relire, morceaux chargés à la demande compris. Les cartes
- * de source n'y sont pas : le serveur ne les sert pas. Les `.br` et `.gz` non
- * plus : ils sortent sous le nom de leur original.
+ * Ce qui s'exécute ou met en forme une page, le SVG compris, qui peut porter un
+ * script. Les polices, images et tables de pdf.js n'y tournent pas, et leurs
+ * centaines de fichiers dépasseraient ce que relit le contrôle d'Uptime.
+ */
+const ACTIVE_FILE = /\.(html|m?js|css|wasm|svg)$/;
+
+/**
+ * `.well-known/deveye-build.json` : chaque fichier actif du build et son
+ * SHA-256. Ce n'est pas une référence de confiance (un serveur compromis le
+ * réécrirait avec le reste) mais la LISTE de ce qu'un contrôle d'intégrité tenu
+ * par une autre instance doit relire, morceaux chargés à la demande compris.
  */
 export function buildManifest(version: string): Plugin {
     let root = '';
@@ -31,7 +36,7 @@ export function buildManifest(version: string): Plugin {
                         continue;
                     }
                     const rel = path.relative(root, full).split(path.sep).join('/');
-                    if (/\.(map|br|gz)$/.test(rel) || rel === manifestPath) continue;
+                    if (!ACTIVE_FILE.test(rel)) continue;
                     files[rel] = createHash('sha256').update(readFileSync(full)).digest('hex');
                 }
             };
