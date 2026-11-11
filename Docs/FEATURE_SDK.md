@@ -630,11 +630,13 @@ et sur sa fiche « À propos » : des enfants SVG colorés aux jetons du thème.
 
 ### Le client
 
-`featureApi(manifest)` rend `send(name, input, { timeoutMs, workspaceId })` et
-`useResource` typés sur les commandes du module, et `post(name, input)` pour
-ce qui part plusieurs fois par seconde sans réponse attendue (un pointeur) : ni
-délai, ni trace, perdu en silence sur une socket fermée ou en retard, mais
-validé et autorisé par le serveur comme `send` ; `workspaceId` fait exécuter la
+`featureApi(manifest)` rend `send(name, input, { timeoutMs, onProgress,
+workspaceId })` et `useResource` typés sur les commandes du module, et
+`post(name, input)` pour ce qui part plusieurs fois par seconde sans réponse
+attendue (un pointeur) : ni délai, ni trace, perdu en silence sur une socket
+fermée ou en retard, mais validé et autorisé par le serveur comme `send` ;
+`timeoutMs` borne le silence de la commande, que chaque avancement rapporté par
+le handler (`ctx.progress`, reçu par `onProgress`) relance ; `workspaceId` fait exécuter la
 commande dans un autre des espaces de l'appelant (`useWorkspaces()`), sous ses
 droits là-bas : c'est le navigateur qui porte une donnée d'un espace à l'autre,
 comme pour la copie d'un élément ; `commandsApi(commands)` fait de même pour
@@ -652,6 +654,12 @@ proposer un signalement à tort : il lève `conflict` ou `validation`. Le bandea
 se range de lui-même en haut de son cadre, sur toute sa largeur : sous le
 `StickyHeader` de la vue, sous le titre du dialogue (`ErrorNote/slot.tsx`) ;
 `inline` le garde dans sa rangée.
+Un geste qui dure passe par `runTask(options, run)` : un dialogue qui se
+réduit, puis la zone des opérations de la barre, qui porte l'avancement et le
+résultat quand l'écran n'est plus là. `useTasks` dit à un écran ce qui tourne
+chez lui, `TaskProgress` y dessine l'avancement en place, et une coupure ou un
+silence rejette une `TaskError` dont `errorNote` garde la phrase
+([TASKS.md](./TASKS.md)).
 `invalidate(clé)` et `useResourceVersion` relient une
 mutation aux widgets qui la lisent, `onServerEvent` écoute la voie de poussée,
 `openFeature` ouvre une autre feature sur un élément, `handFileTo(feature,
@@ -757,6 +765,10 @@ Par requête (`SdkFeatureContext`, construit dans `_sdk/context.ts`) :
 - `live.publish(event, payload)`, `live.joinCursors(key)` et
   `live.leaveCursors(key)` (capacité `live.publish`),
   `live.accountChanged(userId)` et `live.pendingChanged()` ;
+- `progress({ done, total, step })` : l'avancement de la commande, vers son
+  seul appelant, quatre trames par seconde au plus. Chaque trame relance le
+  délai de l'appelant, et alimente son opération longue quand il en a ouvert
+  une ([TASKS.md](./TASKS.md)) ;
 - `secrecy.isUnlocked()` et `secrecy.ticket(payload, { ttlSeconds })` ;
 - `items` (`restrictions`, `assert`, `canExtra`, `forget`) ;
 - `quota` (`limit`, `assert`, `usage`, `assertActive`, `paid`, `isPaused`,

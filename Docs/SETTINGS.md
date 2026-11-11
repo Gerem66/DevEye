@@ -134,9 +134,10 @@ Deux sorties, dans le contrat des panneaux (`SettingsPanelProps`) :
   que son bouton de retour). À appeler dès que la commande a réussi, et
   **avant** de raviver les ressources : une fiche relue avant de partir
   chercherait un élément disparu. L'onglet Partage l'appelle de lui-même après
-  un déplacement, que suit un dialogue de progression que rien ne ferme
-  (`ProgressDialog`) : tout l'arbre est relu et rescellé, et un écran figé ne
-  dit pas si le clic a pris.
+  un déplacement. Un geste qui dure (le déplacement, la suppression d'un gros
+  élément) est une opération longue (`runTask`, voir [TASKS.md](./TASKS.md)) :
+  si son dialogue est réduit avant la fin, la fiche s'en va à ce moment-là
+  (`onDetach`). Plus tard, elle fermerait la fiche ouverte entre-temps.
 
 ## Sans l'écriture
 

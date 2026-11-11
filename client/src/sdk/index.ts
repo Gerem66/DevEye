@@ -39,8 +39,19 @@ export type { SearchSelectFilter, SearchSelectOption } from '@/Components/Search
 /** Le voile d'une relecture, et le journal brut lisible (couleurs, filtre, copie). */
 export { default as LoadingVeil } from '@/Components/LoadingVeil';
 export type { LoadingVeilProps } from '@/Components/LoadingVeil';
-export { ProgressBar, ProgressDialog } from '@/Components/ProgressDialog';
-export type { ProgressBarProps, ProgressDialogProps } from '@/Components/ProgressDialog';
+export { ProgressBar } from '@/Components/ProgressBar';
+export type { ProgressBarProps } from '@/Components/ProgressBar';
+/**
+ * Les opérations longues : `runTask` les lance derrière un dialogue réductible,
+ * la zone de la barre les suit, `useTasks` dit à un écran ce qui tourne chez
+ * lui, et `TaskProgress` y dessine l'avancement en place.
+ */
+export { runTask, useTasks } from './tasks';
+export type { TaskOptions } from './tasks';
+export { TaskError } from '@/stores/tasks';
+export type { Task, TaskContext } from '@/stores/tasks';
+export { TaskProgress } from '@/Components/TaskDialog/TaskProgress';
+export type { TaskProgressProps } from '@/Components/TaskDialog/TaskProgress';
 export { default as LogOutput } from '@/Components/LogOutput';
 export type { LogOutputProps } from '@/Components/LogOutput';
 /** Copier une valeur, confirmé deux secondes par l'icône. */

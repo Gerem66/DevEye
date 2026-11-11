@@ -19,6 +19,7 @@ import { resetTheme, syncThemeFromServer } from '../stores/theme';
 import { resetHomeLayout, syncHomeLayoutFromServer } from '../stores/homeLayout';
 import { resetWorkspace, syncWorkspacesFromServer } from '../stores/workspace';
 import { resetLive } from '../stores/live';
+import { resetTasks } from '../stores/tasks';
 import { setCurrentUser, useActingUser } from '../stores/currentUser';
 import { forgetRemoteSessions, patchRemoteUser, syncRemoteInstances } from '../stores/remoteInstances';
 import { getActiveInstanceId } from '../stores/workspace';
@@ -175,6 +176,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Idem pour la presence, sans quoi la session suivante repartirait avec le
         // roster et le lieu declare de la precedente.
         resetLive();
+        resetTasks();
         setAdmission(null);
         clearLocalTraces();
         setState({ status: 'anonymous', user: null });

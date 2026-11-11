@@ -46,7 +46,10 @@ const types: [
     Same<real.SecrecyState, declared.SecrecyState>,
     Same<real.LiveOutlineProps, declared.LiveOutlineProps>,
     Same<real.ConfirmRequest, declared.ConfirmRequest>,
+    Same<real.Task, declared.Task>,
+    Same<real.TaskOptions, declared.TaskOptions>,
+    Same<real.TaskContext, declared.TaskContext>,
     NotAny<Parameters<Declared['featureApi']>[0]>,
     NotAny<ReturnType<Declared['useWorkspacePermissions']>['canFeature']>
-] = [true, true, true, true, true, true, true, true];
+] = [true, true, true, true, true, true, true, true, true, true, true];
 void types;

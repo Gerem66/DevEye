@@ -369,13 +369,13 @@ Le refus par élément vit dans `plan` : un nom déjà pris là-bas (Bases, Audi
 un dépôt déjà suivi, une empreinte déjà appairée. Il s'affiche au lieu de tomber
 en erreur SQL au milieu du geste.
 
-À l'écran, le geste dure : tout l'arbre est relu et rescellé, et la commande
-part avec un délai de deux minutes (`MOVE_TIMEOUT_MS`,
-`Components/FeatureSettings/sections/SharingSection.tsx`) au lieu des quinze
-secondes ordinaires. Un dialogue de progression que rien ne ferme le dit
-(`Components/ProgressDialog`), puis la coquille de réglages se referme et la
-fiche s'en va (`onGone`, voir [SETTINGS.md](./SETTINGS.md)) : l'élément n'est
-plus ici, il n'y a plus rien à en montrer.
+À l'écran, le geste dure : tout l'arbre est relu et rescellé. C'est une opération
+longue (`runTask` dans `Components/FeatureSettings/sections/SharingSection.tsx`,
+voir [TASKS.md](./TASKS.md)) : son dialogue se réduit, et la commande tolère deux
+minutes de silence au lieu des quinze secondes ordinaires. La coquille de
+réglages se referme et la fiche s'en va (`onGone`, voir
+[SETTINGS.md](./SETTINGS.md)) dès que le dialogue est réduit, sinon à la fin :
+l'élément n'est plus ici, il n'y a plus rien à en montrer.
 
 ## 10. Copier, le troisième geste
 
@@ -397,6 +397,13 @@ et la remet à la destination, l'une après l'autre : la copie entre deux espace
 d'ici emprunte exactement ce chemin, les deux moitiés sur le même serveur. Il n'y
 a donc qu'un code, et la copie entre instances n'est pas un cas à part. La source
 ne sait rien de la cible ; les deux serveurs ne se parlent jamais.
+
+Le transfert tourne donc dans l'onglet : c'est une opération longue **locale**
+([TASKS.md](./TASKS.md)). Réduite, elle continue, et revient devant avant chaque
+invite de coffre ; annulée, elle s'arrête entre deux tranches et la destination
+jette ce qu'elle a reçu ; fermer l'onglet demande confirmation. Chaque serveur ne
+tient qu'un transfert par compte et par sens, le suivant chassant le précédent :
+l'écran ne propose donc pas une seconde copie tant que la première court.
 
 Ce qui voyage est **en clair**, par construction : la destination scelle sous une
 clé que la source ne connaît pas. Il n'existe que dans la mémoire des deux

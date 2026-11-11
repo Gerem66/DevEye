@@ -1,15 +1,20 @@
-import { type MouseEvent as ReactMouseEvent, type ReactNode, useState, useRef, useEffect } from 'react';
+import { type MouseEvent as ReactMouseEvent, type ReactNode, useState, useRef, useEffect, useId } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Button from '@/Components/Button';
+import { ConfirmDialog, type ConfirmRequest } from '@/Components/ConfirmDialog';
 import { CountBadge } from '@/Components/CountBadge';
+import { useDismissLayer } from '@/Components/Dialog';
 import { Hint, useHint } from '@/Components/Hint';
 import { openInfo } from '@/Components/InfoPopup';
 import { useAuth } from '@/auth/AuthProvider';
 import { avatarSrc } from '@/Features/Profile/avatar';
 import { openAccountView } from '@/stores/accountView';
+import { hasLocalWork, setPanelOpen, useTaskRecords, zoneOf } from '@/stores/tasks';
 import { useActiveWorkspace } from '@/stores/workspace';
 import { DeploymentStatus } from './DeploymentStatus';
 import { ConnectionStatus } from './ConnectionStatus';
+import { TasksPanel } from './TasksPanel';
+import { TasksStatus } from './TasksStatus';
 import { TopbarWidgets } from './topbarWidgets';
 import { EditableTopbarWidgets } from './EditableTopbarWidgets';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher';
@@ -180,17 +185,48 @@ export default function TopNavbar({
     if (!lingering) shownRef.current = live;
     const shown = shownRef.current;
 
-    // Close menu on outside click
+    // Le panneau des opérations : un seul des deux menus de la barre à la fois.
+    const [tasksOpen, setTasksOpen] = useState(false);
+    const tasksPanelId = useId();
+    const taskRecords = useTaskRecords();
+    const hasTasks = zoneOf(taskRecords).length > 0;
     useEffect(() => {
-        if (!menuOpen) return;
+        if (!hasTasks) setTasksOpen(false);
+    }, [hasTasks]);
+    useEffect(() => {
+        setPanelOpen(tasksOpen);
+    }, [tasksOpen]);
+    useEffect(() => () => setPanelOpen(false), []);
+    useDismissLayer(tasksOpen, () => setTasksOpen(false));
+
+    // Un travail qui tourne dans l'onglet ne survit pas à la déconnexion.
+    const [confirmLogout, setConfirmLogout] = useState<ConfirmRequest | null>(null);
+    const askLogout = (): void => {
+        if (!hasLocalWork(taskRecords)) {
+            void logout();
+            return;
+        }
+        setConfirmLogout({
+            title: 'Se déconnecter ?',
+            description:
+                'Une opération tourne encore dans cet onglet : elle sera interrompue. Attendez sa fin pour ne rien perdre.',
+            confirmLabel: 'Se déconnecter',
+            onConfirm: () => void logout()
+        });
+    };
+
+    // Un clic hors de la zone droite referme celui des deux menus qui est ouvert.
+    useEffect(() => {
+        if (!menuOpen && !tasksOpen) return;
         const handler = (e: MouseEvent) => {
             if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
                 setMenuOpen(false);
+                setTasksOpen(false);
             }
         };
         document.addEventListener('mousedown', handler);
         return () => document.removeEventListener('mousedown', handler);
-    }, [menuOpen]);
+    }, [menuOpen, tasksOpen]);
 
     // La somme des badges du menu : le pseudo ne peut pas annoncer autre chose que ce qu'il ouvre.
     const pendingTotal = [...(moderationPages ?? []), ...(adminPages ?? [])].reduce((sum, page) => sum + page.count, 0);
@@ -404,12 +440,26 @@ export default function TopNavbar({
                 {/* Hidden in the dev server — the agents aren't built there, so the
                     deployment status would load forever. */}
                 {!import.meta.env.DEV && <DeploymentStatus />}
+                <TasksStatus
+                    open={tasksOpen}
+                    panelId={tasksPanelId}
+                    onToggle={() => {
+                        setTasksOpen((v) => !v);
+                        setMenuOpen(false);
+                    }}
+                />
                 {/* The navbar mini-widgets — edited right here while organizing the
                     home (no detour through the grid), live otherwise. */}
                 {organizing ? <EditableTopbarWidgets /> : <TopbarWidgets onOpenSecurity={onOpenSecurity} />}
 
                 {user && (
-                    <button className={styles.profileBtn} onClick={() => setMenuOpen((v) => !v)}>
+                    <button
+                        className={styles.profileBtn}
+                        onClick={() => {
+                            setMenuOpen((v) => !v);
+                            setTasksOpen(false);
+                        }}
+                    >
                         <img src={avatarSrc(user.avatar)} alt='' className={styles.avatar} />
                         <span className={styles.identity}>
                             <span className={styles.username}>{user.username}</span>
@@ -529,7 +579,7 @@ export default function TopNavbar({
                             <button
                                 className={`${styles.menuItem} ${styles.danger}`}
                                 onClick={() => {
-                                    logout();
+                                    askLogout();
                                     setMenuOpen(false);
                                 }}
                             >
@@ -538,7 +588,25 @@ export default function TopNavbar({
                         </motion.div>
                     )}
                 </AnimatePresence>
+
+                <AnimatePresence>
+                    {tasksOpen && (
+                        <motion.div
+                            id={tasksPanelId}
+                            role='dialog'
+                            aria-label='Opérations'
+                            className={`${styles.menu} ${styles.tasksMenu}`}
+                            initial={{ opacity: 0, y: 0 }}
+                            animate={{ opacity: 1, y: 8 }}
+                            exit={{ opacity: 0, y: 0 }}
+                            transition={{ duration: 0.15 }}
+                        >
+                            <TasksPanel onClose={() => setTasksOpen(false)} />
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </div>
+            <ConfirmDialog request={confirmLogout} onClose={() => setConfirmLogout(null)} />
         </nav>
     );
 }

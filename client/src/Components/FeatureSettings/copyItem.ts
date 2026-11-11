@@ -37,12 +37,21 @@ function connections(to: CopyDestination) {
     return { source, sourceWorkspaceId, target };
 }
 
+/** Ce que l'opération qui porte la copie lui confie. */
+export interface CopyHooks {
+    /** L'abandon : la copie s'arrête entre deux tranches, la destination jette ce qu'elle a reçu. */
+    signal?: AbortSignal;
+    /** Juste avant une invite de coffre : la copie a pu être réduite, il faut la ramener devant. */
+    beforePrompt?: () => void;
+}
+
 /** Rejoue une fois après l'invite du coffre, quand la première tentative a répondu `locked`. */
-async function unlocking<T>(run: () => Promise<T>, unlock: () => Promise<void>): Promise<T> {
+async function unlocking<T>(run: () => Promise<T>, unlock: () => Promise<void>, hooks: CopyHooks): Promise<T> {
     try {
         return await run();
     } catch (e) {
         if (!(e instanceof WsError) || e.code !== 'locked') throw e;
+        hooks.beforePrompt?.();
         await unlock();
         return run();
     }
@@ -68,7 +77,8 @@ export async function copyItem(
     feature: FeatureId,
     itemId: string,
     to: CopyDestination,
-    onProgress: (step: CopyStep, value: number) => void
+    onProgress: (step: CopyStep, value: number) => void,
+    hooks: CopyHooks = {}
 ): Promise<string> {
     const { source, sourceWorkspaceId, target } = connections(to);
     const from = { workspaceId: sourceWorkspaceId };
@@ -78,8 +88,10 @@ export async function copyItem(
     // Un élément gardé se lit coffre ouvert : le `locked` d'ici rouvre celui d'ici.
     const manifest = await unlocking(
         () => source.send('share.copyExport', { feature, itemId }, { ...from, timeoutMs: LONG_MS }),
-        ensureUnlocked
+        ensureUnlocked,
+        hooks
     );
+    hooks.signal?.throwIfAborted();
     const { importId } = await target.send(
         'share.copyBegin',
         { feature, bytes: manifest.bytes, chunks: manifest.chunks, sha256: manifest.sha256 },
@@ -88,17 +100,20 @@ export async function copyItem(
 
     const transfer = 1 - READ_SHARE - WRITE_SHARE;
     for (let index = 0; index < manifest.chunks; index += 1) {
+        hooks.signal?.throwIfAborted();
         onProgress('transfer', READ_SHARE + (transfer * index) / manifest.chunks);
         const { data } = await source.send('share.copyChunk', { exportId: manifest.exportId, index }, from);
         await target.send('share.copyPut', { importId, index, data }, into);
     }
 
+    hooks.signal?.throwIfAborted();
     onProgress('write', 1 - WRITE_SHARE);
     // Le palier gardé de l'arrivée veut SON coffre ouvert : le second mot de
     // passe, celui du compte de là-bas. Le paquet attend côté serveur.
     const { itemId: copied } = await unlocking(
         () => target.send('share.copyCommit', { importId, feature }, { ...into, timeoutMs: LONG_MS }),
-        () => ensureUnlockedOn(to.instanceId, to.instanceLabel)
+        () => ensureUnlockedOn(to.instanceId, to.instanceLabel),
+        hooks
     );
     onProgress('write', 1);
     return copied;

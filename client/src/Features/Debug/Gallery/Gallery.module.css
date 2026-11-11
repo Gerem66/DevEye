@@ -218,6 +218,14 @@
     color: var(--text-secondary);
 }
 
+/* Les lignes du panneau des opérations, à la largeur qu'il leur donne. */
+.taskRows {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    width: min(344px, 100%);
+}
+
 /* Une vue en miniature : son en-tête, l'emplacement des erreurs, son contenu. */
 .frameDemo {
     display: flex;

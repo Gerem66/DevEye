@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import Button from '@/Components/Button';
 import CountBadge from '@/Components/CountBadge';
@@ -9,11 +9,11 @@ import { openInfo } from '@/Components/InfoPopup';
 import LoadingVeil from '@/Components/LoadingVeil';
 import LogOutput from '@/Components/LogOutput';
 import { PlanPausedBadge, PlanPausedNotice } from '@/Components/PlanPause';
-import ProgressDialog from '@/Components/ProgressDialog';
 import { StatusBadge } from '@/Components/StatusBadge';
 import Term from '@/Components/Term';
 import { Specimen, useGalleryDisabled, Variant } from '../Specimen';
 import styles from '../Gallery.module.css';
+import { OperationsSpecimen } from './Operations';
 
 /**
  * Le placement réel : le bandeau est écrit sous le contenu, et s'affiche dans
@@ -59,18 +59,6 @@ const SAMPLE_LOG = [
 
 export default function Feedback() {
     const disabled = useGalleryDisabled();
-    const [progress, setProgress] = useState<number | null>(null);
-
-    // La barre avance d'elle-même, puis la fenêtre se ferme.
-    useEffect(() => {
-        if (progress === null) return;
-        if (progress >= 100) {
-            const done = setTimeout(() => setProgress(null), 400);
-            return () => clearTimeout(done);
-        }
-        const tick = setTimeout(() => setProgress((p) => (p === null ? null : p + 10)), 250);
-        return () => clearTimeout(tick);
-    }, [progress]);
 
     return (
         <>
@@ -174,7 +162,7 @@ export default function Feedback() {
                     <PlanPausedNotice count={2} one='surveillance' many='surveillances' />
                 </Variant>
             </Specimen>
-            <Specimen title='Term, openInfo, ProgressDialog'>
+            <Specimen title='Term, openInfo'>
                 <Variant label='Term' wide>
                     <p className={styles.demoText}>
                         Activez la <Term id='twoFactor' /> pour protéger votre compte.
@@ -195,19 +183,8 @@ export default function Feedback() {
                         Ouvrir
                     </Button>
                 </Variant>
-                <Variant label='ProgressDialog'>
-                    <Button variant='secondary' disabled={disabled || progress !== null} onClick={() => setProgress(0)}>
-                        Lancer
-                    </Button>
-                </Variant>
             </Specimen>
-            <ProgressDialog
-                open={progress !== null}
-                title='Traitement en cours'
-                description='La fenêtre se ferme toute seule à la fin.'
-                value={progress ?? 0}
-                step={`${progress ?? 0} %`}
-            />
+            <OperationsSpecimen disabled={disabled} />
         </>
     );
 }

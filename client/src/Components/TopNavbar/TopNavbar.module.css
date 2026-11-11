@@ -323,6 +323,18 @@
     z-index: var(--z-modal);
 }
 
+/* Le panneau des opérations : la silhouette du menu, plus large pour une
+   barre d'avancement et une phrase de résultat. Opaque : il se pose sur une
+   vue pleine de texte, que le verre laisserait deviner derrière le sien. */
+.menu.tasksMenu {
+    width: min(360px, calc(100vw - 2 * var(--space-md)));
+    max-width: none;
+    padding: var(--space-sm);
+    background: var(--surface-popup-solid);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
 /* Le sursis avant fermeture n'est pas un temps où l'on clique : les entrées
    gelées y montrent l'espace que l'on vient de quitter. */
 .menuClosing {

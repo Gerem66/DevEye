@@ -88,11 +88,15 @@ export interface DialogProps {
      * restarts when it closes. No-op when the feature is off / locked.
      */
     holdSecrecy?: boolean;
-    /**
-     * Sans le bouton de fermeture : un dialogue de progression, que rien ne
-     * ferme tant que l'opération dure. Défaut `true`.
-     */
+    /** Sans le bouton de fermeture : le dialogue ne se quitte que par ses propres gestes. Défaut `true`. */
     closeButton?: boolean;
+    /**
+     * La boîte et son voile n'apparaissent qu'après ce délai : un travail plus
+     * court ne clignote pas. La couche est posée dès l'ouverture, donc l'écran
+     * du dessous ne se clique pas entre-temps, et un dialogue ouvert pendant le
+     * délai passe au-dessus. Échap est absorbé jusqu'à l'apparition.
+     */
+    appearDelayMs?: number;
 }
 
 /** Fields the open-focus should land on (skips checkboxes/radios and selects). */
@@ -132,9 +136,25 @@ export default function Dialog({
     tall = false,
     fill = false,
     holdSecrecy = false,
-    closeButton = true
+    closeButton = true,
+    appearDelayMs = 0
 }: DialogProps) {
     const dialogRef = useRef<HTMLDivElement>(null);
+
+    // Remis à faux pendant le rendu de l'ouverture, et non dans un effet : la
+    // boîte de l'ouverture précédente ne doit pas se peindre une image.
+    const [revealed, setRevealed] = useState(appearDelayMs === 0);
+    const [wasOpen, setWasOpen] = useState(open);
+    if (open !== wasOpen) {
+        setWasOpen(open);
+        if (open && appearDelayMs > 0) setRevealed(false);
+    }
+    useEffect(() => {
+        if (!open || appearDelayMs === 0) return;
+        const timer = setTimeout(() => setRevealed(true), appearDelayMs);
+        return () => clearTimeout(timer);
+    }, [open, appearDelayMs]);
+    const shown = open && revealed;
 
     // Keep the encrypted DEK alive while this dialog stays open (no-op unless
     // password encryption is on). Released on close/unmount → fresh grace window.
@@ -168,7 +188,7 @@ export default function Dialog({
     useLayoutEffect(() => {
         const dialog = dialogRef.current;
         const content = contentRef.current;
-        if (!open || !fits || !dialog || !content) return;
+        if (!shown || !fits || !dialog || !content) return;
         const sync = () => {
             const cs = getComputedStyle(dialog);
             const chrome =
@@ -191,7 +211,7 @@ export default function Dialog({
             // Le prochain contenu (le dialogue d'info en porte plusieurs) repart de sa propre hauteur.
             setFitHeight(null);
         };
-    }, [open, fits]);
+    }, [shown, fits]);
     const height = tall ? tallHeight : fits && fitHeight !== null ? fitHeight : 'auto';
 
     // En fill, la boîte reste en `auto` (son contenu dicte sa colonne flex) : on
@@ -210,7 +230,7 @@ export default function Dialog({
     useLayoutEffect(() => {
         const dialog = dialogRef.current;
         const body = bodyRef.current;
-        if (!open || !fill || !dialog || !body) return;
+        if (!shown || !fill || !dialog || !body) return;
         let lastAt = 0;
         let running: AnimationPlaybackControls | null = null;
         let release: ReturnType<typeof setTimeout> | null = null;
@@ -274,7 +294,7 @@ export default function Dialog({
             if (release) clearTimeout(release);
             unpin();
         };
-    }, [open, fill]);
+    }, [shown, fill]);
 
     // A close attempt either pops the confirmation (when dirty) or closes outright.
     const attemptClose = useCallback(() => {
@@ -297,11 +317,11 @@ export default function Dialog({
     // a layer (absorbing Escape) so it never leaks to whatever is underneath.
     // While the discard confirmation is up it owns the topmost layer, so Escape
     // there cancels it rather than this dialog.
-    useDismissLayer(open, dismissible ? attemptClose : null);
+    useDismissLayer(open, dismissible && revealed ? attemptClose : null);
 
     // Autofocus the main field (or the dialog) once the panel has mounted.
     useEffect(() => {
-        if (!open || !autoFocus) return;
+        if (!shown || !autoFocus) return;
         const id = requestAnimationFrame(() => {
             const root = dialogRef.current;
             if (!root) return;
@@ -312,7 +332,7 @@ export default function Dialog({
             target.focus();
         });
         return () => cancelAnimationFrame(id);
-    }, [open, autoFocus]);
+    }, [shown, autoFocus]);
 
     const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
         if (e.key !== 'Enter' || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -345,59 +365,65 @@ export default function Dialog({
         <AnimatePresence>
             {open && (
                 <div className={styles.root}>
-                    <motion.div
-                        className={styles.overlay}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.2, ease: 'easeOut' }}
-                        onClick={dismissible ? attemptClose : undefined}
-                    />
-                    <motion.div
-                        ref={dialogRef}
-                        tabIndex={-1}
-                        onKeyDown={handleKeyDown}
-                        className={`${styles.dialog} ${tall ? styles.dialogTall : ''} ${fill ? styles.dialogFill : ''}`}
-                        role='dialog'
-                        aria-modal='true'
-                        initial={{ opacity: 0, scale: 0.94, maxWidth: width, height }}
-                        animate={{ opacity: 1, scale: 1, maxWidth: width, height }}
-                        exit={{ opacity: 0, scale: 0.94 }}
-                        transition={fits && fitFollows ? { ...RESIZE_SPRING, height: { duration: 0 } } : RESIZE_SPRING}
-                        // Pendant qu'elle grandit, la boîte est plus courte que son
-                        // contenu : sans ce drapeau, une barre de défilement clignoterait.
-                        onAnimationStart={() => dialogRef.current?.setAttribute('data-resizing', '')}
-                        onAnimationComplete={() => dialogRef.current?.removeAttribute('data-resizing')}
-                    >
-                        <div className={styles.corner}>
-                            {headerAction}
-                            {closeButton && (
-                                <button className={styles.close} onClick={attemptClose} aria-label='Fermer'>
-                                    <span className='icon icon-x' />
-                                </button>
-                            )}
-                        </div>
-                        <div ref={contentRef} className={fits ? styles.measure : styles.passthrough}>
-                            {kicker && <div className={styles.kicker}>{kicker}</div>}
-                            {title && <h3 className={styles.title}>{title}</h3>}
-                            {description && <p className={styles.description}>{description}</p>}
-                            <div ref={setErrorSlot} className={styles.errors} />
-                            {/* Le pied aussi : un `DialogCancelButton` y est le cas courant. */}
-                            <DialogCloseContext.Provider value={attemptClose}>
-                                <ErrorSlotFixedScope slot={errorSlot}>
-                                    <DialogPrimaryContext.Provider value={registerPrimary}>
-                                        <div
-                                            ref={bodyRef}
-                                            className={`${styles.body} ${tall || fill ? styles.bodyFill : ''}`}
-                                        >
-                                            {children}
-                                        </div>
-                                    </DialogPrimaryContext.Provider>
-                                    {footer && <div className={styles.footer}>{footer}</div>}
-                                </ErrorSlotFixedScope>
-                            </DialogCloseContext.Provider>
-                        </div>
-                    </motion.div>
+                    {revealed && (
+                        <>
+                            <motion.div
+                                className={styles.overlay}
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                transition={{ duration: 0.2, ease: 'easeOut' }}
+                                onClick={dismissible ? attemptClose : undefined}
+                            />
+                            <motion.div
+                                ref={dialogRef}
+                                tabIndex={-1}
+                                onKeyDown={handleKeyDown}
+                                className={`${styles.dialog} ${tall ? styles.dialogTall : ''} ${fill ? styles.dialogFill : ''}`}
+                                role='dialog'
+                                aria-modal='true'
+                                initial={{ opacity: 0, scale: 0.94, maxWidth: width, height }}
+                                animate={{ opacity: 1, scale: 1, maxWidth: width, height }}
+                                exit={{ opacity: 0, scale: 0.94 }}
+                                transition={
+                                    fits && fitFollows ? { ...RESIZE_SPRING, height: { duration: 0 } } : RESIZE_SPRING
+                                }
+                                // Pendant qu'elle grandit, la boîte est plus courte que son
+                                // contenu : sans ce drapeau, une barre de défilement clignoterait.
+                                onAnimationStart={() => dialogRef.current?.setAttribute('data-resizing', '')}
+                                onAnimationComplete={() => dialogRef.current?.removeAttribute('data-resizing')}
+                            >
+                                <div className={styles.corner}>
+                                    {headerAction}
+                                    {closeButton && (
+                                        <button className={styles.close} onClick={attemptClose} aria-label='Fermer'>
+                                            <span className='icon icon-x' />
+                                        </button>
+                                    )}
+                                </div>
+                                <div ref={contentRef} className={fits ? styles.measure : styles.passthrough}>
+                                    {kicker && <div className={styles.kicker}>{kicker}</div>}
+                                    {title && <h3 className={styles.title}>{title}</h3>}
+                                    {description && <p className={styles.description}>{description}</p>}
+                                    <div ref={setErrorSlot} className={styles.errors} />
+                                    {/* Le pied aussi : un `DialogCancelButton` y est le cas courant. */}
+                                    <DialogCloseContext.Provider value={attemptClose}>
+                                        <ErrorSlotFixedScope slot={errorSlot}>
+                                            <DialogPrimaryContext.Provider value={registerPrimary}>
+                                                <div
+                                                    ref={bodyRef}
+                                                    className={`${styles.body} ${tall || fill ? styles.bodyFill : ''}`}
+                                                >
+                                                    {children}
+                                                </div>
+                                            </DialogPrimaryContext.Provider>
+                                            {footer && <div className={styles.footer}>{footer}</div>}
+                                        </ErrorSlotFixedScope>
+                                    </DialogCloseContext.Provider>
+                                </div>
+                            </motion.div>
+                        </>
+                    )}
                 </div>
             )}
         </AnimatePresence>,

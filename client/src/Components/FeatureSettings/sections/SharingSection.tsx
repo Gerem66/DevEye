@@ -7,10 +7,10 @@ import Button from '@/Components/Button';
 import { ConfirmDialog, type ConfirmRequest } from '@/Components/ConfirmDialog';
 import { Dialog } from '@/Components/Dialog';
 import ErrorNote, { type ErrorNoteInput } from '@/Components/ErrorNote';
-import { ProgressDialog } from '@/Components/ProgressDialog';
 import SearchSelect from '@/Components/SearchSelect';
 import Switch from '@/Components/Switch';
 import { moduleManifest } from '@/sdk/registry';
+import { runTask, useTasks } from '@/sdk/tasks';
 import { invalidate, type ResourceKey } from '@/stores/invalidation';
 
 import { type SettingsScope } from '../scope';
@@ -39,25 +39,14 @@ const BLOCKER_TEXT: Record<ShareBlocker, string> = {
         'Cet élément vient d’un autre espace, où vous n’avez pas le droit de le modifier : son partage se règle par ceux qui l’ont. Qui tient l’écriture de l’élément chez lui peut, en revanche, régler son partage d’ici.'
 };
 
-/**
- * Un déplacement relit et rescelle tout l'arbre de l'élément dans une
- * transaction : bien au-delà du délai ordinaire d'une commande.
- */
-const MOVE_TIMEOUT_MS = 120_000;
+const MOVE_KEY = 'share.move';
 
 /**
  * Le refus du serveur, tel quel : ses phrases (« déjà suivi dans cet espace »,
  * « une ligne illisible ») disent la cause, qu'un libellé générique cacherait.
- * Un délai dépassé prévient que le geste se poursuit peut-être là-bas.
  */
 function explain(e: unknown, fallback: string): ErrorNoteInput {
     if (!(e instanceof WsError)) return errorNote(e, fallback);
-    if (e.code === 'timeout') {
-        return {
-            message: `${fallback} Le serveur n’a pas répondu à temps : le geste se poursuit peut-être, vérifiez avant de réessayer.`,
-            code: e.code
-        };
-    }
     if (e.code === 'internal' && e.message !== 'Internal server error') return { message: e.message, code: e.code };
     return errorNote(e, fallback);
 }
@@ -78,11 +67,12 @@ export default function SharingSection({ scope, onGone }: Props) {
     /** L'espace visé par un déplacement, tant qu'il n'est pas confirmé. */
     const [moveTo, setMoveTo] = useState('');
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
-    /** Le déplacement est en vol : un dialogue de progression tient l'écran. */
-    const [moving, setMoving] = useState(false);
 
     const itemId = scope.kind === 'item' ? scope.itemId : '';
+    const itemLabel = scope.kind === 'item' ? scope.itemLabel : undefined;
     const { dem, Dem, Def } = itemNounForms(feature);
+    // Lu dans la zone des opérations : un déplacement réduit tient encore l'élément.
+    const moving = useTasks({ feature, itemId, key: MOVE_KEY }).length > 0;
 
     const reload = useCallback(async () => {
         const res = await ws.send('share.get', { feature, itemId });
@@ -164,21 +154,38 @@ export default function SharingSection({ scope, onGone }: Props) {
 
     const doMove = (workspaceId: number, workspaceName: string): void => {
         setBusy(true);
-        setMoving(true);
         setError(null);
-        void ws
-            .send('share.move', { feature, itemId, workspaceId }, { timeoutMs: MOVE_TIMEOUT_MS })
+        const refused = `Déplacement vers « ${workspaceName} » impossible.`;
+        // La fiche se referme une seule fois : dès que le déplacement est réduit,
+        // sinon à sa fin. Plus tard, `onGone` fermerait une autre fiche.
+        let left = false;
+        const leave = (): void => {
+            if (left) return;
+            left = true;
+            onGone();
+        };
+        void runTask(
+            {
+                feature,
+                itemId,
+                key: MOVE_KEY,
+                title: 'Déplacement vers un autre espace',
+                subject: itemLabel ? `« ${itemLabel} » vers « ${workspaceName} »` : `Vers « ${workspaceName} »`,
+                description: `${Dem} change d’espace : sa donnée est déchiffrée puis rescellée sous la clé du nouveau. Sa fiche se refermera ensuite.`,
+                done: `${Dem} est maintenant dans « ${workspaceName} ».`,
+                failed: (e) => explain(e, refused),
+                onDetach: leave
+            },
+            (task) => ws.send('share.move', { feature, itemId, workspaceId }, task.sendOptions)
+        )
             .then(() => {
                 // La fiche s'en va AVANT que les ressources ne soient ravivées :
                 // relue après coup, elle chercherait un élément qui n'est plus là.
-                onGone();
+                leave();
                 for (const key of moduleManifest(feature)?.resources ?? []) invalidate(key as ResourceKey);
             })
-            .catch((e: unknown) => setError(explain(e, `Déplacement vers « ${workspaceName} » impossible.`)))
-            .finally(() => {
-                setMoving(false);
-                setBusy(false);
-            });
+            .catch((e: unknown) => setError(explain(e, refused)))
+            .finally(() => setBusy(false));
     };
 
     if (!state) return error ? <ErrorNote note={error} /> : <p className={styles.sectionHint}>Chargement…</p>;
@@ -212,7 +219,7 @@ export default function SharingSection({ scope, onGone }: Props) {
                         </>
                     )}
                 </p>
-                {state.copyable && <CopyItem feature={feature} itemId={itemId} />}
+                {state.copyable && <CopyItem feature={feature} itemId={itemId} itemLabel={itemLabel} />}
             </div>
         );
     }
@@ -223,7 +230,7 @@ export default function SharingSection({ scope, onGone }: Props) {
         return (
             <div className={styles.section}>
                 <p className={styles.sectionHint}>{BLOCKER_TEXT.item}</p>
-                {state.copyable && <CopyItem feature={feature} itemId={itemId} />}
+                {state.copyable && <CopyItem feature={feature} itemId={itemId} itemLabel={itemLabel} />}
             </div>
         );
     }
@@ -249,7 +256,7 @@ export default function SharingSection({ scope, onGone }: Props) {
                             }
                             // L'origine n'est pas décochable : l'élément y est
                             // chez lui, pas projeté.
-                            disabled={w.isHome || busy || state.blocker !== null}
+                            disabled={w.isHome || busy || moving || state.blocker !== null}
                             onChange={(on) => toggle(w.workspaceId, on)}
                         />
                         <span className={styles.channelText}>
@@ -298,7 +305,7 @@ export default function SharingSection({ scope, onGone }: Props) {
                     <div className={styles.fieldWithAction}>
                         <SearchSelect
                             value={moveTo}
-                            disabled={busy}
+                            disabled={busy || moving}
                             aria-label={`Déplacer ${dem} vers`}
                             placeholder='Choisir un espace…'
                             options={state.workspaces
@@ -306,7 +313,7 @@ export default function SharingSection({ scope, onGone }: Props) {
                                 .map((w) => ({ value: String(w.workspaceId), label: w.workspaceName }))}
                             onChange={setMoveTo}
                         />
-                        <Button variant='secondary' disabled={busy || moveTo === ''} onClick={askMove}>
+                        <Button variant='secondary' disabled={busy || moving || moveTo === ''} onClick={askMove}>
                             Déplacer…
                         </Button>
                     </div>
@@ -323,7 +330,7 @@ export default function SharingSection({ scope, onGone }: Props) {
                 naît ailleurs. Le serveur le propose (`copyable`) depuis le
                 domicile, même pour un élément gardé, que partage et déplacement
                 refusent. */}
-            {state.copyable && <CopyItem feature={feature} itemId={itemId} />}
+            {state.copyable && <CopyItem feature={feature} itemId={itemId} itemLabel={itemLabel} />}
 
             {/* Empilé au-dessus des réglages : il possède alors la couche de
                 fermeture, donc Échap le referme sans emporter le dialogue de
@@ -339,15 +346,6 @@ export default function SharingSection({ scope, onGone }: Props) {
             </Dialog>
 
             <ConfirmDialog request={confirm} busy={busy} onClose={() => setConfirm(null)} />
-
-            {/* Le déplacement peut prendre plusieurs secondes (tout l'arbre est
-                relu et rescellé) : un dialogue que rien ne ferme le dit, plutôt
-                qu'un écran figé où l'on ne sait pas si le clic a pris. */}
-            <ProgressDialog
-                open={moving}
-                title='Déplacement en cours'
-                description={`${Dem} change d’espace : sa donnée est déchiffrée puis rescellée sous la clé du nouveau. Sa fiche se refermera une fois parti.`}
-            />
         </div>
     );
 }

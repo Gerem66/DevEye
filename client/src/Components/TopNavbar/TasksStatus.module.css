@@ -1,0 +1,242 @@
+/* La puce des opérations. Chaque taille d'icône est écrite sous `.chip` ou
+   `.row` : la règle globale `.icon` pose 18px à spécificité égale d'une classe
+   de module nue, et l'ordre du bundle déciderait du vainqueur. */
+.zone {
+    display: inline-flex;
+}
+
+.chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    box-sizing: border-box;
+    height: var(--topbar-pill-height);
+    padding: 0 10px;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-pill);
+    background: var(--glass-bg-light);
+    color: var(--accent);
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast);
+}
+
+.chip:hover,
+.chip[aria-expanded='true'] {
+    border-color: color-mix(in srgb, currentColor 55%, transparent);
+}
+
+.chip .glyph {
+    width: 14px;
+    height: 14px;
+}
+
+.chip.failed {
+    border-color: var(--danger);
+    background: var(--danger-bg);
+    color: var(--danger);
+}
+
+.chip.lost {
+    border-color: var(--warning);
+    background: var(--warning-bg);
+    color: var(--warning);
+}
+
+.chip.done {
+    border-color: color-mix(in srgb, var(--success) 45%, transparent);
+    background: var(--success-bg);
+    color: var(--success);
+}
+
+/* Un résultat à voir pendant que d'autres opérations tournent : le bord le dit. */
+.chip.alertFailed {
+    border-color: var(--danger);
+}
+
+.chip.alertLost {
+    border-color: var(--warning);
+}
+
+.count {
+    color: var(--text-primary);
+}
+
+.spin {
+    animation: tasks-spin 0.8s linear infinite;
+}
+
+@keyframes tasks-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.bar {
+    flex-shrink: 0;
+    width: 42px;
+    height: 4px;
+    overflow: hidden;
+    border-radius: var(--radius-pill);
+    background: var(--glass-border);
+}
+
+.barFill {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--accent);
+    transition: width var(--transition-fast);
+}
+
+/* ── Le panneau ─────────────────────────────────────────────────────────── */
+
+.panelHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    padding: var(--space-xs) var(--space-sm) var(--space-sm);
+}
+
+.panelTitle {
+    color: var(--text-muted);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.rows {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+    padding: var(--space-sm);
+    border-radius: var(--radius-sm);
+    background: var(--surface-subtle);
+}
+
+.rowHead {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    min-height: 18px;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+}
+
+.row .glyph {
+    width: 13px;
+    height: 13px;
+}
+
+.rowHead > .glyph {
+    color: var(--accent);
+}
+
+.rowOrigin {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.rowDismiss {
+    display: inline-flex;
+    flex-shrink: 0;
+    padding: 2px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.rowDismiss:hover,
+.rowDismiss:focus-visible {
+    background: var(--glass-bg-light);
+    color: var(--text-primary);
+}
+
+.rowTitle {
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.rowSubject {
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    overflow-wrap: anywhere;
+}
+
+.rowStep {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    overflow-wrap: anywhere;
+}
+
+.rowResult {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    line-height: 1.4;
+}
+
+.rowResult > .glyph {
+    margin-top: 2px;
+}
+
+.row.done .rowResult > .glyph {
+    color: var(--success);
+}
+
+.row.lost .rowResult > .glyph {
+    color: var(--warning);
+}
+
+.rowActions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: var(--space-xs);
+}
+
+.rowAction {
+    padding: 3px var(--space-sm);
+    border: none;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.rowAction:hover,
+.rowAction:focus-visible {
+    background: var(--glass-bg-light);
+    color: var(--accent);
+}

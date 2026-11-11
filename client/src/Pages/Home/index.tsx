@@ -75,6 +75,7 @@ import { InfoPopup, openInfo } from '@/Components/InfoPopup';
 import { hasDismissLayer } from '@/Components/Dialog';
 import StatusPageLink from '@/Components/StatusPageLink';
 import { ConfirmDialog, type ConfirmRequest } from '@/Components/ConfirmDialog';
+import { TasksHost } from '@/Components/TaskDialog';
 import { RemoteLogin } from '@/Components/RemoteLogin';
 import { useHint } from '@/Components/Hint';
 import CreateWorkspacePopup, { CREATE_WORKSPACE_POPUP, type CreateWorkspaceChoice } from './popup-create-workspace';
@@ -1646,6 +1647,9 @@ export default function HomePage() {
                         onDismissHint={layoutHint.dismiss}
                     />
                 )}
+                {/* Avant les autres dialogues de l'accueil et les invites de l'app :
+                    ce qui s'ouvre pendant une opération longue passe au-dessus du sien. */}
+                <TasksHost />
                 <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
                 <AddTileMarket section={marketSection} onClose={() => setAddTarget(null)} />
                 <Spotlight

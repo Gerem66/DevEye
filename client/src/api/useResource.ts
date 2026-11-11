@@ -40,6 +40,8 @@ export function errorNote(error: unknown, fallback: string): ErrorNoteInput {
     const raw = (error as { code?: unknown } | null)?.code;
     const code = typeof raw === 'string' ? raw : null;
     if (error instanceof UploadError && code !== 'internal') return { message: error.message, code };
+    // Le rejet qu'une opération longue écrit elle-même (coupure, silence) dit déjà quoi faire.
+    if ((error as { name?: unknown } | null)?.name === 'TaskError') return { message: (error as Error).message, code };
     return { message: humanizeError(error, fallback), code };
 }
 

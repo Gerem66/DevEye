@@ -1,0 +1,80 @@
+.kicker {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.text {
+    margin: 0 0 var(--space-md);
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.step {
+    margin: var(--space-sm) 0 0;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+/* L'avancement dessiné dans l'écran qui a lancé l'opération. */
+.inline {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    min-width: 0;
+}
+
+.inlineHead {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-sm);
+}
+
+.inlineTitle {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.inlineSubject {
+    color: var(--text-muted);
+    font-weight: 400;
+}
+
+.inlineShow {
+    flex-shrink: 0;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    font: inherit;
+    font-size: 0.78rem;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+}
+
+.inlineShow:hover,
+.inlineShow:focus-visible {
+    color: var(--accent);
+}
+
+.inlineStep {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+/* L'annonce aux lecteurs d'écran : dite, jamais montrée. */
+.announce {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}

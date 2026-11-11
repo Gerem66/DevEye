@@ -6,12 +6,14 @@ import { errorNote } from '@/api/useResource';
 import Button from '@/Components/Button';
 import { ConfirmDialog, type ConfirmRequest } from '@/Components/ConfirmDialog';
 import ErrorNote, { type ErrorNoteInput } from '@/Components/ErrorNote';
-import { ProgressDialog } from '@/Components/ProgressDialog';
 import SearchSelect from '@/Components/SearchSelect';
+import { TaskProgress } from '@/Components/TaskDialog';
 import { moduleManifest } from '@/sdk/registry';
 import { useRemoteTargets } from '@/sdk/remoteTargets';
+import { runTask } from '@/sdk/tasks';
 import { invalidate, type ResourceKey } from '@/stores/invalidation';
 import { UnlockCancelledError } from '@/stores/secrecy';
+import { TaskError, useTaskRecords } from '@/stores/tasks';
 import { useWorkspacesHere, useWorkspaceState, workspaceKey } from '@/stores/workspace';
 
 import { copyItem, previewCopy, type CopyDestination, type CopyStep } from '../copyItem';
@@ -20,7 +22,12 @@ import styles from '../FeatureSettings.module.css';
 interface Props {
     feature: FeatureId;
     itemId: string;
+    /** Le nom de l'élément, pour la ligne de sa copie dans la zone des opérations. */
+    itemLabel?: string;
 }
+
+/** Le serveur ne tient qu'un transfert par compte : le suivant chasserait celui qui court. */
+const COPY_KEY = 'share.copy';
 
 interface Target extends CopyDestination {
     key: string;
@@ -39,7 +46,7 @@ const STEP_LABEL: Record<CopyStep, string> = {
  * « Copier vers » : l'élément reste ici, un double naît ailleurs, dans un espace
  * d'ici ou d'une instance distante. Rien ne relie ensuite les deux.
  */
-export default function CopyItem({ feature, itemId }: Props) {
+export default function CopyItem({ feature, itemId, itemLabel }: Props) {
     const { activeId, activeInstanceId } = useWorkspaceState();
     // Les espaces de l'instance de l'élément, puis ceux des autres instances.
     const workspaces = useWorkspacesHere();
@@ -49,7 +56,9 @@ export default function CopyItem({ feature, itemId }: Props) {
     const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [done, setDone] = useState<string | null>(null);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
-    const [progress, setProgress] = useState<{ step: CopyStep; value: number } | null>(null);
+    // Quel que soit l'élément ou l'espace d'où elle est partie.
+    const copies = useTaskRecords().filter((task) => task.state === 'running' && task.key === COPY_KEY);
+    const copying = copies.length > 0;
     const { dem, Dem } = itemNounForms(feature);
 
     const targets = useMemo<Target[]>(() => {
@@ -143,18 +152,40 @@ export default function CopyItem({ feature, itemId }: Props) {
     const run = (to: Target, workspaceName: string): void => {
         setConfirm(null);
         setBusy(true);
-        setProgress({ step: 'read', value: 0 });
-        void copyItem(feature, itemId, to, (step, value) => setProgress({ step, value }))
+        const copied = `Une copie de ${dem} est maintenant dans « ${workspaceName} ».`;
+        const refused = `Copie vers « ${workspaceName} » impossible.`;
+        const abort = new AbortController();
+        // Le transfert passe par ce navigateur : réduit, il continue, mais
+        // fermer l'onglet le laisserait à moitié fait, que la destination jette.
+        void runTask(
+            {
+                feature,
+                itemId,
+                key: COPY_KEY,
+                title: 'Copie vers un autre espace',
+                subject: itemLabel ? `« ${itemLabel} » vers « ${workspaceName} »` : `Vers « ${workspaceName} »`,
+                description: 'Lecture ici, transfert par ce navigateur, puis écriture dans l’espace d’arrivée.',
+                local: true,
+                done: copied,
+                failed: (e) => explain(e, refused),
+                cancel: () => abort.abort()
+            },
+            (task) =>
+                copyItem(feature, itemId, to, (step, value) => task.report({ value, step: STEP_LABEL[step] }), {
+                    signal: abort.signal,
+                    beforePrompt: task.raise
+                })
+        )
             .then(() => {
-                setDone(`${Dem} a été copié dans « ${workspaceName} ».`);
+                setDone(copied);
                 // Copié dans l'espace où l'on se trouve, sa liste vient de changer.
                 for (const key of moduleManifest(feature)?.resources ?? []) invalidate(key as ResourceKey);
             })
-            .catch((e: unknown) => setError(explain(e, `Copie vers « ${workspaceName} » impossible.`)))
-            .finally(() => {
-                setProgress(null);
-                setBusy(false);
-            });
+            .catch((e: unknown) => {
+                if (e instanceof TaskError && e.code === 'cancelled') return;
+                setError(explain(e, refused));
+            })
+            .finally(() => setBusy(false));
     };
 
     return (
@@ -174,28 +205,23 @@ export default function CopyItem({ feature, itemId }: Props) {
                     }))}
                     onChange={setChoice}
                 />
-                <Button variant='secondary' disabled={busy || choice === ''} onClick={ask}>
+                <Button variant='secondary' disabled={busy || copying || choice === ''} onClick={ask}>
                     Copier…
                 </Button>
             </div>
             <span className={styles.fieldHint}>
-                Un double indépendant, dans un autre de vos espaces ou sur une instance distante où vous êtes connecté.
-                Ce qu’il n’emporte pas est nommé avant confirmation.
+                {copying
+                    ? 'Une copie est déjà en cours : attendez sa fin pour en lancer une autre.'
+                    : 'Un double indépendant, dans un autre de vos espaces ou sur une instance distante où vous êtes connecté. Ce qu’il n’emporte pas est nommé avant confirmation.'}
             </span>
+            {/* La barre du haut est sous le voile des réglages : la copie réduite se suit ici. */}
+            {copies.map((task) => (
+                <TaskProgress key={task.id} task={task} />
+            ))}
             <ErrorNote note={error} />
             {done && <p className={styles.sectionHint}>{done}</p>}
 
             <ConfirmDialog request={confirm} busy={busy} onClose={() => setConfirm(null)} />
-
-            {/* Rien ne ferme ce dialogue : quitter en cours de route laisserait un
-                transfert à moitié fait, que la destination finirait par jeter. */}
-            <ProgressDialog
-                open={progress !== null}
-                title='Copie en cours'
-                description={`${Dem} est lu ici, transféré par ce navigateur, puis écrit dans l’espace d’arrivée.`}
-                value={progress?.value}
-                step={progress ? STEP_LABEL[progress.step] : undefined}
-            />
         </div>
     );
 }

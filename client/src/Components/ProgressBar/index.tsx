@@ -1,4 +1,4 @@
-import styles from './ProgressDialog.module.css';
+import styles from './ProgressBar.module.css';
 
 export interface ProgressBarProps {
     /** L'avancement, de 0 à 1, quand il se mesure. Absent : la barre balaie sans rien promettre. */

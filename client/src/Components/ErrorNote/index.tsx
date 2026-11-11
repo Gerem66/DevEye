@@ -12,7 +12,8 @@ import styles from './ErrorNote.module.css';
  * Les refus dont le texte se suffit : l'utilisateur a mal saisi, n'a pas le
  * droit, a atteint sa limite, doit se reconnecter, ou regarde une donnée
  * disparue. Les signaler n'apprendrait rien à personne. Une connexion coupée
- * (`closed`, `network`) revient seule, et le signalement ne partirait pas.
+ * (`closed`, `network`) revient seule, et le signalement ne partirait pas. Une
+ * opération abandonnée (`cancelled`) l'a été par l'utilisateur.
  */
 const SPOKEN_FOR: readonly string[] = [
     'validation',
@@ -28,7 +29,8 @@ const SPOKEN_FOR: readonly string[] = [
     'auth_required',
     'stepup_required',
     'closed',
-    'network'
+    'network',
+    'cancelled'
 ];
 
 export interface ErrorNoteInput {

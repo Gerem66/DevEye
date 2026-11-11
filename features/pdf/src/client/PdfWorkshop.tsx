@@ -8,16 +8,21 @@ import {
     handFileTo,
     LoadingVeil,
     pickFiles,
-    ProgressDialog,
+    runTask,
     saveFrom,
     StickyHeader,
+    TaskError,
     useHandedFile,
     useRequestPopupWidth,
     useSubView,
+    useTasks,
     type ConfirmRequest,
-    type ErrorNoteInput
+    type ErrorNoteInput,
+    type TaskContext
 } from 'deveye-sdk-client';
 
+import { manifest } from '../manifest';
+import { runBuild } from './buildRunner';
 import { Picto } from './icons';
 import { addImage, buildInputOf, forgetAll, openSource } from './documents';
 import { EditTab } from './EditTab';
@@ -42,12 +47,12 @@ import { NeedsPassword } from './pdfjs';
 import { redactedPages } from './raster';
 import { TextTab } from './TextTab';
 import { clearThumbnails } from './thumbnails';
-import { useBuild } from './useBuild';
 import { usePdfWorkshop, type OpenedFile } from './usePdfWorkshop';
 
 const POPUP_WIDTH = 1280;
-/** Un assemblage plus court que ça n'a pas besoin d'un dialogue d'avancement. */
-const PROGRESS_DELAY_MS = 400;
+/** Un assemblage à la fois : la clé de son opération. */
+const BUILD_KEY = 'build';
+const BUILD_FAILED = 'Le document n’a pas pu être assemblé.';
 /** Le temps laissé au navigateur pour lire une adresse `blob:` avant qu'elle ne soit rendue. */
 const BLOB_URL_TTL_MS = 60_000;
 
@@ -96,18 +101,8 @@ export default function PdfWorkshop({ initialFiles, intent, onLeave }: PdfWorksh
     const [password, setPassword] = useState<PasswordRequest | null>(null);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
     const nextColor = useRef(0);
-    const { build, progress } = useBuild();
-
-    const building = progress !== null;
-    const [slow, setSlow] = useState(false);
-    useEffect(() => {
-        if (!building) {
-            setSlow(false);
-            return;
-        }
-        const timer = window.setTimeout(() => setSlow(true), PROGRESS_DELAY_MS);
-        return () => window.clearTimeout(timer);
-    }, [building]);
+    // Lu dans la zone des opérations : un assemblage réduit tient encore le bouton.
+    const building = useTasks({ feature: manifest.id, key: BUILD_KEY }).length > 0;
 
     const askPassword = useCallback(
         (file: File, incorrect: boolean) =>
@@ -202,20 +197,28 @@ export default function PdfWorkshop({ initialFiles, intent, onLeave }: PdfWorksh
     }, [plan, finishing]);
 
     /** Le document entier, avec tout ce qui s'y rapporte. */
-    const buildDocument = useCallback(async (): Promise<Uint8Array<ArrayBuffer>> => {
-        const fonts = await buildFonts();
-        const redactions = await redactedPages(plan, elements);
-        return build({
-            ...buildInputOf(plan),
-            pages: plan.pages,
-            elements,
-            fonts,
-            redactions,
-            fields,
-            flatten,
-            finishing: effectiveFinishing()
-        });
-    }, [build, plan, elements, fields, flatten, effectiveFinishing]);
+    const buildDocument = useCallback(
+        async (task: TaskContext, signal: AbortSignal): Promise<Uint8Array<ArrayBuffer>> => {
+            const fonts = await buildFonts();
+            const redactions = await redactedPages(plan, elements);
+            return runBuild(
+                {
+                    ...buildInputOf(plan),
+                    pages: plan.pages,
+                    elements,
+                    fonts,
+                    redactions,
+                    fields,
+                    flatten,
+                    finishing: effectiveFinishing()
+                },
+                (done, total) =>
+                    task.report({ value: total > 0 ? done / total : null, step: `Page ${done} sur ${total}` }),
+                signal
+            );
+        },
+        [plan, elements, fields, flatten, effectiveFinishing]
+    );
 
     const save = (bytes: Uint8Array<ArrayBuffer>, type: string, fileName: string): void => {
         const url = URL.createObjectURL(new Blob([bytes], { type }));
@@ -223,27 +226,47 @@ export default function PdfWorkshop({ initialFiles, intent, onLeave }: PdfWorksh
         window.setTimeout(() => URL.revokeObjectURL(url), BLOB_URL_TTL_MS);
     };
 
-    const download = async (): Promise<void> => {
+    /** L'assemblage, suivi comme une opération : il se réduit, ou bloque quand la suite change d'écran. */
+    const assemble = async <T,>(
+        minimizable: boolean,
+        done: string | undefined,
+        then: (bytes: Uint8Array<ArrayBuffer>) => T
+    ): Promise<void> => {
         if (plan.pages.length === 0) return;
         setError(null);
+        const abort = new AbortController();
         try {
-            save(await buildDocument(), 'application/pdf', name);
+            await runTask(
+                {
+                    feature: manifest.id,
+                    key: BUILD_KEY,
+                    title: 'Assemblage du document',
+                    subject: name,
+                    description: 'Les pages sont copiées dans un PDF neuf, sur cet appareil.',
+                    local: true,
+                    minimizable,
+                    done,
+                    failed: BUILD_FAILED,
+                    cancel: () => abort.abort()
+                },
+                async (task) => then(await buildDocument(task, abort.signal))
+            );
         } catch (e) {
-            setError(errorNote(e, 'Le document n’a pas pu être assemblé.'));
+            if (e instanceof TaskError && e.code === 'cancelled') return;
+            setError(errorNote(e, BUILD_FAILED));
         }
     };
 
+    // Le téléchargement part de l'opération elle-même : réduite, elle le livre
+    // encore quand l'atelier a été quitté.
+    const download = (): Promise<void> =>
+        assemble(true, 'Document téléchargé.', (bytes) => save(bytes, 'application/pdf', name));
+
     /** Le document, tel qu'il sortirait, confié au Convertisseur : la reconnaissance du texte se fait sur son serveur. */
-    const ocr = async (): Promise<void> => {
-        if (plan.pages.length === 0) return;
-        setError(null);
-        try {
-            const bytes = await buildDocument();
-            handFileTo('convert', new File([bytes], name, { type: 'application/pdf' }), 'pdf-ocr');
-        } catch (e) {
-            setError(errorNote(e, 'Le document n’a pas pu être assemblé.'));
-        }
-    };
+    const ocr = (): Promise<void> =>
+        assemble(false, undefined, (bytes) =>
+            handFileTo('convert', new File([bytes], name, { type: 'application/pdf' }), 'pdf-ocr')
+        );
 
     const pick = (): void => {
         void pickFiles({ multiple: true, accept: WORKSHOP_ACCEPT }).then((picked) =>
@@ -370,13 +393,6 @@ export default function PdfWorkshop({ initialFiles, intent, onLeave }: PdfWorksh
             </footer>
 
             <PasswordDialog request={password} onDone={() => setPassword(null)} />
-            <ProgressDialog
-                open={slow && progress !== null}
-                title='Assemblage du document'
-                description='Les pages sont copiées dans un PDF neuf, sur cet appareil.'
-                value={progress && progress.total > 0 ? progress.done / progress.total : undefined}
-                step={progress ? `Page ${progress.done} sur ${progress.total}` : undefined}
-            />
             <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
         </div>
     );

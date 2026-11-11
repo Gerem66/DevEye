@@ -26,6 +26,7 @@ scan (ocrmypdf), est confié au Convertisseur, qui a l'outil et les quotas.
 | `elements.ts`                            | Ce qu'on pose sur une page (signature, texte, coche, image, surlignage, trait, caviardage)             |
 | `geometry.ts`                            | Du cadre affiché au repère du fichier, rotation et origine de la boîte comprises                       |
 | `build.ts`, `build.worker`               | L'assemblage par pdf-lib : pages, formulaire, éléments, finitions, mot de passe                        |
+| `buildRunner.ts`                         | Un assemblage dans son worker, hors de tout composant : réduit, il va au bout même atelier quitté      |
 | `finishing.ts`                           | Numéros de page, filigrane, propriétés, mot de passe                                                   |
 | `fields.ts`, `text.ts`                   | Les champs d'un formulaire et le texte d'une page, lus dans ce que pdf.js livre                        |
 | `documents.ts`                           | Les fichiers ouverts, hors de React : octets, document pdf.js, images posées                           |
