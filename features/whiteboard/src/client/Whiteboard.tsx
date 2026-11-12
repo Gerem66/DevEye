@@ -7,14 +7,17 @@ import {
     useLiveItemTarget,
     useResource,
     useSubView,
+    useTaskRunner,
     useWorkspacePermissions,
     type ConfirmRequest,
-    type ErrorNoteInput
+    type ErrorNoteInput,
+    type TaskOptions
 } from 'deveye-sdk-client';
 import type { FeatureViewProps } from '@deveye/types/sdk/client';
 import { useState } from 'react';
 
 import type { BoardSummary } from '../contracts/domain';
+import { manifest } from '../manifest';
 import { api } from './api';
 import BoardEditor from './BoardEditor';
 import BoardGrid from './BoardGrid';
@@ -25,6 +28,17 @@ export interface BoardActions {
 }
 
 export const displayTitle = (board: { title: string }): string => board.title.trim() || 'Sans titre';
+
+/** Ce que la zone des opérations dit d'une duplication, la copie d'un grand tableau prenant du temps. */
+export const duplicationOf = (board: { id: number; title: string }): TaskOptions<{ board: BoardSummary }> => ({
+    feature: manifest.id,
+    itemId: board.id,
+    key: 'duplicate',
+    title: 'Duplication du tableau',
+    subject: displayTitle(board),
+    done: 'Tableau dupliqué.',
+    failed: 'Le tableau n’a pas pu être dupliqué.'
+});
 
 /**
  * Les tableaux de l'espace, puis l'éditeur d'un tableau ouvert à la place de la
@@ -56,10 +70,13 @@ export default function Whiteboard(_props: FeatureViewProps) {
     });
     useSubView(openedId === null ? null : 'board');
 
+    const runTask = useTaskRunner();
     const actions: BoardActions = {
         duplicate(board) {
             setActionError(null);
-            api.send('whiteboard.duplicate', { boardId: board.id }, { timeoutMs: 120_000 })
+            runTask(duplicationOf(board), (task) =>
+                api.send('whiteboard.duplicate', { boardId: board.id }, task.sendOptions)
+            )
                 .then(({ board: copy }) => {
                     invalidate('whiteboard.list', 'whiteboard.count');
                     setOpenedId(copy.id);

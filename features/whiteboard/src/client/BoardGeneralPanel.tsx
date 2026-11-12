@@ -11,6 +11,7 @@ import {
     settingsStyles as shell,
     TextInput,
     useResource,
+    useTaskRunner,
     type ConfirmRequest,
     type ErrorNoteInput
 } from 'deveye-sdk-client';
@@ -21,7 +22,7 @@ import { WHITEBOARD_TITLE_MAX, type BoardAppearance } from '../contracts/domain'
 import { api } from './api';
 import { THEME_CHOICES } from './format';
 import styles from './style.module.css';
-import { displayTitle } from './Whiteboard';
+import { displayTitle, duplicationOf } from './Whiteboard';
 
 /** Le fond qu'Excalidraw donne à un tableau qui n'en a pas choisi. */
 const DEFAULT_BACKGROUND = '#ffffff';
@@ -60,6 +61,7 @@ export default function BoardGeneralPanel({ scope, canWrite, close, gone }: Sett
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
+    const runTask = useTaskRunner();
 
     // Repris à chaque relecture : un autre participant a pu changer le thème ou le fond.
     const savedTitle = board?.title ?? '';
@@ -104,10 +106,8 @@ export default function BoardGeneralPanel({ scope, canWrite, close, gone }: Sett
         setBusy(true);
         setError(null);
         try {
-            const { board: copy } = await api.send(
-                'whiteboard.duplicate',
-                { boardId: board.id },
-                { timeoutMs: 120_000 }
+            const { board: copy } = await runTask(duplicationOf(board), (task) =>
+                api.send('whiteboard.duplicate', { boardId: board.id }, task.sendOptions)
             );
             invalidate('whiteboard.list', 'whiteboard.count');
             close();
