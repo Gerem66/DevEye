@@ -59,6 +59,7 @@ import type {
 import { logger } from '@/logger';
 import { env } from '@/Utils/Env';
 import { maintenance, replyMaintenance, type MaintenanceServices } from '@/Services/maintenance';
+import { tasks } from '@/Services/tasks';
 import { touchPlanPauses, type StockSource } from '@/Services/planPauses';
 import type { UsageSource } from '@/Services/quotaUsage';
 import type Encryption from '@/Services/Encryption';
@@ -907,6 +908,7 @@ export const moduleServiceControl: MaintenanceServices = {
         // Avant l'attente : les hooks agent cessent tout de suite.
         s.halted = true;
         await s.service.stop();
+        tasks.stopFeature(featureId);
     },
     async start(featureId) {
         const s = SERVICES.find((x) => x.manifest.id === featureId);

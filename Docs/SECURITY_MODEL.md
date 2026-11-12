@@ -193,6 +193,10 @@ minutes au plus, pour la page qu'une coupure en a séparée.
   déchiffré ne survit donc à la DEK de la session.
 - **L'entrée d'une commande n'est jamais retenue**, et l'échec montré aux
   autres onglets ne porte que le code et la phrase du refus, pas ses `details`.
+- **L'opération d'un service vient de l'étage ouvert.** Un service travaille
+  sans session : ce qu'il dit de son opération, le serveur le lisait déjà. Elle
+  paraît donc dans tout espace, gardé ou non, mais seulement pour un compte
+  dont le droit sur la fonctionnalité et l'élément vient d'être relu.
 
 ## Notes privées
 

@@ -53,16 +53,18 @@ export function TaskRow({ task, feature, workspaceName, onShow, onCancel, onOpen
                 <>
                     <ProgressBar value={task.value} label={task.title} />
                     <span className={styles.rowStep}>{task.step ?? 'En cours…'}</span>
-                    {task.owned && (
+                    {(task.owned || task.cancellable) && (
                         <div className={styles.rowActions}>
                             {task.cancellable && (
                                 <button type='button' className={styles.rowAction} onClick={onCancel}>
                                     Annuler
                                 </button>
                             )}
-                            <button type='button' className={styles.rowAction} onClick={onShow}>
-                                Afficher
-                            </button>
+                            {task.owned && (
+                                <button type='button' className={styles.rowAction} onClick={onShow}>
+                                    Afficher
+                                </button>
+                            )}
                         </div>
                     )}
                 </>

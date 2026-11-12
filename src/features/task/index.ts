@@ -1,4 +1,4 @@
-import { taskAttach, taskDismiss } from '@deveye/types';
+import { taskAttach, taskCancel, taskDismiss } from '@deveye/types';
 
 import { defineFeature, type FeatureDefinition } from '../_define';
 
@@ -25,5 +25,19 @@ export const taskDismissFeature: FeatureDefinition<
     handler: async (ctx, input) => ({ ids: ctx.tasks?.dismiss(input.ids) ?? [] })
 });
 
+export const taskCancelFeature: FeatureDefinition<
+    typeof taskCancel.command,
+    typeof taskCancel.input,
+    typeof taskCancel.output
+> = defineFeature({
+    ...taskCancel,
+    access: { scope: 'account' },
+    handler: async (ctx, input) => ({ accepted: (await ctx.tasks?.cancel(input.id)) ?? false })
+});
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const taskFeatures: FeatureDefinition<string, any, any>[] = [taskAttachFeature, taskDismissFeature];
+export const taskFeatures: FeatureDefinition<string, any, any>[] = [
+    taskAttachFeature,
+    taskDismissFeature,
+    taskCancelFeature
+];

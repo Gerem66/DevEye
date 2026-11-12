@@ -95,10 +95,12 @@ Un échec y est un `ErrorNote` : une panne s'y signale comme ailleurs.
 
 La zone est celle du **compte** : une opération que le serveur suit y paraît
 dans chaque onglet, sur chaque appareil. Là où elle n'a pas été lancée, elle
-est toujours détachée : sa ligne n'a ni « Afficher » ni « Annuler » (le dialogue
-et l'arrêt appartiennent à la page qui l'attend), et sa croix dit « Ne plus
-suivre » tant qu'elle tourne. Retirer une ligne la retire de tous les onglets ;
-un succès vu dans l'un est vu partout.
+est toujours détachée : sa ligne n'a pas « Afficher » (le dialogue appartient à
+la page qui l'attend), n'offre « Annuler » qu'à l'opération d'un service qui
+sait s'arrêter, et sa croix dit « Ne plus suivre » tant qu'elle tourne. Retirer une ligne la retire de tous les onglets ;
+un succès vu dans l'un est vu partout. Et un succès qui arrive pendant que la
+page montre la fonctionnalité de l'opération, dans son espace, part sans
+attendre : l'écran le dit déjà (`TasksHost`). Un échec reste.
 
 La barre passe **sous** le voile de tout dialogue ouvert, la puce avec elle. Un
 écran qui vit dans un dialogue (l'historique d'un partage) dessine donc
@@ -180,6 +182,54 @@ Une réponse plus lourde que la borne n'est pas retenue : après une coupure,
 l'opération est dite terminée, et l'écran relit sa donnée. Passé le plafond du
 compte, une commande marquée tourne sans être suivie.
 
+## Le travail d'un service
+
+Ce qu'un membre lance et qu'un service mène ensuite sans sa commande (une
+sauvegarde, un déploiement, une conversion) entre dans la même zone par
+`deps.tasks.open` :
+
+```ts
+const task = deps.tasks.open({
+    userId: run.triggered_by_user_id,
+    workspaceId: job.workspace_id,
+    itemId: job.id,
+    key: 'run',
+    title: 'Sauvegarde',
+    subject: jobName,
+    cancel: () => abort.abort()
+});
+task.progress({ done, total, step });
+// puis une seule fin :
+task.done('Sauvegarde terminée.');
+task.fail('La destination refuse la connexion.', 'conflict');
+task.cancelled();
+```
+
+- L'hôte estampille la fonctionnalité, et ne montre l'opération qu'au compte
+  nommé, dans tous ses onglets, une fois vérifié qu'il lit encore la
+  fonctionnalité et l'élément dans cet espace (`memberVerdict`). Sur un refus,
+  ou passé le plafond du compte, la poignée ne fait rien.
+- Avec une `key`, rouvrir le même espace, élément et clé pour le même compte
+  pendant que l'opération tourne rend la même : un service qui retrouve son
+  travail (une file relue, un redémarrage) rouvre sans doubler. L'id en est
+  dérivé : la ligne que les onglets disaient interrompue reprend.
+- `cancel` offre « Annuler » dans la zone, depuis n'importe quel onglet.
+  `task.cancel` relit le droit, prévient le service une seule fois, et la ligne
+  dit « Annulation… » jusqu'à `cancelled()`, qui la retire sans résultat.
+- `fail(message, code)` : la phrase est celle du service. `code` décide du
+  signalement, `internal` par défaut, `conflict` pour ce que le côté de
+  l'utilisateur explique.
+- L'arrêt du service d'une fonctionnalité (une maintenance) solde en échec ce
+  qu'il menait.
+- Un service ne lit que l'étage ouvert : ce qu'il dit d'une opération, le
+  serveur le lisait déjà. Ses opérations paraissent donc aussi dans un espace
+  personnel que le mot de passe garde.
+
+N'y entre pas ce qui tourne tout seul (une échéance, un rapprochement) :
+personne ne l'a demandé, cela appartient aux écrans de la fonctionnalité. Le
+code natif (les paquets, Docker) ouvre ses opérations par le registre lui-même
+(`tasks.openService`).
+
 ## Ce que l'écran en sait
 
 `useTasks({ feature, itemId?, key? })` rend les opérations **en cours** de la
@@ -239,7 +289,8 @@ await runTask(
 - Côté serveur, le handler rapporte par `ctx.progress`. Sans rapport, la barre
   balaie sans rien promettre.
 - Le serveur ne sait pas arrêter une commande : `cancel` ne s'offre qu'à un
-  travail qui s'arrête de lui-même.
+  travail de l'onglet qui s'arrête de lui-même. L'opération d'un service a le
+  sien ([Le travail d'un service](#le-travail-dun-service)).
 
 ## Carte du code
 
@@ -254,7 +305,7 @@ await runTask(
 | `src/Services/tasks.ts`                   | le registre : ouverture, annonce, réponse retenue, réclamation, retrait, bornes                                                                                                     |
 | `src/ws/handler.ts`                       | la liste dans la trame `session`, l'ouverture après les gardes, la réponse confiée au registre                                                                                      |
 | `src/ws/progress.ts`                      | le régulateur d'avancement, commun à une commande ordinaire et à une opération suivie                                                                                               |
-| `src/features/task/`                      | `task.attach` et `task.dismiss`                                                                                                                                                     |
+| `src/features/task/`                      | `task.attach`, `task.dismiss` et `task.cancel`                                                                                                                                      |
 | `@deveye/types`                           | `protocol/envelope.ts` (l'étiquette), `domain/task.ts` (l'instantané, les trames, la liste), `features/task.ts` (les deux commandes)                                                |
 
 Les essais et chaque état à plat sont dans la galerie de la page Tests et

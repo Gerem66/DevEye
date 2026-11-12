@@ -142,20 +142,25 @@ interface Handle {
     epoch: string | undefined;
 }
 
-type Dismisser = (instanceId: number | null, ids: readonly string[]) => void;
+/** Ce que le magasin demande au serveur d'une instance, branché par le transport. */
+export interface TaskRemote {
+    /** Retire des opérations de la zone du compte. */
+    dismiss(instanceId: number | null, ids: readonly string[]): void;
+    /** Demande son arrêt à une opération qu'un service mène. */
+    cancel(instanceId: number | null, id: string): void;
+}
 
 let records: readonly TaskRecord[] = [];
 const handles = new Map<string, Handle>();
 const listeners = new Set<() => void>();
 /** L'époque du registre de chaque instance, telle que sa dernière liste d'ouverture l'a dite. */
 const epochs = new Map<number | null, string>();
-let dismisser: Dismisser | null = null;
+let remote: TaskRemote | null = null;
 let panelOpen = false;
 let raiseSeq = 0;
 
-/** Branché par le transport : retire des opérations de la zone du compte, sur le serveur d'une instance. */
-export function setTaskDismisser(fn: Dismisser | null): void {
-    dismisser = fn;
+export function setTaskRemote(next: TaskRemote | null): void {
+    remote = next;
 }
 
 function publish(next: readonly TaskRecord[]): void {
@@ -192,7 +197,7 @@ function discard(gone: readonly TaskRecord[]): void {
         if (list) list.push(record.id);
         else byInstance.set(record.origin.instanceId, [record.id]);
     }
-    for (const [instanceId, list] of byInstance) dismisser?.(instanceId, list);
+    for (const [instanceId, list] of byInstance) remote?.dismiss(instanceId, list);
 }
 
 /**
@@ -230,7 +235,9 @@ export function stepOf(
     done: number | undefined,
     total: number | undefined
 ): string | undefined {
-    const count = total !== undefined && total > 0 ? `${done ?? 0} sur ${total}` : undefined;
+    // Sur cent, un compte est un pourcentage, et se lit mieux ainsi.
+    const count =
+        total === undefined || total <= 0 ? undefined : total === 100 ? `${done ?? 0} %` : `${done ?? 0} sur ${total}`;
     if (step && count) return `${step} : ${count}`;
     return step ?? count;
 }
@@ -455,10 +462,18 @@ export function raiseTask(id: string): void {
     patch(id, { foreground: true, raisedAt: ++raiseSeq });
 }
 
-/** Demande l'abandon : l'opération sort quand son travail rejette. */
+/**
+ * Demande l'abandon. Une opération de cette page sort quand son travail
+ * rejette ; celle qu'un service mène, quand il s'est arrêté.
+ */
 export function cancelTask(id: string): void {
     const record = find(id);
     const handle = handles.get(id);
+    if (record && record.state === 'running' && !record.owned && record.cancellable) {
+        patch(id, { cancellable: false, step: CANCELLING_STEP });
+        remote?.cancel(record.origin.instanceId, id);
+        return;
+    }
     if (!record || record.state !== 'running' || !handle?.cancel || handle.cancelRequested) return;
     handle.cancelRequested = true;
     handle.pending = null;
@@ -544,7 +559,7 @@ function followed(instanceId: number | null, snapshot: TaskSnapshot, previous: T
         error: snapshot.state === 'failed' ? failureOf(snapshot) : undefined,
         local: false,
         minimizable: false,
-        cancellable: false,
+        cancellable: running && snapshot.cancellable,
         foreground: false,
         detached: true,
         raisedAt: 0,

@@ -395,3 +395,176 @@ describe('TaskRegistry : audience et plafonds', () => {
         assert.equal(h.listed().includes(id(3)), true);
     });
 });
+
+describe('TaskRegistry : opérations d’un service', () => {
+    /** Le verdict d'accès est une promesse : lui laisser un tour. */
+    const verdict = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
+
+    function service(t: TestContext) {
+        const h = harness(t);
+        let allowed = true;
+        let cancels = 0;
+        const open = (over: { key?: string; itemId?: string; feature?: string; cancellable?: boolean } = {}) =>
+            h.registry.openService({
+                userId: 1,
+                workspaceId: 10,
+                feature: over.feature ?? 'backup',
+                title: 'Sauvegarde',
+                subject: 'Serveur web',
+                itemId: over.itemId ?? '7',
+                key: over.key,
+                cancel: over.cancellable ? () => void cancels++ : undefined,
+                allowed: () => Promise.resolve(allowed)
+            });
+        const last = () => h.updates().at(-1)?.data as TaskSnapshot | undefined;
+        return {
+            ...h,
+            open,
+            last,
+            deny: () => {
+                allowed = false;
+            },
+            cancels: () => cancels
+        };
+    }
+
+    it('ne montre rien avant le verdict d’accès, puis l’annonce à tout le compte', async (t) => {
+        const s = service(t);
+        const task = s.open();
+        task.progress({ done: 1, total: 4 });
+        assert.equal(s.pushes.length, 0);
+        assert.deepEqual(s.listed(), []);
+
+        await verdict();
+        assert.deepEqual(s.listed(), [task.id]);
+        const shown = s.last()!;
+        assert.deepEqual(
+            {
+                feature: shown.feature,
+                title: shown.title,
+                subject: shown.subject,
+                itemId: shown.itemId,
+                workspaceId: shown.workspaceId,
+                cancellable: shown.cancellable,
+                done: shown.progress?.done
+            },
+            {
+                feature: 'backup',
+                title: 'Sauvegarde',
+                subject: 'Serveur web',
+                itemId: '7',
+                workspaceId: 10,
+                cancellable: false,
+                done: 1
+            }
+        );
+        assert.equal(s.updates().at(-1)!.except, null);
+    });
+
+    it('n’existe pas pour qui ne lit pas la fonctionnalité', async (t) => {
+        const s = service(t);
+        s.deny();
+        const task = s.open();
+        task.done('Sauvegarde terminée.');
+        await verdict();
+        s.tick(1000);
+        assert.equal(s.pushes.length, 0);
+        assert.deepEqual(s.listed(), []);
+    });
+
+    it('dit la fin avec la phrase du service, et le code qui décide du signalement', async (t) => {
+        const s = service(t);
+        const fine = s.open({ itemId: '1' });
+        const broken = s.open({ itemId: '2' });
+        await verdict();
+        fine.done('Sauvegarde terminée : 3 Go.');
+        assert.deepEqual(
+            { state: s.last()!.state, done: s.last()!.done, must: s.updates().at(-1)!.must },
+            { state: 'done', done: 'Sauvegarde terminée : 3 Go.', must: true }
+        );
+        broken.fail('La destination refuse la connexion.', 'conflict');
+        broken.done('trop tard');
+        assert.deepEqual(
+            { state: s.last()!.state, failed: s.last()!.failed, error: s.last()!.error },
+            {
+                state: 'failed',
+                failed: 'La destination refuse la connexion.',
+                error: { code: 'conflict', message: 'La destination refuse la connexion.' }
+            }
+        );
+    });
+
+    it('rend la même opération au service qui retrouve son travail sous la même clé', async (t) => {
+        const s = service(t);
+        const first = s.open({ key: 'run' });
+        await verdict();
+        const again = s.open({ key: 'run' });
+        assert.equal(again.id, first.id);
+        assert.deepEqual(s.listed(), [first.id]);
+        assert.notEqual(s.open({ key: 'run', itemId: '8' }).id, first.id);
+
+        again.done();
+        assert.equal(s.last()!.state, 'done');
+        // Un nouveau passage du même travail : le résultat précédent cède la place.
+        const next = s.open({ key: 'run' });
+        assert.equal(next.id, first.id);
+        assert.deepEqual(s.removals().at(-1)?.data, { ids: [first.id] });
+        await verdict();
+        assert.equal(s.last()!.state, 'running');
+    });
+
+    it('transmet la demande d’arrêt une fois, et retire l’opération que le service dit arrêtée', async (t) => {
+        const s = service(t);
+        const task = s.open({ cancellable: true });
+        await verdict();
+        assert.equal(s.last()!.cancellable, true);
+        assert.equal(await s.registry.cancel(2, task.id), false);
+
+        assert.equal(await s.registry.cancel(1, task.id), true);
+        assert.equal(await s.registry.cancel(1, task.id), false);
+        assert.equal(s.cancels(), 1);
+        assert.deepEqual(
+            { cancellable: s.last()!.cancellable, step: s.last()!.progress?.step },
+            { cancellable: false, step: 'Annulation…' }
+        );
+        task.cancelled();
+        assert.deepEqual(s.removals().at(-1)?.data, { ids: [task.id] });
+        assert.deepEqual(s.listed(), []);
+    });
+
+    it('refuse l’arrêt à qui a perdu la fonctionnalité depuis', async (t) => {
+        const s = service(t);
+        const task = s.open({ cancellable: true });
+        await verdict();
+        s.deny();
+        assert.equal(await s.registry.cancel(1, task.id), false);
+        assert.equal(s.cancels(), 0);
+    });
+
+    it('solde en échec ce que menait un service qu’on arrête', async (t) => {
+        const s = service(t);
+        s.open({ feature: 'backup' });
+        const other = s.open({ feature: 'deploy' });
+        await verdict();
+        s.registry.stopFeature('backup');
+        const stopped = s.updates().find((p) => (p.data as TaskSnapshot).state === 'failed')!.data as TaskSnapshot;
+        assert.deepEqual(
+            { feature: stopped.feature, code: stopped.error?.code },
+            { feature: 'backup', code: 'maintenance' }
+        );
+        assert.equal(s.registry.roster(1).list.find((task) => task.id === other.id)?.state, 'running');
+    });
+
+    it('efface à sa fin l’opération qu’on a cessé de suivre', async (t) => {
+        const s = service(t);
+        const task = s.open();
+        await verdict();
+        assert.deepEqual(s.registry.dismiss(1, [task.id]), [task.id]);
+        const before = s.pushes.length;
+        task.progress({ step: 'Suite' });
+        task.done();
+        s.tick(1000);
+        assert.equal(s.pushes.length, before);
+        assert.deepEqual(s.listed(), []);
+    });
+});

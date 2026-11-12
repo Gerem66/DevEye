@@ -9,7 +9,8 @@ import { RESTART_NOTE, type ChipView, type TaskContext, type TaskRecord } from '
 import { Specimen, Variant } from '../Specimen';
 import styles from '../Gallery.module.css';
 
-const FEATURE = 'debug';
+/** Pas l'id de la page : la zone tairait le succès d'un essai dont elle croirait l'écran ouvert. */
+const FEATURE = 'gallery';
 
 /** Un travail d'essai : il avance d'un pas par quart de seconde, puis réussit ou échoue. */
 function sampleWork(seconds: number, task: TaskContext, opts: { fails?: boolean; signal?: AbortSignal } = {}) {
@@ -64,6 +65,16 @@ const BASE: TaskRecord = {
 const ROWS: readonly TaskRecord[] = [
     { ...BASE, id: 'running', value: 0.35, step: 'Libération de l’espace : 7 sur 20', cancellable: true },
     { ...BASE, id: 'followed', value: 0.6, step: 'Libération de l’espace : 12 sur 20', owned: false },
+    {
+        ...BASE,
+        id: 'service',
+        title: 'Sauvegarde',
+        subject: 'Serveur web',
+        value: undefined,
+        step: '120 Mo lus',
+        owned: false,
+        cancellable: true
+    },
     { ...BASE, id: 'done', state: 'done', note: 'Point de restauration supprimé.' },
     {
         ...BASE,
@@ -181,6 +192,20 @@ export function OperationsSpecimen({ disabled }: { disabled: boolean }) {
                     onClick={() => startFollowed('Essai suivi sans avancement', 45, { quiet: true })}
                 >
                     Suivie, muette
+                </Button>
+                <Button
+                    variant='secondary'
+                    disabled={disabled}
+                    onClick={() => launch(ws.send('debug.taskSample', { seconds: 20, background: true }))}
+                >
+                    Menée par le serveur
+                </Button>
+                <Button
+                    variant='secondary'
+                    disabled={disabled}
+                    onClick={() => launch(ws.send('debug.taskSample', { seconds: 6, background: true, fail: true }))}
+                >
+                    Menée par le serveur, qui échoue
                 </Button>
             </Variant>
             <Variant label='TaskProgress, en place' wide fill>

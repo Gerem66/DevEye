@@ -802,6 +802,9 @@ Par service (`FeatureServiceDeps`, `_sdk/service.ts`) :
 - `quotaFor(ws)`, `pauses` (`isPaused`, `paused`) ;
 - `live.changed(ws, topics?)`, `live.publish(ws, event, payload)`,
   `live.accountChanged(userId)`, `live.pendingChanged()` ;
+- `tasks.open({ userId, workspaceId, title, subject?, itemId?, key?, cancel? })` :
+  le travail qu'un membre a lancé et que le service mène, montré dans la zone
+  des opérations de ce compte ([TASKS.md](./TASKS.md)) ;
 - `keys`, `objects(localDir)`, `secrecy.redeem(ticket)`, `origins`,
   `providers` ;
 - `audit` (source système, `userId` facultatif), `createTicker({ intervalMs,

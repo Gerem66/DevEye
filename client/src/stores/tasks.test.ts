@@ -25,7 +25,7 @@ import {
     resetTasks,
     RESTART_NOTE,
     setPanelOpen,
-    setTaskDismisser,
+    setTaskRemote,
     SILENT_NOTE,
     startTask,
     stepOf,
@@ -78,13 +78,18 @@ const coded = (code: string): Error => Object.assign(new Error(code), { code });
 /** Le temps qu'un avancement retenu soit publié. */
 const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, PROGRESS_GAP_MS + 30));
 
-/** Ce que le magasin demande au serveur de retirer, par instance. */
+/** Ce que le magasin demande au serveur : retirer, par instance, et arrêter. */
 let dismissed: { instanceId: number | null; ids: readonly string[] }[] = [];
+let cancelled: string[] = [];
 
 beforeEach(() => {
     resetTasks();
     dismissed = [];
-    setTaskDismisser((instanceId, ids) => dismissed.push({ instanceId, ids }));
+    cancelled = [];
+    setTaskRemote({
+        dismiss: (instanceId, ids) => void dismissed.push({ instanceId, ids }),
+        cancel: (_instanceId, id) => void cancelled.push(id)
+    });
 });
 
 /** L'instantané qu'un serveur pousse d'une opération lancée ailleurs. */
@@ -101,6 +106,7 @@ function snapshot(over: Partial<TaskSnapshot> = {}): TaskSnapshot {
         startedAt: 1_000,
         endedAt: null,
         progress: null,
+        cancellable: false,
         done: null,
         failed: null,
         error: null,
@@ -491,6 +497,21 @@ describe('opérations suivies par le serveur', () => {
         assert.deepEqual(dismissed, [{ instanceId: null, ids: ['remote-0001'] }]);
     });
 
+    it('demande au serveur l’arrêt d’une opération qu’un service sait arrêter', () => {
+        applyTaskUpdate(null, snapshot({ cancellable: true }));
+        assert.equal(getTaskRecords()[0].cancellable, true);
+        cancelTask('remote-0001');
+        cancelTask('remote-0001');
+        assert.deepEqual(cancelled, ['remote-0001']);
+        assert.deepEqual(
+            { cancellable: getTaskRecords()[0].cancellable, step: getTaskRecords()[0].step },
+            { cancellable: false, step: 'Annulation…' }
+        );
+        // Le serveur a refusé : sa trame suivante rend à la ligne son bouton.
+        applyTaskUpdate(null, snapshot({ cancellable: true, progress: { step: 'Copie' } }));
+        assert.equal(getTaskRecords()[0].cancellable, true);
+    });
+
     it('garde en cours l’opération que cette page attend, qu’on la retire ailleurs ou non', () => {
         const task = launch({ dialog: false });
         dismissTask(task.id);
@@ -682,5 +703,7 @@ describe('lectures', () => {
         assert.equal(stepOf('Copie', undefined, undefined), 'Copie');
         assert.equal(stepOf(undefined, 2, 5), '2 sur 5');
         assert.equal(stepOf(undefined, undefined, 0), undefined);
+        assert.equal(stepOf(undefined, 35, 100), '35 %');
+        assert.equal(stepOf('Transcodage', 35, 100), 'Transcodage : 35 %');
     });
 });

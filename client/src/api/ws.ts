@@ -34,13 +34,7 @@ import { notifyQuotaExceeded } from '@/stores/quotaPrompt';
 import { setAdmission, type Admission } from '@/stores/admission';
 import { forgetMaintenance, setMaintenance } from '@/stores/maintenance';
 import { ensureStepUp } from '@/stores/stepUp';
-import {
-    applyTaskRemoved,
-    applyTaskRoster,
-    applyTaskUpdate,
-    forgetInstanceTasks,
-    setTaskDismisser
-} from '@/stores/tasks';
+import { applyTaskRemoved, applyTaskRoster, applyTaskUpdate, forgetInstanceTasks, setTaskRemote } from '@/stores/tasks';
 import { randomUuid } from '@/randomUuid';
 import { reloadIfOutdated } from './version';
 
@@ -875,10 +869,19 @@ class WsRouter {
 export const ws = new WsRouter();
 
 // Sans attendre de réponse : la zone a déjà retiré ces lignes, et un serveur
-// qu'on ne joint pas les laissera périmer seul.
-setTaskDismisser((instanceId, ids) => {
-    const conn = ws.connectionFor(instanceId);
-    for (let from = 0; from < ids.length; from += TASK_BATCH) {
-        void conn?.send('task.dismiss', { ids: ids.slice(from, from + TASK_BATCH) }).catch(() => undefined);
+// qu'on ne joint pas les laissera périmer seul. Une annulation refusée se lit
+// à la trame suivante, qui rend à la ligne son état.
+setTaskRemote({
+    dismiss(instanceId, ids) {
+        const conn = ws.connectionFor(instanceId);
+        for (let from = 0; from < ids.length; from += TASK_BATCH) {
+            void conn?.send('task.dismiss', { ids: ids.slice(from, from + TASK_BATCH) }).catch(() => undefined);
+        }
+    },
+    cancel(instanceId, id) {
+        void ws
+            .connectionFor(instanceId)
+            ?.send('task.cancel', { id })
+            .catch(() => undefined);
     }
 });

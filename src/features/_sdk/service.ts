@@ -31,6 +31,7 @@ import type { AuditLog } from '@/Services/AuditLog';
 import type { LiveHub } from '@/live/hub';
 import { agentsFacade, createFacade, createTelemetry, toSdkDevice } from './facade';
 import { deviceVerdict, memberVerdict } from '../_access';
+import { tasks } from '@/Services/tasks';
 import { sdkFleetDomains } from './domains';
 import { createFeatureStore } from './store';
 import { sdkHub } from './host';
@@ -215,6 +216,24 @@ export function createServiceDeps(
         geo: {
             country: (ip) => (gateGeo(), geoip.country(ip)),
             attribution: GEOIP_ATTRIBUTION
+        },
+        tasks: {
+            open: (opening) => {
+                const itemId = opening.itemId === undefined ? undefined : String(opening.itemId);
+                return tasks.openService({
+                    userId: opening.userId,
+                    workspaceId: opening.workspaceId,
+                    feature: manifest.id,
+                    title: opening.title,
+                    subject: opening.subject,
+                    itemId,
+                    key: opening.key,
+                    cancel: opening.cancel,
+                    // Relu à chaque question : un droit retiré depuis l'ouverture ferme aussi l'annulation.
+                    allowed: async () =>
+                        (await memberVerdict(host.db, opening.userId, opening.workspaceId, manifest.id, { itemId })).ok
+                });
+            }
         },
         live: {
             // Le sujet du module (son id), ou ceux que le service nomme : la même

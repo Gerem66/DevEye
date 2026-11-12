@@ -1,9 +1,11 @@
 import type { WebSocket } from '@fastify/websocket';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import {
     ok,
     REQUEST_PROGRESS_EVENT,
     TASK_REMOVED_EVENT,
+    TASK_TEXT_MAX,
+    TASK_TITLE_MAX,
     TASK_UPDATE_EVENT,
     type CommandTask,
     type ErrorCode,
@@ -36,6 +38,9 @@ const SWEEP_MS = 60_000;
 const REPLAYABLE: ReadonlySet<ErrorCode> = new Set<ErrorCode>(['stepup_required', 'locked']);
 
 const SOCKET_OPEN = 1;
+
+const CANCELLING_STEP = 'Annulation…';
+const SERVICE_STOPPED = 'Le service a été arrêté pendant l’opération.';
 
 /** Ce que le registre pousse aux sockets de navigateur (`live/hub.ts`). */
 export interface TaskLive {
@@ -85,6 +90,36 @@ export interface TaskTransport {
     attach(claims: readonly TaskClaim[]): string[];
     /** Rend les opérations retirées. */
     dismiss(ids: readonly string[]): string[];
+    /** Demande son arrêt à une opération qu'un service sait arrêter ; faux quand elle ne le peut pas. */
+    cancel(id: string): Promise<boolean>;
+}
+
+/** Le travail qu'un service mène pour un compte, sans commande qui l'attende. */
+export interface ServiceTaskOpening {
+    userId: number;
+    workspaceId: number;
+    feature: string;
+    title: string;
+    subject?: string;
+    itemId?: string;
+    /** Avec une clé, rouvrir le même travail pendant qu'il tourne rend la même opération. */
+    key?: string;
+    cancel?: () => void | Promise<void>;
+    /** Le compte lit-il cette fonctionnalité dans cet espace ? Rien n'est montré avant un oui. */
+    allowed(): Promise<boolean>;
+}
+
+export interface ServiceTask {
+    readonly id: string;
+    progress(update: CommandProgress): void;
+    done(note?: string): void;
+    fail(message: string, code?: ErrorCode): void;
+    cancelled(): void;
+}
+
+interface ServiceSide {
+    allowed(): Promise<boolean>;
+    cancel?: () => void | Promise<void>;
 }
 
 interface Entry {
@@ -109,17 +144,21 @@ interface Entry {
     reply: { raw: string; bytes: number; until: number } | null;
     /** Échéance de l'instantané, une fois l'opération finie. */
     until: number;
+    /** Menée par un service : aucune socket n'en attend la réponse. */
+    service: ServiceSide | null;
 }
 
 /**
  * Les opérations longues des comptes : les commandes qu'un client a marquées
- * (`task` de l'enveloppe). Le registre garde leur état pour les autres onglets
- * du compte et leur réponse pour la page qui l'attend, qu'une coupure ou un
- * rechargement en a séparée. Une opération n'est jamais montrée qu'à son
- * compte. Tout est en mémoire, le processus étant seul : un redémarrage oublie
- * tout, et `epoch` le dit aux clients.
+ * (`task` de l'enveloppe), et le travail qu'un service mène pour un membre. Le
+ * registre garde leur état pour les onglets du compte, et la réponse d'une
+ * commande pour la page qui l'attend, qu'une coupure ou un rechargement en a
+ * séparée. Une opération n'est jamais montrée qu'à son compte. Tout est en
+ * mémoire, le processus étant seul : un redémarrage oublie tout, et `epoch` le
+ * dit aux clients.
  */
 export class TaskRegistry {
+    /** Sans hub (un handler éprouvé seul), le registre suit sans rien pousser. */
     private deps: Deps | null = null;
     private epoch = randomUUID();
     private readonly byUser = new Map<number, Map<string, Entry>>();
@@ -153,7 +192,7 @@ export class TaskRegistry {
             if (previous.snapshot.state === 'running' || previous.sessionId !== o.sessionId) return null;
             this.forget(previous);
         }
-        let mine = this.byUser.get(o.userId);
+        const mine = this.byUser.get(o.userId);
         if (mine && mine.size >= PER_USER_MAX && !this.evictOldest(mine)) return null;
         if (this.total >= TOTAL_MAX) {
             this.sweep();
@@ -176,6 +215,7 @@ export class TaskRegistry {
                 startedAt: Date.now(),
                 endedAt: null,
                 progress: null,
+                cancellable: false,
                 done: o.tag.done ?? null,
                 failed: o.tag.failed ?? null,
                 error: null
@@ -187,21 +227,121 @@ export class TaskRegistry {
             announceTimer: null,
             settled: false,
             reply: null,
-            until: 0
+            until: 0,
+            service: null
         };
         // Le minuteur survit à la fin de l'opération : un résultat éclair que sa
         // page retire aussitôt n'est jamais annoncé, un résultat qui reste l'est.
         if (!entry.hidden) this.announceSoon(entry);
 
-        mine = this.byUser.get(o.userId);
-        if (!mine) this.byUser.set(o.userId, (mine = new Map()));
-        mine.set(entry.snapshot.id, entry);
-        this.total += 1;
-
+        this.store(entry);
         return {
             report: (update) => entry.gate.report(update),
             settle: (reply) => this.settle(entry, reply)
         };
+    }
+
+    /**
+     * Ouvre le travail qu'un service mène pour un compte. Rien n'en est montré
+     * avant que `allowed` ait dit oui ; sur un non, ou passé un plafond, la
+     * poignée rendue ne fait rien.
+     */
+    openService(o: ServiceTaskOpening): ServiceTask {
+        // Un id dérivé de ce que le travail vise : le service qui le retrouve
+        // après un redémarrage rouvre la même opération, et les onglets qui la
+        // croyaient interrompue la voient reprendre.
+        const id =
+            o.key === undefined
+                ? randomUUID()
+                : `svc-${createHash('sha256')
+                      .update([o.feature, o.workspaceId, o.itemId ?? '', o.key].join('\0'))
+                      .digest('hex')
+                      .slice(0, 32)}`;
+        const mine = this.byUser.get(o.userId);
+        const previous = mine?.get(id);
+        if (previous) {
+            if (!previous.settled && previous.service) {
+                previous.service = { allowed: o.allowed, cancel: o.cancel };
+                this.setCancellable(previous, o.cancel !== undefined);
+                return this.serviceHandle(previous);
+            }
+            if (!previous.settled) return inertTask(id);
+            this.forget(previous);
+        }
+        if (mine && mine.size >= PER_USER_MAX && !this.evictOldest(mine)) return inertTask(id);
+        if (this.total >= TOTAL_MAX) {
+            this.sweep();
+            if (this.total >= TOTAL_MAX) return inertTask(id);
+        }
+
+        const entry: Entry = {
+            userId: o.userId,
+            sessionId: '',
+            requestId: '',
+            snapshot: {
+                id,
+                state: 'running',
+                title: o.title.trim().slice(0, TASK_TITLE_MAX),
+                subject: o.subject?.trim().slice(0, TASK_TEXT_MAX) || null,
+                feature: o.feature,
+                itemId: bounded(o.itemId),
+                key: bounded(o.key),
+                workspaceId: o.workspaceId,
+                startedAt: Date.now(),
+                endedAt: null,
+                progress: null,
+                cancellable: o.cancel !== undefined,
+                done: null,
+                failed: null,
+                error: null
+            },
+            gate: progressGate((update) => this.progressed(entry, update)),
+            socket: null,
+            announced: false,
+            hidden: false,
+            announceTimer: null,
+            settled: false,
+            reply: null,
+            until: 0,
+            service: { allowed: o.allowed, cancel: o.cancel }
+        };
+        this.store(entry);
+        void o.allowed().then(
+            (allowed) => this.admit(entry, allowed),
+            () => this.admit(entry, false)
+        );
+        return this.serviceHandle(entry);
+    }
+
+    /** Le service d'une fonctionnalité s'arrête : ce qu'il menait ne finira pas. */
+    stopFeature(feature: string): void {
+        for (const mine of [...this.byUser.values()]) {
+            for (const entry of [...mine.values()]) {
+                if (entry.service && entry.snapshot.feature === feature) {
+                    this.end(entry, 'failed', SERVICE_STOPPED, 'maintenance');
+                }
+            }
+        }
+    }
+
+    /**
+     * La personne demande l'arrêt d'une opération qu'un service a dit savoir
+     * arrêter. Le droit est relu : il a pu tomber depuis l'ouverture.
+     */
+    async cancel(userId: number, id: string): Promise<boolean> {
+        const entry = this.byUser.get(userId)?.get(id);
+        const side = entry?.service;
+        if (!entry || !side?.cancel || entry.settled || !entry.announced || entry.hidden) return false;
+        if (!(await side.allowed())) return false;
+        const cancel = side.cancel;
+        if (entry.settled || !cancel) return false;
+        // Une demande suffit : le service retire l'opération quand il s'est arrêté.
+        side.cancel = undefined;
+        entry.snapshot.cancellable = false;
+        entry.snapshot.progress = { ...entry.snapshot.progress, step: CANCELLING_STEP };
+        this.publish(entry);
+        await cancel();
+        return true;
     }
 
     /** Ce que la zone d'un compte montre à l'ouverture d'une socket. */
@@ -216,7 +356,8 @@ export class TaskRegistry {
     transport(socket: WebSocket, userId: number, sessionId: string): TaskTransport {
         return {
             attach: (claims) => this.attach(socket, userId, sessionId, claims),
-            dismiss: (ids) => this.dismiss(userId, ids)
+            dismiss: (ids) => this.dismiss(userId, ids),
+            cancel: (id) => this.cancel(userId, id)
         };
     }
 
@@ -322,6 +463,67 @@ export class TaskRegistry {
         entry.announceTimer.unref();
     }
 
+    private store(entry: Entry): void {
+        let mine = this.byUser.get(entry.userId);
+        if (!mine) this.byUser.set(entry.userId, (mine = new Map()));
+        mine.set(entry.snapshot.id, entry);
+        this.total += 1;
+    }
+
+    /** Le verdict d'accès d'une opération de service : elle paraît, ou n'aura jamais existé. */
+    private admit(entry: Entry, allowed: boolean): void {
+        if (this.byUser.get(entry.userId)?.get(entry.snapshot.id) !== entry) return;
+        if (!allowed) {
+            entry.settled = true;
+            this.forget(entry);
+            return;
+        }
+        entry.announced = true;
+        this.publish(entry, entry.settled);
+    }
+
+    private serviceHandle(entry: Entry): ServiceTask {
+        return {
+            id: entry.snapshot.id,
+            progress: (update) => entry.gate.report(update),
+            done: (note) => this.end(entry, 'done', note),
+            fail: (message, code = 'internal') => this.end(entry, 'failed', message, code),
+            cancelled: () => {
+                if (entry.settled) return;
+                entry.settled = true;
+                this.forget(entry);
+            }
+        };
+    }
+
+    private setCancellable(entry: Entry, cancellable: boolean): void {
+        if (entry.snapshot.cancellable === cancellable) return;
+        entry.snapshot.cancellable = cancellable;
+        this.publish(entry);
+    }
+
+    private end(entry: Entry, state: 'done' | 'failed', text: string | undefined, code: ErrorCode = 'internal'): void {
+        if (entry.settled) return;
+        entry.settled = true;
+        entry.gate.close();
+        if (entry.hidden) {
+            this.forget(entry);
+            return;
+        }
+        const now = Date.now();
+        const sentence = text?.trim().slice(0, TASK_TEXT_MAX) || null;
+        entry.snapshot.state = state;
+        entry.snapshot.endedAt = now;
+        entry.snapshot.cancellable = false;
+        if (state === 'done') entry.snapshot.done = sentence;
+        else {
+            entry.snapshot.failed = sentence;
+            entry.snapshot.error = sentence === null ? null : { code, message: sentence };
+        }
+        entry.until = now + FINISHED_TTL_MS;
+        this.publish(entry, true);
+    }
+
     private progressed(entry: Entry, update: CommandProgress): void {
         entry.snapshot.progress = update;
         const frame: ServerMessage = {
@@ -338,12 +540,12 @@ export class TaskRegistry {
      */
     private publish(entry: Entry, must = false): void {
         if (!entry.announced || entry.hidden) return;
-        this.need().live.toUser(entry.userId, TASK_UPDATE_EVENT, entry.snapshot, { except: entry.socket, must });
+        this.deps?.live.toUser(entry.userId, TASK_UPDATE_EVENT, entry.snapshot, { except: entry.socket, must });
     }
 
     private announceRemoved(entry: Entry): void {
         if (!entry.announced || entry.hidden) return;
-        this.need().live.toUser(entry.userId, TASK_REMOVED_EVENT, { ids: [entry.snapshot.id] }, { must: true });
+        this.deps?.live.toUser(entry.userId, TASK_REMOVED_EVENT, { ids: [entry.snapshot.id] }, { must: true });
     }
 
     /** Une réponse trop lourde n'est pas retenue ; les plus proches de leur échéance cèdent la place. */
@@ -391,11 +593,16 @@ export class TaskRegistry {
             }
         }
     }
+}
 
-    private need(): Deps {
-        if (!this.deps) throw new Error('tasks : init() manquant au boot');
-        return this.deps;
-    }
+/** Un identifiant que l'instantané sait porter, ou rien. */
+function bounded(value: string | undefined): string | null {
+    return value !== undefined && value !== '' && value.length <= 64 ? value : null;
+}
+
+function inertTask(id: string): ServiceTask {
+    const nothing = (): void => undefined;
+    return { id, progress: nothing, done: nothing, fail: nothing, cancelled: nothing };
 }
 
 function clearAnnounce(entry: Entry): void {
