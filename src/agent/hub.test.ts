@@ -3,6 +3,8 @@ import { describe, it } from 'node:test';
 
 import type { WebSocket } from '@fastify/websocket';
 
+import type { ServiceTask } from '@/Services/tasks';
+
 import { MonitorHub } from './hub';
 
 /** Ce qu'une socket d'agent reçoit, relu en clair ; le reste est inerte. */
@@ -312,5 +314,53 @@ describe('MonitorHub : agent en pause', () => {
         hub.agentOffline(DEVICE, working.socket);
         assert.ok(!hub.isOnline(DEVICE) && hub.isPaused(DEVICE));
         assert.equal(hub.disconnectAgent(DEVICE), true, 'révoquer coupe aussi la session de contrôle');
+    });
+});
+
+describe('MonitorHub : l’opération que suit un verrou', () => {
+    /** La poignée d'une opération de la zone, réduite à ce qu'on lui a dit. */
+    function task() {
+        const said: unknown[] = [];
+        const handle: ServiceTask = {
+            id: 'task-1',
+            progress: (update) => void said.push(update),
+            done: (note) => void said.push({ done: note }),
+            fail: (message, code) => void said.push({ fail: message, code }),
+            cancelled: () => void said.push('cancelled')
+        };
+        return { handle, said };
+    }
+
+    it('nourrit et solde l’opération d’une mise à jour de paquets', () => {
+        const hub = new MonitorHub();
+        const { handle, said } = task();
+        hub.beginUpgrade(DEVICE, 'apt');
+        hub.followUpgrade(DEVICE, 'apt', handle);
+
+        hub.publishPackageProgress({ deviceId: DEVICE, manager: 'apt', line: 'Unpacking curl', percent: 40.4 });
+        hub.publishPackageProgress({ deviceId: DEVICE, manager: 'dnf', line: 'autre outil' });
+        hub.publishPackageDone({ deviceId: DEVICE, manager: 'apt', ok: true, rebootRequired: true });
+        hub.publishPackageDone({ deviceId: DEVICE, manager: 'apt', ok: false, error: 'tard' });
+
+        assert.deepEqual(said, [
+            { step: 'Unpacking curl', done: 40, total: 100 },
+            { done: 'Mise à jour terminée : un redémarrage est demandé.' }
+        ]);
+    });
+
+    it('dit l’échec d’une machine qui s’en va au milieu d’une action longue', () => {
+        const hub = new MonitorHub();
+        const { handle, said } = task();
+        hub.beginDockerOp(DEVICE, 'op-9', 'pruneImages');
+        hub.followDockerOp(DEVICE, 'op-9', handle);
+
+        hub.publishDockerProgress({ deviceId: DEVICE, opId: 'op-9', line: 'Deleted: sha256:abc' });
+        hub.failRunningDockerOp(DEVICE, 'L’agent s’est déconnecté.');
+
+        assert.deepEqual(said, [
+            { step: 'Deleted: sha256:abc' },
+            { fail: 'L’agent s’est déconnecté.', code: 'conflict' }
+        ]);
+        assert.equal(hub.runningDockerOp(DEVICE), null);
     });
 });

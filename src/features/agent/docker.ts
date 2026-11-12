@@ -9,6 +9,19 @@ import {
 
 import { authorizeReachableDevice } from '@/agent/authorize';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
+import { openDeviceTask } from './deviceTask';
+
+/** Ce que la zone des opérations dit d'une action longue. */
+const LONG_ACTION_TITLE: Partial<Record<DockerAction, string>> = {
+    pull: 'Récupération de l’image',
+    recreate: 'Recréation du conteneur',
+    composeDeploy: 'Déploiement du service',
+    pruneContainers: 'Nettoyage des conteneurs',
+    pruneImages: 'Nettoyage des images',
+    pruneVolumes: 'Nettoyage des volumes',
+    pruneNetworks: 'Nettoyage des réseaux',
+    pruneBuildCache: 'Nettoyage du cache de construction'
+};
 
 /**
  * Le transport des ordres conteneurs. Une seule permission, `docker`, comme
@@ -92,6 +105,17 @@ export const agentDockerActionFeature: FeatureDefinition<
         if (!monitor.requestDockerAction(row.id, { ...input, target })) {
             if (long) monitor.endDockerOp(row.id, input.opId);
             throw new FeatureError('conflict', 'Agent hors ligne');
+        }
+        if (long) {
+            monitor.followDockerOp(
+                row.id,
+                input.opId,
+                openDeviceTask(ctx, row, {
+                    key: `docker:${input.opId}`,
+                    title: LONG_ACTION_TITLE[input.action] ?? 'Action sur les conteneurs',
+                    detail: target ?? 'tout le moteur'
+                })
+            );
         }
 
         ctx.audit({

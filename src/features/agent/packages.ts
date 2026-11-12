@@ -2,6 +2,7 @@ import { agentListPackages, agentUpgradePackages } from '@deveye/types';
 
 import { authorizeReachableDevice } from '@/agent/authorize';
 import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
+import { openDeviceTask } from './deviceTask';
 
 /**
  * Ask the agent for its update tools and their counts. They stream back
@@ -50,6 +51,15 @@ export const agentUpgradePackagesFeature: FeatureDefinition<
         // Annoncé sans attendre la première ligne de l'outil : les autres écrans
         // doivent griser le bouton dès maintenant.
         monitor.publishPackageStarted({ deviceId: row.id, manager: input.manager });
+        monitor.followUpgrade(
+            row.id,
+            input.manager,
+            openDeviceTask(ctx, row, {
+                key: `upgrade:${input.manager}`,
+                title: 'Mise à jour des paquets',
+                detail: input.manager
+            })
+        );
         ctx.audit({
             action: 'agent.upgradePackages',
             level: 'warning',

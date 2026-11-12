@@ -1,4 +1,5 @@
 import type { WebSocket } from '@fastify/websocket';
+import type { ServiceTask } from '@/Services/tasks';
 import {
     AGENT_COLLECT,
     AGENT_CONFIG,
@@ -278,6 +279,11 @@ export class MonitorHub {
      */
     private readonly dockerOps = new Map<string, { opId: string; action: DockerAction }>();
     /**
+     * L'opération que suit la zone de qui a pris un verrou, par verrou : les
+     * lignes et l'issue que l'agent rapporte la nourrissent puis la soldent.
+     */
+    private readonly lockTasks = new Map<string, ServiceTask>();
+    /**
      * Sessions de terminal ouvertes, par identifiant de session : l'appareil et
      * la socket qui l'a ouverte. Un shell distant n'appartient qu'à qui l'a
      * ouvert : la sortie ne va qu'à lui, la saisie ne vient que de lui, et sa
@@ -528,6 +534,23 @@ export class MonitorHub {
         return true;
     }
 
+    /** Confie au verrou d'une mise à jour l'opération de qui l'a lancée. */
+    followUpgrade(deviceId: string, manager: PackageManagerId, task: ServiceTask): void {
+        this.lockTasks.set(`pkg:${deviceId}:${manager}`, task);
+    }
+
+    /** Confie au verrou d'une action Docker longue l'opération de qui l'a lancée. */
+    followDockerOp(deviceId: string, opId: string, task: ServiceTask): void {
+        this.lockTasks.set(`docker:${deviceId}:${opId}`, task);
+    }
+
+    private settleLockTask(key: string, ok: boolean, done: string, error: string): void {
+        const task = this.lockTasks.get(key);
+        this.lockTasks.delete(key);
+        if (ok) task?.done(done);
+        else task?.fail(error, 'conflict');
+    }
+
     /** Relâche le verrou (fin de la commande, ou échec de son envoi). */
     endUpgrade(deviceId: string, manager: PackageManagerId): void {
         const set = this.upgrades.get(deviceId);
@@ -668,6 +691,7 @@ export class MonitorHub {
 
     /** Fan out one output line of a running action to a device's subscribers. */
     publishDockerProgress(payload: DeviceDockerProgressPush): void {
+        this.lockTasks.get(`docker:${payload.deviceId}:${payload.opId}`)?.progress({ step: payload.line });
         const waiter = this.dockerOpWaiters.get(payload.opId);
         if (waiter?.deviceId === payload.deviceId) waiter.onLine?.(payload.line);
         this.publishToSubscribers(payload.deviceId, DEVICE_DOCKER_PROGRESS_EVENT, payload);
@@ -676,6 +700,12 @@ export class MonitorHub {
     /** Fan out an action's outcome, releasing its lock on the way. */
     publishDockerDone(payload: DeviceDockerDonePush): void {
         this.endDockerOp(payload.deviceId, payload.opId);
+        this.settleLockTask(
+            `docker:${payload.deviceId}:${payload.opId}`,
+            payload.ok,
+            'Action terminée.',
+            payload.error ?? 'L’action a échoué sur la machine.'
+        );
         const waiter = this.dockerOpWaiters.get(payload.opId);
         if (waiter?.deviceId === payload.deviceId) {
             this.dockerOpWaiters.delete(payload.opId);
@@ -1202,11 +1232,21 @@ export class MonitorHub {
 
     /** Fan out one live upgrade-progress line to the device's subscribers. */
     publishPackageProgress(payload: PackageProgressPush): void {
+        this.lockTasks.get(`pkg:${payload.deviceId}:${payload.manager}`)?.progress({
+            step: payload.line,
+            ...(typeof payload.percent === 'number' ? { done: Math.round(payload.percent), total: 100 } : {})
+        });
         this.publishToSubscribers(payload.deviceId, PACKAGE_PROGRESS_EVENT, payload);
     }
 
     /** Fan out an upgrade completion to the device's subscribers. */
     publishPackageDone(payload: PackageDonePush): void {
+        this.settleLockTask(
+            `pkg:${payload.deviceId}:${payload.manager}`,
+            payload.ok,
+            payload.rebootRequired ? 'Mise à jour terminée : un redémarrage est demandé.' : 'Mise à jour terminée.',
+            payload.error ?? 'La mise à jour a échoué sur la machine.'
+        );
         this.publishToSubscribers(payload.deviceId, PACKAGE_DONE_EVENT, payload);
     }
 
@@ -1405,6 +1445,8 @@ export interface MonitorTransport {
     beginUpgrade(deviceId: string, manager: PackageManagerId): boolean;
     /** Relâche le verrou (échec de l'envoi ; la fin normale passe par `pkg.done`). */
     endUpgrade(deviceId: string, manager: PackageManagerId): void;
+    /** Confie au verrou l'opération de la zone de qui a lancé la mise à jour. */
+    followUpgrade(deviceId: string, manager: PackageManagerId, task: ServiceTask): void;
     /** Annonce aux abonnés qu'une mise à jour vient d'être acceptée. */
     publishPackageStarted(payload: PackageStartedPush): void;
     /** Ask the device's agent for its container inventory; false if offline. */
@@ -1419,6 +1461,8 @@ export interface MonitorTransport {
     beginDockerOp(deviceId: string, opId: string, action: DockerAction): boolean;
     /** Relâche le verrou (échec de l'envoi ; la fin normale passe par `docker.done`). */
     endDockerOp(deviceId: string, opId: string): void;
+    /** Confie au verrou l'opération de la zone de qui a lancé l'action. */
+    followDockerOp(deviceId: string, opId: string, task: ServiceTask): void;
     /** Ask the device's agent to run a system power action; false if offline. */
     requestPower(deviceId: string, payload: AgentPowerPayload): boolean;
     /** Ask the device's agent to stop/restart its own process; false if offline. */
@@ -1474,6 +1518,7 @@ export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): Moni
         requestPkgUpgrade: (deviceId, payload) => hub.requestPkgUpgrade(deviceId, payload),
         beginUpgrade: (deviceId, manager) => hub.beginUpgrade(deviceId, manager),
         endUpgrade: (deviceId, manager) => hub.endUpgrade(deviceId, manager),
+        followUpgrade: (deviceId, manager, task) => hub.followUpgrade(deviceId, manager, task),
         publishPackageStarted: (payload) => hub.publishPackageStarted(payload),
         requestDockerInventory: (deviceId) => hub.requestDockerInventory(deviceId),
         requestDockerStats: (deviceId) => hub.requestDockerStats(deviceId),
@@ -1481,6 +1526,7 @@ export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): Moni
         runningDockerOp: (deviceId) => hub.runningDockerOp(deviceId),
         beginDockerOp: (deviceId, opId, action) => hub.beginDockerOp(deviceId, opId, action),
         endDockerOp: (deviceId, opId) => hub.endDockerOp(deviceId, opId),
+        followDockerOp: (deviceId, opId, task) => hub.followDockerOp(deviceId, opId, task),
         requestPower: (deviceId, payload) => hub.requestPower(deviceId, payload),
         requestLifecycle: (deviceId, payload) => hub.requestLifecycle(deviceId, payload),
         requestLogSources: (deviceId) => hub.requestLogSources(deviceId),
