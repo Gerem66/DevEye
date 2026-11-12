@@ -228,7 +228,8 @@ async function triggerOnMachine(
         metadata: { targetId: target.id, deviceId: target.device_id, service: target.external_id }
     });
 
-    if (!startAgentDeploy({ target, deploymentId: row.id, service })) {
+    const launcher = { userId: ctx.userId, workspaceId: ctx.workspaceId };
+    if (!startAgentDeploy({ target, deploymentId: row.id, service, launcher })) {
         const reason = 'Le suivi des déploiements n’est pas démarré sur ce serveur.';
         await ctx.repo.updateDeployment(row.id, {
             externalId: row.external_id,

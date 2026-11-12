@@ -193,6 +193,8 @@ export interface AgentJob {
     target: DeployTargetRow;
     deploymentId: number;
     service: ComposeService;
+    /** Qui l'a déclenché, et depuis quel espace : sa zone des opérations le suit là. */
+    launcher?: { userId: number; workspaceId: number };
 }
 
 interface AgentRun {
@@ -919,27 +921,49 @@ export class DeploySync {
         const name = (await readJson<Partial<StoredTarget>>(cipher, target.content))?.name ?? target.external_id;
         const run: AgentRun = { job, name, lines: [], chars: 0, noticing: Promise.resolve(), queued: false };
         this.agentRuns.set(deploymentId, run);
+        const task = job.launcher
+            ? this.deps.tasks.open({
+                  ...job.launcher,
+                  itemId: target.id,
+                  key: `deployment:${deploymentId}`,
+                  title: 'Déploiement',
+                  subject: name
+              })
+            : null;
 
-        await this.setAgentStatus(job, { status: 'running', finishedAt: null });
-        void this.refreshAgentNotice(run);
+        let failure: string | undefined = 'Le suivi du déploiement a échoué.';
+        try {
+            await this.setAgentStatus(job, { status: 'running', finishedAt: null });
+            void this.refreshAgentNotice(run);
 
-        const result = target.device_id
-            ? await this.deps.agents.dockerRun(
-                  target.device_id,
-                  { engine: service.engine, action: 'composeDeploy', target: composeTargetOf(service) },
-                  { onLine: (line) => keepLine(run, line) }
-              )
-            : { ok: false, error: 'Cette cible ne désigne plus de machine.' };
+            const result = target.device_id
+                ? await this.deps.agents.dockerRun(
+                      target.device_id,
+                      { engine: service.engine, action: 'composeDeploy', target: composeTargetOf(service) },
+                      {
+                          onLine: (line) => {
+                              keepLine(run, line);
+                              task?.progress({ step: line });
+                          }
+                      }
+                  )
+                : { ok: false, error: 'Cette cible ne désigne plus de machine.' };
+            failure = result.ok ? undefined : (result.error ?? 'Le déploiement a échoué sur la machine.');
 
-        // Le message en cours d'écriture d'abord : il range ses identifiants
-        // dans le blob que le verdict va compléter.
-        await run.noticing;
-        await this.setAgentStatus(job, {
-            status: result.ok ? 'success' : 'failed',
-            finishedAt: Math.floor(Date.now() / 1000),
-            error: result.ok ? undefined : (result.error ?? 'Le déploiement a échoué sur la machine.'),
-            log: run.lines.join('\n')
-        });
+            // Le message en cours d'écriture d'abord : il range ses identifiants
+            // dans le blob que le verdict va compléter.
+            await run.noticing;
+            await this.setAgentStatus(job, {
+                status: result.ok ? 'success' : 'failed',
+                finishedAt: Math.floor(Date.now() / 1000),
+                error: failure,
+                log: run.lines.join('\n')
+            });
+        } finally {
+            // Quoi qu'il arrive au suivi : une opération sans fin resterait dans la zone.
+            if (failure === undefined) task?.done('Déploiement terminé.');
+            else task?.fail(failure, 'conflict');
+        }
         await this.refreshAgentNotice(run);
     }
 

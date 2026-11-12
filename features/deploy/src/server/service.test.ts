@@ -1030,10 +1030,26 @@ describe('le déploiement par une machine', () => {
             }
         });
         const sync = new DeploySync(deps);
-        sync.startAgentDeploy(job(repo));
+        sync.startAgentDeploy({ ...job(repo), launcher: { userId: 5, workspaceId: 1 } });
         await sync.idle();
 
         assert.deepEqual(orders, [{ engine: 'docker', action: 'composeDeploy', target: 'site/web' }]);
+        // La zone des opérations de qui l'a déclenché en a suivi les lignes, puis l'issue.
+        const [task] = deps.recorded.tasks;
+        assert.deepEqual(
+            {
+                userId: task?.userId,
+                title: task?.title,
+                steps: task?.updates.map((u) => u.step),
+                outcome: task?.outcome
+            },
+            {
+                userId: 5,
+                title: 'Déploiement',
+                steps: ['Pulling web', 'Container site-web-1 Recreated'],
+                outcome: { state: 'done', note: 'Déploiement terminé.' }
+            }
+        );
         const [row] = repo.deployments;
         assert.equal(row.status, 'success');
         assert.equal(row.notified, 1);
@@ -1059,9 +1075,10 @@ describe('le déploiement par une machine', () => {
             })
         });
         const sync = new DeploySync(deps);
-        sync.startAgentDeploy(job(repo));
+        sync.startAgentDeploy({ ...job(repo), launcher: { userId: 5, workspaceId: 1 } });
         await sync.idle();
 
+        assert.equal(deps.recorded.tasks[0]?.outcome?.state, 'failed');
         const [row] = repo.deployments;
         assert.equal(row.status, 'failed');
         assert.match((JSON.parse(row.content) as { description: string }).description, /allow_docker_deploy/);
