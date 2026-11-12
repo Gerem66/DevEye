@@ -626,6 +626,73 @@ describe('le backfill', () => {
     });
 });
 
+describe('la zone des opérations de qui demande une synchronisation', () => {
+    const quiet: Remote = {
+        defaultBranch: 'main',
+        branches: [{ name: 'main', headSha: 'sha-1' }],
+        commits: () => ({ commits: [commit('sha-1', 100)], exhausted: true }),
+        releases: null,
+        pulls: null
+    };
+
+    /** `requestSync` ne rend rien, et le tour ne démarre qu'après sa lecture de la file. */
+    const ended = async (deps: { recorded: { tasks: { outcome: unknown }[] } }): Promise<void> => {
+        for (let i = 0; i < 200 && !deps.recorded.tasks[0]?.outcome; i++) {
+            await new Promise((resolve) => setTimeout(resolve, 5));
+        }
+    };
+
+    it('suit la synchronisation demandée, étape par étape, jusqu’à son issue', async () => {
+        const { sync, deps } = syncWith(fakeRepo([repo()], [credential()]), quiet);
+        sync.requestSync(1, { userId: 5, workspaceId: 1 });
+        await ended(deps);
+
+        const [task] = deps.recorded.tasks;
+        assert.deepEqual(
+            {
+                userId: task?.userId,
+                workspaceId: task?.workspaceId,
+                itemId: task?.itemId,
+                key: task?.key,
+                title: task?.title,
+                outcome: task?.outcome
+            },
+            {
+                userId: 5,
+                workspaceId: 1,
+                itemId: 1,
+                key: 'sync',
+                title: 'Synchronisation du dépôt',
+                outcome: { state: 'done', note: 'Dépôt synchronisé.' }
+            }
+        );
+        assert.deepEqual(
+            task?.updates.map((u) => u.step),
+            ['Dépôt', 'Branches', 'Commits', 'Comparaison des branches', 'Releases', 'Pull requests']
+        );
+    });
+
+    it('n’ouvre rien pour un tour que personne n’a demandé', async () => {
+        const { tick, deps } = syncWith(fakeRepo([repo()], [credential()]), quiet);
+        await tick();
+        assert.equal(deps.recorded.tasks.length, 0);
+    });
+
+    it('dit l’échec avec la phrase du fournisseur', async () => {
+        const { sync, deps } = syncWith(fakeRepo([repo()], [credential()]), {
+            ...quiet,
+            fail: new GitHubError('Jeton refusé par GitHub.', 401)
+        });
+        sync.requestSync(1, { userId: 5, workspaceId: 1 });
+        await ended(deps);
+        assert.deepEqual(deps.recorded.tasks[0]?.outcome, {
+            state: 'failed',
+            message: 'Jeton refusé par GitHub.',
+            code: 'conflict'
+        });
+    });
+});
+
 describe('les tours suivants', () => {
     it('un tour de 304 ne ravive personne, mais s’inscrit', async () => {
         const store = fakeRepo(

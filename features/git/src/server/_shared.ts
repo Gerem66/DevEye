@@ -86,8 +86,8 @@ export function syncOf(): GitSync | null {
  * dépôt sera pris au prochain tour de l'ordonnanceur, qui trie les jamais
  * synchronisés en tête.
  */
-export function requestSync(repoId: number): void {
-    syncRef?.requestSync(repoId);
+export function requestSync(repoId: number, launcher?: { userId: number; workspaceId: number }): void {
+    syncRef?.requestSync(repoId, launcher);
 }
 
 /**

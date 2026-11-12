@@ -32,6 +32,12 @@ import {
     type StoredRepo
 } from './_shared';
 
+/** Qui demande la synchronisation, et depuis quel espace : sa zone des opérations la suit. */
+const launcherOf = (ctx: Ctx): { userId: number; workspaceId: number } => ({
+    userId: ctx.userId,
+    workspaceId: ctx.workspaceId
+});
+
 /**
  * Les dépôts de l'espace : ajout, réglages, suppression, synchronisation.
  *
@@ -130,7 +136,7 @@ export const gitCrudFeatures = [
                     credentialId: input.credentialId,
                     enabled: existing.enabled === 1
                 });
-                requestSync(existing.id);
+                requestSync(existing.id, launcherOf(ctx));
                 return { repo: await reloadRepo(ctx, existing.id) };
             }
 
@@ -153,7 +159,7 @@ export const gitCrudFeatures = [
             });
             // Première lecture tout de suite : attendre le tour de l'ordonnanceur
             // donnerait l'impression que l'ajout n'a pas fonctionné.
-            requestSync(row.id);
+            requestSync(row.id, launcherOf(ctx));
             return { repo: await reloadRepo(ctx, row.id) };
         }
     }),
@@ -294,7 +300,7 @@ export const gitCrudFeatures = [
             // projeté rafraîchit la même donnée pour tout le monde, chez lui.
             await loadRepo(ctx, input.repoId, 'write');
             await ctx.quota.assertActive('repos', String(input.repoId));
-            requestSync(input.repoId);
+            requestSync(input.repoId, launcherOf(ctx));
             return { repo: await reloadRepo(ctx, input.repoId) };
         }
     }),
@@ -322,7 +328,7 @@ export const gitCrudFeatures = [
             });
             // Tout de suite : c'est un geste explicite, attendre le tour de
             // l'ordonnanceur donnerait l'impression qu'il ne s'est rien passé.
-            requestSync(input.repoId);
+            requestSync(input.repoId, launcherOf(ctx));
             return { repo: await reloadRepo(ctx, input.repoId) };
         }
     }),

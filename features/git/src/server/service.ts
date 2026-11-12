@@ -1,6 +1,12 @@
 import type { GitSyncStatus } from '../contracts/domain';
 import { PROJECTS_USAGE_PROVIDER, type ProjectsUsageProvider } from '@deveye/types/sdk';
-import { logFailure, type FeatureService, type FeatureServiceDeps, type SdkCipher } from '@deveye/types/sdk/server';
+import {
+    logFailure,
+    type FeatureService,
+    type FeatureServiceDeps,
+    type SdkCipher,
+    type SdkTask
+} from '@deveye/types/sdk/server';
 
 import {
     authorRef,
@@ -137,6 +143,10 @@ export class GitSync {
     private readonly backfilling = new Set<number>();
     /** Les reprises de backfill armées, par dépôt : l'arrêt les annule. */
     private readonly resumes = new Map<number, ReturnType<typeof setTimeout>>();
+    /** Qui a demandé la synchronisation d'un dépôt, et depuis quel espace : sa zone des opérations la suit. */
+    private readonly launchers = new Map<number, { userId: number; workspaceId: number }>();
+    /** L'opération d'une synchronisation demandée, d'une tranche de backfill à l'autre. */
+    private readonly tasks = new Map<number, SdkTask>();
     private stopped = false;
 
     constructor(
@@ -168,6 +178,8 @@ export class GitSync {
             this.progress.delete(repoId);
         }
         this.resumes.clear();
+        this.launchers.clear();
+        this.tasks.clear();
         await this.ticker.stop();
         await Promise.allSettled(this.inFlight.values());
     }
@@ -176,9 +188,19 @@ export class GitSync {
      * Demande explicite de l'utilisateur : le dépôt passe devant, et le tour
      * suivant démarre tout de suite au lieu d'attendre la cadence.
      */
-    requestSync(repoId: number): void {
+    requestSync(repoId: number, launcher?: { userId: number; workspaceId: number }): void {
         this.forced.add(repoId);
+        if (launcher) this.launchers.set(repoId, launcher);
         void this.tick();
+    }
+
+    /** Solde l'opération d'une synchronisation demandée ; `failure` à `null` : elle a abouti. */
+    private finishTask(repoId: number, failure: string | null): void {
+        const task = this.tasks.get(repoId);
+        this.tasks.delete(repoId);
+        this.launchers.delete(repoId);
+        if (failure === null) task?.done('Dépôt synchronisé.');
+        else task?.fail(failure, 'conflict');
     }
 
     /**
@@ -251,6 +273,7 @@ export class GitSync {
         if (this.deps.pauses.isPaused('repos', String(repoId))) {
             this.progress.delete(repoId);
             this.forced.delete(repoId);
+            this.finishTask(repoId, 'Ce dépôt est en pause.');
             return Promise.resolve();
         }
         // Une tranche de backfill enchaîne la précédente : elle reprend son
@@ -258,7 +281,7 @@ export class GitSync {
         // toutes les trois secondes alors qu'il s'agit d'une seule opération.
         const startedAt = this.progress.get(repoId)?.startedAt ?? Math.floor(Date.now() / 1000);
         this.progress.set(repoId, { step: 0, startedAt, workspaceId });
-        const task = this.runSync(repoId, workspaceId).finally(() => {
+        const task = this.runSync(repoId, workspaceId).then((failure) => {
             this.inFlight.delete(repoId);
             this.forced.delete(repoId);
 
@@ -290,9 +313,10 @@ export class GitSync {
                 timer.unref();
                 this.resumes.set(repoId, timer);
             } else {
-                // Dans le `finally` : un échec doit lever le voile de chargement
-                // aussi sûrement qu'un succès, sinon l'interface sonde à vide.
+                // Un échec doit lever le voile de chargement aussi sûrement
+                // qu'un succès, sinon l'interface sonde à vide.
                 this.progress.delete(repoId);
+                this.finishTask(repoId, failure);
             }
         });
         this.inFlight.set(repoId, task);
@@ -303,17 +327,38 @@ export class GitSync {
     private advance(repoId: number, step: number): void {
         const current = this.progress.get(repoId);
         if (current) current.step = step;
+        this.tasks.get(repoId)?.progress({ done: step, total: SYNC_PHASES.length, step: SYNC_PHASES[step] });
     }
 
-    private async runSync(repoId: number, workspaceId: number): Promise<void> {
+    /** Rend la phrase de l'échec, `null` quand le tour a abouti ou n'avait rien à faire. Ne lève pas. */
+    private async runSync(repoId: number, workspaceId: number): Promise<string | null> {
         const cipher = this.deps.cipherFor(workspaceId);
-        const repo = await this.deps.repo.findRepo(repoId, workspaceId);
-        if (!repo || repo.credential_id === null) return;
+        let repo: Awaited<ReturnType<GitRepo['findRepo']>>;
+        try {
+            repo = await this.deps.repo.findRepo(repoId, workspaceId);
+        } catch (e) {
+            this.deps.logger.error({ err: e, repoId }, 'Git sync: dépôt illisible en base');
+            return 'Synchronisation impossible.';
+        }
+        if (!repo || repo.credential_id === null) return null;
 
         const now = Math.floor(Date.now() / 1000);
         try {
             const target = await readJson<{ owner: string; repo: string }>(cipher, repo.content);
             if (!target?.owner || !target.repo) throw new Error('Dépôt illisible.');
+            const launcher = this.launchers.get(repoId);
+            if (launcher && !this.tasks.has(repoId)) {
+                this.tasks.set(
+                    repoId,
+                    this.deps.tasks.open({
+                        ...launcher,
+                        itemId: repoId,
+                        key: 'sync',
+                        title: 'Synchronisation du dépôt',
+                        subject: `${target.owner}/${target.repo}`
+                    })
+                );
+            }
 
             const credential = await this.deps.repo.findCredential(repo.credential_id, workspaceId);
             if (!credential) throw new Error('Le jeton d’accès a été retiré.');
@@ -494,6 +539,7 @@ export class GitSync {
             // version d'un projet lié, n'est pas nommable par un module : la
             // version d'un projet se relit à sa prochaine lecture.)
             if (changed) this.deps.live.changed(workspaceId);
+            return null;
         } catch (e) {
             // Un tour qui échoue ne doit pas relancer une tranche trois secondes
             // plus tard : sur un quota épuisé, ce serait précisément la rafale
@@ -523,6 +569,7 @@ export class GitSync {
                 { err: e, repoId },
                 'Git sync: échec de synchronisation git'
             );
+            return message;
         }
     }
 
