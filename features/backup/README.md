@@ -357,6 +357,9 @@ est signalée par une phrase qui les nomme, jamais par un `ENOENT` nu.
 Le mot de passe passe par l'environnement (`MYSQL_PWD`, `PGPASSWORD`), jamais par
 `argv` : la ligne de commande d'un processus est lisible par tout le système.
 
+`mysqldump` joint la base en TCP (`--protocol=TCP`), comme le serveur : le client
+MySQL lirait sinon `localhost` comme sa socket Unix, sans regarder le port.
+
 ---
 
 ## Chiffrement : ce qu'il faut absolument comprendre

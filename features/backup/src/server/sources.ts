@@ -170,6 +170,9 @@ function mysqlDumpArgs(host: string, port: number, user: string, database: strin
     return [
         `--host=${host}`,
         `--port=${port}`,
+        // Sans lui, le client MySQL lit `localhost` comme sa socket Unix et
+        // ignore le port : une base jointe par un port local reste introuvable.
+        '--protocol=TCP',
         `--user=${user}`,
         // Cohérence sans verrou de table : la sauvegarde ne doit pas figer la
         // production le temps qu'elle dure.
