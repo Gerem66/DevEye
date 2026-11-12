@@ -213,18 +213,16 @@ export default function TopNavbar({
         });
     };
 
-    // Un clic hors de la zone droite referme celui des deux menus qui est ouvert.
+    // Un clic hors de la zone droite referme le menu du profil. Le panneau des
+    // opérations a son voile, qui retient ce clic (`TasksStatus`).
     useEffect(() => {
-        if (!menuOpen && !tasksOpen) return;
+        if (!menuOpen) return;
         const handler = (e: MouseEvent) => {
-            if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-                setMenuOpen(false);
-                setTasksOpen(false);
-            }
+            if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
         };
         document.addEventListener('mousedown', handler);
         return () => document.removeEventListener('mousedown', handler);
-    }, [menuOpen, tasksOpen]);
+    }, [menuOpen]);
 
     // La somme des badges du menu : le pseudo ne peut pas annoncer autre chose que ce qu'il ouvre.
     const pendingTotal = [...(moderationPages ?? []), ...(adminPages ?? [])].reduce((sum, page) => sum + page.count, 0);

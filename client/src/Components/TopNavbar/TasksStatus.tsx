@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useId, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import { chipOf, useTaskRecords } from '@/stores/tasks';
 
@@ -28,7 +29,7 @@ export function TasksStatus({ open, onToggle, onClose }: TasksStatusProps) {
     const panelId = useId();
     const zone = useRef<HTMLDivElement>(null);
     const panel = useRef<HTMLDivElement>(null);
-    const [shift, setShift] = useState(0);
+    const [left, setLeft] = useState(0);
 
     // Le panneau s'ouvre centré sous la puce. Là où il sortirait de l'écran, il
     // se décale juste assez ; la puce change de largeur et de place pendant
@@ -40,7 +41,7 @@ export function TasksStatus({ open, onToggle, onClose }: TasksStatusProps) {
             const box = anchor.getBoundingClientRect();
             const width = panel.current?.offsetWidth ?? 0;
             const centred = Math.round(box.left + (box.width - width) / 2);
-            setShift(Math.max(EDGE, Math.min(centred, window.innerWidth - width - EDGE)) - box.left);
+            setLeft(Math.max(EDGE, Math.min(centred, window.innerWidth - width - EDGE)));
         };
         place();
         const observer = new ResizeObserver(place);
@@ -53,26 +54,41 @@ export function TasksStatus({ open, onToggle, onClose }: TasksStatusProps) {
     }, [open]);
 
     return (
-        <AnimatePresence>
-            {chip && (
-                <motion.div
-                    ref={zone}
-                    className={styles.zone}
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.9 }}
-                    transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-                >
-                    <TaskChip chip={chip} open={open} panelId={panelId} onClick={onToggle} />
-                    <AnimatePresence>
-                        {open && (
+        <>
+            <AnimatePresence>
+                {chip && (
+                    <motion.div
+                        ref={zone}
+                        className={styles.zone}
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.9 }}
+                        transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                    >
+                        <TaskChip chip={chip} open={open} panelId={panelId} onClick={onToggle} />
+                    </motion.div>
+                )}
+            </AnimatePresence>
+            {createPortal(
+                <AnimatePresence>
+                    {open && (
+                        <>
+                            {/* Le clic qui referme le panneau s'arrête ici : il ne ferme pas
+                                aussi la fonctionnalité ouverte dessous, ni n'actionne la barre. */}
+                            <div
+                                className={styles.shield}
+                                onClick={(event) => {
+                                    event.stopPropagation();
+                                    onClose();
+                                }}
+                            />
                             <motion.div
                                 ref={panel}
                                 id={panelId}
                                 role='dialog'
                                 aria-label='Opérations'
                                 className={`${bar.menu} ${bar.tasksMenu}`}
-                                style={{ left: shift }}
+                                style={{ left }}
                                 initial={{ opacity: 0, y: 0 }}
                                 animate={{ opacity: 1, y: 8 }}
                                 exit={{ opacity: 0, y: 0 }}
@@ -80,11 +96,12 @@ export function TasksStatus({ open, onToggle, onClose }: TasksStatusProps) {
                             >
                                 <TasksPanel onClose={onClose} />
                             </motion.div>
-                        )}
-                    </AnimatePresence>
-                </motion.div>
+                        </>
+                    )}
+                </AnimatePresence>,
+                document.body
             )}
-        </AnimatePresence>
+        </>
     );
 }
 

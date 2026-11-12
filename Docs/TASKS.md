@@ -98,7 +98,9 @@ vient l'état :
 | des succès non vus        | la coche, au ton du succès                                                                                                                                        |
 
 Son panneau, « Opérations », s'ouvre centré sous la puce, et se décale juste
-assez là où il sortirait de l'écran. Il liste les
+assez là où il sortirait de l'écran. Tant qu'il est ouvert, un voile invisible
+couvre le reste de l'écran, barre comprise : le premier clic ailleurs ne fait
+que le refermer, sans fermer la fonctionnalité ouverte dessous. Il liste les
 opérations détachées, la plus récente d'abord : la fonctionnalité, l'espace quand ce n'est pas l'actif, le titre, ce
 sur quoi elle porte, puis la barre et l'étape, ou le résultat. « Afficher »
 ramène le dialogue, « Annuler » arrête ce qui sait s'arrêter, « Ouvrir » retourne

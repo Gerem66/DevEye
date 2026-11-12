@@ -3,8 +3,15 @@
    égale d'une classe de module nue, et l'ordre du bundle déciderait du
    vainqueur. */
 .zone {
-    position: relative;
     display: inline-flex;
+}
+
+/* Sous le panneau ouvert et par-dessus tout le reste, barre comprise : le
+   premier clic ailleurs ne fait que le refermer. */
+.shield {
+    position: fixed;
+    inset: 0;
+    z-index: calc(var(--z-navbar) + 1);
 }
 
 .chip {
