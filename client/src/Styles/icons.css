@@ -196,6 +196,16 @@
     -webkit-mask-image: url(/icons/spinner.svg);
     mask-image: url(/icons/spinner.svg);
 }
+/* Le spinner tourne de lui-même, où qu'il soit posé. `:where` laisse la main à
+   la classe locale qui règle sa propre rotation. */
+:where(.icon.icon-spinner) {
+    animation: icon-spin 0.8s linear infinite;
+}
+@keyframes icon-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
 .icon.icon-trash {
     -webkit-mask-image: url(/icons/trash.svg);
     mask-image: url(/icons/trash.svg);
