@@ -85,7 +85,10 @@ Une puce de la barre (`TasksStatus`), entre l'état du déploiement et les
 widgets. Elle n'est pas un widget du catalogue : la disposition de l'accueil
 appartient à l'espace, naît vide et se masque sur téléphone, alors qu'une
 opération est à la personne et doit toujours avoir où aller. La puce n'existe
-que lorsqu'une opération détachée tourne ou qu'un résultat attend.
+que lorsqu'une opération détachée tourne ou qu'un résultat attend. Elle porte
+d'abord le logo des opérations (`icon-operations`), que reprend le titre de son
+panneau : sans lui, une croix rouge seule ne dit pas de quoi elle parle. Puis
+vient l'état :
 
 | Ce qui attend             | La puce                                                                                                                                                           |
 | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -48,7 +48,10 @@ export function TasksPanel({ onClose }: { onClose: () => void }) {
     return (
         <>
             <div className={styles.panelHead}>
-                <span className={styles.panelTitle}>Opérations</span>
+                <span className={styles.panelTitle}>
+                    <span className={`icon icon-operations ${styles.glyph}`} />
+                    Opérations
+                </span>
                 {zone.some((task) => task.state !== 'running') && (
                     <button type='button' className={styles.rowAction} onClick={clearFinished}>
                         Tout effacer

@@ -43,8 +43,8 @@ export interface TaskChipProps {
 }
 
 /**
- * La puce des opérations : un sablier tant que quelque chose tourne, puis le
- * ton du résultat qui attend d'être vu.
+ * La puce des opérations : leur logo, qui dit ce qu'elle est, puis ce qui s'y
+ * passe, l'indicateur qui tourne ou le ton du résultat qui attend d'être vu.
  */
 export function TaskChip({ chip, open, panelId, onClick }: TaskChipProps) {
     const label = chipLabel(chip);
@@ -60,6 +60,7 @@ export function TaskChip({ chip, open, panelId, onClick }: TaskChipProps) {
             aria-controls={open ? panelId : undefined}
             onClick={onClick}
         >
+            <span className={`icon icon-operations ${styles.glyph}`} />
             <span
                 className={`icon icon-${ICON[chip.tone]} ${styles.glyph} ${chip.tone === 'running' ? styles.spin : ''}`}
             />

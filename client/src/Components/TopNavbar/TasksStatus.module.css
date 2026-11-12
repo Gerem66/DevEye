@@ -1,6 +1,7 @@
-/* La puce des opérations. Chaque taille d'icône est écrite sous `.chip` ou
-   `.row` : la règle globale `.icon` pose 18px à spécificité égale d'une classe
-   de module nue, et l'ordre du bundle déciderait du vainqueur. */
+/* La puce des opérations. Chaque taille d'icône est écrite sous `.chip`,
+   `.panelTitle` ou `.row` : la règle globale `.icon` pose 18px à spécificité
+   égale d'une classe de module nue, et l'ordre du bundle déciderait du
+   vainqueur. */
 .zone {
     display: inline-flex;
 }
@@ -106,11 +107,19 @@
 }
 
 .panelTitle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     color: var(--text-muted);
     font-size: 0.68rem;
     font-weight: 700;
     letter-spacing: 0.06em;
     text-transform: uppercase;
+}
+
+.panelTitle .glyph {
+    width: 13px;
+    height: 13px;
 }
 
 .rows {

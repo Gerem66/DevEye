@@ -322,6 +322,10 @@
     -webkit-mask-image: url(/icons/collapse.svg);
     mask-image: url(/icons/collapse.svg);
 }
+.icon.icon-operations {
+    -webkit-mask-image: url(/icons/operations.svg);
+    mask-image: url(/icons/operations.svg);
+}
 .icon.icon-settings {
     -webkit-mask-image: url(/icons/settings.svg);
     mask-image: url(/icons/settings.svg);
