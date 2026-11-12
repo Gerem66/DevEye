@@ -225,12 +225,6 @@ export function describeSchedule(job: {
     }
 }
 
-/**
- * `backup.destinationTest` écrit, relit et efface un objet chez un tiers
- * parfois au bout d'un VPN : le défaut de la socket (15 s) est trop court.
- */
-export const BACKUP_PROBE_TIMEOUT_MS = 60_000;
-
 /** L'hôte d'une adresse, pour une ligne de liste ; l'adresse telle quelle si elle ne se lit pas. */
 export function hostOf(url: string): string {
     try {

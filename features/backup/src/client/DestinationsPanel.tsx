@@ -11,19 +11,14 @@ import {
     invalidate,
     settingsStyles as shell,
     useResource,
+    useTaskRunner,
     type ConfirmRequest,
     type ErrorNoteInput
 } from 'deveye-sdk-client';
+import { manifest } from '../manifest';
 import { api } from './api';
 import DestinationDialog from './DestinationDialog';
-import {
-    BACKUP_PROBE_TIMEOUT_MS,
-    DESTINATION_ICONS,
-    DESTINATION_LABELS,
-    destinationTone,
-    formatAgo,
-    hostOf
-} from './format';
+import { DESTINATION_ICONS, DESTINATION_LABELS, destinationTone, formatAgo, hostOf } from './format';
 import styles from './style.module.css';
 
 /**
@@ -54,15 +49,25 @@ export default function DestinationsPanel({ canWrite }: SettingsPanelProps) {
     // Une destination touche aussi les cartes des travaux et la tuile de l'accueil.
     const changed = () => invalidate('backup.destinationList', 'backup.jobList', 'backup.count');
 
+    // Le contrôle écrit, relit et efface un objet chez un tiers, parfois au bout
+    // d'un VPN : la zone des opérations en porte l'issue si le panneau se ferme avant.
+    const runTask = useTaskRunner();
     const test = async (destination: BackupDestination) => {
         setTesting(destination.id);
         setError(null);
         setProbeError(null);
         try {
-            const probe = await api.send(
-                'backup.destinationTest',
-                { destinationId: destination.id },
-                { timeoutMs: BACKUP_PROBE_TIMEOUT_MS }
+            const probe = await runTask<BackupDestinationProbe>(
+                {
+                    feature: manifest.id,
+                    key: `destination.test:${destination.id}`,
+                    title: 'Contrôle de la destination',
+                    subject: destination.name,
+                    done: (result) =>
+                        result.ok ? 'La destination répond.' : (result.error ?? 'Le contrôle a échoué.'),
+                    failed: 'Le contrôle n’a pas abouti.'
+                },
+                (task) => api.send('backup.destinationTest', { destinationId: destination.id }, task.sendOptions)
             );
             setProbes((prev) => ({ ...prev, [destination.id]: probe }));
             if (!probe.ok) setProbeError(probe.error ?? 'Le contrôle a échoué.');
