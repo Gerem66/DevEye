@@ -7,9 +7,11 @@ import {
     errorNote,
     SearchSelect,
     SegmentedControl,
+    useTaskRunner,
     type ErrorNoteInput
 } from 'deveye-sdk-client';
 import { STATEMENT_LINES_MAX, type StatementImportResult } from '../contracts/statement';
+import { manifest } from '../manifest';
 
 import { api, refreshFinance } from './api';
 import { formatDate, formatMoney } from './format';
@@ -136,19 +138,33 @@ export function ImportDialog({ base, open, accountId: preset, onClose, onReview 
         }
     };
 
+    // Un long relevé prend du temps à rapprocher : la zone des opérations en
+    // porte l'issue si le dialogue se ferme avant.
+    const runTask = useTaskRunner();
     const submit = async () => {
         if (busy || parsed === null || parsed.lines.length === 0 || parsed.lines.length > STATEMENT_LINES_MAX) return;
         if (step.kind !== 'csv' && step.kind !== 'ofx') return;
         setBusy(true);
         setError(null);
         try {
-            const { result } = await api.send('finance.statementImport', {
+            const statement = {
                 accountId,
                 format: step.kind,
                 lines: parsed.lines,
                 closing: parsed.closing,
                 mapping: step.kind === 'csv' ? { signature: headerSignature(step.table), ...step.mapping } : null
-            });
+            };
+            const { result } = await runTask(
+                {
+                    feature: manifest.id,
+                    key: 'statement.import',
+                    title: 'Import du relevé',
+                    subject: step.fileName,
+                    done: 'Relevé importé.',
+                    failed: 'Import impossible.'
+                },
+                (task) => api.send('finance.statementImport', statement, task.sendOptions)
+            );
             refreshFinance();
             setStep({ kind: 'done', result });
         } catch (e) {
