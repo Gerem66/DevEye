@@ -3,6 +3,7 @@
    égale d'une classe de module nue, et l'ordre du bundle déciderait du
    vainqueur. */
 .zone {
+    position: relative;
     display: inline-flex;
 }
 

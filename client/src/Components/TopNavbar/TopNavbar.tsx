@@ -1,4 +1,4 @@
-import { type MouseEvent as ReactMouseEvent, type ReactNode, useState, useRef, useEffect, useId } from 'react';
+import { type MouseEvent as ReactMouseEvent, type ReactNode, useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Button from '@/Components/Button';
 import { ConfirmDialog, type ConfirmRequest } from '@/Components/ConfirmDialog';
@@ -13,7 +13,6 @@ import { hasLocalWork, setPanelOpen, useTaskRecords, zoneOf } from '@/stores/tas
 import { useActiveWorkspace } from '@/stores/workspace';
 import { DeploymentStatus } from './DeploymentStatus';
 import { ConnectionStatus } from './ConnectionStatus';
-import { TasksPanel } from './TasksPanel';
 import { TasksStatus } from './TasksStatus';
 import { TopbarWidgets } from './topbarWidgets';
 import { EditableTopbarWidgets } from './EditableTopbarWidgets';
@@ -187,7 +186,6 @@ export default function TopNavbar({
 
     // Le panneau des opérations : un seul des deux menus de la barre à la fois.
     const [tasksOpen, setTasksOpen] = useState(false);
-    const tasksPanelId = useId();
     const taskRecords = useTaskRecords();
     const hasTasks = zoneOf(taskRecords).length > 0;
     useEffect(() => {
@@ -442,11 +440,11 @@ export default function TopNavbar({
                 {!import.meta.env.DEV && <DeploymentStatus />}
                 <TasksStatus
                     open={tasksOpen}
-                    panelId={tasksPanelId}
                     onToggle={() => {
                         setTasksOpen((v) => !v);
                         setMenuOpen(false);
                     }}
+                    onClose={() => setTasksOpen(false)}
                 />
                 {/* The navbar mini-widgets — edited right here while organizing the
                     home (no detour through the grid), live otherwise. */}
@@ -585,23 +583,6 @@ export default function TopNavbar({
                             >
                                 <span className='icon icon-logout' /> Déconnexion
                             </button>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-
-                <AnimatePresence>
-                    {tasksOpen && (
-                        <motion.div
-                            id={tasksPanelId}
-                            role='dialog'
-                            aria-label='Opérations'
-                            className={`${styles.menu} ${styles.tasksMenu}`}
-                            initial={{ opacity: 0, y: 0 }}
-                            animate={{ opacity: 1, y: 8 }}
-                            exit={{ opacity: 0, y: 0 }}
-                            transition={{ duration: 0.15 }}
-                        >
-                            <TasksPanel onClose={() => setTasksOpen(false)} />
                         </motion.div>
                     )}
                 </AnimatePresence>

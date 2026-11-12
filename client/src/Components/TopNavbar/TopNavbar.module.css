@@ -325,8 +325,12 @@
 
 /* Le panneau des opérations : la silhouette du menu, plus large pour une
    barre d'avancement et une phrase de résultat. Opaque : il se pose sur une
-   vue pleine de texte, que le verre laisserait deviner derrière le sien. */
+   vue pleine de texte, que le verre laisserait deviner derrière le sien.
+   Ancré à sa puce (`TasksStatus`, qui pose `left`), au ras de la barre où
+   elle est centrée. */
 .menu.tasksMenu {
+    top: calc(100% + (var(--navbar-height) - var(--topbar-pill-height)) / 2);
+    right: auto;
     width: min(360px, calc(100vw - 2 * var(--space-md)));
     max-width: none;
     padding: var(--space-sm);
