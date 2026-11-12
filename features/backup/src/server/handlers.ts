@@ -802,7 +802,7 @@ const jobRunFeature = defineSdkFeature({
         const name = (await readJsonWith<StoredJob>(cipher, job.content)).name ?? 'Sauvegarde';
         let run;
         try {
-            run = await engine.trigger(job, ctx.userId);
+            run = await engine.trigger(job, ctx.userId, ctx.workspaceId);
         } catch (e) {
             throw new FeatureError('conflict', (e as Error).message);
         }

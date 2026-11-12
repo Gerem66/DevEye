@@ -305,9 +305,10 @@ export class BackupEngine {
 
     /**
      * Ouvre une exécution et la lance en arrière-plan ; rend la ligne `running`
-     * tout de suite, une sauvegarde durant des minutes.
+     * tout de suite, une sauvegarde durant des minutes. `workspaceId` est
+     * l'espace d'où le membre l'a lancée : sa zone des opérations la suit là.
      */
-    async trigger(job: BackupJobRow, userId: number): Promise<BackupRunRow> {
+    async trigger(job: BackupJobRow, userId: number, workspaceId: number = job.workspace_id): Promise<BackupRunRow> {
         // Réservation **synchrone**, avant le premier `await` : deux clics
         // rapprochés (ou deux onglets) passeraient tous les deux un contrôle
         // placé après, et lanceraient deux vidages simultanés de la même base.
@@ -317,7 +318,7 @@ export class BackupEngine {
             if (!destination) throw new Error('La destination de ce travail est introuvable.');
 
             const run = await this.openRun(job, userId);
-            void this.execute(job, destination, run).catch((e: unknown) =>
+            void this.execute(job, destination, run, { userId, workspaceId }).catch((e: unknown) =>
                 this.deps.logger.error({ jobId: job.id, err: e }, 'Backup: exécution manuelle échouée')
             );
             return run;
@@ -370,7 +371,12 @@ export class BackupEngine {
         return run;
     }
 
-    private async execute(job: BackupJobRow, destination: BackupDestinationRow, run: BackupRunRow): Promise<void> {
+    private async execute(
+        job: BackupJobRow,
+        destination: BackupDestinationRow,
+        run: BackupRunRow,
+        launcher?: { userId: number; workspaceId: number }
+    ): Promise<void> {
         const cipher = this.cipherFor(job.workspace_id);
         const started = Date.now();
         let storedJob: Partial<StoredJob> = {};
@@ -381,6 +387,11 @@ export class BackupEngine {
             // nom sert l'écran et le nom de fichier, jamais la mécanique.
         }
         const jobName = (storedJob.name ?? '').trim() || 'Sauvegarde';
+        // Lancée à la main : la zone des opérations de son auteur la suit. Un
+        // passage planifié n'a été demandé par personne.
+        const task = launcher
+            ? this.deps.tasks.open({ ...launcher, itemId: job.id, key: 'run', title: 'Sauvegarde', subject: jobName })
+            : null;
 
         let artifact: string | null = null;
         let size = 0;
@@ -416,9 +427,12 @@ export class BackupEngine {
             // Condensé du clair, avant scellement : deux scellements du même
             // clair donnent deux fichiers différents.
             const digest = crypto.createHash('sha256');
+            let read = 0;
             const measured = async function* (input: AsyncIterable<Buffer>): AsyncGenerator<Buffer> {
                 for await (const chunk of input) {
                     digest.update(chunk);
+                    read += chunk.length;
+                    task?.progress({ step: `${formatBytes(read)} lus` });
                     yield chunk;
                 }
             };
@@ -449,13 +463,19 @@ export class BackupEngine {
             }
         }
 
-        await this.deps.repo.finishRun(run.id, {
-            status: error === null ? 'success' : 'failed',
-            finishedAt: Math.floor(Date.now() / 1000),
-            sizeBytes: size,
-            checksum,
-            content: await cipher.encrypt(JSON.stringify({ artifact, error, warning } satisfies StoredRun))
-        });
+        try {
+            await this.deps.repo.finishRun(run.id, {
+                status: error === null ? 'success' : 'failed',
+                finishedAt: Math.floor(Date.now() / 1000),
+                sizeBytes: size,
+                checksum,
+                content: await cipher.encrypt(JSON.stringify({ artifact, error, warning } satisfies StoredRun))
+            });
+        } finally {
+            // Même si l'issue ne s'écrit pas : une opération sans fin resterait dans la zone.
+            if (error === null) task?.done(`Sauvegarde terminée (${formatBytes(size)}).`);
+            else task?.fail(error, 'conflict');
+        }
 
         this.deps.audit({
             action: error === null ? 'backup.success' : 'backup.failure',

@@ -142,6 +142,14 @@ describe('Backup : moteur, fichiers d’une machine', () => {
         const out = await finished;
 
         assert.equal(out.status, 'success', out.run.error ?? undefined);
+        // La zone des opérations de qui l'a lancée la suit, puis en dit l'issue.
+        await new Promise((resolve) => setImmediate(resolve));
+        const [task] = deps.recorded.tasks;
+        assert.deepEqual(
+            { userId: task?.userId, workspaceId: task?.workspaceId, itemId: task?.itemId, subject: task?.subject },
+            { userId: 5, workspaceId: 1, itemId: 10, subject: 'Site web' }
+        );
+        assert.equal(task?.outcome?.state, 'done');
         // Pas de recompression : la taille écrite est celle des pièces.
         assert.equal(
             out.sizeBytes,
