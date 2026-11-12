@@ -10,7 +10,7 @@ import {
     type ConvertProgress
 } from '../contracts/domain';
 import { optionValuesSchema, resolveOptions } from '../contracts/options';
-import { formatBytes, now, setJobAborter, setQueueWaker, SETTINGS_KEY } from './_shared';
+import { abortJob, formatBytes, now, setJobAborter, setQueueWaker, SETTINGS_KEY } from './_shared';
 import { convert, outputCeiling, probeEngines, probeInput } from './engines';
 import { env } from './env';
 import { frankfurter, refreshRates, type FxClient } from './fx';
@@ -92,6 +92,21 @@ export function createService(deps: FeatureServiceDeps<ConvertRepo>, seam: Conve
         let lastPublish = 0;
         let lastPersist = 0;
         let lastPermille = -1;
+        // La file est personnelle : qui a déposé le fichier suit sa conversion
+        // dans sa zone des opérations, et peut l'y arrêter comme depuis l'écran.
+        const task = deps.tasks.open({
+            userId: job.user_id,
+            workspaceId: job.workspace_id,
+            key: `job:${job.id}`,
+            title: 'Conversion',
+            subject: (await deps.cipherFor(job.workspace_id).tryDecrypt(job.original_name_enc)) ?? undefined,
+            cancel: async () => {
+                if (await deps.repo.cancel(job.id, job.workspace_id, now())) {
+                    abortJob(job.id);
+                    await removeJobDir(job.workspace_id, job.id);
+                }
+            }
+        });
         const onProgress = (permille: number): void => {
             const at = Date.now();
             if (permille === lastPermille || at - lastPublish < PUBLISH_EVERY_MS) return;
@@ -104,6 +119,7 @@ export function createService(deps: FeatureServiceDeps<ConvertRepo>, seam: Conve
                 etaSeconds: permille >= 20 ? Math.round((elapsed * (1000 - permille)) / permille) : null
             };
             deps.live.publish(job.workspace_id, CONVERT_PROGRESS_EVENT, frame);
+            task.progress({ done: Math.round(permille / 10), total: 100 });
             // La base ne suit que de loin : assez pour qu'un rechargement de page retrouve la barre.
             if (at - lastPersist >= PERSIST_EVERY_MS) {
                 lastPersist = at;
@@ -169,6 +185,7 @@ export function createService(deps: FeatureServiceDeps<ConvertRepo>, seam: Conve
 
             const finishedAt = now();
             await deps.repo.finish(job.id, outputBytes, finishedAt, finishedAt + env.CONVERT_RESULT_TTL_SECONDS);
+            task.done('Conversion terminée : le fichier vous attend dans le Convertisseur.');
             await announce(
                 job,
                 target.label,
@@ -186,9 +203,14 @@ export function createService(deps: FeatureServiceDeps<ConvertRepo>, seam: Conve
                 return;
             }
             await removeJobDir(job.workspace_id, job.id);
-            if (e instanceof ConvertCanceled) return;
+            if (e instanceof ConvertCanceled) {
+                task.cancelled();
+                return;
+            }
             const failure =
                 e instanceof ConvertFailure ? e : new ConvertFailure('engine_failed', 'La conversion a échoué.');
+            // Avant d'écrire l'issue : une opération sans fin resterait dans la zone.
+            task.fail(failure.message, e instanceof ConvertFailure ? 'conflict' : 'internal');
             if (!(e instanceof ConvertFailure))
                 deps.logger.error({ err: e, jobId: job.id }, 'convert: travail en échec');
             // Le message d'un outil cite ce qu'il lisait : il est scellé comme le nom du fichier.

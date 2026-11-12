@@ -59,18 +59,31 @@ describe('arrêt et redémarrage', () => {
     it('arrêté, le service ne prend plus rien ; redémarré, il reprend la file', async () => {
         const repo = memoryRepo();
         const id = await queued(repo);
-        const { service, tick } = serviceWith(repo);
+        const { deps, service, tick } = serviceWith(repo);
         await service.start();
         await service.stop();
 
         await tick();
         const row = repo.rows.find((r) => r.id === id);
         assert.deepEqual([row?.phase, row?.attempts], ['queued', 0]);
+        assert.equal(deps.recorded.tasks.length, 0);
 
         await service.start();
         await tick();
         assert.notEqual(row?.phase, 'queued');
         assert.equal(row?.attempts, 1);
+        // La zone des opérations de qui a déposé le fichier a suivi le travail, jusqu'à son issue.
+        const [task] = deps.recorded.tasks;
+        assert.deepEqual(
+            {
+                userId: task?.userId,
+                workspaceId: task?.workspaceId,
+                key: task?.key,
+                cancellable: Boolean(task?.cancel)
+            },
+            { userId: 1, workspaceId: 1, key: `job:${id}`, cancellable: true }
+        );
+        assert.notEqual(task?.outcome, null);
         await service.stop();
         await service.stop();
     });
