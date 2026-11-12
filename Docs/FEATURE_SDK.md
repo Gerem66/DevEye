@@ -656,7 +656,9 @@ se range de lui-même en haut de son cadre, sur toute sa largeur : sous le
 `inline` le garde dans sa rangée.
 Un geste qui dure passe par `runTask(options, run)` : un dialogue qui se
 réduit, puis la zone des opérations de la barre, qui porte l'avancement et le
-résultat quand l'écran n'est plus là. Le serveur suit la commande de
+résultat quand l'écran n'est plus là. `useTaskRunner()` rend le même `runTask`
+pour une attente que l'écran dessine lui-même : rien ne paraît tant qu'il est
+monté, et la zone prend le relais s'il se ferme. Le serveur suit la commande de
 l'opération : elle survit à une coupure comme à un rechargement, et les autres
 onglets du compte la voient. `useTasks` dit à un écran ce qui tourne chez lui,
 `TaskProgress` y dessine l'avancement en place, et quand le serveur ne garde

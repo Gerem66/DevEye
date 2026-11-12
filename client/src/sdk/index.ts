@@ -43,10 +43,11 @@ export { ProgressBar } from '@/Components/ProgressBar';
 export type { ProgressBarProps } from '@/Components/ProgressBar';
 /**
  * Les opérations longues : `runTask` les lance derrière un dialogue réductible,
- * la zone de la barre les suit, `useTasks` dit à un écran ce qui tourne chez
- * lui, et `TaskProgress` y dessine l'avancement en place.
+ * `useTaskRunner` quand l'écran dessine l'attente lui-même, la zone de la barre
+ * les suit, `useTasks` dit à un écran ce qui tourne chez lui, et `TaskProgress`
+ * y dessine l'avancement en place.
  */
-export { runTask, useTasks } from './tasks';
+export { runTask, useTaskRunner, useTasks } from './tasks';
 export type { TaskOptions } from './tasks';
 export { TaskError } from '@/stores/tasks';
 export type { Task, TaskContext } from '@/stores/tasks';

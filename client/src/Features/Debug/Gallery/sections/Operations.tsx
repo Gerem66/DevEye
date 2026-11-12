@@ -1,9 +1,11 @@
+import { useState } from 'react';
+
 import { ws } from '@/api/ws';
 import Button from '@/Components/Button';
 import { TaskProgress } from '@/Components/TaskDialog';
 import { TaskChip } from '@/Components/TopNavbar/TaskChip';
 import { TaskRow } from '@/Components/TopNavbar/TaskRow';
-import { runTask, useTasks } from '@/sdk/tasks';
+import { runTask, useTaskRunner, useTasks } from '@/sdk/tasks';
 import { RESTART_NOTE, type ChipView, type TaskContext, type TaskRecord } from '@/stores/tasks';
 
 import { Specimen, Variant } from '../Specimen';
@@ -136,6 +138,23 @@ function startFollowed(title: string, seconds: number, sample: { fail?: boolean;
 /** Les opérations longues : des essais sur le vrai magasin, puis chaque état à plat. */
 export function OperationsSpecimen({ disabled }: { disabled: boolean }) {
     const running = useTasks({ feature: FEATURE });
+    const runInPlace = useTaskRunner();
+    const [waiting, setWaiting] = useState(false);
+    const inPlace = (): void => {
+        setWaiting(true);
+        launch(
+            runInPlace(
+                {
+                    feature: FEATURE,
+                    title: 'Essai en place',
+                    subject: 'Galerie',
+                    done: 'L’essai est allé au bout.',
+                    failed: 'L’essai a échoué.'
+                },
+                (task) => sampleWork(8, task)
+            ).finally(() => setWaiting(false))
+        );
+    };
 
     return (
         <Specimen
@@ -173,6 +192,9 @@ export function OperationsSpecimen({ disabled }: { disabled: boolean }) {
                     onClick={() => start('Essai sans dialogue', 12, { dialog: false })}
                 >
                     Sans dialogue
+                </Button>
+                <Button variant='secondary' disabled={disabled || waiting} onClick={inPlace}>
+                    {waiting ? 'En place, en cours…' : 'En place'}
                 </Button>
             </Variant>
             <Variant label='essais suivis par le serveur' wide>

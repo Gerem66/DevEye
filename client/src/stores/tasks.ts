@@ -95,6 +95,8 @@ export interface TaskSpec<T> {
     itemId?: string;
     key?: string;
     dialog: boolean;
+    /** Sans dialogue, l'écran dessine l'attente chez lui : la zone ne la prend que s'il s'en va. */
+    inPlace?: boolean;
     minimizable: boolean;
     local: boolean;
     done?: string | ((result: T) => string);
@@ -106,6 +108,8 @@ export interface TaskSpec<T> {
 }
 
 export interface TaskContext {
+    /** L'id de l'opération, celui que rend `useTasks`. */
+    id: string;
     /** À passer à LA commande de l'opération : c'est elle que le serveur suit, avancement et espace d'origine compris. */
     sendOptions: SendOptions;
     /** L'avancement d'un travail fait dans l'onglet ; `null` efface la valeur. */
@@ -400,7 +404,7 @@ export function startTask<T>(spec: TaskSpec<T>, run: (task: TaskContext) => Prom
             minimizable: spec.minimizable,
             cancellable: spec.cancel !== undefined,
             foreground: spec.dialog,
-            detached: !spec.dialog,
+            detached: !spec.dialog && spec.inPlace !== true,
             raisedAt: ++raiseSeq,
             seen: false,
             owned: true,
@@ -409,6 +413,7 @@ export function startTask<T>(spec: TaskSpec<T>, run: (task: TaskContext) => Prom
     ]);
 
     const context: TaskContext = {
+        id,
         origin: spec.origin,
         sendOptions: {
             timeoutMs: SILENCE_MS,
@@ -453,6 +458,14 @@ export function minimizeTask(id: string): void {
     const first = !record.detached;
     patch(id, { foreground: false, detached: true });
     if (first) handles.get(id)?.onDetach?.();
+}
+
+/** L'écran qui dessinait l'attente s'en va : l'opération passe dans la zone, pour de bon. */
+export function detachTask(id: string): void {
+    const record = find(id);
+    if (!record || record.state !== 'running' || record.detached) return;
+    patch(id, { foreground: false, detached: true });
+    handles.get(id)?.onDetach?.();
 }
 
 /** Ramène devant le dialogue d'une opération en cours que cette page a lancée. */

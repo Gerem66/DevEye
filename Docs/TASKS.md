@@ -66,6 +66,14 @@ Deux réglages changent ce départ :
 - `dialog: false` n'ouvre aucun dialogue : l'opération naît détachée et l'écran
   dessine l'avancement chez lui (la vérification d'intégrité d'un partage).
 
+Une troisième façon de partir, pour un geste dont l'écran dessine déjà
+l'attente (un bouton occupé, une barre à lui) : `useTaskRunner()` rend un
+`runTask` **en place**. Pas de dialogue, et rien dans la zone tant que l'écran
+est monté : l'opération sort sans trace comme une opération jamais détachée.
+Si l'écran se démonte avant la fin, elle est détachée à ce moment-là, et la
+zone en porte l'issue à sa place (contrôler une destination de sauvegarde,
+dupliquer un tableau, importer un relevé).
+
 `onDetach` prévient l'appelant à la première réduction. Il sert à refermer la
 fiche d'un élément qui s'en va, un partage qu'on supprime ou un élément qu'on
 déplace : la refermer à la fin fermerait la fiche que la personne a ouverte
@@ -297,7 +305,7 @@ await runTask(
 | Fichier                                   | Rôle                                                                                                                                                                                |
 | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `client/src/stores/tasks.ts`              | le magasin : états, règle de fin, lectures (`foregroundOf`, `zoneOf`, `chipOf`, `matchRunning`), réconciliation avec ce que dit le serveur. Sans dépendance à Vite, testé sous Node |
-| `client/src/sdk/tasks.ts`                 | `runTask` et `useTasks` : l'espace d'origine et la note d'échec résolus                                                                                                             |
+| `client/src/sdk/tasks.ts`                 | `runTask`, `useTaskRunner` et `useTasks` : l'espace d'origine et la note d'échec résolus                                                                                            |
 | `client/src/api/ws.ts`                    | l'étiquette sur l'enveloppe, la requête qui survit à sa socket, `task.attach` à la réouverture, la sonde, les trames `task.*` de chaque instance                                    |
 | `client/src/Components/TaskDialog/`       | `TasksHost`, monté une fois par l'accueil (le dialogue, l'annonce aux lecteurs d'écran, la garde de fermeture), `TaskDialog`, `TaskProgress`                                        |
 | `client/src/Components/TopNavbar/`        | `TasksStatus` et `TaskChip` (la puce), `TasksPanel` et `TaskRow` (le panneau)                                                                                                       |

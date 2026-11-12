@@ -1,8 +1,16 @@
-import { useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { errorNote } from '@/api/useResource';
 import type { ErrorNoteInput } from '@/Components/ErrorNote';
-import { matchRunning, startTask, useTaskRecords, type Task, type TaskContext } from '@/stores/tasks';
+import {
+    detachTask,
+    matchRunning,
+    startTask,
+    useTaskRecords,
+    type Task,
+    type TaskContext,
+    type TaskSpec
+} from '@/stores/tasks';
 import { getActiveInstanceId, getActiveWorkspaceId, useWorkspaceState } from '@/stores/workspace';
 
 /** Ce qu'un écran dit de l'opération longue qu'il lance. */
@@ -48,26 +56,51 @@ export interface TaskOptions<T = unknown> {
  * son avancement par `task.report`.
  */
 export function runTask<T>(options: TaskOptions<T>, run: (task: TaskContext) => Promise<T>): Promise<T> {
+    return startTask<T>(specOf(options), run);
+}
+
+function specOf<T>(options: TaskOptions<T>): TaskSpec<T> {
     const { failed } = options;
-    return startTask<T>(
-        {
-            feature: options.feature,
-            origin: { instanceId: getActiveInstanceId(), workspaceId: getActiveWorkspaceId() },
-            title: options.title,
-            subject: options.subject,
-            description: options.description,
-            itemId: options.itemId === undefined ? undefined : String(options.itemId),
-            key: options.key,
-            dialog: options.dialog ?? true,
-            minimizable: options.minimizable ?? true,
-            local: options.local ?? false,
-            done: options.done,
-            failure: typeof failed === 'function' ? failed : (error) => errorNote(error, failed),
-            failed: typeof failed === 'string' ? failed : undefined,
-            cancel: options.cancel,
-            onDetach: options.onDetach
-        },
-        run
+    return {
+        feature: options.feature,
+        origin: { instanceId: getActiveInstanceId(), workspaceId: getActiveWorkspaceId() },
+        title: options.title,
+        subject: options.subject,
+        description: options.description,
+        itemId: options.itemId === undefined ? undefined : String(options.itemId),
+        key: options.key,
+        dialog: options.dialog ?? true,
+        minimizable: options.minimizable ?? true,
+        local: options.local ?? false,
+        done: options.done,
+        failure: typeof failed === 'function' ? failed : (error) => errorNote(error, failed),
+        failed: typeof failed === 'string' ? failed : undefined,
+        cancel: options.cancel,
+        onDetach: options.onDetach
+    };
+}
+
+/**
+ * `runTask` pour une attente que l'écran dessine lui-même (un bouton occupé,
+ * une barre en place) : pas de dialogue, et rien dans la zone tant que l'écran
+ * est là. S'il se ferme avant la fin, l'opération passe dans la zone, qui en
+ * portera le résultat à sa place.
+ */
+export function useTaskRunner(): <T>(options: TaskOptions<T>, run: (task: TaskContext) => Promise<T>) => Promise<T> {
+    const running = useRef(new Set<string>());
+    useEffect(() => {
+        const ids = running.current;
+        return () => {
+            for (const id of ids) detachTask(id);
+        };
+    }, []);
+    return useCallback(
+        <T>(options: TaskOptions<T>, run: (task: TaskContext) => Promise<T>): Promise<T> =>
+            startTask<T>({ ...specOf(options), dialog: false, inPlace: true }, (task) => {
+                running.current.add(task.id);
+                return run(task).finally(() => running.current.delete(task.id));
+            }),
+        []
     );
 }
 

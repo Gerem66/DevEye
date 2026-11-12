@@ -4,6 +4,7 @@ import type { CommandOutput, DebugRun } from '@deveye/types';
 import { ws, WsError } from '@/api/ws';
 import Button from '@/Components/Button';
 import Checkbox from '@/Components/Checkbox';
+import { useTaskRunner } from '@/sdk/tasks';
 import { useRun } from '../useRun';
 import RunHistory, { RunStatusBadge } from './RunHistory';
 import RunReport from './RunReport';
@@ -71,10 +72,21 @@ export default function E2eSection({ activeRunId }: { activeRunId: number | null
         void start(() => ws.send('debug.e2eStart', { scenarios: ids }));
     };
 
+    const runTask = useTaskRunner();
     const sweep = async (): Promise<void> => {
         setSweeping(true);
         try {
-            await ws.send('debug.e2eSweep', {}, { timeoutMs: 60_000 });
+            await runTask<CommandOutput<'debug.e2eSweep'>>(
+                {
+                    feature: 'debug',
+                    key: 'e2e.sweep',
+                    title: 'Ménage des comptes d’essai',
+                    done: ({ accounts }) =>
+                        accounts === 0 ? 'Aucun compte d’essai à retirer.' : `Comptes d’essai retirés : ${accounts}.`,
+                    failed: 'Ménage impossible.'
+                },
+                (task) => ws.send('debug.e2eSweep', {}, task.sendOptions)
+            );
             await load();
         } catch (e) {
             setCatalogError(e instanceof WsError ? e.message : 'Ménage impossible.');

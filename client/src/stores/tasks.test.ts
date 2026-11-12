@@ -10,6 +10,7 @@ import {
     cancelTask,
     chipOf,
     clearFinished,
+    detachTask,
     dismissTask,
     forgetInstanceTasks,
     FORGOTTEN_NOTE,
@@ -187,6 +188,26 @@ describe('startTask', () => {
         const task = launch({ dialog: false });
         assert.equal(foregroundOf(getTaskRecords()), null);
         assert.equal(zoneOf(getTaskRecords())[0].id, task.id);
+    });
+
+    it('laisse à l’écran l’attente qu’il dessine, et la passe à la zone s’il s’en va', async () => {
+        const stays = launch({ dialog: false, inPlace: true });
+        assert.equal(zoneOf(getTaskRecords()).length, 0);
+        assert.equal(foregroundOf(getTaskRecords()), null);
+        assert.equal(stays.context.id, stays.id);
+        stays.work.resolve(null);
+        await stays.done;
+        assert.equal(getTaskRecords().length, 0);
+
+        let detached = 0;
+        const leaves = launch({ dialog: false, inPlace: true, done: 'Fait.', onDetach: () => detached++ });
+        detachTask(leaves.id);
+        detachTask(leaves.id);
+        assert.equal(detached, 1);
+        assert.equal(zoneOf(getTaskRecords()).length, 1);
+        leaves.work.resolve(null);
+        await leaves.done;
+        assert.deepEqual([getTaskRecords()[0].state, getTaskRecords()[0].note], ['done', 'Fait.']);
     });
 
     it('ne réduit pas un dialogue bloquant', () => {
