@@ -97,8 +97,8 @@ vient l'état :
 | une interruption          | le triangle, au ton de l'avertissement                                                                                                                            |
 | des succès non vus        | la coche, au ton du succès                                                                                                                                        |
 
-Son panneau, « Opérations », s'ouvre sous la puce, bord gauche contre bord
-gauche, et se décale juste assez là où il sortirait de l'écran. Il liste les
+Son panneau, « Opérations », s'ouvre centré sous la puce, et se décale juste
+assez là où il sortirait de l'écran. Il liste les
 opérations détachées, la plus récente d'abord : la fonctionnalité, l'espace quand ce n'est pas l'actif, le titre, ce
 sur quoi elle porte, puis la barre et l'étape, ou le résultat. « Afficher »
 ramène le dialogue, « Annuler » arrête ce qui sait s'arrêter, « Ouvrir » retourne

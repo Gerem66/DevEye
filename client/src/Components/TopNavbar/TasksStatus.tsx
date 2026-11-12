@@ -30,16 +30,17 @@ export function TasksStatus({ open, onToggle, onClose }: TasksStatusProps) {
     const panel = useRef<HTMLDivElement>(null);
     const [shift, setShift] = useState(0);
 
-    // Le panneau s'ouvre sous la puce, bord gauche contre bord gauche. Là où il
-    // sortirait de l'écran, il se décale juste assez ; la puce change de
-    // largeur et de place pendant qu'il est ouvert (une opération se termine).
+    // Le panneau s'ouvre centré sous la puce. Là où il sortirait de l'écran, il
+    // se décale juste assez ; la puce change de largeur et de place pendant
+    // qu'il est ouvert (une opération se termine).
     useLayoutEffect(() => {
         const anchor = zone.current;
         if (!open || !anchor) return;
         const place = (): void => {
-            const { left } = anchor.getBoundingClientRect();
+            const box = anchor.getBoundingClientRect();
             const width = panel.current?.offsetWidth ?? 0;
-            setShift(Math.max(EDGE, Math.min(left, window.innerWidth - width - EDGE)) - left);
+            const centred = Math.round(box.left + (box.width - width) / 2);
+            setShift(Math.max(EDGE, Math.min(centred, window.innerWidth - width - EDGE)) - box.left);
         };
         place();
         const observer = new ResizeObserver(place);
