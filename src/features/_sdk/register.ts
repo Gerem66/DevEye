@@ -141,8 +141,14 @@ export function registerModules(installed: readonly InstalledFeatureModule[]): v
         if (BY_ID.has(manifest.id)) {
             throw new Error(`Module « ${manifest.id} » : déclaré deux fois dans features.config.json`);
         }
-        if ((manifest.nativeCapabilities ?? []).includes('notify') && !manifest.notifies) {
+        // Dans l'autre sens, chaque envoi lèverait `forbidden`, attrapé par le
+        // service : l'alerte se perdrait sans que rien ne le montre.
+        const canNotify = (manifest.nativeCapabilities ?? []).includes('notify');
+        if (canNotify && !manifest.notifies) {
             throw new Error(`Module « ${manifest.id} » : la capacité 'notify' exige notifies: true`);
+        }
+        if (manifest.notifies && !canNotify) {
+            throw new Error(`Module « ${manifest.id} » : notifies: true exige la capacité 'notify'`);
         }
         // Projeter suppose que l'app sache où vit un élément (`items`) :
         // refusé au boot plutôt que découvert à l'écran.

@@ -24,9 +24,10 @@ export const manifest = {
      * dossier, `devices.read` pour n'accepter qu'une machine de l'espace et y
      * éprouver le droit Fichiers, `members.read` pour nommer l'auteur d'un
      * travail, `accounts.read` pour vérifier à chaque passage que celui d'une
-     * sauvegarde de la base de DevEye est toujours administrateur.
+     * sauvegarde de la base de DevEye est toujours administrateur, `notify`
+     * pour prévenir d'une sauvegarde en échec.
      */
-    nativeCapabilities: ['agents', 'devices.read', 'members.read', 'accounts.read', 'objects'],
+    nativeCapabilities: ['agents', 'devices.read', 'members.read', 'accounts.read', 'objects', 'notify'],
     extraPermissions: [
         {
             key: 'deviceFolders',

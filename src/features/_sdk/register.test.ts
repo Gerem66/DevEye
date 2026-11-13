@@ -41,7 +41,15 @@ import type { ModuleServiceHost } from './service';
 type Extra = Partial<
     Pick<
         FeatureManifest,
-        'nativeCapabilities' | 'extraPermissions' | 'shareTier' | 'hasItems' | 'itemNoun' | 'domains' | 'quotas'
+        | 'nativeCapabilities'
+        | 'extraPermissions'
+        | 'shareTier'
+        | 'hasItems'
+        | 'itemNoun'
+        | 'domains'
+        | 'quotas'
+        | 'notifies'
+        | 'notifications'
     >
 >;
 
@@ -280,6 +288,15 @@ describe('registerModules : les sentinelles', () => {
             /'notify' exige notifies: true/
         );
         assert.equal(moduleManifest('x-sdknotify'), undefined);
+    });
+
+    it("refuse notifies sans la capacité 'notify' : chaque envoi lèverait", () => {
+        const notifies = { notifies: true, notifications: { hint: 'Prévient à chaque essai.' } };
+        assert.throws(
+            () => registerModules([{ manifest: manifest('x-sdknotifies', notifies), server: { features: [] } }]),
+            /notifies: true exige la capacité 'notify'/
+        );
+        assert.equal(moduleManifest('x-sdknotifies'), undefined);
     });
 
     it("valide le manifest avant tout : 'agents' est réservée aux ids natifs", () => {
