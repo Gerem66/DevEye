@@ -32,10 +32,14 @@ export type FindingOp =
           covered: number[];
           /** Ce que les écrans montrent a changé : état, éléments touchés ou gravité. */
           significant: boolean;
+          /** La gravité est montée : une fin de vie proche vient d'être atteinte. */
+          escalated: boolean;
       }
     | { type: 'resolve'; id: number };
 
 const keyOf = (kind: string, subjectKey: string): string => `${kind}|${subjectKey}`;
+
+const RANK: Record<string, number> = { none: 0, low: 1, medium: 2, high: 3, critical: 4 };
 
 export function reconcile(
     existing: readonly ExistingFinding[],
@@ -75,7 +79,8 @@ export function reconcile(
             !sameAssets ||
             found.severity !== draft.severity ||
             (found.score === null ? null : Number(found.score)) !== draft.score;
-        ops.push({ type: 'update', id: found.id, draft, state, reopened, covered, significant });
+        const escalated = !reopened && state === 'open' && (RANK[draft.severity] ?? 0) > (RANK[found.severity] ?? 0);
+        ops.push({ type: 'update', id: found.id, draft, state, reopened, covered, significant, escalated });
     }
 
     for (const f of existing) {

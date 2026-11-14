@@ -1,6 +1,8 @@
 import type { SdkExternalService, SdkExternalServicesContext } from '@deveye/types/sdk/server';
 
+import { eolHealth } from './matching/eol';
 import { osvHealth } from './matching/osv';
+import { registryHealth } from './matching/registry';
 import type { CveRepo } from './repo';
 
 const time = (ms: number): string => new Date(ms).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
@@ -22,6 +24,11 @@ export async function cveExternalServices({
     const cache = await repo.osvCacheSize();
     const paused = Date.now() < osvHealth.blockedUntil;
     const failed = osvHealth.lastFailure !== null && osvHealth.lastFailure.at > osvHealth.lastOkAt;
+    const eolAt = await repo.getState('eolFetchedAt');
+    const eolLate = eolAt === null || Date.now() / 1000 - eolAt > 2 * NVD_LATE_S;
+    const registryPaused = Date.now() < registryHealth.blockedUntil;
+    const registryFailed =
+        registryHealth.lastFailure !== null && registryHealth.lastFailure.at > registryHealth.lastOkAt;
     return [
         {
             id: 'nvd',
@@ -62,6 +69,42 @@ export async function cveExternalServices({
                       ]
                     : []),
                 { label: 'En cache', value: `${cache.queries} paquets, ${cache.vulns} avis` }
+            ]
+        },
+        {
+            id: 'endoflife',
+            name: 'endoflife.date',
+            provider: 'Projet communautaire endoflife.date',
+            state: eolLate ? 'degraded' : 'ok',
+            summary: eolLate
+                ? 'Le catalogue des fins de vie n’a pas été relu depuis plus de deux jours : la veille garde le précédent.'
+                : 'Les fins de vie des systèmes, logiciels et frameworks, relues une fois par jour.',
+            facts: [
+                { label: 'Dernière lecture', value: eolAt === null ? 'aucune' : time(eolAt * 1000) },
+                ...(eolHealth.lastFailure
+                    ? [
+                          {
+                              label: 'Dernier échec',
+                              value: `${time(eolHealth.lastFailure.at)}, ${eolHealth.lastFailure.reason}`,
+                              tone: 'warning' as const
+                          }
+                      ]
+                    : [])
+            ]
+        },
+        {
+            id: 'depsdev',
+            name: 'deps.dev',
+            provider: 'Google, Open Source Insights',
+            state: registryPaused ? 'degraded' : registryFailed ? 'down' : 'ok',
+            summary: registryPaused
+                ? `En pause jusqu’à ${time(registryHealth.blockedUntil)} : ${registryHealth.lastFailure?.reason ?? ''}`
+                : 'La dernière version et la dépréciation des dépendances directes, interrogées par la veille CVE.',
+            facts: [
+                {
+                    label: 'Dernière réponse',
+                    value: registryHealth.lastOkAt ? time(registryHealth.lastOkAt) : 'aucune depuis le démarrage'
+                }
             ]
         }
     ];

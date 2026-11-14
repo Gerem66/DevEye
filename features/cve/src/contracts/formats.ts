@@ -6,7 +6,7 @@ import { z } from 'zod';
  * le catalogue entier et coche ce que l'espace contient.
  */
 
-export const formatFamilySchema = z.enum(['lock', 'tool', 'device', 'database', 'deploy']);
+export const formatFamilySchema = z.enum(['lock', 'manifest', 'tool', 'device', 'database', 'deploy']);
 export type FormatFamily = z.infer<typeof formatFamilySchema>;
 
 export const formatIdSchema = z.enum([
@@ -31,6 +31,10 @@ export const formatIdSchema = z.enum([
     'mix.lock',
     'Package.resolved',
     'github-workflow',
+    'package.json',
+    'Cargo.toml',
+    'pyproject.toml',
+    'Gemfile',
     'Dockerfile',
     'compose',
     '.nvmrc',
@@ -59,6 +63,7 @@ export interface ExposureFormat {
 
 export const FORMAT_FAMILY_LABEL: Record<FormatFamily, string> = {
     lock: 'Fichiers de verrouillage',
+    manifest: 'Dépendances directes',
     tool: 'Outils et images',
     device: 'Appareils',
     database: 'Bases de données',
@@ -97,6 +102,10 @@ export const EXPOSURE_FORMATS: readonly ExposureFormat[] = [
         label: '.github/workflows/*.yml',
         detail: 'Les actions GitHub en version exacte'
     },
+    { id: 'package.json', family: 'manifest', label: 'package.json', detail: 'Les dépendances que le projet déclare' },
+    { id: 'Cargo.toml', family: 'manifest', label: 'Cargo.toml', detail: 'Les crates que le projet déclare' },
+    { id: 'pyproject.toml', family: 'manifest', label: 'pyproject.toml', detail: 'Les paquets que le projet déclare' },
+    { id: 'Gemfile', family: 'manifest', label: 'Gemfile', detail: 'Les gemmes que le projet déclare' },
     { id: 'Dockerfile', family: 'tool', label: 'Dockerfile', detail: 'Les images de base (FROM)' },
     { id: 'compose', family: 'tool', label: 'docker-compose.yml', detail: 'Les images des services (image:)' },
     { id: '.nvmrc', family: 'tool', label: '.nvmrc', detail: 'La version de Node' },

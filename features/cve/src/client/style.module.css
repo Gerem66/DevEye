@@ -706,6 +706,20 @@
     color: var(--text-secondary);
 }
 
+.componentTag {
+    margin-left: 6px;
+    padding: 0 6px;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-pill);
+    font-size: 0.68rem;
+    color: var(--text-muted);
+}
+
+.componentTagDanger {
+    border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+    color: var(--danger);
+}
+
 .componentEco {
     font-size: 0.72rem;
     color: var(--text-muted);

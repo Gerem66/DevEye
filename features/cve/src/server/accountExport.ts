@@ -39,6 +39,12 @@ export const cveAccountExport: FeatureAccountExport<CveRepo> = {
             where: 'finding_id IN (SELECT id FROM ft_cve_findings WHERE workspace_id = ?)',
             key: ['finding_id', 'asset_id']
         },
+        ft_cve_eol_products: {
+            skip: 'Les fins de vie publiées par endoflife.date, communes à tout le serveur : aucun compte n’y figure.'
+        },
+        ft_cve_pkg_meta: {
+            skip: 'Ce que deps.dev dit des paquets publics, gardé en cache pour tout le serveur : aucun compte n’y figure.'
+        },
         ft_cve_osv_queries: {
             skip: 'Le cache des réponses du catalogue public OSV, commun à tout le serveur : aucun compte n’y figure.'
         },

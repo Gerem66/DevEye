@@ -4,7 +4,7 @@ import { Button, openFeature, safeHref, StatusBadge, TextInput } from 'deveye-sd
 import { FINDING_REASON_MAX } from '../contracts/commands';
 import type { ExposureFinding } from '../contracts/exposure';
 
-import { since, SOURCE_FEATURE, SOURCE_ICON, whereLine } from './exposureLabels';
+import { FIXED_LABEL, since, SOURCE_FEATURE, SOURCE_ICON, whereLine } from './exposureLabels';
 import { useDetailAsPage } from './layout';
 import { fullDate, SEVERITY_LABEL, severityTone } from './severity';
 import styles from './style.module.css';
@@ -53,6 +53,11 @@ export default function FindingDetail({ finding, canWrite, busy, onIgnore, onRes
             </header>
 
             <div className={styles.detailMeta}>
+                {finding.kind === 'eol' && (
+                    <StatusBadge tone={finding.severity === 'high' ? 'danger' : 'warning'}>
+                        {finding.severity === 'high' ? 'Fin de vie atteinte' : 'Fin de vie proche'}
+                    </StatusBadge>
+                )}
                 {finding.kind === 'vuln' && (
                     <StatusBadge tone={severityTone(finding.severity)}>
                         {finding.score === null
@@ -73,7 +78,7 @@ export default function FindingDetail({ finding, canWrite, busy, onIgnore, onRes
                     {finding.subject.name}
                     {finding.subject.kind === 'package' && ` (${finding.subject.ecosystem})`}
                 </dd>
-                <dt>Corrigé en</dt>
+                <dt>{FIXED_LABEL[finding.kind]}</dt>
                 <dd>{finding.fixed.length > 0 ? finding.fixed.join(', ') : 'aucune version corrigée publiée'}</dd>
                 {finding.aliases.length > 0 && (
                     <>

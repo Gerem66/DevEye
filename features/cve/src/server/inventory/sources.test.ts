@@ -42,7 +42,12 @@ describe('un appareil', () => {
         });
         assert.deepEqual(
             components.map((c) => `${c.format}:${c.ecosystem}@${c.version}:${c.path ?? ''}`),
-            ['device-os:os@12:', 'container-engine:docker@27.1.1:', 'container-image:nginx@1.25.3:web (site/web)']
+            [
+                'device-os:os@12:',
+                'container-engine:docker@27.1.1:',
+                'container-image:nginx@1.25.3:web (site/web)',
+                'container-image:redis@7:cache'
+            ]
         );
     });
 });

@@ -51,16 +51,27 @@ function severityPart(f: AlertedFinding): string {
     return ` (gravité ${SEVERITY_WORD[f.severity]}${score})`;
 }
 
+/** Ce qu'un constat est, en tête de son avis. */
+const KIND_LEAD: Record<FindingKind, { icon: string; word: string }> = {
+    vuln: { icon: '🐞', word: 'Faille' },
+    eol: { icon: '⏳', word: 'Fin de vie' },
+    deprecated: { icon: '📦', word: 'Paquet signalé par son registre' },
+    outdated: { icon: '🕰️', word: 'Dépendance en retard' }
+};
+
 function colorOf(f: AlertedFinding): number {
+    if (f.kind === 'eol') return f.severity === 'high' ? COLOR_DANGER : COLOR_WARNING;
     if (f.kind !== 'vuln') return COLOR_INFO;
     return RANK[f.severity] >= RANK.high ? COLOR_DANGER : COLOR_WARNING;
 }
 
 export function findingAlert(f: AlertedFinding, labelOf: (assetId: number) => string): SdkAlert {
     const labels = f.content.affected.map((a) => labelOf(a.assetId));
+    const { icon, word: what } = KIND_LEAD[f.kind];
+    const where = labels.length > 1 ? `${labels.length} éléments` : labels[0];
     const id = f.advisoryId ?? f.content.subject.name;
-    const what = f.kind === 'deprecated' ? 'Paquet signalé par son registre' : 'Faille';
-    const subject = `🐞 ${id}${severityPart(f)} touche ${labels.length > 1 ? `${labels.length} éléments` : labels[0]}`;
+    const subject =
+        f.kind === 'vuln' ? `${icon} ${id}${severityPart(f)} touche ${where}` : `${icon} ${f.content.title} (${where})`;
     const versions = [...new Set(f.content.affected.map((a) => a.version))].join(', ');
     const lines = [
         `${what}${f.reopened ? ' de retour' : ''} : ${f.content.title}`,
@@ -86,7 +97,7 @@ export function findingAlert(f: AlertedFinding, labelOf: (assetId: number) => st
         },
         embeds: [
             {
-                title: trim(`🐞 ${id}${severityPart(f)}`),
+                title: trim(f.kind === 'vuln' ? `${icon} ${id}${severityPart(f)}` : `${icon} ${f.content.title}`),
                 description: trim(f.content.title),
                 url: f.content.reference ?? undefined,
                 color: colorOf(f),

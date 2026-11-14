@@ -120,6 +120,13 @@ export interface ExposureRepo {
     openByAsset(workspaceId: number): Promise<{ asset_id: number; n: number }[]>;
     purgeResolved(before: number): Promise<number>;
 
+    /** Le catalogue des fins de vie, un produit par ligne (son JSON). */
+    listEolProducts(): Promise<{ product: string; body: string }[]>;
+    /** Remplace le catalogue entier : un produit retiré chez endoflife.date disparaît aussi ici. */
+    replaceEolProducts(entries: readonly { product: string; body: string }[], at: number): Promise<void>;
+    pkgMeta(keys: readonly string[], freshSince: number): Promise<{ pkg_key: string; body: string }[]>;
+    savePkgMeta(entries: readonly { key: string; body: string }[], at: number): Promise<void>;
+    prunePkgMeta(before: number): Promise<void>;
     osvQueries(keys: readonly string[], freshSince: number): Promise<{ pkg_key: string; vuln_ids: string }[]>;
     saveOsvQueries(entries: readonly { key: string; vulnIds: string }[], at: number): Promise<void>;
     osvVulns(ids: readonly string[], freshSince: number): Promise<{ id: string; body: string }[]>;
@@ -333,6 +340,36 @@ export function createExposureRepo(q: SdkQueryable): ExposureRepo {
             return res.affectedRows;
         },
 
+        async listEolProducts() {
+            return q.query<{ product: string; body: string }>('SELECT product, body FROM ft_cve_eol_products');
+        },
+        async replaceEolProducts(entries, at) {
+            await q.execute('DELETE FROM ft_cve_eol_products');
+            for (let i = 0; i < entries.length; i += 100) {
+                await q.execute('INSERT INTO ft_cve_eol_products (product, body, fetched_at) VALUES ?', [
+                    entries.slice(i, i + 100).map((e) => [e.product, e.body, at])
+                ]);
+            }
+        },
+        async pkgMeta(keys, freshSince) {
+            if (keys.length === 0) return [];
+            return q.query<{ pkg_key: string; body: string }>(
+                'SELECT pkg_key, body FROM ft_cve_pkg_meta WHERE pkg_key IN (?) AND fetched_at >= ?',
+                [[...keys], freshSince]
+            );
+        },
+        async savePkgMeta(entries, at) {
+            for (const e of entries) {
+                await q.execute(
+                    `INSERT INTO ft_cve_pkg_meta (pkg_key, body, fetched_at) VALUES (?, ?, ?)
+                     ON DUPLICATE KEY UPDATE body = VALUES(body), fetched_at = VALUES(fetched_at)`,
+                    [e.key, e.body, at]
+                );
+            }
+        },
+        async prunePkgMeta(before) {
+            await q.execute('DELETE FROM ft_cve_pkg_meta WHERE fetched_at < ?', [before]);
+        },
         async osvQueries(keys, freshSince) {
             if (keys.length === 0) return [];
             return q.query<{ pkg_key: string; vuln_ids: string }>(

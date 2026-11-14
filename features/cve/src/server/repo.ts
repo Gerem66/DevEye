@@ -87,7 +87,7 @@ export interface CveRepo extends ExposureRepo {
  * `ingestCursor` : jusqu'où le fil a été ingéré (secondes epoch, sur la date de
  * modification du NVD). `ingestedAt` : quand le dernier tour a réussi.
  */
-export type CveStateKey = 'ingestCursor' | 'ingestedAt';
+export type CveStateKey = 'ingestCursor' | 'ingestedAt' | 'eolFetchedAt';
 
 /** Lignes par INSERT : au-dela, la requete devient trop grosse pour le serveur. */
 const UPSERT_CHUNK = 500;

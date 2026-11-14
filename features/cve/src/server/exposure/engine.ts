@@ -9,9 +9,12 @@ import {
 } from '../../contracts/exposure';
 import { TOOLS, WATCHED_PRODUCTS, type CveProduct } from '../inventory/tools';
 import { matchComponents, type AssetComponents, type MatchCatalogues } from '../matching/match';
+import { fetchDump } from '../matching/eol';
 import { queryOsv, type OsvCache, type OsvFetch, type VulnResponse } from '../matching/osv';
+import { fetchPackage, metaKey, RegistryUnavailable, type PackageMeta } from '../matching/registry';
 import type { CveAffectingRow, CveRepo } from '../repo';
 import { findingAlert, firstScanAlert, isAlertable, type AlertedFinding, type FirstScan } from './notice';
+import { loadEolIndex } from './annotate';
 import { reconcile, type ExistingFinding } from './reconcile';
 import type { AssetRow } from './repo';
 import { EXPOSURE_PREFS_KEY, openJson, productKey, sealJson, setExposureLink, type AssetSummary } from './shared';
@@ -40,6 +43,14 @@ const REEVALUATE_S = 6 * 3600;
 const RESOLVED_KEPT_S = 30 * 86_400;
 const OSV_CACHE_KEPT_S = 7 * 86_400;
 const HOUSEKEEPING_S = 3600;
+/** Le catalogue des fins de vie se relit une fois par jour ; un échec se retente une heure après. */
+const EOL_REFRESH_S = 24 * 3600;
+const EOL_RETRY_S = 3600;
+/** Ce que deps.dev dit d'un paquet reste bon un jour. */
+const REGISTRY_TTL_S = 24 * 3600;
+const REGISTRY_KEPT_S = 7 * 86_400;
+/** Les paquets qu'une évaluation demande au plus à deps.dev : le reste attend le passage suivant. */
+const REGISTRY_PER_EVALUATION = 100;
 /** Au-delà, le fil du NVD est réputé en retard et le catalogue ne garantit plus rien. */
 const NVD_STALE_AFTER_S = 24 * 3600;
 
@@ -88,18 +99,77 @@ function keysOf(components: readonly ExposureComponent[]): string[] {
 
 export function createExposureEngine(
     deps: FeatureServiceDeps<CveRepo>,
-    options: { osvFetch?: OsvFetch } = {}
+    options: { osvFetch?: OsvFetch; eolFetch?: typeof fetch; registryFetch?: typeof fetch } = {}
 ): ExposureEngine {
     const osvCache = osvCacheOf(deps.repo);
     const dirty = new Set<number>();
     const evaluatedAt = new Map<number, number>();
     const notices = new Map<number, string[]>();
     let lastHousekeeping = 0;
+    let lastEolAttempt = 0;
+    /** Une fois par jour, le dump d'endoflife.date ; ensuite, chaque espace se réévalue. */
+    async function refreshEol(workspaceIds: readonly number[], now: number): Promise<void> {
+        const fetchedAt = (await deps.repo.getState('eolFetchedAt')) ?? 0;
+        if (now - fetchedAt < EOL_REFRESH_S || now - lastEolAttempt < EOL_RETRY_S) return;
+        lastEolAttempt = now;
+        try {
+            const products = await fetchDump(options.eolFetch);
+            await deps.repo.replaceEolProducts(
+                products.map((p) => ({ product: p.name, body: JSON.stringify(p) })),
+                now
+            );
+            await deps.repo.setState('eolFetchedAt', now);
+            for (const ws of workspaceIds) dirty.add(ws);
+        } catch (e) {
+            deps.logger.warn({ err: (e as Error).message }, 'cve: catalogue des fins de vie non relu');
+        }
+    }
     let halt = new AbortController();
     let loop: Promise<void> | null = null;
     let pending = false;
 
-    const catalogues = (rowsOf: Map<string, readonly CveAffectingRow[]>): MatchCatalogues => ({
+    const catalogues = (ws: number, rowsOf: Map<string, readonly CveAffectingRow[]>): MatchCatalogues => ({
+        eol: () => loadEolIndex(deps.repo),
+        async registry(packages) {
+            const now = nowSeconds();
+            const key = (p: { system: string; name: string }): string => `${p.system}|${p.name}`;
+            const cached = new Map(
+                (
+                    await deps.repo.pkgMeta(
+                        packages.map((p) => metaKey(p.system, p.name)),
+                        now - REGISTRY_TTL_S
+                    )
+                ).map((r) => [r.pkg_key, r.body])
+            );
+            const metas = new Map<string, PackageMeta | null>();
+            const fresh: { key: string; body: string }[] = [];
+            let reason: string | null = null;
+            let budget = REGISTRY_PER_EVALUATION;
+            for (const p of packages) {
+                const body = cached.get(metaKey(p.system, p.name));
+                if (body !== undefined) {
+                    metas.set(key(p), JSON.parse(body) as PackageMeta | null);
+                    continue;
+                }
+                if (reason !== null) continue;
+                if (budget-- <= 0) {
+                    // Le reste au passage suivant, sans attendre six heures.
+                    reason = 'Les registres de paquets se lisent par lots : le reste suit dans quelques minutes.';
+                    dirty.add(ws);
+                    continue;
+                }
+                try {
+                    const meta = await fetchPackage(p.system, p.name, options.registryFetch);
+                    metas.set(key(p), meta);
+                    fresh.push({ key: metaKey(p.system, p.name), body: JSON.stringify(meta) });
+                } catch (e) {
+                    if (!(e instanceof RegistryUnavailable)) throw e;
+                    reason = `${e.message} Les constats de paquets d’avant restent.`;
+                }
+            }
+            if (fresh.length > 0) await deps.repo.savePkgMeta(fresh, now);
+            return { metas, reason };
+        },
         osv: (list) => queryOsv(list, halt.signal, { cache: osvCache, fetchImpl: options.osvFetch }),
         async nvd(vendor, product) {
             const key = `${vendor}:${product}`;
@@ -255,7 +325,7 @@ export function createExposureEngine(
                 components: await openJson<ExposureComponent[]>(cipher, a.inventory_enc, [])
             });
         }
-        const result = await matchComponents(inputs, catalogues(rowsOf));
+        const result = await matchComponents(inputs, catalogues(ws, rowsOf));
 
         const linkRows = await deps.repo.linksOf(ws);
         const links = new Map<number, Map<number, boolean>>();
@@ -304,8 +374,10 @@ export function createExposureEngine(
                 await deps.repo.setLinks(op.id, assetIds, op.covered);
                 changed ||= op.significant;
             }
-            const finding = { ...op.draft, reopened: op.type === 'update' };
-            if (op.type === 'insert' || op.reopened) alerted.push(finding);
+            const finding = { ...op.draft, reopened: op.type === 'update' && op.reopened };
+            // Une fin de vie proche qui devient atteinte se dit une seconde fois.
+            const escalated = op.type === 'update' && op.escalated && op.draft.kind === 'eol';
+            if (op.type === 'insert' || op.reopened || escalated) alerted.push(finding);
             if (op.type === 'insert' || op.state === 'open') open.push(finding);
         }
         await announce(ws, prefs, assets, alerted, open);
@@ -379,6 +451,7 @@ export function createExposureEngine(
                 (await deps.storeFor(ws).getJson(EXPOSURE_PREFS_KEY, exposurePrefsSchema)) ?? DEFAULT_EXPOSURE_PREFS
             );
         }
+        await refreshEol(workspaceIds, now);
         for (const source of sources) {
             if (halt.signal.aborted) return;
             const enabled = workspaceIds.filter((ws) => prefs.get(ws)?.sources[source.id] !== false);
@@ -404,6 +477,7 @@ export function createExposureEngine(
         if (now - lastHousekeeping > HOUSEKEEPING_S) {
             lastHousekeeping = now;
             await deps.repo.pruneOsvCache(now - OSV_CACHE_KEPT_S);
+            await deps.repo.prunePkgMeta(now - REGISTRY_KEPT_S);
             await deps.repo.purgeResolved(now - RESOLVED_KEPT_S);
         }
     }

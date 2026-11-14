@@ -4,11 +4,29 @@ import type { ExposureAsset, ExposureFinding, ExposureSource, FindingKind } from
 export const FINDING_KINDS: readonly { value: FindingKind; label: string; empty: string }[] = [
     { value: 'vuln', label: 'Failles', empty: 'Aucune faille connue dans ce que l’espace fait tourner.' },
     {
+        value: 'eol',
+        label: 'Fins de vie',
+        empty: 'Rien de ce que l’espace fait tourner n’arrive en fin de vie dans les trente jours.'
+    },
+    {
         value: 'deprecated',
         label: 'Dépréciées',
         empty: 'Aucun paquet déprécié ou abandonné par son auteur.'
+    },
+    {
+        value: 'outdated',
+        label: 'En retard',
+        empty: 'Aucune dépendance directe en retard d’une version majeure.'
     }
 ];
+
+/** Ce que la ligne « Corrigé en » veut dire, selon le genre du constat. */
+export const FIXED_LABEL: Record<FindingKind, string> = {
+    vuln: 'Corrigé en',
+    eol: 'Branches maintenues',
+    deprecated: 'Dernière version',
+    outdated: 'Dernière version'
+};
 
 export const SOURCE_LABEL: Record<ExposureSource, string> = {
     git: 'Dépôt Git',

@@ -7,7 +7,9 @@ import { TOOLS } from '../inventory/tools';
 import type { CveAffectingRow } from '../repo';
 import { isAffected } from '../versions';
 import { cvss3Score, severityOfScore } from './cvss';
+import { eolProductOf, releaseFor, type EolIndex } from './eol';
 import type { OsvHit, OsvOutcome } from './osv';
+import { majorKey, majorsBehind, REGISTRY_SYSTEM, type PackageMeta } from './registry';
 
 /**
  * Les composants d'un espace confrontés aux catalogues : OSV pour les paquets,
@@ -16,7 +18,7 @@ import type { OsvHit, OsvOutcome } from './osv';
  * confronte aux constats déjà en base.
  */
 
-export type FindingOrigin = 'osv' | 'nvd';
+export type FindingOrigin = 'osv' | 'nvd' | 'eol' | 'registry';
 
 /** Ce qu'un élément a de touché par un constat. */
 export interface AffectedEntry {
@@ -58,6 +60,28 @@ export interface MatchCatalogues {
     nvd(vendor: string, product: string): Promise<readonly CveAffectingRow[]>;
     /** Pourquoi le NVD ne peut pas encore répondre de ces produits, ou `null`. */
     nvdStale(products: readonly { vendor: string; product: string }[]): Promise<string | null>;
+    /** Le catalogue des fins de vie, `null` tant qu'il n'a jamais été chargé. */
+    eol(): Promise<EolIndex | null>;
+    /**
+     * Ce que les registres disent de ces paquets, par `system|name`. `reason`
+     * dit pourquoi certains manquent (une panne, ou la lecture qui avance par
+     * lots) : leurs constats d'avant restent alors tels quels.
+     */
+    registry(
+        packages: readonly { system: string; name: string }[]
+    ): Promise<{ metas: Map<string, PackageMeta | null>; reason: string | null }>;
+}
+
+/** Une fin de vie à moins de ça se signale déjà. */
+const EOL_SOON_MS = 30 * 86_400_000;
+
+function frenchDate(iso: string): string {
+    return new Date(`${iso}T00:00:00Z`).toLocaleDateString('fr-FR', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+        timeZone: 'UTC'
+    });
 }
 
 export interface MatchResult {
@@ -189,7 +213,7 @@ export async function matchComponents(
     const rowsOf = new Map<string, readonly CveAffectingRow[]>();
     for (const asset of assets) {
         for (const c of asset.components) {
-            if (c.kind !== 'product') continue;
+            if (c.kind !== 'product' || c.exact === false) continue;
             const tool = TOOLS[c.ecosystem];
             if (!tool) continue;
             const seen = new Set<string>();
@@ -217,6 +241,122 @@ export async function matchComponents(
                             }
                         },
                         { assetId: asset.assetId, version: c.version, path: c.path, line: c.line }
+                    );
+                }
+            }
+        }
+    }
+
+    // Les fins de vie : chaque branche, de tout ce que l'espace fait tourner.
+    const index = await catalogues.eol();
+    if (index === null) unavailable.eol = 'Le catalogue des fins de vie n’a pas encore été chargé.';
+    else {
+        const now = Date.now();
+        for (const asset of assets) {
+            for (const c of asset.components) {
+                const product = eolProductOf(c, index);
+                const release = product ? releaseFor(product, c.version) : null;
+                if (!product || !release) continue;
+                const at = release.eolFrom ? Date.parse(`${release.eolFrom}T00:00:00Z`) : NaN;
+                const reached = release.isEol || (Number.isFinite(at) && at <= now);
+                if (!reached && !(Number.isFinite(at) && at - now <= EOL_SOON_MS)) continue;
+                const when = release.eolFrom ? frenchDate(release.eolFrom) : null;
+                const maintained = product.releases
+                    .filter((r) => r.isMaintained && !r.isEol)
+                    .slice(0, 2)
+                    .map((r) => r.latest ?? r.name);
+                touch(
+                    {
+                        kind: 'eol',
+                        origin: 'eol',
+                        subjectKey: subjectKey(['eol', product.name, release.name]),
+                        advisoryId: null,
+                        severity: reached ? 'high' : 'medium',
+                        score: null,
+                        content: {
+                            title: `${product.label} ${release.name} : ${
+                                reached
+                                    ? when
+                                        ? `fin de vie depuis le ${when}`
+                                        : 'fin de vie'
+                                    : `fin de vie le ${when}`
+                            }`,
+                            summary: reached
+                                ? `${product.label} ${release.name} ne reçoit plus de correctifs : une faille découverte demain n’y sera pas corrigée.`
+                                : `${product.label} ${release.name} ne recevra plus de correctifs après le ${when}.`,
+                            subject: { kind: c.kind, ecosystem: c.ecosystem, name: product.label },
+                            fixed: maintained,
+                            reference: `https://endoflife.date/${product.name}`,
+                            aliases: []
+                        }
+                    },
+                    { assetId: asset.assetId, version: c.version, path: c.path, line: c.line }
+                );
+            }
+        }
+    }
+
+    // Les dépendances directes chez leur registre : dépréciées, ou en retard.
+    const wanted = new Map<string, { system: string; name: string }>();
+    for (const asset of assets) {
+        for (const c of asset.components) {
+            const system = c.kind === 'package' && c.direct ? REGISTRY_SYSTEM[c.ecosystem] : undefined;
+            if (system) wanted.set(`${system}|${c.name}`, { system, name: c.name });
+        }
+    }
+    if (wanted.size > 0) {
+        const answer = await catalogues.registry([...wanted.values()]);
+        if (answer.reason !== null) unavailable.registry = answer.reason;
+        for (const asset of assets) {
+            for (const c of asset.components) {
+                const system = c.kind === 'package' && c.direct ? REGISTRY_SYSTEM[c.ecosystem] : undefined;
+                const meta = system ? answer.metas.get(`${system}|${c.name}`) : undefined;
+                if (!system || !meta) continue;
+                const reference = `https://deps.dev/${system.toLowerCase()}/${encodeURIComponent(c.name)}`;
+                const subject = { kind: 'package' as const, ecosystem: c.ecosystem, name: c.name };
+                const entry = { assetId: asset.assetId, version: c.version, path: c.path, line: c.line };
+                const reason = meta.deprecated[c.version];
+                if (reason !== undefined) {
+                    touch(
+                        {
+                            kind: 'deprecated',
+                            origin: 'registry',
+                            subjectKey: subjectKey(['deprecated', c.ecosystem, c.name]),
+                            advisoryId: null,
+                            severity: 'none',
+                            score: null,
+                            content: {
+                                title: `${c.name} : version dépréciée par son auteur`,
+                                summary: reason || `${c.name} ${c.version} est marquée dépréciée dans son registre.`,
+                                subject,
+                                fixed: meta.latest ? [meta.latest] : [],
+                                reference,
+                                aliases: []
+                            }
+                        },
+                        entry
+                    );
+                }
+                const behind = meta.latest ? majorsBehind(c.version, meta.latest) : 0;
+                if (meta.latest && behind > 0) {
+                    touch(
+                        {
+                            kind: 'outdated',
+                            origin: 'registry',
+                            subjectKey: subjectKey(['outdated', c.ecosystem, c.name, majorKey(meta.latest)]),
+                            advisoryId: null,
+                            severity: 'none',
+                            score: null,
+                            content: {
+                                title: `${c.name} : ${behind} version${behind > 1 ? 's' : ''} majeure${behind > 1 ? 's' : ''} de retard`,
+                                summary: `La dernière version publiée de ${c.name} est la ${meta.latest}.`,
+                                subject,
+                                fixed: [meta.latest],
+                                reference,
+                                aliases: []
+                            }
+                        },
+                        entry
                     );
                 }
             }

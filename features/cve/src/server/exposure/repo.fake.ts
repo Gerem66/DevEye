@@ -15,6 +15,8 @@ export function memoryExposureRepo(): MemoryExposure {
     const keys: { asset_id: number; key_hash: string }[] = [];
     const osvQueries = new Map<string, { vuln_ids: string; at: number }>();
     const osvVulns = new Map<string, { body: string; at: number }>();
+    let eolProducts: { product: string; body: string }[] = [];
+    const pkgMeta = new Map<string, { body: string; at: number }>();
     let nextAsset = 1;
     let nextFinding = 1;
     const asset = (id: number): AssetRow | undefined => assets.find((a) => a.id === id);
@@ -224,6 +226,24 @@ export function memoryExposureRepo(): MemoryExposure {
                 }
             }
             return removed;
+        },
+        async listEolProducts() {
+            return [...eolProducts];
+        },
+        async replaceEolProducts(entries) {
+            eolProducts = [...entries];
+        },
+        async pkgMeta(wanted, freshSince) {
+            return wanted.flatMap((key) => {
+                const hit = pkgMeta.get(key);
+                return hit && hit.at >= freshSince ? [{ pkg_key: key, body: hit.body }] : [];
+            });
+        },
+        async savePkgMeta(entries, at) {
+            for (const e of entries) pkgMeta.set(e.key, { body: e.body, at });
+        },
+        async prunePkgMeta(before) {
+            for (const [k, v] of pkgMeta) if (v.at < before) pkgMeta.delete(k);
         },
         async osvQueries(wanted, freshSince) {
             return wanted.flatMap((key) => {

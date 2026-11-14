@@ -52,16 +52,27 @@ déchiffrer.
 
 ## 2. Les correspondances
 
-| Composant                      | Catalogue               | Où                                |
-| ------------------------------ | ----------------------- | --------------------------------- |
-| Paquet d'un registre (verrous) | OSV.dev, en lot         | `matching/osv.ts`, cache commun   |
-| Produit (nginx, Node, …)       | Le NVD, catalogue local | `ft_cve_products` + `versions.ts` |
+| Constat                 | Catalogue                     | Ce qui est comparé                                             |
+| ----------------------- | ----------------------------- | -------------------------------------------------------------- |
+| Faille (`vuln`)         | OSV.dev, en lot, cache commun | les paquets des verrous, à leur version exacte                 |
+| Faille (`vuln`)         | le NVD, catalogue local       | les produits (nginx, Node, PostgreSQL…), à leur version exacte |
+| Fin de vie (`eol`)      | endoflife.date, dump du jour  | la branche de tout produit, système ou paquet déclaré          |
+| Déprécié (`deprecated`) | deps.dev (et RustSec par OSV) | la version d'une dépendance directe                            |
+| En retard (`outdated`)  | deps.dev                      | la majeure d'une dépendance directe contre la dernière publiée |
 
 Les produits que la veille sait reconnaître (`TOOLS`, `inventory/tools.ts`)
 sont inscrits dans `ft_cve_watched` au démarrage : leur historique entier est
 rattrapé une fois, sinon une version ancienne ne trouverait pas ses CVE
-anciennes. Seule une **version exacte** se compare : `nginx:1.25` suit une
-branche, on ne sait pas quel correctif tourne.
+anciennes. Seule une **version exacte** se compare aux failles : `nginx:1.25`
+suit une branche, on ne sait pas quel correctif tourne ; il garde un
+composant « de branche » (`exact: false`) qui ne sert qu'à la fin de vie.
+
+Une **dépendance directe** est un paquet qu'un manifeste du dossier de son
+verrou déclare (`package.json`, `Cargo.toml`, `pyproject.toml`, `Gemfile`,
+`go.mod` sans `// indirect`, tout `requirements.txt`) : seule elle est
+demandée à deps.dev (cent par évaluation au plus, le reste au passage
+suivant), et seule elle a une fin de vie de paquet (un framework). Une fin
+de vie se signale trente jours avant, puis quand elle est atteinte.
 
 ## 3. Les constats
 

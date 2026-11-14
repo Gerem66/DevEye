@@ -117,10 +117,24 @@ export default function DetectionPanel({ canWrite }: SettingsPanelProps) {
                 </div>
             )}
             <Switch
+                checked={prefs.alerts.eol}
+                onChange={(on) => alert('eol', on)}
+                label='Fin de vie'
+                hint='Un système, un logiciel ou un framework dont la branche cesse de recevoir des correctifs : trente jours avant, puis le jour même.'
+                disabled={!canWrite}
+            />
+            <Switch
                 checked={prefs.alerts.deprecated}
                 onChange={(on) => alert('deprecated', on)}
                 label='Paquet déprécié ou abandonné'
                 hint='Un paquet que son auteur a déprécié, ou que son registre signale comme plus maintenu.'
+                disabled={!canWrite}
+            />
+            <Switch
+                checked={prefs.alerts.outdated}
+                onChange={(on) => alert('outdated', on)}
+                label='Version majeure de retard'
+                hint='Une dépendance que le projet déclare, une version majeure ou plus derrière la dernière publiée. Une fois par paquet et par majeure : coupé d’office, chaque sortie d’une dépendance le déclencherait.'
                 disabled={!canWrite}
             />
 

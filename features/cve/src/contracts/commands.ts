@@ -7,6 +7,7 @@ import {
     cveSeverityFilterSchema
 } from './domain';
 import {
+    componentNotesSchema,
     exposureAssetSchema,
     exposureComponentSchema,
     exposureCountsSchema,
@@ -126,7 +127,10 @@ export const cveInventory = {
 export const cveAsset = {
     command: 'cve.asset' as const,
     input: z.object({ id: z.number().int().positive() }),
-    output: z.object({ asset: exposureAssetSchema, components: z.array(exposureComponentSchema) })
+    output: z.object({
+        asset: exposureAssetSchema,
+        components: z.array(exposureComponentSchema.extend({ notes: componentNotesSchema }))
+    })
 };
 
 /** Ignorer un constat, pour les éléments qu'il touche à cet instant. */

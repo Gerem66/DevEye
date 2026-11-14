@@ -132,9 +132,21 @@ export const EXTERNAL_SERVICES: readonly ExternalService[] = [
     },
     {
         name: 'OSV.dev',
-        purpose: 'Signale les dépendances vulnérables de vos dépôts',
-        receives: 'Le nom et la version des dépendances analysées',
-        features: ['x-audit']
+        purpose: 'Signale les paquets vulnérables de vos dépôts',
+        receives: 'Le nom et la version des paquets lus par la veille',
+        features: ['cve']
+    },
+    {
+        name: 'endoflife.date',
+        purpose: 'Donne la fin de vie des systèmes, logiciels et frameworks que vous faites tourner',
+        receives: 'Rien de vous : le catalogue entier se lit une fois par jour',
+        features: ['cve']
+    },
+    {
+        name: 'deps.dev',
+        purpose: 'Dit si une dépendance de vos projets est dépréciée, ou en retard sur sa dernière version',
+        receives: 'Le nom des dépendances que vos projets déclarent',
+        features: ['cve']
     },
     {
         name: 'Cloudflare et Google Public DNS',

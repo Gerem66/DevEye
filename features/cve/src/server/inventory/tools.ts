@@ -6,8 +6,9 @@ import type { FormatId } from '../../contracts/formats';
  * des paquets d'un registre, OSV ne les connaît pas ; le catalogue du NVD, lui,
  * les connaît par leur nom (`f5:nginx`, `nodejs:node.js`).
  *
- * Seule une version exacte se compare : `nginx:1.25` suit les correctifs de la
- * branche, on ne sait pas lequel tourne. Une étiquette flottante est ignorée.
+ * Seule une version exacte se compare aux failles : `nginx:1.25` suit les
+ * correctifs de la branche, on ne sait pas lequel tourne. Une étiquette
+ * flottante reste un composant « de branche », qui ne sert qu'à la fin de vie.
  */
 
 export interface CveProduct {
@@ -83,10 +84,12 @@ const ALIASES: Record<string, string> = {
 /** Les produits dont le catalogue garde tout l'historique, pour qu'une version ancienne trouve ses CVE. */
 export const WATCHED_PRODUCTS: readonly CveProduct[] = Object.values(TOOLS).flatMap((t) => t.products);
 
-/** Un outil trouvé dans un fichier, à sa version exacte. */
+/** Un outil trouvé dans un fichier, à sa version exacte ou à sa branche. */
 export interface ToolUse {
     tool: string;
     version: string;
+    /** `false` : seule la branche est connue (`postgres:13`). */
+    exact: boolean;
     format: FormatId;
     path: string;
     line: number;
@@ -96,6 +99,11 @@ export function toolOf(name: string): string | null {
     const base = name.toLowerCase().split('/').pop() ?? '';
     const tool = ALIASES[base] ?? base;
     return tool in TOOLS ? tool : null;
+}
+
+/** La branche d'une étiquette flottante (`13-alpine` → `13`), ou rien sans nombre en tête (`latest`). */
+export function cycleVersion(tag: string): string | null {
+    return /^v?(\d+(?:\.\d+)*)/.exec(tag)?.[1] ?? null;
 }
 
 /** La version exacte d'une étiquette (`20.11.1-alpine` → `20.11.1`), ou rien pour une étiquette flottante. */
@@ -137,15 +145,16 @@ function lineAt(text: string, index: number): number {
     return line;
 }
 
-/** Les outils qu'un fichier déclare, à leur version exacte. Fonction pure. */
+/** Les outils qu'un fichier déclare, à leur version exacte, ou à leur branche faute de mieux. Fonction pure. */
 export function findTools(path: string, text: string): ToolUse[] {
     const base = path.slice(path.lastIndexOf('/') + 1);
     const out: ToolUse[] = [];
     const push = (tool: string | null, tag: string, index: number, format: FormatId): void => {
         if (!tool) return;
-        const version = exactVersion(tool, tag);
+        const exact = exactVersion(tool, tag);
+        const version = exact ?? cycleVersion(tag);
         if (!version) return;
-        out.push({ tool, version, format, path, line: lineAt(text, index) });
+        out.push({ tool, version, exact: exact !== null, format, path, line: lineAt(text, index) });
     };
 
     if (isDockerfile(path)) {

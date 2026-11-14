@@ -131,7 +131,8 @@ describe('le rattrapage des produits suivis', () => {
         const repo = memoryRepo();
         const client = nvd([nginxCve('CVE-2024-0001', '1.25.4'), nginxCve('CVE-2020-0002', '1.19.0')]);
         const deps = createTestServiceDeps({ repo });
-        const service = createService(deps, client);
+        // Aucun catalogue ne sort sur le réseau : endoflife.date répond en panne.
+        const service = createService(deps, client, { eolFetch: async () => new Response('', { status: 503 }) });
         await service.start?.();
         // Le premier tour part au démarrage sans être attendu : il rattrape
         // quatre pages, une par produit ici.

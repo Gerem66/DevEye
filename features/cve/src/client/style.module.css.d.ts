@@ -15,6 +15,8 @@ declare const styles: {
     readonly componentList: string;
     readonly componentName: string;
     readonly componentRow: string;
+    readonly componentTag: string;
+    readonly componentTagDanger: string;
     readonly componentVersion: string;
     readonly detail: string;
     readonly detailActions: string;

@@ -4,6 +4,8 @@ DROP TABLE IF EXISTS ft_cve_finding_assets;
 DROP TABLE IF EXISTS ft_cve_findings;
 DROP TABLE IF EXISTS ft_cve_asset_keys;
 DROP TABLE IF EXISTS ft_cve_assets;
+DROP TABLE IF EXISTS ft_cve_eol_products;
+DROP TABLE IF EXISTS ft_cve_pkg_meta;
 DROP TABLE IF EXISTS ft_cve_osv_queries;
 DROP TABLE IF EXISTS ft_cve_osv_vulns;
 DROP TABLE IF EXISTS ft_cve_favorites;

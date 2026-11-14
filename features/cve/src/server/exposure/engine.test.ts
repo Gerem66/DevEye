@@ -51,6 +51,10 @@ async function osvFetch(url: string, init?: RequestInit): Promise<Response> {
     });
 }
 
+/** Aucun catalogue ne sort sur le réseau : endoflife.date en panne, deps.dev qui ne connaît rien. */
+const offline = async (): Promise<Response> => new Response('', { status: 503 });
+const unknown = async (): Promise<Response> => new Response('', { status: 404 });
+
 interface FakeRepoState {
     files: Record<number, { path: string; text: string }[]>;
 }
@@ -146,7 +150,7 @@ function setup(hidden: Set<number> = new Set()) {
     };
     const git = fakeGit(homes, files, hidden);
     const deps = createTestServiceDeps({ repo, providers: { [GIT_ITEMS_PROVIDER]: git } });
-    const engine = createExposureEngine(deps, { osvFetch });
+    const engine = createExposureEngine(deps, { osvFetch, eolFetch: offline, registryFetch: unknown });
     const pass = () => deps.recorded.tickers[0].tick();
     return { repo, homes, files, git, deps, engine, pass };
 }
@@ -316,7 +320,7 @@ describe('les appareils et les bases', () => {
                 }) as unknown as DockerInventory,
             providers: { [DATABASE_ITEMS_PROVIDER]: databases }
         });
-        const engine = createExposureEngine(deps, { osvFetch });
+        const engine = createExposureEngine(deps, { osvFetch, eolFetch: offline, registryFetch: unknown });
         await engine.start();
         await deps.recorded.tickers[0].tick();
         await engine.stop();
@@ -329,5 +333,50 @@ describe('les appareils et les bases', () => {
         assert.ok(nginx, 'le conteneur nginx 1.25.3 trouve sa CVE');
         const device1 = repo.assets.find((a) => a.source === 'device')!;
         assert.ok(repo.links.some((l) => l.finding_id === nginx.id && l.asset_id === device1.id));
+    });
+});
+
+describe('les fins de vie', () => {
+    it('ouvrent un constat pour une branche que plus rien ne corrige, même à étiquette flottante', async () => {
+        osvHealth.blockedUntil = 0;
+        const { repo, files, deps } = setup();
+        files.files[7] = [{ path: 'Dockerfile', text: 'FROM postgres:13-alpine' }];
+        const dump = {
+            result: [
+                {
+                    name: 'postgresql',
+                    label: 'PostgreSQL',
+                    aliases: [],
+                    identifiers: [],
+                    releases: [
+                        {
+                            name: '16',
+                            isEol: false,
+                            eolFrom: '2028-11-09',
+                            isMaintained: true,
+                            latest: { name: '16.4' }
+                        },
+                        { name: '13', isEol: true, eolFrom: '2025-11-13', isMaintained: false, latest: null }
+                    ]
+                }
+            ]
+        };
+        const engine = createExposureEngine(deps, {
+            osvFetch,
+            eolFetch: async () => new Response(JSON.stringify(dump)),
+            registryFetch: unknown
+        });
+        await engine.start();
+        await deps.recorded.tickers[0].tick();
+        await engine.stop();
+
+        const eol = repo.findings.find((f) => f.kind === 'eol');
+        assert.ok(eol, 'PostgreSQL 13 est en fin de vie');
+        assert.equal(eol.severity, 'high');
+        assert.equal(
+            repo.findings.filter((f) => f.kind === 'vuln').length,
+            0,
+            'une branche flottante ne se compare pas aux failles'
+        );
     });
 });

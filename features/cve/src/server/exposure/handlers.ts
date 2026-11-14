@@ -33,6 +33,7 @@ import {
     type ExposureSource
 } from '../../contracts/exposure';
 import type { FindingContent } from '../matching/match';
+import { annotate } from './annotate';
 import type { CveRepo } from '../repo';
 import type { AssetRow, FindingRow } from './repo';
 import {
@@ -301,7 +302,7 @@ export const exposureHandlers = [
         handler: async (ctx: Ctx, input) => {
             const row = await visibleAsset(ctx, input.id);
             const components = await openJson<ExposureComponent[]>(ctx.cipher(), row.inventory_enc, []);
-            return { asset: await assetView(ctx, row.id), components };
+            return { asset: await assetView(ctx, row.id), components: await annotate(ctx.repo, components) };
         }
     }),
     defineSdkFeature({

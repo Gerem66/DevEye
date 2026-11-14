@@ -1,6 +1,6 @@
 import type { ExposureComponent } from '../../contracts/exposure';
 import type { FormatId } from '../../contracts/formats';
-import { exactVersion, TOOLS, toolOf } from './tools';
+import { cycleVersion, exactVersion, TOOLS, toolOf } from './tools';
 
 /**
  * Ce que les sources qui ne sont pas des dépôts apprennent à la veille : un
@@ -21,14 +21,24 @@ export function parseImageRef(ref: string): { name: string; tag: string | null }
     return { name: path.slice(path.lastIndexOf('/') + 1).toLowerCase(), tag: hasTag ? bare.slice(colon + 1) : null };
 }
 
-/** Le produit qu'une image fait tourner, à sa version exacte, ou rien. */
+/** Le produit qu'une image fait tourner, à sa version exacte ou à sa branche, ou rien. */
 export function imageComponent(ref: string, format: FormatId, where: string | null): ExposureComponent | null {
     const { name, tag } = parseImageRef(ref);
     const tool = toolOf(name);
     if (!tool || !tag) return null;
-    const version = exactVersion(tool, tag);
+    const exact = exactVersion(tool, tag);
+    const version = exact ?? cycleVersion(tag);
     if (!version) return null;
-    return { kind: 'product', ecosystem: tool, name: TOOLS[tool].label, version, format, path: where, line: null };
+    return {
+        kind: 'product',
+        ecosystem: tool,
+        name: TOOLS[tool].label,
+        version,
+        format,
+        path: where,
+        line: null,
+        ...(exact === null ? { exact: false } : {})
+    };
 }
 
 /**

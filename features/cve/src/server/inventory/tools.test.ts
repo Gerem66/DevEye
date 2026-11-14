@@ -6,7 +6,10 @@ import { exactVersion, findTools } from './tools';
 
 /** Les outils d'un dépôt : ce qui se repère, et ce qui ne se compare pas. */
 
-const tools = (path: string, text: string) => findTools(path, text).map((t) => `${t.tool}@${t.version}:${t.line}`);
+const tools = (path: string, text: string) =>
+    findTools(path, text)
+        .filter((t) => t.exact)
+        .map((t) => `${t.tool}@${t.version}:${t.line}`);
 
 describe('le repérage des outils', () => {
     it('lit les images d’un Dockerfile et d’un compose, à leur version exacte', () => {
@@ -22,8 +25,12 @@ describe('le repérage des outils', () => {
         assert.deepEqual(tools('docker-compose.yml', compose), ['postgres@16.1:3']);
     });
 
-    it('écarte une étiquette flottante et une image inconnue', () => {
+    it('garde une étiquette flottante pour sa branche seulement, et écarte une image inconnue', () => {
         assert.deepEqual(tools('Dockerfile', 'FROM node:20\nFROM nginx:latest\nFROM acme/app:1.2.3'), []);
+        assert.deepEqual(
+            findTools('Dockerfile', 'FROM node:20-alpine').map((t) => `${t.tool}@${t.version}:${t.exact}`),
+            ['node@20:false']
+        );
         assert.equal(exactVersion('redis', '7.2'), null);
         assert.equal(exactVersion('postgres', '16.1-bookworm'), '16.1');
     });
@@ -63,15 +70,20 @@ describe('l’inventaire d’un dépôt', () => {
         ]);
         assert.deepEqual(
             inventory.components.map((c) => `${c.kind}:${c.ecosystem}:${c.name}@${c.version}:${c.path}`),
-            ['package:npm:lodash@4.17.20:package-lock.json', 'product:node:Node.js@20.11.1:.nvmrc']
+            [
+                'package:npm:lodash@4.17.20:package-lock.json',
+                'product:node:Node.js@20:Dockerfile',
+                'product:node:Node.js@20.11.1:.nvmrc'
+            ]
         );
         assert.deepEqual(
             inventory.formats.map((f) => `${f.format}:${f.path}:${f.count}`),
             [
                 'package-lock.json:package-lock.json:1',
                 'package-lock.json:client/package-lock.json:1',
-                'Dockerfile:Dockerfile:0',
-                '.nvmrc:.nvmrc:1'
+                'Dockerfile:Dockerfile:1',
+                '.nvmrc:.nvmrc:1',
+                'package.json:package.json:0'
             ]
         );
     });

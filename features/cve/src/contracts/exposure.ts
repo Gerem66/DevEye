@@ -41,9 +41,26 @@ export const exposureComponentSchema = z.object({
     version: z.string().max(100),
     format: formatIdSchema,
     path: z.string().max(500).nullable(),
-    line: z.number().int().positive().nullable()
+    line: z.number().int().positive().nullable(),
+    /**
+     * `false` : une étiquette flottante (`postgres:13`) ne dit que la branche.
+     * Elle suffit à la fin de vie, jamais à une faille. Absent : exacte.
+     */
+    exact: z.boolean().optional(),
+    /** Déclarée par un manifeste du dépôt, pas seulement tirée par une autre. */
+    direct: z.boolean().optional()
 });
 export type ExposureComponent = z.infer<typeof exposureComponentSchema>;
+
+/** Ce que les catalogues disent d'un composant, pour l'inventaire. */
+export const componentNotesSchema = z.object({
+    /** La fin de vie de sa branche, quand endoflife.date la connaît. */
+    eol: z.object({ release: z.string(), date: z.string().nullable(), reached: z.boolean() }).nullable(),
+    /** La dernière version publiée, pour une dépendance directe que deps.dev connaît. */
+    latest: z.string().nullable(),
+    deprecated: z.boolean()
+});
+export type ComponentNotes = z.infer<typeof componentNotesSchema>;
 
 /** Un format trouvé dans un élément, et combien de composants il a donnés. */
 export const assetFormatSchema = z.object({

@@ -5,7 +5,6 @@ import { INGEST_MAX_PAGES, NVD_KEY_STORE_KEY } from './_shared';
 import { createExposureEngine } from './exposure/engine';
 import { exposureProvider } from './exposure/provider';
 import type { CveProduct } from './inventory/tools';
-import type { OsvFetch } from './matching/osv';
 import { nvdClient, type NvdClient } from './nvd';
 import type { CveRepo } from './repo';
 
@@ -51,9 +50,9 @@ const BACKFILL_PAGES_PER_TICK = 4;
 export function createService(
     deps: FeatureServiceDeps<CveRepo>,
     client: NvdClient = nvdClient,
-    osvFetch?: OsvFetch
+    catalogues: Parameters<typeof createExposureEngine>[1] = {}
 ): FeatureService {
-    const exposure = createExposureEngine(deps, { osvFetch });
+    const exposure = createExposureEngine(deps, catalogues);
     let lastPurgeAt = 0;
     let running = false;
     let stopping = false;

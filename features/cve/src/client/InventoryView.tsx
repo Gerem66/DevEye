@@ -18,6 +18,7 @@ import DetailPane from './DetailPane';
 import { cveError } from './errors';
 import { assetStatusLine, SOURCE_FEATURE, SOURCE_ICON, SOURCE_LABEL } from './exposureLabels';
 import { useDetailAsPage } from './layout';
+import { fullDate } from './severity';
 import styles from './style.module.css';
 
 const FORMAT_LABEL = new Map(EXPOSURE_FORMATS.map((f) => [f.id, f.label]));
@@ -262,8 +263,31 @@ function AssetDetail({
                 <ul className={styles.componentList}>
                     {components.slice(0, 200).map((c) => (
                         <li key={`${c.kind}:${c.ecosystem}:${c.name}:${c.version}`} className={styles.componentRow}>
-                            <span className={styles.componentName}>{c.name}</span>
-                            <span className={styles.componentVersion}>{c.version}</span>
+                            <span className={styles.componentName}>
+                                {c.name}
+                                {c.direct && <span className={styles.componentTag}>déclarée</span>}
+                                {c.notes.eol && (c.notes.eol.reached || c.notes.eol.date) && (
+                                    <span
+                                        className={`${styles.componentTag} ${c.notes.eol.reached ? styles.componentTagDanger : ''}`}
+                                    >
+                                        {c.notes.eol.reached
+                                            ? 'fin de vie'
+                                            : `fin de vie le ${fullDate(Date.parse(`${c.notes.eol.date}T00:00:00Z`) / 1000)}`}
+                                    </span>
+                                )}
+                                {c.notes.deprecated && (
+                                    <span className={`${styles.componentTag} ${styles.componentTagDanger}`}>
+                                        dépréciée
+                                    </span>
+                                )}
+                                {c.notes.latest && c.notes.latest !== c.version && (
+                                    <span className={styles.componentTag}>dernière : {c.notes.latest}</span>
+                                )}
+                            </span>
+                            <span className={styles.componentVersion}>
+                                {c.version}
+                                {c.exact === false ? '.x' : ''}
+                            </span>
                             <span className={styles.componentEco}>{c.kind === 'package' ? c.ecosystem : 'outil'}</span>
                         </li>
                     ))}

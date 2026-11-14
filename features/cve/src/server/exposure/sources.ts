@@ -290,7 +290,8 @@ export function deploySource(deps: FeatureServiceDeps<CveRepo>): Source<DeployIt
                         version: t.version,
                         format: t.format,
                         path: t.path,
-                        line: t.line
+                        line: t.line,
+                        ...(t.exact ? {} : { exact: false })
                     });
                 }
             }

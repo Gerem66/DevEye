@@ -776,6 +776,13 @@ CREATE TABLE `ft_cve_entries` (
   KEY `idx_cve_severity_published` (`severity`,`published`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+CREATE TABLE `ft_cve_eol_products` (
+  `product` varchar(100) COLLATE utf8mb4_general_ci NOT NULL,
+  `body` mediumtext COLLATE utf8mb4_general_ci NOT NULL,
+  `fetched_at` bigint NOT NULL,
+  PRIMARY KEY (`product`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 CREATE TABLE `ft_cve_favorites` (
   `workspace_id` int NOT NULL,
   `cve_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL,
@@ -835,6 +842,14 @@ CREATE TABLE `ft_cve_osv_vulns` (
   `fetched_at` bigint NOT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_ft_cve_osv_vulns_fetched` (`fetched_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_cve_pkg_meta` (
+  `pkg_key` char(64) COLLATE utf8mb4_general_ci NOT NULL,
+  `body` mediumtext COLLATE utf8mb4_general_ci NOT NULL,
+  `fetched_at` bigint NOT NULL,
+  PRIMARY KEY (`pkg_key`),
+  KEY `idx_ft_cve_pkg_meta_fetched` (`fetched_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 CREATE TABLE `ft_cve_products` (
