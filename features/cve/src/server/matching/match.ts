@@ -170,13 +170,18 @@ export async function matchComponents(
             const id = publicId(hit);
             const note = vuln.informational ? (INFORMATIONAL[vuln.informational] ?? vuln.informational) : null;
             const kind: FindingKind = note ? 'deprecated' : 'vuln';
+            const severity = note ? ('none' as const) : osvSeverity(vuln.severity, vuln.cvss);
+            // La gravité d'un avis vient souvent d'un CVSS 4 que son vecteur 3 ne
+            // reproduit pas : une note qui la contredit ne s'affiche pas.
+            const computed = vuln.cvss ? cvss3Score(vuln.cvss) : null;
+            const score = computed !== null && severityOfScore(computed) === severity ? computed : null;
             const draft = {
                 kind,
                 origin: 'osv' as const,
                 subjectKey: subjectKey([kind, id, dep.ecosystem, dep.name]),
                 advisoryId: id,
-                severity: note ? ('none' as const) : osvSeverity(vuln.severity, vuln.cvss),
-                score: vuln.cvss ? cvss3Score(vuln.cvss) : null,
+                severity,
+                score,
                 content: {
                     title: note ? `${dep.name} : ${note}` : `${dep.name} : ${firstSentence(vuln.summary)}`,
                     summary: vuln.summary,
