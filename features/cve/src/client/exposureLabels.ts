@@ -11,17 +11,26 @@ export const FINDING_KINDS: readonly { value: FindingKind; label: string; empty:
 ];
 
 export const SOURCE_LABEL: Record<ExposureSource, string> = {
-    git: 'Dépôt Git'
+    git: 'Dépôt Git',
+    device: 'Appareil',
+    database: 'Base de données',
+    deploy: 'Déploiement'
 };
 
 /** L'icône de l'app qui dit d'où vient un élément. */
 export const SOURCE_ICON: Record<ExposureSource, string> = {
-    git: 'icon-branch'
+    git: 'icon-branch',
+    device: 'icon-server',
+    database: 'icon-database',
+    deploy: 'icon-rocket'
 };
 
 /** La feature qui tient un élément, pour y emmener. */
 export const SOURCE_FEATURE: Record<ExposureSource, string> = {
-    git: 'git'
+    git: 'git',
+    device: 'devices',
+    database: 'database',
+    deploy: 'deploy'
 };
 
 /** Ce qu'un élément touché a de touché : `4.17.20 · client/package-lock.json:12`. */

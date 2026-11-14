@@ -152,6 +152,12 @@ export function createService(
     const ticker = deps.createTicker({ intervalMs: TICK_MS, tick });
     return {
         providers: { [CVE_EXPOSURE_PROVIDER]: exposureProvider(deps) },
+        agentHooks: {
+            onReport: (deviceId, report) =>
+                exposure.deviceReported(deviceId, report).catch((e: unknown) => {
+                    deps.logger.error({ err: e, deviceId }, 'cve: rapport d’appareil non suivi');
+                })
+        },
         async start() {
             stopping = false;
             await exposure.start();

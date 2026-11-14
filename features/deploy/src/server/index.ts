@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { DEPLOY_ITEMS_PROVIDER, type DeployItemsProvider } from '@deveye/types/sdk';
+import { DEPLOY_ITEMS_PROVIDER, type DeployHomeTarget, type DeployItemsProvider } from '@deveye/types/sdk';
 import type { FeatureServer, SdkCipher } from '@deveye/types/sdk/server';
 
 import { deployAccountExport } from './accountExport';
@@ -105,7 +105,22 @@ export const serverEntry: FeatureServer<DeployRepo> = {
                     inFlight: found.inFlight > 0 ? { what } : null,
                     error: null
                 };
-            }
+            },
+            listHome: async (workspaceIds) =>
+                Promise.all(
+                    (await deps.repo.listHomeTargets(workspaceIds)).map(async (row) => {
+                        const ws = Number(row.workspace_id);
+                        const stored = await readJson<Partial<StoredTarget>>(deps.cipherFor(ws), row.content);
+                        return {
+                            id: Number(row.id),
+                            workspaceId: ws,
+                            name: stored?.name ?? `Cible ${row.id}`,
+                            provider: row.provider as DeployHomeTarget['provider'],
+                            paused: deps.pauses.isPaused('targets', String(row.id))
+                        };
+                    })
+                ),
+            inventoryOf: (targetId, workspaceId) => sync.inventory(targetId, workspaceId)
         };
         return {
             start() {

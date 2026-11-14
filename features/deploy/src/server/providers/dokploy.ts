@@ -1,3 +1,4 @@
+import type { DeployInventory } from '@deveye/types/sdk';
 import { connect as netConnect } from 'node:net';
 import { connect as tlsConnect } from 'node:tls';
 import { Agent, buildConnector, fetch as undiciFetch, type RequestInit } from 'undici';
@@ -418,6 +419,33 @@ export async function fetchRepoUrl(
     return row && typeof row === 'object' ? readRepoUrl(row as Record<string, unknown>) : null;
 }
 
+/**
+ * Ce qu'une cible fait tourner : l'image d'une application de source Docker,
+ * le fichier d'un compose. Rien d'autre de la ligne ne sort : elle porte les
+ * secrets de l'app GitHub et l'environnement du service.
+ */
+export function readInventory(kind: DokployKind, row: Record<string, unknown>): DeployInventory {
+    if (kind === 'application') {
+        const image = pick(row, ['sourceType']) === 'docker' ? pick(row, ['dockerImage']) : null;
+        return { images: image ? [image] : [], composeFiles: [] };
+    }
+    const file = typeof row.composeFile === 'string' ? row.composeFile : '';
+    return { images: [], composeFiles: file.trim() ? [{ path: 'docker-compose.yml', text: file }] : [] };
+}
+
+export async function fetchInventory(
+    instance: DokployInstance,
+    kind: DokployKind,
+    externalId: string,
+    options: ReadOptions = {}
+): Promise<DeployInventory | null> {
+    const row =
+        kind === 'compose'
+            ? await call<unknown>(instance, 'compose.one', { ...options, input: { composeId: externalId } })
+            : await call<unknown>(instance, 'application.one', { ...options, input: { applicationId: externalId } });
+    return row && typeof row === 'object' ? readInventory(kind, row as Record<string, unknown>) : null;
+}
+
 export async function triggerDeploy(
     instance: DokployInstance,
     kind: DokployKind,
@@ -567,9 +595,17 @@ export interface DokployClient {
     triggerDeploy: typeof triggerDeploy;
     fetchDeploymentLog: typeof fetchDeploymentLog;
     fetchRepoUrl: typeof fetchRepoUrl;
+    fetchInventory: typeof fetchInventory;
 }
 
-const NETWORK: DokployClient = { listTargets, listDeployments, triggerDeploy, fetchDeploymentLog, fetchRepoUrl };
+const NETWORK: DokployClient = {
+    listTargets,
+    listDeployments,
+    triggerDeploy,
+    fetchDeploymentLog,
+    fetchRepoUrl,
+    fetchInventory
+};
 
 function kindOf(target: ProviderTarget): DokployKind {
     return target.kind === 'compose' ? 'compose' : 'application';
@@ -682,6 +718,12 @@ export class DokployProvider implements DeployProviderAdapter {
      * pour rien. Une instance qui ne répond pas ne laisse rien en cache : c'est
      * le message qui perd son lien, pas la cible.
      */
+    inventory(access: ProviderAccess, target: ProviderTarget): Promise<DeployInventory | null> {
+        return this.client.fetchInventory(instanceOf(access), kindOf(target), target.externalId, {
+            timeoutMs: BACKGROUND_TIMEOUT_MS
+        });
+    }
+
     async repoUrl(access: ProviderAccess, target: ProviderTarget): Promise<string | null> {
         const key = `${access.credentialId}:${target.externalId}`;
         const now = Math.floor(Date.now() / 1000);

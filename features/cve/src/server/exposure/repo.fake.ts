@@ -35,6 +35,9 @@ export function memoryExposureRepo(): MemoryExposure {
             const a = asset(id);
             return a && a.workspace_id === workspaceId ? { ...a } : null;
         },
+        async findAssetsByRef(source, ref) {
+            return assets.filter((a) => a.source === source && a.ref === ref).map((a) => ({ ...a }));
+        },
         async insertAsset(workspaceId, source, ref, at) {
             if (assets.some((a) => a.workspace_id === workspaceId && a.source === source && a.ref === ref)) return;
             assets.push({

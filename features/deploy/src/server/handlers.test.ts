@@ -166,6 +166,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
         countTargetsInWorkspaces: async (ids) =>
             targets.filter((t) => ids.includes(t.workspace_id) && t.provider !== 'agent').length,
         listStockTargets: unused,
+        listHomeTargets: unused,
         async createTarget(input) {
             const created = target({
                 id: ++seq,

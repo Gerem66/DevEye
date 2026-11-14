@@ -2,8 +2,16 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { z, ZodType } from 'zod';
 
-import { GIT_ITEMS_PROVIDER, type GitFilesResult, type GitHomeRepo, type GitItemsProvider } from '@deveye/types/sdk';
-import type { SdkFeatureContext } from '@deveye/types/sdk/server';
+import {
+    DATABASE_ITEMS_PROVIDER,
+    GIT_ITEMS_PROVIDER,
+    type DatabaseItemsProvider,
+    type GitFilesResult,
+    type GitHomeRepo,
+    type GitItemsProvider
+} from '@deveye/types/sdk';
+import type { DockerInventory } from '@deveye/types';
+import type { SdkDevice, SdkFeatureContext } from '@deveye/types/sdk/server';
 import { createTestContext, createTestServiceDeps } from '@deveye/types/sdk/testing';
 
 import { cveExposure, cveExposureCount, cveFindingIgnore, cveInventory } from '../../contracts/commands';
@@ -191,6 +199,7 @@ describe('la veille de l’espace', () => {
         await deps.storeFor(1).put(
             'exposurePrefs',
             JSON.stringify({
+                sources: { git: true, device: true, database: true, deploy: true },
                 alerts: { vuln: true, eol: true, deprecated: true, outdated: false },
                 threshold: 'all'
             })
@@ -248,5 +257,77 @@ describe('la veille de l’espace', () => {
         assert.equal((await handlerFor(cveExposureCount)(blind, {})).count, 0);
         assert.deepEqual((await handlerFor(cveExposure)(blind, { view: 'active' })).findings, []);
         await engine.stop();
+    });
+});
+
+describe('les appareils et les bases', () => {
+    it('lit un conteneur par l’agent et une base par sa version, et les confronte au catalogue', async () => {
+        osvHealth.blockedUntil = 0;
+        const repo = memoryRepo();
+        const device = {
+            id: 'd1',
+            name: 'nas',
+            online: true,
+            status: 'active',
+            ownerUserId: 1,
+            workspaceId: 1,
+            metricIntervalSeconds: 60,
+            effectiveMetricIntervalSeconds: 60,
+            report: { os: { name: 'Debian GNU/Linux', version: '12', arch: 'x86_64', cores: 4 } }
+        } as unknown as SdkDevice;
+        const databases = {
+            listHome: async () => [
+                {
+                    id: 3,
+                    workspaceId: 1,
+                    name: 'prod',
+                    engine: 'mysql' as const,
+                    serverVersion: '8.0.36',
+                    checkedAt: 1,
+                    paused: false
+                }
+            ],
+            authorize: async () => ({ ok: true as const })
+        } as unknown as DatabaseItemsProvider;
+        const deps = createTestServiceDeps({
+            repo,
+            devices: [device],
+            dockerInventory: async () =>
+                ({
+                    engines: [{ engine: 'docker', reachable: true, version: '27.1.1', error: null }],
+                    containers: [
+                        {
+                            engine: 'docker',
+                            id: 'c',
+                            name: 'web',
+                            image: 'nginx:1.25.3',
+                            state: 'running',
+                            status: 'Up',
+                            ports: '',
+                            createdAt: 0,
+                            composeProject: null,
+                            composeService: null,
+                            composeWorkingDir: null
+                        }
+                    ],
+                    images: [],
+                    volumes: [],
+                    networks: []
+                }) as unknown as DockerInventory,
+            providers: { [DATABASE_ITEMS_PROVIDER]: databases }
+        });
+        const engine = createExposureEngine(deps, { osvFetch });
+        await engine.start();
+        await deps.recorded.tickers[0].tick();
+        await engine.stop();
+
+        assert.deepEqual(repo.assets.map((a) => `${a.source}:${a.ref}:${a.status}`).sort(), [
+            'database:3:ok',
+            'device:d1:ok'
+        ]);
+        const nginx = repo.findings.find((f) => f.advisory_id === 'CVE-2024-7347');
+        assert.ok(nginx, 'le conteneur nginx 1.25.3 trouve sa CVE');
+        const device1 = repo.assets.find((a) => a.source === 'device')!;
+        assert.ok(repo.links.some((l) => l.finding_id === nginx.id && l.asset_id === device1.id));
     });
 });

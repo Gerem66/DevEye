@@ -6,7 +6,7 @@ import { z } from 'zod';
  * le catalogue entier et coche ce que l'espace contient.
  */
 
-export const formatFamilySchema = z.enum(['lock', 'tool']);
+export const formatFamilySchema = z.enum(['lock', 'tool', 'device', 'database', 'deploy']);
 export type FormatFamily = z.infer<typeof formatFamilySchema>;
 
 export const formatIdSchema = z.enum([
@@ -39,7 +39,12 @@ export const formatIdSchema = z.enum([
     '.ruby-version',
     '.tool-versions',
     'rust-toolchain',
-    'engines'
+    'engines',
+    'device-os',
+    'container-engine',
+    'container-image',
+    'database-server',
+    'deploy-image'
 ]);
 export type FormatId = z.infer<typeof formatIdSchema>;
 
@@ -54,7 +59,10 @@ export interface ExposureFormat {
 
 export const FORMAT_FAMILY_LABEL: Record<FormatFamily, string> = {
     lock: 'Fichiers de verrouillage',
-    tool: 'Outils et images'
+    tool: 'Outils et images',
+    device: 'Appareils',
+    database: 'Bases de données',
+    deploy: 'Déploiements'
 };
 
 export const EXPOSURE_FORMATS: readonly ExposureFormat[] = [
@@ -97,5 +105,30 @@ export const EXPOSURE_FORMATS: readonly ExposureFormat[] = [
     { id: '.ruby-version', family: 'tool', label: '.ruby-version', detail: 'La version de Ruby' },
     { id: '.tool-versions', family: 'tool', label: '.tool-versions', detail: 'Les outils épinglés par asdf ou mise' },
     { id: 'rust-toolchain', family: 'tool', label: 'rust-toolchain.toml', detail: 'La version de Rust' },
-    { id: 'engines', family: 'tool', label: 'package.json (engines)', detail: 'La version de Node exigée' }
+    { id: 'engines', family: 'tool', label: 'package.json (engines)', detail: 'La version de Node exigée' },
+    { id: 'device-os', family: 'device', label: 'Système', detail: 'La distribution et sa version, par l’agent' },
+    {
+        id: 'container-engine',
+        family: 'device',
+        label: 'Moteur de conteneurs',
+        detail: 'La version de Docker ou de Podman'
+    },
+    {
+        id: 'container-image',
+        family: 'device',
+        label: 'Conteneurs',
+        detail: 'L’image de chaque conteneur, à sa version exacte'
+    },
+    {
+        id: 'database-server',
+        family: 'database',
+        label: 'Serveur de base',
+        detail: 'La version de MySQL, MariaDB ou PostgreSQL, au dernier relevé'
+    },
+    {
+        id: 'deploy-image',
+        family: 'deploy',
+        label: 'Image Dokploy',
+        detail: 'L’image d’une application de source Docker'
+    }
 ];

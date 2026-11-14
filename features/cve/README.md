@@ -3,7 +3,8 @@
 Module in-repo (`features/cve`) : contrats dans `src/contracts/`, catalogue,
 veille et handlers dans `src/server/`, écrans dans `src/client/`. L'app ne
 garde que l'identité (`cve` dans le registre publié), et les contrats que le
-module consomme (`GIT_ITEMS_PROVIDER`) ou publie (`CVE_EXPOSURE_PROVIDER`, ce
+module consomme (`GIT_ITEMS_PROVIDER`, `DATABASE_ITEMS_PROVIDER`,
+`DEPLOY_ITEMS_PROVIDER`, `PROJECTS_USAGE_PROVIDER`) ou publie (`CVE_EXPOSURE_PROVIDER`, ce
 que la veille sait d'un dépôt, que lit Audit), dans
 `sdk/providers.ts` de `@deveye/types`. Voir
 [Docs/FEATURE_SDK.md](../../Docs/FEATURE_SDK.md).
@@ -20,9 +21,21 @@ Deux moitiés :
 ## 1. L'inventaire
 
 Un **élément suivi** (`ft_cve_assets`) est un élément d'une autre feature que la
-veille lit : aujourd'hui les dépôts de Git. Il naît et disparaît avec son
-élément, sans geste : la veille rapproche ses lignes de `listHome` à chaque
-passage.
+veille lit. Il naît et disparaît avec son élément, sans geste : la veille
+rapproche ses lignes de sa source à chaque passage (`exposure/sources.ts`).
+
+| Source       | Ce qui se lit                                                            | Comment                                      |
+| ------------ | ------------------------------------------------------------------------ | -------------------------------------------- |
+| Dépôts Git   | verrous, Dockerfile, compose, fichiers de version                        | `readFiles` de Git, sans clone               |
+| Appareils    | système (pour sa fin de vie), moteur Docker/Podman, image des conteneurs | rapport de l'agent, `agents.dockerInventory` |
+| Bases        | version du serveur (MySQL, MariaDB, PostgreSQL)                          | `listHome` de Bases, son dernier relevé      |
+| Déploiements | image d'une application Dokploy de source Docker, fichier d'un compose   | `inventoryOf` de Déploiements                |
+
+Une machine de Déploiements dit ses conteneurs par l'appareil, un workflow son
+dépôt par Git : seul Dokploy est lu par Déploiements. Les projets ne sont pas
+une source, ils étiquettent les éléments touchés (filtre « Projet »). Chaque
+source se coupe dans l'onglet Détection ; coupée, elle ne compte plus nulle
+part.
 
 Un dépôt se lit **sans clone** : `readFiles` de Git demande l'arbre de la tête
 puis les seuls fichiers reconnus (verrous, Dockerfile, compose, fichiers de
@@ -72,20 +85,24 @@ filtre par droits sans déchiffrer.
 Un passage toutes les cinq minutes (`exposure/engine.ts`) :
 
 1. il rapproche les éléments de leurs sources ;
-2. il lit au plus six éléments dus : jamais lus, relecture demandée, tête
-   changée, en échec depuis une heure, ou dépôt sans tête connue (public, sans
-   jeton) depuis un jour ;
+2. il lit, par source, les éléments dus (six au plus pour ce qui sort au
+   dehors) : jamais lus, relecture demandée, en échec depuis une heure, puis
+   selon la source : tête du dépôt changée (un jour sans tête connue),
+   système de l'appareil changé ou six heures écoulées, version du serveur
+   changée, six heures pour un déploiement ;
 3. il réévalue les espaces marqués : inventaire changé, CVE ingérée sur l'un de
    leurs produits, ou dernière évaluation plus vieille que la fraîcheur du
    cache d'OSV (six heures).
 
 Un élément inchangé ne coûte aucun appel extérieur. Un dépôt en pause chez Git
-(au-delà de l'offre) n'est pas lu.
+(au-delà de l'offre), comme une base ou une cible en pause, n'est pas lu.
+Un appareil hors ligne garde son inventaire d'avant.
 
 ## 5. Droits
 
 Un membre ne voit un élément, et les constats qui le touchent, que s'il peut
-voir l'élément chez sa feature (`authorize` du provider). Un constat dont
+voir l'élément chez sa feature (`authorize` du provider, la liste des
+appareils pour un appareil). Un constat dont
 aucun élément n'est visible est caché, et la carte de l'accueil ne le compte
 pas. Ignorer, rétablir, relire et sortir un élément de la veille demandent
 l'écriture.

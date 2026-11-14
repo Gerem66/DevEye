@@ -70,6 +70,8 @@ export interface CountRow {
 export interface ExposureRepo {
     listAssets(workspaceId: number): Promise<AssetRow[]>;
     findAsset(workspaceId: number, id: number): Promise<AssetRow | null>;
+    /** Les éléments que suivent tous les espaces pour cet élément d'une source : un appareil partagé en a plusieurs. */
+    findAssetsByRef(source: string, ref: string): Promise<AssetRow[]>;
     insertAsset(workspaceId: number, source: string, ref: string, at: number): Promise<void>;
     deleteAsset(id: number): Promise<void>;
     /** Une lecture complète : l'inventaire remplace le précédent, ses empreintes aussi. */
@@ -145,6 +147,12 @@ export function createExposureRepo(q: SdkQueryable): ExposureRepo {
                 [workspaceId, id]
             );
             return rows[0] ?? null;
+        },
+        async findAssetsByRef(source, ref) {
+            return q.query<AssetRow>(`SELECT ${ASSET_COLUMNS} FROM ft_cve_assets WHERE source = ? AND ref = ?`, [
+                source,
+                ref
+            ]);
         },
         async insertAsset(workspaceId, source, ref, at) {
             await q.execute(

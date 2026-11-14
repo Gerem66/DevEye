@@ -9,7 +9,7 @@ import { formatIdSchema } from './formats';
  */
 
 /** La feature d'où vient un élément suivi. */
-export const exposureSourceSchema = z.enum(['git']);
+export const exposureSourceSchema = z.enum(['git', 'device', 'database', 'deploy']);
 export type ExposureSource = z.infer<typeof exposureSourceSchema>;
 
 /** Où en est la lecture d'un élément : pas encore lu, lu, ou en échec à la dernière lecture. */
@@ -83,7 +83,9 @@ export const affectedAssetSchema = z.object({
     label: z.string(),
     version: z.string(),
     path: z.string().nullable(),
-    line: z.number().int().positive().nullable()
+    line: z.number().int().positive().nullable(),
+    /** Les projets qui relient l'élément, quand il y en a. */
+    projects: z.array(z.object({ id: z.number().int().positive(), title: z.string() }))
 });
 export type AffectedAsset = z.infer<typeof affectedAssetSchema>;
 
@@ -136,6 +138,8 @@ export type AlertThreshold = z.infer<typeof alertThresholdSchema>;
  * indépendamment des autres.
  */
 export const exposurePrefsSchema = z.object({
+    /** Les sources que la veille lit ; une source coupée ne compte plus nulle part. */
+    sources: z.object({ git: z.boolean(), device: z.boolean(), database: z.boolean(), deploy: z.boolean() }),
     alerts: z.object({
         vuln: z.boolean(),
         eol: z.boolean(),
@@ -148,6 +152,7 @@ export const exposurePrefsSchema = z.object({
 export type ExposurePrefs = z.infer<typeof exposurePrefsSchema>;
 
 export const DEFAULT_EXPOSURE_PREFS: ExposurePrefs = {
+    sources: { git: true, device: true, database: true, deploy: true },
     alerts: { vuln: true, eol: true, deprecated: true, outdated: false },
     threshold: 'high'
 };

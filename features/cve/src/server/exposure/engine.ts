@@ -1,8 +1,12 @@
-import { GIT_ITEMS_PROVIDER, type GitHomeRepo, type GitItemsProvider } from '@deveye/types/sdk';
+import type { DeviceReport } from '@deveye/types';
 import { logFailure, type FeatureService, type FeatureServiceDeps } from '@deveye/types/sdk/server';
 
-import { DEFAULT_EXPOSURE_PREFS, exposurePrefsSchema, type ExposureComponent } from '../../contracts/exposure';
-import { inventoryOfFiles, wantsRepoFile } from '../inventory/repoFiles';
+import {
+    DEFAULT_EXPOSURE_PREFS,
+    exposurePrefsSchema,
+    type ExposureComponent,
+    type ExposurePrefs
+} from '../../contracts/exposure';
 import { TOOLS, WATCHED_PRODUCTS, type CveProduct } from '../inventory/tools';
 import { matchComponents, type AssetComponents, type MatchCatalogues } from '../matching/match';
 import { queryOsv, type OsvCache, type OsvFetch, type VulnResponse } from '../matching/osv';
@@ -11,6 +15,15 @@ import { findingAlert, firstScanAlert, isAlertable, type AlertedFinding, type Fi
 import { reconcile, type ExistingFinding } from './reconcile';
 import type { AssetRow } from './repo';
 import { EXPOSURE_PREFS_KEY, openJson, productKey, sealJson, setExposureLink, type AssetSummary } from './shared';
+import {
+    databaseSource,
+    deploySource,
+    deviceSource,
+    gitSource,
+    osRevision,
+    type Source,
+    type SourceItem
+} from './sources';
 
 /**
  * La veille de l'espace : un passage toutes les cinq minutes lit les éléments
@@ -21,24 +34,20 @@ import { EXPOSURE_PREFS_KEY, openJson, productKey, sealJson, setExposureLink, ty
  */
 
 const TICK_MS = 5 * 60_000;
-/** Ce qu'un passage lit au plus : un espace de vingt dépôts neufs se lit en quelques passages, pas d'un coup. */
-const READS_PER_PASS = 6;
-/** Un dépôt dont Git ne connaît pas la tête (public, sans jeton) se relit une fois par jour. */
-const UNSYNCED_RECHECK_S = 24 * 3600;
 const ERROR_RETRY_S = 3600;
 /** La fraîcheur du cache d'OSV : au-delà, un avis nouveau a pu paraître. */
 const REEVALUATE_S = 6 * 3600;
 const RESOLVED_KEPT_S = 30 * 86_400;
 const OSV_CACHE_KEPT_S = 7 * 86_400;
 const HOUSEKEEPING_S = 3600;
-const MAX_FILES = 200;
-const MAX_FILE_BYTES = 8 * 1024 * 1024;
 /** Au-delà, le fil du NVD est réputé en retard et le catalogue ne garantit plus rien. */
 const NVD_STALE_AFTER_S = 24 * 3600;
 
 export interface ExposureEngine extends FeatureService {
     /** Des produits viennent de bouger au NVD : les espaces qui les emploient se réévaluent. */
     productsChanged(products: readonly CveProduct[]): Promise<void>;
+    /** Un appareil vient de se rapporter : s'il a changé de système, il se relit sans attendre. */
+    deviceReported(deviceId: string, report: DeviceReport): Promise<void>;
 }
 
 const nowSeconds = (): number => Math.floor(Date.now() / 1000);
@@ -67,15 +76,6 @@ export function osvCacheOf(repo: CveRepo): OsvCache {
     };
 }
 
-/** Ce dépôt est-il à relire ? */
-export function isRepoDue(asset: AssetRow, home: GitHomeRepo, now: number): boolean {
-    if (asset.refresh_asked === 1 || asset.status === 'pending') return true;
-    if (home.headSha !== null && asset.revision !== home.headSha) return true;
-    const since = asset.checked_at ?? 0;
-    if (asset.status === 'error') return since < now - ERROR_RETRY_S;
-    return home.headSha === null && since < now - UNSYNCED_RECHECK_S;
-}
-
 /** Les empreintes des produits d'un inventaire : ce qu'une CVE ingérée cherche. */
 function keysOf(components: readonly ExposureComponent[]): string[] {
     const keys = new Set<string>();
@@ -84,18 +84,6 @@ function keysOf(components: readonly ExposureComponent[]): string[] {
         for (const p of TOOLS[c.ecosystem]?.products ?? []) keys.add(productKey(p));
     }
     return [...keys];
-}
-
-/** Ce qu'une lecture n'a pas pu couvrir, en phrases pour l'inventaire. */
-function notesOf(truncated: boolean, skipped: readonly string[]): string[] {
-    const notes: string[] = [];
-    if (truncated) notes.push('Dépôt trop grand : une partie de ses fichiers n’a pas été lue.');
-    if (skipped.length > 0) {
-        const shown = skipped.slice(0, 3).join(', ');
-        const more = skipped.length > 3 ? ` et ${skipped.length - 3} autres` : '';
-        notes.push(`Trop lourds pour être lus : ${shown}${more}.`);
-    }
-    return notes;
 }
 
 export function createExposureEngine(
@@ -136,88 +124,94 @@ export function createExposureEngine(
         }
     });
 
-    async function readRepo(git: GitItemsProvider, asset: AssetRow, home: GitHomeRepo): Promise<boolean> {
+    const sources: readonly Source[] = [
+        gitSource(deps),
+        deviceSource(deps),
+        databaseSource(deps),
+        deploySource(deps)
+    ] as readonly Source[];
+
+    /** Ce qu'une lecture a rendu, écrit ; `true` quand l'inventaire a changé. */
+    async function apply(source: Source, asset: AssetRow, item: SourceItem): Promise<boolean> {
         const ws = asset.workspace_id;
-        const repoId = Number(asset.ref);
         const cipher = deps.cipherFor(ws);
         const now = nowSeconds();
-        const result = await git.readFiles(repoId, ws, {
-            ref: home.headSha,
-            // Une relecture demandée relit tout, même un arbre inchangé : c'est
-            // le geste qui suit une mise à jour des lecteurs.
-            knownTree: asset.refresh_asked === 1 ? null : asset.digest,
-            wants: wantsRepoFile,
-            maxFiles: MAX_FILES,
-            maxFileBytes: MAX_FILE_BYTES
-        });
-        if (result === null) {
+        const outcome = await source.read(asset, item);
+        if (outcome.kind === 'gone') {
             await deps.repo.deleteAsset(asset.id);
             return true;
         }
-        if (result.status === 'unchanged') {
-            await deps.repo.saveCheck(asset.id, home.headSha, now);
+        if (outcome.kind === 'unchanged') {
+            await deps.repo.saveCheck(asset.id, outcome.revision, now);
             return false;
         }
-        if (result.status === 'error') {
+        if (outcome.kind === 'error') {
             logFailure(
                 deps.logger,
-                result.userSide,
-                { workspaceId: ws, repoId, err: result.error },
-                'cve: dépôt illisible'
+                outcome.userSide,
+                { workspaceId: ws, source: source.id, ref: asset.ref, err: outcome.error },
+                'cve: élément illisible'
             );
-            await deps.repo.saveError(asset.id, await cipher.encrypt(result.error), now);
+            await deps.repo.saveError(asset.id, await cipher.encrypt(outcome.error), now);
             return false;
         }
-        const label = (await git.describe(repoId, ws))?.label ?? `Dépôt ${repoId}`;
-        const inventory = inventoryOfFiles(result.files);
         const summary: AssetSummary = {
-            label,
-            formats: inventory.formats,
-            notes: notesOf(result.truncated, result.skipped),
-            componentCount: inventory.components.length
+            label: outcome.label,
+            formats: outcome.formats,
+            notes: outcome.notes,
+            componentCount: outcome.components.length
         };
         await deps.repo.saveScan(asset.id, {
-            revision: home.headSha,
-            digest: result.tree,
+            revision: outcome.revision,
+            digest: outcome.digest,
             summaryEnc: await sealJson(cipher, summary),
-            inventoryEnc: await sealJson(cipher, inventory.components),
-            keys: keysOf(inventory.components),
+            inventoryEnc: await sealJson(cipher, outcome.components),
+            keys: keysOf(outcome.components),
             at: now
         });
         return true;
     }
 
-    /** Les dépôts de Git, rapprochés des éléments suivis ; les dus sont lus, dans la limite du passage. */
-    async function collectGit(workspaceIds: readonly number[], budget: { reads: number }): Promise<void> {
-        const git = deps.providers.get<GitItemsProvider>(GIT_ITEMS_PROVIDER);
-        if (!git) return;
+    /**
+     * Les éléments d'une source, rapprochés des éléments suivis ; les dus sont
+     * lus, dans la limite que la source s'accorde par passage. Une source que
+     * l'espace a coupée n'est ni rapprochée ni lue.
+     */
+    async function collect(source: Source, workspaceIds: readonly number[]): Promise<void> {
+        const items = await source.list(workspaceIds);
+        if (items === null) return;
         const now = nowSeconds();
-        const homes = await git.listHome(workspaceIds);
-        const due: { asset: AssetRow; home: GitHomeRepo }[] = [];
+        const due: { asset: AssetRow; item: SourceItem }[] = [];
         for (const ws of workspaceIds) {
-            const repos = new Map(homes.filter((h) => h.workspaceId === ws).map((h) => [String(h.id), h]));
-            let assets = (await deps.repo.listAssets(ws)).filter((a) => a.source === 'git');
+            const listed = new Map(items.filter((i) => i.workspaceId === ws).map((i) => [i.ref, i]));
+            let assets = (await deps.repo.listAssets(ws)).filter((a) => a.source === source.id);
             const known = new Set(assets.map((a) => a.ref));
             let changed = false;
-            for (const ref of repos.keys()) {
+            for (const ref of listed.keys()) {
                 if (known.has(ref)) continue;
-                await deps.repo.insertAsset(ws, 'git', ref, now);
+                await deps.repo.insertAsset(ws, source.id, ref, now);
                 changed = true;
             }
             for (const a of assets) {
-                if (repos.has(a.ref)) continue;
+                if (listed.has(a.ref)) continue;
                 await deps.repo.deleteAsset(a.id);
                 dirty.add(ws);
                 changed = true;
             }
             if (changed) {
-                assets = (await deps.repo.listAssets(ws)).filter((a) => a.source === 'git');
+                assets = (await deps.repo.listAssets(ws)).filter((a) => a.source === source.id);
                 deps.live.changed(ws, ['cveExposure']);
             }
             for (const asset of assets) {
-                const home = repos.get(asset.ref);
-                if (!home || home.paused || asset.excluded === 1) continue;
-                if (isRepoDue(asset, home, now)) due.push({ asset, home });
+                const item = listed.get(asset.ref);
+                if (!item || item.paused || asset.excluded === 1) continue;
+                const commonDue =
+                    asset.refresh_asked === 1 ||
+                    asset.status === 'pending' ||
+                    (asset.status === 'error' && (asset.checked_at ?? 0) < now - ERROR_RETRY_S);
+                if (commonDue || (asset.status !== 'error' && source.isDue(asset, item, now))) {
+                    due.push({ asset, item });
+                }
             }
         }
         // Ce qu'un membre a demandé d'abord, puis le jamais lu, puis le plus ancien.
@@ -227,23 +221,33 @@ export function createExposureEngine(
                 Number(b.asset.status === 'pending') - Number(a.asset.status === 'pending') ||
                 (a.asset.checked_at ?? 0) - (b.asset.checked_at ?? 0)
         );
-        for (const { asset, home } of due) {
-            if (budget.reads <= 0 || halt.signal.aborted) return;
-            budget.reads--;
+        let reads = source.readsPerPass;
+        for (const { asset, item } of due) {
+            if (reads <= 0 || halt.signal.aborted) return;
+            reads--;
             try {
-                if (await readRepo(git, asset, home)) dirty.add(asset.workspace_id);
+                if (await apply(source, asset, item)) dirty.add(asset.workspace_id);
             } catch (e) {
-                deps.logger.error({ err: e, assetId: asset.id }, 'cve: lecture d’un dépôt en échec');
+                deps.logger.error({ err: e, assetId: asset.id, source: source.id }, 'cve: lecture en échec');
             }
             deps.live.changed(asset.workspace_id, ['cveExposure']);
         }
     }
 
     /** L'inventaire de l'espace confronté aux catalogues, et les constats rapprochés. */
-    async function evaluate(ws: number, rowsOf: Map<string, readonly CveAffectingRow[]>): Promise<void> {
+    async function evaluate(
+        ws: number,
+        prefs: ExposurePrefs,
+        rowsOf: Map<string, readonly CveAffectingRow[]>
+    ): Promise<void> {
         const cipher = deps.cipherFor(ws);
         const now = nowSeconds();
-        const assets = (await deps.repo.listAssets(ws)).filter((a) => a.excluded === 0 && a.inventory_enc !== null);
+        const assets = (await deps.repo.listAssets(ws)).filter(
+            (a) =>
+                a.excluded === 0 &&
+                a.inventory_enc !== null &&
+                prefs.sources[a.source as keyof ExposurePrefs['sources']]
+        );
         const inputs: AssetComponents[] = [];
         for (const a of assets) {
             inputs.push({
@@ -304,7 +308,7 @@ export function createExposureEngine(
             if (op.type === 'insert' || op.reopened) alerted.push(finding);
             if (op.type === 'insert' || op.state === 'open') open.push(finding);
         }
-        await announce(ws, assets, alerted, open);
+        await announce(ws, prefs, assets, alerted, open);
         const before = notices.get(ws) ?? [];
         const after = Object.values(result.unavailable);
         notices.set(ws, after);
@@ -321,12 +325,11 @@ export function createExposureEngine(
      */
     async function announce(
         ws: number,
+        prefs: ExposurePrefs,
         assets: readonly AssetRow[],
         alerted: readonly AlertedFinding[],
         open: readonly AlertedFinding[]
     ): Promise<void> {
-        const prefs =
-            (await deps.storeFor(ws).getJson(EXPOSURE_PREFS_KEY, exposurePrefsSchema)) ?? DEFAULT_EXPOSURE_PREFS;
         const fresh = new Map(assets.filter((a) => a.announced === 0).map((a) => [a.id, a]));
         const labels = new Map<number, string>();
         const cipher = deps.cipherFor(ws);
@@ -369,7 +372,22 @@ export function createExposureEngine(
     async function pass(): Promise<void> {
         const now = nowSeconds();
         const workspaceIds = await deps.listWorkspaceIds();
-        await collectGit(workspaceIds, { reads: READS_PER_PASS });
+        const prefs = new Map<number, ExposurePrefs>();
+        for (const ws of workspaceIds) {
+            prefs.set(
+                ws,
+                (await deps.storeFor(ws).getJson(EXPOSURE_PREFS_KEY, exposurePrefsSchema)) ?? DEFAULT_EXPOSURE_PREFS
+            );
+        }
+        for (const source of sources) {
+            if (halt.signal.aborted) return;
+            const enabled = workspaceIds.filter((ws) => prefs.get(ws)?.sources[source.id] !== false);
+            try {
+                await collect(source, enabled);
+            } catch (e) {
+                deps.logger.error({ err: e, source: source.id }, 'cve: collecte d’une source en échec');
+            }
+        }
         for (const ws of workspaceIds) {
             if ((evaluatedAt.get(ws) ?? 0) < now - REEVALUATE_S) dirty.add(ws);
         }
@@ -378,7 +396,7 @@ export function createExposureEngine(
             if (!dirty.has(ws) || halt.signal.aborted) continue;
             dirty.delete(ws);
             try {
-                await evaluate(ws, rowsOf);
+                await evaluate(ws, prefs.get(ws) ?? DEFAULT_EXPOSURE_PREFS, rowsOf);
             } catch (e) {
                 deps.logger.error({ err: e, workspaceId: ws }, 'cve: évaluation de l’exposition en échec');
             }
@@ -416,6 +434,16 @@ export function createExposureEngine(
     const ticker = deps.createTicker({ intervalMs: TICK_MS, tick: runGuarded });
 
     return {
+        async deviceReported(deviceId, report) {
+            const revision = osRevision({ report });
+            let changed = false;
+            for (const asset of await deps.repo.findAssetsByRef('device', deviceId)) {
+                if (asset.scanned_at === null || asset.revision === revision) continue;
+                await deps.repo.askRefresh(asset.id);
+                changed = true;
+            }
+            if (changed) wake();
+        },
         async productsChanged(products) {
             const ids = await deps.repo.workspacesWithKeys(products.map(productKey));
             for (const id of ids) dirty.add(id);

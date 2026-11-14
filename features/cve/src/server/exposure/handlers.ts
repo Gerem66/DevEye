@@ -1,4 +1,13 @@
-import { GIT_ITEMS_PROVIDER, type GitItemsProvider } from '@deveye/types/sdk';
+import {
+    DATABASE_ITEMS_PROVIDER,
+    DEPLOY_ITEMS_PROVIDER,
+    GIT_ITEMS_PROVIDER,
+    PROJECTS_USAGE_PROVIDER,
+    type DatabaseItemsProvider,
+    type DeployItemsProvider,
+    type GitItemsProvider,
+    type ProjectsUsageProvider
+} from '@deveye/types/sdk';
 import { defineSdkFeature, FeatureError, type SdkCipher, type SdkFeatureContext } from '@deveye/types/sdk/server';
 
 import {
@@ -20,6 +29,7 @@ import {
     type ExposureComponent,
     type ExposureCounts,
     type ExposureFinding,
+    type ExposurePrefs,
     type ExposureSource
 } from '../../contracts/exposure';
 import type { FindingContent } from '../matching/match';
@@ -36,16 +46,62 @@ import {
 
 type Ctx = SdkFeatureContext<CveRepo>;
 
-/** Les éléments de l'espace que ce membre peut voir chez leur feature. */
+async function prefsOf(ctx: Ctx): Promise<ExposurePrefs> {
+    return (await ctx.store.getJson(EXPOSURE_PREFS_KEY, exposurePrefsSchema)) ?? DEFAULT_EXPOSURE_PREFS;
+}
+
+/**
+ * Les éléments de l'espace que ce membre peut voir chez leur feature. Une
+ * source que l'espace a coupée ne montre rien : elle ne compte plus nulle part.
+ */
 async function visibleAssets(ctx: Ctx, rows: readonly AssetRow[]): Promise<Set<number>> {
+    const prefs = await prefsOf(ctx);
     const git = ctx.providers.get<GitItemsProvider>(GIT_ITEMS_PROVIDER);
+    const databases = ctx.providers.get<DatabaseItemsProvider>(DATABASE_ITEMS_PROVIDER);
+    const deploy = ctx.providers.get<DeployItemsProvider>(DEPLOY_ITEMS_PROVIDER);
+    let devices: Set<string> | null = null;
     const visible = new Set<number>();
     for (const a of rows) {
-        if (a.source === 'git' && git && (await git.authorize(Number(a.ref), ctx.workspaceId, ctx.userId)).ok) {
-            visible.add(a.id);
+        const source = a.source as ExposureSource;
+        if (!prefs.sources[source]) continue;
+        const id = Number(a.ref);
+        let ok = false;
+        if (source === 'git') ok = git !== undefined && (await git.authorize(id, ctx.workspaceId, ctx.userId)).ok;
+        else if (source === 'database') {
+            ok = databases !== undefined && (await databases.authorize(id, ctx.workspaceId, ctx.userId)).ok;
+        } else if (source === 'deploy') {
+            ok = deploy !== undefined && (await deploy.authorize(id, ctx.workspaceId, ctx.userId)).ok;
+        } else {
+            // Dans une commande, la liste écarte déjà ce que le membre ne voit pas.
+            devices ??= new Set((await ctx.deveye.devices.list()).map((d) => d.id));
+            ok = devices.has(a.ref);
         }
+        if (ok) visible.add(a.id);
     }
     return visible;
+}
+
+/** La feature de Projets qui relie un élément de cette source, quand elle sait le relier. */
+const PROJECT_FEATURE: Partial<Record<ExposureSource, string>> = { git: 'git', deploy: 'deploy', database: 'database' };
+
+/** Les projets de chaque élément, pour le filtre de la liste. */
+async function projectsOf(
+    ctx: Ctx,
+    assets: ReadonlyMap<number, ExposureAsset>
+): Promise<Map<number, { id: number; title: string }[]>> {
+    const projects = ctx.providers.get<ProjectsUsageProvider>(PROJECTS_USAGE_PROVIDER);
+    const out = new Map<number, { id: number; title: string }[]>();
+    if (!projects) return out;
+    for (const asset of assets.values()) {
+        const feature = PROJECT_FEATURE[asset.source];
+        if (!feature) continue;
+        const usage = await projects.usageOf(feature, Number(asset.ref), ctx.workspaceId);
+        out.set(
+            asset.id,
+            usage.map((u) => ({ id: u.projectId, title: u.title }))
+        );
+    }
+    return out;
 }
 
 async function toAsset(cipher: SdkCipher, row: AssetRow, openFindings: number): Promise<ExposureAsset> {
@@ -54,7 +110,7 @@ async function toAsset(cipher: SdkCipher, row: AssetRow, openFindings: number): 
         id: row.id,
         source: row.source as ExposureSource,
         ref: row.ref,
-        label: summary?.label ?? `Dépôt ${row.ref}`,
+        label: summary?.label ?? `Élément ${row.ref}`,
         status: row.status,
         error: row.error_enc === null ? null : await cipher.tryDecrypt(row.error_enc),
         excluded: row.excluded === 1,
@@ -82,7 +138,8 @@ async function toFinding(
     cipher: SdkCipher,
     row: FindingRow,
     assets: ReadonlyMap<number, ExposureAsset>,
-    visible: ReadonlySet<number>
+    visible: ReadonlySet<number>,
+    projects: ReadonlyMap<number, { id: number; title: string }[]> = new Map()
 ): Promise<ExposureFinding | null> {
     const content = await openJson<FindingContent>(cipher, row.content_enc, EMPTY_CONTENT);
     const affected = content.affected.flatMap((a) => {
@@ -96,7 +153,8 @@ async function toFinding(
                 label: asset.label,
                 version: a.version,
                 path: a.path,
-                line: a.line
+                line: a.line,
+                projects: projects.get(a.assetId) ?? []
             }
         ];
     });
@@ -176,6 +234,8 @@ export const exposureHandlers = [
         handler: async (ctx: Ctx, input) => {
             // Chiffrement 'server' par défaut : la veille, sans session, les relit.
             await ctx.store.putJson(EXPOSURE_PREFS_KEY, exposurePrefsSchema, input.prefs);
+            // Une source coupée ou rendue se reflète dans les constats sans attendre.
+            markExposureDirty(ctx.workspaceId);
             ctx.audit({
                 action: 'cve.setExposurePrefs',
                 description: 'Réglages de la veille enregistrés',
@@ -189,12 +249,13 @@ export const exposureHandlers = [
         handler: async (ctx: Ctx, input) => {
             const cipher = ctx.cipher();
             const { assets, visible } = await assetsOf(ctx);
+            const projects = await projectsOf(ctx, assets);
             const rows = (await ctx.repo.listFindings(ctx.workspaceId)).filter((r) =>
                 input.view === 'resolved' ? r.state === 'resolved' : r.state !== 'resolved'
             );
             const findings: ExposureFinding[] = [];
             for (const row of rows) {
-                const finding = await toFinding(cipher, row, assets, visible);
+                const finding = await toFinding(cipher, row, assets, visible, projects);
                 if (finding) findings.push(finding);
             }
             const scans = [...assets.values()].map((a) => a.scannedAt ?? 0);

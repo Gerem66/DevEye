@@ -42,6 +42,7 @@ export default function ExposureView({
     const [kind, setKind] = useState<FindingKind>('vuln');
     const [state, setState] = useState<StateFilter>('open');
     const [severity, setSeverity] = useState<CveSeverityFilter>('all');
+    const [project, setProject] = useState<number | null>(null);
     const [selectedId, setSelectedId] = useState<number | null>(null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<ErrorNoteInput | null>(null);
@@ -61,12 +62,18 @@ export default function ExposureView({
         () =>
             findings
                 .filter((f) => f.kind === kind && (severity === 'all' || f.severity === severity))
+                .filter((f) => project === null || f.affected.some((a) => a.projects.some((p) => p.id === project)))
                 .sort(
                     (a, b) =>
                         (SEVERITY_RANK[b.severity] ?? 0) - (SEVERITY_RANK[a.severity] ?? 0) || b.firstSeen - a.firstSeen
                 ),
-        [findings, kind, severity]
+        [findings, kind, severity, project]
     );
+    const projects = useMemo(() => {
+        const all = new Map<number, string>();
+        for (const f of findings) for (const a of f.affected) for (const p of a.projects) all.set(p.id, p.title);
+        return [...all].sort((a, b) => a[1].localeCompare(b[1]));
+    }, [findings]);
     const kinds = useMemo(
         () =>
             FINDING_KINDS.map((k) => {
@@ -134,6 +141,29 @@ export default function ExposureView({
                         ))}
                     </div>
                 )}
+                {projects.length > 0 && (
+                    <div className={styles.severityChips} role='group' aria-label='Filtrer par projet'>
+                        <button
+                            type='button'
+                            className={`${styles.chip} ${project === null ? styles.chipActive : ''}`}
+                            aria-pressed={project === null}
+                            onClick={() => setProject(null)}
+                        >
+                            Tous les projets
+                        </button>
+                        {projects.map(([id, title]) => (
+                            <button
+                                key={id}
+                                type='button'
+                                className={`${styles.chip} ${project === id ? styles.chipActive : ''}`}
+                                aria-pressed={project === id}
+                                onClick={() => setProject(id)}
+                            >
+                                {title}
+                            </button>
+                        ))}
+                    </div>
+                )}
                 <p className={styles.status}>
                     {exposure.loading
                         ? 'Chargement…'
@@ -156,7 +186,7 @@ export default function ExposureView({
                     {shown.length === 0 && !exposure.loading ? (
                         <p className={styles.empty}>
                             {scannedAt === null
-                                ? 'La veille lit les dépôts de la feature Git : un dépôt ajouté est analysé dans les minutes qui suivent.'
+                                ? 'La veille lit les dépôts, les appareils, les bases et les déploiements de l’espace : un élément ajouté est analysé dans les minutes qui suivent.'
                                 : state === 'open'
                                   ? (kindLabel?.empty ?? 'Rien à signaler.')
                                   : state === 'ignored'

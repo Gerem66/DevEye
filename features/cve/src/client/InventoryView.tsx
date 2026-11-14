@@ -76,7 +76,8 @@ export default function InventoryView({
                 <div className={styles.listPane}>
                     {assets.length === 0 && !inventory.loading ? (
                         <p className={styles.empty}>
-                            Aucun élément à lire. La veille suit les dépôts de la feature Git, dès qu’il y en a un.
+                            Aucun élément à lire. La veille suit les dépôts Git, les appareils, les bases et les
+                            déploiements Dokploy de l’espace, dès qu’il y en a.
                         </p>
                     ) : (
                         <ul className={styles.list}>
@@ -157,6 +158,7 @@ function AssetRow({ asset, selected, onOpen }: { asset: ExposureAsset; selected:
                 <span className={styles.rowHead}>
                     <span className={`icon ${SOURCE_ICON[asset.source]} ${styles.assetChipIcon}`} aria-hidden='true' />
                     <span className={styles.rowId}>{asset.label}</span>
+                    <span className={styles.rowAge}>{SOURCE_LABEL[asset.source]}</span>
                     {asset.status === 'error' && <StatusBadge tone='danger'>Lecture en échec</StatusBadge>}
                     {asset.openFindings > 0 && (
                         <StatusBadge tone='warning'>

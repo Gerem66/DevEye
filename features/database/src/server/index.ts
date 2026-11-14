@@ -162,6 +162,26 @@ export const serverEntry: FeatureServer<DatabaseRepo> = {
             labelOf: async (databaseId, workspaceId) => {
                 const row = await deps.repo.findVisible(databaseId, workspaceId);
                 return row ? labelOf(deps.repo, deps.cipherFor(row.workspace_id), databaseId, row.workspace_id) : null;
+            },
+            listHome: async (workspaceIds) =>
+                Promise.all(
+                    (await deps.repo.listHome(workspaceIds)).map(async (row) => {
+                        const ws = Number(row.workspace_id);
+                        const stored = await readJson<Partial<StoredDatabase>>(deps.cipherFor(ws), row.content);
+                        return {
+                            id: Number(row.id),
+                            workspaceId: ws,
+                            name: typeof stored?.name === 'string' && stored.name ? stored.name : `Base ${row.id}`,
+                            engine: row.engine === 'postgres' ? ('postgres' as const) : ('mysql' as const),
+                            serverVersion: row.server_version,
+                            checkedAt: row.last_check_at === null ? null : Number(row.last_check_at),
+                            paused: deps.pauses.isPaused('connections', String(row.id))
+                        };
+                    })
+                ),
+            authorize: async (databaseId, workspaceId, userId) => {
+                if (!(await deps.repo.findVisible(databaseId, workspaceId))) return { ok: false, reason: 'hidden' };
+                return deps.access.feature(workspaceId, userId, { level: 'read', itemId: String(databaseId) });
             }
         };
         return {

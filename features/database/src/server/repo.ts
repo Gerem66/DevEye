@@ -28,6 +28,10 @@ export interface DatabaseRepo {
     countInWorkspaces(workspaceIds: readonly number[]): Promise<number>;
     /** Ce que compte `countInWorkspaces`, du plus ancien au plus récent : le stock du quota `connections`. */
     listStock(workspaceIds: readonly number[]): Promise<SdkStockItem[]>;
+    /** Les bases dont le domicile est l'un de ces espaces, avec ce que leur dernier relevé a vu du serveur. */
+    listHome(
+        workspaceIds: readonly number[]
+    ): Promise<Pick<DatabaseRow, 'id' | 'workspace_id' | 'engine' | 'server_version' | 'last_check_at' | 'content'>[]>;
     create(input: {
         workspaceId: number;
         engine: string;
@@ -211,6 +215,15 @@ export function createRepo(q: SdkQueryable): DatabaseRepo {
                 [[...workspaceIds]]
             );
             return rows.map((row) => ({ id: String(row.id), workspaceId: Number(row.workspace_id) }));
+        },
+        async listHome(workspaceIds) {
+            if (workspaceIds.length === 0) return [];
+            return q.query<
+                Pick<DatabaseRow, 'id' | 'workspace_id' | 'engine' | 'server_version' | 'last_check_at' | 'content'>
+            >(
+                'SELECT id, workspace_id, engine, server_version, last_check_at, content FROM database_connections WHERE workspace_id IN (?) ORDER BY id',
+                [[...workspaceIds]]
+            );
         },
         async count(workspaceId) {
             const rows = await q.query<{ total: number }>(

@@ -1,3 +1,4 @@
+import type { DeployInventory } from '@deveye/types/sdk';
 import type { DeployCandidate, DeployCredentialProvider, DeployStatus, DeployTargetKind } from '../../contracts/domain';
 import type { DeviceRelay } from '@deveye/types/sdk/server';
 
@@ -100,4 +101,6 @@ export interface DeployProviderAdapter {
     ): Promise<TargetPlace>;
     /** Le dépôt déployé, s'il se connaît ; ne lève jamais. */
     repoUrl(access: ProviderAccess, target: ProviderTarget): Promise<string | null>;
+    /** Ce que la cible fait tourner, pour la veille CVE ; absent quand le dépôt ou l'appareil le disent déjà. */
+    inventory?(access: ProviderAccess, target: ProviderTarget): Promise<DeployInventory | null>;
 }

@@ -5,6 +5,7 @@ import type {
     DeployTargetRow,
     DeployTargetSyncRow
 } from '../contracts/domain';
+import type { DeployInventory } from '@deveye/types/sdk';
 import {
     isRemoteFailure,
     logFailure,
@@ -375,6 +376,36 @@ export class DeploySync {
      * rien lancer si la cible est en pause ou son accès occupé ou en recul : la
      * base dit alors ce que le dernier tour a vu.
      */
+    /**
+     * Ce qu'une cible fait tourner, demandé à son fournisseur sur le moment :
+     * ce que la veille CVE lit d'un déploiement. Rien n'en est gardé.
+     */
+    async inventory(
+        targetId: number,
+        workspaceId: number
+    ): Promise<{ inventory: DeployInventory | null; error: string | null } | null> {
+        const target = await this.deps.repo.findTarget(targetId, workspaceId);
+        if (!target) return null;
+        if (target.credential_id === null) return { inventory: null, error: null };
+        const credential = await this.deps.repo.findCredential(target.credential_id, workspaceId);
+        if (!credential) return { inventory: null, error: null };
+        const provider = providerOf(this.providers, credential.provider);
+        if (!provider.inventory) return { inventory: null, error: null };
+        const cipher = this.deps.cipherFor(workspaceId);
+        const stored = await readJson<Partial<StoredTarget>>(cipher, target.content);
+        try {
+            const access = {
+                credentialId: credential.id,
+                baseUrl: credential.base_url,
+                relay: await this.relayFor(credential),
+                secret: await cipher.decrypt(credential.secret_enc)
+            };
+            return { inventory: await provider.inventory(access, providerTargetOf(target, stored)), error: null };
+        } catch (e) {
+            return { inventory: null, error: e instanceof Error ? e.message : String(e) };
+        }
+    }
+
     async refresh(targetId: number): Promise<void> {
         const running = this.running.get(targetId);
         if (running) return running;

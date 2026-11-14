@@ -35,8 +35,11 @@ export const manifest = {
     /** Symétriquement, ce qu'un membre écrit ne recharge jamais le fil. */
     invalidatedByTopic: ['cve.favorites', 'cve.keyList', 'cve.exposurePrefs'],
     settings: { feature: [{ id: 'detection', label: 'Détection', icon: 'search' }, 'sources'] },
-    /** Les alertes de la veille partent par les canaux de l'espace. */
-    nativeCapabilities: ['notify'],
+    /**
+     * Les alertes partent par les canaux de l'espace ; les appareils et leurs
+     * conteneurs se lisent par l'agent.
+     */
+    nativeCapabilities: ['notify', 'devices.read', 'agents'],
     /**
      * Poser la clé du NVD se confie séparément de l'écriture : épingler une CVE
      * ne doit pas donner la main sur un secret d'espace.

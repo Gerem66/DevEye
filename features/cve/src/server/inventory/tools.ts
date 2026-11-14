@@ -58,7 +58,16 @@ export const TOOLS: Record<string, ToolSpec> = {
     jenkins: { label: 'Jenkins', products: [{ vendor: 'jenkins', product: 'jenkins' }], segments: 3 },
     gitea: { label: 'Gitea', products: [{ vendor: 'gitea', product: 'gitea' }], segments: 3 },
     wordpress: { label: 'WordPress', products: [{ vendor: 'wordpress', product: 'wordpress' }], segments: 3 },
-    keycloak: { label: 'Keycloak', products: [{ vendor: 'redhat', product: 'keycloak' }], segments: 3 }
+    keycloak: { label: 'Keycloak', products: [{ vendor: 'redhat', product: 'keycloak' }], segments: 3 },
+    docker: {
+        label: 'Docker',
+        products: [
+            { vendor: 'docker', product: 'docker' },
+            { vendor: 'mobyproject', product: 'moby' }
+        ],
+        segments: 3
+    },
+    podman: { label: 'Podman', products: [{ vendor: 'podman_project', product: 'podman' }], segments: 3 }
 };
 
 /** Les autres noms d'un même outil : celui de son image, de `.tool-versions`, de son projet. */

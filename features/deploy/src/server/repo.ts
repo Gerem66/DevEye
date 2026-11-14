@@ -54,6 +54,10 @@ export interface DeployRepo {
     countTargetsInWorkspaces(workspaceIds: readonly number[]): Promise<number>;
     /** Ce que compte `countTargetsInWorkspaces`, du plus ancien au plus récent : le stock du quota `targets`. */
     listStockTargets(workspaceIds: readonly number[]): Promise<SdkStockItem[]>;
+    /** Les cibles dont le domicile est l'un de ces espaces. */
+    listHomeTargets(
+        workspaceIds: readonly number[]
+    ): Promise<Pick<DeployTargetRow, 'id' | 'workspace_id' | 'provider' | 'content'>[]>;
     createTarget(input: {
         workspaceId: number;
         credentialId: number | null;
@@ -304,6 +308,13 @@ export function createRepo(q: SdkQueryable): DeployRepo {
                 [workspaceIds]
             );
             return Number(rows[0]?.n ?? 0);
+        },
+        async listHomeTargets(workspaceIds) {
+            if (workspaceIds.length === 0) return [];
+            return q.query<Pick<DeployTargetRow, 'id' | 'workspace_id' | 'provider' | 'content'>>(
+                'SELECT id, workspace_id, provider, content FROM deploy_targets WHERE workspace_id IN (?) ORDER BY id',
+                [[...workspaceIds]]
+            );
         },
         async listStockTargets(workspaceIds) {
             if (workspaceIds.length === 0) return [];

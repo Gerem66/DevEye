@@ -93,6 +93,7 @@ function withDokploy(client: Partial<DokployClient>) {
             triggerDeploy: unused,
             fetchDeploymentLog: unused,
             fetchRepoUrl: unused,
+            fetchInventory: unused,
             ...client
         }),
         github: new GithubProvider()
@@ -158,6 +159,7 @@ function fakeRepo(
         findTargetByDevice: unused,
         countTargetsInWorkspaces: async (ids) => targets.filter((t) => ids.includes(t.workspace_id)).length,
         listStockTargets: unused,
+        listHomeTargets: unused,
         // La requête du vrai dépôt, en mémoire : jointure sur la clé, accès
         // écartés, compte des déploiements en vol, les deux régimes, le tour de
         // chaque espace et l'ordre.

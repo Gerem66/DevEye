@@ -675,7 +675,9 @@ describe('les sources de déploiement', () => {
         ],
         authorize: async (id) =>
             id === 5 ? { ok: true } : id === 6 ? { ok: false, reason: 'level' } : { ok: false, reason: 'hidden' },
-        activity: async () => ({ succeeded: null, inFlight: null, error: null })
+        activity: async () => ({ succeeded: null, inFlight: null, error: null }),
+        listHome: async () => [],
+        inventoryOf: async () => null
     };
     const withDeploy = (repo: FakeRepo) => createTestContext({ repo, providers: { [DEPLOY_ITEMS_PROVIDER]: deploy } });
 

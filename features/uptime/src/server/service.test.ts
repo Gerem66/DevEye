@@ -637,7 +637,9 @@ describe('l’acceptation après un déploiement', () => {
             activity: async (_id, _ws, since) => {
                 asked.push(since);
                 return answer(since);
-            }
+            },
+            listHome: async () => [],
+            inventoryOf: async () => null
         };
         return { asked, provider };
     }
