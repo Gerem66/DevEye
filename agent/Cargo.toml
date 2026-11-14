@@ -80,6 +80,11 @@ libc = "0.2"
 ksni = "0.3"
 zbus = { version = "5", default-features = false, features = ["tokio"] }
 
+# The allocator of the static Linux builds (see `GLOBAL` in main.rs). Its C is
+# built by the same cross compiler as ring's.
+[target.'cfg(target_env = "musl")'.dependencies]
+mimalloc = { version = "0.1", default-features = false }
+
 [target.'cfg(any(windows, target_os = "macos"))'.dependencies]
 tray-icon = { version = "0.25", default-features = false }
 

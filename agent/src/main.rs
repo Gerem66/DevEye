@@ -43,6 +43,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
+// musl's allocator keeps what a sync scan frees (every path of the share, many
+// times over): the agent sat on gigabytes of dead strings. mimalloc returns it.
+#[cfg(target_env = "musl")]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 /// Whether this process is supervised by a service manager (systemd/launchd/task),
 /// set once at startup from `run --managed`. A supervised agent exits on
 /// self-update and lets the manager relaunch it (`update::restart_and_exit`),
