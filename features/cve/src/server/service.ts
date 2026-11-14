@@ -1,10 +1,13 @@
-import { CVE_LOOKUP_PROVIDER, type CveLookupHit, type CveLookupItem, type CveLookupProvider } from '@deveye/types/sdk';
+import { CVE_EXPOSURE_PROVIDER } from '@deveye/types/sdk';
 import type { FeatureService, FeatureServiceDeps } from '@deveye/types/sdk/server';
 
 import { INGEST_MAX_PAGES, NVD_KEY_STORE_KEY } from './_shared';
+import { createExposureEngine } from './exposure/engine';
+import { exposureProvider } from './exposure/provider';
+import type { CveProduct } from './inventory/tools';
+import type { OsvFetch } from './matching/osv';
 import { nvdClient, type NvdClient } from './nvd';
 import type { CveRepo } from './repo';
-import { isAffected } from './versions';
 
 /**
  * L'ingestion du fil : un tour toutes les trente minutes, qui demande au NVD ce
@@ -44,10 +47,13 @@ const PURGE_EVERY_S = 24 * 3600;
  * de la place dans le quota pour le fil et les recherches.
  */
 const BACKFILL_PAGES_PER_TICK = 4;
-/** Au-delà, le fil est réputé en retard et le catalogue ne garantit plus rien. */
-const STALE_AFTER_S = 24 * 3600;
 
-export function createService(deps: FeatureServiceDeps<CveRepo>, client: NvdClient = nvdClient): FeatureService {
+export function createService(
+    deps: FeatureServiceDeps<CveRepo>,
+    client: NvdClient = nvdClient,
+    osvFetch?: OsvFetch
+): FeatureService {
+    const exposure = createExposureEngine(deps, { osvFetch });
     let lastPurgeAt = 0;
     let running = false;
     let stopping = false;
@@ -92,20 +98,25 @@ export function createService(deps: FeatureServiceDeps<CveRepo>, client: NvdClie
         const apiKey = await anyApiKey(workspaceIds);
         let cursor = (await deps.repo.getState('ingestCursor')) ?? now - FIRST_WINDOW_S;
         let ingested = 0;
+        const touched = new Map<string, CveProduct>();
 
         // Le curseur est en base : un arrêt entre deux fenêtres ne perd rien.
         for (let window = 0; window < MAX_WINDOWS_PER_TICK && cursor < now && !stopping; window++) {
             const to = Math.min(now, cursor + WINDOW_S);
             const entries = await client.window(cursor, to, apiKey, INGEST_MAX_PAGES);
             await deps.repo.upsertMany(entries);
+            for (const p of entries.flatMap((e) => e.products)) touched.set(`${p.vendor}:${p.product}`, p);
             cursor = to - OVERLAP_S;
             await deps.repo.setState('ingestCursor', cursor);
             ingested += entries.length;
         }
 
         await deps.repo.setState('ingestedAt', now);
-        await backfill(apiKey);
+        await backfill(apiKey, touched);
         await purge(now);
+        // Une CVE neuve sur un produit qu'un espace emploie : cet espace se
+        // réévalue sans attendre que le cache d'OSV ait vieilli.
+        if (touched.size > 0) await exposure.productsChanged([...touched.values()]);
 
         // Un tour qui n'a rien vu bouger ne reveille personne : chaque appel fait
         // re-solliciter tous les clients de l'espace.
@@ -118,13 +129,14 @@ export function createService(deps: FeatureServiceDeps<CveRepo>, client: NvdClie
      * Le rattrapage des produits surveillés : toutes leurs CVE, une fois, par
      * pages. L'index avance en base : un tour interrompu reprend où il en était.
      */
-    async function backfill(apiKey: string | null): Promise<void> {
+    async function backfill(apiKey: string | null, touched: Map<string, CveProduct>): Promise<void> {
         let pages = 0;
         for (const w of await deps.repo.listWatched()) {
             let index = w.backfill_index;
             while (w.backfilled_at === null && pages < BACKFILL_PAGES_PER_TICK && !stopping) {
                 const page = await client.product(w.vendor, w.product, index, apiKey);
                 await deps.repo.upsertMany(page.entries);
+                touched.set(`${w.vendor}:${w.product}`, { vendor: w.vendor, product: w.product });
                 pages++;
                 index = page.next;
                 if (page.done) {
@@ -137,61 +149,12 @@ export function createService(deps: FeatureServiceDeps<CveRepo>, client: NvdClie
         }
     }
 
-    const lookup: CveLookupProvider = {
-        async watch(products) {
-            const added = await deps.repo.watch(products, Math.floor(Date.now() / 1000));
-            // Un produit neuf n'attend pas la demi-heure : son rattrapage part
-            // tout de suite, sans retenir l'appelant.
-            if (added > 0)
-                void tick().catch((e: unknown) =>
-                    deps.logger.warn({ err: (e as Error).message }, 'Rattrapage CVE échoué')
-                );
-        },
-        async affecting(items) {
-            const watched = new Map((await deps.repo.listWatched()).map((w) => [`${w.vendor}:${w.product}`, w]));
-            const pending = [
-                ...new Set(
-                    items
-                        .filter((i) => watched.get(`${i.vendor}:${i.product}`)?.backfilled_at == null)
-                        .map((i) => i.product)
-                )
-            ];
-            const ingestedAt = await deps.repo.getState('ingestedAt');
-            const late = ingestedAt === null || Math.floor(Date.now() / 1000) - ingestedAt > STALE_AFTER_S;
-            const hits: { item: CveLookupItem; cves: CveLookupHit[] }[] = [];
-            const byProduct = new Map<string, Awaited<ReturnType<CveRepo['affecting']>>>();
-            for (const item of items) {
-                const key = `${item.vendor}:${item.product}`;
-                if (!byProduct.has(key)) byProduct.set(key, await deps.repo.affecting(item.vendor, item.product));
-                const seen = new Map<string, CveLookupHit>();
-                for (const row of byProduct.get(key) ?? []) {
-                    if (seen.has(row.cve_id) || !isAffected(item.version, row)) continue;
-                    seen.set(row.cve_id, {
-                        cveId: row.cve_id,
-                        severity: row.severity,
-                        score: row.score === null ? null : Number(row.score),
-                        summary: row.summary,
-                        published: Number(row.published),
-                        fixedIn: row.end_excl
-                    });
-                }
-                hits.push({ item, cves: [...seen.values()] });
-            }
-            const reason =
-                pending.length > 0
-                    ? `Le catalogue CVE rattrape encore l’historique de ${pending.join(', ')}.`
-                    : late
-                      ? 'Le catalogue CVE n’a pas été mis à jour depuis plus d’un jour.'
-                      : null;
-            return { status: reason === null ? 'ok' : 'stale', reason, hits };
-        }
-    };
-
     const ticker = deps.createTicker({ intervalMs: TICK_MS, tick });
     return {
-        providers: { [CVE_LOOKUP_PROVIDER]: lookup },
-        start() {
+        providers: { [CVE_EXPOSURE_PROVIDER]: exposureProvider(deps) },
+        async start() {
             stopping = false;
+            await exposure.start();
             ticker.start();
             // Sans ce premier tour, le fil resterait vide une demi-heure après
             // l'installation. Lancé sans être attendu : le démarrage du serveur
@@ -202,7 +165,7 @@ export function createService(deps: FeatureServiceDeps<CveRepo>, client: NvdClie
         },
         async stop() {
             stopping = true;
-            await Promise.all([ticker.stop(), first]);
+            await Promise.all([ticker.stop(), first, exposure.stop()]);
         }
     };
 }

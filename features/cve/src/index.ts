@@ -4,4 +4,6 @@
  */
 export { manifest } from './manifest';
 export * from './contracts/domain';
+export * from './contracts/exposure';
+export * from './contracts/formats';
 export * from './contracts/commands';

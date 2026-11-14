@@ -730,6 +730,36 @@ CREATE TABLE `ft_convert_jobs` (
   CONSTRAINT `fk_ft_convert_jobs_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+CREATE TABLE `ft_cve_asset_keys` (
+  `asset_id` int NOT NULL,
+  `key_hash` char(64) COLLATE utf8mb4_general_ci NOT NULL,
+  PRIMARY KEY (`asset_id`,`key_hash`),
+  KEY `idx_ft_cve_asset_keys_hash` (`key_hash`),
+  CONSTRAINT `fk_ft_cve_asset_keys_asset` FOREIGN KEY (`asset_id`) REFERENCES `ft_cve_assets` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_cve_assets` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `workspace_id` int NOT NULL,
+  `source` varchar(16) COLLATE utf8mb4_general_ci NOT NULL,
+  `ref` varchar(64) COLLATE utf8mb4_general_ci NOT NULL,
+  `status` enum('pending','ok','error') COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'pending',
+  `excluded` tinyint(1) NOT NULL DEFAULT '0',
+  `revision` varchar(128) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `digest` varchar(128) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `checked_at` bigint DEFAULT NULL,
+  `scanned_at` bigint DEFAULT NULL,
+  `refresh_asked` tinyint(1) NOT NULL DEFAULT '0',
+  `announced` tinyint(1) NOT NULL DEFAULT '0',
+  `error_enc` text COLLATE utf8mb4_general_ci,
+  `summary_enc` text COLLATE utf8mb4_general_ci,
+  `inventory_enc` mediumtext COLLATE utf8mb4_general_ci,
+  `created` bigint NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_ft_cve_assets_ref` (`workspace_id`,`source`,`ref`),
+  CONSTRAINT `fk_ft_cve_assets_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 CREATE TABLE `ft_cve_entries` (
   `cve_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL,
   `published` bigint NOT NULL,
@@ -754,6 +784,57 @@ CREATE TABLE `ft_cve_favorites` (
   PRIMARY KEY (`workspace_id`,`cve_id`),
   KEY `idx_cve_fav_created` (`workspace_id`,`created`),
   CONSTRAINT `fk_cve_fav_workspace` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_cve_finding_assets` (
+  `finding_id` int NOT NULL,
+  `asset_id` int NOT NULL,
+  `covered` tinyint(1) NOT NULL DEFAULT '0',
+  PRIMARY KEY (`finding_id`,`asset_id`),
+  KEY `idx_ft_cve_finding_assets_asset` (`asset_id`),
+  CONSTRAINT `fk_ft_cve_finding_assets_asset` FOREIGN KEY (`asset_id`) REFERENCES `ft_cve_assets` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_ft_cve_finding_assets_finding` FOREIGN KEY (`finding_id`) REFERENCES `ft_cve_findings` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_cve_findings` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `workspace_id` int NOT NULL,
+  `kind` enum('vuln','eol','deprecated','outdated') COLLATE utf8mb4_general_ci NOT NULL,
+  `origin` varchar(16) COLLATE utf8mb4_general_ci NOT NULL,
+  `subject_key` char(64) COLLATE utf8mb4_general_ci NOT NULL,
+  `advisory_id` varchar(80) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `severity` enum('none','low','medium','high','critical') COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'none',
+  `score` decimal(3,1) DEFAULT NULL,
+  `state` enum('open','ignored','resolved') COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'open',
+  `first_seen` bigint NOT NULL,
+  `last_seen` bigint NOT NULL,
+  `resolved_at` bigint DEFAULT NULL,
+  `due_at` bigint DEFAULT NULL,
+  `notified_stage` varchar(16) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `content_enc` mediumtext COLLATE utf8mb4_general_ci NOT NULL,
+  `ignored_by` int DEFAULT NULL,
+  `ignored_at` bigint DEFAULT NULL,
+  `reason_enc` text COLLATE utf8mb4_general_ci,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_ft_cve_findings_subject` (`workspace_id`,`kind`,`subject_key`),
+  KEY `idx_ft_cve_findings_state` (`workspace_id`,`state`,`kind`),
+  CONSTRAINT `fk_ft_cve_findings_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_cve_osv_queries` (
+  `pkg_key` char(64) COLLATE utf8mb4_general_ci NOT NULL,
+  `vuln_ids` text COLLATE utf8mb4_general_ci NOT NULL,
+  `fetched_at` bigint NOT NULL,
+  PRIMARY KEY (`pkg_key`),
+  KEY `idx_ft_cve_osv_queries_fetched` (`fetched_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_cve_osv_vulns` (
+  `id` varchar(80) COLLATE utf8mb4_general_ci NOT NULL,
+  `body` mediumtext COLLATE utf8mb4_general_ci NOT NULL,
+  `fetched_at` bigint NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_ft_cve_osv_vulns_fetched` (`fetched_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 CREATE TABLE `ft_cve_products` (

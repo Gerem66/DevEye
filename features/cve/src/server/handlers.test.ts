@@ -11,6 +11,7 @@ import { manifest } from '../manifest';
 
 import { cveHandlers, setNvdClient } from './handlers';
 import { NvdQuotaError, type NvdClient } from './nvd';
+import { memoryExposureRepo } from './exposure/repo.fake';
 import type { CveRepo, CveStateKey, CveUpsert } from './repo';
 
 /**
@@ -70,6 +71,7 @@ interface FakeRepo extends CveRepo {
 function fakeRepo(seed: CveUpsert[] = []): FakeRepo {
     const state = new Map<CveStateKey, number>();
     return {
+        ...memoryExposureRepo(),
         entries: [...seed],
         favorites: [],
         async listNews(_ws, severity, limit) {

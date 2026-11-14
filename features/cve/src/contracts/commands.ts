@@ -6,6 +6,13 @@ import {
     cveProviderSchema,
     cveSeverityFilterSchema
 } from './domain';
+import {
+    exposureAssetSchema,
+    exposureComponentSchema,
+    exposureCountsSchema,
+    exposureFindingSchema,
+    exposurePrefsSchema
+} from './exposure';
 
 /** Ce qu'une liste rend au plus, fil comme recherche. */
 export const CVE_PAGE_MAX = 100;
@@ -82,4 +89,105 @@ export const cveSetKey = {
     output: z.object({ keys: z.array(cveProviderKeySchema) })
 };
 
-export const cveCommands = [cveNews, cveSearch, cveGet, cveFavorites, cveSetFavorite, cveKeyList, cveSetKey] as const;
+/** Ce que la raison d'un constat ignoré peut dire. */
+export const FINDING_REASON_MAX = 500;
+
+/**
+ * Les constats de l'espace. `active` : ouverts et ignorés, ce qui demande une
+ * décision ou en a reçu une ; `resolved` : ce qui ne touche plus rien.
+ */
+export const cveExposure = {
+    command: 'cve.exposure' as const,
+    input: z.object({ view: z.enum(['active', 'resolved']).default('active') }),
+    output: z.object({
+        findings: z.array(exposureFindingSchema),
+        /** La dernière lecture d'un élément, toutes sources confondues. */
+        scannedAt: z.number().int().nonnegative().nullable(),
+        /** Ce que la dernière évaluation n'a pas pu vérifier (un catalogue qui n'a pas répondu). */
+        notices: z.array(z.string())
+    })
+};
+
+/** Le décompte de la carte : il répond coffre verrouillé, rien n'y est déchiffré. */
+export const cveExposureCount = {
+    command: 'cve.exposureCount' as const,
+    input: z.object({}),
+    output: exposureCountsSchema
+};
+
+/** Les éléments que la veille lit, et ce qu'elle y a trouvé. */
+export const cveInventory = {
+    command: 'cve.inventory' as const,
+    input: z.object({}),
+    output: z.object({ assets: z.array(exposureAssetSchema) })
+};
+
+/** Un élément et ses composants. */
+export const cveAsset = {
+    command: 'cve.asset' as const,
+    input: z.object({ id: z.number().int().positive() }),
+    output: z.object({ asset: exposureAssetSchema, components: z.array(exposureComponentSchema) })
+};
+
+/** Ignorer un constat, pour les éléments qu'il touche à cet instant. */
+export const cveFindingIgnore = {
+    command: 'cve.findingIgnore' as const,
+    input: z.object({
+        id: z.number().int().positive(),
+        reason: z.string().trim().max(FINDING_REASON_MAX).default('')
+    }),
+    output: z.object({ finding: exposureFindingSchema })
+};
+
+export const cveFindingRestore = {
+    command: 'cve.findingRestore' as const,
+    input: z.object({ id: z.number().int().positive() }),
+    output: z.object({ finding: exposureFindingSchema })
+};
+
+/** Relire un élément au prochain passage, sans attendre son tour. */
+export const cveAssetRefresh = {
+    command: 'cve.assetRefresh' as const,
+    input: z.object({ id: z.number().int().positive() }),
+    output: z.object({ asset: exposureAssetSchema })
+};
+
+/** Sortir un élément de la veille, ou l'y remettre. */
+export const cveAssetExclude = {
+    command: 'cve.assetExclude' as const,
+    input: z.object({ id: z.number().int().positive(), excluded: z.boolean() }),
+    output: z.object({ asset: exposureAssetSchema })
+};
+
+/** Ce que l'espace règle de sa veille. */
+export const cveExposurePrefs = {
+    command: 'cve.exposurePrefs' as const,
+    input: z.object({}),
+    output: z.object({ prefs: exposurePrefsSchema })
+};
+
+export const cveSetExposurePrefs = {
+    command: 'cve.setExposurePrefs' as const,
+    input: z.object({ prefs: exposurePrefsSchema }),
+    output: z.object({ prefs: exposurePrefsSchema })
+};
+
+export const cveCommands = [
+    cveNews,
+    cveSearch,
+    cveGet,
+    cveFavorites,
+    cveSetFavorite,
+    cveKeyList,
+    cveSetKey,
+    cveExposure,
+    cveExposureCount,
+    cveInventory,
+    cveAsset,
+    cveFindingIgnore,
+    cveFindingRestore,
+    cveAssetRefresh,
+    cveAssetExclude,
+    cveExposurePrefs,
+    cveSetExposurePrefs
+] as const;

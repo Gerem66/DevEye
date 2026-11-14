@@ -1,16 +1,16 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { CVE_LOOKUP_PROVIDER, type CveLookupProvider } from '@deveye/types/sdk';
 import { createTestServiceDeps } from '@deveye/types/sdk/testing';
 
+import { memoryExposureRepo } from './exposure/repo.fake';
 import type { NvdClient } from './nvd';
 import type { CveAffectingRow, CveRepo, CveStateKey, CveUpsert, CveWatchedRow } from './repo';
 import { createService } from './service';
 
 /**
- * Le contrat offert aux autres modules : un produit surveillé voit son
- * historique rattrapé, puis ses CVE se lisent sans un appel au NVD.
+ * Le rattrapage : un produit que la veille sait reconnaître voit tout son
+ * historique ingéré, pour qu'une version ancienne trouve ses CVE anciennes.
  */
 
 function nginxCve(id: string, endExcl: string): CveUpsert {
@@ -46,6 +46,7 @@ function memoryRepo(): CveRepo & { entries: CveUpsert[]; watched: CveWatchedRow[
         throw new Error('non attendu ici');
     };
     return {
+        ...memoryExposureRepo(),
         entries,
         watched,
         listNews: unused,
@@ -125,32 +126,24 @@ function nvd(byProduct: CveUpsert[]): NvdClient & { productCalls: number } {
     };
 }
 
-describe('CVE_LOOKUP_PROVIDER', () => {
-    it('rattrape l’historique d’un produit surveillé, puis dit quelles CVE touchent une version', async () => {
+describe('le rattrapage des produits suivis', () => {
+    it('inscrit au démarrage les produits que la veille reconnaît, puis rattrape leur historique', async () => {
         const repo = memoryRepo();
         const client = nvd([nginxCve('CVE-2024-0001', '1.25.4'), nginxCve('CVE-2020-0002', '1.19.0')]);
         const deps = createTestServiceDeps({ repo });
         const service = createService(deps, client);
-        const lookup = service.providers?.[CVE_LOOKUP_PROVIDER] as CveLookupProvider;
-        assert.ok(lookup, 'le service publie le contrat');
-
-        const nginx = { vendor: 'f5', product: 'nginx', version: '1.25.3' };
-        const before = await lookup.affecting([nginx]);
-        assert.equal(before.status, 'stale', 'un produit jamais rattrapé ne se garantit pas');
-
-        await lookup.watch([{ vendor: 'f5', product: 'nginx' }]);
-        // `watch` lance le rattrapage sans le faire attendre à l'appelant.
-        for (let i = 0; i < 50 && repo.watched[0]?.backfilled_at == null; i++) {
+        await service.start?.();
+        // Le premier tour part au démarrage sans être attendu : il rattrape
+        // quatre pages, une par produit ici.
+        for (let i = 0; i < 50 && repo.watched.filter((w) => w.backfilled_at !== null).length < 4; i++) {
             await new Promise((resolve) => setTimeout(resolve, 10));
         }
+        await service.stop?.();
 
-        const after = await lookup.affecting([nginx]);
-        assert.equal(client.productCalls, 1);
-        assert.equal(after.status, 'ok', 'historique rattrapé, fil à jour : le catalogue répond pour nginx');
-        assert.deepEqual(
-            after.hits[0].cves.map((c) => [c.cveId, c.fixedIn]),
-            [['CVE-2024-0001', '1.25.4']]
-        );
-        assert.ok(repo.watched[0].backfilled_at !== null);
+        const nginx = repo.watched.find((w) => w.vendor === 'f5' && w.product === 'nginx');
+        assert.ok(nginx, 'nginx est suivi');
+        assert.ok(nginx.backfilled_at !== null, 'son historique est rattrapé');
+        assert.equal(client.productCalls, 4, 'quatre pages au premier tour, pas une de plus');
+        assert.deepEqual(repo.entries.map((e) => e.id).sort(), ['CVE-2020-0002', 'CVE-2024-0001']);
     });
 });

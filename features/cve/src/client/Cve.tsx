@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
 import {
     ErrorNote,
     FeatureSettingsButton,
@@ -19,32 +18,31 @@ import type { CveEntry, CveSeverityFilter } from '../contracts/domain';
 import { api } from './api';
 import CveDetail from './CveDetail';
 import CveRow, { rowDomId } from './CveRow';
+import DetailPane from './DetailPane';
 import { cveError } from './errors';
+import ExposureView from './ExposureView';
+import InventoryView from './InventoryView';
 import { DETAIL_AS_PAGE } from './layout';
 import { SEVERITY_FILTERS } from './severity';
 import { NEWS_LIMIT, refreshCveNews, useCveNews } from './store';
 import styles from './style.module.css';
 
 /**
- * Veille CVE : le fil des vulnérabilités publiées, la recherche dans le
+ * Veille CVE : ce qui touche ce que l'espace fait tourner, l'inventaire que la
+ * veille en dresse, le fil des vulnérabilités publiées, la recherche dans le
  * catalogue du NVD, et celles que l'espace a épinglées.
  *
  * Une recherche non vide prend le dessus sur l'onglet : c'est le geste le plus
  * direct, il ne doit pas demander de changer d'onglet d'abord.
  */
 
-/**
- * Une seule constante : la largeur qu'anime framer-motion et celle que le
- * contenu garde pendant qu'elle change. Elle comprend l'écart d'avec la liste
- * (`padding-left` de `.detailInner`), qui vit dans le panneau pour disparaître
- * avec lui plutôt que d'un coup à son démontage.
- */
-const DETAIL_WIDTH = 396;
 const SEARCH_DEBOUNCE_MS = 500;
 
-type Tab = 'news' | 'favorites';
+type Tab = 'exposure' | 'inventory' | 'news' | 'favorites';
 
 const TABS = [
+    { value: 'exposure' as const, label: 'Mon espace' },
+    { value: 'inventory' as const, label: 'Inventaire' },
     { value: 'news' as const, label: 'Actualités' },
     { value: 'favorites' as const, label: 'Épinglées' }
 ];
@@ -68,7 +66,9 @@ const NO_SEARCH: SearchState = {
 };
 
 export default function Cve(_props: FeatureViewProps) {
-    const [tab, setTab] = useState<Tab>('news');
+    const [tab, setTab] = useState<Tab>('exposure');
+    /** La fiche d'un constat ou d'un élément est ouverte : sous 1000 px, elle prend la page. */
+    const [exposureDetail, setExposureDetail] = useState(false);
     const [severity, setSeverity] = useState<CveSeverityFilter>('all');
     const [query, setQuery] = useState('');
     const [search, setSearch] = useState<SearchState>(NO_SEARCH);
@@ -82,6 +82,7 @@ export default function Cve(_props: FeatureViewProps) {
     const news = useCveNews();
     const canWrite = useWorkspacePermissions().canFeature('cve', 'write');
     const searching = query.trim().length > 0;
+    const catalogue = searching || tab === 'news' || tab === 'favorites';
 
     const loadFavorites = useCallback(async () => {
         try {
@@ -184,6 +185,7 @@ export default function Cve(_props: FeatureViewProps) {
     useEffect(() => {
         if (!liveTarget) return;
         setSelectedId(liveTarget.value);
+        setTab((t) => (t === 'favorites' ? t : 'news'));
     }, [liveTarget]);
 
     const toggleFavorite = useCallback(
@@ -209,7 +211,7 @@ export default function Cve(_props: FeatureViewProps) {
     const banner = error ?? search.error ?? news.error;
 
     return (
-        <div className={`${styles.root} ${selected ? styles.hasDetail : ''}`}>
+        <div className={`${styles.root} ${(catalogue ? selected !== null : exposureDetail) ? styles.hasDetail : ''}`}>
             <StickyHeader className={styles.headBand}>
                 <header className={styles.headRow}>
                     <h2 className={styles.title}>Veille CVE</h2>
@@ -262,77 +264,72 @@ export default function Cve(_props: FeatureViewProps) {
                             aria-label='Ce que la liste montre'
                         />
                     )}
-                    <div className={styles.severityChips} role='group' aria-label='Filtrer par gravité'>
-                        {SEVERITY_FILTERS.map((f) => (
-                            <button
-                                key={f.value}
-                                type='button'
-                                className={`${styles.chip} ${f.value === severity ? styles.chipActive : ''}`}
-                                aria-pressed={f.value === severity}
-                                onClick={() => setSeverity(f.value)}
-                            >
-                                {f.label}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-
-                <p className={styles.status}>{statusLine({ searching, search, news, loading, count: shown.length })}</p>
-            </div>
-
-            <ErrorNote note={banner} />
-
-            <div className={styles.split}>
-                <div className={styles.listPane}>
-                    {shown.length === 0 && !loading ? (
-                        <p className={styles.empty}>{emptyLine(searching, tab, severity, news.ingestedAt)}</p>
-                    ) : (
-                        <ul className={styles.list}>
-                            {shown.map((entry) => (
-                                <CveRow
-                                    key={entry.id}
-                                    entry={entry}
-                                    selected={entry.id === selectedId}
-                                    canWrite={canWrite}
-                                    onOpen={(e) => setSelectedId((cur) => (cur === e.id ? null : e.id))}
-                                    onToggleFavorite={(e) => void toggleFavorite(e)}
-                                />
+                    {catalogue && (
+                        <div className={styles.severityChips} role='group' aria-label='Filtrer par gravité'>
+                            {SEVERITY_FILTERS.map((f) => (
+                                <button
+                                    key={f.value}
+                                    type='button'
+                                    className={`${styles.chip} ${f.value === severity ? styles.chipActive : ''}`}
+                                    aria-pressed={f.value === severity}
+                                    onClick={() => setSeverity(f.value)}
+                                >
+                                    {f.label}
+                                </button>
                             ))}
-                        </ul>
+                        </div>
                     )}
                 </div>
 
-                {/* Le détail n'occupe la droite que lorsqu'on en veut un. */}
-                <AnimatePresence>
-                    {selected && (
-                        <motion.aside
-                            key='detail'
-                            className={styles.detailPane}
-                            initial={{ x: 24, width: 0, opacity: 0 }}
-                            animate={{ x: 0, width: DETAIL_WIDTH, opacity: 1 }}
-                            exit={{ x: 24, width: 0, opacity: 0 }}
-                            transition={{
-                                type: 'spring',
-                                stiffness: 380,
-                                damping: 34,
-                                opacity: { type: 'tween', duration: 0.12, ease: 'easeOut' }
-                            }}
-                        >
-                            {/* Le contenu garde sa largeur pendant que le panneau
-                                perd la sienne : `overflow: hidden` le rogne au lieu
-                                de le remettre en page. */}
-                            <div className={styles.detailInner} style={{ width: DETAIL_WIDTH }}>
-                                <CveDetail
-                                    entry={selected}
-                                    canWrite={canWrite}
-                                    onToggleFavorite={(e) => void toggleFavorite(e)}
-                                    onClose={() => setSelectedId(null)}
-                                />
-                            </div>
-                        </motion.aside>
-                    )}
-                </AnimatePresence>
+                {catalogue && (
+                    <p className={styles.status}>
+                        {statusLine({ searching, search, news, loading, count: shown.length })}
+                    </p>
+                )}
             </div>
+
+            {!catalogue && tab === 'exposure' && (
+                <ExposureView canWrite={canWrite} onDetailChange={setExposureDetail} />
+            )}
+            {!catalogue && tab === 'inventory' && (
+                <InventoryView canWrite={canWrite} onDetailChange={setExposureDetail} />
+            )}
+
+            {catalogue && <ErrorNote note={banner} />}
+
+            {catalogue && (
+                <div className={styles.split}>
+                    <div className={styles.listPane}>
+                        {shown.length === 0 && !loading ? (
+                            <p className={styles.empty}>{emptyLine(searching, tab, severity, news.ingestedAt)}</p>
+                        ) : (
+                            <ul className={styles.list}>
+                                {shown.map((entry) => (
+                                    <CveRow
+                                        key={entry.id}
+                                        entry={entry}
+                                        selected={entry.id === selectedId}
+                                        canWrite={canWrite}
+                                        onOpen={(e) => setSelectedId((cur) => (cur === e.id ? null : e.id))}
+                                        onToggleFavorite={(e) => void toggleFavorite(e)}
+                                    />
+                                ))}
+                            </ul>
+                        )}
+                    </div>
+
+                    <DetailPane open={selected !== null}>
+                        {selected && (
+                            <CveDetail
+                                entry={selected}
+                                canWrite={canWrite}
+                                onToggleFavorite={(e) => void toggleFavorite(e)}
+                                onClose={() => setSelectedId(null)}
+                            />
+                        )}
+                    </DetailPane>
+                </div>
+            )}
         </div>
     );
 }
@@ -372,33 +369,4 @@ function emptyLine(searching: boolean, tab: Tab, severity: CveSeverityFilter, in
     if (ingestedAt === null) return 'Le catalogue se remplit. Le fil s’affichera dès le premier tour d’ingestion.';
     if (severity !== 'all') return 'Aucune vulnérabilité de cette gravité dans le fil.';
     return 'Le fil est vide.';
-}
-
-/** La carte de grille répond à « quoi de neuf », pas « combien en tout ». */
-export function CveWidget() {
-    const { entries, loading } = useCveNews();
-    const week = Math.floor(Date.now() / 1000) - 7 * 86_400;
-    const recent = entries.filter((e) => e.published >= week);
-    const serious = recent.filter((e) => e.severity === 'critical' || e.severity === 'high');
-    const latest = entries[0] ?? null;
-
-    return (
-        <div className={styles.widget}>
-            <div className={styles.widgetStat}>
-                <span className={`${styles.widgetValue} ${!loading && serious.length > 0 ? styles.widgetAlert : ''}`}>
-                    {loading ? '–' : serious.length}
-                </span>
-                <span className={styles.widgetLabel}>
-                    {serious.length > 1 ? 'graves cette semaine' : 'grave cette semaine'}
-                </span>
-            </div>
-            <span className={styles.widgetFoot}>
-                {loading
-                    ? 'Chargement…'
-                    : latest === null
-                      ? 'Le catalogue se remplit'
-                      : `Dernière parue : ${latest.id}`}
-            </span>
-        </div>
-    );
 }

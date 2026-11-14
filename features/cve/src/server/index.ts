@@ -7,6 +7,7 @@ import { cveHandlers } from './handlers';
 import { createRepo, type CveRepo } from './repo';
 import { createService } from './service';
 import { cveAccountExport } from './accountExport';
+import { cveExternalServices } from './externalServices';
 
 /**
  * Pas d'entrée `items` : `shareTier: 'never'`, une CVE est publique et n'a rien
@@ -17,5 +18,6 @@ export const serverEntry: FeatureServer<CveRepo> = {
     features: cveHandlers,
     accountExport: cveAccountExport,
     migrationsDir: path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations'),
-    createService: (deps) => createService(deps)
+    createService: (deps) => createService(deps),
+    externalServices: cveExternalServices
 };

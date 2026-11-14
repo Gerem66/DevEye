@@ -4,6 +4,7 @@ import { cveFavorites, cveGet, cveKeyList, cveNews, cveSearch, cveSetFavorite, c
 import { cveProviderSchema, type CveEntry, type CveSeverityFilter } from '../contracts/domain';
 import { cveIdCandidate, NVD_KEY_STORE_KEY, searchTerms, toEntry, upsertToEntry } from './_shared';
 import { nvdClient, NvdQuotaError, type NvdClient } from './nvd';
+import { exposureHandlers } from './exposure/handlers';
 import type { CveRepo, CveUpsert } from './repo';
 
 type Ctx = SdkFeatureContext<CveRepo>;
@@ -204,5 +205,6 @@ export const cveHandlers = [
             });
             return { keys: cveProviderSchema.options.map((provider) => ({ provider, hasKey: key.length > 0 })) };
         }
-    })
+    }),
+    ...exposureHandlers
 ];

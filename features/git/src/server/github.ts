@@ -140,13 +140,14 @@ export function nameRef(name: string): string {
     return createHash('sha256').update(name).digest('hex').slice(0, 16);
 }
 
-async function call<T>(path: string, token: string, etag?: string): Promise<FetchResult<T>> {
+/** Sans jeton, l'appel passe en anonyme : 60 requêtes par heure et par IP, le public seulement. */
+async function call<T>(path: string, token: string | null, etag?: string): Promise<FetchResult<T>> {
     const headers: Record<string, string> = {
         accept: 'application/vnd.github+json',
         'x-github-api-version': '2022-11-28',
-        authorization: `Bearer ${token}`,
         'user-agent': 'DevEye'
     };
+    if (token) headers.authorization = `Bearer ${token}`;
     if (etag) headers['if-none-match'] = etag;
 
     let res: Response;
@@ -727,4 +728,50 @@ export async function fetchDeployments(
         })
     );
     return events;
+}
+
+/** Un fichier de l'arbre d'une référence, tel que GitHub le liste : de quoi décider de le lire. */
+export interface GitHubTreeFile {
+    path: string;
+    /** L'empreinte du blob, ce que `fetchBlobText` demande. */
+    sha: string;
+    size: number;
+}
+
+interface RawTree {
+    sha?: string;
+    truncated?: boolean;
+    tree?: { path?: string; type?: string; sha?: string; size?: number }[];
+}
+
+/**
+ * L'arbre complet d'une référence (un commit, `HEAD`), en une requête. GitHub
+ * l'écrête au-delà d'environ cent mille entrées et le dit par `truncated`.
+ */
+export async function fetchTree(
+    owner: string,
+    repo: string,
+    token: string | null,
+    ref: string
+): Promise<{ sha: string; files: GitHubTreeFile[]; truncated: boolean }> {
+    const { data } = await call<RawTree>(
+        `/repos/${owner}/${repo}/git/trees/${encodeURIComponent(ref)}?recursive=1`,
+        token
+    );
+    const files: GitHubTreeFile[] = [];
+    for (const entry of data?.tree ?? []) {
+        if (entry.type !== 'blob' || !entry.path || !entry.sha) continue;
+        files.push({ path: entry.path, sha: entry.sha, size: entry.size ?? 0 });
+    }
+    return { sha: data?.sha ?? '', files, truncated: data?.truncated === true };
+}
+
+/** Le contenu d'un blob, en texte. */
+export async function fetchBlobText(owner: string, repo: string, token: string | null, sha: string): Promise<string> {
+    const { data } = await call<{ content?: string; encoding?: string }>(
+        `/repos/${owner}/${repo}/git/blobs/${sha}`,
+        token
+    );
+    const content = data?.content ?? '';
+    return data?.encoding === 'base64' ? Buffer.from(content, 'base64').toString('utf8') : content;
 }

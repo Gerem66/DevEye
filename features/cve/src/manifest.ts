@@ -10,18 +10,33 @@ export const manifest = {
     ...descriptor,
     category: 'security',
     /**
-     * Le fil, les épingles, et l'état de la clé de l'espace. Le détail d'une CVE
-     * (`cve.get`) et les résultats de recherche se relisent à la demande.
+     * Le fil, les épingles, l'état de la clé de l'espace, et l'exposition de
+     * l'espace. Le détail d'une CVE (`cve.get`), d'un élément (`cve.asset`) et
+     * les résultats de recherche se relisent à la demande.
      */
-    resources: ['cve.news', 'cve.favorites', 'cve.keyList'],
+    resources: [
+        'cve.news',
+        'cve.favorites',
+        'cve.keyList',
+        'cve.exposurePrefs',
+        'cve.exposure',
+        'cve.exposureCount',
+        'cve.inventory'
+    ],
     /**
-     * Le fil a son propre sujet : l'ingestion tourne toute seule et ne doit pas
-     * faire recharger les épingles de tout le monde à chaque tour.
+     * Le fil et l'exposition ont chacun leur sujet : l'ingestion et la veille
+     * tournent toutes seules, et ne doivent pas faire recharger les épingles de
+     * tout le monde à chaque tour.
      */
-    topics: [{ id: 'cveFeed', keys: ['cve.news'] }],
+    topics: [
+        { id: 'cveFeed', keys: ['cve.news'] },
+        { id: 'cveExposure', keys: ['cve.exposure', 'cve.exposureCount', 'cve.inventory'] }
+    ],
     /** Symétriquement, ce qu'un membre écrit ne recharge jamais le fil. */
-    invalidatedByTopic: ['cve.favorites', 'cve.keyList'],
-    settings: { feature: ['sources'] },
+    invalidatedByTopic: ['cve.favorites', 'cve.keyList', 'cve.exposurePrefs'],
+    settings: { feature: [{ id: 'detection', label: 'Détection', icon: 'search' }, 'sources'] },
+    /** Les alertes de la veille partent par les canaux de l'espace. */
+    nativeCapabilities: ['notify'],
     /**
      * Poser la clé du NVD se confie séparément de l'écriture : épingler une CVE
      * ne doit pas donner la main sur un secret d'espace.

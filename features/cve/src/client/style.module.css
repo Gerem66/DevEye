@@ -1,40 +1,3 @@
-/* La carte de grille. */
-.widget {
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    height: 100%;
-    gap: var(--space-sm);
-}
-
-.widgetStat {
-    display: flex;
-    align-items: baseline;
-    gap: var(--space-sm);
-}
-
-.widgetValue {
-    font-size: 2.2rem;
-    font-weight: 600;
-    line-height: 1;
-    color: var(--accent);
-    font-variant-numeric: tabular-nums;
-}
-
-.widgetAlert {
-    color: var(--danger);
-}
-
-.widgetLabel {
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-}
-
-.widgetFoot {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-}
-
 /* La vue complète. */
 .root {
     display: flex;
@@ -497,6 +460,254 @@
 .detailMore {
     margin: 0;
     font-size: 0.76rem;
+    color: var(--text-muted);
+}
+
+/* Un réglage qui dépend du précédent, rangé sous lui et replié avec lui. */
+.subSetting {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-sm) var(--space-md);
+    padding-left: var(--space-lg);
+}
+
+.subSettingLabel {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+/* Ce qu'un catalogue n'a pas pu vérifier : dit, sans cacher ce qui était là. */
+.notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin: 0;
+    font-size: 0.78rem;
+    color: var(--warning);
+}
+
+.noticeIcon {
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+    margin-top: 1px;
+}
+
+/* Ce qu'un constat touche, sous son titre : le paquet et sa version, puis les
+   éléments de l'espace, en puces. */
+.rowFacts {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 0.76rem;
+}
+
+.rowSubject {
+    color: var(--text-primary);
+    font-family: var(--font-mono, monospace);
+    font-size: 0.74rem;
+}
+
+.assetChip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 220px;
+    padding: 1px 8px;
+    overflow: hidden;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-pill);
+    color: var(--text-secondary);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.assetChipIcon {
+    flex-shrink: 0;
+    width: 12px;
+    height: 12px;
+}
+
+.affectedList {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 0.8rem;
+}
+
+.affectedRow {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    min-width: 0;
+}
+
+.affectedIcon {
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+    margin-top: 2px;
+    color: var(--text-muted);
+}
+
+.affectedText {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    color: var(--text-primary);
+}
+
+.affectedWhere {
+    overflow: hidden;
+    font-family: var(--font-mono, monospace);
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.linkBtn {
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--accent);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.linkBtn:hover {
+    text-decoration: underline;
+}
+
+.detailActions {
+    display: flex;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+}
+
+.ignoreForm {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+/* Ce que la veille sait lire, sous la liste des éléments. */
+.formatsCard {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    margin-top: var(--space-lg);
+    padding: var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    background: var(--glass-bg-light);
+}
+
+.formatsTitle {
+    margin: 0;
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.formatsHint {
+    margin: 0;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.formatFamily {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.formatList {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 4px var(--space-md);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.formatItem {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 0;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.formatFound {
+    color: var(--text-primary);
+}
+
+.formatIcon {
+    flex-shrink: 0;
+    width: 12px;
+    height: 12px;
+    align-self: center;
+}
+
+.formatFound .formatIcon {
+    color: var(--success);
+}
+
+.formatName {
+    flex-shrink: 0;
+    font-family: var(--font-mono, monospace);
+    font-size: 0.76rem;
+}
+
+.formatDetail {
+    overflow: hidden;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.componentList {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 0.78rem;
+}
+
+.componentRow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: var(--space-sm);
+    padding: 2px 0;
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.componentName {
+    overflow: hidden;
+    color: var(--text-primary);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.componentVersion {
+    font-family: var(--font-mono, monospace);
+    font-size: 0.74rem;
+    color: var(--text-secondary);
+}
+
+.componentEco {
+    font-size: 0.72rem;
     color: var(--text-muted);
 }
 

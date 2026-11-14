@@ -1,6 +1,7 @@
 import type { SdkQueryable } from '@deveye/types/sdk/server';
 
 import type { CveEntryWithFavoriteRow, CveReference, CveSeverity, CveSeverityFilter } from '../contracts/domain';
+import { createExposureRepo, type ExposureRepo } from './exposure/repo';
 
 /** Ce qu'un tour d'ingestion, ou une lecture chez le fournisseur, veut ranger. */
 export interface CveUpsert {
@@ -45,7 +46,8 @@ export interface CveWatchedRow {
     backfilled_at: number | null;
 }
 
-export interface CveRepo {
+/** Le catalogue commun, et l'exposition de chaque espace. */
+export interface CveRepo extends ExposureRepo {
     /** Le fil : les dernières publiées, filtrées par gravité. */
     listNews(workspaceId: number, severity: CveSeverityFilter, limit: number): Promise<CveEntryWithFavoriteRow[]>;
     /**
@@ -107,6 +109,7 @@ function likeTerm(term: string): string {
 
 export function createRepo(q: SdkQueryable): CveRepo {
     return {
+        ...createExposureRepo(q),
         async listNews(workspaceId, severity, limit) {
             const sev = severityClause(severity);
             return q.query<CveEntryWithFavoriteRow>(

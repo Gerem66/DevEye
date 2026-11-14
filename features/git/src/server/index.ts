@@ -12,6 +12,7 @@ import { fetchDeployments, fetchWorkflowRuns, GitHubError, type GitHubDeployEven
 import { gitHandlers } from './handlers';
 import { gitCopy } from './copy';
 import { gitMove } from './move';
+import { readRepoFiles } from './readFiles';
 import { createRepo, type GitRepo } from './repo';
 import { GitSync } from './service';
 import { readJson, setSync, type StoredRepo } from './_shared';
@@ -116,7 +117,8 @@ export const serverEntry: FeatureServer<GitRepo> = {
                     id: Number(r.id),
                     workspaceId: Number(r.workspace_id),
                     headSha: r.head_sha,
-                    headSeenAt: r.head_seen_at === null ? null : Number(r.head_seen_at)
+                    headSeenAt: r.head_seen_at === null ? null : Number(r.head_seen_at),
+                    paused: deps.pauses.isPaused('repos', String(r.id))
                 })),
             describe: async (repoId, workspaceId) =>
                 (await describeRepo(deps.repo, deps.cipherFor(workspaceId), repoId, workspaceId))?.description ?? null,
@@ -168,6 +170,13 @@ export const serverEntry: FeatureServer<GitRepo> = {
                     ...summarizeActivity(events, since, label, Math.floor(Date.now() / 1000)),
                     error: errors.length > 0 ? errors.join(' ; ') : null
                 };
+            },
+            readFiles: async (repoId, workspaceId, request) => {
+                const cipher = deps.cipherFor(workspaceId);
+                const found = await describeRepo(deps.repo, cipher, repoId, workspaceId);
+                if (!found) return null;
+                const token = await tokenOf(deps.repo, cipher, found.row, workspaceId);
+                return readRepoFiles(found.description.label, token, request);
             }
         };
         return {

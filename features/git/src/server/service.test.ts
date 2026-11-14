@@ -816,7 +816,9 @@ describe('GIT_ITEMS_PROVIDER : exists et labelOf', () => {
 describe('GIT_ITEMS_PROVIDER : listHome, describe et openCheckout', () => {
     it('liste les dépôts d’origine, décrit un dépôt chez lui et remet son jeton au clone', async () => {
         const provider = itemsProviderOn(fakeRepo([repo({ default_branch: 'main' })], [credential()]));
-        assert.deepEqual(await provider.listHome([1]), [{ id: 1, workspaceId: 1, headSha: null, headSeenAt: null }]);
+        assert.deepEqual(await provider.listHome([1]), [
+            { id: 1, workspaceId: 1, headSha: null, headSeenAt: null, paused: false }
+        ]);
         assert.deepEqual(await provider.listHome([2]), []);
         assert.deepEqual(await provider.describe(1, 1), {
             workspaceId: 1,

@@ -1,12 +1,14 @@
 import type { FeatureClient } from '@deveye/types/sdk/client';
 
-import Cve, { CveWidget } from './Cve';
+import Cve from './Cve';
 import CveKeysPanel from './CveKeysPanel';
+import DetectionPanel from './DetectionPanel';
+import ExposureWidget from './ExposureWidget';
 
 export const clientEntry: FeatureClient = {
-    Widget: CveWidget,
+    Widget: ExposureWidget,
     Full: Cve,
-    settingsPanels: { sources: CveKeysPanel },
+    settingsPanels: { detection: DetectionPanel, sources: CveKeysPanel },
     cacheDurationMinutes: 30,
     preload: true
 };
