@@ -68,6 +68,8 @@ const DOCKER_RUN_TIMEOUT_MS = 35 * 60_000;
 
 /** Un inventaire se relève en quelques secondes ; au-delà, l'agent ne répondra plus. */
 const DOCKER_INVENTORY_TIMEOUT_MS = 15_000;
+/** Une base dpkg de dix mille paquets se lit en quelques secondes ; la trame, elle, est grosse. */
+const PACKAGE_INVENTORY_TIMEOUT_MS = 60_000;
 
 export function createFacade(deps: FacadeDeps): DevEyeFacade {
     const declared = new Set<NativeCapability>(deps.manifest.nativeCapabilities ?? []);
@@ -365,6 +367,10 @@ export function agentsFacade(gate: () => void): AgentsFacade {
         dockerInventory: (deviceId, timeoutMs) => (
             gate(),
             sdkHub().awaitDockerInventory(deviceId, timeoutMs ?? DOCKER_INVENTORY_TIMEOUT_MS)
+        ),
+        packageInventory: (deviceId, timeoutMs) => (
+            gate(),
+            sdkHub().awaitPackageInventory(deviceId, timeoutMs ?? PACKAGE_INVENTORY_TIMEOUT_MS)
         ),
         // La sauvegarde d'un dossier d'une machine : l'archive faite par l'agent,
         // tirée au rythme du consommateur.

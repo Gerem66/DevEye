@@ -17,6 +17,8 @@ import {
     AGENT_LOG_QUERY,
     AGENT_DOCKER_ACTION,
     AGENT_DOCKER_INVENTORY,
+    AGENT_PKG_INVENTORY,
+    type PackageInventory,
     AGENT_DOCKER_STATS,
     AGENT_LOG_SOURCES,
     AGENT_PKG_LIST,
@@ -250,6 +252,7 @@ export class MonitorHub {
     >();
     /** Les inventaires Docker attendus hors socket web, par appareil. */
     private readonly inventoryWaiters = new Map<string, ((inventory: DockerInventory) => void)[]>();
+    private readonly packageWaiters = new Map<string, ((inventory: PackageInventory) => void)[]>();
     /**
      * Vivacité par socket agent, remise à `true` par `pong` : une machine
      * éteinte n'envoie jamais de `close`, la socket resterait ouverte jusqu'au
@@ -672,6 +675,33 @@ export class MonitorHub {
             timer.unref();
             this.inventoryWaiters.set(deviceId, [...(this.inventoryWaiters.get(deviceId) ?? []), waiter]);
         });
+    }
+
+    /** Les paquets installés d'un appareil, pour la veille CVE ; `null` s'il ne répond pas à temps. */
+    awaitPackageInventory(deviceId: string, timeoutMs: number): Promise<PackageInventory | null> {
+        if (!this.sendToAgent(deviceId, AGENT_PKG_INVENTORY)) return Promise.resolve(null);
+        return new Promise((resolve) => {
+            const waiter = (inventory: PackageInventory | null) => {
+                clearTimeout(timer);
+                resolve(inventory);
+            };
+            const timer = setTimeout(() => {
+                const list = this.packageWaiters.get(deviceId)?.filter((w) => w !== waiter) ?? [];
+                if (list.length > 0) this.packageWaiters.set(deviceId, list);
+                else this.packageWaiters.delete(deviceId);
+                resolve(null);
+            }, timeoutMs);
+            timer.unref();
+            this.packageWaiters.set(deviceId, [...(this.packageWaiters.get(deviceId) ?? []), waiter]);
+        });
+    }
+
+    /** Ce qu'un agent a répondu à `pkg.inventory` : à qui l'attend, personne d'autre ne s'y abonne. */
+    resolvePackageInventory(deviceId: string, inventory: PackageInventory): void {
+        const waiters = this.packageWaiters.get(deviceId);
+        if (!waiters) return;
+        this.packageWaiters.delete(deviceId);
+        for (const waiter of waiters) waiter(inventory);
     }
 
     /** Fan out a device's container inventory to its subscribers. */

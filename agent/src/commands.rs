@@ -400,6 +400,10 @@ where
             device_id: device_id.to_string(),
             managers,
         },
+        PkgEvent::Inventory(inventory) => ClientMessage::PkgInventoryResult {
+            device_id: device_id.to_string(),
+            inventory,
+        },
         PkgEvent::Count { manager, pending } => ClientMessage::PkgCount {
             device_id: device_id.to_string(),
             manager: manager.to_string(),

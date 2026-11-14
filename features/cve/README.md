@@ -31,6 +31,15 @@ rapproche ses lignes de sa source à chaque passage (`exposure/sources.ts`).
 | Bases        | version du serveur (MySQL, MariaDB, PostgreSQL)                          | `listHome` de Bases, son dernier relevé      |
 | Déploiements | image d'une application Dokploy de source Docker, fichier d'un compose   | `inventoryOf` de Déploiements                |
 
+Les **paquets système** d'un appareil (dpkg, rpm, apk) se lisent par
+`agents.packageInventory`, qu'un agent déclare savoir faire par la sonde
+`pkgInventory`. Ils se confrontent à OSV sous l'écosystème de leur
+distribution (`Debian:12`, `Ubuntu:22.04:LTS`, `Alpine:v3.20`,
+`Rocky Linux:9`, `AlmaLinux:9`), par leur paquet source ; une distribution
+qu'OSV ne couvre pas (Fedora, Arch) n'a que sa fin de vie. Seule une faille
+que la distribution corrige déjà devient un constat : ses bases en portent
+des centaines sans correctif, qui ne sont pas une action à prendre.
+
 Une machine de Déploiements dit ses conteneurs par l'appareil, un workflow son
 dépôt par Git : seul Dokploy est lu par Déploiements. Les projets ne sont pas
 une source, ils étiquettent les éléments touchés (filtre « Projet »). Chaque

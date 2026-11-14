@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { databaseComponent, deviceComponents, parseImageRef } from './sources';
+import { databaseComponent, deviceComponents, osvEcosystem, parseImageRef, systemPackageComponents } from './sources';
 
 /** Ce que les sources sans fichiers apprennent à la veille : une image, une version de serveur, un appareil. */
 
@@ -48,6 +48,23 @@ describe('un appareil', () => {
                 'container-image:nginx@1.25.3:web (site/web)',
                 'container-image:redis@7:cache'
             ]
+        );
+    });
+});
+
+describe('les paquets système', () => {
+    it('prennent l’écosystème OSV de leur distribution, et le nom de leur paquet source', () => {
+        assert.equal(osvEcosystem('debian', '12'), 'Debian:12');
+        assert.equal(osvEcosystem('ubuntu', '22.04'), 'Ubuntu:22.04:LTS');
+        assert.equal(osvEcosystem('ubuntu', '23.10'), 'Ubuntu:23.10');
+        assert.equal(osvEcosystem('alpine', '3.20.3'), 'Alpine:v3.20');
+        assert.equal(osvEcosystem('fedora', '41'), null);
+        assert.deepEqual(
+            systemPackageComponents('Debian:12', [
+                { name: 'libssl3', version: '3.0.11-1~deb12u2', source: 'openssl' },
+                { name: 'openssl', version: '3.0.11-1~deb12u2' }
+            ]).map((c) => `${c.ecosystem}:${c.name}@${c.version}`),
+            ['Debian:12:openssl@3.0.11-1~deb12u2']
         );
     });
 });

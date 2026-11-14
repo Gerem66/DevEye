@@ -195,6 +195,31 @@ pub struct PackageManagerInfo {
     pub reboot_required: bool,
 }
 
+/// One installed system package (mirrors @deveye/types `installedPackageSchema`).
+/// `source` is the Debian source package, the name its advisories use.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct InstalledPackage {
+    pub name: String,
+    pub version: String,
+    pub arch: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+}
+
+/// The host's installed packages, for the CVE watch (mirrors @deveye/types
+/// `packageInventorySchema`). `manager` is `None` when no supported database
+/// was found, and `error` says why.
+#[derive(Debug, Clone, Serialize)]
+pub struct PackageInventory {
+    #[serde(rename = "distroId")]
+    pub distro_id: Option<String>,
+    #[serde(rename = "distroVersion")]
+    pub distro_version: Option<String>,
+    pub manager: Option<&'static str>,
+    pub packages: Vec<InstalledPackage>,
+    pub error: Option<String>,
+}
+
 /// Container inventory and management (mirrors @deveye/types `domain/deviceDocker.ts`).
 /// `engine` is `docker` or `podman`: a host can run both, so every object says
 /// which one it came from.
@@ -1022,6 +1047,13 @@ pub enum ClientMessage {
         device_id: String,
         managers: Vec<PackageManagerInfo>,
     },
+    /// Reply to `pkg.inventory`: the installed system packages.
+    #[serde(rename = "pkg.inventoryResult")]
+    PkgInventoryResult {
+        #[serde(rename = "deviceId")]
+        device_id: String,
+        inventory: PackageInventory,
+    },
     /// Then one per managed tool of that list, as its probe finishes: its
     /// pending count, `None` when the tool gave none.
     #[serde(rename = "pkg.count")]
@@ -1475,6 +1507,9 @@ pub enum ServerMessage {
     /// each managed one's pending updates (one `pkg.count` each).
     #[serde(rename = "pkg.list")]
     PkgList {},
+    /// List the installed system packages (replies `pkg.inventoryResult`).
+    #[serde(rename = "pkg.inventory")]
+    PkgInventory {},
     /// Apply all updates of one manager, streaming `pkg.progress` then `pkg.done`.
     #[serde(rename = "pkg.upgrade")]
     PkgUpgrade { manager: String },

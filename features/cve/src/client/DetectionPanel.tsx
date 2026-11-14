@@ -74,7 +74,7 @@ export default function DetectionPanel({ canWrite }: SettingsPanelProps) {
                 checked={prefs.sources.device}
                 onChange={(on) => source('device', on)}
                 label='Appareils et conteneurs'
-                hint='Le système de chaque appareil, son moteur Docker ou Podman, et l’image de chaque conteneur, par l’agent.'
+                hint='Le système de chaque appareil, ses paquets installés, son moteur Docker ou Podman, et l’image de chaque conteneur, par l’agent.'
                 disabled={!canWrite}
             />
             <Switch

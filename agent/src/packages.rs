@@ -20,12 +20,13 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command as TokioCommand;
 use tokio::sync::mpsc::Sender;
 
-use crate::protocol::PackageManagerInfo;
+use crate::protocol::{InstalledPackage, PackageInventory, PackageManagerInfo};
 
 /// Events streamed from a package task back to the session loop (which turns them
 /// into wire messages carrying the device id).
 pub enum PkgEvent {
     List(Vec<PackageManagerInfo>),
+    Inventory(PackageInventory),
     Count {
         manager: &'static str,
         pending: Option<u32>,
@@ -805,6 +806,178 @@ async fn run_step(
     Ok(())
 }
 
+/// Échéance de la liste des paquets installés : une base de dix mille paquets
+/// se lit en quelques secondes, un verrou tenu par une mise à jour peut la
+/// retarder.
+const INVENTORY_TIMEOUT: Duration = Duration::from_secs(60);
+/// Au-delà, la liste est tronquée : la trame doit rester sous ce que le serveur accepte.
+const INVENTORY_MAX: usize = 20_000;
+
+/// `ID` et `VERSION_ID` d'un `os-release`, guillemets retirés.
+pub(crate) fn parse_os_release(text: &str) -> (Option<String>, Option<String>) {
+    let mut id = None;
+    let mut version = None;
+    for line in text.lines() {
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        let value = value
+            .trim()
+            .trim_matches('"')
+            .trim_matches('\'')
+            .to_string();
+        if value.is_empty() {
+            continue;
+        }
+        match key.trim() {
+            "ID" => id = Some(value),
+            "VERSION_ID" => version = Some(value),
+            _ => {}
+        }
+    }
+    (id, version)
+}
+
+/// `dpkg-query` : nom, version, architecture, paquet source et état, séparés
+/// par des tabulations. Seul ce qui est installé (`ii`) compte.
+pub(crate) fn parse_dpkg(out: &str) -> Vec<InstalledPackage> {
+    out.lines()
+        .filter_map(|line| {
+            let mut f = line.split('\t');
+            let (name, version, arch, source, status) =
+                (f.next()?, f.next()?, f.next()?, f.next()?, f.next()?);
+            if !status.starts_with("ii") || name.is_empty() || version.is_empty() {
+                return None;
+            }
+            // `${source:Package}` vaut le nom du paquet quand il est sa propre source.
+            let source = source.split_whitespace().next().unwrap_or(name);
+            Some(InstalledPackage {
+                name: name.to_string(),
+                version: version.to_string(),
+                arch: arch.to_string(),
+                source: (source != name).then(|| source.to_string()),
+            })
+        })
+        .collect()
+}
+
+/// `rpm -qa` : nom, époque, version-révision, architecture. L'époque nulle ou
+/// absente (`(none)`) ne s'écrit pas, comme dans les avis.
+pub(crate) fn parse_rpm(out: &str) -> Vec<InstalledPackage> {
+    out.lines()
+        .filter_map(|line| {
+            let mut f = line.split('\t');
+            let (name, epoch, version, arch) = (f.next()?, f.next()?, f.next()?, f.next()?);
+            if name.is_empty() || version.is_empty() || name == "gpg-pubkey" {
+                return None;
+            }
+            let version = match epoch {
+                "" | "0" | "(none)" => version.to_string(),
+                e => format!("{e}:{version}"),
+            };
+            Some(InstalledPackage {
+                name: name.to_string(),
+                version,
+                arch: arch.to_string(),
+                source: None,
+            })
+        })
+        .collect()
+}
+
+/// La base d'apk (`/lib/apk/db/installed`) : un bloc par paquet, `P:` son nom,
+/// `V:` sa version, `A:` son architecture, `o:` son paquet d'origine.
+pub(crate) fn parse_apk_db(text: &str) -> Vec<InstalledPackage> {
+    let mut out = Vec::new();
+    for block in text.split("\n\n") {
+        let (mut name, mut version, mut arch, mut origin) = ("", "", "", None);
+        for line in block.lines() {
+            match line.split_once(':') {
+                Some(("P", v)) => name = v,
+                Some(("V", v)) => version = v,
+                Some(("A", v)) => arch = v,
+                Some(("o", v)) => origin = Some(v),
+                _ => {}
+            }
+        }
+        if name.is_empty() || version.is_empty() {
+            continue;
+        }
+        out.push(InstalledPackage {
+            name: name.to_string(),
+            version: version.to_string(),
+            arch: arch.to_string(),
+            source: origin.filter(|o| *o != name).map(str::to_string),
+        });
+    }
+    out
+}
+
+/// Les paquets installés, d'après la première base que le système tient :
+/// dpkg, puis rpm, puis apk. Lecture seule, rien n'est modifié.
+pub fn inventory() -> PackageInventory {
+    let os_release = std::fs::read_to_string("/etc/os-release")
+        .or_else(|_| std::fs::read_to_string("/usr/lib/os-release"))
+        .unwrap_or_default();
+    let (distro_id, distro_version) = parse_os_release(&os_release);
+    let mut found: Option<(&'static str, Vec<InstalledPackage>)> = None;
+    if cfg!(target_os = "linux") {
+        if let Some(out) = crate::report::run_timeout(
+            "dpkg-query",
+            &[
+                "-W",
+                "-f",
+                "${Package}\t${Version}\t${Architecture}\t${source:Package}\t${db:Status-Abbrev}\n",
+            ],
+            INVENTORY_TIMEOUT,
+        )
+        .filter(|o| o.success)
+        {
+            found = Some(("dpkg", parse_dpkg(&out.stdout)));
+        } else if let Some(out) = crate::report::run_timeout(
+            "rpm",
+            &[
+                "-qa",
+                "--qf",
+                "%{NAME}\t%{EPOCH}\t%{VERSION}-%{RELEASE}\t%{ARCH}\n",
+            ],
+            INVENTORY_TIMEOUT,
+        )
+        .filter(|o| o.success)
+        {
+            found = Some(("rpm", parse_rpm(&out.stdout)));
+        } else if let Ok(db) = std::fs::read_to_string("/lib/apk/db/installed") {
+            found = Some(("apk", parse_apk_db(&db)));
+        }
+    }
+    match found {
+        Some((manager, mut packages)) => {
+            packages.truncate(INVENTORY_MAX);
+            PackageInventory {
+                distro_id,
+                distro_version,
+                manager: Some(manager),
+                packages,
+                error: None,
+            }
+        }
+        None => PackageInventory {
+            distro_id,
+            distro_version,
+            manager: None,
+            packages: Vec::new(),
+            error: Some("aucune base de paquets reconnue (dpkg, rpm, apk)".to_string()),
+        },
+    }
+}
+
+/// Lit les paquets installés hors de la boucle, et rend le résultat à la session.
+pub async fn run_inventory(tx: Sender<PkgEvent>) {
+    if let Ok(inventory) = tokio::task::spawn_blocking(inventory).await {
+        let _ = tx.send(PkgEvent::Inventory(inventory)).await;
+    }
+}
+
 fn progress(manager: &str, line: &str) -> PkgEvent {
     PkgEvent::Progress {
         manager: manager.to_string(),
@@ -816,6 +989,41 @@ fn progress(manager: &str, line: &str) -> PkgEvent {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn os_release_gives_id_and_version() {
+        let text = "NAME=\"Debian GNU/Linux\"\nID=debian\nVERSION_ID=\"12\"\n";
+        assert_eq!(
+            parse_os_release(text),
+            (Some("debian".to_string()), Some("12".to_string()))
+        );
+    }
+
+    #[test]
+    fn dpkg_keeps_installed_packages_and_their_source() {
+        let out = "libssl3\t3.0.11-1~deb12u2\tamd64\topenssl\tii \nopenssl\t3.0.11-1~deb12u2\tamd64\topenssl\tii \nold\t1.0\tall\told\trc \n";
+        let packages = parse_dpkg(out);
+        assert_eq!(packages.len(), 2);
+        assert_eq!(packages[0].source.as_deref(), Some("openssl"));
+        assert_eq!(packages[1].source, None);
+    }
+
+    #[test]
+    fn rpm_writes_the_epoch_only_when_it_counts() {
+        let out = "openssl\t1\t3.0.7-27.el9\tx86_64\nbash\t(none)\t5.1.8-9.el9\tx86_64\ngpg-pubkey\t(none)\tabc-def\t(none)\n";
+        let packages = parse_rpm(out);
+        assert_eq!(packages.len(), 2);
+        assert_eq!(packages[0].version, "1:3.0.7-27.el9");
+        assert_eq!(packages[1].version, "5.1.8-9.el9");
+    }
+
+    #[test]
+    fn apk_db_reads_one_block_per_package() {
+        let db = "P:musl\nV:1.2.4-r2\nA:x86_64\no:musl\n\nP:libcrypto3\nV:3.1.4-r5\nA:x86_64\no:openssl\n";
+        let packages = parse_apk_db(db);
+        assert_eq!(packages.len(), 2);
+        assert_eq!(packages[1].source.as_deref(), Some("openssl"));
+    }
 
     #[test]
     fn parse_percent_extracts_values() {

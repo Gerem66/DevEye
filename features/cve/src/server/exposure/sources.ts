@@ -1,3 +1,4 @@
+import { AGENT_PKG_INVENTORY_PROBE } from '@deveye/types';
 import {
     DATABASE_ITEMS_PROVIDER,
     DEPLOY_ITEMS_PROVIDER,
@@ -13,7 +14,13 @@ import type { FeatureServiceDeps, SdkDevice } from '@deveye/types/sdk/server';
 
 import type { AssetFormat, ExposureComponent, ExposureSource } from '../../contracts/exposure';
 import { inventoryOfFiles, wantsRepoFile } from '../inventory/repoFiles';
-import { databaseComponent, deviceComponents, imageComponent } from '../inventory/sources';
+import {
+    databaseComponent,
+    deviceComponents,
+    imageComponent,
+    osvEcosystem,
+    systemPackageComponents
+} from '../inventory/sources';
 import { findTools, TOOLS } from '../inventory/tools';
 import type { CveRepo } from '../repo';
 import type { AssetRow } from './repo';
@@ -179,12 +186,17 @@ export function deviceSource(deps: FeatureServiceDeps<CveRepo>): Source<DeviceIt
                 }))
             });
             const notes = !online
-                ? ['Agent hors ligne : ses conteneurs se liront à son retour.']
+                ? ['Agent hors ligne : ses conteneurs et ses paquets se liront à son retour.']
                 : inventory === null
                   ? [
                         'Les conteneurs n’ont pas pu être lus : Docker ne répond pas, ou la politique de l’agent le refuse.'
                     ]
                   : [];
+            if (online) {
+                const packages = await systemPackagesOf(deps, device);
+                components.push(...packages.components);
+                if (packages.note) notes.push(packages.note);
+            }
             return {
                 kind: 'scan',
                 revision: osRevision(device),
@@ -196,6 +208,33 @@ export function deviceSource(deps: FeatureServiceDeps<CveRepo>): Source<DeviceIt
             };
         }
     };
+}
+
+/** Les paquets système d'un appareil, par l'agent ; la note dit ce qui manque. */
+async function systemPackagesOf(
+    deps: FeatureServiceDeps<CveRepo>,
+    device: SdkDevice
+): Promise<{ components: ExposureComponent[]; note: string | null }> {
+    if (!device.report?.agent?.probes.includes(AGENT_PKG_INVENTORY_PROBE)) {
+        return {
+            components: [],
+            note: 'Agent trop ancien pour lister ses paquets système : sa mise à jour les apportera.'
+        };
+    }
+    const inventory = await deps.agents.packageInventory(device.id);
+    if (inventory === null) return { components: [], note: 'Les paquets système n’ont pas pu être lus à temps.' };
+    if (inventory.manager === null) {
+        return { components: [], note: `Paquets système non lus : ${inventory.error ?? 'aucune base reconnue'}.` };
+    }
+    const ecosystem = osvEcosystem(inventory.distroId, inventory.distroVersion);
+    if (ecosystem === null) {
+        const name = device.report.os.name || inventory.distroId || 'ce système';
+        return {
+            components: [],
+            note: `Les paquets de ${name} ne sont pas couverts par OSV : seule sa fin de vie est suivie.`
+        };
+    }
+    return { components: systemPackageComponents(ecosystem, inventory.packages), note: null };
 }
 
 type DatabaseItem = SourceItem & { base: DatabaseHomeItem };

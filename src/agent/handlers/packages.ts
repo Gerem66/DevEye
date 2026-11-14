@@ -1,4 +1,10 @@
-import { AGENT_PKG_COUNT, AGENT_PKG_DONE, AGENT_PKG_LIST_RESULT, AGENT_PKG_PROGRESS } from '@deveye/types';
+import {
+    AGENT_PKG_COUNT,
+    AGENT_PKG_DONE,
+    AGENT_PKG_INVENTORY_RESULT,
+    AGENT_PKG_LIST_RESULT,
+    AGENT_PKG_PROGRESS
+} from '@deveye/types';
 
 import { ack, type AgentSession, type PayloadOf } from './session';
 
@@ -14,6 +20,12 @@ import { ack, type AgentSession, type PayloadOf } from './session';
 export function handlePkgListResult(s: AgentSession, payload: PayloadOf<typeof AGENT_PKG_LIST_RESULT>): void {
     s.hub.publishPackageList({ ...payload, deviceId: s.device.id });
     ack(s, payload.managers.length);
+}
+
+/** `pkg.inventoryResult` — les paquets installés, remis à qui les attend (la veille CVE). */
+export function handlePkgInventoryResult(s: AgentSession, payload: PayloadOf<typeof AGENT_PKG_INVENTORY_RESULT>): void {
+    s.hub.resolvePackageInventory(s.device.id, payload.inventory);
+    ack(s, payload.inventory.packages.length);
 }
 
 export function handlePkgCount(s: AgentSession, payload: PayloadOf<typeof AGENT_PKG_COUNT>): void {

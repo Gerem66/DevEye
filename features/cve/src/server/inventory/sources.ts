@@ -62,6 +62,54 @@ export function databaseComponent(engine: 'mysql' | 'postgres', serverVersion: s
     };
 }
 
+/**
+ * L'écosystème OSV des paquets d'une distribution, `null` quand OSV ne la
+ * couvre pas (Fedora, Arch, macOS, Windows).
+ */
+export function osvEcosystem(distroId: string | null, version: string | null): string | null {
+    if (!distroId || !version) return null;
+    const [major, minor] = version.split('.');
+    switch (distroId) {
+        case 'debian':
+            return `Debian:${major}`;
+        case 'ubuntu':
+            // Les versions d'avril des années paires sont les LTS, qu'OSV nomme à part.
+            return /^\d*[02468]\.04$/.test(version) ? `Ubuntu:${version}:LTS` : `Ubuntu:${version}`;
+        case 'alpine':
+            return minor === undefined ? null : `Alpine:v${major}.${minor}`;
+        case 'rocky':
+            return `Rocky Linux:${major}`;
+        case 'almalinux':
+            return `AlmaLinux:${major}`;
+        default:
+            return null;
+    }
+}
+
+/** Les paquets système d'un appareil, sous le nom que les avis de sa distribution emploient. */
+export function systemPackageComponents(
+    ecosystem: string,
+    packages: readonly { name: string; version: string; source?: string }[]
+): ExposureComponent[] {
+    const seen = new Map<string, ExposureComponent>();
+    for (const p of packages) {
+        // Debian et Alpine publient leurs avis par paquet source : `libssl3` vient d'`openssl`.
+        const name = p.source ?? p.name;
+        const key = `${name}|${p.version}`;
+        if (seen.has(key)) continue;
+        seen.set(key, {
+            kind: 'package',
+            ecosystem,
+            name,
+            version: p.version,
+            format: 'system-package',
+            path: null,
+            line: null
+        });
+    }
+    return [...seen.values()];
+}
+
 /** Ce qu'un appareil dit de lui et de ses conteneurs, tel que l'agent le rapporte. */
 export interface DeviceFacts {
     os: { name: string; version: string } | null;

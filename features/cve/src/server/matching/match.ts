@@ -187,6 +187,10 @@ export async function matchComponents(
                 }
             };
             for (const use of usesByDep.get(depKey(dep)) ?? []) {
+                // Une faille qu'aucune version de la distribution ne corrige
+                // encore n'est pas une action à prendre : les bases Debian et
+                // Ubuntu en portent des centaines par machine.
+                if (use.component.format === 'system-package' && vuln.fixed.length === 0) continue;
                 touch(draft, {
                     assetId: use.assetId,
                     version: dep.version,

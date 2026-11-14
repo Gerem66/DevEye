@@ -21,7 +21,13 @@ export {
     handleSyncIndex,
     handleSyncOpResult
 } from './sync';
-export { handlePkgCount, handlePkgDone, handlePkgListResult, handlePkgProgress } from './packages';
+export {
+    handlePkgCount,
+    handlePkgDone,
+    handlePkgInventoryResult,
+    handlePkgListResult,
+    handlePkgProgress
+} from './packages';
 export { handleTermExit, handleTermOutput } from './terminal';
 export { handleTunnelClosed, handleTunnelData, handleTunnelOpened } from './tunnel';
 export { handleMetricsBatch, handleReport } from './telemetry';

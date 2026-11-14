@@ -30,6 +30,7 @@ import {
     AGENT_PAUSED_UNTIL_HEADER,
     AGENT_PKG_COUNT,
     AGENT_PKG_DONE,
+    AGENT_PKG_INVENTORY_RESULT,
     AGENT_PKG_LIST_RESULT,
     AGENT_PKG_PROGRESS,
     AGENT_POWER_RESULT,
@@ -80,6 +81,7 @@ import {
     handleMetricsBatch,
     handlePkgCount,
     handlePkgDone,
+    handlePkgInventoryResult,
     handlePkgListResult,
     handlePkgProgress,
     handlePowerResult,
@@ -214,6 +216,8 @@ function dispatch(session: AgentSession, msg: AgentClientMessage): void | Promis
             return handleSyncDeviceKey(session, msg.payload);
         case AGENT_PKG_LIST_RESULT:
             return handlePkgListResult(session, msg.payload);
+        case AGENT_PKG_INVENTORY_RESULT:
+            return handlePkgInventoryResult(session, msg.payload);
         case AGENT_PKG_COUNT:
             return handlePkgCount(session, msg.payload);
         case AGENT_PKG_PROGRESS:

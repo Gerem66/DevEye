@@ -1114,6 +1114,10 @@ async fn stream_session(
                             ServerMessage::PkgList {} => {
                                 tokio::spawn(crate::packages::run_list(pkg_tx.clone()));
                             }
+                            // Installed system packages, for the CVE watch (off-loop; replies via pkg_rx).
+                            ServerMessage::PkgInventory {} => {
+                                tokio::spawn(crate::packages::run_inventory(pkg_tx.clone()));
+                            }
                             // Apply a manager's updates (off-loop; streams via pkg_rx).
                             // Dernière barrière contre les exécutions doublées (le
                             // serveur perd son verrou s'il redémarre pendant une mise

@@ -47,6 +47,7 @@ export const formatIdSchema = z.enum([
     'device-os',
     'container-engine',
     'container-image',
+    'system-package',
     'database-server',
     'deploy-image'
 ]);
@@ -127,6 +128,12 @@ export const EXPOSURE_FORMATS: readonly ExposureFormat[] = [
         family: 'device',
         label: 'Conteneurs',
         detail: 'L’image de chaque conteneur, à sa version exacte'
+    },
+    {
+        id: 'system-package',
+        family: 'device',
+        label: 'Paquets système',
+        detail: 'dpkg, rpm ou apk, par l’agent, sur Debian, Ubuntu, Alpine, Rocky et Alma'
     },
     {
         id: 'database-server',
