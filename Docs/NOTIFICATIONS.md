@@ -203,6 +203,17 @@ Points d'appel : la barre d'outils de chaque émetteur (échelle fonctionnalité
 et l'en-tête de fiche d'un service, d'une base, d'une cible, d'un travail
 (échelle élément).
 
+**Ce qui ne prévient personne le dit.** Tout naît silencieux :
+`NotificationsNotice` (exporté au SDK) le dit en tête d'une liste ou d'une
+fiche. À l'échelle de la fonctionnalité, il paraît tant qu'aucun canal n'est
+déclaré (pour celle qui prévient en son nom, tant qu'aucun n'est coché) ; à
+l'échelle d'un élément, tant qu'il n'en coche aucun. Son bouton ouvre l'onglet
+Notifications de la même échelle. Il reste muet pour qui ne pourrait rien y
+changer, et pendant le chargement. Uptime, Sauvegardes, Déploiements et Bases
+de données le posent sur leur liste et sur leurs fiches (une base, seulement
+si elle a une alerte active), la Sentinelle sur sa vue dès qu'une machine est
+surveillée.
+
 **La gestion des canaux ne se rend qu'à l'échelle de la fonctionnalité.** À
 l'échelle d'un élément, la section ne fait que cocher, et « Gérer les canaux »
 ouvre les réglages de la fonctionnalité par-dessus, sur ce même onglet. C'est le

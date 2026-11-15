@@ -121,6 +121,8 @@ export { get as httpGet, httpFetch } from '@/api/http';
 /** Le refus d'un droit dans un panneau : une seule silhouette pour toutes les
  *  fonctionnalités, cadenas compris. */
 export { default as ReadOnlyNotice } from '@/Components/FeatureSettings/ReadOnlyNotice';
+/** Le bandeau de ce qui ne prévient personne, et le bouton vers son onglet Notifications. */
+export { default as NotificationsNotice } from '@/Components/FeatureSettings/NotificationsNotice';
 /** Le bandeau d'un refus : la phrase, les gestes de réparation passés en
  *  enfants, et le signalement quand l'erreur n'est pas de celles qui se
  *  réparent seules. */

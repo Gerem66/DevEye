@@ -4,6 +4,7 @@ import {
     ErrorNote,
     errorNote,
     FeatureSettingsButton,
+    NotificationsNotice,
     PlanPausedNotice,
     StickyHeader,
     useActiveWorkspace,
@@ -202,6 +203,9 @@ export function FeatureDeploy(_props: FeatureViewProps) {
                             many='cibles de déploiement'
                         />
                     )}
+                    {targets && targets.length > 0 && (
+                        <NotificationsNotice scope={{ kind: 'feature', feature: 'deploy' }} />
+                    )}
 
                     {targets === null ? (
                         <p className={styles.empty}>Chargement…</p>
@@ -249,6 +253,15 @@ export function FeatureDeploy(_props: FeatureViewProps) {
                             </div>
                         </header>
                     </StickyHeader>
+
+                    <NotificationsNotice
+                        scope={{
+                            kind: 'item',
+                            feature: 'deploy',
+                            itemId: String(opened.target.id),
+                            itemLabel: opened.target.name
+                        }}
+                    />
 
                     <TargetView
                         target={opened.target}

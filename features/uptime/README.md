@@ -333,10 +333,12 @@ Les canaux sont ceux de l'espace, désignés par une **route**
 ([Docs/NOTIFICATIONS.md](../../Docs/NOTIFICATIONS.md) porte le modèle
 complet) ; ce qui compte ici :
 
-- un service peut avoir **ses propres canaux** (`notify.send(…, { itemId })`
-  active la route propre au service) ; sans réglage propre il suit ceux
-  d'Uptime. C'est ce qui permet d'envoyer les alertes de deux services à deux
-  équipes différentes ;
+- chaque service **coche ses propres canaux** dans ses réglages
+  (`notify.send(…, { itemId })` suit la route du service) : c'est ce qui
+  permet d'envoyer les alertes de deux services à deux équipes différentes.
+  Un service neuf n'en coche aucun et ne prévient donc personne : sa fiche le
+  dit, comme la liste tant qu'Uptime n'a déclaré aucun canal
+  (`NotificationsNotice`, avec le bouton vers l'onglet Notifications) ;
 - **e-mail** : destinataire libre, vide = l'adresse du compte expéditeur, qui
   doit être un compte Mail de l'espace (le manifest déclare le lien
   `links: [{ to: 'mail' }]`) ;

@@ -5,6 +5,7 @@ import {
     ErrorNote,
     FeatureSettingsButton,
     invalidate,
+    NotificationsNotice,
     openFeature,
     PlanPausedNotice,
     StickyHeader,
@@ -233,6 +234,9 @@ export function FeatureDatabase(_props: FeatureViewProps) {
                     one='base de données'
                     many='bases de données'
                 />
+            )}
+            {databases?.some((d) => d.alertCount > 0) && (
+                <NotificationsNotice scope={{ kind: 'feature', feature: 'database' }} />
             )}
 
             {databases === null && <p className={styles.hint}>Chargement…</p>}

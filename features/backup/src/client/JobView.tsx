@@ -8,6 +8,7 @@ import {
     errorNote,
     FeatureSettingsButton,
     formatBytesFr,
+    NotificationsNotice,
     StatusBadge,
     StickyHeader,
     useResource,
@@ -114,6 +115,10 @@ export default function JobView({ job, canWrite, onBack, onRun, running, runErro
                     </div>
                 </div>
             </StickyHeader>
+
+            <NotificationsNotice
+                scope={{ kind: 'item', feature: 'backup', itemId: String(job.id), itemLabel: job.name }}
+            />
 
             <div className={styles.facts}>
                 <Fact label='Source'>

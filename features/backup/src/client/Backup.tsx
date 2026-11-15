@@ -9,6 +9,7 @@ import {
     FeatureSettingsButton,
     formatBytesFr,
     invalidate,
+    NotificationsNotice,
     StickyHeader,
     useLiveSegment,
     useResource,
@@ -115,6 +116,7 @@ export default function Backup(_props: FeatureViewProps) {
                     </StickyHeader>
 
                     <ErrorNote note={error ?? jobsResource.error} />
+                    {jobs && jobs.length > 0 && <NotificationsNotice scope={{ kind: 'feature', feature: 'backup' }} />}
                     {jobs === null && !jobsResource.error && <p className={styles.empty}>Chargement…</p>}
                     {jobs?.length === 0 && (
                         <p className={styles.empty}>

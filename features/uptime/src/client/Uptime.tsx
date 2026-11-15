@@ -4,6 +4,7 @@ import {
     ErrorNote,
     errorNote,
     FeatureSettingsButton,
+    NotificationsNotice,
     onResourceChange,
     onSocketOpen,
     PlanPausedNotice,
@@ -160,6 +161,7 @@ export default function Uptime(_props: FeatureViewProps) {
 
                     <ErrorNote note={error} />
                     <PlanPausedNotice count={planPausedCount} one='service surveillé' many='services surveillés' />
+                    {services.length > 0 && <NotificationsNotice scope={{ kind: 'feature', feature: 'uptime' }} />}
 
                     {!loading && services.length === 0 ? (
                         <p className={styles.empty}>

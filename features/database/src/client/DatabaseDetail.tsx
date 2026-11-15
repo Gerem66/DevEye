@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, ErrorNote, StickyHeader, type ErrorNoteInput } from 'deveye-sdk-client';
+import { Button, ErrorNote, NotificationsNotice, StickyHeader, type ErrorNoteInput } from 'deveye-sdk-client';
 import type { Database, DatabaseAlert, DatabaseProbe, DatabaseUsage } from '../contracts/domain';
 
 import { DatabaseHeader } from './DatabaseHeader';
@@ -64,6 +64,17 @@ export function DatabaseDetail({
             )}
 
             <ErrorNote note={error} />
+            {/* Une base sans alerte n'a rien à envoyer. */}
+            {!expanded && alerts.some((a) => a.enabled) && (
+                <NotificationsNotice
+                    scope={{
+                        kind: 'item',
+                        feature: 'database',
+                        itemId: String(database.id),
+                        itemLabel: database.name
+                    }}
+                />
+            )}
 
             <DatabaseView
                 database={database}

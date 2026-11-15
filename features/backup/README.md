@@ -467,8 +467,9 @@ la panne qu'on découvre quand le disque est plein.
 
 Ses propres canaux, comme les autres émetteurs, gérés dans Réglages →
 Notifications de la coquille commune ; l'envoi passe par la façade du SDK
-(`deps.deveyeFor(ws).notify.send(alert, { itemId })` : la route du travail
-l'emporte sur celle de la fonctionnalité). **Seuls les échecs sont notifiés** :
+(`deps.deveyeFor(ws).notify.send(alert, { itemId })` : les canaux que coche
+le travail, sans repli sur la fonctionnalité, et un travail neuf ne prévient
+personne, ce que sa fiche dit). **Seuls les échecs sont notifiés** :
 sinon le canal se remplirait de succès et l'échec s'y perdrait. La mise en page
 Discord est `src/server/notice.ts`, sur les helpers partagés de
 `Services/notices/shared.ts` (le seul import de l'app par le module, commenté).

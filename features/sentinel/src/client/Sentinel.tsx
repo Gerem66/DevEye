@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
     errorNote,
     ErrorNote,
+    NotificationsNotice,
     onResourceChange,
     onSocketOpen,
     useActiveWorkspace,
@@ -291,6 +292,9 @@ export default function Sentinel(_props: FeatureViewProps) {
                         showSettled={showSettled}
                         onShowSettled={setShowSettled}
                     />
+                )}
+                {devices.some((d) => d.enabled) && (
+                    <NotificationsNotice scope={{ kind: 'feature', feature: 'sentinel' }} />
                 )}
 
                 {device && !device.enabled ? (

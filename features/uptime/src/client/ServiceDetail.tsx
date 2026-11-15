@@ -4,6 +4,7 @@ import {
     ErrorNote,
     errorNote,
     FeatureSettingsButton,
+    NotificationsNotice,
     safeHref,
     StatusBadge,
     StickyHeader,
@@ -212,6 +213,9 @@ export function ServiceDetail({ service, actionError, onBack, onCheckNow, onAcce
 
             <ErrorNote note={actionError} />
             <ErrorNote note={staleError} />
+            <NotificationsNotice
+                scope={{ kind: 'item', feature: 'uptime', itemId: String(service.id), itemLabel: service.name }}
+            />
 
             {service.integrityIntervalSeconds !== null && (
                 <p className={styles.reference}>
