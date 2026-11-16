@@ -40,6 +40,15 @@ const LINKS: Record<
         unlink(repo: ProjectsRepo, projectId: number, itemId: number, workspaceId: number): Promise<void>;
     }
 > = {
+    appstores: {
+        usage: (repo, itemId, workspaceId) => repo.links.listAppUsage(itemId, workspaceId),
+        counts: (repo, workspaceId) => repo.links.countAppLinks(workspaceId),
+        detach: (repo, itemId, workspaceId) => repo.links.detachApp(itemId, workspaceId),
+        link: (repo, projectId, itemId, workspaceId) => repo.links.linkApp(projectId, workspaceId, itemId),
+        unlink: async (repo, projectId, itemId, workspaceId) => {
+            await repo.links.unlinkApp(projectId, workspaceId, itemId);
+        }
+    },
     audience: {
         usage: (repo, itemId, workspaceId) => repo.links.listSiteUsage(itemId, workspaceId),
         counts: (repo, workspaceId) => repo.links.countSiteLinks(workspaceId),

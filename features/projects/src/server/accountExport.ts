@@ -122,6 +122,12 @@ export const projectsAccountExport: FeatureAccountExport<ProjectsRepo> = {
             key: ['project_id', 'board_id'],
             dates: { created: 's' }
         },
+        ft_projects_appstores_links: {
+            file: 'liens-stores.json',
+            where: 'workspace_id = ?',
+            key: ['project_id', 'app_id'],
+            dates: { created: 's' }
+        },
         project_uptime_links: {
             file: 'liens-uptime.json',
             where: 'workspace_id = ?',

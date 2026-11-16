@@ -51,6 +51,8 @@ import { manifest as manifest21 } from 'deveye-feature-moderation';
 import { serverEntry as server21 } from 'deveye-feature-moderation/server';
 import { manifest as manifest22 } from 'deveye-feature-whiteboard';
 import { serverEntry as server22 } from 'deveye-feature-whiteboard/server';
+import { manifest as manifest23 } from 'deveye-feature-appstores';
+import { serverEntry as server23 } from 'deveye-feature-appstores/server';
 
 export const INSTALLED_MODULES: readonly InstalledFeatureModule[] = [
     { manifest: { ...manifest0, icon: 'cloud' }, server: server0 },
@@ -76,5 +78,6 @@ export const INSTALLED_MODULES: readonly InstalledFeatureModule[] = [
     { manifest: { ...manifest20, icon: 'shortlinks' }, server: server20 },
     { manifest: { ...manifest21, icon: 'shield' }, server: server21 },
     { manifest: { ...manifest22, icon: 'whiteboard' }, server: server22 },
+    { manifest: { ...manifest23, icon: 'appstores' }, server: server23 },
     ...LOCAL_MODULES
 ];

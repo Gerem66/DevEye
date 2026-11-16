@@ -19,7 +19,8 @@ const NONE: ProjectLinkCounts = {
     deploy: 0,
     uptime: 0,
     'x-hosting': 0,
-    whiteboard: 0
+    whiteboard: 0,
+    appstores: 0
 };
 
 /** Une ligne du menu « + » : le geste, et l'onglet qu'il fait naître. */

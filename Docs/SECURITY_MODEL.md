@@ -636,6 +636,35 @@ sert pourrait le réécrire) mais la liste de ce qu'un contrôle d'intégrité t
 par une **autre** instance doit relire ; la référence, elle, est apprise et
 gardée là-bas. Voir [le README d'Uptime](../features/uptime/README.md).
 
+## Stores : des clés privées tierces à l'étage ouvert
+
+Stores (module `features/appstores/`) relève les chiffres et les avis des apps
+chez Apple et Google **sans session**, toutes les demi-heures. Il tient donc
+à l'étage ouvert ce qui est sans doute le secret le plus puissant de l'app : une
+clé d'API App Store Connect (le fichier `.p8`, souvent de rôle Admin, seul rôle
+qui réponde aux avis) ou la clé privée d'un compte de service Google.
+
+- chiffrés : la clé privée dans sa propre colonne (`secret_enc`), jamais rendue
+  au client (qui n'en voit que `hasSecret`), omise de l'export du compte et de
+  toute copie ; ce qui l'identifie sans être secret (Issuer ID, Key ID, numéro
+  de fournisseur, adresse du compte de service, bucket) ; le nom de chaque app,
+  son identifiant au store, ses versions ; le texte des avis, leur auteur et les
+  réponses ;
+- en clair : ce que les écrans agrègent (téléchargements, notes, taux de
+  plantage, revenus par jour et par devise, note de chaque avis) et ce qui pilote
+  la synchronisation. `external_ref`, le condensé de l'identifiant d'une app au
+  store, ne sert qu'à refuser un doublon dans l'espace.
+
+Les adresses contactées sont écrites en dur (`api.appstoreconnect.apple.com`,
+`oauth2.googleapis.com`, `storage.googleapis.com` et les API Google Play) : le
+`token_uri` d'un JSON de compte de service est ignoré, sans quoi l'utilisateur
+choisirait où le serveur envoie une assertion signée. Le nom du bucket, le nom
+de paquet et le numéro de fournisseur sont validés avant d'entrer dans un chemin.
+
+Même garantie que pour Uptime : protégé au repos, lisible par un serveur vivant
+compromis. La parade est du côté du store : une clé se révoque chez Apple ou
+Google sans passer par DevEye. Voir [le README de Stores](../features/appstores/README.md).
+
 ## Projets : l'étage choisi par l'utilisateur
 
 Contrairement à Uptime (toujours ouvert) et au coffre (toujours gardé), les

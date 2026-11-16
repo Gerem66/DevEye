@@ -5,6 +5,7 @@ import type { SdkFeatureDefinition } from '@deveye/types/sdk/server';
 import { projectAudienceLinkFeatures } from './audienceLink';
 import { projectHostingLinkFeatures } from './hostingLink';
 import { projectWhiteboardLinkFeatures } from './whiteboardLink';
+import { projectAppStoresLinkFeatures } from './appstoresLink';
 import { projectBoardFeatures } from './board';
 import { projectChatFeatures } from './chat';
 import { projectDatabaseLinkFeatures } from './databaseLink';
@@ -41,5 +42,6 @@ export const projectsHandlers: readonly SdkFeatureDefinition<ProjectsRepo, strin
     ...projectAudienceLinkFeatures,
     ...projectHostingLinkFeatures,
     ...projectWhiteboardLinkFeatures,
+    ...projectAppStoresLinkFeatures,
     ...projectPublicationFeatures
 ];

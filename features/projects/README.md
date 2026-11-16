@@ -3,8 +3,8 @@
 Le portefeuille de projets d'un espace : pour chacun, un tableau kanban, une
 frise, une discussion par tâche, un historique, une page publique, et des
 liaisons vers les objets des autres features (dépôts, cibles de déploiement,
-bases, sites suivis, services surveillés, dossiers). Ce document dit
-_pourquoi_ ; le code dit comment.
+bases, sites suivis, services surveillés, dossiers, tableaux blancs, apps). Ce
+document dit _pourquoi_ ; le code dit comment.
 
 Le module est branché, par le SDK ([Docs/FEATURE_SDK.md](../../Docs/FEATURE_SDK.md)),
 sur les quatre systèmes transverses du dépôt : [Docs/WORKSPACES.md](../../Docs/WORKSPACES.md),
@@ -15,10 +15,10 @@ sur les quatre systèmes transverses du dépôt : [Docs/WORKSPACES.md](../../Doc
 > ([Bases de données](../database/README.md)), sites suivis ([Audience](../audience/README.md)),
 > cibles de déploiement ([Déploiements](../deploy/README.md)), services
 > surveillés ([Uptime](../uptime/README.md)), dossiers de fichiers
-> (Hébergement, module privé) et schémas ([Tableau blanc](../whiteboard/README.md))
-> sont des features de premier rang : un projet
-> n'en garde qu'une **liaison**, et l'onglet correspondant n'est qu'une vue sur
-> la feature.
+> (Hébergement, module privé), schémas ([Tableau blanc](../whiteboard/README.md))
+> et apps publiées ([Stores](../appstores/README.md)) sont des features de premier
+> rang : un projet n'en garde qu'une **liaison**, et l'onglet correspondant n'est
+> qu'une vue sur la feature.
 
 ---
 
@@ -88,12 +88,13 @@ Choisir le codec **est** le contrôle d'accès.
 ### 1.4 Un projet gardé n'a pas d'intégration externe
 
 Ni dépôt git, ni base, ni site suivi, ni cible de déploiement, ni service
-surveillé, ni dossier. Deux raisons qui vont dans le même sens : le service de
-fond tourne **sans session** et n'atteindra jamais l'étage gardé ; et une
-liaison est une ligne **en clair**, qui rattacherait un projet confidentiel à
-un dépôt nommé : exactement ce que le palier est censé cacher.
+surveillé, ni dossier, ni tableau blanc, ni app. Deux raisons qui vont dans le
+même sens : le service de fond tourne **sans session** et n'atteindra jamais
+l'étage gardé ; et une liaison est une ligne **en clair**, qui rattacherait un
+projet confidentiel à un dépôt nommé : exactement ce que le palier est censé
+cacher.
 
-`projects.repoLink` refuse donc un projet gardé (et ses six sœurs avec lui),
+`projects.repoLink` refuse donc un projet gardé (et ses sept sœurs avec lui),
 et passer un projet en gardé **retire ses liaisons** (`projects.setSecurityTier`),
 avec un événement de frise par famille, ainsi que sa page publique. Le dépôt,
 lui, n'est pas touché : il appartient à l'espace.
@@ -117,11 +118,12 @@ lui, n'est pas touché : il appartient à l'espace.
 | **Uptime**           | les services surveillés rattachés, une vue sur la feature Uptime, voir [Uptime](../uptime/README.md)                                |
 | **Dossiers**         | les dossiers d'Hébergement rattachés, parcourus et aperçus sur place ; absent sans le module privé                                  |
 | **Tableaux blancs**  | les tableaux rattachés, avec leur aperçu ; on les dessine dans la feature, à un clic, voir [Tableau blanc](../whiteboard/README.md) |
+| **Stores**           | les apps rattachées, leurs téléchargements et leurs notes, sans montant, voir [Stores](../appstores/README.md)                      |
 | **Historique**       | faits marquants et tâches archivées en une seule liste, une ligne chacun, dans les réglages du projet                               |
 
 ### La barre d'onglets suit le contenu du projet
 
-**Un onglet obligatoire, deux au choix, sept à la demande** (`client/tabs.ts`).
+**Un onglet obligatoire, deux au choix, huit à la demande** (`client/tabs.ts`).
 Le **Tableau** ne se retire pas et ouvre toujours le projet (`LANDING_TAB`) :
 un projet sans tableau n'a plus de travail à montrer. La **Vue d'ensemble** et
 la **Frise** se déclarent dans l'onglet Général des réglages, en colonnes
@@ -133,9 +135,9 @@ y montrer. L'**Historique** est le dernier onglet des réglages du projet
 (`ProjectHistoryPanel`) : on l'ouvre rarement, pour une question précise. Les
 tâches archivées y sont des entrées comme les autres : à leur événement
 d'archivage, ou à leur date pour celles parties avec leur colonne, rangées sous
-la colonne vidée (`History/entries.ts`). Les sept autres onglets ne montrent que des **liaisons** vers des objets d'espace :
+la colonne vidée (`History/entries.ts`). Les huit autres onglets ne montrent que des **liaisons** vers des objets d'espace :
 tant qu'un projet n'en a aucune, ils n'afficheraient qu'une phrase disant qu'il
-n'y a rien, sept fois de suite.
+n'y a rien, huit fois de suite.
 
 Un onglet d'intégration paraît donc **avec son premier élément** et se replie
 **avec le dernier**. Ce qui n'est pas dans la barre est dans le **« + »** posé à
@@ -145,7 +147,7 @@ copie (`AddFeatureDialog.tsx`). L'ajout abouti, l'onglet naît et s'ouvre dans l
 foulée ; annulé, rien ne bouge.
 
 Les compteurs viennent de `projects.linkCounts`, une commande unique pour les
-sept : les demander séparément ferait sept allers-retours pour dessiner une
+huit : les demander séparément ferait huit allers-retours pour dessiner une
 barre, et la ferait apparaître par morceaux. Ils sont la **seule** source de la
 barre (pas d'état d'affichage à réconcilier à côté, `useProjectTabs.ts`) et se
 relisent sur la clé `projects.board`, celle que toute liaison invalide déjà en
@@ -159,10 +161,10 @@ Trois conséquences à connaître :
   projet qui a des dépôts, et dedans la phrase qui explique ce qui lui manque :
   l'escamoter lui cacherait l'existence même du lien. Le « + », lui, n'offre que
   ce que l'appelant peut vraiment ajouter (`tabs.ts`, `add.requires` : le droit
-  d'écriture sur la feature visée ; les entrées Dossiers et Tableaux blancs
-  exigent en plus que le contrat client de leur module soit installé).
+  d'écriture sur la feature visée ; les entrées Dossiers, Tableaux blancs et
+  Stores exigent en plus que le contrat client de leur module soit installé).
 - **Un projet confidentiel n'a pas de « + »**, pas plus qu'un projet projeté
-  depuis un autre espace : les sept liaisons lui sont refusées (§1.4) ou
+  depuis un autre espace : les huit liaisons lui sont refusées (§1.4) ou
   réservées à son domicile. Ses compteurs se lisent quand même : un projet
   gardé peut porter des services surveillés rattachés avant sa conversion, et
   l'onglet Uptime reste le seul endroit d'où les atteindre.
@@ -207,7 +209,7 @@ leur place et la tâche posée juste après sa voisine visible du dessus. Le
 compteur d'une colonne et sa limite comptent toujours toutes ses tâches. Le
 jalon, lui, estompe sans retirer ; les deux se combinent.
 
-### Les sept onglets d'intégration ont la même forme
+### Les huit onglets d'intégration ont la même forme
 
 Un ou plusieurs objets rattachés, **chacun dans son cadre** (y compris quand il
 n'y en a qu'un : le cadre dit où finit ce que l'onglet montre), un en-tête
@@ -215,9 +217,10 @@ collant qui porte le nom et les actions, « Délier » en bout de barre et confi
 et le geste d'ajout **au pied de la page**. Chaque onglet compose le contrat
 client de la feature visée (`GIT_CLIENT_PROVIDER`, `DEPLOY_CLIENT_PROVIDER`,
 `DATABASE_CLIENT_PROVIDER`, `AUDIENCE_CLIENT_PROVIDER`, `UPTIME_CLIENT_PROVIDER`,
-`HOSTING_CLIENT_PROVIDER`, `WHITEBOARD_CLIENT_PROVIDER`) et se dégrade sans lui. Déploiements est une feature
-d'espace ([Déploiements](../deploy/README.md)) ; son onglet est une enveloppe
-mince comme les autres.
+`HOSTING_CLIENT_PROVIDER`, `WHITEBOARD_CLIENT_PROVIDER`,
+`APPSTORES_CLIENT_PROVIDER`) et se dégrade sans lui. Déploiements est une
+feature d'espace ([Déploiements](../deploy/README.md)) ; son onglet est une
+enveloppe mince comme les autres.
 
 ### Le portefeuille
 
@@ -328,14 +331,14 @@ qu'on en restaure une et que l'archivage est la seule sortie d'une tâche : sans
 `history`, la liste ne montre qu'elles. Voir
 [Docs/PERMISSIONS.md](../../Docs/PERMISSIONS.md) :
 
-| Droit            | Ce qu'il ouvre                                                                     |
-| ---------------- | ---------------------------------------------------------------------------------- |
-| `manageProjects` | ouvrir, renommer, archiver, restaurer, classer un projet, et tenir ses colonnes    |
-| `tasks`          | créer une tâche, l'archiver, la restaurer                                          |
-| `plan`           | les dates sur la frise, les jalons, les dépendances                                |
-| `links`          | rattacher le projet à un dépôt, une cible, une base, un site, un service surveillé |
-| `chat`           | écrire et modifier dans le fil                                                     |
-| `history`        | lire la frise des faits marquants d'un projet                                      |
+| Droit            | Ce qu'il ouvre                                                                                                            |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `manageProjects` | ouvrir, renommer, archiver, restaurer, classer un projet, et tenir ses colonnes                                           |
+| `tasks`          | créer une tâche, l'archiver, la restaurer                                                                                 |
+| `plan`           | les dates sur la frise, les jalons, les dépendances                                                                       |
+| `links`          | rattacher le projet à un dépôt, une cible, une base, un site, un service surveillé, un dossier, un tableau blanc, une app |
+| `chat`           | écrire et modifier dans le fil                                                                                            |
+| `history`        | lire la frise des faits marquants d'un projet                                                                             |
 
 Chacun se surcharge **projet par projet**, par l'onglet Permissions de sa fiche :
 confier la planification d'un seul projet à quelqu'un est le cas courant.
@@ -436,16 +439,16 @@ bat rien, une lecture étant personnelle.
 
 **Les liaisons battent deux sujets** (`mutates: ['projects', 'git']`,
 `['projects', 'deploy']`, `['projects', 'database']`, `['projects', 'audience']`,
-`['projects', 'uptime']`) : la fiche d'un dépôt montre les projets qui
-l'utilisent, et doit suivre. Sauf Hébergement : module privé, son sujet n'existe
-pas sur une instance qui ne l'a pas, et le démarrage y refuserait
-`['projects', 'x-hosting']`. Ses liaisons ne battent que `projects`, comme
-celles du Tableau blanc, dont la liste ne dit rien des projets qui le relient. Dans
-l'autre sens, le module ravive `projects` lui-même quand un autre module écrit
-chez lui par son contrat (§4) : une frise qui reçoit un déploiement, une
-version qui suit une release (`deps.live.changed`). Le sujet `domain` ravive
-`projects.publication` : un domaine vérifié, en pause ou retiré change
-l'adresse qu'une page publique donne à partager.
+`['projects', 'uptime']`, `['projects', 'appstores']`) : la fiche d'un dépôt
+montre les projets qui l'utilisent, et doit suivre. Sauf Hébergement : module
+privé, son sujet n'existe pas sur une instance qui ne l'a pas, et le démarrage
+y refuserait `['projects', 'x-hosting']`. Ses liaisons ne battent que
+`projects`, comme celles du Tableau blanc, dont la liste ne dit rien des projets
+qui le relient. Dans l'autre sens, le module ravive `projects` lui-même quand
+un autre module écrit chez lui par son contrat (§4) : une frise qui reçoit un
+déploiement, une version qui suit une release (`deps.live.changed`). Le sujet
+`domain` ravive `projects.publication` : un domaine vérifié, en pause ou retiré
+change l'adresse qu'une page publique donne à partager.
 
 **L'exception : `live.typing`.** Voir Docs/LIVE.md, section « En train d'écrire ».
 
@@ -476,9 +479,9 @@ statut d'un projet par le contrat d'usage), et les couplages déclarés dans
 `sdk/providers.ts` : `PROJECTS_USAGE_PROVIDER` (ce que Projets offre) et
 `UPTIME_ITEMS_PROVIDER`, `GIT_ITEMS_PROVIDER`, `DEPLOY_ITEMS_PROVIDER`,
 `DATABASE_ITEMS_PROVIDER`, `AUDIENCE_ITEMS_PROVIDER`, `HOSTING_ITEMS_PROVIDER`,
-`WHITEBOARD_ITEMS_PROVIDER`, `DATABASE_MEASURE_PROVIDER` (ce que Projets lit).
-`PROJECT_LINKED_FEATURES` y dit les sept familles qu'un projet relie, que la coquille de réglages lit pour
-son onglet « Projets ».
+`WHITEBOARD_ITEMS_PROVIDER`, `APPSTORES_ITEMS_PROVIDER`, `DATABASE_MEASURE_PROVIDER`
+(ce que Projets lit). `PROJECT_LINKED_FEATURES` y dit les huit familles qu'un
+projet relie, que la coquille de réglages lit pour son onglet « Projets ».
 
 ### Contrats : `features/projects/src/contracts/`
 
@@ -488,7 +491,7 @@ board.ts        colonnes (douze au plus), cartes, priorité, sous-tâches (500 c
 chat.ts         messages
 plan.ts         jalons, dépendances
 history.ts      événements de la frise verticale (genres `projects.*`, `card.*`, `milestone.*`, `deploy.*`)
-link.ts         « mes tâches », compteurs d'onglets, lignes des sept tables de liaison
+link.ts         « mes tâches », compteurs d'onglets, lignes des huit tables de liaison
 dashboard.ts    la vue d'ensemble : agencement des tuiles, indicateurs sur mesure, ligne SQL
 publication.ts  la page publique : `PUBLIC_PATH`, le chemin sous un domaine, les thèmes, `PUBLIC_BOARD_PALETTE`, ligne SQL
 domain.ts       le barrel des huit
@@ -497,7 +500,7 @@ commands.ts     les commandes du module (préfixe unique `projects.`)
 
 `src/manifest.ts` étale le descripteur (dont `shareTier: 'perItem'`, que le
 module tient : §4, « Le partage ») et déclare ce que le registre ne porte
-pas : `category: 'work'`, les liens vers les sept features reliées, les six
+pas : `category: 'work'`, les liens vers les huit features reliées, les six
 clés de ressources (`projects.count`, `projects.list`, `projects.board`,
 `projects.myTasks`, `projects.messages`, `projects.publication`), les cinq que
 le sujet `projects` ravive (toutes sauf les messages), le sujet secondaire
@@ -534,6 +537,7 @@ databaseLink.ts     le pointeur vers les bases (DATABASE_ITEMS_PROVIDER)
 audienceLink.ts     le pointeur vers les sites (AUDIENCE_ITEMS_PROVIDER)
 hostingLink.ts      le pointeur vers les dossiers d'Hébergement (HOSTING_ITEMS_PROVIDER)
 whiteboardLink.ts   le pointeur vers les tableaux blancs (WHITEBOARD_ITEMS_PROVIDER)
+appstoresLink.ts    le pointeur vers les apps des Stores (APPSTORES_ITEMS_PROVIDER)
 dashboard.ts        la vue d'ensemble : agencement, indicateurs (DATABASE_MEASURE_PROVIDER), garde « base reliée »
 publication.ts      la page publique côté réglages : lire, publier, changer le lien ; le chemin sous un domaine
 publicPage/         routes.ts (les routes publiques du tableau, la racine d'un domaine, le cache, l'icône), view.ts (ce que
@@ -551,11 +555,11 @@ repo/board.ts       project_columns, project_cards, les non-lus
 repo/chat.ts        project_messages, project_card_reads
 repo/plan.ts        project_milestones, project_card_deps
 repo/history.ts     project_events
-repo/links.ts       les sept tables de liaison, leurs lectures, leurs comptes et leurs usages
+repo/links.ts       les huit tables de liaison, leurs lectures, leurs comptes et leurs usages
 repo/dashboard.ts   ft_projects_dashboard_tiles : l'agencement et les indicateurs
 repo/publication.ts ft_projects_public : la page publique d'un projet, la file d'un domaine, le stock de l'offre
 repo/rekey.ts       la liste des cellules chiffrées suspendues à un projet (conversion d'étage)
-uninstall.sql       les trois tables propres au module
+uninstall.sql       les cinq tables propres au module
 testing/            le dépôt de la page publique en mémoire, pour les tests
 handlers.test.ts, usageProvider.test.ts, accountExport.test.ts, publicPage/routes.test.ts, publicPage/view.test.ts
 ```
@@ -574,6 +578,7 @@ Les migrations du module (`src/server/migrations/`) :
 009_drop_landing_tab.sql     retrait d'une colonne que rien ne lit
 010_hosting_links.sql        ft_projects_hosting_links, sans clé étrangère vers un module privé
 011_whiteboard_links.sql     ft_projects_whiteboard_links, sans clé étrangère vers le module
+012_appstores_links.sql      ft_projects_appstores_links, sans clé étrangère vers le module
 ```
 
 Côté app, les migrations du socle qui ont créé les treize tables historiques :
@@ -583,10 +588,10 @@ Côté app, les migrations du socle qui ont créé les treize tables historiques
 `069_project_multi_repo.sql`, `077_project_audience_links.sql`,
 `080_deploy_feature.sql`. Ces treize tables sont dans l'allowlist de
 `deveye-feature.json` : jamais déplacées, dispensées du préfixe `ft_projects_`.
-Les tables de la vue d'ensemble, de la page publique et de la liaison aux
-dossiers, elles, sont propres au module et le portent ; `uninstall.sql` ne
-détruit qu'elles, le SQL de démontage ne pouvant pas toucher aux tables
-historiques.
+Les tables de la vue d'ensemble, de la page publique et des liaisons aux
+dossiers, aux tableaux blancs et aux apps, elles, sont propres au module et le
+portent ; `uninstall.sql` ne détruit qu'elles, le SQL de démontage ne pouvant
+pas toucher aux tables historiques.
 
 ### Client : `features/projects/src/client/`
 
@@ -624,6 +629,7 @@ Deploy/            compose le contrat client du module Déploiements (`DEPLOY_CL
 Uptime/            compose le contrat client du module Uptime (`UPTIME_CLIENT_PROVIDER`), dégrade sans lui
 Hosting/           compose le contrat client d'Hébergement (`HOSTING_CLIENT_PROVIDER`) ; son « + » n'est offert qu'installé
 Whiteboard/        compose le contrat client du Tableau blanc (`WHITEBOARD_CLIENT_PROVIDER`) ; son « + » n'est offert qu'installé
+AppStores/         compose le contrat client des Stores (`APPSTORES_CLIENT_PROVIDER`) ; son « + » n'est offert qu'installé
 style.module.css   le module de style, et sa déclaration typée
 ```
 
@@ -644,7 +650,7 @@ la frise mentirait. Les noms d'export TypeScript (`projectList`,
 
 ### Les contrats entre modules
 
-Projets **publie** un contrat et en **consomme** sept, tous par `providers`
+Projets **publie** un contrat et en **consomme** huit, tous par `providers`
 (l'hôte les cherche à l'appel parmi les services des modules installés).
 
 - **`PROJECTS_USAGE_PROVIDER`**, publié par `createService` : pour un élément
@@ -710,14 +716,14 @@ les Notes et le Mail n'ont pas :
   l'appelant, par personne : le point de lecture est posé chez le projet, au
   nom de qui lit.
 - **Les liaisons.** Visibles depuis la fenêtre, **par leur nom**
-  (`ForeignLinks.tsx`). Les sept listes (`repoList`, `deployList`,
-  `databaseList`, `audienceList`, `uptimeList`, `hostingList`, `whiteboardList`) gardent leurs
-  identifiants et rendent `labels` : une entrée par identifiant, toujours
-  remplie (chez soi aussi), obtenue par le contrat d'éléments de la feature
-  visée (`labelOf(id, domicile)`, sous le codec ouvert du domicile du projet,
-  jamais de l'espace actif), `null` sans module ou quand l'élément a disparu.
-  Relier et délier restent des gestes du domicile : une liaison référence un
-  objet de l'espace d'origine, que la fenêtre ne voit pas.
+  (`ForeignLinks.tsx`). Les huit listes (`repoList`, `deployList`,
+  `databaseList`, `audienceList`, `uptimeList`, `hostingList`, `whiteboardList`,
+  `appstoresList`) gardent leurs identifiants et rendent `labels` : une entrée
+  par identifiant, toujours remplie (chez soi aussi), obtenue par le contrat
+  d'éléments de la feature visée (`labelOf(id, domicile)`, sous le codec ouvert
+  du domicile du projet, jamais de l'espace actif), `null` sans module ou quand
+  l'élément a disparu. Relier et délier restent des gestes du domicile : une
+  liaison référence un objet de l'espace d'origine, que la fenêtre ne voit pas.
 
 |         | Depuis la fenêtre                                                                                                                                                                                                                                                                                                                                                                                                        | Domicile seulement                                                                                                                                                                                                    |
 | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -752,7 +758,7 @@ entrer, comme dans `repo/rekey.ts` : rien ne peut détecter un blob oublié.
 
 - **Déplacer** (`move.ts`) rescelle l'arbre sous l'étage ouvert du nouvel
   espace, fait suivre les points de lecture, et range le projet en fin de
-  portefeuille. Ce que le projet reliait reste dans l'espace quitté : les sept
+  portefeuille. Ce que le projet reliait reste dans l'espace quitté : les huit
   familles de liaison partent, la page publique aussi (elle tient à l'offre et
   aux domaines de l'espace quitté), et un indicateur sur mesure perd sa base
   mais garde sa requête. Un projet gardé est refusé en amont par `shareable`.
@@ -895,10 +901,11 @@ Le serveur du module se teste sans base ni réseau, sur le harnais du SDK
 5. **Archives** : une carte archivée quitte le tableau, apparaît dans
    l'Historique des réglages, s'ouvre en lecture seule.
 6. **Onglets** : un projet neuf n'ouvre que le Tableau et la Frise (la Vue
-   d'ensemble se déclare dans les réglages). Le « + » propose les sept
-   intégrations, une de moins par module absent (Hébergement, Tableau blanc) ; annuler l'ajout ne change
-   rien, le valider fait paraître l'onglet **et** l'ouvre. Retirer le dernier
-   élément d'une feature renvoie au tableau et remet son entrée dans le « + ».
+   d'ensemble se déclare dans les réglages). Le « + » propose les huit
+   intégrations, une de moins par module absent (Hébergement, Tableau blanc,
+   Stores) ; annuler l'ajout ne change rien, le valider fait paraître l'onglet
+   **et** l'ouvre. Retirer le dernier élément d'une feature renvoie au tableau
+   et remet son entrée dans le « + ».
    Un rôle sans écriture sur `git`, `database` ou `audience` ne voit pas
    l'entrée correspondante ; un projet confidentiel n'a pas de « + » du tout.
 7. **Dialogue de tâche** : sur un projet d'une seule tâche, le bloc « Dépend

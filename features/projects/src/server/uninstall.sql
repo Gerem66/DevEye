@@ -1,3 +1,4 @@
+DROP TABLE IF EXISTS ft_projects_appstores_links;
 DROP TABLE IF EXISTS ft_projects_whiteboard_links;
 DROP TABLE IF EXISTS ft_projects_hosting_links;
 DROP TABLE IF EXISTS ft_projects_public;

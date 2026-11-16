@@ -4,6 +4,9 @@ import type { z, ZodType } from 'zod';
 
 import {
     projectAdd,
+    projectAppStoresLink,
+    projectAppStoresList,
+    projectAppStoresUnlink,
     projectArchive,
     projectAudienceLink,
     projectAudienceList,
@@ -77,6 +80,7 @@ import type {
     ProjectRow
 } from '../contracts/domain';
 import {
+    APPSTORES_ITEMS_PROVIDER,
     AUDIENCE_ITEMS_PROVIDER,
     DATABASE_ITEMS_PROVIDER,
     DATABASE_MEASURE_PROVIDER,
@@ -150,7 +154,7 @@ interface FakeRepo extends ProjectsRepo {
         milestones: ProjectMilestoneRow[];
         deps: ProjectCardDepRow[];
         events: ProjectEventRow[];
-        links: Record<'uptime' | 'database' | 'deploy' | 'repo' | 'site' | 'pack' | 'board', LinkRow[]>;
+        links: Record<'uptime' | 'database' | 'deploy' | 'repo' | 'site' | 'pack' | 'board' | 'app', LinkRow[]>;
         dashboard: DashboardTileRow[];
     };
 }
@@ -262,7 +266,7 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
         milestones: [],
         deps: [],
         events: [],
-        links: { uptime: [], database: [], deploy: [], repo: [], site: [], pack: [], board: [] },
+        links: { uptime: [], database: [], deploy: [], repo: [], site: [], pack: [], board: [], app: [] },
         dashboard: []
     };
     // `locate` rend la ligne vivante, pour les mutations ; `find` en rend une copie,
@@ -756,7 +760,16 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
             },
             listBoardUsage: usage('board', true),
             countBoardLinks: counts('board'),
-            detachBoard: detach('board')
+            detachBoard: detach('board'),
+            listAppIds: ids('app'),
+            linkApp: link('app'),
+            unlinkApp: unlink('app'),
+            unlinkAllApps: async (projectId, ws) => {
+                await unlinkAll('app')(projectId, ws);
+            },
+            listAppUsage: usage('app', true),
+            countAppLinks: counts('app'),
+            detachApp: detach('app')
         },
         dashboard: {
             list: async (projectId, ws) =>
@@ -972,6 +985,7 @@ describe('le registre des commandes', () => {
             'projects.audienceList',
             'projects.hostingList',
             'projects.whiteboardList',
+            'projects.appstoresList',
             'projects.dashboard',
             'projects.publication'
         ]);
@@ -1010,6 +1024,8 @@ describe('le registre des commandes', () => {
         assert.deepEqual(topicsOf('projects.audienceLink'), ['projects', 'audience']);
         assert.deepEqual(topicsOf('projects.uptimeLink'), ['projects', 'uptime']);
         assert.deepEqual(topicsOf('projects.uptimeUnlink'), ['projects', 'uptime']);
+        assert.deepEqual(topicsOf('projects.appstoresLink'), ['projects', 'appstores']);
+        assert.deepEqual(topicsOf('projects.appstoresUnlink'), ['projects', 'appstores']);
         // Hébergement est un module privé : nommer son sujet ferait refuser le
         // démarrage d'une instance qui ne l'a pas.
         assert.deepEqual(topicsOf('projects.hostingLink'), ['projects']);
@@ -1018,8 +1034,17 @@ describe('le registre des commandes', () => {
         assert.deepEqual(topicsOf('projects.whiteboardUnlink'), ['projects']);
         assert.equal(topicsOf('projects.cardAdd'), true);
         // Aucune liste ne nomme un sujet que le boot refuserait : les nôtres et ceux
-        // des cinq features reliées.
-        const known = new Set(['projects', 'projectsChat', 'git', 'deploy', 'database', 'audience', 'uptime']);
+        // des six features reliées.
+        const known = new Set([
+            'projects',
+            'projectsChat',
+            'git',
+            'deploy',
+            'database',
+            'audience',
+            'uptime',
+            'appstores'
+        ]);
         for (const h of projectsHandlers) {
             if (Array.isArray(h.mutates)) {
                 for (const topic of h.mutates)
@@ -1239,6 +1264,7 @@ describe('projects.setSecurityTier : la conversion d’étage', () => {
         repo.rows.links.site.push({ project_id: 1, workspace_id: 1, item_id: 7 });
         repo.rows.links.pack.push({ project_id: 1, workspace_id: 1, item_id: 4 });
         repo.rows.links.board.push({ project_id: 1, workspace_id: 1, item_id: 3 });
+        repo.rows.links.app.push({ project_id: 1, workspace_id: 1, item_id: 2 });
         repo.rows.links.deploy.push({ project_id: 1, workspace_id: 1, item_id: 8 });
         repo.rows.links.uptime.push({ project_id: 1, workspace_id: 1, item_id: 9 });
     }
@@ -1275,9 +1301,10 @@ describe('projects.setSecurityTier : la conversion d’étage', () => {
                 repo.rows.links.site,
                 repo.rows.links.pack,
                 repo.rows.links.board,
+                repo.rows.links.app,
                 repo.rows.links.deploy
             ].map((l) => l.length),
-            [0, 0, 0, 0, 0, 0]
+            [0, 0, 0, 0, 0, 0, 0]
         );
         assert.equal(repo.rows.links.uptime.length, 1);
 
@@ -1291,6 +1318,7 @@ describe('projects.setSecurityTier : la conversion d’étage', () => {
             'projects.audienceUnlink',
             'projects.hostingUnlink',
             'projects.whiteboardUnlink',
+            'projects.appstoresUnlink',
             'projects.deployUnlink',
             'projects.securityTier'
         ]);
@@ -1846,7 +1874,8 @@ describe('les liaisons par les contrats d’éléments', () => {
             deploy: 1,
             uptime: 1,
             'x-hosting': 0,
-            whiteboard: 0
+            whiteboard: 0,
+            appstores: 0
         });
     });
 
@@ -1907,6 +1936,43 @@ describe('les liaisons par les contrats d’éléments', () => {
         const counted = await handlerFor(projectLinkCounts)(ctx, { projectId: 1 });
         assert.equal(counted.counts.whiteboard, 1);
         assert.deepEqual((await handlerFor(projectWhiteboardUnlink)(ctx, { projectId: 1, boardId: 3 })).boardIds, []);
+    });
+
+    it('une app se relie par le contrat des Stores, module absent refusé, et se délie sans y toucher', async () => {
+        const repo = fakeRepo();
+        seedTwoTiers(repo);
+        await assert.rejects(
+            handlerFor(projectAppStoresLink)(contextWith(repo), { projectId: 1, appId: 2 }),
+            failsWith('validation')
+        );
+        const providers = {
+            [APPSTORES_ITEMS_PROVIDER]: {
+                exists: async (id: number) => id === 2,
+                labelOf: async (id: number) => (id === 2 ? 'Mon app' : null)
+            }
+        };
+        const ctx = contextWith(repo, { providers });
+        await assert.rejects(handlerFor(projectAppStoresLink)(ctx, { projectId: 1, appId: 5 }), failsWith('not_found'));
+        await assert.rejects(
+            handlerFor(projectAppStoresLink)(ctx, { projectId: 2, appId: 2 }),
+            failsWith('validation')
+        );
+        assert.equal(repo.rows.links.app.length, 0);
+        assert.deepEqual((await handlerFor(projectAppStoresLink)(ctx, { projectId: 1, appId: 2 })).appIds, [2]);
+        assert.deepEqual((await handlerFor(projectAppStoresLink)(ctx, { projectId: 1, appId: 2 })).appIds, [2]);
+        assert.deepEqual(await handlerFor(projectAppStoresList)(ctx, { projectId: 1 }), {
+            appIds: [2],
+            labels: [{ id: 2, label: 'Mon app' }]
+        });
+        const counted = await handlerFor(projectLinkCounts)(ctx, { projectId: 1 });
+        assert.equal(counted.counts.appstores, 1);
+        // Module retiré depuis : la liaison se défait quand même.
+        const bare = contextWith(repo);
+        assert.deepEqual(await handlerFor(projectAppStoresList)(bare, { projectId: 1 }), {
+            appIds: [2],
+            labels: [{ id: 2, label: null }]
+        });
+        assert.deepEqual((await handlerFor(projectAppStoresUnlink)(bare, { projectId: 1, appId: 2 })).appIds, []);
     });
 });
 
@@ -2233,6 +2299,7 @@ describe('le partage inter-espaces', () => {
         repo.rows.links.site.push({ project_id: 1, workspace_id: 42, item_id: 7 });
         repo.rows.links.deploy.push({ project_id: 1, workspace_id: 42, item_id: 8 });
         repo.rows.links.uptime.push({ project_id: 1, workspace_id: 42, item_id: 9 });
+        repo.rows.links.app.push({ project_id: 1, workspace_id: 42, item_id: 2 });
         // Chaque contrat ne nomme qu'au domicile (42) ; la base 6 a disparu.
         const naming = (noun: string) => ({
             exists: async () => true,
@@ -2243,7 +2310,8 @@ describe('le partage inter-espaces', () => {
             [DATABASE_ITEMS_PROVIDER]: naming('Base'),
             [AUDIENCE_ITEMS_PROVIDER]: naming('Site'),
             [DEPLOY_ITEMS_PROVIDER]: naming('Cible'),
-            [UPTIME_ITEMS_PROVIDER]: naming('Service')
+            [UPTIME_ITEMS_PROVIDER]: naming('Service'),
+            [APPSTORES_ITEMS_PROVIDER]: naming('App')
         };
         const home = contextWith(repo, { workspaceId: 42, kind: 'shared', providers });
         const window = contextWith(repo, { workspaceId: 1, shares: { 1: 42 }, providers });
@@ -2268,6 +2336,10 @@ describe('le partage inter-espaces', () => {
                 serviceIds: [9],
                 labels: [{ id: 9, label: 'Service 9' }]
             });
+            assert.deepEqual(await handlerFor(projectAppStoresList)(ctx, { projectId: 1 }), {
+                appIds: [2],
+                labels: [{ id: 2, label: 'App 2' }]
+            });
         }
         // Sans module, les identifiants restent et les noms valent `null` ; les
         // compteurs d'onglets se lisent au domicile, depuis la fenêtre.
@@ -2283,7 +2355,8 @@ describe('le partage inter-espaces', () => {
             deploy: 1,
             uptime: 1,
             'x-hosting': 0,
-            whiteboard: 0
+            whiteboard: 0,
+            appstores: 1
         });
     });
 
@@ -2299,7 +2372,8 @@ describe('le partage inter-espaces', () => {
                 [DATABASE_ITEMS_PROVIDER]: present,
                 [AUDIENCE_ITEMS_PROVIDER]: present,
                 [DEPLOY_ITEMS_PROVIDER]: present,
-                [UPTIME_ITEMS_PROVIDER]: present
+                [UPTIME_ITEMS_PROVIDER]: present,
+                [APPSTORES_ITEMS_PROVIDER]: present
             }
         });
         const refused = failsWith('validation');
@@ -2313,15 +2387,18 @@ describe('le partage inter-espaces', () => {
         await assert.rejects(handlerFor(projectAudienceUnlink)(linking, { projectId: 1, siteId: 7 }), refused);
         await assert.rejects(handlerFor(projectDeployLink)(linking, { projectId: 1, targetId: 8 }), refused);
         await assert.rejects(handlerFor(projectDeployUnlink)(linking, { projectId: 1, targetId: 8 }), refused);
+        await assert.rejects(handlerFor(projectAppStoresLink)(linking, { projectId: 1, appId: 2 }), refused);
+        await assert.rejects(handlerFor(projectAppStoresUnlink)(linking, { projectId: 1, appId: 2 }), refused);
         assert.deepEqual(
             [
                 repo.rows.links.repo,
                 repo.rows.links.uptime,
                 repo.rows.links.database,
                 repo.rows.links.site,
-                repo.rows.links.deploy
+                repo.rows.links.deploy,
+                repo.rows.links.app
             ].map((l) => l.length),
-            [1, 0, 0, 0, 0]
+            [1, 0, 0, 0, 0, 0]
         );
 
         await assert.rejects(
@@ -2431,7 +2508,8 @@ describe('la vue d’ensemble d’un projet', () => {
             deploy: [],
             uptime: [9],
             'x-hosting': [],
-            whiteboard: []
+            whiteboard: [],
+            appstores: []
         });
         assert.deepEqual(first.counts, {
             git: 0,
@@ -2440,7 +2518,8 @@ describe('la vue d’ensemble d’un projet', () => {
             deploy: 0,
             uptime: 1,
             'x-hosting': 0,
-            whiteboard: 0
+            whiteboard: 0,
+            appstores: 0
         });
 
         // Le projet gardé se lit quand même : rangs et masquages sont en clair.

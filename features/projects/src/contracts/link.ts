@@ -47,7 +47,8 @@ export const projectLinkCountsSchema = z.object({
     deploy: z.number().int().nonnegative(),
     uptime: z.number().int().nonnegative(),
     'x-hosting': z.number().int().nonnegative(),
-    whiteboard: z.number().int().nonnegative()
+    whiteboard: z.number().int().nonnegative(),
+    appstores: z.number().int().nonnegative()
 });
 export type ProjectLinkCounts = z.infer<typeof projectLinkCountsSchema>;
 
@@ -108,6 +109,14 @@ export interface ProjectHostingLinkRow {
 export interface ProjectWhiteboardLinkRow {
     project_id: number;
     board_id: number;
+    workspace_id: number;
+    created: number;
+}
+
+/** Ligne SQL (serveur uniquement) : la liaison projet → app des Stores. */
+export interface ProjectAppStoresLinkRow {
+    project_id: number;
+    app_id: number;
     workspace_id: number;
     created: number;
 }

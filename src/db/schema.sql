@@ -612,6 +612,103 @@ CREATE TABLE `finance_transactions` (
   CONSTRAINT `fk_fin_tx_workspace` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+CREATE TABLE `ft_appstores_apps` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `workspace_id` int NOT NULL,
+  `content` text COLLATE utf8mb4_general_ci NOT NULL,
+  `sort_order` int NOT NULL DEFAULT '0',
+  `created` bigint NOT NULL DEFAULT (unix_timestamp()),
+  PRIMARY KEY (`id`),
+  KEY `idx_ft_appstores_apps_ws` (`workspace_id`,`sort_order`),
+  CONSTRAINT `fk_ft_appstores_apps_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_appstores_daily` (
+  `app_id` int NOT NULL,
+  `store` enum('apple','google') COLLATE utf8mb4_general_ci NOT NULL,
+  `day` int NOT NULL,
+  `downloads` int DEFAULT NULL,
+  `updates` int DEFAULT NULL,
+  `uninstalls` int DEFAULT NULL,
+  `active_devices` int DEFAULT NULL,
+  `rating_avg` decimal(4,3) DEFAULT NULL,
+  `rating_count` int DEFAULT NULL,
+  `crash_rate` decimal(9,6) DEFAULT NULL,
+  `anr_rate` decimal(9,6) DEFAULT NULL,
+  `vitals_users` int DEFAULT NULL,
+  PRIMARY KEY (`app_id`,`store`,`day`),
+  CONSTRAINT `fk_ft_appstores_daily_app` FOREIGN KEY (`app_id`) REFERENCES `ft_appstores_apps` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_appstores_listings` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `app_id` int NOT NULL,
+  `workspace_id` int NOT NULL,
+  `store` enum('apple','google') COLLATE utf8mb4_general_ci NOT NULL,
+  `source_id` int DEFAULT NULL,
+  `external_ref` char(32) COLLATE utf8mb4_general_ci NOT NULL,
+  `content` text COLLATE utf8mb4_general_ci NOT NULL,
+  `state` mediumtext COLLATE utf8mb4_general_ci,
+  `history_from` int DEFAULT NULL,
+  `synced_day` int DEFAULT NULL,
+  `metrics_synced_at` bigint DEFAULT NULL,
+  `reviews_synced_at` bigint DEFAULT NULL,
+  `rating_synced_at` bigint DEFAULT NULL,
+  `last_sync_at` bigint DEFAULT NULL,
+  `sync_error` varchar(300) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `created` bigint NOT NULL DEFAULT (unix_timestamp()),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_ft_appstores_listing_store` (`app_id`,`store`),
+  UNIQUE KEY `uniq_ft_appstores_listing_ref` (`workspace_id`,`external_ref`),
+  KEY `idx_ft_appstores_listings_source` (`source_id`),
+  CONSTRAINT `fk_ft_appstores_listings_app` FOREIGN KEY (`app_id`) REFERENCES `ft_appstores_apps` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_ft_appstores_listings_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_appstores_revenue` (
+  `app_id` int NOT NULL,
+  `store` enum('apple','google') COLLATE utf8mb4_general_ci NOT NULL,
+  `day` int NOT NULL,
+  `currency` char(3) COLLATE utf8mb4_general_ci NOT NULL,
+  `amount` decimal(16,3) NOT NULL DEFAULT '0.000',
+  `units` int NOT NULL DEFAULT '0',
+  PRIMARY KEY (`app_id`,`store`,`day`,`currency`),
+  CONSTRAINT `fk_ft_appstores_revenue_app` FOREIGN KEY (`app_id`) REFERENCES `ft_appstores_apps` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_appstores_reviews` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `app_id` int NOT NULL,
+  `store` enum('apple','google') COLLATE utf8mb4_general_ci NOT NULL,
+  `external_ref` char(32) COLLATE utf8mb4_general_ci NOT NULL,
+  `rating` tinyint NOT NULL,
+  `created_at` bigint NOT NULL,
+  `replied_at` bigint DEFAULT NULL,
+  `content` mediumtext COLLATE utf8mb4_general_ci NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_ft_appstores_review` (`app_id`,`store`,`external_ref`),
+  KEY `idx_ft_appstores_reviews_list` (`app_id`,`created_at`),
+  CONSTRAINT `fk_ft_appstores_reviews_app` FOREIGN KEY (`app_id`) REFERENCES `ft_appstores_apps` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_appstores_sources` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `workspace_id` int NOT NULL,
+  `store` enum('apple','google') COLLATE utf8mb4_general_ci NOT NULL,
+  `content` text COLLATE utf8mb4_general_ci NOT NULL,
+  `secret_enc` text COLLATE utf8mb4_general_ci NOT NULL,
+  `capabilities` varchar(100) COLLATE utf8mb4_general_ci NOT NULL DEFAULT '',
+  `checked_at` bigint DEFAULT NULL,
+  `failing_since` bigint DEFAULT NULL,
+  `failing_error` varchar(300) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `failing_count` int NOT NULL DEFAULT '0',
+  `failing_notified` tinyint NOT NULL DEFAULT '0',
+  `created` bigint NOT NULL DEFAULT (unix_timestamp()),
+  PRIMARY KEY (`id`),
+  KEY `idx_ft_appstores_sources_ws` (`workspace_id`),
+  CONSTRAINT `fk_ft_appstores_sources_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 CREATE TABLE `ft_audience_answers` (
   `form_id` int NOT NULL,
   `field_id` int NOT NULL,
@@ -1379,6 +1476,18 @@ CREATE TABLE `ft_pdf_signatures` (
   KEY `idx_ft_pdf_signatures_user` (`user_id`,`created`),
   KEY `fk_ft_pdf_signatures_ws` (`workspace_id`),
   CONSTRAINT `fk_ft_pdf_signatures_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `ft_projects_appstores_links` (
+  `project_id` int NOT NULL,
+  `app_id` int NOT NULL,
+  `workspace_id` int NOT NULL,
+  `created` bigint NOT NULL DEFAULT (unix_timestamp()),
+  PRIMARY KEY (`project_id`,`app_id`),
+  KEY `idx_ft_projects_appstores_links_app` (`app_id`),
+  KEY `fk_ft_projects_appstores_links_workspace` (`workspace_id`),
+  CONSTRAINT `fk_ft_projects_appstores_links_project` FOREIGN KEY (`project_id`) REFERENCES `projects` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_ft_projects_appstores_links_workspace` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 CREATE TABLE `ft_projects_dashboard_tiles` (

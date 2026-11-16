@@ -43,6 +43,7 @@ e-mail, ouvre le vrai dialogue de la feature Mail et adopte la boîte créée.
 | Finances        | connexions bancaires                                                                     | `ft_finance_connections` (le module `features/finance`) | l'onglet Banque d'un compte du livre                                                                |
 | Rendez-vous     | agendas externes                                                                         | le module                                               | chaque type de rendez-vous choisit les siens                                                        |
 | Audit           | jetons présentés à la forge                                                              | le module                                               | une cible en désigne un                                                                             |
+| Stores          | comptes App Store Connect (clé d'équipe) et Google Play (compte de service)              | `ft_appstores_sources` (le module `features/appstores`) | `AppDialog` à l'ajout, puis l'onglet Général de l'app, une source par store                         |
 
 Les **domaines** suivent le même contrat (déclarés à l'échelle de la
 fonctionnalité, désignés par les éléments, « + » qui ouvre le bon onglet), mais

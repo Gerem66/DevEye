@@ -83,6 +83,20 @@ export const EXTERNAL_SERVICES: readonly ExternalService[] = [
         features: ['git', 'deploy', 'x-audit', 'osint']
     },
     {
+        name: 'App Store Connect (Apple)',
+        purpose:
+            'Lit les téléchargements, les notes, les avis, les revenus et les versions de vos apps, et publie vos réponses aux avis',
+        receives: 'Votre clé d’API App Store Connect, les apps que vous suivez et les réponses que vous publiez',
+        features: ['appstores']
+    },
+    {
+        name: 'Google Play (Google)',
+        purpose:
+            'Lit les installations, les notes, les avis, les ventes et la stabilité de vos apps, et publie vos réponses aux avis',
+        receives: 'La clé de votre compte de service, les apps que vous suivez et les réponses que vous publiez',
+        features: ['appstores']
+    },
+    {
         name: 'Open-Meteo',
         purpose: 'Prévisions météo et recherche des villes, sans clé',
         receives: 'La ville que vous saisissez et sa position',

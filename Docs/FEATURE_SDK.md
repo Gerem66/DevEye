@@ -165,8 +165,8 @@ L'app lit : `ACCOUNT_PLAN_PROVIDER` (l'offre d'un compte : `Services/quota.ts`,
 DevEye lui-même, `Services/debug/selfTracking`). Les modules se lisent entre
 eux : Projets lit les contrats d'éléments (`UPTIME_ITEMS_PROVIDER`,
 `DATABASE_ITEMS_PROVIDER`, `DEPLOY_ITEMS_PROVIDER`, `GIT_ITEMS_PROVIDER`,
-`AUDIENCE_ITEMS_PROVIDER`, `HOSTING_ITEMS_PROVIDER`) avant de relier un
-élément ; Sauvegardes lit `DATABASE_BACKUP_PROVIDER`,
+`AUDIENCE_ITEMS_PROVIDER`, `HOSTING_ITEMS_PROVIDER`, `WHITEBOARD_ITEMS_PROVIDER`,
+`APPSTORES_ITEMS_PROVIDER`) avant de relier un élément ; Sauvegardes lit `DATABASE_BACKUP_PROVIDER`,
 `MAILSERVER_BACKUP_PROVIDER`, et le contrat d'arborescence commun à
 `CLOUDSYNC_BACKUP_PROVIDER` et `HOSTING_BACKUP_PROVIDER` pour ses sources ;
 Uptime lit `DEPLOY_ITEMS_PROVIDER`, `GIT_ITEMS_PROVIDER` et
@@ -181,7 +181,8 @@ l'envoi et au renommage, et CloudSync avant chaque transfert
 Côté client, `FeatureClient.providers` est le jumeau : les écrans lisent par
 `moduleClientProvider(clé)` (`client/src/sdk/registry.ts`). Les onglets d'un
 projet composent ainsi les composants d'Uptime, de Bases de données, de
-Déploiements, de Git, d'Audience et d'Hébergement (`*_CLIENT_PROVIDER`), et la
+Déploiements, de Git, d'Audience, d'Hébergement, du Tableau blanc et de Stores
+(`*_CLIENT_PROVIDER`), et la
 tuile d'appareil de l'accueil vient de `DEVICES_CLIENT_PROVIDER`.
 
 ### Les tickets de session
@@ -467,7 +468,8 @@ revient tel quel, sa cible dans `headers.location`). Clés en
 `[a-z][a-zA-Z0-9]*`, uniques, vérifiées par `registerModules`. Facturation,
 Rendez-vous, Hébergement, Liens courts et le module de facturation des comptes
 déclarent des échantillons ; Uptime, Notes, Audience, CloudSync, Hébergement,
-Liens courts et la facturation des comptes des scénarios.
+Liens courts, Tableau blanc, PDF, Stores et la facturation des comptes des
+scénarios.
 
 Un service peut aussi dire `health()` (`up`, `degraded`, `down`, une raison
 lisible par le public) : la page d'état l'interroge par `moduleServiceHealth`
@@ -532,8 +534,8 @@ oubli. `copy` décrit l'élément par un arbre (`ItemTree`, `movableCellsOf` pou
 tenir une seule liste de cellules) et l'app lit et écrit (`exportItemTree`,
 `importItemTree`), vers cet espace ou une autre instance ; `plan` sur la
 source, `admit` et `settle` dans la transaction de destination. Uptime,
-Audience, Bases de données, Déploiements, Git, Mail, Notes, Projets et Tableau
-blanc se copient.
+Audience, Bases de données, Déploiements, Git, Mail, Notes, Projets, Tableau
+blanc et Stores se copient.
 
 ### Les quotas et les pauses
 
@@ -623,7 +625,7 @@ onglets à la popup « Modération » (§ L'administration
 d'une fonctionnalité). `extraPermissions` (dix au plus) et `access.extras` :
 [PERMISSIONS.md](./PERMISSIONS.md). `settings` et `settingsPanels` :
 [SETTINGS.md](./SETTINGS.md). `sources` : [SOURCES.md](./SOURCES.md). `links`
-(six au plus) dessine les liaisons de la fiche « À propos ». `commandPrefix`
+(huit au plus) dessine les liaisons de la fiche « À propos ». `commandPrefix`
 n'existe que pour un id natif dont la casse des commandes diffère de l'id
 (CloudSync : `cloudSync.*`). `Art` est la vignette de la carte au marché d'ajout
 et sur sa fiche « À propos » : des enfants SVG colorés aux jetons du thème.

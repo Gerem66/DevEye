@@ -32,31 +32,34 @@ const OWNED_TABLES = [
 ];
 
 /**
- * Les sept familles de liaison, qui appartiennent à Projets. Une liaison ne
+ * Les huit familles de liaison, qui appartiennent à Projets. Une liaison ne
  * traverse pas une frontière d'espace : ce que le projet reliait ici reste ici,
- * et la liaison part.
+ * et la liaison part. `one` accorde « un des » au genre de la famille.
  */
 const LINK_TABLES = [
-    { table: 'project_uptime_links', label: 'services surveillés' },
-    { table: 'project_database_links', label: 'bases de données' },
-    { table: 'project_deploy_links', label: 'cibles de déploiement' },
-    { table: 'project_repo_links', label: 'dépôts git' },
-    { table: 'project_audience_links', label: 'sites suivis' },
-    { table: 'ft_projects_hosting_links', label: 'dossiers' },
-    { table: 'ft_projects_whiteboard_links', label: 'tableaux blancs' }
+    { table: 'project_uptime_links', label: 'services surveillés', one: 'un' },
+    { table: 'project_database_links', label: 'bases de données', one: 'une' },
+    { table: 'project_deploy_links', label: 'cibles de déploiement', one: 'une' },
+    { table: 'project_repo_links', label: 'dépôts git', one: 'un' },
+    { table: 'project_audience_links', label: 'sites suivis', one: 'un' },
+    { table: 'ft_projects_hosting_links', label: 'dossiers', one: 'un' },
+    { table: 'ft_projects_whiteboard_links', label: 'tableaux blancs', one: 'un' },
+    { table: 'ft_projects_appstores_links', label: 'apps suivies', one: 'une' }
 ];
 
 /** Ce que le projet relie, par famille : de quoi nommer ce qu'il va perdre. */
 async function linkCounts(q: SdkQueryable, projectId: number, workspaceId: number): Promise<string[]> {
     const out: string[] = [];
-    for (const { table, label } of LINK_TABLES) {
+    for (const { table, label, one } of LINK_TABLES) {
         const rows = await q.query<{ n: number }>(
             `SELECT COUNT(*) AS n FROM ${table} WHERE project_id = ? AND workspace_id = ?`,
             [projectId, workspaceId]
         );
         const n = Number(rows[0]?.n ?? 0);
         if (n > 0)
-            out.push(n === 1 ? `Sa liaison vers un des ${label} d’ici` : `Ses ${n} liaisons vers les ${label} d’ici`);
+            out.push(
+                n === 1 ? `Sa liaison vers ${one} des ${label} d’ici` : `Ses ${n} liaisons vers les ${label} d’ici`
+            );
     }
     // Les indicateurs sur mesure gardent leur requête mais perdent leur base,
     // qui reste ici : le dire avant, pas après.

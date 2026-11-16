@@ -396,6 +396,15 @@ export const projectSetSecurityTierFeature = defineSdkFeature({
                 });
             }
 
+            const apps = await ctx.repo.links.listAppIds(input.projectId, home);
+            if (apps.length > 0) {
+                await ctx.repo.links.unlinkAllApps(input.projectId, home);
+                await recordEvent(ctx, existing, {
+                    kind: 'projects.appstoresUnlink',
+                    label: `${apps.length} app${apps.length > 1 ? 's' : ''} déliée${apps.length > 1 ? 's' : ''} (projet passé en confidentiel)`
+                });
+            }
+
             const targets = await ctx.repo.links.unlinkAllDeployTargets(input.projectId, home);
             if (targets > 0) {
                 await recordEvent(ctx, existing, {

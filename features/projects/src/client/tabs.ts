@@ -1,17 +1,18 @@
 import type { FeatureAccess, FeatureId } from '@deveye/types';
-import { HOSTING_CLIENT_PROVIDER, WHITEBOARD_CLIENT_PROVIDER } from '@deveye/types/sdk';
+import { APPSTORES_CLIENT_PROVIDER, HOSTING_CLIENT_PROVIDER, WHITEBOARD_CLIENT_PROVIDER } from '@deveye/types/sdk';
 import type { Project, ProjectLinkCounts } from '../contracts/domain';
 
 /**
  * Les onglets d'un projet : le Tableau, seul obligatoire et seul à ouvrir le
- * projet, la Vue d'ensemble et la Frise que le projet déclare, et sept suspendus à
+ * projet, la Vue d'ensemble et la Frise que le projet déclare, et huit suspendus à
  * leurs liaisons, qui paraissent au premier élément et se replient dans le menu
  * « + » de la barre avec le dernier. L'histoire du projet est dans ses réglages :
  * on l'ouvre rarement, pour une question précise.
  */
 
 /** Les onglets qui ne montrent que des liaisons, donc escamotables. */
-export type ProjectFeatureTabId = 'git' | 'database' | 'audience' | 'deploy' | 'uptime' | 'x-hosting' | 'whiteboard';
+export type ProjectFeatureTabId =
+    'git' | 'database' | 'audience' | 'deploy' | 'uptime' | 'x-hosting' | 'whiteboard' | 'appstores';
 
 export type ProjectTabId = 'overview' | 'board' | 'timeline' | ProjectFeatureTabId;
 
@@ -104,6 +105,17 @@ export const PROJECT_FEATURE_TABS: ProjectFeatureTab[] = [
             label: 'Ajouter un tableau blanc',
             requires: { feature: 'whiteboard', level: 'write' },
             provider: WHITEBOARD_CLIENT_PROVIDER
+        }
+    },
+    {
+        id: 'appstores',
+        label: 'Stores',
+        icon: 'appstores',
+        add: {
+            key: 'appstores',
+            label: 'Ajouter une app',
+            requires: { feature: 'appstores', level: 'write' },
+            provider: APPSTORES_CLIENT_PROVIDER
         }
     }
 ];

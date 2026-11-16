@@ -6,6 +6,7 @@ import { LinkTargetDialog } from './Deploy/LinkTargetDialog';
 import { LinkUptimeDialog } from './Uptime/LinkUptimeDialog';
 import { LinkPackDialog } from './Hosting/LinkPackDialog';
 import { LinkBoardDialog } from './Whiteboard/LinkBoardDialog';
+import { LinkAppDialog } from './AppStores/LinkAppDialog';
 import type { ProjectFeatureTabId, ProjectTabAddKey } from './tabs';
 
 /**
@@ -106,6 +107,17 @@ export function AddFeatureDialog({ projectId, pending, onClose, onAdded }: AddFe
                 onSaved={() => {
                     invalidate('projects.board', 'whiteboard.list', 'whiteboard.count');
                     onAdded('whiteboard');
+                }}
+            />
+
+            <LinkAppDialog
+                open={pending === 'appstores'}
+                projectId={projectId}
+                linkedIds={NOTHING_LINKED}
+                onClose={onClose}
+                onSaved={() => {
+                    invalidate('projects.board', 'appstores.list', 'appstores.count');
+                    onAdded('appstores');
                 }}
             />
         </>

@@ -23,6 +23,7 @@ const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
     // Le transport des agents : des relais sans état côté serveur, sauf trois
     // `mutates` (autostart, élévation, rétrogradation) qui changent la liste.
     agent: 'devices',
+    appstores: 'appstores',
     // Le gros du trafic de ce sujet ne passe pas par une commande : l'ingestion
     // publique écrit sans socket et diffuse elle-même, coalescée à la minute.
     audience: 'audience',
@@ -133,6 +134,8 @@ const NON_MUTATING = new Set([
     'cloudSync.subscribe',
     'cloudSync.unsubscribe',
     'cloudSync.syncNow',
+    // Réveille le service de fond, qui diffuse lui-même ce qu'il a changé.
+    'appstores.syncNow',
     // Lecture pure (avancement des synchronisations en cours).
     'git.syncStatuses',
     'mail.oauthStart',

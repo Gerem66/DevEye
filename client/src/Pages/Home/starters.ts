@@ -50,7 +50,7 @@ export const HOME_STARTERS: readonly HomeStarter[] = [
         id: 'supervise',
         label: 'Superviser',
         icon: 'activity',
-        features: ['devices', 'uptime', 'audience'],
+        features: ['devices', 'uptime', 'audience', 'appstores'],
         topbar: ['search', 'publicIp', 'uptime', 'devices']
     },
     {

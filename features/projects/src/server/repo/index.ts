@@ -30,8 +30,8 @@ export type { ProjectRekeyRepo };
 /**
  * Le dépôt du module : un fichier par agrégat, réunis en un seul contrat sur
  * `SdkQueryable`. Les treize tables `project*` datent du socle, l'allowlist de
- * `deveye-feature.json` les dispense du préfixe `ft_projects_` ; celles de la vue
- * d'ensemble et de la page publique, propres au module, le portent.
+ * `deveye-feature.json` les dispense du préfixe `ft_projects_` ; les autres,
+ * propres au module, le portent.
  *
  * Les dépôts ne chiffrent jamais : les handlers passent des valeurs déjà scellées
  * par `ctx.cipher(...)`, le service par `deps.cipherFor(ws)`.

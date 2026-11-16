@@ -400,10 +400,10 @@ export const projectMyTasks = {
 
 /**
  * Combien d'éléments chaque intégration du projet a à montrer. Une seule commande
- * pour les quatre : elle sert une seule décision, quels onglets la fiche ouvre, et
+ * pour les huit : elle sert une seule décision, quels onglets la fiche ouvre, et
  * les demander une par une ferait apparaître la barre d'onglets par morceaux. Ne
  * déchiffre rien et ne demande aucune session, ce sont des liaisons en clair ; un
- * projet confidentiel n'en a aucune et répond quatre zéros.
+ * projet confidentiel n'en garde que ses services surveillés.
  */
 export const projectLinkCounts = {
     command: 'projects.linkCounts' as const,
@@ -558,6 +558,32 @@ export const projectWhiteboardUnlink = {
     output: z.object({ boardIds: z.array(z.number().int().positive()) })
 };
 
+// ---------------------------------------------------------- stores
+
+/** Les apps des Stores rattachées au projet, dans l'ordre des liaisons, et leur nom. */
+export const projectAppStoresList = {
+    command: 'projects.appstoresList' as const,
+    input: z.object({ projectId }),
+    output: z.object({
+        appIds: z.array(z.number().int().positive()),
+        labels: z.array(projectLinkLabelSchema)
+    })
+};
+
+/** Rattache une app au projet. Idempotente, refusée sur un projet confidentiel. Domicile seulement. */
+export const projectAppStoresLink = {
+    command: 'projects.appstoresLink' as const,
+    input: z.object({ projectId, appId: z.number().int().positive() }),
+    output: z.object({ appIds: z.array(z.number().int().positive()) })
+};
+
+/** Retire la liaison, domicile seulement. L'app, elle, n'est pas touchée. */
+export const projectAppStoresUnlink = {
+    command: 'projects.appstoresUnlink' as const,
+    input: z.object({ projectId, appId: z.number().int().positive() }),
+    output: z.object({ appIds: z.array(z.number().int().positive()) })
+};
+
 // ---------------------------------------------------------- déploiement
 
 /**
@@ -678,8 +704,8 @@ export const projectMarkRead = {
 
 /**
  * La vue d'ensemble : l'agencement des tuiles et les indicateurs sur mesure, plus
- * les liaisons du projet en une fois. Les cinq familles ici plutôt que cinq
- * commandes : le tableau de bord n'en montre aucune sans les autres, et cinq
+ * les liaisons du projet en une fois. Les huit familles ici plutôt que huit
+ * commandes : le tableau de bord n'en montre aucune sans les autres, et huit
  * allers-retours le feraient paraître par morceaux.
  *
  * Jamais verrouillée : rangs et masquages sont en clair, et un projet gardé dont
@@ -699,7 +725,8 @@ export const projectDashboard = {
             deploy: z.array(z.number().int().positive()),
             uptime: z.array(z.number().int().positive()),
             'x-hosting': z.array(z.number().int().positive()),
-            whiteboard: z.array(z.number().int().positive())
+            whiteboard: z.array(z.number().int().positive()),
+            appstores: z.array(z.number().int().positive())
         })
     })
 };
@@ -842,6 +869,9 @@ export const projectCommands = [
     projectWhiteboardList,
     projectWhiteboardLink,
     projectWhiteboardUnlink,
+    projectAppStoresList,
+    projectAppStoresLink,
+    projectAppStoresUnlink,
     projectDashboard,
     projectDashboardArrange,
     projectDashboardKpiSave,

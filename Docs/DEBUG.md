@@ -74,8 +74,11 @@ dans les tables du module part avec le compte ; seul ce qui vit ailleurs
 `features/uptime`, `features/audience`, `features/shortlinks` (une redirection
 lue par `headers.location`), `features/whiteboard` (des images dans le magasin
 d'objets, que le `defer` retire avec leur tableau, y compris après un
-déplacement vers un second espace) ; pour un objet chez un tiers (un client
-Stripe), le module de facturation des comptes déclare un `sweep`.
+déplacement vers un second espace), `features/appstores` (une app sans store,
+sa liaison à un projet, le refus d'une clé mal formée : la vraie
+synchronisation demande les clés d'un vrai compte de store, elle se vérifie à
+la main) ; pour un objet chez un tiers (un client Stripe), le module de
+facturation des comptes déclare un `sweep`.
 
 Dans le socle : `src/Services/debug/e2e/scenarios/`, même forme, avec
 `accounts: 0 | 1 | 2` pour les comptes ouverts avant la première étape.

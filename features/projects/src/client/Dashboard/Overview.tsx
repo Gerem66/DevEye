@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+    APPSTORES_CLIENT_PROVIDER,
     AUDIENCE_CLIENT_PROVIDER,
     DATABASE_CLIENT_PROVIDER,
     DEPLOY_CLIENT_PROVIDER,
@@ -60,6 +61,7 @@ const FEATURES: { id: TileFeature; token: string; missing: string }[] = [
     { id: 'deploy', token: DEPLOY_CLIENT_PROVIDER, missing: 'Le module Déploiements n’est pas installé.' },
     { id: 'uptime', token: UPTIME_CLIENT_PROVIDER, missing: 'Le module Uptime n’est pas installé.' },
     { id: 'audience', token: AUDIENCE_CLIENT_PROVIDER, missing: 'Le module Audience n’est pas installé.' },
+    { id: 'appstores', token: APPSTORES_CLIENT_PROVIDER, missing: 'Le module Stores n’est pas installé.' },
     { id: 'database', token: DATABASE_CLIENT_PROVIDER, missing: 'Le module Bases de données n’est pas installé.' },
     { id: 'git', token: GIT_CLIENT_PROVIDER, missing: 'Le module Git n’est pas installé.' },
     { id: 'x-hosting', token: HOSTING_CLIENT_PROVIDER, missing: 'Le module Hébergement n’est pas installé.' },
@@ -78,7 +80,8 @@ const EMPTY_LINKS: DashboardLinks = {
     deploy: [],
     uptime: [],
     'x-hosting': [],
-    whiteboard: []
+    whiteboard: [],
+    appstores: []
 };
 
 function formatAgo(at: number | null): string {

@@ -23,6 +23,7 @@ const KIND_META: Record<ProjectEventKind, { icon: string; text: string }> = {
     'projects.audienceUnlink': { icon: 'globe', text: 'Liaisons' },
     'projects.hostingUnlink': { icon: 'folder', text: 'Liaisons' },
     'projects.whiteboardUnlink': { icon: 'whiteboard', text: 'Liaisons' },
+    'projects.appstoresUnlink': { icon: 'appstores', text: 'Liaisons' },
     'projects.deployLink': { icon: 'rocket', text: 'Liaisons' },
     'projects.deployUnlink': { icon: 'rocket', text: 'Liaisons' },
     'card.archived': { icon: 'archive', text: 'Tâche archivée' },

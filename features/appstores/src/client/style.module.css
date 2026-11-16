@@ -1,0 +1,1266 @@
+/* Stores : la liste des apps, leur fiche et les comptes de store. Uniquement
+   des jetons du thème ; une classe n'est définie qu'une fois seule dans son
+   sélecteur, sans quoi `client/scripts/check-css-modules.mjs` échoue. */
+
+/* La popup défile, jamais la racine : `min-height` remplit la boîte d'un
+   contenu court. Le conteneur `appstores` décide de ce qui se replie à
+   l'étroit, la popup changeant de largeur sans que la fenêtre bouge. */
+.root {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    min-height: 100%;
+    container: appstores / inline-size;
+}
+
+.header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.heading {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-xs) var(--space-sm);
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.headingText {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.subheading {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-xs) var(--space-sm);
+    margin: var(--space-xs) 0 0;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+.empty {
+    margin: 0;
+    padding: var(--space-xl) 0;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    text-align: center;
+}
+
+/* Un état vide qui apprend quelque chose : ce qui manque, pourquoi, et le geste. */
+.emptyCard {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+    padding: var(--space-lg);
+    border: 1px dashed var(--glass-border);
+    border-radius: var(--radius-lg);
+    color: var(--text-secondary);
+    font-size: 0.88rem;
+    line-height: 1.5;
+}
+
+.emptyIcon {
+    width: 28px;
+    color: var(--accent);
+}
+
+.emptyText {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    flex: 1;
+    min-width: 220px;
+}
+
+.emptyText p {
+    margin: 0;
+}
+
+.emptyTitle {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.notice,
+.noticeDanger {
+    margin: 0;
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
+.notice {
+    background: var(--warning-bg);
+    color: var(--warning);
+}
+
+.noticeDanger {
+    background: var(--danger-bg);
+    color: var(--danger);
+}
+
+/* L'enveloppe qui porte l'infobulle d'une pastille : en flex, elle prend la
+   hauteur de la pastille plutôt que celle de la ligne. */
+.badgeWrap {
+    display: inline-flex;
+}
+
+.srOnly {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+}
+
+.mono {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    overflow-wrap: anywhere;
+}
+
+.linkButton {
+    align-self: flex-start;
+    padding: 0;
+    background: none;
+    border: none;
+    color: var(--accent);
+    font: inherit;
+    font-size: 0.78rem;
+    cursor: pointer;
+}
+
+.linkButton:hover {
+    text-decoration: underline;
+}
+
+/* ------------------------------------------------------------- la liste */
+
+.list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    margin: 0;
+    padding: 0 0 var(--space-md);
+    list-style: none;
+}
+
+/* Ni ombre ni décalage au survol : la popup rogne ce qui sort d'une rangée. */
+.row {
+    display: flex;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    background: var(--surface-widget);
+    transition: border-color var(--transition-fast);
+}
+
+.row:hover {
+    border-color: var(--glass-border-strong);
+}
+
+.rowBody {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    color: inherit;
+    cursor: pointer;
+}
+
+.rowBody:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+    border-radius: var(--radius-lg);
+}
+
+.rowMain {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.rowName {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-xs) var(--space-sm);
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 1rem;
+}
+
+.rowTitle {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.rowFoot {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+.rowError {
+    margin: 0;
+    overflow: hidden;
+    color: var(--danger);
+    font-size: 0.75rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* La colonne que l'œil suit en parcourant la liste : au même endroit d'une rangée à l'autre. */
+.rowStats {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: center;
+    min-width: 96px;
+}
+
+.rowValue {
+    color: var(--text-primary);
+    font-size: 1.35rem;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
+}
+
+.rowLabel {
+    color: var(--text-muted);
+    font-size: 0.7rem;
+}
+
+.rowDelta {
+    margin-top: 2px;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.rowDelta[data-tone='good'] {
+    color: var(--success);
+}
+
+.rowDelta[data-tone='bad'] {
+    color: var(--danger);
+}
+
+.rating {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+.ratingStar {
+    width: 12px;
+    color: var(--warning);
+}
+
+.ratingStore {
+    color: var(--text-muted);
+}
+
+/* ------------------------------------------------------- les puces de store */
+
+.chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+}
+
+.chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 8px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-subtle);
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+    white-space: nowrap;
+}
+
+.chip[data-tone='success'] {
+    background: var(--success-bg);
+    color: var(--success);
+}
+
+.chip[data-tone='warning'] {
+    background: var(--warning-bg);
+    color: var(--warning);
+}
+
+.chip[data-tone='danger'] {
+    background: var(--danger-bg);
+    color: var(--danger);
+}
+
+.chip[data-tone='accent'] {
+    background: var(--accent-bg);
+    color: var(--accent);
+}
+
+.chipIcon {
+    width: 12px;
+}
+
+.chipNone {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+}
+
+/* ------------------------------------------------------------- la fiche */
+
+/* L'en-tête et les onglets dans le même bandeau collant : le trait des onglets en borde le bas. */
+.sheetSticky {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    padding-bottom: 0;
+}
+
+.sheetHeader {
+    row-gap: var(--space-sm);
+}
+
+.detailHead {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    min-width: 0;
+}
+
+.back {
+    flex: none;
+}
+
+.backLabel {
+    white-space: nowrap;
+}
+
+.ident {
+    flex: 1;
+    min-width: 0;
+}
+
+.tabs {
+    display: flex;
+    gap: var(--space-xs);
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.tab,
+.tabActive {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    margin-bottom: -1px;
+    padding: var(--space-sm) var(--space-md);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-secondary);
+    font: inherit;
+    cursor: pointer;
+    transition: color var(--transition-fast);
+}
+
+.tab:hover {
+    color: var(--text-primary);
+}
+
+.tabActive {
+    border-bottom-color: var(--accent);
+    color: var(--accent);
+}
+
+.tabIcon {
+    width: 16px;
+}
+
+/* À l'étroit, le retour garde sa flèche et l'identité passe dessous, sur toute
+   la largeur ; les onglets se partagent la ligne et gardent leurs mots. */
+@container appstores (max-width: 560px) {
+    .backLabel {
+        display: none;
+    }
+
+    .sheetHeader {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        grid-template-areas:
+            'back  actions'
+            'ident ident';
+        align-items: center;
+        gap: var(--space-sm);
+    }
+
+    .sheetHeader .detailHead {
+        display: contents;
+    }
+
+    .sheetHeader .back {
+        grid-area: back;
+    }
+
+    .sheetHeader .ident {
+        grid-area: ident;
+    }
+
+    .sheetHeader .actions {
+        grid-area: actions;
+        justify-content: flex-end;
+    }
+
+    .heading {
+        font-size: 1.1rem;
+    }
+
+    .tab,
+    .tabActive {
+        flex: 1;
+        justify-content: center;
+        padding: var(--space-sm);
+    }
+
+    /* La règle globale `.icon` a la même spécificité et passe après celle-ci. */
+    .tab .tabIcon,
+    .tabActive .tabIcon {
+        display: none;
+    }
+
+    .rowStats {
+        min-width: 72px;
+    }
+}
+
+.usage {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.sectionTitle {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.usageList {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.usageItem {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    max-width: 320px;
+    padding: var(--space-xs) var(--space-sm);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-pill);
+    background: var(--surface-widget);
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition:
+        border-color var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.usageItem:hover {
+    border-color: var(--accent);
+    color: var(--text-primary);
+}
+
+.usageName {
+    overflow: hidden;
+    color: var(--text-primary);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.status {
+    padding: 2px 10px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-subtle);
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+    font-weight: 600;
+}
+
+.status[data-status='active'] {
+    color: var(--success);
+}
+
+.status[data-status='done'] {
+    color: var(--accent);
+}
+
+.status[data-status='paused'] {
+    color: var(--warning);
+}
+
+/* ----------------------------------------------------- les blocs de mesure */
+
+.block {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    min-width: 0;
+    padding: var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    background: var(--surface-widget);
+}
+
+.blockHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm) var(--space-md);
+    flex-wrap: wrap;
+}
+
+.blockTitle {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-xs) var(--space-sm);
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+.blockTitleNote {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    font-weight: 400;
+}
+
+.blockHint {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    line-height: 1.5;
+}
+
+.blockEmpty {
+    margin: 0;
+    padding: var(--space-sm) 0;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
+.until {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}
+
+/* Une autre période en route : la précédente reste lisible, atténuée par un
+   filtre, jamais par `opacity`, que les surfaces animées possèdent. */
+.measure {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    transition: filter var(--transition-normal);
+}
+
+.measure[data-stale] {
+    filter: opacity(0.5);
+}
+
+.capability {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-xs);
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    background: var(--warning-bg);
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    line-height: 1.5;
+}
+
+.capability p {
+    margin: 0;
+}
+
+/* Le bandeau des chiffres : des tuiles à largeur égale, qui se replient en
+   grille à l'étroit plutôt que de se comprimer jusqu'à l'illisible. */
+.band {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: var(--space-sm);
+    margin: 0;
+}
+
+.bandTile {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle);
+    /* Chaque tuile porte sa définition en `title` : le curseur dit qu'il y a quelque chose à survoler. */
+    cursor: help;
+}
+
+.bandLabel {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.bandValue {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 1.4rem;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+}
+
+.bandDelta {
+    color: var(--text-muted);
+    font-size: 0.74rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.bandDelta[data-tone='good'] {
+    color: var(--success);
+}
+
+.bandDelta[data-tone='bad'] {
+    color: var(--danger);
+}
+
+.bandNote {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.74rem;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------ les courbes */
+
+/* Un store garde sa teinte partout ; ce qui n'est pas un store prend l'accent. */
+.chart {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    min-width: 0;
+    margin: 0;
+}
+
+.chartTitle {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.chartSvg {
+    display: block;
+    width: 100%;
+    height: auto;
+    overflow: visible;
+}
+
+.chartLine {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.chartLine[data-series='apple'] {
+    stroke: var(--palette-blue);
+}
+
+.chartLine[data-series='google'] {
+    stroke: var(--palette-green);
+}
+
+.chartDot {
+    fill: var(--accent);
+}
+
+.chartDot[data-series='apple'] {
+    fill: var(--palette-blue);
+}
+
+.chartDot[data-series='google'] {
+    fill: var(--palette-green);
+}
+
+.chartStop {
+    stop-color: var(--accent);
+}
+
+.chartStop[data-series='apple'] {
+    stop-color: var(--palette-blue);
+}
+
+.chartStop[data-series='google'] {
+    stop-color: var(--palette-green);
+}
+
+.chartTick {
+    fill: var(--text-muted);
+    font-size: 11px;
+}
+
+.chartCursor {
+    stroke: var(--glass-border-strong);
+    stroke-width: 1;
+}
+
+.chartThreshold {
+    stroke: var(--warning);
+    stroke-width: 1.5;
+    stroke-dasharray: 6 4;
+}
+
+.chartLegend {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-xs) var(--space-md);
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+}
+
+.legendItem {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    font-variant-numeric: tabular-nums;
+}
+
+.legendSwatch {
+    width: 12px;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--accent);
+}
+
+.legendSwatch[data-series='apple'] {
+    background: var(--palette-blue);
+}
+
+.legendSwatch[data-series='google'] {
+    background: var(--palette-green);
+}
+
+.legendThreshold {
+    width: 14px;
+    border-top: 2px dashed var(--warning);
+}
+
+.legendLabel {
+    color: var(--text-muted);
+}
+
+.legendValue {
+    color: var(--text-primary);
+}
+
+.legendWhen {
+    margin-left: auto;
+    color: var(--text-muted);
+}
+
+/* ------------------------------------------------------------ les versions */
+
+.versionList {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.versionRow {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    padding: var(--space-xs) 0;
+    border-bottom: 1px solid var(--glass-border);
+    font-size: 0.85rem;
+}
+
+.versionRow:last-child {
+    border-bottom: none;
+}
+
+.versionName {
+    min-width: 4rem;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+}
+
+.versionSince {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+}
+
+/* ---------------------------------------------------------------- les avis */
+
+.stars {
+    display: inline-flex;
+    gap: 1px;
+}
+
+.starOn {
+    width: 14px;
+    color: var(--warning);
+}
+
+.starOff {
+    width: 14px;
+    color: var(--text-muted);
+}
+
+.starBars {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.starRow {
+    display: grid;
+    grid-template-columns: 2.4rem minmax(0, 1fr) 6.5rem;
+    align-items: center;
+    gap: var(--space-sm);
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}
+
+.starLabel {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-variant-numeric: tabular-nums;
+}
+
+.starGlyph {
+    width: 12px;
+    color: var(--warning);
+}
+
+.starTrack {
+    height: 8px;
+    overflow: hidden;
+    border-radius: var(--radius-pill);
+    background: var(--surface-subtle);
+}
+
+.starFill {
+    display: block;
+    height: 100%;
+    border-radius: var(--radius-pill);
+    background: var(--warning);
+    transition: width var(--transition-normal);
+}
+
+.starCount {
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+.starShare {
+    color: var(--text-muted);
+}
+
+.filters {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+}
+
+.ratingFilter {
+    min-width: 160px;
+}
+
+.reviewList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    transition: filter var(--transition-normal);
+}
+
+.reviewList[data-stale] {
+    filter: opacity(0.5);
+}
+
+.review {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle);
+}
+
+.reviewHead {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-xs) var(--space-sm);
+}
+
+.reviewMeta {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+.metaIcon {
+    width: 13px;
+}
+
+.reviewTitle {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+/* Les retours à la ligne de l'auteur sont gardés : un avis est un texte, pas une ligne. */
+.reviewBody {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.88rem;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+    white-space: pre-line;
+}
+
+.reviewAuthor {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+.reply {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: var(--space-xs);
+    padding: var(--space-sm) var(--space-md);
+    border-left: 2px solid var(--accent);
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+    background: var(--surface-widget);
+}
+
+.replyHead {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-xs) var(--space-sm);
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+.replyDate {
+    color: var(--text-muted);
+    font-weight: 400;
+}
+
+.replyBody {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+    white-space: pre-line;
+}
+
+.reviewActions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.more {
+    display: flex;
+    justify-content: center;
+}
+
+.replyQuote {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    margin: 0;
+    padding: var(--space-sm) var(--space-md);
+    border-left: 3px solid var(--glass-border-strong);
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+    background: var(--surface-subtle);
+}
+
+.counter {
+    align-self: flex-end;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.counter[data-over] {
+    color: var(--danger);
+    font-weight: 600;
+}
+
+/* --------------------------------------------------- revenus et stabilité */
+
+.storeRevenue,
+.stabilityMeasure {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.storeRevenue + .storeRevenue,
+.stabilityMeasure + .stabilityMeasure {
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--glass-border);
+}
+
+.stabilityAlert {
+    margin: 0;
+}
+
+/* ----------------------------------------------- les comptes et les fiches */
+
+.steps {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    margin: 0;
+    padding-left: 1.3rem;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    line-height: 1.55;
+}
+
+.steps li::marker {
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.copyRow {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+    margin-top: var(--space-xs);
+}
+
+.fileLoaded {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    color: var(--success);
+    font-size: 0.85rem;
+}
+
+.fileLoaded .mono {
+    flex: 1;
+    min-width: 0;
+    color: var(--text-primary);
+}
+
+.checklist {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.checkItem {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+}
+
+.checkIcon {
+    width: 18px;
+    margin-top: 1px;
+    color: var(--text-muted);
+}
+
+.checkItem[data-state='ok'] .checkIcon {
+    color: var(--success);
+}
+
+.checkItem[data-state='missing'] .checkIcon {
+    color: var(--warning);
+}
+
+.checkText {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.checkLabel {
+    color: var(--text-primary);
+    font-size: 0.88rem;
+    font-weight: 600;
+}
+
+.checkNeed {
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    line-height: 1.45;
+}
+
+.storeBlock {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    padding: var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    background: var(--glass-bg-light);
+}
+
+.storeBlockLabel {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.storeBlockBody {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    padding-top: var(--space-sm);
+}
+
+.identityName {
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.identityMeta {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    overflow-wrap: anywhere;
+}
+
+/* ------------------------------------------------ une app dans un projet */
+
+.linked {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    min-width: 0;
+    padding: var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    background: var(--surface-widget);
+}
+
+.linkedHead {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-sm) var(--space-md);
+    flex-wrap: wrap;
+}
+
+.linkedIdent {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    min-width: 0;
+}
+
+.linkedTitle {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-xs) var(--space-sm);
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 1rem;
+}

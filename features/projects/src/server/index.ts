@@ -17,13 +17,12 @@ import { createProjectsUsageProvider } from './usageProvider';
 
 /**
  * L'entrée serveur du module. `createService` ne fait tourner aucune boucle : rien
- * de Projets ne travaille en fond. Il publie le contrat que les modules Bases de
- * données, Déploiement, Git et Audience lisent par `providers.get`
- * (`PROJECTS_USAGE_PROVIDER` : les projets qui relient un élément, la frise où
- * inscrire un déploiement, la version qui suit les releases d'un dépôt), et sert
- * les tableaux publics. Dans l'autre sens, Projets consomme leurs contrats
- * d'éléments (`*_ITEMS_PROVIDER`) : `exists` avant de poser une liaison, `labelOf`
- * pour nommer celles qui existent.
+ * de Projets ne travaille en fond. Il publie le contrat que les modules qu'un
+ * projet relie lisent par `providers.get` (`PROJECTS_USAGE_PROVIDER` : les projets
+ * qui relient un élément, la frise où inscrire un déploiement, la version qui suit
+ * les releases d'un dépôt), et sert les tableaux publics. Dans l'autre sens,
+ * Projets consomme leurs contrats d'éléments (`*_ITEMS_PROVIDER`) : `exists` avant
+ * de poser une liaison, `labelOf` pour nommer celles qui existent.
  *
  * `items` est ce que le partage sait des projets sans ouvrir la feature
  * (`Docs/SHARING.md`) ; `shareTier: 'perItem'` l'exige, le boot refuse un module qui
@@ -31,9 +30,8 @@ import { createProjectsUsageProvider } from './usageProvider';
  *
  * Les treize tables du module datent du socle et l'allowlist de
  * `deveye-feature.json` les dispense du préfixe `ft_projects_`. `uninstall.sql`
- * ne détruit que ce que le module possède vraiment, les tables de la vue
- * d'ensemble et de la page publique : le SQL de démontage ne peut pas toucher aux
- * tables historiques.
+ * ne détruit que ce que le module possède vraiment, ses tables `ft_projects_*` :
+ * le SQL de démontage ne peut pas toucher aux tables historiques.
  */
 export const serverEntry: FeatureServer<ProjectsRepo> = {
     createRepo,

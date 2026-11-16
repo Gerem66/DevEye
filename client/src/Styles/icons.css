@@ -441,3 +441,13 @@
     -webkit-mask-image: url(/icons/chat-outline.svg);
     mask-image: url(/icons/chat-outline.svg);
 }
+
+.icon.icon-appstores {
+    -webkit-mask-image: url(/icons/appstores.svg);
+    mask-image: url(/icons/appstores.svg);
+}
+
+.icon.icon-google-play {
+    -webkit-mask-image: url(/icons/google-play.svg);
+    mask-image: url(/icons/google-play.svg);
+}

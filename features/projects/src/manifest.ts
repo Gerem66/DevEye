@@ -26,7 +26,8 @@ export const manifest = {
         { to: 'audience', what: "suit les sites qu'il produit" },
         { to: 'uptime', what: "suit les services qu'il fait tourner" },
         { to: 'x-hosting', what: 'rattache ses dossiers de fichiers' },
-        { to: 'whiteboard', what: 'rattache ses schémas et ses maquettes' }
+        { to: 'whiteboard', what: 'rattache ses schémas et ses maquettes' },
+        { to: 'appstores', what: "suit les apps qu'il publie" }
     ],
     /**
      * Le détail ouvert (tableau, frise, liaisons, historique) tient dans une seule
@@ -102,7 +103,7 @@ export const manifest = {
             key: 'links',
             label: 'Gérer les liaisons',
             description:
-                'Rattacher le projet à un dépôt, une cible de mise en production, une base, un site, un service surveillé, et l’en détacher.',
+                'Rattacher le projet à un dépôt, une cible de mise en production, une base, un site, un service surveillé, un dossier, un tableau blanc, une app, et l’en détacher.',
             type: 'toggle'
         },
         {

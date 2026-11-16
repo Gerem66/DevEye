@@ -99,6 +99,7 @@ gestes :
 | Hébergement      | parcourir, déposer (compté sur l'offre du domicile), renommer, déplacer, supprimer et télécharger des fichiers                                                                            | adresses, domaines, mot de passe, allure, nom et suppression du dossier                   |
 | Projets          | tout l'arbre (colonnes, cartes, assignation parmi les membres d'ici, jalons, dépendances, discussion, historique), profil, statut, archivage, version manuelle ; liaisons lues et nommées | changer de palier, version suivie d'une release, relier / délier, classer le portefeuille |
 | Tableau blanc    | dessiner en direct avec les participants des deux espaces, coller des images (comptées sur l'offre du domicile), changer le fond et le thème, renommer, dupliquer ici                     | supprimer                                                                                 |
+| Stores           | les chiffres, les notes, les avis, et les revenus avec le droit Revenus accordé ici                                                                                                       | réglages, **répondre aux avis**, synchroniser, supprimer (la clé vit chez lui)            |
 
 Le critère n'est pas le goût : un geste reste au domicile quand il **référence
 d'autres objets de l'espace d'origine** (une clé d'API, une destination, les
@@ -350,8 +351,9 @@ déplacement : retirer une projection (`share.set`) ou supprimer l'élément
 | Projets          | tout l'arbre                                         | ses liaisons, dont les cibles restent             |
 | Hébergement      | le dossier, ses fichiers et ses adresses             | leur domaine : elles reviennent à celle de DevEye |
 | Tableau blanc    | la scène, l'aperçu, les images (sans les rechiffrer) | la séance en cours, dont les participants sortent |
+| Stores           | l'app, ses fiches, ses chiffres, ses avis            | ses sources : la synchronisation s'arrête         |
 
-Un accès ou un jeton mis à `NULL` n'est pas une avarie : les deux features
+Un accès ou un jeton mis à `NULL` n'est pas une avarie : ces features
 savent dire « sans accès », et en rattacher un est un geste du propriétaire, pas
 un effet de bord d'un déplacement.
 
@@ -471,8 +473,11 @@ liront la copie.
 
 ### Qui se copie
 
-Neuf des modules qui se déplacent se copient aussi : Audience, Bases de données,
-Déploiements, Git, Mail, Notes, Projets, Tableau blanc, Uptime. **Pas les
+Dix des modules qui se déplacent se copient aussi : Audience, Bases de données,
+Déploiements, Git, Mail, Notes, Projets, Stores, Tableau blanc, Uptime. Stores
+ne copie que l'app et ses fiches : ses chiffres et ses revenus restent hors de
+l'arbre, car une copie passe par qui sait lire l'app, sans exiger le droit
+Revenus, et ses avis se relisent chez les stores. **Pas les
 Appareils** : un appareil est une machine reliée par le jeton de son agent, qui
 ne parle qu'à un serveur ; il se partage déjà entre espaces, et vers une autre
 instance il s'enrôle en plus, par une instance nommée de son agent

@@ -1,4 +1,5 @@
 import type {
+    ProjectAppStoresLinkRow,
     ProjectAudienceLinkRow,
     ProjectDatabaseLinkRow,
     ProjectDeployLinkRow,
@@ -20,16 +21,17 @@ export interface ProjectUsageRow {
 
 /**
  * Les objets d'espace rattachés à un projet : services surveillés, bases de données,
- * cibles de déploiement, dépôts git, sites suivis, dossiers d'Hébergement et tableaux
- * blancs. Seul l'identifiant de la cible est stocké, rien d'identifiant donc rien à
- * chiffrer, et la cible garde ses propres droits : c'est la feature visée qui tranche. Non exclusif dans les deux sens, ce
- * sont des objets d'espace et non des propriétés d'un projet.
+ * cibles de déploiement, dépôts git, sites suivis, dossiers d'Hébergement, tableaux
+ * blancs et apps des Stores. Seul l'identifiant de la cible est stocké, rien
+ * d'identifiant donc rien à chiffrer, et la cible garde ses propres droits : c'est la
+ * feature visée qui tranche. Non exclusif dans les deux sens, ce sont des objets
+ * d'espace et non des propriétés d'un projet.
  *
- * Les sept tables sont celles de Projets, pas des modules visés : ceux-ci n'en
+ * Les huit tables sont celles de Projets, pas des modules visés : ceux-ci n'en
  * lisent aucune, Projets ne lit les leurs que pour l'ordre d'affichage, et ce qu'ils
  * ont besoin de savoir des projets leur est offert par `PROJECTS_USAGE_PROVIDER`.
  *
- * Une même forme pour les sept familles : `list*Ids` rend les identifiants dans
+ * Une même forme pour les huit familles : `list*Ids` rend les identifiants dans
  * l'ordre d'affichage de la feature visée, `list*Usage` les projets qui relient un
  * élément (titre encore chiffré), `count*Links` une entrée par élément relié de
  * l'espace, un élément absent valant zéro, `unlinkAll*` sert la conversion d'un
@@ -99,6 +101,15 @@ export interface ProjectLinksRepo {
     detachBoard(boardId: number, workspaceId: number): Promise<number>;
     listBoardUsage(boardId: number, workspaceId: number): Promise<ProjectUsageRow[]>;
     countBoardLinks(workspaceId: number): Promise<Map<number, number>>;
+
+    // -- liaison projet → app des Stores ----------------------------------
+    listAppIds(projectId: number, workspaceId: number): Promise<number[]>;
+    linkApp(projectId: number, workspaceId: number, appId: number): Promise<void>;
+    unlinkApp(projectId: number, workspaceId: number, appId: number): Promise<boolean>;
+    unlinkAllApps(projectId: number, workspaceId: number): Promise<void>;
+    detachApp(appId: number, workspaceId: number): Promise<number>;
+    listAppUsage(appId: number, workspaceId: number): Promise<ProjectUsageRow[]>;
+    countAppLinks(workspaceId: number): Promise<Map<number, number>>;
 }
 
 export function projectLinksRepo(q: SdkQueryable): ProjectLinksRepo {
@@ -544,6 +555,67 @@ export function projectLinksRepo(q: SdkQueryable): ProjectLinksRepo {
                 [workspaceId]
             );
             return new Map(rows.map((row) => [Number(row.board_id), Number(row.n)]));
+        },
+
+        async listAppIds(projectId, workspaceId) {
+            // Dans l'ordre des liaisons, sans jointure : la table du module peut
+            // manquer s'il est désinstallé.
+            const rows = await q.query<{ app_id: number }>(
+                `SELECT app_id
+                   FROM ft_projects_appstores_links
+                  WHERE project_id = ? AND workspace_id = ?
+                  ORDER BY created ASC, app_id ASC`,
+                [projectId, workspaceId]
+            );
+            return rows.map((row) => Number(row.app_id));
+        },
+        async linkApp(projectId, workspaceId, appId) {
+            await q.execute(
+                `INSERT INTO ft_projects_appstores_links (project_id, app_id, workspace_id)
+                 VALUES (?, ?, ?)
+                 ON DUPLICATE KEY UPDATE workspace_id = VALUES(workspace_id)`,
+                [projectId, appId, workspaceId]
+            );
+        },
+        async unlinkApp(projectId, workspaceId, appId) {
+            const res = await q.execute(
+                'DELETE FROM ft_projects_appstores_links WHERE project_id = ? AND workspace_id = ? AND app_id = ?',
+                [projectId, workspaceId, appId]
+            );
+            return res.affectedRows > 0;
+        },
+        async unlinkAllApps(projectId, workspaceId) {
+            await q.execute('DELETE FROM ft_projects_appstores_links WHERE project_id = ? AND workspace_id = ?', [
+                projectId,
+                workspaceId
+            ]);
+        },
+        async listAppUsage(appId, workspaceId) {
+            return q.query<ProjectUsageRow>(
+                `SELECT p.id AS project_id, p.status, p.content
+                   FROM ft_projects_appstores_links l
+                   JOIN projects p ON p.id = l.project_id
+                  WHERE l.app_id = ? AND l.workspace_id = ? AND p.security_tier = 'open'
+                  ORDER BY p.sort_order ASC, p.id ASC`,
+                [appId, workspaceId]
+            );
+        },
+        async detachApp(appId, workspaceId) {
+            const res = await q.execute(
+                'DELETE FROM ft_projects_appstores_links WHERE app_id = ? AND workspace_id = ?',
+                [appId, workspaceId]
+            );
+            return res.affectedRows;
+        },
+        async countAppLinks(workspaceId) {
+            const rows = await q.query<Pick<ProjectAppStoresLinkRow, 'app_id'> & { n: number }>(
+                `SELECT app_id, COUNT(*) AS n
+                   FROM ft_projects_appstores_links
+                  WHERE workspace_id = ?
+                  GROUP BY app_id`,
+                [workspaceId]
+            );
+            return new Map(rows.map((row) => [Number(row.app_id), Number(row.n)]));
         }
     };
 }

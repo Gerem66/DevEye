@@ -1,0 +1,21 @@
+{
+  "name": "deveye-feature-appstores",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "description": "Stores : les téléchargements, notes, avis et revenus des apps sur l'App Store et Google Play, relevés avec les clés de l'utilisateur, et la réponse aux avis.",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./server": "./src/server/index.ts",
+    "./client": "./src/client/index.tsx",
+    "./package.json": "./package.json"
+  },
+  "peerDependencies": {
+    "@deveye/types": ">=0.26.1",
+    "react": "^19.0.0",
+    "zod": "^4.0.0"
+  }
+}

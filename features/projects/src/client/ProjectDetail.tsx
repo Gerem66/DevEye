@@ -38,6 +38,7 @@ import { Deploy } from './Deploy/Deploy';
 import { Uptime } from './Uptime/Uptime';
 import { Hosting } from './Hosting/Hosting';
 import { Whiteboards } from './Whiteboard/Whiteboards';
+import { AppStores } from './AppStores/AppStores';
 import { Overview } from './Dashboard/Overview';
 import { AddFeatureDialog } from './AddFeatureDialog';
 import { ProjectTabs } from './ProjectTabs';
@@ -73,7 +74,8 @@ const FEATURE_TAB_VIEWS: Record<ProjectFeatureTabId, ComponentType<{ project: Pr
     deploy: Deploy,
     uptime: Uptime,
     'x-hosting': Hosting,
-    whiteboard: Whiteboards
+    whiteboard: Whiteboards,
+    appstores: AppStores
 };
 
 export function ProjectDetail({ project, members, meUserId, onBack }: ProjectDetailProps) {

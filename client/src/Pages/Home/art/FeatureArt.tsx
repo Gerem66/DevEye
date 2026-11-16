@@ -46,6 +46,16 @@ function Card({ x, y, w, h, c = M, o = 0.22 }: { x: number; y: number; w: number
     return <rect x={x} y={y} width={w} height={h} rx='4' fill={c} opacity={o} />;
 }
 
+/** Une étoile à cinq branches, celle des notes. */
+function starPath(cx: number, cy: number, r: number): string {
+    const points = Array.from({ length: 10 }, (_, i) => {
+        const radius = i % 2 === 0 ? r : r * 0.45;
+        const angle = -Math.PI / 2 + (i * Math.PI) / 5;
+        return `${(cx + radius * Math.cos(angle)).toFixed(2)} ${(cy + radius * Math.sin(angle)).toFixed(2)}`;
+    });
+    return `M${points.join(' ')}Z`;
+}
+
 /**
  * Une fonctionnalité, ou l'un des deux autres genres de carte du marché : une
  * carte d'appareil sans vignette au milieu des autres se lirait comme cassée.
@@ -296,6 +306,20 @@ const ART: Record<ArtId, ReactNode> = {
             <path d='M110 62 120 50 128 54 142 26' stroke={A} {...stroke} />
             <circle cx='120' cy='50' r='2.8' fill={A} />
             <circle cx='142' cy='26' r='2.8' fill={A} />
+        </>
+    ),
+    // Une app, sa note en étoiles, et les téléchargements de ses deux stores sur une même courbe.
+    appstores: (
+        <>
+            <rect x='16' y='12' width='22' height='22' rx='6' fill={A} opacity='0.85' />
+            <Line x={46} y={14} w={44} c={A} o={0.85} />
+            {[50, 61, 72, 83, 94].map((cx, index) => (
+                <path key={cx} d={starPath(cx, 28, 4.6)} fill={index < 4 ? A : M} opacity={index < 4 ? 0.75 : 0.35} />
+            ))}
+            <line x1='16' y1='76' x2='144' y2='76' stroke={M} {...thin} />
+            <path d='M16 71 36 66 56 68 76 57 96 59 116 47 141 38' stroke={A} {...stroke} />
+            <path d='M16 74 36 72 56 72.5 76 67 96 68 116 62 141 58' stroke={M} {...thin} strokeDasharray='3 3' />
+            <circle cx='141' cy='38' r='3' fill={A} />
         </>
     ),
     // Un réseau de traces, et la loupe qui vient d'en isoler une.

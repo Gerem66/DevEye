@@ -137,6 +137,15 @@ export type ResourceKey =
     | 'shortlinks.reports'
     | 'whiteboard.count'
     | 'whiteboard.list'
+    | 'appstores.count'
+    | 'appstores.list'
+    | 'appstores.detail'
+    /** Les chiffres d'une app, relus à chaque passage du service qui a relevé du neuf. */
+    | 'appstores.stats'
+    /** Gardés à part : seule la permission Revenus les ouvre. */
+    | 'appstores.revenue'
+    | 'appstores.reviews'
+    | 'appstores.sources'
     /** Les clés d'un module externe (`<id>.<nom>`), déclarées par son manifest. */
     | ExternalResourceKey;
 
