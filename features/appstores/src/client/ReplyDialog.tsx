@@ -11,7 +11,7 @@ import {
 import { APPSTORES_REPLY_MAX_LENGTH, type AppStore, type AppStoresReview } from '../contracts/domain';
 
 import { api } from './api';
-import { formatCount, STORE_LABELS } from './format';
+import { formatCount, formatDate, STORE_LABELS } from './format';
 import { Stars } from './Stats/StarBars';
 import styles from './style.module.css';
 
@@ -99,7 +99,7 @@ export function ReplyDialog({ review, onClose, onReplied }: ReplyDialogProps) {
                         {shown.title && <p className={styles.reviewTitle}>{shown.title}</p>}
                         {shown.body && <p className={styles.reviewBody}>{shown.body}</p>}
                         <p className={styles.reviewAuthor}>
-                            {shown.author} · {STORE_LABELS[shown.store]}
+                            {shown.author} · {STORE_LABELS[shown.store]} · {formatDate(shown.createdAt)}
                         </p>
                     </blockquote>
 
