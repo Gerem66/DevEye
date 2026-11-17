@@ -42,8 +42,8 @@ type Drafts = Record<AppStore, ListingDraft | null>;
 const NO_DRAFTS: Drafts = { apple: null, google: null };
 
 /**
- * Suivre une app. Rien d'autre : une fois créée, elle se règle dans l'onglet
- * Général de sa fiche. Monté aussi par Projets, qui relie ce qui vient d'être
+ * Suivre une app. Rien d'autre : une fois créée, elle se règle dans les
+ * onglets Général et Stores de sa fiche. Monté aussi par Projets, qui relie ce qui vient d'être
  * créé. Une app sans store est admise : elle attend sa sortie.
  */
 export function AppDialog({ open, onClose, onSaved }: AppDialogProps) {

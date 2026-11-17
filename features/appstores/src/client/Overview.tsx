@@ -86,7 +86,7 @@ export function Overview({ app, store, sources, canWrite, range }: OverviewProps
                 {canSet && (
                     <FeatureSettingsButton
                         scope={settings}
-                        initialSection='general'
+                        initialSection='stores'
                         variant='primary'
                         label='Relier un store'
                     />
@@ -181,7 +181,7 @@ export function Overview({ app, store, sources, canWrite, range }: OverviewProps
                         {canSet && (
                             <FeatureSettingsButton
                                 scope={settings}
-                                initialSection='general'
+                                initialSection='stores'
                                 variant='link'
                                 label='Choisir un compte'
                             />

@@ -89,7 +89,7 @@ sa synchronisation restent chez elle, où vit sa source.
 | **Fiche, Revenus**     | par store et par devise, avec le droit Revenus                                                                                                                                  |
 | **Fiche, Stabilité**   | taux de plantage et de blocage perçus, avec les seuils de Google, pour une app sur Google Play                                                                                  |
 | **Réglages, Sources**  | les comptes de store, leurs capacités, leur état ; ajout pas à pas dans un dialogue empilé                                                                                      |
-| **Réglages d'une app** | onglet Général : nom, fiches de store et leur source, pays de la note Apple, relecture de l'année, suppression                                                                  |
+| **Réglages d'une app** | onglet Général : nom, suppression ; onglet Stores : fiches de store et leur source, pays de la note Apple, cadence de synchronisation, relecture de l'année                     |
 | **Onglet d'un projet** | les apps reliées, en version compacte de l'Aperçu, sans montant                                                                                                                 |
 
 La vue d'ensemble (`appstores.overview`, `overview.ts`) ne cumule que ce qui
@@ -165,7 +165,7 @@ requêtes en vol, puis attend le battement et chaque passe par source.
 Rien ne se synchronise à la main : les stores ne publient qu'une fois par jour,
 et une app ajoutée ou reliée réveille le service, qui la passe en premier.
 
-« Relire l'historique », dans l'onglet Général de l'app (`appstores.backfill`),
+« Relire l'historique », dans l'onglet Stores de l'app (`appstores.backfill`),
 relance le rattrapage d'un an sans rien effacer : Apple relit ses rapports du
 dernier jour relevé vers le passé, Google ses mois jusqu'au même mois de l'an
 dernier, `etag` oubliés. La première passe ouvre l'opération, les battements
@@ -236,26 +236,26 @@ montre combien de projets relient chacune, et la fiche les nomme.
 
 ## 6. Carte du code
 
-| Fichier                                                                | Rôle                                                                                           |
-| ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `src/manifest.ts`, `src/contracts/*`                                   | le manifest, les schémas et les commandes                                                      |
-| `src/server/index.ts`                                                  | l'entrée serveur : handlers, service, quotas, éléments, export, e2e                            |
-| `src/server/sources.ts`                                                | les comptes de store : ajout éprouvé, test, retrait                                            |
-| `src/server/apps.ts`                                                   | les apps : liste, fiche, ajout, réglages, suppression, synchronisation                         |
-| `src/server/stats.ts`, `src/server/days.ts`                            | les fenêtres, l'écart, les revenus, l'arithmétique des jours                                   |
-| `src/server/overview.ts`                                               | la vue d'ensemble de toutes les apps                                                           |
-| `src/server/reviews.ts`                                                | les avis et la réponse                                                                         |
-| `src/server/service.ts`, `src/server/notice.ts`                        | la synchronisation de fond, et les avis qu'elle envoie                                         |
-| `src/server/stores/*`                                                  | les clients d'Apple et de Google, les jetons                                                   |
-| `src/server/parse/*`                                                   | TSV, CSV (UTF-16 compris), zip                                                                 |
-| `src/server/copy.ts`, `move.ts`, `accountExport.ts`                    | partage, déplacement, copie, export                                                            |
-| `src/server/e2e.ts`                                                    | les parcours de la page Tests et débogage                                                      |
-| `src/client/AppStores.tsx`, `AppList.tsx`, `StoresOverview.tsx`        | l'accueil de la fonctionnalité, et sa vue d'ensemble                                           |
-| `src/client/AppDetail.tsx` et ses onglets                              | la fiche : `Overview`, `Reviews`, `Revenue`, `Stability`                                       |
-| `src/client/SourcesPanel.tsx`, `SourceDialog.tsx`                      | l'onglet Sources                                                                               |
-| `src/client/AppGeneralPanel.tsx`, `AppDialog.tsx`, `ListingPicker.tsx` | l'ajout et l'onglet Général                                                                    |
-| `src/client/Stats/*`                                                   | bandeau, courbe en SVG écrit à la main, répartition des étoiles, pays en liste et sur la carte |
-| `src/client/provider.tsx`                                              | le contrat client avec Projets                                                                 |
+| Fichier                                                                                                       | Rôle                                                                                           |
+| ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `src/manifest.ts`, `src/contracts/*`                                                                          | le manifest, les schémas et les commandes                                                      |
+| `src/server/index.ts`                                                                                         | l'entrée serveur : handlers, service, quotas, éléments, export, e2e                            |
+| `src/server/sources.ts`                                                                                       | les comptes de store : ajout éprouvé, test, retrait                                            |
+| `src/server/apps.ts`                                                                                          | les apps : liste, fiche, ajout, réglages, suppression, synchronisation                         |
+| `src/server/stats.ts`, `src/server/days.ts`                                                                   | les fenêtres, l'écart, les revenus, l'arithmétique des jours                                   |
+| `src/server/overview.ts`                                                                                      | la vue d'ensemble de toutes les apps                                                           |
+| `src/server/reviews.ts`                                                                                       | les avis et la réponse                                                                         |
+| `src/server/service.ts`, `src/server/notice.ts`                                                               | la synchronisation de fond, et les avis qu'elle envoie                                         |
+| `src/server/stores/*`                                                                                         | les clients d'Apple et de Google, les jetons                                                   |
+| `src/server/parse/*`                                                                                          | TSV, CSV (UTF-16 compris), zip                                                                 |
+| `src/server/copy.ts`, `move.ts`, `accountExport.ts`                                                           | partage, déplacement, copie, export                                                            |
+| `src/server/e2e.ts`                                                                                           | les parcours de la page Tests et débogage                                                      |
+| `src/client/AppStores.tsx`, `AppList.tsx`, `StoresOverview.tsx`                                               | l'accueil de la fonctionnalité, et sa vue d'ensemble                                           |
+| `src/client/AppDetail.tsx` et ses onglets                                                                     | la fiche : `Overview`, `Reviews`, `Revenue`, `Stability`                                       |
+| `src/client/SourcesPanel.tsx`, `SourceDialog.tsx`                                                             | l'onglet Sources                                                                               |
+| `src/client/AppGeneralPanel.tsx`, `ListingsPanel.tsx`, `appSettings.ts`, `AppDialog.tsx`, `ListingPicker.tsx` | l'ajout, et les onglets Général et Stores de l'app                                             |
+| `src/client/Stats/*`                                                                                          | bandeau, courbe en SVG écrit à la main, répartition des étoiles, pays en liste et sur la carte |
+| `src/client/provider.tsx`                                                                                     | le contrat client avec Projets                                                                 |
 
 ---
 

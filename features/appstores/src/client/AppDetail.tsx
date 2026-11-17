@@ -206,8 +206,8 @@ export function AppDetail({ app, usage, onBack }: AppDetailProps) {
                         </div>
                     </div>
                     <div className={styles.actions}>
-                        {/* Ses réglages, dont son nom, ses fiches de store et sa suppression
-                            (onglet Général). Supprimée ou déplacée depuis la coquille,
+                        {/* Ses réglages : son nom et sa suppression (Général), ses fiches de
+                            store et leur synchronisation (Stores). Supprimée ou déplacée depuis la coquille,
                             l'app n'est plus ici : la fiche revient à la liste. */}
                         <FeatureSettingsButton
                             scope={{ kind: 'item', feature: 'appstores', itemId, itemLabel: app.name }}

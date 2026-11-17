@@ -49,6 +49,6 @@ export const manifest = {
      * (nom, fiches de store, pays de la note, suppression) dans l'onglet Général
      * de sa fiche. Partage et Permissions viennent du descripteur.
      */
-    settings: { feature: ['sources'], item: ['general'] },
+    settings: { feature: ['sources'], item: ['general', { id: 'stores', label: 'Stores', icon: 'appstores' }] },
     commands: appStoresCommands
 } satisfies FeatureManifest;
