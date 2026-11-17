@@ -249,6 +249,15 @@
     min-width: 96px;
 }
 
+/* La valeur et ce qu'elle compte, sur la même ligne de base. */
+.rowFigure {
+    display: flex;
+    align-items: baseline;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 0 var(--space-xs);
+}
+
 .rowValue {
     color: var(--text-primary);
     font-size: 1.35rem;

@@ -92,6 +92,7 @@ declare const styles: {
     readonly rowBody: string;
     readonly rowDelta: string;
     readonly rowError: string;
+    readonly rowFigure: string;
     readonly rowFoot: string;
     readonly rowLabel: string;
     readonly rowMain: string;

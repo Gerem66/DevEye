@@ -69,8 +69,8 @@ function AppRow({ summary, outline, onOpen }: AppRowProps) {
                             </span>
                         )}
                         {app.planPaused && <PlanPausedBadge />}
+                        <StoreChips listings={listings} />
                     </p>
-                    <StoreChips listings={listings} />
                     <p className={styles.rowFoot}>
                         {rated.map((listing) => (
                             <span
@@ -99,8 +99,10 @@ function AppRow({ summary, outline, onOpen }: AppRowProps) {
                 </div>
 
                 <div className={styles.rowStats}>
-                    <span className={styles.rowValue}>{downloads === null ? MISSING : formatCount(downloads)}</span>
-                    <span className={styles.rowLabel}>téléchargements · 7 j</span>
+                    <span className={styles.rowFigure}>
+                        <span className={styles.rowValue}>{downloads === null ? MISSING : formatCount(downloads)}</span>
+                        <span className={styles.rowLabel}>téléchargements · 7 j</span>
+                    </span>
                     {change && (
                         <span
                             className={styles.rowDelta}
