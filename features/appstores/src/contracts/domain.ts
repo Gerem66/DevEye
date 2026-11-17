@@ -158,8 +158,6 @@ export const appStoresListingSchema = z.object({
     /** Le nom de l'app chez le store, tel que relevé au dernier passage. */
     storeName: z.string().nullable(),
     bundleId: z.string().nullable(),
-    /** L'adresse de l'icône sur les serveurs d'images du store ; `null` avant sa sortie. */
-    icon: z.string().nullable(),
     /** Les dernières versions, la plus récente d'abord ; chez Google, celles de la piste de production. */
     versions: z.array(appStoresVersionSchema),
     /** La note moyenne et son nombre de notes (Apple : dans le pays de référence). */
@@ -181,6 +179,8 @@ export const appStoresAppSchema = z.object({
     name: z.string(),
     /** Le pays dont la note App Store est lue : Apple n'en donne pas de mondiale. */
     ratingCountry: z.string(),
+    /** L'icône sur les serveurs d'images du store, celle de l'App Store d'abord ; `null` avant la sortie. */
+    icon: z.string().nullable(),
     listings: z.array(appStoresListingSchema),
     projectCount: z.number().int().nonnegative(),
     /** Cet élément vient d'un autre espace, qui le projette ici. */
@@ -365,6 +365,7 @@ export const appStoresOverviewSchema = appStoresStatsSchema.omit({ reviewStars: 
     apps: z.array(
         z.object({
             ...appRef,
+            icon: z.string().nullable(),
             downloads: z.number().int().nonnegative().nullable(),
             points: z.array(z.number().int().nonnegative().nullable())
         })

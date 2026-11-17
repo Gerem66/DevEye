@@ -14,7 +14,7 @@ import type { AppStoresAppSummary, AppStoresRange } from '../contracts/domain';
 import { api } from './api';
 import AppDialog from './AppDialog';
 import { formatCount, formatRating, MISSING, ON_STORE, plural, STORE_LABELS, STORE_ORDER } from './format';
-import { useCurveView } from './prefs';
+import { useStoresPrefs } from './prefs';
 import { downloadCurves, downloadsOf } from './Stats/downloads';
 import StatBand, { ratingChange, relativeChange, type StatTile } from './Stats/StatBand';
 import TrendChart from './Stats/TrendChart';
@@ -30,7 +30,7 @@ import styles from './style.module.css';
 const LINKED_RANGE: AppStoresRange = '30d';
 
 function LinkedApp({ appId, canWrite, onUnlink }: { appId: number; canWrite: boolean; onUnlink: () => void }) {
-    const view = useCurveView(false);
+    const view = useStoresPrefs('sheet').curveView;
     const detail = useResource(
         'appstores.detail',
         () => api.send('appstores.get', { appId }),

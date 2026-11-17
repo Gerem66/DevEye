@@ -1,6 +1,7 @@
-import { useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import type { AppStoresResolution } from '../../contracts/domain';
 
+import AppIcon from '../AppIcon';
 import { formatPointLabel, formatPointTitle } from '../format';
 import styles from '../style.module.css';
 
@@ -12,6 +13,9 @@ const H_COMPACT = 120;
 const PAD_BOTTOM = 22;
 /** Un pic collé au cadre se lit comme coupé. */
 const HEADROOM = 1.15;
+/** Le côté d'une icône au départ d'une courbe, et l'écart entre deux, en pixels. */
+const MARK = 20;
+const MARK_GAP = 4;
 
 export interface TrendSeries {
     /** Porté en `data-series` : un store garde sa teinte d'une courbe à l'autre. */
@@ -21,6 +25,8 @@ export interface TrendSeries {
     values: readonly (number | null)[];
     /** Ce que la légende dit hors survol : un total, une moyenne. */
     summary: string;
+    /** L'icône d'une app, à gauche du départ de sa courbe ; `null` pour une app qui n'en a pas encore. */
+    icon?: string | null;
 }
 
 interface TrendChartProps {
@@ -72,6 +78,23 @@ function axisTicks(bottom: number, top: number, whole: boolean): number[] {
     return ticks;
 }
 
+/**
+ * Les hauteurs des icônes, au plus près de celles voulues, sans chevauchement
+ * ni sortie de `[min, max]` : écartées vers le bas, puis remontées si la
+ * dernière déborde. `null` quand elles ne tiennent pas toutes.
+ */
+function spreadMarks(wanted: readonly number[], min: number, max: number, gap: number): number[] | null {
+    if (wanted.length === 0 || (wanted.length - 1) * gap > max - min) return null;
+    const order = wanted.map((at, index) => ({ at, index })).sort((a, b) => a.at - b.at);
+    const placed = order.map(({ at }) => Math.min(max, Math.max(min, at)));
+    for (let k = 1; k < placed.length; k++) placed[k] = Math.max(placed[k], placed[k - 1] + gap);
+    placed[placed.length - 1] = Math.min(placed[placed.length - 1], max);
+    for (let k = placed.length - 2; k >= 0; k--) placed[k] = Math.min(placed[k], placed[k + 1] - gap);
+    const out: number[] = [];
+    order.forEach(({ index }, k) => (out[index] = placed[k]));
+    return out;
+}
+
 /** Le rayon d'un angle, en unités du `viewBox` (environ 13 px sur un grand écran). */
 const CORNER = 8;
 
@@ -101,8 +124,10 @@ function roundedPath(points: readonly (readonly [number, number])[]): string {
 
 /**
  * Une courbe par série sur la fenêtre demandée. `viewBox` fixe : le SVG suit
- * son conteneur par mise à l'échelle, sans mesure ni recalcul. La légende
- * porte la valeur survolée plutôt qu'une info-bulle qui suivrait le pointeur.
+ * son conteneur par mise à l'échelle, sans recalcul. La légende porte la
+ * valeur survolée plutôt qu'une info-bulle qui suivrait le pointeur. Les
+ * icônes des apps, elles, gardent leur taille : elles se placent à gauche, à
+ * la hauteur mesurée du départ de leur courbe, et se taisent faute de place.
  */
 export function TrendChart({
     slots,
@@ -119,6 +144,17 @@ export function TrendChart({
     const [hover, setHover] = useState<number | null>(null);
     const H = compact ? H_COMPACT : H_FULL;
     const fillId = useId();
+    const svgRef = useRef<SVGSVGElement>(null);
+    const [svgHeight, setSvgHeight] = useState(0);
+    const marked = series.filter((s) => s.icon !== undefined);
+    const hasMarks = marked.length > 0;
+    useEffect(() => {
+        const svg = svgRef.current;
+        if (!svg || !hasMarks) return;
+        const observer = new ResizeObserver(([entry]) => setSvgHeight(entry.contentRect.height));
+        observer.observe(svg);
+        return () => observer.disconnect();
+    }, [hasMarks]);
 
     // Le zéro reste dans le cadre, et un jour négatif (des remboursements) passe dessous au lieu d'en sortir.
     const known = series.flatMap((s) => s.values.filter((value): value is number => value !== null));
@@ -142,6 +178,18 @@ export function TrendChart({
     // Une aire sous une seule série ; à deux, elles se brouilleraient l'une l'autre.
     const area = series.length === 1 ? series[0] : null;
 
+    const scale = svgHeight / H;
+    const starting = marked.flatMap((s) => {
+        const first = s.values.find((value): value is number => value !== null);
+        return first === undefined ? [] : [{ s, at: y(first) * scale }];
+    });
+    const tops = spreadMarks(
+        starting.map(({ at }) => at),
+        MARK / 2,
+        plotH * scale - MARK / 2,
+        MARK + MARK_GAP
+    );
+
     return (
         <figure className={styles.chart}>
             {(title || tools) && (
@@ -150,109 +198,138 @@ export function TrendChart({
                     {tools && <div className={styles.chartTools}>{tools}</div>}
                 </div>
             )}
-            <svg viewBox={`0 0 ${W} ${H}`} className={styles.chartSvg} role='img' aria-label={label}>
-                {ticks.map((value) => (
-                    <g key={`axis-${value}`}>
-                        <line x1={0} x2={W} y1={y(value)} y2={y(value)} className={styles.chartGrid} />
-                        <text x={0} y={y(value) - 4} className={styles.chartAxis}>
-                            {format(value)}
-                        </text>
-                    </g>
-                ))}
-
-                {area && (
-                    <defs>
-                        <linearGradient id={fillId} x1='0' y1='0' x2='0' y2='1'>
-                            <stop offset='0%' className={styles.chartStop} data-series={area.key} stopOpacity='0.26' />
-                            <stop offset='100%' className={styles.chartStop} data-series={area.key} stopOpacity='0' />
-                        </linearGradient>
-                    </defs>
+            <div className={styles.chartBody}>
+                {hasMarks && (
+                    // Les noms sont dans la légende : les icônes ne font que les montrer.
+                    <div className={styles.chartMarks} aria-hidden='true'>
+                        {tops &&
+                            starting.map(({ s }, k) => (
+                                <span
+                                    key={s.key}
+                                    className={styles.chartMark}
+                                    data-series={s.key}
+                                    style={{ top: tops[k] }}
+                                    title={s.label}
+                                >
+                                    <AppIcon src={s.icon ?? null} size='mark' />
+                                </span>
+                            ))}
+                    </div>
                 )}
+                <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} className={styles.chartSvg} role='img' aria-label={label}>
+                    {ticks.map((value) => (
+                        <g key={`axis-${value}`}>
+                            <line x1={0} x2={W} y1={y(value)} y2={y(value)} className={styles.chartGrid} />
+                            <text x={0} y={y(value) - 4} className={styles.chartAxis}>
+                                {format(value)}
+                            </text>
+                        </g>
+                    ))}
 
-                {area &&
-                    runsOf(area.values)
-                        .filter((run) => run.length > 1)
-                        .map((run) => (
-                            <path
-                                key={`area-${run[0]}`}
-                                d={`${pathOf(area.values, run)} L ${x(run[run.length - 1]).toFixed(1)} ${base.toFixed(1)} L ${x(run[0]).toFixed(1)} ${base.toFixed(1)} Z`}
-                                fill={`url(#${fillId})`}
-                            />
-                        ))}
+                    {area && (
+                        <defs>
+                            <linearGradient id={fillId} x1='0' y1='0' x2='0' y2='1'>
+                                <stop
+                                    offset='0%'
+                                    className={styles.chartStop}
+                                    data-series={area.key}
+                                    stopOpacity='0.26'
+                                />
+                                <stop
+                                    offset='100%'
+                                    className={styles.chartStop}
+                                    data-series={area.key}
+                                    stopOpacity='0'
+                                />
+                            </linearGradient>
+                        </defs>
+                    )}
 
-                {threshold && (
-                    <line
-                        x1={0}
-                        x2={W}
-                        y1={y(threshold.value)}
-                        y2={y(threshold.value)}
-                        className={styles.chartThreshold}
-                    />
-                )}
+                    {area &&
+                        runsOf(area.values)
+                            .filter((run) => run.length > 1)
+                            .map((run) => (
+                                <path
+                                    key={`area-${run[0]}`}
+                                    d={`${pathOf(area.values, run)} L ${x(run[run.length - 1]).toFixed(1)} ${base.toFixed(1)} L ${x(run[0]).toFixed(1)} ${base.toFixed(1)} Z`}
+                                    fill={`url(#${fillId})`}
+                                />
+                            ))}
 
-                {series.map((s) =>
-                    runsOf(s.values).map((run) =>
-                        run.length === 1 ? (
-                            <circle
-                                key={`${s.key}-${run[0]}`}
-                                cx={x(run[0])}
-                                cy={y(s.values[run[0]] ?? 0)}
-                                r={2.5}
-                                className={styles.chartDot}
-                                data-series={s.key}
-                            />
-                        ) : (
-                            <path
-                                key={`${s.key}-${run[0]}`}
-                                d={pathOf(s.values, run)}
-                                className={styles.chartLine}
-                                data-series={s.key}
-                            />
-                        )
-                    )
-                )}
+                    {threshold && (
+                        <line
+                            x1={0}
+                            x2={W}
+                            y1={y(threshold.value)}
+                            y2={y(threshold.value)}
+                            className={styles.chartThreshold}
+                        />
+                    )}
 
-                {slots.map((at, i) =>
-                    ticked(i) ? (
-                        <text key={at} x={x(i)} y={H - 6} className={styles.chartTick} textAnchor='middle'>
-                            {formatPointLabel(at)}
-                        </text>
-                    ) : null
-                )}
-
-                {hover !== null && (
-                    <>
-                        <line x1={x(hover)} x2={x(hover)} y1={0} y2={plotH} className={styles.chartCursor} />
-                        {series.map((s) => {
-                            const value = s.values[hover];
-                            return value === null || value === undefined ? null : (
+                    {series.map((s) =>
+                        runsOf(s.values).map((run) =>
+                            run.length === 1 ? (
                                 <circle
-                                    key={`hover-${s.key}`}
-                                    cx={x(hover)}
-                                    cy={y(value)}
-                                    r={3.5}
+                                    key={`${s.key}-${run[0]}`}
+                                    cx={x(run[0])}
+                                    cy={y(s.values[run[0]] ?? 0)}
+                                    r={2.5}
                                     className={styles.chartDot}
                                     data-series={s.key}
                                 />
-                            );
-                        })}
-                    </>
-                )}
+                            ) : (
+                                <path
+                                    key={`${s.key}-${run[0]}`}
+                                    d={pathOf(s.values, run)}
+                                    className={styles.chartLine}
+                                    data-series={s.key}
+                                />
+                            )
+                        )
+                    )}
 
-                {/* Une bande par seau : le survol vise une colonne entière, pas un point de deux pixels. */}
-                {slots.map((at, i) => (
-                    <rect
-                        key={`hit-${at}`}
-                        x={i * step}
-                        y={0}
-                        width={step}
-                        height={plotH}
-                        fill='transparent'
-                        onMouseEnter={() => setHover(i)}
-                        onMouseLeave={() => setHover(null)}
-                    />
-                ))}
-            </svg>
+                    {slots.map((at, i) =>
+                        ticked(i) ? (
+                            <text key={at} x={x(i)} y={H - 6} className={styles.chartTick} textAnchor='middle'>
+                                {formatPointLabel(at)}
+                            </text>
+                        ) : null
+                    )}
+
+                    {hover !== null && (
+                        <>
+                            <line x1={x(hover)} x2={x(hover)} y1={0} y2={plotH} className={styles.chartCursor} />
+                            {series.map((s) => {
+                                const value = s.values[hover];
+                                return value === null || value === undefined ? null : (
+                                    <circle
+                                        key={`hover-${s.key}`}
+                                        cx={x(hover)}
+                                        cy={y(value)}
+                                        r={3.5}
+                                        className={styles.chartDot}
+                                        data-series={s.key}
+                                    />
+                                );
+                            })}
+                        </>
+                    )}
+
+                    {/* Une bande par seau : le survol vise une colonne entière, pas un point de deux pixels. */}
+                    {slots.map((at, i) => (
+                        <rect
+                            key={`hit-${at}`}
+                            x={i * step}
+                            y={0}
+                            width={step}
+                            height={plotH}
+                            fill='transparent'
+                            onMouseEnter={() => setHover(i)}
+                            onMouseLeave={() => setHover(null)}
+                        />
+                    ))}
+                </svg>
+            </div>
 
             <figcaption className={styles.chartLegend}>
                 {series.map((s) => {

@@ -131,12 +131,12 @@ Les décisions d'écran qui méritent d'être connues :
   Aucun store n'expose la répartition de toutes les notes.
 - **Une courbe de téléchargements se lit au choix** : par store, en total, en
   total face à la période d'avant (en pointillés), en moyenne sur 7 jours, ou
-  par app sur la vue d'ensemble (les cinq premières, puis les autres). Sur un
-  seul store, « par store » et « total » ne font qu'un bouton, à son nom. Le choix
-  vaut pour toutes les courbes de Stores et se retient dans le navigateur
-  (`prefs.ts`) ; le récapitulatif le suit sans le régler. La période et le
-  store choisis se retiennent de même, communs aux fiches et à la vue
-  d'ensemble.
+  par app sur la vue d'ensemble (les cinq premières, puis les autres, chacune
+  marquée de son icône à gauche du départ de sa courbe quand la place le
+  permet). Sur un seul store, « par store » et « total » ne font qu'un bouton, à
+  son nom. Ce choix, la période et le store se retiennent dans le navigateur
+  (`prefs.ts`), en deux jeux : l'un commun à toutes les fiches d'apps, l'autre
+  à la vue d'ensemble, que son récapitulatif sur l'accueil suit sans le régler.
 - **Les revenus ne se somment jamais** entre stores ni entre devises : Apple
   rend des produits nets, Google des ventes estimées avant sa commission.
 - Fenêtres de 7, 30, 90 et 365 jours, une seule pour toute la fiche, à droite

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import {
+    APP_STORES,
     appStoresAppSchema,
     APPSTORES_CAPABILITIES,
     type AppStore,
@@ -192,7 +193,6 @@ export async function toListing(cipher: SdkCipher, row: ListingRow): Promise<App
         externalId: content?.externalId ?? '',
         storeName: content?.storeName ?? null,
         bundleId: content?.bundleId ?? null,
-        icon: typeof state.icon === 'string' ? state.icon : null,
         versions: state.versions ?? [],
         rating: typeof state.rating === 'number' ? Math.min(5, Math.max(0, state.rating)) : null,
         ratingCount: typeof state.ratingCount === 'number' ? state.ratingCount : null,
@@ -203,6 +203,16 @@ export async function toListing(cipher: SdkCipher, row: ListingRow): Promise<App
         // Les chiffres ne se disent relevés qu'une fois le rattrapage fini : jusque-là, la colonne reste vide.
         syncing: row.source_id !== null && row.metrics_synced_at === null
     };
+}
+
+/** L'icône d'une app, celle de l'App Store d'abord ; `null` avant sa sortie. */
+export async function iconOf(cipher: SdkCipher, listings: readonly ListingRow[]): Promise<string | null> {
+    for (const store of APP_STORES) {
+        const listing = listings.find((l) => l.store === store);
+        const state = listing ? await readJson<ListingState>(cipher, listing.state) : null;
+        if (typeof state?.icon === 'string') return state.icon;
+    }
+    return null;
 }
 
 export async function toApp(
@@ -217,6 +227,7 @@ export async function toApp(
         id: row.id,
         name: stored.name,
         ratingCountry: stored.ratingCountry,
+        icon: await iconOf(cipher, mine),
         listings: await Promise.all(mine.map((l) => toListing(cipher, l))),
         projectCount: extra.projectCount,
         foreign: extra.foreign,

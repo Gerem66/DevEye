@@ -68,7 +68,7 @@ function AppRow({ summary, outline, onOpen, onRetry }: AppRowProps) {
                     }
                 }}
             >
-                <AppIcon app={app} />
+                <AppIcon src={app.icon} />
                 <div className={styles.rowMain}>
                     <p className={styles.rowName}>
                         <span className={styles.rowTitle}>{app.name}</span>

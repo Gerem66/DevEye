@@ -2,7 +2,7 @@ import { SegmentedControl } from 'deveye-sdk-client';
 import type { AppStore } from '../../contracts/domain';
 
 import { ON_STORE, STORE_LABELS } from '../format';
-import { setStoresPrefs, useCurveView, type CurveView } from '../prefs';
+import { setStoresPrefs, useStoresPrefs, type CurveView, type PrefsScope } from '../prefs';
 import { curveViewOf } from './downloads';
 
 const OPTIONS: readonly { value: CurveView; label: string; title: string }[] = [
@@ -18,16 +18,16 @@ const OPTIONS: readonly { value: CurveView; label: string; title: string }[] = [
 ];
 
 /**
- * Le choix de ce que montrent les courbes de téléchargements. Un seul choix,
- * retenu dans le navigateur : il vaut pour toutes les courbes de Stores. Sur
- * un seul store, « par store » et « total » tracent la même courbe : un bouton
- * au nom du store les remplace.
+ * Le choix de ce que montrent les courbes de téléchargements, retenu dans le
+ * navigateur pour toutes les courbes de son `scope`. « Par app » n'existe que
+ * dans la vue d'ensemble. Sur un seul store, « par store » et « total » tracent
+ * la même courbe : un bouton au nom du store les remplace.
  */
-export function CurveViewBar({ severalApps, stores }: { severalApps: boolean; stores: readonly AppStore[] }) {
-    const view = curveViewOf(useCurveView(severalApps), stores);
+export function CurveViewBar({ scope, stores }: { scope: PrefsScope; stores: readonly AppStore[] }) {
+    const view = curveViewOf(useStoresPrefs(scope).curveView, stores);
     const single = stores.length === 1 ? stores[0] : null;
     const options = OPTIONS.filter(
-        (option) => (severalApps || option.value !== 'apps') && (single === null || option.value !== 'total')
+        (option) => (scope === 'overview' || option.value !== 'apps') && (single === null || option.value !== 'total')
     ).map((option) =>
         single !== null && option.value === 'stores'
             ? { ...option, label: STORE_LABELS[single], title: `Les téléchargements ${ON_STORE[single]}` }
@@ -37,7 +37,7 @@ export function CurveViewBar({ severalApps, stores }: { severalApps: boolean; st
         <SegmentedControl
             value={view}
             options={options}
-            onChange={(next) => setStoresPrefs({ curveView: next })}
+            onChange={(next) => setStoresPrefs(scope, { curveView: next })}
             aria-label='Courbes affichées'
         />
     );

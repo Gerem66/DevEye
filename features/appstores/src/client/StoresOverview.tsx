@@ -22,7 +22,7 @@ import ReplyDialog from './ReplyDialog';
 import { REVENUE_HINT, RevenueTotals, storeTotals } from './Revenue';
 import { ReviewCard } from './Reviews';
 import CountriesPanel from './Stats/CountriesPanel';
-import { setStoresPrefs, useCurveView, useStoresPrefs } from './prefs';
+import { setStoresPrefs, useStoresPrefs } from './prefs';
 import CurveViewBar from './Stats/CurveViewBar';
 import { downloadCurves, downloadsOf } from './Stats/downloads';
 import RangeBar from './Stats/RangeBar';
@@ -49,10 +49,9 @@ const countOrMissing = (value: number | null) => (value === null ? MISSING : for
  */
 export function StoresOverview({ stores, canWrite, onOpen, onBack }: StoresOverviewProps) {
     const [replying, setReplying] = useState<AppStoresReview | null>(null);
-    const { range, store: chosenStore } = useStoresPrefs();
+    const { range, store: chosenStore, curveView: view } = useStoresPrefs('overview');
     const store = chosenStore === 'all' || !stores.includes(chosenStore) ? null : chosenStore;
     useSubView('overview');
-    const view = useCurveView(true);
 
     const { data: overview, error } = useResource(
         'appstores.stats',
@@ -93,11 +92,11 @@ export function StoresOverview({ stores, canWrite, onOpen, onBack }: StoresOverv
                             { value: 'all', label: 'Tous' },
                             ...stores.map((entry) => ({ value: entry, label: STORE_LABELS[entry] }))
                         ]}
-                        onChange={(next) => setStoresPrefs({ store: next })}
+                        onChange={(next) => setStoresPrefs('overview', { store: next })}
                         aria-label='Store'
                     />
                 )}
-                <RangeBar value={range} onChange={(next) => setStoresPrefs({ range: next })} />
+                <RangeBar value={range} onChange={(next) => setStoresPrefs('overview', { range: next })} />
             </div>
         </StickyHeader>
     );
@@ -185,7 +184,7 @@ export function StoresOverview({ stores, canWrite, onOpen, onBack }: StoresOverv
                     {overview.dataUntil !== null && (
                         <TrendChart
                             title='Téléchargements'
-                            tools={<CurveViewBar severalApps stores={shown} />}
+                            tools={<CurveViewBar scope='overview' stores={shown} />}
                             slots={slots}
                             resolution={overview.resolution}
                             series={series}

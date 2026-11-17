@@ -5,6 +5,7 @@ declare const styles: {
     readonly alertRow: string;
     readonly appIcon: string;
     readonly appIconLarge: string;
+    readonly appIconMark: string;
     readonly appstoresSyncStrip: string;
     readonly back: string;
     readonly backLabel: string;
@@ -24,12 +25,15 @@ declare const styles: {
     readonly capability: string;
     readonly chart: string;
     readonly chartAxis: string;
+    readonly chartBody: string;
     readonly chartCursor: string;
     readonly chartDot: string;
     readonly chartGrid: string;
     readonly chartHead: string;
     readonly chartLegend: string;
     readonly chartLine: string;
+    readonly chartMark: string;
+    readonly chartMarks: string;
     readonly chartStop: string;
     readonly chartSvg: string;
     readonly chartThreshold: string;

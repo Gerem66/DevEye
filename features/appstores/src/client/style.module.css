@@ -315,6 +315,17 @@
     height: 48px;
 }
 
+.appIconMark {
+    width: 20px;
+    height: 20px;
+    border: none;
+}
+
+/* Deux classes : `.icon` des styles globaux, chargés après ceux des modules, l'emporterait. */
+.appIconMark :global(.icon) {
+    width: 12px;
+}
+
 .rowMain {
     flex: 1;
     min-width: 0;
@@ -625,6 +636,11 @@
         font-size: 1.1rem;
     }
 
+    /* Les icônes d'apps n'y tiendraient pas à côté des courbes : la légende les nomme. */
+    .chartMarks {
+        display: none;
+    }
+
     .tabs {
         flex: 1 1 100%;
     }
@@ -919,11 +935,33 @@
     font-weight: 600;
 }
 
+.chartBody {
+    display: flex;
+    gap: var(--space-sm);
+}
+
 .chartSvg {
     display: block;
+    flex: 1;
+    min-width: 0;
     width: 100%;
     height: auto;
     overflow: visible;
+}
+
+/* La gouttière des icônes d'apps : chacune au départ de sa courbe, cerclée de sa teinte. */
+.chartMarks {
+    position: relative;
+    flex: 0 0 20px;
+}
+
+.chartMark {
+    position: absolute;
+    left: 0;
+    display: flex;
+    border-radius: 22%;
+    box-shadow: 0 0 0 2px var(--series, var(--accent));
+    transform: translateY(-50%);
 }
 
 .chartLine {
@@ -1029,30 +1067,35 @@
    autres apps et la période d'avant en retrait, celle-ci en pointillés. */
 .chartLine[data-series='rank0'],
 .chartDot[data-series='rank0'],
+.chartMark[data-series='rank0'],
 .legendSwatch[data-series='rank0'] {
     --series: var(--palette-indigo);
 }
 
 .chartLine[data-series='rank1'],
 .chartDot[data-series='rank1'],
+.chartMark[data-series='rank1'],
 .legendSwatch[data-series='rank1'] {
     --series: var(--palette-orange);
 }
 
 .chartLine[data-series='rank2'],
 .chartDot[data-series='rank2'],
+.chartMark[data-series='rank2'],
 .legendSwatch[data-series='rank2'] {
     --series: var(--palette-pink);
 }
 
 .chartLine[data-series='rank3'],
 .chartDot[data-series='rank3'],
+.chartMark[data-series='rank3'],
 .legendSwatch[data-series='rank3'] {
     --series: var(--palette-yellow);
 }
 
 .chartLine[data-series='rank4'],
 .chartDot[data-series='rank4'],
+.chartMark[data-series='rank4'],
 .legendSwatch[data-series='rank4'] {
     --series: var(--palette-purple);
 }

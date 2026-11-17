@@ -1,4 +1,10 @@
-import type { AppStore, AppStoresMetrics, AppStoresPoint, AppStoresStats } from '../../contracts/domain';
+import type {
+    AppStore,
+    AppStoresMetrics,
+    AppStoresOverview,
+    AppStoresPoint,
+    AppStoresStats
+} from '../../contracts/domain';
 
 import { absentValue, bucketStarts, formatCount, STORE_LABELS } from '../format';
 import type { CurveView } from '../prefs';
@@ -72,7 +78,7 @@ export function downloadCurves(
     stats: Window & Pick<AppStoresStats, 'previousPoints' | 'resolution'>,
     stores: readonly AppStore[],
     view: CurveView,
-    apps: readonly { id: number; name: string; downloads: number | null; points: readonly (number | null)[] }[] = []
+    apps: AppStoresOverview['apps'] = []
 ): { slots: number[]; series: TrendSeries[] } {
     const byStore = downloadSeries(stats, stores);
     const { slots } = byStore;
@@ -120,6 +126,7 @@ export function downloadCurves(
     const named = apps.slice(0, APPS_SHOWN).map((app, rank) => ({
         key: `rank${rank}`,
         label: app.name,
+        icon: app.icon,
         values: slots.map((_, index) => app.points[index] ?? null),
         summary: app.downloads === null ? 'non relevé' : `${formatCount(app.downloads)} au total`
     }));

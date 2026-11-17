@@ -1,19 +1,17 @@
 import { useState } from 'react';
-import type { AppStoresApp } from '../contracts/domain';
 
-import { STORE_ORDER } from './format';
 import styles from './style.module.css';
 
+const SIZES = { mark: styles.appIconMark, row: undefined, sheet: styles.appIconLarge } as const;
+
 /**
- * L'icône de l'app telle que ses stores la publient, l'App Store d'abord, et
- * un carré neutre avant sa sortie. L'image vient des serveurs d'Apple ou de
- * Google, sans leur dire d'où part la page.
+ * L'icône d'une app telle que ses stores la publient, et un carré neutre avant
+ * sa sortie. L'image vient des serveurs d'Apple ou de Google, sans leur dire
+ * d'où part la page.
  */
-export function AppIcon({ app, large = false }: { app: AppStoresApp; large?: boolean }) {
-    const src =
-        STORE_ORDER.map((store) => app.listings.find((listing) => listing.store === store)?.icon).find(Boolean) ?? null;
+export function AppIcon({ src, size = 'row' }: { src: string | null; size?: keyof typeof SIZES }) {
     const [broken, setBroken] = useState<string | null>(null);
-    const className = large ? `${styles.appIcon} ${styles.appIconLarge}` : styles.appIcon;
+    const className = [styles.appIcon, SIZES[size]].filter(Boolean).join(' ');
     if (src === null || src === broken) {
         return (
             <span className={className} aria-hidden='true'>

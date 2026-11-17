@@ -70,7 +70,7 @@ export function AppDetail({ app, usage, onBack }: AppDetailProps) {
         ...(hasGoogle ? [{ id: 'stability' as const, label: 'Stabilité', icon: 'bug' }] : [])
     ];
     const [chosen, setChosen] = useState<Tab>('overview');
-    const { range, store: chosenStore } = useStoresPrefs();
+    const { range, store: chosenStore } = useStoresPrefs('sheet');
     // Le store choisi vaut pour les onglets qui comparent les deux ; la Stabilité n'est que Google Play.
     const linkedStores = STORE_ORDER.filter((store) => app.listings.some((listing) => listing.store === store));
     const store = chosenStore !== 'all' && linkedStores.includes(chosenStore) ? chosenStore : null;
@@ -132,7 +132,7 @@ export function AppDetail({ app, usage, onBack }: AppDetailProps) {
                             <span className={styles.backLabel}>Stores</span>
                         </Button>
                         <div className={styles.identity}>
-                            <AppIcon app={app} large />
+                            <AppIcon src={app.icon} size='sheet' />
                             <div className={styles.ident}>
                                 <h2 className={styles.heading}>
                                     <span className={styles.headingText}>{app.name}</span>
@@ -190,11 +190,11 @@ export function AppDetail({ app, usage, onBack }: AppDetailProps) {
                                         { value: 'all', label: 'Tous' },
                                         ...linkedStores.map((entry) => ({ value: entry, label: STORE_LABELS[entry] }))
                                     ]}
-                                    onChange={(next) => setStoresPrefs({ store: next })}
+                                    onChange={(next) => setStoresPrefs('sheet', { store: next })}
                                     aria-label='Store'
                                 />
                             )}
-                            <RangeBar value={range} onChange={(next) => setStoresPrefs({ range: next })} />
+                            <RangeBar value={range} onChange={(next) => setStoresPrefs('sheet', { range: next })} />
                         </div>
                     )}
                 </div>

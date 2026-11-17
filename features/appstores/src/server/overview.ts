@@ -16,7 +16,7 @@ import { DAY_SECONDS, utcToday } from './days';
 import type { ListingRow, RevenueRow } from './repo';
 import { toReview } from './reviews';
 import { contractWindow, dayWindow, downloadsIn, keysOf, weighted, withData, type DayWindow } from './stats';
-import { readApp, type Ctx } from './_shared';
+import { iconOf, readApp, type Ctx } from './_shared';
 
 /**
  * La vue d'ensemble : toutes les apps visibles sur une même fenêtre, lue en
@@ -171,9 +171,23 @@ export const appStoresOverviewFeatures = [
             );
             const ref = (id: number) => ({ id, name: names.get(id) ?? '' });
 
-            const listings = (await ctx.repo.listListingsOfApps(apps.map((row) => row.id))).filter(
-                (l) => !input.store || l.store === input.store
+            const all = await ctx.repo.listListingsOfApps(apps.map((row) => row.id));
+            // L'icône d'une app ne dépend pas du store choisi.
+            const icons = new Map(
+                await Promise.all(
+                    apps.map(
+                        async (row) =>
+                            [
+                                row.id,
+                                await iconOf(
+                                    ciphers.get(row.id)!,
+                                    all.filter((l) => l.app_id === row.id)
+                                )
+                            ] as const
+                    )
+                )
             );
+            const listings = all.filter((l) => !input.store || l.store === input.store);
             const { kept, left } = splitStale(listings);
             const today = utcToday(Date.now());
             const window = dayWindow(input.range, dataUntilOf(kept), today);
@@ -214,6 +228,7 @@ export const appStoresOverviewFeatures = [
                     const mine = kept.filter((l) => l.app_id === id);
                     return {
                         ...ref(id),
+                        icon: icons.get(id) ?? null,
                         downloads: downloadsOver(mine, rows, window.fromDay, window.toDay),
                         points: pointsOver(mine, rows, window).map((point) =>
                             point.appleDownloads === null && point.googleDownloads === null

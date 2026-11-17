@@ -3,7 +3,7 @@ import type { AppStore } from '../contracts/domain';
 
 import { api } from './api';
 import { DEFAULT_RANGE, formatCount, MISSING, RANGE_LABELS } from './format';
-import { useCurveView } from './prefs';
+import { useStoresPrefs } from './prefs';
 import { downloadCurves, downloadsOf } from './Stats/downloads';
 import { relativeChange } from './Stats/StatBand';
 import TrendChart from './Stats/TrendChart';
@@ -20,8 +20,8 @@ interface OverviewRecapProps {
  * quelques chiffres et la courbe. Tout le panneau ouvre la vue entière.
  */
 export function OverviewRecap({ stores, onOpen }: OverviewRecapProps) {
-    // La vue choisie sur les autres courbes : le panneau ne la règle pas, tout clic l'ouvrant.
-    const view = useCurveView(true);
+    // La vue choisie dans la vue d'ensemble : le panneau ne la règle pas, tout clic l'ouvrant.
+    const view = useStoresPrefs('overview').curveView;
     const { data: overview } = useResource(
         'appstores.stats',
         () => api.send('appstores.overview', { range: DEFAULT_RANGE }).then((res) => res.overview),
