@@ -11,6 +11,10 @@ import {
     notifyChannelTest,
     notifyChannelUpdate,
     notifyChannelUsage,
+    notifyNoticeCount,
+    notifyNoticeGet,
+    notifyNoticeHide,
+    notifyNoticeReset,
     notifyRouteGet,
     notifyRouteSet,
     notifyRouteTest
@@ -237,6 +241,58 @@ const routeTest = defineFeature({
     }
 });
 
+/**
+ * Le bandeau « rien ne partira » d'une page, fermé par un compte pour lui
+ * seul. Rien de partagé ne change : pas de `mutates`, qui ferait relire ses
+ * canaux à toute la salle. Chaque écriture prévient les connexions du compte,
+ * où qu'elles soient assises.
+ */
+const noticeGet = defineFeature({
+    ...notifyNoticeGet,
+    handler: async (ctx, input) => {
+        assertRouteAccess(ctx, input.feature, 'read');
+        return {
+            hidden: await ctx.db.hiddenNotices.isHidden(ctx.userId, ctx.workspaceId, input.feature, input.itemId ?? 0)
+        };
+    }
+});
+
+const noticeHide = defineFeature({
+    ...notifyNoticeHide,
+    handler: async (ctx, input) => {
+        assertRouteAccess(ctx, input.feature, 'read');
+        await ctx.db.hiddenNotices.hide(ctx.userId, ctx.workspaceId, input.feature, input.itemId ?? 0);
+        ctx.live?.userChanged(ctx.userId, ctx.workspaceId, ['account'], ctx.userId);
+        ctx.audit({
+            action: 'notify.noticeHide',
+            level: 'debug',
+            description: `Bandeau des notifications masqué (${input.feature}${input.itemId ? ` #${input.itemId}` : ''})`
+        });
+        return {};
+    }
+});
+
+const noticeCount = defineFeature({
+    ...notifyNoticeCount,
+    access: { scope: 'account' },
+    handler: async (ctx) => ({ count: await ctx.db.hiddenNotices.countFor(ctx.userId) })
+});
+
+const noticeReset = defineFeature({
+    ...notifyNoticeReset,
+    access: { scope: 'account' },
+    handler: async (ctx) => {
+        await ctx.db.hiddenNotices.clearFor(ctx.userId);
+        ctx.live?.userChanged(ctx.userId, ctx.workspaceId, ['account'], ctx.userId);
+        ctx.audit({
+            action: 'notify.noticeReset',
+            level: 'debug',
+            description: 'Bandeaux des notifications réaffichés'
+        });
+        return {};
+    }
+});
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const notifyFeatures: FeatureDefinition<string, any, any>[] = [
     channelList,
@@ -248,5 +304,9 @@ export const notifyFeatures: FeatureDefinition<string, any, any>[] = [
     channelTest,
     routeGet,
     routeSet,
-    routeTest
+    routeTest,
+    noticeGet,
+    noticeHide,
+    noticeCount,
+    noticeReset
 ];

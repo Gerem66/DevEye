@@ -25,3 +25,29 @@
     font-weight: 600;
     color: var(--warning);
 }
+
+.actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+.dismiss {
+    display: inline-flex;
+    flex-shrink: 0;
+    padding: 0;
+    border: none;
+    background: none;
+    color: inherit;
+    cursor: pointer;
+    filter: opacity(0.7);
+    transition: filter var(--transition-fast);
+}
+
+.dismiss:hover,
+.dismiss:focus-visible {
+    outline: none;
+    filter: opacity(1);
+}

@@ -476,6 +476,17 @@ const SCOPES: { [K in RepoKey]: RepoScope<K> } = {
             systemRouteWorkspaces: { args: [], global: 'les espaces à prévenir des alertes système' }
         }
     },
+    hiddenNotices: {
+        guard: ACCOUNT,
+        methods: {
+            isHidden: { args: [1, 2, 'uptime', 0] },
+            hide: { args: [1, 2, 'uptime', 0] },
+            countFor: { args: [1] },
+            clearFor: { args: [1] },
+            forgetItem: { args: [2, 'uptime', 3], guard: WORKSPACE },
+            forgetMember: { args: [1, 2] }
+        }
+    },
     instanceSettings: {
         global: "les réglages de l'instance, par origine publique",
         methods: {

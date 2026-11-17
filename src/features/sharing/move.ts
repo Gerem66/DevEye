@@ -260,6 +260,7 @@ const moveFeature = defineFeature({
                     input.feature as NotificationFeature,
                     routeItemId
                 );
+                await db.hiddenNotices.forgetItem(homeWorkspaceId, input.feature, routeItemId);
             }
         });
 

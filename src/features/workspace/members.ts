@@ -102,6 +102,7 @@ export const workspaceLeaveFeature: FeatureDefinition<
         }
         const sharesDropped = await dropSharesOf(ctx.db, ctx.userId, ctx.workspaceId);
         await ctx.db.workspaceMembers.remove(ctx.userId, ctx.workspaceId);
+        await ctx.db.hiddenNotices.forgetMember(ctx.userId, ctx.workspaceId);
         await clearFavoriteIfPointingAt(ctx, ctx.userId, ctx.workspaceId);
         invalidateAccess();
         // Sa place revient au membre en pause arrivé le plus tôt.
@@ -132,6 +133,7 @@ export const workspaceRemoveMemberFeature: FeatureDefinition<
         }
         const sharesDropped = await dropSharesOf(ctx.db, input.userId, ctx.workspaceId);
         await ctx.db.workspaceMembers.remove(input.userId, ctx.workspaceId);
+        await ctx.db.hiddenNotices.forgetMember(input.userId, ctx.workspaceId);
         // Le favori de l'exclu pointait peut-être ici : sans ça, sa prochaine
         // connexion viserait un espace auquel il n'a plus accès.
         await clearFavoriteIfPointingAt(ctx, input.userId, ctx.workspaceId);

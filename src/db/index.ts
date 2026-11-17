@@ -7,6 +7,7 @@ import { maintenanceRepo, type MaintenanceRepo } from './repos/maintenance';
 import { metricsRepo, type MetricsRepo } from './repos/metrics';
 import { featureDomainsRepo, type FeatureDomainsRepo } from './repos/featureDomains';
 import { featureKvRepo, type FeatureKvRepo } from './repos/featureKv';
+import { hiddenNoticesRepo, type HiddenNoticesRepo } from './repos/hiddenNotices';
 import { instanceSettingsRepo, type InstanceSettingsRepo } from './repos/instanceSettings';
 import { itemSharingRepo, type ItemSharingRepo } from './repos/itemSharing';
 import { notificationChannelsRepo, type NotificationChannelsRepo } from './repos/notificationChannels';
@@ -75,6 +76,8 @@ export interface Database {
     itemSharing: ItemSharingRepo;
     /** Canaux d'alerte, par espace et par feature (voir `Services/notifications.ts`). */
     notificationChannels: NotificationChannelsRepo;
+    /** Les pages où un compte a fermé le bandeau des notifications. */
+    hiddenNotices: HiddenNoticesRepo;
     /** Les réglages de l'instance, par origine publique. */
     instanceSettings: InstanceSettingsRepo;
     /** Les essais de la page Tests et débogage (voir `Services/debug/`). */
@@ -127,6 +130,7 @@ export function databaseOn(q: Queryable, begin: BeginTransaction): Database {
         featureKv: featureKvRepo(q),
         itemSharing: itemSharingRepo(q),
         notificationChannels: notificationChannelsRepo(q),
+        hiddenNotices: hiddenNoticesRepo(q),
         instanceSettings: instanceSettingsRepo(q),
         debug: debugRepo(q)
     };

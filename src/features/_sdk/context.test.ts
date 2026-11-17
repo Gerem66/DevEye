@@ -148,6 +148,9 @@ describe('createSdkContext : items.forget', () => {
             },
             notificationChannels: {
                 clearRoute: async () => {}
+            },
+            hiddenNotices: {
+                forgetItem: async () => {}
             }
         };
         const providers: SdkProviders = {
@@ -172,7 +175,8 @@ describe('createSdkContext : items.forget', () => {
         const detached: unknown[][] = [];
         (f.ctx as unknown as { db: unknown }).db = {
             itemSharing: { sharesOf: async () => [], forgetItem: async () => {} },
-            notificationChannels: { clearRoute: async () => {} }
+            notificationChannels: { clearRoute: async () => {} },
+            hiddenNotices: { forgetItem: async () => {} }
         };
         const providers: SdkProviders = {
             get: <T>() => ({ detach: async (...args: unknown[]) => (detached.push(args), 1) }) as T

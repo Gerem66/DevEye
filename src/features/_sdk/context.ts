@@ -168,8 +168,8 @@ export function createSdkContext(
                 return override ?? extras.canExtra(key);
             },
             // Le ménage d'un élément supprimé : projections, restrictions, route
-            // de notification et liaisons de projets, qu'aucune clé étrangère ne
-            // rattache à sa table. Les liaisons tombent chez lui et dans chaque
+            // de notification, bandeaux masqués et liaisons de projets, qu'aucune
+            // clé étrangère ne rattache à sa table. Les liaisons tombent chez lui et dans chaque
             // espace qui le recevait : plus personne n'y voit l'élément.
             forget: async (itemId) => {
                 const shares = await ctx.db.itemSharing.sharesOf(manifest.id, itemId, ctx.workspaceId);
@@ -190,6 +190,7 @@ export function createSdkContext(
                         manifest.id as NotificationFeature,
                         routeItemId
                     );
+                    await ctx.db.hiddenNotices.forgetItem(ctx.workspaceId, manifest.id, routeItemId);
                 }
             }
         },

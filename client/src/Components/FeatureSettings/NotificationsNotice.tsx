@@ -16,7 +16,8 @@ type NoticeScope = Exclude<SettingsScope, { kind: 'record' }>;
  * qui n'en coche aucun : rien ne partira, et son bouton ouvre l'onglet
  * Notifications à la bonne échelle. Muet pour qui ne pourrait rien y changer,
  * et tant que la réponse n'est pas là : un bandeau qui clignote au chargement
- * dirait faux une fois sur deux.
+ * dirait faux une fois sur deux. Sa croix le masque pour ce seul compte, sur
+ * cette seule page, jusqu'à ce que le Profil les réaffiche.
  */
 export default function NotificationsNotice({ scope }: { scope: NoticeScope }) {
     const feature = scope.feature as NotificationFeature;
@@ -25,6 +26,7 @@ export default function NotificationsNotice({ scope }: { scope: NoticeScope }) {
     const hasTab = useSettingsSections(scope).some((s) => s.id === 'notifications');
     const channelsVersion = useResourceVersion('notify.channelList');
     const routeVersion = useResourceVersion('notify.routeGet');
+    const hiddenVersion = useResourceVersion('notify.noticeGet');
     const itemId = routeItemId(scope);
     /** Ce qui se règle à cette échelle : cocher (élément, fonctionnalité qui prévient en son nom) ou déclarer. */
     const routes = scope.kind === 'item' || info.featureRoute;
@@ -42,19 +44,25 @@ export default function NotificationsNotice({ scope }: { scope: NoticeScope }) {
             return;
         }
         let live = true;
+        const target = { feature, itemId: itemId ?? undefined };
         const load = routes
             ? ws
-                  .send('notify.routeGet', { feature, itemId: itemId ?? undefined })
+                  .send('notify.routeGet', target)
                   .then((r) => r.managedHere && r.route.channelIds.length === 0 && r.foreign.length === 0)
             : ws.send('notify.channelList', { feature }).then((r) => r.channels.length === 0);
-        void load.then(
-            (none) => live && setSilent(none),
+        void Promise.all([load, ws.send('notify.noticeGet', target)]).then(
+            ([none, notice]) => live && setSilent(none && !notice.hidden),
             () => live && setSilent(false)
         );
         return () => {
             live = false;
         };
-    }, [applies, routes, feature, itemId, channelsVersion, routeVersion]);
+    }, [applies, routes, feature, itemId, channelsVersion, routeVersion, hiddenVersion]);
+
+    const hide = (): void => {
+        setSilent(false);
+        void ws.send('notify.noticeHide', { feature, itemId: itemId ?? undefined }).catch(() => setSilent(true));
+    };
 
     if (!applies || (!silent && !dialogOpen)) return null;
     const noun = itemNounForms(scope.feature);
@@ -70,13 +78,26 @@ export default function NotificationsNotice({ scope }: { scope: NoticeScope }) {
                           : `Aucun avis ne peut partir : aucun canal (e-mail, webhook ou Discord) n’est déclaré pour ${info.label}. Déclarez-en un, puis cochez-le dans les réglages de chaque ${noun.noun}.`}
                 </p>
             </div>
-            <FeatureSettingsButton
-                scope={scope}
-                variant='primary'
-                initialSection='notifications'
-                label={scope.kind === 'item' ? 'Choisir les canaux' : 'Configurer les notifications'}
-                onOpenChange={setDialogOpen}
-            />
+            <span className={styles.actions}>
+                <FeatureSettingsButton
+                    scope={scope}
+                    variant='primary'
+                    initialSection='notifications'
+                    label={scope.kind === 'item' ? 'Choisir les canaux' : 'Configurer les notifications'}
+                    onOpenChange={setDialogOpen}
+                />
+                {silent && (
+                    <button
+                        type='button'
+                        className={styles.dismiss}
+                        onClick={hide}
+                        title='Ne plus afficher ici (réaffichable depuis votre Profil)'
+                        aria-label='Ne plus afficher ce bandeau sur cette page'
+                    >
+                        <span className='icon icon-x' />
+                    </button>
+                )}
+            </span>
         </div>
     );
 }

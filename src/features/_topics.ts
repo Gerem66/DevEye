@@ -134,6 +134,8 @@ const NON_MUTATING = new Set([
     'cloudSync.subscribe',
     'cloudSync.unsubscribe',
     'cloudSync.syncNow',
+    // Privé au compte : le handler prévient lui-même toutes ses connexions.
+    'notify.noticeReset',
     // Réveillent le service de fond, qui diffuse lui-même ce qu'il a changé.
     'appstores.backfill',
     'appstores.syncNow',

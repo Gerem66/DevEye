@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { ws } from '@/api/ws';
-import { errorNote } from '@/api/useResource';
+import { errorNote, useResource } from '@/api/useResource';
+import { ConfirmDialog, type ConfirmRequest } from '@/Components/ConfirmDialog';
 import { Dialog } from '@/Components/Dialog';
 import ErrorNote, { type ErrorNoteInput } from '@/Components/ErrorNote';
 import Button from '@/Components/Button';
@@ -20,6 +21,7 @@ import { USER_COLOR_OPTIONS, userColorVar } from './userColors';
 import styles from './style.module.css';
 import { HIDE_LIVE_CURSORS } from '@/live/hideCursors';
 import { HIDE_HOME_ADD_TILE } from '@/Pages/Home/homeAddTile';
+import { invalidate } from '@/stores/invalidation';
 import { requestOpenView } from '@/stores/viewRequest';
 import { useWorkspacesHere } from '@/stores/workspace';
 import { useLiteRender, useRenderState, setRenderMode, type RenderMode } from '@/stores/render';
@@ -93,6 +95,12 @@ export default function FeatureProfile({ user }: FeatureProps) {
         setFailure({ title, note });
         setFailureOpen(true);
     };
+    const { data: hiddenNotices } = useResource(
+        'notify.noticeCount',
+        () => ws.send('notify.noticeCount', {}).then((r) => r.count),
+        'Le nombre d’alertes masquées n’a pas pu être lu.'
+    );
+    const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
     const [savingColor, setSavingColor] = useState(false);
     const [savingSetting, setSavingSetting] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -165,6 +173,28 @@ export default function FeatureProfile({ user }: FeatureProps) {
             setUploading(false);
         }
     };
+
+    const onShowNotices = async () => {
+        try {
+            await ws.send('notify.noticeReset', {});
+            invalidate('notify.noticeGet', 'notify.noticeCount');
+        } catch (err) {
+            showFailure(
+                'Réaffichage des alertes',
+                errorNote(err, 'Les alertes masquées n’ont pas pu être réaffichées.')
+            );
+        }
+    };
+
+    const askShowNotices = (count: number) =>
+        setConfirm({
+            title: count === 1 ? 'Réafficher l’alerte masquée ?' : `Réafficher les ${count} alertes masquées ?`,
+            description:
+                'Le bandeau « Aucune notification configurée » reviendra sur chaque page où vous l’aviez fermé.',
+            confirmLabel: 'Réafficher',
+            tone: 'primary',
+            onConfirm: () => void onShowNotices()
+        });
 
     return (
         <div className={styles.container}>
@@ -367,6 +397,27 @@ export default function FeatureProfile({ user }: FeatureProps) {
                                     />
                                 </span>
                             </div>
+                            <div className={styles.row}>
+                                <span className={styles.rowLabel}>
+                                    Alertes masquées
+                                    <span className={styles.rowHint}>
+                                        {hiddenNotices === null
+                                            ? 'Le bandeau « Aucune notification configurée », fermé par sa croix'
+                                            : hiddenNotices === 0
+                                              ? 'Aucune alerte fermée'
+                                              : `« Aucune notification configurée », fermée sur ${hiddenNotices} ${
+                                                    hiddenNotices === 1 ? 'page' : 'pages'
+                                                }`}
+                                    </span>
+                                </span>
+                                {hiddenNotices !== null && hiddenNotices > 0 && (
+                                    <span className={styles.rowValue}>
+                                        <Button variant='secondary' onClick={() => askShowNotices(hiddenNotices)}>
+                                            Tout réafficher
+                                        </Button>
+                                    </span>
+                                )}
+                            </div>
                         </div>
                     </section>
 
@@ -425,6 +476,7 @@ export default function FeatureProfile({ user }: FeatureProps) {
                 }}
             />
             <ExportDataDialog open={exportOpen} onClose={() => setExportOpen(false)} />
+            <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />
 
             <Dialog
                 open={failureOpen}

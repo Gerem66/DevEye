@@ -209,10 +209,19 @@ fiche. À l'échelle de la fonctionnalité, il paraît tant qu'aucun canal n'est
 déclaré (pour celle qui prévient en son nom, tant qu'aucun n'est coché) ; à
 l'échelle d'un élément, tant qu'il n'en coche aucun. Son bouton ouvre l'onglet
 Notifications de la même échelle. Il reste muet pour qui ne pourrait rien y
-changer, et pendant le chargement. Uptime, Sauvegardes, Déploiements et Bases
-de données le posent sur leur liste et sur leurs fiches (une base, seulement
-si elle a une alerte active), la Sentinelle sur sa vue dès qu'une machine est
-surveillée.
+changer, et pendant le chargement. Uptime, Sauvegardes, Déploiements, Bases de
+données et Stores le posent sur leur liste et sur leurs fiches (une base,
+seulement si elle a une alerte active), la Sentinelle sur sa vue dès qu'une
+machine est surveillée.
+
+**Un bandeau se ferme pour soi, page par page.** Sa croix le masque pour le
+seul compte qui la clique, sur la seule page où il l'a fermé : la liste d'une
+fonctionnalité dans un espace, ou la fiche d'un élément (table
+`user_hidden_notices`, à la clé des routes : `item_id` 0 pour la liste). Les
+autres membres le voient toujours. La rangée « Alertes masquées » du Profil
+dit sur combien de pages, et les réaffiche toutes d'un coup. Les lignes
+tombent avec l'élément (`ctx.items.forget`, déplacement) et quand le compte
+quitte l'espace.
 
 **La gestion des canaux ne se rend qu'à l'échelle de la fonctionnalité.** À
 l'échelle d'un élément, la section ne fait que cocher, et « Gérer les canaux »

@@ -32,6 +32,9 @@ const ACCESS_EXEMPT = new Set([
     'notify.routeGet',
     'notify.routeSet',
     'notify.routeTest',
+    // Ouvrent sur la lecture de la fonctionnalité visée (`assertRouteAccess`).
+    'notify.noticeGet',
+    'notify.noticeHide',
     // Chaque handler ouvre sur `ctx.assertChannels(...)`.
     'notify.channelAdd',
     'notify.channelUpdate',

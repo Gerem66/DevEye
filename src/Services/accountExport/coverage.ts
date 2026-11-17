@@ -27,6 +27,7 @@ export const CORE_EXPORT_TABLES: Readonly<Record<string, 'host' | { skip: string
     user_phones: 'host',
     notification_routes: { skip: 'Les routes de notification visent des éléments par leur numéro interne.' },
     notification_route_channels: { skip: 'Les routes de notification visent des éléments par leur numéro interne.' },
+    user_hidden_notices: { skip: 'Les bandeaux masqués visent des éléments par leur numéro interne.' },
     item_shares: { skip: 'Le partage d’un élément entre espaces n’a de sens que sur ce serveur.' },
     item_role_grants: { skip: 'Les droits d’un rôle sur un élément n’ont de sens que sur ce serveur.' },
     workspace_invitations: { skip: 'Une invitation ouvre un accès et porte l’adresse d’un tiers.' },

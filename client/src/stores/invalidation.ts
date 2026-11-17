@@ -18,6 +18,9 @@ export type ResourceKey =
     /** Les canaux d'alerte, une seule clé pour toutes les fonctionnalités. */
     | 'notify.channelList'
     | 'notify.routeGet'
+    /** Les bandeaux de notifications fermés par le compte : l'état d'une page, et leur nombre au Profil. */
+    | 'notify.noticeGet'
+    | 'notify.noticeCount'
     /** Les domaines d'une fonctionnalité, une seule clé pour toutes. */
     | 'domain.list'
     | 'notes.count'
@@ -171,9 +174,10 @@ const TOPIC_KEYS: Partial<Record<LiveTopic, ResourceKey[]>> = {
     workspace: ['workspace.roleList', 'workspace.session', 'workspace.invitations', 'user.invitations'],
     /* L'accueil ou l'apparence de l'espace : `workspace.activate` seule, sans recharger la session. */
     home: ['workspace.activate'],
-    /* Réglages de compte, diffusés dans l'espace personnel de leur auteur. Seule
-       l'offre se relit : un module la change depuis un service, sans commande. */
-    account: ['user.plan'],
+    /* Réglages de compte, diffusés dans l'espace personnel de leur auteur. L'offre
+       se relit (un module la change depuis un service, sans commande), et les
+       bandeaux masqués, poussés à toutes les connexions du compte. */
+    account: ['user.plan', 'notify.noticeGet', 'notify.noticeCount'],
     /* Un compte a changé, ou un réglage d'administration : reçu par compte, jamais en salle. */
     admin: ['admin.userList', 'admin.maintenanceGet', 'debug.overview', 'debug.tracking'],
     /* Poussé compte par compte aux modérateurs et aux administrateurs : l'espace de la trame n'y change rien. */
