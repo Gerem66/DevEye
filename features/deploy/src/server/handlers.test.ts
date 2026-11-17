@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { describe, it, mock } from 'node:test';
 import type { z, ZodType } from 'zod';
 
 import {
@@ -9,6 +9,7 @@ import {
     deployCredentialAdd,
     deployCredentialList,
     deployCredentialRemove,
+    deployCredentialTest,
     deployCredentialUpdate,
     deployGet,
     deployHistory,
@@ -26,6 +27,8 @@ import { FeatureError, type SdkDevice, type SdkFeatureContext } from '@deveye/ty
 import { createTestContext, testDevice } from '@deveye/types/sdk/testing';
 
 import { deployHandlers } from './handlers';
+import { PROVIDERS } from './providers';
+import { ProviderError } from './providers/types';
 import type { DeployRepo, DeployTargetWithUsageRow } from './repo';
 
 /**
@@ -33,8 +36,8 @@ import type { DeployRepo, DeployTargetWithUsageRow } from './repo';
  * le partage inter-espaces (projection listée sous le codec de son domicile,
  * jamais modifiable depuis la fenêtre), le contrat de Projets (absent = zéro),
  * l'idempotence de la déclaration, le ménage à la suppression et les clés
- * Dokploy (secret jamais rendu, absent = conservé, retrait qui met les cibles à
- * NULL).
+ * Dokploy (secret jamais rendu, absent = conservé, essai sans écriture, retrait
+ * qui met les cibles à NULL).
  */
 
 /** Le handler d'un contrat, typé par ce contrat (le registre est hétérogène). */
@@ -710,6 +713,57 @@ describe('les clés Dokploy', () => {
             update(ctx, { credentialId: 99, label: 'x', baseUrl: 'https://x', deviceId: null }),
             failsWith('not_found')
         );
+    });
+
+    it('essaie la clé enregistrée pour la même instance, la saisie sinon, et rend le refus sans lever', async () => {
+        const repo = fakeRepo();
+        repo.credentials.push(credential({ id: 10, workspace_id: 1 }));
+        const ctx = createTestContext({ repo });
+        const test = handlerFor(deployCredentialTest);
+        const seen: [string | null, string][] = [];
+        const probe = mock.method(
+            PROVIDERS.dokploy,
+            'probe',
+            async (access: { baseUrl: string | null; secret: string }) => {
+                seen.push([access.baseUrl, access.secret]);
+                if (access.secret === 'mauvaise') throw new ProviderError('Clé d’API refusée par Dokploy.', 401);
+                return 'Clé acceptée : 2 applications visibles.';
+            }
+        );
+        const here = { provider: 'dokploy' as const, baseUrl: 'https://dokploy.exemple.fr', deviceId: null };
+        const elsewhere = { ...here, baseUrl: 'https://autre.exemple.fr' };
+        try {
+            const kept = await test(ctx, { credentialId: 10, ...here });
+            assert.deepEqual([kept.probe.ok, kept.probe.message], [true, 'Clé acceptée : 2 applications visibles.']);
+
+            const refused = await test(ctx, { credentialId: 10, ...here, secret: 'mauvaise' });
+            assert.deepEqual([refused.probe.ok, refused.probe.message], [false, 'Clé d’API refusée par Dokploy.']);
+
+            // La clé gardée ne suit pas une autre adresse, pas plus pour un essai.
+            await assert.rejects(test(ctx, { credentialId: 10, ...elsewhere }), failsWith('validation'));
+            await test(ctx, { credentialId: 10, ...elsewhere, secret: 'sk-2' });
+
+            await assert.rejects(test(ctx, here), failsWith('validation'));
+            await assert.rejects(
+                test(ctx, { credentialId: 10, provider: 'github', baseUrl: null, deviceId: null }),
+                failsWith('validation')
+            );
+            await assert.rejects(test(ctx, { credentialId: 99, ...here, secret: 'sk' }), failsWith('not_found'));
+
+            assert.deepEqual(seen, [
+                ['https://dokploy.exemple.fr', 'clé-secrète'],
+                ['https://dokploy.exemple.fr', 'mauvaise'],
+                ['https://autre.exemple.fr', 'sk-2']
+            ]);
+            // Un essai n'enregistre rien.
+            assert.deepEqual(
+                [repo.credentials[0].base_url, repo.credentials[0].secret_enc],
+                ['https://dokploy.exemple.fr', 'clé-secrète']
+            );
+            assert.deepEqual(ctx.recorded.audits, []);
+        } finally {
+            probe.mock.restore();
+        }
     });
 
     it('retirer une clé laisse ses cibles, sans clé, et répond `not_found` sur la clé d’un autre espace', async () => {

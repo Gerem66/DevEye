@@ -121,14 +121,22 @@ que le rôle n'ouvre pas les cibles qu'il déploie.
 
 ### 3.1 Les commandes
 
-Dix-sept commandes sous le préfixe `deploy.`, en camelCase
+Dix-huit commandes sous le préfixe `deploy.`, en camelCase
 (`src/contracts/commands.ts`) :
 
 - **cibles** : `list`, `count`, `get`, `add`, `update`, `remove`, `reorder`,
   `candidates`, `machines` ;
 - **déploiements** : `trigger`, `history`, `log` ;
 - **accès** : `credentialList`, `credentialAdd`, `credentialUpdate`,
-  `credentialRemove`, `credentialDevices`.
+  `credentialTest`, `credentialRemove`, `credentialDevices`.
+
+`credentialTest` essaie un accès par la plus petite lecture qui exige son secret
+(`probe` de l'adaptateur : `project.all` chez Dokploy, `/user` chez GitHub), sans
+rien écrire. Il sert au bouton de la rangée (l'accès tel qu'enregistré, relais
+de son auteur compris) et à celui du formulaire (les champs saisis, sous les
+gardes de l'enregistrement). Un secret omis reprend celui de l'accès, pour la
+même instance seulement. Le refus du fournisseur ou du relais revient dans la
+réponse, avec la durée de l'aller-retour.
 
 Toute commande qui prend un `targetId` commence par `loadTarget` : la cible doit
 être visible de l'espace actif (chez elle, ou projetée ici), et
@@ -198,7 +206,8 @@ ré-entrance rend l'appel inoffensif s'il en tourne déjà un. `idle()` attend t
 ce qui est en vol (l'arrêt du service s'en sert, les tests aussi).
 
 **Le recul se compte par accès, en mémoire**, jamais dans `synced_at` : 60 s au
-premier échec, doublé ensuite jusqu'à 15 min, remis à zéro au premier succès ;
+premier échec, doublé ensuite jusqu'à 15 min, remis à zéro au premier succès,
+à la modification de l'accès et à la réussite d'un essai de son secret enregistré ;
 un fournisseur qui dit quand revenir (limite de débit, `retryAt`) est écouté.
 Exception : le relais d'un appareil qui ne s'ouvre pas (hors ligne, droit perdu)
 se constate sans rien envoyer, donc sans doublement, toutes les minutes ; l'agent
@@ -354,7 +363,7 @@ Le lien vers la fiche a la forme
 
 Le module ne parle à aucun fournisseur en direct : handlers et service passent
 par `DeployProviderAdapter` (`src/server/providers/types.ts`), un par famille
-d'accès (`PROVIDERS`, `providers/index.ts`) : `candidates`, `trigger`,
+d'accès (`PROVIDERS`, `providers/index.ts`) : `candidates`, `probe`, `trigger`,
 `history`, `noticeLog`, `fullLog`, `place`, `repoUrl`, `location`, et les
 `kinds` de cible qu'il sait déployer. Chacun garde ses propres caches. Une cible
 portée par une machine n'a pas d'adaptateur : c'est l'agent qui répond

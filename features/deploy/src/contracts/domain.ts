@@ -249,6 +249,14 @@ export const deployCredentialSchema = z.object({
 });
 export type DeployCredential = z.infer<typeof deployCredentialSchema>;
 
+/** L'essai d'un accès : ce que le fournisseur a laissé voir, ou son refus dans ses mots. */
+export const deployCredentialProbeSchema = z.object({
+    ok: z.boolean(),
+    message: z.string(),
+    elapsedMs: z.number().int().nonnegative()
+});
+export type DeployCredentialProbe = z.infer<typeof deployCredentialProbeSchema>;
+
 /** Ligne SQL (serveur uniquement). */
 export interface DeployCredentialRow {
     id: number;

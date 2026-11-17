@@ -70,6 +70,22 @@ export function wakeSync(): void {
     syncRef?.wake();
 }
 
+/** Reprend tout de suite le suivi des cibles d'un accès, sans attendre son recul. */
+export function retryAccess(credentialId: number): void {
+    syncRef?.retry(credentialId);
+}
+
+/**
+ * Le relais de l'appareil d'un accès enregistré, au nom du membre qui l'a
+ * choisi. Ses refus (hors ligne, droit perdu) sont des {@link ProviderError} :
+ * pour un essai, ce sont des réponses.
+ */
+export async function savedRelay(credential: DeployCredentialRow): Promise<DeviceRelay | null> {
+    if (!credential.device_id) return null;
+    if (!syncRef) throw new FeatureError('internal', 'Le suivi des déploiements n’est pas démarré.');
+    return syncRef.relayFor(credential);
+}
+
 /**
  * Confie au suivi de fond un déploiement par une machine : il attend l'agent,
  * tient le message vivant et enregistre le verdict. `false` quand le service

@@ -6,6 +6,7 @@ import {
     deployCredentialDevices,
     deployCredentialList,
     deployCredentialRemove,
+    deployCredentialTest,
     deployCredentialUpdate,
     deployGet,
     deployHistory,
@@ -20,7 +21,15 @@ import {
 import { randomUUID } from 'node:crypto';
 
 import type { Deployment, DeployTarget, DeployTargetRow } from '../contracts/domain';
-import { authorizeRelayDevice, defineSdkFeature, FeatureError, relayDeviceOptions } from '@deveye/types/sdk/server';
+import {
+    authorizeRelayDevice,
+    defineSdkFeature,
+    FeatureError,
+    relayDeviceOptions,
+    relayOf,
+    type DeviceRelay,
+    type SdkDevice
+} from '@deveye/types/sdk/server';
 
 // Le garde des appels sortants, partagé par toute l'app : l'adresse refusée l'est
 // à l'écriture, là où le membre voit pourquoi.
@@ -28,6 +37,7 @@ import { isAllowedOutboundUrl, OUTBOUND_REFUSED_MESSAGE } from '@/Services/netFe
 
 import { candidatesOf, machineOf, parseServiceId } from './agent';
 import { recallHistoryEntry, rememberHistory } from './historyCache';
+import { PROVIDERS, providerOf } from './providers';
 import { DOKPLOY_INSTANCE } from './providers/dokploy';
 import { ProviderError, type DeployProviderAdapter } from './providers/types';
 import {
@@ -42,6 +52,8 @@ import {
     readJson,
     recordProjectEvent,
     reloadTarget,
+    retryAccess,
+    savedRelay,
     startAgentDeploy,
     targetCipherFor,
     toCredential,
@@ -83,22 +95,39 @@ function assertKind(provider: DeployProviderAdapter, kind: string): void {
 /**
  * Par où joindre une instance Dokploy : sans objet pour GitHub. Jointe par le
  * serveur, l'adresse doit être publique ; jointe par un appareil, c'est son
- * agent qui borne ce qu'il atteint, et l'appelant devient l'auteur du choix,
- * dont le droit sur l'appareil sera revérifié à chaque usage.
+ * agent qui borne ce qu'il atteint, sous le droit de l'appelant. Rend
+ * l'appareil choisi, `null` quand le serveur joint l'instance.
  */
+async function checkRoute(
+    ctx: Ctx,
+    provider: string,
+    input: { baseUrl: string | null; deviceId: string | null }
+): Promise<SdkDevice | null> {
+    if (provider !== 'dokploy') return null;
+    if (!input.baseUrl) throw new FeatureError('validation', 'Une instance Dokploy demande son adresse.');
+    if (input.deviceId) return authorizeRelayDevice(ctx, input.deviceId, DOKPLOY_INSTANCE);
+    if (!isAllowedOutboundUrl(input.baseUrl)) throw new FeatureError('validation', OUTBOUND_REFUSED_MESSAGE);
+    return null;
+}
+
+/** Le chemin à enregistrer : l'appelant devient l'auteur du choix d'un appareil, dont le droit sera revérifié à chaque usage. */
 async function routeFor(
     ctx: Ctx,
     provider: string,
     input: { baseUrl: string | null; deviceId: string | null }
 ): Promise<{ baseUrl: string | null; deviceId: string | null; authorUserId: number | null }> {
     if (provider !== 'dokploy') return { baseUrl: null, deviceId: null, authorUserId: null };
-    if (!input.baseUrl) throw new FeatureError('validation', 'Une instance Dokploy demande son adresse.');
-    if (input.deviceId) {
-        const device = await authorizeRelayDevice(ctx, input.deviceId, DOKPLOY_INSTANCE);
-        return { baseUrl: input.baseUrl, deviceId: device.id, authorUserId: ctx.userId };
+    const device = await checkRoute(ctx, provider, input);
+    return { baseUrl: input.baseUrl, deviceId: device?.id ?? null, authorUserId: device ? ctx.userId : null };
+}
+
+/** Le relais d'un appareil tout juste choisi ; hors ligne ou agent trop ancien, c'est une réponse de l'essai. */
+function draftRelay(ctx: Ctx, device: SdkDevice): DeviceRelay {
+    try {
+        return relayOf(ctx.deveye.agents, device, ctx.deveye.devices.isOnline(device.id), DOKPLOY_INSTANCE);
+    } catch (e) {
+        throw new ProviderError(e instanceof Error ? e.message : String(e), 0);
     }
-    if (!isAllowedOutboundUrl(input.baseUrl)) throw new FeatureError('validation', OUTBOUND_REFUSED_MESSAGE);
-    return { baseUrl: input.baseUrl, deviceId: null, authorUserId: null };
 }
 
 const PROVIDER_LABELS: Record<string, string> = { dokploy: 'Dokploy', github: 'GitHub' };
@@ -647,8 +676,63 @@ export const deployHandlers = [
                 secretEnc: input.secret ? await ctx.cipher().encrypt(input.secret) : undefined
             });
             if (!row) throw new FeatureError('not_found', 'Accès de déploiement introuvable');
+            // Une clé ou une adresse corrigée n'attend pas le recul de l'ancienne.
+            retryAccess(row.id);
             const uses = await ctx.repo.countCredentialUses(ctx.workspaceId);
             return { credential: toCredential(row, uses.get(row.id) ?? 0) };
+        }
+    }),
+    defineSdkFeature({
+        ...deployCredentialTest,
+        access: { level: 'write' },
+        handler: async (ctx: Ctx, input) => {
+            const provider = providerOf(PROVIDERS, input.provider);
+            const existing =
+                input.credentialId === undefined
+                    ? null
+                    : await ctx.repo.findCredential(input.credentialId, ctx.workspaceId);
+            if (input.credentialId !== undefined && !existing) {
+                throw new FeatureError('not_found', 'Accès de déploiement introuvable');
+            }
+            if (existing && existing.provider !== input.provider) {
+                throw new FeatureError('validation', 'Le fournisseur d’un accès ne change pas.');
+            }
+
+            const dokploy = input.provider === 'dokploy';
+            const baseUrl = dokploy ? input.baseUrl : null;
+            const deviceId = dokploy ? input.deviceId : null;
+            // Le chemin enregistré passe par le choix de son auteur, comme le
+            // suivi de fond ; un chemin neuf, par les gardes de l'enregistrement.
+            const saved = existing?.base_url === baseUrl && existing.device_id === deviceId ? existing : null;
+            const device = saved ? null : await checkRoute(ctx, input.provider, { baseUrl, deviceId });
+
+            let secret = input.secret;
+            if (secret === undefined) {
+                // Comme à l'enregistrement : la clé gardée ne suit pas une autre adresse.
+                if (!saved) {
+                    throw new FeatureError(
+                        'validation',
+                        existing
+                            ? 'Ressaisissez la clé : l’instance qu’elle ouvre a changé.'
+                            : 'Saisissez la clé d’API ou le jeton à essayer.'
+                    );
+                }
+                secret = await ctx.cipher().decrypt(saved.secret_enc);
+            }
+
+            const started = Date.now();
+            const answer = (ok: boolean, message: string) => ({
+                probe: { ok, message, elapsedMs: Date.now() - started }
+            });
+            try {
+                const relay = saved ? await savedRelay(saved) : device ? draftRelay(ctx, device) : null;
+                const message = await provider.probe({ baseUrl, relay, secret });
+                if (saved && input.secret === undefined) retryAccess(saved.id);
+                return answer(true, message);
+            } catch (e) {
+                if (e instanceof ProviderError) return answer(false, e.message);
+                throw e;
+            }
         }
     }),
     defineSdkFeature({

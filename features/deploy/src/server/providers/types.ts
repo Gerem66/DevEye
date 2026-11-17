@@ -77,6 +77,12 @@ export interface DeployProviderAdapter {
     /** Le lieu d'une cible, lisible sans réseau : l'hôte d'une instance, un dépôt. */
     location(access: Pick<ProviderAccess, 'baseUrl'>, target: ProviderTarget): string | null;
     candidates(access: ProviderAccess): Promise<DeployCandidate[]>;
+    /**
+     * La plus petite lecture qui exige le secret, hors de tout cache : ce
+     * qu'elle a vu, en une phrase. Un accès pas encore enregistré n'a pas
+     * d'identifiant.
+     */
+    probe(access: Omit<ProviderAccess, 'credentialId'>): Promise<string>;
     trigger(
         access: ProviderAccess,
         target: ProviderTarget,

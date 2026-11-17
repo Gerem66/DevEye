@@ -371,6 +371,15 @@ export class DeploySync {
     }
 
     /**
+     * Un accès corrigé ou qui vient de répondre à un essai : son recul tombe et
+     * un tour part, pour que le lien perdu s'efface sans attendre le recul.
+     */
+    retry(credentialId: number): void {
+        this.credentialBackoff.delete(credentialId);
+        this.wake();
+    }
+
+    /**
      * Rapproche une cible sur-le-champ, pour qui doit savoir à l'instant si elle
      * vient de déployer. Rejoint un rapprochement en cours, et rend la main sans
      * rien lancer si la cible est en pause ou son accès occupé ou en recul : la

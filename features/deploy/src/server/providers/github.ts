@@ -89,7 +89,7 @@ export function parseWorkflowId(externalId: string): { repo: string; workflowId:
     return { repo: match[1], workflowId: match[2] };
 }
 
-function authHeaders(access: ProviderAccess): Record<string, string> {
+function authHeaders(access: Pick<ProviderAccess, 'secret'>): Record<string, string> {
     return {
         accept: 'application/vnd.github+json',
         authorization: `Bearer ${access.secret}`,
@@ -129,7 +129,7 @@ function refusalOf(status: number, body: unknown): string {
 
 /** Un appel à l'API ; `data` vaut `null` sur 204 et sur 304 (ETag inchangé). */
 async function call<T>(
-    access: ProviderAccess,
+    access: Pick<ProviderAccess, 'secret'>,
     path: string,
     init: { method?: 'GET' | 'POST'; body?: unknown; timeoutMs?: number; etag?: string | null } = {}
 ): Promise<{ status: number; data: T | null; etag: string | null }> {
@@ -285,6 +285,11 @@ export class GithubProvider implements DeployProviderAdapter {
         } catch {
             return 'github.com';
         }
+    }
+
+    async probe(access: Omit<ProviderAccess, 'credentialId'>): Promise<string> {
+        const { data } = await call<{ login?: string }>(access, '/user');
+        return data?.login ? `Jeton accepté, au nom de « ${data.login} ».` : 'Jeton accepté.';
     }
 
     async candidates(access: ProviderAccess): Promise<DeployCandidate[]> {

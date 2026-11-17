@@ -612,7 +612,7 @@ function kindOf(target: ProviderTarget): DokployKind {
 }
 
 /** L'instance d'un accès : sans adresse, rien n'est adressable chez Dokploy. */
-function instanceOf(access: ProviderAccess): DokployInstance {
+function instanceOf(access: Pick<ProviderAccess, 'baseUrl' | 'secret' | 'relay'>): DokployInstance {
     if (!access.baseUrl) throw new ProviderError('Cet accès Dokploy n’a pas d’adresse d’instance.', 0);
     return { baseUrl: access.baseUrl, apiKey: access.secret, relay: access.relay };
 }
@@ -646,6 +646,21 @@ export class DokployProvider implements DeployProviderAdapter {
     async candidates(access: ProviderAccess): Promise<DeployCandidate[]> {
         const targets = await this.client.listTargets(instanceOf(access));
         return targets.map((t) => ({ kind: t.kind, externalId: t.externalId, name: t.name, path: t.path, ref: null }));
+    }
+
+    /** `project.all` : la seule lecture connue que toute clé valide peut faire, et elle dit ce que la clé voit. */
+    async probe(access: Omit<ProviderAccess, 'credentialId'>): Promise<string> {
+        const targets = await this.client.listTargets(instanceOf(access));
+        if (targets.length === 0) {
+            return 'Clé acceptée, mais elle ne voit aucune application ni pile : vérifiez ses droits sur les projets.';
+        }
+        const apps = targets.filter((t) => t.kind === 'application').length;
+        const stacks = targets.length - apps;
+        const seen = [
+            apps > 0 && `${apps} application${apps > 1 ? 's' : ''}`,
+            stacks > 0 && `${stacks} pile${stacks > 1 ? 's' : ''}`
+        ].filter(Boolean);
+        return `Clé acceptée : ${seen.join(' et ')} visible${targets.length > 1 ? 's' : ''}.`;
     }
 
     async trigger(

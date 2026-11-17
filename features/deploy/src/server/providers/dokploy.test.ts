@@ -6,7 +6,14 @@ import { WebSocketServer } from 'ws';
 // Le serveur d'essai écoute sur la boucle locale, que le garde des appels
 // sortants refuse par défaut.
 import { setAllowPrivateForTest } from '@/Services/netFetch';
-import { fetchDeploymentLog, readRepoUrl, webGitUrl } from './dokploy';
+import {
+    DokployProvider,
+    fetchDeploymentLog,
+    readRepoUrl,
+    webGitUrl,
+    type DokployClient,
+    type DokployTarget
+} from './dokploy';
 
 /**
  * Le rapatriement d'un journal de déploiement. `/listen-deployment` ne referme
@@ -154,5 +161,41 @@ describe('readRepoUrl : le dépôt d’une cible', () => {
         // Ce que rend le catalogue : l'identifiant, le nom, l'état, rien d'autre.
         assert.equal(readRepoUrl({ applicationId: 'a1', name: 'server' }), null);
         assert.equal(readRepoUrl({ sourceType: 'github', owner: 'OxyFoo' }), null);
+    });
+});
+
+describe('probe : ce que la clé laisse voir', () => {
+    const unused = async () => {
+        throw new Error('non attendu ici');
+    };
+    const seeing = (kinds: DokployTarget['kind'][]) => {
+        const client: DokployClient = {
+            listTargets: async () =>
+                kinds.map((kind, i) => ({
+                    kind,
+                    externalId: `id-${i}`,
+                    name: `cible ${i}`,
+                    path: null,
+                    projectName: null,
+                    environmentName: null,
+                    projectId: null,
+                    environmentId: null
+                })),
+            listDeployments: unused,
+            triggerDeploy: unused,
+            fetchDeploymentLog: unused,
+            fetchRepoUrl: unused,
+            fetchInventory: unused
+        };
+        return new DokployProvider(client).probe({ baseUrl: 'https://dokploy.exemple.fr', relay: null, secret: 'k' });
+    };
+
+    it('compte applications et piles, et dit quand la clé ne voit rien', async () => {
+        assert.equal(await seeing(['application']), 'Clé acceptée : 1 application visible.');
+        assert.equal(
+            await seeing(['application', 'compose', 'application']),
+            'Clé acceptée : 2 applications et 1 pile visibles.'
+        );
+        assert.match(await seeing([]), /ne voit aucune application ni pile/);
     });
 });

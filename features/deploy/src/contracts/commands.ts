@@ -13,6 +13,7 @@ import {
     deploymentSchema,
     DEPLOY_CREDENTIAL_LABEL_MAX_LENGTH,
     DEPLOY_CREDENTIAL_SECRET_MAX_LENGTH,
+    deployCredentialProbeSchema,
     deployCredentialProviderSchema,
     deployCredentialSchema,
     deployMachineSchema
@@ -212,6 +213,24 @@ export const deployCredentialUpdate = {
     output: z.object({ credential: deployCredentialSchema })
 };
 
+/**
+ * Essaie un accès par la plus petite lecture qui exige son secret, sans rien
+ * écrire. `credentialId` désigne un accès enregistré : un secret omis reprend
+ * le sien, pour la même instance seulement. Un refus du fournisseur ou du
+ * relais revient dans `probe` au lieu de lever.
+ */
+export const deployCredentialTest = {
+    command: 'deploy.credentialTest' as const,
+    input: z.object({
+        credentialId: credentialId.optional(),
+        provider: deployCredentialProviderSchema,
+        baseUrl: dokployBaseUrl.nullable(),
+        deviceId: z.uuid().nullable(),
+        secret: z.string().min(1).max(DEPLOY_CREDENTIAL_SECRET_MAX_LENGTH).optional()
+    }),
+    output: z.object({ probe: deployCredentialProbeSchema })
+};
+
 /** Les appareils de l'espace par lesquels joindre une instance Dokploy, pour le formulaire d'un accès. */
 export const deployCredentialDevices = {
     command: 'deploy.credentialDevices' as const,
@@ -245,6 +264,7 @@ export const deployCommands = [
     deployCredentialList,
     deployCredentialAdd,
     deployCredentialUpdate,
+    deployCredentialTest,
     deployCredentialRemove,
     deployCredentialDevices
 ] as const;

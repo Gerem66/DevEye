@@ -20,6 +20,7 @@ import {
     DEPLOY_CREDENTIAL_LABEL_MAX_LENGTH,
     DEPLOY_CREDENTIAL_SECRET_MAX_LENGTH,
     type DeployCredential,
+    type DeployCredentialProbe,
     type DeployCredentialProvider
 } from '../contracts/domain';
 
@@ -47,6 +48,9 @@ const loadDevices = () => api.send('deploy.credentialDevices', {}).then((res) =>
 
 /** Le formulaire ouvert : un accès existant, ou un nouveau. */
 type Editing = { credential: DeployCredential | null } | null;
+
+/** Le compte rendu d'un essai réussi ; un refus passe par le bandeau d'erreur. */
+const probeText = (probe: DeployCredentialProbe): string => `${probe.message} Réponse en ${probe.elapsedMs} ms.`;
 
 /**
  * Les accès de l'espace, Dokploy et GitHub : le panneau de l'onglet « Sources »
@@ -82,6 +86,12 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
     const [formError, setFormError] = useState<ErrorNoteInput | null>(null);
     const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
+    /** L'essai en cours : celui d'une rangée, ou celui du formulaire. */
+    const [testing, setTesting] = useState<number | 'form' | null>(null);
+    /** La réussite d'un essai de rangée, sous la liste. */
+    const [status, setStatus] = useState<string | null>(null);
+    /** Celle de l'essai du formulaire, qui ne vaut que pour les champs essayés. */
+    const [formStatus, setFormStatus] = useState<{ draft: string; text: string } | null>(null);
 
     /** Un accès qui change touche la liste (cible orpheline) et la fiche ouverte (« accès retiré »). */
     const changed = () => invalidate('deploy.list', 'deploy.detail');
@@ -95,34 +105,46 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
         setDeviceId(credential?.deviceId ?? '');
         setSecret('');
         setFormError(null);
+        setFormStatus(null);
         setError(null);
     };
 
+    /** L'adresse et l'appareil saisis, ou `null` après avoir dit ce qui manque. */
+    const draftRoute = (): { baseUrl: string | null; deviceId: string | null } | null => {
+        if (provider !== 'dokploy') return { baseUrl: null, deviceId: null };
+        // Un service auto-hébergé sans adresse n'est pas adressable.
+        if (!baseUrl.trim()) {
+            setFormError({ message: 'Cette instance a besoin de l’adresse de son API.', code: 'validation' });
+            return null;
+        }
+        if (route === 'device' && !deviceId) {
+            setFormError({ message: 'Choisissez l’appareil par lequel joindre cette instance.', code: 'validation' });
+            return null;
+        }
+        return { baseUrl: baseUrl.trim(), deviceId: route === 'device' ? deviceId : null };
+    };
+
+    /** Un accès neuf sans secret : le dire plutôt que l'envoyer. */
+    const missingSecret = (): boolean => {
+        if (editing?.credential || secret.trim()) return false;
+        setFormError({
+            message:
+                provider === 'github'
+                    ? 'Un accès sans jeton ne sert à rien.'
+                    : 'Un accès sans clé d’API ne sert à rien.',
+            code: 'validation'
+        });
+        return true;
+    };
+
+    /** Les champs qu'un essai éprouve : sa réussite s'efface dès que l'un d'eux change. */
+    const draftKey = JSON.stringify([provider, baseUrl.trim(), route, deviceId, secret.trim()]);
+
     const submit = async () => {
         if (busy || !label.trim()) return;
-        // Un service auto-hébergé sans adresse n'est pas adressable.
-        if (provider === 'dokploy' && !baseUrl.trim()) {
-            setFormError({ message: 'Cette instance a besoin de l’adresse de son API.', code: 'validation' });
-            return;
-        }
-        const byDevice = provider === 'dokploy' && route === 'device';
-        if (byDevice && !deviceId) {
-            setFormError({ message: 'Choisissez l’appareil par lequel joindre cette instance.', code: 'validation' });
-            return;
-        }
+        const target = draftRoute();
+        if (!target || missingSecret()) return;
         const existing = editing?.credential ?? null;
-        if (!existing && !secret.trim()) {
-            setFormError({
-                message:
-                    provider === 'github'
-                        ? 'Un accès sans jeton ne sert à rien.'
-                        : 'Un accès sans clé d’API ne sert à rien.',
-                code: 'validation'
-            });
-            return;
-        }
-        const address = provider === 'dokploy' ? baseUrl.trim() : null;
-        const device = byDevice ? deviceId : null;
 
         setBusy(true);
         setFormError(null);
@@ -131,8 +153,7 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
                 await api.send('deploy.credentialUpdate', {
                     credentialId: existing.id,
                     label: label.trim(),
-                    baseUrl: address,
-                    deviceId: device,
+                    ...target,
                     // Champ vide = inchangé : le serveur ne nous l'a jamais rendu.
                     ...(secret.trim() ? { secret: secret.trim() } : {})
                 });
@@ -140,8 +161,7 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
                 await api.send('deploy.credentialAdd', {
                     provider,
                     label: label.trim(),
-                    baseUrl: address,
-                    deviceId: device,
+                    ...target,
                     secret: secret.trim()
                 });
             }
@@ -151,6 +171,54 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
             setFormError(errorNote(e, 'L’accès n’a pas pu être enregistré.'));
         } finally {
             setBusy(false);
+        }
+    };
+
+    /** Essaie les champs du formulaire ; un secret laissé vide reprend celui de l'accès ouvert. */
+    const testForm = async () => {
+        if (testing !== null) return;
+        const target = draftRoute();
+        if (!target || missingSecret()) return;
+        const existing = editing?.credential ?? null;
+        const tried = draftKey;
+        setTesting('form');
+        setFormError(null);
+        setFormStatus(null);
+        try {
+            const { probe } = await api.send('deploy.credentialTest', {
+                ...(existing ? { credentialId: existing.id } : {}),
+                provider,
+                ...target,
+                ...(secret.trim() ? { secret: secret.trim() } : {})
+            });
+            if (probe.ok) setFormStatus({ draft: tried, text: probeText(probe) });
+            else setFormError({ message: probe.message, code: 'conflict' });
+        } catch (e) {
+            setFormError(errorNote(e, 'L’essai n’a pas pu être lancé.'));
+        } finally {
+            setTesting(null);
+        }
+    };
+
+    /** Essaie un accès tel qu'enregistré : sa clé, son adresse, son appareil. */
+    const testSaved = async (credential: DeployCredential) => {
+        if (testing !== null) return;
+        setTesting(credential.id);
+        setStatus(null);
+        setError(null);
+        try {
+            const { probe } = await api.send('deploy.credentialTest', {
+                credentialId: credential.id,
+                provider: credential.provider,
+                baseUrl: credential.baseUrl,
+                deviceId: credential.deviceId
+            });
+            if (probe.ok) setStatus(`« ${credential.label} » : ${probeText(probe)}`);
+            else setError({ message: `« ${credential.label} » : ${probe.message}`, code: 'conflict' });
+        } catch (e) {
+            setError(errorNote(e, 'L’essai n’a pas pu être lancé.'));
+        } finally {
+            setTesting(null);
         }
     };
 
@@ -232,6 +300,16 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
                                 <button
                                     type='button'
                                     className={shell.rowAction}
+                                    title='Tester cet accès : une lecture minimale avec sa clé'
+                                    aria-label={`Tester ${c.label}`}
+                                    disabled={busy || testing !== null}
+                                    onClick={() => void testSaved(c)}
+                                >
+                                    <span className={`icon ${testing === c.id ? 'icon-spinner' : 'icon-play'}`} />
+                                </button>
+                                <button
+                                    type='button'
+                                    className={shell.rowAction}
                                     title='Modifier cet accès'
                                     aria-label={`Modifier ${c.label}`}
                                     disabled={busy}
@@ -255,6 +333,7 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
                 ))}
             </div>
 
+            {status && <p className={shell.notice}>{status}</p>}
             <ErrorNote note={error ?? loadError} />
 
             {canWrite && (
@@ -274,6 +353,14 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
                 onSubmit={submit}
                 footer={
                     <>
+                        <Button
+                            variant='secondary'
+                            onClick={() => void testForm()}
+                            disabled={busy || testing !== null}
+                            title='Une lecture minimale chez le fournisseur, avec la clé saisie ou celle en place'
+                        >
+                            {testing === 'form' ? 'Essai…' : 'Tester'}
+                        </Button>
                         <Button variant='secondary' onClick={() => setEditing(null)} disabled={busy}>
                             Annuler
                         </Button>
@@ -386,6 +473,7 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
                         )}
                     </label>
 
+                    {formStatus?.draft === draftKey && <p className={shell.notice}>{formStatus.text}</p>}
                     <ErrorNote note={formError} />
                 </div>
             </Dialog>
