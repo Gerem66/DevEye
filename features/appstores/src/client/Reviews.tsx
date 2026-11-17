@@ -6,7 +6,6 @@ import {
     errorNote,
     invalidate,
     SearchSelect,
-    SegmentedControl,
     StatusBadge,
     useResource,
     useResourceVersion,
@@ -30,8 +29,6 @@ import styles from './style.module.css';
 
 const PAGE = 25;
 
-type StoreFilter = AppStore | 'all';
-
 const RATING_OPTIONS = [
     { value: '', label: 'Toutes les notes' },
     ...[5, 4, 3, 2, 1].map((stars) => ({ value: String(stars), label: `${stars} étoile${stars > 1 ? 's' : ''}` }))
@@ -42,6 +39,8 @@ interface ReviewsProps {
     sources: readonly AppStoresSource[] | null;
     /** La période, commune aux onglets de la fiche. */
     range: AppStoresRange;
+    /** Le store choisi dans la fiche, `null` pour les deux. */
+    store: AppStore | null;
     canWrite: boolean;
 }
 
@@ -50,11 +49,10 @@ interface ReviewsProps {
  * la période. Répondre est une écriture, et ne part que de l'espace de l'app :
  * c'est là que vit la clé qui publie.
  */
-export function Reviews({ app, sources, canWrite, range }: ReviewsProps) {
+export function Reviews({ app, store, sources, canWrite, range }: ReviewsProps) {
     const stores = STORE_ORDER.filter((store) => app.listings.some((listing) => listing.store === store));
     const linked = stores.length > 0;
 
-    const [store, setStore] = useState<StoreFilter>('all');
     const [rating, setRating] = useState('');
     const [unanswered, setUnanswered] = useState(false);
     const [reviews, setReviews] = useState<AppStoresReview[] | null>(null);
@@ -68,16 +66,18 @@ export function Reviews({ app, sources, canWrite, range }: ReviewsProps) {
         'appstores.stats',
         () =>
             linked
-                ? api.send('appstores.stats', { appId: app.id, range }).then((res) => res.stats)
+                ? api
+                      .send('appstores.stats', { appId: app.id, range, ...(store ? { store } : {}) })
+                      .then((res) => res.stats)
                 : Promise.resolve(null),
         'La répartition des avis n’a pas pu être lue.',
-        [app.id, range, linked]
+        [app.id, range, store, linked]
     );
 
     const filter = useMemo(
         () => ({
             appId: app.id,
-            ...(store === 'all' ? {} : { store }),
+            ...(store ? { store } : {}),
             ...(rating ? { rating: Number(rating) } : {}),
             ...(unanswered ? { unanswered: true } : {})
         }),
@@ -145,7 +145,7 @@ export function Reviews({ app, sources, canWrite, range }: ReviewsProps) {
 
     /** Répondre vit chez l'app, avec sa clé : jamais depuis un espace qui ne fait que la voir. */
     const canReply = canWrite && !app.foreign;
-    const filtered = store !== 'all' || rating !== '' || unanswered;
+    const filtered = store !== null || rating !== '' || unanswered;
     const stale = loadedFor !== filter;
 
     return (
@@ -172,17 +172,6 @@ export function Reviews({ app, sources, canWrite, range }: ReviewsProps) {
                 <header className={styles.blockHead}>
                     <h3 className={styles.blockTitle}>Avis</h3>
                     <div className={styles.filters}>
-                        {stores.length > 1 && (
-                            <SegmentedControl
-                                value={store}
-                                options={[
-                                    { value: 'all', label: 'Tous' },
-                                    ...stores.map((entry) => ({ value: entry, label: STORE_LABELS[entry] }))
-                                ]}
-                                onChange={setStore}
-                                aria-label='Store'
-                            />
-                        )}
                         <SearchSelect
                             className={styles.ratingFilter}
                             value={rating}

@@ -30,6 +30,8 @@ interface RevenueProps {
     sources: readonly AppStoresSource[] | null;
     /** La période, commune aux onglets de la fiche. */
     range: AppStoresRange;
+    /** Le store choisi dans la fiche, `null` pour les deux. */
+    store: AppStore | null;
 }
 
 /**
@@ -37,7 +39,7 @@ interface RevenueProps {
  * store à l'autre ni d'une devise à l'autre. Monté seulement pour qui tient le
  * droit Revenus sur cette app ; le serveur le vérifie de son côté.
  */
-export function Revenue({ app, sources, range }: RevenueProps) {
+export function Revenue({ app, store, sources, range }: RevenueProps) {
     const stores = STORE_ORDER.filter((store) => app.listings.some((listing) => listing.store === store));
     const linked = stores.length > 0;
 
@@ -45,10 +47,12 @@ export function Revenue({ app, sources, range }: RevenueProps) {
         'appstores.revenue',
         () =>
             linked
-                ? api.send('appstores.revenue', { appId: app.id, range }).then((res) => res.revenue)
+                ? api
+                      .send('appstores.revenue', { appId: app.id, range, ...(store ? { store } : {}) })
+                      .then((res) => res.revenue)
                 : Promise.resolve(null),
         'Les revenus de cette app n’ont pas pu être lus.',
-        [app.id, range, linked]
+        [app.id, range, store, linked]
     );
 
     if (!linked) {

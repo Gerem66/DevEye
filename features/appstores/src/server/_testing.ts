@@ -411,10 +411,11 @@ export function fakeRepo(seed: Partial<Omit<FakeDb, 'calls' | 'dueCalls'>> = {})
                 .slice(0, limit)
                 .map((r) => ({ ...r }));
         },
-        async reviewCounts(appId, from, split, to) {
+        async reviewCounts(appId, store, from, split, to) {
             const out = new Map<number, { rating: number; previous: number; current: number }>();
             for (const r of db.reviews) {
-                if (r.app_id !== appId || r.created_at < from || r.created_at >= to) continue;
+                if (r.app_id !== appId || (store !== null && r.store !== store)) continue;
+                if (r.created_at < from || r.created_at >= to) continue;
                 const entry = out.get(r.rating) ?? { rating: r.rating, previous: 0, current: 0 };
                 if (r.created_at < split) entry.previous += 1;
                 else entry.current += 1;

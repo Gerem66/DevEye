@@ -105,7 +105,9 @@ Les décisions d'écran qui méritent d'être connues :
 - **Les revenus ne se somment jamais** entre stores ni entre devises : Apple
   rend des produits nets, Google des ventes estimées avant sa commission.
 - Fenêtres de 7, 30, 90 et 365 jours, une seule pour toute la fiche, à droite
-  des onglets ; la dernière se lit par semaines.
+  des onglets ; la dernière se lit par semaines. À côté, le choix du store
+  (« Tous », « App Store », « Google Play ») vaut pour l'aperçu, les avis et les
+  revenus ; un seul store choisi, la fenêtre va jusqu'à son propre dernier jour.
 
 ---
 

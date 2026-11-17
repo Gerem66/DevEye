@@ -972,6 +972,11 @@
     min-width: 160px;
 }
 
+/* Le sélecteur prend toute la largeur par défaut : ici, il tient sur la ligne des filtres. */
+.filters .ratingFilter {
+    width: auto;
+}
+
 .reviewList {
     display: flex;
     flex-direction: column;

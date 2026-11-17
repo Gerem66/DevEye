@@ -120,16 +120,17 @@ export const appStoresSyncNow = {
     output: z.object({ app: appStoresAppSchema })
 };
 
+/** `store` restreint la lecture à ce store : sa fenêtre s'arrête alors à son propre dernier jour. */
 export const appStoresStats = {
     command: 'appstores.stats' as const,
-    input: z.object({ appId, range: appStoresRangeSchema }),
+    input: z.object({ appId, range: appStoresRangeSchema, store: appStoreSchema.optional() }),
     output: z.object({ stats: appStoresStatsSchema })
 };
 
-/** Gardée par la permission `revenue`, surcharge par app comprise. */
+/** Gardée par la permission `revenue`, surcharge par app comprise. `store` comme pour `stats`. */
 export const appStoresRevenue = {
     command: 'appstores.revenue' as const,
-    input: z.object({ appId, range: appStoresRangeSchema }),
+    input: z.object({ appId, range: appStoresRangeSchema, store: appStoreSchema.optional() }),
     output: z.object({ revenue: appStoresRevenueSchema })
 };
 

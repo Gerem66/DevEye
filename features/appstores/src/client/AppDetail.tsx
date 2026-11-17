@@ -10,6 +10,7 @@ import {
     openFeature,
     PlanPausedBadge,
     PlanPausedNotice,
+    SegmentedControl,
     StatusBadge,
     StickyHeader,
     TaskProgress,
@@ -21,7 +22,7 @@ import {
     useWorkspacePermissions,
     type ErrorNoteInput
 } from 'deveye-sdk-client';
-import type { AppStoresApp, AppStoresRange, AppStoresUsage } from '../contracts/domain';
+import type { AppStore, AppStoresApp, AppStoresRange, AppStoresUsage } from '../contracts/domain';
 
 import { api } from './api';
 import { DEFAULT_RANGE, formatAgo, formatDay, plural, STORE_LABELS, STORE_ORDER } from './format';
@@ -76,6 +77,12 @@ export function AppDetail({ app, usage, onBack }: AppDetailProps) {
     ];
     const [chosen, setChosen] = useState<Tab>('overview');
     const [range, setRange] = useState<AppStoresRange>(DEFAULT_RANGE);
+    const [chosenStore, setChosenStore] = useState<AppStore | 'all'>('all');
+    // Le store choisi vaut pour les onglets qui comparent les deux ; la Stabilité n'est que Google Play.
+    const linkedStores = STORE_ORDER.filter((store) => app.listings.some((listing) => listing.store === store));
+    const store = chosenStore !== 'all' && linkedStores.includes(chosenStore) ? chosenStore : null;
+    const shown =
+        store === null ? app : { ...app, listings: app.listings.filter((listing) => listing.store === store) };
     // Un onglet qui disparaît (droit retiré, fiche Google Play retirée) ramène à l'aperçu.
     const tab = tabs.some((entry) => entry.id === chosen) ? chosen : 'overview';
 
@@ -241,6 +248,17 @@ export function AppDetail({ app, usage, onBack }: AppDetailProps) {
                     </nav>
                     {app.listings.length > 0 && (
                         <div className={styles.tabsTools}>
+                            {linkedStores.length > 1 && tab !== 'stability' && (
+                                <SegmentedControl
+                                    value={store ?? 'all'}
+                                    options={[
+                                        { value: 'all', label: 'Tous' },
+                                        ...linkedStores.map((entry) => ({ value: entry, label: STORE_LABELS[entry] }))
+                                    ]}
+                                    onChange={setChosenStore}
+                                    aria-label='Store'
+                                />
+                            )}
                             <RangeBar value={range} onChange={setRange} />
                         </div>
                     )}
@@ -254,9 +272,13 @@ export function AppDetail({ app, usage, onBack }: AppDetailProps) {
             <PlanPausedNotice count={app.planPaused && !app.foreign ? 1 : 0} one='app suivie' many='apps suivies' />
             <NotificationsNotice scope={{ kind: 'item', feature: 'appstores', itemId, itemLabel: app.name }} />
 
-            {tab === 'overview' && <Overview app={app} sources={sources.data} canWrite={canWrite} range={range} />}
-            {tab === 'reviews' && <Reviews app={app} sources={sources.data} canWrite={canWrite} range={range} />}
-            {tab === 'revenue' && <Revenue app={app} sources={sources.data} range={range} />}
+            {tab === 'overview' && (
+                <Overview app={shown} store={store} sources={sources.data} canWrite={canWrite} range={range} />
+            )}
+            {tab === 'reviews' && (
+                <Reviews app={shown} store={store} sources={sources.data} canWrite={canWrite} range={range} />
+            )}
+            {tab === 'revenue' && <Revenue app={shown} store={store} sources={sources.data} range={range} />}
             {tab === 'stability' && <Stability app={app} sources={sources.data} range={range} />}
 
             {tab === 'overview' && usage.length > 0 && (

@@ -32,6 +32,8 @@ interface OverviewProps {
     sources: readonly AppStoresSource[] | null;
     /** La période, commune aux onglets de la fiche. */
     range: AppStoresRange;
+    /** Le store choisi dans la fiche, `null` pour les deux. */
+    store: AppStore | null;
     canWrite: boolean;
 }
 
@@ -42,7 +44,7 @@ const countOrMissing = (value: number | null) => (value === null ? MISSING : for
  * précédente, la courbe des téléchargements par store, puis les versions
  * Apple. Aucun montant ici : les revenus ont leur onglet et leur droit.
  */
-export function Overview({ app, sources, canWrite, range }: OverviewProps) {
+export function Overview({ app, store, sources, canWrite, range }: OverviewProps) {
     const has = (store: AppStore) => app.listings.some((listing) => listing.store === store);
     const linked = app.listings.length > 0;
 
@@ -50,10 +52,12 @@ export function Overview({ app, sources, canWrite, range }: OverviewProps) {
         'appstores.stats',
         () =>
             linked
-                ? api.send('appstores.stats', { appId: app.id, range }).then((res) => res.stats)
+                ? api
+                      .send('appstores.stats', { appId: app.id, range, ...(store ? { store } : {}) })
+                      .then((res) => res.stats)
                 : Promise.resolve(null),
         'Les chiffres de cette app n’ont pas pu être lus.',
-        [app.id, range, linked]
+        [app.id, range, store, linked]
     );
 
     const settings = {

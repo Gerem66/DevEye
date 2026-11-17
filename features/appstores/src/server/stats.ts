@@ -221,18 +221,26 @@ export function revenueOf(
     return { totals, points };
 }
 
+/** Les lignes d'un seul store quand la lecture le demande, toutes sinon. */
+function ofStore<T extends { store: AppStore }>(rows: readonly T[], store: AppStore | undefined): T[] {
+    return store ? rows.filter((row) => row.store === store) : [...rows];
+}
+
 export const appStoresStatsFeatures = [
     defineSdkFeature({
         ...appStoresStats,
         access: { item: 'appId' },
         handler: async (ctx: Ctx, input) => {
             await loadApp(ctx, input.appId);
-            const listings = await ctx.repo.listListingsOfApps([input.appId]);
+            const listings = ofStore(await ctx.repo.listListingsOfApps([input.appId]), input.store);
             const window = dayWindow(input.range, dataUntilOf(withData(listings)), utcToday(Date.now()));
             const [rows, counts] = await Promise.all([
-                ctx.repo.dailyRows(input.appId, window.previousFromDay, window.toDay),
+                ctx.repo
+                    .dailyRows(input.appId, window.previousFromDay, window.toDay)
+                    .then((all) => ofStore(all, input.store)),
                 ctx.repo.reviewCounts(
                     input.appId,
+                    input.store ?? null,
                     window.previousFromDay * DAY_SECONDS,
                     window.fromDay * DAY_SECONDS,
                     (window.toDay + 1) * DAY_SECONDS
@@ -263,9 +271,12 @@ export const appStoresStatsFeatures = [
         access: { extras: ['revenue'], item: 'appId' },
         handler: async (ctx: Ctx, input) => {
             await loadApp(ctx, input.appId);
-            const listings = await ctx.repo.listListingsOfApps([input.appId]);
+            const listings = ofStore(await ctx.repo.listListingsOfApps([input.appId]), input.store);
             const window = dayWindow(input.range, dataUntilOf(withData(listings)), utcToday(Date.now()));
-            const rows = await ctx.repo.revenueRows(input.appId, window.previousFromDay, window.toDay);
+            const rows = ofStore(
+                await ctx.repo.revenueRows(input.appId, window.previousFromDay, window.toDay),
+                input.store
+            );
             return {
                 revenue: { ...contractWindow(input.range, window, listings), ...revenueOf(listings, rows, window) }
             };

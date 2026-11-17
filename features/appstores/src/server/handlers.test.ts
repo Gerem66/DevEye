@@ -233,6 +233,28 @@ describe('les chiffres', () => {
         assert.equal(stats.metrics.crashRate, 0.01);
     });
 
+    it('restreints à un store, finissent à son propre dernier jour et ne comptent que ses avis', async () => {
+        const { stats } = await handlerFor(appStoresStats)(contextOf(seeded()), {
+            appId: 1,
+            range: '30d',
+            store: 'google'
+        });
+        assert.equal(stats.dataUntil, (UNTIL - 1) * 86400);
+        assert.deepEqual(stats.metrics.downloads, { apple: null, google: 10 });
+        assert.equal(stats.metrics.reviews, 0, 'le seul avis est sur l’App Store');
+        assert.deepEqual(stats.reviewStars, [0, 0, 0, 0, 0]);
+
+        const { revenue } = await handlerFor(appStoresRevenue)(contextOf(seeded(), { extras: { revenue: true } }), {
+            appId: 1,
+            range: '30d',
+            store: 'apple'
+        });
+        assert.deepEqual(
+            revenue.totals.map((t) => [t.store, t.currency]),
+            [['apple', 'EUR']]
+        );
+    });
+
     it('comptent par semaine sur l’année', async () => {
         const { stats } = await handlerFor(appStoresStats)(contextOf(seeded()), { appId: 1, range: '365d' });
         assert.equal(stats.resolution, 'week');

@@ -234,9 +234,10 @@ export interface AppStoresRepo {
 
     findReview(id: number): Promise<ReviewRow | null>;
     listReviews(appId: number, filter: ReviewFilter, limit: number): Promise<ReviewRow[]>;
-    /** Les avis reçus par note : `[from, split[` et `[split, to[`. */
+    /** Les avis reçus par note : `[from, split[` et `[split, to[`, d'un store ou de tous (`null`). */
     reviewCounts(
         appId: number,
+        store: AppStore | null,
         from: number,
         split: number,
         to: number
@@ -665,15 +666,15 @@ export function createRepo(q: SdkQueryable): AppStoresRepo {
                 ]
             );
         },
-        async reviewCounts(appId, from, split, to) {
+        async reviewCounts(appId, store, from, split, to) {
             const rows = await q.query<{ rating: number; previous: number; current: number }>(
                 `SELECT rating,
                         COUNT(CASE WHEN created_at < ? THEN 1 END) AS previous,
                         COUNT(CASE WHEN created_at >= ? THEN 1 END) AS current
                    FROM ft_appstores_reviews
-                  WHERE app_id = ? AND created_at >= ? AND created_at < ?
+                  WHERE app_id = ? AND (? IS NULL OR store = ?) AND created_at >= ? AND created_at < ?
                   GROUP BY rating`,
-                [split, split, appId, from, to]
+                [split, split, appId, store, store, from, to]
             );
             return rows.map((row) => ({
                 rating: Number(row.rating),
