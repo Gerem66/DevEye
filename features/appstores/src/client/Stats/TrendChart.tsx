@@ -53,6 +53,9 @@ function runsOf(values: readonly (number | null)[]): number[][] {
     return runs;
 }
 
+/** Entre la ligne brisée (0) et la cubique monotone pleine (1) : des angles adoucis sans s'arrondir tout à fait. */
+const SMOOTHING = 0.6;
+
 /**
  * Le tracé d'une suite de points à pas régulier, en cubique monotone : les
  * angles s'arrondissent sans qu'aucune bosse ne dépasse les valeurs relevées.
@@ -74,7 +77,10 @@ function smoothPath(points: readonly (readonly [number, number])[]): string {
         const [x0, y0] = points[k - 1];
         const [x1, y1] = points[k];
         const third = (x1 - x0) / 3;
-        d += ` C ${at([x0 + third, y0 + third * tangents[k - 1]])} ${at([x1 - third, y1 - third * tangents[k]])} ${at([x1, y1])}`;
+        // La pente du segment donne un trait droit : on n'en tire qu'une part vers la tangente monotone.
+        const slope = slopes[k - 1];
+        const [t0, t1] = [tangents[k - 1], tangents[k]].map((tangent) => slope + (tangent - slope) * SMOOTHING);
+        d += ` C ${at([x0 + third, y0 + third * t0])} ${at([x1 - third, y1 - third * t1])} ${at([x1, y1])}`;
     }
     return d;
 }
