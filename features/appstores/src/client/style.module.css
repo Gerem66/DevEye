@@ -182,6 +182,65 @@
     border-color: var(--glass-border-strong);
 }
 
+/* L'essentiel de la vue d'ensemble au-dessus de la liste : toute la carte l'ouvre. */
+.teaser {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-sm) var(--space-lg);
+    width: 100%;
+    padding: var(--space-md);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    background: var(--surface-widget);
+    color: inherit;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color var(--transition-fast);
+}
+
+.teaser:hover,
+.teaser:focus-visible {
+    border-color: var(--glass-border-strong);
+}
+
+.teaserFigures {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.teaserValue {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-sm);
+    color: var(--text-primary);
+    font-size: 1.4rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.teaserMore {
+    color: var(--accent);
+    font-size: 0.78rem;
+}
+
+.sparkline {
+    flex: 1 1 240px;
+    min-width: 0;
+    height: 56px;
+}
+
+.sparkLine {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    vector-effect: non-scaling-stroke;
+}
+
 /* Sans étape connue, la bande va et vient : le rattrapage avance, sans total à montrer. */
 .syncStrip {
     position: absolute;

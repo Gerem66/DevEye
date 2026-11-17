@@ -79,7 +79,7 @@ const CORNER = 8;
  * le quart de ses deux segments. La moitié de chacun reste droite, si serrés
  * que soient les points : la forme ne se fond pas dans une courbe.
  */
-function roundedPath(points: readonly (readonly [number, number])[]): string {
+export function roundedPath(points: readonly (readonly [number, number])[]): string {
     const at = ([px, py]: readonly [number, number]) => `${px.toFixed(1)} ${py.toFixed(1)}`;
     let d = `M ${at(points[0])}`;
     for (let k = 1; k < points.length - 1; k++) {

@@ -21,6 +21,7 @@ import AppDetail from './AppDetail';
 import AppDialog from './AppDialog';
 import AppList from './AppList';
 import { DEFAULT_RANGE, plural, STORE_LABELS, STORE_ORDER } from './format';
+import OverviewTeaser from './OverviewTeaser';
 import RangeBar from './Stats/RangeBar';
 import StoresOverview from './StoresOverview';
 import styles from './style.module.css';
@@ -217,7 +218,13 @@ export function FeatureAppStores(_props: FeatureViewProps) {
                     onOpen={setOpenedId}
                 />
             ) : (
-                apps !== null && apps.length > 0 && <AppList apps={apps} outlineFor={outlineFor} onOpen={setOpenedId} />
+                apps !== null &&
+                apps.length > 0 && (
+                    <>
+                        {several && <OverviewTeaser stores={linkedStores} onOpen={() => setView('overview')} />}
+                        <AppList apps={apps} outlineFor={outlineFor} onOpen={setOpenedId} />
+                    </>
+                )
             )}
 
             <AppDialog

@@ -122,6 +122,8 @@ declare const styles: {
     readonly sectionTitle: string;
     readonly sheetHeader: string;
     readonly sheetSticky: string;
+    readonly sparkLine: string;
+    readonly sparkline: string;
     readonly srOnly: string;
     readonly stabilityAlert: string;
     readonly stabilityMeasure: string;
@@ -151,6 +153,10 @@ declare const styles: {
     readonly tabs: string;
     readonly tabsRow: string;
     readonly tabsTools: string;
+    readonly teaser: string;
+    readonly teaserFigures: string;
+    readonly teaserMore: string;
+    readonly teaserValue: string;
     readonly until: string;
     readonly usage: string;
     readonly usageItem: string;

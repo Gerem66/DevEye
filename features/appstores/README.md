@@ -80,17 +80,17 @@ sa synchronisation restent chez elle, où vit sa source.
 
 ## 2. À l'usage
 
-| Vue                    | Contenu                                                                                                                                                 |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Accueil**            | une rangée par app : puces de store (logo, puis état), téléchargements sur sept jours et leur écart, notes, « N projets »                               |
-| **Vue d'ensemble**     | dès deux apps, à côté de la liste : toutes les apps sur une période (voir ci-dessous)                                                                   |
-| **Fiche, Aperçu**      | bandeau (téléchargements, notes, avis reçus, taux de plantage) avec l'écart, courbe par store, pays en liste ou sur une carte, versions des deux stores |
-| **Fiche, Avis**        | filtres, répartition des avis reçus sur la période, cartes d'avis et leur réponse, dialogue de réponse                                                  |
-| **Fiche, Revenus**     | par store et par devise, avec le droit Revenus                                                                                                          |
-| **Fiche, Stabilité**   | taux de plantage et de blocage perçus, avec les seuils de Google, pour une app sur Google Play                                                          |
-| **Réglages, Sources**  | les comptes de store, leurs capacités, leur état ; ajout pas à pas dans un dialogue empilé                                                              |
-| **Réglages d'une app** | onglet Général : nom, fiches de store et leur source, pays de la note Apple, relecture de l'année, suppression                                          |
-| **Onglet d'un projet** | les apps reliées, en version compacte de l'Aperçu, sans montant                                                                                         |
+| Vue                    | Contenu                                                                                                                                                                         |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Accueil**            | une rangée par app : puces de store (logo, puis état), téléchargements sur sept jours et leur écart, notes, « N projets »                                                       |
+| **Vue d'ensemble**     | dès deux apps, à côté de la liste : toutes les apps sur une période (voir ci-dessous) ; au-dessus de la liste, son résumé (total sur 30 jours, écart, courbe) l'ouvre d'un clic |
+| **Fiche, Aperçu**      | bandeau (téléchargements, notes, avis reçus, taux de plantage) avec l'écart, courbe par store, pays en liste ou sur une carte, versions des deux stores                         |
+| **Fiche, Avis**        | filtres, répartition des avis reçus sur la période, cartes d'avis et leur réponse, dialogue de réponse                                                                          |
+| **Fiche, Revenus**     | par store et par devise, avec le droit Revenus                                                                                                                                  |
+| **Fiche, Stabilité**   | taux de plantage et de blocage perçus, avec les seuils de Google, pour une app sur Google Play                                                                                  |
+| **Réglages, Sources**  | les comptes de store, leurs capacités, leur état ; ajout pas à pas dans un dialogue empilé                                                                                      |
+| **Réglages d'une app** | onglet Général : nom, fiches de store et leur source, pays de la note Apple, relecture de l'année, suppression                                                                  |
+| **Onglet d'un projet** | les apps reliées, en version compacte de l'Aperçu, sans montant                                                                                                                 |
 
 La vue d'ensemble (`appstores.overview`, `overview.ts`) ne cumule que ce qui
 s'additionne : téléchargements (total, courbe par store, part de chaque app),
