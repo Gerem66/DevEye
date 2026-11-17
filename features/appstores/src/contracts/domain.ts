@@ -146,6 +146,10 @@ export const appStoresVersionSchema = z.object({
 });
 export type AppStoresVersion = z.infer<typeof appStoresVersionSchema>;
 
+/** Ce qui a fait échouer la dernière passe d'une fiche, à dire en deux mots : la phrase est à côté. */
+export const appStoresSyncFailureSchema = z.enum(['key', 'access', 'missing', 'limited', 'down', 'other']);
+export type AppStoresSyncFailure = z.infer<typeof appStoresSyncFailureSchema>;
+
 /** La présence d'une app sur un store. */
 export const appStoresListingSchema = z.object({
     store: appStoreSchema,
@@ -163,6 +167,8 @@ export const appStoresListingSchema = z.object({
     dataUntil: z.number().int().nullable(),
     lastSyncAt: z.number().int().nullable(),
     syncError: z.string().nullable(),
+    /** Présent avec `syncError`, et seulement avec lui. */
+    syncFailure: appStoresSyncFailureSchema.nullable(),
     /** Le premier relevé, ou une relecture de l'année, n'est pas allé au bout : les chiffres se complètent. */
     syncing: z.boolean()
 });

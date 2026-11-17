@@ -43,6 +43,8 @@ declare const styles: {
     readonly chip: string;
     readonly chipIcon: string;
     readonly chipNone: string;
+    readonly chipRetry: string;
+    readonly chipRetryIcon: string;
     readonly chips: string;
     readonly copyRow: string;
     readonly counter: string;

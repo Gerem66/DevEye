@@ -128,7 +128,7 @@ function LinkedApp({ appId, canWrite, onUnlink }: { appId: number; canWrite: boo
                         )}
                         {app.planPaused && <PlanPausedBadge />}
                     </h3>
-                    <StoreChips listings={app.listings} />
+                    <StoreChips app={app} />
                 </div>
                 <div className={styles.actions}>
                     <FeatureSettingsButton

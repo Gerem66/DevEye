@@ -8,6 +8,7 @@ import {
     type AppStoresCapability,
     type AppStoresListing,
     type AppStoresSource,
+    type AppStoresSyncFailure,
     type AppStoresVersion
 } from '../contracts/domain';
 import { PROJECTS_USAGE_PROVIDER, type ProjectsUsageProvider, type ProjectUsage } from '@deveye/types/sdk';
@@ -63,6 +64,8 @@ export interface ListingState {
     etags?: Record<string, string>;
     /** Au-dessus du seuil de Google ou non, sur 28 jours ; absent avant la première mesure. */
     vitals?: { crash?: boolean; anr?: boolean; day?: number };
+    /** La nature de `sync_error`, écrite avec elle. */
+    failure?: AppStoresSyncFailure;
 }
 
 /** Ce que porte `ft_appstores_sources.content` : rien de secret. */
@@ -191,6 +194,7 @@ export async function toListing(cipher: SdkCipher, row: ListingRow): Promise<App
         dataUntil: row.synced_day === null ? null : row.synced_day * DAY_SECONDS,
         lastSyncAt: row.last_sync_at,
         syncError: row.sync_error,
+        syncFailure: row.sync_error === null ? null : (state.failure ?? 'other'),
         // Les chiffres ne se disent relevés qu'une fois le rattrapage fini : jusque-là, la colonne reste vide.
         syncing: row.source_id !== null && row.metrics_synced_at === null
     };

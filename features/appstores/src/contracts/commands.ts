@@ -125,6 +125,16 @@ export const appStoresBackfill = {
     output: z.object({ app: appStoresAppSchema })
 };
 
+/**
+ * Synchronise l'app tout de suite, cadences et repli ignorés, sans rien
+ * relire de l'historique : la nouvelle tentative après un échec.
+ */
+export const appStoresSyncNow = {
+    command: 'appstores.syncNow' as const,
+    input: z.object({ appId }),
+    output: z.object({ app: appStoresAppSchema })
+};
+
 /** `store` restreint la lecture à ce store : sa fenêtre s'arrête alors à son propre dernier jour. */
 export const appStoresStats = {
     command: 'appstores.stats' as const,
@@ -194,6 +204,7 @@ export const appStoresCommands = [
     appStoresUpdate,
     appStoresRemove,
     appStoresBackfill,
+    appStoresSyncNow,
     appStoresStats,
     appStoresOverview,
     appStoresRevenue,

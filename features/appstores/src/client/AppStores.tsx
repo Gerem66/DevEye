@@ -20,6 +20,7 @@ import AppDialog from './AppDialog';
 import AppList from './AppList';
 import { plural, STORE_ORDER } from './format';
 import OverviewRecap from './OverviewRecap';
+import { useSyncNow } from './StoreChips';
 import StoresOverview from './StoresOverview';
 import styles from './style.module.css';
 
@@ -41,6 +42,7 @@ export function FeatureAppStores(_props: FeatureViewProps) {
     /** La vue d'ensemble, une page comme la fiche d'une app : une app ouverte depuis elle y ramène. */
     const [overviewOpen, setOverviewOpen] = useState(false);
     const [addOpen, setAddOpen] = useState(false);
+    const retry = useSyncNow();
 
     const list = useResource(
         'appstores.list',
@@ -126,7 +128,7 @@ export function FeatureAppStores(_props: FeatureViewProps) {
                 </header>
             </StickyHeader>
 
-            <ErrorNote note={list.error ?? sources.error} />
+            <ErrorNote note={list.error ?? sources.error ?? retry.error} />
 
             {apps !== null && apps.length > 0 && (
                 <NotificationsNotice scope={{ kind: 'feature', feature: 'appstores' }} />
@@ -177,7 +179,7 @@ export function FeatureAppStores(_props: FeatureViewProps) {
             {apps !== null && apps.length > 0 && (
                 <>
                     {several && <OverviewRecap stores={linkedStores} onOpen={() => setOverviewOpen(true)} />}
-                    <AppList apps={apps} outlineFor={outlineFor} onOpen={setOpenedId} />
+                    <AppList apps={apps} outlineFor={outlineFor} onOpen={setOpenedId} onRetry={retry.syncNow} />
                 </>
             )}
 

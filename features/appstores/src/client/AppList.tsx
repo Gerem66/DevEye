@@ -11,10 +11,11 @@ interface AppListProps {
     /** Le halo de présence d'une app (`useLiveOutlines('l1')` de l'appelant). */
     outlineFor: (value: string | null) => LiveOutlineProps;
     onOpen: (appId: number) => void;
+    onRetry: (appId: number) => Promise<void>;
 }
 
 /** Les apps suivies, une rangée chacune : ce qu'on vient lire en parcourant, le reste est dans la fiche. */
-export function AppList({ apps, outlineFor, onOpen }: AppListProps) {
+export function AppList({ apps, outlineFor, onOpen, onRetry }: AppListProps) {
     return (
         <ul className={styles.list}>
             {apps.map((summary) => (
@@ -23,6 +24,7 @@ export function AppList({ apps, outlineFor, onOpen }: AppListProps) {
                     summary={summary}
                     outline={outlineFor(String(summary.app.id))}
                     onOpen={() => onOpen(summary.app.id)}
+                    onRetry={onRetry}
                 />
             ))}
         </ul>
@@ -33,9 +35,10 @@ interface AppRowProps {
     summary: AppStoresAppSummary;
     outline: LiveOutlineProps;
     onOpen: () => void;
+    onRetry: (appId: number) => Promise<void>;
 }
 
-function AppRow({ summary, outline, onOpen }: AppRowProps) {
+function AppRow({ summary, outline, onOpen, onRetry }: AppRowProps) {
     const { app, downloads, previousDownloads } = summary;
     const change = relativeChange(downloads, previousDownloads);
     const listings = STORE_ORDER.flatMap((store) => app.listings.filter((listing) => listing.store === store));
@@ -76,7 +79,7 @@ function AppRow({ summary, outline, onOpen }: AppRowProps) {
                             </span>
                         )}
                         {app.planPaused && <PlanPausedBadge />}
-                        <StoreChips listings={listings} />
+                        <StoreChips app={app} onRetry={onRetry} />
                     </p>
                     <p className={styles.rowFoot}>
                         {rated.map((listing) => (

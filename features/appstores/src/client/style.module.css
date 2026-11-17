@@ -444,6 +444,27 @@
     width: 12px;
 }
 
+/* Une puce en échec relance la synchronisation : un bouton qui garde l'allure de la puce. */
+.chipRetry {
+    border: none;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.chipRetry:hover,
+.chipRetry:focus-visible {
+    box-shadow: inset 0 0 0 1px currentColor;
+}
+
+.chipRetry:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+
+.chipRetryIcon {
+    width: 10px;
+}
+
 .chipNone {
     color: var(--text-muted);
     font-size: 0.72rem;

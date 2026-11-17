@@ -5,6 +5,7 @@ import {
     appStoresGet,
     appStoresList,
     appStoresRemove,
+    appStoresSyncNow,
     appStoresUpdate
 } from '../contracts/commands';
 import {
@@ -18,6 +19,7 @@ import {
 import { defineSdkFeature, FeatureError } from '@deveye/types/sdk/server';
 
 import type { AppRow, ListingRow } from './repo';
+import type { SyncLauncher } from './service';
 import {
     externalRef,
     loadApp,
@@ -64,6 +66,21 @@ async function checkSource(ctx: Ctx, store: AppStore, sourceId: number | null): 
     if (source.store !== store) {
         throw new FeatureError('validation', `Cette source n’est pas un compte ${STORE_LABEL[store]}.`);
     }
+}
+
+/** Une synchronisation demandée part de chez l'app, active, et d'au moins une fiche reliée à une source. */
+async function syncTarget(ctx: Ctx, appId: number): Promise<{ row: AppRow; launcher: SyncLauncher }> {
+    const row = await loadHomeApp(ctx, appId);
+    await ctx.quota.assertActive('apps', String(appId));
+    const listings = await ctx.repo.listListingsOfApps([row.id]);
+    if (!listings.some((l) => l.source_id !== null)) {
+        throw new FeatureError(
+            'validation',
+            'Aucune fiche de cette app n’a de source : choisissez-en une dans ses réglages.'
+        );
+    }
+    const subject = (await readApp(ctx.cipher(), row)).name;
+    return { row, launcher: { userId: ctx.userId, workspaceId: ctx.workspaceId, subject } };
 }
 
 /** Ce que l'app demande d'un store : un identifiant valide, une source d'ici, une place libre dans l'espace. */
@@ -287,23 +304,27 @@ export const appStoresAppFeatures = [
             return { appId: input.appId };
         }
     }),
+    // Pas de `mutates` : ces deux commandes réveillent le service, qui diffusera ce qu'il aura écrit.
     defineSdkFeature({
         ...appStoresBackfill,
-        // Pas de `mutates` : la commande réveille le service, qui diffusera ce qu'il aura écrit.
         access: { level: 'write', item: 'appId' },
-        // Une relecture part de chez l'app, active, et d'au moins une fiche reliée à une source.
         handler: async (ctx: Ctx, input) => {
-            const row = await loadHomeApp(ctx, input.appId);
-            await ctx.quota.assertActive('apps', String(input.appId));
-            const listings = await ctx.repo.listListingsOfApps([row.id]);
-            if (!listings.some((l) => l.source_id !== null)) {
+            const { row, launcher } = await syncTarget(ctx, input.appId);
+            if (syncOf()?.requestBackfill(row.id, launcher) === false) {
                 throw new FeatureError(
-                    'validation',
-                    'Aucune fiche de cette app n’a de source : choisissez-en une dans ses réglages.'
+                    'conflict',
+                    'Cette app se synchronise en ce moment : relancez la relecture dans un instant.'
                 );
             }
-            const name = (await readApp(ctx.cipher(), row)).name;
-            syncOf()?.requestBackfill(row.id, { userId: ctx.userId, workspaceId: ctx.workspaceId, subject: name });
+            return { app: await presentApp(ctx, row.id) };
+        }
+    }),
+    defineSdkFeature({
+        ...appStoresSyncNow,
+        access: { level: 'write', item: 'appId' },
+        handler: async (ctx: Ctx, input) => {
+            const { row, launcher } = await syncTarget(ctx, input.appId);
+            syncOf()?.requestSync(row.id, launcher);
             return { app: await presentApp(ctx, row.id) };
         }
     })

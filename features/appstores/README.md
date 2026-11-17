@@ -92,6 +92,15 @@ sa synchronisation restent chez elle, où vit sa source.
 | **Réglages d'une app** | onglet Général : nom, suppression ; onglet Stores : fiches de store et leur source, pays de la note Apple, cadence de synchronisation, relecture de l'année                  |
 | **Onglet d'un projet** | les apps reliées, en version compacte de l'Aperçu, sans montant                                                                                                              |
 
+Chaque fiche de store a sa puce, à l'accueil comme dans l'en-tête de la fiche :
+son logo, puis son propre état. En temps normal, sa dernière version et l'état
+de celle-ci ; sinon, dans cet ordre, « Sans compte », un échec en deux mots
+(« Sans réponse », « Clé refusée »…), « Synchronisation… » pendant un rattrapage
+ou une nouvelle tentative, et « Pas relevée depuis 5 h » quand le service ne
+passe plus. Le survol donne la phrase entière, jusqu'où vont les données et
+quand la fiche a été relevée. Pour qui écrit sur l'app chez elle, une puce en
+échec est un bouton : un clic relance la synchronisation (`appstores.syncNow`).
+
 La vue d'ensemble (`appstores.overview`, `overview.ts`) ne cumule que ce qui
 s'additionne : téléchargements (total, courbe par store, part de chaque app),
 pays, avis reçus, revenus par store et par devise. Une note ou un taux de
@@ -170,8 +179,13 @@ quinze minutes au plus, ou ce que dit `Retry-After`. C'est un horodatage « pas
 avant », jamais une attente dans le battement. À l'arrêt, `stop()` coupe les
 requêtes en vol, puis attend le battement et chaque passe par source.
 
-Rien ne se synchronise à la main : les stores ne publient qu'une fois par jour,
-et une app ajoutée ou reliée réveille le service, qui la passe en premier.
+Rien ne se synchronise à la main en temps normal : les stores ne publient qu'une
+fois par jour, et une app ajoutée ou reliée réveille le service, qui la passe en
+premier. Seule exception, la nouvelle tentative d'une fiche en échec
+(`appstores.syncNow`) : l'app passe tout de suite, cadences ignorées et repli de
+ses sources levé, sans rien relire de l'année. Le délai du repli reste, qu'un
+nouvel échec doublera. Une relecture demandée pendant une tentative pas finie est
+refusée en conflit : elle ne pourrait plus la rembobiner.
 
 « Relire l'historique », dans l'onglet Stores de l'app (`appstores.backfill`),
 relance le rattrapage d'un an sans rien effacer : Apple relit ses rapports du
@@ -210,6 +224,11 @@ store. **Un seul avis part, par source**, vers l'union des canaux de ses apps
 été annoncée. Un 403 sur une seule app, quand le reste passe, ne note que son
 `sync_error`. Une panne que l'utilisateur explique (sa clé, ses permissions, le
 store qui ne répond pas) passe par `logFailure`, en `info` avec `cause: 'user'`.
+
+`sync_error` porte la phrase, et l'état chiffré de la fiche sa nature (`failure` :
+clé refusée, accès refusé, introuvable, appels limités, sans réponse, autre), que
+la puce dit en deux mots. Un échec qui paraît, change ou se lève prévient les
+écrans, même sans chiffre nouveau.
 
 ---
 
@@ -260,6 +279,7 @@ montre combien de projets relient chacune, et la fiche les nomme.
 | `src/server/e2e.ts`                                                                                           | les parcours de la page Tests et débogage                                                      |
 | `src/client/AppStores.tsx`, `AppList.tsx`, `OverviewRecap.tsx`, `StoresOverview.tsx`                          | l'accueil de la fonctionnalité, son récapitulatif et la vue d'ensemble                         |
 | `src/client/AppDetail.tsx` et ses onglets                                                                     | la fiche : `Overview`, `Reviews`, `Revenue`, `Stability`                                       |
+| `src/client/StoreChips.tsx`                                                                                   | les puces de store, leur état et la nouvelle tentative                                         |
 | `src/client/SourcesPanel.tsx`, `SourceDialog.tsx`                                                             | l'onglet Sources                                                                               |
 | `src/client/AppGeneralPanel.tsx`, `ListingsPanel.tsx`, `appSettings.ts`, `AppDialog.tsx`, `ListingPicker.tsx` | l'ajout, et les onglets Général et Stores de l'app                                             |
 | `src/client/Stats/*`                                                                                          | bandeau, courbe en SVG écrit à la main, répartition des étoiles, pays en liste et sur la carte |

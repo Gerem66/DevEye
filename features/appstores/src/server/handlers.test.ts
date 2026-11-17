@@ -115,6 +115,7 @@ describe('les droits déclarés', () => {
         'appstores.update': { level: 'write', item: 'appId', mutates: true },
         'appstores.remove': { level: 'write', item: 'appId', mutates: true },
         'appstores.backfill': { level: 'write', item: 'appId' },
+        'appstores.syncNow': { level: 'write', item: 'appId' },
         'appstores.overview': {},
         'appstores.replyReview': { level: 'write', item: 'finder', mutates: true },
         'appstores.revenue': { extras: ['revenue'], item: 'appId' }

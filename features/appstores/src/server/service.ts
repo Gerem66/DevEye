@@ -7,6 +7,7 @@ import {
     APPSTORES_VITALS_WINDOW_DAYS,
     isStoreAppId,
     type AppStoresCapability,
+    type AppStoresSyncFailure,
     type AppStoresVersion
 } from '../contracts/domain';
 import {
@@ -111,6 +112,8 @@ export interface SyncLauncher {
 
 interface Forced {
     task: SdkTask | null;
+    /** Relire l'année écoulée ; sinon, reprendre où en est la fiche, repli levé. */
+    rewind: boolean;
     /** Les sources qu'il reste à passer ; `null` tant que le battement ne les a pas lues. */
     sources: Set<number> | null;
     errors: string[];
@@ -130,7 +133,7 @@ interface Work {
     metricsAt: number | null;
     reviewsAt: number | null;
     ratingAt: number | null;
-    error: string | null;
+    error: Failure | null;
     touched: boolean;
     changed: boolean;
     newReviews: StoreReview[];
@@ -160,20 +163,32 @@ const failed = <T>(attempt: Attempt<T>): attempt is { failure: 'refused' | 'tran
 
 const STORE_OWNER = { apple: 'Apple', google: 'Google' } as const;
 
-/** Notre phrase pour un échec, jamais celle du store. */
-function failureSentence(e: StoreError, label: string, what: string): string {
+/** L'échec d'une fiche : sa nature pour l'écran, et notre phrase. */
+interface Failure {
+    kind: AppStoresSyncFailure;
+    sentence: string;
+}
+
+/** Notre phrase pour un échec, jamais celle du store, et sa nature. */
+function failureOf(e: StoreError, label: string, what: string): Failure {
     const who = STORE_OWNER[e.store];
-    if (e.status === 401) return `${who} refuse la clé « ${label} » : elle a pu être révoquée ou supprimée.`;
+    const of = (kind: AppStoresSyncFailure, sentence: string) => ({ kind, sentence: sentence.slice(0, SENTENCE_MAX) });
+    if (e.status === 401) return of('key', `${who} refuse la clé « ${label} » : elle a pu être révoquée ou supprimée.`);
     if (e.status === 403) {
-        return e.store === 'apple'
-            ? `La clé « ${label} » ne lit pas ${what} : son rôle dans App Store Connect ne le permet pas.`
-            : `Le compte de service « ${label} » ne lit pas ${what} : la Play Console ne lui en donne pas la permission.`;
+        return of(
+            'access',
+            e.store === 'apple'
+                ? `La clé « ${label} » ne lit pas ${what} : son rôle dans App Store Connect ne le permet pas.`
+                : `Le compte de service « ${label} » ne lit pas ${what} : la Play Console ne lui en donne pas la permission.`
+        );
     }
-    if (e.status === 404) return `${who} ne trouve pas ${what} de cette app avec la clé « ${label} ».`;
-    if (e.status === 429)
-        return `${who} limite les appels de la clé « ${label} » : nouvel essai dans quelques minutes.`;
-    if (e.status === 0 || e.status >= 500) return `${who} ne répond pas : nouvel essai dans quelques minutes.`;
-    return e.message;
+    if (e.status === 404) return of('missing', `${who} ne trouve pas ${what} de cette app avec la clé « ${label} ».`);
+    if (e.status === 429) {
+        return of('limited', `${who} limite les appels de la clé « ${label} » : nouvel essai dans quelques minutes.`);
+    }
+    if (e.status === 0 || e.status >= 500)
+        return of('down', `${who} ne répond pas : nouvel essai dans quelques minutes.`);
+    return of('other', e.message);
 }
 
 /** Les taux moyens d'une fenêtre, pondérés par les utilisateurs de chaque jour. */
@@ -306,10 +321,23 @@ export class AppStoresSync {
      * Relit l'année écoulée d'une app, cadences ignorées : la première passe
      * relance le rattrapage, les battements suivants le finissent. Avec un
      * `launcher`, l'opération paraît dans sa zone jusqu'à la fin de cette passe.
+     * Rend `false` sur une synchronisation demandée pas finie, que la relecture
+     * ne peut plus rembobiner.
      */
-    requestBackfill(appId: number, launcher: SyncLauncher | null): void {
-        if (this.stopping) return;
+    requestBackfill(appId: number, launcher: SyncLauncher | null): boolean {
+        return this.request(appId, launcher, true);
+    }
+
+    /** Synchronise une app tout de suite, cadences et repli de ses sources ignorés, sans rien relire. */
+    requestSync(appId: number, launcher: SyncLauncher | null): void {
+        this.request(appId, launcher, false);
+    }
+
+    private request(appId: number, launcher: SyncLauncher | null, rewind: boolean): boolean {
+        if (this.stopping) return true;
         const existing = this.forced.get(appId);
+        // Une relecture en cours force déjà la passe ; une synchronisation simple ne se rembobine pas en route.
+        if (existing && rewind && !existing.rewind) return false;
         const task =
             existing?.task ??
             (launcher
@@ -318,12 +346,18 @@ export class AppStoresSync {
                       workspaceId: launcher.workspaceId,
                       itemId: appId,
                       key: 'sync',
-                      title: 'Relecture de l’année écoulée',
+                      title: rewind ? 'Relecture de l’année écoulée' : 'Synchronisation',
                       subject: launcher.subject
                   })
                 : null);
-        this.forced.set(appId, { task, sources: existing?.sources ?? null, errors: existing?.errors ?? [] });
+        this.forced.set(appId, {
+            task,
+            rewind: existing?.rewind ?? rewind,
+            sources: existing?.sources ?? null,
+            errors: existing?.errors ?? []
+        });
         this.wake();
+        return true;
     }
 
     private get signal(): AbortSignal {
@@ -417,7 +451,15 @@ export class AppStoresSync {
             );
             if (this.deps.pauses.isPaused('apps', String(appId))) this.finishForced(appId, PAUSED);
             else if (sources.size === 0) this.finishForced(appId, NO_SOURCE);
-            else forced.sources = sources;
+            else {
+                forced.sources = sources;
+                if (forced.rewind) continue;
+                // Une nouvelle tentative n'attend pas le repli : son délai reste, qu'un nouvel échec doublera.
+                for (const sourceId of sources) {
+                    const backoff = this.backoff.get(sourceId);
+                    if (backoff) this.backoff.set(sourceId, { ...backoff, notBefore: 0 });
+                }
+            }
         }
     }
 
@@ -439,9 +481,10 @@ export class AppStoresSync {
         if (!forced) return;
         this.forced.delete(appId);
         const failure = error ?? forced.errors[0];
-        if (failure === undefined) {
+        if (failure !== undefined) forced.task?.fail(failure, 'conflict');
+        else if (forced.rewind) {
             forced.task?.done('Relecture lancée : les mois restants se complètent d’eux-mêmes en quelques minutes.');
-        } else forced.task?.fail(failure, 'conflict');
+        } else forced.task?.done();
     }
 
     private launch(sourceId: number): void {
@@ -521,8 +564,8 @@ export class AppStoresSync {
                 );
                 return { failure: 'transient' };
             }
-            const sentence = failureSentence(e, pass.label, what).slice(0, SENTENCE_MAX);
-            for (const work of concerned) work.error ??= sentence;
+            const failure = failureOf(e, pass.label, what);
+            for (const work of concerned) work.error ??= failure;
             if (e.refused) {
                 pass.refused ??= e;
                 if (e.status === 401) pass.keyRefused = true;
@@ -582,7 +625,8 @@ export class AppStoresSync {
         };
         let works: Work[] = [];
         try {
-            works = await this.openWorks(cipher, rows, new Set(forcedHere));
+            const rewound = forcedHere.filter((appId) => this.forced.get(appId)?.rewind);
+            works = await this.openWorks(cipher, rows, new Set(forcedHere), new Set(rewound));
             const readable = new Set(works.map((w) => w.row.app_id));
             const unreadable = rows.map((r) => r.app_id).filter((appId) => !readable.has(appId));
             release(unreadable, new Map(unreadable.map((id) => [id, UNREADABLE])));
@@ -600,7 +644,7 @@ export class AppStoresSync {
                 const touched = works.filter((w) => w.touched);
                 release(
                     forcedHere.filter((appId) => touched.some((w) => w.row.app_id === appId)),
-                    new Map(touched.map((w) => [w.row.app_id, w.error]))
+                    new Map(touched.map((w) => [w.row.app_id, w.error?.sentence ?? null]))
                 );
             }
         }
@@ -609,7 +653,8 @@ export class AppStoresSync {
     private async openWorks(
         cipher: SdkCipher,
         rows: readonly ListingRow[],
-        forced: ReadonlySet<number>
+        forced: ReadonlySet<number>,
+        rewound: ReadonlySet<number>
     ): Promise<Work[]> {
         const apps = new Map(
             (await this.deps.repo.listAppsByIds([...new Set(rows.map((r) => r.app_id))])).map((a) => [a.id, a])
@@ -625,7 +670,7 @@ export class AppStoresSync {
                 continue;
             }
             let state = (await readJson<ListingState>(cipher, row.state)) ?? {};
-            if (forced.has(row.app_id)) {
+            if (rewound.has(row.app_id)) {
                 state = rewind(state, row);
                 // Dus à chaque battement jusqu'à la fin du rattrapage, comme au premier branchement.
                 await this.deps.repo.clearMetricsSync(row.id);
@@ -633,7 +678,7 @@ export class AppStoresSync {
                 this.deps.live.changed(row.workspace_id);
             }
             works.push({
-                row: forced.has(row.app_id) ? { ...row, metrics_synced_at: null } : row,
+                row: rewound.has(row.app_id) ? { ...row, metrics_synced_at: null } : row,
                 appName: stored.name || `App ${row.app_id}`,
                 ratingCountry: stored.ratingCountry,
                 content: {
@@ -666,6 +711,7 @@ export class AppStoresSync {
     }
 
     private async persist(cipher: SdkCipher, work: Work): Promise<void> {
+        work.state.failure = work.error?.kind;
         await this.deps.repo.saveListing(work.row.id, {
             content: work.contentChanged ? await sealJson(cipher, work.content) : null,
             state: await sealJson(cipher, work.state),
@@ -675,7 +721,7 @@ export class AppStoresSync {
             reviewsSyncedAt: work.reviewsAt,
             ratingSyncedAt: work.ratingAt,
             lastSyncAt: this.nowSeconds(),
-            syncError: work.error
+            syncError: work.error?.sentence ?? null
         });
         work.contentChanged = false;
     }
@@ -706,7 +752,10 @@ export class AppStoresSync {
                 );
                 if (failed(found)) continue;
                 if (found.value === null) {
-                    work.error ??= `Apple ne connaît pas cette app avec la clé « ${pass.label} ».`;
+                    work.error ??= {
+                        kind: 'missing',
+                        sentence: `Apple ne connaît pas cette app avec la clé « ${pass.label} ».`
+                    };
                     continue;
                 }
                 work.content = {
@@ -1286,9 +1335,11 @@ export class AppStoresSync {
         for (const work of works) if (work.touched) await this.persist(cipher, work);
         await this.settleSource(pass, cipher);
         await this.announce(pass, works);
-        // Une fiche qui finit son rattrapage cesse de se dire en cours, même sans chiffre nouveau.
+        // Une fiche qui finit son rattrapage cesse de se dire en cours, et un échec qui paraît ou se lève se
+        // voit, même sans chiffre nouveau.
         const settled = (work: Work) => work.row.metrics_synced_at === null && work.metricsAt !== null;
-        if (pass.changed || works.some((w) => w.changed || settled(w))) {
+        const failureMoved = (work: Work) => work.touched && (work.error?.sentence ?? null) !== work.row.sync_error;
+        if (pass.changed || works.some((w) => w.changed || settled(w) || failureMoved(w))) {
             this.deps.live.changed(pass.source.workspace_id);
         }
     }
@@ -1310,7 +1361,7 @@ export class AppStoresSync {
                 if (Number(source.failing_notified) === 1) await announce({ lost: false, cause: '', at: now });
             }
         } else if (pass.refused) {
-            const cause = failureSentence(pass.refused, pass.label, 'les données de ses apps').slice(0, SENTENCE_MAX);
+            const cause = failureOf(pass.refused, pass.label, 'les données de ses apps').sentence;
             const before = Number(source.failing_count);
             const after = await this.deps.repo.recordRefusal(source.id, { at: now, error: cause });
             if (after && after.count >= LOST_AFTER_REFUSALS) pass.changed = true;

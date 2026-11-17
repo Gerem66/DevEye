@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { PROJECT_STATUS_LABELS } from '@deveye/types';
 import {
     Button,
+    ErrorNote,
     FeatureSettingsButton,
     invalidate,
     NotificationsNotice,
@@ -19,73 +20,20 @@ import {
     useTasks,
     useWorkspacePermissions
 } from 'deveye-sdk-client';
-import type { AppStoresApp, AppStoresSource, AppStoresUsage } from '../contracts/domain';
+import type { AppStoresApp, AppStoresUsage } from '../contracts/domain';
 
 import { api } from './api';
-import { formatAgo, formatDay, plural, STORE_LABELS, STORE_ORDER, type Tone } from './format';
+import { plural, STORE_LABELS, STORE_ORDER } from './format';
 import Overview from './Overview';
 import { setStoresPrefs, useStoresPrefs } from './prefs';
 import Revenue from './Revenue';
 import Reviews from './Reviews';
 import RangeBar from './Stats/RangeBar';
 import Stability from './Stability';
-import StoreChips from './StoreChips';
+import StoreChips, { useSyncNow } from './StoreChips';
 import styles from './style.module.css';
 
 type Tab = 'overview' | 'reviews' | 'revenue' | 'stability';
-
-/** Au-delà, une fiche relue toutes les demi-heures a cessé de l'être : le service ne tourne plus pour elle. */
-const STALE_SECONDS = 2 * 3600;
-
-/** « 4 h » : le temps écoulé depuis un instant, à la minute près. */
-function formatSince(epochSeconds: number): string {
-    const minutes = Math.max(1, Math.floor((Date.now() / 1000 - epochSeconds) / 60));
-    if (minutes < 60) return `${minutes} min`;
-    const hours = Math.floor(minutes / 60);
-    return hours < 24 ? `${hours} h` : `${Math.floor(hours / 24)} j`;
-}
-
-/**
- * L'état de la synchronisation en quelques mots, le détail de chaque store au
- * survol : chacun publie à son rythme, et un relevé commun laisserait croire
- * l'autre à jour. `null` tant qu'aucune fiche n'a de compte.
- */
-function syncStatus(
-    app: AppStoresApp,
-    sources: readonly AppStoresSource[] | null,
-    busy: boolean
-): { text: string; tone: Tone; title: string } | null {
-    const linked = STORE_ORDER.flatMap((store) =>
-        app.listings.filter((listing) => listing.store === store && listing.sourceId !== null)
-    );
-    if (linked.length === 0) return null;
-    const title = linked
-        .map((listing) => {
-            const data =
-                listing.dataUntil === null
-                    ? 'aucune donnée pour l’instant'
-                    : `données jusqu’au ${formatDay(listing.dataUntil)}`;
-            const read = listing.lastSyncAt === null ? 'jamais relevée' : `relevée ${formatAgo(listing.lastSyncAt)}`;
-            return `${STORE_LABELS[listing.store]} : ${data}, ${read}${listing.syncError ? `. ${listing.syncError}` : ''}`;
-        })
-        .join('\n');
-    const failingSince = linked
-        .map((listing) => sources?.find((source) => source.id === listing.sourceId)?.failingSince ?? null)
-        .filter((since): since is number => since !== null);
-    if (app.planPaused) return { text: 'Synchronisation en pause', tone: 'warning', title };
-    if (failingSince.length > 0) {
-        return { text: `En échec depuis ${formatSince(Math.min(...failingSince))}`, tone: 'danger', title };
-    }
-    if (linked.some((listing) => listing.syncError !== null)) return { text: 'En échec', tone: 'danger', title };
-    if (busy || linked.some((listing) => listing.syncing)) {
-        return { text: 'Synchronisation en cours', tone: 'accent', title };
-    }
-    const oldest = Math.min(...linked.map((listing) => listing.lastSyncAt ?? 0));
-    if (Date.now() / 1000 - oldest > STALE_SECONDS) {
-        return { text: `Pas synchronisée depuis ${formatSince(oldest)}`, tone: 'warning', title };
-    }
-    return { text: 'À jour', tone: 'success', title };
-}
 
 interface AppDetailProps {
     app: AppStoresApp;
@@ -165,7 +113,7 @@ export function AppDetail({ app, usage, onBack }: AppDetailProps) {
         invalidate('appstores.detail');
     };
 
-    const status = syncStatus(app, sources.data, running);
+    const retry = useSyncNow();
 
     return (
         <div className={styles.root}>
@@ -196,12 +144,7 @@ export function AppDetail({ app, usage, onBack }: AppDetailProps) {
                                 {app.planPaused && <PlanPausedBadge />}
                             </h2>
                             <div className={styles.subheading}>
-                                <StoreChips listings={app.listings} />
-                                {status && (
-                                    <span className={styles.badgeWrap} title={status.title}>
-                                        <StatusBadge tone={status.tone}>{status.text}</StatusBadge>
-                                    </span>
-                                )}
+                                <StoreChips app={app} onRetry={retry.syncNow} />
                             </div>
                         </div>
                     </div>
@@ -253,6 +196,7 @@ export function AppDetail({ app, usage, onBack }: AppDetailProps) {
                 </div>
             </StickyHeader>
 
+            <ErrorNote note={retry.error} />
             {tasks.map((task) => (
                 <TaskProgress key={task.id} task={task} />
             ))}

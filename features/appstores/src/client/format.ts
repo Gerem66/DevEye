@@ -3,6 +3,7 @@ import type {
     AppStoresCapability,
     AppStoresRange,
     AppStoresResolution,
+    AppStoresSyncFailure,
     AppStoresVersion
 } from '../contracts/domain';
 
@@ -10,6 +11,16 @@ export const STORE_LABELS: Record<AppStore, string> = { apple: 'App Store', goog
 
 /** Le logo d'un store, classe d'icône sans son préfixe `icon-`. */
 export const STORE_ICONS: Record<AppStore, string> = { apple: 'apple', google: 'google-play' };
+
+/** Un échec de synchronisation en deux mots, sur la puce de son store ; la phrase est au survol. */
+export const SYNC_FAILURE_LABELS: Record<AppStoresSyncFailure, string> = {
+    key: 'Clé refusée',
+    access: 'Accès refusé',
+    missing: 'Introuvable',
+    limited: 'Trop d’appels',
+    down: 'Sans réponse',
+    other: 'Erreur'
+};
 
 /** Le store dans une phrase : « sur l’App Store », « sur Google Play ». */
 export const ON_STORE: Record<AppStore, string> = { apple: 'sur l’App Store', google: 'sur Google Play' };

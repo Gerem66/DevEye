@@ -350,6 +350,10 @@ describe('une clé refusée', () => {
             t.repo.db.listings.every((l) => l.sync_error?.includes('refuse la clé')),
             'chaque fiche dit pourquoi'
         );
+        assert.ok(
+            t.repo.db.listings.every((l) => JSON.parse(l.state ?? '{}').failure === 'key'),
+            'et la nature de l’échec, pour la puce de son store'
+        );
 
         refuse = false;
         t.later(1000_000);
@@ -646,6 +650,56 @@ describe('la relecture demandée', () => {
         assert.equal(task.outcome?.state, 'failed');
         assert.ok(task.outcome?.state === 'failed' && task.outcome.code === 'conflict');
         assert.ok(task.outcome?.state === 'failed' && /refuse la clé/.test(task.outcome.message));
+    });
+});
+
+describe('la synchronisation demandée', () => {
+    it('reprend tout de suite une fiche en échec, repli levé, sans relire l’année', async () => {
+        let down = true;
+        const days: number[] = [];
+        const t = setup(
+            { sources: [sourceRow({ id: 10 })], listings: [caughtUp({ id: 1, app_id: 1 })] },
+            clientsOf({
+                fetchSalesReport: async (_creds, day) => {
+                    days.push(day);
+                    return { kind: 'empty' };
+                },
+                fetchReviewsPage: async () => {
+                    if (down) throw new StoreError('apple', 503);
+                    return { reviews: [], next: null };
+                }
+            })
+        );
+        await t.start();
+        const listing = () => t.repo.db.listings[0];
+        const failure = () => (JSON.parse(listing().state ?? '{}') as { failure?: string }).failure;
+        assert.match(listing().sync_error ?? '', /ne répond pas/);
+        assert.equal(failure(), 'down');
+
+        down = false;
+        days.length = 0;
+        const before = t.deps.recorded.liveChanges.length;
+        t.sync.requestSync(1, { userId: 7, workspaceId: 1, subject: 'App 1' });
+        await t.sync.idle();
+        assert.equal(listing().sync_error, null, 'le repli de la source n’a pas retenu la passe');
+        assert.equal(failure(), undefined);
+        assert.ok(t.deps.recorded.liveChanges.length > before, 'les écrans voient l’échec se lever');
+        assert.deepEqual(days, [], 'rien n’est relu de l’année');
+        assert.equal(listing().history_from, LATEST - 364);
+        const [task] = t.deps.recorded.tasks;
+        assert.equal(task.title, 'Synchronisation');
+        assert.equal(task.key, 'sync');
+        assert.equal(task.outcome?.state, 'done');
+    });
+
+    it('ne laisse pas une relecture rembobiner une synchronisation en route', async () => {
+        const t = setup({ sources: [sourceRow({ id: 10 })], listings: [synced(1)] }, clientsOf());
+        await t.start();
+        t.sync.requestSync(1, null);
+        assert.equal(t.sync.requestBackfill(1, null), false);
+        await t.sync.idle();
+        assert.equal(t.sync.requestBackfill(1, null), true, 'finie, elle laisse la place');
+        await t.sync.idle();
     });
 });
 
