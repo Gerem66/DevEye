@@ -15,6 +15,7 @@ describe('l’export du compte', () => {
         const tables = serverEntry.accountExport?.tables ?? {};
         assert.deepEqual(Object.keys(tables).sort(), [
             'ft_appstores_apps',
+            'ft_appstores_countries',
             'ft_appstores_daily',
             'ft_appstores_listings',
             'ft_appstores_revenue',
@@ -23,6 +24,7 @@ describe('l’export du compte', () => {
         ]);
         assert.deepEqual((tables.ft_appstores_sources as SdkExportTable).omit, ['secret_enc']);
         assert.ok('skip' in (tables.ft_appstores_daily as SdkExportSkip));
+        assert.ok('skip' in (tables.ft_appstores_countries as SdkExportSkip));
         assert.ok('skip' in (tables.ft_appstores_revenue as SdkExportSkip));
         assert.match(
             (tables.ft_appstores_reviews as SdkExportTable).where,

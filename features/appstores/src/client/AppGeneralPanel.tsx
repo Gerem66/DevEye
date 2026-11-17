@@ -52,8 +52,8 @@ const changedApp = () =>
     );
 
 /**
- * L'app elle-même : son nom, ses fiches de store, le pays de sa note et sa
- * suppression. L'identité d'une fiche ne se modifie pas : elle ferait d'une
+ * L'app elle-même : son nom, ses fiches de store, le pays de sa note, la
+ * relecture de son année et sa suppression. L'identité d'une fiche ne se modifie pas : elle ferait d'une
  * ligne suivie une autre app, avec l'historique de la précédente.
  */
 export default function AppGeneralPanel({ scope, canWrite, gone }: SettingsPanelProps) {
@@ -69,6 +69,8 @@ export default function AppGeneralPanel({ scope, canWrite, gone }: SettingsPanel
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<ErrorNoteInput | null>(null);
     const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
+    /** La relecture de l'année est partie : le service la finit seul. */
+    const [rereading, setRereading] = useState(false);
 
     const {
         sources,
@@ -198,6 +200,16 @@ export default function AppGeneralPanel({ scope, canWrite, gone }: SettingsPanel
                     }
                 })()
         });
+    };
+
+    const reread = async () => {
+        setError(null);
+        try {
+            await api.send('appstores.backfill', { appId: app.id });
+            setRereading(true);
+        } catch (e) {
+            setError(errorNote(e, 'La relecture n’a pas pu être lancée.'));
+        }
     };
 
     const remove = async () => {
@@ -370,6 +382,26 @@ export default function AppGeneralPanel({ scope, canWrite, gone }: SettingsPanel
                 <ReadOnlyNotice>
                     Votre rôle ne permet pas de modifier une app : cela relève de l’écriture sur Stores.
                 </ReadOnlyNotice>
+            )}
+
+            {canWrite && app.listings.some((listing) => listing.sourceId !== null) && (
+                <div className={shell.field}>
+                    <span className={shell.sectionLabel}>Relire l’année écoulée</span>
+                    <span className={shell.fieldHint}>
+                        Apple et Google sont relus jusqu’au même mois de l’an dernier : téléchargements, pays, notes et
+                        revenus. Rien n’est effacé, et les chiffres se complètent en quelques minutes.
+                    </span>
+                    <div className={shell.sectionActions}>
+                        <Button
+                            variant='secondary'
+                            icon='refresh'
+                            disabled={busy || rereading || app.planPaused}
+                            onClick={() => void reread()}
+                        >
+                            {rereading ? 'Relecture lancée' : 'Relire l’historique'}
+                        </Button>
+                    </div>
+                </div>
             )}
 
             {canWrite && (

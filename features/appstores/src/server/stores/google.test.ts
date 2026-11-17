@@ -16,6 +16,7 @@ import {
     googleToken,
     installsObject,
     listObjects,
+    parseCountryInstalls,
     parseInstalls,
     parseRatings,
     parseSales,
@@ -196,6 +197,21 @@ describe('les rapports du bucket', () => {
             { day: nov(1), downloads: 1234, updates: 6, uninstalls: 3, activeDevices: 800 },
             { day: nov(2), downloads: 7, updates: null, uninstalls: 1, activeDevices: 801 }
         ]);
+    });
+
+    it('lit les installations par pays, sans les pays muets ni ceux que Google ne nomme pas', () => {
+        const csv = [
+            'Date,Package Name,Country,Daily Device Installs,Daily User Installs,Active Device Installs',
+            '2026-11-01,com.exemple.app,FR,10,"1,204",800',
+            '2026-11-01,com.exemple.app,be,2,3,40',
+            '2026-11-01,com.exemple.app,DE,0,0,12',
+            '2026-11-01,com.exemple.app,,1,1,1'
+        ].join('\r\n');
+        assert.deepEqual(parseCountryInstalls(utf16(csv)), [
+            { day: nov(1), country: 'FR', downloads: 1204 },
+            { day: nov(1), country: 'BE', downloads: 3 }
+        ]);
+        assert.throws(() => parseCountryInstalls(utf16('Date,Daily User Installs\n2026-11-01,3')), StoreError);
     });
 
     it('lit la note moyenne totale, et passe « NA »', () => {

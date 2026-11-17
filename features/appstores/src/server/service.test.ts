@@ -162,14 +162,15 @@ describe('le choix des fiches dues', () => {
 
     it('lit un rapport par jour pour tout le compte, et le répartit entre ses apps', async () => {
         const days: number[] = [];
-        const rows = (appleId: string, units: number): AppleSalesRow => ({
+        const rows = (appleId: string, units: number, country: string): AppleSalesRow => ({
             appleId,
             parentId: '',
             sku: `sku-${appleId}`,
             productType: '1',
             units,
             proceeds: 0,
-            currency: 'EUR'
+            currency: 'EUR',
+            country
         });
         const t = setup(
             {
@@ -182,7 +183,10 @@ describe('le choix des fiches dues', () => {
             clientsOf({
                 fetchSalesReport: async (_creds, day) => {
                     days.push(day);
-                    return { kind: 'rows', rows: [rows('1001', 4), rows('1002', 9)] };
+                    return {
+                        kind: 'rows',
+                        rows: [rows('1001', 4, 'FR'), rows('1002', 6, 'US'), rows('1002', 3, 'CA')]
+                    };
                 }
             })
         );
@@ -198,6 +202,13 @@ describe('le choix des fiches dues', () => {
             [LATEST - 1, 9],
             [LATEST, 9]
         ]);
+        assert.deepEqual(
+            t.repo.db.countries.filter((c) => c.app_id === 2 && c.day === LATEST).map((c) => [c.country, c.downloads]),
+            [
+                ['US', 6],
+                ['CA', 3]
+            ]
+        );
         assert.ok(t.repo.db.listings.every((l) => l.synced_day === LATEST));
     });
 
@@ -219,6 +230,56 @@ describe('le choix des fiches dues', () => {
         assert.equal(listing.synced_day, LATEST - 1, 'le jour pas encore publié ne compte pas');
         assert.equal(listing.history_from, LATEST - 29);
         assert.equal(listing.metrics_synced_at, null, 'le rattrapage continue au battement suivant');
+    });
+});
+
+describe('les pays Google', () => {
+    it('se lisent dans le rapport par pays, à côté des installations', async () => {
+        const utf16 = (text: string) => Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(text, 'utf16le')]);
+        const files: Record<string, Buffer> = {
+            'stats/installs/installs_com.exemple.app1_202611_overview.csv': utf16(
+                'Date,Daily User Installs\n2026-11-14,12'
+            ),
+            'stats/installs/installs_com.exemple.app1_202611_country.csv': utf16(
+                'Date,Country,Daily User Installs\n2026-11-14,FR,9\n2026-11-14,BE,3\n2026-11-14,DE,0'
+            )
+        };
+        const t = setup(
+            {
+                sources: [
+                    sourceRow({
+                        id: 20,
+                        store: 'google',
+                        capabilities: 'downloads',
+                        content: JSON.stringify({
+                            label: 'Play',
+                            clientEmail: 'deveye@projet.iam.gserviceaccount.com',
+                            bucket: 'pubsite_prod_rev_0123'
+                        })
+                    })
+                ],
+                listings: [caughtUp({ id: 1, app_id: 1, store: 'google', source_id: 20 })]
+            },
+            clientsOf(
+                {},
+                {
+                    listObjects: async (_creds, prefix) =>
+                        Object.keys(files)
+                            .filter((name) => name.startsWith(prefix))
+                            .map((name) => ({ name, etag: 'e1' })),
+                    downloadObject: async (_creds, name) => files[name]
+                }
+            )
+        );
+        await t.start();
+        assert.deepEqual(
+            t.repo.db.countries.map((c) => [c.store, c.country, c.downloads]),
+            [
+                ['google', 'FR', 9],
+                ['google', 'BE', 3]
+            ]
+        );
+        assert.equal(t.repo.db.daily[0]?.downloads, 12);
     });
 });
 
@@ -582,5 +643,110 @@ describe('la synchronisation demandée', () => {
         assert.equal(task.outcome?.state, 'failed');
         assert.ok(task.outcome?.state === 'failed' && task.outcome.code === 'conflict');
         assert.ok(task.outcome?.state === 'failed' && /refuse la clé/.test(task.outcome.message));
+    });
+});
+
+describe('la relecture de l’année', () => {
+    it('relit les rapports Apple du dernier jour relevé vers le passé, sans faire reculer la couverture', async () => {
+        const days: number[] = [];
+        const t = setup(
+            { sources: [sourceRow({ id: 10 })], listings: [synced(1)] },
+            clientsOf({
+                fetchSalesReport: async (_creds, day) => {
+                    days.push(day);
+                    return { kind: 'empty' };
+                }
+            })
+        );
+        await t.start();
+        assert.deepEqual(days, [], 'rien n’était dû');
+        t.sync.requestSync(1, { userId: 7, workspaceId: 1, subject: 'App 1' }, true);
+        await t.sync.idle();
+        assert.equal(days.length, 30, 'une passe lit trente rapports au plus');
+        assert.equal(days[0], LATEST);
+        const listing = () => t.repo.db.listings[0];
+        assert.equal(listing().history_from, LATEST - 364, 'la couverture reste entière');
+        assert.equal(listing().metrics_synced_at, null, 'le rattrapage continue au battement suivant');
+        assert.equal(t.deps.recorded.tasks[0].title, 'Relecture de l’année écoulée');
+        assert.equal(t.deps.recorded.tasks[0].outcome?.state, 'done');
+
+        for (let beat = 0; beat < 12 && listing().metrics_synced_at === null; beat++) {
+            t.later(60_000);
+            await t.beat();
+        }
+        assert.equal(days.length, 365, 'un an, chaque jour une fois');
+        assert.equal(Math.min(...days), LATEST - 364);
+        assert.notEqual(listing().metrics_synced_at, null, 'rattrapage fini, la cadence reprend');
+        assert.equal(listing().history_from, LATEST - 364);
+    });
+
+    it('relit les mois Google, même ceux dont l’etag n’a pas bougé', async () => {
+        const read: string[] = [];
+        const t = setup(
+            {
+                sources: [
+                    sourceRow({
+                        id: 20,
+                        store: 'google',
+                        capabilities: 'downloads',
+                        content: JSON.stringify({
+                            label: 'Play',
+                            clientEmail: 'deveye@projet.iam.gserviceaccount.com',
+                            bucket: 'pubsite_prod_rev_0123'
+                        })
+                    })
+                ],
+                listings: [
+                    caughtUp({
+                        id: 1,
+                        app_id: 1,
+                        store: 'google',
+                        source_id: 20,
+                        metrics_synced_at: Math.floor(START / 1000),
+                        reviews_synced_at: Math.floor(START / 1000)
+                    })
+                ]
+            },
+            clientsOf(
+                {},
+                {
+                    listObjects: async (_creds, prefix) =>
+                        ['202610', '202611'].flatMap((month) =>
+                            [`${prefix}${month}_overview.csv`, `${prefix}${month}_country.csv`].map((name) => ({
+                                name,
+                                etag: 'e1'
+                            }))
+                        ),
+                    downloadObject: async (_creds, name) => {
+                        read.push(name);
+                        return Buffer.concat([
+                            Buffer.from([0xff, 0xfe]),
+                            Buffer.from('Date,Country,Daily User Installs\n', 'utf16le')
+                        ]);
+                    }
+                }
+            )
+        );
+        await t.start();
+        t.repo.db.listings[0].state = JSON.stringify({
+            backfillDone: true,
+            etags: Object.fromEntries(
+                ['202610', '202611'].flatMap((month) =>
+                    ['overview', 'country'].map((kind) => [
+                        `stats/installs/installs_com.exemple.app1_${month}_${kind}.csv`,
+                        'e1'
+                    ])
+                )
+            )
+        });
+        t.sync.requestSync(1, null, true);
+        await t.sync.idle();
+        assert.deepEqual(read.sort(), [
+            'stats/installs/installs_com.exemple.app1_202610_country.csv',
+            'stats/installs/installs_com.exemple.app1_202610_overview.csv',
+            'stats/installs/installs_com.exemple.app1_202611_country.csv',
+            'stats/installs/installs_com.exemple.app1_202611_overview.csv'
+        ]);
+        assert.notEqual(t.repo.db.listings[0].metrics_synced_at, null, 'tout est relu en une passe');
     });
 });

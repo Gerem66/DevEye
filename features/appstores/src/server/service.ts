@@ -26,7 +26,9 @@ import { ArchiveError, unzipFirst } from './parse/unzip';
 import type { AppStoresRepo, ListingRow, SourceRow } from './repo';
 import { figuresFor, firstReviewsPage, skuOf, type AppleSalesReport } from './stores/apple';
 import {
+    countriesObject,
     installsObject,
+    parseCountryInstalls,
     parseInstalls,
     parseRatings,
     parseSales,
@@ -85,6 +87,14 @@ const SALES_MAX_OUTPUT = 256 * 1024 * 1024;
 /** `sync_error` et `failing_error` tiennent en 300 caractères. */
 const SENTENCE_MAX = 300;
 
+/** Les rapports mensuels d'un paquet que lit une passe : leur dossier du bucket, et le nom d'un mois. */
+const GOOGLE_REPORTS = {
+    installs: { what: 'les installations', folder: 'installs', object: installsObject },
+    countries: { what: 'les installations par pays', folder: 'installs', object: countriesObject },
+    ratings: { what: 'les notes', folder: 'ratings', object: ratingsObject }
+} as const;
+type GoogleReport = keyof typeof GOOGLE_REPORTS;
+
 const PAUSED = 'Cette app est en pause : l’offre de son propriétaire est atteinte.';
 const NO_SOURCE = 'Aucune fiche de cette app n’a de source : choisissez-en une dans ses réglages.';
 const BACKING_OFF =
@@ -104,6 +114,8 @@ interface Forced {
     /** Les sources qu'il reste à passer ; `null` tant que le battement ne les a pas lues. */
     sources: Set<number> | null;
     errors: string[];
+    /** L'année écoulée est à relire : le rattrapage repart de chaque fiche passée. */
+    history: boolean;
 }
 
 /** Une fiche pendant une passe : ce qu'on en a lu, et ce que la passe va en écrire. */
@@ -225,6 +237,18 @@ export async function announceSource(
     return notify.send(alert, { itemIds: appIds });
 }
 
+/**
+ * Le rattrapage d'un an repart, sans rien effacer : Apple relit ses rapports
+ * du dernier jour relevé vers le passé, Google ses mois, `etag` oubliés.
+ */
+function rewind(state: ListingState, row: ListingRow): ListingState {
+    const next: ListingState = { ...state, backfillDone: false, etags: {} };
+    delete next.backfillFrom;
+    delete next.backfillAt;
+    if (row.store === 'apple' && row.synced_day !== null) next.backfillAt = row.synced_day;
+    return next;
+}
+
 export class AppStoresSync {
     private readonly ticker: FeatureService;
     private ticking: Promise<void> | null = null;
@@ -283,8 +307,10 @@ export class AppStoresSync {
     /**
      * Synchronise une app tout de suite, cadences ignorées. Avec un `launcher`,
      * l'opération paraît dans sa zone jusqu'à la fin de chaque passe concernée.
+     * `history` relit en plus l'année écoulée : la première passe lance le
+     * rattrapage, les battements suivants le finissent.
      */
-    requestSync(appId: number, launcher: SyncLauncher | null): void {
+    requestSync(appId: number, launcher: SyncLauncher | null, history = false): void {
         if (this.stopping) return;
         const existing = this.forced.get(appId);
         const task =
@@ -295,11 +321,16 @@ export class AppStoresSync {
                       workspaceId: launcher.workspaceId,
                       itemId: appId,
                       key: 'sync',
-                      title: 'Synchronisation de l’app',
+                      title: history ? 'Relecture de l’année écoulée' : 'Synchronisation de l’app',
                       subject: launcher.subject
                   })
                 : null);
-        this.forced.set(appId, { task, sources: existing?.sources ?? null, errors: existing?.errors ?? [] });
+        this.forced.set(appId, {
+            task,
+            sources: existing?.sources ?? null,
+            errors: existing?.errors ?? [],
+            history: history || (existing?.history ?? false)
+        });
         this.wake();
     }
 
@@ -352,7 +383,10 @@ export class AppStoresSync {
         for (const sourceId of order.slice(0, MAX_PASSES - this.passes.size)) this.launch(sourceId);
     }
 
-    /** Les avis de plus d'un an, et au-delà du plafond par app et par store, partent une fois par jour. */
+    /**
+     * Les avis de plus d'un an, et au-delà du plafond par app et par store,
+     * partent une fois par jour, avec les pays plus anciens que le rattrapage.
+     */
     private async purge(): Promise<void> {
         const today = utcToday(this.clock());
         if (this.purgedDay === today) return;
@@ -366,8 +400,16 @@ export class AppStoresSync {
         for (const { app_id, store } of await this.deps.repo.overflowingReviews(APPSTORES_REVIEWS_MAX_PER_STORE)) {
             removed += await this.deps.repo.trimReviews(app_id, store, APPSTORES_REVIEWS_MAX_PER_STORE);
         }
+        let countries = 0;
+        for (let round = 0; round < 20; round++) {
+            const count = await this.deps.repo.purgeCountriesBefore(today - APPSTORES_BACKFILL_DAYS);
+            countries += count;
+            if (count < 5000) break;
+        }
         this.purgedDay = today;
-        if (removed > 0) this.deps.logger.info({ removed }, 'Stores : avis anciens retirés');
+        if (removed + countries > 0) {
+            this.deps.logger.info({ reviews: removed, countries }, 'Stores : relevés anciens retirés');
+        }
     }
 
     /** Les sources d'une synchronisation demandée, lues une fois. */
@@ -405,7 +447,9 @@ export class AppStoresSync {
         if (!forced) return;
         this.forced.delete(appId);
         const failure = error ?? forced.errors[0];
-        if (failure === undefined) forced.task?.done('App synchronisée.');
+        if (failure === undefined && forced.history) {
+            forced.task?.done('Relecture lancée : les mois restants se complètent d’eux-mêmes en quelques minutes.');
+        } else if (failure === undefined) forced.task?.done('App synchronisée.');
         else forced.task?.fail(failure, 'conflict');
     }
 
@@ -547,7 +591,12 @@ export class AppStoresSync {
         };
         let works: Work[] = [];
         try {
-            works = await this.openWorks(cipher, rows, new Set(forcedHere));
+            works = await this.openWorks(
+                cipher,
+                rows,
+                new Set(forcedHere),
+                new Set(forcedHere.filter((appId) => this.forced.get(appId)?.history))
+            );
             const readable = new Set(works.map((w) => w.row.app_id));
             const unreadable = rows.map((r) => r.app_id).filter((appId) => !readable.has(appId));
             release(unreadable, new Map(unreadable.map((id) => [id, UNREADABLE])));
@@ -574,7 +623,8 @@ export class AppStoresSync {
     private async openWorks(
         cipher: SdkCipher,
         rows: readonly ListingRow[],
-        forced: ReadonlySet<number>
+        forced: ReadonlySet<number>,
+        rewound: ReadonlySet<number>
     ): Promise<Work[]> {
         const apps = new Map(
             (await this.deps.repo.listAppsByIds([...new Set(rows.map((r) => r.app_id))])).map((a) => [a.id, a])
@@ -589,8 +639,14 @@ export class AppStoresSync {
                 this.deps.logger.error({ listingId: row.id }, 'Stores : l’identité d’une fiche ne se lit plus');
                 continue;
             }
+            let state = (await readJson<ListingState>(cipher, row.state)) ?? {};
+            if (rewound.has(row.app_id)) {
+                state = rewind(state, row);
+                // Dus à chaque battement jusqu'à la fin du rattrapage, comme au premier branchement.
+                await this.deps.repo.clearMetricsSync(row.id);
+            }
             works.push({
-                row,
+                row: rewound.has(row.app_id) ? { ...row, metrics_synced_at: null } : row,
                 appName: stored.name || `App ${row.app_id}`,
                 ratingCountry: stored.ratingCountry,
                 content: {
@@ -600,7 +656,7 @@ export class AppStoresSync {
                     sku: content.sku ?? null
                 },
                 contentChanged: false,
-                state: (await readJson<ListingState>(cipher, row.state)) ?? {},
+                state,
                 syncedDay: row.synced_day,
                 historyFrom: row.history_from,
                 forced: forced.has(row.app_id),
@@ -720,12 +776,14 @@ export class AppStoresSync {
         const fresh = new Set(works.filter((w) => w.syncedDay === null));
         const cursor = new Map<Work, number>();
         for (const work of works) {
-            if (!work.state.backfillDone) cursor.set(work, work.historyFrom === null ? latest : work.historyFrom - 1);
+            if (work.state.backfillDone) continue;
+            cursor.set(work, work.state.backfillAt ?? (work.historyFrom === null ? latest : work.historyFrom - 1));
         }
         while (!this.halted(pass)) {
             for (const [work, day] of cursor) {
                 if (day < (work.state.backfillFrom ?? 0)) {
                     work.state.backfillDone = true;
+                    delete work.state.backfillAt;
                     cursor.delete(work);
                 }
             }
@@ -737,6 +795,7 @@ export class AppStoresSync {
             for (const work of wanting) {
                 if (got.kind === 'expired') {
                     work.state.backfillDone = true;
+                    delete work.state.backfillAt;
                     cursor.delete(work);
                 } else if (got.kind === 'pending') {
                     // Le haut d'une fiche neuve peut ne pas être paru : on descend sans le compter.
@@ -744,8 +803,10 @@ export class AppStoresSync {
                     else cursor.delete(work);
                 } else {
                     await this.applyAppleDay(work, day, got);
-                    work.historyFrom = day;
+                    // Une relecture repasse sur des jours déjà couverts : la couverture ne recule pas.
+                    work.historyFrom = Math.min(work.historyFrom ?? day, day);
                     work.syncedDay ??= day;
+                    work.state.backfillAt = day - 1;
                     cursor.set(work, day - 1);
                 }
             }
@@ -773,6 +834,13 @@ export class AppStoresSync {
             await this.deps.repo.writeDownloads(appId, 'apple', [
                 { day, downloads: figures.downloads, updates: figures.updates, uninstalls: null, activeDevices: null }
             ]);
+        }
+        if (figures.countries.size > 0) {
+            await this.deps.repo.writeCountries(
+                appId,
+                'apple',
+                [...figures.countries].map(([country, downloads]) => ({ day, country, downloads }))
+            );
         }
         if (figures.revenue.size > 0) {
             await this.deps.repo.replaceRevenue(
@@ -831,7 +899,7 @@ export class AppStoresSync {
             }
             const months = this.monthsOf(work, today);
             const reports = [
-                ...(pass.capabilities.has('downloads') ? (['installs'] as const) : []),
+                ...(pass.capabilities.has('downloads') ? (['installs', 'countries'] as const) : []),
                 ...(pass.capabilities.has('ratings') ? (['ratings'] as const) : [])
             ];
             for (const kind of reports) {
@@ -839,7 +907,10 @@ export class AppStoresSync {
             }
             if (!incomplete.has(work) && !work.state.backfillDone) {
                 work.state.backfillDone = true;
-                if (work.syncedDay !== null) work.historyFrom = work.state.backfillFrom ?? null;
+                const from = work.state.backfillFrom;
+                if (work.syncedDay !== null && from !== undefined) {
+                    work.historyFrom = Math.min(work.historyFrom ?? from, from);
+                }
             }
             await this.saveCoverage([work]);
             if (pass.capabilities.has('vitals') && !(await this.googleVitals(pass, work))) incomplete.add(work);
@@ -859,22 +930,20 @@ export class AppStoresSync {
     private async googleReports(
         pass: Pass,
         work: Work,
-        kind: 'installs' | 'ratings',
+        kind: GoogleReport,
         months: readonly string[],
         budget: { left: number }
     ): Promise<boolean> {
         if (pass.credentials.store !== 'google') return true;
         const { creds } = pass.credentials;
         const pkg = work.content.externalId;
-        const what = kind === 'installs' ? 'les installations' : 'les notes';
-        const prefix = kind === 'installs' ? `stats/installs/installs_${pkg}_` : `stats/ratings/ratings_${pkg}_`;
+        const { what, folder, object } = GOOGLE_REPORTS[kind];
         const listed = await this.attempt(pass, work, what, () =>
-            this.clients.google.listObjects(creds, prefix, this.signal)
+            this.clients.google.listObjects(creds, `stats/${folder}/${folder}_${pkg}_`, this.signal)
         );
         if (failed(listed)) return listed.failure === 'refused';
         const objects = new Map(listed.value.map((o) => [o.name, o]));
-        const nameOf = (month: string) =>
-            kind === 'installs' ? installsObject(pkg, month) : ratingsObject(pkg, month);
+        const nameOf = (month: string) => object(pkg, month);
         const newest = months.find((month) => objects.has(nameOf(month)));
         const etags = (work.state.etags ??= {});
         let oldest: number | null = null;
@@ -897,6 +966,10 @@ export class AppStoresSync {
                     await this.deps.repo.writeDownloads(work.row.app_id, 'google', days);
                     const last = Math.max(...days.map((d) => d.day));
                     if (days.length > 0 && (work.syncedDay === null || last > work.syncedDay)) work.syncedDay = last;
+                } else if (kind === 'countries') {
+                    const parsed = await this.attempt(pass, work, what, async () => parseCountryInstalls(bytes));
+                    if (failed(parsed)) return false;
+                    await this.deps.repo.writeCountries(work.row.app_id, 'google', parsed.value);
                 } else {
                     const parsed = await this.attempt(pass, work, what, async () => parseRatings(bytes));
                     if (failed(parsed)) return false;

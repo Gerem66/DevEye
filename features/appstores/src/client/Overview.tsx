@@ -24,6 +24,7 @@ import {
     storePageUrl,
     versionStates
 } from './format';
+import CountryBars from './Stats/CountryBars';
 import { downloadSeries, downloadsOf } from './Stats/downloads';
 import StatBand, { ratingChange, relativeChange, type StatTile } from './Stats/StatBand';
 import TrendChart, { type TrendSeries } from './Stats/TrendChart';
@@ -43,8 +44,9 @@ const countOrMissing = (value: number | null) => (value === null ? MISSING : for
 
 /**
  * L'aperçu d'une app : les chiffres de la période et leur écart à la
- * précédente, la courbe des téléchargements par store, puis les versions de
- * chaque store. Aucun montant ici : les revenus ont leur onglet et leur droit.
+ * précédente, la courbe des téléchargements par store, leurs pays, puis les
+ * versions de chaque store. Aucun montant ici : les revenus ont leur onglet
+ * et leur droit.
  */
 export function Overview({ app, store, sources, canWrite, range }: OverviewProps) {
     const has = (store: AppStore) => app.listings.some((listing) => listing.store === store);
@@ -235,6 +237,17 @@ export function Overview({ app, store, sources, canWrite, range }: OverviewProps
                     </div>
                 )}
             </section>
+
+            {stats !== null && stats.dataUntil !== null && (
+                <section className={styles.block}>
+                    <header className={styles.blockHead}>
+                        <h3 className={styles.blockTitle}>Téléchargements par pays</h3>
+                    </header>
+                    <div className={styles.measure} data-stale={stats.range !== range ? '' : undefined}>
+                        <CountryBars countries={stats.countries} />
+                    </div>
+                </section>
+            )}
 
             {(google || apple) && (
                 // Google Play à gauche, l'App Store à droite ; l'un sous l'autre à l'étroit.

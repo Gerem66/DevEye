@@ -12,8 +12,8 @@ import type { AppStoresRepo } from './repo';
 
 /**
  * Le changement d'espace d'une app : sa fiche, ses fiches de store et ses
- * avis, rescellés. Les chiffres du jour et les revenus ne portent ni espace ni
- * chiffre : ils suivent `app_id`. La source appartient à l'espace quitté et ne
+ * avis, rescellés. Les chiffres du jour, leurs pays et les revenus ne portent
+ * ni espace ni chiffre : ils suivent `app_id`. La source appartient à l'espace quitté et ne
  * suit pas : l'app arrive sans elle, donc sans synchronisation.
  */
 const CELLS = movableCellsOf(appStoresTree);

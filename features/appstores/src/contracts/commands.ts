@@ -120,6 +120,17 @@ export const appStoresSyncNow = {
     output: z.object({ app: appStoresAppSchema })
 };
 
+/**
+ * Relit l'année écoulée chez les stores, jusqu'au même mois de l'an dernier.
+ * Rien n'est effacé : le service relance son rattrapage, et les chiffres se
+ * complètent en quelques minutes.
+ */
+export const appStoresBackfill = {
+    command: 'appstores.backfill' as const,
+    input: z.object({ appId }),
+    output: z.object({ app: appStoresAppSchema })
+};
+
 /** `store` restreint la lecture à ce store : sa fenêtre s'arrête alors à son propre dernier jour. */
 export const appStoresStats = {
     command: 'appstores.stats' as const,
@@ -178,6 +189,7 @@ export const appStoresCommands = [
     appStoresUpdate,
     appStoresRemove,
     appStoresSyncNow,
+    appStoresBackfill,
     appStoresStats,
     appStoresRevenue,
     appStoresListReviews,

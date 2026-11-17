@@ -53,6 +53,8 @@ export interface ListingState {
     /** Le premier jour que le rattrapage va chercher, fixé au premier passage. */
     backfillFrom?: number;
     backfillDone?: boolean;
+    /** Apple : le prochain jour que le rattrapage lit, en descendant ; absent, il reprend sous `history_from`. */
+    backfillAt?: number;
     /** Le premier passage des avis est fait : ce qui arrive ensuite est neuf. */
     reviewsSeeded?: boolean;
     /** Où reprend la lecture des avis Apple, quand une passe n'a pas tout lu. */

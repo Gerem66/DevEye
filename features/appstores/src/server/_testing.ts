@@ -32,12 +32,21 @@ export interface RevenueCell {
     units: number;
 }
 
+export interface CountryCell {
+    app_id: number;
+    store: AppStore;
+    day: number;
+    country: string;
+    downloads: number;
+}
+
 export interface FakeDb {
     sources: SourceRow[];
     apps: AppRow[];
     listings: ListingRow[];
     daily: DailyCell[];
     revenue: RevenueCell[];
+    countries: CountryCell[];
     reviews: ReviewRow[];
     /** `item_shares` : les apps projetées, et vers quel espace. */
     shares: { appId: number; workspaceId: number }[];
@@ -113,6 +122,7 @@ export function fakeRepo(seed: Partial<Omit<FakeDb, 'calls' | 'dueCalls'>> = {})
         listings: seed.listings ?? [],
         daily: seed.daily ?? [],
         revenue: seed.revenue ?? [],
+        countries: seed.countries ?? [],
         reviews: seed.reviews ?? [],
         shares: seed.shares ?? [],
         calls: [],
@@ -125,6 +135,7 @@ export function fakeRepo(seed: Partial<Omit<FakeDb, 'calls' | 'dueCalls'>> = {})
     const dropRows = (appId: number, store: AppStore) => {
         db.daily = db.daily.filter((d) => !(d.app_id === appId && d.store === store));
         db.revenue = db.revenue.filter((r) => !(r.app_id === appId && r.store === store));
+        db.countries = db.countries.filter((c) => !(c.app_id === appId && c.store === store));
         db.reviews = db.reviews.filter((r) => !(r.app_id === appId && r.store === store));
     };
     const daily = (appId: number, store: AppStore, day: number): DailyCell => {
@@ -257,6 +268,7 @@ export function fakeRepo(seed: Partial<Omit<FakeDb, 'calls' | 'dueCalls'>> = {})
             db.listings = db.listings.filter((l) => l.app_id !== id);
             db.daily = db.daily.filter((d) => d.app_id !== id);
             db.revenue = db.revenue.filter((r) => r.app_id !== id);
+            db.countries = db.countries.filter((c) => c.app_id !== id);
             db.reviews = db.reviews.filter((r) => r.app_id !== id);
             return true;
         },
@@ -342,6 +354,10 @@ export function fakeRepo(seed: Partial<Omit<FakeDb, 'calls' | 'dueCalls'>> = {})
             const row = db.listings.find((l) => l.id === id);
             if (row) Object.assign(row, { synced_day: syncedDay, history_from: historyFrom });
         },
+        async clearMetricsSync(id) {
+            const row = db.listings.find((l) => l.id === id);
+            if (row) row.metrics_synced_at = null;
+        },
 
         async writeDownloads(appId, store, rows) {
             for (const r of rows) {
@@ -364,6 +380,13 @@ export function fakeRepo(seed: Partial<Omit<FakeDb, 'calls' | 'dueCalls'>> = {})
                     anr_rate: r.anrRate,
                     vitals_users: r.users
                 });
+            }
+        },
+        async writeCountries(appId, store, rows) {
+            for (const r of rows) {
+                const same = (c: CountryCell) =>
+                    c.app_id === appId && c.store === store && c.day === r.day && c.country === r.country;
+                db.countries = [...db.countries.filter((c) => !same(c)), { app_id: appId, store, ...r }];
             }
         },
         async replaceRevenue(appId, store, fromDay, toDay, rows) {
@@ -389,6 +412,21 @@ export function fakeRepo(seed: Partial<Omit<FakeDb, 'calls' | 'dueCalls'>> = {})
             db.revenue
                 .filter((r) => r.app_id === appId && r.day >= from && r.day <= to)
                 .map((r) => ({ store: r.store, day: r.day, currency: r.currency, amount: r.amount, units: r.units })),
+        async countryTotals(appId, store, from, to) {
+            const totals = new Map<string, number>();
+            for (const c of db.countries) {
+                if (c.app_id !== appId || (store !== null && c.store !== store) || c.day < from || c.day > to) continue;
+                totals.set(c.country, (totals.get(c.country) ?? 0) + c.downloads);
+            }
+            return [...totals]
+                .map(([country, downloads]) => ({ country, downloads }))
+                .sort((a, b) => b.downloads - a.downloads || a.country.localeCompare(b.country));
+        },
+        async purgeCountriesBefore(day) {
+            const before = db.countries.length;
+            db.countries = db.countries.filter((c) => c.day >= day);
+            return before - db.countries.length;
+        },
         downloadsOf: async (ids, from, to) =>
             db.daily
                 .filter((d) => ids.includes(d.app_id) && d.day >= from && d.day <= to)

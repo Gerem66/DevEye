@@ -6,8 +6,8 @@ import { externalRef, type StoredApp, type StoredListing } from './_shared';
 
 /**
  * Ce dont une app est faite : sa ligne, ses fiches de store, et les avis que
- * la synchronisation a relevés. Les chiffres du jour et les revenus restent
- * hors de l'arbre : ils suivent `app_id` dans un déplacement, et une copie ne
+ * la synchronisation a relevés. Les chiffres du jour, leurs pays et les
+ * revenus restent hors de l'arbre : ils suivent `app_id` dans un déplacement, et une copie ne
  * les emporte pas, car elle passe par le navigateur de quelqu'un qui peut lire
  * l'app sans tenir le droit Revenus.
  *

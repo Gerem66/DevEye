@@ -93,7 +93,16 @@ function line(cells: Record<string, string>): string {
     return HEADER.map((name) => cells[name] ?? '').join('\t');
 }
 
-const row = (sku: string, type: string, units: string, proceeds: string, currency: string, id: string, parent = '') =>
+const row = (
+    sku: string,
+    type: string,
+    units: string,
+    proceeds: string,
+    currency: string,
+    id: string,
+    parent = '',
+    country = 'FR'
+) =>
     line({
         Provider: 'APPLE',
         SKU: sku,
@@ -103,6 +112,7 @@ const row = (sku: string, type: string, units: string, proceeds: string, currenc
         'Begin Date': '11/14/2026',
         'End Date': '11/14/2026',
         'Currency of Proceeds': currency,
+        'Country Code': country,
         'Apple Identifier': id,
         'Parent Identifier': parent
     });
@@ -110,7 +120,9 @@ const row = (sku: string, type: string, units: string, proceeds: string, currenc
 const REPORT = [
     HEADER.join('\t'),
     row('meteo-sku', '1', '12', '0', 'EUR', '1234567890'),
-    row('meteo-sku', '1F', '3', '0', 'EUR', '1234567890'),
+    row('meteo-sku', '1F', '3', '0', 'EUR', '1234567890', '', 'BE'),
+    row('meteo-sku', '1', '1', '0', 'EUR', '1234567890', '', 'DE'),
+    row('meteo-sku', '1', '-1', '0', 'EUR', '1234567890', '', 'DE'),
     row('meteo-sku', '7', '40', '0', 'EUR', '1234567890'),
     row('meteo-sku', '3', '5', '0', 'EUR', '1234567890'),
     row('meteo.pro', 'IA1', '2', '1.40', 'EUR', '9990001', 'meteo-sku'),
@@ -161,6 +173,7 @@ describe('le rapport de ventes quotidien', () => {
         const rows = parseSalesReport(REPORT);
         const meteo = figuresFor(rows, { appleId: '1234567890', sku: 'meteo-sku' });
         assert.equal(meteo.downloads, 15, 'ni mises à jour, ni retéléchargements, ni achats intégrés');
+        assert.deepEqual(Object.fromEntries(meteo.countries), { FR: 12, BE: 3 }, 'un pays remboursé n’en est plus un');
         assert.equal(meteo.updates, 40);
         assert.deepEqual(Object.fromEntries(meteo.revenue), {
             EUR: { amount: 1.4, units: 1 },

@@ -6,6 +6,7 @@ import type { z, ZodType } from 'zod';
 import {
     appStoresAdd,
     appStoresAddSource,
+    appStoresBackfill,
     appStoresCommands,
     appStoresList,
     appStoresListSources,
@@ -192,6 +193,13 @@ describe('les chiffres', () => {
                 { app_id: 1, store: 'google', day: UNTIL - 2, currency: 'USD', amount: 4.99, units: 1 },
                 { app_id: 1, store: 'apple', day: UNTIL - 40, currency: 'EUR', amount: 2, units: 1 }
             ],
+            countries: [
+                { app_id: 1, store: 'apple', day: UNTIL, country: 'DE', downloads: 7 },
+                { app_id: 1, store: 'apple', day: UNTIL - 1, country: 'US', downloads: 4 },
+                { app_id: 1, store: 'apple', day: UNTIL - 1, country: 'FR', downloads: 6 },
+                { app_id: 1, store: 'google', day: UNTIL - 2, country: 'FR', downloads: 5 },
+                { app_id: 1, store: 'apple', day: UNTIL - 40, country: 'FR', downloads: 100 }
+            ],
             reviews: [
                 {
                     id: 1,
@@ -231,6 +239,14 @@ describe('les chiffres', () => {
         assert.equal(stats.metrics.reviews, 1);
         assert.deepEqual(stats.reviewStars, [0, 1, 0, 0, 0]);
         assert.equal(stats.metrics.crashRate, 0.01);
+        assert.deepEqual(
+            stats.countries,
+            [
+                { country: 'FR', downloads: 11 },
+                { country: 'US', downloads: 4 }
+            ],
+            'les deux stores sommés, sur la seule période'
+        );
     });
 
     it('restreints à un store, finissent à son propre dernier jour et ne comptent que ses avis', async () => {
@@ -243,6 +259,7 @@ describe('les chiffres', () => {
         assert.deepEqual(stats.metrics.downloads, { apple: null, google: 10 });
         assert.equal(stats.metrics.reviews, 0, 'le seul avis est sur l’App Store');
         assert.deepEqual(stats.reviewStars, [0, 0, 0, 0, 0]);
+        assert.deepEqual(stats.countries, [{ country: 'FR', downloads: 5 }]);
 
         const { revenue } = await handlerFor(appStoresRevenue)(contextOf(seeded(), { extras: { revenue: true } }), {
             appId: 1,
@@ -540,18 +557,20 @@ describe('les apps', () => {
         );
     });
 
-    it('ne se synchronisent à la demande que reliées à une source, et actives', async () => {
+    it('ne se synchronisent ou ne relisent leur année que reliées à une source, et actives', async () => {
         const repo = fakeRepo({
             apps: [appRow({ id: 1 }), appRow({ id: 2 })],
             listings: [listingRow({ id: 1, app_id: 1, source_id: null }), listingRow({ id: 2, app_id: 2 })]
         });
-        await assert.rejects(handlerFor(appStoresSyncNow)(contextOf(repo), { appId: 1 }), failsWith('validation'));
-        await assert.rejects(
-            handlerFor(appStoresSyncNow)(contextOf(repo, { pausedItems: { apps: ['2'] } }), { appId: 2 }),
-            failsWith('quota_exceeded')
-        );
-        const { app } = await handlerFor(appStoresSyncNow)(contextOf(repo), { appId: 2 });
-        assert.equal(app.id, 2);
+        for (const command of [appStoresSyncNow, appStoresBackfill]) {
+            await assert.rejects(handlerFor(command)(contextOf(repo), { appId: 1 }), failsWith('validation'));
+            await assert.rejects(
+                handlerFor(command)(contextOf(repo, { pausedItems: { apps: ['2'] } }), { appId: 2 }),
+                failsWith('quota_exceeded')
+            );
+            const { app } = await handlerFor(command)(contextOf(repo), { appId: 2 });
+            assert.equal(app.id, 2);
+        }
     });
 });
 

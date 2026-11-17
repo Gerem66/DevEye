@@ -80,16 +80,16 @@ sa synchronisation restent chez elle, où vit sa source.
 
 ## 2. À l'usage
 
-| Vue                    | Contenu                                                                                                                   |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| **Accueil**            | une rangée par app : puces de store (logo, puis état), téléchargements sur sept jours et leur écart, notes, « N projets » |
-| **Fiche, Aperçu**      | bandeau (téléchargements, notes, avis reçus, taux de plantage) avec l'écart, courbe par store, versions des deux stores   |
-| **Fiche, Avis**        | filtres, répartition des avis reçus sur la période, cartes d'avis et leur réponse, dialogue de réponse                    |
-| **Fiche, Revenus**     | par store et par devise, avec le droit Revenus                                                                            |
-| **Fiche, Stabilité**   | taux de plantage et de blocage perçus, avec les seuils de Google, pour une app sur Google Play                            |
-| **Réglages, Sources**  | les comptes de store, leurs capacités, leur état ; ajout pas à pas dans un dialogue empilé                                |
-| **Réglages d'une app** | onglet Général : nom, fiches de store et leur source, pays de la note Apple, suppression                                  |
-| **Onglet d'un projet** | les apps reliées, en version compacte de l'Aperçu, sans montant                                                           |
+| Vue                    | Contenu                                                                                                                       |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| **Accueil**            | une rangée par app : puces de store (logo, puis état), téléchargements sur sept jours et leur écart, notes, « N projets »     |
+| **Fiche, Aperçu**      | bandeau (téléchargements, notes, avis reçus, taux de plantage) avec l'écart, courbe par store, pays, versions des deux stores |
+| **Fiche, Avis**        | filtres, répartition des avis reçus sur la période, cartes d'avis et leur réponse, dialogue de réponse                        |
+| **Fiche, Revenus**     | par store et par devise, avec le droit Revenus                                                                                |
+| **Fiche, Stabilité**   | taux de plantage et de blocage perçus, avec les seuils de Google, pour une app sur Google Play                                |
+| **Réglages, Sources**  | les comptes de store, leurs capacités, leur état ; ajout pas à pas dans un dialogue empilé                                    |
+| **Réglages d'une app** | onglet Général : nom, fiches de store et leur source, pays de la note Apple, relecture de l'année, suppression                |
+| **Onglet d'un projet** | les apps reliées, en version compacte de l'Aperçu, sans montant                                                               |
 
 Les décisions d'écran qui méritent d'être connues :
 
@@ -119,6 +119,7 @@ Les décisions d'écran qui méritent d'être connues :
 | --------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
 | Liste des apps  | `GET /v1/apps`                                                                                   | Reporting API `apps:search`, à défaut les noms des fichiers d'installations du bucket |
 | Téléchargements | rapport `salesReports` DAILY SALES SUMMARY, version `1_0`, TSV gzippé, un par compte et par jour | CSV `stats/installs/installs_<paquet>_<AAAAMM>_overview.csv`, en UTF-16               |
+| Pays            | le même rapport, colonne `Country Code` : le pays de l'App Store                                 | CSV `stats/installs/installs_<paquet>_<AAAAMM>_country.csv`, colonne `Country`        |
 | Note            | API publique iTunes Lookup, sans clé, dans le pays de référence de l'app                         | CSV `stats/ratings/…`, moyenne totale                                                 |
 | Avis            | `customerReviews`, tout l'historique                                                             | `reviews.list` : les sept derniers jours seulement                                    |
 | Réponse         | `customerReviewResponses`, 5 970 caractères ; la remplacer = supprimer puis recréer              | `reviews/{id}:reply`, 350 caractères                                                  |
@@ -150,6 +151,13 @@ requêtes en vol, puis attend le battement et chaque passe par source.
 
 « Synchroniser », sur la fiche, ignore les cadences et ouvre une opération dans
 la barre du haut (`deps.tasks.open`), suivie par le client.
+
+« Relire l'historique », dans l'onglet Général de l'app (`appstores.backfill`),
+relance le rattrapage d'un an sans rien effacer : Apple relit ses rapports du
+dernier jour relevé vers le passé, Google ses mois jusqu'au même mois de l'an
+dernier, `etag` oubliés. La première passe ouvre l'opération, les battements
+suivants finissent le rattrapage ; `history_from` ne recule jamais, si bien que
+les chiffres déjà là restent affichés pendant la relecture.
 
 ### 3.3 Apple
 
@@ -199,8 +207,8 @@ montre combien de projets relient chacune, et la fiche les nomme.
 
 - **Partage** (`shareTier: 'open'`) : une app se projette dans d'autres espaces,
   qui la lisent ; elle se règle chez elle.
-- **Déplacement** : l'app, ses fiches, ses chiffres, ses revenus et ses avis la
-  suivent. Sa source reste dans l'espace quitté (`source_id` à NULL), et le
+- **Déplacement** : l'app, ses fiches, ses chiffres (pays compris), ses revenus
+  et ses avis la suivent. Sa source reste dans l'espace quitté (`source_id` à NULL), et le
   déplacement est bloqué si l'espace d'arrivée suit déjà la même app du store.
 - **Copie** : seulement l'app et ses fiches. Les chiffres et les revenus restent
   hors de l'arbre, comme ceux d'Audience : une copie passe par qui sait lire
@@ -215,38 +223,39 @@ montre combien de projets relient chacune, et la fiche les nomme.
 
 ## 6. Carte du code
 
-| Fichier                                                                | Rôle                                                                   |
-| ---------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `src/manifest.ts`, `src/contracts/*`                                   | le manifest, les schémas et les commandes                              |
-| `src/server/index.ts`                                                  | l'entrée serveur : handlers, service, quotas, éléments, export, e2e    |
-| `src/server/sources.ts`                                                | les comptes de store : ajout éprouvé, test, retrait                    |
-| `src/server/apps.ts`                                                   | les apps : liste, fiche, ajout, réglages, suppression, synchronisation |
-| `src/server/stats.ts`, `src/server/days.ts`                            | les fenêtres, l'écart, les revenus, l'arithmétique des jours           |
-| `src/server/reviews.ts`                                                | les avis et la réponse                                                 |
-| `src/server/service.ts`, `src/server/notice.ts`                        | la synchronisation de fond, et les avis qu'elle envoie                 |
-| `src/server/stores/*`                                                  | les clients d'Apple et de Google, les jetons                           |
-| `src/server/parse/*`                                                   | TSV, CSV (UTF-16 compris), zip                                         |
-| `src/server/copy.ts`, `move.ts`, `accountExport.ts`                    | partage, déplacement, copie, export                                    |
-| `src/server/e2e.ts`                                                    | les parcours de la page Tests et débogage                              |
-| `src/client/AppStores.tsx`, `AppList.tsx`                              | l'accueil de la fonctionnalité                                         |
-| `src/client/AppDetail.tsx` et ses onglets                              | la fiche : `Overview`, `Reviews`, `Revenue`, `Stability`               |
-| `src/client/SourcesPanel.tsx`, `SourceDialog.tsx`                      | l'onglet Sources                                                       |
-| `src/client/AppGeneralPanel.tsx`, `AppDialog.tsx`, `ListingPicker.tsx` | l'ajout et l'onglet Général                                            |
-| `src/client/Stats/*`                                                   | bandeau, courbe, répartition des étoiles, en SVG écrit à la main       |
-| `src/client/provider.tsx`                                              | le contrat client avec Projets                                         |
+| Fichier                                                                | Rôle                                                                        |
+| ---------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `src/manifest.ts`, `src/contracts/*`                                   | le manifest, les schémas et les commandes                                   |
+| `src/server/index.ts`                                                  | l'entrée serveur : handlers, service, quotas, éléments, export, e2e         |
+| `src/server/sources.ts`                                                | les comptes de store : ajout éprouvé, test, retrait                         |
+| `src/server/apps.ts`                                                   | les apps : liste, fiche, ajout, réglages, suppression, synchronisation      |
+| `src/server/stats.ts`, `src/server/days.ts`                            | les fenêtres, l'écart, les revenus, l'arithmétique des jours                |
+| `src/server/reviews.ts`                                                | les avis et la réponse                                                      |
+| `src/server/service.ts`, `src/server/notice.ts`                        | la synchronisation de fond, et les avis qu'elle envoie                      |
+| `src/server/stores/*`                                                  | les clients d'Apple et de Google, les jetons                                |
+| `src/server/parse/*`                                                   | TSV, CSV (UTF-16 compris), zip                                              |
+| `src/server/copy.ts`, `move.ts`, `accountExport.ts`                    | partage, déplacement, copie, export                                         |
+| `src/server/e2e.ts`                                                    | les parcours de la page Tests et débogage                                   |
+| `src/client/AppStores.tsx`, `AppList.tsx`                              | l'accueil de la fonctionnalité                                              |
+| `src/client/AppDetail.tsx` et ses onglets                              | la fiche : `Overview`, `Reviews`, `Revenue`, `Stability`                    |
+| `src/client/SourcesPanel.tsx`, `SourceDialog.tsx`                      | l'onglet Sources                                                            |
+| `src/client/AppGeneralPanel.tsx`, `AppDialog.tsx`, `ListingPicker.tsx` | l'ajout et l'onglet Général                                                 |
+| `src/client/Stats/*`                                                   | bandeau, courbe en SVG écrit à la main, répartition des étoiles et des pays |
+| `src/client/provider.tsx`                                              | le contrat client avec Projets                                              |
 
 ---
 
 ## 7. Les tables
 
-| Table                   | Ce qu'elle tient                                                                                  |
-| ----------------------- | ------------------------------------------------------------------------------------------------- |
-| `ft_appstores_sources`  | les comptes de store ; `secret_enc` porte la clé privée, `capabilities` ce qu'elle a su lire      |
-| `ft_appstores_apps`     | les apps ; nom et pays de la note dans `content`                                                  |
-| `ft_appstores_listings` | une fiche par app et par store ; `state` est écrit par le service seul                            |
-| `ft_appstores_daily`    | les chiffres d'un jour, par app et par store, en clair ; jamais purgée                            |
-| `ft_appstores_revenue`  | les revenus d'un jour, par devise, sur trois décimales                                            |
-| `ft_appstores_reviews`  | les avis : note et dates en clair, le reste chiffré ; un an et 5 000 par app et par store au plus |
+| Table                    | Ce qu'elle tient                                                                                  |
+| ------------------------ | ------------------------------------------------------------------------------------------------- |
+| `ft_appstores_sources`   | les comptes de store ; `secret_enc` porte la clé privée, `capabilities` ce qu'elle a su lire      |
+| `ft_appstores_apps`      | les apps ; nom et pays de la note dans `content`                                                  |
+| `ft_appstores_listings`  | une fiche par app et par store ; `state` est écrit par le service seul                            |
+| `ft_appstores_daily`     | les chiffres d'un jour, par app et par store, en clair ; jamais purgée                            |
+| `ft_appstores_countries` | les premiers téléchargements d'un jour par pays, seuls les pays non nuls ; gardés un an           |
+| `ft_appstores_revenue`   | les revenus d'un jour, par devise, sur trois décimales                                            |
+| `ft_appstores_reviews`   | les avis : note et dates en clair, le reste chiffré ; un an et 5 000 par app et par store au plus |
 
 Les jours se comptent depuis 1970, en UTC. Les fiches n'ont pas de clé étrangère
 vers leur source (voir § 11).
@@ -269,7 +278,8 @@ externes, mais figurent dans la liste « À propos » des services tiers.
 `appstores.apps` est un stock (« apps suivies ») : 1 en Gratuite, 10 en Pro
 (`DevEye-Billing/src/server/plans.ts`). Au-delà, après une baisse d'offre, les
 apps les plus récentes sont mises en pause : leur synchronisation s'arrête, et
-« Synchroniser » comme la réponse aux avis sont refusés (`assertActive`). L'écran
+« Synchroniser », la relecture de l'année et la réponse aux avis sont refusés
+(`assertActive`). L'écran
 le dit (`PlanPausedBadge`, `PlanPausedNotice`).
 
 ---

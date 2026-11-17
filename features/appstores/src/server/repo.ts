@@ -93,6 +93,14 @@ export interface VitalsInput {
     users: number | null;
 }
 
+/** Les premiers téléchargements d'un jour dans un pays. */
+export interface CountryInput {
+    day: number;
+    /** Le code ISO à deux lettres, en capitales. */
+    country: string;
+    downloads: number;
+}
+
 export interface RevenueInput {
     day: number;
     currency: string;
@@ -208,6 +216,8 @@ export interface AppStoresRepo {
     }): Promise<{ id: number; app_id: number; source_id: number }[]>;
     saveListing(id: number, sync: ListingSync): Promise<void>;
     saveCoverage(id: number, syncedDay: number | null, historyFrom: number | null): Promise<void>;
+    /** Les chiffres de la fiche redeviennent dus. */
+    clearMetricsSync(id: number): Promise<void>;
 
     writeDownloads(appId: number, store: AppStore, rows: readonly DownloadsInput[]): Promise<void>;
     writeRatings(
@@ -216,6 +226,7 @@ export interface AppStoresRepo {
         rows: readonly { day: number; rating: number; count: number | null }[]
     ): Promise<void>;
     writeVitals(appId: number, store: AppStore, rows: readonly VitalsInput[]): Promise<void>;
+    writeCountries(appId: number, store: AppStore, rows: readonly CountryInput[]): Promise<void>;
     /** Les revenus de `fromDay` à `toDay` sont remplacés par `rows`. */
     replaceRevenue(
         appId: number,
@@ -226,6 +237,14 @@ export interface AppStoresRepo {
     ): Promise<void>;
     dailyRows(appId: number, fromDay: number, toDay: number): Promise<DailyRow[]>;
     revenueRows(appId: number, fromDay: number, toDay: number): Promise<RevenueRow[]>;
+    /** Les téléchargements de la période par pays, d'un store ou des deux (`null`), les plus nombreux d'abord. */
+    countryTotals(
+        appId: number,
+        store: AppStore | null,
+        fromDay: number,
+        toDay: number
+    ): Promise<{ country: string; downloads: number }[]>;
+    purgeCountriesBefore(day: number): Promise<number>;
     downloadsOf(
         appIds: readonly number[],
         fromDay: number,
@@ -288,6 +307,7 @@ export function createRepo(q: SdkQueryable): AppStoresRepo {
     async function deleteAppRows(appId: number, store: AppStore): Promise<void> {
         await q.execute('DELETE FROM ft_appstores_daily WHERE app_id = ? AND store = ?', [appId, store]);
         await q.execute('DELETE FROM ft_appstores_revenue WHERE app_id = ? AND store = ?', [appId, store]);
+        await q.execute('DELETE FROM ft_appstores_countries WHERE app_id = ? AND store = ?', [appId, store]);
         await q.execute('DELETE FROM ft_appstores_reviews WHERE app_id = ? AND store = ?', [appId, store]);
     }
 
@@ -558,6 +578,10 @@ export function createRepo(q: SdkQueryable): AppStoresRepo {
             ]);
         },
 
+        async clearMetricsSync(id) {
+            await q.execute('UPDATE ft_appstores_listings SET metrics_synced_at = NULL WHERE id = ?', [id]);
+        },
+
         async writeDownloads(appId, store, rows) {
             for (let at = 0; at < rows.length; at += BULK) {
                 const chunk = rows
@@ -597,6 +621,17 @@ export function createRepo(q: SdkQueryable): AppStoresRepo {
                 );
             }
         },
+        async writeCountries(appId, store, rows) {
+            for (let at = 0; at < rows.length; at += BULK) {
+                const chunk = rows.slice(at, at + BULK).map((r) => [appId, store, r.day, r.country, r.downloads]);
+                await q.execute(
+                    `INSERT INTO ft_appstores_countries (app_id, store, day, country, downloads)
+                     VALUES ?
+                     ON DUPLICATE KEY UPDATE downloads = VALUES(downloads)`,
+                    [chunk]
+                );
+            }
+        },
         async replaceRevenue(appId, store, fromDay, toDay, rows) {
             await q.execute('DELETE FROM ft_appstores_revenue WHERE app_id = ? AND store = ? AND day BETWEEN ? AND ?', [
                 appId,
@@ -632,6 +667,21 @@ export function createRepo(q: SdkQueryable): AppStoresRepo {
                   ORDER BY day ASC`,
                 [appId, fromDay, toDay]
             );
+        },
+        async countryTotals(appId, store, fromDay, toDay) {
+            const rows = await q.query<{ country: string; downloads: number }>(
+                `SELECT country, SUM(downloads) AS downloads
+                   FROM ft_appstores_countries
+                  WHERE app_id = ? AND (? IS NULL OR store = ?) AND day BETWEEN ? AND ?
+                  GROUP BY country
+                  ORDER BY downloads DESC, country ASC`,
+                [appId, store, store, fromDay, toDay]
+            );
+            return rows.map((row) => ({ country: row.country, downloads: Number(row.downloads) }));
+        },
+        async purgeCountriesBefore(day) {
+            const res = await q.execute('DELETE FROM ft_appstores_countries WHERE day < ? LIMIT 5000', [day]);
+            return res.affectedRows;
         },
         async downloadsOf(appIds, fromDay, toDay) {
             if (appIds.length === 0) return [];

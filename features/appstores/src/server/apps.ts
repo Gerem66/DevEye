@@ -1,5 +1,6 @@
 import {
     appStoresAdd,
+    appStoresBackfill,
     appStoresCount,
     appStoresGet,
     appStoresList,
@@ -11,6 +12,7 @@ import {
     APP_STORES,
     isStoreAppId,
     type AppStore,
+    type AppStoresApp,
     type AppStoresAppInput,
     type AppStoresAppSummary,
     type AppStoresListingInput
@@ -291,19 +293,29 @@ export const appStoresAppFeatures = [
         ...appStoresSyncNow,
         // Pas de `mutates` : la commande réveille le service, qui diffusera ce qu'il aura écrit.
         access: { level: 'write', item: 'appId' },
-        handler: async (ctx: Ctx, input) => {
-            const row = await loadHomeApp(ctx, input.appId);
-            await ctx.quota.assertActive('apps', String(input.appId));
-            const listings = await ctx.repo.listListingsOfApps([row.id]);
-            if (!listings.some((l) => l.source_id !== null)) {
-                throw new FeatureError(
-                    'validation',
-                    'Aucune fiche de cette app n’a de source : choisissez-en une dans ses réglages.'
-                );
-            }
-            const name = (await readApp(ctx.cipher(), row)).name;
-            syncOf()?.requestSync(row.id, { userId: ctx.userId, workspaceId: ctx.workspaceId, subject: name });
-            return { app: await presentApp(ctx, row.id) };
-        }
+        handler: (ctx: Ctx, input) => requestSync(ctx, input.appId, false)
+    }),
+    defineSdkFeature({
+        ...appStoresBackfill,
+        // Pas de `mutates`, comme `syncNow` : le service écrit et diffuse.
+        access: { level: 'write', item: 'appId' },
+        handler: (ctx: Ctx, input) => requestSync(ctx, input.appId, true)
     })
 ];
+
+/** Une synchronisation demandée part de chez l'app, active, et d'au moins une fiche reliée à une source. */
+async function requestSync(ctx: Ctx, appId: number, history: boolean): Promise<{ app: AppStoresApp }> {
+    const row = await loadHomeApp(ctx, appId);
+    await ctx.quota.assertActive('apps', String(appId));
+    const listings = await ctx.repo.listListingsOfApps([row.id]);
+    if (!listings.some((l) => l.source_id !== null)) {
+        throw new FeatureError(
+            'validation',
+            'Aucune fiche de cette app n’a de source : choisissez-en une dans ses réglages.'
+        );
+    }
+    const name = (await readApp(ctx.cipher(), row)).name;
+    const launcher = { userId: ctx.userId, workspaceId: ctx.workspaceId, subject: name };
+    syncOf()?.requestSync(row.id, launcher, history);
+    return { app: await presentApp(ctx, row.id) };
+}

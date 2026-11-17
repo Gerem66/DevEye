@@ -272,7 +272,9 @@ export const appStoresStatsSchema = appStoresWindowSchema.extend({
     previous: appStoresMetricsSchema,
     points: z.array(appStoresPointSchema),
     /** Les avis reçus pendant la fenêtre, par note : l'indice 0 compte les avis à une étoile. */
-    reviewStars: z.array(z.number().int().nonnegative()).length(5)
+    reviewStars: z.array(z.number().int().nonnegative()).length(5),
+    /** Les premiers téléchargements de la fenêtre par pays, les plus nombreux d'abord. */
+    countries: z.array(z.object({ country: z.string().regex(COUNTRY_CODE), downloads: z.number().int().positive() }))
 });
 export type AppStoresStats = z.infer<typeof appStoresStatsSchema>;
 

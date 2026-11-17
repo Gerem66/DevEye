@@ -625,6 +625,17 @@ CREATE TABLE `ft_appstores_apps` (
   CONSTRAINT `fk_ft_appstores_apps_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+CREATE TABLE `ft_appstores_countries` (
+  `app_id` int NOT NULL,
+  `store` enum('apple','google') COLLATE utf8mb4_general_ci NOT NULL,
+  `day` int NOT NULL,
+  `country` char(2) COLLATE utf8mb4_general_ci NOT NULL,
+  `downloads` int NOT NULL,
+  PRIMARY KEY (`app_id`,`store`,`day`,`country`),
+  KEY `idx_ft_appstores_countries_day` (`day`),
+  CONSTRAINT `fk_ft_appstores_countries_app` FOREIGN KEY (`app_id`) REFERENCES `ft_appstores_apps` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 CREATE TABLE `ft_appstores_daily` (
   `app_id` int NOT NULL,
   `store` enum('apple','google') COLLATE utf8mb4_general_ci NOT NULL,

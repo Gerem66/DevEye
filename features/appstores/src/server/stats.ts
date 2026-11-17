@@ -234,7 +234,7 @@ export const appStoresStatsFeatures = [
             await loadApp(ctx, input.appId);
             const listings = ofStore(await ctx.repo.listListingsOfApps([input.appId]), input.store);
             const window = dayWindow(input.range, dataUntilOf(withData(listings)), utcToday(Date.now()));
-            const [rows, counts] = await Promise.all([
+            const [rows, counts, countries] = await Promise.all([
                 ctx.repo
                     .dailyRows(input.appId, window.previousFromDay, window.toDay)
                     .then((all) => ofStore(all, input.store)),
@@ -244,7 +244,8 @@ export const appStoresStatsFeatures = [
                     window.previousFromDay * DAY_SECONDS,
                     window.fromDay * DAY_SECONDS,
                     (window.toDay + 1) * DAY_SECONDS
-                )
+                ),
+                ctx.repo.countryTotals(input.appId, input.store ?? null, window.fromDay, window.toDay)
             ]);
             const reviewStars = [1, 2, 3, 4, 5].map((stars) => counts.find((c) => c.rating === stars)?.current ?? 0);
             const previousReviews = counts.reduce((sum, c) => sum + c.previous, 0);
@@ -260,7 +261,8 @@ export const appStoresStatsFeatures = [
                     ),
                     previous: metricsOf(listings, rows, window.previousFromDay, window.fromDay - 1, previousReviews),
                     points: pointsOf(listings, rows, window),
-                    reviewStars
+                    reviewStars,
+                    countries: countries.filter((c) => c.downloads > 0)
                 }
             };
         }

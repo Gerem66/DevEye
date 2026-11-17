@@ -995,6 +995,79 @@
     color: var(--text-muted);
 }
 
+.countryList {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+/* La barre est derrière le texte, comme les classements d'Audience : en colonne,
+   elle n'aurait plus de place sur un téléphone. */
+.countryRow {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: 5px 8px;
+    overflow: hidden;
+    border-radius: var(--radius-sm);
+    font-size: 0.82rem;
+}
+
+.countryBar {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    background: var(--accent-bg);
+    pointer-events: none;
+    transition: width var(--transition-normal);
+}
+
+.countryName {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text-primary);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.countryCount {
+    position: relative;
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-xs);
+    flex-shrink: 0;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.countryShare {
+    color: var(--text-muted);
+    font-size: 0.74rem;
+}
+
+.countryMore {
+    align-self: flex-start;
+    padding: 2px 8px;
+    border: 0;
+    background: transparent;
+    color: var(--accent);
+    font: inherit;
+    font-size: 0.78rem;
+    cursor: pointer;
+}
+
+.countryMore:hover,
+.countryMore:focus-visible {
+    text-decoration: underline;
+}
+
 .filters {
     display: flex;
     align-items: center;

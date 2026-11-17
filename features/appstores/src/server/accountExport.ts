@@ -53,6 +53,7 @@ export const appStoresAccountExport: FeatureAccountExport<AppStoresRepo> = {
             dates: { created_at: 's', replied_at: 's' }
         },
         ft_appstores_daily: { skip: `Le relevé quotidien (téléchargements, notes, stabilité) ${IMPORTED}` },
+        ft_appstores_countries: { skip: `Le relevé des téléchargements par pays ${IMPORTED}` },
         ft_appstores_revenue: { skip: `Le relevé des revenus ${IMPORTED}` }
     }
 };

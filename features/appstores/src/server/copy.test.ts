@@ -103,7 +103,8 @@ describe('l’arbre d’une app', () => {
                 }
             ],
             ft_appstores_revenue: [{ app_id: 1, store: 'apple', day: 1, currency: 'EUR', amount: 99, units: 1 }],
-            ft_appstores_daily: [{ app_id: 1, store: 'apple', day: 1, downloads: 5 }]
+            ft_appstores_daily: [{ app_id: 1, store: 'apple', day: 1, downloads: 5 }],
+            ft_appstores_countries: [{ app_id: 1, store: 'apple', day: 1, country: 'FR', downloads: 5 }]
         });
         const rows = await exportItemTree(q, appStoresTree, '1', identity);
         assert.deepEqual(Object.keys(rows).sort(), ['ft_appstores_apps', 'ft_appstores_listings']);

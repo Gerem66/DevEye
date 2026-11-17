@@ -282,6 +282,8 @@ export interface AppleSalesRow {
     /** Le produit net d'une unité, dans `currency`. */
     proceeds: number;
     currency: string;
+    /** Le pays de l'App Store où l'unité s'est vendue, en capitales. */
+    country: string;
 }
 
 /**
@@ -301,7 +303,8 @@ export function parseSalesReport(tsv: string): AppleSalesRow[] {
         productType: columnIndex(header, ['Product Type Identifier']),
         units: columnIndex(header, ['Units']),
         proceeds: columnIndex(header, ['Developer Proceeds']),
-        currency: columnIndex(header, ['Currency of Proceeds'])
+        currency: columnIndex(header, ['Currency of Proceeds']),
+        country: columnIndex(header, ['Country Code'])
     };
     if (at.appleId < 0 || at.productType < 0 || at.units < 0) {
         throw new StoreError('apple', 200, {
@@ -315,7 +318,8 @@ export function parseSalesReport(tsv: string): AppleSalesRow[] {
         productType: cell(row, at.productType).toUpperCase(),
         units: parseCount(cell(row, at.units)) ?? 0,
         proceeds: parseDecimal(cell(row, at.proceeds)) ?? 0,
-        currency: cell(row, at.currency).toUpperCase()
+        currency: cell(row, at.currency).toUpperCase(),
+        country: cell(row, at.country).toUpperCase()
     }));
 }
 
@@ -323,6 +327,8 @@ export function parseSalesReport(tsv: string): AppleSalesRow[] {
 export interface AppleDayFigures {
     downloads: number;
     updates: number;
+    /** Les premiers téléchargements par pays ; un pays sans téléchargement n'y est pas. */
+    countries: Map<string, number>;
     revenue: Map<string, { amount: number; units: number }>;
 }
 
@@ -336,11 +342,17 @@ export function figuresFor(
 ): AppleDayFigures {
     let downloads = 0;
     let updates = 0;
+    const countries = new Map<string, number>();
     const revenue = new Map<string, { amount: number; units: number }>();
     for (const row of rows) {
         const own = row.appleId === app.appleId;
         if (!own && (!app.sku || row.parentId !== app.sku)) continue;
-        if (own && FIRST_DOWNLOAD_TYPES.has(row.productType)) downloads += row.units;
+        if (own && FIRST_DOWNLOAD_TYPES.has(row.productType)) {
+            downloads += row.units;
+            if (COUNTRY_CODE.test(row.country)) {
+                countries.set(row.country, (countries.get(row.country) ?? 0) + row.units);
+            }
+        }
         if (own && UPDATE_TYPES.has(row.productType)) updates += row.units;
         if (row.proceeds !== 0 && /^[A-Z]{3}$/.test(row.currency)) {
             const entry = revenue.get(row.currency) ?? { amount: 0, units: 0 };
@@ -350,7 +362,9 @@ export function figuresFor(
         }
     }
     for (const entry of revenue.values()) entry.amount = Math.round(entry.amount * 1000) / 1000;
-    return { downloads: Math.max(0, downloads), updates: Math.max(0, updates), revenue };
+    // Un remboursement compte en négatif : un pays qui n'a rien gardé n'a rien téléchargé.
+    for (const [country, units] of countries) if (units <= 0) countries.delete(country);
+    return { downloads: Math.max(0, downloads), updates: Math.max(0, updates), countries, revenue };
 }
 
 /** Le SKU d'une app, lu sur ses propres lignes : de quoi rattacher ses achats intégrés. */

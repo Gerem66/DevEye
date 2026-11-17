@@ -1,6 +1,6 @@
 import { createHash, createPrivateKey, sign, type KeyObject } from 'node:crypto';
 
-import { GOOGLE_BUCKET, GOOGLE_PACKAGE, type AppStoresCapability } from '../../contracts/domain';
+import { COUNTRY_CODE, GOOGLE_BUCKET, GOOGLE_PACKAGE, type AppStoresCapability } from '../../contracts/domain';
 import { FeatureError } from '@deveye/types/sdk/server';
 
 import { civilOf, dayOfDate } from '../days';
@@ -305,6 +305,11 @@ export function installsObject(pkg: string, month: string): string {
     return `stats/installs/installs_${assertPackage(pkg)}_${month}_overview.csv`;
 }
 
+/** Le même rapport, ligne par pays. */
+export function countriesObject(pkg: string, month: string): string {
+    return `stats/installs/installs_${assertPackage(pkg)}_${month}_country.csv`;
+}
+
 export function ratingsObject(pkg: string, month: string): string {
     return `stats/ratings/ratings_${assertPackage(pkg)}_${month}_overview.csv`;
 }
@@ -355,6 +360,32 @@ export function parseInstalls(bytes: Uint8Array): InstallsDay[] {
             uninstalls: atLeastZero(parseCount(cell(row, at.uninstalls))),
             activeDevices: atLeastZero(parseCount(cell(row, at.active)))
         });
+    }
+    return out;
+}
+
+/**
+ * Le CSV mensuel des installations par pays (UTF-16). Un pays sans premier
+ * téléchargement ce jour-là, ou que Google ne sait pas nommer, n'est pas rendu.
+ */
+export function parseCountryInstalls(bytes: Uint8Array): { day: number; country: string; downloads: number }[] {
+    const { header, rows } = parseCsv(decodeText(bytes));
+    const at = {
+        date: columnIndex(header, ['Date']),
+        country: columnIndex(header, ['Country', 'Country Code']),
+        downloads: columnIndex(header, ['Daily User Installs'])
+    };
+    if (at.date < 0 || at.country < 0 || at.downloads < 0) {
+        throw new StoreError('google', 200, {
+            message: 'Le rapport des installations par pays de Google Play a changé de forme : il ne se lit plus.'
+        });
+    }
+    const out: { day: number; country: string; downloads: number }[] = [];
+    for (const row of rows) {
+        const day = parseDay(cell(row, at.date));
+        const country = cell(row, at.country).toUpperCase();
+        const downloads = parseCount(cell(row, at.downloads)) ?? 0;
+        if (day !== null && COUNTRY_CODE.test(country) && downloads > 0) out.push({ day, country, downloads });
     }
     return out;
 }

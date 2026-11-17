@@ -38,6 +38,13 @@ declare const styles: {
     readonly chips: string;
     readonly copyRow: string;
     readonly counter: string;
+    readonly countryBar: string;
+    readonly countryCount: string;
+    readonly countryList: string;
+    readonly countryMore: string;
+    readonly countryName: string;
+    readonly countryRow: string;
+    readonly countryShare: string;
     readonly detailHead: string;
     readonly empty: string;
     readonly emptyCard: string;
