@@ -11,8 +11,19 @@ import styles from './style.module.css';
  */
 const DETAIL_WIDTH = 396;
 
-/** Le panneau de droite d'une liste : il n'occupe la place que lorsqu'on veut un détail. */
-export default function DetailPane({ open, children }: { open: boolean; children: ReactNode }) {
+/**
+ * Le panneau de droite d'une liste : il n'occupe la place que lorsqu'on veut un
+ * détail. `width` : plus large pour un tableau, celui des versions d'un logiciel.
+ */
+export default function DetailPane({
+    open,
+    width = DETAIL_WIDTH,
+    children
+}: {
+    open: boolean;
+    width?: number;
+    children: ReactNode;
+}) {
     return (
         <AnimatePresence>
             {open && (
@@ -20,7 +31,7 @@ export default function DetailPane({ open, children }: { open: boolean; children
                     key='detail'
                     className={styles.detailPane}
                     initial={{ x: 24, width: 0, opacity: 0 }}
-                    animate={{ x: 0, width: DETAIL_WIDTH, opacity: 1 }}
+                    animate={{ x: 0, width, opacity: 1 }}
                     exit={{ x: 24, width: 0, opacity: 0 }}
                     transition={{
                         type: 'spring',
@@ -32,7 +43,7 @@ export default function DetailPane({ open, children }: { open: boolean; children
                     {/* Le contenu garde sa largeur pendant que le panneau perd
                         la sienne : `overflow: hidden` le rogne au lieu de le
                         remettre en page. */}
-                    <div className={styles.detailInner} style={{ width: DETAIL_WIDTH }}>
+                    <div className={styles.detailInner} style={{ width }}>
                         {children}
                     </div>
                 </motion.aside>

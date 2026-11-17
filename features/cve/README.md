@@ -132,3 +132,14 @@ appareils pour un appareil). Un constat dont
 aucun élément n'est visible est caché, et la carte de l'accueil ne le compte
 pas. Ignorer, rétablir, relire et sortir un élément de la veille demandent
 l'écriture.
+
+## 6. La recherche
+
+La barre de recherche interroge deux catalogues à la fois. Les CVE : le
+catalogue local, puis le NVD quand il ne suffit pas. Les logiciels
+(`cve.softwareSearch`) : le dump d'endoflife.date déjà en base, sans appel au
+dehors. Une requête se lit comme un nom et peut-être une version (« node 18 »,
+« postgresql@16.4 », « python3.11 ») ; `matching/software.ts` compare les noms,
+les libellés et les alias sous une forme compacte, et une version surligne sa
+branche dans le tableau du logiciel, ou les branches qui commencent par elle
+(Windows « 11 »).

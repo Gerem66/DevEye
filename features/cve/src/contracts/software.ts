@@ -46,3 +46,21 @@ export const cveSoftware = {
     input: z.object({ name: z.string().min(1).max(100) }),
     output: z.object({ software: softwareSchema })
 };
+
+/** Ce que la recherche rend au plus de logiciels. */
+export const SOFTWARE_MATCHES_MAX = 5;
+
+/**
+ * Les logiciels qu'une recherche nomme, et la version qu'elle donne.
+ * `releases` : les branches de cette version chez chacun, à surligner.
+ */
+export const cveSoftwareSearch = {
+    command: 'cve.softwareSearch' as const,
+    input: z.object({ query: z.string().trim().min(1).max(120) }),
+    output: z.object({
+        matches: z.array(z.object({ software: softwareSchema, releases: z.array(z.string()) })),
+        version: z.string().nullable(),
+        /** Les logiciels trouvés au-delà de ceux rendus. */
+        more: z.number().int().nonnegative()
+    })
+};

@@ -15,6 +15,7 @@ import type { FeatureViewProps } from '@deveye/types/sdk/client';
 
 import { CVE_SEARCH_QUERY_MAX } from '../contracts/commands';
 import type { CveEntry, CveSeverityFilter } from '../contracts/domain';
+import type { Software } from '../contracts/software';
 
 import { api } from './api';
 import CveDetail from './CveDetail';
@@ -25,6 +26,8 @@ import InventoryView from './InventoryView';
 import { DETAIL_AS_PAGE } from './layout';
 import ObsolescenceView from './ObsolescenceView';
 import { SEVERITY_FILTERS } from './severity';
+import SoftwareRow from './SoftwareRow';
+import SoftwareSheet from './SoftwareSheet';
 import { NEWS_LIMIT, refreshCveNews, useCveNews } from './store';
 import styles from './style.module.css';
 import VulnView from './VulnView';
@@ -36,10 +39,15 @@ import VulnView from './VulnView';
  * du NVD, et celles que l'espace a épinglées.
  *
  * Une recherche non vide prend le dessus sur l'onglet : c'est le geste le plus
- * direct, il ne doit pas demander de changer d'onglet d'abord.
+ * direct, il ne doit pas demander de changer d'onglet d'abord. Elle cherche
+ * aussi les logiciels d'endoflife.date, et leur branche quand elle porte une
+ * version.
  */
 
 const SEARCH_DEBOUNCE_MS = 500;
+
+/** La fiche d'un logiciel porte un tableau : plus large que celle d'une CVE. */
+const SOFTWARE_SHEET_WIDTH = 560;
 
 type Tab = 'vulns' | 'obsolescence' | 'inventory' | 'latest' | 'favorites';
 
@@ -63,6 +71,14 @@ const NO_SEARCH: SearchState = {
     error: null
 };
 
+interface SoftwareFound {
+    matches: { software: Software; releases: string[] }[];
+    version: string | null;
+    more: number;
+}
+
+const NO_SOFTWARE: SoftwareFound = { matches: [], version: null, more: 0 };
+
 export default function Cve(_props: FeatureViewProps) {
     const [tab, setTab] = useState<Tab>('vulns');
     /** La fiche d'un constat ou d'un élément est ouverte : sous 1000 px, elle prend la page. */
@@ -73,6 +89,9 @@ export default function Cve(_props: FeatureViewProps) {
     const [favorites, setFavorites] = useState<CveEntry[]>([]);
     const [favoritesLoading, setFavoritesLoading] = useState(true);
     const [selectedId, setSelectedId] = useState<string | null>(null);
+    const [softwareFound, setSoftwareFound] = useState<SoftwareFound>(NO_SOFTWARE);
+    /** Le logiciel ouvert, par son nom : une seule fiche à la fois, CVE ou logiciel. */
+    const [openSoftware, setOpenSoftware] = useState<string | null>(null);
     /** Une CVE ouverte qu'aucune liste ne porte : une téléportation, ou un résultat effacé depuis. */
     const [fetched, setFetched] = useState<CveEntry | null>(null);
     const [error, setError] = useState<ErrorNoteInput | null>(null);
@@ -144,6 +163,34 @@ export default function Cve(_props: FeatureViewProps) {
         };
     }, [query, severity]);
 
+    // Le catalogue des fins de vie est en base : la réponse arrive avant celle des
+    // CVE, qui peut attendre le NVD, et s'affiche sans elle.
+    useEffect(() => {
+        const needle = query.trim();
+        if (needle.length === 0) {
+            setSoftwareFound(NO_SOFTWARE);
+            setOpenSoftware(null);
+            return;
+        }
+        let cancelled = false;
+        const timer = setTimeout(() => {
+            void (async () => {
+                try {
+                    const res = await api.send('cve.softwareSearch', { query: needle });
+                    if (!cancelled) setSoftwareFound(res);
+                } catch {
+                    // Les CVE répondent à côté : un catalogue muet ne fait que taire cette partie.
+                    if (!cancelled) setSoftwareFound(NO_SOFTWARE);
+                }
+            })();
+        }, SEARCH_DEBOUNCE_MS);
+        return () => {
+            cancelled = true;
+            clearTimeout(timer);
+        };
+    }, [query]);
+    const software = searching ? (softwareFound.matches.find((m) => m.software.name === openSoftware) ?? null) : null;
+
     const shown: readonly CveEntry[] = useMemo(() => {
         if (searching) return search.entries;
         if (tab === 'favorites') {
@@ -198,7 +245,7 @@ export default function Cve(_props: FeatureViewProps) {
 
     // La CVE ouverte est le niveau profond ; la racine `view:cve` vient de l'accueil.
     const liveTarget = useLiveSegment('l1', selectedId);
-    useSubView(selected ? 'entry' : null);
+    useSubView(selected ? 'entry' : software ? 'software' : null);
     useEffect(() => {
         if (!liveTarget) return;
         setSelectedId(liveTarget.value);
@@ -228,7 +275,9 @@ export default function Cve(_props: FeatureViewProps) {
     const banner = error ?? search.error ?? news.error;
 
     return (
-        <div className={`${styles.root} ${(catalogue ? selected !== null : exposureDetail) ? styles.hasDetail : ''}`}>
+        <div
+            className={`${styles.root} ${(catalogue ? selected !== null || software !== null : exposureDetail) ? styles.hasDetail : ''}`}
+        >
             <StickyHeader className={styles.headBand}>
                 <header className={styles.headRow}>
                     <h2 className={styles.title}>Veille CVE</h2>
@@ -246,8 +295,8 @@ export default function Cve(_props: FeatureViewProps) {
                             className={styles.searchInput}
                             value={query}
                             maxLength={CVE_SEARCH_QUERY_MAX}
-                            placeholder='CVE-2021-44228, log4j, apache…'
-                            aria-label='Chercher une vulnérabilité'
+                            placeholder='CVE-2021-44228, log4j, node 18…'
+                            aria-label='Chercher une vulnérabilité ou un logiciel'
                             onChange={(e) => setQuery(e.target.value)}
                         />
                         {searching && (
@@ -320,31 +369,83 @@ export default function Cve(_props: FeatureViewProps) {
             {catalogue && (
                 <div className={styles.split}>
                     <div className={styles.listPane}>
-                        {shown.length === 0 && !loading ? (
-                            <p className={styles.empty}>{emptyLine(searching, tab, severity, news.ingestedAt)}</p>
-                        ) : (
-                            <ul className={styles.list}>
-                                {shown.map((entry) => (
-                                    <CveRow
-                                        key={entry.id}
-                                        entry={entry}
-                                        selected={entry.id === selectedId}
-                                        canWrite={canWrite}
-                                        onOpen={(e) => setSelectedId((cur) => (cur === e.id ? null : e.id))}
-                                        onToggleFavorite={(e) => void toggleFavorite(e)}
-                                    />
-                                ))}
-                            </ul>
-                        )}
+                        <div className={styles.sections}>
+                            {searching && softwareFound.matches.length > 0 && (
+                                <section className={styles.section}>
+                                    <h3 className={styles.sectionTitle}>Logiciels</h3>
+                                    <ul className={styles.list}>
+                                        {softwareFound.matches.map((m) => (
+                                            <SoftwareRow
+                                                key={m.software.name}
+                                                software={m.software}
+                                                releases={m.releases}
+                                                version={softwareFound.version}
+                                                selected={m.software.name === openSoftware}
+                                                onOpen={() => {
+                                                    setSelectedId(null);
+                                                    setOpenSoftware((cur) =>
+                                                        cur === m.software.name ? null : m.software.name
+                                                    );
+                                                }}
+                                            />
+                                        ))}
+                                    </ul>
+                                    {softwareFound.more > 0 && (
+                                        <p className={styles.detailMore}>
+                                            Et {softwareFound.more} autre{softwareFound.more > 1 ? 's' : ''} : précisez
+                                            le nom.
+                                        </p>
+                                    )}
+                                </section>
+                            )}
+                            <section className={styles.section}>
+                                {searching && softwareFound.matches.length > 0 && (
+                                    <h3 className={styles.sectionTitle}>Vulnérabilités</h3>
+                                )}
+                                {shown.length === 0 && loading && softwareFound.matches.length > 0 ? (
+                                    <p className={styles.detailMore}>Recherche en cours…</p>
+                                ) : shown.length === 0 && !loading ? (
+                                    <p className={styles.empty}>
+                                        {emptyLine(searching, tab, severity, news.ingestedAt)}
+                                    </p>
+                                ) : (
+                                    <ul className={styles.list}>
+                                        {shown.map((entry) => (
+                                            <CveRow
+                                                key={entry.id}
+                                                entry={entry}
+                                                selected={entry.id === selectedId}
+                                                canWrite={canWrite}
+                                                onOpen={(e) => {
+                                                    setOpenSoftware(null);
+                                                    setSelectedId((cur) => (cur === e.id ? null : e.id));
+                                                }}
+                                                onToggleFavorite={(e) => void toggleFavorite(e)}
+                                            />
+                                        ))}
+                                    </ul>
+                                )}
+                            </section>
+                        </div>
                     </div>
 
-                    <DetailPane open={selected !== null}>
+                    <DetailPane
+                        open={selected !== null || software !== null}
+                        width={software ? SOFTWARE_SHEET_WIDTH : undefined}
+                    >
                         {selected && (
                             <CveDetail
                                 entry={selected}
                                 canWrite={canWrite}
                                 onToggleFavorite={(e) => void toggleFavorite(e)}
                                 onClose={() => setSelectedId(null)}
+                            />
+                        )}
+                        {!selected && software && (
+                            <SoftwareSheet
+                                software={software.software}
+                                releases={software.releases}
+                                onClose={() => setOpenSoftware(null)}
                             />
                         )}
                     </DetailPane>
@@ -370,7 +471,7 @@ function statusLine(args: {
             : search.remote
               ? 'catalogue local et NVD'
               : 'catalogue local';
-        return `${count} résultat${count > 1 ? 's' : ''}${search.truncated ? ' ou plus' : ''}, ${scope}.`;
+        return `${count} vulnérabilité${count > 1 ? 's' : ''}${search.truncated ? ' ou plus' : ''}, ${scope}.`;
     }
     if (news.ingestedAt === null) return 'Le catalogue se remplit au premier tour d’ingestion.';
     return `Catalogue à jour au ${new Date(news.ingestedAt * 1000).toLocaleString('fr-FR', {

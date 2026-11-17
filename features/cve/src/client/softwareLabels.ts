@@ -122,3 +122,63 @@ export function verdictLine(software: Software, release: SoftwareRelease): strin
         .map(releaseLabel);
     return others.length > 0 ? `${head} Branches maintenues : ${others.join(', ')}.` : head;
 }
+
+/** La pastille d'une branche : « Fin de vie depuis 1 an », « Fin de vie dans 12 jours », « Maintenue ». */
+export function releaseBadge(release: SoftwareRelease): { tone: 'danger' | 'warning' | 'success'; label: string } {
+    const state = releaseState(release);
+    if (state === 'maintained') return { tone: 'success', label: 'Maintenue' };
+    const label = release.eolFrom === null ? 'Fin de vie' : `Fin de vie ${untilLine(release.eolFrom)}`;
+    return { tone: state === 'eol' ? 'danger' : 'warning', label };
+}
+
+/** Les branches maintenues, dites en une ligne : « branches maintenues : 26, 24, 22 ». */
+export function maintainedLine(software: Software): string {
+    const names = maintainedReleases(software).slice(0, 3).map(releaseLabel);
+    return names.length > 0 ? `branches maintenues : ${names.join(', ')}` : 'plus aucune branche maintenue';
+}
+
+/**
+ * Ce que la recherche dit d'un logiciel, selon les branches qu'elle demande :
+ * une seule, son état ; plusieurs (Windows « 11 »), combien sont maintenues ;
+ * aucune, les branches maintenues du logiciel.
+ */
+export function askedSummary(
+    software: Software,
+    releases: readonly string[]
+): {
+    asked: SoftwareRelease | null;
+    badge: { tone: 'danger' | 'warning' | 'success' | 'neutral'; label: string };
+    line: string;
+} {
+    const askedReleases = software.releases.filter((r) => releases.includes(r.name));
+    if (askedReleases.length === 1) {
+        const asked = askedReleases[0];
+        const line =
+            releaseState(asked) !== 'maintained'
+                ? maintainedLine(software)
+                : asked.eolFrom === null
+                  ? 'maintenue, sans date de fin annoncée'
+                  : `maintenue jusqu’au ${longDate(asked.eolFrom)}`;
+        return { asked, badge: releaseBadge(asked), line };
+    }
+    if (askedReleases.length > 1) {
+        const alive = askedReleases.filter((r) => releaseState(r) !== 'eol');
+        if (alive.length === 0)
+            return { asked: null, badge: { tone: 'danger', label: 'Fin de vie' }, line: maintainedLine(software) };
+        const names = alive.slice(0, 3).map(releaseLabel).join(', ');
+        return {
+            asked: null,
+            badge: { tone: 'success', label: `${alive.length} sur ${askedReleases.length} maintenues` },
+            line: `maintenues : ${names}${alive.length > 3 ? '…' : ''}`
+        };
+    }
+    const n = maintainedReleases(software).length;
+    return {
+        asked: null,
+        badge:
+            n > 0
+                ? { tone: 'success', label: `${n} version${n > 1 ? 's' : ''} maintenue${n > 1 ? 's' : ''}` }
+                : { tone: 'neutral', label: 'Plus maintenu' },
+        line: maintainedLine(software)
+    };
+}
