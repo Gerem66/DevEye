@@ -62,6 +62,8 @@ export interface CveRepo extends ExposureRepo {
         limit: number
     ): Promise<CveEntryWithFavoriteRow[]>;
     find(workspaceId: number, cveId: string): Promise<CveEntryWithFavoriteRow | null>;
+    /** Les CVE du catalogue parmi ces identifiants, celles qu'il ignore en moins. */
+    findMany(workspaceId: number, cveIds: readonly string[]): Promise<CveEntryWithFavoriteRow[]>;
     listFavorites(workspaceId: number): Promise<CveEntryWithFavoriteRow[]>;
     /** Range ou rafraîchit des CVE. Rend le nombre de lignes réellement touchées. */
     upsertMany(entries: CveUpsert[]): Promise<number>;
@@ -134,6 +136,13 @@ export function createRepo(q: SdkQueryable): CveRepo {
                 cveId
             ]);
             return rows[0] ?? null;
+        },
+        async findMany(workspaceId, cveIds) {
+            if (cveIds.length === 0) return [];
+            return q.query<CveEntryWithFavoriteRow>(`SELECT ${COLUMNS} ${JOIN} WHERE e.cve_id IN (?)`, [
+                workspaceId,
+                cveIds
+            ]);
         },
         async listFavorites(workspaceId) {
             return q.query<CveEntryWithFavoriteRow>(

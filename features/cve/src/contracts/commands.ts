@@ -34,10 +34,28 @@ export const cveNews = {
     })
 };
 
+/** Ce que la recherche a lu : des mots, ou un logiciel que la veille suit et sa version. */
+export const searchScopeSchema = z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('keyword') }),
+    z.object({
+        kind: z.literal('version'),
+        /** Le logiciel, tel que l'écran le nomme (`Node.js`). */
+        product: z.string(),
+        version: z.string(),
+        /** `false` : une branche (`18`), qui ne se compare pas aux failles. */
+        exact: z.boolean(),
+        /** Pourquoi la liste peut manquer des failles : un historique encore en rattrapage. */
+        stale: z.string().nullable()
+    })
+]);
+export type SearchScope = z.infer<typeof searchScopeSchema>;
+
 /**
  * La recherche, en deux jambes : le catalogue local d'abord, le NVD ensuite si
  * le local ne suffit pas. La sortie dit franchement ce qui a répondu, pour que
  * l'écran ne laisse pas croire à une absence quand c'est le tiers qui a manqué.
+ * Une requête qui nomme la version exacte d'un logiciel que la veille suit
+ * (« nginx 1.25.3 ») rend les failles qui la touchent, du catalogue local.
  */
 export const cveSearch = {
     command: 'cve.search' as const,
@@ -52,7 +70,8 @@ export const cveSearch = {
         truncated: z.boolean(),
         /** La jambe distante a tourné. */
         remote: z.boolean(),
-        remoteError: z.string().nullable()
+        remoteError: z.string().nullable(),
+        scope: searchScopeSchema
     })
 };
 

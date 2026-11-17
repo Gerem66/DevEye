@@ -10,9 +10,10 @@ import type { CveEntryWithFavoriteRow } from '../contracts/domain';
 import { manifest } from '../manifest';
 
 import { cveHandlers, setNvdClient } from './handlers';
+import { parseDump } from './matching/eol';
 import { NvdQuotaError, type NvdClient } from './nvd';
 import { memoryExposureRepo } from './exposure/repo.fake';
-import type { CveRepo, CveStateKey, CveUpsert } from './repo';
+import type { CveAffectingRow, CveRepo, CveStateKey, CveUpsert } from './repo';
 
 /**
  * Ce qui se vérifie ici ne lève nulle part ailleurs : la recherche ne doit
@@ -91,6 +92,11 @@ function fakeRepo(seed: CveUpsert[] = []): FakeRepo {
         async find(_ws, cveId) {
             const found = this.entries.find((e) => e.id === cveId);
             return found ? toRow(found, this.favorites.includes(cveId)) : null;
+        },
+        async findMany(_ws, cveIds) {
+            return this.entries
+                .filter((e) => cveIds.includes(e.id))
+                .map((e) => toRow(e, this.favorites.includes(e.id)));
         },
         async listFavorites(_ws) {
             return this.entries.filter((e) => this.favorites.includes(e.id)).map((e) => toRow(e, true));
@@ -246,6 +252,88 @@ describe('cve.search', () => {
         assert.equal(out.entries.length, 0);
         assert.equal(out.remote, true);
         assert.match(out.remoteError ?? '', /Quota/);
+    });
+});
+
+describe('cve.search, la version d’un logiciel', () => {
+    const affecting = (cveId: string, endExcl: string): CveAffectingRow => ({
+        cve_id: cveId,
+        vendor: 'f5',
+        product: 'nginx',
+        version: null,
+        start_incl: null,
+        start_excl: null,
+        end_incl: null,
+        end_excl: endExcl,
+        severity: 'medium',
+        score: 5,
+        summary: '',
+        published: 1_700_000_000
+    });
+
+    /** Un catalogue des fins de vie chargé, et nginx rattrapé chez le NVD. */
+    async function catalogued(repo: FakeRepo): Promise<void> {
+        const dump = parseDump({
+            result: [
+                {
+                    name: 'nginx',
+                    label: 'nginx',
+                    releases: [{ name: '1.29' }, { name: '1.25', isEol: true, eolFrom: '2024-05-29' }]
+                },
+                { name: 'debian', label: 'Debian', releases: [{ name: '12' }] }
+            ]
+        });
+        await repo.replaceEolProducts(
+            dump.map((p) => ({ product: p.name, body: JSON.stringify(p) })),
+            0
+        );
+        // Une date à elle : le catalogue lu se garde en mémoire par date de chargement.
+        await repo.setState('eolFetchedAt', 4242);
+        await repo.setState('ingestedAt', Math.floor(Date.now() / 1000));
+        repo.listWatched = async () =>
+            [
+                { vendor: 'f5', product: 'nginx' },
+                { vendor: 'nginx', product: 'nginx' }
+            ].map((p) => ({ ...p, requested_at: 0, backfill_index: 0, backfilled_at: 1 }));
+        repo.affecting = async (vendor) =>
+            vendor === 'f5' ? [affecting('CVE-2024-7347', '1.27.1'), affecting('CVE-2019-9511', '1.17.3')] : [];
+    }
+
+    it('rend les failles qui touchent une version exacte, sans le NVD', async () => {
+        const repo = fakeRepo([entry('CVE-2024-7347'), entry('CVE-2019-9511')]);
+        await catalogued(repo);
+        const calls = fakeNvd();
+        const ctx = createTestContext({ repo });
+
+        const out = await handlerFor(cveSearch)(ctx, { query: 'nginx 1.25.3', severity: 'all', limit: 50 });
+        assert.deepEqual(
+            out.entries.map((e) => e.id),
+            ['CVE-2024-7347']
+        );
+        assert.deepEqual(out.scope, { kind: 'version', product: 'nginx', version: '1.25.3', exact: true, stale: null });
+        assert.equal(calls.keyword, 0);
+    });
+
+    it('ne compare pas une branche aux failles', async () => {
+        const repo = fakeRepo([entry('CVE-2024-7347')]);
+        await catalogued(repo);
+        fakeNvd();
+        const ctx = createTestContext({ repo });
+
+        const out = await handlerFor(cveSearch)(ctx, { query: 'nginx 1.25', severity: 'all', limit: 50 });
+        assert.deepEqual(out.entries, []);
+        assert.equal(out.scope.kind === 'version' && out.scope.exact, false);
+    });
+
+    it('cherche par mots un logiciel que la veille ne suit pas', async () => {
+        const repo = fakeRepo();
+        await catalogued(repo);
+        const calls = fakeNvd();
+        const ctx = createTestContext({ repo });
+
+        const out = await handlerFor(cveSearch)(ctx, { query: 'debian 12', severity: 'all', limit: 50 });
+        assert.deepEqual(out.scope, { kind: 'keyword' });
+        assert.equal(calls.keyword, 1);
     });
 });
 

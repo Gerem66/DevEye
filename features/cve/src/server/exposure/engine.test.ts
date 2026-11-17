@@ -118,6 +118,7 @@ function memoryRepo(): CveRepo & ReturnType<typeof memoryExposureRepo> {
         listNews: unused,
         search: unused,
         find: unused,
+        findMany: unused,
         listFavorites: unused,
         upsertMany: unused,
         addFavorite: unused,

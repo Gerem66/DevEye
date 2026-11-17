@@ -11,6 +11,7 @@ import { TOOLS, WATCHED_PRODUCTS, type CveProduct } from '../inventory/tools';
 import { matchComponents, type AssetComponents, type MatchCatalogues } from '../matching/match';
 import { fetchDump } from '../matching/eol';
 import { queryOsv, type OsvCache, type OsvFetch, type VulnResponse } from '../matching/osv';
+import { nvdStaleReason } from '../matching/nvdCatalogue';
 import { fetchPackage, metaKey, RegistryUnavailable, type PackageMeta } from '../matching/registry';
 import type { CveAffectingRow, CveRepo } from '../repo';
 import { findingAlert, firstScanAlert, isAlertable, type AlertedFinding, type FirstScan } from './notice';
@@ -51,8 +52,6 @@ const REGISTRY_TTL_S = 24 * 3600;
 const REGISTRY_KEPT_S = 7 * 86_400;
 /** Les paquets qu'une évaluation demande au plus à deps.dev : le reste attend le passage suivant. */
 const REGISTRY_PER_EVALUATION = 100;
-/** Au-delà, le fil du NVD est réputé en retard et le catalogue ne garantit plus rien. */
-const NVD_STALE_AFTER_S = 24 * 3600;
 
 export interface ExposureEngine extends FeatureService {
     /** Des produits viennent de bouger au NVD : les espaces qui les emploient se réévaluent. */
@@ -176,22 +175,7 @@ export function createExposureEngine(
             if (!rowsOf.has(key)) rowsOf.set(key, await deps.repo.affecting(vendor, product));
             return rowsOf.get(key) ?? [];
         },
-        async nvdStale(products) {
-            const watched = new Map((await deps.repo.listWatched()).map((w) => [`${w.vendor}:${w.product}`, w]));
-            const filling = [
-                ...new Set(
-                    products
-                        .filter((p) => watched.get(`${p.vendor}:${p.product}`)?.backfilled_at == null)
-                        .map((p) => p.product)
-                )
-            ];
-            if (filling.length > 0) return `Le catalogue du NVD rattrape encore l’historique de ${filling.join(', ')}.`;
-            const ingestedAt = await deps.repo.getState('ingestedAt');
-            if (ingestedAt === null || nowSeconds() - ingestedAt > NVD_STALE_AFTER_S) {
-                return 'Le catalogue du NVD n’a pas été mis à jour depuis plus d’un jour.';
-            }
-            return null;
-        }
+        nvdStale: (products) => nvdStaleReason(deps.repo, products, nowSeconds())
     });
 
     const sources: readonly Source[] = [

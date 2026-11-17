@@ -5,10 +5,12 @@ import { cveProviderSchema, type CveEntry, type CveSeverityFilter } from '../con
 import { cveIdCandidate, NVD_KEY_STORE_KEY, searchTerms, toEntry, upsertToEntry } from './_shared';
 import { nvdClient, NvdQuotaError, type NvdClient } from './nvd';
 import { exposureHandlers } from './exposure/handlers';
-import { softwareHandlers } from './software';
+import { softwareHandlers, versionScope } from './software';
 import type { CveRepo, CveUpsert } from './repo';
 
 type Ctx = SdkFeatureContext<CveRepo>;
+
+const KEYWORD = { kind: 'keyword' } as const;
 
 /**
  * Le client HTTP est un point d'injection : les tests tournent sur le harnais
@@ -63,6 +65,30 @@ export const cveHandlers = [
             const terms = searchTerms(input.query);
             if (terms.length === 0) throw new FeatureError('validation', 'Requête vide.');
 
+            // « nginx 1.25.3 » : les failles de cette version, que le catalogue
+            // local tient entières pour les outils de la veille. Le NVD par mots
+            // n'y ajouterait que des descriptions qui citent le nombre.
+            const scope = await versionScope(ctx, input.query);
+            if (scope) {
+                const found = (await ctx.repo.findMany(ctx.workspaceId, scope.cveIds))
+                    .map(toEntry)
+                    .filter((e) => input.severity === 'all' || e.severity === input.severity)
+                    .sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || b.published - a.published);
+                return {
+                    entries: found.slice(0, input.limit),
+                    truncated: found.length > input.limit,
+                    remote: false,
+                    remoteError: null,
+                    scope: {
+                        kind: 'version' as const,
+                        product: scope.product,
+                        version: scope.version,
+                        exact: scope.exact,
+                        stale: scope.stale
+                    }
+                };
+            }
+
             const local = await ctx.repo.search(ctx.workspaceId, terms, input.severity, input.limit);
             const truncated = local.length > input.limit;
             const entries: CveEntry[] = local.slice(0, input.limit).map(toEntry);
@@ -75,7 +101,7 @@ export const cveHandlers = [
             const candidate = cveIdCandidate(input.query);
             const exactHeld = candidate !== null && entries.some((e) => e.id === candidate);
             if (candidate !== null ? exactHeld : truncated || entries.length >= input.limit) {
-                return { entries, truncated, remote: false, remoteError: null };
+                return { entries, truncated, remote: false, remoteError: null, scope: KEYWORD };
             }
 
             const known = new Set(entries.map((e) => e.id));
@@ -103,12 +129,13 @@ export const cveHandlers = [
                     entries: entries.slice(0, input.limit),
                     truncated: truncated || entries.length > input.limit,
                     remote: true,
-                    remoteError: null
+                    remoteError: null,
+                    scope: KEYWORD
                 };
             } catch (e) {
                 // Le local a peut-etre deja de quoi repondre : le rendre, en disant
                 // que la moitie distante a manque.
-                return { entries, truncated, remote: true, remoteError: (e as Error).message };
+                return { entries, truncated, remote: true, remoteError: (e as Error).message, scope: KEYWORD };
             }
         }
     }),

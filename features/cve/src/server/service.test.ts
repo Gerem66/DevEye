@@ -52,6 +52,7 @@ function memoryRepo(): CveRepo & { entries: CveUpsert[]; watched: CveWatchedRow[
         listNews: unused,
         search: unused,
         find: unused,
+        findMany: unused,
         listFavorites: unused,
         addFavorite: unused,
         removeFavorite: unused,

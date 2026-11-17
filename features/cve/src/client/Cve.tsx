@@ -13,7 +13,7 @@ import {
 } from 'deveye-sdk-client';
 import type { FeatureViewProps } from '@deveye/types/sdk/client';
 
-import { CVE_SEARCH_QUERY_MAX } from '../contracts/commands';
+import { CVE_SEARCH_QUERY_MAX, type SearchScope } from '../contracts/commands';
 import type { CveEntry, CveSeverityFilter } from '../contracts/domain';
 import type { Software } from '../contracts/software';
 
@@ -58,6 +58,7 @@ interface SearchState {
     truncated: boolean;
     remote: boolean;
     remoteError: string | null;
+    scope: SearchScope;
     loading: boolean;
     error: ErrorNoteInput | null;
 }
@@ -67,6 +68,7 @@ const NO_SEARCH: SearchState = {
     truncated: false,
     remote: false,
     remoteError: null,
+    scope: { kind: 'keyword' },
     loading: false,
     error: null
 };
@@ -400,13 +402,19 @@ export default function Cve(_props: FeatureViewProps) {
                             )}
                             <section className={styles.section}>
                                 {searching && softwareFound.matches.length > 0 && (
-                                    <h3 className={styles.sectionTitle}>Vulnérabilités</h3>
+                                    <h3 className={styles.sectionTitle}>
+                                        {search.scope.kind === 'version' && search.scope.exact
+                                            ? `Failles de ${search.scope.product} ${search.scope.version}`
+                                            : 'Vulnérabilités'}
+                                    </h3>
                                 )}
                                 {shown.length === 0 && loading && softwareFound.matches.length > 0 ? (
                                     <p className={styles.detailMore}>Recherche en cours…</p>
                                 ) : shown.length === 0 && !loading ? (
                                     <p className={styles.empty}>
-                                        {emptyLine(searching, tab, severity, news.ingestedAt)}
+                                        {searching
+                                            ? searchEmptyLine(search.scope, softwareFound)
+                                            : emptyLine(tab, severity, news.ingestedAt)}
                                     </p>
                                 ) : (
                                     <ul className={styles.list}>
@@ -465,6 +473,15 @@ function statusLine(args: {
 }): string {
     const { searching, search, news, loading, count } = args;
     if (loading) return 'Chargement…';
+    if (searching && search.scope.kind === 'version') {
+        const { product, version, exact, stale } = search.scope;
+        if (!exact) return `Les failles se comparent à une version exacte de ${product}, pas à une branche.`;
+        const found =
+            count === 0
+                ? `Aucune faille connue ne touche ${product} ${version}`
+                : `${count} faille${count > 1 ? 's' : ''} connue${count > 1 ? 's touchent' : ' touche'} ${product} ${version}`;
+        return `${found}, d’après le catalogue local.${stale ? ` ${stale} La liste peut être incomplète.` : ''}`;
+    }
     if (searching) {
         const scope = search.remoteError
             ? `catalogue local seulement (le NVD n’a pas répondu : ${search.remoteError})`
@@ -482,8 +499,16 @@ function statusLine(args: {
     })}.`;
 }
 
-function emptyLine(searching: boolean, tab: Tab, severity: CveSeverityFilter, ingestedAt: number | null): string {
-    if (searching) return 'Aucune vulnérabilité ne correspond.';
+/** Une recherche sans CVE : rien ne correspond, ou la version demandée n'est qu'une branche. */
+function searchEmptyLine(scope: SearchScope, found: SoftwareFound): string {
+    if (scope.kind === 'keyword') return 'Aucune vulnérabilité ne correspond.';
+    if (scope.exact) return `Aucune faille connue ne touche ${scope.product} ${scope.version}.`;
+    const [first] = found.matches;
+    const latest = first?.software.releases.find((r) => r.name === first.releases[0])?.latest ?? null;
+    return `Précisez la version exacte pour voir ses failles${latest ? `, par exemple ${latest}` : ''}.`;
+}
+
+function emptyLine(tab: Tab, severity: CveSeverityFilter, ingestedAt: number | null): string {
     if (tab === 'favorites') return 'Rien d’épinglé dans cet espace. L’étoile d’une CVE la range ici.';
     // Un fil vide avant le premier tour n'est pas une absence : le dire, sinon
     // la vue accuse le filtre de ce que l'ingestion n'a pas encore fait.

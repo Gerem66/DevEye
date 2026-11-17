@@ -143,3 +143,10 @@ dehors. Une requête se lit comme un nom et peut-être une version (« node 18 �
 les libellés et les alias sous une forme compacte, et une version surligne sa
 branche dans le tableau du logiciel, ou les branches qui commencent par elle
 (Windows « 11 »).
+
+Quand le logiciel est un outil que la veille suit (`TOOLS`) et que la version
+est exacte (« nginx 1.25.3 »), `cve.search` rend les failles du catalogue local
+qui touchent cette version, confrontées comme la veille le fait, sans le NVD
+par mots ; une branche (« node 18 ») ne se compare pas aux failles, et l'écran
+demande la version exacte. Un historique encore en rattrapage se dit à côté de
+la liste.
