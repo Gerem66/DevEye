@@ -17,7 +17,7 @@ function chipState(listing: AppStoresListing): { text: string; tone: Tone; title
     if (listing.lastSyncAt === null) {
         return { text: 'En attente', tone: 'neutral', title: `${store} : pas encore synchronisée.` };
     }
-    const latest = listing.store === 'apple' ? listing.versions[0] : undefined;
+    const latest = listing.versions[0];
     if (latest) {
         const state = versionState(latest.state);
         const since = latest.since === null ? '' : `, depuis le ${formatDay(latest.since)}`;

@@ -1,4 +1,10 @@
-import type { AppStore, AppStoresCapability, AppStoresRange, AppStoresResolution } from '../contracts/domain';
+import type {
+    AppStore,
+    AppStoresCapability,
+    AppStoresRange,
+    AppStoresResolution,
+    AppStoresVersion
+} from '../contracts/domain';
 
 export const STORE_LABELS: Record<AppStore, string> = { apple: 'App Store', google: 'Google Play' };
 
@@ -178,12 +184,41 @@ const VERSION_STATES: Record<string, { label: string; tone: Tone }> = {
     INVALID_BINARY: { label: 'Binaire refusé', tone: 'danger' },
     WAITING_FOR_EXPORT_COMPLIANCE: { label: 'Conformité export à déclarer', tone: 'warning' },
     ACCEPTED: { label: 'Acceptée', tone: 'success' },
-    REPLACED_WITH_NEW_VERSION: { label: 'Remplacée', tone: 'neutral' }
+    REPLACED_WITH_NEW_VERSION: { label: 'Remplacée', tone: 'neutral' },
+    RELEASE_LIFECYCLE_STATE_DRAFT: { label: 'Brouillon', tone: 'neutral' },
+    RELEASE_LIFECYCLE_STATE_NOT_SENT_FOR_REVIEW: { label: 'À envoyer en revue', tone: 'warning' },
+    RELEASE_LIFECYCLE_STATE_IN_REVIEW: { label: 'En revue', tone: 'accent' },
+    RELEASE_LIFECYCLE_STATE_APPROVED_NOT_PUBLISHED: { label: 'Acceptée, à publier', tone: 'warning' },
+    RELEASE_LIFECYCLE_STATE_NOT_APPROVED: { label: 'Rejetée', tone: 'danger' },
+    RELEASE_LIFECYCLE_STATE_PUBLISHED: { label: 'En production', tone: 'success' }
 };
 
-/** Un état qu'Apple ajouterait demain se montre brut plutôt que de disparaître. */
+/** Un état qu'un store ajouterait demain se montre brut plutôt que de disparaître. */
 export function versionState(state: string): { label: string; tone: Tone } {
     return VERSION_STATES[state] ?? { label: state, tone: 'neutral' };
+}
+
+const LIVE_STATES = new Set(['READY_FOR_DISTRIBUTION', 'RELEASE_LIFECYCLE_STATE_PUBLISHED']);
+
+/**
+ * L'état affiché de chaque version, la plus récente d'abord : les stores
+ * laissent « en production » celles qu'une plus récente a remplacées.
+ */
+export function versionStates(versions: readonly AppStoresVersion[]): { label: string; tone: Tone }[] {
+    let live = false;
+    return versions.map((version) => {
+        if (!LIVE_STATES.has(version.state)) return versionState(version.state);
+        if (live) return versionState('REPLACED_WITH_NEW_VERSION');
+        live = true;
+        return versionState(version.state);
+    });
+}
+
+/** La fiche publique d'une app sur son store. */
+export function storePageUrl(store: AppStore, externalId: string): string {
+    return store === 'apple'
+        ? `https://apps.apple.com/app/id${encodeURIComponent(externalId)}`
+        : `https://play.google.com/store/apps/details?id=${encodeURIComponent(externalId)}`;
 }
 
 export const CAPABILITY_LABELS: Record<AppStoresCapability, string> = {
@@ -210,7 +245,7 @@ export const CAPABILITY_OBJECTS: Record<AppStoresCapability, string> = {
 /** Apple ne mesure pas la stabilité, et l'état des versions Google n'est pas lu. */
 export const STORE_CAPABILITIES: Record<AppStore, readonly AppStoresCapability[]> = {
     apple: ['apps', 'downloads', 'ratings', 'reviews', 'revenue', 'versions'],
-    google: ['apps', 'downloads', 'ratings', 'reviews', 'revenue', 'vitals']
+    google: ['apps', 'downloads', 'ratings', 'reviews', 'revenue', 'versions', 'vitals']
 };
 
 /** Ce qu'il manque à une clé pour lire une capacité, avec les mots de la console du store. */
@@ -233,6 +268,8 @@ export const CAPABILITY_NEEDS: Record<AppStore, Partial<Record<AppStoresCapabili
             'Comme pour les téléchargements : l’autorisation des rapports groupés, et la bonne URI des rapports (étape 3).',
         reviews: 'Il faut l’autorisation « Répondre aux avis ».',
         revenue: 'Il faut l’autorisation « Voir les données financières ».',
+        versions:
+            'Il faut l’autorisation « Voir les informations sur la qualité de l’application », et l’API Google Play Android Developer activée (étape 1).',
         vitals: 'Il faut l’autorisation « Voir les informations sur la qualité de l’application », et l’API Google Play Developer Reporting activée (étape 1).'
     }
 };

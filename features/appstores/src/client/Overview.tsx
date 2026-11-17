@@ -17,10 +17,12 @@ import {
     formatRate,
     formatRating,
     MISSING,
+    ON_STORE,
     plural,
     STORE_LABELS,
     STORE_ORDER,
-    versionState
+    storePageUrl,
+    versionStates
 } from './format';
 import { downloadSeries, downloadsOf } from './Stats/downloads';
 import StatBand, { ratingChange, relativeChange, type StatTile } from './Stats/StatBand';
@@ -41,8 +43,8 @@ const countOrMissing = (value: number | null) => (value === null ? MISSING : for
 
 /**
  * L'aperçu d'une app : les chiffres de la période et leur écart à la
- * précédente, la courbe des téléchargements par store, puis les versions
- * Apple. Aucun montant ici : les revenus ont leur onglet et leur droit.
+ * précédente, la courbe des téléchargements par store, puis les versions de
+ * chaque store. Aucun montant ici : les revenus ont leur onglet et leur droit.
  */
 export function Overview({ app, store, sources, canWrite, range }: OverviewProps) {
     const has = (store: AppStore) => app.listings.some((listing) => listing.store === store);
@@ -234,32 +236,54 @@ export function Overview({ app, store, sources, canWrite, range }: OverviewProps
                 )}
             </section>
 
-            {apple && (
-                <section className={`${styles.block} ${styles.versionsBlock}`}>
-                    <header className={styles.blockHead}>
-                        <h3 className={styles.blockTitle}>Versions sur l’App Store</h3>
-                    </header>
-                    {apple.versions.length === 0 ? (
-                        <p className={styles.blockEmpty}>Aucune version relevée pour l’instant.</p>
-                    ) : (
-                        <ul className={styles.versionList}>
-                            {apple.versions.map((version, index) => {
-                                const state = versionState(version.state);
-                                return (
-                                    <li key={`${version.version}-${index}`} className={styles.versionRow}>
-                                        <span className={styles.versionName}>{version.version}</span>
-                                        <StatusBadge tone={state.tone}>{state.label}</StatusBadge>
-                                        {version.since !== null && (
-                                            <span className={styles.versionSince}>
-                                                depuis le {formatDate(version.since)}
-                                            </span>
-                                        )}
-                                    </li>
-                                );
-                            })}
-                        </ul>
+            {(google || apple) && (
+                // Google Play à gauche, l'App Store à droite ; l'un sous l'autre à l'étroit.
+                <div className={styles.versionPanels}>
+                    {[google, apple].map(
+                        (listing) =>
+                            listing && (
+                                <section key={listing.store} className={`${styles.block} ${styles.versionsBlock}`}>
+                                    <header className={styles.blockHead}>
+                                        <h3 className={styles.blockTitle}>Versions {ON_STORE[listing.store]}</h3>
+                                    </header>
+                                    {listing.versions.length === 0 ? (
+                                        <p className={styles.blockEmpty}>Aucune version relevée pour l’instant.</p>
+                                    ) : (
+                                        <ul className={styles.versionList}>
+                                            {versionStates(listing.versions).map((state, index) => {
+                                                const version = listing.versions[index];
+                                                return (
+                                                    <li key={`${version.version}-${index}`}>
+                                                        <a
+                                                            className={styles.versionRow}
+                                                            href={storePageUrl(listing.store, listing.externalId)}
+                                                            target='_blank'
+                                                            rel='noopener noreferrer'
+                                                            title={`Ouvrir la fiche de l’app ${ON_STORE[listing.store]}`}
+                                                        >
+                                                            <span className={styles.versionName}>
+                                                                {version.version}
+                                                            </span>
+                                                            <StatusBadge tone={state.tone}>{state.label}</StatusBadge>
+                                                            {version.since !== null && (
+                                                                <span className={styles.versionSince}>
+                                                                    depuis le {formatDate(version.since)}
+                                                                </span>
+                                                            )}
+                                                            <span
+                                                                className={`icon icon-move-to-right ${styles.versionOpen}`}
+                                                                aria-hidden='true'
+                                                            />
+                                                        </a>
+                                                    </li>
+                                                );
+                                            })}
+                                        </ul>
+                                    )}
+                                </section>
+                            )
                     )}
-                </section>
+                </div>
             )}
         </>
     );

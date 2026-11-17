@@ -860,6 +860,13 @@
 
 /* ------------------------------------------------------------ les versions */
 
+.versionPanels {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    align-items: start;
+    gap: var(--space-md);
+}
+
 /* La dernière ligne garde son propre souffle : la marge du bas du bloc s'en trouve doublée. */
 .versionsBlock {
     padding-bottom: calc(var(--space-md) / 2);
@@ -873,18 +880,36 @@
     list-style: none;
 }
 
+.versionList > li {
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.versionList > li:last-child {
+    border-bottom: none;
+}
+
+/* Toute la ligne ouvre la fiche du store, dans un nouvel onglet. */
 .versionRow {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
     gap: var(--space-sm);
     padding: var(--space-xs) 0;
-    border-bottom: 1px solid var(--glass-border);
+    color: inherit;
     font-size: 0.85rem;
+    text-decoration: none;
 }
 
-.versionRow:last-child {
-    border-bottom: none;
+.versionOpen {
+    margin-left: auto;
+    width: 14px;
+    color: var(--text-muted);
+    transition: color var(--transition-fast);
+}
+
+.versionRow:hover .versionOpen,
+.versionRow:focus-visible .versionOpen {
+    color: var(--accent);
 }
 
 .versionName {

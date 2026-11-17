@@ -137,6 +137,8 @@ declare const styles: {
     readonly usageName: string;
     readonly versionList: string;
     readonly versionName: string;
+    readonly versionOpen: string;
+    readonly versionPanels: string;
     readonly versionRow: string;
     readonly versionSince: string;
     readonly versionsBlock: string;

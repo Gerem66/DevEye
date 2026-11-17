@@ -2,7 +2,7 @@
 
 Stores relève, pour chaque app qu'un espace suit, ce qu'Apple et Google en
 savent : les téléchargements jour par jour, les notes, les avis, les revenus,
-l'état des versions chez Apple et la stabilité chez Google. On y répond aussi
+l'état des versions et la stabilité chez Google. On y répond aussi
 aux avis. C'est le voisin d'[Audience](../audience/README.md), qui mesure ce
 qu'une app envoie elle-même, et de [Projets](../projects/README.md), qui relie
 des apps dans son onglet Stores.
@@ -83,7 +83,7 @@ sa synchronisation restent chez elle, où vit sa source.
 | Vue                    | Contenu                                                                                                                   |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | **Accueil**            | une rangée par app : puces de store (logo, puis état), téléchargements sur sept jours et leur écart, notes, « N projets » |
-| **Fiche, Aperçu**      | bandeau (téléchargements, notes, avis reçus, taux de plantage) avec l'écart, courbe par store, versions Apple             |
+| **Fiche, Aperçu**      | bandeau (téléchargements, notes, avis reçus, taux de plantage) avec l'écart, courbe par store, versions des deux stores   |
 | **Fiche, Avis**        | filtres, répartition des avis reçus sur la période, cartes d'avis et leur réponse, dialogue de réponse                    |
 | **Fiche, Revenus**     | par store et par devise, avec le droit Revenus                                                                            |
 | **Fiche, Stabilité**   | taux de plantage et de blocage perçus, avec les seuils de Google, pour une app sur Google Play                            |
@@ -123,7 +123,7 @@ Les décisions d'écran qui méritent d'être connues :
 | Avis            | `customerReviews`, tout l'historique                                                             | `reviews.list` : les sept derniers jours seulement                                    |
 | Réponse         | `customerReviewResponses`, 5 970 caractères ; la remplacer = supprimer puis recréer              | `reviews/{id}:reply`, 350 caractères                                                  |
 | Revenus         | le même rapport : unités × produit net, par devise                                               | `sales/salesreport_<AAAAMM>.zip`, ventes estimées avant commission, hors taxes        |
-| Versions        | `appStoreVersions`, champ `appVersionState`                                                      | aucun                                                                                 |
+| Versions        | `appStoreVersions`, champ `appVersionState`                                                      | `tracks/production/releases` : la piste de production, en lecture seule, sans date    |
 | Stabilité       | aucun                                                                                            | Reporting API `crashRateMetricSet` et `anrRateMetricSet`, taux perçus                 |
 
 ### 3.2 La synchronisation
@@ -280,7 +280,7 @@ le dit (`PlanPausedBadge`, `PlanPausedNotice`).
   nomme la note la plus basse et cite les premiers. Le premier passage d'une
   fiche n'envoie rien pour ce qu'il rattrape.
 - **Versions Apple** : à chaque changement utile (soumise, en revue, acceptée,
-  rejetée, en vente).
+  rejetée, en production).
 - **Stabilité Google** : quand la moyenne sur 28 jours du taux perçu, pondérée
   par utilisateurs, franchit le seuil de Google (1,09 % pour les plantages,
   0,47 % pour les blocages), puis quand elle redescend.
@@ -310,7 +310,9 @@ Aucun avis ne porte de montant.
 
 ## 12. Limites
 
-- Pas d'état des versions chez Google, ni de stabilité chez Apple.
+- Pas de stabilité chez Apple. Les versions de Google n'ont pas de date, et
+  leurs changements ne préviennent pas. Google ne rend que ses versions
+  actives : les cinq dernières se gardent de mémoire, à partir du branchement.
 - La note Apple est celle d'un pays : Apple n'en publie pas de mondiale.
 - Les revenus Google sont estimés et bruts de la commission ; aucune devise n'est
   convertie.
