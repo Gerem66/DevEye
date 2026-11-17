@@ -50,6 +50,7 @@ function clientsOf(apple: AppleFake = {}, google: GoogleFake = {}): StoreClients
             listObjects: async () => [],
             downloadObject: async () => Buffer.alloc(0),
             fetchReviews: async () => [],
+            fetchReleases: async () => [],
             fetchVitals: async () => [],
             ...google
         }
@@ -423,9 +424,47 @@ describe('les versions Apple', () => {
         state = 'READY_FOR_DISTRIBUTION';
         t.later(31 * 60_000);
         await t.beat();
-        assert.deepEqual(subjects().slice(1), ['[DevEye] App 1 2.0 : acceptée', '[DevEye] App 1 2.0 : en vente']);
+        assert.deepEqual(subjects().slice(1), ['[DevEye] App 1 2.0 : acceptée', '[DevEye] App 1 2.0 : en production']);
         const listing = JSON.parse(t.repo.db.listings[0].state ?? '{}') as { versions: { state: string }[] };
         assert.equal(listing.versions[0].state, 'READY_FOR_DISTRIBUTION');
+    });
+});
+
+describe('les versions Google', () => {
+    it('gardent de mémoire celles que Google ne rend plus, sans prévenir de leurs étapes', async () => {
+        let releases = [{ version: '4.3.5', state: 'RELEASE_LIFECYCLE_STATE_PUBLISHED', code: 435 }];
+        const t = setup(
+            {
+                sources: [
+                    sourceRow({
+                        id: 20,
+                        store: 'google',
+                        capabilities: 'versions',
+                        content: JSON.stringify({
+                            label: 'Play',
+                            clientEmail: 'deveye@projet.iam.gserviceaccount.com',
+                            bucket: 'pubsite_prod_rev_0123'
+                        })
+                    })
+                ],
+                listings: [caughtUp({ id: 1, app_id: 1, store: 'google', source_id: 20 })]
+            },
+            clientsOf({}, { fetchReleases: async () => releases })
+        );
+        const stored = () =>
+            (
+                JSON.parse(t.repo.db.listings[0].state ?? '{}') as { versions: { version: string; state: string }[] }
+            ).versions.map((v) => [v.version, v.state]);
+        await t.start();
+        assert.deepEqual(stored(), [['4.3.5', 'RELEASE_LIFECYCLE_STATE_PUBLISHED']]);
+        releases = [{ version: '4.3.6', state: 'RELEASE_LIFECYCLE_STATE_PUBLISHED', code: 436 }];
+        t.later(31 * 60_000);
+        await t.beat();
+        assert.deepEqual(stored(), [
+            ['4.3.6', 'RELEASE_LIFECYCLE_STATE_PUBLISHED'],
+            ['4.3.5', 'RELEASE_LIFECYCLE_STATE_PUBLISHED']
+        ]);
+        assert.deepEqual(t.deps.recorded.notifications, []);
     });
 });
 

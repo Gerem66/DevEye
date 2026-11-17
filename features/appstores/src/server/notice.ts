@@ -193,7 +193,7 @@ const PHASE_TITLE: Record<VersionPhase, string> = {
     review: 'en revue',
     accepted: 'acceptée',
     rejected: 'rejetée',
-    live: 'en vente'
+    live: 'en production'
 };
 
 const PHASE_SENTENCE: Record<VersionPhase, string> = {
@@ -201,7 +201,7 @@ const PHASE_SENTENCE: Record<VersionPhase, string> = {
     review: 'est en revue chez Apple',
     accepted: 'a été acceptée par Apple',
     rejected: 'a été rejetée par Apple : le motif se lit dans App Store Connect',
-    live: 'est en vente sur l’App Store'
+    live: 'est en production sur l’App Store'
 };
 
 export interface VersionNotice {

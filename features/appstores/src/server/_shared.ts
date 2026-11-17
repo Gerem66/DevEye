@@ -183,7 +183,7 @@ export async function toListing(cipher: SdkCipher, row: ListingRow): Promise<App
         externalId: content?.externalId ?? '',
         storeName: content?.storeName ?? null,
         bundleId: content?.bundleId ?? null,
-        versions: row.store === 'apple' ? (state.versions ?? []) : [],
+        versions: state.versions ?? [],
         rating: typeof state.rating === 'number' ? Math.min(5, Math.max(0, state.rating)) : null,
         ratingCount: typeof state.ratingCount === 'number' ? state.ratingCount : null,
         dataUntil: row.synced_day === null ? null : row.synced_day * DAY_SECONDS,

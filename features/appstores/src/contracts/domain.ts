@@ -154,7 +154,7 @@ export const appStoresListingSchema = z.object({
     /** Le nom de l'app chez le store, tel que relevé au dernier passage. */
     storeName: z.string().nullable(),
     bundleId: z.string().nullable(),
-    /** Apple seulement : les dernières versions, la plus récente d'abord. */
+    /** Les dernières versions, la plus récente d'abord ; chez Google, celles de la piste de production. */
     versions: z.array(appStoresVersionSchema),
     /** La note moyenne et son nombre de notes (Apple : dans le pays de référence). */
     rating: z.number().nullable(),

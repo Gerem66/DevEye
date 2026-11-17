@@ -314,6 +314,8 @@ export function salesObject(month: string): string {
 }
 
 const INSTALLS_NAME = /^stats\/installs\/installs_(.+)_(\d{6})_overview\.csv$/;
+/** Un rapport d'installations de n'importe quelle dimension (`app_version`, `country`…) : le premier venu n'est pas l'aperçu. */
+const INSTALLS_REPORT = /^stats\/installs\/installs_(.+)_\d{6}_[a-z_]+\.csv$/;
 
 // ----------------------------------------------------------------- les rapports
 
@@ -535,6 +537,46 @@ export async function fetchGoogleReviews(
     return out;
 }
 
+interface RawRelease {
+    releaseName?: unknown;
+    releaseLifecycleState?: unknown;
+    activeArtifacts?: { versionCode?: unknown }[];
+}
+
+/** Une version de la piste de production : Google ne lui donne ni date ni numéro à part de son nom. */
+export interface GoogleVersion {
+    version: string;
+    /** La valeur brute de `releaseLifecycleState`. */
+    state: string;
+    /** Le plus haut `versionCode` livré, qui ordonne les versions. */
+    code: number | null;
+}
+
+/**
+ * Les versions de la piste de production, la plus récente d'abord. Une lecture
+ * seule, sans ouvrir de modification, que la permission de lecture de la
+ * qualité de l'app suffit à ouvrir.
+ */
+export async function fetchGoogleReleases(
+    creds: GoogleCredentials,
+    pkg: string,
+    signal?: AbortSignal
+): Promise<GoogleVersion[]> {
+    const doc = await readStoreJson<{ releases?: RawRelease[] }>(
+        'google',
+        await googleApi(creds, `${PUBLISHER}/${assertPackage(pkg)}/tracks/production/releases`, { signal })
+    );
+    const out: GoogleVersion[] = [];
+    for (const raw of doc.releases ?? []) {
+        const codes = (raw.activeArtifacts ?? []).map((a) => Number(a.versionCode)).filter(Number.isFinite);
+        const code = codes.length > 0 ? Math.max(...codes) : null;
+        const version = text(raw.releaseName) ?? (code === null ? null : String(code));
+        const state = text(raw.releaseLifecycleState);
+        if (version !== null && state !== null) out.push({ version, state, code });
+    }
+    return out.sort((a, b) => (b.code ?? 0) - (a.code ?? 0));
+}
+
 /** Publie une réponse, ou remplace celle en place : Google la montre aussitôt. */
 export async function replyGoogle(
     creds: GoogleCredentials,
@@ -697,7 +739,7 @@ export async function probeGoogle(creds: GoogleCredentials, signal?: AbortSignal
             capabilities.add(capability);
             if (capability === 'downloads' && first) {
                 capabilities.add('apps');
-                pkg ??= INSTALLS_NAME.exec(first.name)?.[1] ?? null;
+                pkg ??= INSTALLS_REPORT.exec(first.name)?.[1] ?? null;
             }
         } catch (e) {
             tolerate(e);
@@ -715,6 +757,12 @@ export async function probeGoogle(creds: GoogleCredentials, signal?: AbortSignal
         try {
             await fetchGoogleReviews(creds, pkg, signal, 1);
             capabilities.add('reviews');
+        } catch (e) {
+            tolerate(e);
+        }
+        try {
+            await fetchGoogleReleases(creds, pkg, signal);
+            capabilities.add('versions');
         } catch (e) {
             tolerate(e);
         }
@@ -737,6 +785,7 @@ export const googleClient = {
     listObjects,
     downloadObject,
     fetchReviews: fetchGoogleReviews,
+    fetchReleases: fetchGoogleReleases,
     fetchVitals
 };
 

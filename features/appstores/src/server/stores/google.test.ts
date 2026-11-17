@@ -8,7 +8,9 @@ import { FeatureError } from '@deveye/types/sdk/server';
 import { dayOfDate } from '../days';
 import { unzipFirst } from '../parse/unzip';
 import {
+    fetchGoogleReleases,
     fetchGoogleReviews,
+    probeGoogle,
     fetchVitals,
     forgetGoogleTokens,
     googleToken,
@@ -293,6 +295,55 @@ describe('les avis et la stabilité', () => {
             createdAt: 1763200000,
             reply: { body: 'Merci !', at: 1763210000, state: 'published', responseId: null }
         });
+    });
+
+    it('sonde avis, versions et stabilité avec le paquet lu au premier rapport venu, sans la Reporting API', async () => {
+        answer((url) => {
+            if (url.pathname.endsWith('/apps:search')) return json({ error: { code: 403 } }, 403);
+            const prefix = url.searchParams.get('prefix');
+            if (prefix === 'stats/installs/installs_') {
+                return json({ items: [{ name: 'stats/installs/installs_com.exemple.app_202511_app_version.csv' }] });
+            }
+            if (prefix !== null) return json({ items: [] });
+            if (url.pathname.endsWith('/reviews')) return json({ reviews: [] });
+            if (url.pathname.endsWith('/tracks/production/releases')) return json({ releases: [] });
+            if (url.pathname.endsWith('/crashRateMetricSet')) return json({});
+            return json({}, 404);
+        });
+        const capabilities = await probeGoogle(creds);
+        for (const capability of ['apps', 'downloads', 'reviews', 'versions', 'vitals']) {
+            assert.ok(capabilities.includes(capability as never), `${capability} sondée`);
+        }
+        assert.ok(calls.some((c) => c.url.includes('/applications/com.exemple.app/tracks/production/releases')));
+    });
+
+    it('lit les versions de la piste de production, la plus récente d’abord', async () => {
+        answer(() =>
+            json({
+                releases: [
+                    {
+                        releaseName: '4.3.4',
+                        track: 'production',
+                        releaseLifecycleState: 'RELEASE_LIFECYCLE_STATE_PUBLISHED',
+                        activeArtifacts: [{ versionCode: 434 }]
+                    },
+                    {
+                        track: 'production',
+                        releaseLifecycleState: 'RELEASE_LIFECYCLE_STATE_IN_REVIEW',
+                        activeArtifacts: [{ versionCode: 435 }]
+                    }
+                ]
+            })
+        );
+        const versions = await fetchGoogleReleases(creds, 'com.exemple.app');
+        assert.deepEqual(versions, [
+            { version: '435', state: 'RELEASE_LIFECYCLE_STATE_IN_REVIEW', code: 435 },
+            { version: '4.3.4', state: 'RELEASE_LIFECYCLE_STATE_PUBLISHED', code: 434 }
+        ]);
+        assert.equal(
+            calls.at(-1)?.url,
+            'https://androidpublisher.googleapis.com/androidpublisher/v3/applications/com.exemple.app/tracks/production/releases'
+        );
     });
 
     it('lit les taux perçus jour par jour, jusqu’à la fraîcheur annoncée', async () => {

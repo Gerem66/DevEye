@@ -514,6 +514,32 @@ describe('les apps', () => {
         );
     });
 
+    it('rendent les versions relevées de chaque store, Google Play compris', async () => {
+        const versions = (version: string, state: string) =>
+            JSON.stringify({ versions: [{ version, state, since: null }] });
+        const repo = fakeRepo({
+            apps: [appRow({ id: 1 })],
+            listings: [
+                covered({ id: 1, app_id: 1, state: versions('4.3.5', 'READY_FOR_DISTRIBUTION') }),
+                covered({
+                    id: 2,
+                    app_id: 1,
+                    store: 'google',
+                    externalId: 'com.exemple.app',
+                    state: versions('4.3.5', 'RELEASE_LIFECYCLE_STATE_PUBLISHED')
+                })
+            ]
+        });
+        const { apps } = await handlerFor(appStoresList)(contextOf(repo), {});
+        assert.deepEqual(
+            apps[0].app.listings.map((l) => [l.store, l.versions.map((v) => v.state)]),
+            [
+                ['apple', ['READY_FOR_DISTRIBUTION']],
+                ['google', ['RELEASE_LIFECYCLE_STATE_PUBLISHED']]
+            ]
+        );
+    });
+
     it('ne se synchronisent à la demande que reliées à une source, et actives', async () => {
         const repo = fakeRepo({
             apps: [appRow({ id: 1 }), appRow({ id: 2 })],

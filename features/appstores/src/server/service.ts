@@ -74,6 +74,8 @@ const BACKOFF_MAX = 15 * 60;
 const APPLE_REPORTS_PER_PASS = 30;
 const GOOGLE_OBJECTS_PER_PASS = 30;
 const REVIEW_PAGES_PER_PASS = 10;
+/** Les dernières versions gardées par fiche de store. */
+const VERSIONS_KEPT = 5;
 /** Une réponse Apple de moins de deux semaines peut encore attendre sa relecture. */
 const PENDING_REPLY_SECONDS = 14 * DAY_SECONDS;
 /** Les jours de stabilité relus, de quoi couvrir la moyenne sur 28 jours. */
@@ -1013,9 +1015,7 @@ export class AppStoresSync {
             work.touched = true;
             if (!pass.capabilities.has('reviews')) work.reviewsAt = now;
             else if (await this.reviews(pass, cipher, work)) work.reviewsAt = now;
-            if (pass.credentials.store === 'apple' && pass.capabilities.has('versions')) {
-                await this.versions(pass, work);
-            }
+            if (pass.capabilities.has('versions')) await this.versions(pass, work);
         }
         if (pass.credentials.store === 'apple' && this.due(work, work.row.rating_synced_at, RATING_EVERY)) {
             work.touched = true;
@@ -1156,12 +1156,19 @@ export class AppStoresSync {
         }
     }
 
-    /** Les versions d'Apple, et l'avis de chaque étape utile ; la première lecture ne fait que noter. */
+    /**
+     * Les versions d'un store, et l'avis de chaque étape utile d'Apple ; la
+     * première lecture ne fait que noter. Google ne donne pas d'identifiant à
+     * part : le nom de la version en tient lieu.
+     */
     private async versions(pass: Pass, work: Work): Promise<void> {
-        if (pass.credentials.store !== 'apple') return;
-        const { creds } = pass.credentials;
-        const read = await this.attempt(pass, work, 'les versions', () =>
-            this.clients.apple.fetchVersions(creds, work.content.externalId, this.signal)
+        const credentials = pass.credentials;
+        const read = await this.attempt(pass, work, 'les versions', async () =>
+            credentials.store === 'apple'
+                ? this.clients.apple.fetchVersions(credentials.creds, work.content.externalId, this.signal)
+                : (
+                      await this.clients.google.fetchReleases(credentials.creds, work.content.externalId, this.signal)
+                  ).map((release) => ({ id: release.version, version: release.version, state: release.state }))
         );
         if (failed(read)) return;
         const now = this.nowSeconds();
@@ -1176,10 +1183,14 @@ export class AppStoresSync {
                 work.versionNotices.push({ version: version.version, phase });
             }
         }
-        const versions: AppStoresVersion[] = read.value.slice(0, 5).map((v) => {
+        const current: AppStoresVersion[] = read.value.slice(0, VERSIONS_KEPT).map((v) => {
             const same = previous.find((p) => p.version === v.version && p.state === v.state);
             return { version: v.version, state: v.state, since: same ? same.since : first ? null : now };
         });
+        // Google ne rend que ses versions actives : les précédentes restent de mémoire, depuis le branchement.
+        const remembered =
+            credentials.store === 'google' ? previous.filter((p) => !current.some((v) => v.version === p.version)) : [];
+        const versions = [...current, ...remembered].slice(0, VERSIONS_KEPT);
         if (JSON.stringify(versions) !== JSON.stringify(previous)) work.changed = true;
         work.state.versions = versions;
         work.state.phases = nextPhases;
