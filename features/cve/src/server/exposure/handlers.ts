@@ -173,6 +173,8 @@ async function toFinding(
         fixed: content.fixed,
         reference: content.reference,
         aliases: content.aliases,
+        eol: content.eol ?? null,
+        behind: content.behind ?? null,
         firstSeen: Number(row.first_seen),
         lastSeen: Number(row.last_seen),
         resolvedAt: row.resolved_at === null ? null : Number(row.resolved_at),

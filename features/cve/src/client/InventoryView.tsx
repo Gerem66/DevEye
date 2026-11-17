@@ -65,6 +65,10 @@ export default function InventoryView({
     return (
         <>
             <div className={styles.listTools}>
+                <p className={styles.viewIntro}>
+                    Ce que la veille lit dans l’espace (dépôts, appareils, bases, déploiements) et les logiciels qu’elle
+                    y trouve.
+                </p>
                 <p className={styles.status}>
                     {inventory.loading
                         ? 'Chargement…'

@@ -7,3 +7,4 @@ export * from './contracts/domain';
 export * from './contracts/exposure';
 export * from './contracts/formats';
 export * from './contracts/commands';
+export * from './contracts/software';

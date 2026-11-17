@@ -28,6 +28,20 @@ export type FindingKind = z.infer<typeof findingKindSchema>;
 export const findingStateSchema = z.enum(['open', 'ignored', 'resolved']);
 export type FindingState = z.infer<typeof findingStateSchema>;
 
+/** Une fin de vie à moins de ce nombre de jours se signale déjà, à l'écran comme dans la veille. */
+export const EOL_SOON_DAYS = 30;
+
+/** La branche d'un constat de fin de vie, telle qu'endoflife.date la nomme. */
+export const findingEolSchema = z.object({
+    /** Le nom du logiciel chez endoflife.date (`nodejs`), pour relire sa fiche. */
+    product: z.string(),
+    release: z.string(),
+    /** `AAAA-MM-JJ`, quand la date est connue. */
+    date: z.string().nullable(),
+    reached: z.boolean()
+});
+export type FindingEol = z.infer<typeof findingEolSchema>;
+
 /**
  * Un composant de l'inventaire. Un paquet vient d'un registre et se confronte
  * à OSV par son écosystème ; un produit est un logiciel que le NVD nomme
@@ -122,6 +136,10 @@ export const exposureFindingSchema = z.object({
     fixed: z.array(z.string()),
     reference: z.string().nullable(),
     aliases: z.array(z.string()),
+    /** La branche et sa date, pour une fin de vie. */
+    eol: findingEolSchema.nullable(),
+    /** Les versions majeures de retard, pour une dépendance en retard. */
+    behind: z.number().int().positive().nullable(),
     firstSeen: z.number().int().nonnegative(),
     lastSeen: z.number().int().nonnegative(),
     resolvedAt: z.number().int().nonnegative().nullable(),

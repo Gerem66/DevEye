@@ -15,8 +15,10 @@ import type { SdkDevice, SdkFeatureContext } from '@deveye/types/sdk/server';
 import { createTestContext, createTestServiceDeps } from '@deveye/types/sdk/testing';
 
 import { cveExposure, cveExposureCount, cveFindingIgnore, cveInventory } from '../../contracts/commands';
+import { cveSoftware } from '../../contracts/software';
 import { osvHealth } from '../matching/osv';
 import type { CveAffectingRow, CveRepo, CveStateKey, CveWatchedRow } from '../repo';
+import { softwareHandlers } from '../software';
 import { createExposureEngine } from './engine';
 import { exposureHandlers } from './handlers';
 import { memoryExposureRepo } from './repo.fake';
@@ -156,7 +158,7 @@ function setup(hidden: Set<number> = new Set()) {
 }
 
 function handlerFor<C extends { command: string; input: ZodType; output: ZodType }>(contract: C) {
-    const def = exposureHandlers.find((h) => h.command === contract.command);
+    const def = [...exposureHandlers, ...softwareHandlers].find((h) => h.command === contract.command);
     assert.ok(def, `handler ${contract.command} manquant`);
     return def.handler as unknown as (
         ctx: SdkFeatureContext<CveRepo>,
@@ -247,6 +249,7 @@ describe('la veille de l’espace', () => {
         const lodash = listed.findings.find((f) => f.advisoryId === 'CVE-2020-8203');
         assert.equal(lodash?.title, 'lodash : Prototype pollution in lodash');
         assert.deepEqual(lodash?.fixed, ['4.17.21']);
+        assert.equal(lodash?.eol, null, 'une faille n’a pas de branche');
         assert.deepEqual(
             lodash?.affected.map((a) => `${a.label}:${a.version}:${a.path}`),
             ['o/app7:4.17.20:package-lock.json']
@@ -339,7 +342,7 @@ describe('les appareils et les bases', () => {
 describe('les fins de vie', () => {
     it('ouvrent un constat pour une branche que plus rien ne corrige, même à étiquette flottante', async () => {
         osvHealth.blockedUntil = 0;
-        const { repo, files, deps } = setup();
+        const { repo, files, deps, git } = setup();
         files.files[7] = [{ path: 'Dockerfile', text: 'FROM postgres:13-alpine' }];
         const dump = {
             result: [
@@ -351,10 +354,11 @@ describe('les fins de vie', () => {
                     releases: [
                         {
                             name: '16',
+                            releaseDate: '2023-09-14',
                             isEol: false,
                             eolFrom: '2028-11-09',
                             isMaintained: true,
-                            latest: { name: '16.4' }
+                            latest: { name: '16.4', date: '2024-08-08' }
                         },
                         { name: '13', isEol: true, eolFrom: '2025-11-13', isMaintained: false, latest: null }
                     ]
@@ -377,6 +381,20 @@ describe('les fins de vie', () => {
             repo.findings.filter((f) => f.kind === 'vuln').length,
             0,
             'une branche flottante ne se compare pas aux failles'
+        );
+
+        const ctx = createTestContext({ repo, providers: { [GIT_ITEMS_PROVIDER]: git } });
+        const listed = await handlerFor(cveExposure)(ctx, { view: 'active' });
+        assert.deepEqual(listed.findings.find((f) => f.kind === 'eol')?.eol, {
+            product: 'postgresql',
+            release: '13',
+            date: '2025-11-13',
+            reached: true
+        });
+        const { software } = await handlerFor(cveSoftware)(ctx, { name: 'postgresql' });
+        assert.deepEqual(
+            software.releases.map((r) => `${r.name}:${r.releaseDate}:${r.latest}:${r.latestDate}`),
+            ['16:2023-09-14:16.4:2024-08-08', '13:null:null:null']
         );
     });
 });

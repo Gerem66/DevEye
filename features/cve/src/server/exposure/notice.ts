@@ -77,7 +77,11 @@ export function findingAlert(f: AlertedFinding, labelOf: (assetId: number) => st
         `${what}${f.reopened ? ' de retour' : ''} : ${f.content.title}`,
         `Touche : ${touched(labels)}`,
         `Composant : ${f.content.subject.name} ${versions}`,
-        `Corrigé en : ${f.content.fixed.length > 0 ? f.content.fixed.join(', ') : 'aucune version corrigée publiée'}`,
+        f.kind === 'vuln'
+            ? `Corrigé en : ${f.content.fixed.length > 0 ? f.content.fixed.join(', ') : 'aucune version corrigée publiée'}`
+            : f.kind === 'eol'
+              ? `Branches maintenues : ${f.content.fixed.length > 0 ? f.content.fixed.join(', ') : 'aucune'}`
+              : `Dernière version : ${f.content.fixed[0] ?? 'inconnue'}`,
         ...(f.content.reference ? [`Avis : ${f.content.reference}`] : [])
     ];
     return {

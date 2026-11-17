@@ -1,12 +1,24 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button, openFeature, safeHref, StatusBadge, TextInput } from 'deveye-sdk-client';
 
 import { FINDING_REASON_MAX } from '../contracts/commands';
-import type { ExposureFinding } from '../contracts/exposure';
+import type { ExposureFinding, FindingKind } from '../contracts/exposure';
+import type { Software } from '../contracts/software';
 
-import { FIXED_LABEL, since, SOURCE_FEATURE, SOURCE_ICON, whereLine } from './exposureLabels';
+import { api } from './api';
+import {
+    behindLine,
+    eolBadge,
+    eolName,
+    since,
+    SOURCE_FEATURE,
+    SOURCE_ICON,
+    versionsOf,
+    whereLine
+} from './exposureLabels';
 import { useDetailAsPage } from './layout';
 import { fullDate, SEVERITY_LABEL, severityTone } from './severity';
+import SoftwareTable from './SoftwareTable';
 import styles from './style.module.css';
 
 interface Props {
@@ -16,6 +28,19 @@ interface Props {
     onIgnore: (finding: ExposureFinding, reason: string) => void;
     onRestore: (finding: ExposureFinding) => void;
     onClose: () => void;
+}
+
+const REFERENCE_TITLE: Record<FindingKind, string> = {
+    vuln: 'Ouvrir l’avis publié',
+    eol: 'Voir sur endoflife.date',
+    deprecated: 'Voir sur deps.dev',
+    outdated: 'Voir sur deps.dev'
+};
+
+function titleOf(f: ExposureFinding): string {
+    if (f.kind === 'vuln') return f.advisoryId ?? f.subject.name;
+    if (f.kind === 'eol') return eolName(f);
+    return f.subject.name;
 }
 
 /** Un constat en détail : ce qu'il dit, ce qu'il touche dans l'espace, et la décision à prendre. */
@@ -37,15 +62,15 @@ export default function FindingDetail({ finding, canWrite, busy, onIgnore, onRes
                 >
                     <span className={`icon ${asPage ? 'icon-arrow-left' : 'icon-x'}`} />
                 </button>
-                <h3 className={styles.detailTitle}>{finding.advisoryId ?? finding.subject.name}</h3>
+                <h3 className={styles.detailTitle}>{titleOf(finding)}</h3>
                 {reference && (
                     <a
                         className={styles.iconBtn}
                         href={reference}
                         target='_blank'
                         rel='noreferrer'
-                        title='Ouvrir l’avis publié'
-                        aria-label='Ouvrir l’avis publié'
+                        title={REFERENCE_TITLE[finding.kind]}
+                        aria-label={REFERENCE_TITLE[finding.kind]}
                     >
                         <span className='icon icon-move-to-right' />
                     </a>
@@ -53,46 +78,16 @@ export default function FindingDetail({ finding, canWrite, busy, onIgnore, onRes
             </header>
 
             <div className={styles.detailMeta}>
-                {finding.kind === 'eol' && (
-                    <StatusBadge tone={finding.severity === 'high' ? 'danger' : 'warning'}>
-                        {finding.severity === 'high' ? 'Fin de vie atteinte' : 'Fin de vie proche'}
-                    </StatusBadge>
-                )}
-                {finding.kind === 'vuln' && (
-                    <StatusBadge tone={severityTone(finding.severity)}>
-                        {finding.score === null
-                            ? SEVERITY_LABEL[finding.severity]
-                            : `${SEVERITY_LABEL[finding.severity]} ${finding.score.toFixed(1)}`}
-                    </StatusBadge>
-                )}
+                <KindBadge finding={finding} />
                 {finding.state === 'ignored' && <StatusBadge tone='neutral'>Ignoré</StatusBadge>}
                 {finding.state === 'resolved' && <StatusBadge tone='success'>Résolu</StatusBadge>}
                 <span className={styles.detailDate}>Vu pour la première fois le {fullDate(finding.firstSeen)}</span>
             </div>
 
-            <p className={styles.detailSummary}>{finding.summary}</p>
-
-            <dl className={styles.detailFacts}>
-                <dt>Touche</dt>
-                <dd>
-                    {finding.subject.name}
-                    {finding.subject.kind === 'package' && ` (${finding.subject.ecosystem})`}
-                </dd>
-                <dt>{FIXED_LABEL[finding.kind]}</dt>
-                <dd>{finding.fixed.length > 0 ? finding.fixed.join(', ') : 'aucune version corrigée publiée'}</dd>
-                {finding.aliases.length > 0 && (
-                    <>
-                        <dt>Aussi publié sous</dt>
-                        <dd>{finding.aliases.join(', ')}</dd>
-                    </>
-                )}
-                {finding.resolvedAt !== null && (
-                    <>
-                        <dt>Résolu</dt>
-                        <dd>{since(finding.resolvedAt)}</dd>
-                    </>
-                )}
-            </dl>
+            {finding.kind === 'vuln' && <VulnBody finding={finding} />}
+            {finding.kind === 'eol' && <EolBody finding={finding} />}
+            {finding.kind === 'deprecated' && <PackageBody finding={finding} quote />}
+            {finding.kind === 'outdated' && <PackageBody finding={finding} quote={false} />}
 
             <section className={styles.detailSection}>
                 <h4 className={styles.detailSectionTitle}>Ce qui est touché</h4>
@@ -168,5 +163,123 @@ export default function FindingDetail({ finding, canWrite, busy, onIgnore, onRes
                 </div>
             )}
         </div>
+    );
+}
+
+function KindBadge({ finding: f }: { finding: ExposureFinding }) {
+    if (f.kind === 'vuln') {
+        return (
+            <StatusBadge tone={severityTone(f.severity)}>
+                {f.score === null ? SEVERITY_LABEL[f.severity] : `${SEVERITY_LABEL[f.severity]} ${f.score.toFixed(1)}`}
+            </StatusBadge>
+        );
+    }
+    if (f.kind === 'eol') {
+        const badge = eolBadge(f);
+        return <StatusBadge tone={badge.tone}>{badge.label}</StatusBadge>;
+    }
+    if (f.kind === 'deprecated') return <StatusBadge tone='warning'>Dépréciée par son auteur</StatusBadge>;
+    return f.behind === null ? null : <StatusBadge tone='neutral'>{behindLine(f.behind)}</StatusBadge>;
+}
+
+function Resolved({ finding }: { finding: ExposureFinding }) {
+    if (finding.resolvedAt === null) return null;
+    return (
+        <>
+            <dt>Résolu</dt>
+            <dd>{since(finding.resolvedAt)}</dd>
+        </>
+    );
+}
+
+function VulnBody({ finding }: { finding: ExposureFinding }) {
+    return (
+        <>
+            <p className={styles.detailSummary}>{finding.summary}</p>
+            <dl className={styles.detailFacts}>
+                <dt>Touche</dt>
+                <dd>
+                    {finding.subject.name}
+                    {finding.subject.kind === 'package' && ` (${finding.subject.ecosystem})`}
+                </dd>
+                <dt>Corrigé en</dt>
+                <dd>{finding.fixed.length > 0 ? finding.fixed.join(', ') : 'aucune version corrigée publiée'}</dd>
+                {finding.aliases.length > 0 && (
+                    <>
+                        <dt>Aussi publié sous</dt>
+                        <dd>{finding.aliases.join(', ')}</dd>
+                    </>
+                )}
+                <Resolved finding={finding} />
+            </dl>
+        </>
+    );
+}
+
+/** Une fin de vie : la phrase de la veille, puis les branches du logiciel, la sienne surlignée. */
+function EolBody({ finding }: { finding: ExposureFinding }) {
+    const product = finding.eol?.product ?? null;
+    const [software, setSoftware] = useState<Software | null>(null);
+    const [failed, setFailed] = useState(false);
+
+    useEffect(() => {
+        if (product === null) return;
+        let cancelled = false;
+        setSoftware(null);
+        setFailed(false);
+        void (async () => {
+            try {
+                const res = await api.send('cve.software', { name: product });
+                if (!cancelled) setSoftware(res.software);
+            } catch {
+                // Le tableau est un plus : sans lui, la fiche garde les branches maintenues.
+                if (!cancelled) setFailed(true);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [product]);
+
+    return (
+        <>
+            <p className={styles.detailSummary}>{finding.summary}</p>
+            {software && finding.eol ? (
+                <section className={styles.detailSection}>
+                    <h4 className={styles.detailSectionTitle}>Versions de {software.label}</h4>
+                    <SoftwareTable software={software} highlight={[finding.eol.release]} />
+                </section>
+            ) : product !== null && !failed ? (
+                <p className={styles.detailMore}>Chargement des versions…</p>
+            ) : (
+                <dl className={styles.detailFacts}>
+                    <dt>Branches maintenues</dt>
+                    <dd>{finding.fixed.length > 0 ? finding.fixed.join(', ') : 'aucune'}</dd>
+                </dl>
+            )}
+            {finding.resolvedAt !== null && (
+                <dl className={styles.detailFacts}>
+                    <Resolved finding={finding} />
+                </dl>
+            )}
+        </>
+    );
+}
+
+/** Un paquet déprécié ou en retard : sa version, la dernière publiée, et le mot de l'auteur quand il y en a un. */
+function PackageBody({ finding, quote }: { finding: ExposureFinding; quote: boolean }) {
+    return (
+        <>
+            {quote && <blockquote className={styles.authorNote}>{finding.summary}</blockquote>}
+            <dl className={styles.detailFacts}>
+                <dt>Registre</dt>
+                <dd>{finding.subject.ecosystem}</dd>
+                <dt>Version utilisée</dt>
+                <dd>{versionsOf(finding)}</dd>
+                <dt>Dernière version</dt>
+                <dd>{finding.fixed[0] ?? 'inconnue'}</dd>
+                <Resolved finding={finding} />
+            </dl>
+        </>
     );
 }

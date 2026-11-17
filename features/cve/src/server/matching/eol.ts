@@ -13,11 +13,20 @@ const TIMEOUT_MS = 60_000;
 
 export interface EolRelease {
     name: string;
+    /** Le libellé d'endoflife.date (« 26.04 'Resolute Raccoon' (LTS) »), quand il diffère du nom. */
+    label: string | null;
+    /** `AAAA-MM-JJ`, comme toutes les dates d'une branche. */
+    releaseDate: string | null;
+    isLts: boolean;
+    /** Fin du support actif : ensuite, les seuls correctifs de sécurité. */
+    eoasFrom: string | null;
     isEol: boolean;
-    /** `AAAA-MM-JJ`, quand la date est connue. */
     eolFrom: string | null;
+    /** Fin du support étendu, souvent payant. */
+    eoesFrom: string | null;
     isMaintained: boolean;
     latest: string | null;
+    latestDate: string | null;
 }
 
 export interface EolProduct {
@@ -26,6 +35,12 @@ export interface EolProduct {
     aliases: string[];
     /** `purl` et `cpe`, ce qui relie un paquet ou un produit du NVD à sa fiche. */
     identifiers: { type: string; id: string }[];
+    /** `lang`, `os`, `database`… */
+    category: string | null;
+    link: string | null;
+    /** Les jalons que le logiciel distingue de sa fin de vie. */
+    hasEoas: boolean;
+    hasEoes: boolean;
     releases: EolRelease[];
 }
 
@@ -34,22 +49,30 @@ export const eolHealth = { lastOkAt: 0, lastFailure: null as { at: number; reaso
 
 type RawRelease = {
     name?: unknown;
+    label?: unknown;
+    releaseDate?: unknown;
+    isLts?: unknown;
+    eoasFrom?: unknown;
     isEol?: unknown;
     eolFrom?: unknown;
+    eoesFrom?: unknown;
     isMaintained?: unknown;
-    latest?: { name?: unknown } | null;
+    latest?: { name?: unknown; date?: unknown } | null;
 };
 type RawProduct = {
     name?: unknown;
     label?: unknown;
     aliases?: unknown;
     identifiers?: unknown;
+    category?: unknown;
+    links?: { html?: unknown } | null;
+    labels?: { eoas?: unknown; eoes?: unknown } | null;
     releases?: unknown;
 };
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v.length > 0 ? v : null);
 
-/** Le dump tel que l'API le rend, réduit à ce que la veille lit. */
+/** Le dump tel que l'API le rend, réduit à ce que la veille et la recherche lisent. Un champ absent vaut `null`. */
 export function parseDump(json: unknown): EolProduct[] {
     const result = (json as { result?: unknown } | null)?.result;
     if (!Array.isArray(result)) return [];
@@ -57,6 +80,26 @@ export function parseDump(json: unknown): EolProduct[] {
     for (const raw of result as RawProduct[]) {
         const name = str(raw.name);
         if (!name || !Array.isArray(raw.releases)) continue;
+        const releases = (raw.releases as RawRelease[]).flatMap((r) => {
+            const release = str(r.name);
+            if (!release) return [];
+            const label = str(r.label);
+            return [
+                {
+                    name: release,
+                    label: label === release ? null : label,
+                    releaseDate: str(r.releaseDate),
+                    isLts: r.isLts === true,
+                    eoasFrom: str(r.eoasFrom),
+                    isEol: r.isEol === true,
+                    eolFrom: str(r.eolFrom),
+                    eoesFrom: str(r.eoesFrom),
+                    isMaintained: r.isMaintained === true,
+                    latest: str(r.latest?.name),
+                    latestDate: str(r.latest?.date)
+                }
+            ];
+        });
         out.push({
             name,
             label: str(raw.label) ?? name,
@@ -66,19 +109,13 @@ export function parseDump(json: unknown): EolProduct[] {
                       str(i.type) && str(i.id) ? [{ type: String(i.type), id: String(i.id) }] : []
                   )
                 : [],
-            releases: (raw.releases as RawRelease[]).flatMap((r) => {
-                const release = str(r.name);
-                if (!release) return [];
-                return [
-                    {
-                        name: release,
-                        isEol: r.isEol === true,
-                        eolFrom: str(r.eolFrom),
-                        isMaintained: r.isMaintained === true,
-                        latest: str(r.latest?.name)
-                    }
-                ];
-            })
+            category: str(raw.category),
+            link: str(raw.links?.html),
+            // Ubuntu nomme un support actif qui finit le jour de la fin de vie :
+            // une colonne qui répète la voisine ne dit rien.
+            hasEoas: str(raw.labels?.eoas) !== null && releases.some((r) => r.eoasFrom && r.eoasFrom !== r.eolFrom),
+            hasEoes: str(raw.labels?.eoes) !== null && releases.some((r) => r.eoesFrom !== null),
+            releases
         });
     }
     return out;
@@ -124,6 +161,7 @@ export function releaseFor(product: EolProduct, version: string): EolRelease | n
 
 /** Les produits d'endoflife.date, trouvables par leur nom, leurs alias et leurs identifiants. */
 export interface EolIndex {
+    products: readonly EolProduct[];
     byName: Map<string, EolProduct>;
     byIdentifier: Map<string, EolProduct>;
 }
@@ -141,7 +179,7 @@ export function indexOf(products: readonly EolProduct[]): EolIndex {
         for (const alias of p.aliases) if (!byName.has(alias)) byName.set(alias, p);
         for (const i of p.identifiers) byIdentifier.set(normalizeId(i.id), p);
     }
-    return { byName, byIdentifier };
+    return { products, byName, byIdentifier };
 }
 
 /** Le nom endoflife.date d'un outil, quand il diffère du sien. */
@@ -198,9 +236,14 @@ export function eolProductOf(c: ExposureComponent, index: EolIndex): EolProduct 
         const id = OS_PRODUCT.find(([re]) => re.test(c.name))?.[1];
         return id ? (index.byName.get(id) ?? null) : null;
     }
-    const named = index.byName.get(TOOL_PRODUCT[c.ecosystem] ?? c.ecosystem);
+    return eolProductOfTool(c.ecosystem, index);
+}
+
+/** La fiche d'un outil que la veille reconnaît (`node`, `postgres`). */
+export function eolProductOfTool(tool: string, index: EolIndex): EolProduct | null {
+    const named = index.byName.get(TOOL_PRODUCT[tool] ?? tool);
     if (named) return named;
-    for (const p of TOOLS[c.ecosystem]?.products ?? []) {
+    for (const p of TOOLS[tool]?.products ?? []) {
         const found = index.byIdentifier.get(`cpe:2.3:a:${p.vendor}:${p.product}`.toLowerCase());
         if (found) return found;
     }

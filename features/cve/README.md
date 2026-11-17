@@ -90,6 +90,12 @@ un paquet, quel que soit le nombre d'éléments qu'elle touche. Les éléments
 touchés sont dans `ft_cve_finding_assets`, en clair, pour que le décompte
 filtre par droits sans déchiffrer.
 
+L'écran les range en deux onglets : **Failles** (`vuln`) et **Obsolescence**
+(fins de vie, versions dépréciées, dépendances en retard, en sections). Un
+constat de fin de vie porte sa branche et sa date (`eol`), un retard son nombre
+de versions majeures (`behind`) ; la fiche d'une fin de vie montre le tableau
+des branches du logiciel (`cve.software`).
+
 `exposure/reconcile.ts`, fonction pure, décide des transitions :
 
 - **ouvert** au premier croisement ;

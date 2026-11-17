@@ -12,7 +12,7 @@ import { api } from './api';
 import { cveError } from './errors';
 
 /**
- * Le fil partagé : la carte de l'accueil et l'onglet « Actualités » lisent le
+ * Le fil partagé : la carte de l'accueil et l'onglet « Dernières CVE » lisent le
  * même relevé, d'une seule requête.
  *
  * Pas de sondage : le service d'ingestion bat `cveFeed` quand des CVE ont

@@ -14,6 +14,7 @@ import {
     exposureFindingSchema,
     exposurePrefsSchema
 } from './exposure';
+import { cveSoftware } from './software';
 
 /** Ce qu'une liste rend au plus, fil comme recherche. */
 export const CVE_PAGE_MAX = 100;
@@ -193,5 +194,6 @@ export const cveCommands = [
     cveAssetRefresh,
     cveAssetExclude,
     cveExposurePrefs,
-    cveSetExposurePrefs
+    cveSetExposurePrefs,
+    cveSoftware
 ] as const;

@@ -1,32 +1,6 @@
-import type { ExposureAsset, ExposureFinding, ExposureSource, FindingKind } from '../contracts/exposure';
+import type { ExposureAsset, ExposureFinding, ExposureSource } from '../contracts/exposure';
 
-/** Les genres de constats que la veille établit, dans l'ordre où l'écran les propose. */
-export const FINDING_KINDS: readonly { value: FindingKind; label: string; empty: string }[] = [
-    { value: 'vuln', label: 'Failles', empty: 'Aucune faille connue dans ce que l’espace fait tourner.' },
-    {
-        value: 'eol',
-        label: 'Fins de vie',
-        empty: 'Rien de ce que l’espace fait tourner n’arrive en fin de vie dans les trente jours.'
-    },
-    {
-        value: 'deprecated',
-        label: 'Dépréciées',
-        empty: 'Aucun paquet déprécié ou abandonné par son auteur.'
-    },
-    {
-        value: 'outdated',
-        label: 'En retard',
-        empty: 'Aucune dépendance directe en retard d’une version majeure.'
-    }
-];
-
-/** Ce que la ligne « Corrigé en » veut dire, selon le genre du constat. */
-export const FIXED_LABEL: Record<FindingKind, string> = {
-    vuln: 'Corrigé en',
-    eol: 'Branches maintenues',
-    deprecated: 'Dernière version',
-    outdated: 'Dernière version'
-};
+import { dayMs, untilLine } from './softwareLabels';
 
 export const SOURCE_LABEL: Record<ExposureSource, string> = {
     git: 'Dépôt Git',
@@ -80,4 +54,30 @@ export function assetStatusLine(a: ExposureAsset): string {
     if (a.scannedAt === null) return 'Lu';
     const checked = a.checkedAt !== null && a.checkedAt > a.scannedAt ? `, vérifié ${since(a.checkedAt)}` : '';
     return `Lu ${since(a.scannedAt)}${checked}`;
+}
+
+/** Une fin de vie est atteinte : la veille l'a dit, ou sa date est passée depuis. */
+export function eolReached(f: ExposureFinding): boolean {
+    if (!f.eol) return f.severity === 'high';
+    return f.eol.reached || (f.eol.date !== null && dayMs(f.eol.date) <= Date.now());
+}
+
+/** Ce qu'un constat de fin de vie nomme : « Node.js 18 ». */
+export function eolName(f: ExposureFinding): string {
+    return f.eol ? `${f.subject.name} ${f.eol.release}` : f.title;
+}
+
+/** La pastille d'une fin de vie : « Fin de vie depuis 7 mois », « Fin de vie dans 12 jours ». */
+export function eolBadge(f: ExposureFinding): { tone: 'danger' | 'warning'; label: string } {
+    const reached = eolReached(f);
+    const date = f.eol?.date ?? null;
+    return {
+        tone: reached ? 'danger' : 'warning',
+        label: date !== null ? `Fin de vie ${untilLine(date)}` : reached ? 'Fin de vie' : 'Fin de vie proche'
+    };
+}
+
+/** « 1 version majeure de retard », « 3 versions majeures de retard ». */
+export function behindLine(behind: number): string {
+    return `${behind} version${behind > 1 ? 's' : ''} majeure${behind > 1 ? 's' : ''} de retard`;
 }

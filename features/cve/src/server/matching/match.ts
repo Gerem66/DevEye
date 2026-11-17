@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 
 import type { CveSeverity } from '../../contracts/domain';
-import type { ExposureComponent, FindingKind } from '../../contracts/exposure';
+import { EOL_SOON_DAYS, type ExposureComponent, type FindingEol, type FindingKind } from '../../contracts/exposure';
 import type { Dependency, Ecosystem } from '../inventory/lockfiles';
 import { TOOLS } from '../inventory/tools';
 import type { CveAffectingRow } from '../repo';
@@ -36,6 +36,10 @@ export interface FindingContent {
     fixed: string[];
     reference: string | null;
     aliases: string[];
+    /** Une fin de vie : sa branche et sa date. */
+    eol?: FindingEol;
+    /** Une dépendance en retard : de combien de versions majeures. */
+    behind?: number;
     affected: AffectedEntry[];
 }
 
@@ -72,8 +76,7 @@ export interface MatchCatalogues {
     ): Promise<{ metas: Map<string, PackageMeta | null>; reason: string | null }>;
 }
 
-/** Une fin de vie à moins de ça se signale déjà. */
-const EOL_SOON_MS = 30 * 86_400_000;
+const EOL_SOON_MS = EOL_SOON_DAYS * 86_400_000;
 
 function frenchDate(iso: string): string {
     return new Date(`${iso}T00:00:00Z`).toLocaleDateString('fr-FR', {
@@ -296,7 +299,8 @@ export async function matchComponents(
                             subject: { kind: c.kind, ecosystem: c.ecosystem, name: product.label },
                             fixed: maintained,
                             reference: `https://endoflife.date/${product.name}`,
-                            aliases: []
+                            aliases: [],
+                            eol: { product: product.name, release: release.name, date: release.eolFrom, reached }
                         }
                     },
                     { assetId: asset.assetId, version: c.version, path: c.path, line: c.line }
@@ -362,7 +366,8 @@ export async function matchComponents(
                                 subject,
                                 fixed: [meta.latest],
                                 reference,
-                                aliases: []
+                                aliases: [],
+                                behind
                             }
                         },
                         entry

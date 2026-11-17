@@ -5,6 +5,7 @@ import { cveProviderSchema, type CveEntry, type CveSeverityFilter } from '../con
 import { cveIdCandidate, NVD_KEY_STORE_KEY, searchTerms, toEntry, upsertToEntry } from './_shared';
 import { nvdClient, NvdQuotaError, type NvdClient } from './nvd';
 import { exposureHandlers } from './exposure/handlers';
+import { softwareHandlers } from './software';
 import type { CveRepo, CveUpsert } from './repo';
 
 type Ctx = SdkFeatureContext<CveRepo>;
@@ -206,5 +207,6 @@ export const cveHandlers = [
             return { keys: cveProviderSchema.options.map((provider) => ({ provider, hasKey: key.length > 0 })) };
         }
     }),
-    ...exposureHandlers
+    ...exposureHandlers,
+    ...softwareHandlers
 ];

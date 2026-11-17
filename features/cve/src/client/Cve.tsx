@@ -6,6 +6,7 @@ import {
     StickyHeader,
     TextInput,
     useLiveSegment,
+    useResource,
     useSubView,
     useWorkspacePermissions,
     type ErrorNoteInput
@@ -20,17 +21,19 @@ import CveDetail from './CveDetail';
 import CveRow, { rowDomId } from './CveRow';
 import DetailPane from './DetailPane';
 import { cveError } from './errors';
-import ExposureView from './ExposureView';
 import InventoryView from './InventoryView';
 import { DETAIL_AS_PAGE } from './layout';
+import ObsolescenceView from './ObsolescenceView';
 import { SEVERITY_FILTERS } from './severity';
 import { NEWS_LIMIT, refreshCveNews, useCveNews } from './store';
 import styles from './style.module.css';
+import VulnView from './VulnView';
 
 /**
- * Veille CVE : ce qui touche ce que l'espace fait tourner, l'inventaire que la
- * veille en dresse, le fil des vulnérabilités publiées, la recherche dans le
- * catalogue du NVD, et celles que l'espace a épinglées.
+ * Veille CVE : les failles qui touchent ce que l'espace fait tourner, ce qui y
+ * vieillit (fins de vie, versions dépréciées ou en retard), l'inventaire que la
+ * veille en dresse, les dernières CVE publiées, la recherche dans le catalogue
+ * du NVD, et celles que l'espace a épinglées.
  *
  * Une recherche non vide prend le dessus sur l'onglet : c'est le geste le plus
  * direct, il ne doit pas demander de changer d'onglet d'abord.
@@ -38,14 +41,9 @@ import styles from './style.module.css';
 
 const SEARCH_DEBOUNCE_MS = 500;
 
-type Tab = 'exposure' | 'inventory' | 'news' | 'favorites';
+type Tab = 'vulns' | 'obsolescence' | 'inventory' | 'latest' | 'favorites';
 
-const TABS = [
-    { value: 'exposure' as const, label: 'Mon espace' },
-    { value: 'inventory' as const, label: 'Inventaire' },
-    { value: 'news' as const, label: 'Actualités' },
-    { value: 'favorites' as const, label: 'Épinglées' }
-];
+const counted = (label: string, n: number | null | undefined): string => (n ? `${label} ${n}` : label);
 
 interface SearchState {
     entries: CveEntry[];
@@ -66,7 +64,7 @@ const NO_SEARCH: SearchState = {
 };
 
 export default function Cve(_props: FeatureViewProps) {
-    const [tab, setTab] = useState<Tab>('exposure');
+    const [tab, setTab] = useState<Tab>('vulns');
     /** La fiche d'un constat ou d'un élément est ouverte : sous 1000 px, elle prend la page. */
     const [exposureDetail, setExposureDetail] = useState(false);
     const [severity, setSeverity] = useState<CveSeverityFilter>('all');
@@ -82,7 +80,26 @@ export default function Cve(_props: FeatureViewProps) {
     const news = useCveNews();
     const canWrite = useWorkspacePermissions().canFeature('cve', 'write');
     const searching = query.trim().length > 0;
-    const catalogue = searching || tab === 'news' || tab === 'favorites';
+    const catalogue = searching || tab === 'latest' || tab === 'favorites';
+
+    const counts = useResource(
+        'cve.exposureCount',
+        () => api.send('cve.exposureCount', {}),
+        'Le décompte n’a pas pu être lu.'
+    ).data;
+    const tabs = useMemo(
+        () => [
+            { value: 'vulns' as const, label: counted('Failles', counts?.count) },
+            {
+                value: 'obsolescence' as const,
+                label: counted('Obsolescence', counts && counts.eol + counts.deprecated + counts.outdated)
+            },
+            { value: 'inventory' as const, label: 'Inventaire' },
+            { value: 'latest' as const, label: 'Dernières CVE' },
+            { value: 'favorites' as const, label: 'Épinglées' }
+        ],
+        [counts]
+    );
 
     const loadFavorites = useCallback(async () => {
         try {
@@ -185,7 +202,7 @@ export default function Cve(_props: FeatureViewProps) {
     useEffect(() => {
         if (!liveTarget) return;
         setSelectedId(liveTarget.value);
-        setTab((t) => (t === 'favorites' ? t : 'news'));
+        setTab((t) => (t === 'favorites' ? t : 'latest'));
     }, [liveTarget]);
 
     const toggleFavorite = useCallback(
@@ -257,12 +274,14 @@ export default function Cve(_props: FeatureViewProps) {
                             Résultats pour « {query.trim()} »
                         </button>
                     ) : (
-                        <SegmentedControl
-                            options={TABS}
-                            value={tab}
-                            onChange={setTab}
-                            aria-label='Ce que la liste montre'
-                        />
+                        <div className={styles.tabsScroll}>
+                            <SegmentedControl
+                                options={tabs}
+                                value={tab}
+                                onChange={setTab}
+                                aria-label='Ce que la liste montre'
+                            />
+                        </div>
                     )}
                     {catalogue && (
                         <div className={styles.severityChips} role='group' aria-label='Filtrer par gravité'>
@@ -288,8 +307,9 @@ export default function Cve(_props: FeatureViewProps) {
                 )}
             </div>
 
-            {!catalogue && tab === 'exposure' && (
-                <ExposureView canWrite={canWrite} onDetailChange={setExposureDetail} />
+            {!catalogue && tab === 'vulns' && <VulnView canWrite={canWrite} onDetailChange={setExposureDetail} />}
+            {!catalogue && tab === 'obsolescence' && (
+                <ObsolescenceView canWrite={canWrite} onDetailChange={setExposureDetail} />
             )}
             {!catalogue && tab === 'inventory' && (
                 <InventoryView canWrite={canWrite} onDetailChange={setExposureDetail} />

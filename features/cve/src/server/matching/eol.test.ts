@@ -47,6 +47,66 @@ const product = (ecosystem: string, name: string, version: string, extra = {}) =
 });
 
 describe('les fins de vie', () => {
+    it('gardent les dates de chaque branche et ce que le logiciel distingue', () => {
+        const [node] = parseDump({
+            result: [
+                {
+                    name: 'nodejs',
+                    label: 'Node.js',
+                    category: 'framework',
+                    links: { html: 'https://endoflife.date/nodejs' },
+                    labels: { eoas: 'Active Support', eol: 'Security Support', eoes: null },
+                    releases: [
+                        {
+                            name: '22',
+                            label: '22 (LTS)',
+                            releaseDate: '2024-04-24',
+                            isLts: true,
+                            eoasFrom: '2025-10-21',
+                            isEol: false,
+                            eolFrom: '2027-04-30',
+                            isMaintained: true,
+                            latest: { name: '22.11.0', date: '2024-10-29' }
+                        },
+                        { name: '21', label: '21', isEol: true, eolFrom: '2024-06-01', eoasFrom: '2024-04-01' }
+                    ]
+                }
+            ]
+        });
+        assert.equal(node.category, 'framework');
+        assert.equal(node.link, 'https://endoflife.date/nodejs');
+        assert.equal(node.hasEoas, true);
+        assert.equal(node.hasEoes, false, 'aucune branche n’a de support étendu');
+        assert.deepEqual(node.releases[0], {
+            name: '22',
+            label: '22 (LTS)',
+            releaseDate: '2024-04-24',
+            isLts: true,
+            eoasFrom: '2025-10-21',
+            isEol: false,
+            eolFrom: '2027-04-30',
+            eoesFrom: null,
+            isMaintained: true,
+            latest: '22.11.0',
+            latestDate: '2024-10-29'
+        });
+        assert.equal(node.releases[1].label, null, 'un libellé égal au nom ne se garde pas');
+    });
+
+    it('taisent le support actif quand il finit avec la fin de vie', () => {
+        const [ubuntu] = parseDump({
+            result: [
+                {
+                    name: 'ubuntu',
+                    labels: { eoas: 'Hardware & Maintenance', eoes: 'Expanded Security Maintenance' },
+                    releases: [{ name: '24.04', eoasFrom: '2029-05-31', eolFrom: '2029-05-31', eoesFrom: '2034-04-25' }]
+                }
+            ]
+        });
+        assert.equal(ubuntu.hasEoas, false);
+        assert.equal(ubuntu.hasEoes, true);
+    });
+
     it('trouvent la branche d’une version par segments', () => {
         const pg = index.byName.get('postgresql')!;
         assert.equal(releaseFor(pg, '13.4')?.name, '13');

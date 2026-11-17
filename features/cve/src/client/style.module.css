@@ -108,6 +108,14 @@
     gap: var(--space-sm);
 }
 
+/* Sur un écran étroit, les onglets défilent en travers plutôt que d'être rognés. */
+.tabsScroll {
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
 .severityChips {
     display: flex;
     align-items: center;
@@ -767,5 +775,147 @@
         width: 100% !important;
         /* Pleine page : plus de liste à côté, donc plus d'écart à ménager. */
         padding-left: 0;
+    }
+}
+
+/* Ce qu'un onglet liste, en une phrase au-dessus de son décompte. */
+.viewIntro {
+    margin: 0;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}
+
+/* Les genres de l'obsolescence, l'un sous l'autre plutôt que derrière un filtre. */
+.sections {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+}
+
+.section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.sectionHead {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.sectionTitle {
+    margin: 0;
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.sectionCount {
+    margin-left: 4px;
+    font-weight: 500;
+    color: var(--text-muted);
+}
+
+.sectionHint {
+    margin: 0;
+    font-size: 0.76rem;
+    color: var(--text-muted);
+}
+
+/* Une ligne au plus : le mot d'un auteur qui déprécie son paquet peut faire un paragraphe. */
+.rowLine {
+    overflow: hidden;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.authorNote {
+    margin: 0;
+    padding: var(--space-xs) var(--space-sm);
+    border-left: 2px solid var(--warning);
+    font-size: 0.82rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+
+/* Les colonnes se replient avec le conteneur : le même tableau tient dans le
+   panneau de côté et en pleine page. */
+.releaseTableWrap {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    container-type: inline-size;
+}
+
+.releaseTable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.78rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.releaseTable th {
+    padding: 4px 6px;
+    border-bottom: 1px solid var(--glass-border);
+    font-weight: 600;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    text-align: left;
+    white-space: nowrap;
+}
+
+.releaseTable th[title] {
+    cursor: help;
+}
+
+.releaseTable td {
+    padding: 5px 6px;
+    border-bottom: 1px solid var(--glass-border);
+    color: var(--text-secondary);
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+.releaseAsked td {
+    background: var(--accent-bg);
+    color: var(--text-primary);
+}
+
+.releaseCell {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px 8px;
+    white-space: normal;
+}
+
+.releaseName {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.moreBtn {
+    font-size: 0.78rem;
+}
+
+.releaseLatest {
+    font-family: var(--font-mono, monospace);
+    font-size: 0.74rem;
+}
+
+@container (max-width: 520px) {
+    .colRelease,
+    .colEoes {
+        display: none;
+    }
+}
+
+@container (max-width: 400px) {
+    .colEoas {
+        display: none;
     }
 }
