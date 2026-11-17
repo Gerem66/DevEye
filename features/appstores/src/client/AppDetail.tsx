@@ -85,7 +85,7 @@ function syncStatus(
         return { text: `En échec depuis ${formatSince(Math.min(...failingSince))}`, tone: 'danger', title };
     }
     if (linked.some((listing) => listing.syncError !== null)) return { text: 'En échec', tone: 'danger', title };
-    if (busy || linked.some((listing) => listing.lastSyncAt === null)) {
+    if (busy || linked.some((listing) => listing.syncing)) {
         return { text: 'Synchronisation en cours', tone: 'accent', title };
     }
     const oldest = Math.min(...linked.map((listing) => listing.lastSyncAt ?? 0));

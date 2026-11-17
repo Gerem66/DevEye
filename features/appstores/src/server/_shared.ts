@@ -190,7 +190,9 @@ export async function toListing(cipher: SdkCipher, row: ListingRow): Promise<App
         ratingCount: typeof state.ratingCount === 'number' ? state.ratingCount : null,
         dataUntil: row.synced_day === null ? null : row.synced_day * DAY_SECONDS,
         lastSyncAt: row.last_sync_at,
-        syncError: row.sync_error
+        syncError: row.sync_error,
+        // Les chiffres ne se disent relevés qu'une fois le rattrapage fini : jusque-là, la colonne reste vide.
+        syncing: row.source_id !== null && row.metrics_synced_at === null
     };
 }
 

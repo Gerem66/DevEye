@@ -14,8 +14,12 @@ function chipState(listing: AppStoresListing): { text: string; tone: Tone; title
             title: `${store} : aucun compte de store n’est choisi, rien ne se synchronise.`
         };
     }
-    if (listing.lastSyncAt === null) {
-        return { text: 'En attente', tone: 'neutral', title: `${store} : pas encore synchronisée.` };
+    if (listing.syncing) {
+        return {
+            text: 'Synchronisation…',
+            tone: 'accent',
+            title: `${store} : l’historique se relève, les chiffres se complètent.`
+        };
     }
     const latest = listing.versions[0];
     if (latest) {

@@ -555,6 +555,27 @@ describe('les apps', () => {
         );
     });
 
+    it('se disent en cours de synchronisation tant que le rattrapage n’est pas allé au bout', async () => {
+        const repo = fakeRepo({
+            apps: [appRow({ id: 1 }), appRow({ id: 2 })],
+            listings: [
+                covered({ id: 1, app_id: 1, metrics_synced_at: null }),
+                covered({ id: 2, app_id: 1, store: 'google', metrics_synced_at: 1_700_000_000 }),
+                covered({ id: 3, app_id: 2, source_id: null, metrics_synced_at: null })
+            ]
+        });
+        const { apps } = await handlerFor(appStoresList)(contextOf(repo), {});
+        assert.deepEqual(
+            apps.flatMap((summary) => summary.app.listings.map((l) => [summary.app.id, l.store, l.syncing])),
+            [
+                [1, 'apple', true],
+                [1, 'google', false],
+                [2, 'apple', false]
+            ],
+            'sans source, rien ne tourne'
+        );
+    });
+
     it('rendent les versions relevées de chaque store, Google Play compris', async () => {
         const versions = (version: string, state: string) =>
             JSON.stringify({ versions: [{ version, state, since: null }] });

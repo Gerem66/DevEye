@@ -162,7 +162,9 @@ export const appStoresListingSchema = z.object({
     /** Dernier jour complet relevé, en secondes epoch (minuit UTC) ; `null` avant le premier. */
     dataUntil: z.number().int().nullable(),
     lastSyncAt: z.number().int().nullable(),
-    syncError: z.string().nullable()
+    syncError: z.string().nullable(),
+    /** Le premier relevé, ou une relecture de l'année, n'est pas allé au bout : les chiffres se complètent. */
+    syncing: z.boolean()
 });
 export type AppStoresListing = z.infer<typeof appStoresListingSchema>;
 

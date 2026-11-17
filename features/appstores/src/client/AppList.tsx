@@ -41,9 +41,16 @@ function AppRow({ summary, outline, onOpen }: AppRowProps) {
     const listings = STORE_ORDER.flatMap((store) => app.listings.filter((listing) => listing.store === store));
     const rated = listings.filter((listing) => listing.rating !== null);
     const failing = listings.find((listing) => listing.syncError !== null);
+    const syncing = !failing && !app.planPaused && listings.some((listing) => listing.syncing);
 
     return (
         <li className={styles.row} {...outline}>
+            {/* Une bande fine en tête de rangée, comme Git et Mail : il se passe quelque chose, sans rien déplacer. */}
+            {syncing && (
+                <div className={styles.syncStrip} aria-hidden='true'>
+                    <div className={styles.syncStripFill} />
+                </div>
+            )}
             {/* `div role="button"` : la rangée porte des paragraphes, interdits dans un `<button>`. */}
             <div
                 className={styles.rowBody}

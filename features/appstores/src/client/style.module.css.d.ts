@@ -3,6 +3,7 @@ declare const styles: {
     readonly alertList: string;
     readonly alertName: string;
     readonly alertRow: string;
+    readonly appstoresSyncStrip: string;
     readonly back: string;
     readonly backLabel: string;
     readonly badgeWrap: string;
@@ -142,6 +143,8 @@ declare const styles: {
     readonly storeBlockLabel: string;
     readonly storeRevenue: string;
     readonly subheading: string;
+    readonly syncStrip: string;
+    readonly syncStripFill: string;
     readonly tab: string;
     readonly tabActive: string;
     readonly tabIcon: string;
