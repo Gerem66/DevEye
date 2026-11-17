@@ -53,35 +53,30 @@ function runsOf(values: readonly (number | null)[]): number[][] {
     return runs;
 }
 
-/** Entre la ligne brisée (0) et la cubique monotone pleine (1) : des angles adoucis sans s'arrondir tout à fait. */
-const SMOOTHING = 0.6;
+/** Le rayon d'un angle, en unités du `viewBox` (environ 13 px sur un grand écran). */
+const CORNER = 8;
 
 /**
- * Le tracé d'une suite de points à pas régulier, en cubique monotone : les
- * angles s'arrondissent sans qu'aucune bosse ne dépasse les valeurs relevées.
+ * La ligne brisée des relevés, angles arrondis comme par un `border-radius` :
+ * chaque sommet devient un arc d'au plus `CORNER` de rayon, pris au plus sur
+ * le quart de ses deux segments. La moitié de chacun reste droite, si serrés
+ * que soient les points : la forme ne se fond pas dans une courbe.
  */
-function smoothPath(points: readonly (readonly [number, number])[]): string {
+function roundedPath(points: readonly (readonly [number, number])[]): string {
     const at = ([px, py]: readonly [number, number]) => `${px.toFixed(1)} ${py.toFixed(1)}`;
-    if (points.length < 3) return points.map((point, k) => `${k === 0 ? 'M' : 'L'} ${at(point)}`).join(' ');
-    const slopes = points.slice(1).map(([px, py], k) => (py - points[k][1]) / (px - points[k][0] || 1));
-    // Une pente nulle aux extrêmes locaux, bornée ailleurs : c'est ce qui interdit le dépassement.
-    const tangents = points.map((_, k) => {
-        if (k === 0) return slopes[0];
-        if (k === points.length - 1) return slopes[k - 1];
-        const [before, after] = [slopes[k - 1], slopes[k]];
-        if (before * after <= 0) return 0;
-        return Math.sign(before) * Math.min(Math.abs(before), Math.abs(after), Math.abs(before + after) / 4) * 2;
-    });
     let d = `M ${at(points[0])}`;
-    for (let k = 1; k < points.length; k++) {
-        const [x0, y0] = points[k - 1];
-        const [x1, y1] = points[k];
-        const third = (x1 - x0) / 3;
-        // La pente du segment donne un trait droit : on n'en tire qu'une part vers la tangente monotone.
-        const slope = slopes[k - 1];
-        const [t0, t1] = [tangents[k - 1], tangents[k]].map((tangent) => slope + (tangent - slope) * SMOOTHING);
-        d += ` C ${at([x0 + third, y0 + third * t0])} ${at([x1 - third, y1 - third * t1])} ${at([x1, y1])}`;
+    for (let k = 1; k < points.length - 1; k++) {
+        const [px, py] = points[k - 1];
+        const [cx, cy] = points[k];
+        const [nx, ny] = points[k + 1];
+        const before = Math.hypot(cx - px, cy - py);
+        const after = Math.hypot(nx - cx, ny - cy);
+        const r = Math.min(CORNER, before / 4, after / 4);
+        const enter = [cx - ((cx - px) / before) * r, cy - ((cy - py) / before) * r] as const;
+        const leave = [cx + ((nx - cx) / after) * r, cy + ((ny - cy) / after) * r] as const;
+        d += ` L ${at(enter)} Q ${at(points[k])} ${at(leave)}`;
     }
+    if (points.length > 1) d += ` L ${at(points[points.length - 1])}`;
     return d;
 }
 
@@ -111,7 +106,7 @@ export function TrendChart({ slots, resolution, series, format, label, title, th
     const ticked = (i: number) => i === slots.length - 1 || (i % every === 0 && slots.length - 1 - i >= every / 2);
 
     const pathOf = (values: readonly (number | null)[], run: number[]) =>
-        smoothPath(run.map((i) => [x(i), y(values[i] ?? 0)] as const));
+        roundedPath(run.map((i) => [x(i), y(values[i] ?? 0)] as const));
 
     // Une aire sous une seule série ; à deux, elles se brouilleraient l'une l'autre.
     const area = series.length === 1 ? series[0] : null;
