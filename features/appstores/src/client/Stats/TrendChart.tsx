@@ -35,6 +35,8 @@ interface TrendChartProps {
     /** Une ligne pointillée et ce qu'elle veut dire : le seuil de Google. */
     threshold?: { value: number; label: string };
     compact?: boolean;
+    /** Une ordonnée discrète : quelques valeurs rondes et leurs lignes, sous la courbe. */
+    axis?: boolean;
 }
 
 /** Les suites de seaux relevés : un trou reste un trou, jamais un zéro dessiné. */
@@ -51,6 +53,21 @@ function runsOf(values: readonly (number | null)[]): number[][] {
     });
     if (current.length > 0) runs.push(current);
     return runs;
+}
+
+/** Des valeurs rondes (1, 2 ou 5 fois une puissance de dix) jusqu'au plus haut relevé, au plus près de trois intervalles. */
+function axisTicks(bottom: number, top: number, whole: boolean): number[] {
+    if (top <= bottom) return [];
+    const range = top - bottom;
+    const magnitude = 10 ** Math.floor(Math.log10(range / 3));
+    // Des téléchargements ne se comptent pas en demis.
+    const steps = [1, 2, 5, 10].map((m) => m * magnitude).filter((step) => !whole || step >= 1);
+    const step = steps.reduce((best, candidate) =>
+        Math.abs(range / candidate - 3) < Math.abs(range / best - 3) ? candidate : best
+    );
+    const ticks: number[] = [];
+    for (let k = Math.ceil(bottom / step); k * step <= top; k++) ticks.push(Number((k * step).toPrecision(12)));
+    return ticks;
 }
 
 /** Le rayon d'un angle, en unités du `viewBox` (environ 13 px sur un grand écran). */
@@ -85,7 +102,17 @@ function roundedPath(points: readonly (readonly [number, number])[]): string {
  * son conteneur par mise à l'échelle, sans mesure ni recalcul. La légende
  * porte la valeur survolée plutôt qu'une info-bulle qui suivrait le pointeur.
  */
-export function TrendChart({ slots, resolution, series, format, label, title, threshold, compact }: TrendChartProps) {
+export function TrendChart({
+    slots,
+    resolution,
+    series,
+    format,
+    label,
+    title,
+    threshold,
+    compact,
+    axis
+}: TrendChartProps) {
     const [hover, setHover] = useState<number | null>(null);
     const H = compact ? H_COMPACT : H_FULL;
     const fillId = useId();
@@ -100,6 +127,7 @@ export function TrendChart({ slots, resolution, series, format, label, title, th
     const x = (index: number) => index * step + step / 2;
     const y = (value: number) => plotH - ((value - bottom) / span) * plotH;
     const base = y(0);
+    const ticks = axis ? axisTicks(bottom, top, known.every(Number.isInteger)) : [];
 
     /** Une étiquette sur six au plus, la dernière toujours, sans qu'elle chevauche sa voisine. */
     const every = Math.max(1, Math.ceil(slots.length / 6));
@@ -115,6 +143,15 @@ export function TrendChart({ slots, resolution, series, format, label, title, th
         <figure className={styles.chart}>
             {title && <p className={styles.chartTitle}>{title}</p>}
             <svg viewBox={`0 0 ${W} ${H}`} className={styles.chartSvg} role='img' aria-label={label}>
+                {ticks.map((value) => (
+                    <g key={`axis-${value}`}>
+                        <line x1={0} x2={W} y1={y(value)} y2={y(value)} className={styles.chartGrid} />
+                        <text x={0} y={y(value) - 4} className={styles.chartAxis}>
+                            {format(value)}
+                        </text>
+                    </g>
+                ))}
+
                 {area && (
                     <defs>
                         <linearGradient id={fillId} x1='0' y1='0' x2='0' y2='1'>

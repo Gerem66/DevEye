@@ -17,8 +17,10 @@ declare const styles: {
     readonly blockTitleNote: string;
     readonly capability: string;
     readonly chart: string;
+    readonly chartAxis: string;
     readonly chartCursor: string;
     readonly chartDot: string;
+    readonly chartGrid: string;
     readonly chartLegend: string;
     readonly chartLine: string;
     readonly chartStop: string;

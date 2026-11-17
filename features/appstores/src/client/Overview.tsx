@@ -238,6 +238,7 @@ export function Overview({ app, store, sources, canWrite, range }: OverviewProps
                                 resolution={stats.resolution}
                                 series={series}
                                 format={formatCount}
+                                axis
                                 label={`Téléchargements par ${stats.resolution === 'week' ? 'semaine' : 'jour'} sur la période : ${countOrMissing(downloadsOf(stats.metrics, stores))} au total.`}
                             />
                         )}

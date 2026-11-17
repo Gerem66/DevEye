@@ -798,6 +798,18 @@
     font-size: 11px;
 }
 
+.chartGrid {
+    stroke: var(--glass-border);
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+}
+
+.chartAxis {
+    fill: var(--text-muted);
+    font-size: 9px;
+    font-variant-numeric: tabular-nums;
+}
+
 .chartCursor {
     stroke: var(--glass-border-strong);
     stroke-width: 1;
