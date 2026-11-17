@@ -118,7 +118,7 @@
 /* Une fiche : le retour, puis l'identité, sur la même ligne. */
 .detailHead {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: var(--space-md);
     min-width: 0;
 }
@@ -130,7 +130,7 @@
 
 .pageHead {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: var(--space-sm);
     flex-wrap: wrap;
 }

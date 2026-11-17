@@ -368,7 +368,7 @@
 .detailHead {
     flex: 1;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: var(--space-md);
     min-width: 0;
 }

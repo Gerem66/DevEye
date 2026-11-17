@@ -24,7 +24,7 @@
 /* En-tête : retour, titre, actions */
 .header {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: var(--space-md);
 }
 

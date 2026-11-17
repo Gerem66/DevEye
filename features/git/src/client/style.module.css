@@ -1133,7 +1133,7 @@
 /* En-tête d'un dépôt ouvert : la flèche de retour et l'identité sur une ligne. */
 .detailHead {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: var(--space-md);
     min-width: 0;
 }

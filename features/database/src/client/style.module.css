@@ -302,7 +302,7 @@
 
 .detailHead {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: var(--space-md);
     min-width: 0;
 }
