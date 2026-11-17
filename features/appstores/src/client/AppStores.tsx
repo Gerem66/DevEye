@@ -5,6 +5,7 @@ import {
     FeatureSettingsButton,
     NotificationsNotice,
     PlanPausedNotice,
+    SegmentedControl,
     StickyHeader,
     useActiveWorkspace,
     useLiveItemTarget,
@@ -13,13 +14,18 @@ import {
     useWorkspacePermissions
 } from 'deveye-sdk-client';
 import type { FeatureViewProps } from '@deveye/types/sdk/client';
+import type { AppStore, AppStoresRange } from '../contracts/domain';
 
 import { api } from './api';
 import AppDetail from './AppDetail';
 import AppDialog from './AppDialog';
 import AppList from './AppList';
-import { plural } from './format';
+import { DEFAULT_RANGE, plural, STORE_LABELS, STORE_ORDER } from './format';
+import RangeBar from './Stats/RangeBar';
+import StoresOverview from './StoresOverview';
 import styles from './style.module.css';
+
+type HomeView = 'apps' | 'overview';
 
 /**
  * Les apps que l'espace suit sur l'App Store et sur Google Play. Rien n'est lu
@@ -34,6 +40,9 @@ export function FeatureAppStores(_props: FeatureViewProps) {
     /** L'app ouverte ; `null` = la liste. */
     const [openedId, setOpenedId] = useState<number | null>(null);
     const [addOpen, setAddOpen] = useState(false);
+    const [view, setView] = useState<HomeView>('apps');
+    const [range, setRange] = useState<AppStoresRange>(DEFAULT_RANGE);
+    const [chosenStore, setChosenStore] = useState<AppStore | 'all'>('all');
 
     const list = useResource(
         'appstores.list',
@@ -74,6 +83,13 @@ export function FeatureAppStores(_props: FeatureViewProps) {
 
     const pausedHere = (apps ?? []).filter((summary) => summary.app.planPaused && !summary.app.foreign).length;
     const noSource = canWrite && sources.data !== null && sources.data.length === 0;
+    // Une seule app n'a rien à cumuler : sa fiche dit déjà tout.
+    const several = apps !== null && apps.length > 1;
+    const shown: HomeView = several ? view : 'apps';
+    const linkedStores = STORE_ORDER.filter((store) =>
+        (apps ?? []).some((summary) => summary.app.listings.some((listing) => listing.store === store))
+    );
+    const store = chosenStore === 'all' || !linkedStores.includes(chosenStore) ? null : chosenStore;
 
     return (
         <div className={styles.root}>
@@ -99,6 +115,49 @@ export function FeatureAppStores(_props: FeatureViewProps) {
                         )}
                     </div>
                 </header>
+                {several && (
+                    <div className={styles.tabsRow}>
+                        <nav className={styles.tabs} role='tablist' aria-label='Vues de Stores'>
+                            {(
+                                [
+                                    { id: 'apps', label: 'Apps', icon: 'appstores' },
+                                    { id: 'overview', label: 'Vue d’ensemble', icon: 'activity' }
+                                ] as const
+                            ).map((entry) => (
+                                <button
+                                    key={entry.id}
+                                    type='button'
+                                    role='tab'
+                                    aria-selected={entry.id === shown}
+                                    className={entry.id === shown ? styles.tabActive : styles.tab}
+                                    onClick={() => setView(entry.id)}
+                                >
+                                    <span className={`icon icon-${entry.icon} ${styles.tabIcon}`} aria-hidden='true' />
+                                    <span>{entry.label}</span>
+                                </button>
+                            ))}
+                        </nav>
+                        {shown === 'overview' && (
+                            <div className={styles.tabsTools}>
+                                {linkedStores.length > 1 && (
+                                    <SegmentedControl
+                                        value={store ?? 'all'}
+                                        options={[
+                                            { value: 'all', label: 'Tous' },
+                                            ...linkedStores.map((entry) => ({
+                                                value: entry,
+                                                label: STORE_LABELS[entry]
+                                            }))
+                                        ]}
+                                        onChange={setChosenStore}
+                                        aria-label='Store'
+                                    />
+                                )}
+                                <RangeBar value={range} onChange={setRange} />
+                            </div>
+                        )}
+                    </div>
+                )}
             </StickyHeader>
 
             <ErrorNote note={list.error ?? sources.error} />
@@ -149,7 +208,17 @@ export function FeatureAppStores(_props: FeatureViewProps) {
                 </div>
             )}
 
-            {apps !== null && apps.length > 0 && <AppList apps={apps} outlineFor={outlineFor} onOpen={setOpenedId} />}
+            {shown === 'overview' ? (
+                <StoresOverview
+                    range={range}
+                    store={store}
+                    stores={linkedStores}
+                    canWrite={canWrite}
+                    onOpen={setOpenedId}
+                />
+            ) : (
+                apps !== null && apps.length > 0 && <AppList apps={apps} outlineFor={outlineFor} onOpen={setOpenedId} />
+            )}
 
             <AppDialog
                 open={addOpen}

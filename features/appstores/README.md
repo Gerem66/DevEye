@@ -83,6 +83,7 @@ sa synchronisation restent chez elle, où vit sa source.
 | Vue                    | Contenu                                                                                                                                                 |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Accueil**            | une rangée par app : puces de store (logo, puis état), téléchargements sur sept jours et leur écart, notes, « N projets »                               |
+| **Vue d'ensemble**     | dès deux apps, à côté de la liste : toutes les apps sur une période (voir ci-dessous)                                                                   |
 | **Fiche, Aperçu**      | bandeau (téléchargements, notes, avis reçus, taux de plantage) avec l'écart, courbe par store, pays en liste ou sur une carte, versions des deux stores |
 | **Fiche, Avis**        | filtres, répartition des avis reçus sur la période, cartes d'avis et leur réponse, dialogue de réponse                                                  |
 | **Fiche, Revenus**     | par store et par devise, avec le droit Revenus                                                                                                          |
@@ -90,6 +91,18 @@ sa synchronisation restent chez elle, où vit sa source.
 | **Réglages, Sources**  | les comptes de store, leurs capacités, leur état ; ajout pas à pas dans un dialogue empilé                                                              |
 | **Réglages d'une app** | onglet Général : nom, fiches de store et leur source, pays de la note Apple, relecture de l'année, suppression                                          |
 | **Onglet d'un projet** | les apps reliées, en version compacte de l'Aperçu, sans montant                                                                                         |
+
+La vue d'ensemble (`appstores.overview`, `overview.ts`) ne cumule que ce qui
+s'additionne : téléchargements (total, courbe par store, part de chaque app),
+pays, avis reçus, revenus par store et par devise. Une note ou un taux de
+plantage moyen de plusieurs apps ne dirait rien : la note reste par app, et la
+stabilité devient la liste des apps au-dessus d'un seuil de Google. Les avis
+sans réponse de la période s'y lisent les plus mal notés d'abord, et se
+répondent sur place. Les revenus ne comptent que les apps où le rôle tient le
+droit Revenus (`items.canExtra`), et le disent quand il en manque. La période
+finit au dernier jour commun aux fiches, sauf celles dont le dernier jour
+traîne de plus de trois jours derrière celui des autres fiches de leur store :
+une clé cassée ne fige pas la vue, et la fiche laissée de côté est nommée.
 
 Les décisions d'écran qui méritent d'être connues :
 
@@ -230,13 +243,14 @@ montre combien de projets relient chacune, et la fiche les nomme.
 | `src/server/sources.ts`                                                | les comptes de store : ajout éprouvé, test, retrait                                            |
 | `src/server/apps.ts`                                                   | les apps : liste, fiche, ajout, réglages, suppression, synchronisation                         |
 | `src/server/stats.ts`, `src/server/days.ts`                            | les fenêtres, l'écart, les revenus, l'arithmétique des jours                                   |
+| `src/server/overview.ts`                                               | la vue d'ensemble de toutes les apps                                                           |
 | `src/server/reviews.ts`                                                | les avis et la réponse                                                                         |
 | `src/server/service.ts`, `src/server/notice.ts`                        | la synchronisation de fond, et les avis qu'elle envoie                                         |
 | `src/server/stores/*`                                                  | les clients d'Apple et de Google, les jetons                                                   |
 | `src/server/parse/*`                                                   | TSV, CSV (UTF-16 compris), zip                                                                 |
 | `src/server/copy.ts`, `move.ts`, `accountExport.ts`                    | partage, déplacement, copie, export                                                            |
 | `src/server/e2e.ts`                                                    | les parcours de la page Tests et débogage                                                      |
-| `src/client/AppStores.tsx`, `AppList.tsx`                              | l'accueil de la fonctionnalité                                                                 |
+| `src/client/AppStores.tsx`, `AppList.tsx`, `StoresOverview.tsx`        | l'accueil de la fonctionnalité, et sa vue d'ensemble                                           |
 | `src/client/AppDetail.tsx` et ses onglets                              | la fiche : `Overview`, `Reviews`, `Revenue`, `Stability`                                       |
 | `src/client/SourcesPanel.tsx`, `SourceDialog.tsx`                      | l'onglet Sources                                                                               |
 | `src/client/AppGeneralPanel.tsx`, `AppDialog.tsx`, `ListingPicker.tsx` | l'ajout et l'onglet Général                                                                    |

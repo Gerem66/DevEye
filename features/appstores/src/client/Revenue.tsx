@@ -1,5 +1,11 @@
 import { ErrorNote, useResource } from 'deveye-sdk-client';
-import type { AppStore, AppStoresApp, AppStoresRange, AppStoresSource } from '../contracts/domain';
+import type {
+    AppStore,
+    AppStoresApp,
+    AppStoresRange,
+    AppStoresRevenueTotal,
+    AppStoresSource
+} from '../contracts/domain';
 
 import { api } from './api';
 import CapabilityNote from './CapabilityNote';
@@ -24,6 +30,50 @@ const MEANING: Record<AppStore, string> = {
     apple: 'Produits nets',
     google: 'Ventes estimées, avant la commission de Google'
 };
+
+export const REVENUE_HINT =
+    'Apple donne ce qui vous revient après sa commission, Google ce que paient vos clients avant la sienne : ' +
+    'les deux ne s’additionnent pas, et chaque devise reste à part.';
+
+interface RevenueTotalsProps {
+    store: AppStore;
+    /** Ceux du store, la devise qui pèse le plus en ventes d'abord. */
+    totals: readonly AppStoresRevenueTotal[];
+    /** La période d'avant est relevée : l'écart se montre. */
+    covered: boolean;
+}
+
+/** Le titre d'un store et une tuile par devise : deux devises ne se somment pas. */
+export function RevenueTotals({ store, totals, covered }: RevenueTotalsProps) {
+    return (
+        <>
+            <h3 className={styles.blockTitle}>
+                <span className={`icon icon-${STORE_ICONS[store]}`} aria-hidden='true' />
+                {STORE_LABELS[store]}
+                <span className={styles.blockTitleNote}>{MEANING[store]}</span>
+            </h3>
+            {totals.length === 0 ? (
+                <p className={styles.blockEmpty}>Aucune vente relevée sur la période.</p>
+            ) : (
+                <StatBand
+                    tiles={totals.map((total) => ({
+                        key: total.currency,
+                        label: currencyName(total.currency),
+                        value: formatMoney(total.amount, total.currency),
+                        hint: `${MEANING[store]}, en ${currencyName(total.currency).toLowerCase()}.`,
+                        change: covered ? relativeChange(total.amount, total.previous) : null,
+                        note: plural(total.units, 'vente', 'ventes')
+                    }))}
+                />
+            )}
+        </>
+    );
+}
+
+/** Les totaux d'un store, la devise qui pèse le plus en ventes d'abord : deux devises ne se comparent pas. */
+export function storeTotals(totals: readonly AppStoresRevenueTotal[], store: AppStore): AppStoresRevenueTotal[] {
+    return totals.filter((total) => total.store === store).sort((a, b) => b.units - a.units || b.amount - a.amount);
+}
 
 interface RevenueProps {
     app: AppStoresApp;
@@ -72,10 +122,7 @@ export function Revenue({ app, store, sources, range }: RevenueProps) {
                     {revenue?.dataUntil ? `Données jusqu’au ${formatDay(revenue.dataUntil)}` : ''}
                 </p>
             </header>
-            <p className={styles.blockHint}>
-                Apple donne ce qui vous revient après sa commission, Google ce que paient vos clients avant la sienne :
-                les deux ne s’additionnent pas, et chaque devise reste à part.
-            </p>
+            <p className={styles.blockHint}>{REVENUE_HINT}</p>
             <ErrorNote note={error} />
             <CapabilityNote app={app} sources={sources} capabilities={['revenue']} empty={empty} />
 
@@ -84,10 +131,7 @@ export function Revenue({ app, store, sources, range }: RevenueProps) {
             ) : (
                 <div className={styles.measure} data-stale={revenue.range !== range ? '' : undefined}>
                     {stores.map((store) => {
-                        // La devise qui pèse le plus en ventes : les montants de deux devises ne se comparent pas.
-                        const totals = revenue.totals
-                            .filter((total) => total.store === store)
-                            .sort((a, b) => b.units - a.units || b.amount - a.amount);
+                        const totals = storeTotals(revenue.totals, store);
                         const main = totals[0]?.currency ?? null;
                         const slots = bucketStarts(
                             revenue.from,
@@ -102,47 +146,25 @@ export function Revenue({ app, store, sources, range }: RevenueProps) {
                         );
                         return (
                             <div key={store} className={styles.storeRevenue}>
-                                <h3 className={styles.blockTitle}>
-                                    <span className={`icon icon-${STORE_ICONS[store]}`} aria-hidden='true' />
-                                    {STORE_LABELS[store]}
-                                    <span className={styles.blockTitleNote}>{MEANING[store]}</span>
-                                </h3>
-                                {totals.length === 0 ? (
-                                    <p className={styles.blockEmpty}>Aucune vente relevée sur la période.</p>
-                                ) : (
-                                    <>
-                                        <StatBand
-                                            tiles={totals.map((total) => ({
-                                                key: total.currency,
-                                                label: currencyName(total.currency),
-                                                value: formatMoney(total.amount, total.currency),
-                                                hint: `${MEANING[store]}, en ${currencyName(total.currency).toLowerCase()}.`,
-                                                change: revenue.previousCovered
-                                                    ? relativeChange(total.amount, total.previous)
-                                                    : null,
-                                                note: plural(total.units, 'vente', 'ventes')
-                                            }))}
-                                        />
-                                        {main !== null && (
-                                            <TrendChart
-                                                title={`${MEANING[store]}, en ${currencyName(main).toLowerCase()}`}
-                                                slots={slots}
-                                                resolution={revenue.resolution}
-                                                series={[
-                                                    {
-                                                        key: store,
-                                                        label: STORE_LABELS[store],
-                                                        values: slots.map(
-                                                            (at) => byAt.get(at) ?? absentValue(at, revenue.dataUntil)
-                                                        ),
-                                                        summary: `${formatMoney(totals[0].amount, main)} sur la période`
-                                                    }
-                                                ]}
-                                                format={(value) => formatMoney(value, main)}
-                                                label={`${MEANING[store]} ${ON_STORE[store]} : ${formatMoney(totals[0].amount, main)} sur la période.`}
-                                            />
-                                        )}
-                                    </>
+                                <RevenueTotals store={store} totals={totals} covered={revenue.previousCovered} />
+                                {main !== null && (
+                                    <TrendChart
+                                        title={`${MEANING[store]}, en ${currencyName(main).toLowerCase()}`}
+                                        slots={slots}
+                                        resolution={revenue.resolution}
+                                        series={[
+                                            {
+                                                key: store,
+                                                label: STORE_LABELS[store],
+                                                values: slots.map(
+                                                    (at) => byAt.get(at) ?? absentValue(at, revenue.dataUntil)
+                                                ),
+                                                summary: `${formatMoney(totals[0].amount, main)} sur la période`
+                                            }
+                                        ]}
+                                        format={(value) => formatMoney(value, main)}
+                                        label={`${MEANING[store]} ${ON_STORE[store]} : ${formatMoney(totals[0].amount, main)} sur la période.`}
+                                    />
                                 )}
                             </div>
                         );

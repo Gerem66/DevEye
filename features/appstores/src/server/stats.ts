@@ -12,7 +12,7 @@ import { defineSdkFeature } from '@deveye/types/sdk/server';
 
 import { dataUntilOf } from './apps';
 import { DAY_SECONDS, utcToday } from './days';
-import type { DailyRow, ListingRow, RevenueRow } from './repo';
+import type { DailyRow, ListingKey, ListingRow, RevenueRow } from './repo';
 import { loadApp, type Ctx } from './_shared';
 
 /**
@@ -57,7 +57,7 @@ export function dayWindow(range: AppStoresRange, dataUntil: number | null, today
     };
 }
 
-function withData(listings: readonly ListingRow[]): ListingRow[] {
+export function withData(listings: readonly ListingRow[]): ListingRow[] {
     return listings.filter((l) => l.synced_day !== null && l.history_from !== null);
 }
 
@@ -91,7 +91,10 @@ export function contractWindow(
 }
 
 /** Les taux d'un ensemble de jours, pondérés par les utilisateurs de chacun. */
-function weighted(rows: readonly DailyRow[], metric: 'crash_rate' | 'anr_rate'): number | null {
+export function weighted(
+    rows: readonly Pick<DailyRow, 'store' | 'crash_rate' | 'anr_rate' | 'vitals_users'>[],
+    metric: 'crash_rate' | 'anr_rate'
+): number | null {
     let sum = 0;
     let weight = 0;
     for (const row of rows) {
@@ -105,9 +108,9 @@ function weighted(rows: readonly DailyRow[], metric: 'crash_rate' | 'anr_rate'):
 }
 
 /** Le total d'un store sur des jours ; `null` quand la fiche manque ou ne couvre aucun de ces jours. */
-function downloadsIn(
+export function downloadsIn(
     listing: ListingRow | undefined,
-    rows: readonly DailyRow[],
+    rows: readonly Pick<DailyRow, 'store' | 'day' | 'downloads'>[],
     from: number,
     to: number
 ): number | null {
@@ -232,8 +235,10 @@ export function revenueOf(
     return { totals, points };
 }
 
+export const keysOf = (listings: readonly ListingRow[]): ListingKey[] => listings.map((l) => [l.app_id, l.store]);
+
 /** Les lignes d'un seul store quand la lecture le demande, toutes sinon. */
-function ofStore<T extends { store: AppStore }>(rows: readonly T[], store: AppStore | undefined): T[] {
+export function ofStore<T extends { store: AppStore }>(rows: readonly T[], store: AppStore | undefined): T[] {
     return store ? rows.filter((row) => row.store === store) : [...rows];
 }
 
@@ -250,13 +255,12 @@ export const appStoresStatsFeatures = [
                 // Jusqu'à aujourd'hui, au-delà de la fenêtre : de quoi trouver une note relevée après elle.
                 ctx.repo.dailyRows(input.appId, window.previousFromDay, today).then((all) => ofStore(all, input.store)),
                 ctx.repo.reviewCounts(
-                    input.appId,
-                    input.store ?? null,
+                    keysOf(listings),
                     window.previousFromDay * DAY_SECONDS,
                     window.fromDay * DAY_SECONDS,
                     (window.toDay + 1) * DAY_SECONDS
                 ),
-                ctx.repo.countryTotals(input.appId, input.store ?? null, window.fromDay, window.toDay)
+                ctx.repo.countryTotals(keysOf(listings), window.fromDay, window.toDay)
             ]);
             const reviewStars = [1, 2, 3, 4, 5].map((stars) => counts.find((c) => c.rating === stars)?.current ?? 0);
             const previousReviews = counts.reduce((sum, c) => sum + c.previous, 0);
@@ -294,10 +298,7 @@ export const appStoresStatsFeatures = [
             await loadApp(ctx, input.appId);
             const listings = ofStore(await ctx.repo.listListingsOfApps([input.appId]), input.store);
             const window = dayWindow(input.range, dataUntilOf(withData(listings)), utcToday(Date.now()));
-            const rows = ofStore(
-                await ctx.repo.revenueRows(input.appId, window.previousFromDay, window.toDay),
-                input.store
-            );
+            const rows = await ctx.repo.revenueRows(keysOf(listings), window.previousFromDay, window.toDay);
             return {
                 revenue: { ...contractWindow(input.range, window, listings), ...revenueOf(listings, rows, window) }
             };

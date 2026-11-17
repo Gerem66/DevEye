@@ -6,6 +6,7 @@ import {
     appStoresAppInputSchema,
     appStoresAppSchema,
     appStoresAppSummarySchema,
+    appStoresOverviewSchema,
     appStoresRangeSchema,
     appStoresRevenueSchema,
     appStoresReviewCursorSchema,
@@ -138,6 +139,17 @@ export const appStoresStats = {
     output: z.object({ stats: appStoresStatsSchema })
 };
 
+/**
+ * Toutes les apps visibles sur une même fenêtre. Elle finit au dernier jour
+ * commun aux fiches, hormis celles dont les chiffres se sont arrêtés : elles
+ * sont nommées dans `left` plutôt que de figer la vue entière.
+ */
+export const appStoresOverview = {
+    command: 'appstores.overview' as const,
+    input: z.object({ range: appStoresRangeSchema, store: appStoreSchema.optional() }),
+    output: z.object({ overview: appStoresOverviewSchema })
+};
+
 /** Gardée par la permission `revenue`, surcharge par app comprise. `store` comme pour `stats`. */
 export const appStoresRevenue = {
     command: 'appstores.revenue' as const,
@@ -191,6 +203,7 @@ export const appStoresCommands = [
     appStoresSyncNow,
     appStoresBackfill,
     appStoresStats,
+    appStoresOverview,
     appStoresRevenue,
     appStoresListReviews,
     appStoresReplyReview

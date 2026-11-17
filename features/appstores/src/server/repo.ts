@@ -59,7 +59,11 @@ export interface DailyRow {
     vitals_users: number | null;
 }
 
+/** Une fiche de store, désignée par son app : ce que les lectures de plusieurs apps prennent. */
+export type ListingKey = readonly [appId: number, store: AppStore];
+
 export interface RevenueRow {
+    app_id: number;
     store: AppStore;
     day: number;
     currency: string;
@@ -236,14 +240,27 @@ export interface AppStoresRepo {
         rows: readonly RevenueInput[]
     ): Promise<void>;
     dailyRows(appId: number, fromDay: number, toDay: number): Promise<DailyRow[]>;
-    revenueRows(appId: number, fromDay: number, toDay: number): Promise<RevenueRow[]>;
-    /** Les téléchargements de la période par pays, d'un store ou des deux (`null`), les plus nombreux d'abord. */
+    revenueRows(keys: readonly ListingKey[], fromDay: number, toDay: number): Promise<RevenueRow[]>;
+    /** Les téléchargements de la période par pays, sur ces fiches, les plus nombreux d'abord. */
     countryTotals(
-        appId: number,
-        store: AppStore | null,
+        keys: readonly ListingKey[],
         fromDay: number,
         toDay: number
     ): Promise<{ country: string; downloads: number }[]>;
+    /** Les taux de stabilité relevés chez Google, par app et par jour. */
+    vitalsOf(
+        appIds: readonly number[],
+        fromDay: number,
+        toDay: number
+    ): Promise<
+        {
+            app_id: number;
+            day: number;
+            crash_rate: number | null;
+            anr_rate: number | null;
+            vitals_users: number | null;
+        }[]
+    >;
     purgeCountriesBefore(day: number): Promise<number>;
     downloadsOf(
         appIds: readonly number[],
@@ -253,14 +270,20 @@ export interface AppStoresRepo {
 
     findReview(id: number): Promise<ReviewRow | null>;
     listReviews(appId: number, filter: ReviewFilter, limit: number): Promise<ReviewRow[]>;
-    /** Les avis reçus par note : `[from, split[` et `[split, to[`, d'un store ou de tous (`null`). */
+    /** Les avis reçus sur ces fiches, par note : `[from, split[` et `[split, to[`. */
     reviewCounts(
-        appId: number,
-        store: AppStore | null,
+        keys: readonly ListingKey[],
         from: number,
         split: number,
         to: number
     ): Promise<{ rating: number; previous: number; current: number }[]>;
+    /** Les avis de `[from, to[` sans réponse sur ces fiches : leur nombre, et les `limit` plus mal notés puis plus récents. */
+    unansweredReviews(
+        keys: readonly ListingKey[],
+        from: number,
+        to: number,
+        limit: number
+    ): Promise<{ total: number; rows: ReviewRow[] }>;
     reviewsByRefs(appId: number, store: AppStore, refs: readonly string[]): Promise<ReviewRow[]>;
     /** `false` quand l'avis était déjà là. */
     insertReview(input: {
@@ -280,6 +303,21 @@ export interface AppStoresRepo {
     overflowingReviews(max: number): Promise<{ app_id: number; store: AppStore }[]>;
     /** Ne garde que les `keep` avis les plus récents d'une app sur un store. */
     trimReviews(appId: number, store: AppStore, keep: number): Promise<number>;
+}
+
+/**
+ * Ces fiches précises, une liste d'apps par store : une paire de colonnes
+ * `(app_id, store) IN (?)` ne se prépare pas. Un store sans fiche reçoit
+ * `NULL`, qui ne retient rien.
+ */
+const OF_LISTINGS = "((store = 'apple' AND app_id IN (?)) OR (store = 'google' AND app_id IN (?)))";
+
+function listingParams(keys: readonly ListingKey[]): [(number | null)[], (number | null)[]] {
+    const of = (store: AppStore) => {
+        const ids = keys.filter(([, keyStore]) => keyStore === store).map(([appId]) => appId);
+        return ids.length > 0 ? ids : [null];
+    };
+    return [of('apple'), of('google')];
 }
 
 export function createRepo(q: SdkQueryable): AppStoresRepo {
@@ -660,24 +698,41 @@ export function createRepo(q: SdkQueryable): AppStoresRepo {
                 [appId, fromDay, toDay]
             );
         },
-        async revenueRows(appId, fromDay, toDay) {
+        async revenueRows(keys, fromDay, toDay) {
+            if (keys.length === 0) return [];
             return q.query<RevenueRow>(
-                `SELECT store, day, currency, amount, units FROM ft_appstores_revenue
-                  WHERE app_id = ? AND day BETWEEN ? AND ?
+                `SELECT app_id, store, day, currency, amount, units FROM ft_appstores_revenue
+                  WHERE ${OF_LISTINGS} AND day BETWEEN ? AND ?
                   ORDER BY day ASC`,
-                [appId, fromDay, toDay]
+                [...listingParams(keys), fromDay, toDay]
             );
         },
-        async countryTotals(appId, store, fromDay, toDay) {
+        async countryTotals(keys, fromDay, toDay) {
+            if (keys.length === 0) return [];
             const rows = await q.query<{ country: string; downloads: number }>(
                 `SELECT country, SUM(downloads) AS downloads
                    FROM ft_appstores_countries
-                  WHERE app_id = ? AND (? IS NULL OR store = ?) AND day BETWEEN ? AND ?
+                  WHERE ${OF_LISTINGS} AND day BETWEEN ? AND ?
                   GROUP BY country
                   ORDER BY downloads DESC, country ASC`,
-                [appId, store, store, fromDay, toDay]
+                [...listingParams(keys), fromDay, toDay]
             );
             return rows.map((row) => ({ country: row.country, downloads: Number(row.downloads) }));
+        },
+        async vitalsOf(appIds, fromDay, toDay) {
+            if (appIds.length === 0) return [];
+            return q.query<{
+                app_id: number;
+                day: number;
+                crash_rate: number | null;
+                anr_rate: number | null;
+                vitals_users: number | null;
+            }>(
+                `SELECT app_id, day, crash_rate, anr_rate, vitals_users FROM ft_appstores_daily
+                  WHERE store = 'google' AND app_id IN (?) AND day BETWEEN ? AND ?
+                    AND (crash_rate IS NOT NULL OR anr_rate IS NOT NULL)`,
+                [[...appIds], fromDay, toDay]
+            );
         },
         async purgeCountriesBefore(day) {
             const res = await q.execute('DELETE FROM ft_appstores_countries WHERE day < ? LIMIT 5000', [day]);
@@ -716,21 +771,41 @@ export function createRepo(q: SdkQueryable): AppStoresRepo {
                 ]
             );
         },
-        async reviewCounts(appId, store, from, split, to) {
+        async reviewCounts(keys, from, split, to) {
+            if (keys.length === 0) return [];
             const rows = await q.query<{ rating: number; previous: number; current: number }>(
                 `SELECT rating,
                         COUNT(CASE WHEN created_at < ? THEN 1 END) AS previous,
                         COUNT(CASE WHEN created_at >= ? THEN 1 END) AS current
                    FROM ft_appstores_reviews
-                  WHERE app_id = ? AND (? IS NULL OR store = ?) AND created_at >= ? AND created_at < ?
+                  WHERE ${OF_LISTINGS} AND created_at >= ? AND created_at < ?
                   GROUP BY rating`,
-                [split, split, appId, store, store, from, to]
+                [split, split, ...listingParams(keys), from, to]
             );
             return rows.map((row) => ({
                 rating: Number(row.rating),
                 previous: Number(row.previous),
                 current: Number(row.current)
             }));
+        },
+        async unansweredReviews(keys, from, to, limit) {
+            if (keys.length === 0) return { total: 0, rows: [] };
+            const listed = listingParams(keys);
+            const [counted, rows] = await Promise.all([
+                q.query<{ total: number }>(
+                    `SELECT COUNT(*) AS total FROM ft_appstores_reviews
+                      WHERE ${OF_LISTINGS} AND replied_at IS NULL AND created_at >= ? AND created_at < ?`,
+                    [...listed, from, to]
+                ),
+                q.query<ReviewRow>(
+                    `SELECT * FROM ft_appstores_reviews
+                      WHERE ${OF_LISTINGS} AND replied_at IS NULL AND created_at >= ? AND created_at < ?
+                      ORDER BY rating ASC, created_at DESC, id DESC
+                      LIMIT ?`,
+                    [...listed, from, to, limit]
+                )
+            ]);
+            return { total: Number(counted[0]?.total ?? 0), rows };
         },
         async reviewsByRefs(appId, store, refs) {
             if (refs.length === 0) return [];

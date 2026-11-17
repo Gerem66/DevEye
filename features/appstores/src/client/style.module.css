@@ -1007,7 +1007,7 @@
     color: var(--text-muted);
 }
 
-.countryList {
+.rankList {
     display: flex;
     flex-direction: column;
     gap: 2px;
@@ -1018,7 +1018,7 @@
 
 /* La barre est derrière le texte, comme les classements d'Audience : en colonne,
    elle n'aurait plus de place sur un téléphone. */
-.countryRow {
+.rankRow {
     position: relative;
     display: flex;
     align-items: center;
@@ -1029,7 +1029,7 @@
     font-size: 0.82rem;
 }
 
-.countryBar {
+.rankBar {
     position: absolute;
     top: 0;
     bottom: 0;
@@ -1039,7 +1039,7 @@
     transition: width var(--transition-normal);
 }
 
-.countryName {
+.rankName {
     position: relative;
     flex: 1;
     min-width: 0;
@@ -1049,7 +1049,7 @@
     white-space: nowrap;
 }
 
-.countryCount {
+.rankCount {
     position: relative;
     display: flex;
     align-items: baseline;
@@ -1059,12 +1059,64 @@
     font-variant-numeric: tabular-nums;
 }
 
-.countryShare {
+.rankShare {
     color: var(--text-muted);
     font-size: 0.74rem;
 }
 
-.countryMore {
+.rankPick {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.rankPick:hover,
+.rankPick:focus-visible {
+    background: var(--surface-subtle);
+}
+
+/* Les apps au-dessus d'un seuil de Google : une rangée qui ouvre l'app. */
+.alertList {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.alertRow {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    width: 100%;
+    padding: 6px 8px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.alertRow:hover,
+.alertRow:focus-visible {
+    background: var(--surface-subtle);
+}
+
+.alertName {
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.rankMore {
     align-self: flex-start;
     padding: 2px 8px;
     border: 0;
@@ -1075,8 +1127,8 @@
     cursor: pointer;
 }
 
-.countryMore:hover,
-.countryMore:focus-visible {
+.rankMore:hover,
+.rankMore:focus-visible {
     text-decoration: underline;
 }
 

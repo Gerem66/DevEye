@@ -1,5 +1,4 @@
-import { lazy, Suspense, useState } from 'react';
-import { ErrorNote, FeatureSettingsButton, SegmentedControl, StatusBadge, useResource } from 'deveye-sdk-client';
+import { ErrorNote, FeatureSettingsButton, StatusBadge, useResource } from 'deveye-sdk-client';
 import {
     APPSTORES_CRASH_THRESHOLD,
     type AppStore,
@@ -25,7 +24,7 @@ import {
     storePageUrl,
     versionStates
 } from './format';
-import CountryBars from './Stats/CountryBars';
+import CountriesPanel from './Stats/CountriesPanel';
 import { downloadSeries, downloadsOf } from './Stats/downloads';
 import StatBand, { ratingChange, relativeChange, type StatTile } from './Stats/StatBand';
 import TrendChart, { type TrendSeries } from './Stats/TrendChart';
@@ -43,11 +42,6 @@ interface OverviewProps {
 
 const countOrMissing = (value: number | null) => (value === null ? MISSING : formatCount(value));
 
-/** Les tracés du monde ne se chargent qu'à la première carte demandée. */
-const CountryMap = lazy(() => import('./Stats/CountryMap'));
-
-type CountryView = 'list' | 'map';
-
 /**
  * L'aperçu d'une app : les chiffres de la période et leur écart à la
  * précédente, la courbe des téléchargements par store, leurs pays, puis les
@@ -57,7 +51,6 @@ type CountryView = 'list' | 'map';
 export function Overview({ app, store, sources, canWrite, range }: OverviewProps) {
     const has = (store: AppStore) => app.listings.some((listing) => listing.store === store);
     const linked = app.listings.length > 0;
-    const [countryView, setCountryView] = useState<CountryView>('list');
 
     const { data: stats, error } = useResource(
         'appstores.stats',
@@ -247,33 +240,7 @@ export function Overview({ app, store, sources, canWrite, range }: OverviewProps
             </section>
 
             {stats !== null && stats.dataUntil !== null && (
-                <section className={styles.block}>
-                    <header className={styles.blockHead}>
-                        <h3 className={styles.blockTitle}>Téléchargements par pays</h3>
-                        {stats.countries.length > 0 && (
-                            <SegmentedControl
-                                value={countryView}
-                                options={[
-                                    { value: 'list', label: 'Liste' },
-                                    { value: 'map', label: 'Carte' }
-                                ]}
-                                onChange={setCountryView}
-                                aria-label='Affichage des pays'
-                            />
-                        )}
-                    </header>
-                    <div className={styles.measure} data-stale={stats.range !== range ? '' : undefined}>
-                        {stats.countries.length === 0 ? (
-                            <p className={styles.blockEmpty}>Aucun téléchargement relevé sur la période.</p>
-                        ) : countryView === 'map' ? (
-                            <Suspense fallback={<p className={styles.blockEmpty}>Chargement de la carte…</p>}>
-                                <CountryMap countries={stats.countries} />
-                            </Suspense>
-                        ) : (
-                            <CountryBars countries={stats.countries} />
-                        )}
-                    </div>
-                </section>
+                <CountriesPanel countries={stats.countries} stale={stats.range !== range} />
             )}
 
             {(google || apple) && (

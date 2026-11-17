@@ -10,6 +10,7 @@ import {
     appStoresCommands,
     appStoresList,
     appStoresListSources,
+    appStoresOverview,
     appStoresRemove,
     appStoresReplyReview,
     appStoresRevenue,
@@ -27,7 +28,7 @@ import { appStoresHandlers } from './handlers';
 import type { AppStoresRepo, ListingRow } from './repo';
 import { forgetAppleTokens } from './stores/apple';
 import { storeHttp, type StoreFetch } from './stores/types';
-import { appRow, fakeRepo, listingRow, sourceRow, type FakeRepo } from './_testing';
+import { appRow, fakeRepo, listingRow, sourceRow, type DailyCell, type FakeRepo } from './_testing';
 import { reviewRef, toSource } from './_shared';
 
 /**
@@ -594,6 +595,131 @@ describe('les apps', () => {
             const { app } = await handlerFor(command)(contextOf(repo), { appId: 2 });
             assert.equal(app.id, 2);
         }
+    });
+});
+
+describe('la vue d’ensemble', () => {
+    const cell = (
+        appId: number,
+        store: 'apple' | 'google',
+        day: number,
+        downloads: number,
+        over: Partial<DailyCell> = {}
+    ): DailyCell => ({
+        app_id: appId,
+        store,
+        day,
+        downloads,
+        updates: null,
+        uninstalls: null,
+        active_devices: null,
+        rating_avg: null,
+        rating_count: null,
+        crash_rate: null,
+        anr_rate: null,
+        vitals_users: null,
+        ...over
+    });
+    const review = (
+        id: number,
+        appId: number,
+        store: 'apple' | 'google',
+        rating: number,
+        repliedAt: number | null
+    ) => ({
+        id,
+        app_id: appId,
+        store,
+        external_ref: `r${id}`,
+        rating,
+        created_at: UNTIL * 86400 + id,
+        replied_at: repliedAt,
+        content: '{}'
+    });
+
+    /** Deux apps à jour, et une troisième dont Google Play a décroché de dix jours. */
+    function seeded() {
+        return fakeRepo({
+            sources: [sourceRow({ id: 10 }), sourceRow({ id: 20, store: 'google' })],
+            apps: [appRow({ id: 1 }), appRow({ id: 2 }), appRow({ id: 3 })],
+            listings: [
+                covered({ id: 1, app_id: 1 }),
+                covered({ id: 2, app_id: 1, store: 'google', source_id: 20 }),
+                covered({ id: 3, app_id: 2 }),
+                covered({ id: 4, app_id: 3, store: 'google', source_id: 20, synced_day: UNTIL - 10 })
+            ],
+            daily: [
+                cell(1, 'apple', UNTIL, 10),
+                cell(1, 'google', UNTIL, 30),
+                cell(1, 'google', UNTIL - 1, 0, { crash_rate: 0.02, vitals_users: 100 }),
+                cell(2, 'apple', UNTIL, 5),
+                cell(3, 'google', UNTIL - 12, 99)
+            ],
+            revenue: [
+                { app_id: 1, store: 'apple', day: UNTIL, currency: 'EUR', amount: 10, units: 2 },
+                { app_id: 2, store: 'apple', day: UNTIL, currency: 'EUR', amount: 99, units: 1 }
+            ],
+            reviews: [review(1, 1, 'apple', 4, null), review(2, 2, 'apple', 1, null), review(3, 1, 'google', 2, 1)]
+        });
+    }
+
+    it('cumule les apps sur une fenêtre commune, sans la fiche qui a décroché de son store', async () => {
+        const { overview } = await handlerFor(appStoresOverview)(contextOf(seeded()), { range: '7d' });
+        assert.equal(overview.dataUntil, UNTIL * 86400, 'la fiche en retard ne fige pas la fenêtre');
+        assert.deepEqual(overview.metrics.downloads, { apple: 15, google: 30 });
+        assert.deepEqual(
+            overview.apps.map((app) => [app.id, app.downloads]),
+            [
+                [1, 40],
+                [2, 5]
+            ]
+        );
+        assert.deepEqual(
+            overview.left.map((entry) => [entry.id, entry.store, entry.dataUntil]),
+            [[3, 'google', (UNTIL - 10) * 86400]]
+        );
+        assert.equal(overview.metrics.reviews, 3);
+        assert.equal(overview.unanswered, 2);
+        assert.deepEqual(
+            overview.reviews.map((r) => [r.app.id, r.rating]),
+            [
+                [2, 1],
+                [1, 4]
+            ],
+            'les plus mal notés d’abord'
+        );
+        assert.deepEqual(
+            overview.alerts.map((alert) => alert.id),
+            [1],
+            'au-dessus du seuil de Google sur ses 28 derniers jours'
+        );
+        assert.equal(overview.metrics.rating.apple, null, 'une note ne se cumule pas');
+    });
+
+    it('ne compte que les revenus des apps où le droit est tenu, et le dit', async () => {
+        const repo = seeded();
+        const none = await handlerFor(appStoresOverview)(contextOf(repo, { isOwner: false }), { range: '7d' });
+        assert.equal(none.overview.revenue, null);
+        const { overview } = await handlerFor(appStoresOverview)(
+            contextOf(repo, { isOwner: false, extras: { revenue: true }, itemExtras: { '2': { revenue: false } } }),
+            { range: '7d' }
+        );
+        assert.deepEqual(
+            overview.revenue?.totals.map((t) => [t.store, t.currency, t.amount]),
+            [['apple', 'EUR', 10]]
+        );
+        assert.equal(overview.revenue?.partial, true);
+    });
+
+    it('n’ouvre pas une app masquée au rôle', async () => {
+        const { overview } = await handlerFor(appStoresOverview)(
+            contextOf(seeded(), { itemRestrictions: { '2': 'none' } }),
+            { range: '7d' }
+        );
+        assert.deepEqual(
+            overview.apps.map((app) => app.id),
+            [1]
+        );
     });
 });
 

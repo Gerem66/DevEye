@@ -11,7 +11,7 @@ export function downloadsOf(metrics: AppStoresMetrics, stores: readonly AppStore
 
 /** La courbe des téléchargements de la fenêtre, une série par store, dans l'ordre donné. */
 export function downloadSeries(
-    stats: AppStoresStats,
+    stats: Pick<AppStoresStats, 'from' | 'to' | 'bucket' | 'points' | 'metrics' | 'dataUntil'>,
     stores: readonly AppStore[]
 ): { slots: number[]; series: TrendSeries[] } {
     const slots = bucketStarts(

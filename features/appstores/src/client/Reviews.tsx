@@ -244,13 +244,16 @@ export function Reviews({ app, store, sources, canWrite, range }: ReviewsProps) 
 
 interface ReviewCardProps {
     review: AppStoresReview;
+    /** L'app de l'avis, quand la liste en mêle plusieurs. */
+    appName?: string;
     /** `null` : pas de geste ; `''` : répondre ; une phrase : le geste est là mais retenu, et elle dit pourquoi. */
     replyBlocked: string | null;
     onReply: () => void;
 }
 
-function ReviewCard({ review, replyBlocked, onReply }: ReviewCardProps) {
+export function ReviewCard({ review, appName, replyBlocked, onReply }: ReviewCardProps) {
     const meta = [
+        appName ?? null,
         review.territory ? countryName(review.territory) : null,
         formatDate(review.createdAt),
         review.appVersion ? `version ${review.appVersion}` : null

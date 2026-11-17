@@ -338,3 +338,34 @@ export const appStoresReviewCursorSchema = z.object({
     id: z.number().int().positive()
 });
 export type AppStoresReviewCursor = z.infer<typeof appStoresReviewCursorSchema>;
+
+// ----------------------------------------------------------------- la vue d'ensemble
+
+const appRef = { id: z.number().int().positive(), name: z.string() };
+
+/**
+ * Toutes les apps visibles d'un coup, sur une seule fenêtre. Ne se cumulent que
+ * les téléchargements, les pays, les avis reçus et les revenus : une note ou un
+ * taux de plantage moyen de plusieurs apps ne dirait rien, ils restent par app.
+ */
+export const appStoresOverviewSchema = appStoresStatsSchema.omit({ reviewStars: true }).extend({
+    /** Les apps comptées, les plus téléchargées d'abord. */
+    apps: z.array(z.object({ ...appRef, downloads: z.number().int().nonnegative().nullable() })),
+    /** Les fiches laissées de côté : leurs chiffres se sont arrêtés bien avant ceux des autres. */
+    left: z.array(z.object({ ...appRef, store: appStoreSchema, dataUntil: z.number().int() })),
+    /** Les avis de la fenêtre restés sans réponse. */
+    unanswered: z.number().int().nonnegative(),
+    /** Les premiers d'entre eux, les plus mal notés puis les plus récents. */
+    reviews: z.array(appStoresReviewSchema.extend({ app: z.object(appRef), replyable: z.boolean() })),
+    /** Les apps au-dessus d'un seuil de Google, sur ses 28 derniers jours mesurés. */
+    alerts: z.array(
+        z.object({
+            ...appRef,
+            crashRate: z.number().nonnegative().nullable(),
+            anrRate: z.number().nonnegative().nullable()
+        })
+    ),
+    /** `null` sans le droit Revenus sur aucune app ; `partial` quand il manque sur certaines. */
+    revenue: z.object({ totals: z.array(appStoresRevenueTotalSchema), partial: z.boolean() }).nullable()
+});
+export type AppStoresOverview = z.infer<typeof appStoresOverviewSchema>;

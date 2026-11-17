@@ -1,6 +1,6 @@
 import type { AppStore } from '../contracts/domain';
 
-import type { AppRow, AppStoresRepo, ListingRow, ReviewRow, SourceRow } from './repo';
+import type { AppRow, AppStoresRepo, ListingKey, ListingRow, ReviewRow, SourceRow } from './repo';
 import { externalRef } from './_shared';
 
 /**
@@ -129,6 +129,8 @@ export function fakeRepo(seed: Partial<Omit<FakeDb, 'calls' | 'dueCalls'>> = {})
         dueCalls: []
     };
     let seq = 500;
+    const among = (keys: readonly ListingKey[], appId: number, store: AppStore) =>
+        keys.some(([key, keyStore]) => key === appId && keyStore === store);
     const copy = <T extends object>(row: T | undefined): T | null => (row ? { ...row } : null);
     const visible = (app: AppRow, workspaceId: number) =>
         app.workspace_id === workspaceId || db.shares.some((s) => s.appId === app.id && s.workspaceId === workspaceId);
@@ -408,20 +410,44 @@ export function fakeRepo(seed: Partial<Omit<FakeDb, 'calls' | 'dueCalls'>> = {})
                     anr_rate: d.anr_rate,
                     vitals_users: d.vitals_users
                 })),
-        revenueRows: async (appId, from, to) =>
+        revenueRows: async (keys, from, to) =>
             db.revenue
-                .filter((r) => r.app_id === appId && r.day >= from && r.day <= to)
-                .map((r) => ({ store: r.store, day: r.day, currency: r.currency, amount: r.amount, units: r.units })),
-        async countryTotals(appId, store, from, to) {
+                .filter((r) => among(keys, r.app_id, r.store) && r.day >= from && r.day <= to)
+                .map((r) => ({
+                    app_id: r.app_id,
+                    store: r.store,
+                    day: r.day,
+                    currency: r.currency,
+                    amount: r.amount,
+                    units: r.units
+                })),
+        async countryTotals(keys, from, to) {
             const totals = new Map<string, number>();
             for (const c of db.countries) {
-                if (c.app_id !== appId || (store !== null && c.store !== store) || c.day < from || c.day > to) continue;
+                if (!among(keys, c.app_id, c.store) || c.day < from || c.day > to) continue;
                 totals.set(c.country, (totals.get(c.country) ?? 0) + c.downloads);
             }
             return [...totals]
                 .map(([country, downloads]) => ({ country, downloads }))
                 .sort((a, b) => b.downloads - a.downloads || a.country.localeCompare(b.country));
         },
+        vitalsOf: async (ids, from, to) =>
+            db.daily
+                .filter(
+                    (d) =>
+                        d.store === 'google' &&
+                        ids.includes(d.app_id) &&
+                        d.day >= from &&
+                        d.day <= to &&
+                        (d.crash_rate !== null || d.anr_rate !== null)
+                )
+                .map((d) => ({
+                    app_id: d.app_id,
+                    day: d.day,
+                    crash_rate: d.crash_rate,
+                    anr_rate: d.anr_rate,
+                    vitals_users: d.vitals_users
+                })),
         async purgeCountriesBefore(day) {
             const before = db.countries.length;
             db.countries = db.countries.filter((c) => c.day >= day);
@@ -449,10 +475,10 @@ export function fakeRepo(seed: Partial<Omit<FakeDb, 'calls' | 'dueCalls'>> = {})
                 .slice(0, limit)
                 .map((r) => ({ ...r }));
         },
-        async reviewCounts(appId, store, from, split, to) {
+        async reviewCounts(keys, from, split, to) {
             const out = new Map<number, { rating: number; previous: number; current: number }>();
             for (const r of db.reviews) {
-                if (r.app_id !== appId || (store !== null && r.store !== store)) continue;
+                if (!among(keys, r.app_id, r.store)) continue;
                 if (r.created_at < from || r.created_at >= to) continue;
                 const entry = out.get(r.rating) ?? { rating: r.rating, previous: 0, current: 0 };
                 if (r.created_at < split) entry.previous += 1;
@@ -460,6 +486,18 @@ export function fakeRepo(seed: Partial<Omit<FakeDb, 'calls' | 'dueCalls'>> = {})
                 out.set(r.rating, entry);
             }
             return [...out.values()];
+        },
+        async unansweredReviews(keys, from, to, limit) {
+            const open = db.reviews
+                .filter(
+                    (r) =>
+                        among(keys, r.app_id, r.store) &&
+                        r.replied_at === null &&
+                        r.created_at >= from &&
+                        r.created_at < to
+                )
+                .sort((a, b) => a.rating - b.rating || b.created_at - a.created_at || b.id - a.id);
+            return { total: open.length, rows: open.slice(0, limit).map((r) => ({ ...r })) };
         },
         reviewsByRefs: async (appId, store, refs) =>
             db.reviews
