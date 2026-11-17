@@ -81,7 +81,8 @@ interface SearchSelectMultipleProps<T extends string> extends SearchSelectCommon
 
 export type SearchSelectProps<T extends string> = SearchSelectSingleProps<T> | SearchSelectMultipleProps<T>;
 
-const LIST_MAX_HEIGHT = 300;
+/** Le panneau entier, champ de recherche compris : une liste d'environ huit lignes sous lui. */
+const PANEL_MAX_HEIGHT = 340;
 const GAP = 4;
 /** Le panneau d'un déclencheur étroit garde des choix lisibles, sans sortir de l'écran. */
 const PANEL_MIN_WIDTH = 240;
@@ -252,7 +253,7 @@ export function SearchSelect<T extends string>(props: SearchSelectProps<T>) {
                 left: Math.max(GAP * 2, Math.min(rect.left, window.innerWidth - width - GAP * 2)),
                 width,
                 ...(up ? { bottom: window.innerHeight - rect.top + GAP } : { top: rect.bottom + GAP }),
-                maxHeight: Math.min(LIST_MAX_HEIGHT, up ? above : below)
+                maxHeight: Math.min(PANEL_MAX_HEIGHT, up ? above : below)
             });
         };
         place();
@@ -352,7 +353,15 @@ export function SearchSelect<T extends string>(props: SearchSelectProps<T>) {
                     <div
                         ref={panel}
                         className={styles.panel}
-                        style={{ left: anchor.left, width: anchor.width, top: anchor.top, bottom: anchor.bottom }}
+                        // La hauteur bornée est celle du panneau : bornée sur la seule liste, le champ
+                        // de recherche s'y ajoutait et poussait le panneau hors de l'écran.
+                        style={{
+                            left: anchor.left,
+                            width: anchor.width,
+                            top: anchor.top,
+                            bottom: anchor.bottom,
+                            maxHeight: anchor.maxHeight
+                        }}
                     >
                         {hasSearch && (
                             <input
@@ -412,7 +421,6 @@ export function SearchSelect<T extends string>(props: SearchSelectProps<T>) {
                             tabIndex={hasSearch ? undefined : -1}
                             onKeyDown={hasSearch ? undefined : onKeyDown}
                             className={styles.list}
-                            style={{ maxHeight: anchor.maxHeight }}
                         >
                             {sections.map((section) => {
                                 const items = section.items.map(({ option, index }) => (
