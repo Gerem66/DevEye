@@ -18,7 +18,7 @@ import {
     type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { FeatureViewProps } from '@deveye/types/sdk/client';
-import type { Database, DatabaseAlert, DatabaseProbe, DatabaseUsage } from '../contracts/domain';
+import type { Database, DatabaseAlert, DatabaseKpi, DatabaseProbe, DatabaseUsage } from '../contracts/domain';
 
 import { api } from './api';
 import DatabaseDetail from './DatabaseDetail';
@@ -45,6 +45,7 @@ export function FeatureDatabase(_props: FeatureViewProps) {
         database: Database;
         usage: DatabaseUsage[];
         alerts: DatabaseAlert[];
+        kpis: DatabaseKpi[];
     } | null>(null);
     const [probe, setProbe] = useState<DatabaseProbe | null>(null);
 
@@ -127,7 +128,7 @@ export function FeatureDatabase(_props: FeatureViewProps) {
     const loadOpened = useCallback(async (databaseId: number) => {
         try {
             const res = await api.send('database.get', { databaseId });
-            setOpened({ database: res.database, usage: res.usage, alerts: res.alerts });
+            setOpened({ database: res.database, usage: res.usage, alerts: res.alerts, kpis: res.kpis });
             setError(null);
         } catch (e) {
             setError(errorNote(e, 'Impossible d’ouvrir cette base.'));
@@ -186,6 +187,7 @@ export function FeatureDatabase(_props: FeatureViewProps) {
                 database={opened.database}
                 usage={opened.usage}
                 alerts={opened.alerts}
+                kpis={opened.kpis}
                 canWrite={canWrite}
                 busy={busy}
                 testing={testing}

@@ -10,6 +10,8 @@ import {
     databaseCount,
     databaseGet,
     databaseInspect,
+    databaseKpiRemove,
+    databaseKpiSave,
     databaseList,
     databaseQuery,
     databaseRemove,
@@ -30,7 +32,8 @@ import { nameRef } from './_shared';
 /**
  * Les handlers du module sur le harnais du SDK : restrictions par élément,
  * partage inter-espaces, contrat de Projets, discipline des secrets, ménage à
- * la suppression, dernières mesures conservées à la réécriture d'une alerte.
+ * la suppression, dernières mesures conservées à la réécriture d'une alerte,
+ * indicateurs.
  */
 
 /** Le handler d'un contrat, typé par ce contrat (le registre est hétérogène). */
@@ -74,6 +77,8 @@ function row(over: Partial<DatabaseRow> & { id: number; workspace_id: number }):
         access_content: null,
         access_secret_enc: null,
         created: 1,
+        kpis: null,
+        kpi_values: null,
         ...over
     };
 }
@@ -212,7 +217,17 @@ function fakeRepo(projections: Record<number, number[]> = {}): FakeRepo {
             alerts.splice(i, 1);
             return true;
         },
-        recordAlertCheck: unused
+        recordAlertCheck: unused,
+        async saveKpis(id, workspaceId, kpis) {
+            const target = rows.find((r) => r.id === id && r.workspace_id === workspaceId);
+            if (!target) return false;
+            target.kpis = kpis;
+            return true;
+        },
+        async recordKpiValues(id, values) {
+            const target = rows.find((r) => r.id === id);
+            if (target) target.kpi_values = values;
+        }
     };
 }
 
@@ -654,5 +669,96 @@ describe('les alertes', () => {
             repo.alerts.map((a) => a.id),
             [11]
         );
+    });
+});
+
+describe('les indicateurs', () => {
+    const stored = (id: string, sql: string) => ({ id, label: `Indicateur ${id}`, sql, unit: '' });
+
+    it('ajoute un indicateur et le mesure aussitôt ; une session impossible laisse sa raison à la tuile', async () => {
+        const repo = seed(fakeRepo(), row({ id: 1, workspace_id: 1 }));
+        // Sans service de relevé monté, aucune session ne s'ouvre.
+        const ctx = createTestContext({ repo });
+        const out = await handlerFor(databaseKpiSave)(ctx, {
+            databaseId: 1,
+            label: ' Commandes ',
+            sql: ' SELECT COUNT(*) FROM commandes ',
+            unit: ''
+        });
+        assert.equal(out.kpi.label, 'Commandes');
+        assert.equal(out.kpi.sql, 'SELECT COUNT(*) FROM commandes');
+        assert.equal(out.kpi.value, null);
+        assert.ok(out.kpi.error);
+        const got = await handlerFor(databaseGet)(ctx, { databaseId: 1 });
+        assert.deepEqual(
+            got.kpis.map((k) => [k.id, k.label, k.error === out.kpi.error]),
+            [[out.kpi.id, 'Commandes', true]]
+        );
+    });
+
+    it('ne montre que la mesure de la requête actuelle', async () => {
+        const repo = seed(
+            fakeRepo(),
+            row({
+                id: 1,
+                workspace_id: 1,
+                kpis: JSON.stringify([stored('a', 'SELECT 1'), stored('b', 'SELECT 3')]),
+                kpi_values: JSON.stringify({
+                    a: { sql: 'SELECT 1', value: 142, error: null, at: 5 },
+                    b: { sql: 'SELECT 2', value: 9, error: null, at: 5 }
+                })
+            })
+        );
+        const got = await handlerFor(databaseGet)(createTestContext({ repo }), { databaseId: 1 });
+        assert.deepEqual(
+            got.kpis.map((k) => [k.id, k.value, k.measuredAt]),
+            [
+                ['a', 142, 5],
+                ['b', null, null]
+            ]
+        );
+    });
+
+    it('en tient huit au plus, et refuse une projection : elle serait scellée ici', async () => {
+        const full = Array.from({ length: 8 }, (_, i) => stored(String(i), 'SELECT 1'));
+        const repo = seed(
+            fakeRepo({ 7: [1] }),
+            row({ id: 1, workspace_id: 1, kpis: JSON.stringify(full) }),
+            row({ id: 7, workspace_id: 42 })
+        );
+        const draft = { label: 'Stock', sql: 'SELECT MIN(stock) FROM produits', unit: '' };
+        await assert.rejects(
+            handlerFor(databaseKpiSave)(createTestContext({ repo }), { databaseId: 1, ...draft }),
+            failsWith('validation')
+        );
+        const window = createTestContext({ repo, workspaceId: 1, shares: { 7: 42 } });
+        await assert.rejects(handlerFor(databaseKpiSave)(window, { databaseId: 7, ...draft }), failsWith('forbidden'));
+        assert.equal(repo.rows[1].kpis, null);
+    });
+
+    it('réécrit un indicateur à sa place, et le retire', async () => {
+        const repo = seed(
+            fakeRepo(),
+            row({ id: 1, workspace_id: 1, kpis: JSON.stringify([stored('a', 'SELECT 1'), stored('b', 'SELECT 2')]) })
+        );
+        const ctx = createTestContext({ repo });
+        await handlerFor(databaseKpiSave)(ctx, {
+            databaseId: 1,
+            kpiId: 'a',
+            label: 'Ventes',
+            sql: 'SELECT 4',
+            unit: '€'
+        });
+        await assert.rejects(
+            handlerFor(databaseKpiSave)(ctx, { databaseId: 1, kpiId: 'z', label: 'x', sql: 'SELECT 1', unit: '' }),
+            failsWith('not_found')
+        );
+        assert.deepEqual(await handlerFor(databaseKpiRemove)(ctx, { databaseId: 1, kpiId: 'b' }), { kpiId: 'b' });
+        const got = await handlerFor(databaseGet)(ctx, { databaseId: 1 });
+        assert.deepEqual(
+            got.kpis.map((k) => [k.id, k.label, k.sql, k.unit]),
+            [['a', 'Ventes', 'SELECT 4', '€']]
+        );
+        await assert.rejects(handlerFor(databaseKpiRemove)(ctx, { databaseId: 1, kpiId: 'b' }), failsWith('not_found'));
     });
 });

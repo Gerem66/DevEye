@@ -275,6 +275,11 @@
     -webkit-mask-image: url(/icons/activity.svg);
     mask-image: url(/icons/activity.svg);
 }
+
+.icon.icon-chart {
+    -webkit-mask-image: url(/icons/chart.svg);
+    mask-image: url(/icons/chart.svg);
+}
 .icon.icon-upload {
     -webkit-mask-image: url(/icons/upload.svg);
     mask-image: url(/icons/upload.svg);

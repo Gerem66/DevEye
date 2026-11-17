@@ -24,18 +24,19 @@ Documents voisins à respecter : [Docs/WORKSPACES.md](../../Docs/WORKSPACES.md),
 la liste et la fiche lisent le dernier relevé enregistré. Seules les commandes
 ci-dessous sortent vers un serveur tiers, et toutes sur un geste explicite :
 
-| Commande                                         | Ce qu'elle fait                                                |
-| ------------------------------------------------ | -------------------------------------------------------------- |
-| `database.test`                                  | un essai de connexion, rien d'autre                            |
-| `database.testDraft`                             | le même essai, sur des réglages **pas encore enregistrés**     |
-| `database.inspect`                               | un relevé complet (version, taille, tables) **et** les alertes |
-| `database.tableList`                             | les tables, avec leur taille et leur nombre de lignes          |
-| `database.tableStructure`                        | colonnes, clé primaire, clés étrangères, index                 |
-| `database.tableRows`                             | une page du contenu, filtres et tri compris                    |
-| `database.rowInsert` / `rowUpdate` / `rowDelete` | l'écriture d'une ligne                                         |
-| `database.execute`                               | une instruction libre : le terminal                            |
-| `database.export`                                | une table, ou la base, en CSV / JSON / SQL                     |
-| `database.query` / `alertTest`                   | une requête de lecture, pour mettre au point une condition     |
+| Commande                                         | Ce qu'elle fait                                                     |
+| ------------------------------------------------ | ------------------------------------------------------------------- |
+| `database.test`                                  | un essai de connexion, rien d'autre                                 |
+| `database.testDraft`                             | le même essai, sur des réglages **pas encore enregistrés**          |
+| `database.inspect`                               | un relevé complet (version, taille, tables), alertes et indicateurs |
+| `database.tableList`                             | les tables, avec leur taille et leur nombre de lignes               |
+| `database.tableStructure`                        | colonnes, clé primaire, clés étrangères, index                      |
+| `database.tableRows`                             | une page du contenu, filtres et tri compris                         |
+| `database.rowInsert` / `rowUpdate` / `rowDelete` | l'écriture d'une ligne                                              |
+| `database.execute`                               | une instruction libre : le terminal                                 |
+| `database.export`                                | une table, ou la base, en CSV / JSON / SQL                          |
+| `database.query` / `alertTest`                   | une requête de lecture, pour mettre au point une condition          |
+| `database.kpiSave`                               | enregistre un indicateur et le mesure aussitôt                      |
 
 Une seule exception à « rien ne part sans clic » : `autoLoadTables`, réglage
 **par base et éteint par défaut**, charge l'inventaire des tables à l'ouverture
@@ -204,6 +205,31 @@ Les quatre fonctions pures de l'évaluation (`compare`, `runConditions`,
 `isFiring`, `renderMessage`) vivent dans `src/server/rules.ts`, partagées par
 le relevé et l'essai à blanc : une condition ne peut pas franchir d'un côté et
 pas de l'autre.
+
+### Les indicateurs
+
+Un indicateur est la moitié d'une condition : **une requête qui rend un seul
+nombre**, avec un nom et une unité facultative (« € », « % »), sans seuil. La
+fiche montre les siens en tuiles, au-dessus des alertes : les chiffres du
+client (commandes du jour, chiffre d'affaires, stock le plus bas) sans écrire
+de requête à chaque question. Le bloc est facultatif : sans indicateur, seul
+qui peut en poser un le voit.
+
+- **Mesuré à l'enregistrement** (`database.kpiSave`, pour qu'une tuile ne
+  naisse pas vide), puis à chaque relevé, dans la session des alertes. Une base
+  injoignable n'empêche pas l'enregistrement : la tuile dit pourquoi.
+- **Deux colonnes chiffrées de la base**, pas une table : `kpis` porte les
+  définitions, `kpi_values` les dernières mesures, chacune avec la requête
+  qu'elle a mesurée. Une requête modifiée ne montre donc jamais la valeur de
+  l'ancienne, et le relevé range ses mesures sur les définitions relues à
+  l'écriture (`keepKpiValues`) : un indicateur retiré pendant un relevé ne
+  revient pas.
+- **Huit au plus par base** (`DATABASE_KPI_MAX`) : chacun coûte une requête à
+  chaque relevé.
+- Écrits dans l'onglet **Indicateurs** des réglages de la base
+  (`DatabaseKpisPanel`, `KpiDialog`), chez leur domicile seulement, comme les
+  alertes. Chaque indicateur y tend **« Créer une alerte »** : le dialogue
+  d'alerte s'ouvre avec sa requête, son nom et sa valeur du moment comme seuil.
 
 ---
 
@@ -375,9 +401,10 @@ probe.ts         ce qui joint un serveur sur un geste : test, testDraft, inspect
                  query ; `withSession` (ouvre, fait, referme)
 explore.ts       les tables : structure, pages, écriture de lignes, terminal, export
 alerts.ts        les conditions, leur essai à blanc
-handlers.ts      l'agrégat des quatre fichiers, ce que serverEntry.features expose
-rules.ts         compare, runConditions, isFiring, renderMessage (fonctions pures)
-service.ts       DatabaseMonitor : relevé périodique + évaluation + notification,
+kpis.ts          les indicateurs : enregistrement (mesuré aussitôt), retrait
+handlers.ts      l'agrégat des cinq fichiers, ce que serverEntry.features expose
+rules.ts         compare, measure, runConditions, isFiring, renderMessage (fonctions pures)
+service.ts       DatabaseMonitor : relevé périodique + évaluation + notification + indicateurs,
                  sur FeatureServiceDeps (ticker, cipherFor, notify, live.changed)
 engine.ts        adaptateurs MySQL et PostgreSQL, les deux gardes d'instruction
 tunnel.ts        direct, SSH (ssh2) et SOCKS5 (socks) sous le garde sortant, appareil
@@ -399,12 +426,13 @@ le contrat offert aux modules (`src/server/usageProvider.ts`) et le tableau de
 bord qui consomme la mesure (`src/server/dashboard.ts`). Côté app, les
 migrations du socle qui portent les tables : `068_databases.sql` (les trois
 tables), `070_database_response_time.sql` (`last_elapsed_ms`),
-`085_deploy_sync_notifications.sql` (la ligne `database` des canaux).
+`085_deploy_sync_notifications.sql` (la ligne `database` des canaux),
+`151_database_kpis.sql` (`kpis`, `kpi_values`).
 
 ### Client : `src/client/`
 
 ```
-index.tsx                clientEntry : Widget, Full, settingsPanels (general, alerts), providers
+index.tsx                clientEntry : Widget, Full, settingsPanels (general, kpis, alerts), providers
 api.ts                   featureApi(manifest)
 provider.tsx             ce que Projets compose (DATABASE_CLIENT_PROVIDER) : la liste des
                          bases de l'espace, une base reliée autonome (LinkedDatabase), le
@@ -413,7 +441,7 @@ Database.tsx             liste + détail ; possède le niveau live `l1`
 DatabaseList.tsx         les cartes + le glisser-déposer (useDragReorder du barrel)
 DatabaseHeader.tsx       l'en-tête d'une base (retour ou « Délier », titre, Tester, Relever,
                          le bouton commun des réglages), partagé avec l'onglet d'un projet
-DatabaseDetail.tsx       état, alertes (leur état seulement), explorateur, projets liés
+DatabaseDetail.tsx       état, indicateurs et alertes (leur état seulement), explorateur, projets liés
 DatabaseView.tsx         le contenu partagé avec l'onglet d'un projet
 DatabaseDialog.tsx       ajouter une base : moteur, connexion et tunnel ; une base ajoutée se
                          règle dans sa fiche
@@ -421,8 +449,12 @@ DatabaseGeneralPanel.tsx Réglages → Général d'une base : connexion, accès,
                          à l'ouverture, suppression
 ConnectionFields.tsx     les champs de connexion et d'accès, et leur modèle, partagés entre le
                          dialogue d'ajout et le panneau Général
+DatabaseKpisPanel.tsx    Réglages → Indicateurs d'une base : la liste, KpiDialog, et l'alerte
+                         déjà remplie depuis un indicateur
+KpiDialog.tsx            nom, unité, requête, essai à blanc ; zone danger pour supprimer
 DatabaseAlertsPanel.tsx  Réglages → Alertes d'une base : la liste des règles, qui ouvre AlertDialog
-AlertDialog.tsx          conditions, opérateur, message, essai à blanc ; zone danger pour supprimer
+AlertDialog.tsx          conditions, opérateur, message, essai à blanc, brouillon venu d'un
+                         indicateur ; zone danger pour supprimer
 ProbeLine.tsx            « en cours », puis le résultat d'un essai, effacé après 10 s
 TableExplorer.tsx        tables, contenu, sélection, tri, clés étrangères, plein écran
 Pagination.tsx           Précédent / Suivant + les numéros, avec coupures

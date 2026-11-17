@@ -1,15 +1,16 @@
 import { useCallback, useState, type ReactNode } from 'react';
 import { FeatureSettingsButton } from 'deveye-sdk-client';
-import type { Database, DatabaseAlert, DatabaseProbe } from '../contracts/domain';
+import type { Database, DatabaseAlert, DatabaseKpi, DatabaseProbe } from '../contracts/domain';
 
 import { ProbeLine } from './ProbeLine';
 import { TableExplorer } from './TableExplorer';
-import { formatAgo, formatBytes, formatCount, formatInterval, formatMs, STATUS_META } from './format';
+import { formatAgo, formatBytes, formatCount, formatInterval, formatKpiValue, formatMs, STATUS_META } from './format';
 import styles from './style.module.css';
 
 interface DatabaseViewProps {
     database: Database;
     alerts: DatabaseAlert[];
+    kpis: DatabaseKpi[];
     canWrite: boolean;
     /** Un essai de connexion est en cours. */
     testing: boolean;
@@ -24,14 +25,15 @@ interface DatabaseViewProps {
 }
 
 /**
- * Le contenu d'une base (état, alertes, tables), partagé entre la feature et
- * l'onglet d'un projet ; l'en-tête appartient à l'appelant. Le bloc Alertes
- * montre un état, leur écriture vit dans les réglages de la base. En mode
- * agrandi, seul l'explorateur reste.
+ * Le contenu d'une base (état, indicateurs, alertes, tables), partagé entre la
+ * feature et l'onglet d'un projet ; l'en-tête appartient à l'appelant. Les
+ * blocs Indicateurs et Alertes montrent un état, leur écriture vit dans les
+ * réglages de la base. En mode agrandi, seul l'explorateur reste.
  */
 export function DatabaseView({
     database,
     alerts,
+    kpis,
     canWrite,
     testing,
     probe,
@@ -41,6 +43,12 @@ export function DatabaseView({
 }: DatabaseViewProps) {
     const [expanded, setExpanded] = useState(false);
     const status = STATUS_META[database.status];
+    const scope = {
+        kind: 'item' as const,
+        feature: 'database' as const,
+        itemId: String(database.id),
+        itemLabel: database.name
+    };
 
     // Stable : l'explorateur s'en sert dans un effet de remise à zéro.
     const expand = useCallback(
@@ -83,6 +91,56 @@ export function DatabaseView({
                 </>
             )}
 
+            {/* Facultatif : sans indicateur, le bloc ne parle qu'à qui peut en poser un. */}
+            {!expanded && (kpis.length > 0 || (canWrite && !database.foreign)) && (
+                <section className={styles.panel}>
+                    <header className={styles.panelHead}>
+                        <h3 className={styles.panelTitle}>Indicateurs</h3>
+                        <FeatureSettingsButton
+                            scope={scope}
+                            initialSection='kpis'
+                            label='Gérer les indicateurs'
+                            onGone={onGone}
+                        />
+                    </header>
+
+                    {kpis.length === 0 ? (
+                        <p className={styles.hint}>
+                            Un indicateur garde sous les yeux le résultat d’une requête : commandes du jour, chiffre
+                            d’affaires, stock le plus bas. « Gérer les indicateurs » en ajoute un.
+                        </p>
+                    ) : (
+                        <div className={styles.kpiGrid}>
+                            {kpis.map((kpi) => (
+                                <div key={kpi.id} className={styles.kpiTile}>
+                                    <span className={styles.statLabel}>{kpi.label}</span>
+                                    <span className={styles.kpiValue}>
+                                        {kpi.value === null ? '–' : formatKpiValue(kpi.value)}
+                                        {kpi.value !== null && kpi.unit && (
+                                            <span className={styles.kpiUnit}>{kpi.unit}</span>
+                                        )}
+                                    </span>
+                                    {kpi.error ? (
+                                        <span className={styles.kpiError}>{kpi.error}</span>
+                                    ) : (
+                                        <span className={styles.kpiMeta}>
+                                            {kpi.measuredAt === null ? 'jamais mesuré' : formatAgo(kpi.measuredAt)}
+                                        </span>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {kpis.length > 0 && !database.monitorEnabled && (
+                        <p className={styles.hint}>
+                            Mesurés à leur enregistrement et à chaque « Relever l’état ». Le relevé régulier (réglages,
+                            Général) les tient à jour seul.
+                        </p>
+                    )}
+                </section>
+            )}
+
             {!expanded && (
                 <section className={styles.panel}>
                     <header className={styles.panelHead}>
@@ -97,12 +155,7 @@ export function DatabaseView({
                         {/* Hors du `canWrite` : un lecteur y voit les règles, et le
                             bouton se supprime seul sans section lisible. */}
                         <FeatureSettingsButton
-                            scope={{
-                                kind: 'item',
-                                feature: 'database',
-                                itemId: String(database.id),
-                                itemLabel: database.name
-                            }}
+                            scope={scope}
                             initialSection='alerts'
                             label='Gérer les alertes'
                             onGone={onGone}

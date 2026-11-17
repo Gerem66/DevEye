@@ -33,19 +33,22 @@ export function compare(value: number, comparator: DatabaseComparator, threshold
     }
 }
 
+/** Une requête qui doit rendre un seul nombre : la condition d'une alerte, ou un indicateur. */
+export async function measure(session: Pick<Session, 'query'>, sql: string): Promise<ConditionOutcome> {
+    try {
+        return { value: singleNumber(await session.query(sql)), error: null };
+    } catch (e) {
+        return { value: null, error: explainError(e) };
+    }
+}
+
 /** Évalue chaque condition ; une condition en échec n'interrompt pas les autres. */
 export async function runConditions(
     session: Pick<Session, 'query'>,
     conditions: DatabaseCondition[]
 ): Promise<ConditionOutcome[]> {
     const out: ConditionOutcome[] = [];
-    for (const condition of conditions) {
-        try {
-            out.push({ value: singleNumber(await session.query(condition.sql)), error: null });
-        } catch (e) {
-            out.push({ value: null, error: explainError(e) });
-        }
-    }
+    for (const condition of conditions) out.push(await measure(session, condition.sql));
     return out;
 }
 

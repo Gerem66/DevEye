@@ -57,6 +57,8 @@ function row(over: Partial<DatabaseRow> = {}): DatabaseRow {
         access_content: null,
         access_secret_enc: null,
         created: 1,
+        kpis: null,
+        kpi_values: null,
         ...over
     };
 }
@@ -151,6 +153,11 @@ function fakeRepo(rows: DatabaseRow[], alerts: DatabaseAlertRow[] = []): FakeRep
             target.last_error = input.error;
             target.content = input.content;
             if (input.firedAt !== null) target.last_fired_at = input.firedAt;
+        },
+        saveKpis: unused,
+        recordKpiValues: async (id, values) => {
+            const target = rows.find((x) => x.id === id);
+            if (target) target.kpi_values = values;
         }
     };
 }
@@ -524,5 +531,53 @@ describe('l’accès par un appareil', () => {
         await assert.rejects(new DatabaseMonitor(offline).targetOf(repo.rows[0], 1), /« Poste » est hors ligne/);
         const old = createTestServiceDeps({ repo, devices: [device([])] });
         await assert.rejects(new DatabaseMonitor(old).targetOf(repo.rows[0], 1), /à mettre à jour/);
+    });
+});
+
+describe('les indicateurs', () => {
+    const kpi = (id: string, sql: string) => ({ id, label: id, sql, unit: '' });
+
+    it('se mesurent au relevé ; la panne de l’un n’arrête pas les autres', async () => {
+        const repo = fakeRepo([
+            row({
+                kpis: JSON.stringify([
+                    kpi('commandes', 'SELECT COUNT(*) FROM commandes'),
+                    kpi('stock', 'SELECT MIN(stock) FROM produits')
+                ])
+            })
+        ]);
+        const { monitor, answer } = monitorWith(repo);
+        answer({
+            query: (sql) => {
+                if (sql.includes('commandes')) return number(142);
+                throw new Error("Table 'shop.produits' doesn't exist");
+            }
+        });
+        await monitor.checkNow(1, 1);
+        const values = JSON.parse(repo.rows[0].kpi_values ?? '{}');
+        assert.equal(values.commandes.value, 142);
+        assert.equal(values.stock.value, null);
+        assert.ok(values.stock.error);
+    });
+
+    it('se rangent sur les définitions relues : un indicateur retiré pendant le relevé perd sa mesure', async () => {
+        const repo = fakeRepo([row({ kpis: JSON.stringify([kpi('a', 'SELECT 1'), kpi('b', 'SELECT 2')]) })]);
+        const { monitor, answer } = monitorWith(repo);
+        answer({
+            query: (sql) => {
+                repo.rows[0].kpis = JSON.stringify([kpi('a', 'SELECT 1')]);
+                return number(sql === 'SELECT 1' ? 1 : 2);
+            }
+        });
+        await monitor.checkNow(1, 1);
+        assert.deepEqual(Object.keys(JSON.parse(repo.rows[0].kpi_values ?? '{}')), ['a']);
+    });
+
+    it('une base sans indicateur n’écrit rien', async () => {
+        const repo = fakeRepo([row()]);
+        const { monitor, answer } = monitorWith(repo);
+        answer({});
+        await monitor.checkNow(1, 1);
+        assert.equal(repo.rows[0].kpi_values, null);
     });
 });

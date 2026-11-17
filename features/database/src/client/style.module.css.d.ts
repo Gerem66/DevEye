@@ -32,6 +32,7 @@ declare const styles: {
     readonly explorer: string;
     readonly explorerExpanded: string;
     readonly field: string;
+    readonly fieldComparator: string;
     readonly fieldNarrow: string;
     readonly fieldRow: string;
     readonly fieldWide: string;
@@ -53,6 +54,13 @@ declare const styles: {
     readonly ident: string;
     readonly infoButton: string;
     readonly keyField: string;
+    readonly kpiError: string;
+    readonly kpiGrid: string;
+    readonly kpiInline: string;
+    readonly kpiMeta: string;
+    readonly kpiTile: string;
+    readonly kpiUnit: string;
+    readonly kpiValue: string;
     readonly label: string;
     readonly linkedBlock: string;
     readonly linkedBlockFramed: string;

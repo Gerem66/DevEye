@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Button, ErrorNote, NotificationsNotice, StickyHeader, type ErrorNoteInput } from 'deveye-sdk-client';
-import type { Database, DatabaseAlert, DatabaseProbe, DatabaseUsage } from '../contracts/domain';
+import type { Database, DatabaseAlert, DatabaseKpi, DatabaseProbe, DatabaseUsage } from '../contracts/domain';
 
 import { DatabaseHeader } from './DatabaseHeader';
 import { DatabaseView } from './DatabaseView';
@@ -11,6 +11,7 @@ interface DatabaseDetailProps {
     database: Database;
     usage: DatabaseUsage[];
     alerts: DatabaseAlert[];
+    kpis: DatabaseKpi[];
     canWrite: boolean;
     busy: boolean;
     testing: boolean;
@@ -31,6 +32,7 @@ export function DatabaseDetail({
     database,
     usage,
     alerts,
+    kpis,
     canWrite,
     busy,
     testing,
@@ -79,6 +81,7 @@ export function DatabaseDetail({
             <DatabaseView
                 database={database}
                 alerts={alerts}
+                kpis={kpis}
                 canWrite={canWrite}
                 testing={testing}
                 probe={probe}

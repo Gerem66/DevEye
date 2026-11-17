@@ -78,6 +78,10 @@ export interface DatabaseRepo {
      * en pause occuperaient la fenêtre sans que leur relevé n'avance jamais.
      */
     listDue(now: number, limit: number, pausedIds: readonly number[]): Promise<DatabaseRow[]>;
+    /** Les définitions des indicateurs, chez leur domicile seulement. */
+    saveKpis(id: number, workspaceId: number, kpis: string | null): Promise<boolean>;
+    /** Leurs dernières mesures ; sans espace, le relevé tourne sans session. */
+    recordKpiValues(id: number, values: string | null): Promise<void>;
 
     listAlerts(databaseId: number, workspaceId: number): Promise<DatabaseAlertRow[]>;
     /** Les alertes actives d'une base, pour le relevé périodique. */
@@ -339,6 +343,18 @@ export function createRepo(q: SdkQueryable): DatabaseRepo {
                   LIMIT ?`,
                 paused ? [now, [...pausedIds], limit] : [now, limit]
             );
+        },
+
+        async saveKpis(id, workspaceId, kpis) {
+            const res = await q.execute('UPDATE database_connections SET kpis = ? WHERE id = ? AND workspace_id = ?', [
+                kpis,
+                id,
+                workspaceId
+            ]);
+            return res.affectedRows > 0;
+        },
+        async recordKpiValues(id, values) {
+            await q.execute('UPDATE database_connections SET kpi_values = ? WHERE id = ?', [values, id]);
         },
 
         async listAlerts(databaseId, workspaceId) {

@@ -9,8 +9,8 @@ export const databaseAccountExport: FeatureAccountExport<DatabaseRepo> = {
             file: 'bases.json',
             where: 'workspace_id = ?',
             key: ['id'],
-            sealed: ['content', 'access_content', 'last_error'],
-            json: ['content', 'access_content'],
+            sealed: ['content', 'access_content', 'last_error', 'kpis', 'kpi_values'],
+            json: ['content', 'access_content', 'kpis', 'kpi_values'],
             dates: { last_check_at: 's', created: 's' },
             omit: ['secret_enc', 'access_secret_enc']
         },

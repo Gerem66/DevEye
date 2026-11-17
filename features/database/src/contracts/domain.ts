@@ -16,6 +16,10 @@ export const DATABASE_SECRET_MAX_LENGTH = 8192;
 export const DATABASE_ALERT_NAME_MAX_LENGTH = 96;
 export const DATABASE_ALERT_MESSAGE_MAX_LENGTH = 1000;
 export const DATABASE_SQL_MAX_LENGTH = 4000;
+export const DATABASE_KPI_LABEL_MAX_LENGTH = 48;
+export const DATABASE_KPI_UNIT_MAX_LENGTH = 12;
+/** Une rangée de tuiles, pas un tableau de bord : chacune coûte une requête à chaque relevé. */
+export const DATABASE_KPI_MAX = 8;
 
 export const databaseEngineSchema = z.enum(['mysql', 'postgres']);
 export type DatabaseEngine = z.infer<typeof databaseEngineSchema>;
@@ -298,6 +302,24 @@ export const databaseAlertSchema = z.object({
 });
 export type DatabaseAlert = z.infer<typeof databaseAlertSchema>;
 
+/**
+ * Un indicateur : une requête qui rend un nombre, montrée en tuile sur la fiche.
+ * Mesuré à son enregistrement, puis à chaque relevé de la base.
+ */
+export const databaseKpiSchema = z.object({
+    id: z.string(),
+    label: z.string().max(DATABASE_KPI_LABEL_MAX_LENGTH),
+    sql: z.string().max(DATABASE_SQL_MAX_LENGTH),
+    /** Écrite après la valeur (« € », « % ») ; vide sinon. */
+    unit: z.string().max(DATABASE_KPI_UNIT_MAX_LENGTH),
+    /** La dernière mesure de cette requête-ci : une requête modifiée repart de rien. */
+    value: z.number().nullable(),
+    /** Pourquoi la dernière mesure a échoué, s'il y a lieu. */
+    error: z.string().nullable(),
+    measuredAt: z.number().int().nullable()
+});
+export type DatabaseKpi = z.infer<typeof databaseKpiSchema>;
+
 /** Ligne SQL (serveur uniquement). */
 export interface DatabaseRow {
     id: number;
@@ -325,6 +347,10 @@ export interface DatabaseRow {
     /** Mot de passe SSH ou clé privée, chiffré. Ne sort jamais du serveur. */
     access_secret_enc: string | null;
     created: number;
+    /** Les indicateurs, `StoredKpi[]` chiffré. */
+    kpis: string | null;
+    /** Leurs dernières mesures, `StoredKpiValues` chiffré : le relevé l'écrit sans toucher aux définitions. */
+    kpi_values: string | null;
 }
 
 /** Ligne SQL (serveur uniquement). */

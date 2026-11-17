@@ -46,7 +46,7 @@ function LinkedDatabase({ databaseId, canWrite, onUnlink }: LinkedDatabaseProps)
     const [expanded, setExpanded] = useState(false);
 
     if (!data) return loadError ? <ErrorNote note={loadError} /> : <p className={styles.hint}>Chargement…</p>;
-    const { database, alerts } = data;
+    const { database, alerts, kpis } = data;
 
     const test = async () => {
         setBusy(true);
@@ -105,6 +105,7 @@ function LinkedDatabase({ databaseId, canWrite, onUnlink }: LinkedDatabaseProps)
             <DatabaseView
                 database={database}
                 alerts={alerts}
+                kpis={kpis}
                 canWrite={canWrite}
                 testing={testing}
                 probe={probe}

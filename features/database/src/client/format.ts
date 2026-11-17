@@ -25,6 +25,21 @@ export const COMPARATOR_LABELS: Record<DatabaseComparator, string> = {
     ne: '≠'
 };
 
+/** Ce que dit chaque symbole, en toutes lettres, dans la liste de choix. */
+export const COMPARATOR_DETAILS: Record<DatabaseComparator, string> = {
+    gt: 'supérieur à',
+    gte: 'au moins',
+    lt: 'inférieur à',
+    lte: 'au plus',
+    eq: 'égal à',
+    ne: 'différent de'
+};
+
+const KPI_NUMBER = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 });
+
+/** « 1 240 », « 3,5 » : la valeur d'un indicateur. */
+export const formatKpiValue = (value: number): string => KPI_NUMBER.format(value);
+
 /** Dans l'ordre d'usage, pas alphabétique. */
 export const FILTER_OPERATOR_LABELS: Record<DatabaseFilterOperator, string> = {
     contains: 'contient',

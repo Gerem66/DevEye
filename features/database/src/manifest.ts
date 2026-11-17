@@ -30,10 +30,16 @@ export const manifest = {
     ],
     /**
      * Panneaux d'une base : Général (la base elle-même : connexion, accès,
-     * relevé, cadence, chargement des tables, suppression) et Alertes (les
-     * règles ; la fiche n'en montre que l'état). Notifications, Partage et
+     * relevé, cadence, chargement des tables, suppression), Indicateurs et
+     * Alertes (la fiche n'en montre que l'état). Notifications, Partage et
      * Permissions viennent du descripteur.
      */
-    settings: { item: ['general', { id: 'alerts', label: 'Alertes', icon: 'activity' }] },
+    settings: {
+        item: [
+            'general',
+            { id: 'kpis', label: 'Indicateurs', icon: 'chart' },
+            { id: 'alerts', label: 'Alertes', icon: 'activity' }
+        ]
+    },
     commands: databaseCommands
 } satisfies FeatureManifest;

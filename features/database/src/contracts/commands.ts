@@ -4,6 +4,8 @@ import {
     DATABASE_ALERT_MESSAGE_MAX_LENGTH,
     DATABASE_ALERT_NAME_MAX_LENGTH,
     DATABASE_HOST_MAX_LENGTH,
+    DATABASE_KPI_LABEL_MAX_LENGTH,
+    DATABASE_KPI_UNIT_MAX_LENGTH,
     DATABASE_NAME_MAX_LENGTH,
     DATABASE_SECRET_MAX_LENGTH,
     DATABASE_SQL_MAX_LENGTH,
@@ -18,6 +20,7 @@ import {
     databaseExportFormatSchema,
     databaseFilterSchema,
     databaseIdRangeSchema,
+    databaseKpiSchema,
     databaseProbeSchema,
     databaseRowsSchema,
     databaseSchema,
@@ -78,7 +81,8 @@ export const databaseGet = {
     output: z.object({
         database: databaseSchema,
         usage: z.array(databaseUsageSchema),
-        alerts: z.array(databaseAlertSchema)
+        alerts: z.array(databaseAlertSchema),
+        kpis: z.array(databaseKpiSchema)
     })
 };
 
@@ -344,6 +348,28 @@ export const databaseAlertTest = {
     })
 };
 
+/**
+ * Ajoute un indicateur, ou remplace celui de `kpiId`, et le mesure aussitôt :
+ * une base injoignable n'empêche pas l'enregistrement, la tuile dit pourquoi.
+ */
+export const databaseKpiSave = {
+    command: 'database.kpiSave' as const,
+    input: z.object({
+        databaseId,
+        kpiId: z.string().min(1).max(64).optional(),
+        label: z.string().min(1).max(DATABASE_KPI_LABEL_MAX_LENGTH),
+        sql: z.string().min(1).max(DATABASE_SQL_MAX_LENGTH),
+        unit: z.string().max(DATABASE_KPI_UNIT_MAX_LENGTH)
+    }),
+    output: z.object({ kpi: databaseKpiSchema })
+};
+
+export const databaseKpiRemove = {
+    command: 'database.kpiRemove' as const,
+    input: z.object({ databaseId, kpiId: z.string().min(1).max(64) }),
+    output: z.object({ kpiId: z.string() })
+};
+
 /** Une requête libre en lecture seule, pour mettre au point une condition. */
 export const databaseQuery = {
     command: 'database.query' as const,
@@ -376,5 +402,7 @@ export const databaseCommands = [
     databaseAlertUpdate,
     databaseAlertRemove,
     databaseAlertTest,
+    databaseKpiSave,
+    databaseKpiRemove,
     databaseQuery
 ] as const;

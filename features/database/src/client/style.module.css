@@ -353,6 +353,63 @@
     color: var(--danger);
 }
 
+/* Les indicateurs : le nombre d'abord, lisible de loin. */
+.kpiGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: var(--space-sm);
+}
+
+.kpiTile {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--glass-border);
+    background: var(--surface-subtle);
+}
+
+.kpiValue {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    font-size: 1.6rem;
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.kpiUnit {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.kpiMeta {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+/* Deux lignes : la phrase entière est dans les réglages de la base. */
+.kpiError {
+    display: -webkit-box;
+    overflow: hidden;
+    font-size: 0.72rem;
+    color: var(--danger);
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+}
+
+.kpiInline {
+    margin-left: var(--space-sm);
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
 .panel {
     display: flex;
     flex-direction: column;
@@ -991,6 +1048,15 @@
 .fieldRow > .fieldNarrow {
     flex: 0 1 130px;
     max-width: none;
+}
+
+/* Le symbole et ses mots (« > supérieur à ») : sans cette largeur, la liste les coupe. */
+.fieldComparator {
+    composes: field;
+}
+
+.fieldRow > .fieldComparator {
+    flex: 0 1 230px;
 }
 
 .label {

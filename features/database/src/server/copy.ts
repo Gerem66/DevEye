@@ -3,7 +3,7 @@ import type { FeatureItemsCopy, ItemTree } from '@deveye/types/sdk/server';
 import type { DatabaseRepo } from './repo';
 
 /**
- * Ce dont une base est faite : sa connexion, et ses alertes. C'est la liste que
+ * Ce dont une base est faite : sa connexion, ses indicateurs et ses alertes. C'est la liste que
  * le déplacement rescelle et que la copie emporte.
  *
  * ⚠️ À tenir à jour : toute nouvelle colonne chiffrée suspendue à une base doit
@@ -22,7 +22,7 @@ export const databaseTree: ItemTree = [
         // Le nom est unique par espace, par un condensé (`nameRef`) : il voyage
         // tel quel, n'étant dérivé que du nom.
         unique: { column: 'name_ref', message: 'Une base du même nom existe déjà dans cet espace.' },
-        sealed: ['content', 'secret_enc', 'access_content', 'access_secret_enc', 'last_error'],
+        sealed: ['content', 'secret_enc', 'access_content', 'access_secret_enc', 'last_error', 'kpis', 'kpi_values'],
         // Une copie passe par le navigateur de qui la fait, qui peut n'avoir que
         // la lecture : les secrets restent sur le serveur, rescellés au seul
         // déplacement.
@@ -36,6 +36,7 @@ export const databaseTree: ItemTree = [
             'server_version',
             'size_bytes',
             'table_count',
+            'kpi_values',
             'created'
         ]
     },

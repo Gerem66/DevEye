@@ -10,8 +10,17 @@ import {
 import { explainError, isTargetFailure, openSession, type EngineTarget, type Session } from './engine';
 import { buildNotice } from './notice';
 import type { DatabaseRepo } from './repo';
-import { isFiring, renderMessage, runConditions } from './rules';
-import { PLAN_PAUSED_MESSAGE, readJson, type StoredAccess, type StoredAlert, type StoredDatabase } from './_shared';
+import { isFiring, measure, renderMessage, runConditions } from './rules';
+import {
+    PLAN_PAUSED_MESSAGE,
+    readJson,
+    type StoredAccess,
+    type StoredAlert,
+    type StoredDatabase,
+    keepKpiValues,
+    type StoredKpi,
+    type StoredKpiValues
+} from './_shared';
 
 /**
  * Le relevé périodique des bases, et l'évaluation de leurs alertes. Éteint par
@@ -128,6 +137,7 @@ export class DatabaseMonitor {
                 tableCount: inventory.tableCount
             });
             await this.evaluateAlerts(row, session);
+            await this.measureKpis(row, session);
             this.deps.live.changed(workspaceId);
             return {
                 ok: true,
@@ -167,6 +177,31 @@ export class DatabaseMonitor {
                     /* la fermeture d'une session déjà morte n'a rien à dire */
                 }
             }
+        }
+    }
+
+    /**
+     * Mesure les indicateurs. Le résultat se range sur les définitions relues à
+     * l'écriture : un indicateur enregistré pendant le relevé garde la mesure
+     * de son enregistrement, un indicateur retiré perd la sienne.
+     */
+    private async measureKpis(row: DatabaseRow, session: Session): Promise<void> {
+        const cipher = this.deps.cipherFor(row.workspace_id);
+        const kpis = (await readJson<StoredKpi[]>(cipher, row.kpis)) ?? [];
+        if (kpis.length === 0) return;
+        const at = Math.floor(Date.now() / 1000);
+        const measured: StoredKpiValues = {};
+        for (const kpi of kpis) measured[kpi.id] = { sql: kpi.sql, ...(await measure(session, kpi.sql)), at };
+        try {
+            const fresh = await this.deps.repo.find(row.id, row.workspace_id);
+            const current = (await readJson<StoredKpi[]>(cipher, fresh?.kpis ?? null)) ?? [];
+            const before = (await readJson<StoredKpiValues>(cipher, fresh?.kpi_values ?? null)) ?? {};
+            await this.deps.repo.recordKpiValues(
+                row.id,
+                await cipher.encrypt(JSON.stringify(keepKpiValues(current, { ...before, ...measured })))
+            );
+        } catch (e) {
+            this.deps.logger.error({ databaseId: row.id, err: e }, 'Database KPI write failed');
         }
     }
 

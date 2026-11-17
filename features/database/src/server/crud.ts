@@ -20,6 +20,7 @@ import {
     reloadDatabase,
     toAlert,
     toDatabase,
+    toKpis,
     type Ctx,
     type StoredAccess,
     type StoredDatabase
@@ -117,7 +118,8 @@ export const databaseCrudFeatures = [
                     ctx.quota.isPaused('connections', String(input.databaseId))
                 ),
                 usage,
-                alerts: await Promise.all(alertRows.map((a) => toAlert(homeCipher, a)))
+                alerts: await Promise.all(alertRows.map((a) => toAlert(homeCipher, a))),
+                kpis: await toKpis(homeCipher, row)
             };
         }
     }),

@@ -14,7 +14,7 @@ import {
 import type { DatabaseAlert, DatabaseCombinator, DatabaseComparator, DatabaseCondition } from '../contracts/domain';
 
 import { api } from './api';
-import { COMPARATOR_LABELS } from './format';
+import { COMPARATOR_DETAILS, COMPARATOR_LABELS } from './format';
 import styles from './style.module.css';
 
 interface AlertDialogProps {
@@ -22,11 +22,19 @@ interface AlertDialogProps {
     databaseId: number;
     /** L'alerte modifiée ; `null` = on en crée une. */
     alert: DatabaseAlert | null;
+    /** Une nouvelle alerte déjà remplie, depuis un indicateur ; ignoré quand `alert` est donné. */
+    draft?: AlertDraft | null;
     /** Sans surveillance active, l'alerte est inerte. */
     monitorEnabled: boolean;
     onClose: () => void;
     onSaved: () => void;
     onRemove?: () => void;
+}
+
+export interface AlertDraft {
+    name: string;
+    condition: DatabaseCondition;
+    message: string;
 }
 
 const EMPTY_CONDITION: DatabaseCondition = {
@@ -43,7 +51,7 @@ const COMBINATORS: { value: DatabaseCombinator; label: string; title: string }[]
 
 const COMPARATOR_OPTIONS: readonly SearchSelectOption<DatabaseComparator>[] = (
     Object.keys(COMPARATOR_LABELS) as DatabaseComparator[]
-).map((id) => ({ value: id, label: COMPARATOR_LABELS[id] }));
+).map((id) => ({ value: id, label: COMPARATOR_LABELS[id], detail: COMPARATOR_DETAILS[id] }));
 
 interface TestResult {
     firing: boolean;
@@ -56,7 +64,16 @@ interface TestResult {
  * Écrire une alerte : conditions, opérateur, message. L'essai à blanc n'écrit
  * rien et ne notifie personne : c'est ce qui permet de choisir un seuil.
  */
-export function AlertDialog({ open, databaseId, alert, monitorEnabled, onClose, onSaved, onRemove }: AlertDialogProps) {
+export function AlertDialog({
+    open,
+    databaseId,
+    alert,
+    draft,
+    monitorEnabled,
+    onClose,
+    onSaved,
+    onRemove
+}: AlertDialogProps) {
     const [name, setName] = useState('');
     const [enabled, setEnabled] = useState(true);
     const [combinator, setCombinator] = useState<DatabaseCombinator>('and');
@@ -72,12 +89,13 @@ export function AlertDialog({ open, databaseId, alert, monitorEnabled, onClose, 
         setTest(null);
         setError(null);
         setConfirmRemove(false);
-        setName(alert?.name ?? '');
+        const start = alert ? null : (draft ?? null);
+        setName(alert?.name ?? start?.name ?? '');
         setEnabled(alert?.enabled ?? true);
         setCombinator(alert?.combinator ?? 'and');
-        setConditions(alert && alert.conditions.length > 0 ? alert.conditions : [EMPTY_CONDITION]);
-        setMessage(alert?.message ?? '');
-    }, [open, alert]);
+        setConditions(alert && alert.conditions.length > 0 ? alert.conditions : [start?.condition ?? EMPTY_CONDITION]);
+        setMessage(alert?.message ?? start?.message ?? '');
+    }, [open, alert, draft]);
 
     const patch = (index: number, change: Partial<DatabaseCondition>) =>
         setConditions((list) => list.map((c, i) => (i === index ? { ...c, ...change } : c)));
@@ -182,14 +200,14 @@ export function AlertDialog({ open, databaseId, alert, monitorEnabled, onClose, 
                     {conditions.map((condition, i) => (
                         <div key={i} className={styles.condition}>
                             <div className={styles.fieldRow}>
-                                <label className={styles.fieldNarrow}>
+                                <label className={styles.field}>
                                     <span className={styles.label}>Nom court</span>
                                     <TextInput
                                         value={condition.label}
                                         onChange={(e) => patch(i, { label: e.target.value })}
                                     />
                                 </label>
-                                <label className={styles.fieldNarrow}>
+                                <label className={styles.fieldComparator}>
                                     <span className={styles.label}>Comparaison</span>
                                     {/* Six comparateurs : un de trop pour des segments. */}
                                     <SearchSelect

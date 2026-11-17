@@ -4,14 +4,15 @@ import type { FeatureClient } from '@deveye/types/sdk/client';
 import Database from './Database';
 import DatabaseAlertsPanel from './DatabaseAlertsPanel';
 import DatabaseGeneralPanel from './DatabaseGeneralPanel';
+import DatabaseKpisPanel from './DatabaseKpisPanel';
 import DatabaseWidget from './DatabaseWidget';
 import { clientProvider } from './provider';
 
 export const clientEntry: FeatureClient = {
     Widget: DatabaseWidget,
     Full: Database,
-    /** Les panneaux d'une base : Général (la base elle-même : connexion, accès, relevé, suppression) et Alertes. */
-    settingsPanels: { general: DatabaseGeneralPanel, alerts: DatabaseAlertsPanel },
+    /** Les panneaux d'une base : Général (la base elle-même : connexion, accès, relevé, suppression), Indicateurs et Alertes. */
+    settingsPanels: { general: DatabaseGeneralPanel, kpis: DatabaseKpisPanel, alerts: DatabaseAlertsPanel },
     // Démonté dès la fermeture : l'explorateur tient des résultats lus chez un
     // serveur tiers, qui n'ont pas à survivre à l'écran.
     cacheDurationMinutes: 0,

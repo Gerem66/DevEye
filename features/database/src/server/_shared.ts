@@ -4,10 +4,11 @@ import type {
     DatabaseAlert,
     DatabaseAlertRow,
     DatabaseCondition,
+    DatabaseKpi,
     DatabaseRow,
     DatabaseUsage
 } from '../contracts/domain';
-import { databaseAlertSchema, databaseSchema } from '../contracts/domain';
+import { databaseAlertSchema, databaseKpiSchema, databaseSchema } from '../contracts/domain';
 import { PROJECTS_USAGE_PROVIDER, type ProjectsUsageProvider } from '@deveye/types/sdk';
 import { FeatureError, type SdkCipher, type SdkFeatureContext } from '@deveye/types/sdk/server';
 
@@ -36,6 +37,21 @@ export interface StoredAlert {
     /** Ce qu'a mesuré la dernière évaluation, condition par condition. */
     lastValues: (number | null)[];
 }
+
+/** Un élément de `database_connections.kpis`, chiffré : la définition seule. */
+export interface StoredKpi {
+    id: string;
+    label: string;
+    sql: string;
+    unit: string;
+}
+
+/**
+ * `database_connections.kpi_values`, chiffré : la dernière mesure de chaque
+ * indicateur, avec la requête mesurée, pour qu'une requête modifiée ne montre
+ * jamais la valeur de l'ancienne.
+ */
+export type StoredKpiValues = Record<string, { sql: string; value: number | null; error: string | null; at: number }>;
 
 /** Ce que porte `database_connections.content`, chiffré. */
 export interface StoredDatabase {
@@ -266,6 +282,29 @@ export async function toAlert(cipher: SdkCipher, row: DatabaseAlertRow): Promise
         lastValues: body?.lastValues ?? [],
         lastError: row.last_error ? await cipher.tryDecrypt(row.last_error) : null,
         created: row.created
+    });
+}
+
+/** Les mesures qui décrivent encore un indicateur : le sien, sur sa requête actuelle. */
+export function keepKpiValues(kpis: StoredKpi[], values: StoredKpiValues): StoredKpiValues {
+    const kept: StoredKpiValues = {};
+    for (const kpi of kpis) if (values[kpi.id]?.sql === kpi.sql) kept[kpi.id] = values[kpi.id];
+    return kept;
+}
+
+/** Les indicateurs d'une base, dans leur ordre, avec la mesure de leur requête actuelle. */
+export async function toKpis(cipher: SdkCipher, row: Pick<DatabaseRow, 'kpis' | 'kpi_values'>): Promise<DatabaseKpi[]> {
+    const kpis = (await readJson<StoredKpi[]>(cipher, row.kpis)) ?? [];
+    const values = (await readJson<StoredKpiValues>(cipher, row.kpi_values)) ?? {};
+    return kpis.map((kpi) => {
+        const measured = values[kpi.id];
+        const current = measured?.sql === kpi.sql ? measured : null;
+        return databaseKpiSchema.parse({
+            ...kpi,
+            value: current?.value ?? null,
+            error: current?.error ?? null,
+            measuredAt: current?.at ?? null
+        });
     });
 }
 

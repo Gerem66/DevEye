@@ -228,6 +228,8 @@ CREATE TABLE `database_connections` (
   `access_content` text COLLATE utf8mb4_general_ci,
   `access_secret_enc` text COLLATE utf8mb4_general_ci,
   `created` bigint NOT NULL DEFAULT (unix_timestamp()),
+  `kpis` text COLLATE utf8mb4_general_ci,
+  `kpi_values` text COLLATE utf8mb4_general_ci,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uniq_database_name` (`workspace_id`,`name_ref`),
   KEY `idx_database_connections_due` (`monitor_enabled`,`last_check_at`),
