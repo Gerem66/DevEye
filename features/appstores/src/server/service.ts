@@ -629,6 +629,8 @@ export class AppStoresSync {
                 state = rewind(state, row);
                 // Dus à chaque battement jusqu'à la fin du rattrapage, comme au premier branchement.
                 await this.deps.repo.clearMetricsSync(row.id);
+                // La fiche se dit en cours dès maintenant, pas à la fin de cette passe.
+                this.deps.live.changed(row.workspace_id);
             }
             works.push({
                 row: forced.has(row.app_id) ? { ...row, metrics_synced_at: null } : row,
@@ -1284,7 +1286,11 @@ export class AppStoresSync {
         for (const work of works) if (work.touched) await this.persist(cipher, work);
         await this.settleSource(pass, cipher);
         await this.announce(pass, works);
-        if (pass.changed || works.some((w) => w.changed)) this.deps.live.changed(pass.source.workspace_id);
+        // Une fiche qui finit son rattrapage cesse de se dire en cours, même sans chiffre nouveau.
+        const settled = (work: Work) => work.row.metrics_synced_at === null && work.metricsAt !== null;
+        if (pass.changed || works.some((w) => w.changed || settled(w))) {
+            this.deps.live.changed(pass.source.workspace_id);
+        }
     }
 
     private async settleSource(pass: Pass, cipher: SdkCipher): Promise<void> {

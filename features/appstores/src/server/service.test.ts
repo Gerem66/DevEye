@@ -663,8 +663,10 @@ describe('la relecture de l’année', () => {
         );
         await t.start();
         assert.deepEqual(days, [], 'rien n’était dû');
+        const before = t.deps.recorded.liveChanges.length;
         t.sync.requestBackfill(1, { userId: 7, workspaceId: 1, subject: 'App 1' });
         await t.sync.idle();
+        assert.ok(t.deps.recorded.liveChanges.length > before, 'les écrans voient la relecture partir');
         assert.equal(days.length, 30, 'une passe lit trente rapports au plus');
         assert.equal(days[0], LATEST);
         const listing = () => t.repo.db.listings[0];
@@ -673,10 +675,13 @@ describe('la relecture de l’année', () => {
         assert.equal(t.deps.recorded.tasks[0].title, 'Relecture de l’année écoulée');
         assert.equal(t.deps.recorded.tasks[0].outcome?.state, 'done');
 
+        let beforeLast = 0;
         for (let beat = 0; beat < 12 && listing().metrics_synced_at === null; beat++) {
             t.later(60_000);
+            beforeLast = t.deps.recorded.liveChanges.length;
             await t.beat();
         }
+        assert.ok(t.deps.recorded.liveChanges.length > beforeLast, 'les écrans voient la relecture finir');
         assert.equal(days.length, 365, 'un an, chaque jour une fois');
         assert.equal(Math.min(...days), LATEST - 364);
         assert.notEqual(listing().metrics_synced_at, null, 'rattrapage fini, la cadence reprend');
