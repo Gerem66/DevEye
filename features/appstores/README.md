@@ -162,8 +162,8 @@ quinze minutes au plus, ou ce que dit `Retry-After`. C'est un horodatage « pas
 avant », jamais une attente dans le battement. À l'arrêt, `stop()` coupe les
 requêtes en vol, puis attend le battement et chaque passe par source.
 
-« Synchroniser », sur la fiche, ignore les cadences et ouvre une opération dans
-la barre du haut (`deps.tasks.open`), suivie par le client.
+Rien ne se synchronise à la main : les stores ne publient qu'une fois par jour,
+et une app ajoutée ou reliée réveille le service, qui la passe en premier.
 
 « Relire l'historique », dans l'onglet Général de l'app (`appstores.backfill`),
 relance le rattrapage d'un an sans rien effacer : Apple relit ses rapports du
@@ -292,8 +292,7 @@ externes, mais figurent dans la liste « À propos » des services tiers.
 `appstores.apps` est un stock (« apps suivies ») : 1 en Gratuite, 10 en Pro
 (`DevEye-Billing/src/server/plans.ts`). Au-delà, après une baisse d'offre, les
 apps les plus récentes sont mises en pause : leur synchronisation s'arrête, et
-« Synchroniser », la relecture de l'année et la réponse aux avis sont refusés
-(`assertActive`). L'écran
+la relecture de l'année et la réponse aux avis sont refusées (`assertActive`). L'écran
 le dit (`PlanPausedBadge`, `PlanPausedNotice`).
 
 ---

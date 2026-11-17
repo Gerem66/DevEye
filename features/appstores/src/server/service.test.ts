@@ -613,18 +613,21 @@ describe('l’arrêt', () => {
     });
 });
 
-describe('la synchronisation demandée', () => {
-    it('ouvre une opération et la solde à la fin de la passe', async () => {
+describe('la relecture demandée', () => {
+    it('ouvre une opération et la solde à la fin de la première passe', async () => {
         const t = setup({ sources: [sourceRow({ id: 10 })], listings: [synced(1)] }, clientsOf());
         await t.start();
         assert.equal(t.repo.db.calls.filter((c) => c === 'listListingsOfSource').length, 0, 'rien n’était dû');
-        t.sync.requestSync(1, { userId: 7, workspaceId: 1, subject: 'App 1' });
+        t.sync.requestBackfill(1, { userId: 7, workspaceId: 1, subject: 'App 1' });
         await t.sync.idle();
         const [task] = t.deps.recorded.tasks;
-        assert.equal(task.title, 'Synchronisation de l’app');
+        assert.equal(task.title, 'Relecture de l’année écoulée');
         assert.equal(task.key, 'sync');
         assert.equal(task.itemId, 1);
-        assert.deepEqual(task.outcome, { state: 'done', note: 'App synchronisée.' });
+        assert.deepEqual(task.outcome, {
+            state: 'done',
+            note: 'Relecture lancée : les mois restants se complètent d’eux-mêmes en quelques minutes.'
+        });
     });
 
     it('dit l’échec d’une clé refusée, en conflit', async () => {
@@ -637,7 +640,7 @@ describe('la synchronisation demandée', () => {
             })
         );
         await t.start();
-        t.sync.requestSync(1, { userId: 7, workspaceId: 1, subject: 'App 1' });
+        t.sync.requestBackfill(1, { userId: 7, workspaceId: 1, subject: 'App 1' });
         await t.sync.idle();
         const [task] = t.deps.recorded.tasks;
         assert.equal(task.outcome?.state, 'failed');
@@ -660,7 +663,7 @@ describe('la relecture de l’année', () => {
         );
         await t.start();
         assert.deepEqual(days, [], 'rien n’était dû');
-        t.sync.requestSync(1, { userId: 7, workspaceId: 1, subject: 'App 1' }, true);
+        t.sync.requestBackfill(1, { userId: 7, workspaceId: 1, subject: 'App 1' });
         await t.sync.idle();
         assert.equal(days.length, 30, 'une passe lit trente rapports au plus');
         assert.equal(days[0], LATEST);
@@ -739,7 +742,7 @@ describe('la relecture de l’année', () => {
                 )
             )
         });
-        t.sync.requestSync(1, null, true);
+        t.sync.requestBackfill(1, null);
         await t.sync.idle();
         assert.deepEqual(read.sort(), [
             'stats/installs/installs_com.exemple.app1_202610_country.csv',

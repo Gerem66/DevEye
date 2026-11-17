@@ -15,7 +15,6 @@ import {
     appStoresReplyReview,
     appStoresRevenue,
     appStoresStats,
-    appStoresSyncNow,
     appStoresUpdate,
     appStoresUpdateSource
 } from '../contracts/commands';
@@ -115,7 +114,8 @@ describe('les droits déclarés', () => {
         'appstores.add': { level: 'write', mutates: true },
         'appstores.update': { level: 'write', item: 'appId', mutates: true },
         'appstores.remove': { level: 'write', item: 'appId', mutates: true },
-        'appstores.syncNow': { level: 'write', item: 'appId' },
+        'appstores.backfill': { level: 'write', item: 'appId' },
+        'appstores.overview': {},
         'appstores.replyReview': { level: 'write', item: 'finder', mutates: true },
         'appstores.revenue': { extras: ['revenue'], item: 'appId' }
     };
@@ -602,20 +602,18 @@ describe('les apps', () => {
         );
     });
 
-    it('ne se synchronisent ou ne relisent leur année que reliées à une source, et actives', async () => {
+    it('ne relisent leur année que reliées à une source, et actives', async () => {
         const repo = fakeRepo({
             apps: [appRow({ id: 1 }), appRow({ id: 2 })],
             listings: [listingRow({ id: 1, app_id: 1, source_id: null }), listingRow({ id: 2, app_id: 2 })]
         });
-        for (const command of [appStoresSyncNow, appStoresBackfill]) {
-            await assert.rejects(handlerFor(command)(contextOf(repo), { appId: 1 }), failsWith('validation'));
-            await assert.rejects(
-                handlerFor(command)(contextOf(repo, { pausedItems: { apps: ['2'] } }), { appId: 2 }),
-                failsWith('quota_exceeded')
-            );
-            const { app } = await handlerFor(command)(contextOf(repo), { appId: 2 });
-            assert.equal(app.id, 2);
-        }
+        await assert.rejects(handlerFor(appStoresBackfill)(contextOf(repo), { appId: 1 }), failsWith('validation'));
+        await assert.rejects(
+            handlerFor(appStoresBackfill)(contextOf(repo, { pausedItems: { apps: ['2'] } }), { appId: 2 }),
+            failsWith('quota_exceeded')
+        );
+        const { app } = await handlerFor(appStoresBackfill)(contextOf(repo), { appId: 2 });
+        assert.equal(app.id, 2);
     });
 });
 

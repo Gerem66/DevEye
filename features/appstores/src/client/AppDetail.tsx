@@ -2,8 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { PROJECT_STATUS_LABELS } from '@deveye/types';
 import {
     Button,
-    ErrorNote,
-    errorNote,
     FeatureSettingsButton,
     invalidate,
     NotificationsNotice,
@@ -19,8 +17,7 @@ import {
     useResource,
     useSubView,
     useTasks,
-    useWorkspacePermissions,
-    type ErrorNoteInput
+    useWorkspacePermissions
 } from 'deveye-sdk-client';
 import type { AppStore, AppStoresApp, AppStoresRange, AppStoresSource, AppStoresUsage } from '../contracts/domain';
 
@@ -35,12 +32,6 @@ import StoreChips from './StoreChips';
 import styles from './style.module.css';
 
 type Tab = 'overview' | 'reviews' | 'revenue' | 'stability';
-
-/**
- * `syncNow` rend la main dès qu'il a réveillé le service, qui n'ouvre son
- * opération qu'en commençant la passe : le bouton reste retenu ce temps-là.
- */
-const START_GRACE_MS = 10_000;
 
 /** Au-delà, une fiche relue toutes les demi-heures a cessé de l'être : le service ne tourne plus pour elle. */
 const STALE_SECONDS = 2 * 3600;
@@ -146,18 +137,6 @@ export function AppDetail({ app, usage, onBack }: AppDetailProps) {
 
     const tasks = useTasks({ feature: 'appstores', itemId: app.id });
     const running = tasks.length > 0;
-    const [starting, setStarting] = useState(false);
-    const [error, setError] = useState<ErrorNoteInput | null>(null);
-
-    useEffect(() => {
-        if (running) setStarting(false);
-    }, [running]);
-
-    useEffect(() => {
-        if (!starting) return;
-        const timer = window.setTimeout(() => setStarting(false), START_GRACE_MS);
-        return () => window.clearTimeout(timer);
-    }, [starting]);
 
     // Une passe qui n'a rien relevé ne prévient personne : sa date et son refus éventuel se relisent ici.
     const ran = useRef(false);
@@ -174,17 +153,6 @@ export function AppDetail({ app, usage, onBack }: AppDetailProps) {
         ran.current = running;
     }, [running]);
 
-    const syncNow = async () => {
-        setStarting(true);
-        setError(null);
-        try {
-            await api.send('appstores.syncNow', { appId: app.id });
-        } catch (e) {
-            setStarting(false);
-            setError(errorNote(e, 'La synchronisation n’a pas pu être lancée.'));
-        }
-    };
-
     /** Les réglages ont pu changer ce que la fiche montre : elle se relit à leur fermeture, pas à leur montage. */
     const settingsOpened = useRef(false);
     const onSettingsOpenChange = (open: boolean) => {
@@ -197,13 +165,7 @@ export function AppDetail({ app, usage, onBack }: AppDetailProps) {
         invalidate('appstores.detail');
     };
 
-    const status = syncStatus(app, sources.data, starting || running);
-    const hasSource = app.listings.some((listing) => listing.sourceId !== null);
-    const syncBlocked = app.planPaused
-        ? 'Au-delà de l’offre, la synchronisation de cette app est en pause.'
-        : !hasSource
-          ? 'Aucun compte de store n’est choisi pour cette app : choisissez-en un dans ses réglages.'
-          : null;
+    const status = syncStatus(app, sources.data, running);
 
     return (
         <div className={styles.root}>
@@ -244,18 +206,6 @@ export function AppDetail({ app, usage, onBack }: AppDetailProps) {
                         </div>
                     </div>
                     <div className={styles.actions}>
-                        {/* Une app partagée ici se synchronise chez elle, avec ses comptes. */}
-                        {canWrite && !app.foreign && app.listings.length > 0 && (
-                            <Button
-                                variant='secondary'
-                                icon='refresh'
-                                disabled={starting || running || syncBlocked !== null}
-                                title={syncBlocked ?? 'Relire maintenant les chiffres, les avis et les versions'}
-                                onClick={() => void syncNow()}
-                            >
-                                {starting || running ? 'Synchronisation…' : 'Synchroniser'}
-                            </Button>
-                        )}
                         {/* Ses réglages, dont son nom, ses fiches de store et sa suppression
                             (onglet Général). Supprimée ou déplacée depuis la coquille,
                             l'app n'est plus ici : la fiche revient à la liste. */}
@@ -303,7 +253,6 @@ export function AppDetail({ app, usage, onBack }: AppDetailProps) {
                 </div>
             </StickyHeader>
 
-            <ErrorNote note={error} />
             {tasks.map((task) => (
                 <TaskProgress key={task.id} task={task} />
             ))}

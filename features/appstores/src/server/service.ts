@@ -114,8 +114,6 @@ interface Forced {
     /** Les sources qu'il reste à passer ; `null` tant que le battement ne les a pas lues. */
     sources: Set<number> | null;
     errors: string[];
-    /** L'année écoulée est à relire : le rattrapage repart de chaque fiche passée. */
-    history: boolean;
 }
 
 /** Une fiche pendant une passe : ce qu'on en a lu, et ce que la passe va en écrire. */
@@ -305,12 +303,11 @@ export class AppStoresSync {
     }
 
     /**
-     * Synchronise une app tout de suite, cadences ignorées. Avec un `launcher`,
-     * l'opération paraît dans sa zone jusqu'à la fin de chaque passe concernée.
-     * `history` relit en plus l'année écoulée : la première passe lance le
-     * rattrapage, les battements suivants le finissent.
+     * Relit l'année écoulée d'une app, cadences ignorées : la première passe
+     * relance le rattrapage, les battements suivants le finissent. Avec un
+     * `launcher`, l'opération paraît dans sa zone jusqu'à la fin de cette passe.
      */
-    requestSync(appId: number, launcher: SyncLauncher | null, history = false): void {
+    requestBackfill(appId: number, launcher: SyncLauncher | null): void {
         if (this.stopping) return;
         const existing = this.forced.get(appId);
         const task =
@@ -321,16 +318,11 @@ export class AppStoresSync {
                       workspaceId: launcher.workspaceId,
                       itemId: appId,
                       key: 'sync',
-                      title: history ? 'Relecture de l’année écoulée' : 'Synchronisation de l’app',
+                      title: 'Relecture de l’année écoulée',
                       subject: launcher.subject
                   })
                 : null);
-        this.forced.set(appId, {
-            task,
-            sources: existing?.sources ?? null,
-            errors: existing?.errors ?? [],
-            history: history || (existing?.history ?? false)
-        });
+        this.forced.set(appId, { task, sources: existing?.sources ?? null, errors: existing?.errors ?? [] });
         this.wake();
     }
 
@@ -447,10 +439,9 @@ export class AppStoresSync {
         if (!forced) return;
         this.forced.delete(appId);
         const failure = error ?? forced.errors[0];
-        if (failure === undefined && forced.history) {
+        if (failure === undefined) {
             forced.task?.done('Relecture lancée : les mois restants se complètent d’eux-mêmes en quelques minutes.');
-        } else if (failure === undefined) forced.task?.done('App synchronisée.');
-        else forced.task?.fail(failure, 'conflict');
+        } else forced.task?.fail(failure, 'conflict');
     }
 
     private launch(sourceId: number): void {
@@ -591,12 +582,7 @@ export class AppStoresSync {
         };
         let works: Work[] = [];
         try {
-            works = await this.openWorks(
-                cipher,
-                rows,
-                new Set(forcedHere),
-                new Set(forcedHere.filter((appId) => this.forced.get(appId)?.history))
-            );
+            works = await this.openWorks(cipher, rows, new Set(forcedHere));
             const readable = new Set(works.map((w) => w.row.app_id));
             const unreadable = rows.map((r) => r.app_id).filter((appId) => !readable.has(appId));
             release(unreadable, new Map(unreadable.map((id) => [id, UNREADABLE])));
@@ -623,8 +609,7 @@ export class AppStoresSync {
     private async openWorks(
         cipher: SdkCipher,
         rows: readonly ListingRow[],
-        forced: ReadonlySet<number>,
-        rewound: ReadonlySet<number>
+        forced: ReadonlySet<number>
     ): Promise<Work[]> {
         const apps = new Map(
             (await this.deps.repo.listAppsByIds([...new Set(rows.map((r) => r.app_id))])).map((a) => [a.id, a])
@@ -640,13 +625,13 @@ export class AppStoresSync {
                 continue;
             }
             let state = (await readJson<ListingState>(cipher, row.state)) ?? {};
-            if (rewound.has(row.app_id)) {
+            if (forced.has(row.app_id)) {
                 state = rewind(state, row);
                 // Dus à chaque battement jusqu'à la fin du rattrapage, comme au premier branchement.
                 await this.deps.repo.clearMetricsSync(row.id);
             }
             works.push({
-                row: rewound.has(row.app_id) ? { ...row, metrics_synced_at: null } : row,
+                row: forced.has(row.app_id) ? { ...row, metrics_synced_at: null } : row,
                 appName: stored.name || `App ${row.app_id}`,
                 ratingCountry: stored.ratingCountry,
                 content: {

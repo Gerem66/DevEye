@@ -114,13 +114,6 @@ export const appStoresRemove = {
     output: z.object({ appId })
 };
 
-/** Réveille le service de fond ; n'écrit rien elle-même. */
-export const appStoresSyncNow = {
-    command: 'appstores.syncNow' as const,
-    input: z.object({ appId }),
-    output: z.object({ app: appStoresAppSchema })
-};
-
 /**
  * Relit l'année écoulée chez les stores, jusqu'au même mois de l'an dernier.
  * Rien n'est effacé : le service relance son rattrapage, et les chiffres se
@@ -200,7 +193,6 @@ export const appStoresCommands = [
     appStoresAdd,
     appStoresUpdate,
     appStoresRemove,
-    appStoresSyncNow,
     appStoresBackfill,
     appStoresStats,
     appStoresOverview,

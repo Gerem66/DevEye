@@ -135,7 +135,6 @@ const NON_MUTATING = new Set([
     'cloudSync.unsubscribe',
     'cloudSync.syncNow',
     // Réveille le service de fond, qui diffuse lui-même ce qu'il a changé.
-    'appstores.syncNow',
     'appstores.backfill',
     // Lecture pure (avancement des synchronisations en cours).
     'git.syncStatuses',
