@@ -104,7 +104,8 @@ Les décisions d'écran qui méritent d'être connues :
   Aucun store n'expose la répartition de toutes les notes.
 - **Les revenus ne se somment jamais** entre stores ni entre devises : Apple
   rend des produits nets, Google des ventes estimées avant sa commission.
-- Fenêtres de 7, 30, 90 et 365 jours ; la dernière se lit par semaines.
+- Fenêtres de 7, 30, 90 et 365 jours, une seule pour toute la fiche, à droite
+  des onglets ; la dernière se lit par semaines.
 
 ---
 

@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { ErrorNote, FeatureSettingsButton, StatusBadge, useResource } from 'deveye-sdk-client';
 import {
     APPSTORES_CRASH_THRESHOLD,
@@ -12,7 +11,6 @@ import { api } from './api';
 import CapabilityNote from './CapabilityNote';
 import {
     countryName,
-    DEFAULT_RANGE,
     formatCount,
     formatDate,
     formatDay,
@@ -24,7 +22,6 @@ import {
     STORE_ORDER,
     versionState
 } from './format';
-import RangeBar from './Stats/RangeBar';
 import { downloadSeries, downloadsOf } from './Stats/downloads';
 import StatBand, { ratingChange, relativeChange, type StatTile } from './Stats/StatBand';
 import TrendChart, { type TrendSeries } from './Stats/TrendChart';
@@ -33,6 +30,8 @@ import styles from './style.module.css';
 interface OverviewProps {
     app: AppStoresApp;
     sources: readonly AppStoresSource[] | null;
+    /** La période, commune aux onglets de la fiche. */
+    range: AppStoresRange;
     canWrite: boolean;
 }
 
@@ -43,8 +42,7 @@ const countOrMissing = (value: number | null) => (value === null ? MISSING : for
  * précédente, la courbe des téléchargements par store, puis les versions
  * Apple. Aucun montant ici : les revenus ont leur onglet et leur droit.
  */
-export function Overview({ app, sources, canWrite }: OverviewProps) {
-    const [range, setRange] = useState<AppStoresRange>(DEFAULT_RANGE);
+export function Overview({ app, sources, canWrite, range }: OverviewProps) {
     const has = (store: AppStore) => app.listings.some((listing) => listing.store === store);
     const linked = app.listings.length > 0;
 
@@ -197,7 +195,6 @@ export function Overview({ app, sources, canWrite }: OverviewProps) {
                               ? 'Aucun chiffre relevé pour l’instant'
                               : `Données jusqu’au ${formatDay(stats.dataUntil)}`}
                     </p>
-                    <RangeBar value={range} onChange={setRange} />
                 </header>
 
                 <ErrorNote note={error} />

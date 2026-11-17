@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { ErrorNote, useResource } from 'deveye-sdk-client';
 import type { AppStore, AppStoresApp, AppStoresRange, AppStoresSource } from '../contracts/domain';
 
@@ -8,7 +7,6 @@ import {
     absentValue,
     bucketStarts,
     currencyName,
-    DEFAULT_RANGE,
     formatDay,
     formatMoney,
     ON_STORE,
@@ -17,7 +15,6 @@ import {
     STORE_LABELS,
     STORE_ORDER
 } from './format';
-import RangeBar from './Stats/RangeBar';
 import StatBand, { relativeChange } from './Stats/StatBand';
 import TrendChart from './Stats/TrendChart';
 import styles from './style.module.css';
@@ -31,6 +28,8 @@ const MEANING: Record<AppStore, string> = {
 interface RevenueProps {
     app: AppStoresApp;
     sources: readonly AppStoresSource[] | null;
+    /** La période, commune aux onglets de la fiche. */
+    range: AppStoresRange;
 }
 
 /**
@@ -38,8 +37,7 @@ interface RevenueProps {
  * store à l'autre ni d'une devise à l'autre. Monté seulement pour qui tient le
  * droit Revenus sur cette app ; le serveur le vérifie de son côté.
  */
-export function Revenue({ app, sources }: RevenueProps) {
-    const [range, setRange] = useState<AppStoresRange>(DEFAULT_RANGE);
+export function Revenue({ app, sources, range }: RevenueProps) {
     const stores = STORE_ORDER.filter((store) => app.listings.some((listing) => listing.store === store));
     const linked = stores.length > 0;
 
@@ -69,7 +67,6 @@ export function Revenue({ app, sources }: RevenueProps) {
                 <p className={styles.until}>
                     {revenue?.dataUntil ? `Données jusqu’au ${formatDay(revenue.dataUntil)}` : ''}
                 </p>
-                <RangeBar value={range} onChange={setRange} />
             </header>
             <p className={styles.blockHint}>
                 Apple donne ce qui vous revient après sa commission, Google ce que paient vos clients avant la sienne :

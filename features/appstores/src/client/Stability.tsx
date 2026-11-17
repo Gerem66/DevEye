@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { ErrorNote, StatusBadge, useResource } from 'deveye-sdk-client';
 import {
     APPSTORES_ANR_THRESHOLD,
@@ -12,14 +11,15 @@ import {
 
 import { api } from './api';
 import CapabilityNote from './CapabilityNote';
-import { bucketStarts, DEFAULT_RANGE, formatDay, formatRate } from './format';
-import RangeBar from './Stats/RangeBar';
+import { bucketStarts, formatDay, formatRate } from './format';
 import TrendChart from './Stats/TrendChart';
 import styles from './style.module.css';
 
 interface StabilityProps {
     app: AppStoresApp;
     sources: readonly AppStoresSource[] | null;
+    /** La période, commune aux onglets de la fiche. */
+    range: AppStoresRange;
 }
 
 interface Measure {
@@ -43,8 +43,7 @@ const MEASURES: readonly Measure[] = [
  * La stabilité d'une app Android, telle que Google la mesure : un jour sans
  * mesure reste un trou, jamais un zéro, qui se lirait comme une app parfaite.
  */
-export function Stability({ app, sources }: StabilityProps) {
-    const [range, setRange] = useState<AppStoresRange>(DEFAULT_RANGE);
+export function Stability({ app, sources, range }: StabilityProps) {
     const { data: stats, error } = useResource(
         'appstores.stats',
         () => api.send('appstores.stats', { appId: app.id, range }).then((res) => res.stats),
@@ -61,7 +60,6 @@ export function Stability({ app, sources }: StabilityProps) {
                 <p className={styles.until}>
                     {stats?.dataUntil ? `Données jusqu’au ${formatDay(stats.dataUntil)}` : ''}
                 </p>
-                <RangeBar value={range} onChange={setRange} />
             </header>
             <p className={styles.blockHint}>
                 Chaque jour, Google compte la part des utilisateurs qui ont vu l’app planter, ou se figer au point

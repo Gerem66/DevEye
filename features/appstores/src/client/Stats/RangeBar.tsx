@@ -8,7 +8,7 @@ interface RangeBarProps {
     onChange: (range: AppStoresRange) => void;
 }
 
-/** Les fenêtres offertes. Chaque bloc qui mesure porte la sienne, comme dans Audience. */
+/** Les fenêtres offertes, une seule pour tous les onglets de la fiche. */
 export function RangeBar({ value, onChange }: RangeBarProps) {
     return (
         <SegmentedControl

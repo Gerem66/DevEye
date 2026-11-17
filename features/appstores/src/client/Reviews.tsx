@@ -23,9 +23,8 @@ import {
 
 import { api } from './api';
 import CapabilityNote from './CapabilityNote';
-import { countryName, DEFAULT_RANGE, formatDate, STORE_ICONS, STORE_LABELS, STORE_ORDER } from './format';
+import { countryName, formatDate, STORE_ICONS, STORE_LABELS, STORE_ORDER } from './format';
 import ReplyDialog from './ReplyDialog';
-import RangeBar from './Stats/RangeBar';
 import StarBars, { Stars } from './Stats/StarBars';
 import styles from './style.module.css';
 
@@ -41,6 +40,8 @@ const RATING_OPTIONS = [
 interface ReviewsProps {
     app: AppStoresApp;
     sources: readonly AppStoresSource[] | null;
+    /** La période, commune aux onglets de la fiche. */
+    range: AppStoresRange;
     canWrite: boolean;
 }
 
@@ -49,11 +50,10 @@ interface ReviewsProps {
  * la période. Répondre est une écriture, et ne part que de l'espace de l'app :
  * c'est là que vit la clé qui publie.
  */
-export function Reviews({ app, sources, canWrite }: ReviewsProps) {
+export function Reviews({ app, sources, canWrite, range }: ReviewsProps) {
     const stores = STORE_ORDER.filter((store) => app.listings.some((listing) => listing.store === store));
     const linked = stores.length > 0;
 
-    const [range, setRange] = useState<AppStoresRange>(DEFAULT_RANGE);
     const [store, setStore] = useState<StoreFilter>('all');
     const [rating, setRating] = useState('');
     const [unanswered, setUnanswered] = useState(false);
@@ -153,7 +153,6 @@ export function Reviews({ app, sources, canWrite }: ReviewsProps) {
             <section className={styles.block}>
                 <header className={styles.blockHead}>
                     <h3 className={styles.blockTitle}>Répartition des avis reçus sur la période</h3>
-                    <RangeBar value={range} onChange={setRange} />
                 </header>
                 <ErrorNote note={stats.error} />
                 {stats.data ? (

@@ -127,6 +127,8 @@ declare const styles: {
     readonly tabActive: string;
     readonly tabIcon: string;
     readonly tabs: string;
+    readonly tabsRow: string;
+    readonly tabsTools: string;
     readonly until: string;
     readonly usage: string;
     readonly usageItem: string;

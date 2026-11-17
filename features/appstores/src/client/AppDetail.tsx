@@ -21,13 +21,14 @@ import {
     useWorkspacePermissions,
     type ErrorNoteInput
 } from 'deveye-sdk-client';
-import type { AppStoresApp, AppStoresUsage } from '../contracts/domain';
+import type { AppStoresApp, AppStoresRange, AppStoresUsage } from '../contracts/domain';
 
 import { api } from './api';
-import { formatAgo, formatDay, plural, STORE_LABELS, STORE_ORDER } from './format';
+import { DEFAULT_RANGE, formatAgo, formatDay, plural, STORE_LABELS, STORE_ORDER } from './format';
 import Overview from './Overview';
 import Revenue from './Revenue';
 import Reviews from './Reviews';
+import RangeBar from './Stats/RangeBar';
 import Stability from './Stability';
 import StoreChips from './StoreChips';
 import styles from './style.module.css';
@@ -74,6 +75,7 @@ export function AppDetail({ app, usage, onBack }: AppDetailProps) {
         ...(hasGoogle ? [{ id: 'stability' as const, label: 'Stabilité', icon: 'bug' }] : [])
     ];
     const [chosen, setChosen] = useState<Tab>('overview');
+    const [range, setRange] = useState<AppStoresRange>(DEFAULT_RANGE);
     // Un onglet qui disparaît (droit retiré, fiche Google Play retirée) ramène à l'aperçu.
     const tab = tabs.some((entry) => entry.id === chosen) ? chosen : 'overview';
 
@@ -220,22 +222,29 @@ export function AppDetail({ app, usage, onBack }: AppDetailProps) {
                     </div>
                 </header>
 
-                <nav className={styles.tabs} role='tablist' aria-label='Sections de l’app'>
-                    {tabs.map((entry) => (
-                        <button
-                            key={entry.id}
-                            type='button'
-                            role='tab'
-                            aria-selected={entry.id === tab}
-                            className={entry.id === tab ? styles.tabActive : styles.tab}
-                            onClick={() => setChosen(entry.id)}
-                            {...outlineOf(entry.id)}
-                        >
-                            <span className={`icon icon-${entry.icon} ${styles.tabIcon}`} aria-hidden='true' />
-                            <span>{entry.label}</span>
-                        </button>
-                    ))}
-                </nav>
+                <div className={styles.tabsRow}>
+                    <nav className={styles.tabs} role='tablist' aria-label='Sections de l’app'>
+                        {tabs.map((entry) => (
+                            <button
+                                key={entry.id}
+                                type='button'
+                                role='tab'
+                                aria-selected={entry.id === tab}
+                                className={entry.id === tab ? styles.tabActive : styles.tab}
+                                onClick={() => setChosen(entry.id)}
+                                {...outlineOf(entry.id)}
+                            >
+                                <span className={`icon icon-${entry.icon} ${styles.tabIcon}`} aria-hidden='true' />
+                                <span>{entry.label}</span>
+                            </button>
+                        ))}
+                    </nav>
+                    {app.listings.length > 0 && (
+                        <div className={styles.tabsTools}>
+                            <RangeBar value={range} onChange={setRange} />
+                        </div>
+                    )}
+                </div>
             </StickyHeader>
 
             <ErrorNote note={error} />
@@ -245,10 +254,10 @@ export function AppDetail({ app, usage, onBack }: AppDetailProps) {
             <PlanPausedNotice count={app.planPaused && !app.foreign ? 1 : 0} one='app suivie' many='apps suivies' />
             <NotificationsNotice scope={{ kind: 'item', feature: 'appstores', itemId, itemLabel: app.name }} />
 
-            {tab === 'overview' && <Overview app={app} sources={sources.data} canWrite={canWrite} />}
-            {tab === 'reviews' && <Reviews app={app} sources={sources.data} canWrite={canWrite} />}
-            {tab === 'revenue' && <Revenue app={app} sources={sources.data} />}
-            {tab === 'stability' && <Stability app={app} sources={sources.data} />}
+            {tab === 'overview' && <Overview app={app} sources={sources.data} canWrite={canWrite} range={range} />}
+            {tab === 'reviews' && <Reviews app={app} sources={sources.data} canWrite={canWrite} range={range} />}
+            {tab === 'revenue' && <Revenue app={app} sources={sources.data} range={range} />}
+            {tab === 'stability' && <Stability app={app} sources={sources.data} range={range} />}
 
             {tab === 'overview' && usage.length > 0 && (
                 <section className={styles.usage}>

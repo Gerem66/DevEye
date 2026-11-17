@@ -377,10 +377,27 @@
     min-width: 0;
 }
 
+/* Les onglets à gauche, la période commune à droite, sur le même trait. */
+.tabsRow {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--space-xs) var(--space-md);
+    border-bottom: 1px solid var(--glass-border);
+}
+
 .tabs {
     display: flex;
     gap: var(--space-xs);
-    border-bottom: 1px solid var(--glass-border);
+}
+
+.tabsTools {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    padding-bottom: var(--space-xs);
 }
 
 .tab,
@@ -448,6 +465,16 @@
 
     .heading {
         font-size: 1.1rem;
+    }
+
+    .tabs {
+        flex: 1 1 100%;
+    }
+
+    /* Au-dessus des onglets, qui restent collés au trait. */
+    .tabsTools {
+        order: -1;
+        margin-left: auto;
     }
 
     .tab,
