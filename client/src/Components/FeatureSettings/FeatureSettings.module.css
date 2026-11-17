@@ -101,6 +101,9 @@
        laisse (`.bodyFill`, mode `fill`) et rend cette place à son contenu. */
     margin-right: calc(-1 * var(--space-lg));
     padding-right: var(--space-lg);
+    /* Défilé jusqu'en bas, le dernier élément tomberait pile sur la coupe : son
+       bord et son anneau de focus y resteraient. */
+    padding-bottom: var(--space-sm);
 }
 
 /* L'écart entre deux blocs de réglage. Nettement plus large que celui d'un
