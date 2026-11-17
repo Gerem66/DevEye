@@ -14,7 +14,8 @@ import type { AppStoresAppSummary, AppStoresRange } from '../contracts/domain';
 import { api } from './api';
 import AppDialog from './AppDialog';
 import { formatCount, formatRating, MISSING, ON_STORE, plural, STORE_LABELS, STORE_ORDER } from './format';
-import { downloadSeries, downloadsOf } from './Stats/downloads';
+import { useCurveView } from './prefs';
+import { downloadCurves, downloadsOf } from './Stats/downloads';
 import StatBand, { ratingChange, relativeChange, type StatTile } from './Stats/StatBand';
 import TrendChart from './Stats/TrendChart';
 import StoreChips from './StoreChips';
@@ -29,6 +30,7 @@ import styles from './style.module.css';
 const LINKED_RANGE: AppStoresRange = '30d';
 
 function LinkedApp({ appId, canWrite, onUnlink }: { appId: number; canWrite: boolean; onUnlink: () => void }) {
+    const view = useCurveView(false);
     const detail = useResource(
         'appstores.detail',
         () => api.send('appstores.get', { appId }),
@@ -96,7 +98,7 @@ function LinkedApp({ appId, canWrite, onUnlink }: { appId: number; canWrite: boo
             });
         }
 
-        const { slots, series } = downloadSeries(stats.data, stores);
+        const { slots, series } = downloadCurves(stats.data, stores, view);
         chart =
             stats.data.dataUntil === null ? null : (
                 <TrendChart

@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import type { AppStoresResolution } from '../../contracts/domain';
 
 import { formatPointLabel, formatPointTitle } from '../format';
@@ -37,6 +37,8 @@ interface TrendChartProps {
     compact?: boolean;
     /** Une ordonnée discrète : quelques valeurs rondes et leurs lignes, sous la courbe. */
     axis?: boolean;
+    /** Ce qui se règle de la courbe, à droite de son titre. */
+    tools?: ReactNode;
 }
 
 /** Les suites de seaux relevés : un trou reste un trou, jamais un zéro dessiné. */
@@ -79,7 +81,7 @@ const CORNER = 8;
  * le quart de ses deux segments. La moitié de chacun reste droite, si serrés
  * que soient les points : la forme ne se fond pas dans une courbe.
  */
-export function roundedPath(points: readonly (readonly [number, number])[]): string {
+function roundedPath(points: readonly (readonly [number, number])[]): string {
     const at = ([px, py]: readonly [number, number]) => `${px.toFixed(1)} ${py.toFixed(1)}`;
     let d = `M ${at(points[0])}`;
     for (let k = 1; k < points.length - 1; k++) {
@@ -111,7 +113,8 @@ export function TrendChart({
     title,
     threshold,
     compact,
-    axis
+    axis,
+    tools
 }: TrendChartProps) {
     const [hover, setHover] = useState<number | null>(null);
     const H = compact ? H_COMPACT : H_FULL;
@@ -141,7 +144,12 @@ export function TrendChart({
 
     return (
         <figure className={styles.chart}>
-            {title && <p className={styles.chartTitle}>{title}</p>}
+            {(title || tools) && (
+                <div className={styles.chartHead}>
+                    {title && <p className={styles.chartTitle}>{title}</p>}
+                    {tools && <div className={styles.chartTools}>{tools}</div>}
+                </div>
+            )}
             <svg viewBox={`0 0 ${W} ${H}`} className={styles.chartSvg} role='img' aria-label={label}>
                 {ticks.map((value) => (
                     <g key={`axis-${value}`}>

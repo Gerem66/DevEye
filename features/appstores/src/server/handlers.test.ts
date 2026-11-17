@@ -233,6 +233,8 @@ describe('les chiffres', () => {
         assert.equal(stats.to, UNTIL * 86400);
         assert.equal(stats.from, (UNTIL - 30) * 86400);
         assert.equal(stats.points.length, 30);
+        assert.equal(stats.previousPoints.length, 30, 'la période d’avant, seau par seau');
+        assert.equal(stats.previousPoints[29].at, (UNTIL - 31) * 86400);
         assert.deepEqual(stats.metrics.downloads, { apple: 20, google: 10 });
         assert.deepEqual(stats.previous.downloads, { apple: 10, google: 5 });
         assert.equal(stats.previousCovered, false, 'Google ne remonte pas jusqu’au début de la période précédente');
@@ -687,11 +689,12 @@ describe('la vue d’ensemble', () => {
         assert.equal(overview.dataUntil, UNTIL * 86400, 'la fiche en retard ne fige pas la fenêtre');
         assert.deepEqual(overview.metrics.downloads, { apple: 15, google: 30 });
         assert.deepEqual(
-            overview.apps.map((app) => [app.id, app.downloads]),
+            overview.apps.map((app) => [app.id, app.downloads, app.points[app.points.length - 1]]),
             [
-                [1, 40],
-                [2, 5]
-            ]
+                [1, 40, 40],
+                [2, 5, 5]
+            ],
+            'le dernier seau de chaque app porte son dernier jour'
         );
         assert.deepEqual(
             overview.left.map((entry) => [entry.id, entry.store, entry.dataUntil]),

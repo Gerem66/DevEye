@@ -273,6 +273,8 @@ export const appStoresStatsSchema = appStoresWindowSchema.extend({
     metrics: appStoresMetricsSchema,
     previous: appStoresMetricsSchema,
     points: z.array(appStoresPointSchema),
+    /** La période d'avant, seau par seau, alignée sur `points` : de quoi la comparer et amorcer une moyenne glissante. */
+    previousPoints: z.array(appStoresPointSchema),
     /** Les avis reçus pendant la fenêtre, par note : l'indice 0 compte les avis à une étoile. */
     reviewStars: z.array(z.number().int().nonnegative()).length(5),
     /** Les premiers téléchargements de la fenêtre par pays, les plus nombreux d'abord. */
@@ -351,8 +353,14 @@ const appRef = { id: z.number().int().positive(), name: z.string() };
  * taux de plantage moyen de plusieurs apps ne dirait rien, ils restent par app.
  */
 export const appStoresOverviewSchema = appStoresStatsSchema.omit({ reviewStars: true }).extend({
-    /** Les apps comptées, les plus téléchargées d'abord. */
-    apps: z.array(z.object({ ...appRef, downloads: z.number().int().nonnegative().nullable() })),
+    /** Les apps comptées, les plus téléchargées d'abord, avec leurs seaux alignés sur `points`. */
+    apps: z.array(
+        z.object({
+            ...appRef,
+            downloads: z.number().int().nonnegative().nullable(),
+            points: z.array(z.number().int().nonnegative().nullable())
+        })
+    ),
     /** Les fiches laissées de côté : leurs chiffres se sont arrêtés bien avant ceux des autres. */
     left: z.array(z.object({ ...appRef, store: appStoreSchema, dataUntil: z.number().int() })),
     /** Les avis de la fenêtre restés sans réponse. */

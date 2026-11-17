@@ -25,6 +25,7 @@ declare const styles: {
     readonly chartCursor: string;
     readonly chartDot: string;
     readonly chartGrid: string;
+    readonly chartHead: string;
     readonly chartLegend: string;
     readonly chartLine: string;
     readonly chartStop: string;
@@ -32,6 +33,7 @@ declare const styles: {
     readonly chartThreshold: string;
     readonly chartTick: string;
     readonly chartTitle: string;
+    readonly chartTools: string;
     readonly checkIcon: string;
     readonly checkItem: string;
     readonly checkLabel: string;
@@ -81,6 +83,7 @@ declare const styles: {
     readonly more: string;
     readonly notice: string;
     readonly noticeDanger: string;
+    readonly pageTools: string;
     readonly rankBar: string;
     readonly rankCount: string;
     readonly rankList: string;
@@ -93,6 +96,12 @@ declare const styles: {
     readonly ratingFilter: string;
     readonly ratingStar: string;
     readonly ratingStore: string;
+    readonly recap: string;
+    readonly recapFigure: string;
+    readonly recapFigures: string;
+    readonly recapHead: string;
+    readonly recapMore: string;
+    readonly recapValue: string;
     readonly reply: string;
     readonly replyBody: string;
     readonly replyDate: string;
@@ -122,8 +131,6 @@ declare const styles: {
     readonly sectionTitle: string;
     readonly sheetHeader: string;
     readonly sheetSticky: string;
-    readonly sparkLine: string;
-    readonly sparkline: string;
     readonly srOnly: string;
     readonly stabilityAlert: string;
     readonly stabilityMeasure: string;
@@ -153,10 +160,6 @@ declare const styles: {
     readonly tabs: string;
     readonly tabsRow: string;
     readonly tabsTools: string;
-    readonly teaser: string;
-    readonly teaserFigures: string;
-    readonly teaserMore: string;
-    readonly teaserValue: string;
     readonly until: string;
     readonly usage: string;
     readonly usageItem: string;

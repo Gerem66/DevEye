@@ -284,6 +284,7 @@ export const appStoresStatsFeatures = [
                         false
                     ),
                     points: pointsOf(listings, rows, window),
+                    previousPoints: pointsOf(listings, rows, { ...window, fromDay: window.previousFromDay }),
                     reviewStars,
                     countries: countries.filter((c) => c.downloads > 0)
                 }

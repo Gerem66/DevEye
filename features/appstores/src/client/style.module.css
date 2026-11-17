@@ -182,63 +182,65 @@
     border-color: var(--glass-border-strong);
 }
 
-/* L'essentiel de la vue d'ensemble au-dessus de la liste : toute la carte l'ouvre. */
-.teaser {
+/* L'essentiel de la vue d'ensemble au-dessus de la liste : tout le panneau l'ouvre. */
+.recap {
     display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: var(--space-sm) var(--space-lg);
-    width: 100%;
+    flex-direction: column;
+    gap: var(--space-sm);
     padding: var(--space-md);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-lg);
     background: var(--surface-widget);
-    color: inherit;
-    font-family: inherit;
-    text-align: left;
     cursor: pointer;
     transition: border-color var(--transition-fast);
 }
 
-.teaser:hover,
-.teaser:focus-visible {
+.recap:hover,
+.recap:focus-visible {
     border-color: var(--glass-border-strong);
 }
 
-.teaserFigures {
+.recap:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+}
+
+.recapHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+}
+
+.recapMore {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    color: var(--accent);
+    font-size: 0.8rem;
+}
+
+.recapFigures {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm) var(--space-xl);
+    margin: 0;
+}
+
+.recapFigure {
     display: flex;
     flex-direction: column;
     gap: 2px;
-    flex-shrink: 0;
 }
 
-.teaserValue {
+.recapValue {
     display: flex;
     align-items: baseline;
     gap: var(--space-sm);
+    margin: 0;
     color: var(--text-primary);
-    font-size: 1.4rem;
+    font-size: 1.3rem;
     font-variant-numeric: tabular-nums;
-}
-
-.teaserMore {
-    color: var(--accent);
-    font-size: 0.78rem;
-}
-
-.sparkline {
-    flex: 1 1 240px;
-    min-width: 0;
-    height: 56px;
-}
-
-.sparkLine {
-    fill: none;
-    stroke: var(--accent);
-    stroke-width: 2;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-    vector-effect: non-scaling-stroke;
 }
 
 /* Sans étape connue, la bande va et vient : le rattrapage avance, sans total à
@@ -835,6 +837,30 @@
     margin: 0;
 }
 
+.chartHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+}
+
+.chartTools {
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+/* Les réglages d'une page sans onglets : sous son en-tête, à droite. */
+.pageTools {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    padding-bottom: var(--space-xs);
+    border-bottom: 1px solid var(--glass-border);
+}
+
 .chartTitle {
     margin: 0;
     color: var(--text-secondary);
@@ -946,6 +972,74 @@
 
 .legendSwatch[data-series='google'] {
     background: var(--palette-green);
+}
+
+/* Les vues à plusieurs courbes : une teinte par app dans un ordre fixe, les
+   autres apps et la période d'avant en retrait, celle-ci en pointillés. */
+.chartLine[data-series='rank0'],
+.chartDot[data-series='rank0'],
+.legendSwatch[data-series='rank0'] {
+    --series: var(--palette-indigo);
+}
+
+.chartLine[data-series='rank1'],
+.chartDot[data-series='rank1'],
+.legendSwatch[data-series='rank1'] {
+    --series: var(--palette-orange);
+}
+
+.chartLine[data-series='rank2'],
+.chartDot[data-series='rank2'],
+.legendSwatch[data-series='rank2'] {
+    --series: var(--palette-pink);
+}
+
+.chartLine[data-series='rank3'],
+.chartDot[data-series='rank3'],
+.legendSwatch[data-series='rank3'] {
+    --series: var(--palette-yellow);
+}
+
+.chartLine[data-series='rank4'],
+.chartDot[data-series='rank4'],
+.legendSwatch[data-series='rank4'] {
+    --series: var(--palette-purple);
+}
+
+.chartLine[data-series='others'],
+.chartDot[data-series='others'],
+.legendSwatch[data-series='others'],
+.chartLine[data-series='previous'],
+.chartDot[data-series='previous'],
+.legendSwatch[data-series='previous'] {
+    --series: var(--text-muted);
+}
+
+.chartLine[data-series^='rank'],
+.chartLine[data-series='others'],
+.chartLine[data-series='previous'] {
+    stroke: var(--series);
+}
+
+.chartDot[data-series^='rank'],
+.chartDot[data-series='others'],
+.chartDot[data-series='previous'] {
+    fill: var(--series);
+}
+
+.legendSwatch[data-series^='rank'],
+.legendSwatch[data-series='others'] {
+    background: var(--series);
+}
+
+.chartLine[data-series='previous'] {
+    stroke-dasharray: 6 5;
+}
+
+.legendSwatch[data-series='previous'] {
+    height: 0;
+    border-top: 2px dashed var(--series);
+    background: none;
 }
 
 .legendThreshold {

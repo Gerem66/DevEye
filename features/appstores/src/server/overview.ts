@@ -210,15 +210,18 @@ export const appStoresOverviewFeatures = [
             const rows = new Map<number, DownloadRow[]>();
             for (const row of daily) rows.set(row.app_id, [...(rows.get(row.app_id) ?? []), row]);
             const ranked = keptIds
-                .map((id) => ({
-                    ...ref(id),
-                    downloads: downloadsOver(
-                        kept.filter((l) => l.app_id === id),
-                        rows,
-                        window.fromDay,
-                        window.toDay
-                    )
-                }))
+                .map((id) => {
+                    const mine = kept.filter((l) => l.app_id === id);
+                    return {
+                        ...ref(id),
+                        downloads: downloadsOver(mine, rows, window.fromDay, window.toDay),
+                        points: pointsOver(mine, rows, window).map((point) =>
+                            point.appleDownloads === null && point.googleDownloads === null
+                                ? null
+                                : (point.appleDownloads ?? 0) + (point.googleDownloads ?? 0)
+                        )
+                    };
+                })
                 .sort((a, b) => (b.downloads ?? -1) - (a.downloads ?? -1));
             const homeOf = new Map(apps.map((row) => [row.id, row.workspace_id]));
             const replyable = (appId: number) =>
@@ -242,6 +245,7 @@ export const appStoresOverviewFeatures = [
                         counts.reduce((sum, c) => sum + c.previous, 0)
                     ),
                     points: pointsOver(kept, rows, window),
+                    previousPoints: pointsOver(kept, rows, { ...window, fromDay: window.previousFromDay }),
                     countries: countries.filter((c) => c.downloads > 0),
                     apps: ranked,
                     left: left.map((l) => ({

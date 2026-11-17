@@ -19,11 +19,12 @@ import {
     useTasks,
     useWorkspacePermissions
 } from 'deveye-sdk-client';
-import type { AppStore, AppStoresApp, AppStoresRange, AppStoresSource, AppStoresUsage } from '../contracts/domain';
+import type { AppStoresApp, AppStoresSource, AppStoresUsage } from '../contracts/domain';
 
 import { api } from './api';
-import { DEFAULT_RANGE, formatAgo, formatDay, plural, STORE_LABELS, STORE_ORDER, type Tone } from './format';
+import { formatAgo, formatDay, plural, STORE_LABELS, STORE_ORDER, type Tone } from './format';
 import Overview from './Overview';
+import { setStoresPrefs, useStoresPrefs } from './prefs';
 import Revenue from './Revenue';
 import Reviews from './Reviews';
 import RangeBar from './Stats/RangeBar';
@@ -120,8 +121,7 @@ export function AppDetail({ app, usage, onBack }: AppDetailProps) {
         ...(hasGoogle ? [{ id: 'stability' as const, label: 'Stabilité', icon: 'bug' }] : [])
     ];
     const [chosen, setChosen] = useState<Tab>('overview');
-    const [range, setRange] = useState<AppStoresRange>(DEFAULT_RANGE);
-    const [chosenStore, setChosenStore] = useState<AppStore | 'all'>('all');
+    const { range, store: chosenStore } = useStoresPrefs();
     // Le store choisi vaut pour les onglets qui comparent les deux ; la Stabilité n'est que Google Play.
     const linkedStores = STORE_ORDER.filter((store) => app.listings.some((listing) => listing.store === store));
     const store = chosenStore !== 'all' && linkedStores.includes(chosenStore) ? chosenStore : null;
@@ -243,11 +243,11 @@ export function AppDetail({ app, usage, onBack }: AppDetailProps) {
                                         { value: 'all', label: 'Tous' },
                                         ...linkedStores.map((entry) => ({ value: entry, label: STORE_LABELS[entry] }))
                                     ]}
-                                    onChange={setChosenStore}
+                                    onChange={(next) => setStoresPrefs({ store: next })}
                                     aria-label='Store'
                                 />
                             )}
-                            <RangeBar value={range} onChange={setRange} />
+                            <RangeBar value={range} onChange={(next) => setStoresPrefs({ range: next })} />
                         </div>
                     )}
                 </div>

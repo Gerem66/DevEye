@@ -25,7 +25,9 @@ import {
     versionStates
 } from './format';
 import CountriesPanel from './Stats/CountriesPanel';
-import { downloadSeries, downloadsOf } from './Stats/downloads';
+import { useCurveView } from './prefs';
+import CurveViewBar from './Stats/CurveViewBar';
+import { downloadCurves, downloadsOf } from './Stats/downloads';
 import StatBand, { ratingChange, relativeChange, type StatTile } from './Stats/StatBand';
 import TrendChart, { type TrendSeries } from './Stats/TrendChart';
 import styles from './style.module.css';
@@ -52,6 +54,7 @@ export function Overview({ app, store, sources, canWrite, range }: OverviewProps
     const has = (store: AppStore) => app.listings.some((listing) => listing.store === store);
     const linked = app.listings.length > 0;
 
+    const view = useCurveView(false);
     const { data: stats, error } = useResource(
         'appstores.stats',
         () =>
@@ -162,7 +165,7 @@ export function Overview({ app, store, sources, canWrite, range }: OverviewProps
             });
         }
 
-        ({ slots, series } = downloadSeries(stats, stores));
+        ({ slots, series } = downloadCurves(stats, stores, view));
     }
 
     const empty = stats
@@ -227,6 +230,7 @@ export function Overview({ app, store, sources, canWrite, range }: OverviewProps
                         ) : (
                             <TrendChart
                                 title='Téléchargements'
+                                tools={<CurveViewBar severalApps={false} stores={stores} />}
                                 slots={slots}
                                 resolution={stats.resolution}
                                 series={series}

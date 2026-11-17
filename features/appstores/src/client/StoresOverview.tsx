@@ -1,44 +1,58 @@
 import { useState } from 'react';
-import { ErrorNote, invalidate, StatusBadge, useResource } from 'deveye-sdk-client';
+import {
+    Button,
+    ErrorNote,
+    invalidate,
+    SegmentedControl,
+    StatusBadge,
+    StickyHeader,
+    useResource,
+    useSubView
+} from 'deveye-sdk-client';
 import {
     APPSTORES_ANR_THRESHOLD,
     APPSTORES_CRASH_THRESHOLD,
     type AppStore,
-    type AppStoresRange,
     type AppStoresReview
 } from '../contracts/domain';
 
 import { api } from './api';
-import { formatCount, formatDay, formatRate, MISSING, STORE_LABELS } from './format';
+import { formatCount, formatDay, formatRate, MISSING, plural, STORE_LABELS } from './format';
 import ReplyDialog from './ReplyDialog';
 import { REVENUE_HINT, RevenueTotals, storeTotals } from './Revenue';
 import { ReviewCard } from './Reviews';
 import CountriesPanel from './Stats/CountriesPanel';
-import { downloadSeries, downloadsOf } from './Stats/downloads';
+import { setStoresPrefs, useCurveView, useStoresPrefs } from './prefs';
+import CurveViewBar from './Stats/CurveViewBar';
+import { downloadCurves, downloadsOf } from './Stats/downloads';
+import RangeBar from './Stats/RangeBar';
 import RankBars from './Stats/RankBars';
 import StatBand, { relativeChange } from './Stats/StatBand';
 import TrendChart from './Stats/TrendChart';
 import styles from './style.module.css';
 
 interface StoresOverviewProps {
-    range: AppStoresRange;
-    /** Le store choisi, `null` pour les deux. */
-    store: AppStore | null;
     /** Les stores où au moins une app est reliée, dans l'ordre d'affichage. */
     stores: readonly AppStore[];
     canWrite: boolean;
     onOpen: (appId: number) => void;
+    onBack: () => void;
 }
 
 const countOrMissing = (value: number | null) => (value === null ? MISSING : formatCount(value));
 
 /**
- * Toutes les apps à la fois : ce qui se cumule (téléchargements, pays, avis,
- * revenus), et ce qui demande d'agir (avis sans réponse, apps au-dessus d'un
- * seuil de Google). Une note ne se cumule pas : elle reste sur chaque app.
+ * Toutes les apps à la fois, en page comme la fiche d'une app : ce qui se
+ * cumule (téléchargements, pays, avis, revenus), et ce qui demande d'agir (avis
+ * sans réponse, apps au-dessus d'un seuil de Google). Une note ne se cumule
+ * pas : elle reste sur chaque app.
  */
-export function StoresOverview({ range, store, stores, canWrite, onOpen }: StoresOverviewProps) {
+export function StoresOverview({ stores, canWrite, onOpen, onBack }: StoresOverviewProps) {
     const [replying, setReplying] = useState<AppStoresReview | null>(null);
+    const { range, store: chosenStore } = useStoresPrefs();
+    const store = chosenStore === 'all' || !stores.includes(chosenStore) ? null : chosenStore;
+    useSubView('overview');
+    const view = useCurveView(true);
 
     const { data: overview, error } = useResource(
         'appstores.stats',
@@ -47,18 +61,65 @@ export function StoresOverview({ range, store, stores, canWrite, onOpen }: Store
         [range, store]
     );
 
+    const head = (
+        <StickyHeader className={styles.sheetSticky}>
+            <header className={`${styles.header} ${styles.sheetHeader}`}>
+                <div className={styles.detailHead}>
+                    <Button
+                        variant='ghost'
+                        icon='arrow-left'
+                        className={styles.back}
+                        aria-label='Stores'
+                        title='Stores'
+                        onClick={onBack}
+                    >
+                        <span className={styles.backLabel}>Stores</span>
+                    </Button>
+                    <div className={styles.ident}>
+                        <h2 className={styles.heading}>
+                            <span className={styles.headingText}>Vue d’ensemble</span>
+                        </h2>
+                        <p className={styles.subheading}>
+                            {overview ? `${plural(overview.apps.length, 'app comptée', 'apps comptées')}` : ''}
+                        </p>
+                    </div>
+                </div>
+            </header>
+            <div className={styles.pageTools}>
+                {stores.length > 1 && (
+                    <SegmentedControl
+                        value={store ?? 'all'}
+                        options={[
+                            { value: 'all', label: 'Tous' },
+                            ...stores.map((entry) => ({ value: entry, label: STORE_LABELS[entry] }))
+                        ]}
+                        onChange={(next) => setStoresPrefs({ store: next })}
+                        aria-label='Store'
+                    />
+                )}
+                <RangeBar value={range} onChange={(next) => setStoresPrefs({ range: next })} />
+            </div>
+        </StickyHeader>
+    );
+
     if (overview === null) {
-        return error ? <ErrorNote note={error} /> : <p className={styles.blockEmpty}>Chargement…</p>;
+        return (
+            <div className={styles.root}>
+                {head}
+                {error ? <ErrorNote note={error} /> : <p className={styles.blockEmpty}>Chargement…</p>}
+            </div>
+        );
     }
 
     const shown = store ? [store] : stores;
     const covered = overview.previousCovered;
-    const { slots, series } = downloadSeries(overview, shown);
+    const { slots, series } = downloadCurves(overview, shown, view, overview.apps);
     const stale = overview.range !== range ? '' : undefined;
     const ranked = overview.apps.filter((app) => app.downloads !== null && app.downloads > 0);
 
     return (
-        <>
+        <div className={styles.root}>
+            {head}
             <ErrorNote note={error} />
             {overview.left.length > 0 && (
                 <p className={styles.notice}>
@@ -124,6 +185,7 @@ export function StoresOverview({ range, store, stores, canWrite, onOpen }: Store
                     {overview.dataUntil !== null && (
                         <TrendChart
                             title='Téléchargements'
+                            tools={<CurveViewBar severalApps stores={shown} />}
                             slots={slots}
                             resolution={overview.resolution}
                             series={series}
@@ -246,7 +308,7 @@ export function StoresOverview({ range, store, stores, canWrite, onOpen }: Store
                     invalidate('appstores.reviews', 'appstores.stats');
                 }}
             />
-        </>
+        </div>
     );
 }
 
