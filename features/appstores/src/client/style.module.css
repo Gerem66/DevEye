@@ -1068,6 +1068,72 @@
     text-decoration: underline;
 }
 
+/* La carte : une teinte, l'accent mêlé à la terre, en cinq paliers ; l'ordre des
+   clartés tient dans les deux thèmes, la terre étant la teinte du texte, très diluée. */
+.mapCountry,
+.mapStep {
+    --map-land: color-mix(in srgb, var(--text-primary) 9%, transparent);
+}
+
+.mapCountry[data-level='1'],
+.mapStep[data-level='1'] {
+    --map-fill: color-mix(in oklab, var(--accent) 22%, var(--map-land));
+}
+
+.mapCountry[data-level='2'],
+.mapStep[data-level='2'] {
+    --map-fill: color-mix(in oklab, var(--accent) 40%, var(--map-land));
+}
+
+.mapCountry[data-level='3'],
+.mapStep[data-level='3'] {
+    --map-fill: color-mix(in oklab, var(--accent) 58%, var(--map-land));
+}
+
+.mapCountry[data-level='4'],
+.mapStep[data-level='4'] {
+    --map-fill: color-mix(in oklab, var(--accent) 78%, var(--map-land));
+}
+
+.mapCountry[data-level='5'],
+.mapStep[data-level='5'] {
+    --map-fill: var(--accent);
+}
+
+/* Les frontières à la couleur du fond : un interstice entre deux pays colorés. */
+.mapCountry {
+    fill: var(--map-fill, var(--map-land));
+    stroke: var(--surface-popup-solid);
+    stroke-width: 0.6;
+    transition: fill var(--transition-normal);
+}
+
+.mapOutline {
+    fill: none;
+    stroke: var(--text-primary);
+    stroke-width: 1.2;
+    stroke-linejoin: round;
+    pointer-events: none;
+}
+
+.mapCaption {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.mapScale {
+    display: inline-flex;
+    gap: 2px;
+}
+
+.mapStep {
+    width: 14px;
+    height: 8px;
+    border-radius: 2px;
+    background: var(--map-fill);
+}
+
 .filters {
     display: flex;
     align-items: center;

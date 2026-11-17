@@ -71,6 +71,11 @@ declare const styles: {
     readonly linkedIdent: string;
     readonly linkedTitle: string;
     readonly list: string;
+    readonly mapCaption: string;
+    readonly mapCountry: string;
+    readonly mapOutline: string;
+    readonly mapScale: string;
+    readonly mapStep: string;
     readonly measure: string;
     readonly metaIcon: string;
     readonly mono: string;

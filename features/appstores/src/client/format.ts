@@ -61,6 +61,11 @@ export function formatRate(ratio: number): string {
     return `${(ratio * 100).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %`;
 }
 
+/** « 43 % » d'un total ; une part qui s'arrondirait à zéro se dit « < 1 % ». */
+export function formatShare(share: number): string {
+    return share < 0.01 ? '< 1 %' : `${Math.round(share * 100)} %`;
+}
+
 /** `null` quand la période d'avant est à zéro : « +100 % » sur une app qui démarre serait inventé. */
 export function delta(current: number, previous: number): number | null {
     if (previous === 0) return null;
