@@ -249,6 +249,29 @@ describe('les chiffres', () => {
         );
     });
 
+    it('prennent la note Apple relevée après une fenêtre que Google arrête plus tôt, sans écart inventé', async () => {
+        const repo = seeded();
+        for (const cell of repo.db.daily) if (cell.store === 'apple') cell.rating_avg = null;
+        repo.db.daily.push({
+            app_id: 1,
+            store: 'apple',
+            day: UNTIL,
+            downloads: null,
+            updates: null,
+            uninstalls: null,
+            active_devices: null,
+            rating_avg: 4.7,
+            rating_count: 102,
+            crash_rate: null,
+            anr_rate: null,
+            vitals_users: null
+        });
+        const { stats } = await handlerFor(appStoresStats)(contextOf(repo), { appId: 1, range: '30d' });
+        assert.equal(stats.to, UNTIL * 86400, 'la fenêtre finit la veille du relevé de la note');
+        assert.equal(stats.metrics.rating.apple, 4.7);
+        assert.equal(stats.previous.rating.apple, null);
+    });
+
     it('restreints à un store, finissent à son propre dernier jour et ne comptent que ses avis', async () => {
         const { stats } = await handlerFor(appStoresStats)(contextOf(seeded()), {
             appId: 1,

@@ -124,22 +124,33 @@ function downloadsIn(
         .reduce((total, r) => total + Math.max(0, r.downloads ?? 0), 0);
 }
 
-/** La dernière note relevée de la fenêtre. */
-function lastRating(rows: readonly DailyRow[], store: AppStore, from: number, to: number): number | null {
+/**
+ * La dernière note relevée de la fenêtre ; `later`, la première relevée après
+ * elle à défaut. Apple ne publie que la note du moment, relevée chaque jour
+ * depuis le branchement : elle peut ne commencer qu'après la fin d'une fenêtre
+ * que le retard de Google arrête plus tôt.
+ */
+function ratingOf(rows: readonly DailyRow[], store: AppStore, from: number, to: number, later: boolean): number | null {
     let found: DailyRow | null = null;
     for (const row of rows) {
         if (row.store !== store || row.rating_avg === null || row.day < from || row.day > to) continue;
         if (found === null || row.day > found.day) found = row;
     }
+    for (const row of later && found === null ? rows : []) {
+        if (row.store !== store || row.rating_avg === null || row.day <= to) continue;
+        if (found === null || row.day < found.day) found = row;
+    }
     return found === null ? null : Math.min(5, Math.max(0, Number(found.rating_avg)));
 }
 
+/** `current` : la fenêtre affichée, dont la note peut se prendre juste après elle (voir `ratingOf`). */
 export function metricsOf(
     listings: readonly ListingRow[],
     rows: readonly DailyRow[],
     from: number,
     to: number,
-    reviews: number
+    reviews: number,
+    current: boolean
 ): AppStoresMetrics {
     const of = (store: AppStore) => listings.find((l) => l.store === store);
     const inWindow = rows.filter((r) => r.day >= from && r.day <= to);
@@ -149,8 +160,8 @@ export function metricsOf(
             google: downloadsIn(of('google'), rows, from, to)
         },
         rating: {
-            apple: of('apple') ? lastRating(rows, 'apple', from, to) : null,
-            google: of('google') ? lastRating(rows, 'google', from, to) : null
+            apple: of('apple') ? ratingOf(rows, 'apple', from, to, current) : null,
+            google: of('google') ? ratingOf(rows, 'google', from, to, current) : null
         },
         reviews,
         crashRate: weighted(inWindow, 'crash_rate'),
@@ -233,11 +244,11 @@ export const appStoresStatsFeatures = [
         handler: async (ctx: Ctx, input) => {
             await loadApp(ctx, input.appId);
             const listings = ofStore(await ctx.repo.listListingsOfApps([input.appId]), input.store);
-            const window = dayWindow(input.range, dataUntilOf(withData(listings)), utcToday(Date.now()));
+            const today = utcToday(Date.now());
+            const window = dayWindow(input.range, dataUntilOf(withData(listings)), today);
             const [rows, counts, countries] = await Promise.all([
-                ctx.repo
-                    .dailyRows(input.appId, window.previousFromDay, window.toDay)
-                    .then((all) => ofStore(all, input.store)),
+                // Jusqu'à aujourd'hui, au-delà de la fenêtre : de quoi trouver une note relevée après elle.
+                ctx.repo.dailyRows(input.appId, window.previousFromDay, today).then((all) => ofStore(all, input.store)),
                 ctx.repo.reviewCounts(
                     input.appId,
                     input.store ?? null,
@@ -257,9 +268,17 @@ export const appStoresStatsFeatures = [
                         rows,
                         window.fromDay,
                         window.toDay,
-                        reviewStars.reduce((a, b) => a + b, 0)
+                        reviewStars.reduce((a, b) => a + b, 0),
+                        true
                     ),
-                    previous: metricsOf(listings, rows, window.previousFromDay, window.fromDay - 1, previousReviews),
+                    previous: metricsOf(
+                        listings,
+                        rows,
+                        window.previousFromDay,
+                        window.fromDay - 1,
+                        previousReviews,
+                        false
+                    ),
                     points: pointsOf(listings, rows, window),
                     reviewStars,
                     countries: countries.filter((c) => c.downloads > 0)
