@@ -3,6 +3,8 @@ declare const styles: {
     readonly alertList: string;
     readonly alertName: string;
     readonly alertRow: string;
+    readonly appIcon: string;
+    readonly appIconLarge: string;
     readonly appstoresSyncStrip: string;
     readonly back: string;
     readonly backLabel: string;
@@ -60,6 +62,7 @@ declare const styles: {
     readonly heading: string;
     readonly headingText: string;
     readonly ident: string;
+    readonly identity: string;
     readonly identityMeta: string;
     readonly identityName: string;
     readonly legendItem: string;

@@ -63,10 +63,11 @@ import {
  */
 
 const TICK_MS = 60_000;
-/** Les chiffres du jour, les avis et versions, la note Apple. */
+/** Les chiffres du jour, les avis et versions, la note et l'icône Apple, l'icône Google. */
 const METRICS_EVERY = 6 * 3600;
 const REVIEWS_EVERY = 30 * 60;
 const RATING_EVERY = 24 * 3600;
+const ICON_EVERY = 24 * 3600;
 /** Passes en même temps, tout le serveur confondu. */
 const MAX_PASSES = 4;
 const DUE_LIMIT = 100;
@@ -1126,9 +1127,15 @@ export class AppStoresSync {
             else if (await this.reviews(pass, cipher, work)) work.reviewsAt = now;
             if (pass.capabilities.has('versions')) await this.versions(pass, work);
         }
-        if (pass.credentials.store === 'apple' && this.due(work, work.row.rating_synced_at, RATING_EVERY)) {
+        // L'icône Apple vient avec la note : une fiche qui ne l'a jamais cherchée n'attend pas la cadence.
+        const appleLookup = this.due(work, work.row.rating_synced_at, RATING_EVERY) || work.state.icon === undefined;
+        if (pass.credentials.store === 'apple' && appleLookup) {
             work.touched = true;
             if (await this.rating(pass, work)) work.ratingAt = now;
+        }
+        if (pass.credentials.store === 'google' && this.due(work, work.state.iconAt ?? null, ICON_EVERY)) {
+            work.touched = true;
+            await this.googleIcon(pass, work);
         }
     }
 
@@ -1311,21 +1318,44 @@ export class AppStoresSync {
             pass,
             work,
             'la note',
-            () => this.clients.apple.fetchRating(work.content.externalId, work.ratingCountry, this.signal),
+            () => this.clients.apple.fetchLookup(work.content.externalId, work.ratingCountry, this.signal),
             true
         );
         // Une note qui ne se lit pas attend demain : elle bouge peu, et l'API publique n'a pas de repli.
-        if (failed(read) || read.value === null) return true;
+        if (failed(read)) return true;
+        this.setIcon(work, read.value?.icon ?? null);
+        const rating = read.value?.rating;
+        if (!rating) return true;
         const day = work.syncedDay ?? utcToday(this.clock()) - 1;
         await this.deps.repo.writeRatings(work.row.app_id, 'apple', [
-            { day, rating: read.value.rating, count: read.value.count }
+            { day, rating: rating.rating, count: rating.count }
         ]);
-        if (work.state.rating !== read.value.rating || work.state.ratingCount !== read.value.count) {
-            work.state.rating = read.value.rating;
-            work.state.ratingCount = read.value.count;
+        if (work.state.rating !== rating.rating || work.state.ratingCount !== rating.count) {
+            work.state.rating = rating.rating;
+            work.state.ratingCount = rating.count;
             work.changed = true;
         }
         return true;
+    }
+
+    /** Lue ou manquée, l'icône Google attend le lendemain, comme la note Apple. */
+    private async googleIcon(pass: Pass, work: Work): Promise<void> {
+        if (this.halted(pass)) return;
+        const read = await this.attempt(
+            pass,
+            work,
+            'l’icône',
+            () => this.clients.google.fetchIcon(work.content.externalId, this.signal),
+            true
+        );
+        work.state.iconAt = this.nowSeconds();
+        if (!failed(read)) this.setIcon(work, read.value);
+    }
+
+    private setIcon(work: Work, icon: string | null): void {
+        if (work.state.icon === icon) return;
+        work.state.icon = icon;
+        work.changed = true;
     }
 
     // ------------------------------------------------------------- la fin d'une passe

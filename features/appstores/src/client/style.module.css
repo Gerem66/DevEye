@@ -295,6 +295,26 @@
     border-radius: var(--radius-lg);
 }
 
+/* L'icône d'une app, aux coins arrondis comme sur les stores ; un carré neutre avant sa sortie. */
+.appIcon {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 22%;
+    border: 1px solid var(--glass-border);
+    background: var(--surface-subtle);
+    color: var(--text-muted);
+    object-fit: cover;
+}
+
+.appIconLarge {
+    width: 48px;
+    height: 48px;
+}
+
 .rowMain {
     flex: 1;
     min-width: 0;
@@ -505,6 +525,15 @@
     min-width: 0;
 }
 
+/* L'icône d'une app et son identité, côte à côte à toutes les largeurs. */
+.identity {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    min-width: 0;
+}
+
 /* Les onglets à gauche, la période commune à droite, sur le même trait. */
 .tabsRow {
     display: flex;
@@ -582,7 +611,8 @@
         grid-area: back;
     }
 
-    .sheetHeader .ident {
+    .sheetHeader .ident,
+    .sheetHeader .identity {
         grid-area: ident;
     }
 

@@ -66,6 +66,10 @@ export interface ListingState {
     vitals?: { crash?: boolean; anr?: boolean; day?: number };
     /** La nature de `sync_error`, écrite avec elle. */
     failure?: AppStoresSyncFailure;
+    /** L'icône que montre le store, `null` s'il n'en montre pas ; absente, elle n'a pas encore été cherchée. */
+    icon?: string | null;
+    /** Google : la dernière lecture de l'icône, sur la page publique de l'app. */
+    iconAt?: number;
 }
 
 /** Ce que porte `ft_appstores_sources.content` : rien de secret. */
@@ -188,6 +192,7 @@ export async function toListing(cipher: SdkCipher, row: ListingRow): Promise<App
         externalId: content?.externalId ?? '',
         storeName: content?.storeName ?? null,
         bundleId: content?.bundleId ?? null,
+        icon: typeof state.icon === 'string' ? state.icon : null,
         versions: state.versions ?? [],
         rating: typeof state.rating === 'number' ? Math.min(5, Math.max(0, state.rating)) : null,
         ratingCount: typeof state.ratingCount === 'number' ? state.ratingCount : null,

@@ -8,6 +8,7 @@ import { FeatureError } from '@deveye/types/sdk/server';
 import { dayOfDate } from '../days';
 import {
     appleToken,
+    fetchAppleLookup,
     fetchReviewsPage,
     fetchSalesReport,
     figuresFor,
@@ -318,6 +319,28 @@ describe('les avis et les réponses', () => {
         };
         assert.equal(body.data.relationships.review.data.id, 'aaaa-1111');
         assert.deepEqual(reply, { body: 'Corrigé', at: null, state: 'pending', responseId: 'resp-2' });
+    });
+});
+
+describe('la recherche publique', () => {
+    it('rend la note et l’icône du pays, l’icône seule sans note, rien quand le pays ne la vend pas', async () => {
+        const artwork = 'https://is1-ssl.mzstatic.com/image/thumb/Purple/v4/a.png/100x100bb.jpg';
+        answer((url) => {
+            assert.equal(url.searchParams.get('country'), 'fr');
+            if (url.searchParams.get('id') === '1') {
+                return json({ results: [{ averageUserRating: 4.6, userRatingCount: 120, artworkUrl100: artwork }] });
+            }
+            if (url.searchParams.get('id') === '2') return json({ results: [{ artworkUrl100: artwork }] });
+            return json({ results: [] });
+        });
+        assert.deepEqual(await fetchAppleLookup('1', 'FR'), { rating: { rating: 4.6, count: 120 }, icon: artwork });
+        assert.deepEqual(await fetchAppleLookup('2', 'FR'), { rating: null, icon: artwork });
+        assert.equal(await fetchAppleLookup('3', 'FR'), null);
+    });
+
+    it('ne garde pas une icône hors des serveurs d’images d’Apple', async () => {
+        answer(() => json({ results: [{ artworkUrl100: 'https://exemple.fr/icone.png' }] }));
+        assert.deepEqual(await fetchAppleLookup('1', 'FR'), { rating: null, icon: null });
     });
 });
 

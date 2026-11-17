@@ -21,11 +21,13 @@ import {
  * Play Console : un jeton RS256 échangé chez Google, les rapports mensuels du
  * bucket `pubsite_prod_…` pour les installations, les notes et les ventes, la
  * Reporting API pour les apps et la stabilité, l'API Publisher pour les avis.
+ * L'icône vient de la page publique de l'app, sans clé.
  */
 
 const STORAGE = 'https://storage.googleapis.com/storage/v1/b';
 const REPORTING = 'https://playdeveloperreporting.googleapis.com/v1beta1';
 const PUBLISHER = 'https://androidpublisher.googleapis.com/androidpublisher/v3/applications';
+const PLAY_PAGE = 'https://play.google.com/store/apps/details';
 
 const SCOPES = [
     'https://www.googleapis.com/auth/androidpublisher',
@@ -608,6 +610,24 @@ export async function fetchGoogleReleases(
     return out.sort((a, b) => (b.code ?? 0) - (a.code ?? 0));
 }
 
+/** La page publique pèse plus d'un mégaoctet : son icône n'est déclarée qu'à la fin. */
+const PLAY_PAGE_MAX_BYTES = 8 * 1024 * 1024;
+const PLAY_ICON =
+    /<meta property="og:image" content="(https:\/\/play-lh\.googleusercontent\.com\/[A-Za-z0-9_-]+)(?:=[^"]*)?"/;
+
+/**
+ * L'icône de l'app, en 128 px, lue sur sa page publique : l'API Publisher ne
+ * la donne qu'en ouvrant une modification. `null` avant sa publication.
+ */
+export async function fetchGoogleIcon(pkg: string, signal?: AbortSignal): Promise<string | null> {
+    const query = new URLSearchParams({ id: assertPackage(pkg), hl: 'en' });
+    const res = await storeCall('google', `${PLAY_PAGE}?${query.toString()}`, { signal }, [404]);
+    if (res.status === 404) return null;
+    const page = (await readBody('google', res, PLAY_PAGE_MAX_BYTES)).toString('utf8');
+    const found = PLAY_ICON.exec(page);
+    return found ? `${found[1]}=s128` : null;
+}
+
 /** Publie une réponse, ou remplace celle en place : Google la montre aussitôt. */
 export async function replyGoogle(
     creds: GoogleCredentials,
@@ -817,7 +837,8 @@ export const googleClient = {
     downloadObject,
     fetchReviews: fetchGoogleReviews,
     fetchReleases: fetchGoogleReleases,
-    fetchVitals
+    fetchVitals,
+    fetchIcon: fetchGoogleIcon
 };
 
 export type GoogleClient = typeof googleClient;

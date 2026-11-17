@@ -92,6 +92,11 @@ sa synchronisation restent chez elle, où vit sa source.
 | **Réglages d'une app** | onglet Général : nom, suppression ; onglet Stores : fiches de store et leur source, pays de la note Apple, cadence de synchronisation, relecture de l'année                  |
 | **Onglet d'un projet** | les apps reliées, en version compacte de l'Aperçu, sans montant                                                                                                              |
 
+L'icône de l'app, celle de l'App Store d'abord, ouvre sa rangée et son en-tête ;
+un carré neutre la remplace avant la sortie. Le navigateur la charge depuis les
+serveurs d'images d'Apple ou de Google, sans référent. Une fiche qui ne l'a
+jamais cherchée la lit au passage suivant, sans attendre la cadence de la note.
+
 Chaque fiche de store a sa puce, à l'accueil comme dans l'en-tête de la fiche :
 son logo, puis son propre état. En temps normal, sa dernière version et l'état
 de celle-ci ; sinon, dans cet ordre, « Sans compte », un échec en deux mots
@@ -156,6 +161,7 @@ Les décisions d'écran qui méritent d'être connues :
 | Revenus         | le même rapport : unités × produit net, par devise                                               | `sales/salesreport_<AAAAMM>.zip`, ventes estimées avant commission, hors taxes        |
 | Versions        | `appStoreVersions`, champ `appVersionState`                                                      | `tracks/production/releases` : la piste de production, en lecture seule, sans date    |
 | Stabilité       | aucun                                                                                            | Reporting API `crashRateMetricSet` et `anrRateMetricSet`, taux perçus                 |
+| Icône           | la même recherche iTunes que la note, `artworkUrl100`                                            | la page publique de l'app, balise `og:image`, sans clé, une fois par jour             |
 
 ### 3.2 La synchronisation
 
@@ -279,7 +285,7 @@ montre combien de projets relient chacune, et la fiche les nomme.
 | `src/server/e2e.ts`                                                                                           | les parcours de la page Tests et débogage                                                      |
 | `src/client/AppStores.tsx`, `AppList.tsx`, `OverviewRecap.tsx`, `StoresOverview.tsx`                          | l'accueil de la fonctionnalité, son récapitulatif et la vue d'ensemble                         |
 | `src/client/AppDetail.tsx` et ses onglets                                                                     | la fiche : `Overview`, `Reviews`, `Revenue`, `Stability`                                       |
-| `src/client/StoreChips.tsx`                                                                                   | les puces de store, leur état et la nouvelle tentative                                         |
+| `src/client/StoreChips.tsx`, `AppIcon.tsx`                                                                    | les puces de store, leur état et la nouvelle tentative ; l'icône de l'app                      |
 | `src/client/SourcesPanel.tsx`, `SourceDialog.tsx`                                                             | l'onglet Sources                                                                               |
 | `src/client/AppGeneralPanel.tsx`, `ListingsPanel.tsx`, `appSettings.ts`, `AppDialog.tsx`, `ListingPicker.tsx` | l'ajout, et les onglets Général et Stores de l'app                                             |
 | `src/client/Stats/*`                                                                                          | bandeau, courbe en SVG écrit à la main, répartition des étoiles, pays en liste et sur la carte |
@@ -356,6 +362,10 @@ Aucun avis ne porte de montant.
   publié » se distinguent par l'âge du jour (§ 3.3).
 - **Les CSV de Google sont en UTF-16** et changent de colonnes : on les lit par
   le nom des colonnes.
+- **L'icône Google se lit sur la page publique de l'app** (`og:image`) : l'API
+  Publisher ne la donne qu'en ouvrant une modification. Si Google change sa
+  page, l'icône manque, et rien d'autre ; seule une adresse de
+  `play-lh.googleusercontent.com` est retenue, comme `mzstatic.com` chez Apple.
 
 ---
 

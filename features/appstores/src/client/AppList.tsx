@@ -1,6 +1,7 @@
 import { PlanPausedBadge, StatusBadge, type LiveOutlineProps } from 'deveye-sdk-client';
 import type { AppStoresAppSummary } from '../contracts/domain';
 
+import AppIcon from './AppIcon';
 import { countryName, formatCount, formatRating, MISSING, plural, STORE_LABELS, STORE_ORDER } from './format';
 import { relativeChange } from './Stats/StatBand';
 import StoreChips from './StoreChips';
@@ -67,6 +68,7 @@ function AppRow({ summary, outline, onOpen, onRetry }: AppRowProps) {
                     }
                 }}
             >
+                <AppIcon app={app} />
                 <div className={styles.rowMain}>
                     <p className={styles.rowName}>
                         <span className={styles.rowTitle}>{app.name}</span>

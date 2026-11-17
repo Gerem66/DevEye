@@ -28,7 +28,7 @@ import {
  * App Store Connect, avec la clé d'API d'équipe que l'utilisateur colle : un
  * jeton ES256 signé ici, l'API JSON pour les apps, les avis et les versions,
  * le rapport de ventes quotidien pour les téléchargements et les produits. La
- * note vient de l'API publique iTunes, sans clé.
+ * note et l'icône viennent de l'API publique iTunes, sans clé.
  */
 
 const API = 'https://api.appstoreconnect.apple.com';
@@ -623,29 +623,43 @@ export async function fetchVersions(
     return out.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
 }
 
-/** La note d'une app dans un pays, par l'API publique iTunes ; `null` sans note. */
-export async function fetchAppleRating(
+/** Ce que l'App Store d'un pays montre d'une app. */
+export interface AppleLookup {
+    rating: StoreRating | null;
+    /** L'icône de 100 px, sur les serveurs d'images d'Apple. */
+    icon: string | null;
+}
+
+const ARTWORK = /^https:\/\/[a-z0-9-]+\.mzstatic\.com\/[^\s"'<>]+$/;
+
+/** La note et l'icône d'une app dans un pays, par l'API publique iTunes ; `null` quand ce pays ne la vend pas. */
+export async function fetchAppleLookup(
     appId: string,
     country: string,
     signal?: AbortSignal
-): Promise<StoreRating | null> {
+): Promise<AppleLookup | null> {
     if (!COUNTRY_CODE.test(country)) throw new Error('Code pays invalide');
     const query = new URLSearchParams({ id: assertAppId(appId), country: country.toLowerCase() });
     const res = await storeCall('apple', `${LOOKUP}?${query.toString()}`, {
         headers: { Accept: 'application/json' },
         signal
     });
-    const doc = await readStoreJson<{ results?: { averageUserRating?: unknown; userRatingCount?: unknown }[] }>(
-        'apple',
-        res
-    );
+    const doc = await readStoreJson<{
+        results?: { averageUserRating?: unknown; userRatingCount?: unknown; artworkUrl100?: unknown }[];
+    }>('apple', res);
     const first = doc.results?.[0];
-    const rating = Number(first?.averageUserRating);
-    if (!first || first.averageUserRating === undefined || !Number.isFinite(rating)) return null;
+    if (!first) return null;
+    const icon =
+        typeof first.artworkUrl100 === 'string' && ARTWORK.test(first.artworkUrl100) ? first.artworkUrl100 : null;
+    const rating = Number(first.averageUserRating);
+    if (first.averageUserRating === undefined || !Number.isFinite(rating)) return { rating: null, icon };
     const count = Number(first.userRatingCount);
     return {
-        rating: Math.min(5, Math.max(0, rating)),
-        count: Number.isFinite(count) && count >= 0 ? Math.trunc(count) : null
+        rating: {
+            rating: Math.min(5, Math.max(0, rating)),
+            count: Number.isFinite(count) && count >= 0 ? Math.trunc(count) : null
+        },
+        icon
     };
 }
 
@@ -719,7 +733,7 @@ export const appleClient = {
     fetchReviewsPage,
     fetchResponse,
     fetchVersions,
-    fetchRating: fetchAppleRating
+    fetchLookup: fetchAppleLookup
 };
 
 export type AppleClient = typeof appleClient;

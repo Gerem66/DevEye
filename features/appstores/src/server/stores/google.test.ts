@@ -8,6 +8,7 @@ import { FeatureError } from '@deveye/types/sdk/server';
 import { dayOfDate } from '../days';
 import { unzipFirst } from '../parse/unzip';
 import {
+    fetchGoogleIcon,
     fetchGoogleReleases,
     fetchGoogleReviews,
     probeGoogle,
@@ -406,5 +407,26 @@ describe('les avis et la stabilité', () => {
         assert.equal(body.timelineSpec.endTime.day, 15);
         assert.equal(body.timelineSpec.endTime.timeZone.id, 'America/Los_Angeles');
         assert.deepEqual(body.metrics, ['userPerceivedCrashRate', 'distinctUsers']);
+    });
+});
+
+describe('l’icône', () => {
+    it('lit l’icône de la page publique, en 128 px, sans clé', async () => {
+        answer((url, init) => {
+            assert.equal(url.origin + url.pathname, 'https://play.google.com/store/apps/details');
+            assert.equal(url.searchParams.get('id'), 'com.exemple.app');
+            assert.equal(new Headers(init.headers).get('authorization'), null);
+            return new Response(
+                '<html><body>…</body><meta property="og:image" content="https://play-lh.googleusercontent.com/AbC_d-1=s0-br30"></html>'
+            );
+        });
+        assert.equal(await fetchGoogleIcon('com.exemple.app'), 'https://play-lh.googleusercontent.com/AbC_d-1=s128');
+    });
+
+    it('ne rend rien avant la publication, ni pour une image d’ailleurs', async () => {
+        answer(() => new Response('introuvable', { status: 404 }));
+        assert.equal(await fetchGoogleIcon('com.exemple.app'), null);
+        answer(() => new Response('<meta property="og:image" content="https://exemple.fr/icone.png">'));
+        assert.equal(await fetchGoogleIcon('com.exemple.app'), null);
     });
 });

@@ -23,6 +23,7 @@ import {
 import type { AppStoresApp, AppStoresUsage } from '../contracts/domain';
 
 import { api } from './api';
+import AppIcon from './AppIcon';
 import { plural, STORE_LABELS, STORE_ORDER } from './format';
 import Overview from './Overview';
 import { setStoresPrefs, useStoresPrefs } from './prefs';
@@ -130,21 +131,24 @@ export function AppDetail({ app, usage, onBack }: AppDetailProps) {
                         >
                             <span className={styles.backLabel}>Stores</span>
                         </Button>
-                        <div className={styles.ident}>
-                            <h2 className={styles.heading}>
-                                <span className={styles.headingText}>{app.name}</span>
-                                {app.foreign && (
-                                    <span
-                                        className={styles.badgeWrap}
-                                        title='Cette app appartient à un autre espace qui la partage ici'
-                                    >
-                                        <StatusBadge tone='accent'>partagée</StatusBadge>
-                                    </span>
-                                )}
-                                {app.planPaused && <PlanPausedBadge />}
-                            </h2>
-                            <div className={styles.subheading}>
-                                <StoreChips app={app} onRetry={retry.syncNow} />
+                        <div className={styles.identity}>
+                            <AppIcon app={app} large />
+                            <div className={styles.ident}>
+                                <h2 className={styles.heading}>
+                                    <span className={styles.headingText}>{app.name}</span>
+                                    {app.foreign && (
+                                        <span
+                                            className={styles.badgeWrap}
+                                            title='Cette app appartient à un autre espace qui la partage ici'
+                                        >
+                                            <StatusBadge tone='accent'>partagée</StatusBadge>
+                                        </span>
+                                    )}
+                                    {app.planPaused && <PlanPausedBadge />}
+                                </h2>
+                                <div className={styles.subheading}>
+                                    <StoreChips app={app} onRetry={retry.syncNow} />
+                                </div>
                             </div>
                         </div>
                     </div>

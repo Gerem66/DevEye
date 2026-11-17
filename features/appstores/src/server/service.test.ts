@@ -42,7 +42,7 @@ function clientsOf(apple: AppleFake = {}, google: GoogleFake = {}): StoreClients
             fetchReviewsPage: async () => ({ reviews: [], next: null }),
             fetchResponse: async () => null,
             fetchVersions: async () => [],
-            fetchRating: async () => null,
+            fetchLookup: async () => null,
             ...apple
         },
         google: {
@@ -52,6 +52,7 @@ function clientsOf(apple: AppleFake = {}, google: GoogleFake = {}): StoreClients
             fetchReviews: async () => [],
             fetchReleases: async () => [],
             fetchVitals: async () => [],
+            fetchIcon: async () => null,
             ...google
         }
     };
@@ -530,6 +531,72 @@ describe('les versions Google', () => {
             ['4.3.5', 'RELEASE_LIFECYCLE_STATE_PUBLISHED']
         ]);
         assert.deepEqual(t.deps.recorded.notifications, []);
+    });
+});
+
+describe('les icônes', () => {
+    const state = (t: ReturnType<typeof setup>) =>
+        JSON.parse(t.repo.db.listings[0].state ?? '{}') as { icon?: string | null; iconAt?: number };
+
+    it('lit l’icône Apple avec la note, sans attendre la cadence de celle-ci la première fois', async () => {
+        let lookups = 0;
+        const icon = 'https://is1-ssl.mzstatic.com/image/thumb/a/100x100bb.jpg';
+        const t = setup(
+            { sources: [sourceRow({ id: 10 })], listings: [synced(1)] },
+            clientsOf({
+                fetchLookup: async () => {
+                    lookups += 1;
+                    return { rating: null, icon };
+                }
+            })
+        );
+        await t.start();
+        t.later(31 * 60_000);
+        await t.beat();
+        assert.equal(lookups, 1, 'la note était à jour, l’icône jamais cherchée');
+        assert.equal(state(t).icon, icon);
+        t.later(31 * 60_000);
+        await t.beat();
+        assert.equal(lookups, 1, 'ensuite, une fois par jour avec la note');
+    });
+
+    it('lit l’icône Google une fois par jour', async () => {
+        let reads = 0;
+        const t = setup(
+            {
+                sources: [
+                    sourceRow({
+                        id: 20,
+                        store: 'google',
+                        capabilities: '',
+                        content: JSON.stringify({
+                            label: 'Play',
+                            clientEmail: 'deveye@projet.iam.gserviceaccount.com',
+                            bucket: 'pubsite_prod_rev_0123'
+                        })
+                    })
+                ],
+                listings: [caughtUp({ id: 1, app_id: 1, store: 'google', source_id: 20 })]
+            },
+            clientsOf(
+                {},
+                {
+                    fetchIcon: async () => {
+                        reads += 1;
+                        return 'https://play-lh.googleusercontent.com/abc=s128';
+                    }
+                }
+            )
+        );
+        await t.start();
+        assert.equal(reads, 1);
+        assert.equal(state(t).icon, 'https://play-lh.googleusercontent.com/abc=s128');
+        t.later(31 * 60_000);
+        await t.beat();
+        assert.equal(reads, 1);
+        t.later(24 * HOUR);
+        await t.beat();
+        assert.equal(reads, 2);
     });
 });
 
