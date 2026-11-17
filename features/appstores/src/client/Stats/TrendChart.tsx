@@ -54,6 +54,32 @@ function runsOf(values: readonly (number | null)[]): number[][] {
 }
 
 /**
+ * Le tracé d'une suite de points à pas régulier, en cubique monotone : les
+ * angles s'arrondissent sans qu'aucune bosse ne dépasse les valeurs relevées.
+ */
+function smoothPath(points: readonly (readonly [number, number])[]): string {
+    const at = ([px, py]: readonly [number, number]) => `${px.toFixed(1)} ${py.toFixed(1)}`;
+    if (points.length < 3) return points.map((point, k) => `${k === 0 ? 'M' : 'L'} ${at(point)}`).join(' ');
+    const slopes = points.slice(1).map(([px, py], k) => (py - points[k][1]) / (px - points[k][0] || 1));
+    // Une pente nulle aux extrêmes locaux, bornée ailleurs : c'est ce qui interdit le dépassement.
+    const tangents = points.map((_, k) => {
+        if (k === 0) return slopes[0];
+        if (k === points.length - 1) return slopes[k - 1];
+        const [before, after] = [slopes[k - 1], slopes[k]];
+        if (before * after <= 0) return 0;
+        return Math.sign(before) * Math.min(Math.abs(before), Math.abs(after), Math.abs(before + after) / 4) * 2;
+    });
+    let d = `M ${at(points[0])}`;
+    for (let k = 1; k < points.length; k++) {
+        const [x0, y0] = points[k - 1];
+        const [x1, y1] = points[k];
+        const third = (x1 - x0) / 3;
+        d += ` C ${at([x0 + third, y0 + third * tangents[k - 1]])} ${at([x1 - third, y1 - third * tangents[k]])} ${at([x1, y1])}`;
+    }
+    return d;
+}
+
+/**
  * Une courbe par série sur la fenêtre demandée. `viewBox` fixe : le SVG suit
  * son conteneur par mise à l'échelle, sans mesure ni recalcul. La légende
  * porte la valeur survolée plutôt qu'une info-bulle qui suivrait le pointeur.
@@ -79,7 +105,7 @@ export function TrendChart({ slots, resolution, series, format, label, title, th
     const ticked = (i: number) => i === slots.length - 1 || (i % every === 0 && slots.length - 1 - i >= every / 2);
 
     const pathOf = (values: readonly (number | null)[], run: number[]) =>
-        run.map((i, k) => `${k === 0 ? 'M' : 'L'} ${x(i).toFixed(1)} ${y(values[i] ?? 0).toFixed(1)}`).join(' ');
+        smoothPath(run.map((i) => [x(i), y(values[i] ?? 0)] as const));
 
     // Une aire sous une seule série ; à deux, elles se brouilleraient l'une l'autre.
     const area = series.length === 1 ? series[0] : null;
