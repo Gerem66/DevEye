@@ -136,5 +136,6 @@ declare const styles: {
     readonly versionName: string;
     readonly versionRow: string;
     readonly versionSince: string;
+    readonly versionsBlock: string;
 };
 export = styles;

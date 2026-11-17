@@ -168,7 +168,7 @@ const VERSION_STATES: Record<string, { label: string; tone: Tone }> = {
     IN_REVIEW: { label: 'En revue', tone: 'accent' },
     PENDING_DEVELOPER_RELEASE: { label: 'Acceptée, à publier', tone: 'warning' },
     PENDING_APPLE_RELEASE: { label: 'Acceptée, publication par Apple', tone: 'accent' },
-    READY_FOR_DISTRIBUTION: { label: 'En vente', tone: 'success' },
+    READY_FOR_DISTRIBUTION: { label: 'En production', tone: 'success' },
     REJECTED: { label: 'Rejetée', tone: 'danger' },
     METADATA_REJECTED: { label: 'Métadonnées rejetées', tone: 'danger' },
     DEVELOPER_REJECTED: { label: 'Retirée de la revue', tone: 'neutral' },

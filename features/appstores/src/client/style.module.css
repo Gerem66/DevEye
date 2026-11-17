@@ -824,6 +824,11 @@
 
 /* ------------------------------------------------------------ les versions */
 
+/* La dernière ligne garde son propre souffle : la marge du bas du bloc s'en trouve doublée. */
+.versionsBlock {
+    padding-bottom: calc(var(--space-md) / 2);
+}
+
 .versionList {
     display: flex;
     flex-direction: column;

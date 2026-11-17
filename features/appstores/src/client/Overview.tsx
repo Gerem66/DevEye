@@ -234,7 +234,7 @@ export function Overview({ app, sources, canWrite }: OverviewProps) {
             </section>
 
             {apple && (
-                <section className={styles.block}>
+                <section className={`${styles.block} ${styles.versionsBlock}`}>
                     <header className={styles.blockHead}>
                         <h3 className={styles.blockTitle}>Versions sur l’App Store</h3>
                     </header>
