@@ -241,7 +241,8 @@
     vector-effect: non-scaling-stroke;
 }
 
-/* Sans étape connue, la bande va et vient : le rattrapage avance, sans total à montrer. */
+/* Sans étape connue, la bande va et vient : le rattrapage avance, sans total à
+   montrer. Lentement : elle traverse une rangée de toute la largeur de la liste. */
 .syncStrip {
     position: absolute;
     top: 0;
@@ -257,15 +258,15 @@
     height: 100%;
     background: var(--accent);
     box-shadow: 0 0 4px var(--accent-glow);
-    animation: appstoresSyncStrip 1.1s ease-in-out infinite;
+    animation: appstoresSyncStrip 3s ease-in-out infinite;
 }
 
 @keyframes appstoresSyncStrip {
     0% {
-        transform: translateX(-150%);
+        transform: translateX(-100%);
     }
     100% {
-        transform: translateX(350%);
+        transform: translateX(250%);
     }
 }
 
