@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { PROJECT_STATUS_LABELS } from '@deveye/types';
 import {
     Button,
@@ -24,7 +24,7 @@ import {
 import type { AppStoresApp, AppStoresUsage } from '../contracts/domain';
 
 import { api } from './api';
-import { formatAgo, plural } from './format';
+import { formatAgo, formatDay, plural, STORE_LABELS, STORE_ORDER } from './format';
 import Overview from './Overview';
 import Revenue from './Revenue';
 import Reviews from './Reviews';
@@ -135,8 +135,21 @@ export function AppDetail({ app, usage, onBack }: AppDetailProps) {
         invalidate('appstores.detail');
     };
 
-    const synced = app.listings.map((listing) => listing.lastSyncAt).filter((at): at is number => at !== null);
-    const lastSync = synced.length > 0 ? Math.max(...synced) : null;
+    // Chaque store publie à son rythme : un relevé commun laisserait croire l'autre à jour.
+    const freshness = STORE_ORDER.flatMap((store) => {
+        const listing = app.listings.find((candidate) => candidate.store === store);
+        if (!listing || listing.lastSyncAt === null) return [];
+        return [
+            {
+                store,
+                text:
+                    listing.dataUntil === null
+                        ? `${STORE_LABELS[store]} : aucune donnée pour l’instant`
+                        : `${STORE_LABELS[store]} : données jusqu’au ${formatDay(listing.dataUntil)}`,
+                title: `Relevé ${formatAgo(listing.lastSyncAt)}`
+            }
+        ];
+    });
     const hasSource = app.listings.some((listing) => listing.sourceId !== null);
     const syncBlocked = app.planPaused
         ? 'Au-delà de l’offre, la synchronisation de cette app est en pause.'
@@ -174,7 +187,12 @@ export function AppDetail({ app, usage, onBack }: AppDetailProps) {
                             </h2>
                             <div className={styles.subheading}>
                                 <StoreChips listings={app.listings} />
-                                {lastSync !== null && <span>synchronisée {formatAgo(lastSync)}</span>}
+                                {freshness.map((entry, index) => (
+                                    <Fragment key={entry.store}>
+                                        {index > 0 && <span aria-hidden='true'>·</span>}
+                                        <span title={entry.title}>{entry.text}</span>
+                                    </Fragment>
+                                ))}
                             </div>
                         </div>
                     </div>
