@@ -7,6 +7,7 @@ import {
     useRef,
     useState,
     type KeyboardEvent,
+    type PointerEvent,
     type ReactNode
 } from 'react';
 import { createPortal } from 'react-dom';
@@ -58,6 +59,11 @@ interface SearchSelectCommonProps<T extends string> {
     searchable?: boolean | 'auto';
     /** Des pastilles sous la recherche, combinées en ET, remises à zéro à la fermeture. */
     filters?: readonly SearchSelectFilter<T>[];
+    /**
+     * Pour une longue liste aux libellés longs : le panneau s'ouvre plus grand,
+     * s'agrandit par son coin, et le navigateur retient sous cette clé la taille tirée.
+     */
+    resizeKey?: string;
     /** L'identifiant du déclencheur, pour le `htmlFor` d'un libellé. */
     id?: string;
     /** Le champ que le dialogue ouvrant doit saisir (`data-autofocus`). */
@@ -89,6 +95,41 @@ const PANEL_MIN_WIDTH = 240;
 /** En deçà, la liste se parcourt des yeux : le champ de recherche gênerait plus qu'il n'aiderait. */
 const AUTO_SEARCH_MIN = 8;
 const NO_GROUPS: readonly string[] = [];
+
+interface PanelSize {
+    width: number;
+    /** Un plafond : une liste plus courte ramasse le panneau sur elle. */
+    height: number;
+}
+
+/** Le panneau d'un `resizeKey` qu'on n'a jamais tiré. */
+const RESIZABLE_SIZE: PanelSize = { width: 560, height: 600 };
+/** En deçà, la recherche et les pastilles ne laisseraient plus voir deux lignes. */
+const RESIZABLE_MIN_HEIGHT = 200;
+
+function panelSizeKey(resizeKey: string): string {
+    return `deveye.searchSelect.${resizeKey}`;
+}
+
+function readPanelSize(resizeKey: string): PanelSize {
+    try {
+        const stored = JSON.parse(localStorage.getItem(panelSizeKey(resizeKey)) ?? 'null') as Partial<PanelSize> | null;
+        if (typeof stored?.width === 'number' && typeof stored.height === 'number') {
+            return { width: stored.width, height: stored.height };
+        }
+    } catch {
+        // Stockage indisponible ou valeur illisible : la taille par défaut.
+    }
+    return RESIZABLE_SIZE;
+}
+
+function writePanelSize(resizeKey: string, size: PanelSize): void {
+    try {
+        localStorage.setItem(panelSizeKey(resizeKey), JSON.stringify(size));
+    } catch {
+        // Stockage indisponible : la taille tient jusqu'au rechargement.
+    }
+}
 
 /** Chaque groupe d'un seul tenant : d'abord ceux de `fixed`, puis les autres dans l'ordre où ils apparaissent. */
 function byGroup<T extends string>(
@@ -143,6 +184,7 @@ export function SearchSelect<T extends string>(props: SearchSelectProps<T>) {
         emptyGroupText = 'Aucun',
         searchable = 'auto',
         filters,
+        resizeKey,
         id: triggerId,
         autoFocus,
         disabled,
@@ -155,6 +197,9 @@ export function SearchSelect<T extends string>(props: SearchSelectProps<T>) {
     const [active, setActive] = useState(0);
     const [activeFilters, setActiveFilters] = useState<ReadonlySet<string>>(() => new Set());
     const [anchor, setAnchor] = useState<Anchor | null>(null);
+    const [size, setSize] = useState<PanelSize | null>(() =>
+        resizeKey === undefined ? null : readPanelSize(resizeKey)
+    );
     const trigger = useRef<HTMLButtonElement>(null);
     const panel = useRef<HTMLDivElement>(null);
     const search = useRef<HTMLInputElement>(null);
@@ -248,12 +293,12 @@ export function SearchSelect<T extends string>(props: SearchSelectProps<T>) {
             const below = window.innerHeight - rect.bottom - GAP * 2;
             const above = rect.top - GAP * 2;
             const up = below < 200 && above > below;
-            const width = Math.min(Math.max(rect.width, PANEL_MIN_WIDTH), window.innerWidth - GAP * 4);
+            const width = Math.min(size?.width ?? Math.max(rect.width, PANEL_MIN_WIDTH), window.innerWidth - GAP * 4);
             setAnchor({
                 left: Math.max(GAP * 2, Math.min(rect.left, window.innerWidth - width - GAP * 2)),
                 width,
                 ...(up ? { bottom: window.innerHeight - rect.top + GAP } : { top: rect.bottom + GAP }),
-                maxHeight: Math.min(PANEL_MAX_HEIGHT, up ? above : below)
+                maxHeight: Math.min(size?.height ?? PANEL_MAX_HEIGHT, up ? above : below)
             });
         };
         place();
@@ -263,7 +308,7 @@ export function SearchSelect<T extends string>(props: SearchSelectProps<T>) {
             window.removeEventListener('resize', place);
             window.removeEventListener('scroll', place, true);
         };
-    }, [open]);
+    }, [open, size]);
 
     useEffect(() => {
         if (!open) return;
@@ -292,6 +337,41 @@ export function SearchSelect<T extends string>(props: SearchSelectProps<T>) {
     useEffect(() => {
         if (open) document.getElementById(`${id}-option-${active}`)?.scrollIntoView({ block: 'nearest' });
     }, [open, active, id, placed]);
+
+    // Le coin suit le pointeur sans pousser le panneau hors de l'écran ; la taille
+    // ne s'enregistre qu'au lâcher.
+    const startResize = (event: PointerEvent<HTMLSpanElement>): void => {
+        const box = panel.current?.getBoundingClientRect();
+        if (!box || resizeKey === undefined) return;
+        event.preventDefault();
+        const grip = event.currentTarget;
+        grip.setPointerCapture(event.pointerId);
+        const origin = { x: event.clientX - box.width, y: event.clientY - box.height };
+        let next: PanelSize | null = null;
+        const move = (moveEvent: globalThis.PointerEvent): void => {
+            next = {
+                width: Math.round(
+                    Math.min(
+                        Math.max(moveEvent.clientX - origin.x, PANEL_MIN_WIDTH),
+                        window.innerWidth - box.left - GAP * 2
+                    )
+                ),
+                height: Math.round(
+                    Math.min(Math.max(moveEvent.clientY - origin.y, RESIZABLE_MIN_HEIGHT), window.innerHeight)
+                )
+            };
+            setSize(next);
+        };
+        grip.addEventListener('pointermove', move);
+        grip.addEventListener(
+            'lostpointercapture',
+            () => {
+                grip.removeEventListener('pointermove', move);
+                if (next) writePanelSize(resizeKey, next);
+            },
+            { once: true }
+        );
+    };
 
     const onKeyDown = (event: KeyboardEvent): void => {
         if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
@@ -482,6 +562,9 @@ export function SearchSelect<T extends string>(props: SearchSelectProps<T>) {
                             })}
                             {sections.length === 0 && <li className={styles.empty}>{emptyText}</li>}
                         </ul>
+                        {resizeKey !== undefined && (
+                            <span className={styles.grip} aria-hidden='true' onPointerDown={startResize} />
+                        )}
                     </div>,
                     document.body
                 )}

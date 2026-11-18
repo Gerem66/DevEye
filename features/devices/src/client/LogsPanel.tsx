@@ -573,6 +573,7 @@ export function LogsPanel({ deviceId }: { deviceId: string }) {
                         aria-label='Source de logs'
                         placeholder='Choisir une source…'
                         searchPlaceholder='Chercher une source…'
+                        resizeKey='devices.logs.source'
                         className={styles.logSourceSelect}
                     />
                     <button

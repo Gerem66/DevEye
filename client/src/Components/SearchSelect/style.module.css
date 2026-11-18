@@ -83,6 +83,25 @@
     overflow: hidden;
 }
 
+/* Le coin à tirer d'un panneau à `resizeKey`, dessiné comme celui d'une zone de texte. */
+.grip {
+    position: absolute;
+    right: 2px;
+    bottom: 2px;
+    width: 14px;
+    height: 14px;
+    cursor: nwse-resize;
+    touch-action: none;
+    background: linear-gradient(
+        135deg,
+        transparent 55%,
+        var(--text-muted) 55% 62%,
+        transparent 62% 76%,
+        var(--text-muted) 76% 83%,
+        transparent 83%
+    );
+}
+
 .search {
     flex-shrink: 0;
     padding: var(--space-sm) var(--space-md);
