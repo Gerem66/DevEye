@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
     Button,
     Checkbox,
+    CopyButton,
     Dialog,
     ErrorNote,
     SearchSelect,
@@ -139,14 +140,29 @@ export function Subtasks({
         const by = item.doneBy === null ? '' : ` par ${nameOf(item.doneBy)}`;
         return `Terminée${by} le ${formatDateTime(item.doneAt)}`;
     };
+    // En cases Markdown ; la suite d'un libellé sur plusieurs lignes s'indente
+    // pour rester dans sa case.
+    const copyValue = items
+        .map((item) => {
+            const notes = [
+                item.assigneeUserId !== null ? nameOf(item.assigneeUserId) : null,
+                item.required ? 'obligatoire' : null
+            ].filter(Boolean);
+            const tail = notes.length > 0 ? ` (${notes.join(', ')})` : '';
+            return `- [${item.done ? 'x' : ' '}] ${item.label.replaceAll('\n', '\n  ')}${tail}`;
+        })
+        .join('\n');
 
     return (
         <div className={styles.subPage}>
             <div className={styles.checkHead}>
                 <span className={styles.label}>Sous-tâches</span>
                 {items.length > 0 && (
-                    <span className={styles.checkCount}>
-                        {doneCount}/{items.length}
+                    <span className={styles.checkHeadEnd}>
+                        <span className={styles.checkCount}>
+                            {doneCount}/{items.length}
+                        </span>
+                        <CopyButton value={copyValue} label='Copier les sous-tâches' className={styles.checkCopy} />
                     </span>
                 )}
             </div>

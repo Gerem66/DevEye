@@ -56,6 +56,7 @@ declare const styles: {
     readonly checkAdd: string;
     readonly checkAddCount: string;
     readonly checkAddField: string;
+    readonly checkCopy: string;
     readonly checkCount: string;
     readonly checkDone: string;
     readonly checkDropBar: string;
@@ -66,6 +67,7 @@ declare const styles: {
     readonly checkEditText: string;
     readonly checkGrip: string;
     readonly checkHead: string;
+    readonly checkHeadEnd: string;
     readonly checkItem: string;
     readonly checkLabel: string;
     readonly checkLabelOpen: string;

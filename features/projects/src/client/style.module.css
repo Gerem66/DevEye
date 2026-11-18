@@ -1430,6 +1430,17 @@
     gap: var(--space-sm);
 }
 
+.checkHeadEnd {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+/* Son padding déborde : la rangée garde la hauteur de son intitulé. */
+.checkCopy {
+    margin-block: calc(-1 * var(--space-xs));
+}
+
 .checkCount {
     font-size: 0.75rem;
     color: var(--text-muted);
