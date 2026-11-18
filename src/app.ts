@@ -7,7 +7,14 @@ import fastifyHelmet from '@fastify/helmet';
 import fastifyRateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
-import Fastify, { type FastifyBaseLogger, type FastifyError, type FastifyInstance, type FastifyRequest } from 'fastify';
+import Fastify, {
+    type FastifyBaseLogger,
+    type FastifyError,
+    type FastifyInstance,
+    type FastifyReply,
+    type FastifyRequest,
+    LogController
+} from 'fastify';
 import {
     BUILD_MANIFEST_PATH,
     type ErrorCode,
@@ -179,6 +186,33 @@ export function documentCsp(remoteOrigins: readonly string[]): string {
         .join(';');
 }
 
+function isFileRequest(url: string): boolean {
+    const path = url.split('?')[0];
+    return !path.startsWith('/api') && /\.[^/]*$/.test(path);
+}
+
+/**
+ * Un fichier servi tel quel (client, icône, police) ne se journalise qu'en
+ * échec : une sonde d'intégrité en relit trois cents à chaque passage.
+ */
+export class QuietFilesLogController extends LogController {
+    override incomingRequest(request: FastifyRequest, reply: FastifyReply): void {
+        if (!isFileRequest(request.url)) super.incomingRequest(request, reply);
+    }
+
+    override requestCompleted(error: Error | null | undefined, request: FastifyRequest, reply: FastifyReply): void {
+        if (!isFileRequest(request.url)) {
+            super.requestCompleted(error, request, reply);
+            return;
+        }
+        if (!error && reply.statusCode < 400) return;
+        // Sa ligne d'arrivée s'est tue : celle-ci dit quel fichier.
+        const fields = { req: request, res: reply, err: error, responseTime: reply.elapsedTime };
+        if (error) reply.log.error(fields, 'request errored');
+        else reply.log.info(fields, 'request completed');
+    }
+}
+
 export interface AppDeps {
     db: Database;
     crypt: Encryption;
@@ -193,6 +227,7 @@ export interface BuiltApp {
 export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     const app = Fastify({
         loggerInstance: logger as FastifyBaseLogger,
+        logController: new QuietFilesLogController(),
         trustProxy: TRUST_PROXY,
         requestTimeout: env.REQUEST_TIMEOUT_SECONDS * 1000
     });
