@@ -38,6 +38,12 @@ import {
  */
 
 const TICK_MS = 5 * 60_000;
+/**
+ * Un premier échec se retente une minute après, au passage suivant : un agent
+ * qui redémarre ou un relais pas encore revenu. Un échec qui se répète attend
+ * une heure.
+ */
+const FIRST_RETRY_S = 60;
 const ERROR_RETRY_S = 3600;
 /** La fraîcheur du cache d'OSV : au-delà, un avis nouveau a pu paraître. */
 const REEVALUATE_S = 6 * 3600;
@@ -104,6 +110,8 @@ export function createExposureEngine(
     const dirty = new Set<number>();
     const evaluatedAt = new Map<number, number>();
     const notices = new Map<number, string[]>();
+    /** En mémoire : un redémarrage redonne à chacun son essai rapide. */
+    const failedTwice = new Set<number>();
     let lastHousekeeping = 0;
     let lastEolAttempt = 0;
     /** Une fois par jour, le dump d'endoflife.date ; ensuite, chaque espace se réévalue. */
@@ -191,6 +199,7 @@ export function createExposureEngine(
         const cipher = deps.cipherFor(ws);
         const now = nowSeconds();
         const outcome = await source.read(asset, item);
+        if (outcome.kind !== 'error') failedTwice.delete(asset.id);
         if (outcome.kind === 'gone') {
             await deps.repo.deleteAsset(asset.id);
             return true;
@@ -206,6 +215,7 @@ export function createExposureEngine(
                 { workspaceId: ws, source: source.id, ref: asset.ref, err: outcome.error },
                 'cve: élément illisible'
             );
+            if (asset.status === 'error') failedTwice.add(asset.id);
             await deps.repo.saveError(asset.id, await cipher.encrypt(outcome.error), now);
             return false;
         }
@@ -262,7 +272,8 @@ export function createExposureEngine(
                 const commonDue =
                     asset.refresh_asked === 1 ||
                     asset.status === 'pending' ||
-                    (asset.status === 'error' && (asset.checked_at ?? 0) < now - ERROR_RETRY_S);
+                    (asset.status === 'error' &&
+                        (asset.checked_at ?? 0) < now - (failedTwice.has(asset.id) ? ERROR_RETRY_S : FIRST_RETRY_S));
                 if (commonDue || (asset.status !== 'error' && source.isDue(asset, item, now))) {
                     due.push({ asset, item });
                 }

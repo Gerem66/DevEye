@@ -168,6 +168,8 @@ export function deviceSource(deps: FeatureServiceDeps<CveRepo>): Source<DeviceIt
             return items;
         },
         isDue(asset, { device }, now) {
+            // Hors ligne, la lecture ne rendrait que l'inventaire d'avant.
+            if (!deps.devicesFor(asset.workspace_id).isOnline(device.id)) return false;
             return asset.revision !== osRevision(device) || (asset.checked_at ?? 0) < now - POLL_S;
         },
         async read(asset, { device }) {
@@ -199,7 +201,8 @@ export function deviceSource(deps: FeatureServiceDeps<CveRepo>): Source<DeviceIt
             }
             return {
                 kind: 'scan',
-                revision: osRevision(device),
+                // Sans révision, une lecture faite hors ligne se refait au retour de l'agent.
+                revision: online ? osRevision(device) : null,
                 digest: null,
                 label: device.name,
                 components,

@@ -10,7 +10,7 @@ import {
     type GitHomeRepo,
     type GitItemsProvider
 } from '@deveye/types/sdk';
-import type { DockerInventory } from '@deveye/types';
+import type { DeviceReport, DockerInventory } from '@deveye/types';
 import type { SdkDevice, SdkFeatureContext } from '@deveye/types/sdk/server';
 import { createTestContext, createTestServiceDeps } from '@deveye/types/sdk/testing';
 
@@ -266,23 +266,81 @@ describe('la veille de l’espace', () => {
         assert.deepEqual((await handlerFor(cveExposure)(blind, { view: 'active' })).findings, []);
         await engine.stop();
     });
+
+    it('retente un premier échec une minute après, puis attend une heure', async () => {
+        osvHealth.blockedUntil = 0;
+        const { repo, git, engine, pass } = setup();
+        let reads = 0;
+        git.readFiles = async (): Promise<GitFilesResult> => {
+            reads++;
+            return { status: 'error', error: 'Jeton refusé par GitHub.', userSide: true };
+        };
+        // Le temps qui passe, vu de l'élément : son dernier essai recule d'autant.
+        const elapse = (seconds: number) => {
+            repo.assets[0].checked_at = (repo.assets[0].checked_at ?? 0) - seconds;
+        };
+        await engine.start();
+        await pass();
+        assert.equal(repo.assets[0].status, 'error');
+        assert.equal(reads, 1, 'un passage qui suit de près ne retente rien');
+
+        elapse(90);
+        await pass();
+        assert.equal(reads, 2, 'un premier échec se retente une minute après');
+
+        elapse(90);
+        await pass();
+        assert.equal(reads, 2, 'un second attend une heure');
+        elapse(3600);
+        await pass();
+        assert.equal(reads, 3);
+        await engine.stop();
+    });
 });
+
+/** Un appareil de papier, que le test met hors ligne ou en ligne. */
+function nas(online: boolean) {
+    return {
+        id: 'd1',
+        name: 'nas',
+        online,
+        status: 'active',
+        ownerUserId: 1,
+        workspaceId: 1,
+        metricIntervalSeconds: 60,
+        effectiveMetricIntervalSeconds: 60,
+        report: { os: { name: 'Debian GNU/Linux', version: '12', arch: 'x86_64', cores: 4 } }
+    };
+}
+
+/** Ce que l'agent du NAS dit de Docker : un conteneur nginx 1.25.3. */
+const nginxInventory = {
+    engines: [{ engine: 'docker', reachable: true, version: '27.1.1', error: null }],
+    containers: [
+        {
+            engine: 'docker',
+            id: 'c',
+            name: 'web',
+            image: 'nginx:1.25.3',
+            state: 'running',
+            status: 'Up',
+            ports: '',
+            createdAt: 0,
+            composeProject: null,
+            composeService: null,
+            composeWorkingDir: null
+        }
+    ],
+    images: [],
+    volumes: [],
+    networks: []
+} as unknown as DockerInventory;
 
 describe('les appareils et les bases', () => {
     it('lit un conteneur par l’agent et une base par sa version, et les confronte au catalogue', async () => {
         osvHealth.blockedUntil = 0;
         const repo = memoryRepo();
-        const device = {
-            id: 'd1',
-            name: 'nas',
-            online: true,
-            status: 'active',
-            ownerUserId: 1,
-            workspaceId: 1,
-            metricIntervalSeconds: 60,
-            effectiveMetricIntervalSeconds: 60,
-            report: { os: { name: 'Debian GNU/Linux', version: '12', arch: 'x86_64', cores: 4 } }
-        } as unknown as SdkDevice;
+        const device = nas(true) as unknown as SdkDevice;
         const databases = {
             listHome: async () => [
                 {
@@ -300,28 +358,7 @@ describe('les appareils et les bases', () => {
         const deps = createTestServiceDeps({
             repo,
             devices: [device],
-            dockerInventory: async () =>
-                ({
-                    engines: [{ engine: 'docker', reachable: true, version: '27.1.1', error: null }],
-                    containers: [
-                        {
-                            engine: 'docker',
-                            id: 'c',
-                            name: 'web',
-                            image: 'nginx:1.25.3',
-                            state: 'running',
-                            status: 'Up',
-                            ports: '',
-                            createdAt: 0,
-                            composeProject: null,
-                            composeService: null,
-                            composeWorkingDir: null
-                        }
-                    ],
-                    images: [],
-                    volumes: [],
-                    networks: []
-                }) as unknown as DockerInventory,
+            dockerInventory: async () => nginxInventory,
             providers: { [DATABASE_ITEMS_PROVIDER]: databases }
         });
         const engine = createExposureEngine(deps, { osvFetch, eolFetch: offline, registryFetch: unknown });
@@ -337,6 +374,39 @@ describe('les appareils et les bases', () => {
         assert.ok(nginx, 'le conteneur nginx 1.25.3 trouve sa CVE');
         const device1 = repo.assets.find((a) => a.source === 'device')!;
         assert.ok(repo.links.some((l) => l.finding_id === nginx.id && l.asset_id === device1.id));
+    });
+
+    it('relit au retour de son agent un appareil lu hors ligne', async () => {
+        osvHealth.blockedUntil = 0;
+        const repo = memoryRepo();
+        const device = nas(false);
+        let inventories = 0;
+        const deps = createTestServiceDeps({
+            repo,
+            devices: [device as unknown as SdkDevice],
+            dockerInventory: async () => {
+                inventories++;
+                return nginxInventory;
+            }
+        });
+        const engine = createExposureEngine(deps, { osvFetch, eolFetch: offline, registryFetch: unknown });
+        const pass = () => deps.recorded.tickers[0].tick();
+        await engine.start();
+        await pass();
+        assert.equal(repo.assets[0].status, 'ok', 'son système se lit sans l’agent');
+        await pass();
+        assert.equal(inventories, 0, 'hors ligne, rien de plus n’est dû');
+
+        device.online = true;
+        await engine.deviceReported('d1', device.report as unknown as DeviceReport);
+        await pass();
+        await engine.stop();
+        assert.equal(inventories, 1);
+        assert.equal(repo.assets[0].revision, 'Debian GNU/Linux 12');
+        assert.ok(
+            repo.findings.some((f) => f.advisory_id === 'CVE-2024-7347'),
+            'le conteneur nginx se lit au retour de l’agent'
+        );
     });
 });
 
