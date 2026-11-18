@@ -12,6 +12,48 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: readonly ChangelogEntry[] = [
     {
+        version: '0.27.0',
+        date: '2026-11-18',
+        changes: [
+            {
+                kind: 'added',
+                text: 'Stores : une nouvelle fonctionnalité pour suivre vos apps sur l’App Store et Google Play, avec leurs téléchargements par pays, leurs notes, leurs avis et vos réponses, leurs revenus, leurs versions et leur stabilité, une vue d’ensemble de toutes vos apps et un onglet Stores dans les projets'
+            },
+            {
+                kind: 'added',
+                text: 'Veille CVE : la veille surveille désormais ce que votre espace fait tourner (dépôts Git, système, paquets et conteneurs des appareils, bases de données, déploiements Dokploy) et vous alerte une fois par faille qui le touche ; Audit lui laisse les dépendances et les outils de vos dépôts et n’analyse plus que les secrets et le code'
+            },
+            {
+                kind: 'added',
+                text: 'Veille CVE : un onglet Obsolescence liste les logiciels en fin de vie, avec une alerte trente jours avant, les paquets dépréciés et les dépendances en retard d’une version majeure, et la recherche trouve les fins de vie d’un logiciel (« node 18 ») ou les failles d’une version précise (« nginx 1.25.3 »)'
+            },
+            {
+                kind: 'added',
+                text: 'Barre du haut : les opérations longues (copie, sauvegarde, conversion, déploiement, mise à jour d’un appareil, point de restauration CloudSync, import d’un relevé…) se réduisent dans une puce qui suit leur avancement jusqu’au résultat, même après un rechargement de la page'
+            },
+            {
+                kind: 'added',
+                text: 'Uptime, Sauvegardes, Déploiements, Bases de données et Sentinelle : un bandeau signale ce qui ne prévient personne et mène à l’onglet Notifications ; il se ferme page par page, « Alertes masquées » dans le Profil les réaffiche, et une sauvegarde en échec envoie enfin son alerte'
+            },
+            {
+                kind: 'added',
+                text: 'Bases de données : des indicateurs, chacun une requête qui rend un nombre, s’affichent en tuiles sur la fiche d’une base, et chacun ouvre une alerte déjà remplie de sa requête'
+            },
+            {
+                kind: 'added',
+                text: 'Déploiements : un bouton teste un accès Dokploy ou GitHub, déjà enregistré ou avant de l’enregistrer, et dit ce que la clé voit'
+            },
+            {
+                kind: 'improved',
+                text: 'Uptime : le contrôle d’intégrité d’un site accepte des dossiers exclus, et propose ses plus gros dossiers'
+            },
+            {
+                kind: 'fixed',
+                text: 'CloudSync : sur Linux, l’agent rend la mémoire de chaque analyse au lieu de monter jusqu’à plusieurs gigaoctets, et les versions « exclu du cloud » d’un fichier revenu ne comptent plus dans votre stockage'
+            }
+        ]
+    },
+    {
         version: '0.26.1',
         date: '2026-11-10',
         changes: [
