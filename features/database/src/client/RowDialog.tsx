@@ -27,6 +27,11 @@ function isLongText(column: DatabaseColumn): boolean {
     return /text|json|blob|bytea|xml/i.test(column.type);
 }
 
+/** Le moteur sait la remplir seul : auto-incrément, colonne générée, valeur par défaut. */
+function engineFilled(column: DatabaseColumn): boolean {
+    return column.generated || column.default !== null;
+}
+
 /**
  * Ajouter ou modifier une ligne : un champ par colonne, dans l'ordre de la
  * table. `NULL` a sa case, distincte de la chaîne vide. Une colonne que le
@@ -47,7 +52,7 @@ export function RowDialog({ open, databaseId, structure, row, onClose, onSaved }
         for (const column of structure.columns) {
             const index = row ? row.columns.indexOf(column.name) : -1;
             const current = index === -1 ? undefined : row?.values[index];
-            const auto = !editing && column.generated;
+            const auto = !editing && engineFilled(column);
             next[column.name] = {
                 value: current ?? '',
                 // À l'ajout, une colonne nullable part sur `NULL`, comme le
@@ -172,7 +177,10 @@ export function RowDialog({ open, databaseId, structure, row, onClose, onSaved }
                                         onClick={() => set(column.name, { auto: false })}
                                     >
                                         <span className='icon icon-lock' aria-hidden='true' />
-                                        Défini automatiquement : cliquer pour saisir une valeur
+                                        {column.generated
+                                            ? 'Défini automatiquement'
+                                            : `Laissé à sa valeur par défaut (${column.default})`}{' '}
+                                        : cliquer pour saisir une valeur
                                     </button>
                                 ) : isLongText(column) ? (
                                     <textarea
@@ -192,7 +200,7 @@ export function RowDialog({ open, databaseId, structure, row, onClose, onSaved }
                                     />
                                 )}
 
-                                {!field.auto && column.generated && !editing && (
+                                {!field.auto && engineFilled(column) && !editing && (
                                     <button
                                         type='button'
                                         className={styles.autoBack}
