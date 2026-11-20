@@ -5,6 +5,7 @@ import {
     Dialog,
     errorNote,
     ErrorNote,
+    NumberInput,
     SearchSelect,
     SegmentedControl,
     TextInput,
@@ -217,14 +218,16 @@ export function AlertDialog({
                                         onChange={(comparator) => patch(i, { comparator })}
                                     />
                                 </label>
-                                <label className={styles.fieldNarrow}>
+                                {/* Un `div` : dans un `label`, cliquer l'intitulé activerait « − ». */}
+                                <div className={styles.fieldNarrow}>
                                     <span className={styles.label}>Seuil</span>
-                                    <TextInput
-                                        value={String(condition.threshold)}
-                                        inputMode='numeric'
-                                        onChange={(e) => patch(i, { threshold: Number(e.target.value) || 0 })}
+                                    <NumberInput
+                                        aria-label='Seuil'
+                                        value={condition.threshold}
+                                        live
+                                        onChange={(threshold) => patch(i, { threshold: threshold ?? 0 })}
                                     />
-                                </label>
+                                </div>
                                 {conditions.length > 1 && (
                                     <button
                                         type='button'
