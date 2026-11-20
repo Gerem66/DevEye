@@ -61,8 +61,18 @@ export function RowDialog({ open, databaseId, structure, row, onClose, onSaved }
 
     const editable = structure.columns.filter((c) => !editing || !structure.primaryKey.includes(c.name));
 
-    /** Une colonne laissée au moteur ne part pas. */
-    const submitted = editable.filter((c) => !(fields[c.name]?.auto ?? false));
+    /**
+     * Ce qui part : jamais une colonne laissée au moteur, et à la modification
+     * les seules colonnes touchées. Réécrire les autres remplacerait un binaire
+     * par son aperçu, et une valeur changée entre-temps par l'ancienne.
+     */
+    const submitted = editable.filter((c) => {
+        const field = fields[c.name];
+        if (!field || field.auto) return false;
+        if (!row) return true;
+        const before = row.values[row.columns.indexOf(c.name)];
+        return field.isNull ? before !== null : field.value !== before;
+    });
 
     const cellsOf = (columns: DatabaseColumn[]): DatabaseCell[] =>
         columns.map((c) => {
@@ -212,7 +222,7 @@ export function RowDialog({ open, databaseId, structure, row, onClose, onSaved }
                     </p>
                 )}
 
-                {editable.length > 0 && submitted.length === 0 && (
+                {!editing && editable.length > 0 && submitted.length === 0 && (
                     <p className={styles.warn}>
                         Toutes les colonnes sont laissées au moteur : il n’y a rien à écrire. Ouvrez-en au moins une, ou
                         insérez la ligne depuis le terminal.
