@@ -1,4 +1,5 @@
 import type {
+    DatabaseAccessKind,
     DatabaseComparator,
     DatabaseEngine,
     DatabaseFilterOperator,
@@ -14,6 +15,13 @@ export const ENGINE_LABELS: Record<DatabaseEngine, string> = {
 export const ENGINE_PORTS: Record<DatabaseEngine, number> = {
     mysql: 3306,
     postgres: 5432
+};
+
+/** Par où passe la connexion quand elle n'est pas directe : « via SSH ». */
+export const ACCESS_VIA: Record<Exclude<DatabaseAccessKind, 'direct'>, string> = {
+    ssh: 'SSH',
+    socks: 'SOCKS',
+    device: 'un appareil'
 };
 
 export const COMPARATOR_LABELS: Record<DatabaseComparator, string> = {

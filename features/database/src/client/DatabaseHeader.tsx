@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { Button, FeatureSettingsButton, openInfo, PlanPausedBadge } from 'deveye-sdk-client';
 import type { Database } from '../contracts/domain';
 
-import { ENGINE_LABELS, STATUS_META } from './format';
+import { ACCESS_VIA, ENGINE_LABELS, STATUS_META } from './format';
 import styles from './style.module.css';
 
 /** Ce que « Tester » et « Relever » font, et ce que « Relever » conserve. */
@@ -106,7 +106,8 @@ export function DatabaseHeader({
                         {ENGINE_LABELS[database.engine]} · {database.host}:{database.port}/{database.database}
                         {database.access.kind !== 'direct' && (
                             <span className={styles.viaTag}>
-                                via {database.access.kind === 'ssh' ? 'SSH' : 'SOCKS'} {database.access.host}
+                                via {ACCESS_VIA[database.access.kind]}
+                                {database.access.kind !== 'device' && ` ${database.access.host}`}
                             </span>
                         )}
                         {database.planPaused && (

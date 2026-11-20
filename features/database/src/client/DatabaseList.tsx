@@ -1,7 +1,7 @@
 import { PlanPausedBadge, useDragReorder, type LiveOutlineProps } from 'deveye-sdk-client';
 import type { Database } from '../contracts/domain';
 
-import { ENGINE_LABELS, formatAgo, formatBytes, STATUS_META } from './format';
+import { ACCESS_VIA, ENGINE_LABELS, formatAgo, formatBytes, STATUS_META } from './format';
 import styles from './style.module.css';
 
 interface DatabaseListProps {
@@ -107,9 +107,7 @@ function DatabaseCard({ database, outline, dragging, onOpen, onDragPointerDown }
                     <p className={styles.cardMeta}>
                         {ENGINE_LABELS[database.engine]} · {database.host}:{database.port}/{database.database}
                         {database.access.kind !== 'direct' && (
-                            <span className={styles.viaTag}>
-                                via {database.access.kind === 'ssh' ? 'SSH' : 'SOCKS'}
-                            </span>
+                            <span className={styles.viaTag}>via {ACCESS_VIA[database.access.kind]}</span>
                         )}
                     </p>
                     <div className={styles.cardFoot}>
