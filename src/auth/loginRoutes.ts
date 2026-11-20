@@ -419,11 +419,13 @@ export async function loginRoutes(app: FastifyInstance, { db, crypt, audit }: Lo
         }
         const { username, password } = parsed.data;
         // Verrouillé par identifiant, connu ou non : la réponse reste la même.
+        // Le pseudo et l'adresse d'un compte ont chacun leur compteur, sans quoi
+        // le verrou posé sur l'un trahirait à qui appartient l'autre.
         const attemptKey = username.trim().toLowerCase();
         const locked = lockedOut(reply, 'login', attemptKey);
         if (locked) return locked;
 
-        const row = await db.users.findByUsername(username);
+        const row = await db.users.findByLogin(username);
         if (!row) {
             await verifyPassword(await dummyHash, password);
             recordFailedAttempt('login', attemptKey);
@@ -456,8 +458,8 @@ export async function loginRoutes(app: FastifyInstance, { db, crypt, audit }: Lo
                 level: 'warning',
                 uid: row.id,
                 ip: req.ip,
-                description: `Échec de connexion : mot de passe incorrect pour « ${username} »`,
-                metadata: { username, reason: 'bad_password' }
+                description: `Échec de connexion : mot de passe incorrect pour « ${row.username} »`,
+                metadata: { username: row.username, reason: 'bad_password' }
             });
             return reply.code(401).send(err('auth_invalid', 'Invalid credentials'));
         }
@@ -475,8 +477,8 @@ export async function loginRoutes(app: FastifyInstance, { db, crypt, audit }: Lo
                 level: 'warning',
                 uid: row.id,
                 ip: req.ip,
-                description: `Connexion refusée : compte suspendu « ${username} »`,
-                metadata: { username }
+                description: `Connexion refusée : compte suspendu « ${row.username} »`,
+                metadata: { username: row.username }
             });
             return reply.code(403).send(err('forbidden', 'Ce compte est suspendu. Contactez un administrateur.'));
         }
@@ -514,7 +516,7 @@ export async function loginRoutes(app: FastifyInstance, { db, crypt, audit }: Lo
             level: 'info',
             uid: row.id,
             ip: req.ip,
-            description: `Mot de passe validé pour « ${username} » ; en attente : ${steps.map((s) => STEP_LABELS[s]).join(', ')}`,
+            description: `Mot de passe validé pour « ${row.username} » ; en attente : ${steps.map((s) => STEP_LABELS[s]).join(', ')}`,
             metadata: { steps }
         });
         return proceed(req, reply, challenge, row, token);

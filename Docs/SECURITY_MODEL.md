@@ -290,7 +290,10 @@ Application directe des deux étages ci-dessus (`features/notes/src/server/handl
   activation/désactivation de la 2FA.
   Compteur d'échecs par compte (par identifiant pour le login), 5 échecs → 30 s,
   10 → 5 min, 20 → 1 h ; les commandes WS y passent aussi, puisque la limite de
-  débit HTTP ne voit que la poignée de main. Chaque échec est audité.
+  débit HTTP ne voit que la poignée de main. Chaque échec est audité. La
+  connexion accepte le pseudo ou l'adresse du compte, chacun avec son compteur :
+  un compteur commun verrouillerait l'adresse après des échecs sur le pseudo, et
+  dirait ainsi à un inconnu à quel compte elle appartient.
 - **Inscription** (`src/Services/signup`, `src/auth/signupRoutes.ts`) en trois
   étapes : pseudo et adresse, lien reçu par mail, mot de passe.
     - Aucun compte n'existe avant la dernière étape : la demande vit dans

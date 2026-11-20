@@ -219,7 +219,7 @@ export const selfTracking = {
         const body = (req.body ?? {}) as { username?: unknown; email?: unknown };
         let account = await accountFromCookie(req);
         if (!account && typeof body.username === 'string') {
-            const row = await db?.users.findByUsername(body.username);
+            const row = await db?.users.findByLogin(body.username);
             account = row ? { role: row.role, e2eRun: row.e2e_run } : null;
         }
         if ((typeof body.email === 'string' && isTestEmail(body.email)) || isExcluded(account, visitor)) {

@@ -394,9 +394,12 @@ function LoginPage({ onSignup, onForgot, prefillUsername, onBack }: LoginPagePro
                                     <div className='input-group'>
                                         <TextInput
                                             ref={inputUsername}
-                                            placeholder="Nom d'utilisateur"
+                                            placeholder='Nom d’utilisateur ou email'
                                             value={username}
                                             onChange={(e) => setUsername(e.target.value)}
+                                            autoComplete='username'
+                                            autoCapitalize='none'
+                                            spellCheck={false}
                                             autoFocus={!prefillUsername}
                                         />
                                         <span className='icon icon-user'></span>

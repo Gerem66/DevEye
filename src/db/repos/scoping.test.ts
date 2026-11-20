@@ -75,8 +75,9 @@ const SCOPES: { [K in RepoKey]: RepoScope<K> } = {
         guard: ROW,
         methods: {
             findById: { args: [1] },
-            findByUsername: { args: ['u'], global: 'la connexion cherche le compte par son pseudo' },
-            findByEmail: { args: ['a@b.c'], global: 'la connexion cherche le compte par son adresse' },
+            findByUsername: { args: ['u'], global: 'un pseudo ne sert qu’une fois' },
+            findByEmail: { args: ['a@b.c'], global: 'une adresse ne sert qu’une fois, les invitations' },
+            findByLogin: { args: ['u'], global: 'la connexion cherche le compte par son pseudo ou son adresse' },
             findByIds: { args: [[1, 2]] },
             all: { args: [], global: "relevé d'administration" },
             search: { args: ['u', 10], global: "recherche d'administration" },

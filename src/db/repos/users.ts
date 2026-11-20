@@ -34,6 +34,8 @@ export interface UsersRepo {
     findById(id: number): Promise<UserRow | null>;
     findByUsername(username: string): Promise<UserRow | null>;
     findByEmail(email: string): Promise<UserRow | null>;
+    /** Le compte que désigne l'identifiant de connexion : son pseudo, ou son adresse s'il porte un @ (jamais permis dans un pseudo). */
+    findByLogin(login: string): Promise<UserRow | null>;
     findByIds(ids: number[]): Promise<UserRow[]>;
     /** Tous les comptes, les plus anciens d'abord, sans avatar ni secret : ce qu'un relevé d'administration lit. */
     all(): Promise<AccountRow[]>;
@@ -107,6 +109,14 @@ export function usersRepo(pool: Q): UsersRepo {
         },
         async findByEmail(email) {
             const r = await pool.query<UserRow>('SELECT * FROM users WHERE email = ?', [email]);
+            return r.rows[0] ?? null;
+        },
+        async findByLogin(login) {
+            const key = login.trim().toLowerCase();
+            const r = await pool.query<UserRow>(
+                key.includes('@') ? 'SELECT * FROM users WHERE email = ?' : 'SELECT * FROM users WHERE username = ?',
+                [key]
+            );
             return r.rows[0] ?? null;
         },
         async findByIds(ids) {

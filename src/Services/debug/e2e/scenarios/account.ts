@@ -98,6 +98,20 @@ export const accountLifecycle: E2eScenario = {
             }
         },
         {
+            label: 'Se reconnecter par son adresse mail',
+            run: async (ctx) => {
+                const client = clientOf(ctx);
+                const identity = identityOf(ctx);
+                await client.api('/api/auth/logout', {});
+                // En capitales : l'adresse se reconnaît quelle que soit sa casse.
+                await client.api('/api/auth/login', {
+                    username: identity.email.toUpperCase(),
+                    password: identity.password
+                });
+                check((await client.http('/api/auth/me')).status === 200, 'L’adresse mail n’ouvre pas de session');
+            }
+        },
+        {
             label: 'Supprimer le compte',
             run: async (ctx) => {
                 const client = clientOf(ctx);

@@ -38,3 +38,19 @@ describe('le rôle d’un compte', () => {
         assert.match(q.queries[0]!.sql, /role IN \('moderator', 'admin'\) AND status = 'active'/);
     });
 });
+
+describe('l’identifiant de connexion', () => {
+    it('un pseudo se cherche par pseudo, une adresse par adresse, sans espaces ni majuscules', async () => {
+        const q = fakeQueryable();
+        const repo = usersRepo(q);
+        await repo.findByLogin(' Alice ');
+        await repo.findByLogin(' Alice@Exemple.FR ');
+        assert.deepEqual(
+            q.queries.map((x) => [x.sql, x.params]),
+            [
+                ['SELECT * FROM users WHERE username = ?', ['alice']],
+                ['SELECT * FROM users WHERE email = ?', ['alice@exemple.fr']]
+            ]
+        );
+    });
+});
