@@ -20,6 +20,14 @@ hérité par tous les éléments, et un élément peut le remplacer dans les deu
 sens. L'absence de ligne au niveau 4 vaut « comme la fonctionnalité » : seules
 les surcharges existent en base.
 
+Un rôle peut aussi tenir **toutes les fonctionnalités** (`all_features`) : sa
+liste est alors ignorée, et `grantsFor` (`src/features/_access.ts`) lui rend à
+chaque lecture, comme au propriétaire, l'écriture et tous les réglages sur les
+natives et les modules installés, permissions propres comprises. Ses capacités
+restent les siennes. Sans cela, une liste figée à l'enregistrement du rôle
+laisse dehors toute fonctionnalité installée après lui : le propriétaire, qui
+passe outre, ne s'en aperçoit pas, et ses Admins n'y entrent pas.
+
 Un **plancher** subsiste, et c'est lui qui garde sa valeur à l'étage 3 : sans
 au moins la lecture sur la fonctionnalité, aucun élément n'existe pour le rôle
 et rien ne se surcharge. « Qui a accès à Appareils ? » se répond donc toujours
@@ -152,7 +160,16 @@ couleur, capacités, accès et réglages par fonctionnalité. L'usage réel est
 droits dans une matrice) obligerait à savoir lequel des deux détient quoi. Sa
 forme est celle de la coquille de réglages (navigation à gauche : « Espace » en
 tête, puis une entrée par fonctionnalité). Les intitulés viennent du registre
-et des manifests, jamais d'une table locale. Une seule capacité gouverne les
+et des manifests, jamais d'une table locale. La section « Espace » porte la case
+« Toutes les fonctionnalités » (§1) ; cochée, chaque fonctionnalité montre
+l'écriture sans se régler, et la décocher recopie ce tout en liste explicite,
+qu'on restreint ensuite. Le rôle « Admin » des rôles de départ la porte.
+
+Ouvrir une fonctionnalité qu'on pose sur l'accueil passe par
+`workspace.featureAccessSet`, gardé par `workspace.roles` : le marché demande
+« qui y aura accès ? » pour les rôles qui ne l'ouvrent pas, chacun à « Aucun »
+(voir [WORKSPACES.md](./WORKSPACES.md) §6). La commande ne fait que monter : un
+grant neuf ne porte que le niveau, un grant existant garde ses réglages. Une seule capacité gouverne les
 rôles, `workspace.roles` : existence **et** contenu, parce qu'un découpage plus
 fin produit des demi-refus illisibles sur un même formulaire.
 

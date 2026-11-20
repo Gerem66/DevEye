@@ -57,7 +57,7 @@ const SECRET: Guard = [/\b(code|jti|session_id|token_hash|watch_hash) = \?/];
 /** L'adresse du compte appelant, relue en base : elle le désigne comme son `user_id`. */
 const INVITEE: Guard = [/\bemail = \?/];
 
-const ROLE_INPUT = { name: 'r', color: 'red', capabilities: [], features: [] };
+const ROLE_INPUT = { name: 'r', color: 'red', capabilities: [], features: [], allFeatures: false };
 const CHANNEL_INPUT = { kind: 'email' as const, labelEnc: null, targetEnc: null, mailAccountId: null, enabled: true };
 const VERDICT = {
     dns_state: 'pending' as const,
@@ -161,6 +161,7 @@ const SCOPES: { [K in RepoKey]: RepoScope<K> } = {
             findDefault: { args: [1] },
             create: { args: [1, ROLE_INPUT] },
             update: { args: [1, 2, ROLE_INPUT] },
+            setFeatures: { args: [1, 2, []] },
             delete: { args: [1, 2] },
             memberCount: { args: [1], guard: [/\brole_id = \?/] },
             setDefault: { args: [1, 2] },

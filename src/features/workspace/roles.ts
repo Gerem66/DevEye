@@ -1,7 +1,9 @@
 import {
+    maybeFeatureDescriptor,
     WORKSPACE_CAPABILITIES,
     WORKSPACE_FEATURE_IDS,
     workspaceAssignRole,
+    workspaceFeatureAccessSet,
     workspaceRoleCreate,
     workspaceRoleDelete,
     workspaceRoleList,
@@ -30,6 +32,7 @@ async function toRole(ctx: FeatureContext, row: WorkspaceRoleRow): Promise<Works
         position: row.position,
         capabilities: parseJsonArray<WorkspaceCapability>(row.capabilities),
         features: parseJsonArray<WorkspaceFeatureGrant>(row.features),
+        allFeatures: Number(row.all_features) === 1,
         isDefault: Number(row.is_default) === 1,
         memberCount: await ctx.db.workspaceRoles.memberCount(row.id)
     };
@@ -90,7 +93,8 @@ export const workspaceRoleCreateFeature: FeatureDefinition<
             name: input.name.trim(),
             color: input.color,
             capabilities: input.capabilities,
-            features: input.features
+            features: input.features,
+            allFeatures: input.allFeatures
         });
         ctx.audit({ action: 'workspace.role.create', description: `Rôle créé : « ${row.name} »` });
         return { role: await toRole(ctx, row) };
@@ -115,7 +119,8 @@ export const workspaceRoleUpdateFeature: FeatureDefinition<
             name: input.name.trim(),
             color: input.color,
             capabilities: input.capabilities,
-            features: input.features
+            features: input.features,
+            allFeatures: input.allFeatures
         });
         if (!row) throw new FeatureError('not_found', 'Rôle introuvable');
 
@@ -183,6 +188,53 @@ export const workspaceRoleSetDefaultFeature: FeatureDefinition<
             description: `Rôle par défaut : « ${row.name} »`
         });
         return { roleId: row.id };
+    }
+});
+
+export const workspaceFeatureAccessSetFeature: FeatureDefinition<
+    typeof workspaceFeatureAccessSet.command,
+    typeof workspaceFeatureAccessSet.input,
+    typeof workspaceFeatureAccessSet.output
+> = defineFeature({
+    ...workspaceFeatureAccessSet,
+    mutates: true,
+    access: { capabilities: ['workspace.roles'] },
+    handler: async (ctx, input) => {
+        assertShared(ctx);
+        const { feature } = input;
+        const descriptor = maybeFeatureDescriptor(feature);
+        if (!descriptor) throw new FeatureError('not_found', 'Fonctionnalité introuvable');
+
+        const rows = await ctx.db.workspaceRoles.listByWorkspace(ctx.workspaceId);
+        const targets = input.grants.map(({ roleId, access }) => {
+            const row = rows.find((r) => r.id === roleId);
+            if (!row) throw new FeatureError('not_found', 'Rôle introuvable');
+            return { row, access };
+        });
+        const changed: WorkspaceRoleRow[] = [];
+        for (const { row, access } of targets) {
+            if (Number(row.all_features) === 1) continue;
+            const grants = parseJsonArray<WorkspaceFeatureGrant>(row.features);
+            const held = grants.find((g) => g.feature === feature);
+            if (held?.access === 'write' || held?.access === access) continue;
+            const next = held
+                ? grants.map((g) => (g.feature === feature ? { ...g, access } : g))
+                : [...grants, { feature, access, channels: false, itemPermissions: false, extras: {} }];
+            await ctx.db.workspaceRoles.setFeatures(row.id, ctx.workspaceId, next);
+            changed.push(row);
+        }
+
+        if (changed.length > 0) {
+            invalidateAccess();
+            await ctx.live?.resync(ctx.db, ctx.workspaceId);
+            ctx.audit({
+                action: 'workspace.role.update',
+                level: 'warning',
+                description: `Accès à ${descriptor.label} ouvert aux rôles ${changed.map((r) => `« ${r.name} »`).join(', ')}`,
+                metadata: { feature, roleIds: changed.map((r) => r.id) }
+            });
+        }
+        return { roleIds: changed.map((r) => r.id) };
     }
 });
 

@@ -310,9 +310,18 @@ export interface ResolvedScope {
 }
 
 /**
+ * Toutes les fonctionnalités de l'instance, lues à l'appel : les natives et les
+ * modules installés. La constante ne porte que l'enum natif, un module à id
+ * externe en est absent.
+ */
+function allFeatureIds(): FeatureId[] {
+    return [...WORKSPACE_FEATURE_IDS, ...moduleManifests().map((m) => m.id)];
+}
+
+/**
  * Droits effectifs d'un membre : le propriétaire a tout (non révocable), un
- * membre avec rôle exactement ce que son rôle accorde, un membre sans rôle rien
- * (fail-closed).
+ * membre avec rôle ce que son rôle accorde (tout, s'il tient toutes les
+ * fonctionnalités, sans les capacités), un membre sans rôle rien (fail-closed).
  *
  * Volontairement sans intersection avec `workspaces.features` : cette liste dit
  * quels widgets figurent sur l'accueil, pas qui a le droit d'ouvrir quoi. Le
@@ -330,16 +339,36 @@ export function grantsFor(
 } {
     if (isOwner) {
         // Les extras du propriétaire se résolvent à la lecture, contre le
-        // manifest. « Tout » = les natives et les modules installés : la
-        // constante ne porte que l'enum natif, un module à id externe en est
-        // absent.
-        const all: FeatureId[] = [...WORKSPACE_FEATURE_IDS, ...moduleManifests().map((m) => m.id)];
+        // manifest.
+        const all = allFeatureIds();
         return {
             capabilities: new Set(WORKSPACE_CAPABILITIES),
             features: new Map(all.map((f) => [f, 'write'])),
             channels: new Set(all),
             itemPermissions: new Set(all),
             extras: new Map()
+        };
+    }
+    if (role && Number(role.all_features) === 1) {
+        // Les extras sont écrits en clair, au plus haut de chaque spec : tout
+        // lecteur des grants (attribution, partage, client) les compare alors
+        // sans connaître ce réglage.
+        const all = allFeatureIds();
+        const extras = new Map<FeatureId, Record<string, boolean | string>>();
+        for (const m of moduleManifests()) {
+            const specs = m.extraPermissions ?? [];
+            if (specs.length === 0) continue;
+            extras.set(
+                m.id,
+                Object.fromEntries(specs.map((spec) => [spec.key, spec.type === 'toggle' ? true : spec.ownerValue]))
+            );
+        }
+        return {
+            capabilities: new Set(parseJsonArray<WorkspaceCapability>(role.capabilities)),
+            features: new Map(all.map((f) => [f, 'write'])),
+            channels: new Set(all),
+            itemPermissions: new Set(all),
+            extras
         };
     }
     if (!role) {

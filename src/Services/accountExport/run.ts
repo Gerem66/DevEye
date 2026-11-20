@@ -509,9 +509,10 @@ async function workspaceSheet(
         color: string;
         capabilities: unknown;
         features: unknown;
+        all_features: number;
         is_default: number;
     }>(
-        'SELECT id, name, color, capabilities, features, is_default FROM workspace_roles WHERE workspace_id = ? ORDER BY position, id',
+        'SELECT id, name, color, capabilities, features, all_features, is_default FROM workspace_roles WHERE workspace_id = ? ORDER BY position, id',
         [workspaceId]
     );
     const members = await q.query<{ username: string; role_id: number | null; date: number }>(
@@ -540,6 +541,7 @@ async function workspaceSheet(
             couleur: r.color,
             capacites: parseJson(r.capabilities),
             fonctionnalites: parseJson(r.features),
+            toutesFonctionnalites: Boolean(r.all_features),
             parDefaut: Boolean(r.is_default)
         })),
         membres: members.map((m) => ({

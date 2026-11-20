@@ -885,3 +885,78 @@
 .shortcutSwitch.shortcutSwitch {
     margin: var(--space-xs) 0;
 }
+
+/* L'étape d'accès qui suit l'ajout d'une fonctionnalité : une rangée par rôle
+   qui ne l'ouvre pas encore, son niveau au bout. */
+.accessStep {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.accessLead,
+.accessNote {
+    margin: 0;
+    line-height: 1.5;
+}
+
+.accessLead {
+    font-size: 0.9rem;
+    color: var(--text-primary);
+}
+
+.accessNote {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.accessRows {
+    display: flex;
+    flex-direction: column;
+    padding: var(--space-xs) var(--space-md);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+}
+
+.accessRow {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-sm) var(--space-md);
+    padding: var(--space-sm) 0;
+}
+
+.accessRow + .accessRow {
+    border-top: 1px solid var(--glass-border);
+}
+
+.accessDot {
+    width: 8px;
+    height: 8px;
+    border-radius: var(--radius-pill);
+    flex-shrink: 0;
+}
+
+/* Une base assez large pour le nom : sur un écran étroit, ce sont les niveaux
+   qui passent à la ligne, pas le nom qui se tronque. */
+.accessText {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1 1 160px;
+}
+
+.accessName {
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.accessMeta {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}

@@ -4,7 +4,7 @@ import { describe, it } from 'node:test';
 import type { FeatureAccess, WorkspaceRoleRow } from '@deveye/types';
 
 import { registerModules } from './_sdk/register';
-import { roleExceeds } from './_access';
+import { grantsFor, roleExceeds } from './_access';
 
 /**
  * Attribuer un rôle ne doit jamais donner plus que ce que l'appelant tient :
@@ -52,6 +52,7 @@ function role(grant: Record<string, unknown>): WorkspaceRoleRow {
         name: 'Support',
         color: '',
         position: 0,
+        all_features: 0,
         is_default: 0,
         created: 0,
         capabilities: '[]',
@@ -96,5 +97,28 @@ describe('roleExceeds', () => {
     it('compare le niveau, et laisse le propriétaire tout attribuer', () => {
         assert.equal(roleExceeds(caller(), role({ access: 'write' })), true);
         assert.equal(roleExceeds(caller({}, { isOwner: true }), role({ access: 'write', channels: true })), false);
+    });
+});
+
+describe('un rôle qui tient toutes les fonctionnalités', () => {
+    const allRole = (): WorkspaceRoleRow => ({
+        ...role({}),
+        capabilities: JSON.stringify(['workspace.layout']),
+        features: '[]',
+        all_features: 1
+    });
+
+    it('ouvre en écriture les natives et les modules installés, permissions propres au plus haut', () => {
+        const granted = grantsFor(false, allRole());
+        assert.equal(granted.features.get('appstores'), 'write');
+        assert.equal(granted.features.get('x-roletest'), 'write');
+        assert.equal(granted.channels.has('appstores'), true);
+        assert.equal(granted.itemPermissions.has('x-roletest'), true);
+        assert.deepEqual(granted.extras.get('x-roletest'), { terminal: true, scope: 'all' });
+        assert.deepEqual([...granted.capabilities], ['workspace.layout']);
+    });
+
+    it('ne s’attribue pas par qui ne tient pas tout', () => {
+        assert.equal(roleExceeds(caller(), allRole()), true);
     });
 });

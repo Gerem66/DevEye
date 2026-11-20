@@ -9,8 +9,7 @@ import {
     type ItemExtraOverrides,
     type ItemGrantState,
     type ItemShareState,
-    type ShareBlocker,
-    type WorkspaceFeatureGrant
+    type ShareBlocker
 } from '@deveye/types';
 
 import { grantsFor, invalidateAccess } from '../_access';
@@ -22,7 +21,6 @@ import { copyFeatures } from './copy';
 import { moveFeatures } from './move';
 import { projectLinkFeatures } from './projectLinks';
 import { extraOverridesOf } from '@/db/repos/itemSharing';
-import { parseJsonArray } from '@/Utils/json';
 import { resolveExtras } from '@deveye/types/sdk';
 
 /**
@@ -299,15 +297,15 @@ async function grantState(
         workspaceName: target.workspaceName,
         extras: specs.map((spec) => ({ key: spec.key, label: spec.label })),
         roles: roles.map((role) => {
-            const featureGrants = parseJsonArray<WorkspaceFeatureGrant>(role.features);
-            const grant = featureGrants.find((g) => g.feature === feature);
+            const granted = grantsFor(false, role);
+            const grantExtras = granted.extras.get(feature) ?? {};
             const row = byRole.get(role.id) ?? null;
-            const held = specs.filter((spec) => grant?.extras?.[spec.key] === true).map((spec) => spec.key);
+            const held = specs.filter((spec) => grantExtras[spec.key] === true).map((spec) => spec.key);
             return {
                 roleId: role.id,
                 name: role.name,
                 color: role.color,
-                featureAccess: grant?.access ?? 'none',
+                featureAccess: granted.features.get(feature) ?? 'none',
                 access: row?.access ?? null,
                 featureExtras: held,
                 // Une clé que le manifest ne déclare plus n'a rien à faire ici :

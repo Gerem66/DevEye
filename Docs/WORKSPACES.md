@@ -155,7 +155,9 @@ supervision exigerait à la fois un droit feature et une capacité.
    même un administrateur global n'entre pas dans l'espace d'autrui.
 2. **propriétaire** → tout, non révocable, **sans ligne de rôle**. Lui en donner
    une laisserait croire qu'on peut le lui retirer.
-3. **membre avec rôle** → exactement ce que son rôle accorde.
+3. **membre avec rôle** → exactement ce que son rôle accorde ; un rôle qui tient
+   toutes les fonctionnalités les reçoit toutes en écriture, celles installées
+   après lui comprises ([PERMISSIONS.md](./PERMISSIONS.md) §1).
 4. **membre sans rôle** → rien. _Fail-closed_ : un oubli d'attribution retire
    l'accès, il ne le donne jamais.
 
@@ -343,6 +345,12 @@ Garder le drapeau comme simple ACL contredirait le modèle documenté.
   pendant une bascule, et garde visible une section vide qu'elle invite à
   remplir. Présente par défaut, chaque compte peut la retirer dans son Profil
   (drapeau `hideHomeAddTile`). L'accueil vide, sans section, garde ses modèles.
+- **Étape d'accès** (`Pages/Home/organize/FeatureAccessStep.tsx`) : dans un
+  espace partagé, qui gouverne les rôles et pose une fonctionnalité qu'un rôle
+  n'ouvre pas répond d'abord à « Qui aura accès à X ? », rôle par rôle, chacun à
+  « Aucun ». Le propriétaire voit tout et ne remarquerait pas qu'il est seul ;
+  la question se pose donc là, sans rien ouvrir par défaut. Sans ce droit,
+  l'ajout reste direct, et les autres voient la tuile grisée.
 - **Bouton de profil** : le nom de l'espace y figure pour un espace partagé
   seulement : répéter « Espace personnel » à qui y est déjà n'apprend rien.
 - **En-tête de l'accueil** (`homeHeading`, `Pages/Home/index.tsx`) :

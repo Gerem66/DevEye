@@ -60,6 +60,7 @@ export interface RoleDraft {
     color: string;
     capabilities: WorkspaceCapability[];
     features: WorkspaceFeatureGrant[];
+    allFeatures: boolean;
 }
 
 export interface RoleDialogProps {
@@ -82,6 +83,8 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
     const [itemPerms, setItemPerms] = useState<Record<string, boolean>>({});
     /** Permissions déclarées par les features (manifest `extraPermissions`), par feature puis par clé. */
     const [extras, setExtras] = useState<Record<string, Record<string, boolean | string>>>({});
+    /** Tout, celles installées plus tard comprises : les panneaux ci-dessous ne font alors que le montrer. */
+    const [allFeatures, setAllFeatures] = useState(false);
     const [section, setSection] = useState<RoleSection>('space');
     /** La navigation dépliée sur tout le registre, pas seulement l'accueil. */
     const [showAll, setShowAll] = useState(false);
@@ -102,10 +105,9 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
     const onHome = registry.filter((f) => placed.has(f.id));
     const collapsed = !showAll && onHome.length > 0 && onHome.length < registry.length;
     const featureRows = collapsed ? onHome : registry;
+    const accessOf = (id: string): FeatureAccess | 'none' => (allFeatures ? 'write' : (features[id] ?? 'none'));
     /** Parmi les lignes repliées, celles que le rôle accorde déjà : dit sur le bouton. */
-    const hiddenGranted = collapsed
-        ? registry.filter((f) => !placed.has(f.id) && (features[f.id] ?? 'none') !== 'none').length
-        : 0;
+    const hiddenGranted = collapsed ? registry.filter((f) => !placed.has(f.id) && accessOf(f.id) !== 'none').length : 0;
 
     useEffect(() => {
         if (!open) return;
@@ -114,6 +116,7 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
         setName(role?.name ?? '');
         setColor(role?.color ?? '#22d3ee');
         setCapabilities(role?.capabilities ?? []);
+        setAllFeatures(role?.allFeatures ?? false);
         const registry = allFeatureDescriptors();
         setFeatures(
             Object.fromEntries(
@@ -141,6 +144,34 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
         setCapabilities((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
 
     /**
+     * Décocher recopie en clair ce que la case accordait : le rôle garde tout,
+     * et l'on retire ensuite. Repartir de l'ancienne liste retirerait d'un clic
+     * ce qu'on avait sous les yeux.
+     */
+    const toggleAllFeatures = (): void => {
+        if (allFeatures) {
+            const all = allFeatureDescriptors();
+            setFeatures(Object.fromEntries(all.map((f) => [f.id, 'write'])));
+            setChannels(Object.fromEntries(all.map((f) => [f.id, f.notifies])));
+            setItemPerms(Object.fromEntries(all.map((f) => [f.id, f.hasItems])));
+            setExtras(
+                Object.fromEntries(
+                    all.map((f) => [
+                        f.id,
+                        Object.fromEntries(
+                            (moduleManifest(f.id)?.extraPermissions ?? []).map((spec) => [
+                                spec.key,
+                                spec.type === 'toggle' ? true : spec.ownerValue
+                            ])
+                        )
+                    ])
+                )
+            );
+        }
+        setAllFeatures(!allFeatures);
+    };
+
+    /**
      * Les extras à écrire : seules les clés que le manifest déclare encore, avec
      * leur valeur choisie, pour ne pas envoyer de restes. Le serveur revalide de
      * toute façon (`validateGrantExtras`).
@@ -159,30 +190,33 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
             name: name.trim(),
             color,
             capabilities,
-            features: allFeatureDescriptors().flatMap<WorkspaceFeatureGrant>((f) => {
-                const a = features[f.id];
-                if (a !== 'read' && a !== 'write') return [];
-                // Les canaux ne se gèrent pas sur une fonctionnalité qui n'en émet
-                // pas : le champ est rangé à false plutôt qu'à un état sans objet.
-                return [
-                    {
-                        feature: f.id,
-                        access: a,
-                        channels: f.notifies && (channels[f.id] ?? false),
-                        // Même règle : sans éléments, le champ est rangé à false
-                        // plutôt qu'à un état sans objet.
-                        itemPermissions: f.hasItems && (itemPerms[f.id] ?? false),
-                        extras: grantExtras(f.id)
-                    }
-                ];
-            })
+            allFeatures,
+            features: allFeatures
+                ? []
+                : allFeatureDescriptors().flatMap<WorkspaceFeatureGrant>((f) => {
+                      const a = features[f.id];
+                      if (a !== 'read' && a !== 'write') return [];
+                      // Les canaux ne se gèrent pas sur une fonctionnalité qui n'en émet
+                      // pas : le champ est rangé à false plutôt qu'à un état sans objet.
+                      return [
+                          {
+                              feature: f.id,
+                              access: a,
+                              channels: f.notifies && (channels[f.id] ?? false),
+                              // Même règle : sans éléments, le champ est rangé à false
+                              // plutôt qu'à un état sans objet.
+                              itemPermissions: f.hasItems && (itemPerms[f.id] ?? false),
+                              extras: grantExtras(f.id)
+                          }
+                      ];
+                  })
         });
     };
 
     const active = registry.find((f) => f.id === section) ?? null;
     // Sans accès à la fonctionnalité, rien de ce qu'elle confie en plus n'a de
     // sens : les cases restent visibles, pour dire ce qu'un accès ouvrirait.
-    const noAccess = active !== null && (features[active.id] ?? 'none') === 'none';
+    const noAccess = active !== null && accessOf(active.id) === 'none';
     const extraSpecs = active ? (moduleManifest(active.id)?.extraPermissions ?? []) : [];
 
     return (
@@ -242,7 +276,7 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
                     <div className={styles.navSpacer} aria-hidden='true' />
 
                     {featureRows.map((f) => {
-                        const access = features[f.id] ?? 'none';
+                        const access = accessOf(f.id);
                         return (
                             <button
                                 key={f.id}
@@ -317,6 +351,22 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
                                     </Checkbox>
                                 ))}
                             </div>
+
+                            <span className={shell.sectionLabel}>Fonctionnalités</span>
+                            <div className={`${styles.card} ${styles.rowList}`}>
+                                <Checkbox
+                                    className={styles.checkRow}
+                                    checked={allFeatures}
+                                    onChange={toggleAllFeatures}
+                                >
+                                    Toutes les fonctionnalités
+                                    <span className={shell.fieldHint}>
+                                        Écriture et toutes les permissions sur chaque fonctionnalité, y compris celles
+                                        ajoutées plus tard. Décoché, le rôle garde tout ce qui est affiché, à
+                                        restreindre fonctionnalité par fonctionnalité.
+                                    </span>
+                                </Checkbox>
+                            </div>
                         </section>
                     ) : (
                         <section className={shell.section}>
@@ -325,6 +375,11 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
                                 « Déploiement » ne dit pas seul que `write` permet
                                 une mise en production. */}
                             <p className={shell.sectionHint}>{active.description}</p>
+                            {allFeatures && (
+                                <p className={shell.sectionHint}>
+                                    Accordé par « Toutes les fonctionnalités », dans la section Espace.
+                                </p>
+                            )}
 
                             {/* « Aucun » est un choix explicite, pas une absence de
                                 ligne. Les exceptions par élément (masquer une base à
@@ -334,8 +389,9 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
                                 <span className={styles.grantFieldLabel}>Accès</span>
                                 <SegmentedControl
                                     aria-label={`Accès à ${active.label}`}
-                                    value={features[active.id] ?? 'none'}
+                                    value={accessOf(active.id)}
                                     options={ACCESS_OPTIONS}
+                                    disabled={allFeatures}
                                     onChange={(v) => setFeatures((prev) => ({ ...prev, [active.id]: v }))}
                                 />
                             </div>
@@ -356,8 +412,8 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
                                         {active.hasItems && (
                                             <Checkbox
                                                 className={styles.checkRow}
-                                                checked={!noAccess && (itemPerms[active.id] ?? false)}
-                                                disabled={noAccess}
+                                                checked={allFeatures || (!noAccess && (itemPerms[active.id] ?? false))}
+                                                disabled={noAccess || allFeatures}
                                                 onChange={() =>
                                                     setItemPerms((prev) => ({
                                                         ...prev,
@@ -377,8 +433,8 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
                                         {active.notifies && (
                                             <Checkbox
                                                 className={styles.checkRow}
-                                                checked={!noAccess && (channels[active.id] ?? false)}
-                                                disabled={noAccess}
+                                                checked={allFeatures || (!noAccess && (channels[active.id] ?? false))}
+                                                disabled={noAccess || allFeatures}
                                                 onChange={() =>
                                                     setChannels((prev) => ({
                                                         ...prev,
@@ -406,8 +462,10 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
                                                     <Checkbox
                                                         key={spec.key}
                                                         className={styles.checkRow}
-                                                        checked={!noAccess && chosen[spec.key] === true}
-                                                        disabled={noAccess}
+                                                        checked={
+                                                            allFeatures || (!noAccess && chosen[spec.key] === true)
+                                                        }
+                                                        disabled={noAccess || allFeatures}
                                                         onChange={() => setExtra(!(chosen[spec.key] === true))}
                                                     >
                                                         {spec.label}
@@ -420,12 +478,14 @@ export default function RoleDialog({ open, role, busy, onClose, onSubmit }: Role
                                                     <span className={styles.grantFieldLabel}>{spec.label}</span>
                                                     <SearchSelect
                                                         value={
-                                                            typeof chosen[spec.key] === 'string'
-                                                                ? (chosen[spec.key] as string)
-                                                                : spec.default
+                                                            allFeatures
+                                                                ? spec.ownerValue
+                                                                : typeof chosen[spec.key] === 'string'
+                                                                  ? (chosen[spec.key] as string)
+                                                                  : spec.default
                                                         }
                                                         options={spec.options}
-                                                        disabled={noAccess}
+                                                        disabled={noAccess || allFeatures}
                                                         aria-label={spec.label}
                                                         onChange={setExtra}
                                                     />

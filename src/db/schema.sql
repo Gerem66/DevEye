@@ -2923,6 +2923,7 @@ CREATE TABLE `workspace_roles` (
   `position` int NOT NULL DEFAULT '0',
   `capabilities` json NOT NULL,
   `features` json NOT NULL,
+  `all_features` tinyint NOT NULL DEFAULT '0',
   `is_default` tinyint NOT NULL DEFAULT '0',
   `created` bigint NOT NULL DEFAULT (unix_timestamp()),
   PRIMARY KEY (`id`),

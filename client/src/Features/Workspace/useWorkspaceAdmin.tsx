@@ -137,34 +137,33 @@ export function useWorkspaceAdmin() {
         clearError: () => setError(null),
 
         /**
-         * Deux rôles de départ pour un onglet encore vide : « Admin » (tout) et
-         * « Membre » (toutes les fonctionnalités, aucune administration), ce dernier
-         * attribué d'office pour que la première invitation marche sans réglage.
+         * Deux rôles de départ pour un onglet encore vide : « Admin » (tout, les
+         * fonctionnalités à venir comprises) et « Membre » (les fonctionnalités
+         * d'aujourd'hui en écriture, aucune administration), ce dernier attribué
+         * d'office pour que la première invitation marche sans réglage. Le Membre
+         * ne gère ni les canaux d'alerte ni les permissions par élément.
          */
         createPresetRoles: () =>
             run(async () => {
-                // Les canaux d'alerte et les permissions par élément suivent la
-                // ligne du preset : l'Admin les gère, le Membre s'en sert sans
-                // pouvoir les modifier.
-                const grants = (channels: boolean) =>
-                    FEATURE_REGISTRY.map<WorkspaceFeatureGrant>((f) => ({
-                        feature: f.id,
-                        access: 'write',
-                        channels,
-                        itemPermissions: channels,
-                        extras: {}
-                    }));
                 await ws.send('workspace.roleCreate', {
                     name: 'Admin',
                     color: '#f97316',
                     capabilities: [...WORKSPACE_CAPABILITIES],
-                    features: grants(true)
+                    features: [],
+                    allFeatures: true
                 });
                 const member = await ws.send('workspace.roleCreate', {
                     name: 'Membre',
                     color: '#22d3ee',
                     capabilities: [],
-                    features: grants(false)
+                    features: FEATURE_REGISTRY.map<WorkspaceFeatureGrant>((f) => ({
+                        feature: f.id,
+                        access: 'write',
+                        channels: false,
+                        itemPermissions: false,
+                        extras: {}
+                    })),
+                    allFeatures: false
                 });
                 await ws.send('workspace.roleSetDefault', { roleId: member.role.id });
                 await loadRoles();
@@ -175,6 +174,7 @@ export function useWorkspaceAdmin() {
             color: string;
             capabilities: WorkspaceCapability[];
             features: WorkspaceFeatureGrant[];
+            allFeatures: boolean;
         }) =>
             run(async () => {
                 await ws.send('workspace.roleCreate', draft);
@@ -188,6 +188,7 @@ export function useWorkspaceAdmin() {
                 color: string;
                 capabilities: WorkspaceCapability[];
                 features: WorkspaceFeatureGrant[];
+                allFeatures: boolean;
             }
         ) =>
             run(async () => {

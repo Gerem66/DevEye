@@ -40,6 +40,7 @@ import {
 } from './workspace/members';
 import {
     workspaceAssignRoleFeature,
+    workspaceFeatureAccessSetFeature,
     workspaceRoleCreateFeature,
     workspaceRoleDeleteFeature,
     workspaceRoleListFeature,
@@ -78,6 +79,7 @@ export const featureHandlers: ReadonlyArray<FeatureDefinition<string, any, any>>
     workspaceRoleUpdateFeature,
     workspaceRoleDeleteFeature,
     workspaceRoleSetDefaultFeature,
+    workspaceFeatureAccessSetFeature,
     workspaceAssignRoleFeature,
     ...remoteFeatures,
     userSetAvatarFeature,

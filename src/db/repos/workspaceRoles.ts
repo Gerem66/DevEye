@@ -13,6 +13,7 @@ const roleColumns = (alias: string | null): string =>
         position: true,
         capabilities: true,
         features: true,
+        all_features: true,
         is_default: true,
         created: true
     });
@@ -25,6 +26,7 @@ export interface RoleInput {
     color: string;
     capabilities: WorkspaceCapability[];
     features: WorkspaceFeatureGrant[];
+    allFeatures: boolean;
 }
 
 export interface WorkspaceRolesRepo {
@@ -36,6 +38,8 @@ export interface WorkspaceRolesRepo {
     findDefault(workspaceId: number): Promise<WorkspaceRoleRow | null>;
     create(workspaceId: number, input: RoleInput): Promise<WorkspaceRoleRow>;
     update(id: number, workspaceId: number, input: RoleInput): Promise<WorkspaceRoleRow | null>;
+    /** Réécrit les seuls grants d'un rôle, le reste de la ligne tel quel. */
+    setFeatures(id: number, workspaceId: number, features: WorkspaceFeatureGrant[]): Promise<void>;
     delete(id: number, workspaceId: number): Promise<boolean>;
     /** Combien de membres portent ce rôle — le refus de suppression s'appuie dessus. */
     memberCount(roleId: number): Promise<number>;
@@ -79,36 +83,51 @@ export function workspaceRolesRepo(pool: Q): WorkspaceRolesRepo {
             );
             return r.rows[0] ?? null;
         },
-        async create(workspaceId, { name, color, capabilities, features }) {
+        async create(workspaceId, { name, color, capabilities, features, allFeatures }) {
             const posRow = await pool.query<{ next: number }>(
                 'SELECT COALESCE(MAX(position) + 1, 0) AS next FROM workspace_roles WHERE workspace_id = ?',
                 [workspaceId]
             );
             const res = await pool.query(
-                `INSERT INTO workspace_roles (workspace_id, name, color, position, capabilities, features)
-                 VALUES (?, ?, ?, ?, CAST(? AS JSON), CAST(? AS JSON))`,
+                `INSERT INTO workspace_roles (workspace_id, name, color, position, capabilities, features, all_features)
+                 VALUES (?, ?, ?, ?, CAST(? AS JSON), CAST(? AS JSON), ?)`,
                 [
                     workspaceId,
                     name,
                     color,
                     Number(posRow.rows[0]?.next ?? 0),
                     JSON.stringify(capabilities),
-                    JSON.stringify(features)
+                    JSON.stringify(features),
+                    allFeatures ? 1 : 0
                 ]
             );
             const row = await this.findById(res.insertId, workspaceId);
             if (!row) throw new Error('Failed to create workspace role');
             return row;
         },
-        async update(id, workspaceId, { name, color, capabilities, features }) {
+        async update(id, workspaceId, { name, color, capabilities, features, allFeatures }) {
             const res = await pool.query(
                 `UPDATE workspace_roles
-                 SET name = ?, color = ?, capabilities = CAST(? AS JSON), features = CAST(? AS JSON)
+                 SET name = ?, color = ?, capabilities = CAST(? AS JSON), features = CAST(? AS JSON), all_features = ?
                  WHERE id = ? AND workspace_id = ?`,
-                [name, color, JSON.stringify(capabilities), JSON.stringify(features), id, workspaceId]
+                [
+                    name,
+                    color,
+                    JSON.stringify(capabilities),
+                    JSON.stringify(features),
+                    allFeatures ? 1 : 0,
+                    id,
+                    workspaceId
+                ]
             );
             if (res.rowCount === 0 && !(await this.findById(id, workspaceId))) return null;
             return this.findById(id, workspaceId);
+        },
+        async setFeatures(id, workspaceId, features) {
+            await pool.query(
+                'UPDATE workspace_roles SET features = CAST(? AS JSON) WHERE id = ? AND workspace_id = ?',
+                [JSON.stringify(features), id, workspaceId]
+            );
         },
         async delete(id, workspaceId) {
             const r = await pool.query('DELETE FROM workspace_roles WHERE id = ? AND workspace_id = ?', [

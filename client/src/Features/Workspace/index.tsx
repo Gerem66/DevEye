@@ -333,8 +333,9 @@ export default function FeatureWorkspace() {
                                         {admin.busy ? 'Création…' : 'Créer les rôles de départ'}
                                     </Button>
                                     <p className={styles.hint}>
-                                        « Admin » peut tout ; « Membre » a toutes les fonctionnalités sans
-                                        l’administration, et devient le rôle attribué d’office.
+                                        « Admin » peut tout, y compris sur les fonctionnalités ajoutées plus tard ; «
+                                        Membre » a les fonctionnalités actuelles sans l’administration, et devient le
+                                        rôle attribué d’office.
                                     </p>
                                 </div>
                             ) : (
@@ -347,8 +348,11 @@ export default function FeatureWorkspace() {
                                                 {r.isDefault && <span className={styles.defaultTag}>par défaut</span>}
                                             </span>
                                             <span className={styles.rowMeta}>
-                                                {r.features.length} fonctionnalité(s) · {r.capabilities.length} droit(s)
-                                                d’administration · {r.memberCount} membre(s)
+                                                {r.allFeatures
+                                                    ? 'Toutes les fonctionnalités'
+                                                    : `${r.features.length} fonctionnalité(s)`}{' '}
+                                                · {r.capabilities.length} droit(s) d’administration · {r.memberCount}{' '}
+                                                membre(s)
                                             </span>
                                         </div>
                                         {r.isDefault ? (

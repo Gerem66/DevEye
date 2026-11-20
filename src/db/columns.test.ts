@@ -39,16 +39,17 @@ describe('la liste de colonnes d’un SELECT', () => {
             position: true,
             capabilities: true,
             features: true,
+            all_features: true,
             is_default: true,
             created: true
         } as const;
         assert.equal(
             selectColumns<WorkspaceRoleRow>(null, spec),
-            'id, workspace_id, name, color, position, capabilities, features, is_default, created'
+            'id, workspace_id, name, color, position, capabilities, features, all_features, is_default, created'
         );
         assert.equal(
             selectColumns<WorkspaceRoleRow>('r', spec),
-            'r.id, r.workspace_id, r.name, r.color, r.position, r.capabilities, r.features, r.is_default, r.created'
+            'r.id, r.workspace_id, r.name, r.color, r.position, r.capabilities, r.features, r.all_features, r.is_default, r.created'
         );
     });
 });

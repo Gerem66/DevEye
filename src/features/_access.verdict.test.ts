@@ -47,6 +47,7 @@ function fakeDb(world: World): Database {
                 position: 0,
                 capabilities: '[]',
                 features: JSON.stringify(grant ? [{ feature: 'devices', ...grant }] : []),
+                all_features: 0,
                 is_default: 0,
                 created: 0
             })

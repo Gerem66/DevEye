@@ -1,11 +1,23 @@
 import { useEffect, useState, type ComponentType, type ReactNode } from 'react';
-import { placedFeatureIds, type HomeSection, type ShortcutItem } from '@deveye/types';
+import {
+    placedFeatureIds,
+    type FeatureId,
+    type HomeSection,
+    type ShortcutItem,
+    type WorkspaceRole
+} from '@deveye/types';
 
+import { errorNote } from '@/api/useResource';
+import { ws } from '@/api/ws';
+import Button from '@/Components/Button';
 import { Dialog } from '@/Components/Dialog';
+import ErrorNote, { type ErrorNoteInput } from '@/Components/ErrorNote';
 import TextInput from '@/Components/TextInput';
 import { useDevices } from '@/devicesProvider';
 import { foldText } from '@/foldText';
 import { addDevice, addFeature, getHomeLayout, placedDeviceIds, useHomeLayout } from '@/stores/homeLayout';
+import { invalidate } from '@/stores/invalidation';
+import { setPermissions, useActiveWorkspace, useWorkspacePermissions } from '@/stores/workspace';
 import {
     FEATURE_CATEGORIES,
     FEATURE_CATEGORY_ICON,
@@ -15,6 +27,7 @@ import {
 } from '../catalog';
 import { allRecommendedPlaced, recommendedFeatures } from '../starters';
 import { FeatureArt, type ArtId } from '../art';
+import { FeatureAccessStep, rolesWithout, type AccessChoice } from './FeatureAccessStep';
 import { ShortcutForm } from './ShortcutForm';
 import styles from './organize.module.css';
 
@@ -106,6 +119,14 @@ export interface AddTileMarketProps {
     onClose: () => void;
 }
 
+/** La fonctionnalité choisie, en attente de la réponse à « qui y aura accès ? ». */
+interface AccessStepState {
+    featureId: FeatureId;
+    title: string;
+    roles: WorkspaceRole[];
+    choices: Record<number, AccessChoice>;
+}
+
 /**
  * Le marché : une seule popup pour tout ce qui se pose sur l'accueil. Le rayon
  * des raccourcis est un formulaire, pas un catalogue. Les dossiers ne passent
@@ -115,8 +136,13 @@ export interface AddTileMarketProps {
 export function AddTileMarket({ section, editShortcut, onClose }: AddTileMarketProps) {
     const layout = useHomeLayout();
     const { devices } = useDevices();
+    const workspace = useActiveWorkspace();
+    const { isOwner, can } = useWorkspacePermissions();
     const [rayon, setRayon] = useState<Rayon>('all');
     const [query, setQuery] = useState('');
+    const [accessStep, setAccessStep] = useState<AccessStepState | null>(null);
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState<ErrorNoteInput | null>(null);
 
     const open = section !== null;
     const sectionId = section?.id ?? null;
@@ -129,7 +155,69 @@ export function AddTileMarket({ section, editShortcut, onClose }: AddTileMarketP
         if (!open) return;
         setRayon(allRecommendedPlaced(getHomeLayout()) ? 'all' : 'recommended');
         setQuery('');
+        setAccessStep(null);
+        setError(null);
     }, [open]);
+
+    /**
+     * Dans un espace partagé, qui gouverne les rôles répond d'abord à « qui y
+     * aura accès ? » quand un rôle n'ouvre pas la fonctionnalité. Sans ce droit,
+     * l'ajout reste direct : les autres voient la tuile grisée, ce qui les
+     * renseigne déjà.
+     */
+    const pickFeature = async (sectionId: string, featureId: FeatureId, title: string): Promise<void> => {
+        const canGrant = workspace?.kind === 'shared' && (isOwner || can('workspace.roles'));
+        if (canGrant && !busy) {
+            setBusy(true);
+            setError(null);
+            try {
+                const { roles } = await ws.send('workspace.roleList', {});
+                if (rolesWithout(roles, featureId).length > 0) {
+                    setAccessStep({ featureId, title, roles, choices: {} });
+                    return;
+                }
+            } catch (e) {
+                setError(errorNote(e, 'Lecture des rôles impossible.'));
+                return;
+            } finally {
+                setBusy(false);
+            }
+        }
+        addFeature(sectionId, featureId);
+        onClose();
+    };
+
+    const confirmAccess = async (): Promise<void> => {
+        if (sectionId === null || accessStep === null || busy) return;
+        const grants = Object.entries(accessStep.choices).flatMap(([roleId, access]) =>
+            access === 'none' ? [] : [{ roleId: Number(roleId), access }]
+        );
+        setBusy(true);
+        setError(null);
+        try {
+            if (grants.length > 0) {
+                await ws.send('workspace.featureAccessSet', { feature: accessStep.featureId, grants });
+                // L'auteur est exclu de la diffusion : l'écran des rôles et ses
+                // propres droits se relisent ici. Les droits seuls : la
+                // disposition rendue par `workspace.activate` précède la tuile,
+                // pas encore enregistrée, et l'effacerait.
+                invalidate('workspace.roleList');
+                if (!isOwner) {
+                    void ws
+                        .send('workspace.activate', {})
+                        .then((res) => setPermissions(res.permissions))
+                        .catch(() => {});
+                }
+            }
+        } catch (e) {
+            setError(errorNote(e, 'Ouverture de l’accès impossible.'));
+            return;
+        } finally {
+            setBusy(false);
+        }
+        addFeature(sectionId, accessStep.featureId);
+        onClose();
+    };
 
     const recommendedIds = new Set<string>(recommendedFeatures().map((feature) => feature.id));
 
@@ -179,10 +267,7 @@ export function AddTileMarket({ section, editShortcut, onClose }: AddTileMarketP
                 description: feature.description,
                 placed: placedFeatures.has(feature.id),
                 recommended: recommendedIds.has(feature.id),
-                onPick: () => {
-                    addFeature(sectionId, feature.id);
-                    onClose();
-                }
+                onPick: () => void pickFeature(sectionId, feature.id, feature.title)
             });
         }
 
@@ -236,12 +321,52 @@ export function AddTileMarket({ section, editShortcut, onClose }: AddTileMarketP
         <Dialog
             open={open}
             onClose={onClose}
-            title={editing ? 'Modifier le raccourci' : "Ajouter à l'accueil"}
-            width={editing ? 520 : 860}
+            title={
+                editing
+                    ? 'Modifier le raccourci'
+                    : accessStep
+                      ? `Qui aura accès à ${accessStep.title} ?`
+                      : "Ajouter à l'accueil"
+            }
+            width={editing || accessStep ? 560 : 860}
+            onSubmit={accessStep ? () => void confirmAccess() : undefined}
+            footer={
+                accessStep ? (
+                    <>
+                        <Button
+                            variant='secondary'
+                            disabled={busy}
+                            onClick={() => {
+                                setAccessStep(null);
+                                setError(null);
+                            }}
+                        >
+                            Retour
+                        </Button>
+                        <Button onClick={() => void confirmAccess()} disabled={busy}>
+                            {busy ? 'Ajout…' : 'Ajouter la tuile'}
+                        </Button>
+                    </>
+                ) : undefined
+            }
         >
+            <ErrorNote note={error} onDismiss={() => setError(null)} />
             {section !== null &&
                 (editing ? (
                     <ShortcutForm sectionId={section.id} initial={editShortcut} onDone={onClose} />
+                ) : accessStep ? (
+                    <FeatureAccessStep
+                        featureId={accessStep.featureId}
+                        featureLabel={accessStep.title}
+                        roles={accessStep.roles}
+                        choices={accessStep.choices}
+                        isOwner={isOwner}
+                        onChange={(roleId, choice) =>
+                            setAccessStep((prev) =>
+                                prev ? { ...prev, choices: { ...prev.choices, [roleId]: choice } } : prev
+                            )
+                        }
+                    />
                 ) : (
                     <div className={styles.market}>
                         <TextInput
