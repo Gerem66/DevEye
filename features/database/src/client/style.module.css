@@ -421,6 +421,20 @@
     min-width: 0;
 }
 
+/* Indicateurs et Alertes, l'un sous l'autre. */
+.panelStack {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-md);
+}
+
+/* Vides tous les deux, ils tiennent côte à côte, et se replient dans un cadre
+   étroit. */
+.panelPair {
+    composes: panelStack;
+    grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+}
+
 /* Le seul bloc de la fiche qui grandit. `flex: 1 1 auto` et non `flex: 1`
    (`1 1 0%`) : la base reste la hauteur naturelle du panneau, qui ne fait que
    prendre ce qui reste. */

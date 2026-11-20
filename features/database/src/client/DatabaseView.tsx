@@ -50,6 +50,11 @@ export function DatabaseView({
         itemLabel: database.name
     };
 
+    // Facultatif : sans indicateur, le bloc ne parle qu'à qui peut en poser un.
+    const showKpis = kpis.length > 0 || (canWrite && !database.foreign);
+    // Vides tous les deux, ils ne portent qu'une phrase chacun : une seule ligne.
+    const sideBySide = showKpis && kpis.length === 0 && alerts.length === 0;
+
     // Stable : l'explorateur s'en sert dans un effet de remise à zéro.
     const expand = useCallback(
         (next: boolean) => {
@@ -91,115 +96,118 @@ export function DatabaseView({
                 </>
             )}
 
-            {/* Facultatif : sans indicateur, le bloc ne parle qu'à qui peut en poser un. */}
-            {!expanded && (kpis.length > 0 || (canWrite && !database.foreign)) && (
-                <section className={styles.panel}>
-                    <header className={styles.panelHead}>
-                        <h3 className={styles.panelTitle}>Indicateurs</h3>
-                        <FeatureSettingsButton
-                            scope={scope}
-                            initialSection='kpis'
-                            label='Gérer les indicateurs'
-                            onGone={onGone}
-                        />
-                    </header>
-
-                    {kpis.length === 0 ? (
-                        <p className={styles.hint}>
-                            Un indicateur garde sous les yeux le résultat d’une requête : commandes du jour, chiffre
-                            d’affaires, stock le plus bas. « Gérer les indicateurs » en ajoute un.
-                        </p>
-                    ) : (
-                        <div className={styles.kpiGrid}>
-                            {kpis.map((kpi) => (
-                                <div key={kpi.id} className={styles.kpiTile}>
-                                    <span className={styles.statLabel}>{kpi.label}</span>
-                                    <span className={styles.kpiValue}>
-                                        {kpi.value === null ? '–' : formatKpiValue(kpi.value)}
-                                        {kpi.value !== null && kpi.unit && (
-                                            <span className={styles.kpiUnit}>{kpi.unit}</span>
-                                        )}
-                                    </span>
-                                    {kpi.error ? (
-                                        <span className={styles.kpiError}>{kpi.error}</span>
-                                    ) : (
-                                        <span className={styles.kpiMeta}>
-                                            {kpi.measuredAt === null ? 'jamais mesuré' : formatAgo(kpi.measuredAt)}
-                                        </span>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    )}
-
-                    {kpis.length > 0 && !database.monitorEnabled && (
-                        <p className={styles.hint}>
-                            Mesurés à leur enregistrement et à chaque « Relever l’état ». Le relevé régulier (réglages,
-                            Général) les tient à jour seul.
-                        </p>
-                    )}
-                </section>
-            )}
-
             {!expanded && (
-                <section className={styles.panel}>
-                    <header className={styles.panelHead}>
-                        <h3 className={styles.panelTitle}>
-                            Alertes
-                            {database.firingCount > 0 && (
-                                <span className={styles.alertTag}>
-                                    {database.firingCount} franchie{database.firingCount > 1 ? 's' : ''}
-                                </span>
-                            )}
-                        </h3>
-                        {/* Hors du `canWrite` : un lecteur y voit les règles, et le
-                            bouton se supprime seul sans section lisible. */}
-                        <FeatureSettingsButton
-                            scope={scope}
-                            initialSection='alerts'
-                            label='Gérer les alertes'
-                            onGone={onGone}
-                        />
-                    </header>
+                <div className={sideBySide ? styles.panelPair : styles.panelStack}>
+                    {showKpis && (
+                        <section className={styles.panel}>
+                            <header className={styles.panelHead}>
+                                <h3 className={styles.panelTitle}>Indicateurs</h3>
+                                <FeatureSettingsButton
+                                    scope={scope}
+                                    initialSection='kpis'
+                                    label='Gérer les indicateurs'
+                                    onGone={onGone}
+                                />
+                            </header>
 
-                    {!database.monitorEnabled && alerts.length > 0 && (
-                        <p className={styles.warn}>
-                            La surveillance est éteinte : ces alertes ne sont <strong>pas évaluées</strong>. Activez le
-                            relevé régulier dans les réglages de la base (Général) pour les rendre vivantes.
-                        </p>
-                    )}
-
-                    {alerts.length === 0 && (
-                        <p className={styles.hint}>
-                            Aucune alerte. Une alerte compare le résultat de requêtes à des seuils (nombre d’erreurs de
-                            la dernière heure, utilisateurs actifs, lignes en attente) et prévient sur les canaux de
-                            l’espace.
-                            {canWrite && ' « Gérer les alertes » en écrit une.'}
-                        </p>
-                    )}
-
-                    <ul className={styles.alertList}>
-                        {alerts.map((alert) => (
-                            <li key={alert.id} className={alert.firing ? styles.alertRowOn : styles.alertRow}>
-                                <div className={styles.alertEntry}>
-                                    <span className={styles.alertName}>
-                                        {alert.name}
-                                        {!alert.enabled && <span className={styles.tag}>désactivée</span>}
-                                        {alert.firing && <span className={styles.alertTag}>franchie</span>}
-                                    </span>
-                                    <span className={styles.hint}>
-                                        {alert.conditions.length} condition{alert.conditions.length > 1 ? 's' : ''} ·{' '}
-                                        {alert.combinator === 'and' ? 'toutes' : 'au moins une'}
-                                        {alert.lastCheckAt !== null && ` · évaluée ${formatAgo(alert.lastCheckAt)}`}
-                                        {alert.lastValues.length > 0 &&
-                                            ` · ${alert.lastValues.map((v) => (v === null ? '–' : v)).join(' / ')}`}
-                                    </span>
-                                    {alert.lastError && <span className={styles.error}>{alert.lastError}</span>}
+                            {kpis.length === 0 ? (
+                                <p className={styles.hint}>
+                                    Un indicateur garde sous les yeux le résultat d’une requête : commandes du jour,
+                                    chiffre d’affaires, stock le plus bas. « Gérer les indicateurs » en ajoute un.
+                                </p>
+                            ) : (
+                                <div className={styles.kpiGrid}>
+                                    {kpis.map((kpi) => (
+                                        <div key={kpi.id} className={styles.kpiTile}>
+                                            <span className={styles.statLabel}>{kpi.label}</span>
+                                            <span className={styles.kpiValue}>
+                                                {kpi.value === null ? '–' : formatKpiValue(kpi.value)}
+                                                {kpi.value !== null && kpi.unit && (
+                                                    <span className={styles.kpiUnit}>{kpi.unit}</span>
+                                                )}
+                                            </span>
+                                            {kpi.error ? (
+                                                <span className={styles.kpiError}>{kpi.error}</span>
+                                            ) : (
+                                                <span className={styles.kpiMeta}>
+                                                    {kpi.measuredAt === null
+                                                        ? 'jamais mesuré'
+                                                        : formatAgo(kpi.measuredAt)}
+                                                </span>
+                                            )}
+                                        </div>
+                                    ))}
                                 </div>
-                            </li>
-                        ))}
-                    </ul>
-                </section>
+                            )}
+
+                            {kpis.length > 0 && !database.monitorEnabled && (
+                                <p className={styles.hint}>
+                                    Mesurés à leur enregistrement et à chaque « Relever l’état ». Le relevé régulier
+                                    (réglages, Général) les tient à jour seul.
+                                </p>
+                            )}
+                        </section>
+                    )}
+
+                    <section className={styles.panel}>
+                        <header className={styles.panelHead}>
+                            <h3 className={styles.panelTitle}>
+                                Alertes
+                                {database.firingCount > 0 && (
+                                    <span className={styles.alertTag}>
+                                        {database.firingCount} franchie{database.firingCount > 1 ? 's' : ''}
+                                    </span>
+                                )}
+                            </h3>
+                            {/* Hors du `canWrite` : un lecteur y voit les règles, et le
+                                bouton se supprime seul sans section lisible. */}
+                            <FeatureSettingsButton
+                                scope={scope}
+                                initialSection='alerts'
+                                label='Gérer les alertes'
+                                onGone={onGone}
+                            />
+                        </header>
+
+                        {!database.monitorEnabled && alerts.length > 0 && (
+                            <p className={styles.warn}>
+                                La surveillance est éteinte : ces alertes ne sont <strong>pas évaluées</strong>. Activez
+                                le relevé régulier dans les réglages de la base (Général) pour les rendre vivantes.
+                            </p>
+                        )}
+
+                        {alerts.length === 0 && (
+                            <p className={styles.hint}>
+                                Aucune alerte. Une alerte compare le résultat de requêtes à des seuils (nombre d’erreurs
+                                de la dernière heure, utilisateurs actifs, lignes en attente) et prévient sur les canaux
+                                de l’espace.
+                                {canWrite && ' « Gérer les alertes » en écrit une.'}
+                            </p>
+                        )}
+
+                        <ul className={styles.alertList}>
+                            {alerts.map((alert) => (
+                                <li key={alert.id} className={alert.firing ? styles.alertRowOn : styles.alertRow}>
+                                    <div className={styles.alertEntry}>
+                                        <span className={styles.alertName}>
+                                            {alert.name}
+                                            {!alert.enabled && <span className={styles.tag}>désactivée</span>}
+                                            {alert.firing && <span className={styles.alertTag}>franchie</span>}
+                                        </span>
+                                        <span className={styles.hint}>
+                                            {alert.conditions.length} condition{alert.conditions.length > 1 ? 's' : ''}{' '}
+                                            · {alert.combinator === 'and' ? 'toutes' : 'au moins une'}
+                                            {alert.lastCheckAt !== null && ` · évaluée ${formatAgo(alert.lastCheckAt)}`}
+                                            {alert.lastValues.length > 0 &&
+                                                ` · ${alert.lastValues.map((v) => (v === null ? '–' : v)).join(' / ')}`}
+                                        </span>
+                                        {alert.lastError && <span className={styles.error}>{alert.lastError}</span>}
+                                    </div>
+                                </li>
+                            ))}
+                        </ul>
+                    </section>
+                </div>
             )}
 
             <TableExplorer

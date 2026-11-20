@@ -77,6 +77,8 @@ declare const styles: {
     readonly panelExpanded: string;
     readonly panelGrow: string;
     readonly panelHead: string;
+    readonly panelPair: string;
+    readonly panelStack: string;
     readonly panelTitle: string;
     readonly pending: string;
     readonly requiredMark: string;
