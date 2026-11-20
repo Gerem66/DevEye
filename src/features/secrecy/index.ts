@@ -317,6 +317,7 @@ export const secrecyRecoverFeature: FeatureDefinition<
         forgetSessionsOf(ctx.userId, ctx.sessionId);
         forgetStepUpsOf(ctx.userId, ctx.sessionId);
         await ctx.db.trustedBrowsers.removeAllOf(ctx.userId);
+        await ctx.db.passwordResets.removeAllOf(ctx.userId);
         abandonLoginChallengesOf(ctx.userId);
         ctx.live?.closeSessionsOf(ctx.userId, ctx.sessionId);
         rememberSessionDek(ctx.sessionId, ctx.userId, dek, await graceMs(ctx));

@@ -227,6 +227,7 @@ export async function authRoutes(app: FastifyInstance, { db, crypt, audit, live 
             // Un navigateur de confiance l'était sous l'ancien mot de passe :
             // chacun repassera par les codes, celui-ci compris.
             await db.trustedBrowsers.removeAllOf(row.id);
+            await db.passwordResets.removeAllOf(row.id);
             abandonLoginChallengesOf(row.id);
             live.closeSessionsOf(row.id, claims.sid);
             const { tokens } = await issueSession(reply, db, row.id, authTransport(req), claims.sid);

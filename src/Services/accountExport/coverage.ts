@@ -38,6 +38,7 @@ export const CORE_EXPORT_TABLES: Readonly<Record<string, 'host' | { skip: string
     quota_pauses: { skip: 'L’état des pauses de l’offre appartient au service.' },
     quota_rechecks: { skip: 'L’état des pauses de l’offre appartient au service.' },
     pending_signups: { skip: 'Une inscription en attente n’est pas encore un compte.' },
+    password_resets: { skip: 'Un lien de réinitialisation ne sert qu’une fois, et ne sort jamais.' },
     site_maintenance: { skip: 'Un réglage du serveur, pas du compte.' },
     feature_maintenance: { skip: 'Un réglage du serveur, pas du compte.' },
     instance_settings: { skip: 'Un réglage du serveur, pas du compte.' },

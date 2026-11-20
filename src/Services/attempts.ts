@@ -9,7 +9,8 @@ import { FeatureError } from '@/features/_define';
  * Un redémarrage remet les compteurs à zéro, ce qui est acceptable pour un
  * frein ; la trace, elle, est dans l'audit.
  */
-export type AttemptScope = 'login' | 'logincode' | 'signup' | 'twofa' | 'unlock' | 'recover' | 'password' | 'linkcode';
+export type AttemptScope =
+    'login' | 'logincode' | 'signup' | 'reset' | 'twofa' | 'unlock' | 'recover' | 'password' | 'linkcode';
 
 interface AttemptEntry {
     failures: number;

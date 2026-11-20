@@ -3,6 +3,7 @@ import type { SdkMailSample } from '@deveye/types/sdk/server';
 import { accountDeletedMail, loginCodeMail } from '@/Services/accountMails';
 import { alertMail } from '@/Services/alertCore';
 import { sampleAlert } from '@/Services/notifications';
+import { passwordResetImpossibleMail, passwordResetMail } from '@/Services/passwordReset/mails';
 import { existingAccountMail, verificationMail } from '@/Services/signup/mails';
 
 const HOLDER = 'Camille';
@@ -20,6 +21,24 @@ export const CORE_MAIL_SAMPLES: readonly SdkMailSample[] = [
         label: 'Inscription sur une adresse déjà inscrite',
         sender: 'server',
         build: ({ origins }) => existingAccountMail(origins.app)
+    },
+    {
+        key: 'passwordReset',
+        label: 'Mot de passe oublié : le lien',
+        sender: 'server',
+        build: ({ origins }) => passwordResetMail(HOLDER, `${origins.app}/reset-password#exemple`, false)
+    },
+    {
+        key: 'passwordResetRecovery',
+        label: 'Mot de passe oublié : le lien d’un compte chiffré',
+        sender: 'server',
+        build: ({ origins }) => passwordResetMail(HOLDER, `${origins.app}/reset-password#exemple`, true)
+    },
+    {
+        key: 'passwordResetImpossible',
+        label: 'Mot de passe oublié : compte chiffré sans code de récupération',
+        sender: 'server',
+        build: ({ origins }) => passwordResetImpossibleMail(HOLDER, origins.app)
     },
     {
         key: 'accountDeletedSelf',

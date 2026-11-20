@@ -396,6 +396,23 @@
     font-size: 0.9rem;
 }
 
+/* Le nouveau code de récupération remis après une réinitialisation. */
+.login .reset-code {
+    display: block;
+    margin: 0 0 var(--space-sm);
+    padding: var(--space-md);
+    font-family: var(--font-mono, monospace);
+    font-size: 1.05rem;
+    letter-spacing: 0.05em;
+    text-align: center;
+    color: var(--text-primary);
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border-strong);
+    border-radius: var(--radius-md);
+    word-break: break-all;
+    user-select: all;
+}
+
 /* Page de maintenance : la même scène, un message au lieu d'un formulaire. */
 .login .maintenance {
     display: flex;

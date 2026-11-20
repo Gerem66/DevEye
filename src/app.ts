@@ -34,6 +34,7 @@ import { assertAccessDeclared } from '@/features/_permissions';
 import { featureHandlers } from '@/features/registry';
 import { buildTopicIndex } from '@/features/_topics';
 import { signupRoutes } from '@/auth/signupRoutes';
+import { passwordResetRoutes } from '@/auth/passwordResetRoutes';
 import { federatedOriginOf, federationEnabled } from '@/auth/federation';
 import { FEDERATION_COOKIE, openFederationOrigins } from '@/auth/federationCookie';
 import { authRoutes } from '@/auth/routes';
@@ -76,6 +77,7 @@ import { runGate } from '@/Services/debug/e2e/gate';
 import { mailbox } from '@/Services/debug/e2e/mailbox';
 import { selfTracking } from '@/Services/debug/selfTracking';
 import { trackingRoutes } from '@/Services/debug/selfTracking/routes';
+import { createPasswordResetService } from '@/Services/passwordReset';
 import { createSignupService } from '@/Services/signup';
 import { maintenance, MaintenanceError } from '@/Services/maintenance';
 import { describeError, systemAlerts } from '@/Services/systemAlerts';
@@ -432,6 +434,13 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         logger,
         origin: env.PUBLIC_ORIGIN.replace(/\/+$/, '')
     });
+    const passwordReset = createPasswordResetService({
+        db: deps.db,
+        crypt: deps.crypt,
+        mailer,
+        logger,
+        origin: env.PUBLIC_ORIGIN.replace(/\/+$/, '')
+    });
     geoip.init({
         logger,
         enabled: moduleManifests().some((m) => m.nativeCapabilities?.includes('geoip'))
@@ -441,6 +450,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         geoip,
         createDomainVerifier({ db: deps.db, crypt: deps.crypt, logger, live }),
         signup,
+        passwordReset,
         createLogRetention({ db: deps.db, logger }),
         createDebugService({
             db: deps.db,
@@ -501,6 +511,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     await authRoutes(app, { db: deps.db, crypt: deps.crypt, audit, live });
     await accountExportRoutes(app, { db: deps.db, crypt: deps.crypt, audit });
     await signupRoutes(app, { db: deps.db, audit, live, signup });
+    await passwordResetRoutes(app, { db: deps.db, audit, live, passwordReset });
     await agentRoutes(app, { db: deps.db, hub, live, audit });
     // Routes publiques des modules (capacité `routes.public`), aussi montées
     // sur la surface publique quand elle existe (`publicApp.ts`). Après la

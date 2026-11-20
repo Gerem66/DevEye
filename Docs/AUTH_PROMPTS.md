@@ -78,6 +78,19 @@ chiffrement.
 - Ce n'est pas un mot de passe et ne déverrouille aucune donnée : voir
   [SECURITY_MODEL.md](./SECURITY_MODEL.md#lagent).
 
+## 1 quinquies. Mot de passe oublié : hors session
+
+- Fichiers : `client/src/Pages/PasswordReset/` (`Start.tsx` demande le lien par
+  l'adresse, `Reset.tsx` l'ouvre), routées par `App.tsx` sur `/forgot-password`
+  et `/reset-password#<jeton>` ; le lien « Mot de passe oublié ? » est sur la
+  page de connexion, hors maintenance.
+- Appels : `POST /api/auth/password-reset`, `/verify` puis `/complete`, sans
+  session. Voir [SECURITY_MODEL.md](./SECURITY_MODEL.md#authentification).
+- Un compte chiffré y donne son code de récupération (`XXXX-XXXX-XXXX-XXXX`) en
+  plus du nouveau mot de passe, et reçoit le code qui le remplace, affiché une
+  fois. Ce n'est ni `SecrecyGate` ni `secrecy.recover` : rien n'est déverrouillé,
+  la connexion qui suit ouvre la session et la DEK.
+
 ## 2. Notes privées : aucune invite dédiée
 
 Une note marquée « privée » est chiffrée avec la DEK gardée au lieu de la DEK

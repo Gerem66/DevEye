@@ -349,6 +349,16 @@ const SCOPES: { [K in RepoKey]: RepoScope<K> } = {
             purgeExpired: { args: [0], global: 'le ménage des demandes échues' }
         }
     },
+    passwordResets: {
+        guard: ACCOUNT,
+        methods: {
+            replace: { args: [1, 't', 0] },
+            findLive: { args: ['t', 0], guard: SECRET },
+            consume: { args: [1, 0], guard: ROW },
+            removeAllOf: { args: [1] },
+            purgeExpired: { args: [0], global: 'le ménage des liens échus' }
+        }
+    },
     presence: {
         guard: DEVICE,
         methods: {

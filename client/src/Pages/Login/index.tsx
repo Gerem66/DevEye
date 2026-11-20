@@ -63,14 +63,18 @@ const CARD_PHASE_CLASS: Record<CardPhase, string> = {
 
 interface LoginPageProps {
     onSignup?: () => void;
+    /** Le lien « Mot de passe oublié ? », absent pendant la maintenance. */
+    onForgot?: () => void;
+    /** Au retour d'une réinitialisation : le nom est déjà là, le mot de passe attend. */
+    prefillUsername?: string;
     /** Pendant la maintenance du site : le retour à sa page, à la place de l'inscription. */
     onBack?: () => void;
 }
 
-function LoginPage({ onSignup, onBack }: LoginPageProps) {
+function LoginPage({ onSignup, onForgot, prefillUsername, onBack }: LoginPageProps) {
     const { status, unreachable, login, verifyLogin, resendLoginCode, cancelLogin } = useAuth();
     const [signupOpen, setSignupOpen] = useState(false);
-    const [username, setUsername] = useState('');
+    const [username, setUsername] = useState(prefillUsername ?? '');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
@@ -393,7 +397,7 @@ function LoginPage({ onSignup, onBack }: LoginPageProps) {
                                             placeholder="Nom d'utilisateur"
                                             value={username}
                                             onChange={(e) => setUsername(e.target.value)}
-                                            autoFocus
+                                            autoFocus={!prefillUsername}
                                         />
                                         <span className='icon icon-user'></span>
                                     </div>
@@ -405,6 +409,7 @@ function LoginPage({ onSignup, onBack }: LoginPageProps) {
                                             placeholder='Mot de passe'
                                             value={password}
                                             onChange={(e) => setPassword(e.target.value)}
+                                            autoFocus={!!prefillUsername}
                                             error={error}
                                         />
                                         <span className='icon icon-lock' />
@@ -413,6 +418,17 @@ function LoginPage({ onSignup, onBack }: LoginPageProps) {
                                     <button className='submit' onClick={onSubmit} disabled={loading}>
                                         Se connecter
                                     </button>
+
+                                    {onForgot && (
+                                        <button
+                                            type='button'
+                                            className='login-link'
+                                            disabled={loading}
+                                            onClick={onForgot}
+                                        >
+                                            Mot de passe oublié ?
+                                        </button>
+                                    )}
                                 </>
                             ) : (
                                 <>

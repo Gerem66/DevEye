@@ -11,6 +11,7 @@ import { hiddenNoticesRepo, type HiddenNoticesRepo } from './repos/hiddenNotices
 import { instanceSettingsRepo, type InstanceSettingsRepo } from './repos/instanceSettings';
 import { itemSharingRepo, type ItemSharingRepo } from './repos/itemSharing';
 import { notificationChannelsRepo, type NotificationChannelsRepo } from './repos/notificationChannels';
+import { passwordResetsRepo, type PasswordResetsRepo } from './repos/passwordResets';
 import { pendingSignupsRepo, type PendingSignupsRepo } from './repos/pendingSignups';
 import { presenceRepo, type PresenceRepo } from './repos/presence';
 import { processSamplesRepo, type ProcessSamplesRepo } from './repos/processSamples';
@@ -64,6 +65,8 @@ export interface Database {
     metrics: MetricsRepo;
     /** Les inscriptions en attente de validation par mail. */
     pendingSignups: PendingSignupsRepo;
+    /** Les liens envoyés par « Mot de passe oublié ». */
+    passwordResets: PasswordResetsRepo;
     presence: PresenceRepo;
     processSamples: ProcessSamplesRepo;
     /** Ce que l'offre de son propriétaire tient en pause (voir `Services/planPauses.ts`). */
@@ -121,6 +124,7 @@ export function databaseOn(q: Queryable, begin: BeginTransaction): Database {
         linkCodes: linkCodesRepo(q),
         metrics: metricsRepo(q),
         pendingSignups: pendingSignupsRepo(q),
+        passwordResets: passwordResetsRepo(q),
         presence: presenceRepo(q),
         processSamples: processSamplesRepo(q),
         quotaPauses: quotaPausesRepo(q),

@@ -1,7 +1,8 @@
 import { accountLifecycle } from './account';
 import { loginEmail } from './loginEmail';
+import { passwordReset } from './passwordReset';
 import { sharedWorkspace } from './sharing';
 import { twoFactor } from './twoFactor';
 
 /** Les scénarios du socle, dans l'ordre où ils tournent : le cycle de compte d'abord. */
-export const CORE_SCENARIOS = [accountLifecycle, sharedWorkspace, twoFactor, loginEmail] as const;
+export const CORE_SCENARIOS = [accountLifecycle, sharedWorkspace, twoFactor, loginEmail, passwordReset] as const;

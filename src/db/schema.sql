@@ -2122,6 +2122,19 @@ CREATE TABLE `osint_provider_keys` (
   CONSTRAINT `fk_osint_key_workspace` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+CREATE TABLE `password_resets` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `token_hash` char(64) COLLATE utf8mb4_general_ci NOT NULL,
+  `expires_at` bigint NOT NULL,
+  `created` bigint NOT NULL DEFAULT (unix_timestamp()),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_password_reset_user` (`user_id`),
+  UNIQUE KEY `uniq_password_reset_token` (`token_hash`),
+  KEY `idx_password_reset_expires` (`expires_at`),
+  CONSTRAINT `fk_password_resets_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 CREATE TABLE `passwords` (
   `id` int NOT NULL AUTO_INCREMENT,
   `user_id` int NOT NULL,

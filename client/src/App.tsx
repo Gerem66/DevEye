@@ -4,8 +4,10 @@ import { useEffect, useRef, useState } from 'react';
 import HomePage from './Pages/Home/index.js';
 import LoginPage from './Pages/Login/index.js';
 import MaintenancePage from './Pages/Maintenance';
+import PasswordResetPage from './Pages/PasswordReset';
 import SignupPage from './Pages/Signup';
 import WaitingRoomPage from './Pages/WaitingRoom';
+import { readPasswordResetRoute, type PasswordResetRoute } from './Pages/PasswordReset/route';
 import { readSignupRoute, type SignupRoute } from './Pages/Signup/route';
 import { useRootView } from './telemetry/useView';
 import { SecrecyGate } from './Components/SecrecyGate';
@@ -34,6 +36,8 @@ import './Styles/boot.css';
 function AppRoot() {
     const { status, refresh, logout } = useAuth();
     const [signup, setSignup] = useState<SignupRoute | null>(readSignupRoute);
+    const [reset, setReset] = useState<PasswordResetRoute | null>(readPasswordResetRoute);
+    const [loginPrefill, setLoginPrefill] = useState<string | undefined>(undefined);
     const maintenance = useSiteMaintenance();
     const localUser = useLocalUser();
     const [adminLogin, setAdminLogin] = useState(false);
@@ -52,9 +56,11 @@ function AppRoot() {
               ? 'auth/queue'
               : signup && (signup.kind === 'verify' || status !== 'authenticated')
                 ? `auth/signup${signup.kind === 'verify' ? '/verify' : ''}`
-                : status === 'anonymous'
-                  ? 'auth/login'
-                  : null
+                : reset && (reset.kind === 'reset' || status !== 'authenticated')
+                  ? `auth/${reset.kind}`
+                  : status === 'anonymous'
+                    ? 'auth/login'
+                    : null
     );
 
     useEffect(() => primeStatusPage(), []);
@@ -78,9 +84,15 @@ function AppRoot() {
     useEffect(() => {
         if (signup?.kind === 'verify') window.history.replaceState({}, '', '/signup/verify');
     }, [signup]);
+    useEffect(() => {
+        if (reset?.kind === 'reset') window.history.replaceState({}, '', '/reset-password');
+    }, [reset]);
 
     useEffect(() => {
-        const onPop = (): void => setSignup(readSignupRoute());
+        const onPop = (): void => {
+            setSignup(readSignupRoute());
+            setReset(readPasswordResetRoute());
+        };
         window.addEventListener('popstate', onPop);
         return () => window.removeEventListener('popstate', onPop);
     }, []);
@@ -88,6 +100,7 @@ function AppRoot() {
     const go = (path: string): void => {
         window.history.pushState({}, '', path);
         setSignup(readSignupRoute());
+        setReset(readPasswordResetRoute());
     };
 
     if (heldOut && !adminLogin) {
@@ -135,8 +148,21 @@ function AppRoot() {
                     onLogin={() => go('/')}
                     onRestart={() => go('/signup')}
                 />
+            ) : reset && (reset.kind === 'reset' || status !== 'authenticated') ? (
+                <PasswordResetPage
+                    route={reset}
+                    onLogin={(username) => {
+                        setLoginPrefill(username);
+                        go('/');
+                    }}
+                    onRestart={() => go('/forgot-password')}
+                />
             ) : (
-                <LoginPage onSignup={() => go('/signup')} />
+                <LoginPage
+                    onSignup={() => go('/signup')}
+                    onForgot={() => go('/forgot-password')}
+                    prefillUsername={loginPrefill}
+                />
             )}
         </>
     );

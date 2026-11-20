@@ -190,7 +190,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
     const [regenRecovery, setRegenRecovery] = useState(false);
     const [regenError, setRegenError] = useState<ErrorNoteInput | null>(null);
     const [secrecy, setSecrecy] = useState<SecrecyStatus | null>(null);
-    const [securityOpen, setSecurityOpen] = useState(false);
+    const [securityIntent, setSecurityIntent] = useState<'toggle' | 'recovery' | null>(null);
     const [stepUp, setStepUp] = useState<StepUpStatus | null>(null);
     const [checks, setChecks] = useState<LoginChecksStatus | null>(null);
 
@@ -374,6 +374,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
     }, []);
 
     const encryptionEnabled = secrecy?.enabled ?? false;
+    const hasRecovery = secrecy?.recoveryEnabled ?? false;
     // La fenêtre enregistrée, en minutes (null : la minute du serveur par défaut).
     const currentReAuthMinutes = Math.round((secrecy?.reAuthInterval ?? 60) / 60);
     const reAuthHint =
@@ -525,7 +526,7 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                             <Switch
                                 checked={encryptionEnabled}
                                 aria-label='Chiffrement par mot de passe'
-                                onChange={() => setSecurityOpen(true)}
+                                onChange={() => setSecurityIntent('toggle')}
                             />
                         </Row>
                         <Reveal open={encryptionEnabled}>
@@ -544,6 +545,23 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                                     onSave={saveReAuth}
                                     aria-label='Délai de validation en minutes'
                                 />
+                            </Row>
+                        </Reveal>
+                        <Reveal open={encryptionEnabled}>
+                            <Row
+                                sub
+                                icon='key'
+                                tone={hasRecovery ? 'accent' : 'warning'}
+                                label='Code de récupération'
+                                hint={
+                                    hasRecovery
+                                        ? 'Si vous oubliez votre mot de passe, ce code permet d’en choisir un nouveau sans perdre vos données.'
+                                        : 'Aucun code : un mot de passe oublié rendrait vos données chiffrées illisibles pour toujours.'
+                                }
+                            >
+                                <Button variant='secondary' onClick={() => setSecurityIntent('recovery')}>
+                                    {hasRecovery ? 'Régénérer' : 'Créer'}
+                                </Button>
                             </Row>
                         </Reveal>
                     </Section>
@@ -735,9 +753,11 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                     </Dialog>
 
                     <SecurityDialog
-                        open={securityOpen}
+                        open={securityIntent !== null}
                         enabled={secrecy?.enabled ?? false}
-                        onClose={() => setSecurityOpen(false)}
+                        intent={securityIntent ?? 'toggle'}
+                        hasRecovery={secrecy?.recoveryEnabled ?? false}
+                        onClose={() => setSecurityIntent(null)}
                         onChanged={() => {
                             void fetchSecrecy();
                             void refreshSecrecyStatus();

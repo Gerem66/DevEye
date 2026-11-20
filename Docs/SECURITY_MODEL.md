@@ -45,7 +45,9 @@ décrit côté types dans `src/domain/secrecy.ts` de `@deveye/types`.
 - Activer/désactiver la feature ou changer de mot de passe **ne réécrit jamais**
   le contenu chiffré : on ré-emballe seulement la DEK.
 - Un **code de récupération** optionnel peut aussi déballer la DEK (filet de
-  sécurité), stocké dans `recovery_wrapped`.
+  sécurité), stocké dans `recovery_wrapped`. La page Sécurité le crée ou le
+  refait sur le mot de passe (`secrecy.regenerateRecovery`) : l'ancien cesse
+  aussitôt de servir.
 
 **Conséquence importante :** rien n'est jamais stocké en clair en BDD. Même
 feature OFF, les données sont chiffrées (DEK distincte par user) ; seul le niveau
@@ -308,9 +310,33 @@ Application directe des deux étages ci-dessus (`features/notes/src/server/handl
       sans aucun compte : le premier inscrit naît administrateur, le compte
       étant compté sous verrou dans la transaction qui le crée.
     - Sans `SMTP_HOST`, le lien est écrit dans le journal du serveur.
+- **Mot de passe oublié** (`src/Services/passwordReset`,
+  `src/auth/passwordResetRoutes.ts`) : l'adresse du compte, un lien reçu par
+  mail, le nouveau mot de passe.
+    - La demande vit dans `password_resets`, une seule par compte, condensé
+      SHA-256 du jeton seulement. Le lien vaut 1 h, voyage en fragment d'URL et
+      ne sert qu'une fois : la ligne est supprimée dans la transaction qui pose
+      le mot de passe. Changer de mot de passe ou récupérer le coffre efface une
+      demande en cours.
+    - La première étape répond la même chose qu'une adresse ait un compte ou
+      non, et le mail part sans être attendu : la durée de la réponse ne trahit
+      pas non plus l'existence du compte. Chaque demande compte contre
+      l'adresse visée (portée `reset`), en plus de la limite par IP.
+    - Un compte en chiffrement par mot de passe ne se réinitialise qu'avec son
+      code de récupération : la DEK est déballée par le code, ré-emballée par le
+      nouveau mot de passe, et un nouveau code remplace l'ancien, comme
+      `secrecy.recover`. Les essais comptent dans la portée `recover`, et un
+      mauvais code laisse le lien vivant. Sans code de récupération, aucun lien
+      n'est créé : le mail explique que seul le mot de passe actuel ouvre le
+      compte. Le serveur ne peut pas déballer cette DEK, et une réinitialisation
+      qui la perdrait n'existe pas.
+    - Aucune session ne s'ouvre à la fin : la connexion suivante repasse par
+      les étapes du compte (2FA, code par mail ou SMS). Un lien reçu par mail ne
+      contourne pas un second facteur.
 - **Sessions** : changer de mot de passe ou récupérer le coffre révoque toutes
   les autres sessions du compte (jetons de rafraîchissement, DEK en mémoire,
-  sockets). Un `sid` révoqué ne peut plus ouvrir de WebSocket, même avec un
+  sockets). Le réinitialiser les révoque toutes, avec les navigateurs de
+  confiance. Un `sid` révoqué ne peut plus ouvrir de WebSocket, même avec un
   jeton d'accès encore valide.
 
 ## L'agent
