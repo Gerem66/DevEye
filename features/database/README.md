@@ -18,56 +18,61 @@ Documents voisins à respecter : [Docs/WORKSPACES.md](../../Docs/WORKSPACES.md),
 
 ---
 
-## 1. Le principe : à la demande
+## 1. Le principe : relevée à l'ouverture, surveillée sur demande
 
-**Rien ne se connecte tout seul.** Ouvrir la feature ne joint aucun serveur ;
-la liste et la fiche lisent le dernier relevé enregistré. Seules les commandes
-ci-dessous sortent vers un serveur tiers, et toutes sur un geste explicite :
+**La liste ne joint aucun serveur** : elle lit le dernier relevé enregistré.
+C'est la fiche d'une base qui va voir, et sans bouton :
+
+- la **vue d'ensemble** relève la base en s'affichant (`DatabaseOverview`,
+  `database.inspect`), sauf si son dernier relevé a moins de cinq minutes
+  (`FRESH_SECONDS`) : rouvrir dix fois la fiche ne fait pas dix relevés. Le
+  seuil se compare à `lastCheckAt`, donc au relevé de n'importe qui, ordonnanceur
+  compris. Un bouton discret, dans le bloc des indicateurs, relève sans attendre ;
+- les **tables** chargent leur inventaire à leur premier affichage
+  (`TableExplorer`), une fois par base. C'est le réglage `autoLoadTables`,
+  **allumé par défaut** : éteint, « Charger les tables » va le chercher. Seul le
+  refus se range (`tablesOnDemand` dans le blob chiffré `content`, pas une
+  colonne : un réglage d'affichage n'entre dans aucune requête).
+
+Ces deux gestes demandent le droit d'écriture, comme toute session : un lecteur
+voit le dernier relevé, et rien ne part. Une base en pause ne se relève pas.
+
+Les commandes qui sortent vers un serveur tiers :
 
 | Commande                                         | Ce qu'elle fait                                                     |
 | ------------------------------------------------ | ------------------------------------------------------------------- |
-| `database.test`                                  | un essai de connexion, rien d'autre                                 |
-| `database.testDraft`                             | le même essai, sur des réglages **pas encore enregistrés**          |
+| `database.testDraft`                             | un essai de connexion, sur des réglages **pas encore enregistrés**  |
 | `database.inspect`                               | un relevé complet (version, taille, tables), alertes et indicateurs |
 | `database.tableList`                             | les tables, avec leur taille et leur nombre de lignes               |
 | `database.tableStructure`                        | colonnes, clé primaire, clés étrangères, index                      |
-| `database.tableRows`                             | une page du contenu, filtres et tri compris                         |
+| `database.tableRows`                             | une page du contenu (25 à 500 lignes), filtres et tri compris       |
 | `database.rowInsert` / `rowUpdate` / `rowDelete` | l'écriture d'une ligne                                              |
 | `database.execute`                               | une instruction libre : le terminal                                 |
 | `database.export`                                | une table, ou la base, en CSV / JSON / SQL                          |
 | `database.query` / `alertTest`                   | une requête de lecture, pour mettre au point une condition          |
 | `database.kpiSave`                               | enregistre un indicateur et le mesure aussitôt                      |
 
-Une seule exception à « rien ne part sans clic » : `autoLoadTables`, réglage
-**par base et éteint par défaut**, charge l'inventaire des tables à l'ouverture
-de la fiche. Il vit dans le blob chiffré `content` et non dans une colonne : un
-réglage d'affichage n'entre dans aucune requête et ne se trie sur rien. Il se
-règle, comme le relevé et sa cadence, dans le panneau **Général** de la base
-(Réglages de l'élément, coquille commune).
+Le **relevé périodique** est **éteint par défaut et s'active base par base**
+(`monitor_enabled`, cadence `intervalSeconds` de 60 s au moins), dans le panneau
+**Général** de la base. C'est la différence de fond avec Uptime, qui surveille
+tout ce qu'on lui confie : ici, une base dont personne n'ouvre la fiche ne coûte
+rien et ne réveille personne. Le service (`DatabaseMonitor`) cherche les bases
+dues toutes les 30 s et en relève au plus six à la fois.
 
-Le **relevé périodique** existe, mais il est **éteint par défaut et s'active base
-par base** (`monitor_enabled`, cadence `intervalSeconds` de 60 s au moins).
-C'est la différence de fond avec Uptime, qui surveille tout ce qu'on lui
-confie : ici, une base au repos ne coûte rien et ne réveille personne. Le
-service (`DatabaseMonitor`) cherche les bases dues toutes les 30 s et en relève
-au plus six à la fois.
+> ⚠️ Corollaire à connaître, et que l'interface répète : **une alerte est
+> évaluée à chaque relevé, et seulement là.** Sans relevé périodique, elle ne
+> l'est qu'à l'ouverture de la fiche : elle ne prévient personne la nuit.
 
-> ⚠️ Corollaire à connaître, et que l'interface répète à trois endroits : **une
-> alerte n'est évaluée que si le relevé est actif sur sa base.** Une alerte posée
-> sur une base au repos est inerte.
+### L'essai de connexion n'écrit rien
 
-### Tester et relever ne parlent pas au même endroit
-
-Les deux joignent le serveur, et c'est pourquoi ils sont séparés à l'écran :
-
-- **Tester** n'écrit rien. Son résultat n'a donc **aucun autre endroit où
-  s'afficher** qu'une phrase : d'où `ProbeLine`, qui dit « connexion en cours »
-  pendant l'essai puis affiche l'issue, et **l'efface au bout de dix secondes**.
-  Un « est-ce que ça répond ? » répond pour l'instant où on l'a posé ; laissé à
-  l'écran, il se lirait une heure plus tard comme un état courant.
-- **Relever** écrit. Son résultat _est_ le bandeau « État / Temps de réponse /
-  Dernier relevé / Taille / Tables / Version » : il n'a donc pas de phrase du
-  tout.
+« Tester la connexion » n'existe que là où l'on règle une connexion : le
+dialogue d'ajout et le panneau Général. Il n'écrit rien, son résultat n'a donc
+**aucun autre endroit où s'afficher** qu'une phrase : d'où `ProbeLine`, qui dit
+« connexion en cours » pendant l'essai puis affiche l'issue, et **l'efface au
+bout de dix secondes**. Un « est-ce que ça répond ? » répond pour l'instant où
+on l'a posé ; laissé à l'écran, il se lirait une heure plus tard comme un état
+courant. Un relevé, lui, écrit : son résultat _est_ le bandeau « État / Temps de
+réponse / Dernier relevé / Taille / Tables / Version ».
 
 `last_elapsed_ms` est la durée du dernier relevé, **renseignée aussi sur un
 échec** : un relevé qui met douze secondes à tomber dit qu'on a attendu un délai
@@ -192,10 +197,9 @@ personne. L'envoi passe par la façade `notify` du SDK
 (le seul import de l'app par le module, commenté). Voir
 [Docs/NOTIFICATIONS.md](../../Docs/NOTIFICATIONS.md).
 
-Les alertes s'écrivent dans l'onglet **Alertes** des réglages de la base
-(onglet personnalisé du manifest, `DatabaseAlertsPanel`), qui ouvre le
-dialogue de la feature (`AlertDialog`) ; la fiche n'en montre que l'état
-(franchie, dernières mesures). Le bouton **« Essayer maintenant »** de ce
+Les alertes s'écrivent sur la fiche, dans la vue d'ensemble : « Ajouter une
+alerte » en ouvre une, un clic sur une alerte la rouvre (`AlertDialog`), et sa
+suppression est au bas du dialogue. Le bouton **« Essayer maintenant »** de ce
 dialogue est le cœur de l'écran, pas un extra : il évalue les conditions telles
 qu'on vient de les écrire (`database.alertTest`), sans rien enregistrer ni
 notifier. Sans lui, on choisirait un seuil à l'aveugle et l'on découvrirait son
@@ -226,10 +230,11 @@ qui peut en poser un le voit.
   revient pas.
 - **Huit au plus par base** (`DATABASE_KPI_MAX`) : chacun coûte une requête à
   chaque relevé.
-- Écrits dans l'onglet **Indicateurs** des réglages de la base
-  (`DatabaseKpisPanel`, `KpiDialog`), chez leur domicile seulement, comme les
-  alertes. Chaque indicateur y tend **« Créer une alerte »** : le dialogue
-  d'alerte s'ouvre avec sa requête, son nom et sa valeur du moment comme seuil.
+- Écrits sur la fiche, comme les alertes et chez leur domicile seulement :
+  « Ajouter un indicateur », puis un clic sur une tuile pour la rouvrir
+  (`KpiDialog`). Le dialogue d'un indicateur enregistré tend **« Créer une
+  alerte »** : celui d'une alerte s'ouvre avec sa requête, son nom et sa valeur
+  du moment comme seuil.
 
 ---
 
@@ -343,7 +348,8 @@ Cliquer une cellule contrainte ouvre la table visée **filtrée sur la valeur
 pointée**, et auréole la ligne quelques secondes. Filtrer plutôt que calculer la
 page où elle se trouve : ce calcul supposerait un ordre stable et une clé d'une
 seule colonne, deux hypothèses que rien ne garantit. Le critère reste visible et
-se retire d'un clic : on voit donc _pourquoi_ on ne voit qu'une ligne.
+se retire d'un clic : on voit donc _pourquoi_ on ne voit qu'une ligne. La liste
+de gauche défile jusqu'à la table ouverte.
 
 ### 5.6 Un export lit tout ce qu'on lui désigne
 
@@ -375,7 +381,7 @@ relatifs.
 
 ```
 domain.ts      schémas, lignes SQL, bornes de longueur
-commands.ts    25 commandes, préfixe unique `database.`
+commands.ts    26 commandes, préfixe unique `database.`
 ```
 
 `@deveye/types` ne garde que l'identité (`database` dans le registre, le
@@ -397,8 +403,8 @@ _shared.ts       Stored*, nameRef, readJson, loadDatabase, databaseCipherFor,
                  singleton du relevé (setMonitor / monitorOf), le refus d'une base en pause
 crud.ts          l'inventaire : count, list, get, add, update, remove, reorder, et
                  `database.devices` (les appareils relais, `relayDeviceOptions`)
-probe.ts         ce qui joint un serveur sur un geste : test, testDraft, inspect,
-                 query ; `withSession` (ouvre, fait, referme)
+probe.ts         ce qui joint un serveur hors des tables : testDraft, inspect, query ;
+                 `withSession` (ouvre, fait, referme)
 explore.ts       les tables : structure, pages, écriture de lignes, terminal, export
 alerts.ts        les conditions, leur essai à blanc
 kpis.ts          les indicateurs : enregistrement (mesuré aussitôt), retrait
@@ -432,31 +438,39 @@ tables), `070_database_response_time.sql` (`last_elapsed_ms`),
 ### Client : `src/client/`
 
 ```
-index.tsx                clientEntry : Widget, Full, settingsPanels (general, kpis, alerts), providers
+index.tsx                clientEntry : Widget, Full, settingsPanels (general), providers
 api.ts                   featureApi(manifest)
 provider.tsx             ce que Projets compose (DATABASE_CLIENT_PROVIDER) : la liste des
                          bases de l'espace, une base reliée autonome (LinkedDatabase), le
                          dialogue de création
-Database.tsx             liste + détail ; possède le niveau live `l1`
+Database.tsx             liste + détail ; possède les niveaux live `l1` (la base) et `l2`
+                         (l'onglet de sa fiche)
 DatabaseList.tsx         les cartes + le glisser-déposer (useDragReorder du barrel)
-DatabaseHeader.tsx       l'en-tête d'une base (retour ou « Délier », titre, Tester, Relever,
-                         le bouton commun des réglages), partagé avec l'onglet d'un projet
-DatabaseDetail.tsx       état, indicateurs et alertes (leur état seulement), explorateur, projets liés
-DatabaseView.tsx         le contenu partagé avec l'onglet d'un projet
+DatabaseHeader.tsx       l'en-tête d'une base (retour ou « Délier », titre, le bouton commun des
+                         réglages), partagé avec l'onglet d'un projet
+DatabaseDetail.tsx       la fiche, en deux onglets : « Vue d'ensemble » (état, indicateurs, alertes,
+                         projets liés) et « Tables », où l'explorateur remplit la popup et seul
+                         le tableau défile
+DatabaseOverview.tsx     l'état d'une base, qu'elle relève en s'affichant : bandeau, accès aux
+                         tables, indicateurs et alertes avec leurs dialogues ; partagé avec
+                         l'onglet d'un projet
 DatabaseDialog.tsx       ajouter une base : moteur, connexion et tunnel ; une base ajoutée se
                          règle dans sa fiche
 DatabaseGeneralPanel.tsx Réglages → Général d'une base : connexion, accès, relevé, cadence, tables
                          à l'ouverture, suppression
 ConnectionFields.tsx     les champs de connexion et d'accès, et leur modèle, partagés entre le
                          dialogue d'ajout et le panneau Général
-DatabaseKpisPanel.tsx    Réglages → Indicateurs d'une base : la liste, KpiDialog, et l'alerte
-                         déjà remplie depuis un indicateur
-KpiDialog.tsx            nom, unité, requête, essai à blanc ; zone danger pour supprimer
-DatabaseAlertsPanel.tsx  Réglages → Alertes d'une base : la liste des règles, qui ouvre AlertDialog
+KpiDialog.tsx            nom, unité, requête, essai à blanc, « Créer une alerte » ; zone danger
+                         pour supprimer
 AlertDialog.tsx          conditions, opérateur, message, essai à blanc, brouillon venu d'un
                          indicateur ; zone danger pour supprimer
 ProbeLine.tsx            « en cours », puis le résultat d'un essai, effacé après 10 s
-TableExplorer.tsx        tables, contenu, sélection, tri, clés étrangères, plein écran
+TableExplorer.tsx        un seul cadre : une barre de gestes, la liste des tables (filtrable), la
+                         table ouverte (tri, clés étrangères, sélection, taille des pages), les
+                         gestes au bout de chaque ligne, l'export au pied
+useColumnResize.ts       les colonnes tirées à la poignée, oubliées d'une table à l'autre
+CellEditor.tsx           une cellule ouverte au double-clic : sa valeur entière, à lire, copier
+                         ou modifier
 Pagination.tsx           Précédent / Suivant + les numéros, avec coupures
 ResultTable.tsx          le tableau d'un jeu de résultats, et sa vue en grand
 RowDialog.tsx            ajout / modification d'une ligne, NULL explicite, colonnes auto
@@ -469,16 +483,18 @@ rowKey.ts format.ts style.module.css
 ```
 
 Trois composants de cette liste servent **plusieurs écrans chacun**, et c'est
-volontaire : `ProbeLine` porte le retour d'un essai dans la fiche, dans le pied
-du dialogue d'ajout et dans le panneau Général (tous doivent dire la même chose
-et s'effacer pareil), `ConnectionFields` est le formulaire de connexion et
+volontaire : `ProbeLine` porte le retour d'un essai dans le pied du dialogue
+d'ajout et dans le panneau Général (les deux doivent dire la même chose et
+s'effacer pareil), `ConnectionFields` est le formulaire de connexion et
 d'accès du dialogue d'ajout comme du panneau Général (un seul formulaire, jamais
 une copie réduite), et `ResultTable` rend l'aperçu du terminal comme sa vue en
 grand : une ligne vue en petit est ainsi forcément la même que celle vue en
 grand.
-`DatabaseHeader` et `DatabaseView` le sont aussi, entre la feature et l'onglet
-d'un projet : ce qui diffère d'un contexte à l'autre entre par leurs props, le
-reste est identique et doit le rester.
+`DatabaseHeader`, `DatabaseOverview` et `TableExplorer` le sont aussi, entre la
+feature et l'onglet d'un projet : ce qui diffère d'un contexte à l'autre entre
+par leurs props, le reste est identique et doit le rester. La feature les range
+en onglets ; un projet, qui peut empiler plusieurs bases, les montre à la suite,
+et l'explorateur y prend la hauteur d'un écran.
 
 L'onglet **Bases de données** d'un projet
 (`features/projects/src/client/Database/`) est une enveloppe mince sur
@@ -530,7 +546,7 @@ qui montrent une base suivent `database.detail` / `database.list` ; le tableau
 d'un projet et les compteurs de ses onglets se remettent à jour à leur prochaine
 lecture.
 
-### Un relevé manuel et un relevé automatique suivent le même chemin
+### Le relevé de la fiche et le relevé périodique suivent le même chemin
 
 `database.inspect` appelle `DatabaseMonitor.checkNow` (`src/server/service.ts`),
 exactement comme l'ordonnanceur, par le singleton que `createService` pose
@@ -545,8 +561,8 @@ le relevé n'évalue que les alertes du domicile de la base, lisibles sous la
 sienne : une alerte posée depuis une fenêtre sur une base projetée serait
 inerte, et la fiche (qui liste les alertes du domicile) ne la montrerait même
 pas. Le serveur la **refuse** donc (`forbidden`, comme `database.update`), et
-l'interface ne propose les réglages d'une base (Général, Alertes) qu'à son
-domicile. `alertTest` reste permis d'une fenêtre : il évalue sans rien écrire.
+l'interface ne propose d'écrire une alerte ou un indicateur, comme de régler
+la base (Général), qu'à son domicile. `alertTest` reste permis d'une fenêtre : il évalue sans rien écrire.
 
 ### `unknown` n'est pas `down`
 

@@ -11,9 +11,9 @@ interface ProbeLineProps {
 }
 
 /**
- * Ce qu'a donné « Tester » : une attente pendant l'essai (un tunnel prend des
- * secondes), puis un résultat qui s'efface seul, sa réponse ne valant que pour
- * l'instant où on l'a posée. « Relever » écrit dans le bandeau d'état, pas ici.
+ * Ce qu'a donné « Tester la connexion » : une attente pendant l'essai (un
+ * tunnel prend des secondes), puis un résultat qui s'efface seul, sa réponse
+ * ne valant que pour l'instant où on l'a posée.
  */
 export function ProbeLine({ testing, probe }: ProbeLineProps) {
     const [shown, setShown] = useState<DatabaseProbe | null>(null);

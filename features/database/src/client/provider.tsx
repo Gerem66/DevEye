@@ -1,20 +1,11 @@
-import { useState } from 'react';
-import {
-    Button,
-    errorNote,
-    ErrorNote,
-    invalidate,
-    openFeature,
-    useResource,
-    type ErrorNoteInput
-} from 'deveye-sdk-client';
+import { Button, ErrorNote, openFeature, useResource, useWorkspacePermissions } from 'deveye-sdk-client';
 import type { DatabaseClientProvider, SdkTileSummary } from '@deveye/types/sdk/client';
-import type { DatabaseProbe } from '../contracts/domain';
 
 import { api } from './api';
 import { DatabaseDialog } from './DatabaseDialog';
 import { DatabaseHeader } from './DatabaseHeader';
-import { DatabaseView } from './DatabaseView';
+import { DatabaseOverview } from './DatabaseOverview';
+import { TableExplorer } from './TableExplorer';
 import { ENGINE_LABELS, formatBytes, STATUS_META } from './format';
 import styles from './style.module.css';
 
@@ -30,87 +21,37 @@ interface LinkedDatabaseProps {
     onUnlink: () => void;
 }
 
-/** Une base du projet : son en-tête, et le contenu partagé avec la feature. */
+/** Une base du projet, en entier : son en-tête, son état, puis ses tables. */
 function LinkedDatabase({ databaseId, canWrite, onUnlink }: LinkedDatabaseProps) {
+    // Le droit sur CETTE base, surcharge comprise : la fiche la relève d'elle-même.
+    const writable = useWorkspacePermissions().canFeature('database', 'write', String(databaseId)) && canWrite;
     const { data, error: loadError } = useResource(
         'database.detail',
         () => api.send('database.get', { databaseId }),
         'Impossible de charger cette base.',
         [databaseId]
     );
-    const [probe, setProbe] = useState<DatabaseProbe | null>(null);
-    const [testing, setTesting] = useState(false);
-    const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<ErrorNoteInput | null>(null);
-    /** L'explorateur occupe tout : l'en-tête et les voisins s'effacent. */
-    const [expanded, setExpanded] = useState(false);
 
     if (!data) return loadError ? <ErrorNote note={loadError} /> : <p className={styles.hint}>Chargement…</p>;
     const { database, alerts, kpis } = data;
 
-    const test = async () => {
-        setBusy(true);
-        setTesting(true);
-        setProbe(null);
-        setError(null);
-        try {
-            const res = await api.send('database.test', { databaseId: database.id });
-            setProbe(res.probe);
-        } catch (e) {
-            setError(errorNote(e, 'Le test n’a pas pu être lancé.'));
-        } finally {
-            setTesting(false);
-            setBusy(false);
-        }
-    };
-
-    // Relever n'écrit rien dans `probe` : son résultat est le bandeau d'état.
-    const inspect = async () => {
-        setBusy(true);
-        setError(null);
-        try {
-            await api.send('database.inspect', { databaseId: database.id });
-            invalidate('database.list', 'database.detail', 'database.count');
-        } catch (e) {
-            setError(errorNote(e, 'Le relevé n’a pas pu être fait.'));
-        } finally {
-            setBusy(false);
-        }
-    };
-
-    // Toujours encadré, sauf en plein écran : le cadre dit où finit ce que
-    // l'onglet montre.
+    // Le cadre dit où finit ce que l'onglet montre.
     return (
-        <section className={expanded ? styles.linkedBlock : styles.linkedBlockFramed}>
-            {!expanded && (
-                <DatabaseHeader
-                    database={database}
-                    canWrite={canWrite}
-                    busy={busy}
-                    onTest={() => void test()}
-                    onInspect={() => void inspect()}
-                    onOpenInFeature={() => openFeature('database', database.id)}
-                    after={
-                        // La confirmation et le déliement sont à l'hôte, qui
-                        // seul tient le pointeur.
-                        <Button variant='ghost' onClick={onUnlink} disabled={busy}>
-                            Délier
-                        </Button>
-                    }
-                />
-            )}
-
-            <ErrorNote note={error} />
-
-            <DatabaseView
+        <section className={styles.linkedBlock}>
+            <DatabaseHeader
                 database={database}
-                alerts={alerts}
-                kpis={kpis}
-                canWrite={canWrite}
-                testing={testing}
-                probe={probe}
-                onExpandChange={setExpanded}
+                onOpenInFeature={() => openFeature('database', database.id)}
+                after={
+                    // La confirmation et le déliement sont à l'hôte, qui
+                    // seul tient le pointeur.
+                    <Button variant='ghost' onClick={onUnlink}>
+                        Délier
+                    </Button>
+                }
             />
+
+            <DatabaseOverview database={database} alerts={alerts} kpis={kpis} canWrite={writable} />
+            <TableExplorer database={database} canWrite={writable} />
         </section>
     );
 }

@@ -12,24 +12,26 @@ import {
     useActiveWorkspace,
     useLiveItemTarget,
     useLiveOutlines,
+    useLiveSegment,
     useResourceVersion,
     useSubView,
     useWorkspacePermissions,
     type ErrorNoteInput
 } from 'deveye-sdk-client';
 import type { FeatureViewProps } from '@deveye/types/sdk/client';
-import type { Database, DatabaseAlert, DatabaseKpi, DatabaseProbe, DatabaseUsage } from '../contracts/domain';
+import type { Database, DatabaseAlert, DatabaseKpi, DatabaseUsage } from '../contracts/domain';
 
 import { api } from './api';
-import DatabaseDetail from './DatabaseDetail';
+import DatabaseDetail, { type DatabaseTab } from './DatabaseDetail';
 import DatabaseDialog from './DatabaseDialog';
 import DatabaseList from './DatabaseList';
 import styles from './style.module.css';
 
 /**
- * Les bases de données de l'espace actif. Rien ne se connecte à l'ouverture :
- * la liste et la fiche lisent le dernier relevé, joindre un serveur demande un
- * geste. Rien n'est chiffré à l'étage gardé : jamais d'invite de mot de passe.
+ * Les bases de données de l'espace actif. La liste lit le dernier relevé sans
+ * joindre aucun serveur ; c'est la fiche d'une base qui la relève
+ * (`DatabaseOverview`). Rien n'est chiffré à l'étage gardé : jamais d'invite
+ * de mot de passe.
  */
 export function FeatureDatabase(_props: FeatureViewProps) {
     const permissions = useWorkspacePermissions();
@@ -47,13 +49,10 @@ export function FeatureDatabase(_props: FeatureViewProps) {
         alerts: DatabaseAlert[];
         kpis: DatabaseKpi[];
     } | null>(null);
-    const [probe, setProbe] = useState<DatabaseProbe | null>(null);
-
-    /** Un essai de connexion est en cours ; distinct de `busy`, qui grise tout. */
-    const [testing, setTesting] = useState(false);
+    /** L'onglet de la fiche, tenu ici pour qu'il vaille d'une base à l'autre. */
+    const [tab, setTab] = useState<DatabaseTab>('overview');
 
     const [addOpen, setAddOpen] = useState(false);
-    const [busy, setBusy] = useState(false);
 
     const listVersion = useResourceVersion('database.list');
     const detailVersion = useResourceVersion('database.detail');
@@ -77,6 +76,8 @@ export function FeatureDatabase(_props: FeatureViewProps) {
         setOpenedId(id);
     });
     const outlineFor = useLiveOutlines('l1');
+    // `l2` : l'onglet de la fiche ; `DatabaseDetail` en entoure les onglets.
+    useLiveSegment('l2', opened ? tab : null);
     useSubView(opened ? 'database' : null);
 
     const reload = useCallback(async () => {
@@ -140,42 +141,10 @@ export function FeatureDatabase(_props: FeatureViewProps) {
     useEffect(() => {
         if (openedId === null) {
             setOpened(null);
-            setProbe(null);
             return;
         }
         void loadOpened(openedId);
     }, [openedId, loadOpened, detailVersion]);
-
-    const test = async (databaseId: number) => {
-        setBusy(true);
-        setTesting(true);
-        setProbe(null);
-        setError(null);
-        try {
-            const res = await api.send('database.test', { databaseId });
-            setProbe(res.probe);
-        } catch (e) {
-            setError(errorNote(e, 'Le test n’a pas pu être lancé.'));
-        } finally {
-            setTesting(false);
-            setBusy(false);
-        }
-    };
-
-    // Ne touche pas à `probe` : le résultat d'un relevé s'écrit dans le
-    // bandeau d'état, la phrase de connexion est réservée aux essais.
-    const inspect = async (databaseId: number) => {
-        setBusy(true);
-        setError(null);
-        try {
-            await api.send('database.inspect', { databaseId });
-            invalidate('database.list', 'database.detail', 'database.count');
-        } catch (e) {
-            setError(errorNote(e, 'Le relevé n’a pas pu être fait.'));
-        } finally {
-            setBusy(false);
-        }
-    };
 
     const openProject = (projectId: number) => {
         openFeature('projects', projectId);
@@ -188,14 +157,11 @@ export function FeatureDatabase(_props: FeatureViewProps) {
                 usage={opened.usage}
                 alerts={opened.alerts}
                 kpis={opened.kpis}
-                canWrite={canWrite}
-                busy={busy}
-                testing={testing}
-                probe={probe}
-                error={error}
+                // Le droit sur CETTE base, surcharge comprise : la fiche la relève d'elle-même.
+                canWrite={permissions.canFeature('database', 'write', String(opened.database.id))}
+                tab={tab}
+                onTab={setTab}
                 onBack={() => setOpenedId(null)}
-                onTest={() => void test(opened.database.id)}
-                onInspect={() => void inspect(opened.database.id)}
                 onOpenProject={openProject}
             />
         );

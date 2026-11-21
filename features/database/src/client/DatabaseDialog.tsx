@@ -22,7 +22,7 @@ interface DatabaseDialogProps {
 }
 
 /** La surveillance d'une base qui naît ; elle se règle ensuite dans le panneau Général. */
-const MONITORING_DEFAULTS = { monitorEnabled: false, intervalSeconds: 300, autoLoadTables: false } as const;
+const MONITORING_DEFAULTS = { monitorEnabled: false, intervalSeconds: 300, autoLoadTables: true } as const;
 
 const ENGINES: { value: DatabaseEngine; label: string }[] = (Object.keys(ENGINE_LABELS) as DatabaseEngine[]).map(
     (id) => ({ value: id, label: ENGINE_LABELS[id] })

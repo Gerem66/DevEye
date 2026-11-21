@@ -5,8 +5,8 @@ import { projectStatusSchema } from '@deveye/types';
  * Les bases de données d'un espace. Une base appartient à l'espace, pas à un
  * projet, donc toujours à l'étage ouvert du chiffrement. Le mot de passe et le
  * secret du tunnel ne quittent jamais le serveur : les DTO n'en portent qu'un
- * booléen. Rien ne se connecte tout seul ; le relevé périodique s'active base
- * par base, et lui seul évalue les alertes.
+ * booléen. Une base est relevée à l'ouverture de sa fiche ; le relevé
+ * périodique s'active base par base, et c'est un relevé qui évalue les alertes.
  */
 
 export const DATABASE_NAME_MAX_LENGTH = 96;
@@ -77,10 +77,7 @@ export const databaseSchema = z.object({
     // Le plancher de l'interface, tenu aussi par le contrat : une sonde ouvre
     // une connexion sortante, et l'API ne doit pas permettre d'en ouvrir une par seconde.
     intervalSeconds: z.number().int().min(60),
-    /**
-     * Charger l'inventaire des tables dès l'ouverture de la fiche. Éteint par
-     * défaut : c'est le seul endroit où une connexion part sans clic.
-     */
+    /** Charger l'inventaire des tables dès qu'elles s'affichent. Allumé par défaut. */
     autoLoadTables: z.boolean(),
     lastCheckAt: z.number().int().nullable(),
     /** Durée du dernier relevé en ms, tunnel compris ; renseignée même sur un échec. */
@@ -110,7 +107,7 @@ export const databaseUsageSchema = z.object({
 });
 export type DatabaseUsage = z.infer<typeof databaseUsageSchema>;
 
-/** Le résultat d'un essai de connexion, à la demande. */
+/** Le résultat d'un essai de connexion, ou d'un relevé. */
 export const databaseProbeSchema = z.object({
     ok: z.boolean(),
     serverVersion: z.string().nullable(),
@@ -277,8 +274,8 @@ export const databaseCombinatorSchema = z.enum(['and', 'or']);
 export type DatabaseCombinator = z.infer<typeof databaseCombinatorSchema>;
 
 /**
- * Évaluée par le relevé périodique, donc seulement si celui-ci est actif sur
- * la base ; inerte sinon, et l'interface le dit.
+ * Évaluée à chaque relevé. Sans relevé périodique sur la base, elle ne l'est
+ * qu'à l'ouverture de la fiche, et l'interface le dit.
  */
 export const databaseAlertSchema = z.object({
     id: z.number().int().positive(),

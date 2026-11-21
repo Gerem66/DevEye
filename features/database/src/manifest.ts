@@ -29,17 +29,11 @@ export const manifest = {
         { to: 'backup', what: 'offre ses bases aux sauvegardes' }
     ],
     /**
-     * Panneaux d'une base : Général (la base elle-même : connexion, accès,
-     * relevé, cadence, chargement des tables, suppression), Indicateurs et
-     * Alertes (la fiche n'en montre que l'état). Notifications, Partage et
+     * Le panneau d'une base : Général (la base elle-même : connexion, accès,
+     * relevé, cadence, chargement des tables, suppression). Ses indicateurs et
+     * ses alertes s'écrivent sur sa fiche. Notifications, Partage et
      * Permissions viennent du descripteur.
      */
-    settings: {
-        item: [
-            'general',
-            { id: 'kpis', label: 'Indicateurs', icon: 'chart' },
-            { id: 'alerts', label: 'Alertes', icon: 'activity' }
-        ]
-    },
+    settings: { item: ['general'] },
     commands: databaseCommands
 } satisfies FeatureManifest;

@@ -143,7 +143,7 @@ export const databaseCrudFeatures = [
                 port: input.port,
                 database: input.database.trim(),
                 username: input.username.trim(),
-                autoLoadTables: input.autoLoadTables
+                ...(input.autoLoadTables ? {} : { tablesOnDemand: true as const })
             };
 
             const row = await ctx.repo.create({
@@ -194,7 +194,7 @@ export const databaseCrudFeatures = [
                 port: input.port,
                 database: input.database.trim(),
                 username: input.username.trim(),
-                autoLoadTables: input.autoLoadTables
+                ...(input.autoLoadTables ? {} : { tablesOnDemand: true as const })
             };
 
             // Secret absent = inchangé, chaîne vide = effacé. Le client ne le reçoit

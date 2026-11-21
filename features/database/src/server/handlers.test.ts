@@ -17,7 +17,6 @@ import {
     databaseRemove,
     databaseReorder,
     databaseTableList,
-    databaseTest,
     databaseUpdate
 } from '../contracts/commands';
 import type { DatabaseAlertRow, DatabaseRow } from '../contracts/domain';
@@ -322,7 +321,7 @@ describe('la pause d’offre', () => {
         e.code === 'quota_exceeded' &&
         (e.details as { paused?: boolean } | undefined)?.paused === true;
 
-    it('la liste et la fiche la disent ; tester, relever et toute session sont refusés avant d’ouvrir quoi que ce soit', async () => {
+    it('la liste et la fiche la disent ; relever et toute session sont refusés avant d’ouvrir quoi que ce soit', async () => {
         const repo = seed(fakeRepo(), row({ id: 1, workspace_id: 1 }), row({ id: 2, workspace_id: 1 }));
         // Sans service de relevé monté : une commande qui passerait la garde
         // lèverait `internal`, pas le refus de l'offre.
@@ -338,7 +337,6 @@ describe('la pause d’offre', () => {
         );
         assert.equal((await handlerFor(databaseGet)(ctx, { databaseId: 2 })).database.planPaused, true);
 
-        await assert.rejects(handlerFor(databaseTest)(ctx, { databaseId: 2 }), isPausedRefusal);
         await assert.rejects(handlerFor(databaseInspect)(ctx, { databaseId: 2 }), isPausedRefusal);
         await assert.rejects(handlerFor(databaseQuery)(ctx, { databaseId: 2, sql: 'SELECT 1' }), isPausedRefusal);
         await assert.rejects(handlerFor(databaseTableList)(ctx, { databaseId: 2 }), isPausedRefusal);
@@ -579,6 +577,23 @@ describe('database.update', () => {
         const changed = await update(ctx, { databaseId: 1, ...DRAFT, password: 'nouveau' });
         assert.equal(changed.database.hasPassword, true);
         assert.equal(repo.rows[0].secret_enc, 'nouveau');
+    });
+
+    it('les tables se chargent dès leur affichage, sauf refus enregistré', async () => {
+        const repo = seed(fakeRepo(), row({ id: 1, workspace_id: 1 }));
+        const ctx = createTestContext({ repo });
+        const update = handlerFor(databaseUpdate);
+
+        // Un corps qui n'en dit rien vaut le défaut.
+        assert.equal((await handlerFor(databaseGet)(ctx, { databaseId: 1 })).database.autoLoadTables, true);
+        assert.equal(
+            (await update(ctx, { databaseId: 1, ...SAME, autoLoadTables: false })).database.autoLoadTables,
+            false
+        );
+        assert.equal(
+            (await update(ctx, { databaseId: 1, ...SAME, autoLoadTables: true })).database.autoLoadTables,
+            true
+        );
     });
 
     it('refuse le nom d’une autre base, et accepte le sien', async () => {

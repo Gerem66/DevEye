@@ -38,9 +38,9 @@ import {
  * cherche un verbe juste après le point et ne verra aucune de ces commandes ;
  * un `mutates` oublié ne produit aucun avertissement.
  *
- * Seules les commandes qui lisent ou écrivent chez le serveur joignent la base,
- * sur un geste explicite ; `list` et `get` lisent le cache local. L'espace visé
- * voyage sur l'enveloppe WS, jamais en entrée.
+ * `list` et `get` lisent le cache local ; les autres commandes de lecture et
+ * d'écriture joignent le serveur de la base. L'espace visé voyage sur
+ * l'enveloppe WS, jamais en entrée.
  */
 
 const databaseId = z.number().int().positive();
@@ -144,15 +144,9 @@ export const databaseReorder = {
     output: z.object({ ids: z.array(databaseId) })
 };
 
-/** Ne lève jamais sur un échec de connexion : le message revient dans `error`. */
-export const databaseTest = {
-    command: 'database.test' as const,
-    input: z.object({ databaseId }),
-    output: z.object({ probe: databaseProbeSchema })
-};
-
 /**
- * Essaie des réglages pas encore enregistrés, sans rien écrire. `databaseId`
+ * Essaie des réglages pas encore enregistrés, sans rien écrire. Ne lève jamais
+ * sur un échec de connexion : le message revient dans `error`. `databaseId`
  * sert à la modification : un secret laissé intact ne redescend jamais au
  * client, le serveur reprend alors celui qu'il détient.
  */
@@ -171,7 +165,7 @@ export const databaseTestDraft = {
     output: z.object({ probe: databaseProbeSchema })
 };
 
-/** Le relevé périodique, sur demande : inventaire et alertes, même sur une base au repos. */
+/** Le relevé périodique, lancé par la fiche : inventaire, alertes et indicateurs, même sur une base au repos. */
 export const databaseInspect = {
     command: 'database.inspect' as const,
     input: z.object({ databaseId }),
@@ -197,7 +191,7 @@ export const databaseTableRows = {
         schema: z.string().max(DATABASE_NAME_MAX_LENGTH),
         table: z.string().min(1).max(DATABASE_NAME_MAX_LENGTH),
         offset: z.number().int().nonnegative().max(1_000_000).optional(),
-        limit: z.number().int().positive().max(200).optional(),
+        limit: z.number().int().positive().max(500).optional(),
         filters: z.array(databaseFilterSchema).max(8).optional(),
         combinator: databaseCombinatorSchema.optional(),
         sort: databaseSortSchema.optional(),
@@ -386,7 +380,6 @@ export const databaseCommands = [
     databaseDevices,
     databaseRemove,
     databaseReorder,
-    databaseTest,
     databaseTestDraft,
     databaseInspect,
     databaseTableList,

@@ -14,13 +14,15 @@ interface KpiDialogProps {
     onClose: () => void;
     onSaved: () => void;
     onRemove?: () => void;
+    /** Ouvrir une alerte déjà remplie sur l'indicateur enregistré. */
+    onCreateAlert?: () => void;
 }
 
 /**
  * Écrire un indicateur : un nom, une requête qui rend un nombre, une unité.
  * L'essai se fait sans rien enregistrer ; l'enregistrement mesure aussitôt.
  */
-export function KpiDialog({ open, databaseId, kpi, onClose, onSaved, onRemove }: KpiDialogProps) {
+export function KpiDialog({ open, databaseId, kpi, onClose, onSaved, onRemove, onCreateAlert }: KpiDialogProps) {
     const [label, setLabel] = useState('');
     const [sql, setSql] = useState('');
     const [unit, setUnit] = useState('');
@@ -81,6 +83,18 @@ export function KpiDialog({ open, databaseId, kpi, onClose, onSaved, onRemove }:
             width={640}
             footer={
                 <>
+                    {kpi && onCreateAlert && (
+                        <Button
+                            variant='secondary'
+                            icon='activity'
+                            className={styles.footerLead}
+                            title='Une alerte déjà remplie : la requête de cet indicateur, comparée à sa valeur du moment'
+                            onClick={onCreateAlert}
+                            disabled={busy}
+                        >
+                            Créer une alerte
+                        </Button>
+                    )}
                     <Button variant='secondary' onClick={onClose} disabled={busy}>
                         Annuler
                     </Button>

@@ -222,7 +222,7 @@ export default function DatabaseGeneralPanel({ scope, canWrite, gone }: Settings
                     disabled={!editable}
                     onChange={(monitorEnabled) => patch({ monitorEnabled })}
                     label='Relever cette base régulièrement'
-                    hint='Éteint (le réglage par défaut), rien ne se connecte : la base ne se joint qu’au moment où vous le demandez. Allumé, DevEye relève sa taille et son état, et c’est ce qui rend ses alertes vivantes.'
+                    hint='Éteint (le réglage par défaut), la base n’est relevée qu’à l’ouverture de sa fiche. Allumé, DevEye relève sa taille et son état à la cadence choisie, fiche fermée comprise : c’est ce qui rend ses alertes vivantes.'
                 />
             </div>
 
@@ -247,8 +247,8 @@ export default function DatabaseGeneralPanel({ scope, canWrite, gone }: Settings
                 checked={draft.autoLoadTables}
                 disabled={!editable}
                 onChange={(autoLoadTables) => patch({ autoLoadTables })}
-                label='Charger les tables à l’ouverture de la fiche'
-                hint='Éteint (le réglage par défaut), ouvrir la fiche de cette base ne joint aucun serveur : c’est « Charger les tables » qui va voir. Allumé, l’inventaire des tables est lu dès l’affichage de la fiche, ce qui fait gagner un clic sur une base qu’on consulte souvent et coûte une connexion à chaque ouverture.'
+                label='Charger les tables dès leur affichage'
+                hint='Allumé (le réglage par défaut), la liste des tables est lue dès que l’onglet Tables s’ouvre. Éteint, elle attend « Charger les tables ».'
             />
 
             {canWrite ? (

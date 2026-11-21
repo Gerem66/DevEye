@@ -120,7 +120,7 @@ function DatabaseCard({ database, outline, dragging, onOpen, onDragPointerDown }
                         ) : (
                             // Dit que rien ne tourne : « jamais testée » se lirait
                             // comme une panne.
-                            <span className={styles.tag}>à la demande</span>
+                            <span className={styles.tag}>relevée à l’ouverture</span>
                         )}
                         {database.sizeBytes !== null && (
                             <span className={styles.tag}>{formatBytes(database.sizeBytes)}</span>

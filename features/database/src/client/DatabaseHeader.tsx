@@ -1,60 +1,12 @@
 import type { ReactNode } from 'react';
-import { Button, FeatureSettingsButton, openInfo, PlanPausedBadge } from 'deveye-sdk-client';
+import { Button, FeatureSettingsButton, PlanPausedBadge } from 'deveye-sdk-client';
 import type { Database } from '../contracts/domain';
 
 import { ACCESS_VIA, ENGINE_LABELS, STATUS_META } from './format';
 import styles from './style.module.css';
 
-/** Ce que « Tester » et « Relever » font, et ce que « Relever » conserve. */
-function explainInspect() {
-    void openInfo({
-        title: 'Tester, relever : quelle différence ?',
-        width: 560,
-        body: (
-            <>
-                <p>
-                    <strong>Tester</strong> ouvre une connexion, lit la version du serveur et referme. Rien n’est
-                    enregistré : c’est un « est-ce que ça répond ? », et son résultat s’affiche le temps qu’on le
-                    regarde.
-                </p>
-                <p>
-                    <strong>Relever</strong> fait davantage, en trois temps :
-                </p>
-                <ul>
-                    <li>
-                        il lit l’<strong>inventaire</strong> : version du serveur, taille totale de la base, nombre de
-                        tables ;
-                    </li>
-                    <li>
-                        il <strong>enregistre</strong> ces chiffres dans DevEye, avec la date et l’état joignable ou
-                        non. Ce sont eux, et pas une lecture en direct, que montre le bandeau « État / Taille / Tables /
-                        Version » juste en dessous : ils datent donc du dernier relevé ;
-                    </li>
-                    <li>
-                        il <strong>évalue les alertes</strong> de cette base et envoie les notifications si l’une
-                        bascule, exactement comme le fait le relevé périodique, puisque c’est le même code.
-                    </li>
-                </ul>
-                <p>
-                    Ce qu’il ne fait <strong>pas</strong> : aucune donnée de vos tables n’est copiée, ni téléchargée, ni
-                    conservée. Seuls trois chiffres et une date entrent dans DevEye. Le contenu des tables ne se lit que
-                    dans l’explorateur, à la demande, et n’est jamais gardé.
-                </p>
-                <p>
-                    Relever à la main est utile même sans surveillance périodique : c’est ce qui permet de vérifier une
-                    alerte qu’on vient d’écrire sur une base laissée au repos.
-                </p>
-            </>
-        )
-    });
-}
-
 interface DatabaseHeaderProps {
     database: Database;
-    canWrite: boolean;
-    busy: boolean;
-    onTest: () => void;
-    onInspect: () => void;
     /** Ouvrir cette base dans sa feature ; absent quand on y est déjà. */
     onOpenInFeature?: () => void;
     /**
@@ -72,17 +24,7 @@ interface DatabaseHeaderProps {
  * L'en-tête d'une base, partagé entre la feature et l'onglet d'un projet ; ce
  * qui diffère entre par `before` et `after`.
  */
-export function DatabaseHeader({
-    database,
-    canWrite,
-    busy,
-    onTest,
-    onInspect,
-    onOpenInFeature,
-    onGone,
-    before,
-    after
-}: DatabaseHeaderProps) {
+export function DatabaseHeader({ database, onOpenInFeature, onGone, before, after }: DatabaseHeaderProps) {
     const status = STATUS_META[database.status];
 
     return (
@@ -122,25 +64,6 @@ export function DatabaseHeader({
             </div>
             {/* Rendue sans condition : le bouton de réglages est ouvert au lecteur. */}
             <div className={styles.actions}>
-                {canWrite && (
-                    <>
-                        <Button variant='secondary' icon='refresh' onClick={onTest} disabled={busy}>
-                            Tester
-                        </Button>
-                        <Button variant='secondary' icon='search' onClick={onInspect} disabled={busy}>
-                            Relever l’état
-                        </Button>
-                        <button
-                            type='button'
-                            className={styles.infoButton}
-                            aria-label='Que font « Tester » et « Relever l’état » ?'
-                            title='Que font ces deux boutons ?'
-                            onClick={explainInspect}
-                        >
-                            <span className='icon icon-info' />
-                        </button>
-                    </>
-                )}
                 {/* Les réglages de cette base, sa connexion et sa suppression
                     comprises (onglet Général). Le bouton se garde de lui-même,
                     sans section accessible il ne s'affiche pas. */}

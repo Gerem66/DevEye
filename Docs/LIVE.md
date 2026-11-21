@@ -115,20 +115,21 @@ l'envers.
 
 ### Ce que chaque feature déclare
 
-| Fonctionnalité                                                                                              | Niveaux                                                                              | Valeur `l1`                         |
-| ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ----------------------------------- |
-| Mail                                                                                                        | boîte, `l2` dossier, `l3` message ouvert                                             | l'id                                |
-| Projets                                                                                                     | projet, `l2` onglet (`tab:<onglet>`), `l3` carte (`card:<id>`), `l4` onglet de carte | l'id                                |
-| Audience                                                                                                    | site, `l2` section de la fiche                                                       | l'id                                |
-| Stores                                                                                                      | app, `l2` onglet de la fiche                                                         | l'id                                |
-| Facturation                                                                                                 | section ouverte, `l2` onglet d'un document                                           | le nom de la section                |
-| Finances                                                                                                    | compte ouvert, sinon la vue                                                          | l'id du compte, ou le nom de la vue |
-| Uptime, Git, Déploiements, Bases de données, Sauvegardes, Serveur mail, Notes, Mots de passe, Tableau blanc | l'élément ouvert                                                                     | l'id                                |
-| Appareils, Sentinelle                                                                                       | l'appareil sélectionné                                                               | l'uuid                              |
-| Météo                                                                                                       | la ville consultée                                                                   | l'id                                |
-| Veille CVE                                                                                                  | l'entrée sélectionnée                                                                | son identifiant                     |
-| CloudSync, Rendez-vous, Hébergement                                                                         | le partage, le type, le dossier ouvert                                               | l'id                                |
-| Convertisseur, OSINT, Audit, Jeu de la vie, Abonnement, Journaux, Utilisateurs…                             | aucun                                                                                | (la vue suffit)                     |
+| Fonctionnalité                                                                            | Niveaux                                                                              | Valeur `l1`                         |
+| ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ----------------------------------- |
+| Mail                                                                                      | boîte, `l2` dossier, `l3` message ouvert                                             | l'id                                |
+| Projets                                                                                   | projet, `l2` onglet (`tab:<onglet>`), `l3` carte (`card:<id>`), `l4` onglet de carte | l'id                                |
+| Audience                                                                                  | site, `l2` section de la fiche                                                       | l'id                                |
+| Stores                                                                                    | app, `l2` onglet de la fiche                                                         | l'id                                |
+| Bases de données                                                                          | base, `l2` onglet de la fiche                                                        | l'id                                |
+| Facturation                                                                               | section ouverte, `l2` onglet d'un document                                           | le nom de la section                |
+| Finances                                                                                  | compte ouvert, sinon la vue                                                          | l'id du compte, ou le nom de la vue |
+| Uptime, Git, Déploiements, Sauvegardes, Serveur mail, Notes, Mots de passe, Tableau blanc | l'élément ouvert                                                                     | l'id                                |
+| Appareils, Sentinelle                                                                     | l'appareil sélectionné                                                               | l'uuid                              |
+| Météo                                                                                     | la ville consultée                                                                   | l'id                                |
+| Veille CVE                                                                                | l'entrée sélectionnée                                                                | son identifiant                     |
+| CloudSync, Rendez-vous, Hébergement                                                       | le partage, le type, le dossier ouvert                                               | l'id                                |
+| Convertisseur, OSINT, Audit, Jeu de la vie, Abonnement, Journaux, Utilisateurs…           | aucun                                                                                | (la vue suffit)                     |
 
 La valeur `l1` d'un élément est son identifiant nu : le préfixe `view:<feature>`
 du chemin dit déjà de quelle sorte d'élément il s'agit, et

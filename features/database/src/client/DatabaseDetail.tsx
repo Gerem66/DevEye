@@ -1,11 +1,18 @@
-import { useState } from 'react';
-import { Button, ErrorNote, NotificationsNotice, StickyHeader, type ErrorNoteInput } from 'deveye-sdk-client';
-import type { Database, DatabaseAlert, DatabaseKpi, DatabaseProbe, DatabaseUsage } from '../contracts/domain';
+import { Button, NotificationsNotice, StickyHeader, useLiveOutlines } from 'deveye-sdk-client';
+import type { Database, DatabaseAlert, DatabaseKpi, DatabaseUsage } from '../contracts/domain';
 
 import { DatabaseHeader } from './DatabaseHeader';
-import { DatabaseView } from './DatabaseView';
+import { DatabaseOverview } from './DatabaseOverview';
+import { TableExplorer } from './TableExplorer';
 import { PROJECT_STATUS_LABELS } from '@deveye/types';
 import styles from './style.module.css';
+
+export type DatabaseTab = 'overview' | 'tables';
+
+const TABS: { id: DatabaseTab; label: string; icon: string }[] = [
+    { id: 'overview', label: 'Vue d’ensemble', icon: 'activity' },
+    { id: 'tables', label: 'Tables', icon: 'list' }
+];
 
 interface DatabaseDetailProps {
     database: Database;
@@ -13,20 +20,17 @@ interface DatabaseDetailProps {
     alerts: DatabaseAlert[];
     kpis: DatabaseKpi[];
     canWrite: boolean;
-    busy: boolean;
-    testing: boolean;
-    probe: DatabaseProbe | null;
-    /** L'échec d'un essai ou d'un relevé lancé depuis l'en-tête. */
-    error: ErrorNoteInput | null;
+    /** L'onglet affiché ; l'appelant le tient, pour qu'il vaille d'une base à l'autre. */
+    tab: DatabaseTab;
+    onTab: (tab: DatabaseTab) => void;
     onBack: () => void;
-    onTest: () => void;
-    onInspect: () => void;
     onOpenProject: (projectId: number) => void;
 }
 
 /**
- * Une base ouverte dans sa feature. En plein écran, l'en-tête s'efface et la
- * racine prend toute la hauteur de la popup : seul cet écran possède les deux.
+ * Une base ouverte dans sa feature, en deux onglets : son état, et ses tables.
+ * Sous « Tables », la fiche tient dans la hauteur de la popup : seuls le
+ * tableau et la liste défilent.
  */
 export function DatabaseDetail({
     database,
@@ -34,85 +38,99 @@ export function DatabaseDetail({
     alerts,
     kpis,
     canWrite,
-    busy,
-    testing,
-    probe,
-    error,
+    tab,
+    onTab,
     onBack,
-    onTest,
-    onInspect,
     onOpenProject
 }: DatabaseDetailProps) {
-    const [expanded, setExpanded] = useState(false);
+    const outlineOf = useLiveOutlines('l2');
 
     return (
-        <div className={expanded ? styles.rootExpanded : styles.root}>
-            {!expanded && (
-                <StickyHeader>
-                    <DatabaseHeader
-                        database={database}
-                        canWrite={canWrite}
-                        busy={busy}
-                        onTest={onTest}
-                        onInspect={onInspect}
-                        onGone={onBack}
-                        before={
-                            <Button variant='ghost' icon='arrow-left' onClick={onBack}>
-                                Bases
-                            </Button>
-                        }
-                    />
-                </StickyHeader>
-            )}
-
-            <ErrorNote note={error} />
-            {/* Une base sans alerte n'a rien à envoyer. */}
-            {!expanded && alerts.some((a) => a.enabled) && (
-                <NotificationsNotice
-                    scope={{
-                        kind: 'item',
-                        feature: 'database',
-                        itemId: String(database.id),
-                        itemLabel: database.name
-                    }}
+        <div className={tab === 'tables' ? styles.rootFill : styles.root}>
+            <StickyHeader className={styles.sheetSticky}>
+                <DatabaseHeader
+                    database={database}
+                    onGone={onBack}
+                    before={
+                        <Button variant='ghost' icon='arrow-left' onClick={onBack}>
+                            Bases
+                        </Button>
+                    }
                 />
+                <nav className={styles.tabs} role='tablist' aria-label='Sections de la base'>
+                    {TABS.map((entry) => (
+                        <button
+                            key={entry.id}
+                            type='button'
+                            role='tab'
+                            aria-selected={entry.id === tab}
+                            className={entry.id === tab ? styles.tabActive : styles.tab}
+                            onClick={() => onTab(entry.id)}
+                            {...outlineOf(entry.id)}
+                        >
+                            <span className={`icon icon-${entry.icon} ${styles.tabIcon}`} aria-hidden='true' />
+                            <span>{entry.label}</span>
+                            {/* Les alertes vivent sous cet onglet : une alerte franchie se voit depuis l'autre. */}
+                            {entry.id === 'overview' && database.firingCount > 0 && (
+                                <span className={styles.alertTag}>
+                                    {database.firingCount} franchie{database.firingCount > 1 ? 's' : ''}
+                                </span>
+                            )}
+                        </button>
+                    ))}
+                </nav>
+            </StickyHeader>
+
+            {tab === 'overview' && (
+                <>
+                    {/* Une base sans alerte n'a rien à envoyer. */}
+                    {alerts.some((a) => a.enabled) && (
+                        <NotificationsNotice
+                            scope={{
+                                kind: 'item',
+                                feature: 'database',
+                                itemId: String(database.id),
+                                itemLabel: database.name
+                            }}
+                        />
+                    )}
+
+                    <DatabaseOverview
+                        database={database}
+                        alerts={alerts}
+                        kpis={kpis}
+                        canWrite={canWrite}
+                        onOpenTables={() => onTab('tables')}
+                    />
+
+                    {usage.length > 0 && (
+                        <section className={styles.panel}>
+                            <h3 className={styles.panelTitle}>
+                                {usage.length} projet{usage.length > 1 ? 's' : ''}
+                            </h3>
+                            <ul className={styles.usageList}>
+                                {usage.map((u) => (
+                                    <li key={u.projectId}>
+                                        <button
+                                            type='button'
+                                            className={styles.usageItem}
+                                            onClick={() => onOpenProject(u.projectId)}
+                                        >
+                                            <span className='icon icon-projects' />
+                                            <span>{u.title}</span>
+                                            <span className={styles.status} data-status={u.status}>
+                                                {PROJECT_STATUS_LABELS[u.status]}
+                                            </span>
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
+                        </section>
+                    )}
+                </>
             )}
 
-            <DatabaseView
-                database={database}
-                alerts={alerts}
-                kpis={kpis}
-                canWrite={canWrite}
-                testing={testing}
-                probe={probe}
-                onExpandChange={setExpanded}
-                onGone={onBack}
-            >
-                {usage.length > 0 && (
-                    <section className={styles.panel}>
-                        <h3 className={styles.panelTitle}>
-                            {usage.length} projet{usage.length > 1 ? 's' : ''}
-                        </h3>
-                        <ul className={styles.usageList}>
-                            {usage.map((u) => (
-                                <li key={u.projectId}>
-                                    <button
-                                        type='button'
-                                        className={styles.usageItem}
-                                        onClick={() => onOpenProject(u.projectId)}
-                                    >
-                                        <span className='icon icon-projects' />
-                                        <span>{u.title}</span>
-                                        <span className={styles.status} data-status={u.status}>
-                                            {PROJECT_STATUS_LABELS[u.status]}
-                                        </span>
-                                    </button>
-                                </li>
-                            ))}
-                        </ul>
-                    </section>
-                )}
-            </DatabaseView>
+            <TableExplorer database={database} canWrite={canWrite} fill hidden={tab !== 'tables'} />
         </div>
     );
 }

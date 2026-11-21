@@ -153,9 +153,9 @@ export function AlertDialog({
             <div className={styles.form}>
                 {!monitorEnabled && (
                     <p className={styles.warn}>
-                        La surveillance est éteinte sur cette base : cette alerte sera enregistrée mais{' '}
-                        <strong>jamais évaluée</strong>. Activez « Relever cette base régulièrement » dans ses réglages
-                        (Général) pour la rendre vivante.
+                        La surveillance est éteinte sur cette base : cette alerte ne sera évaluée{' '}
+                        <strong>qu’à l’ouverture de sa fiche</strong>. Activez « Relever cette base régulièrement » dans
+                        ses réglages (Général) pour qu’elle prévienne sans vous.
                     </p>
                 )}
 

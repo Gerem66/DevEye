@@ -1,13 +1,12 @@
-import { databaseInspect, databaseQuery, databaseTest, databaseTestDraft } from '../contracts/commands';
+import { databaseInspect, databaseQuery, databaseTestDraft } from '../contracts/commands';
 import { authorizeRelayDevice, defineSdkFeature, FeatureError, relayOf } from '@deveye/types/sdk/server';
 
 import { explainError, openSession, type Session } from './engine';
 import { assertSecretsStay, loadDatabase, monitorOf, reloadDatabase, type Ctx } from './_shared';
 
 /**
- * Ce qui joint réellement un serveur, toujours sur un geste explicite. Sous le
- * droit d'écriture : lire une base, même en `SELECT`, consomme une connexion
- * chez un tiers et expose son contenu.
+ * Ce qui joint réellement un serveur. Sous le droit d'écriture : lire une base,
+ * même en `SELECT`, consomme une connexion chez un tiers et expose son contenu.
  */
 
 /** Ouvre une session vers une base visible, cible déchiffrée sous la clé de son domicile. */
@@ -41,25 +40,10 @@ export async function withSession<T>(ctx: Ctx, databaseId: number, run: (s: Sess
 }
 
 export const databaseProbeFeatures = [
-    defineSdkFeature({
-        ...databaseTest,
-        access: { level: 'write', item: 'databaseId' },
-        handler: async (ctx: Ctx, input) => {
-            await loadDatabase(ctx, input.databaseId);
-            // Avant l'essai, qui rend tout échec comme un résultat : la pause doit lever.
-            await ctx.quota.assertActive('connections', String(input.databaseId));
-            const started = Date.now();
-            // Ne lève jamais : un échec de connexion est le résultat normal d'un test.
-            try {
-                const version = await withSession(ctx, input.databaseId, (s) => s.serverVersion());
-                return { probe: { ok: true, serverVersion: version, elapsedMs: Date.now() - started, error: null } };
-            } catch (e) {
-                const message = e instanceof FeatureError ? e.message : explainError(e);
-                return { probe: { ok: false, serverVersion: null, elapsedMs: Date.now() - started, error: message } };
-            }
-        }
-    }),
-    /** Le même essai sur des réglages pas encore enregistrés ; n'écrit rien. */
+    /**
+     * Un essai de connexion sur des réglages pas encore enregistrés ; n'écrit
+     * rien. Ne lève jamais sur un échec de connexion, son résultat normal.
+     */
     defineSdkFeature({
         ...databaseTestDraft,
         access: { level: 'write', item: 'databaseId' },

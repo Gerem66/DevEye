@@ -60,8 +60,12 @@ export interface StoredDatabase {
     port: number;
     database: string;
     username: string;
-    /** Dans le blob et non en colonne : un réglage d'affichage, qui n'entre dans aucune requête. */
-    autoLoadTables?: boolean;
+    /**
+     * Les tables attendent « Charger les tables ». Seul le refus se range :
+     * absent, elles se chargent dès qu'elles s'affichent. Dans le blob et non
+     * en colonne : un réglage d'affichage, qui n'entre dans aucune requête.
+     */
+    tablesOnDemand?: true;
 }
 
 /** Ce que porte `database_connections.access_content`, chiffré. */
@@ -250,7 +254,7 @@ export async function toDatabase(
         },
         monitorEnabled: row.monitor_enabled === 1,
         intervalSeconds: row.interval_seconds,
-        autoLoadTables: body?.autoLoadTables === true,
+        autoLoadTables: body?.tablesOnDemand !== true,
         lastCheckAt: row.last_check_at,
         lastElapsedMs: row.last_elapsed_ms === null ? null : Number(row.last_elapsed_ms),
         status: row.status === 'up' || row.status === 'down' ? row.status : 'unknown',
