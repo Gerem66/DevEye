@@ -63,11 +63,12 @@ décrit côté types dans `src/domain/secrecy.ts` de `@deveye/types`.
   refait sur le mot de passe (`secrecy.regenerateRecovery`) : l'ancien cesse
   aussitôt de servir.
 
-**Conséquence :** aucun contenu n'est stocké en clair en BDD. Même feature OFF,
-les contenus sont chiffrés (DEK distincte par user) ; seul le niveau
-d'emballage de la DEK change. Ce qui n'est pas un contenu (nombres, dates,
-états, rattachements) n'est pas chiffré : voir
-[Ce qui reste en clair](#ce-qui-reste-en-clair).
+**Conséquence :** ce qu'une feature chiffre n'est jamais stocké en clair en
+BDD. Même feature OFF, ces contenus sont chiffrés (DEK distincte par user) ;
+seul le niveau d'emballage de la DEK change. Tout n'est pas chiffré pour
+autant : les nombres, les dates, les états, et ce que le serveur traite sans
+session (mesures des machines, chemins des fichiers synchronisés, comptes et
+espaces) ne le sont pas. Voir [Ce qui reste en clair](#ce-qui-reste-en-clair).
 
 **Une primitive, deux formats de blob** (`src/Services/Encryption.ts`), tous
 deux AES-256-GCM. Sous une DEK ou une WDK (le contenu, et l'emballage d'une DEK
@@ -574,7 +575,10 @@ disque réunis, et contre un opérateur qui lit. Ce que ça ne protège pas :
   lire le code de secours au moment où on le tape. C'est la limite de tout
   chiffrement de bout en bout sur le web. L'agent, lui, n'exécute pas de code
   venu du serveur pour ce chiffrement, et aucune clé ne lui parvient sans
-  avoir été scellée par un navigateur.
+  avoir été scellée par un navigateur ;
+- un **serveur actif** qui substitue la clé publique d'un appareil : le
+  navigateur scelle le secret pour la clé que le serveur lui rend, sans
+  empreinte à comparer sur la machine.
 
 Ce que l'utilisateur perd : les sauvegardes (le module Sauvegardes ne
 propose pas ces partages), l'export de compte (une note à la place des
@@ -851,9 +855,43 @@ l'activité, pas son contenu.
   coordonnées bancaires, intitulés de ligne, références de paiement.
 - **Projets** et **Git** : voir
   [Ce qui reste en clair, et pourquoi](#ce-qui-reste-en-clair-et-pourquoi).
-- **Uptime**, **Stores**, **CloudSync** : voir leur section.
+- **Uptime** et **Stores** : voir leur section.
+- **CloudSync** : le nom d'un partage, les chemins, les tailles, les dates, le
+  dossier local de chaque appareil et le journal, y compris pour un partage de
+  bout en bout. Seul le contenu des fichiers est chiffré.
+- **Appareils** et **Sentinelle** : rien n'y est chiffré. Les rapports, les
+  mesures, les processus et les constats sont des faits sur des machines, que
+  le moteur lit sans session.
+- **Météo** : le nom d'une ville et ses coordonnées.
+- **Convertisseur** : le fichier envoyé et son résultat sont sur le disque du
+  serveur, en clair, le temps de la conversion, puis une heure par défaut pour
+  le résultat. Seuls leur nom et l'erreur éventuelle sont chiffrés en base.
+- **Comptes et espaces** : nom d'utilisateur, adresse e-mail, avatar, nom d'un
+  espace et de ses rôles, membres, adresses invitées, partages et droits.
+- **Journaux** : le journal d'audit garde un an la description de chaque geste,
+  qui cite des noms (un partage, une ville) et des chemins (un fichier lu sur
+  une machine), avec l'adresse IP. L'historique des connexions garde l'adresse
+  IP quatre-vingt-dix jours.
 - **Partout** : les identifiants de ligne, l'espace et le compte propriétaires,
   les dates de création et de modification, les tailles.
+
+## Ce que le serveur ne lit jamais
+
+Au sens strict, celui où ni la clé ni le clair ne lui parviennent :
+
+- **Le contenu d'un partage CloudSync de bout en bout.** La clé est tirée dans
+  le navigateur et scellée pour chaque appareil (voir
+  [De bout en bout](#de-bout-en-bout--la-clé-des-appareils)). Les métadonnées
+  ci-dessus restent lisibles.
+- **Un document travaillé dans l'atelier PDF.** Pages, signature, annotations,
+  caviardage et mot de passe se font dans le navigateur, qui n'envoie rien.
+  Deux exceptions : reconnaître le texte et alléger passent par le
+  Convertisseur, donc par le serveur. Les signatures enregistrées, elles, sont
+  gardées à l'étage ouvert.
+- **Le moyen de paiement**, saisi chez le prestataire de paiement.
+
+Rien d'autre. L'étage gardé n'en fait pas partie : le serveur le déchiffre
+pendant qu'une session est déverrouillée.
 
 ## Ce qui est vérifié, et par qui
 

@@ -135,8 +135,8 @@ export function PasswordResetForm({
         return (
             <LoginScene footer={footer}>
                 <p className='signup-intro'>
-                    Sans ce code, le mot de passe ne peut pas être réinitialisé : vos données sont chiffrées par votre
-                    mot de passe actuel, et rien d’autre ne les ouvre, pas même le service.
+                    Sans ce code, le mot de passe ne peut pas être réinitialisé : vos données protégées sont chiffrées
+                    par votre mot de passe actuel, et rien d’autre ne les ouvre, pas même le service.
                 </p>
                 <p className='signup-intro'>
                     Ce lien n’y a rien changé : si votre mot de passe vous revient, connectez-vous simplement avec. Un

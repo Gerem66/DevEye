@@ -22,7 +22,8 @@ export const EXTERNAL_SERVICES: readonly ExternalService[] = [
     {
         name: 'Stripe',
         purpose: 'Encaisse les abonnements',
-        receives: 'Votre nom, votre adresse e-mail et votre moyen de paiement, que DevEye ne voit jamais',
+        receives:
+            'Votre nom et votre adresse e-mail, que DevEye lui transmet, et votre moyen de paiement, que DevEye ne voit jamais',
         features: ['x-billing'],
         official: true
     },
