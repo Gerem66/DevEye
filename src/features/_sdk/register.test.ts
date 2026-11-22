@@ -87,7 +87,7 @@ const host = {
 
 type HookCall = [hook: string, deviceId: string, payload?: unknown];
 const weatherCalls: HookCall[] = [];
-const osintCalls: HookCall[] = [];
+const notesCalls: HookCall[] = [];
 /** Le module SANS la capacité : ses hooks ne doivent jamais être appelés. */
 const externalCalls: HookCall[] = [];
 
@@ -115,23 +115,23 @@ const weather: FeatureServer = {
 };
 
 /** Le voisin sain : il doit recevoir chaque trame quoi qu'il arrive à Météo. */
-const osint: FeatureServer = {
+const notes: FeatureServer = {
     features: [],
     createService: () => ({
         start() {},
         stop() {},
         agentHooks: {
             onAgentConnect: (deviceId) => {
-                osintCalls.push(['onAgentConnect', deviceId]);
+                notesCalls.push(['onAgentConnect', deviceId]);
             },
             onAgentOffline: (deviceId) => {
-                osintCalls.push(['onAgentOffline', deviceId]);
+                notesCalls.push(['onAgentOffline', deviceId]);
             },
             onSyncChanged: (deviceId, payload) => {
-                osintCalls.push(['onSyncChanged', deviceId, payload]);
+                notesCalls.push(['onSyncChanged', deviceId, payload]);
             }
         },
-        providers: { beta: 'beta-osint' }
+        providers: { beta: 'beta-notes' }
     })
 };
 
@@ -229,7 +229,7 @@ const movable: FeatureServer<{ tag: string }> = {
 
 registerModules([
     { manifest: manifest('weather', { nativeCapabilities: ['agents'] }), server: weather },
-    { manifest: manifest('osint', { nativeCapabilities: ['agents'] }), server: osint },
+    { manifest: manifest('notes', { nativeCapabilities: ['agents'] }), server: notes },
     {
         manifest: manifest('x-sdkregister', {
             extraPermissions: [{ key: 'manage', label: 'Gérer', description: 'Peut purger.', type: 'toggle' }]
@@ -535,7 +535,7 @@ describe('moduleAgentHooks : les hooks isolés', () => {
 
     it("un hook qui lève n'empêche pas les autres, et se lit dans le journal", () => {
         hooks.onAgentConnect('dev-1');
-        assert.ok(osintCalls.some(([hook, deviceId]) => hook === 'onAgentConnect' && deviceId === 'dev-1'));
+        assert.ok(notesCalls.some(([hook, deviceId]) => hook === 'onAgentConnect' && deviceId === 'dev-1'));
         const [line] = logged('weather', 'onAgentConnect');
         assert.ok(line, 'le hook en échec est journalisé');
         assert.equal(line.msg, 'hook agent en échec');
@@ -546,7 +546,7 @@ describe('moduleAgentHooks : les hooks isolés', () => {
     it('un hook asynchrone qui rejette est journalisé de même, sans rejet non géré', async () => {
         hooks.onAgentOffline('dev-2');
         await new Promise((resolve) => setImmediate(resolve));
-        assert.ok(osintCalls.some(([hook, deviceId]) => hook === 'onAgentOffline' && deviceId === 'dev-2'));
+        assert.ok(notesCalls.some(([hook, deviceId]) => hook === 'onAgentOffline' && deviceId === 'dev-2'));
         const [line] = logged('weather', 'onAgentOffline');
         assert.ok(line);
         assert.ok(line.obj.err instanceof Error);
@@ -562,7 +562,7 @@ describe('moduleAgentHooks : les hooks isolés', () => {
             )
         );
         assert.ok(
-            osintCalls.some(([hook, deviceId, p]) => hook === 'onSyncChanged' && deviceId === 'dev-3' && p === payload)
+            notesCalls.some(([hook, deviceId, p]) => hook === 'onSyncChanged' && deviceId === 'dev-3' && p === payload)
         );
     });
 
@@ -581,7 +581,7 @@ describe('moduleAgentHooks : les hooks isolés', () => {
 describe('moduleProvider', () => {
     it('rend le contrat offert, par identité', () => {
         assert.equal(moduleProvider('alpha'), ALPHA);
-        assert.equal(moduleProvider('beta'), 'beta-osint');
+        assert.equal(moduleProvider('beta'), 'beta-notes');
     });
 
     it("rend undefined quand aucun module ne l'offre", () => {

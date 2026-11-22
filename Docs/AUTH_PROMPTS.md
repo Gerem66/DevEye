@@ -107,9 +107,8 @@ connaître. Les formulaires des features (ajout d'un mot de passe, d'un compte
 mail) suivent eux le contrat du composant `client/src/Components/Popup` :
 `OpenPopup(id, input)` (résout à la fermeture) / `ClosePopup(id, result)`.
 
-Même réutilisation partout ailleurs : une boîte mail à l'étage gardé,
-l'historique OSINT, une note privée passent tous par `withSecrecy()` et donc
-par l'invite n°1. Il n'existe aucune autre invite de mot de passe dans l'app,
+Même réutilisation partout ailleurs : une boîte mail à l'étage gardé et une
+note privée passent toutes deux par `withSecrecy()` et donc par l'invite n°1. Il n'existe aucune autre invite de mot de passe dans l'app,
 hors des gestes de compte (n° 1 ter, mise en place de la 2FA dans Sécurité).
 
 ## Modèle de sécurité global

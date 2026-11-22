@@ -82,7 +82,9 @@ export default defineConfig(({ command }) => {
             // (devDeps de son typecheck autonome) : sans dédoublonnage, ses
             // fichiers résolvaient `react` et `zod` vers SES copies, bundlées
             // en double, et deux React dans la même page cassent les hooks.
-            dedupe: ['react', 'react-dom', 'zod', '@deveye/types'],
+            // Une seconde copie de framer-motion ignorerait le `MotionConfig`
+            // de l'app (mouvement réduit).
+            dedupe: ['react', 'react-dom', 'zod', '@deveye/types', 'framer-motion'],
             alias: {
                 '@': path.join(CLIENT_DIR, 'src'),
                 // La surface client du SDK des modules : un vrai module de l'app,

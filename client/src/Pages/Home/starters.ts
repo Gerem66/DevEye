@@ -64,7 +64,7 @@ export const HOME_STARTERS: readonly HomeStarter[] = [
         id: 'secure',
         label: 'Sécuriser',
         icon: 'shield',
-        features: ['sentinel', 'cve', 'x-audit', 'osint'],
+        features: ['sentinel', 'cve', 'x-audit'],
         topbar: ['search', 'publicIp']
     }
 ];

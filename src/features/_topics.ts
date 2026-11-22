@@ -13,7 +13,7 @@ import { featureHandlers } from './registry';
  *
  * Les modules à préfixe unique et verbes camelCase derrière le point
  * (`audience`, `backup`, `database`, `deploy`, `finance`, `git`, `notify`,
- * `osint`, `projects`, les dossiers de `notes`) échappent au filet
+ * `projects`, les dossiers de `notes`) échappent au filet
  * `MUTATION_VERB` : leurs `mutates` se relisent à la main.
  */
 const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
@@ -70,7 +70,6 @@ const COMMAND_PREFIX_TOPIC: Record<string, LiveTopic | null> = {
     // restriction ce que voit un rôle : faute d'un sujet qui dise les deux, le
     // sujet de l'espace, le plus large.
     share: 'workspace',
-    osint: 'osint',
     password: 'password',
     pdf: 'pdf',
     // Les commandes de discussion nomment `['projectsChat']`, sujet secondaire

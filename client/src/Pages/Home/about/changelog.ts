@@ -256,7 +256,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
             },
             {
                 kind: 'improved',
-                text: 'Uptime, Appareils, CloudSync et OSINT : Uptime garde au plus deux ans de détail, Appareils un an et CloudSync 365 jours de points de restauration, au-delà réservé aux administrateurs ; les recherches OSINT s’effacent après 90 jours, et vos signalements perdent au bout de trois ans ce qui vous identifie'
+                text: 'Uptime, Appareils et CloudSync : Uptime garde au plus deux ans de détail, Appareils un an et CloudSync 365 jours de points de restauration, au-delà réservé aux administrateurs ; vos signalements perdent au bout de trois ans ce qui vous identifie'
             },
             {
                 kind: 'improved',
@@ -819,8 +819,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
             {
                 kind: 'improved',
                 text: 'Projets : les onglets suivent le contenu du projet, et « + » propose l’action utile'
-            },
-            { kind: 'improved', text: 'OSINT : la tuile d’accueil montre les sondes et les clés' }
+            }
         ]
     },
     {
@@ -838,10 +837,6 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
         version: '0.12.0',
         date: '2026-08-12',
         changes: [
-            {
-                kind: 'added',
-                text: 'OSINT : enquête sur un domaine, une adresse IP, un numéro, un e-mail ou un pseudo'
-            },
             {
                 kind: 'added',
                 text: 'Sentinelle : surveillance de la sécurité des appareils, constats et ligne de base'

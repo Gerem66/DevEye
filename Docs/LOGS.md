@@ -109,7 +109,5 @@ séparé) couvre la vivacité du processus, pas la base.
   l'adresse, l'espace et ce que le navigateur dit de la personne partent, la
   partie technique reste (`anonymized_at`), pour suivre les problèmes sur des
   années.
-- **Historique OSINT** : 90 jours (`OSINT_HISTORY_DAYS`), purgé par le service
-  du module au démarrage puis chaque jour.
 - **Sortie standard** : la rotation Docker des fichiers compose, 5 fichiers de
   20 Mo par conteneur.

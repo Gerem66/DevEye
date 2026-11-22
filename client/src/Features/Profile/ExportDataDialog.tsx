@@ -173,8 +173,8 @@ export function ExportDataDialog({ open, onClose }: ExportDataDialogProps) {
                             </p>
                         )}
                         <p className={styles.exportWarning}>
-                            Cette archive contient vos mots de passe en clair : ceux du coffre, vos notes privées, vos
-                            recherches OSINT. Gardez-la en lieu sûr, et supprimez-la quand vous n’en avez plus besoin.
+                            Cette archive contient en clair les mots de passe du coffre et vos notes privées. Gardez-la
+                            en lieu sûr, et supprimez-la quand vous n’en avez plus besoin.
                         </p>
                         <label className={styles.field}>
                             <span className={styles.fieldLabel}>Votre mot de passe, pour confirmer</span>

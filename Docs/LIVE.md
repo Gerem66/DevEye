@@ -129,7 +129,7 @@ l'envers.
 | Météo                                                                                     | la ville consultée                                                                   | l'id                                |
 | Veille CVE                                                                                | l'entrée sélectionnée                                                                | son identifiant                     |
 | CloudSync, Rendez-vous, Hébergement                                                       | le partage, le type, le dossier ouvert                                               | l'id                                |
-| Convertisseur, OSINT, Audit, Jeu de la vie, Abonnement, Journaux, Utilisateurs…           | aucun                                                                                | (la vue suffit)                     |
+| Convertisseur, Audit, Jeu de la vie, Abonnement, Journaux, Utilisateurs…                  | aucun                                                                                | (la vue suffit)                     |
 
 La valeur `l1` d'un élément est son identifiant nu : le préfixe `view:<feature>`
 du chemin dit déjà de quelle sorte d'élément il s'agit, et

@@ -578,7 +578,7 @@ function readme(report: ExportReport, foreign: number): string {
     return [
         `Export des données du compte « ${report.account.username} », depuis ${report.instance}, le ${new Date(report.generatedAt).toLocaleString('fr-FR', { timeZone: 'Europe/Paris' })}.`,
         '',
-        'ATTENTION : cette archive contient vos données en clair, y compris ce que protège votre mot de passe (le coffre de mots de passe, les notes privées, les recherches OSINT). Gardez-la en lieu sûr, et supprimez-la quand vous n’en avez plus besoin.',
+        'ATTENTION : cette archive contient vos données en clair, y compris ce que protège votre mot de passe (le coffre de mots de passe, les notes privées). Gardez-la en lieu sûr, et supprimez-la quand vous n’en avez plus besoin.',
         '',
         'Contenu',
         '- Compte/ : votre profil, vos réglages, vos sessions, votre journal d’activité, vos retours, et ce que les fonctionnalités gardent par compte.',

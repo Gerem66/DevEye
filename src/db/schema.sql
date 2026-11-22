@@ -1470,14 +1470,6 @@ CREATE TABLE `ft_moderation_rules` (
   KEY `idx_ft_moderation_rules_source` (`source`,`created`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
-CREATE TABLE `ft_osint_usage` (
-  `workspace_id` int NOT NULL,
-  `month` int NOT NULL,
-  `lookups` int NOT NULL DEFAULT '0',
-  PRIMARY KEY (`workspace_id`,`month`),
-  CONSTRAINT `fk_ft_osint_usage_ws` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
 CREATE TABLE `ft_pdf_signatures` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `workspace_id` int NOT NULL,
@@ -2097,29 +2089,6 @@ CREATE TABLE `notification_routes` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uniq_notif_route` (`workspace_id`,`feature`,`item_id`),
   CONSTRAINT `fk_notif_route_workspace` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
-CREATE TABLE `osint_lookups` (
-  `id` char(36) COLLATE utf8mb4_general_ci NOT NULL,
-  `workspace_id` int NOT NULL,
-  `user_id` int NOT NULL,
-  `kind` varchar(16) COLLATE utf8mb4_general_ci NOT NULL,
-  `query_enc` text COLLATE utf8mb4_general_ci NOT NULL,
-  `created` bigint NOT NULL DEFAULT (unix_timestamp()),
-  PRIMARY KEY (`id`),
-  KEY `idx_osint_lookup_workspace` (`workspace_id`,`created` DESC),
-  KEY `fk_osint_lookup_user` (`user_id`),
-  CONSTRAINT `fk_osint_lookup_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_osint_lookup_workspace` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
-CREATE TABLE `osint_provider_keys` (
-  `workspace_id` int NOT NULL,
-  `provider` varchar(32) COLLATE utf8mb4_general_ci NOT NULL,
-  `key_enc` text COLLATE utf8mb4_general_ci NOT NULL,
-  `created` bigint NOT NULL DEFAULT (unix_timestamp()),
-  PRIMARY KEY (`workspace_id`,`provider`),
-  CONSTRAINT `fk_osint_key_workspace` FOREIGN KEY (`workspace_id`) REFERENCES `workspaces` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 CREATE TABLE `password_resets` (

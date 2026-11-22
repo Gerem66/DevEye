@@ -8,77 +8,74 @@ import type { InstalledClientFeature } from '@/sdk/registry';
 import { LOCAL_CLIENT_FEATURES } from './features.local';
 import { manifest as manifest0 } from 'deveye-feature-weather';
 import { clientEntry as client0 } from 'deveye-feature-weather/client';
-import { manifest as manifest1 } from 'deveye-feature-osint';
-import { clientEntry as client1 } from 'deveye-feature-osint/client';
-import { manifest as manifest2 } from 'deveye-feature-finance';
-import { clientEntry as client2 } from 'deveye-feature-finance/client';
-import { manifest as manifest3 } from 'deveye-feature-password';
-import { clientEntry as client3 } from 'deveye-feature-password/client';
-import { manifest as manifest4 } from 'deveye-feature-notes';
-import { clientEntry as client4 } from 'deveye-feature-notes/client';
-import { manifest as manifest5 } from 'deveye-feature-uptime';
-import { clientEntry as client5 } from 'deveye-feature-uptime/client';
-import { manifest as manifest6 } from 'deveye-feature-sentinel';
-import { clientEntry as client6 } from 'deveye-feature-sentinel/client';
-import { manifest as manifest7 } from 'deveye-feature-backup';
-import { clientEntry as client7 } from 'deveye-feature-backup/client';
-import { manifest as manifest8 } from 'deveye-feature-database';
-import { clientEntry as client8 } from 'deveye-feature-database/client';
-import { manifest as manifest9 } from 'deveye-feature-deploy';
-import { clientEntry as client9 } from 'deveye-feature-deploy/client';
-import { manifest as manifest10 } from 'deveye-feature-git';
-import { clientEntry as client10 } from 'deveye-feature-git/client';
-import { manifest as manifest11 } from 'deveye-feature-audience';
-import { clientEntry as client11 } from 'deveye-feature-audience/client';
-import { manifest as manifest12 } from 'deveye-feature-mail';
-import { clientEntry as client12 } from 'deveye-feature-mail/client';
-import { manifest as manifest13 } from 'deveye-feature-projects';
-import { clientEntry as client13 } from 'deveye-feature-projects/client';
-import { manifest as manifest14 } from 'deveye-feature-devices';
-import { clientEntry as client14 } from 'deveye-feature-devices/client';
-import { manifest as manifest15 } from 'deveye-feature-cve';
-import { clientEntry as client15 } from 'deveye-feature-cve/client';
-import { manifest as manifest16 } from 'deveye-feature-mailserver';
-import { clientEntry as client16 } from 'deveye-feature-mailserver/client';
-import { manifest as manifest17 } from 'deveye-feature-convert';
-import { clientEntry as client17 } from 'deveye-feature-convert/client';
-import { manifest as manifest18 } from 'deveye-feature-pdf';
-import { clientEntry as client18 } from 'deveye-feature-pdf/client';
-import { manifest as manifest19 } from 'deveye-feature-invoicing';
-import { clientEntry as client19 } from 'deveye-feature-invoicing/client';
-import { manifest as manifest20 } from 'deveye-feature-shortlinks';
-import { clientEntry as client20 } from 'deveye-feature-shortlinks/client';
-import { manifest as manifest21 } from 'deveye-feature-moderation';
-import { clientEntry as client21 } from 'deveye-feature-moderation/client';
-import { manifest as manifest22 } from 'deveye-feature-whiteboard';
-import { clientEntry as client22 } from 'deveye-feature-whiteboard/client';
-import { manifest as manifest23 } from 'deveye-feature-appstores';
-import { clientEntry as client23 } from 'deveye-feature-appstores/client';
+import { manifest as manifest1 } from 'deveye-feature-finance';
+import { clientEntry as client1 } from 'deveye-feature-finance/client';
+import { manifest as manifest2 } from 'deveye-feature-password';
+import { clientEntry as client2 } from 'deveye-feature-password/client';
+import { manifest as manifest3 } from 'deveye-feature-notes';
+import { clientEntry as client3 } from 'deveye-feature-notes/client';
+import { manifest as manifest4 } from 'deveye-feature-uptime';
+import { clientEntry as client4 } from 'deveye-feature-uptime/client';
+import { manifest as manifest5 } from 'deveye-feature-sentinel';
+import { clientEntry as client5 } from 'deveye-feature-sentinel/client';
+import { manifest as manifest6 } from 'deveye-feature-backup';
+import { clientEntry as client6 } from 'deveye-feature-backup/client';
+import { manifest as manifest7 } from 'deveye-feature-database';
+import { clientEntry as client7 } from 'deveye-feature-database/client';
+import { manifest as manifest8 } from 'deveye-feature-deploy';
+import { clientEntry as client8 } from 'deveye-feature-deploy/client';
+import { manifest as manifest9 } from 'deveye-feature-git';
+import { clientEntry as client9 } from 'deveye-feature-git/client';
+import { manifest as manifest10 } from 'deveye-feature-audience';
+import { clientEntry as client10 } from 'deveye-feature-audience/client';
+import { manifest as manifest11 } from 'deveye-feature-mail';
+import { clientEntry as client11 } from 'deveye-feature-mail/client';
+import { manifest as manifest12 } from 'deveye-feature-projects';
+import { clientEntry as client12 } from 'deveye-feature-projects/client';
+import { manifest as manifest13 } from 'deveye-feature-devices';
+import { clientEntry as client13 } from 'deveye-feature-devices/client';
+import { manifest as manifest14 } from 'deveye-feature-cve';
+import { clientEntry as client14 } from 'deveye-feature-cve/client';
+import { manifest as manifest15 } from 'deveye-feature-mailserver';
+import { clientEntry as client15 } from 'deveye-feature-mailserver/client';
+import { manifest as manifest16 } from 'deveye-feature-convert';
+import { clientEntry as client16 } from 'deveye-feature-convert/client';
+import { manifest as manifest17 } from 'deveye-feature-pdf';
+import { clientEntry as client17 } from 'deveye-feature-pdf/client';
+import { manifest as manifest18 } from 'deveye-feature-invoicing';
+import { clientEntry as client18 } from 'deveye-feature-invoicing/client';
+import { manifest as manifest19 } from 'deveye-feature-shortlinks';
+import { clientEntry as client19 } from 'deveye-feature-shortlinks/client';
+import { manifest as manifest20 } from 'deveye-feature-moderation';
+import { clientEntry as client20 } from 'deveye-feature-moderation/client';
+import { manifest as manifest21 } from 'deveye-feature-whiteboard';
+import { clientEntry as client21 } from 'deveye-feature-whiteboard/client';
+import { manifest as manifest22 } from 'deveye-feature-appstores';
+import { clientEntry as client22 } from 'deveye-feature-appstores/client';
 
 export const INSTALLED_CLIENT_FEATURES: readonly InstalledClientFeature[] = [
     { manifest: { ...manifest0, icon: 'cloud' }, client: client0 },
-    { manifest: { ...manifest1, icon: 'search' }, client: client1 },
-    { manifest: { ...manifest2, icon: 'finance' }, client: client2 },
-    { manifest: { ...manifest3, icon: 'lock' }, client: client3 },
-    { manifest: { ...manifest4, icon: 'notes' }, client: client4 },
-    { manifest: { ...manifest5, icon: 'uptime' }, client: client5 },
-    { manifest: { ...manifest6, icon: 'shield' }, client: client6 },
-    { manifest: { ...manifest7, icon: 'archive' }, client: client7 },
-    { manifest: { ...manifest8, icon: 'database' }, client: client8 },
-    { manifest: { ...manifest9, icon: 'rocket' }, client: client9 },
-    { manifest: { ...manifest10, icon: 'branch' }, client: client10 },
-    { manifest: { ...manifest11, icon: 'eye-open' }, client: client11 },
-    { manifest: { ...manifest12, icon: 'mail' }, client: client12 },
-    { manifest: { ...manifest13, icon: 'projects' }, client: client13 },
-    { manifest: { ...manifest14, icon: 'server' }, client: client14 },
-    { manifest: { ...manifest15, icon: 'bug' }, client: client15 },
-    { manifest: { ...manifest16, icon: 'at' }, client: client16 },
-    { manifest: { ...manifest17, icon: 'convert' }, client: client17 },
-    { manifest: { ...manifest18, icon: 'pdf' }, client: client18 },
-    { manifest: { ...manifest19, icon: 'invoicing' }, client: client19 },
-    { manifest: { ...manifest20, icon: 'shortlinks' }, client: client20 },
-    { manifest: { ...manifest21, icon: 'shield' }, client: client21 },
-    { manifest: { ...manifest22, icon: 'whiteboard' }, client: client22 },
-    { manifest: { ...manifest23, icon: 'appstores' }, client: client23 },
+    { manifest: { ...manifest1, icon: 'finance' }, client: client1 },
+    { manifest: { ...manifest2, icon: 'lock' }, client: client2 },
+    { manifest: { ...manifest3, icon: 'notes' }, client: client3 },
+    { manifest: { ...manifest4, icon: 'uptime' }, client: client4 },
+    { manifest: { ...manifest5, icon: 'shield' }, client: client5 },
+    { manifest: { ...manifest6, icon: 'archive' }, client: client6 },
+    { manifest: { ...manifest7, icon: 'database' }, client: client7 },
+    { manifest: { ...manifest8, icon: 'rocket' }, client: client8 },
+    { manifest: { ...manifest9, icon: 'branch' }, client: client9 },
+    { manifest: { ...manifest10, icon: 'eye-open' }, client: client10 },
+    { manifest: { ...manifest11, icon: 'mail' }, client: client11 },
+    { manifest: { ...manifest12, icon: 'projects' }, client: client12 },
+    { manifest: { ...manifest13, icon: 'server' }, client: client13 },
+    { manifest: { ...manifest14, icon: 'bug' }, client: client14 },
+    { manifest: { ...manifest15, icon: 'at' }, client: client15 },
+    { manifest: { ...manifest16, icon: 'convert' }, client: client16 },
+    { manifest: { ...manifest17, icon: 'pdf' }, client: client17 },
+    { manifest: { ...manifest18, icon: 'invoicing' }, client: client18 },
+    { manifest: { ...manifest19, icon: 'shortlinks' }, client: client19 },
+    { manifest: { ...manifest20, icon: 'shield' }, client: client20 },
+    { manifest: { ...manifest21, icon: 'whiteboard' }, client: client21 },
+    { manifest: { ...manifest22, icon: 'appstores' }, client: client22 },
     ...LOCAL_CLIENT_FEATURES
 ];

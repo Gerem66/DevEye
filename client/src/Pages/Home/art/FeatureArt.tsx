@@ -322,22 +322,6 @@ const ART: Record<ArtId, ReactNode> = {
             <circle cx='141' cy='38' r='3' fill={A} />
         </>
     ),
-    // Un réseau de traces, et la loupe qui vient d'en isoler une.
-    osint: (
-        <>
-            <line x1='32' y1='22' x2='68' y2='40' stroke={M} {...thin} />
-            <line x1='32' y1='60' x2='68' y2='40' stroke={M} {...thin} />
-            <line x1='68' y1='40' x2='114' y2='20' stroke={M} {...thin} />
-            <line x1='68' y1='40' x2='98' y2='52' stroke={M} {...thin} />
-            <circle cx='32' cy='22' r='4.5' fill={M} opacity='0.6' />
-            <circle cx='32' cy='60' r='4.5' fill={M} opacity='0.6' />
-            <circle cx='114' cy='20' r='4.5' fill={M} opacity='0.6' />
-            <circle cx='68' cy='40' r='6' fill={A} />
-            <circle cx='106' cy='56' r='14' fill={A} opacity='0.12' />
-            <circle cx='106' cy='56' r='14' stroke={A} {...stroke} />
-            <path d='M116 66 128 76' stroke={A} {...stroke} />
-        </>
-    ),
     // Une enveloppe, et la pile de messages derrière elle.
     mail: (
         <>

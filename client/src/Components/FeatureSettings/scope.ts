@@ -123,7 +123,7 @@ export function scopeDescription(scope: ShellScope): string {
     if (scope.kind === 'record') return scope.description;
     const feature = targetInfo(scope.feature);
     if (scope.kind === 'feature') {
-        // Le libellé tel quel : « Uptime », « OSINT » sont des noms propres, en
+        // Le libellé tel quel : « Uptime », « Git » sont des noms propres, en
         // minuscules ils se lisent comme une faute.
         return feature.hasItems
             ? `Réglages généraux de ${feature.label} : ils valent pour tout ce qu’elle contient, sauf là où un élément règle le sien.`

@@ -16,8 +16,8 @@ describe('forbiddenUninstallTargets', () => {
     });
 
     it("refuse une table d'un autre préfixe, allowlist ou pas", () => {
-        const sql = 'DROP TABLE IF EXISTS ft_countdown_items;\nDROP TABLE osint_lookups;';
-        assert.deepEqual(forbiddenUninstallTargets('x-countdown', sql), ['osint_lookups']);
+        const sql = 'DROP TABLE IF EXISTS ft_countdown_items;\nDROP TABLE weather_provider_keys;';
+        assert.deepEqual(forbiddenUninstallTargets('x-countdown', sql), ['weather_provider_keys']);
     });
 
     it('voit aussi un DELETE ou un TRUNCATE, pas seulement les DROP', () => {

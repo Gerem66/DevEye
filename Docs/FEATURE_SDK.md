@@ -81,9 +81,9 @@ d'un tiers. Jamais d'export « en douce » par un autre chemin.
 
 Un module in-repo a un privilège de plus, commenté à chaque usage : il peut
 importer un service RÉELLEMENT partagé de l'app (le garde SSRF de
-`Services/netFetch`) là où le barrel ne suffit pas. Un module externe, jamais ;
-côté client, aucun import `@/…` pour personne. S'il manque quelque chose au
-SDK, on l'ajoute au SDK.
+`Services/netFetch`) là où le barrel ne suffit pas. Un module externe, jamais :
+le même garde lui arrive par `ctx.net.fetch`. Côté client, aucun import
+`@/…` pour personne. S'il manque quelque chose au SDK, on l'ajoute au SDK.
 
 Un module déclare `@deveye/types` en `peerDependencies` (la seule du template) ;
 les modules in-repo y ajoutent `react` et `zod`, résolus depuis l'app.
@@ -354,7 +354,7 @@ scellé par un module ne s'ouvre ni dans un autre ni comme une clé de l'app, et
 stockée : pour ce qui doit survivre à la base (une clé rangée en table
 dormirait dans la sauvegarde qu'elle protège). Sauvegardes en dérive la clé de
 ses archives, que `scripts/restore-backup.mjs` refait sans DevEye ; Audience le
-sel de ses visiteurs ; Finances, Hébergement et OSINT s'en servent aussi.
+sel de ses visiteurs ; Finances et Hébergement s'en servent aussi.
 
 ### Le magasin d'objets
 

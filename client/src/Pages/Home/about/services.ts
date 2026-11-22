@@ -49,7 +49,7 @@ export const EXTERNAL_SERVICES: readonly ExternalService[] = [
     {
         name: 'ipwho.is',
         purpose: 'Situe une adresse IP : pays, drapeau et fournisseur d’accès',
-        receives: 'Votre adresse IP publique, ou celle que vous recherchez dans OSINT'
+        receives: 'Votre adresse IP publique, depuis votre navigateur'
     },
     {
         name: 'Let’s Encrypt',
@@ -78,9 +78,9 @@ export const EXTERNAL_SERVICES: readonly ExternalService[] = [
     },
     {
         name: 'GitHub',
-        purpose: 'Lit vos dépôts, lance vos déploiements et cherche des comptes publics',
-        receives: 'Votre jeton d’accès, les dépôts que vous désignez et les noms que vous recherchez',
-        features: ['git', 'deploy', 'x-audit', 'osint']
+        purpose: 'Lit vos dépôts et lance vos déploiements',
+        receives: 'Votre jeton d’accès et les dépôts que vous désignez',
+        features: ['git', 'deploy', 'x-audit']
     },
     {
         name: 'App Store Connect (Apple)',
@@ -161,108 +161,6 @@ export const EXTERNAL_SERVICES: readonly ExternalService[] = [
         purpose: 'Dit si une dépendance de vos projets est dépréciée, ou en retard sur sa dernière version',
         receives: 'Le nom des dépendances que vos projets déclarent',
         features: ['cve']
-    },
-    {
-        name: 'Cloudflare et Google Public DNS',
-        purpose: 'Lisent les enregistrements DNS publics d’un domaine',
-        receives: 'Le domaine ou l’adresse IP recherchés',
-        features: ['osint']
-    },
-    {
-        name: 'rdap.org',
-        purpose: 'Donne le titulaire et les dates d’un domaine ou d’une adresse IP',
-        receives: 'Le domaine ou l’adresse IP recherchés',
-        features: ['osint']
-    },
-    {
-        name: 'Annuaires WHOIS (IANA et registres)',
-        purpose: 'Donnent la fiche d’enregistrement d’un domaine',
-        receives: 'Le domaine recherché',
-        features: ['osint']
-    },
-    {
-        name: 'crt.sh',
-        purpose: 'Liste les certificats émis pour un domaine',
-        receives: 'Le domaine recherché',
-        features: ['osint']
-    },
-    {
-        name: 'VirusTotal',
-        purpose: 'Réputation d’un domaine ou d’une adresse IP, avec votre clé',
-        receives: 'Votre clé et le domaine ou l’adresse IP recherchés',
-        features: ['osint']
-    },
-    {
-        name: 'Shodan',
-        purpose: 'Liste les services ouverts d’une adresse IP',
-        receives: 'L’adresse IP recherchée, et votre clé si vous en donnez une',
-        features: ['osint']
-    },
-    {
-        name: 'SpamCop, Barracuda et Spamhaus',
-        purpose: 'Disent si une adresse IP figure sur une liste noire de spam',
-        receives: 'L’adresse IP recherchée, et votre clé Spamhaus si vous en donnez une',
-        features: ['osint']
-    },
-    {
-        name: 'Have I Been Pwned',
-        purpose: 'Liste les fuites de données où figure une adresse e-mail, avec votre clé',
-        receives: 'Votre clé et l’adresse e-mail recherchée',
-        features: ['osint']
-    },
-    {
-        name: 'Gravatar',
-        purpose: 'Cherche le profil public lié à une adresse e-mail ou à un pseudonyme',
-        receives: 'Une empreinte de l’adresse e-mail, ou le pseudonyme recherché',
-        features: ['osint']
-    },
-    {
-        name: 'keys.openpgp.org et keyserver.ubuntu.com',
-        purpose: 'Cherchent les clés de chiffrement publiées pour une adresse e-mail',
-        receives: 'L’adresse e-mail recherchée',
-        features: ['osint']
-    },
-    {
-        name: 'Keybase',
-        purpose: 'Cherche un compte Keybase et ses preuves d’identité',
-        receives: 'Le pseudonyme recherché',
-        features: ['osint']
-    },
-    {
-        name: 'Réseaux sociaux et forges de code',
-        purpose: 'Une trentaine de sites (Reddit, Instagram, TikTok, GitLab…) disent si un pseudonyme y a un compte',
-        receives: 'Le pseudonyme recherché',
-        features: ['osint']
-    },
-    {
-        name: 'Numverify',
-        purpose: 'Donne l’opérateur d’un numéro de téléphone, avec votre clé',
-        receives: 'Votre clé et le numéro recherché',
-        features: ['osint']
-    },
-    {
-        name: 'matchID',
-        purpose: 'Cherche une personne dans le fichier public des décès de l’Insee',
-        receives: 'Le nom recherché',
-        features: ['osint']
-    },
-    {
-        name: 'Annuaire des entreprises',
-        purpose: 'Liste les sociétés qu’une personne dirige, d’après les données publiques de l’État',
-        receives: 'Le nom et le prénom recherchés',
-        features: ['osint']
-    },
-    {
-        name: 'Pappers',
-        purpose: 'Liste les mandats de dirigeant d’une personne, avec votre clé',
-        receives: 'Votre clé et le nom recherché',
-        features: ['osint']
-    },
-    {
-        name: 'Wikidata',
-        purpose: 'Cherche une personnalité publique et ses comptes officiels',
-        receives: 'Le nom recherché',
-        features: ['osint']
     }
 ];
 

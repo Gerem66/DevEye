@@ -3,8 +3,7 @@
 La page admin Services externes (menu du compte, administrateur global) montre
 chaque dépendance externe de l'instance : son état, ses chiffres utiles et ce
 qu'elle coûte. Les services qu'un espace règle lui-même (son webhook Discord,
-son instance Dokploy, ses clés OSINT) n'y figurent pas : ils sont ceux de ses
-membres.
+son instance Dokploy) n'y figurent pas : ils sont ceux de ses membres.
 
 ## Ce que la page lit
 

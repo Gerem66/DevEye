@@ -1,6 +1,7 @@
 import type {
     FeatureServer,
     SdkFeatureContext,
+    SdkNet,
     SdkOrigins,
     SdkProviders,
     SdkSocketTransport
@@ -26,6 +27,7 @@ import { createFacade } from './facade';
 import { moduleManifest } from './register';
 import { accountChanged } from './live';
 import { adminPending } from '@/Services/adminPending';
+import { safeFetch } from '@/Services/netFetch';
 import { createQuota, quotaCounter } from './quota';
 import { createFeatureStore } from './store';
 
@@ -46,6 +48,12 @@ export const ORIGINS: SdkOrigins = {
     app: env.PUBLIC_ORIGIN.replace(/\/+$/, ''),
     public: (env.AUDIENCE_ORIGIN || env.PUBLIC_ORIGIN).replace(/\/+$/, ''),
     site: env.SITE_URL ? env.SITE_URL.replace(/\/+$/, '') : null
+};
+
+/** Le garde de l'app, le même que celui des modules in-repo : un garde écrit deux fois se corrige une fois. */
+const NET: SdkNet = {
+    // Le `Response` d'undici et celui du runtime ont la même forme, pas le même type.
+    fetch: (input, init) => safeFetch(input, init) as unknown as Promise<Response>
 };
 
 export function createSdkContext(
@@ -224,7 +232,8 @@ export function createSdkContext(
         logger: ctx.logger,
         requestId: ctx.requestId,
         progress: (update) => ctx.progress?.(update),
-        origins: ORIGINS
+        origins: ORIGINS,
+        net: NET
     };
 }
 
