@@ -10,11 +10,10 @@ export interface GlossaryEntry {
  * sert partout où le terme apparaît, par `<Term id='…'>`.
  */
 export const GLOSSARY = {
-    zeroKnowledge: {
-        title: 'Zero knowledge',
+    passwordEncryption: {
+        title: 'Chiffrement par mot de passe',
         body: [
-            'Littéralement « connaissance nulle » : le service qui héberge vos données n’a pas de quoi les lire. Elles sont chiffrées avec une clé tirée de votre mot de passe, que le serveur ne conserve pas.',
-            'Concrètement, tant que vous n’avez pas déverrouillé votre session, personne ne peut consulter ces données : ni l’administrateur du serveur, ni quelqu’un qui volerait la base de données.',
+            'Ces données sont chiffrées avec une clé tirée de votre mot de passe, que le serveur ne conserve pas. Tant que votre session est verrouillée, personne ne peut les consulter : ni l’administrateur du serveur, ni quelqu’un qui volerait la base de données.',
             'Deux contreparties. Rien ne peut travailler dessus en votre absence (pas de synchronisation ni d’alerte en arrière-plan). Et pendant que votre session est déverrouillée, le serveur les déchiffre en mémoire pour vous les afficher, puis oublie la clé.'
         ]
     },
@@ -22,7 +21,7 @@ export const GLOSSARY = {
         title: 'Chiffrement',
         body: [
             'Chiffrer une donnée, c’est la brouiller avec une clé secrète : sans cette clé, elle est illisible, même pour qui met la main sur le fichier ou la base de données.',
-            'Ce qui compte ensuite, c’est de savoir qui détient la clé : le serveur (pratique, il peut travailler seul) ou vous uniquement (plus sûr, mais rien ne se fait sans vous).'
+            'Ce qui compte ensuite, c’est de savoir qui détient la clé : le serveur (pratique, il peut travailler seul) ou vous, par votre mot de passe (plus sûr, mais rien ne se fait sans vous).'
         ]
     },
     twoFactor: {

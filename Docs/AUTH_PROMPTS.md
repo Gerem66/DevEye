@@ -32,7 +32,8 @@ celle qui existe au lieu d'en écrire une.
   (plusieurs appels concurrents partagent la même invite).
 
 Il n'y a pas de mot de passe par espace : la protection réelle est le
-chiffrement.
+chiffrement de l'étage gardé, dans l'espace personnel d'un compte qui a activé
+le chiffrement par mot de passe. Un espace partagé se lit sans invite.
 
 ## 1 bis. `RemoteLogin` : connexion à une instance distante
 

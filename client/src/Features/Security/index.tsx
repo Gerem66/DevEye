@@ -75,13 +75,19 @@ function showEncryptionInfo() {
                 </p>
                 <p>
                     Avec ce mode activé, la DEK est chiffrée par une clé dérivée de <strong>votre mot de passe</strong>{' '}
-                    via Argon2id (résistant aux GPUs). Le serveur ne stocke jamais votre mot de passe ni la DEK en clair
-                    : même un accès à la base de données ne suffit pas à lire vos données.
+                    via Argon2id (résistant aux GPUs). Le serveur ne stocke ni votre mot de passe ni la DEK en clair :
+                    la base de données, même volée avec la clé du serveur, ne suffit pas à lire ces données.
                 </p>
                 <p>
-                    Ce mode protège l&apos;étage gardé (notes privées, coffre, projets confidentiels). Ce qu&apos;une
-                    tâche de fond doit lire sans vous (Uptime, intégrations, CloudSync) reste chiffré au repos mais
-                    lisible par le serveur.
+                    Le serveur reçoit votre mot de passe à la connexion et au déverrouillage, en tire la clé, et garde
+                    la DEK en mémoire le temps de la session déverrouillée : pendant ce temps-là, il déchiffre pour vous
+                    afficher vos données.
+                </p>
+                <p>
+                    Ce mode protège l&apos;étage gardé (notes privées, coffre, projets confidentiels, boîtes mail
+                    protégées), dans votre espace personnel. Ce qu&apos;une tâche de fond doit lire sans vous (relevés
+                    Uptime, identifiants de bases, de sauvegardes et de dépôts, CloudSync) reste chiffré au repos mais
+                    lisible par le serveur, comme tout ce que contient un espace partagé.
                 </p>
                 <p>
                     Le <strong>code de récupération</strong> chiffre une seconde copie de la DEK via une clé Argon2id
@@ -519,8 +525,8 @@ export default function Security({ user: _user, workspace: _ws }: FeatureProps) 
                             onInfo={showEncryptionInfo}
                             hint={
                                 encryptionEnabled
-                                    ? 'Vos données chiffrées ne se lisent qu’avec votre mot de passe.'
-                                    : 'Verrouillez vos données chiffrées avec votre mot de passe : sans lui, le serveur lui-même ne peut pas les lire.'
+                                    ? 'Vos données protégées ne se lisent qu’une fois la session déverrouillée par votre mot de passe.'
+                                    : 'Verrouillez vos données protégées avec votre mot de passe : tant que la session est verrouillée, le serveur lui-même ne peut pas les lire.'
                             }
                         >
                             <Switch

@@ -105,7 +105,7 @@ export const financeTransactionAddFeature = defineSdkFeature({
         ctx.audit({
             action: 'finance.transactionAdd',
             description: 'Opération enregistrée',
-            metadata: { transactionId: id, kind: draft.kind, amount: draft.amount }
+            metadata: { transactionId: id, kind: draft.kind }
         });
         return { transaction: toTransaction(row, payload) };
     }

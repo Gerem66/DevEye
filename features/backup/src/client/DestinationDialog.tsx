@@ -9,6 +9,7 @@ import {
     errorNote,
     SearchSelect,
     SegmentedControl,
+    ServerHeldNote,
     Switch,
     TextInput,
     useDevices,
@@ -451,6 +452,13 @@ export default function DestinationDialog({ open, destination, onClose, onSaved 
                             hint='Activé pour Garage et MinIO (https://hôte/bucket/clé). À désactiver pour AWS S3.'
                         />
                     </>
+                )}
+
+                {(kind === 'sftp' || kind === 'webdav' || kind === 's3') && (
+                    <span className={styles.fieldHint}>
+                        <ServerHeldNote purpose='lancer les sauvegardes planifiées' /> Donnez-lui un accès limité à ce
+                        seul emplacement.
+                    </span>
                 )}
 
                 <ErrorNote note={error} />

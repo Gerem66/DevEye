@@ -3,8 +3,8 @@
 -- Les contenus de fichiers ne sont PAS en base : ils vivent dans un blob store
 -- disque chiffré (clé serveur, voir src/cloudSync/blobCrypto.ts), adressés par
 -- le SHA-256 de leur clair. Ici on ne garde que l'index : chemins, hashes,
--- tailles, mtimes, appareil source. Exception assumée au modèle zero-knowledge
--- (la synchro tourne en tâche de fond, session verrouillée ou non) — voir
+-- tailles, mtimes, appareil source. Exception assumée au chiffrement par mot de
+-- passe (la synchro tourne en tâche de fond, session verrouillée ou non) : voir
 -- Docs/SECURITY_MODEL.md.
 --
 -- Invariant central : sync_versions référence toujours un blob présent AVANT

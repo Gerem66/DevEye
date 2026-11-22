@@ -17,9 +17,10 @@ agent installé sur vos machines peut lui remonter leur état.
   [`@deveye/types`](https://github.com/Gerem66/DevEye-Types)
 
 **Chiffré au repos, avec une clé par utilisateur.** Activez le chiffrement par
-mot de passe et le serveur lui-même ne peut plus lire vos données : voir
+mot de passe et ce que vous protégez devient illisible dans la base de données
+et tant que votre session est verrouillée : voir
 [Docs/SECURITY_MODEL.md](./Docs/SECURITY_MODEL.md) pour ce que chaque étage
-garantit.
+garantit, et ce qu'un serveur en marche lit toujours.
 
 Pour les détails d'implémentation, voir [Docs/README.md](./Docs/README.md).
 

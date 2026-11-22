@@ -254,8 +254,10 @@ Le propriétaire ne quitte pas son espace et seul lui le supprime
 
 ### Le modèle
 
-- **Espace personnel** → la DEK du compte. Si le chiffrement par mot de passe est
-  actif, elle est emballée par ce mot de passe et le serveur ne peut rien lire.
+- **Espace personnel** → les deux DEK du compte. Si le chiffrement par mot de
+  passe est actif, la DEK gardée est emballée par ce mot de passe : le serveur
+  ne lit cet étage que session déverrouillée. La DEK ouverte reste emballée par
+  la clé serveur.
 - **Espace partagé** → sa propre clé (WDK, table `workspace_secret_keys`),
   **toujours emballée par la clé serveur**. Tout membre lit l'espace sans aucun
   mot de passe, le rôle étant la seule frontière. Les tâches de fond y travaillent

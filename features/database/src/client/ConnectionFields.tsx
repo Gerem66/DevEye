@@ -1,4 +1,4 @@
-import { DeviceRelayField, SegmentedControl, TextInput } from 'deveye-sdk-client';
+import { DeviceRelayField, SegmentedControl, ServerHeldNote, TextInput } from 'deveye-sdk-client';
 import type { Database, DatabaseAccessKind, DatabaseSshAuth } from '../contracts/domain';
 
 import { api } from './api';
@@ -195,9 +195,10 @@ export function ConnectionFields({
                     onChange={(e) => onChange({ password: e.target.value })}
                 />
                 <span className={styles.hint}>
-                    Un compte en <strong>lecture seule</strong> suffit tant qu’on ne fait que consulter. Pour modifier
-                    des lignes depuis l’explorateur, il faut un compte qui en a le droit : c’est le serveur qui tranche
-                    en dernier ressort.
+                    <ServerHeldNote purpose='relever la base, vérifier ses alertes et la sauvegarder' /> Un compte en{' '}
+                    <strong>lecture seule</strong> suffit tant qu’on ne fait que consulter. Pour modifier des lignes
+                    depuis l’explorateur, il faut un compte qui en a le droit : c’est le serveur qui tranche en dernier
+                    ressort.
                     {existing?.hasPassword && ' Laissez vide pour conserver celui enregistré.'}
                 </span>
             </label>
@@ -321,8 +322,8 @@ export function AccessFields({ form, onChange, disabled, existing }: FieldsProps
                             />
                         )}
                         <span className={styles.hint}>
-                            La clé reste en mémoire du serveur le temps de la connexion : elle n’est jamais écrite sur
-                            disque, et ne redescend jamais jusqu’ici.
+                            <ServerHeldNote purpose='ouvrir le tunnel' /> Il le conserve chiffré, ne l’écrit dans aucun
+                            fichier, et ne le renvoie jamais jusqu’ici.
                         </span>
                     </label>
                 </>

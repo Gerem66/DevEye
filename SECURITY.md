@@ -37,10 +37,24 @@ Please give the fix 90 days, or until it is released, before you publish.
 
 [Docs/SECURITY_MODEL.md](./Docs/SECURITY_MODEL.md) states what DevEye protects
 and what it does not. A limit that document already acknowledges (for example,
-what a live server can read when password-based encryption is off) is not a
-vulnerability. Anything that breaks a guarantee it makes is, and is the most
-valuable report you can send.
+what a live server can read: everything when password-based encryption is off,
+and the protected tier too while a session is unlocked) is not a vulnerability.
+Anything that breaks a guarantee it makes is, and is the most valuable report
+you can send.
 
 Out of scope: findings that require physical access or an already compromised
 administrator account, missing hardening headers without a demonstrated impact,
 and automated scanner output without a working proof.
+
+## What is verified automatically
+
+Every push runs the unit tests of the server, the client, the modules and the
+agent; a test that checks every query of the core repositories against the
+guard it declares (workspace, account, device); a check that prepares, on a
+throwaway MySQL database, every SQL statement the server can send; and a pass
+that opens every module in a real browser. Dependency advisories are checked
+every week for the agent's crates.
+
+These checks are written and maintained by the project itself. No third party
+has audited DevEye or tested it for intrusion yet: read the guarantees of the
+security model as claims the code and its tests back, not as certified ones.

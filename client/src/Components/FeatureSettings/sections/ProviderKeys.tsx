@@ -4,6 +4,7 @@ import { errorNote } from '@/api/useResource';
 import Button from '@/Components/Button';
 import { Dialog, DialogCancelButton } from '@/Components/Dialog';
 import ErrorNote, { type ErrorNoteInput } from '@/Components/ErrorNote';
+import ServerHeldNote from '@/Components/ServerHeldNote';
 import TextInput from '@/Components/TextInput';
 
 import ReadOnlyNotice from '../ReadOnlyNotice';
@@ -180,6 +181,9 @@ export function ProviderKeys({ rows, canWrite, onSave, onRemove, readOnlyHint }:
                             {editing?.held
                                 ? 'La clé enregistrée n’est jamais réaffichée. Laissez vide pour la conserver.'
                                 : 'Elle est chiffrée puis conservée pour cet espace.'}
+                        </span>
+                        <span className={styles.fieldHint}>
+                            <ServerHeldNote purpose='interroger ce service' />
                         </span>
                         {!editing?.held && editing?.signupUrl && (
                             <a

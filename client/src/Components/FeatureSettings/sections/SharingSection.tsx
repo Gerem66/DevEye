@@ -33,7 +33,7 @@ import ItemGrantsPanel from './ItemGrantsPanel';
 const BLOCKER_TEXT: Record<ShareBlocker, string> = {
     feature:
         'Cette fonctionnalité ne se partage pas encore entre espaces : son listage ne sait pas aller chercher les éléments projetés.',
-    item: 'Cet élément est chiffré au palier « gardé ». Le serveur ne peut pas le relire pour un autre espace, et il n’est donc pas projetable — passez-le au palier ouvert si sa nature s’y prête.',
+    item: 'Cet élément est chiffré au palier « gardé » : il ne se lit qu’une fois votre session déverrouillée, et n’est donc pas projetable dans un autre espace. Passez-le au palier ouvert si sa nature s’y prête.',
     forbidden: 'Vous n’avez pas le droit de partager les éléments de cette fonctionnalité.',
     foreign:
         'Cet élément vient d’un autre espace, où vous n’avez pas le droit de le modifier : son partage se règle par ceux qui l’ont. Qui tient l’écriture de l’élément chez lui peut, en revanche, régler son partage d’ici.'

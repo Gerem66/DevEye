@@ -6,6 +6,7 @@ import {
     ErrorNote,
     errorNote,
     invalidate,
+    ServerHeldNote,
     settingsStyles as shell,
     TextInput,
     useResource,
@@ -242,6 +243,9 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
                             {editing?.credential
                                 ? 'Laissez vide pour conserver le jeton en place : il n’est jamais renvoyé.'
                                 : 'Un jeton en lecture seule suffit (Contents). Ajoutez Actions et Deployments en lecture pour qu’Uptime reconnaisse vos mises en ligne.'}
+                        </span>
+                        <span className={shell.fieldHint}>
+                            <ServerHeldNote purpose='suivre vos dépôts' />
                         </span>
                     </label>
 

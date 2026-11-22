@@ -29,7 +29,8 @@ const COPY_FAILED = 'Impossible de copier le mot de passe.';
 
 function Password({ closeFeature }: FeatureViewProps) {
     // L'espace borne le coffre ; son changement recharge la liste.
-    const workspaceId = useActiveWorkspace()?.id ?? null;
+    const workspace = useActiveWorkspace();
+    const workspaceId = workspace?.id ?? null;
     const [loaded, setLoaded] = useState(false);
     const [search, setSearch] = useState('');
     const [allPasswords, setAllPasswords] = useState<RowPassword[]>([]);
@@ -257,6 +258,15 @@ function Password({ closeFeature }: FeatureViewProps) {
 
     const visibleCategories = Object.keys(categories).filter((c) => categories[c].length > 0);
 
+    // Le coffre n'est verrouillé par le mot de passe que dans un espace
+    // personnel dont le compte a activé le chiffrement par mot de passe.
+    const serverReadable =
+        workspace?.kind === 'shared'
+            ? 'Coffre d’un espace partagé : ses membres y accèdent, et le serveur garde de quoi le lire.'
+            : enabled
+              ? null
+              : 'Le chiffrement par mot de passe n’est pas activé (Sécurité) : le serveur garde de quoi lire ce coffre.';
+
     return (
         <div className={styles.container}>
             <StickyHeader className={styles.headerBand}>
@@ -267,6 +277,7 @@ function Password({ closeFeature }: FeatureViewProps) {
                             {allPasswords.length} entrée{allPasswords.length !== 1 ? 's' : ''} enregistrée
                             {allPasswords.length !== 1 ? 's' : ''}
                         </p>
+                        {serverReadable && <p className={styles.subtitle}>{serverReadable}</p>}
                     </div>
                     <Button icon='plus' onClick={() => void openEditPopup(null)}>
                         Ajouter

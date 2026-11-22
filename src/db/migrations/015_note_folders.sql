@@ -2,7 +2,7 @@
 -- folders survive reloads and can be renamed/deleted independently of notes.
 --
 -- Like notes, a folder's name is sensitive and lives encrypted in `content`
--- (a `{ name }` payload) — the server stays zero-knowledge about folder names.
+-- (a `{ name }` payload): the database never holds a folder name in clear.
 -- `workspace_id` NULL is the caller's personal workspace (id 0 client-side).
 CREATE TABLE IF NOT EXISTS note_folders (
     id           INT AUTO_INCREMENT PRIMARY KEY,

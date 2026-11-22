@@ -46,7 +46,7 @@ export function SecurityTierChoice({ value, onChange, disabled, pending, onPick,
                             <p>
                                 Relevée automatiquement en arrière-plan, et utilisable par les autres fonctionnalités,
                                 par exemple pour envoyer les alertes d’Uptime. En contrepartie, le serveur garde de quoi
-                                la lire à tout moment : ce n’est pas du <Term id='zeroKnowledge'>zero knowledge</Term>.
+                                la lire à tout moment.
                             </p>
                         )
                     },
@@ -56,9 +56,9 @@ export function SecurityTierChoice({ value, onChange, disabled, pending, onPick,
                         icon: 'icon-lock',
                         description: (
                             <p>
-                                Chiffrée avec votre mot de passe, en <Term id='zeroKnowledge'>zero knowledge</Term> :
-                                une fois votre session verrouillée, ni le serveur ni aucune autre fonctionnalité ne peut
-                                la lire. En contrepartie, elle ne se relève que lorsque vous la consultez, et ne peut
+                                Protégée par le <Term id='passwordEncryption'>chiffrement par mot de passe</Term> : une
+                                fois votre session verrouillée, ni le serveur ni aucune autre fonctionnalité ne peut la
+                                lire. En contrepartie, elle ne se relève que lorsque vous la consultez, et ne peut
                                 envoyer aucune alerte.
                             </p>
                         ),

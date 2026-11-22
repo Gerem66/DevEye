@@ -1,4 +1,4 @@
--- TOTP two-factor authentication. The secret is encrypted at rest (zero-knowledge).
+-- TOTP two-factor authentication. The secret is encrypted at rest under the server key.
 -- Recovery codes are stored as SHA-256 hashes; raw codes are shown once.
 
 CREATE TABLE IF NOT EXISTS user_2fa (

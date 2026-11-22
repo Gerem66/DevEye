@@ -9,6 +9,7 @@ import {
     ErrorNote,
     errorNote,
     invalidate,
+    ServerHeldNote,
     settingsStyles as shell,
     TextArea,
     TextInput,
@@ -484,6 +485,9 @@ export function SourceDialog({ open, source, onClose }: SourceDialogProps) {
                             Laissez vide pour garder la clé en place : elle n’est jamais renvoyée.
                         </span>
                     )}
+                    <span className={shell.fieldHint}>
+                        <ServerHeldNote purpose='relever vos téléchargements, vos ventes et vos avis' />
+                    </span>
                 </div>
 
                 {apple ? (

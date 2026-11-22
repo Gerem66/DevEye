@@ -223,7 +223,7 @@ export function SecurityDialog({ open, enabled, intent, hasRecovery, onClose, on
             open={open}
             onClose={close}
             title='Activer le chiffrement par mot de passe'
-            description='Vos données chiffrées seront verrouillées par votre mot de passe. Même en cas de vol de la base, elles resteront illisibles sans celui-ci.'
+            description='Vos notes privées, votre coffre, vos projets confidentiels et vos boîtes mail protégées seront verrouillés par votre mot de passe. Même en cas de vol de la base, ils resteront illisibles sans celui-ci.'
             onSubmit={() => void onEnable()}
             footer={
                 <>

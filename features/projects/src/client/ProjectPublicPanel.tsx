@@ -98,8 +98,8 @@ export default function ProjectPublicPanel({ scope, canWrite }: SettingsPanelPro
         return (
             <div className={shell.section}>
                 <p className={shell.notice}>
-                    Ce projet est confidentiel : il est chiffré par votre mot de passe, que le serveur n’a pas. Il ne
-                    peut donc pas être montré au public.
+                    Ce projet est confidentiel : il ne se lit qu’une fois la session déverrouillée par votre mot de
+                    passe. Il ne peut donc pas être montré au public.
                 </p>
             </div>
         );

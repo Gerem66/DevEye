@@ -8,6 +8,7 @@ import {
     errorNote,
     invalidate,
     SegmentedControl,
+    ServerHeldNote,
     settingsStyles as shell,
     TextInput,
     useDevices,
@@ -471,6 +472,9 @@ export default function CredentialsPanel({ canWrite }: SettingsPanelProps) {
                                 </span>
                             )
                         )}
+                        <span className={shell.fieldHint}>
+                            <ServerHeldNote purpose='suivre et lancer vos déploiements' />
+                        </span>
                     </label>
 
                     {formStatus?.draft === draftKey && <p className={shell.notice}>{formStatus.text}</p>}

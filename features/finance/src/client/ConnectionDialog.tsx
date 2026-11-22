@@ -8,6 +8,7 @@ import {
     errorNote,
     SearchSelect,
     SegmentedControl,
+    ServerHeldNote,
     settingsStyles as shell,
     TextInput,
     type ErrorNoteInput,
@@ -280,6 +281,9 @@ export default function ConnectionDialog({ open, connection, enableBanking, onCl
                                 {connection === null
                                     ? 'Dans Qonto : Paramètres, Intégrations et partenariats, Clé API. Elle ne permet que de lire : aucun virement ne peut partir d’ici.'
                                     : 'Laissez vide pour garder ceux en place : ils ne sont jamais renvoyés.'}
+                            </span>
+                            <span className={shell.fieldHint}>
+                                <ServerHeldNote purpose='relever vos comptes' />
                             </span>
                         </label>
                     </>

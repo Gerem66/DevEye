@@ -184,7 +184,7 @@ export async function postOccurrence(
     ctx.audit({
         action: 'finance.recurringPost',
         description: 'Échéance enregistrée',
-        metadata: { recurringId: row.id, transactionId: id, amount }
+        metadata: { recurringId: row.id, transactionId: id }
     });
     return id;
 }

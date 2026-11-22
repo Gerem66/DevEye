@@ -129,8 +129,9 @@ export default function FeaturesTab() {
                     <li className={styles.serviceItem}>
                         <strong>Chiffrement par mot de passe</strong>
                         <span>
-                            Leur contenu est chiffré par une clé dérivée de votre mot de passe. Le serveur ne le voit
-                            jamais en clair, et un déverrouillage est demandé avant lecture.
+                            Demandent un déverrouillage avant lecture. Quand le chiffrement par mot de passe est activé,
+                            leur contenu protégé est illisible dans la base de données et tant que la session est
+                            verrouillée ; sans lui, le serveur garde de quoi le lire.
                         </span>
                         <div className={styles.chips}>
                             {encrypted.map((entry) => (

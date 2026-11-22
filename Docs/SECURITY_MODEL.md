@@ -5,16 +5,26 @@ chaque étage garantit, et ce qu'il ne garantit pas.
 
 ## Ce que le serveur peut lire, en une phrase
 
-Tout est chiffré au repos, sous une clé par utilisateur. Par défaut, le serveur
-détient de quoi déballer cette clé : il lit. Quand l'utilisateur active le
-**chiffrement par mot de passe**, l'étage gardé ne s'ouvre plus qu'avec son mot
-de passe vivant : le serveur ne lit plus. L'étage ouvert (ce qu'une tâche de
-fond doit servir sans personne devant l'écran : Uptime, intégrations, CloudSync)
-reste lisible par un serveur vivant, quoi qu'il arrive. Seule exception : un
-partage CloudSync **chiffré de bout en bout**, dont seuls les appareils ont la
-clé (voir la section CloudSync). « Zero-knowledge » est donc une propriété que
-l'utilisateur obtient sur l'étage gardé en activant le chiffrement par mot de
-passe, pas l'état par défaut d'une installation.
+Les contenus sont chiffrés au repos, sous une clé par utilisateur. Par défaut,
+le serveur détient de quoi déballer cette clé : il lit. Quand l'utilisateur
+active le **chiffrement par mot de passe**, l'étage gardé de son espace
+personnel ne s'ouvre plus qu'avec son mot de passe : la base de données et la
+clé du serveur ne suffisent plus, et un serveur dont la session est verrouillée
+ne lit pas. Un serveur en marche reçoit pourtant ce mot de passe à chaque
+connexion et à chaque déverrouillage, en tire la clé et la garde en mémoire
+tant que la session est déverrouillée : pendant ce temps-là, il lit. L'étage
+ouvert (ce qu'une tâche de fond doit servir sans personne devant l'écran :
+relevés, identifiants d'infrastructure, CloudSync) reste lisible par un serveur
+vivant, quoi qu'il arrive, comme tout ce que contient un espace partagé. Seule
+exception : un partage CloudSync **chiffré de bout en bout**, dont seuls les
+appareils ont la clé (voir la section CloudSync).
+
+DevEye n'est donc pas « zero knowledge » : le mot promet un serveur qui ne
+reçoit jamais de quoi lire. Ce que le chiffrement par mot de passe garantit se
+dit autrement : illisible dans la base de données, et tant que la session est
+verrouillée. Le détail de ce que le serveur lit toujours est dans
+[Ce que le serveur peut toujours lire](#ce-que-le-serveur-peut-toujours-lire),
+celui de ce qui n'est pas chiffré dans [Ce qui reste en clair](#ce-qui-reste-en-clair).
 
 ## Chiffrement par enveloppe ("envelope encryption")
 
@@ -33,8 +43,9 @@ décrit côté types dans `src/domain/secrecy.ts` de `@deveye/types`.
     - **`password`** → emballée par une clé dérivée du mot de passe via
       **Argon2id** (profil versionné par ligne, `KDF_VERSIONS` : une ligne dérivée
       sous un ancien profil se ré-emballe sous le courant au déverrouillage
-      suivant, sans migration). Le serveur ne peut alors plus lire les données
-      sans le mot de passe vivant. Limite à connaître : activer le chiffrement ne fait pas
+      suivant, sans migration). Le serveur ne peut alors plus déballer la DEK
+      sans le mot de passe, qu'il reçoit à la connexion et au déverrouillage.
+      Limite à connaître : activer le chiffrement ne fait pas
       tourner la DEK. Une sauvegarde de la base antérieure à l'activation contient
       encore `dek_wrapped` sous la clé serveur, et cette DEK est toujours celle
       du contenu : qui détient ce dump **et** `CRYPT_KEY_A/B` lit tout ce qui
@@ -49,9 +60,11 @@ décrit côté types dans `src/domain/secrecy.ts` de `@deveye/types`.
   refait sur le mot de passe (`secrecy.regenerateRecovery`) : l'ancien cesse
   aussitôt de servir.
 
-**Conséquence importante :** rien n'est jamais stocké en clair en BDD. Même
-feature OFF, les données sont chiffrées (DEK distincte par user) ; seul le niveau
-d'emballage de la DEK change.
+**Conséquence :** aucun contenu n'est stocké en clair en BDD. Même feature OFF,
+les contenus sont chiffrés (DEK distincte par user) ; seul le niveau
+d'emballage de la DEK change. Ce qui n'est pas un contenu (nombres, dates,
+états, rattachements) n'est pas chiffré : voir
+[Ce qui reste en clair](#ce-qui-reste-en-clair).
 
 **Une primitive, deux formats de blob** (`src/Services/Encryption.ts`), tous
 deux AES-256-GCM. Sous une DEK ou une WDK (le contenu, et l'emballage d'une DEK
@@ -69,10 +82,17 @@ Détail et procédure de passage dans [KEY_ROTATION.md](./KEY_ROTATION.md).
 Chaque contexte expose **deux** codecs (`Cipher`), chacun adossé à une clé
 différente : c'est le choix du codec qui fait le contrôle d'accès :
 
-| Étage  | Côté module (SDK)       | Contexte natif    | Clé                | Emballage                  | Lisible sans mot de passe ? |
-| ------ | ----------------------- | ----------------- | ------------------ | -------------------------- | --------------------------- |
-| gardé  | `ctx.cipher('private')` | `ctx.secure`      | `dek_wrapped`      | `server` **ou** `password` | non quand la feature est ON |
-| ouvert | `ctx.cipher()` (défaut) | `ctx.secure.open` | `open_dek_wrapped` | **toujours** `server`      | oui, toujours               |
+| Étage  | Côté module (SDK)       | Contexte natif    | Clé                | Emballage                  | Lisible sans mot de passe ?                           |
+| ------ | ----------------------- | ----------------- | ------------------ | -------------------------- | ----------------------------------------------------- |
+| gardé  | `ctx.cipher('private')` | `ctx.secure`      | `dek_wrapped`      | `server` **ou** `password` | non quand la feature est ON, dans un espace personnel |
+| ouvert | `ctx.cipher()` (défaut) | `ctx.secure.open` | `open_dek_wrapped` | **toujours** `server`      | oui, toujours                                         |
+
+Dans un **espace partagé**, les deux étages utilisent la clé de l'espace (WDK),
+toujours emballée par la clé serveur : l'étage gardé y est lisible par le
+serveur et par tout membre, feature ON ou non (`SecureStore.resolveDek`). C'est
+pourquoi une note privée, un projet confidentiel et une boîte mail protégée y
+sont refusés. Le coffre, lui, y existe : c'est le coffre de l'espace, lisible
+par le serveur, et son écran le dit.
 
 Un module écrit par le SDK : `ctx.cipher()` et `ctx.cipher('private')` pour les
 codecs, `ctx.secrecy.isUnlocked()` pour l'état de verrou. `ctx.secure` est le
@@ -208,8 +228,11 @@ Application directe des deux étages ci-dessus (`features/notes/src/server/handl
   noms de dossiers vivent dans l'étage **ouvert** ;
 - une note avec le drapeau clair `notes.is_private` a son corps chiffré par la
   DEK **gardée**. Il n'y a aucun contrôle d'accès par-dessus : c'est le
-  chiffrement lui-même qui protège, et le serveur ne peut pas la déchiffrer sans
-  mot de passe vivant ;
+  chiffrement lui-même qui protège. Avec le chiffrement par mot de passe, le
+  serveur ne la déchiffre que session déverrouillée. Sans lui, la DEK gardée
+  est emballée par la clé serveur : la note s'ouvre sans saisie et le serveur la
+  lit, si bien que l'éditeur ne propose le drapeau qu'aux comptes qui ont
+  activé le chiffrement par mot de passe ;
 - `notes.list` n'est jamais bloquée : une note privée sortie session verrouillée
   est renvoyée en **summary masqué** (`masked: true`) : métadonnées claires
   seules (id, dossier, rang, dates), jamais de titre ni de corps. Le client
@@ -558,7 +581,7 @@ appareils gardent la clé et les fichiers ; seuls le navigateur et l'ajout
 d'un nouvel appareil deviennent impossibles.
 
 **Pourquoi pas la DEK personnelle** : la DEK gardée est liée à une session
-WebSocket vivante (fenêtre glissante de 60 s, effacée à la fermeture de la
+WebSocket vivante (fenêtre glissante, de 60 s par défaut, effacée à la fermeture de la
 socket, jamais persistée) et le code la déclare structurellement inatteignable
 sans session. Or une session CloudSync est pilotée par l'agent, sans aucune
 session utilisateur. Un partage ainsi chiffré ne se synchroniserait que
@@ -696,9 +719,13 @@ Google sans passer par DevEye. Voir [le README de Stores](../features/appstores/
 
 ## Projets : l'étage choisi par l'utilisateur
 
-Contrairement à Uptime (toujours ouvert) et au coffre (toujours gardé), les
-projets laissent le choix **par projet** : `projects.security_tier` vaut `open`
-ou `guarded`, exactement comme `mail_accounts.security_tier`.
+Contrairement à Uptime (toujours ouvert) et au coffre (toujours à l'étage
+gardé, donc sous la clé de l'espace dans un espace partagé), les projets
+laissent le choix **par projet** : `projects.security_tier` vaut `open` ou
+`guarded`, exactement comme `mail_accounts.security_tier`. Comme pour une note
+privée, la fenêtre de création ne propose le palier confidentiel qu'aux comptes
+qui ont activé le chiffrement par mot de passe : sans lui, le projet s'ouvrirait
+sans saisie et resterait lisible par le serveur.
 
 Les étages vivent dans le module (`features/projects/src/server/_shared.ts`) :
 `cipherFor(ctx, tier)` rend `ctx.cipher()` (l'étage ouvert) ou
@@ -769,3 +796,71 @@ les siens) sont **toujours** sous l'étage ouvert, quel que
 soit le tier des projets qui s'en servent : le service de fond doit les lire
 sans session. Ils ne sont jamais renvoyés au client, qui n'en reçoit qu'un
 booléen `hasSecret`.
+
+## Ce que le serveur peut toujours lire
+
+L'étage ouvert et la clé serveur portent tout ce dont un service de fond se
+sert sans session. Aucun de ces identifiants n'est protégé par le chiffrement
+par mot de passe : un serveur en marche les déchiffre seul, à tout moment. Les
+formulaires où se saisissent les identifiants d'infrastructure (base, tunnel,
+destination de sauvegarde, jeton, clé d'API, accès bancaire) le disent.
+
+| Identifiant                                                       | Colonne                                                                                                 | Ce qui s'en sert sans session                                    |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Mot de passe d'une base, mot de passe ou clé privée du tunnel SSH | `database_connections.secret_enc`, `access_secret_enc`                                                  | le relevé des bases suivies, la source « base » d'une sauvegarde |
+| Secret d'une destination de sauvegarde (S3, SFTP, WebDAV)         | `backup_destinations.secret_enc`                                                                        | le planificateur de sauvegardes                                  |
+| Identifiants IMAP et SMTP, jetons OAuth d'une boîte **ouverte**   | `mail_accounts.credentials_enc`                                                                         | la relève du courrier, l'envoi des alertes par mail              |
+| URL de webhook, adresse d'alerte                                  | `notification_channels.target_enc`                                                                      | tout envoi d'alerte                                              |
+| Jeton GitHub                                                      | `ft_git_credentials.secret_enc`                                                                         | le suivi des dépôts                                              |
+| Identifiants Dokploy et GitHub Actions                            | `ft_deploy_credentials.secret_enc`                                                                      | le suivi et le lancement des déploiements                        |
+| Clé `.p8` de l'App Store, clé de compte de service Google         | `ft_appstores_sources.secret_enc`                                                                       | la synchronisation des stores                                    |
+| Accès bancaire (clé Qonto, session Enable Banking)                | `ft_finance_connections.content`                                                                        | le relevé des comptes                                            |
+| Clés de fournisseurs (météo, NVD)                                 | `weather_provider_keys.key_enc`, `feature_kv`                                                           | les appels à ces services, l'ingestion des CVE                   |
+| Secret TOTP, numéro de téléphone                                  | `user_2fa.secret_enc`, `user_phones.phone_sealed`                                                       | la connexion, avant toute session                                |
+| Clés DKIM, clé de boîte, certificat TLS du serveur mail           | `ft_mailserver_domain_keys.private_key`, `ft_mailserver_mailboxes.blob_key`, `ft_mailserver_tls.sealed` | la réception et l'envoi du courrier hébergé                      |
+
+Ce qui borne le dégât n'est donc pas le chiffrement mais le privilège donné :
+un compte de base en lecture seule, un jeton GitHub limité aux dépôts suivis,
+une clé S3 limitée à son préfixe. Une machine, elle, n'obéit qu'à la politique
+locale de son agent, que le serveur ne peut pas élargir (voir [L'agent](#lagent)).
+
+Ce que le serveur ne peut pas déchiffrer, session verrouillée : l'étage gardé
+d'un espace personnel dont le compte a activé le chiffrement par mot de passe
+(coffre, notes privées, projets confidentiels, boîtes mail protégées), et un
+partage CloudSync chiffré de bout en bout.
+
+## Ce qui reste en clair
+
+Le chiffrement de DevEye est non déterministe : ce sur quoi une requête trie,
+filtre, joint ou agrège ne peut pas le traverser. La règle, dans chaque
+module : le **texte libre** (titres, intitulés, noms, notes, adresses,
+identifiants) est chiffré ; les **nombres, dates, états et rattachements**
+restent en clair. Qui lit la base sans la clé y voit donc la forme de
+l'activité, pas son contenu.
+
+- **Finances** : montants, TVA, dates, natures, pointage, rattachements à un
+  compte ou à une catégorie, soldes d'ouverture et de clôture d'un relevé. Un
+  solde et une répartition sont des `SUM(...) GROUP BY`. Chiffrés : intitulé,
+  tiers, note, nom de compte, nom de catégorie, accès bancaires. Le journal
+  d'audit ne porte pas les montants.
+- **Facturation** : totaux, taux, quantités, prix unitaires, dates, statuts,
+  numéros, devise. Chiffrés : identités et adresses de l'émetteur et du client,
+  coordonnées bancaires, intitulés de ligne, références de paiement.
+- **Projets** et **Git** : voir
+  [Ce qui reste en clair, et pourquoi](#ce-qui-reste-en-clair-et-pourquoi).
+- **Uptime**, **Stores**, **CloudSync** : voir leur section.
+- **Partout** : les identifiants de ligne, l'espace et le compte propriétaires,
+  les dates de création et de modification, les tailles.
+
+## Ce qui est vérifié, et par qui
+
+À chaque poussée : les tests unitaires du serveur, du client, des modules et de
+l'agent ; un test qui confronte chaque requête des dépôts du socle à la garde
+qu'elle déclare (espace, compte, appareil) ; un contrôle qui prépare, sur une
+base MySQL jetable, chaque requête SQL que le serveur peut envoyer ; et un
+passage qui ouvre chaque module dans un vrai navigateur. Les avis de sécurité
+des crates de l'agent sont relus chaque semaine.
+
+Ces contrôles sont écrits et tenus par le projet lui-même. Aucun tiers n'a
+encore audité DevEye ni tenté de s'y introduire : les garanties de ce document
+sont celles que le code et ses tests soutiennent, pas des garanties certifiées.

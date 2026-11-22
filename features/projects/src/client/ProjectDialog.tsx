@@ -7,6 +7,7 @@ import {
     fileToSquareDataUrl,
     SearchSelect,
     TextInput,
+    useSecrecy,
     type ErrorNoteInput,
     type SearchSelectOption
 } from 'deveye-sdk-client';
@@ -68,6 +69,9 @@ const TIER_OPTIONS: readonly SearchSelectOption<ProjectSecurityTier>[] = [
 export function ProjectDialog({ open, allowGuarded, busy, error, onClose, onSubmit }: ProjectDialogProps) {
     const [draft, setDraft] = useState<ProjectDraft>(EMPTY);
     const [tier, setTier] = useState<ProjectSecurityTier>('open');
+    // Sans chiffrement par mot de passe, un projet « confidentiel » s'ouvrirait
+    // sans saisie et resterait lisible par le serveur : le choix s'explique.
+    const passwordEncryption = useSecrecy().enabled;
     const [tagKind, setTagKind] = useState<ProjectTag['kind']>('tech');
     const [tagLabel, setTagLabel] = useState('');
     const [iconError, setIconError] = useState<string | null>(null);
@@ -264,7 +268,7 @@ export function ProjectDialog({ open, allowGuarded, busy, error, onClose, onSubm
                     )}
                 </div>
 
-                {allowGuarded && (
+                {allowGuarded && passwordEncryption && (
                     <label className={styles.field}>
                         <span className={styles.label}>Confidentialité</span>
                         <SearchSelect
@@ -278,6 +282,15 @@ export function ProjectDialog({ open, allowGuarded, busy, error, onClose, onSubm
                             déploiement : ces tâches tournent sans session.
                         </span>
                     </label>
+                )}
+                {allowGuarded && !passwordEncryption && (
+                    <div className={styles.field}>
+                        <span className={styles.label}>Confidentialité</span>
+                        <span className={styles.hint}>
+                            Un projet confidentiel est verrouillé par votre mot de passe : activez d’abord le
+                            chiffrement par mot de passe, dans Sécurité.
+                        </span>
+                    </div>
                 )}
 
                 <ErrorNote note={error} />

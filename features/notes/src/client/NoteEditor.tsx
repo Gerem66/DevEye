@@ -10,7 +10,8 @@ import {
     openInfo,
     OpenPopup,
     Popup,
-    useActiveWorkspace
+    useActiveWorkspace,
+    useSecrecy
 } from 'deveye-sdk-client';
 import BlockEditor from './BlockEditor';
 import { exportNotePdf } from './exportPdf';
@@ -61,17 +62,26 @@ function normalizeBlocks(blocks: NoteBlock[]): NoteBlock[] {
     return blocks.filter((b) => b.type === 'divider' || b.text.trim() !== '');
 }
 
-function showPrivateInfo() {
+const NEEDS_PASSWORD_ENCRYPTION = 'Activez d’abord le chiffrement par mot de passe, dans Sécurité.';
+
+function showPrivateInfo(passwordEncryption: boolean) {
     void openInfo({
         title: 'Notes privées',
         body: (
             <>
                 <p>
                     Une note ordinaire est chiffrée avec une clé que le serveur sait déballer seul : elle s’ouvre sans
-                    aucune saisie. Une note <strong>privée</strong> est chiffrée avec la clé dérivée de votre mot de
-                    passe : tant que la session n’est pas déverrouillée, son titre comme son contenu restent illisibles,
-                    y compris pour le serveur.
+                    aucune saisie. Une note <strong>privée</strong> est verrouillée par le chiffrement par mot de passe
+                    : tant que la session n’est pas déverrouillée, son titre comme son contenu restent illisibles, y
+                    compris pour le serveur. Une fois la session déverrouillée, le serveur la déchiffre en mémoire pour
+                    vous l’afficher.
                 </p>
+                {!passwordEncryption && (
+                    <p>
+                        Le chiffrement par mot de passe n’est pas activé sur votre compte : sans lui, une note privée
+                        s’ouvrirait sans saisie, et le serveur garderait de quoi la lire. {NEEDS_PASSWORD_ENCRYPTION}
+                    </p>
+                )}
                 <p>
                     Dans la liste, une note privée verrouillée s’affiche avec un cadenas ; « Déchiffrer » demande votre
                     mot de passe et les révèle toutes d’un coup. Basculer ce réglage re-chiffre la note à
@@ -90,6 +100,7 @@ export default function NoteEditor() {
     // Le drapeau « privée » n'existe que dans l'espace personnel, ce que le
     // serveur revérifie (`assertPrivateAllowed`).
     const isPersonalWorkspace = useActiveWorkspace()?.kind === 'personal';
+    const passwordEncryption = useSecrecy().enabled;
     const [mode, setMode] = useState<'add' | 'edit'>('add');
     const [title, setTitle] = useState('');
     const [folderId, setFolderId] = useState<number | null>(null);
@@ -214,7 +225,7 @@ export default function NoteEditor() {
                         className={styles.editorInfoBtn}
                         aria-label='À propos des notes privées'
                         title='Comment fonctionnent les notes privées ?'
-                        onClick={showPrivateInfo}
+                        onClick={() => showPrivateInfo(passwordEncryption)}
                     >
                         <span className='icon icon-info' />
                     </button>
@@ -263,16 +274,26 @@ export default function NoteEditor() {
                                 la clé est celle du propriétaire, donc la note serait
                                 illisible pour les autres membres d'un espace partagé, et
                                 illisible chez elle si elle vient d'un autre espace. Le
-                                serveur refuse les deux, le bouton ne s'affiche pas. */}
+                                serveur refuse les deux, le bouton ne s'affiche pas. Sans
+                                chiffrement par mot de passe, la clé est déballable par le
+                                serveur : le bouton s'explique au lieu de s'offrir. */}
                             {isPersonalWorkspace && !stored?.foreign && (
                                 <button
                                     type='button'
                                     className={`${styles.iconToggle} ${isPrivate ? styles.iconToggleActive : ''}`}
                                     aria-pressed={isPrivate}
+                                    aria-disabled={!isPrivate && !passwordEncryption}
                                     title={
-                                        isPrivate ? 'Rendre la note lisible sans mot de passe' : 'Rendre la note privée'
+                                        isPrivate
+                                            ? 'Rendre la note lisible sans mot de passe'
+                                            : passwordEncryption
+                                              ? 'Rendre la note privée'
+                                              : NEEDS_PASSWORD_ENCRYPTION
                                     }
-                                    onClick={() => setIsPrivate((v) => !v)}
+                                    onClick={() => {
+                                        if (isPrivate || passwordEncryption) setIsPrivate((v) => !v);
+                                        else showPrivateInfo(false);
+                                    }}
                                 >
                                     <span
                                         className={`icon ${styles.toggleIcon} icon-${isPrivate ? 'lock' : 'unlock'}`}

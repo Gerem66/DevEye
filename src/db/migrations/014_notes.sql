@@ -1,7 +1,7 @@
 -- Notes feature: per-user, workspace-scoped notes with an encrypted body.
 --
 -- Mirrors `passwords`: `content` is the encrypted payload (title + folder +
--- blocks) so the server stays zero-knowledge about the note body. The columns
+-- blocks) so the database never holds the note body in clear. The columns
 -- kept in clear (`pinned`, `hidden`, `updated`) are non-sensitive metadata the
 -- server needs to list/sort/gate without decrypting. `workspace_id` NULL is the
 -- caller's personal workspace (id 0 client-side), matching the passwords model.
