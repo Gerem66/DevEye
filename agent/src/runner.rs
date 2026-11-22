@@ -774,6 +774,9 @@ async fn stream_session(
                                 let (snapshot, sockets) = collect(collector, &capture, true).await?;
                                 push_bounded(queue, snapshot);
                                 marks.snapshot = Some(Instant::now());
+                                // A full period from this instant: a tick due a few
+                                // seconds later would see its process list dropped.
+                                ticker = new_ticker(interval);
                                 flush_queue(&mut sink, device_id, queue).await?;
                                 // Demandé explicitement : jamais borné, mais le
                                 // jalon est posé pour qu'une reconnexion ne le refasse pas.

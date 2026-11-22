@@ -24,12 +24,10 @@ export function gated(s: AgentSession): boolean {
 }
 
 /**
- * Floor between two *persisted* process samples of one device. Defense in depth
- * against a misbehaving or looping agent (each instant can carry up to 2000
- * process entries, so an uncapped stream balloons the DB). Kept below the
- * smallest configurable cadence (5 s) so legitimate samples — including a manual
- * refresh — are never affected. Tripping it only skips the process blob: the
- * metric row itself is always written, so the graphs stay continuous.
+ * Plancher entre deux listes de processus enregistrées d'un appareil, contre un
+ * agent qui boucle (jusqu'à 2000 processus par instant). « Rafraîchir maintenant »
+ * ou `deveye-agent --once` juste après un relevé le franchissent sans faute :
+ * seule la liste saute, la ligne de métriques est toujours écrite.
  */
 const MIN_PROCESS_SAMPLE_GAP_MS = 4_000;
 
@@ -93,7 +91,7 @@ async function persistProcesses(
 ): Promise<void> {
     const last = lastProcessSampleTs.get(s.device.id);
     if (last !== undefined && ts - last < MIN_PROCESS_SAMPLE_GAP_MS) {
-        s.logger.warn({ lastTs: last, ts }, 'Process sample throttled (too soon after previous)');
+        s.logger.debug({ lastTs: last, ts }, 'Process sample throttled (too soon after previous)');
         return;
     }
     try {
