@@ -12,6 +12,44 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: readonly ChangelogEntry[] = [
     {
+        version: '0.27.1',
+        date: '2026-11-22',
+        changes: [
+            {
+                kind: 'added',
+                text: 'Connexion : vous pouvez vous connecter avec votre adresse mail comme avec votre nom d’utilisateur, et « Mot de passe oublié ? » vous envoie un lien pour en choisir un nouveau ; un compte chiffré par mot de passe demande alors son code de récupération, que la page Sécurité crée ou refait'
+            },
+            {
+                kind: 'added',
+                text: 'Espace de travail : un rôle peut ouvrir « Toutes les fonctionnalités », y compris celles installées après lui, et ajouter une tuile qu’un rôle n’ouvre pas demande d’abord qui y aura accès'
+            },
+            {
+                kind: 'added',
+                text: 'Projets : un bouton copie les sous-tâches d’une tâche en liste de cases à cocher Markdown, avec leurs assignés'
+            },
+            {
+                kind: 'improved',
+                text: 'Bases de données : la fiche d’une base tient en deux onglets, Vue d’ensemble et Tables, et relève la base dès son ouverture ; indicateurs et alertes se gèrent directement sur la fiche, et autres améliorations de l’interface'
+            },
+            {
+                kind: 'improved',
+                text: 'Appareils : la liste des sources des journaux s’ouvre en grand, s’agrandit en tirant son coin et garde sa taille'
+            },
+            {
+                kind: 'fixed',
+                text: 'Bases de données : modifier une ligne n’écrit plus que les champs changés, sans remplacer une colonne binaire par son aperçu, une colonne à valeur par défaut garde ce défaut à l’ajout d’une ligne, le seuil d’une alerte accepte une décimale, et une base jointe par un appareil ne s’annonce plus « via SOCKS »'
+            },
+            {
+                kind: 'fixed',
+                text: 'Abonnement : un abonné voit de nouveau les offres et leur comparatif, la sienne marquée'
+            },
+            {
+                kind: 'fixed',
+                text: 'Veille CVE : un élément momentanément illisible, comme un appareil qui redémarre, se relit une minute après au lieu d’une heure, et un appareil hors ligne se réanalyse dès son retour'
+            }
+        ]
+    },
+    {
         version: '0.27.0',
         date: '2026-11-18',
         changes: [
