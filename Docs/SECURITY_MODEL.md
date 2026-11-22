@@ -19,10 +19,13 @@ vivant, quoi qu'il arrive, comme tout ce que contient un espace partagé. Seule
 exception : un partage CloudSync **chiffré de bout en bout**, dont seuls les
 appareils ont la clé (voir la section CloudSync).
 
-DevEye n'est donc pas « zero knowledge » : le mot promet un serveur qui ne
-reçoit jamais de quoi lire. Ce que le chiffrement par mot de passe garantit se
-dit autrement : illisible dans la base de données, et tant que la session est
-verrouillée. Le détail de ce que le serveur lit toujours est dans
+Le chiffrement par mot de passe n'est donc pas du « zero knowledge » : le mot
+promet un serveur qui ne reçoit jamais de quoi lire, et celui-ci reçoit le mot
+de passe. Ce qu'il garantit se dit autrement : illisible dans la base de
+données, et tant que la session est verrouillée. Un partage CloudSync créé de
+bout en bout, lui, tient la promesse pour ses contenus : sa clé ne quitte pas
+les appareils et ne dérive pas du mot de passe du compte. Le détail de ce que
+le serveur lit toujours est dans
 [Ce que le serveur peut toujours lire](#ce-que-le-serveur-peut-toujours-lire),
 celui de ce qui n'est pas chiffré dans [Ce qui reste en clair](#ce-qui-reste-en-clair).
 
