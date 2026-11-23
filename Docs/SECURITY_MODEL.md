@@ -485,9 +485,13 @@ serveur contrôle les machines**, à ceci près.
   (voir [son README](../features/sentinel/README.md), dont ce qu'un compte local
   peut ou non lui faire croire). À la demande : journaux (des sources que l'agent
   découvre lui-même : journal système, quatre fichiers de `/var/log`,
-  conteneurs ; jamais un chemin libre), fichiers, terminal. La sortie d'un
-  terminal n'est relayée qu'à la connexion qui
-  l'a ouvert, et n'est jamais persistée.
+  conteneurs ; jamais un chemin libre), fichiers, terminal. Rien de cela n'est
+  persisté. La sortie d'un terminal, une liste de dossier, le résultat d'une
+  recherche, les octets d'un fichier et les lignes d'un journal ne sont relayés
+  qu'à la connexion qui les a demandés. L'état de Docker, des paquets et de
+  l'alimentation est partagé entre ceux qui tiennent la permission de l'ordre
+  sur cette machine (`DEVICE_EVENT_AUDIENCES`, `src/agent/hub.ts`) : la simple
+  lecture d'Appareils ne donne que la télémétrie.
 - **CloudSync** : la racine d'un partage est choisie côté serveur, sous un droit
   qui n'est pas celui du terminal. L'agent refuse un dossier système (`/root` et
   `/var/spool` compris), la racine, son propre dossier, un chemin qu'un lien
@@ -869,7 +873,8 @@ l'activité, pas son contenu.
 - **Comptes et espaces** : nom d'utilisateur, adresse e-mail, avatar, nom d'un
   espace et de ses rôles, membres, adresses invitées, partages et droits.
 - **Journaux** : le journal d'audit garde un an la description de chaque geste,
-  qui cite des noms (un partage, une ville) et des chemins (un fichier lu sur
+  qui cite des noms (un partage, une ville) et des chemins (un dossier parcouru,
+  un fichier téléchargé ou écrit, un journal lu sur
   une machine), avec l'adresse IP. L'historique des connexions garde l'adresse
   IP quatre-vingt-dix jours.
 - **Partout** : les identifiants de ligne, l'espace et le compte propriétaires,

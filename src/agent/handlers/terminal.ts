@@ -4,8 +4,8 @@ import { ack, type AgentSession, type PayloadOf } from './session';
 
 /**
  * Terminal session streams from the agent (`term.output`, `term.exit`). Pure live
- * relay — nothing is persisted; we just fan each frame out to the device's
- * subscribers, which the client filters by session id.
+ * relay: nothing is persisted, and each frame goes to the one socket that opened
+ * the session.
  */
 
 /** `term.output` — a chunk of PTY output (base64) for one session. */

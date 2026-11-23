@@ -138,6 +138,14 @@ import type { AgentFolderArchive, AgentFolderArchiveSummary } from '@deveye/type
 
 import { accessEpochNow } from '@/features/_access';
 import { logger } from '@/logger';
+import {
+    holders,
+    mayReceiveDevice,
+    READERS,
+    SERVICE_MANAGERS,
+    type DeviceAudience,
+    type DeviceGrants
+} from './audience';
 import { agentFrame } from './orders';
 import { AgentTunnels } from './tunnels';
 
@@ -171,6 +179,48 @@ const ARCHIVE_FIRST_FRAME_MS = 60_000;
 const ARCHIVE_IDLE_MS = 120_000;
 
 const archiveKey = (deviceId: string, opId: string): string => `${deviceId}\n${opId}`;
+
+/** Opérations qu'une socket peut tenir ouvertes à la fois : au-delà, une demande est refusée. */
+const MAX_OPS_PER_SOCKET = 256;
+
+const FILES = holders('files');
+const LOGS = holders('logs');
+const DOCKER = holders('docker');
+const SYSTEM = holders('system');
+const TERMINAL = holders('terminal');
+
+/** Une lecture de journal partage le registre des opérations de fichier, sous un préfixe à elle. */
+const logOp = (queryId: string): string => `log:${queryId}`;
+
+/**
+ * À qui va chaque événement d'un appareil. `requester` : à la seule socket qui
+ * a lancé l'opération. Un événement absent d'ici ne part vers aucun navigateur.
+ */
+export const DEVICE_EVENT_AUDIENCES: Readonly<Record<string, DeviceAudience | 'requester'>> = {
+    [METRICS_PUSH_EVENT]: READERS,
+    [DEVICE_REPORT_EVENT]: READERS,
+    [DEVICE_PRESENCE_EVENT]: READERS,
+    [DEVICE_DOCKER_INVENTORY_EVENT]: DOCKER,
+    [DEVICE_DOCKER_STATS_EVENT]: DOCKER,
+    [DEVICE_DOCKER_PROGRESS_EVENT]: DOCKER,
+    [DEVICE_DOCKER_DONE_EVENT]: DOCKER,
+    [PACKAGE_LIST_EVENT]: SYSTEM,
+    [PACKAGE_COUNT_EVENT]: SYSTEM,
+    [PACKAGE_STARTED_EVENT]: SYSTEM,
+    [PACKAGE_PROGRESS_EVENT]: SYSTEM,
+    [PACKAGE_DONE_EVENT]: SYSTEM,
+    [DEVICE_POWER_EVENT]: SYSTEM,
+    [DEVICE_SERVICE_EVENT]: SERVICE_MANAGERS,
+    [DEVICE_FILES_LISTING_EVENT]: 'requester',
+    [DEVICE_FILES_USAGE_EVENT]: 'requester',
+    [DEVICE_FILES_MATCHES_EVENT]: 'requester',
+    [DEVICE_FILES_CHUNK_EVENT]: 'requester',
+    [DEVICE_FILES_OP_EVENT]: 'requester',
+    [DEVICE_LOG_SOURCES_EVENT]: 'requester',
+    [DEVICE_LOG_LINES_EVENT]: 'requester',
+    [DEVICE_TERM_OUTPUT_EVENT]: 'requester',
+    [DEVICE_TERM_EXIT_EVENT]: 'requester'
+};
 
 function abortReason(signal: AbortSignal | undefined): Error {
     return signal?.reason instanceof Error ? signal.reason : new Error('Archive abandonnée.');
@@ -293,6 +343,15 @@ export class MonitorHub {
      * socket fermée le referme sur la machine.
      */
     private readonly termSessions = new Map<string, { deviceId: string; socket: WebSocket }>();
+    /**
+     * La socket qui a demandé une opération de fichier ou une lecture de
+     * journal, par appareil et identifiant : la réponse ne va qu'à elle. Une
+     * opération lancée sans socket (une sauvegarde) n'y figure pas, et rien
+     * n'en part vers un navigateur.
+     */
+    private readonly opOwners = new Map<string, { socket: WebSocket; deviceId: string; audience: DeviceAudience }>();
+    /** Les sockets qui attendent l'inventaire des sources de journal d'un appareil, réponse sans identifiant. */
+    private readonly logSourceAskers = new Map<string, Set<WebSocket>>();
     /** shareId (CloudSync) -> set of subscriber (user) sockets. */
     private readonly syncSubscribers = new Map<number, Set<WebSocket>>();
     /** subscriber socket -> set of shareIds it watches (for cleanup). */
@@ -304,7 +363,7 @@ export class MonitorHub {
      * synchrone (comme `LiveHub`) ; une époque divergente vaut « aucun droit »,
      * et une commande de l'utilisateur dans cet espace répare l'instantané.
      */
-    private readonly grants = new Map<WebSocket, Map<number, { allowed: boolean; epoch: number }>>();
+    private readonly grants = new Map<WebSocket, Map<number, { held: DeviceGrants; epoch: number }>>();
     /** deviceId → connexions comptées sur la fenêtre courante (voir `noteReconnect`). */
     private readonly reconnects = new Map<string, { since: number; count: number }>();
 
@@ -429,6 +488,12 @@ export class MonitorHub {
         if (this.agents.get(deviceId) !== socket) return;
         this.agents.delete(deviceId);
         this.agentAlive.delete(socket);
+        // Aucune réponse ne viendra plus : un identifiant repris après la
+        // reconnexion ne doit pas retrouver l'ancien demandeur.
+        for (const [key, owner] of this.opOwners) {
+            if (owner.deviceId === deviceId) this.opOwners.delete(key);
+        }
+        this.logSourceAskers.delete(deviceId);
         this.publishPresence(deviceId, false);
     }
 
@@ -774,24 +839,37 @@ export class MonitorHub {
         this.publishToSubscribers(payload.deviceId, DEVICE_SERVICE_EVENT, payload);
     }
 
-    /** Ask a connected agent to enumerate its log sources. No-op if offline. */
-    requestLogSources(deviceId: string): boolean {
-        return this.sendToAgent(deviceId, AGENT_LOG_SOURCES);
+    /** Ask a connected agent to enumerate its log sources, for `owner`. No-op if offline. */
+    requestLogSources(deviceId: string, owner?: WebSocket): boolean {
+        if (!this.sendToAgent(deviceId, AGENT_LOG_SOURCES)) return false;
+        if (owner) {
+            const askers = this.logSourceAskers.get(deviceId) ?? new Set<WebSocket>();
+            askers.add(owner);
+            this.logSourceAskers.set(deviceId, askers);
+        }
+        return true;
     }
 
-    /** Ask a connected agent to run one log query. No-op if offline. */
-    requestLogQuery(deviceId: string, payload: AgentLogQueryPayload): boolean {
-        return this.sendToAgent(deviceId, AGENT_LOG_QUERY, payload);
+    /** Ask a connected agent to run one log query, for `owner`. No-op if offline. */
+    requestLogQuery(deviceId: string, payload: AgentLogQueryPayload, owner?: WebSocket): boolean {
+        return this.requestOp(deviceId, AGENT_LOG_QUERY, logOp(payload.queryId), payload, owner, LOGS);
     }
 
-    /** Fan out a device's log-source inventory to its subscribers. */
+    /** The log-source inventory, to the sockets that asked for it since the last one. */
     publishLogSources(payload: DeviceLogSourcesPush): void {
-        this.publishToSubscribers(payload.deviceId, DEVICE_LOG_SOURCES_EVENT, payload);
+        const askers = this.logSourceAskers.get(payload.deviceId);
+        if (!askers) return;
+        this.logSourceAskers.delete(payload.deviceId);
+        const frame = JSON.stringify({ command: DEVICE_LOG_SOURCES_EVENT, payload: { ok: true, data: payload } });
+        const epoch = accessEpochNow();
+        for (const socket of askers) {
+            if (this.mayReceive(socket, payload.deviceId, epoch, LOGS)) socket.send(frame);
+        }
     }
 
-    /** Fan out one chunk of queried log lines to a device's subscribers. */
+    /** One chunk of queried log lines, to the socket that ran the query. */
     publishLogLines(payload: DeviceLogLinesPush): void {
-        this.publishToSubscribers(payload.deviceId, DEVICE_LOG_LINES_EVENT, payload);
+        this.sendToOpOwner(payload.deviceId, logOp(payload.queryId), DEVICE_LOG_LINES_EVENT, payload, payload.done);
     }
 
     /**
@@ -831,7 +909,7 @@ export class MonitorHub {
         const owner = this.termSessions.get(sessionId);
         if (owner?.deviceId !== deviceId) return;
         const epoch = accessEpochNow();
-        if (!this.mayReceive(owner.socket, owner.deviceId, epoch)) return;
+        if (!this.mayReceive(owner.socket, owner.deviceId, epoch, TERMINAL)) return;
         owner.socket.send(JSON.stringify({ command, payload: { ok: true, data } }));
     }
 
@@ -847,51 +925,97 @@ export class MonitorHub {
         this.termSessions.delete(payload.sessionId);
     }
 
-    /** Ask a connected agent to list a directory. No-op if offline. */
-    requestFilesList(deviceId: string, payload: AgentFilesListPayload): boolean {
-        return this.sendToAgent(deviceId, AGENT_FILES_LIST, payload);
+    /**
+     * Réserve une opération à la socket qui la demande, pour que sa réponse ne
+     * parte qu'à elle. Un identifiant déjà tenu par une autre socket est
+     * refusé. Sans `owner`, l'appelant est le serveur : rien n'est réservé.
+     */
+    private claimOp(owner: WebSocket | undefined, deviceId: string, opId: string, audience: DeviceAudience): boolean {
+        if (!owner) return true;
+        const key = archiveKey(deviceId, opId);
+        const held = this.opOwners.get(key);
+        if (held) return held.socket === owner;
+        // Une machine qui ne répond jamais laisserait ses demandes s'entasser :
+        // au plafond, la plus ancienne de cette socket cède sa place.
+        let count = 0;
+        let oldest: string | null = null;
+        for (const [k, o] of this.opOwners) {
+            if (o.socket !== owner) continue;
+            oldest ??= k;
+            count++;
+        }
+        if (count >= MAX_OPS_PER_SOCKET && oldest !== null) this.opOwners.delete(oldest);
+        this.opOwners.set(key, { socket: owner, deviceId, audience });
+        return true;
     }
 
-    /** Ask a connected agent to analyse a directory's usage. No-op if offline. */
-    requestFilesAnalyze(deviceId: string, payload: AgentFilesAnalyzePayload): boolean {
-        return this.sendToAgent(deviceId, AGENT_FILES_ANALYZE, payload);
+    /** Envoie à l'agent une opération à réponse, réservée à `owner` s'il y en a un. */
+    private requestOp(
+        deviceId: string,
+        command: string,
+        opId: string,
+        payload: unknown,
+        owner: WebSocket | undefined,
+        audience: DeviceAudience
+    ): boolean {
+        if (!this.agents.has(deviceId)) return false;
+        if (!this.claimOp(owner, deviceId, opId, audience)) return false;
+        return this.sendToAgent(deviceId, command, payload);
     }
 
-    /** Ask a connected agent to search a directory. No-op if offline. */
-    requestFilesSearch(deviceId: string, payload: AgentFilesSearchPayload): boolean {
-        return this.sendToAgent(deviceId, AGENT_FILES_SEARCH, payload);
+    /** La réponse d'une opération, à la seule socket qui l'a demandée ; `last` la solde. */
+    private sendToOpOwner(deviceId: string, opId: string, command: string, data: unknown, last: boolean): void {
+        const key = archiveKey(deviceId, opId);
+        const owner = this.opOwners.get(key);
+        if (!owner) return;
+        if (last) this.opOwners.delete(key);
+        if (!this.mayReceive(owner.socket, deviceId, accessEpochNow(), owner.audience)) return;
+        owner.socket.send(JSON.stringify({ command, payload: { ok: true, data } }));
     }
 
-    /** Ask a connected agent to mutate the filesystem. No-op if offline. */
-    requestFilesMutate(deviceId: string, payload: AgentFilesMutatePayload): boolean {
-        return this.sendToAgent(deviceId, AGENT_FILES_MUTATE, payload);
+    /** Ask a connected agent to list a directory, for `owner`. No-op if offline. */
+    requestFilesList(deviceId: string, payload: AgentFilesListPayload, owner?: WebSocket): boolean {
+        return this.requestOp(deviceId, AGENT_FILES_LIST, payload.opId, payload, owner, FILES);
     }
 
-    /** Fan out a directory listing to a device's subscribers. */
+    /** Ask a connected agent to analyse a directory's usage, for `owner`. No-op if offline. */
+    requestFilesAnalyze(deviceId: string, payload: AgentFilesAnalyzePayload, owner?: WebSocket): boolean {
+        return this.requestOp(deviceId, AGENT_FILES_ANALYZE, payload.opId, payload, owner, FILES);
+    }
+
+    /** Ask a connected agent to search a directory, for `owner`. No-op if offline. */
+    requestFilesSearch(deviceId: string, payload: AgentFilesSearchPayload, owner?: WebSocket): boolean {
+        return this.requestOp(deviceId, AGENT_FILES_SEARCH, payload.opId, payload, owner, FILES);
+    }
+
+    /** Ask a connected agent to mutate the filesystem, for `owner`. No-op if offline. */
+    requestFilesMutate(deviceId: string, payload: AgentFilesMutatePayload, owner?: WebSocket): boolean {
+        return this.requestOp(deviceId, AGENT_FILES_MUTATE, payload.opId, payload, owner, FILES);
+    }
+
+    /** A directory listing, to the socket that asked for it. */
     publishFilesListing(payload: DeviceFilesListingPush): void {
-        this.publishToSubscribers(payload.deviceId, DEVICE_FILES_LISTING_EVENT, payload);
+        this.sendToOpOwner(payload.deviceId, payload.opId, DEVICE_FILES_LISTING_EVENT, payload, true);
     }
 
-    /** Fan out a directory usage analysis to a device's subscribers. */
+    /** A directory usage analysis, to the socket that asked for it. */
     publishFilesUsage(payload: DeviceFilesUsagePush): void {
-        this.publishToSubscribers(payload.deviceId, DEVICE_FILES_USAGE_EVENT, payload);
+        this.sendToOpOwner(payload.deviceId, payload.opId, DEVICE_FILES_USAGE_EVENT, payload, true);
     }
 
-    /** Fan out file search hits to a device's subscribers. */
+    /** File search hits, to the socket that asked for them. */
     publishFilesMatches(payload: DeviceFilesMatchesPush): void {
-        this.publishToSubscribers(payload.deviceId, DEVICE_FILES_MATCHES_EVENT, payload);
+        this.sendToOpOwner(payload.deviceId, payload.opId, DEVICE_FILES_MATCHES_EVENT, payload, true);
     }
 
-    /** Fan out a filesystem mutation outcome to a device's subscribers. */
+    /** A filesystem operation's outcome: to the caller awaiting it, and to the socket that ran it. */
     publishFilesOp(payload: DeviceFilesOpPush): void {
-        // Le verdict part aux abonnés et à qui l'attendait par promesse : une
-        // sauvegarde lancée depuis un écran doit débloquer le moteur et se voir.
         const waiter = this.fileOpWaiters.get(payload.opId);
         if (waiter?.deviceId === payload.deviceId) {
             this.fileOpWaiters.delete(payload.opId);
             waiter.done({ ok: payload.ok, error: payload.error });
         }
-        this.publishToSubscribers(payload.deviceId, DEVICE_FILES_OP_EVENT, payload);
+        this.sendToOpOwner(payload.deviceId, payload.opId, DEVICE_FILES_OP_EVENT, payload, true);
     }
 
     /**
@@ -929,19 +1053,19 @@ export class MonitorHub {
         return this.agents.get(deviceId)?.bufferedAmount ?? 0;
     }
 
-    /** Ask a connected agent to download a file (streams chunks). No-op if offline. */
-    requestFilesDownload(deviceId: string, payload: AgentFilesDownloadPayload): boolean {
-        return this.sendToAgent(deviceId, AGENT_FILES_DOWNLOAD, payload);
+    /** Ask a connected agent to download a file (streams chunks), for `owner`. No-op if offline. */
+    requestFilesDownload(deviceId: string, payload: AgentFilesDownloadPayload, owner?: WebSocket): boolean {
+        return this.requestOp(deviceId, AGENT_FILES_DOWNLOAD, payload.opId, payload, owner, FILES);
     }
 
-    /** Send one upload chunk to a connected agent. No-op if offline. */
-    requestFilesUpload(deviceId: string, payload: AgentFilesUploadPayload): boolean {
-        return this.sendToAgent(deviceId, AGENT_FILES_UPLOAD, payload);
+    /** Send one upload chunk to a connected agent, for `owner`. No-op if offline. */
+    requestFilesUpload(deviceId: string, payload: AgentFilesUploadPayload, owner?: WebSocket): boolean {
+        return this.requestOp(deviceId, AGENT_FILES_UPLOAD, payload.opId, payload, owner, FILES);
     }
 
-    /** Fan out one chunk of a downloaded file to a device's subscribers. */
+    /** One chunk of a downloaded file, to the socket that asked for it. */
     publishFilesChunk(payload: DeviceFilesChunkPush): void {
-        this.publishToSubscribers(payload.deviceId, DEVICE_FILES_CHUNK_EVENT, payload);
+        this.sendToOpOwner(payload.deviceId, payload.opId, DEVICE_FILES_CHUNK_EVENT, payload, payload.done);
     }
 
     /**
@@ -1284,45 +1408,52 @@ export class MonitorHub {
      * Instantané des droits dans un espace, posé par le dispatcheur à chaque
      * commande. Voir {@link grants}.
      */
-    rememberGrants(socket: WebSocket, workspaceId: number, allowed: boolean, epoch: number): void {
+    rememberGrants(socket: WebSocket, workspaceId: number, held: DeviceGrants, epoch: number): void {
         let byWorkspace = this.grants.get(socket);
         if (!byWorkspace) {
             byWorkspace = new Map();
             this.grants.set(socket, byWorkspace);
         }
-        byWorkspace.set(workspaceId, { allowed, epoch });
+        byWorkspace.set(workspaceId, { held, epoch });
     }
 
     /**
-     * Cette socket a-t-elle *encore* le droit de recevoir cet appareil ? Refuse
-     * par défaut : une socket sans instantané pour l'espace de l'abonnement, ou
-     * dont l'instantané précède la dernière mutation d'accès, ne reçoit rien
-     * tant qu'elle n'a pas prouvé le contraire.
+     * Cette socket a-t-elle *encore* le droit de recevoir, de cet appareil, ce
+     * qui s'adresse à `audience` ? Refuse par défaut : une socket sans
+     * instantané pour l'espace de l'abonnement, ou dont l'instantané précède la
+     * dernière mutation d'accès, ne reçoit rien tant qu'elle n'a pas prouvé le
+     * contraire.
      */
-    private mayReceive(socket: WebSocket, deviceId: string, epoch: number): boolean {
+    private mayReceive(socket: WebSocket, deviceId: string, epoch: number, audience: DeviceAudience): boolean {
         const workspaceId = this.socketDevices.get(socket)?.get(deviceId);
         if (workspaceId === undefined) return false;
         const g = this.grants.get(socket)?.get(workspaceId);
-        return g !== undefined && g.allowed && g.epoch === epoch;
+        return g !== undefined && g.epoch === epoch && mayReceiveDevice(g.held, deviceId, audience);
     }
 
     /**
      * La diffusion vers les navigateurs qui suivent un appareil, filtrée par
-     * l'époque d'accès de chaque socket. La trame est construite à la demande :
-     * sans abonné, les métriques ne sérialisent rien.
+     * l'audience de l'événement et l'époque d'accès de chaque socket. La trame
+     * est construite à la demande : sans abonné, les métriques ne sérialisent
+     * rien.
      */
-    private fanOut(deviceId: string, buildFrame: () => string): void {
+    private fanOut(deviceId: string, audience: DeviceAudience, buildFrame: () => string): void {
         const set = this.subscribers.get(deviceId);
         if (!set || set.size === 0) return;
-        const frame = buildFrame();
         const epoch = accessEpochNow();
+        let frame: string | null = null;
         for (const socket of set) {
-            if (this.mayReceive(socket, deviceId, epoch)) socket.send(frame);
+            if (!this.mayReceive(socket, deviceId, epoch, audience)) continue;
+            frame ??= buildFrame();
+            socket.send(frame);
         }
     }
 
+    /** Un état que partagent ceux à qui {@link DEVICE_EVENT_AUDIENCES} adresse l'événement. */
     private publishToSubscribers(deviceId: string, command: string, data: unknown): void {
-        this.fanOut(deviceId, () => JSON.stringify({ command, payload: { ok: true, data } }));
+        const audience = DEVICE_EVENT_AUDIENCES[command];
+        if (audience === undefined || audience === 'requester') return;
+        this.fanOut(deviceId, audience, () => JSON.stringify({ command, payload: { ok: true, data } }));
     }
 
     onlineDevices(deviceIds: string[]): Record<string, boolean> {
@@ -1366,6 +1497,13 @@ export class MonitorHub {
             this.termSessions.delete(sessionId);
             this.sendToAgent(owner.deviceId, AGENT_TERM_CLOSE, { sessionId });
         }
+        for (const [key, owner] of this.opOwners) {
+            if (owner.socket === socket) this.opOwners.delete(key);
+        }
+        for (const [deviceId, askers] of this.logSourceAskers) {
+            askers.delete(socket);
+            if (askers.size === 0) this.logSourceAskers.delete(deviceId);
+        }
         const watched = this.socketDevices.get(socket);
         if (watched) {
             for (const id of watched.keys()) {
@@ -1388,11 +1526,11 @@ export class MonitorHub {
     }
 
     publishMetric(deviceId: string, snapshot: MetricSnapshot): void {
-        this.fanOut(deviceId, () => metricFrame(deviceId, snapshot));
+        this.fanOut(deviceId, READERS, () => metricFrame(deviceId, snapshot));
     }
 
     publishReport(deviceId: string, report: DeviceReport): void {
-        this.fanOut(deviceId, () => reportFrame(deviceId, report));
+        this.fanOut(deviceId, READERS, () => reportFrame(deviceId, report));
     }
 
     /**
@@ -1423,7 +1561,7 @@ export class MonitorHub {
     }
 
     private publishPresence(deviceId: string, online: boolean): void {
-        this.fanOut(deviceId, () => {
+        this.fanOut(deviceId, READERS, () => {
             const presence: DevicePresence = { deviceId, online, lastSeen: Math.floor(Date.now() / 1000) };
             return JSON.stringify({ command: DEVICE_PRESENCE_EVENT, payload: { ok: true, data: presence } });
         });
@@ -1559,19 +1697,19 @@ export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): Moni
         followDockerOp: (deviceId, opId, task) => hub.followDockerOp(deviceId, opId, task),
         requestPower: (deviceId, payload) => hub.requestPower(deviceId, payload),
         requestLifecycle: (deviceId, payload) => hub.requestLifecycle(deviceId, payload),
-        requestLogSources: (deviceId) => hub.requestLogSources(deviceId),
-        requestLogQuery: (deviceId, payload) => hub.requestLogQuery(deviceId, payload),
+        requestLogSources: (deviceId) => hub.requestLogSources(deviceId, socket),
+        requestLogQuery: (deviceId, payload) => hub.requestLogQuery(deviceId, payload, socket),
         requestTermOpen: (deviceId, payload) => hub.requestTermOpen(socket, deviceId, payload),
         ownsTermSession: (sessionId) => hub.ownsTermSession(socket, sessionId),
         requestTermInput: (deviceId, payload) => hub.requestTermInput(deviceId, payload),
         requestTermResize: (deviceId, payload) => hub.requestTermResize(deviceId, payload),
         requestTermClose: (deviceId, payload) => hub.requestTermClose(deviceId, payload),
-        requestFilesList: (deviceId, payload) => hub.requestFilesList(deviceId, payload),
-        requestFilesAnalyze: (deviceId, payload) => hub.requestFilesAnalyze(deviceId, payload),
-        requestFilesSearch: (deviceId, payload) => hub.requestFilesSearch(deviceId, payload),
-        requestFilesMutate: (deviceId, payload) => hub.requestFilesMutate(deviceId, payload),
-        requestFilesDownload: (deviceId, payload) => hub.requestFilesDownload(deviceId, payload),
-        requestFilesUpload: (deviceId, payload) => hub.requestFilesUpload(deviceId, payload),
+        requestFilesList: (deviceId, payload) => hub.requestFilesList(deviceId, payload, socket),
+        requestFilesAnalyze: (deviceId, payload) => hub.requestFilesAnalyze(deviceId, payload, socket),
+        requestFilesSearch: (deviceId, payload) => hub.requestFilesSearch(deviceId, payload, socket),
+        requestFilesMutate: (deviceId, payload) => hub.requestFilesMutate(deviceId, payload, socket),
+        requestFilesDownload: (deviceId, payload) => hub.requestFilesDownload(deviceId, payload, socket),
+        requestFilesUpload: (deviceId, payload) => hub.requestFilesUpload(deviceId, payload, socket),
         subscribeSync: (shareIds) => hub.subscribeSync(socket, shareIds),
         unsubscribeSync: (shareIds) => hub.unsubscribeSync(socket, shareIds),
         sendSyncChunk: (payload) => hub.sendSyncChunk(socket, payload),

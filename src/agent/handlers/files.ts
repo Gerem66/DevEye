@@ -13,8 +13,8 @@ import { ack, type AgentSession, type PayloadOf } from './session';
 
 /**
  * File-explorer replies from the agent (`files.listing`, `files.usage`,
- * `files.matches`, `files.opResult`). Pure live relay keyed by `opId` — nothing is
- * persisted; we just fan each result out to the device's subscribers.
+ * `files.matches`, `files.opResult`). Pure live relay keyed by `opId`: nothing is
+ * persisted, and each result goes to the socket that ran the operation.
  */
 
 export async function handleFilesListing(

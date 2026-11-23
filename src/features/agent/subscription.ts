@@ -5,9 +5,10 @@ import { parseDeviceReport } from '@/agent/mappers';
 import { defineFeature, type FeatureDefinition } from '../_define';
 
 /**
- * L'abonnement d'une socket aux poussées d'un appareil (métriques, rapports,
- * sortie de terminal, morceaux de fichiers) et la collecte à la demande. Rien
- * n'est écrit côté serveur : c'est l'état d'une connexion, tenu par le hub.
+ * L'abonnement d'une socket aux poussées d'un appareil et la collecte à la
+ * demande. L'abonnement ouvre la télémétrie ; le résultat d'un ordre ne va qu'à
+ * qui tient la permission de cet ordre, ou à la seule socket qui l'a lancé.
+ * Rien n'est écrit côté serveur : c'est l'état d'une connexion, tenu par le hub.
  */
 
 export const agentSubscribeFeature: FeatureDefinition<

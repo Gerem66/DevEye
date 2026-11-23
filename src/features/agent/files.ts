@@ -8,15 +8,30 @@ import {
 } from '@deveye/types';
 
 import { authorizeReachableDevice } from '@/agent/authorize';
-import { defineFeature, FeatureError, type FeatureDefinition } from '../_define';
+import { defineFeature, FeatureError, type FeatureContext, type FeatureDefinition } from '../_define';
 
 /**
  * File explorer commands for a device. Needs the `files` permission on Appareils
  * + agent online. Read ops
- * (list/analyze/search) only acknowledge; results stream back as `device.files*`
- * push events keyed by `opId` (the caller must be subscribed). Mutations are
- * audited (cleanup is destructive).
+ * (list/analyze/search) only acknowledge; results come back as `device.files*`
+ * push events keyed by `opId`, to the socket that asked (which must be
+ * subscribed to the device). Every op that reads or writes a path is audited.
  */
+
+/** Ce qu'un geste de lecture laisse au journal : la machine et le chemin. */
+function auditRead(
+    ctx: FeatureContext,
+    action: string,
+    label: string,
+    row: { id: string; name: string; owner_id: number },
+    path: string
+): void {
+    ctx.audit({
+        action,
+        description: `${label} sur « ${row.name} » : ${path}`,
+        metadata: { deviceId: row.id, ownerId: row.owner_id, path }
+    });
+}
 
 export const agentFilesListFeature: FeatureDefinition<
     typeof agentFilesList.command,
@@ -29,6 +44,7 @@ export const agentFilesListFeature: FeatureDefinition<
         const row = await authorizeReachableDevice(ctx, input.deviceId, { control: true });
         const ok = ctx.monitor?.requestFilesList(row.id, { opId: input.opId, path: input.path });
         if (!ok) throw new FeatureError('conflict', 'Agent hors ligne');
+        auditRead(ctx, 'agent.filesList', 'Parcours', row, input.path);
         return { ok: true };
     }
 });
@@ -44,6 +60,7 @@ export const agentFilesAnalyzeFeature: FeatureDefinition<
         const row = await authorizeReachableDevice(ctx, input.deviceId, { control: true });
         const ok = ctx.monitor?.requestFilesAnalyze(row.id, { opId: input.opId, path: input.path });
         if (!ok) throw new FeatureError('conflict', 'Agent hors ligne');
+        auditRead(ctx, 'agent.filesAnalyze', 'Analyse', row, input.path);
         return { ok: true };
     }
 });
@@ -63,6 +80,7 @@ export const agentFilesSearchFeature: FeatureDefinition<
             filter: input.filter
         });
         if (!ok) throw new FeatureError('conflict', 'Agent hors ligne');
+        auditRead(ctx, 'agent.filesSearch', 'Recherche', row, input.path);
         return { ok: true };
     }
 });
@@ -93,7 +111,7 @@ export const agentFilesMutateFeature: FeatureDefinition<
         ctx.audit({
             action: 'agent.filesMutate',
             level: input.op === 'delete' ? 'warning' : 'info',
-            description: `${MUTATE_LABELS[input.op]} : « ${row.name} » — ${input.path}${input.dest ? ` → ${input.dest}` : ''}`,
+            description: `${MUTATE_LABELS[input.op]} sur « ${row.name} » : ${input.path}${input.dest ? ` → ${input.dest}` : ''}`,
             metadata: {
                 deviceId: row.id,
                 ownerId: row.owner_id,
@@ -118,6 +136,7 @@ export const agentFilesDownloadFeature: FeatureDefinition<
         const row = await authorizeReachableDevice(ctx, input.deviceId, { control: true });
         const ok = ctx.monitor?.requestFilesDownload(row.id, { opId: input.opId, path: input.path });
         if (!ok) throw new FeatureError('conflict', 'Agent hors ligne');
+        auditRead(ctx, 'agent.filesDownload', 'Téléchargement', row, input.path);
         return { ok: true };
     }
 });
@@ -146,7 +165,7 @@ export const agentFilesUploadFeature: FeatureDefinition<
         if (input.offset === 0) {
             ctx.audit({
                 action: 'agent.filesUpload',
-                description: `Téléversement : « ${row.name} » — ${input.path}`,
+                description: `Téléversement sur « ${row.name} » : ${input.path}`,
                 metadata: { deviceId: row.id, ownerId: row.owner_id, path: input.path }
             });
         }

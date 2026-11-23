@@ -26,8 +26,9 @@ export const agentLogSourcesFeature: FeatureDefinition<
 
 /**
  * Run one log query on a source with an advanced filter. Lines stream back as
- * `device.logLines` push events keyed by `queryId`. Read-only; the agent reads the
- * logs live (nothing is persisted server-side).
+ * `device.logLines` push events keyed by `queryId`, to the socket that asked.
+ * Read-only; the agent reads the logs live (nothing is persisted server-side).
+ * Only the first page of a query is audited: the next ones are the same read.
  */
 export const agentLogQueryFeature: FeatureDefinition<
     typeof agentLogQuery.command,
@@ -48,6 +49,13 @@ export const agentLogQueryFeature: FeatureDefinition<
                 anchor: input.anchor
             }) ?? false;
         if (!ok) throw new FeatureError('conflict', 'Agent hors ligne');
+        if (!input.offset && !input.anchor) {
+            ctx.audit({
+                action: 'agent.logQuery',
+                description: `Lecture de journal sur « ${row.name} » : ${input.sourceId}`,
+                metadata: { deviceId: row.id, ownerId: row.owner_id, sourceId: input.sourceId }
+            });
+        }
         return { ok: true };
     }
 });

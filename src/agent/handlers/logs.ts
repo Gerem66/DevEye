@@ -4,8 +4,8 @@ import { ack, type AgentSession, type PayloadOf } from './session';
 
 /**
  * Replies to the relayed device-log commands (`log.sources`, `log.query`). These
- * carry no persisted state — the agent reads the logs live and we just fan the
- * results out to the device's subscribers, exactly like the package events.
+ * carry no persisted state: the agent reads the logs live, and each result goes
+ * to the socket that asked for it.
  */
 
 /** `log.sourcesResult` — the log sources the agent discovered. */

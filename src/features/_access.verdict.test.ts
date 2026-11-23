@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 
 import type { ItemRoleGrantRow } from '@deveye/types';
 
+import { holders, mayReceiveDevice, type DeviceGrants } from '@/agent/audience';
 import type { Database } from '@/db';
 import { attachPlanPauses, type PlanPauses } from '@/Services/planPauses';
 import { manifest as devicesManifest } from '../../features/devices/src/manifest';
@@ -100,6 +101,53 @@ describe('deviceVerdict : les droits d’un membre sur une machine, sans session
         assert.deepEqual(await files({ member: false }), { ok: false, reason: 'not_member' });
         assert.deepEqual(await files({ deviceVisible: false }), { ok: false, reason: 'no_device' });
         assert.deepEqual(await files({}, 99), { ok: false, reason: 'not_member' });
+    });
+});
+
+/** Les droits qu'un membre présente au hub, tirés du même monde que `fakeDb`. */
+function grantsOf(world: World): DeviceGrants {
+    const grant = world.grant === undefined ? { access: 'read' as const, extras: { files: true } } : world.grant;
+    const overrides = world.overrides ?? [];
+    return {
+        read: grant !== null,
+        write: grant?.access === 'write',
+        admin: false,
+        extras: new Set(Object.entries(grant?.extras ?? {}).flatMap(([key, on]) => (on ? [key] : []))),
+        access: new Map(overrides.flatMap((o) => (o.access ? [[o.item_id, o.access] as const] : []))),
+        itemExtras: new Map(
+            overrides.flatMap((o) =>
+                o.extra_overrides
+                    ? [[o.item_id, JSON.parse(o.extra_overrides) as Record<string, boolean>] as const]
+                    : []
+            )
+        )
+    };
+}
+
+describe('mayReceiveDevice : la diffusion suit la règle des ordres', () => {
+    it('reçoit le résultat d’un ordre qui le pourrait donner, et lui seul', async () => {
+        const worlds: World[] = [
+            {},
+            { grant: null },
+            { grant: { access: 'read', extras: {} } },
+            { grant: { access: 'write', extras: { files: true } } },
+            {
+                grant: { access: 'read', extras: {} },
+                overrides: [{ item_id: DEVICE, access: null, extra_overrides: '{"files":true}' }]
+            },
+            { overrides: [{ item_id: DEVICE, access: null, extra_overrides: '{"files":false}' }] },
+            { overrides: [{ item_id: DEVICE, access: 'read', extra_overrides: null }] },
+            { overrides: [{ item_id: DEVICE, access: 'none', extra_overrides: null }] },
+            { overrides: [{ item_id: 'dev-b', access: 'none', extra_overrides: '{"files":false}' }] }
+        ];
+        for (const world of worlds) {
+            const verdict = await files(world);
+            assert.equal(
+                mayReceiveDevice(grantsOf(world), DEVICE, holders('files')),
+                verdict.ok,
+                JSON.stringify(world)
+            );
+        }
     });
 });
 

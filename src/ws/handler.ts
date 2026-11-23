@@ -27,6 +27,7 @@ import { markSeen } from '@/auth/lastSeen';
 import { isFederatedOrigin } from '@/auth/federation';
 import { redeemWsTicket } from '@/auth/wsTicket';
 import { verifyAccessToken } from '@/auth/jwt';
+import { NO_DEVICE_GRANTS, type DeviceGrants } from '@/agent/audience';
 import { createMonitorTransport, type MonitorHub } from '@/agent/hub';
 import {
     accessEpochNow,
@@ -35,7 +36,8 @@ import {
     createAccessResolver,
     declaredItemId,
     isAdminUser,
-    itemRefusal
+    itemRefusal,
+    type ResolvedScope
 } from '@/features/_access';
 import { moduleManifest } from '@/features/_sdk/register';
 import { resolveExtras } from '@deveye/types/sdk';
@@ -78,6 +80,31 @@ function send(socket: WebSocket, msg: ServerMessage): void {
     // Une commande postée (`ws.post`, requestId `-`) n'attend aucune réponse.
     if (msg.requestId === '-') return;
     socket.send(JSON.stringify(msg));
+}
+
+/**
+ * Ce que le hub des agents doit savoir pour filtrer ses diffusions : la lecture
+ * d'Appareils, les permissions propres tenues, et les surcharges du rôle
+ * appareil par appareil. Un administrateur garde la lecture de la flotte hors
+ * de tout rôle d'espace.
+ */
+async function deviceGrantsOf(scope: ResolvedScope): Promise<DeviceGrants> {
+    const read = scope.isAdmin || scope.features.has('devices');
+    if (!read) return NO_DEVICE_GRANTS;
+    const specs = moduleManifest('devices')?.extraPermissions ?? [];
+    const held = resolveExtras(specs, scope.isOwner, scope.extras.get('devices') ?? {});
+    const [access, itemExtras] = await Promise.all([
+        scope.itemRestrictions('devices'),
+        scope.itemExtraOverrides('devices')
+    ]);
+    return {
+        read,
+        write: scope.features.get('devices') === 'write',
+        admin: scope.isAdmin,
+        extras: new Set(specs.filter((spec) => held.canExtra(spec.key)).map((spec) => spec.key)),
+        access,
+        itemExtras
+    };
 }
 
 export async function registerWS(
@@ -294,9 +321,7 @@ export async function registerWS(
                 // répare un instantané périmé.
                 const epoch = accessEpochNow();
                 liveHub.rememberGrants(socket, scope.workspace.id, scope.features, epoch);
-                // Un administrateur garde le droit sur la flotte entière, hors de
-                // tout rôle d'espace.
-                hub.rememberGrants(socket, scope.workspace.id, scope.isAdmin || scope.features.has('devices'), epoch);
+                hub.rememberGrants(socket, scope.workspace.id, await deviceGrantsOf(scope), epoch);
 
                 const assertAdmin = (): void => assertDeclaredRole({ admin: true }, scope);
                 // Toute porte vers une feature passe par l'une des deux gardes

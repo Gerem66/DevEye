@@ -2,10 +2,13 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import type { WebSocket } from '@fastify/websocket';
+import * as types from '@deveye/types';
 
+import { accessEpochNow } from '@/features/_access';
 import type { ServiceTask } from '@/Services/tasks';
 
-import { MonitorHub } from './hub';
+import type { DeviceGrants } from './audience';
+import { DEVICE_EVENT_AUDIENCES, MonitorHub } from './hub';
 
 /** Ce qu'une socket d'agent reçoit, relu en clair ; le reste est inerte. */
 function fakeAgent(): { socket: WebSocket; sent: { command: string; payload: Record<string, unknown> }[] } {
@@ -362,5 +365,258 @@ describe('MonitorHub : l’opération que suit un verrou', () => {
             { fail: 'L’agent s’est déconnecté.', code: 'conflict' }
         ]);
         assert.equal(hub.runningDockerOp(DEVICE), null);
+    });
+});
+
+/** Ce qu'un navigateur abonné reçoit, par nom d'événement. */
+function fakeBrowser(): { socket: WebSocket; got: string[]; data: unknown[] } {
+    const got: string[] = [];
+    const data: unknown[] = [];
+    const socket = {
+        send: (frame: string) => {
+            const parsed = JSON.parse(frame) as { command: string; payload: { data: unknown } };
+            got.push(parsed.command);
+            data.push(parsed.payload.data);
+        },
+        bufferedAmount: 0
+    } as unknown as WebSocket;
+    return { socket, got, data };
+}
+
+const WORKSPACE = 1;
+
+const held = (over: Partial<DeviceGrants> = {}): DeviceGrants => ({
+    read: true,
+    write: false,
+    admin: false,
+    extras: new Set<string>(),
+    access: new Map(),
+    itemExtras: new Map(),
+    ...over
+});
+
+const EVERYTHING = held({
+    write: true,
+    admin: true,
+    extras: new Set(['terminal', 'files', 'logs', 'docker', 'network', 'system'])
+});
+
+/** Un navigateur qui suit la machine avec ces droits. */
+function watching(hub: MonitorHub, grants: DeviceGrants): ReturnType<typeof fakeBrowser> {
+    const browser = fakeBrowser();
+    hub.subscribe(browser.socket, WORKSPACE, [DEVICE]);
+    hub.rememberGrants(browser.socket, WORKSPACE, grants, accessEpochNow());
+    return browser;
+}
+
+function onlineHub(): MonitorHub {
+    const hub = new MonitorHub();
+    hub.agentOnline(DEVICE, fakeAgent().socket);
+    return hub;
+}
+
+/** Tout ce que le hub diffuse comme état partagé, charge utile réduite au nécessaire. */
+function publishShared(hub: MonitorHub): void {
+    hub.publishMetric(DEVICE, {} as never);
+    hub.publishReport(DEVICE, {} as never);
+    hub.publishDockerInventory({ deviceId: DEVICE, inventory: {} } as never);
+    hub.publishDockerStats({ deviceId: DEVICE } as never);
+    hub.publishDockerProgress({ deviceId: DEVICE, opId: 'd1', line: 'pull' });
+    hub.publishDockerDone({ deviceId: DEVICE, opId: 'd1', action: 'pruneImages', ok: true });
+    hub.publishPackageList({ deviceId: DEVICE, managers: [] } as never);
+    hub.publishPackageCount({ deviceId: DEVICE, manager: 'apt', count: 2 } as never);
+    hub.publishPackageStarted({ deviceId: DEVICE, manager: 'apt' } as never);
+    hub.publishPackageProgress({ deviceId: DEVICE, manager: 'apt', line: 'curl' });
+    hub.publishPackageDone({ deviceId: DEVICE, manager: 'apt', ok: true });
+    hub.publishPower({ deviceId: DEVICE, action: 'reboot', ok: true } as never);
+    hub.publishService({ deviceId: DEVICE, action: 'elevate', ok: true } as never);
+}
+
+const TELEMETRY = ['metrics.push', 'device.report'];
+const DOCKER_EVENTS = ['device.dockerInventory', 'device.dockerStats', 'device.dockerProgress', 'device.dockerDone'];
+const SYSTEM_EVENTS = [
+    'package.list',
+    'package.count',
+    'package.started',
+    'package.progress',
+    'package.done',
+    'device.powerResult'
+];
+
+describe('MonitorHub : qui reçoit ce qu’une machine renvoie', () => {
+    it('un état partagé ne va qu’à ceux qui tiennent la permission de l’ordre', () => {
+        const hub = onlineHub();
+        const owner = watching(hub, EVERYTHING);
+        const docker = watching(hub, held({ extras: new Set(['docker']) }));
+        const system = watching(hub, held({ extras: new Set(['system']) }));
+        const reader = watching(hub, held());
+
+        publishShared(hub);
+
+        assert.deepEqual(reader.got, TELEMETRY);
+        assert.deepEqual(docker.got, [...TELEMETRY, ...DOCKER_EVENTS]);
+        assert.deepEqual(system.got, [...TELEMETRY, ...SYSTEM_EVENTS]);
+        assert.deepEqual(owner.got, [...TELEMETRY, ...DOCKER_EVENTS, ...SYSTEM_EVENTS, 'device.serviceResult']);
+    });
+
+    it('le résultat d’un changement de service demande l’administrateur et l’écriture', () => {
+        const hub = onlineHub();
+        const admin = watching(hub, held({ admin: true }));
+        const writer = watching(hub, held({ write: true }));
+        const both = watching(hub, held({ admin: true, write: true }));
+
+        hub.publishService({ deviceId: DEVICE, action: 'elevate', ok: true } as never);
+
+        assert.deepEqual(admin.got, []);
+        assert.deepEqual(writer.got, []);
+        assert.deepEqual(both.got, ['device.serviceResult']);
+    });
+
+    it('la surcharge d’une machine remplace ce que le rôle accorde, dans les deux sens', () => {
+        const hub = onlineHub();
+        const raised = watching(hub, held({ itemExtras: new Map([[DEVICE, { docker: true }]]) }));
+        const lowered = watching(
+            hub,
+            held({ extras: new Set(['docker']), itemExtras: new Map([[DEVICE, { docker: false }]]) })
+        );
+        const readOnly = watching(hub, held({ extras: new Set(['docker']), access: new Map([[DEVICE, 'read']]) }));
+        const hidden = watching(hub, held({ extras: new Set(['docker']), access: new Map([[DEVICE, 'none']]) }));
+
+        hub.publishMetric(DEVICE, {} as never);
+        hub.publishDockerStats({ deviceId: DEVICE } as never);
+
+        assert.deepEqual(raised.got, ['metrics.push', 'device.dockerStats']);
+        assert.deepEqual(lowered.got, ['metrics.push']);
+        assert.deepEqual(readOnly.got, ['metrics.push']);
+        assert.deepEqual(hidden.got, []);
+    });
+
+    it('un instantané d’avant le dernier changement d’accès ne reçoit rien', () => {
+        const hub = onlineHub();
+        const stale = fakeBrowser();
+        hub.subscribe(stale.socket, WORKSPACE, [DEVICE]);
+        hub.rememberGrants(stale.socket, WORKSPACE, EVERYTHING, accessEpochNow() - 1);
+
+        publishShared(hub);
+
+        assert.deepEqual(stale.got, []);
+    });
+
+    it('chaque événement d’appareil des types a une audience déclarée', () => {
+        const events = Object.entries(types)
+            .filter(([name]) => /^(DEVICE|PACKAGE|METRICS)_\w+_EVENT$/.test(name))
+            .map(([, value]) => value as string);
+        assert.ok(events.length >= 23);
+        for (const event of events) {
+            assert.ok(event in DEVICE_EVENT_AUDIENCES, `${event} n’a pas d’audience`);
+        }
+    });
+});
+
+describe('MonitorHub : la réponse d’une opération va à qui l’a demandée', () => {
+    const FILES_HOLDER = held({ extras: new Set(['files', 'logs']) });
+
+    it('une liste, une recherche et un téléchargement ne vont qu’à la socket demandeuse', () => {
+        const hub = onlineHub();
+        const asker = watching(hub, FILES_HOLDER);
+        const other = watching(hub, FILES_HOLDER);
+
+        assert.equal(hub.requestFilesList(DEVICE, { opId: 'l1', path: '/etc' }, asker.socket), true);
+        hub.publishFilesListing({ deviceId: DEVICE, opId: 'l1', listing: null });
+        hub.publishFilesListing({ deviceId: DEVICE, opId: 'l1', listing: null });
+
+        assert.equal(hub.requestFilesSearch(DEVICE, { opId: 's1', path: '/etc' } as never, asker.socket), true);
+        hub.publishFilesMatches({ deviceId: DEVICE, opId: 's1', matches: [], truncated: false });
+
+        assert.equal(hub.requestFilesDownload(DEVICE, { opId: 'g1', path: '/etc/hosts' }, asker.socket), true);
+        hub.publishFilesChunk({ deviceId: DEVICE, opId: 'g1', data: 'YQ==', done: false });
+        hub.publishFilesChunk({ deviceId: DEVICE, opId: 'g1', data: '', done: true });
+        hub.publishFilesChunk({ deviceId: DEVICE, opId: 'g1', data: 'Yg==', done: false });
+
+        assert.deepEqual(asker.got, [
+            'device.filesListing',
+            'device.filesMatches',
+            'device.filesChunk',
+            'device.filesChunk'
+        ]);
+        assert.deepEqual(other.got, []);
+    });
+
+    it('une lecture de journal et l’inventaire des sources vont à qui les a demandés', () => {
+        const hub = onlineHub();
+        const asker = watching(hub, FILES_HOLDER);
+        const other = watching(hub, FILES_HOLDER);
+
+        assert.equal(hub.requestLogSources(DEVICE, asker.socket), true);
+        hub.publishLogSources({ deviceId: DEVICE, sources: [] });
+        hub.publishLogSources({ deviceId: DEVICE, sources: [] });
+
+        assert.equal(hub.requestLogQuery(DEVICE, { queryId: 'q1', sourceId: 'journal' }, asker.socket), true);
+        hub.publishLogLines({ deviceId: DEVICE, queryId: 'q1', lines: [], done: false });
+        hub.publishLogLines({ deviceId: DEVICE, queryId: 'q1', lines: [], done: true });
+        hub.publishLogLines({ deviceId: DEVICE, queryId: 'q1', lines: [], done: true });
+
+        assert.deepEqual(asker.got, ['device.logSources', 'device.logLines', 'device.logLines']);
+        assert.deepEqual(other.got, []);
+    });
+
+    it('un identifiant déjà tenu par une autre socket est refusé', () => {
+        const hub = onlineHub();
+        const first = watching(hub, FILES_HOLDER);
+        const second = watching(hub, FILES_HOLDER);
+
+        assert.equal(hub.requestFilesDownload(DEVICE, { opId: 'g1', path: '/etc/hosts' }, first.socket), true);
+        assert.equal(hub.requestFilesDownload(DEVICE, { opId: 'g1', path: '/etc/shadow' }, second.socket), false);
+        // Les morceaux d'un même envoi reprennent l'identifiant de leur socket.
+        assert.equal(hub.requestFilesDownload(DEVICE, { opId: 'g1', path: '/etc/hosts' }, first.socket), true);
+
+        hub.publishFilesChunk({ deviceId: DEVICE, opId: 'g1', data: 'YQ==', done: true });
+        assert.deepEqual(first.got, ['device.filesChunk']);
+        assert.deepEqual(second.got, []);
+    });
+
+    it('qui a perdu la permission entre la demande et la réponse ne reçoit rien', () => {
+        const hub = onlineHub();
+        const asker = watching(hub, FILES_HOLDER);
+
+        hub.requestFilesList(DEVICE, { opId: 'l1', path: '/etc' }, asker.socket);
+        hub.rememberGrants(asker.socket, WORKSPACE, held(), accessEpochNow());
+        hub.publishFilesListing({ deviceId: DEVICE, opId: 'l1', listing: null });
+
+        assert.deepEqual(asker.got, []);
+    });
+
+    it('une socket fermée ou une machine partie solde ses opérations', () => {
+        const hub = new MonitorHub();
+        const agent = fakeAgent();
+        hub.agentOnline(DEVICE, agent.socket);
+        const gone = watching(hub, FILES_HOLDER);
+        const next = watching(hub, FILES_HOLDER);
+
+        hub.requestFilesList(DEVICE, { opId: 'l1', path: '/etc' }, gone.socket);
+        hub.dropSubscriber(gone.socket);
+        assert.equal(hub.requestFilesList(DEVICE, { opId: 'l1', path: '/srv' }, next.socket), true);
+
+        hub.agentOffline(DEVICE, agent.socket);
+        hub.agentOnline(DEVICE, agent.socket);
+        hub.publishFilesListing({ deviceId: DEVICE, opId: 'l1', listing: null });
+
+        assert.deepEqual(gone.got, []);
+        assert.deepEqual(
+            next.got.filter((command) => command === 'device.filesListing'),
+            []
+        );
+    });
+
+    it('une opération lancée par le serveur ne va à aucun navigateur', async () => {
+        const hub = onlineHub();
+        const browser = watching(hub, EVERYTHING);
+
+        const verdict = hub.awaitFilesOp(DEVICE, 'b1', 1000);
+        assert.equal(hub.requestFilesMutate(DEVICE, { opId: 'b1', op: 'mkdir', path: '/backup' }), true);
+        hub.publishFilesOp({ deviceId: DEVICE, opId: 'b1', op: 'mkdir', ok: true });
+
+        assert.deepEqual(await verdict, { ok: true, error: undefined });
+        assert.deepEqual(browser.got, []);
     });
 });
