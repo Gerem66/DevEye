@@ -4,7 +4,7 @@ import { describe, it } from 'node:test';
 import type { WebSocket } from '@fastify/websocket';
 import * as types from '@deveye/types';
 
-import { accessEpochNow } from '@/features/_access';
+import { accessEpochNow, invalidateAccess } from '@/features/_access';
 import type { ServiceTask } from '@/Services/tasks';
 
 import type { DeviceGrants } from './audience';
@@ -618,5 +618,101 @@ describe('MonitorHub : la réponse d’une opération va à qui l’a demandée'
 
         assert.deepEqual(await verdict, { ok: true, error: undefined });
         assert.deepEqual(browser.got, []);
+    });
+});
+
+describe('MonitorHub : un instantané périmé se recalcule', () => {
+    const TERM_HOLDER = held({ extras: new Set(['terminal']) });
+
+    /** Un recalcul que le test laisse aboutir quand il le décide, sous les droits qu'il choisit. */
+    function refresherOf(hub: MonitorHub, browser: ReturnType<typeof fakeBrowser>) {
+        const calls: number[] = [];
+        let release: (grants: DeviceGrants) => void = () => undefined;
+        hub.setRefresher(browser.socket, (workspaceId) => {
+            calls.push(workspaceId);
+            const epoch = accessEpochNow();
+            return new Promise<void>((resolve) => {
+                release = (grants) => {
+                    hub.rememberGrants(browser.socket, workspaceId, grants, epoch);
+                    resolve();
+                };
+            });
+        });
+        return { calls, release: (grants: DeviceGrants) => release(grants) };
+    }
+
+    const output = (data: string) => ({ deviceId: DEVICE, sessionId: 't1', data });
+
+    it('la sortie d’un terminal attend le recalcul, puis arrive dans l’ordre', async () => {
+        const hub = onlineHub();
+        const browser = watching(hub, TERM_HOLDER);
+        const refresh = refresherOf(hub, browser);
+        hub.requestTermOpen(browser.socket, DEVICE, { sessionId: 't1', cols: 80, rows: 24 });
+
+        invalidateAccess();
+        hub.publishTermOutput(output('YQ=='));
+        hub.publishMetric(DEVICE, {} as never);
+        hub.publishTermOutput(output('Yg=='));
+        assert.deepEqual(browser.got, []);
+        assert.deepEqual(refresh.calls, [WORKSPACE]);
+
+        refresh.release(TERM_HOLDER);
+        await settle();
+        hub.publishTermOutput(output('Yw=='));
+        hub.publishMetric(DEVICE, {} as never);
+
+        assert.deepEqual(
+            browser.data.map((d) => (d as { data?: string }).data),
+            ['YQ==', 'Yg==', 'Yw==', undefined]
+        );
+        assert.deepEqual(browser.got.at(-1), 'metrics.push');
+        assert.deepEqual(refresh.calls, [WORKSPACE]);
+    });
+
+    it('un recalcul qui retire le droit jette ce qui attendait', async () => {
+        const hub = onlineHub();
+        const browser = watching(hub, TERM_HOLDER);
+        const refresh = refresherOf(hub, browser);
+        hub.requestTermOpen(browser.socket, DEVICE, { sessionId: 't1', cols: 80, rows: 24 });
+
+        invalidateAccess();
+        hub.publishTermOutput(output('YQ=='));
+        refresh.release(held());
+        await settle();
+        hub.publishTermOutput(output('Yg=='));
+
+        assert.deepEqual(browser.got, []);
+    });
+
+    it('sans recalcul possible, rien ne part', () => {
+        const hub = onlineHub();
+        const browser = watching(hub, TERM_HOLDER);
+        hub.requestTermOpen(browser.socket, DEVICE, { sessionId: 't1', cols: 80, rows: 24 });
+
+        invalidateAccess();
+        hub.publishTermOutput(output('YQ=='));
+
+        assert.deepEqual(browser.got, []);
+    });
+
+    it('une machine qui se déconnecte clôt ses terminaux chez qui les a ouverts', () => {
+        const hub = new MonitorHub();
+        const agent = fakeAgent();
+        hub.agentOnline(DEVICE, agent.socket);
+        const owner = watching(hub, TERM_HOLDER);
+        const other = watching(hub, TERM_HOLDER);
+        hub.requestTermOpen(owner.socket, DEVICE, { sessionId: 't1', cols: 80, rows: 24 });
+
+        hub.agentOffline(DEVICE, agent.socket);
+
+        assert.deepEqual(
+            owner.got.filter((command) => command === 'device.termExit'),
+            ['device.termExit']
+        );
+        assert.deepEqual(
+            other.got.filter((command) => command === 'device.termExit'),
+            []
+        );
+        assert.equal(hub.ownsTermSession(owner.socket, 't1'), false);
     });
 });

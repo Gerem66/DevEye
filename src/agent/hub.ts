@@ -180,8 +180,23 @@ const ARCHIVE_IDLE_MS = 120_000;
 
 const archiveKey = (deviceId: string, opId: string): string => `${deviceId}\n${opId}`;
 
-/** Opérations qu'une socket peut tenir ouvertes à la fois : au-delà, une demande est refusée. */
+/** Opérations qu'une socket peut tenir ouvertes à la fois : au-delà, la plus ancienne cède sa place. */
 const MAX_OPS_PER_SOCKET = 256;
+
+/** Trames gardées pour une socket le temps que ses droits soient recalculés. */
+const MAX_PENDING_FRAMES = 512;
+
+/**
+ * Recalcule les droits d'une socket dans un espace et les rend au hub par
+ * `rememberGrants`, estampillés de l'époque lue AVANT le calcul. Ne lève pas.
+ */
+export type GrantRefresher = (workspaceId: number) => Promise<void>;
+
+interface PendingFrame {
+    deviceId: string;
+    audience: DeviceAudience;
+    frame: string;
+}
 
 const FILES = holders('files');
 const LOGS = holders('logs');
@@ -364,6 +379,13 @@ export class MonitorHub {
      * et une commande de l'utilisateur dans cet espace répare l'instantané.
      */
     private readonly grants = new Map<WebSocket, Map<number, { held: DeviceGrants; epoch: number }>>();
+    private readonly refreshers = new Map<WebSocket, GrantRefresher>();
+    /**
+     * Les recalculs en cours, par socket et par espace, avec les réponses qui
+     * attendent leur verdict : une sortie de terminal ne doit pas se perdre
+     * parce qu'un rôle a changé ailleurs dans l'instance.
+     */
+    private readonly refreshing = new Map<WebSocket, Map<number, PendingFrame[]>>();
     /** deviceId → connexions comptées sur la fenêtre courante (voir `noteReconnect`). */
     private readonly reconnects = new Map<string, { since: number; count: number }>();
 
@@ -494,6 +516,16 @@ export class MonitorHub {
             if (owner.deviceId === deviceId) this.opOwners.delete(key);
         }
         this.logSourceAskers.delete(deviceId);
+        // Le shell est mort avec la session de l'agent : son onglet doit le savoir.
+        for (const [sessionId, owner] of this.termSessions) {
+            if (owner.deviceId !== deviceId) continue;
+            this.sendToTermOwner(sessionId, deviceId, DEVICE_TERM_EXIT_EVENT, {
+                deviceId,
+                sessionId,
+                error: 'La machine s’est déconnectée.'
+            } satisfies DeviceTermExitPush);
+            this.termSessions.delete(sessionId);
+        }
         this.publishPresence(deviceId, false);
     }
 
@@ -861,10 +893,7 @@ export class MonitorHub {
         if (!askers) return;
         this.logSourceAskers.delete(payload.deviceId);
         const frame = JSON.stringify({ command: DEVICE_LOG_SOURCES_EVENT, payload: { ok: true, data: payload } });
-        const epoch = accessEpochNow();
-        for (const socket of askers) {
-            if (this.mayReceive(socket, payload.deviceId, epoch, LOGS)) socket.send(frame);
-        }
+        for (const socket of askers) this.deliver(socket, payload.deviceId, LOGS, () => frame, true);
     }
 
     /** One chunk of queried log lines, to the socket that ran the query. */
@@ -908,9 +937,7 @@ export class MonitorHub {
     private sendToTermOwner(sessionId: string, deviceId: string, command: string, data: unknown): void {
         const owner = this.termSessions.get(sessionId);
         if (owner?.deviceId !== deviceId) return;
-        const epoch = accessEpochNow();
-        if (!this.mayReceive(owner.socket, owner.deviceId, epoch, TERMINAL)) return;
-        owner.socket.send(JSON.stringify({ command, payload: { ok: true, data } }));
+        this.deliver(owner.socket, deviceId, TERMINAL, () => frameOf(command, data), true);
     }
 
     /** A chunk of terminal output, to the session's owner only. */
@@ -969,8 +996,7 @@ export class MonitorHub {
         const owner = this.opOwners.get(key);
         if (!owner) return;
         if (last) this.opOwners.delete(key);
-        if (!this.mayReceive(owner.socket, deviceId, accessEpochNow(), owner.audience)) return;
-        owner.socket.send(JSON.stringify({ command, payload: { ok: true, data } }));
+        this.deliver(owner.socket, deviceId, owner.audience, () => frameOf(command, data), true);
     }
 
     /** Ask a connected agent to list a directory, for `owner`. No-op if offline. */
@@ -1418,17 +1444,70 @@ export class MonitorHub {
     }
 
     /**
-     * Cette socket a-t-elle *encore* le droit de recevoir, de cet appareil, ce
-     * qui s'adresse à `audience` ? Refuse par défaut : une socket sans
-     * instantané pour l'espace de l'abonnement, ou dont l'instantané précède la
-     * dernière mutation d'accès, ne reçoit rien tant qu'elle n'a pas prouvé le
-     * contraire.
+     * Envoie à cette socket ce qui s'adresse à `audience` sur cet appareil, si
+     * elle en a *encore* le droit. Refuse par défaut : sans instantané pour
+     * l'espace de l'abonnement, ou avec un instantané d'avant la dernière
+     * mutation d'accès, rien ne part, et le recalcul est demandé. `keep` : la
+     * trame est une réponse attendue, gardée jusqu'au verdict du recalcul ;
+     * sinon c'est un état qui se répétera, et elle se perd sans dommage.
      */
-    private mayReceive(socket: WebSocket, deviceId: string, epoch: number, audience: DeviceAudience): boolean {
+    private deliver(
+        socket: WebSocket,
+        deviceId: string,
+        audience: DeviceAudience,
+        frame: () => string,
+        keep: boolean
+    ): void {
         const workspaceId = this.socketDevices.get(socket)?.get(deviceId);
-        if (workspaceId === undefined) return false;
+        if (workspaceId === undefined) return;
+        const pending = this.refreshing.get(socket)?.get(workspaceId);
+        if (pending) {
+            // Derrière ce qui attend déjà : l'ordre d'un flux ne se refait pas.
+            if (keep && pending.length < MAX_PENDING_FRAMES) pending.push({ deviceId, audience, frame: frame() });
+            return;
+        }
         const g = this.grants.get(socket)?.get(workspaceId);
-        return g !== undefined && g.epoch === epoch && mayReceiveDevice(g.held, deviceId, audience);
+        if (g !== undefined && g.epoch === accessEpochNow()) {
+            if (mayReceiveDevice(g.held, deviceId, audience)) socket.send(frame());
+            return;
+        }
+        this.refresh(socket, workspaceId, keep ? { deviceId, audience, frame: frame() } : null);
+    }
+
+    /** Lance le recalcul des droits d'une socket dans un espace, puis rend ce qui l'attendait. */
+    private refresh(socket: WebSocket, workspaceId: number, first: PendingFrame | null): void {
+        const refresher = this.refreshers.get(socket);
+        if (!refresher) return;
+        const queue: PendingFrame[] = first ? [first] : [];
+        const byWorkspace = this.refreshing.get(socket) ?? new Map<number, PendingFrame[]>();
+        byWorkspace.set(workspaceId, queue);
+        this.refreshing.set(socket, byWorkspace);
+        void refresher(workspaceId)
+            .catch((e: unknown) => logger.error({ err: e, workspaceId }, 'Device grants refresh failed'))
+            .finally(() => {
+                if (byWorkspace.get(workspaceId) !== queue) return;
+                byWorkspace.delete(workspaceId);
+                if (byWorkspace.size === 0) this.refreshing.delete(socket);
+                const g = this.grants.get(socket)?.get(workspaceId);
+                // Un accès a encore bougé pendant le calcul : la trame suivante le relancera.
+                if (g === undefined || g.epoch !== accessEpochNow()) return;
+                for (const p of queue) {
+                    if (this.socketDevices.get(socket)?.get(p.deviceId) !== workspaceId) continue;
+                    if (mayReceiveDevice(g.held, p.deviceId, p.audience)) socket.send(p.frame);
+                }
+            });
+    }
+
+    /** Le recalcul des droits de cette socket, appelé quand son instantané est périmé. */
+    setRefresher(socket: WebSocket, refresher: GrantRefresher): void {
+        this.refreshers.set(socket, refresher);
+    }
+
+    /** Les appareils que cette socket suit au titre de cet espace. */
+    subscribedIn(socket: WebSocket, workspaceId: number): string[] {
+        const watched = this.socketDevices.get(socket);
+        if (!watched) return [];
+        return [...watched].filter(([, ws]) => ws === workspaceId).map(([deviceId]) => deviceId);
     }
 
     /**
@@ -1440,20 +1519,16 @@ export class MonitorHub {
     private fanOut(deviceId: string, audience: DeviceAudience, buildFrame: () => string): void {
         const set = this.subscribers.get(deviceId);
         if (!set || set.size === 0) return;
-        const epoch = accessEpochNow();
         let frame: string | null = null;
-        for (const socket of set) {
-            if (!this.mayReceive(socket, deviceId, epoch, audience)) continue;
-            frame ??= buildFrame();
-            socket.send(frame);
-        }
+        const once = (): string => (frame ??= buildFrame());
+        for (const socket of set) this.deliver(socket, deviceId, audience, once, false);
     }
 
     /** Un état que partagent ceux à qui {@link DEVICE_EVENT_AUDIENCES} adresse l'événement. */
     private publishToSubscribers(deviceId: string, command: string, data: unknown): void {
         const audience = DEVICE_EVENT_AUDIENCES[command];
         if (audience === undefined || audience === 'requester') return;
-        this.fanOut(deviceId, audience, () => JSON.stringify({ command, payload: { ok: true, data } }));
+        this.fanOut(deviceId, audience, () => frameOf(command, data));
     }
 
     onlineDevices(deviceIds: string[]): Record<string, boolean> {
@@ -1523,6 +1598,8 @@ export class MonitorHub {
             this.socketShares.delete(socket);
         }
         this.grants.delete(socket);
+        this.refreshers.delete(socket);
+        this.refreshing.delete(socket);
     }
 
     publishMetric(deviceId: string, snapshot: MetricSnapshot): void {
@@ -1567,6 +1644,8 @@ export class MonitorHub {
         });
     }
 }
+
+const frameOf = (command: string, data: unknown): string => JSON.stringify({ command, payload: { ok: true, data } });
 
 function metricFrame(deviceId: string, snapshot: MetricSnapshot): string {
     return JSON.stringify({

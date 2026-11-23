@@ -184,6 +184,24 @@ export async function registerWS(
         const access = createAccessResolver(db, crypt, session.userId, session.sessionId);
 
         const monitor = createMonitorTransport(hub, socket);
+        // Un accès qui change n'importe où dans l'instance périme l'instantané
+        // du hub : il le fait recalculer ici, sans attendre une commande de
+        // l'onglet. Un appareil qui n'est plus visible de l'espace (projection
+        // retirée, appareil déplacé) quitte l'abonnement.
+        hub.setRefresher(socket, async (workspaceId) => {
+            const epoch = accessEpochNow();
+            try {
+                const held = await deviceGrantsOf(await access.forWorkspace(workspaceId));
+                const watched = hub.subscribedIn(socket, workspaceId);
+                const visible = await Promise.all(watched.map((id) => db.devices.findVisible(id, workspaceId)));
+                const gone = watched.filter((_, i) => visible[i] === null);
+                if (gone.length > 0) hub.unsubscribe(socket, gone);
+                hub.rememberGrants(socket, workspaceId, held, epoch);
+            } catch {
+                // Plus membre, compte suspendu, espace supprimé : aucun droit.
+                hub.rememberGrants(socket, workspaceId, NO_DEVICE_GRANTS, epoch);
+            }
+        });
 
         // Inscrite dès la poignée de main, avant tout `live.here` : le battement
         // de cœur doit couvrir toutes les sockets, pas seulement les vues
