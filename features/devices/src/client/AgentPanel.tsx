@@ -130,7 +130,7 @@ export function AgentPanel({
     const reach = agentReach(device);
     const fleet = firstReason(!canWrite && NO_WRITE, device.foreign && FOREIGN);
     const adminOnly = firstReason(!isAdmin && ADMIN_ONLY, fleet, reach);
-    const refused = agent ? POLICY_KEYS.filter((k) => !agent.policy[k]) : [];
+    const allowed = agent ? POLICY_KEYS.filter((k) => agent.policy[k]) : [];
 
     const autostart = agent?.autostart;
     // Sans service, l'activation en crée un à la mesure des privilèges de l'agent.
@@ -289,9 +289,11 @@ export function AgentPanel({
                         <Row
                             label='Politique locale'
                             value={
-                                refused.length === 0
-                                    ? 'tout est permis'
-                                    : `refuse : ${refused.map((k) => POLICY_LABEL[k]).join(', ')}`
+                                allowed.length === 0
+                                    ? 'surveillance seule'
+                                    : allowed.length === POLICY_KEYS.length
+                                      ? 'tout est permis'
+                                      : `permet : ${allowed.map((k) => POLICY_LABEL[k]).join(', ')}`
                             }
                         />
                         <Row label='Relevé le' value={new Date(report.collectedAt).toLocaleString('fr-FR')} />

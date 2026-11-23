@@ -120,7 +120,8 @@ TerminalPanel.tsx, FilesPanel.tsx, LogsPanel.tsx, PackagesPanel.tsx, PowerMenu.t
 DockerPanel.tsx             le transport agent.* et onServerEvent
 DeviceWidget.tsx            la tuile d'un appareil (DeviceWidget du provider), avec
                             DeviceWidget.module.css
-policy.ts                   les interrupteurs de [policy] de l'agent : libellés, options --deny
+policy.ts                   les interrupteurs de [policy] de l'agent : libellés, options --allow,
+                            et ce qui retient le terminal root
 deviceUsage.ts, agentUpdates.ts, agentVersion.ts, useAgentUpdate.tsx,
 utils.ts                    les stores et utilitaires du client
 availability.ts             pourquoi une entrée du menu est inerte, et dans quel ordre
@@ -474,8 +475,9 @@ Statuts (`devices.status`) : `pending`, `active`, `pending_deletion`,
   succès.
 - **La commande d'installation** (`manage/installCommand.ts`) nomme le
   serveur que renvoie `devices.linkCodeList` (`ctx.origins.app`, jamais
-  l'adresse du navigateur) et porte les droits choisis en options de `link`
-  (`--deny`, `--monitor-only`) : c'est la machine qui les retient.
+  l'adresse du navigateur) et porte les droits choisis dans l'option `--allow`
+  de `link` : c'est la machine qui les retient, et sans elle la machine n'est
+  que surveillée.
   `/install.sh` et `/install.ps1` sont servis par l'app (`src/agent/routes.ts`),
   rendus une fois depuis `agent/install/`.
 

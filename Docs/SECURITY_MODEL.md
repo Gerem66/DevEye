@@ -371,12 +371,13 @@ Application directe des deux étages ci-dessus (`features/notes/src/server/handl
 
 ## L'agent
 
-Un agent n'est pas une sonde avec quelques boutons : c'est un démon
-d'administration à distance. Avec la permission correspondante, un opérateur
+Un agent relié sans rien permettre est une sonde : il mesure, rapporte, et ne
+prend aucun ordre. Dès que la machine le permet, c'est un démon
+d'administration à distance : avec la permission correspondante, un opérateur
 obtient un shell, un explorateur de fichiers sans bac à sable, les mises à jour
 de paquets et l'extinction, sous le compte de l'agent (root pour un service
 système). Le modèle de confiance se dit donc sans détour : **qui contrôle le
-serveur contrôle les machines**, à ceci près.
+serveur contrôle ce que chaque machine lui a permis**, à ceci près.
 
 - **La confirmation pour piloter.** Le serveur signe pour toute session qui a
   les droits : un mot de passe ou un cookie volés suffiraient donc à piloter
@@ -394,13 +395,16 @@ serveur contrôle les machines**, à ceci près.
   place) ni se fabriquer des codes de secours (un code est exigé pour les
   régénérer). Ce que ça ne protège pas : un serveur compromis.
 - **La politique locale.** La section `[policy]` de l'`agent.toml` dit ce que la
-  machine accepte (onze interrupteurs, listés plus bas). Aucune trame ne la
-  modifie, l'explorateur n'atteint jamais le dossier de l'agent (ni en écriture,
-  ni en lecture, ni par un de ses parents : une recherche ou une analyse lancée
-  plus haut n'y entre pas), et le rapport de l'appareil la publie pour
-  que l'interface grise ce qui serait refusé. C'est le seul réglage de la machine
-  que le serveur ne décide pas : une installation « supervision seule » se fait
-  là. Limite honnête : un terminal root autorisé rend le reste consultatif.
+  machine accepte (douze interrupteurs, listés plus bas), et rien n'y est
+  permis par défaut : une machine reliée sans le dire n'est que surveillée.
+  Aucune trame ne la modifie, l'explorateur n'atteint jamais le dossier de
+  l'agent (ni en écriture, ni en lecture, ni par un de ses parents : une
+  recherche ou une analyse lancée plus haut n'y entre pas), et le rapport de
+  l'appareil la publie pour que l'interface grise ce qui serait refusé. C'est
+  le seul réglage de la machine que le serveur ne décide pas. Limite honnête :
+  le terminal root est un interrupteur à part parce qu'une fois permis il rend
+  les autres consultatifs, et sur un agent root l'écriture de fichiers ou
+  Docker y mènent aussi.
 - **Les ordres signés.** Ce qui exécute du code, écrit, déplace, supprime ou
   lit le contenu d'un fichier, change les privilèges de l'agent, sa vie ou son
   jeton, ou commande ce que CloudSync écrit (`SIGNED_AGENT_COMMANDS`) porte une
@@ -454,17 +458,28 @@ serveur contrôle les machines**, à ceci près.
   l'appelant. Un code à plusieurs usages la refuse, pour que deux clones ne se
   prennent pas leur fiche. Révoquer archive l'appareil et détruit son jeton :
   seul un nouvel appairage le fait revenir.
-- **Les droits décidés sur la machine.** `[policy]` (onze interrupteurs :
-  terminal, lecture de fichiers, écriture de fichiers, alimentation, mises à
-  jour de paquets, élévation du service, auto-destruction, Docker, déploiements
-  Docker, CloudSync, tunnels) se fixe à la
-  liaison (`--deny`, `--monitor-only`) et ne change que sur la machine
-  (`deveye-agent policy`) ; aucun ordre du serveur n'y touche, et la rotation
-  du jeton réécrit le fichier tel qu'il est sur disque. La surveillance
-  (mesures, rapports, inventaire Docker) n'est jamais refusée.
+- **Les droits décidés sur la machine.** `[policy]` (douze interrupteurs :
+  terminal, terminal root, lecture de fichiers, écriture de fichiers,
+  alimentation, mises à jour de paquets, élévation du service,
+  auto-destruction, Docker, déploiements Docker, CloudSync, tunnels) se fixe à
+  la liaison (`--allow`, sans quoi rien n'est permis) et ne change que sur la
+  machine (`deveye-agent policy`) ; aucun ordre du serveur n'y touche, et la
+  rotation du jeton réécrit le fichier tel qu'il est sur disque. Un
+  interrupteur absent du fichier vaut un refus. La fenêtre d'appairage propose
+  « Surveillance seule » d'abord. La surveillance (mesures, rapports,
+  inventaire Docker) n'est jamais refusée.
+- **Le terminal root.** Un agent root ouvre un shell root, sauf si la session
+  nomme un autre compte, qu'il rejoint par `su -l`. Ce shell exige
+  l'interrupteur `terminal-root` en plus de `terminal` : sans lui, l'agent
+  refuse une session sans compte, au nom de root ou d'un compte d'uid 0, ou
+  dont le compte ne se résout pas, et l'interface demande un compte dans les
+  réglages du terminal. Sous Windows, où le shell est toujours celui de
+  l'agent, un agent élevé l'exige pour tout terminal. Un fichier qui ne porte
+  pas cet interrupteur le refuse, comme tout interrupteur absent :
+  `sudo deveye-agent policy --allow terminal-root`, sur la machine, le permet.
 - **Le script d'installation** (`/install.sh`, `/install.ps1`) exécute ce que
-  le serveur envoie : un serveur compromis servirait un script sans les `--deny`
-  demandés. Pour une machine où cela compte, le binaire publié et un `link`
+  le serveur envoie : un serveur compromis servirait un script qui permet plus
+  que les `--allow` demandés. Pour une machine où cela compte, le binaire publié et un `link`
   tapé à la main s'en passent. Il ne porte aucun secret ; l'origine y est
   validée avant d'être posée entre apostrophes.
 - **L'auto-mise à jour** ne dépend pas du serveur : sha256 du binaire et
@@ -503,8 +518,8 @@ serveur contrôle les machines**, à ceci près.
   foyer) que si le partage l'autorise, ce qu'il ne fait pas par défaut. Sans
   cette règle, écrire dans un partage vaudrait un terminal : l'autoriser exige
   donc le droit « Terminal distant » sur chaque appareil du partage et une
-  confirmation récente, et un agent dont la politique refuse le terminal les
-  refuse toujours. L'accord vaut pour quiconque écrit dans le partage.
+  confirmation récente, et un agent dont la politique refuse le terminal (le
+  terminal root, pour un agent root) les refuse toujours. L'accord vaut pour quiconque écrit dans le partage.
 - **Tunnels** : une connexion TCP que la machine ouvre pour un module (une base
   de données sur sa boucle locale), sous un droit d'Appareils qui n'est pas
   celui du terminal (« Accès au réseau de l'appareil »). L'agent ne joint que sa

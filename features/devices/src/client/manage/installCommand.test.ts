@@ -17,40 +17,48 @@ const base: InstallChoice = {
     os: 'linux',
     server: 'https://app.deveye.fr',
     code: 'ABCD-EFGH',
-    denied: [],
+    allowed: [],
     autostart: true,
     admin: false,
     shuffleId: false
 };
 
 describe('installCommand', () => {
-    it('installe et relie en une ligne, sans option pour le contrôle complet', () => {
+    it('installe et relie en une ligne, sans option pour la surveillance seule', () => {
         assert.equal(
             installCommand(base),
             'curl -fsSL https://app.deveye.fr/install.sh | sh -s -- ABCD-EFGH --autostart'
         );
     });
 
-    it("passe sous sudo pour l'administrateur, et les refus dans l'ordre de l'agent", () => {
+    it("passe sous sudo pour l'administrateur, et les droits dans l'ordre de l'agent", () => {
         assert.equal(
-            installCommand({ ...base, admin: true, denied: ['power', 'terminal'], shuffleId: true }),
-            'curl -fsSL https://app.deveye.fr/install.sh | sudo sh -s -- ABCD-EFGH --deny terminal,power --autostart --shuffle-id'
+            installCommand({ ...base, admin: true, allowed: ['power', 'terminal'], shuffleId: true }),
+            'curl -fsSL https://app.deveye.fr/install.sh | sudo sh -s -- ABCD-EFGH --allow terminal,power --autostart --shuffle-id'
         );
     });
 
-    it('tout refuser se dit --monitor-only', () => {
+    it('tout permettre se dit --allow all', () => {
+        assert.match(installCommand({ ...base, allowed: POLICY_KEYS, autostart: false }), /-- ABCD-EFGH --allow all$/);
+    });
+
+    it("tait un droit dont le préalable n'est pas choisi", () => {
         assert.match(
-            installCommand({ ...base, denied: POLICY_KEYS, autostart: false }),
-            /-- ABCD-EFGH --monitor-only$/
+            installCommand({ ...base, allowed: ['terminalRoot', 'dockerDeploy', 'filesRead'], autostart: false }),
+            /-- ABCD-EFGH --allow files-read$/
+        );
+        assert.match(
+            installCommand({ ...base, allowed: ['terminalRoot', 'terminal'], autostart: false }),
+            /-- ABCD-EFGH --allow terminal,terminal-root$/
         );
     });
 
     it('sous Windows, force TLS 1.2 et encadre la liste, que PowerShell prendrait pour un tableau', () => {
-        const command = installCommand({ ...base, os: 'windows', admin: true, denied: ['terminal', 'sync'] });
+        const command = installCommand({ ...base, os: 'windows', admin: true, allowed: ['terminal', 'sync'] });
         assert.ok(command.startsWith('[Net.ServicePointManager]::SecurityProtocol'));
         assert.ok(
             command.endsWith(
-                "& ([scriptblock]::Create((irm https://app.deveye.fr/install.ps1))) ABCD-EFGH --deny 'terminal,sync' --autostart"
+                "& ([scriptblock]::Create((irm https://app.deveye.fr/install.ps1))) ABCD-EFGH --allow 'terminal,sync' --autostart"
             ),
             command
         );

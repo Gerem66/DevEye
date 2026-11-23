@@ -1,5 +1,8 @@
+import type { AgentInfo } from '@deveye/types';
+
 import type { FleetDevice } from '../contracts/commands';
 import { manifest } from '../manifest';
+import { rootTerminalBlock } from './policy';
 import { pauseEnd } from './utils';
 
 /** Pourquoi une entrée du menu est inerte : le glyphe qui le dit, la phrase en infobulle. */
@@ -60,6 +63,22 @@ export const LOCAL_POLICY: Unavailable = {
     icon: 'icon-lock',
     reason: 'Refusé par la politique locale de l’agent (agent.toml, sur la machine)'
 };
+
+/** Le terminal root que la machine refuse : ce qui le lève se lit dans le motif. */
+export function rootTerminalRefused(
+    device: Pick<FleetDevice, 'platform' | 'terminalDefaultUser'>,
+    agent: AgentInfo | null | undefined
+): Unavailable | undefined {
+    const block = rootTerminalBlock(device, agent);
+    if (block === null) return undefined;
+    return {
+        icon: 'icon-lock',
+        reason:
+            block === 'account'
+                ? 'Terminal root refusé par la machine : nommez un compte dans les réglages du terminal'
+                : 'Terminal administrateur refusé par la machine (terminal-root, dans la politique locale de l’agent)'
+    };
+}
 
 export const OFFLINE: Unavailable = {
     icon: 'icon-x-circle',

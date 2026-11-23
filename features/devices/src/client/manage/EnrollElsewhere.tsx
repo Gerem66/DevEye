@@ -12,7 +12,7 @@ import {
     type ErrorNoteInput,
     type RemoteWorkspaceTarget
 } from 'deveye-sdk-client';
-import type { Device } from '@deveye/types';
+import { AGENT_LINK_ALLOW_PROBE, type Device } from '@deveye/types';
 import type { SettingsPanelProps } from '@deveye/types/sdk/client';
 
 import { api } from '../api';
@@ -66,9 +66,11 @@ function EnrollElsewhere({ device, workspaces }: { device: Device; workspaces: r
 
     const target = workspaces.find((w) => w.key === choice) ?? null;
     const validName = isInstanceName(instance);
-    // Les mêmes droits qu'ici : ce que la machine refuse à ce serveur, elle le
-    // refuse à l'autre. Ils se changent sur la machine, jamais d'un serveur.
-    const denied = POLICY_KEYS.filter((key) => agent?.policy[key] === false);
+    // Les mêmes droits qu'ici : la machine ne permet à l'autre serveur que ce
+    // qu'elle permet à celui-ci. Ils se changent sur elle, jamais d'un serveur.
+    const allowed = POLICY_KEYS.filter((key) => agent?.policy[key] === true);
+    // La commande porte `--allow`, qu'un agent plus ancien ne connaît pas.
+    const outdated = agent !== null && !(agent.probes?.includes(AGENT_LINK_ALLOW_PROBE) ?? false);
     const windows = device.platform === 'windows';
 
     const pick = (key: string) => {
@@ -106,7 +108,7 @@ function EnrollElsewhere({ device, workspaces }: { device: Device; workspaces: r
                   os: device.platform,
                   server: issued.server,
                   code: issued.code,
-                  denied,
+                  allowed,
                   autostart,
                   admin,
                   shuffleId: false,
@@ -147,12 +149,18 @@ function EnrollElsewhere({ device, workspaces }: { device: Device; workspaces: r
                         />
                         <Button
                             variant='secondary'
-                            disabled={busy || target === null || !validName}
+                            disabled={busy || target === null || !validName || outdated}
                             onClick={() => void generate()}
                         >
                             {busy ? 'Demande…' : 'Générer la commande'}
                         </Button>
                     </div>
+                    {outdated && (
+                        <p className={styles.genError}>
+                            L’agent de cette machine est trop ancien pour cette commande : mettez-le à jour depuis sa
+                            popup « Agent », puis revenez ici.
+                        </p>
+                    )}
                     {target && (
                         <div className={styles.pairOptions}>
                             <label className={shell.field}>
@@ -189,7 +197,7 @@ function EnrollElsewhere({ device, workspaces }: { device: Device; workspaces: r
                                 }
                             />
                             <p className={styles.pairHint}>
-                                {rightsLine(denied)} Pour les changer plus tard,{' '}
+                                {rightsLine(allowed)} Pour les changer plus tard,{' '}
                                 <code>deveye-agent --instance {validName ? instance : '<nom>'} policy</code> sur la
                                 machine.
                             </p>
@@ -226,9 +234,9 @@ function EnrollElsewhere({ device, workspaces }: { device: Device; workspaces: r
     );
 }
 
-/** Ce que la machine refuse à ce serveur, qu'elle refusera à l'autre. */
-function rightsLine(denied: readonly PolicyKey[]): string {
-    if (denied.length === 0) return 'Mêmes droits qu’ici : contrôle complet.';
-    if (denied.length === POLICY_KEYS.length) return 'Mêmes droits qu’ici : surveillance seule.';
-    return `Mêmes droits qu’ici : refuse ${denied.map((key) => POLICY_LABEL[key]).join(', ')}.`;
+/** Ce que la machine permet à ce serveur, qu'elle permettra à l'autre. */
+function rightsLine(allowed: readonly PolicyKey[]): string {
+    if (allowed.length === 0) return 'Mêmes droits qu’ici : surveillance seule.';
+    if (allowed.length === POLICY_KEYS.length) return 'Mêmes droits qu’ici : contrôle complet.';
+    return `Mêmes droits qu’ici : ${allowed.map((key) => POLICY_LABEL[key]).join(', ')}.`;
 }

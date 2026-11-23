@@ -1,10 +1,10 @@
-import { POLICY_FLAG, POLICY_KEYS, type PolicyKey } from '../policy';
+import { effectivePolicy, POLICY_FLAG, POLICY_KEYS, type PolicyKey } from '../policy';
 
 /**
  * Les commandes que la fenêtre d'appairage fait copier : installer l'agent et
  * relier la machine d'une ligne (`install.sh`, `install.ps1`), ou relier un
- * agent déjà présent. Les droits choisis deviennent des options de `link` :
- * c'est la machine qui les retient, jamais le serveur.
+ * agent déjà présent. Les droits choisis deviennent l'option `--allow` de
+ * `link` : c'est la machine qui les retient, jamais le serveur.
  */
 
 export type InstallOs = 'linux' | 'macos' | 'windows';
@@ -14,8 +14,8 @@ export interface InstallChoice {
     /** L'origine que l'agent joint, sans barre finale. */
     server: string;
     code: string;
-    /** Ce que la machine refusera ; vide : contrôle complet. */
-    denied: readonly PolicyKey[];
+    /** Ce que la machine permettra ; vide : surveillance seule. */
+    allowed: readonly PolicyKey[];
     autostart: boolean;
     /** Linux et macOS : sous `sudo`, pour un service système. */
     admin: boolean;
@@ -36,9 +36,9 @@ function instanceArgs(choice: InstallChoice): string[] {
 /** Les options de `deveye-agent link`, que le script lui passe telles quelles. */
 export function linkArgs(choice: InstallChoice): string[] {
     const args: string[] = [];
-    const denied = POLICY_KEYS.filter((key) => choice.denied.includes(key));
-    if (denied.length === POLICY_KEYS.length) args.push('--monitor-only');
-    else if (denied.length > 0) args.push('--deny', denied.map((key) => POLICY_FLAG[key]).join(','));
+    const allowed = effectivePolicy(choice.allowed);
+    if (allowed.length === POLICY_KEYS.length) args.push('--allow', 'all');
+    else if (allowed.length > 0) args.push('--allow', allowed.map((key) => POLICY_FLAG[key]).join(','));
     if (choice.autostart) args.push('--autostart');
     if (choice.shuffleId) args.push('--shuffle-id');
     return args;

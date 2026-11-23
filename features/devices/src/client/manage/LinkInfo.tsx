@@ -30,8 +30,10 @@ export function LinkInfo() {
             <h4>Les droits</h4>
             <p>
                 Ce que DevEye peut faire sur un appareil se décide sur l&apos;appareil lui-même, au moment de le relier.
-                Ni le serveur ni un compte compromis ne peuvent l&apos;élargir : seule la commande{' '}
-                <code>deveye-agent policy</code>, lancée sur la machine, rend un droit.
+                Rien n&apos;est permis par défaut : la machine n&apos;est alors que surveillée. Ni le serveur ni un
+                compte compromis ne peuvent élargir ces droits : seule la commande <code>deveye-agent policy</code>,
+                lancée sur la machine, en accorde ou en retire un. Le terminal root d&apos;un agent lancé en
+                administrateur est un droit à part.
             </p>
         </div>
     );

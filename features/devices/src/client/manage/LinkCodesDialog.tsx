@@ -12,7 +12,7 @@ import {
 } from 'deveye-sdk-client';
 import { LINK_CODE_MAX_USES } from '@deveye/types';
 
-import { POLICY_KEYS, POLICY_LABEL, type PolicyKey } from '../policy';
+import { effectivePolicy, POLICY_KEYS, POLICY_LABEL, POLICY_REQUIRES, type PolicyKey } from '../policy';
 import { formatExpiry } from './format';
 import { installCommand, linkCommand, osOf, type InstallOs } from './installCommand';
 import { TTL_PRESETS, type LinkCodes } from './useLinkCodes';
@@ -29,13 +29,6 @@ const OS_OPTIONS: readonly { value: InstallOs; label: string }[] = [
 
 const RIGHTS_OPTIONS: readonly { value: Rights; label: string; icon: string; description: string }[] = [
     {
-        value: 'full',
-        label: 'Contrôle complet',
-        icon: 'icon-unlock',
-        description:
-            'Terminal, fichiers, alimentation, mises à jour, Docker : tout ce que DevEye sait faire à distance.'
-    },
-    {
         value: 'monitor',
         label: 'Surveillance seule',
         icon: 'icon-eye-open',
@@ -46,6 +39,13 @@ const RIGHTS_OPTIONS: readonly { value: Rights; label: string; icon: string; des
         label: 'Sur mesure',
         icon: 'icon-settings',
         description: 'Vous choisissez ce que DevEye pourra faire sur cette machine.'
+    },
+    {
+        value: 'full',
+        label: 'Contrôle complet',
+        icon: 'icon-unlock',
+        description:
+            'Terminal, fichiers, alimentation, mises à jour, Docker : tout ce que DevEye sait faire à distance, terminal root compris si l’agent tourne en administrateur.'
     }
 ];
 
@@ -71,7 +71,8 @@ function quotaLine({ used, limit }: { used: number; limit: number }): string {
  */
 export function LinkCodesDialog({ links, onDownload }: { links: LinkCodes; onDownload: () => void }) {
     const [os, setOs] = useState<InstallOs>(() => osOf(browserPlatform()));
-    const [rights, setRights] = useState<Rights>('full');
+    const [rights, setRights] = useState<Rights>('monitor');
+    /** Ce que « Sur mesure » permet : rien tant que rien n'est coché. */
     const [custom, setCustom] = useState<PolicyKey[]>([]);
     const [autostart, setAutostart] = useState(true);
     const [admin, setAdmin] = useState(false);
@@ -83,14 +84,17 @@ export function LinkCodesDialog({ links, onDownload }: { links: LinkCodes; onDow
 
     const selected = links.selected;
     const serves = selected ? selected.maxUses > 1 : false;
-    const denied = rights === 'full' ? [] : rights === 'monitor' ? POLICY_KEYS : custom;
+    const allowed = effectivePolicy(rights === 'full' ? POLICY_KEYS : rights === 'monitor' ? [] : custom);
+    // Écrire un fichier ou piloter Docker en root vaut un shell root.
+    const rootInAllButName =
+        admin && !allowed.includes('terminalRoot') && (allowed.includes('filesWrite') || allowed.includes('docker'));
     const command =
         selected && links.server
             ? (variant === 'install' ? installCommand : linkCommand)({
                   os,
                   server: links.server,
                   code: selected.code,
-                  denied,
+                  allowed,
                   autostart,
                   admin,
                   shuffleId: serves && shuffleId
@@ -110,8 +114,8 @@ export function LinkCodesDialog({ links, onDownload }: { links: LinkCodes; onDow
         window.setTimeout(() => setCopied(false), 2000);
     };
 
-    const toggleCustom = (key: PolicyKey, allowed: boolean) =>
-        setCustom((prev) => (allowed ? prev.filter((k) => k !== key) : [...prev, key]));
+    const toggleCustom = (key: PolicyKey, checked: boolean) =>
+        setCustom((prev) => (checked ? [...prev, key] : prev.filter((k) => k !== key)));
 
     return (
         <Dialog
@@ -151,21 +155,33 @@ export function LinkCodesDialog({ links, onDownload }: { links: LinkCodes; onDow
                 <ChoiceCards value={rights} options={RIGHTS_OPTIONS} onChange={setRights} aria-label='Droits' />
                 {rights === 'custom' && (
                     <div className={styles.policyGrid}>
-                        {POLICY_KEYS.map((key) => (
-                            <Checkbox
-                                key={key}
-                                checked={!custom.includes(key)}
-                                onChange={(allowed) => toggleCustom(key, allowed)}
-                            >
-                                {POLICY_LABEL[key].charAt(0).toUpperCase() + POLICY_LABEL[key].slice(1)}
-                            </Checkbox>
-                        ))}
+                        {POLICY_KEYS.map((key) => {
+                            const needs = POLICY_REQUIRES[key];
+                            const reachable = needs === undefined || custom.includes(needs);
+                            return (
+                                <Checkbox
+                                    key={key}
+                                    checked={reachable && custom.includes(key)}
+                                    disabled={!reachable}
+                                    onChange={(checked) => toggleCustom(key, checked)}
+                                >
+                                    {POLICY_LABEL[key].charAt(0).toUpperCase() + POLICY_LABEL[key].slice(1)}
+                                </Checkbox>
+                            );
+                        })}
                     </div>
                 )}
                 <p className={styles.pairHint}>
                     Ces droits se décident sur la machine : DevEye ne pourra jamais les élargir. Pour les changer plus
-                    tard, <code>deveye-agent policy</code> sur la machine.
+                    tard, <code>deveye-agent policy</code> sur la machine. Relier à nouveau une machine lui laisse ceux
+                    qu’elle avait déjà.
                 </p>
+                {rootInAllButName && (
+                    <p className={styles.pairHint}>
+                        En administrateur, l’écriture de fichiers et Docker suffisent à prendre la main sur toute la
+                        machine, même sans terminal root.
+                    </p>
+                )}
             </div>
 
             <div className={styles.pairOptions}>

@@ -13,6 +13,7 @@ import {
 } from 'deveye-sdk-client';
 
 import { api } from './api';
+import { rootTerminalBlock } from './policy';
 import { refreshDevices, useDevices } from './store';
 
 const EXIT_OPTIONS: readonly SearchSelectOption<'close' | 'keep'>[] = [
@@ -45,6 +46,13 @@ export function TerminalSettings({ deviceId, canWrite }: { deviceId: string; can
     }, [deviceId, known]);
 
     const userValid = defaultUser === '' || terminalUser.safeParse(defaultUser).success;
+    // Jugé sur la saisie : la note s'efface dès qu'un compte la lève.
+    const rootBlock =
+        device &&
+        rootTerminalBlock(
+            { platform: device.platform, terminalDefaultUser: defaultUser === '' ? null : defaultUser },
+            device.report?.agent
+        );
 
     const save = async () => {
         setError(null);
@@ -94,6 +102,14 @@ export function TerminalSettings({ deviceId, canWrite }: { deviceId: string; can
                     la prochaine session.
                 </span>
             </label>
+            {rootBlock && (
+                <p className={shell.notice}>
+                    {rootBlock === 'policy'
+                        ? 'L’agent de cette machine tourne en administrateur, et elle refuse le terminal qu’il ouvrirait.'
+                        : 'L’agent de cette machine tourne en root, et elle refuse le terminal root : sans autre compte nommé ici, le terminal ne s’ouvre pas.'}{' '}
+                    Pour le permettre, sur la machine : <code>deveye-agent policy --allow terminal-root</code>.
+                </p>
+            )}
 
             <label className={shell.field}>
                 <span className={shell.sectionLabel}>À la fin de la session</span>

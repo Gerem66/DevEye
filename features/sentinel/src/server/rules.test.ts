@@ -281,6 +281,7 @@ describe('Règles de ports', () => {
                             probes: [],
                             policy: {
                                 terminal: true,
+                                terminalRoot: true,
                                 filesRead: true,
                                 filesWrite: true,
                                 power: true,

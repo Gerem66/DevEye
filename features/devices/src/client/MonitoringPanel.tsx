@@ -33,7 +33,15 @@ import { AgentPanel } from './AgentPanel';
 import { HardwareInfo } from './HardwareInfo';
 import { Connections } from './Connections';
 import { DeviceActionsMenu, type DeviceAction } from './DeviceActionsMenu';
-import { agentReach, firstReason, LOCAL_POLICY, missingPermission, OLD_AGENT, type Unavailable } from './availability';
+import {
+    agentReach,
+    firstReason,
+    LOCAL_POLICY,
+    missingPermission,
+    OLD_AGENT,
+    rootTerminalRefused,
+    type Unavailable
+} from './availability';
 import { PrivilegeInfo } from './PrivilegeInfo';
 import { OpenPorts } from './OpenPorts';
 import { groupPorts } from './ports';
@@ -1028,7 +1036,8 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         label: string,
         onClick: () => void,
         icon: string,
-        order?: keyof AgentPolicy
+        order?: keyof AgentPolicy,
+        alsoRefused?: Unavailable
     ): DeviceAction => ({
         icon,
         label,
@@ -1036,7 +1045,8 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         unavailable: firstReason(
             permissions.canExtra('devices', key, selected.id) ? undefined : missingPermission(key),
             reach,
-            order && refusedLocally(order)
+            order && refusedLocally(order),
+            alsoRefused
         )
     });
 
@@ -1044,7 +1054,14 @@ export default function MonitoringPanel({ deviceId }: MonitoringPanelProps) {
         // Le seul geste qui ne dépend de rien : il relit le dernier rapport reçu.
         { icon: 'icon-cpu', label: 'Matériel', onClick: showHardwareInfo },
         remote('files', 'Explorateur de fichiers', () => setFilesOpen(true), 'icon-folder', 'filesRead'),
-        remote('terminal', 'Terminal distant', () => setTerminalOpen(true), 'icon-terminal', 'terminal'),
+        remote(
+            'terminal',
+            'Terminal distant',
+            () => setTerminalOpen(true),
+            'icon-terminal',
+            'terminal',
+            rootTerminalRefused(selected, report?.agent)
+        ),
         remote('logs', 'Journaux de l’appareil', () => setLogsOpen(true), 'icon-logs'),
         {
             icon: 'icon-server',
