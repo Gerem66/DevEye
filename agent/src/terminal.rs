@@ -7,13 +7,13 @@
 //!
 //! `TermManager` is owned by the session loop (single task), so its map needs no
 //! locking. Sessions are killed on explicit close, on shell exit (reader EOF), and
-//! on drop (socket close) — so a disconnect never leaves an orphan shell.
+//! on drop (socket close), so a disconnect never leaves an orphan shell.
 
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::sync::mpsc as std_mpsc;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
 use tokio::sync::mpsc::Sender;
 
@@ -67,6 +67,9 @@ impl TermManager {
     ) -> Result<()> {
         if self.sessions.contains_key(&session_id) {
             return Ok(());
+        }
+        if requested(user.as_deref()).is_some_and(|name| !is_account_name(name)) {
+            bail!("invalid account name");
         }
         let pair = native_pty_system()
             .openpty(PtySize {
@@ -169,9 +172,48 @@ impl Drop for TermManager {
     }
 }
 
+/// The account a session names, when it names one.
+fn requested(user: Option<&str>) -> Option<&str> {
+    user.map(str::trim).filter(|u| !u.is_empty())
+}
+
+/// A name `su` reads as an account, never as one of its options.
+fn is_account_name(name: &str) -> bool {
+    !name.starts_with('-')
+}
+
+/// Would a shell opened for `user` be root's (an elevated one on Windows)?
+/// Only a privileged agent hands one out: `su` asks any other for a password.
+pub fn opens_root_shell(user: Option<&str>) -> bool {
+    crate::config::privileged() && runs_as_root(user, account_uid)
+}
+
+/// Whether a privileged agent's shell for `user` runs as root: no account
+/// named, or one of uid 0. An account that does not resolve counts as root,
+/// since `su` falls back to it when it is given none.
+#[cfg(unix)]
+fn runs_as_root(user: Option<&str>, uid_of: impl Fn(&str) -> Option<u32>) -> bool {
+    match requested(user) {
+        None => true,
+        Some(name) => !is_account_name(name) || uid_of(name).unwrap_or(0) == 0,
+    }
+}
+
+/// Windows has no `su`: the shell is always the agent's own.
+#[cfg(windows)]
+fn runs_as_root(_user: Option<&str>, _uid_of: impl Fn(&str) -> Option<u32>) -> bool {
+    true
+}
+
+/// The uid behind an account name, asked of `id`, which resolves it the way
+/// `su` will (directory accounts included).
+fn account_uid(name: &str) -> Option<u32> {
+    crate::report::run("id", &["-u", name])?.trim().parse().ok()
+}
+
 /// The shell to run, with a sane terminal env and the agent user's home as cwd.
 /// `user` (Unix only), when set to a *different* account, switches to it with
-/// `su -l` — a login shell, so that user's rc files (oh-my-zsh, etc.) load. As
+/// `su -l`: a login shell, so that user's rc files (oh-my-zsh, etc.) load. As
 /// root this is seamless; otherwise `su` simply prompts for the password in the PTY.
 fn build_shell(user: Option<&str>) -> CommandBuilder {
     #[cfg(windows)]
@@ -182,9 +224,7 @@ fn build_shell(user: Option<&str>) -> CommandBuilder {
     #[cfg(unix)]
     let mut cmd = {
         let me = crate::report::current_user();
-        let switch = user
-            .map(str::trim)
-            .filter(|u| !u.is_empty() && *u != me.as_str());
+        let switch = requested(user).filter(|u| *u != me.as_str());
         match switch {
             Some(u) => {
                 let mut c = CommandBuilder::new("su");
@@ -202,4 +242,50 @@ fn build_shell(user: Option<&str>) -> CommandBuilder {
         cmd.cwd(home);
     }
     cmd
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    fn uid_of(name: &str) -> Option<u32> {
+        match name {
+            "root" | "toor" => Some(0),
+            "alice" => Some(1000),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn only_a_named_account_that_is_not_root_keeps_a_privileged_shell_out_of_root() {
+        assert!(runs_as_root(None, uid_of));
+        assert!(runs_as_root(Some("  "), uid_of));
+        assert!(runs_as_root(Some("root"), uid_of));
+        assert!(
+            runs_as_root(Some("toor"), uid_of),
+            "uid 0 under another name"
+        );
+        assert!(!runs_as_root(Some("alice"), uid_of));
+        assert!(!runs_as_root(Some(" alice "), uid_of));
+        assert!(runs_as_root(Some("nobody-here"), uid_of), "unresolved");
+    }
+
+    #[test]
+    fn the_system_tells_root_from_an_account_it_does_not_know() {
+        assert_eq!(account_uid("root"), Some(0));
+        assert_eq!(account_uid("deveye-no-such-account"), None);
+    }
+
+    #[test]
+    fn a_name_su_would_read_as_an_option_is_never_an_account() {
+        for name in ["-", "-l", "--help", "-s/bin/sh"] {
+            assert!(!is_account_name(name), "{name}");
+            // Even if something resolved it, `su` would get no account: root.
+            assert!(runs_as_root(Some(name), |_| Some(1000)), "{name}");
+        }
+        let (tx, _rx) = tokio::sync::mpsc::channel(1);
+        let mut terminals = TermManager::new(tx);
+        let refused = terminals.open("s".into(), 80, 24, Some("-l".into()));
+        assert!(refused.unwrap_err().to_string().contains("account name"));
+    }
 }

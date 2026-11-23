@@ -79,14 +79,18 @@ pub struct Config {
 }
 
 /// What this machine's operator allows the server to order. No frame maps to
-/// it: it is the one thing on the device the server does not decide. Everything
-/// defaults to allowed; set a key to `false` to get monitoring without that
-/// kind of remote control.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// it: it is the one thing on the device the server does not decide. Nothing
+/// is allowed until the operator says so: a key left out is `false`, and the
+/// machine is only monitored.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Policy {
     /// `term.open`: an interactive shell.
     pub allow_terminal: bool,
+    /// `term.open` when the shell would be root's (an elevated one on
+    /// Windows): the agent runs privileged, and the session names no account
+    /// or one of uid 0. Needs `allow_terminal` too.
+    pub allow_terminal_root: bool,
     /// `files.list`, `files.analyze`, `files.search`, `files.download`,
     /// `files.archive`: browsing, searching and downloading files.
     pub allow_files_read: bool,
@@ -112,29 +116,12 @@ pub struct Policy {
     pub allow_tunnel: bool,
 }
 
-impl Default for Policy {
-    fn default() -> Self {
-        Self {
-            allow_terminal: true,
-            allow_files_read: true,
-            allow_files_write: true,
-            allow_power: true,
-            allow_pkg_upgrade: true,
-            allow_service_elevate: true,
-            allow_destroy: true,
-            allow_docker: true,
-            allow_docker_deploy: true,
-            allow_sync: true,
-            allow_tunnel: true,
-        }
-    }
-}
-
 /// One switch of `[policy]`, as the command line names it
-/// (`--deny terminal,power`).
+/// (`--allow terminal,files-read`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum PolicyKey {
     Terminal,
+    TerminalRoot,
     FilesRead,
     FilesWrite,
     Power,
@@ -151,8 +138,9 @@ pub enum PolicyKey {
 
 impl PolicyKey {
     /// The switches themselves, `all` aside.
-    pub const SWITCHES: [PolicyKey; 11] = [
+    pub const SWITCHES: [PolicyKey; 12] = [
         PolicyKey::Terminal,
+        PolicyKey::TerminalRoot,
         PolicyKey::FilesRead,
         PolicyKey::FilesWrite,
         PolicyKey::Power,
@@ -169,6 +157,7 @@ impl PolicyKey {
     pub fn toml_key(self) -> &'static str {
         match self {
             PolicyKey::Terminal => "allow_terminal",
+            PolicyKey::TerminalRoot => "allow_terminal_root",
             PolicyKey::FilesRead => "allow_files_read",
             PolicyKey::FilesWrite => "allow_files_write",
             PolicyKey::Power => "allow_power",
@@ -187,6 +176,7 @@ impl PolicyKey {
     pub fn label(self) -> &'static str {
         match self {
             PolicyKey::Terminal => "terminal",
+            PolicyKey::TerminalRoot => "root terminal",
             PolicyKey::FilesRead => "file browsing and downloads",
             PolicyKey::FilesWrite => "file writes",
             PolicyKey::Power => "power",
@@ -199,6 +189,13 @@ impl PolicyKey {
             PolicyKey::Tunnel => "tunnels to local services",
             PolicyKey::All => "everything",
         }
+    }
+
+    fn refusal(self) -> String {
+        format!(
+            "refused by local policy ({} = false in agent.toml)",
+            self.toml_key()
+        )
     }
 
     /// `all` stands for every switch.
@@ -237,6 +234,7 @@ impl Policy {
     fn switch(&mut self, key: PolicyKey) -> &mut bool {
         match key {
             PolicyKey::Terminal => &mut self.allow_terminal,
+            PolicyKey::TerminalRoot => &mut self.allow_terminal_root,
             PolicyKey::FilesRead => &mut self.allow_files_read,
             PolicyKey::FilesWrite => &mut self.allow_files_write,
             PolicyKey::Power => &mut self.allow_power,
@@ -254,6 +252,7 @@ impl Policy {
     fn get(&self, key: PolicyKey) -> bool {
         match key {
             PolicyKey::Terminal => self.allow_terminal,
+            PolicyKey::TerminalRoot => self.allow_terminal_root,
             PolicyKey::FilesRead => self.allow_files_read,
             PolicyKey::FilesWrite => self.allow_files_write,
             PolicyKey::Power => self.allow_power,
@@ -278,7 +277,7 @@ impl Policy {
         self.set(keys, false)
     }
 
-    /// Allow these switches again. Returns whether anything changed.
+    /// Allow these switches. Returns whether anything changed.
     pub fn allow(&mut self, keys: &[PolicyKey]) -> bool {
         self.set(keys, true)
     }
@@ -293,12 +292,19 @@ impl Policy {
         changed
     }
 
-    /// The switches this machine refuses.
-    pub fn refused(&self) -> Vec<PolicyKey> {
+    /// The switches this machine allows.
+    pub fn allowed(&self) -> Vec<PolicyKey> {
         PolicyKey::SWITCHES
             .into_iter()
-            .filter(|&key| !self.allows(key))
+            .filter(|&key| self.allows(key))
             .collect()
+    }
+
+    /// Whether the server may get a shell by writing a file (a CloudSync share
+    /// reaching `.ssh` or a shell startup file): the terminal, and the root one
+    /// on a privileged agent, which writes anywhere.
+    pub fn allows_shell_writes(&self, privileged: bool) -> bool {
+        self.allow_terminal && (!privileged || self.allow_terminal_root)
     }
 
     /// The policy as the device report carries it, so the server UI can grey out
@@ -306,6 +312,7 @@ impl Policy {
     pub fn wire(&self) -> AgentPolicy {
         AgentPolicy {
             terminal: self.allow_terminal,
+            terminal_root: self.allow_terminal_root,
             files_read: self.allow_files_read,
             files_write: self.allow_files_write,
             power: self.allow_power,
@@ -327,10 +334,17 @@ impl Policy {
         let key = PolicyKey::gating(command, action)
             .iter()
             .find(|&&key| !self.allows(key))?;
-        Some(format!(
-            "refused by local policy ({} = false in agent.toml)",
-            key.toml_key()
-        ))
+        Some(key.refusal())
+    }
+
+    /// Why a root shell is refused here, or `None` when the policy allows one.
+    pub fn root_terminal_refusal(&self) -> Option<String> {
+        (!self.allow_terminal_root).then(|| {
+            format!(
+                "{}: the agent runs as root, name an account for the terminal",
+                PolicyKey::TerminalRoot.refusal()
+            )
+        })
     }
 }
 
@@ -774,6 +788,12 @@ mod tests {
         assert_eq!(request.headers().get(AUTHORIZATION).unwrap(), "Bearer tok");
     }
 
+    fn open() -> Policy {
+        let mut policy = Policy::default();
+        policy.allow(&[PolicyKey::All]);
+        policy
+    }
+
     #[test]
     fn policy_refuses_each_gated_order_and_nothing_else() {
         let cases = [
@@ -797,28 +817,29 @@ mod tests {
             ),
             ("sync.config", None, PolicyKey::Sync),
             ("sync.applyChunk", None, PolicyKey::Sync),
+            ("tunnel.open", None, PolicyKey::Tunnel),
         ];
-        let open = Policy::default();
         for (command, action, key) in cases {
+            let why = Policy::default().refusal(command, action).expect(command);
+            assert!(why.contains("= false in agent.toml"), "{why}");
             assert!(
-                open.refusal(command, action).is_none(),
-                "{command} allowed by default"
+                open().refusal(command, action).is_none(),
+                "{command} allowed once every switch is"
             );
-            let mut closed = Policy::default();
+            let mut closed = open();
             closed.deny(&[key]);
             let why = closed.refusal(command, action).expect(command);
             assert!(why.contains(key.toml_key()), "{why}");
         }
         // A deployment is a container action: refusing Docker refuses it too.
-        let mut no_docker = Policy::default();
+        let mut no_docker = open();
         no_docker.deny(&[PolicyKey::Docker]);
         assert!(no_docker
             .refusal("docker.action", Some("composeDeploy"))
             .is_some());
 
         // What the policy does not name stays allowed, even fully closed.
-        let mut closed = Policy::default();
-        closed.deny(&[PolicyKey::All]);
+        let closed = Policy::default();
         for command in [
             "agent.collect",
             "term.input",
@@ -833,21 +854,43 @@ mod tests {
     }
 
     #[test]
+    fn a_root_shell_takes_its_own_switch_on_top_of_the_terminal() {
+        let mut policy = Policy::default();
+        policy.allow(&[PolicyKey::Terminal]);
+        assert!(policy.refusal("term.open", None).is_none());
+        let why = policy.root_terminal_refusal().unwrap();
+        assert!(why.contains("allow_terminal_root"), "{why}");
+        assert!(policy.allows_shell_writes(false));
+        assert!(!policy.allows_shell_writes(true));
+
+        policy.allow(&[PolicyKey::TerminalRoot]);
+        assert!(policy.root_terminal_refusal().is_none());
+        assert!(policy.allows_shell_writes(true));
+
+        // The root switch alone opens nothing.
+        policy.deny(&[PolicyKey::Terminal]);
+        assert!(policy.refusal("term.open", None).is_some());
+        assert!(!policy.allows_shell_writes(true) && !policy.allows_shell_writes(false));
+    }
+
+    #[test]
     fn allow_and_deny_report_whether_anything_changed() {
         let mut policy = Policy::default();
-        assert!(policy.deny(&[PolicyKey::Terminal, PolicyKey::Power]));
-        assert!(!policy.deny(&[PolicyKey::Terminal]));
+        assert!(policy.allow(&[PolicyKey::Terminal, PolicyKey::Power]));
+        assert!(!policy.allow(&[PolicyKey::Terminal]));
         assert_eq!(
-            policy.refused(),
+            policy.allowed(),
             vec![PolicyKey::Terminal, PolicyKey::Power]
         );
         assert!(!policy.allows(PolicyKey::All));
         assert!(policy.allow(&[PolicyKey::All]));
+        assert!(policy.allows(PolicyKey::All));
+        assert!(policy.deny(&[PolicyKey::All]));
         assert_eq!(policy, Policy::default());
     }
 
     #[test]
-    fn a_config_without_policy_allows_everything_and_an_old_one_still_parses() {
+    fn a_config_without_policy_allows_nothing_and_a_key_left_out_stays_refused() {
         let old = r#"
             server = "https://x"
             name = "n"
@@ -856,17 +899,19 @@ mod tests {
             public_key = "legacy"
         "#;
         let cfg: Config = toml::from_str(old).unwrap();
-        assert!(cfg.policy.allow_terminal && cfg.policy.allow_destroy);
+        assert!(cfg.policy.allowed().is_empty());
         assert!(cfg.order_key.is_none());
 
-        let restricted: Config = toml::from_str(
-            "server = \"https://x\"\nname = \"n\"\nfingerprint = \"f\"\n[policy]\nallow_terminal = false\n",
+        // What a machine linked before the root switch wrote: its eleven keys,
+        // and not that one.
+        let written: Config = toml::from_str(
+            "server = \"https://x\"\nname = \"n\"\nfingerprint = \"f\"\n[policy]\nallow_terminal = true\nallow_power = true\n",
         )
         .unwrap();
-        assert!(!restricted.policy.allow_terminal);
-        assert!(
-            restricted.policy.allow_power,
-            "unnamed keys keep their default"
+        assert_eq!(
+            written.policy.allowed(),
+            vec![PolicyKey::Terminal, PolicyKey::Power]
         );
+        assert!(!written.policy.allow_terminal_root);
     }
 }

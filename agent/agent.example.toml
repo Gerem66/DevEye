@@ -43,19 +43,21 @@ sync_roots = []
 tunnel_targets = []
 
 # What the server may order on this machine. The server cannot change this
-# section. Set a key to false for monitoring without that kind of remote control;
-# the matching buttons are greyed out in DevEye. `link --deny` and
-# `deveye-agent policy` write it too.
+# section. Nothing is allowed until a key says so: a key left out is false, and
+# a machine with none is only monitored. What it refuses is greyed out in
+# DevEye. `link --allow` and `deveye-agent policy` write it too.
 [policy]
-allow_terminal = true          # an interactive shell
-allow_files_read = true        # browse, search, download, archive files
-allow_files_write = true       # delete, rename, create, upload
-allow_power = true             # shut down, reboot, suspend, lock
-allow_pkg_upgrade = true       # system package upgrades
-allow_service_elevate = true   # asking the desktop to make the agent a root service
-allow_destroy = true           # wiping the agent when the device is deleted in DevEye
-allow_docker = true            # every container action (the inventory stays readable)
-allow_docker_deploy = true     # deployments: pull a compose service's image and recreate it
-allow_sync = true              # CloudSync shares: the server reading and writing a synced folder
-allow_tunnel = true            # tunnels: a module reaching a service of this machine (a database on
-                               # its loopback, or a host of `tunnel_targets`)
+allow_terminal = false          # an interactive shell
+allow_terminal_root = false     # that shell as root, when the agent runs as root and the session
+                                # names no other account (needs allow_terminal too)
+allow_files_read = false        # browse, search, download, archive files
+allow_files_write = false       # delete, rename, create, upload
+allow_power = false             # shut down, reboot, suspend, lock
+allow_pkg_upgrade = false       # system package upgrades
+allow_service_elevate = false   # asking the desktop to make the agent a root service
+allow_destroy = false           # wiping the agent when the device is deleted in DevEye
+allow_docker = false            # every container action (the inventory stays readable)
+allow_docker_deploy = false     # deployments: pull a compose service's image and recreate it
+allow_sync = false              # CloudSync shares: the server reading and writing a synced folder
+allow_tunnel = false            # tunnels: a module reaching a service of this machine (a database on
+                                # its loopback, or a host of `tunnel_targets`)

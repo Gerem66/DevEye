@@ -4,8 +4,9 @@
 #   & ([scriptblock]::Create((irm '<server>/install.ps1'))) <CODE> [link options]
 #
 # The options after the code go to `deveye-agent link` (see its --help):
-# --autostart, --deny 'terminal,power' (quoted: a comma makes an array in
-# PowerShell), --monitor-only, --shuffle-id, --name, --move, --instance <name>.
+# --autostart, --allow 'terminal,files-read' (quoted: a comma makes an array
+# in PowerShell; nothing is allowed without it), --deny power, --shuffle-id,
+# --name, --move, --instance <name>.
 # Without a code, DEVEYE_LINK_CODE is used. From an administrator PowerShell,
 # the agent goes to Program Files and a system task; otherwise to the user's
 # AppData.

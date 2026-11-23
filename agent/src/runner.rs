@@ -599,7 +599,9 @@ async fn stream_session(
     let mut sync_mgr = crate::sync::SyncManager::new(
         sync_tx,
         config.sync_roots.clone(),
-        config.policy.allow_terminal,
+        config
+            .policy
+            .allows_shell_writes(crate::config::privileged()),
         Some(crate::config::Config::sync_device_key_path()),
     );
     // Tunnels: each relays one TCP connection under the server's credits; the

@@ -242,8 +242,9 @@ pub struct SyncManager {
     caches: SharedCaches,
     /// `sync_roots` de la config locale : où cette machine accepte un partage.
     sync_roots: Vec<String>,
-    /// `allow_terminal` of the local policy: a share that opens its sensitive
-    /// folders opens them here only if the terminal is allowed.
+    /// Whether the local policy allows the terminal such a write amounts to
+    /// (`Policy::allows_shell_writes`): a share that opens its sensitive
+    /// folders opens them here only then.
     terminal_allowed: bool,
     /// Les partages dont la racine a été refusée, et pourquoi : le serveur
     /// l'apprend par la réponse à sa première opération.

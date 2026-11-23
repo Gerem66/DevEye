@@ -27,14 +27,16 @@ pub struct LinkOptions {
     /// Device name (defaults to the hostname).
     #[arg(long, env = "DEVEYE_NAME")]
     pub name: Option<String>,
-    /// Refuse these kinds of orders on this machine, whatever the server says
-    /// (comma-separated). Only ever adds refusals: `deveye-agent policy --allow`
-    /// gives them back.
+    /// Allow these kinds of orders on this machine (comma-separated, or
+    /// `all`). Without it the machine is only monitored. Read when linking,
+    /// never by an agent already linked: `deveye-agent policy --allow` then.
+    #[arg(long, env = "DEVEYE_ALLOW", value_enum, value_delimiter = ',')]
+    pub allow: Vec<PolicyKey>,
+    /// Refuse these kinds of orders on this machine, whatever `--allow` says
+    /// (comma-separated). An agent already linked adds them at every start:
+    /// `deveye-agent policy --allow` gives them back.
     #[arg(long, env = "DEVEYE_DENY", value_enum, value_delimiter = ',')]
     pub deny: Vec<PolicyKey>,
-    /// Monitoring only: refuse every kind of remote control (`--deny all`).
-    #[arg(long, env = "DEVEYE_MONITOR_ONLY", value_parser = BoolishValueParser::new())]
-    pub monitor_only: bool,
     /// Identify this machine by a random id instead of its machine-id, for
     /// clones of one image, which share it. Acts only when enrolling.
     #[arg(long, env = "DEVEYE_SHUFFLE_ID", value_parser = BoolishValueParser::new())]
@@ -44,17 +46,6 @@ pub struct LinkOptions {
     /// in clear: only for a network you fully trust.
     #[arg(long)]
     pub insecure_plaintext: bool,
-}
-
-impl LinkOptions {
-    /// The refusals these options add, `--monitor-only` included.
-    fn denials(&self) -> Vec<PolicyKey> {
-        let mut keys = self.deny.clone();
-        if self.monitor_only {
-            keys.push(PolicyKey::All);
-        }
-        keys
-    }
 }
 
 /// The server a link talks to: the one named, else the one this machine
@@ -71,9 +62,9 @@ fn resolve_server(named: Option<&str>, saved: Option<&str>) -> (String, bool) {
 }
 
 /// The config a link writes: what this machine already had (its identity, its
-/// policy, its accepted sync roots), with what the options change. The policy
-/// only ever tightens. `moving`: `link --move`, another server may replace
-/// the one this machine is linked to.
+/// policy, its accepted sync roots), with what the options change. `--allow`
+/// adds to the policy, `--deny` takes from it and wins. `moving`: `link
+/// --move`, another server may replace the one this machine is linked to.
 pub fn prepare(options: &LinkOptions, moving: bool) -> Result<Config> {
     let existing = if Config::exists() {
         Some(Config::load()?)
@@ -126,7 +117,8 @@ pub fn prepare(options: &LinkOptions, moving: bool) -> Result<Config> {
         }
         config.fingerprint = identity::random_fingerprint();
     }
-    config.policy.deny(&options.denials());
+    config.policy.allow(&options.allow);
+    config.policy.deny(&options.deny);
     config.allow_plaintext = options.insecure_plaintext;
     Ok(config)
 }
@@ -191,7 +183,10 @@ pub async fn link(code: &str, options: &LinkOptions, autostart: bool, moving: bo
             config.name, id
         );
     }
-    println!("  Local policy: {}", describe(&config.policy));
+    println!(
+        "  Remote control allowed: {}. `deveye-agent policy` changes it.",
+        describe(&config.policy)
+    );
 
     if autostart {
         return start_service(system);
@@ -202,14 +197,17 @@ pub async fn link(code: &str, options: &LinkOptions, autostart: bool, moving: bo
     Ok(())
 }
 
-/// What `[policy]` refuses, in one line.
+/// What `[policy]` allows, in a few words.
 pub fn describe(policy: &config::Policy) -> String {
-    let refused = policy.refused();
-    if refused.is_empty() {
-        return "everything allowed (`deveye-agent policy` to refuse some)".to_string();
+    let allowed = policy.allowed();
+    if allowed.is_empty() {
+        return "none (monitoring only)".to_string();
     }
-    let names: Vec<&str> = refused.iter().map(|k| k.label()).collect();
-    format!("refuses {}", names.join(", "))
+    if allowed.len() == PolicyKey::SWITCHES.len() {
+        return "everything".to_string();
+    }
+    let names: Vec<&str> = allowed.iter().map(|k| k.label()).collect();
+    names.join(", ")
 }
 
 /// `link --autostart`: the service, installed for the config just written,
@@ -312,8 +310,9 @@ fn retry_delay(error: &EnrollError, transient_failures: u32) -> Option<Duration>
     }
 }
 
-/// What `--deny`, `DEVEYE_DENY` and `--monitor-only` ask of an agent already
-/// linked: more refusals, saved before the agent reads its policy. Never fewer.
+/// What `--deny` and `DEVEYE_DENY` ask of an agent already linked: more
+/// refusals, saved before the agent reads its policy. Never fewer: `--allow`
+/// is not read here.
 pub fn tighten(config: &mut Config, options: &LinkOptions) -> Result<()> {
     if let Some(server) = options.server.as_deref() {
         let (named, _) = resolve_server(Some(server), None);
@@ -321,7 +320,7 @@ pub fn tighten(config: &mut Config, options: &LinkOptions) -> Result<()> {
             warn!(named = %named, linked = %config.server, "DEVEYE_SERVER ignored: this machine is linked to another server");
         }
     }
-    if config.policy.deny(&options.denials()) {
+    if config.policy.deny(&options.deny) {
         config.save()?;
         info!(policy = %describe(&config.policy), "local policy tightened");
     }
@@ -359,46 +358,95 @@ mod tests {
     }
 
     #[test]
-    fn denials_parse_as_a_list_and_monitor_only_means_all() {
+    fn switches_parse_as_lists_and_all_names_every_one() {
         let _env = ENV.lock().unwrap();
-        let cli = Cli::parse_from(["x", "--deny", "terminal,files-write", "--deny", "power"]);
+        let cli = Cli::parse_from([
+            "x",
+            "--allow",
+            "terminal,terminal-root",
+            "--allow",
+            "files-read",
+            "--deny",
+            "power",
+        ]);
         assert_eq!(
-            cli.options.denials(),
-            vec![PolicyKey::Terminal, PolicyKey::FilesWrite, PolicyKey::Power]
+            cli.options.allow,
+            vec![
+                PolicyKey::Terminal,
+                PolicyKey::TerminalRoot,
+                PolicyKey::FilesRead
+            ]
         );
-        let cli = Cli::parse_from(["x", "--monitor-only"]);
+        assert_eq!(cli.options.deny, vec![PolicyKey::Power]);
+        let cli = Cli::parse_from(["x", "--allow", "all"]);
         let mut policy = config::Policy::default();
-        policy.deny(&cli.options.denials());
-        assert_eq!(policy.refused(), PolicyKey::SWITCHES.to_vec());
-        assert!(Cli::try_parse_from(["x", "--deny", "everything"]).is_err());
+        policy.allow(&cli.options.allow);
+        assert_eq!(policy.allowed(), PolicyKey::SWITCHES.to_vec());
+        assert!(Cli::try_parse_from(["x", "--allow", "everything"]).is_err());
+        assert!(Cli::try_parse_from(["x", "--monitor-only"]).is_err());
+    }
+
+    #[test]
+    fn a_link_without_options_leaves_the_machine_monitored_only() {
+        let _env = ENV.lock().unwrap();
+        let options = Cli::parse_from(["x"]).options;
+        let mut policy = config::Policy::default();
+        policy.allow(&options.allow);
+        policy.deny(&options.deny);
+        assert!(policy.allowed().is_empty());
+        assert_eq!(describe(&policy), "none (monitoring only)");
     }
 
     #[test]
     fn the_environment_takes_boolish_values() {
         let _env = ENV.lock().unwrap();
         std::env::set_var("DEVEYE_SHUFFLE_ID", "1");
+        std::env::set_var("DEVEYE_ALLOW", "files-read,docker");
         std::env::set_var("DEVEYE_DENY", "terminal,sync");
         let cli = Cli::try_parse_from(["x"]);
         std::env::remove_var("DEVEYE_SHUFFLE_ID");
+        std::env::remove_var("DEVEYE_ALLOW");
         std::env::remove_var("DEVEYE_DENY");
         let options = cli.unwrap().options;
-        assert!(options.shuffle_id && !options.monitor_only);
+        assert!(options.shuffle_id);
+        assert_eq!(options.allow, vec![PolicyKey::FilesRead, PolicyKey::Docker]);
         assert_eq!(options.deny, vec![PolicyKey::Terminal, PolicyKey::Sync]);
     }
 
     #[test]
-    fn a_denial_never_gives_back_what_the_machine_refused() {
-        let mut policy = config::Policy::default();
-        policy.deny(&[PolicyKey::Power]);
+    fn a_denial_wins_over_what_the_same_link_allows() {
         let options = LinkOptions {
-            deny: vec![PolicyKey::Terminal],
+            allow: vec![PolicyKey::All],
+            deny: vec![PolicyKey::Terminal, PolicyKey::TerminalRoot],
             ..Default::default()
         };
-        policy.deny(&options.denials());
-        assert_eq!(
-            policy.refused(),
-            vec![PolicyKey::Terminal, PolicyKey::Power]
-        );
+        let mut policy = config::Policy::default();
+        policy.allow(&options.allow);
+        policy.deny(&options.deny);
+        assert!(!policy.allows(PolicyKey::Terminal) && !policy.allows(PolicyKey::TerminalRoot));
+        assert_eq!(policy.allowed().len(), PolicyKey::SWITCHES.len() - 2);
+    }
+
+    #[test]
+    fn an_agent_already_linked_never_reads_allow() {
+        let mut config = Config {
+            server: "https://app.deveye.fr".into(),
+            name: "n".into(),
+            fingerprint: "f".into(),
+            device_id: None,
+            device_token: Some("t".into()),
+            order_key: None,
+            allow_plaintext: false,
+            sync_roots: Vec::new(),
+            tunnel_targets: Vec::new(),
+            policy: config::Policy::default(),
+        };
+        let options = LinkOptions {
+            allow: vec![PolicyKey::All],
+            ..Default::default()
+        };
+        tighten(&mut config, &options).unwrap();
+        assert!(config.policy.allowed().is_empty());
     }
 
     #[test]

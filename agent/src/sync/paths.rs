@@ -433,8 +433,8 @@ fn sensitive_dir(path: &Path) -> Option<String> {
 pub enum SensitiveWrites {
     /// The share keeps them out, its default.
     Refused,
-    /// The share lets them in, but this machine's policy refuses the terminal,
-    /// which such a write would amount to.
+    /// The share lets them in, but this machine's policy refuses the terminal
+    /// such a write would amount to: root's, when the agent runs as root.
     NoTerminal,
     Allowed,
 }
@@ -453,7 +453,8 @@ impl SensitiveWrites {
         match self {
             Self::Refused => Some("le partage n'autorise pas les dossiers sensibles"),
             Self::NoTerminal => Some(
-                "cette machine refuse le terminal (`allow_terminal`), et y écrire en ouvrirait un",
+                "cette machine refuse le terminal (`allow_terminal`, et `allow_terminal_root` \
+                 pour un agent root), et y écrire en ouvrirait un",
             ),
             Self::Allowed => None,
         }

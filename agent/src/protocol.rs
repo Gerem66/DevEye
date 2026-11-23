@@ -172,6 +172,7 @@ pub struct AgentInfo {
 #[serde(rename_all = "camelCase")]
 pub struct AgentPolicy {
     pub terminal: bool,
+    pub terminal_root: bool,
     pub files_read: bool,
     pub files_write: bool,
     pub power: bool,

@@ -132,21 +132,19 @@ enum Command {
         #[arg(long)]
         config: Option<String>,
         /// Not linked yet, the agent enrolls with `DEVEYE_LINK_CODE` and these.
-        /// Once linked, only the refusals act: they are added at start.
+        /// Once linked, only `--deny` acts: its refusals are added at start.
         #[command(flatten, next_help_heading = "Linking (with DEVEYE_LINK_CODE)")]
         link: LinkOptions,
     },
     /// Show or change what the server may order on this machine.
     Policy {
-        /// Allow these kinds of orders again (comma-separated, or `all`).
+        /// Allow these kinds of orders (comma-separated, or `all`).
         #[arg(long, value_enum, value_delimiter = ',')]
         allow: Vec<PolicyKey>,
-        /// Refuse these kinds of orders (comma-separated, or `all`).
+        /// Refuse these kinds of orders (comma-separated, or `all` for
+        /// monitoring only).
         #[arg(long, value_enum, value_delimiter = ',')]
         deny: Vec<PolicyKey>,
-        /// Refuse every kind of remote control (`--deny all`).
-        #[arg(long)]
-        monitor_only: bool,
         /// Use this config file instead of the default location.
         #[arg(long)]
         config: Option<String>,
@@ -287,16 +285,12 @@ async fn dispatch(command: Command) -> Result<()> {
         } => run(once, interval, detach, managed, config, link).await,
         Command::Policy {
             allow,
-            mut deny,
-            monitor_only,
+            deny,
             config,
         } => {
             if let Some(path) = config {
                 instance::follow_config(Path::new(&path))?;
                 std::env::set_var("DEVEYE_CONFIG", path);
-            }
-            if monitor_only {
-                deny.push(PolicyKey::All);
             }
             policy_cmd::run(policy_cmd::Change { allow, deny })
         }
@@ -684,13 +678,9 @@ fn status() {
     }
     status_row("Autostart", &autostart);
 
-    // Only what this machine refuses: an all-default policy says nothing.
-    let refused: Vec<&str> = c.policy.refused().iter().map(|k| k.label()).collect();
-    if !refused.is_empty() {
-        println!();
-        status_section("Local policy");
-        status_row("Refused", &refused.join(", "));
-    }
+    println!();
+    status_section("Local policy");
+    status_row("Allowed", &link::describe(&c.policy));
     instances_section();
 }
 

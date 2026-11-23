@@ -169,6 +169,24 @@ pub enum Admission {
 /// which the file explorer neither reads nor writes (its config is what holds
 /// the policy and the device token). A frame that is not a well-formed envelope is ignored, never run.
 pub fn admit(text: &str, guard: &mut OrderGuard, policy: &Policy, now_ms: i64) -> Admission {
+    admit_with(
+        text,
+        guard,
+        policy,
+        now_ms,
+        crate::terminal::opens_root_shell,
+    )
+}
+
+/// [`admit`], with the answer to "would this session's shell be root's?"
+/// handed in: it depends on the account the agent itself runs as.
+fn admit_with(
+    text: &str,
+    guard: &mut OrderGuard,
+    policy: &Policy,
+    now_ms: i64,
+    opens_root_shell: impl Fn(Option<&str>) -> bool,
+) -> Admission {
     let Ok(env) = serde_json::from_str::<Envelope<'_>>(text) else {
         return Admission::Ignore;
     };
@@ -185,6 +203,15 @@ pub fn admit(text: &str, guard: &mut OrderGuard, policy: &Policy, now_ms: i64) -
     let field = |name: &str| payload.get(name).and_then(|v| v.as_str());
     if let Some(reason) = policy.refusal(&env.command, field("action")) {
         return refuse(reason);
+    }
+    // The policy first: resolving the account asks the system.
+    if env.command == "term.open" {
+        let refusal = policy
+            .root_terminal_refusal()
+            .filter(|_| opens_root_shell(field("user")));
+        if let Some(reason) = refusal {
+            return refuse(reason);
+        }
     }
     if matches!(
         env.command.as_str(),
@@ -221,7 +248,15 @@ pub fn admit(text: &str, guard: &mut OrderGuard, policy: &Policy, now_ms: i64) -
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::PolicyKey;
     use ed25519_dalek::{Signer, SigningKey};
+
+    /// A machine whose operator allowed every kind of order.
+    fn open() -> Policy {
+        let mut policy = Policy::default();
+        policy.allow(&[PolicyKey::All]);
+        policy
+    }
 
     const NOW: i64 = 1_700_000_000_000;
     const DEVICE: &str = "11111111-1111-4111-8111-111111111111";
@@ -342,7 +377,7 @@ mod tests {
         let mut guard = OrderGuard::new(Some(&pinned()), DEVICE);
         let closed = Policy {
             allow_terminal: false,
-            ..Policy::default()
+            ..open()
         };
         let order = frame(
             "term.open",
@@ -369,14 +404,14 @@ mod tests {
             NOW,
         );
         assert!(matches!(
-            admit(&again, &mut guard, &Policy::default(), NOW),
+            admit(&again, &mut guard, &open(), NOW),
             Admission::Dispatch(_)
         ));
 
         // Elevation is one action of `agent.service`; the others stay allowed.
         let no_elevate = Policy {
             allow_service_elevate: false,
-            ..Policy::default()
+            ..open()
         };
         let elevate = frame("agent.service", r#"{"action":"elevate"}"#, "n3", NOW);
         assert!(matches!(
@@ -388,6 +423,86 @@ mod tests {
             admit(&install, &mut guard, &no_elevate, NOW),
             Admission::Dispatch(_)
         ));
+    }
+
+    #[test]
+    fn a_machine_left_at_its_defaults_takes_no_order() {
+        let mut guard = OrderGuard::new(Some(&pinned()), DEVICE);
+        for (n, (command, payload)) in [
+            ("term.open", r#"{"sessionId":"s","cols":80,"rows":24}"#),
+            ("files.list", r#"{"opId":"o","path":"/srv"}"#),
+            (
+                "files.mutate",
+                r#"{"opId":"o","op":"delete","path":"/srv/x"}"#,
+            ),
+            ("agent.power", r#"{"action":"reboot"}"#),
+            ("agent.destroy", "{}"),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let order = frame(command, payload, &format!("n{n}"), NOW);
+            assert!(
+                matches!(
+                    admit(&order, &mut guard, &Policy::default(), NOW),
+                    Admission::Refused { .. }
+                ),
+                "{command} must be refused until the operator allows it"
+            );
+        }
+        // Monitoring goes on: what the policy does not name is not an order.
+        let collect = r#"{"command":"agent.collect","payload":{}}"#;
+        assert!(matches!(
+            admit(collect, &mut guard, &Policy::default(), NOW),
+            Admission::Dispatch(_)
+        ));
+    }
+
+    #[test]
+    fn a_root_shell_is_refused_until_its_own_switch_allows_it() {
+        let mut guard = OrderGuard::new(Some(&pinned()), DEVICE);
+        // A privileged agent: only a named account that is not root avoids root.
+        let root_unless_alice = |user: Option<&str>| user != Some("alice");
+        let no_root = Policy {
+            allow_terminal_root: false,
+            ..open()
+        };
+        let unnamed = r#"{"sessionId":"s1","cols":80,"rows":24}"#;
+        let as_root = r#"{"sessionId":"s2","cols":80,"rows":24,"user":"root"}"#;
+        let as_alice = r#"{"sessionId":"s3","cols":80,"rows":24,"user":"alice"}"#;
+
+        for (nonce, payload) in [("n1", unnamed), ("n2", as_root)] {
+            let order = frame("term.open", payload, nonce, NOW);
+            match admit_with(&order, &mut guard, &no_root, NOW, root_unless_alice) {
+                Admission::Refused { reason, .. } => {
+                    assert!(reason.contains("allow_terminal_root"), "{reason}")
+                }
+                _ => panic!("a root shell must be refused: {payload}"),
+            }
+        }
+        let order = frame("term.open", as_alice, "n3", NOW);
+        assert!(matches!(
+            admit_with(&order, &mut guard, &no_root, NOW, root_unless_alice),
+            Admission::Dispatch(_)
+        ));
+        let order = frame("term.open", unnamed, "n4", NOW);
+        assert!(matches!(
+            admit_with(&order, &mut guard, &open(), NOW, root_unless_alice),
+            Admission::Dispatch(_)
+        ));
+
+        // The switch alone gives nothing: the terminal itself stays refused.
+        let root_only = Policy {
+            allow_terminal_root: true,
+            ..Policy::default()
+        };
+        let order = frame("term.open", as_alice, "n5", NOW);
+        match admit_with(&order, &mut guard, &root_only, NOW, root_unless_alice) {
+            Admission::Refused { reason, .. } => {
+                assert!(reason.contains("allow_terminal = false"), "{reason}")
+            }
+            _ => panic!("the terminal switch comes first"),
+        }
     }
 
     #[test]
@@ -403,7 +518,7 @@ mod tests {
 
         let no_deploy = Policy {
             allow_docker_deploy: false,
-            ..Policy::default()
+            ..open()
         };
         let deploy = frame("docker.action", payload, "n1", NOW);
         assert!(matches!(
@@ -437,22 +552,19 @@ mod tests {
         ] {
             let frame = format!(r#"{{"command":"term.open","payload":{payload},"sig":{sig}}}"#);
             assert!(
-                matches!(
-                    admit(&frame, &mut guard, &Policy::default(), NOW),
-                    Admission::Ignore
-                ),
+                matches!(admit(&frame, &mut guard, &open(), NOW), Admission::Ignore),
                 "sig {sig} must not be run"
             );
         }
         let extra = format!(r#"{{"command":"term.open","payload":{payload},"extra":1}}"#);
         assert!(matches!(
-            admit(&extra, &mut guard, &Policy::default(), NOW),
+            admit(&extra, &mut guard, &open(), NOW),
             Admission::Ignore
         ));
 
         // The same order, properly signed, is the one that runs.
         let good = frame("term.open", payload, "n1", NOW);
-        match admit(&good, &mut guard, &Policy::default(), NOW) {
+        match admit(&good, &mut guard, &open(), NOW) {
             Admission::Dispatch(ServerMessage::TermOpen { session_id, .. }) => {
                 assert_eq!(session_id, "x")
             }
@@ -500,7 +612,7 @@ mod tests {
             let order = frame(command, &payload, &format!("n-{command}"), NOW);
             assert!(
                 matches!(
-                    admit(&order, &mut guard, &Policy::default(), NOW),
+                    admit(&order, &mut guard, &open(), NOW),
                     Admission::Refused { .. }
                 ),
                 "{command} on the agent directory must be refused"
