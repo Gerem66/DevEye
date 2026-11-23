@@ -27,6 +27,13 @@ export interface DeviceGrants {
     itemExtras: ReadonlyMap<string, ItemExtraOverrides>;
 }
 
+/** Ce que le hub retient d'une socket dans un espace, pour filtrer tout ce qu'il diffuse. */
+export interface HubGrants {
+    devices: DeviceGrants;
+    /** La lecture de CloudSync : l'avancement et l'état d'un partage. */
+    cloudSync: boolean;
+}
+
 export const NO_DEVICE_GRANTS: DeviceGrants = {
     read: false,
     write: false,
@@ -35,6 +42,8 @@ export const NO_DEVICE_GRANTS: DeviceGrants = {
     access: new Map(),
     itemExtras: new Map()
 };
+
+export const NO_HUB_GRANTS: HubGrants = { devices: NO_DEVICE_GRANTS, cloudSync: false };
 
 /**
  * La règle de `authorizeReachableDevice`, appliquée à la diffusion : un appareil

@@ -6,6 +6,7 @@ import { env } from './env';
 import type { MailRepo } from './repo';
 import { prefetchFolderBodies, purgeStaleBodies, syncAccountFolders, syncOneFolder, type SyncClient } from './sync';
 import {
+    accountWatchers,
     beginAccountSync,
     endAccountSync,
     getAccountSyncStatus,
@@ -114,6 +115,21 @@ export class MailSync {
      * rotation pour de bon, sans erreur enregistrée. Passé le délai, l'échec est
      * consigné comme un autre et la relève réessaie au tour suivant.
      */
+    /** Parmi ceux à qui la boîte a été listée, ceux qui la lisent encore. Ne lève pas. */
+    private async readersOf(workspaceId: number, accountId: number): Promise<number[]> {
+        const verdicts = await Promise.all(
+            accountWatchers(accountId).map(async (userId) => {
+                try {
+                    const verdict = await this.deps.access.feature(workspaceId, userId, { itemId: String(accountId) });
+                    return verdict.ok ? userId : null;
+                } catch {
+                    return null;
+                }
+            })
+        );
+        return verdicts.filter((userId): userId is number => userId !== null);
+    }
+
     async syncOne(accountId: number): Promise<void> {
         if (this.inFlight.has(accountId)) return;
         this.inFlight.add(accountId);
@@ -131,14 +147,24 @@ export class MailSync {
                 // L'avancement part en trames : elles animent la barre, et
                 // `mail.accountList` fait foi. Sans elles, un écran ouvert n'a
                 // d'autre recours que de redemander la liste en boucle.
+                // Elles ne vont qu'à ceux à qui la boîte a été listée et qui la
+                // lisent encore : un rôle peut la masquer, ou l'avoir masquée
+                // depuis. Qui ouvre Mail en cours de relève rejoint la suite.
+                let readers = await this.readersOf(row.workspace_id, accountId);
+                let known = accountWatchers(accountId).length;
                 let lastPublish = 0;
                 const publish = (force: boolean): void => {
                     const at = Date.now();
                     if (!force && at - lastPublish < PUBLISH_EVERY_MS) return;
                     lastPublish = at;
+                    if (accountWatchers(accountId).length !== known) {
+                        known = accountWatchers(accountId).length;
+                        void this.readersOf(row.workspace_id, accountId).then((found) => (readers = found));
+                    }
+                    if (readers.length === 0) return;
                     const { syncing, progress } = getAccountSyncStatus(accountId);
                     const frame: MailSyncProgress = { accountId, syncing, progress };
-                    this.deps.live.publish(row.workspace_id, MAIL_SYNC_PROGRESS_EVENT, frame);
+                    this.deps.live.publishTo(row.workspace_id, readers, MAIL_SYNC_PROGRESS_EVENT, frame);
                 };
 
                 const moved = await this.client.withSession(

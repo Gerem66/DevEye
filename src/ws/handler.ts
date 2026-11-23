@@ -27,7 +27,7 @@ import { markSeen } from '@/auth/lastSeen';
 import { isFederatedOrigin } from '@/auth/federation';
 import { redeemWsTicket } from '@/auth/wsTicket';
 import { verifyAccessToken } from '@/auth/jwt';
-import { NO_DEVICE_GRANTS, type DeviceGrants } from '@/agent/audience';
+import { NO_DEVICE_GRANTS, NO_HUB_GRANTS, type DeviceGrants, type HubGrants } from '@/agent/audience';
 import { createMonitorTransport, type MonitorHub } from '@/agent/hub';
 import {
     accessEpochNow,
@@ -88,6 +88,10 @@ function send(socket: WebSocket, msg: ServerMessage): void {
  * appareil par appareil. Un administrateur garde la lecture de la flotte hors
  * de tout rôle d'espace.
  */
+async function hubGrantsOf(scope: ResolvedScope): Promise<HubGrants> {
+    return { devices: await deviceGrantsOf(scope), cloudSync: scope.features.has('cloudsync') };
+}
+
 async function deviceGrantsOf(scope: ResolvedScope): Promise<DeviceGrants> {
     const read = scope.isAdmin || scope.features.has('devices');
     if (!read) return NO_DEVICE_GRANTS;
@@ -191,7 +195,7 @@ export async function registerWS(
         hub.setRefresher(socket, async (workspaceId) => {
             const epoch = accessEpochNow();
             try {
-                const held = await deviceGrantsOf(await access.forWorkspace(workspaceId));
+                const held = await hubGrantsOf(await access.forWorkspace(workspaceId));
                 const watched = hub.subscribedIn(socket, workspaceId);
                 const visible = await Promise.all(watched.map((id) => db.devices.findVisible(id, workspaceId)));
                 const gone = watched.filter((_, i) => visible[i] === null);
@@ -199,7 +203,7 @@ export async function registerWS(
                 hub.rememberGrants(socket, workspaceId, held, epoch);
             } catch {
                 // Plus membre, compte suspendu, espace supprimé : aucun droit.
-                hub.rememberGrants(socket, workspaceId, NO_DEVICE_GRANTS, epoch);
+                hub.rememberGrants(socket, workspaceId, NO_HUB_GRANTS, epoch);
             }
         });
 
@@ -339,7 +343,7 @@ export async function registerWS(
                 // répare un instantané périmé.
                 const epoch = accessEpochNow();
                 liveHub.rememberGrants(socket, scope.workspace.id, scope.features, epoch);
-                hub.rememberGrants(socket, scope.workspace.id, await deviceGrantsOf(scope), epoch);
+                hub.rememberGrants(socket, scope.workspace.id, await hubGrantsOf(scope), epoch);
 
                 const assertAdmin = (): void => assertDeclaredRole({ admin: true }, scope);
                 // Toute porte vers une feature passe par l'une des deux gardes

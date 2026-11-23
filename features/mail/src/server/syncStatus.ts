@@ -15,6 +15,27 @@ interface SyncEntry {
 
 const inProgress = new Map<number, SyncEntry>();
 
+/**
+ * Les comptes à qui une boîte a été rendue dans leur liste : son avancement
+ * n'est poussé qu'à eux. Un membre à qui son rôle masque la boîte n'y entre
+ * jamais, là où une diffusion à tout l'espace lui en apprendrait l'existence.
+ */
+const listedTo = new Map<number, Set<number>>();
+
+export function noteAccountListed(accountId: number, userId: number): void {
+    const users = listedTo.get(accountId) ?? new Set<number>();
+    users.add(userId);
+    listedTo.set(accountId, users);
+}
+
+export function accountWatchers(accountId: number): number[] {
+    return [...(listedTo.get(accountId) ?? [])];
+}
+
+export function forgetAccountWatchers(accountId: number): void {
+    listedTo.delete(accountId);
+}
+
 export function beginAccountSync(accountId: number, foldersTotal: number): void {
     inProgress.set(accountId, { foldersDone: 0, foldersTotal, currentFolderProgress: 0 });
 }

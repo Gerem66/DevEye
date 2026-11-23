@@ -405,7 +405,7 @@ const EVERYTHING = held({
 function watching(hub: MonitorHub, grants: DeviceGrants): ReturnType<typeof fakeBrowser> {
     const browser = fakeBrowser();
     hub.subscribe(browser.socket, WORKSPACE, [DEVICE]);
-    hub.rememberGrants(browser.socket, WORKSPACE, grants, accessEpochNow());
+    hub.rememberGrants(browser.socket, WORKSPACE, { devices: grants, cloudSync: false }, accessEpochNow());
     return browser;
 }
 
@@ -495,7 +495,7 @@ describe('MonitorHub : qui reçoit ce qu’une machine renvoie', () => {
         const hub = onlineHub();
         const stale = fakeBrowser();
         hub.subscribe(stale.socket, WORKSPACE, [DEVICE]);
-        hub.rememberGrants(stale.socket, WORKSPACE, EVERYTHING, accessEpochNow() - 1);
+        hub.rememberGrants(stale.socket, WORKSPACE, { devices: EVERYTHING, cloudSync: false }, accessEpochNow() - 1);
 
         publishShared(hub);
 
@@ -580,7 +580,7 @@ describe('MonitorHub : la réponse d’une opération va à qui l’a demandée'
         const asker = watching(hub, FILES_HOLDER);
 
         hub.requestFilesList(DEVICE, { opId: 'l1', path: '/etc' }, asker.socket);
-        hub.rememberGrants(asker.socket, WORKSPACE, held(), accessEpochNow());
+        hub.rememberGrants(asker.socket, WORKSPACE, { devices: held(), cloudSync: false }, accessEpochNow());
         hub.publishFilesListing({ deviceId: DEVICE, opId: 'l1', listing: null });
 
         assert.deepEqual(asker.got, []);
@@ -633,7 +633,7 @@ describe('MonitorHub : un instantané périmé se recalcule', () => {
             const epoch = accessEpochNow();
             return new Promise<void>((resolve) => {
                 release = (grants) => {
-                    hub.rememberGrants(browser.socket, workspaceId, grants, epoch);
+                    hub.rememberGrants(browser.socket, workspaceId, { devices: grants, cloudSync: false }, epoch);
                     resolve();
                 };
             });
@@ -714,5 +714,48 @@ describe('MonitorHub : un instantané périmé se recalcule', () => {
             []
         );
         assert.equal(hub.ownsTermSession(owner.socket, 't1'), false);
+    });
+});
+
+describe('MonitorHub : l’avancement d’un partage CloudSync', () => {
+    const SHARE = 5;
+    const progress = { shareId: SHARE } as never;
+
+    function syncing(hub: MonitorHub, cloudSync: boolean): ReturnType<typeof fakeBrowser> {
+        const browser = fakeBrowser();
+        hub.subscribeSync(browser.socket, WORKSPACE, [SHARE]);
+        hub.rememberGrants(browser.socket, WORKSPACE, { devices: held(), cloudSync }, accessEpochNow());
+        return browser;
+    }
+
+    it('ne va qu’à qui lit encore CloudSync dans l’espace de son abonnement', () => {
+        const hub = new MonitorHub();
+        const reader = syncing(hub, true);
+        const former = syncing(hub, false);
+
+        hub.publishSyncProgress(progress);
+        hub.publishSyncState(progress);
+
+        assert.deepEqual(reader.got, ['cloudSync.progress', 'cloudSync.state']);
+        assert.deepEqual(former.got, []);
+    });
+
+    it('un instantané périmé saute la trame et se fait recalculer', async () => {
+        const hub = new MonitorHub();
+        const browser = syncing(hub, true);
+        let calls = 0;
+        hub.setRefresher(browser.socket, async (workspaceId) => {
+            calls++;
+            hub.rememberGrants(browser.socket, workspaceId, { devices: held(), cloudSync: true }, accessEpochNow());
+        });
+
+        invalidateAccess();
+        hub.publishSyncProgress(progress);
+        assert.deepEqual(browser.got, []);
+        await settle();
+        hub.publishSyncProgress(progress);
+
+        assert.equal(calls, 1);
+        assert.deepEqual(browser.got, ['cloudSync.progress']);
     });
 });

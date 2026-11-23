@@ -160,7 +160,12 @@ L'appartenance reste la frontière, et la présence ne la contourne pas.
 
 - **L'entrée en salle est gratuite et sûre.** `live.here` est une commande
   normale : l'enveloppe est résolue par `access.forWorkspace()`, donc
-  l'appartenance est déjà vérifiée quand le handler s'exécute.
+  l'appartenance est déjà vérifiée quand le handler s'exécute. Le lieu, lui,
+  est déclaré par le client : le handler le borne à ce que l'appelant lit.
+  Sans `read` sur la feature de la racine il retombe à l'accueil, et sur un
+  élément fermé à son rôle (`l1`), à la vue. Les curseurs, la frappe et les
+  bulles se diffusent entre pairs du **même chemin** : sans cette borne, se
+  déclarer sur un écran qu'on ne lit pas suffirait à les recevoir.
 - **Les chemins sont tronqués par destinataire.** Sans `read` sur la feature de
   la racine, le pair apparaît « ailleurs » (`path: []`). Seule la racine est
   examinée : un segment plus profond appartient par construction à la même

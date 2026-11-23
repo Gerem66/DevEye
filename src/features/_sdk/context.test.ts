@@ -249,12 +249,12 @@ describe('createSdkContext : extraValue (choice)', () => {
 
 describe('createSdkContext : transport', () => {
     function fakeMonitor() {
-        const subs: number[][] = [];
+        const subs: { workspaceId: number; ids: number[] }[] = [];
         const unsubs: number[][] = [];
         const chunks: unknown[] = [];
         const monitor = {
-            subscribeSync: (ids: number[]) => {
-                subs.push(ids);
+            subscribeSync: (workspaceId: number, ids: number[]) => {
+                subs.push({ workspaceId, ids });
             },
             unsubscribeSync: (ids: number[]) => {
                 unsubs.push(ids);
@@ -287,7 +287,7 @@ describe('createSdkContext : transport', () => {
         assert.throws(() => sdk.transport.syncChunkBuffered(), { name: 'FeatureError', code: 'internal' });
     });
 
-    it('avec la capacité et le socket : délègue à la part sync du monitor', () => {
+    it('avec la capacité et le socket : délègue à la part sync du monitor, sous l’espace de l’appel', () => {
         const m = fakeMonitor();
         const sdk = createSdkContext(fakeCtx({ monitor: m.monitor }).ctx, withAgents, null, NO_PROVIDERS, undefined);
         sdk.transport.subscribeSync([1, 2]);
@@ -295,7 +295,7 @@ describe('createSdkContext : transport', () => {
         const chunk = { shareId: 1, seq: 0 };
         assert.equal(sdk.transport.sendSyncChunk(chunk as never), 512);
         assert.equal(sdk.transport.syncChunkBuffered(), 128);
-        assert.deepEqual(m.subs, [[1, 2]]);
+        assert.deepEqual(m.subs, [{ workspaceId: 3, ids: [1, 2] }]);
         assert.deepEqual(m.unsubs, [[2]]);
         assert.deepEqual(m.chunks, [chunk]);
     });

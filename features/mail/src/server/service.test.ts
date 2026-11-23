@@ -12,6 +12,7 @@ import { classifyMailError } from './_shared';
 import type { MailRepo } from './repo';
 import { MailSync } from './service';
 import type { SyncClient } from './sync';
+import { forgetAccountWatchers, noteAccountListed } from './syncStatus';
 import { createMailTransport } from './transport';
 
 /**
@@ -482,6 +483,7 @@ describe('la relève de fond', () => {
         const repo = fakeRepo([account({ id: 1 })]);
         const deps = createTestServiceDeps({ repo });
         const sync = new MailSync(deps, { mailClient: fakeClient([envelope(1)]) });
+        noteAccountListed(1, 7);
         await sync.syncOne(1);
 
         const frames = deps.recorded.livePublishes.filter((f) => f.event === MAIL_SYNC_PROGRESS_EVENT);
@@ -490,10 +492,37 @@ describe('la relève de fond', () => {
         // changement de liste.
         assert.ok(frames.length >= 2);
         assert.equal(frames[0].workspaceId, 1);
+        assert.deepEqual(frames[0].userIds, [7]);
         assert.deepEqual(frames[0].payload, { accountId: 1, syncing: true, progress: 0 });
         assert.deepEqual(frames[frames.length - 1].payload, { accountId: 1, syncing: false, progress: null });
         // Toutes se relisent sous le contrat que le client applique.
         for (const frame of frames) mailSyncProgressSchema.parse(frame.payload);
+        forgetAccountWatchers(1);
+    });
+
+    it('l’avancement ne va qu’à ceux à qui la boîte a été listée et qui la lisent encore', async () => {
+        const repo = fakeRepo([account({ id: 1 })]);
+        const deps = createTestServiceDeps({
+            repo,
+            access: {
+                feature: async (_workspaceId, userId) => (userId === 8 ? { ok: false, reason: 'hidden' } : { ok: true })
+            }
+        });
+        const sync = new MailSync(deps, { mailClient: fakeClient([envelope(1)]) });
+
+        await sync.syncOne(1);
+        assert.deepEqual(
+            deps.recorded.livePublishes.filter((f) => f.event === MAIL_SYNC_PROGRESS_EVENT),
+            []
+        );
+
+        noteAccountListed(1, 7);
+        noteAccountListed(1, 8);
+        await sync.syncOne(1);
+        const frames = deps.recorded.livePublishes.filter((f) => f.event === MAIL_SYNC_PROGRESS_EVENT);
+        assert.ok(frames.length >= 2);
+        for (const frame of frames) assert.deepEqual(frame.userIds, [7]);
+        forgetAccountWatchers(1);
     });
 
     it('une boîte qui ne répond pas est abandonnée à l’échéance, consignée `unreachable`, annoncée, puis rendue à la rotation', async () => {

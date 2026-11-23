@@ -26,6 +26,7 @@ import * as mailClient from './client';
 import type { MailCredentials, MailOAuthCredentials } from './client';
 import { buildAuthorizationUrl, exchangeCodeForTokens, isOAuthConfigured } from './oauth';
 import type { MailRepo } from './repo';
+import { forgetAccountWatchers, noteAccountListed } from './syncStatus';
 import {
     accountCipher,
     assertAtHome,
@@ -82,6 +83,7 @@ export const mailAccountListFeature = defineSdkFeature<
     ...mailAccountList,
     handler: async (ctx) => {
         const rows = await listVisibleAccounts(ctx);
+        for (const row of rows) noteAccountListed(row.id, ctx.userId);
         // Le codec est choisi ligne par ligne : un compte projeté reste chiffré
         // sous la clé de son espace d'origine, et le lire avec celle d'ici le
         // ferait passer pour verrouillé.
@@ -291,6 +293,7 @@ export const mailAccountDeleteFeature = defineSdkFeature<
         // d'un autre : retirer la projection est `share.set`, pas ceci.
         assertAtHome(ctx, existing, 'la supprimer');
         await ctx.repo.accounts.delete(input.id, ctx.workspaceId);
+        forgetAccountWatchers(input.id);
         // Le ménage d'un élément supprimé (restrictions par rôle, projections,
         // route de notification), qu'aucune clé étrangère ne rattache à la table
         // des comptes.

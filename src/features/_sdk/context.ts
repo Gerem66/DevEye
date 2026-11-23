@@ -303,7 +303,7 @@ function socketTransport(ctx: FeatureContext, manifest: FeatureManifest): SdkSoc
         return ctx.monitor;
     };
     return {
-        subscribeSync: (shareIds) => monitor().subscribeSync(shareIds),
+        subscribeSync: (shareIds) => monitor().subscribeSync(ctx.workspaceId, shareIds),
         unsubscribeSync: (shareIds) => monitor().unsubscribeSync(shareIds),
         sendSyncChunk: (payload) => monitor().sendSyncChunk(payload),
         syncChunkBuffered: () => monitor().syncChunkBuffered()

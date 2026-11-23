@@ -138,14 +138,7 @@ import type { AgentFolderArchive, AgentFolderArchiveSummary } from '@deveye/type
 
 import { accessEpochNow } from '@/features/_access';
 import { logger } from '@/logger';
-import {
-    holders,
-    mayReceiveDevice,
-    READERS,
-    SERVICE_MANAGERS,
-    type DeviceAudience,
-    type DeviceGrants
-} from './audience';
+import { holders, mayReceiveDevice, READERS, SERVICE_MANAGERS, type DeviceAudience, type HubGrants } from './audience';
 import { agentFrame } from './orders';
 import { AgentTunnels } from './tunnels';
 
@@ -369,8 +362,8 @@ export class MonitorHub {
     private readonly logSourceAskers = new Map<string, Set<WebSocket>>();
     /** shareId (CloudSync) -> set of subscriber (user) sockets. */
     private readonly syncSubscribers = new Map<number, Set<WebSocket>>();
-    /** subscriber socket -> set of shareIds it watches (for cleanup). */
-    private readonly socketShares = new Map<WebSocket, Set<number>>();
+    /** subscriber socket -> shareId -> l'espace sous lequel l'abonnement a été autorisé. */
+    private readonly socketShares = new Map<WebSocket, Map<number, number>>();
     /**
      * Droit de voir les appareils, par socket abonnée et par espace, estampillé
      * de l'époque d'accès : un utilisateur retiré d'un espace ne doit plus rien
@@ -378,7 +371,7 @@ export class MonitorHub {
      * synchrone (comme `LiveHub`) ; une époque divergente vaut « aucun droit »,
      * et une commande de l'utilisateur dans cet espace répare l'instantané.
      */
-    private readonly grants = new Map<WebSocket, Map<number, { held: DeviceGrants; epoch: number }>>();
+    private readonly grants = new Map<WebSocket, Map<number, { held: HubGrants; epoch: number }>>();
     private readonly refreshers = new Map<WebSocket, GrantRefresher>();
     /**
      * Les recalculs en cours, par socket et par espace, avec les réponses qui
@@ -1356,14 +1349,14 @@ export class MonitorHub {
         return socket.bufferedAmount;
     }
 
-    subscribeSync(socket: WebSocket, shareIds: number[]): void {
+    subscribeSync(socket: WebSocket, workspaceId: number, shareIds: number[]): void {
         let watched = this.socketShares.get(socket);
         if (!watched) {
-            watched = new Set();
+            watched = new Map();
             this.socketShares.set(socket, watched);
         }
         for (const id of shareIds) {
-            watched.add(id);
+            watched.set(id, workspaceId);
             let set = this.syncSubscribers.get(id);
             if (!set) {
                 set = new Set();
@@ -1383,11 +1376,28 @@ export class MonitorHub {
         }
     }
 
+    /**
+     * L'avancement et l'état d'un partage, à qui lit *encore* CloudSync dans
+     * l'espace de son abonnement. Ce sont des états qui se répètent : une
+     * socket à l'instantané périmé saute la trame et se fait recalculer.
+     */
     private publishToSyncSubscribers(shareId: number, command: string, data: unknown): void {
         const set = this.syncSubscribers.get(shareId);
         if (!set || set.size === 0) return;
-        const frame = JSON.stringify({ command, payload: { ok: true, data } });
-        for (const socket of set) socket.send(frame);
+        const epoch = accessEpochNow();
+        let frame: string | null = null;
+        for (const socket of set) {
+            const workspaceId = this.socketShares.get(socket)?.get(shareId);
+            if (workspaceId === undefined) continue;
+            const g = this.grants.get(socket)?.get(workspaceId);
+            if (g === undefined || g.epoch !== epoch) {
+                if (!this.refreshing.get(socket)?.has(workspaceId)) this.refresh(socket, workspaceId, null);
+                continue;
+            }
+            if (!g.held.cloudSync) continue;
+            frame ??= frameOf(command, data);
+            socket.send(frame);
+        }
     }
 
     /**
@@ -1434,7 +1444,7 @@ export class MonitorHub {
      * Instantané des droits dans un espace, posé par le dispatcheur à chaque
      * commande. Voir {@link grants}.
      */
-    rememberGrants(socket: WebSocket, workspaceId: number, held: DeviceGrants, epoch: number): void {
+    rememberGrants(socket: WebSocket, workspaceId: number, held: HubGrants, epoch: number): void {
         let byWorkspace = this.grants.get(socket);
         if (!byWorkspace) {
             byWorkspace = new Map();
@@ -1468,7 +1478,7 @@ export class MonitorHub {
         }
         const g = this.grants.get(socket)?.get(workspaceId);
         if (g !== undefined && g.epoch === accessEpochNow()) {
-            if (mayReceiveDevice(g.held, deviceId, audience)) socket.send(frame());
+            if (mayReceiveDevice(g.held.devices, deviceId, audience)) socket.send(frame());
             return;
         }
         this.refresh(socket, workspaceId, keep ? { deviceId, audience, frame: frame() } : null);
@@ -1493,7 +1503,7 @@ export class MonitorHub {
                 if (g === undefined || g.epoch !== accessEpochNow()) return;
                 for (const p of queue) {
                     if (this.socketDevices.get(socket)?.get(p.deviceId) !== workspaceId) continue;
-                    if (mayReceiveDevice(g.held, p.deviceId, p.audience)) socket.send(p.frame);
+                    if (mayReceiveDevice(g.held.devices, p.deviceId, p.audience)) socket.send(p.frame);
                 }
             });
     }
@@ -1590,7 +1600,7 @@ export class MonitorHub {
         }
         const shares = this.socketShares.get(socket);
         if (shares) {
-            for (const id of shares) {
+            for (const id of shares.keys()) {
                 const set = this.syncSubscribers.get(id);
                 set?.delete(socket);
                 if (set && set.size === 0) this.syncSubscribers.delete(id);
@@ -1740,8 +1750,8 @@ export interface MonitorTransport {
     requestFilesDownload(deviceId: string, payload: AgentFilesDownloadPayload): boolean;
     /** Send one upload chunk to the device's agent; false if offline. */
     requestFilesUpload(deviceId: string, payload: AgentFilesUploadPayload): boolean;
-    /** Subscribe this socket to CloudSync events of the given shares. */
-    subscribeSync(shareIds: number[]): void;
+    /** Subscribe this socket to CloudSync events of the given shares, under the workspace that authorised it. */
+    subscribeSync(workspaceId: number, shareIds: number[]): void;
     /** Unsubscribe this socket from CloudSync events of the given shares. */
     unsubscribeSync(shareIds: number[]): void;
     /** Send one CloudSync download chunk to this socket; returns the send-buffer size. */
@@ -1789,7 +1799,7 @@ export function createMonitorTransport(hub: MonitorHub, socket: WebSocket): Moni
         requestFilesMutate: (deviceId, payload) => hub.requestFilesMutate(deviceId, payload, socket),
         requestFilesDownload: (deviceId, payload) => hub.requestFilesDownload(deviceId, payload, socket),
         requestFilesUpload: (deviceId, payload) => hub.requestFilesUpload(deviceId, payload, socket),
-        subscribeSync: (shareIds) => hub.subscribeSync(socket, shareIds),
+        subscribeSync: (workspaceId, shareIds) => hub.subscribeSync(socket, workspaceId, shareIds),
         unsubscribeSync: (shareIds) => hub.unsubscribeSync(socket, shareIds),
         sendSyncChunk: (payload) => hub.sendSyncChunk(socket, payload),
         syncChunkBuffered: () => socket.bufferedAmount
