@@ -8,12 +8,13 @@
 //! agent can already do anything via the terminal); access is gated server-side.
 
 use std::cmp::Ordering;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 use tokio::sync::mpsc::Sender;
 
 use crate::archive::{write_tree, ArchiveStats, WalkLimits, WalkOptions};
+use crate::config::{inside_any, Config};
 use crate::exclusions::CompiledExclusions;
 use crate::protocol::{FileEntry, FileListing, FileMatch, FileSearchFilter, FileUsageEntry};
 
@@ -185,6 +186,11 @@ pub(crate) fn is_virtual_fs(_path: &Path) -> bool {
 /// pathological trees hit it: it keeps most results complete, which the client
 /// only caches when they are (a per-child split returns far more `partial`).
 pub fn analyze(path: &str) -> Result<Vec<FileUsageEntry>> {
+    analyze_outside(path, &Config::own_dirs())
+}
+
+/// [`analyze`], never entering `own` (the agent's folders, resolved).
+fn analyze_outside(path: &str, own: &[PathBuf]) -> Result<Vec<FileUsageEntry>> {
     let canon = std::fs::canonicalize(path).with_context(|| format!("résolution de {path}"))?;
     let mut budget = ANALYZE_BUDGET;
     let mut out = Vec::new();
@@ -195,10 +201,10 @@ pub fn analyze(path: &str) -> Result<Vec<FileUsageEntry>> {
         let Ok(ft) = entry.file_type() else { continue };
         let path = entry.path();
         let (total_size, partial) = if ft.is_dir() && !ft.is_symlink() {
-            if is_virtual_fs(&path) {
+            if is_virtual_fs(&path) || inside_any(own, &path) {
                 (0, false)
             } else {
-                dir_size(&path, &mut budget)
+                dir_size(&path, &mut budget, own)
             }
         } else {
             (entry.metadata().map(|m| m.len()).unwrap_or(0), false)
@@ -215,9 +221,9 @@ pub fn analyze(path: &str) -> Result<Vec<FileUsageEntry>> {
 }
 
 /// Sum file sizes under `root` (iterative DFS, no symlink following, kernel
-/// filesystems skipped), stopping when the budget runs out — then the result is
-/// flagged partial.
-fn dir_size(root: &Path, budget: &mut u64) -> (u64, bool) {
+/// filesystems and the agent's own folders skipped), stopping when the budget
+/// runs out: the result is then flagged partial.
+fn dir_size(root: &Path, budget: &mut u64, own: &[PathBuf]) -> (u64, bool) {
     let mut total = 0u64;
     let mut partial = false;
     let mut stack = vec![root.to_path_buf()];
@@ -238,7 +244,7 @@ fn dir_size(root: &Path, budget: &mut u64) -> (u64, bool) {
             }
             if ft.is_dir() {
                 let path = entry.path();
-                if !is_virtual_fs(&path) {
+                if !is_virtual_fs(&path) && !inside_any(own, &path) {
                     stack.push(path);
                 }
             } else if let Ok(m) = entry.metadata() {
@@ -309,8 +315,19 @@ fn content_match(path: &Path, m: &Matcher) -> Option<String> {
         .map(truncate_preview)
 }
 
-/// Recursively search `path`. Returns the hits and whether the result was capped.
+/// Recursively search `path`, never entering the agent's own folders: a
+/// content match there would hand out the device token. Returns the hits and
+/// whether the result was capped.
 pub fn search(path: &str, filter: &FileSearchFilter) -> Result<(Vec<FileMatch>, bool)> {
+    search_outside(path, filter, &Config::own_dirs())
+}
+
+/// [`search`], never entering `own` (the agent's folders, resolved).
+fn search_outside(
+    path: &str,
+    filter: &FileSearchFilter,
+    own: &[PathBuf],
+) -> Result<(Vec<FileMatch>, bool)> {
     let canon = std::fs::canonicalize(path).with_context(|| format!("résolution de {path}"))?;
     let matcher = build_matcher(filter)?;
     let field = filter.field.as_deref().unwrap_or("name");
@@ -337,7 +354,7 @@ pub fn search(path: &str, filter: &FileSearchFilter) -> Result<(Vec<FileMatch>, 
             let Ok(entry) = entry else { continue };
             let Ok(ft) = entry.file_type() else { continue };
             let path = entry.path();
-            if ft.is_dir() && !ft.is_symlink() {
+            if ft.is_dir() && !ft.is_symlink() && !inside_any(own, &path) {
                 stack.push(path.clone());
             }
 
@@ -747,6 +764,49 @@ mod tests {
         v.sort_by(dir_first);
         let order: Vec<&str> = v.iter().map(|e| e.name.as_str()).collect();
         assert_eq!(order, vec!["Apps", "zed", "a.txt", "b.txt"]);
+    }
+
+    #[test]
+    fn the_walks_never_enter_the_agent_folders() {
+        let base = tempfile::tempdir().unwrap();
+        let root = base.path().canonicalize().unwrap();
+        let own = root.join("deveye");
+        std::fs::create_dir_all(own.join("instances/nas")).unwrap();
+        std::fs::write(own.join("agent.toml"), "device_token = \"secret-token\"\n").unwrap();
+        std::fs::write(
+            own.join("instances/nas/agent.toml"),
+            "device_token = \"other\"\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(root.join("notes")).unwrap();
+        std::fs::write(root.join("notes/todo.txt"), "rotate the device_token\n").unwrap();
+        let guarded = vec![own.clone()];
+        let at = root.to_str().unwrap();
+
+        let filter = FileSearchFilter {
+            field: Some("content".into()),
+            query: Some("device_token".into()),
+            ..Default::default()
+        };
+        let (hits, _) = search_outside(at, &filter, &guarded).unwrap();
+        let names: Vec<&str> = hits.iter().map(|m| m.name.as_str()).collect();
+        assert_eq!(names, vec!["todo.txt"], "only the file outside the folder");
+
+        let by_name = FileSearchFilter {
+            query: Some("agent".into()),
+            ..Default::default()
+        };
+        let (hits, _) = search_outside(at, &by_name, &guarded).unwrap();
+        assert!(hits.is_empty(), "nothing inside is even named");
+
+        let usage = analyze_outside(at, &guarded).unwrap();
+        let size = |name: &str| usage.iter().find(|e| e.name == name).unwrap().total_size;
+        assert_eq!(size("deveye"), 0, "the folder is listed, not measured");
+        assert!(size("notes") > 0);
+
+        // Without the guard, the same search hands out the token line.
+        let (hits, _) = search_outside(at, &filter, &[]).unwrap();
+        assert!(hits.iter().any(|m| m.name == "agent.toml"));
     }
 
     #[test]

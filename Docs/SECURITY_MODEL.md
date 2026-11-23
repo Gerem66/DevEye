@@ -396,7 +396,8 @@ serveur contrôle les machines**, à ceci près.
 - **La politique locale.** La section `[policy]` de l'`agent.toml` dit ce que la
   machine accepte (onze interrupteurs, listés plus bas). Aucune trame ne la
   modifie, l'explorateur n'atteint jamais le dossier de l'agent (ni en écriture,
-  ni en lecture, ni par un de ses parents), et le rapport de l'appareil la publie pour
+  ni en lecture, ni par un de ses parents : une recherche ou une analyse lancée
+  plus haut n'y entre pas), et le rapport de l'appareil la publie pour
   que l'interface grise ce qui serait refusé. C'est le seul réglage de la machine
   que le serveur ne décide pas : une installation « supervision seule » se fait
   là. Limite honnête : un terminal root autorisé rend le reste consultatif.

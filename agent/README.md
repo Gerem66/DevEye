@@ -619,8 +619,10 @@ older agent to get around a key it does not know: a self-update to a version
 that is not newer than the running one is refused (the same version is built
 more than once, so an equal number could bring back an earlier build).
 
-Whatever the policy, the explorer never writes into the agent's own directory:
-that is where the policy lives. Be honest about the limit: a machine that allows
+Whatever the policy, the explorer neither writes into the agent's own directory
+nor reads it: that is where the policy and the device token live. Listing,
+analysing or searching it is refused, and a search or an analysis started from
+a parent never enters it. Be honest about the limit: a machine that allows
 the terminal to a root agent has allowed everything else with it.
 
 **Signed orders.** Twenty-one orders must carry the server's Ed25519 signature

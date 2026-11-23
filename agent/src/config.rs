@@ -493,14 +493,31 @@ impl Config {
     /// `deveye` folder counts, with every instance in it: the server of one
     /// instance must not read the token of another run by the same account.
     pub fn is_own_path(path: &Path) -> bool {
-        let mut guarded = vec![Self::user_root()];
+        Self::own_dirs().iter().any(|dir| covers(dir, path))
+    }
+
+    /// The agent's own folders, resolved: the account's `deveye` folder, the
+    /// root of the instance this process runs, and the system one for a
+    /// privileged agent.
+    pub fn own_dirs() -> Vec<PathBuf> {
+        let mut dirs = vec![Self::user_root()];
         if let Some(dir) = Self::path().parent() {
-            guarded.push(crate::instance::root_of(dir).to_path_buf());
+            dirs.push(crate::instance::root_of(dir).to_path_buf());
         }
         if privileged() {
-            guarded.push(crate::system_dir::root());
+            dirs.push(crate::system_dir::root());
         }
-        guarded.iter().any(|dir| covers(dir, path))
+        dirs.into_iter()
+            .map(|dir| dir.canonicalize().unwrap_or(dir))
+            .collect()
+    }
+
+    /// Is this path one of the agent's own folders, or inside one? A parent
+    /// does not count, unlike [`Self::is_own_path`]: listing or searching it
+    /// stays possible, the walk just never enters the folder.
+    pub fn is_inside_own_dir(path: &Path) -> bool {
+        let real = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        inside_any(&Self::own_dirs(), &real)
     }
 
     /// Wipe every local trace of this enrollment: the config (which holds the
@@ -590,6 +607,11 @@ impl Config {
         }
         Ok(transport)
     }
+}
+
+/// Is the resolved `path` one of `dirs`, or inside one?
+pub fn inside_any(dirs: &[PathBuf], path: &Path) -> bool {
+    dirs.iter().any(|dir| path.starts_with(dir))
 }
 
 /// Is `path` the folder `dir`, inside it, or one of its parents? The target

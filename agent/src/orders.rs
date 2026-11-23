@@ -166,8 +166,8 @@ pub enum Admission {
 /// The single gate every server frame passes, and the only place it is parsed:
 /// the signature for the orders that need one, then what this machine's
 /// operator refuses whatever the server says, then the agent's own directory,
-/// which the file explorer never writes to (its config is what holds the
-/// policy). A frame that is not a well-formed envelope is ignored, never run.
+/// which the file explorer neither reads nor writes (its config is what holds
+/// the policy and the device token). A frame that is not a well-formed envelope is ignored, never run.
 pub fn admit(text: &str, guard: &mut OrderGuard, policy: &Policy, now_ms: i64) -> Admission {
     let Ok(env) = serde_json::from_str::<Envelope<'_>>(text) else {
         return Admission::Ignore;
@@ -197,6 +197,16 @@ pub fn admit(text: &str, guard: &mut OrderGuard, policy: &Policy, now_ms: i64) -
         if own {
             return refuse("refused: the agent's own directory is not reachable remotely".into());
         }
+    }
+    // Reading the folder would show the token the config holds: a content
+    // search returns the line that matches. Its parents stay browsable, the
+    // walks skip the folder (`files::search`, `files::analyze`).
+    if matches!(
+        env.command.as_str(),
+        "files.list" | "files.analyze" | "files.search"
+    ) && field("path").is_some_and(|p| Config::is_inside_own_dir(Path::new(p)))
+    {
+        return refuse("refused: the agent's own directory is not reachable remotely".into());
     }
     // Built from the command and payload already admitted, so the gate and the
     // dispatch can never see two different things.
@@ -477,6 +487,14 @@ mod tests {
             (
                 "files.mutate",
                 format!(r#"{{"opId":"o","op":"rename","path":"{parent}","dest":"/tmp/x"}}"#),
+            ),
+            ("files.list", format!(r#"{{"opId":"o","path":"{dir}"}}"#)),
+            ("files.analyze", format!(r#"{{"opId":"o","path":"{dir}"}}"#)),
+            (
+                "files.search",
+                format!(
+                    r#"{{"opId":"o","path":"{dir}","filter":{{"field":"content","query":"token"}}}}"#
+                ),
             ),
         ] {
             let order = frame(command, &payload, &format!("n-{command}"), NOW);
