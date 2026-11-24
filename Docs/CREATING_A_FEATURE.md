@@ -234,6 +234,41 @@ Il couvre aussi les modules privés installés par `features.local.json`. Un SQL
 assemblé à l'exécution n'est pas vérifié (`--verbose` le liste) ; un appel
 qu'il ne sait pas préparer s'écarte par `// check-queries: ignore <raison>`.
 
+`npm run check:queries -- --scope-report` lit les mêmes requêtes pour une autre
+question : chaque table qu'elles citent est-elle bornée ? Un
+`AND workspace_id = ?` oublié n'échoue nulle part, la requête rend simplement
+les lignes des autres espaces.
+
+- Une table qui porte `workspace_id` demande un prédicat sur cette colonne, ou
+  la colonne dans la liste d'un `INSERT`.
+- Une table qu'une clé étrangère mène à une telle table se borne par cette clé,
+  ou par une jointure à des lignes déjà bornées.
+- Relire par `WHERE id = ?` la ligne qu'on vient d'insérer (`insertId`) est
+  admis.
+- Les autres tables se déclarent dans le `deveye-scope.json` du module
+  (`src/db/scope.json` pour le socle) : `account` avec les colonnes qui la
+  bornent, `child` avec un parent que le schéma ne dit pas, `instance` avec sa
+  raison.
+
+Le même fichier dispense une fonction, par sa clé `fichier#fonction`, un `kind`
+(`service`, `token`, `row` ou `instance`) et une raison :
+
+```json
+{
+    "tables": {
+        "ft_demo_prefs": { "class": "account", "columns": ["user_id"] },
+        "ft_demo_catalog": { "class": "instance", "reason": "Un catalogue commun à l'instance." }
+    },
+    "exempt": {
+        "src/server/repo.ts#listDue": { "kind": "service", "reason": "Le planificateur lit tous les espaces." }
+    }
+}
+```
+
+Le rapport compte par dépôt et ne fait rien échouer ; `--verbose` nomme chaque
+requête, sa fonction et ce qui lui manque. Une requête qu'il ne sait pas lire
+est comptée « non analysée », jamais tenue pour saine.
+
 Jamais `npx eslint .` à la racine de `DevEye/` : `npm run lint`,
 `npm run lint:features`, et dans `client/` `npm run lint`. Prettier couvre
 aussi `.md`, `.yml`, `.css`, `.html` et `.json` (`format:check`).

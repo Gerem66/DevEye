@@ -15,6 +15,10 @@
  * `Queryable` (le socle) ou de `SdkQueryable` (les modules). Le SQL qui ne se
  * réduit pas à des chaînes connues est compté à part (`--verbose` le liste).
  * `// check-queries: ignore <raison>` juste avant un appel l'écarte.
+ *
+ * `--scope-report` fait autre chose, sans rien préparer ni faire échouer : il
+ * dit de chaque requête si les tables qu'elle cite sont bornées à un espace ou
+ * à un compte (`lib/query-scope.ts`), dépôt par dépôt.
  */
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -38,17 +42,13 @@ import {
     type PreparedColumn,
     type SchemaColumn
 } from './lib/query-check';
+import { findQueryCalls, ignoreReason, loadProgram, paramCount, whereOf } from './lib/query-calls';
+import { scopeReport } from './lib/scope-pass';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const WORKSPACE = path.dirname(ROOT);
 const VERBOSE = process.argv.includes('--verbose');
-const IGNORE_MARK = /check-queries:\s*ignore\b(.*)/;
-
-/** Les interfaces dont les méthodes `query`/`execute` partent vers la base de l'instance. */
-const QUERYABLES = [
-    { name: 'Queryable', file: /\/DevEye\/src\/db\/pool\.ts$/ },
-    { name: 'SdkQueryable', file: /\/sdk\/server\.(d\.)?ts$/ }
-];
+const SCOPE_REPORT = process.argv.includes('--scope-report');
 
 interface Prepared {
     columns: ColumnShape[];
@@ -60,77 +60,6 @@ type PrepareResult = { ok: Prepared } | { error: string; code: string };
 interface Problem {
     where: string;
     message: string;
-}
-
-function where(node: ts.Node): string {
-    const sf = node.getSourceFile();
-    const { line } = sf.getLineAndCharacterOfPosition(node.getStart());
-    return `${path.relative(WORKSPACE, sf.fileName)}:${line + 1}`;
-}
-
-function loadProgram(): ts.Program {
-    const configPath = path.join(ROOT, 'tsconfig.json');
-    const parsed = ts.getParsedCommandLineOfConfigFile(
-        configPath,
-        {},
-        {
-            ...ts.sys,
-            onUnRecoverableConfigFileDiagnostic: (d) => {
-                throw new Error(ts.flattenDiagnosticMessageText(d.messageText, '\n'));
-            }
-        }
-    );
-    if (!parsed) throw new Error(`tsconfig illisible : ${configPath}`);
-    return ts.createProgram({ rootNames: parsed.fileNames, options: { ...parsed.options, noEmit: true } });
-}
-
-/** Les fichiers dont les requêtes partent en production : ni tests, ni doublures, ni dépendances. */
-function isChecked(program: ts.Program, sf: ts.SourceFile): boolean {
-    const file = sf.fileName;
-    return (
-        !sf.isDeclarationFile &&
-        !program.isSourceFileFromExternalLibrary(sf) &&
-        !file.includes('/node_modules/') &&
-        !/\.test\.tsx?$/.test(file) &&
-        !file.endsWith('/src/db/pool.fake.ts') &&
-        file.startsWith(WORKSPACE)
-    );
-}
-
-function isInstanceQuery(call: ts.CallExpression, checker: ts.TypeChecker): boolean {
-    const callee = call.expression;
-    if (!ts.isPropertyAccessExpression(callee)) return false;
-    if (callee.name.text !== 'query' && callee.name.text !== 'execute') return false;
-    const decl = checker.getResolvedSignature(call)?.getDeclaration();
-    if (!decl || !ts.isMethodSignature(decl) || !ts.isInterfaceDeclaration(decl.parent)) return false;
-    const owner = decl.parent.name.text;
-    const file = decl.getSourceFile().fileName;
-    return QUERYABLES.some((q) => q.name === owner && q.file.test(file));
-}
-
-/** La raison d'un `check-queries: ignore` posé juste avant l'appel ou l'instruction qui le porte, `null` sans marque. */
-function ignoreReason(call: ts.CallExpression): string | null {
-    const text = call.getSourceFile().getFullText();
-    let node: ts.Node = call;
-    while (node.parent && !ts.isSourceFile(node.parent)) {
-        for (const range of ts.getLeadingCommentRanges(text, node.getFullStart()) ?? []) {
-            const m = IGNORE_MARK.exec(text.slice(range.pos, range.end));
-            if (m) return m[1].replace(/\*\/\s*$/, '').trim();
-        }
-        if (ts.isStatement(node)) break;
-        node = node.parent;
-    }
-    return null;
-}
-
-/** Le nombre de paramètres passés, quand c'est un tableau littéral sans étalement ; `null` sinon. */
-function paramCount(call: ts.CallExpression): number | null {
-    const arg = call.arguments[1];
-    if (!arg) return 0;
-    let n = arg;
-    while (ts.isAsExpression(n) || ts.isParenthesizedExpression(n) || ts.isSatisfiesExpression(n)) n = n.expression;
-    if (!ts.isArrayLiteralExpression(n) || n.elements.some(ts.isSpreadElement)) return null;
-    return n.elements.length;
 }
 
 /** Le type de ligne annoncé, quand il en a un à vérifier (pas le `RowDataPacket` de mysql2, ni un générique). */
@@ -240,7 +169,7 @@ function rowProblems(type: ts.Type, columns: ColumnShape[], checker: ts.TypeChec
 }
 
 async function main(): Promise<void> {
-    const program = loadProgram();
+    const program = loadProgram(ROOT);
     const checker = program.getTypeChecker();
     const conn = connect();
     let schema: Map<string, SchemaColumn>;
@@ -251,6 +180,12 @@ async function main(): Promise<void> {
         process.exit(1);
     }
 
+    if (SCOPE_REPORT) {
+        await scopeReport({ program, conn, root: ROOT, workspace: WORKSPACE, verbose: VERBOSE });
+        conn.end();
+        return;
+    }
+
     const cache = new Map<string, PrepareResult>();
     const problems: Problem[] = [];
     const dynamic: string[] = [];
@@ -258,7 +193,7 @@ async function main(): Promise<void> {
 
     const checkCall = async (call: ts.CallExpression): Promise<void> => {
         stats.calls++;
-        const at = where(call);
+        const at = whereOf(call, WORKSPACE);
         const reason = ignoreReason(call);
         if (reason !== null) {
             if (reason === '') problems.push({ where: at, message: '`check-queries: ignore` sans raison' });
@@ -307,12 +242,7 @@ async function main(): Promise<void> {
         }
     };
 
-    const calls: ts.CallExpression[] = [];
-    const visit = (node: ts.Node): void => {
-        if (ts.isCallExpression(node) && isInstanceQuery(node, checker)) calls.push(node);
-        ts.forEachChild(node, visit);
-    };
-    for (const sf of program.getSourceFiles()) if (isChecked(program, sf)) visit(sf);
+    const calls = findQueryCalls(program, WORKSPACE);
     for (const call of calls) await checkCall(call);
     conn.end();
 
